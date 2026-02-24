@@ -108,9 +108,9 @@ condition_a:
   # Self-QA: LLM inspects its own output
   qa:
     enabled: true
-    max_retries: 3              # max regeneration attempts on QA failure
+    max_retries: 1              # max regeneration attempts on QA failure
     model: null                 # null = same model as generation
-    min_score: 6                # scores below this fail QA (1-10)
+    min_score: 5                # scores below this fail QA (1-10)
     prompt: |
       You are a strict QA inspector for professional deliverables.
 
@@ -142,4 +142,4 @@ execution:
   #mode: "subprocess"          # code_interpreter | subprocess | json_renderer
   mode: "code_interpreter"     # code_interpreter | subprocess | json_renderer
   max_retries: 5               # infra retries per task (API errors, timeouts, Python execution errors)
-  resume_max_rounds: 3         # auto re-run rounds for error tasks in progress.json (0 = no resume)
+  resume_max_rounds: 1         # auto re-run rounds for error tasks in progress.json (0 = no resume)

@@ -29,7 +29,7 @@ env:
 jobs:
   batch-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 300    # max 5 hours
+    timeout-minutes: 360    # max 6 hours
 
     steps:
       - name: Checkout
