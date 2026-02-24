@@ -1,11 +1,11 @@
 # Experiment Configuration
-# Smoke test — for verifying pipeline operation (small task set)
+# Full baseline run with GPT-5.2 Chat on all 220 tasks
 # If condition_b is absent, automatically runs as Single Test
 
 experiment:
   id: "exp001_GPT52Chat_baseline"
-  name: "Smoke Baseline Run (Sample)"
-  description: "Smoke test — tasks for verifying pipeline operation"
+  name: "GPT-5.2 Chat Baseline (Full 220 tasks)"
+  description: "Full baseline run with GPT-5.2 Chat on all 220 tasks. Single condition (condition_a only) with code_interpreter mode and Self-QA enabled."
   author: "Hyeonsang Jeon"
   created_at: "2026-02-24"
 
@@ -94,8 +94,3 @@ execution:
   max_retries: 5               # infra retries per task (API errors, timeouts, Python execution errors)
   resume_max_rounds: 3         # auto re-run rounds for error tasks in progress.json (0 = no resume)
 
-# Output settings
-output:
-  publish_to_hf: false
-  submit_to_evals: false
-  save_path: "results/exp999"
