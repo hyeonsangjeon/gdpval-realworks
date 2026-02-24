@@ -1,0 +1,95 @@
+# Experiment Configuration
+# Smoke test — 파이프라인 정상 작동 확인용 (소량 태스크)
+# condition_b가 없으면 자동으로 Single Test로 동작
+
+experiment:
+  id: "exp999_smoke_baseline_sample"
+  name: "Smoke Baseline Run (Sample)"
+  description: "Smoke test — 파이프라인 정상 작동 확인용 테스크"
+  author: "Hyeonsang Jeon"
+  created_at: "2026-02-24"
+
+# 변인통제
+control:
+  fixed:
+    - model
+    - tasks
+    - temperature
+  changed:
+    - prompt_strategy
+
+# 데이터 필터
+data:
+  source: "HyeonSang/exp999_smoke_baseline_sample"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: 3          # smoke test: 3개만
+
+# Condition A: Baseline (condition_b 없음 → Single Test)
+condition_a:
+  name: "Baseline"
+  model:
+    provider: "azure" #"anthropic", "azure", "openai", "custom"
+    deployment: "gpt-5.2-chat"
+    temperature: 0.0
+    seed: 42
+  prompt:
+    system: |
+      You are a helpful assistant that completes professional tasks.
+      When the task requires creating files (e.g., Excel, Word, PDF, PowerPoint),
+      write Python code that generates those files and save them to the current directory.
+      Use libraries such as openpyxl, python-docx, reportlab, python-pptx, and Pillow.
+      Always produce complete, runnable code.
+    prefix: null
+    body: null
+    suffix: |
+      If the task requires creating deliverable files (documents, spreadsheets,
+      presentations, reports, etc.), you MUST use Python code to generate the
+      actual file(s) and save them to the current directory.
+      Do NOT just describe what you would create — actually execute code to produce
+      downloadable files. The task is NOT complete unless the files are saved.
+
+      In your text response, do NOT include any file download links or sandbox URLs
+      (e.g. "[Download ...](sandbox:/mnt/data/...)" or similar).
+      Only provide a plain-text summary of what was produced.
+
+  # Self-QA: LLM이 자기 결과물을 검수
+  qa:
+    enabled: true
+    max_retries: 3              # QA 실패 시 최대 재생성 횟수
+    model: null                 # null = 생성과 같은 모델
+    min_score: 6                # 이 점수 미만이면 QA 실패 (1-10)
+    prompt: |
+      You are a strict QA inspector for professional deliverables.
+
+      ## Original Task
+      {instruction}
+
+      ## Generated Output
+      - Text response: {deliverable_text}
+      - Files produced: {deliverable_files}
+
+      ## Inspection Criteria
+      1. Does the output address ALL requirements in the original task?
+      2. Are all required files produced with correct types and content?
+      3. Is the text response complete and professional?
+      4. Are there any obvious errors, missing elements, or placeholder content?
+
+      ## Response Format (JSON only)
+      ```json
+      {{
+        "passed": true,
+        "score": 8,
+        "issues": [],
+        "suggestion": ""
+      }}
+      ```
+
+# 실행 설정
+execution:
+  #mode: "subprocess"          # code_interpreter | subprocess | json_renderer
+  mode: "code_interpreter"          # code_interpreter | subprocess | json_renderer
+  max_retries: 5              # 태스크 내 인프라 리트라이 (API 에러, 타임아웃, Python 실행 에러)
+  resume_max_rounds: 3        # progress.json error 태스크 자동 재실행 라운드 수 (0=resume 안 함)
+

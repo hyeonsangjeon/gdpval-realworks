@@ -1,0 +1,101 @@
+# Experiment Configuration
+# Smoke test — for verifying pipeline operation (small task set)
+# If condition_b is absent, automatically runs as Single Test
+
+experiment:
+  id: "exp001_GPT52Chat_baseline"
+  name: "Smoke Baseline Run (Sample)"
+  description: "Smoke test — tasks for verifying pipeline operation"
+  author: "Hyeonsang Jeon"
+  created_at: "2026-02-24"
+
+# Variable control
+control:
+  fixed:
+    - model
+    - tasks
+    - temperature
+    - prompt_strategy
+  changed:
+    - model
+
+# Data filter
+data:
+  source: "HyeonSang/exp001_GPT52Chat_baseline"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: null         
+
+# Condition A: Baseline (no condition_b → Single Test)
+condition_a:
+  name: "Baseline"
+  model:
+    provider: "azure" #"anthropic", "azure", "openai", "custom"
+    deployment: "gpt-5.2-chat"
+    temperature: 0.0
+    seed: 42
+  prompt:
+    system: |
+      You are a helpful assistant that completes professional tasks.
+      When the task requires creating files (e.g., Excel, Word, PDF, PowerPoint),
+      write Python code that generates those files and save them to the current directory.
+      Use libraries such as openpyxl, python-docx, reportlab, python-pptx, and Pillow.
+      Always produce complete, runnable code.
+    prefix: null
+    body: null
+    suffix: |
+      If the task requires creating deliverable files (documents, spreadsheets,
+      presentations, reports, etc.), you MUST use Python code to generate the
+      actual file(s) and save them to the current directory.
+      Do NOT just describe what you would create — actually execute code to produce
+      downloadable files. The task is NOT complete unless the files are saved.
+
+      In your text response, do NOT include any file download links or sandbox URLs
+      (e.g. "[Download ...](sandbox:/mnt/data/...)" or similar).
+      Only provide a plain-text summary of what was produced.
+
+  # Self-QA: LLM inspects its own output
+  qa:
+    enabled: true
+    max_retries: 3              # max regeneration attempts on QA failure
+    model: null                 # null = same model as generation
+    min_score: 6                # scores below this fail QA (1-10)
+    prompt: |
+      You are a strict QA inspector for professional deliverables.
+
+      ## Original Task
+      {instruction}
+
+      ## Generated Output
+      - Text response: {deliverable_text}
+      - Files produced: {deliverable_files}
+
+      ## Inspection Criteria
+      1. Does the output address ALL requirements in the original task?
+      2. Are all required files produced with correct types and content?
+      3. Is the text response complete and professional?
+      4. Are there any obvious errors, missing elements, or placeholder content?
+
+      ## Response Format (JSON only)
+      ```json
+      {{
+        "passed": true,
+        "score": 8,
+        "issues": [],
+        "suggestion": ""
+      }}
+      ```
+
+# Execution settings
+execution:
+  #mode: "subprocess"          # code_interpreter | subprocess | json_renderer
+  mode: "code_interpreter"     # code_interpreter | subprocess | json_renderer
+  max_retries: 5               # infra retries per task (API errors, timeouts, Python execution errors)
+  resume_max_rounds: 3         # auto re-run rounds for error tasks in progress.json (0 = no resume)
+
+# Output settings
+output:
+  publish_to_hf: false
+  submit_to_evals: false
+  save_path: "results/exp999"

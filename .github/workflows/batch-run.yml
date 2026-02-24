@@ -1,0 +1,206 @@
+name: Run GDPVal Batch Experiment
+
+# This workflow can only be triggered manually from the GitHub Actions tab.
+# Only users with repo write access can run it → security enforced automatically.
+on:
+  workflow_dispatch:
+    inputs:
+      experiment_yaml:
+        description: 'Experiment YAML filename (without .yaml extension, e.g., "exp998_smoke_baseline_sample")'
+        required: true
+        type: string
+      experiment_name:
+        description: 'Experiment name (optional - will auto-extract from YAML if empty)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (skip HF upload and PR creation)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write        # to commit yaml results
+  pull-requests: write   # to create PRs
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  batch-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300    # max 5 hours
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r batch-runner/requirements.txt
+
+      # ── Validation: Check YAML file exists ──
+      - name: Validate experiment YAML exists
+        run: |
+          YAML_FILE="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
+          if [ ! -f "$YAML_FILE" ]; then
+            echo "❌ Error: $YAML_FILE not found"
+            exit 1
+          fi
+          echo "✅ Found: $YAML_FILE"
+
+      # ── Extract experiment_name from YAML if not provided ──
+      - name: Extract experiment name from YAML
+        run: |
+          YAML_PATH="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
+          if [ -z "${{ inputs.experiment_name }}" ]; then
+            EXPERIMENT_NAME=$(python3 -c "import yaml,sys; cfg=yaml.safe_load(open(sys.argv[1])); n=cfg.get('experiment',{}).get('name',''); (print(n) if n else sys.exit('ERROR: experiment.name not found'))" "$YAML_PATH")
+          else
+            EXPERIMENT_NAME="${{ inputs.experiment_name }}"
+          fi
+          echo "experiment_name=$EXPERIMENT_NAME" >> $GITHUB_ENV
+          echo "📝 Experiment: $EXPERIMENT_NAME"
+
+      # ── Step 0: Bootstrap ──
+      - name: 'Step 0: Bootstrap submission repo'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd batch-runner
+          bash step0_bootstrap.sh experiments/${{ inputs.experiment_yaml }}.yaml
+
+      # ── Step 1: Prepare Tasks ──
+      - name: 'Step 1: Prepare tasks'
+        run: |
+          cd batch-runner
+          bash step1_prepare_tasks.sh experiments/${{ inputs.experiment_yaml }}.yaml
+
+      # ── Step 2a: Run Inference (condition_a) ──
+      - name: 'Step 2a: Run inference (condition_a)'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd batch-runner
+          bash step2_run_inference.sh condition_a
+
+      # ── Step 2b: Run Inference (condition_b) — CONDITIONAL ──
+      - name: 'Check if condition_b exists'
+        id: check_condition_b
+        run: |
+          YAML_PATH="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
+          HAS_CONDITION_B=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${YAML_PATH}')); print('true' if 'condition_b' in cfg else 'false')")
+          echo "has_condition_b=$HAS_CONDITION_B" >> $GITHUB_OUTPUT
+          echo "Condition B exists: $HAS_CONDITION_B"
+
+      - name: 'Step 2b: Run inference (condition_b)'
+        if: steps.check_condition_b.outputs.has_condition_b == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd batch-runner
+          bash step2_run_inference.sh condition_b
+
+      # ── Step 3: Format Results ──
+      - name: 'Step 3: Format results'
+        run: |
+          cd batch-runner
+          bash step3_format_results.sh
+
+      # ── Step 4: Fill Parquet ──
+      - name: 'Step 4: Fill parquet'
+        run: |
+          cd batch-runner
+          bash step4_fill_parquet.sh
+
+      # ── Check sample_size (skip validation for smoke tests) ──
+      - name: 'Check if smoke test'
+        id: check_smoke_test
+        run: |
+          YAML_PATH="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
+          SAMPLE_SIZE=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${YAML_PATH}')); s=cfg.get('data',{}).get('filter',{}).get('sample_size',220); print(s if s is not None else 220)")
+          IS_SMOKE_TEST=$([ "$SAMPLE_SIZE" -le 3 ] && echo "true" || echo "false")
+          echo "sample_size=$SAMPLE_SIZE" >> $GITHUB_OUTPUT
+          echo "is_smoke_test=$IS_SMOKE_TEST" >> $GITHUB_OUTPUT
+          echo "Sample size: $SAMPLE_SIZE (smoke test: $IS_SMOKE_TEST)"
+
+      # ── Step 5: Validate (skip for smoke tests or dry_run) ──
+      - name: 'Step 5: Validate dataset'
+        if: inputs.dry_run != true && steps.check_smoke_test.outputs.is_smoke_test != 'true'
+        run: |
+          cd batch-runner
+          bash step5_validate.sh
+
+      # ── Step 6: Upload to HuggingFace (only if not dry_run) ──
+      - name: 'Step 6: Upload to HuggingFace'
+        if: inputs.dry_run != true
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd batch-runner
+          bash step6_upload_hf.sh --test
+
+      # ── Create Pull Request (only if not dry_run) ──
+      - name: Create Pull Request with results
+        if: inputs.dry_run != true
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "experiment: ${{ env.experiment_name }}"
+          title: "🧪 New Experiment: ${{ env.experiment_name }}"
+          body: |
+            ## Experiment Results
+
+            | Field | Value |
+            |---|---|
+            | **Name** | ${{ env.experiment_name }} |
+            | **YAML Config** | `${{ inputs.experiment_yaml }}` |
+            | **Run ID** | [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+            ### Pipeline Summary
+            - ✅ Step 0: Bootstrap submission repo
+            - ✅ Step 1: Prepare tasks
+            - ✅ Step 2: Run inference (condition_a)
+            - ✅ Step 2: Run inference (condition_b) - ${{ steps.check_condition_b.outputs.has_condition_b == 'true' && 'Run' || 'Skipped' }}
+            - ✅ Step 3: Format results
+            - ✅ Step 4: Fill parquet
+            - ✅ Step 5: Validate dataset - ${{ steps.check_smoke_test.outputs.is_smoke_test == 'true' && 'Skipped (smoke test)' || 'Run' }}
+            - ✅ Step 6: Upload to HuggingFace
+
+            Results uploaded to HuggingFace dataset repository.
+            Review and merge to finalize the experiment.
+          branch: experiment/${{ inputs.experiment_yaml }}
+          labels: experiment,automated
+
+      # ── Summary step ──
+      - name: Show summary
+        if: always()
+        run: |
+          echo "════════════════════════════════════════"
+          echo "📊 Batch Experiment Complete"
+          echo "════════════════════════════════════════"
+          echo "Experiment: ${{ env.experiment_name }}"
+          echo "YAML Config: ${{ inputs.experiment_yaml }}"
+          echo "Dry Run: ${{ inputs.dry_run }}"
+          echo ""
+          echo "Check artifacts for full pipeline output."
+
+      # ── Upload artifacts ──
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-results-${{ github.run_id }}
+          path: batch-runner/workspace/
+          retention-days: 30

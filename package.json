@@ -1,0 +1,40 @@
+{
+  "name": "gdpval-realworks",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "aggregate": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs",
+    "predev": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && gh-pages -d dist"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.3.0",
+    "lucide-react": "^0.445.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.23.0",
+    "recharts": "^2.12.7",
+    "tailwind-merge": "^2.5.0",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "gh-pages": "^6.1.1",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.1",
+    "yaml": "^2.8.2"
+  }
+}

@@ -1,0 +1,48 @@
+# Experiment Configuration
+# Example: Single Test (no A/B comparison)
+# condition_b가 없으면 자동으로 Single Test로 동작
+
+experiment:
+  id: "exp002"
+  name: "Single Baseline Run"
+  description: "Baseline 프롬프트 단독 실행"
+  author: "Hyeonsang Jeon"
+  created_at: "2025-02-09"
+
+# 변인통제
+control:
+  fixed:
+    - model
+    - tasks
+    - temperature
+  changed:
+    - prompt_strategy
+
+# 데이터 필터
+data:
+  source: "openai/gdpval"
+  filter:
+    sector: null        # null = 전체
+    occupation: null
+    sample_size: null   # null = 전체 220개
+
+# Condition A: Baseline (condition_b 없음 → Single Test)
+condition_a:
+  name: "Baseline"
+  model:
+    provider: "azure"
+    deployment: "gpt-5.2-chat"
+    temperature: 0.0
+    seed: 42
+  prompt:
+    system: |
+      You are a helpful assistant.
+    prefix: null
+    body: null
+    suffix: null
+
+# 출력 설정
+output:
+  publish_to_hf: false
+  submit_to_evals: false
+  save_path: "results/exp002"

@@ -1,0 +1,28 @@
+# GDPVal Batch Runner Dependencies
+
+# Core dependencies
+datasets>=2.18.0
+huggingface-hub>=0.20.0
+openai>=1.12.0
+
+# Reference file readers
+openpyxl>=3.1.0
+pdfplumber>=0.10.0
+python-docx>=1.0.0
+python-pptx>=0.6.0
+Pillow>=10.0.0
+
+# File generation (Phase 5-3)
+reportlab>=4.0.0              # PDF generation
+matplotlib>=3.8.0             # Charts for PNG
+pandas>=2.1.0                 # Data processing
+PyPDF2>=3.0.0                 # PDF validation
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.1.0
+
+# Type checking
+mypy>=1.8.0
+python-docx>=0.8.11
+

@@ -1,0 +1,28 @@
+id: exp001
+is_dummy: true
+name: "Baseline vs Visual Inspection"
+model: GPT-5
+tasks: 220
+condition_a:
+  name: Baseline
+  prompt: "Standard prompt with direct PDF reading"
+  win_rate: 34
+condition_b:
+  name: Visual Inspection
+  prompt: "Convert to PNG and inspect visually before answering"
+  win_rate: 39
+delta: 5
+changed_variable: "Prompt Strategy"
+industry_breakdown:
+  Finance and Insurance: 7
+  Government: 4
+  Health Care and Social Assistance: 3
+  Information: 6
+  Manufacturing: 2
+  Professional, Scientific, and Technical Services: 5
+  Real Estate and Rental and Leasing: 3
+  Retail Trade: 4
+  Wholesale Trade: 6
+analysis: >
+  Visual inspection prompt increased win rate by +5%p across all industries.
+  Largest gain in Finance (+7%p). PDF errors reduced from 50%+ to 0%.

@@ -1,0 +1,100 @@
+{
+  "experiments": [
+    {
+      "id": "exp001",
+      "name": "Baseline vs Visual Inspection",
+      "model": "GPT-5",
+      "tasks": 220,
+      "condition_a": {
+        "name": "Baseline",
+        "prompt": "Standard prompt with direct PDF reading",
+        "win_rate": 34
+      },
+      "condition_b": {
+        "name": "Visual Inspection",
+        "prompt": "Convert to PNG and inspect visually before answering",
+        "win_rate": 39
+      },
+      "delta": 5,
+      "industry_breakdown": {
+        "Finance": 7,
+        "Legal": 4,
+        "Healthcare": 3,
+        "Software Engineering": 6
+      },
+      "analysis": "Visual inspection prompt increased win rate by +5%p across all industries. Largest gain in Finance (+7%p). PDF errors reduced from 50%+ to 0%."
+    },
+    {
+      "id": "exp002",
+      "name": "Reasoning Low vs High",
+      "model": "GPT-5",
+      "tasks": 220,
+      "condition_a": {
+        "name": "Reasoning Low",
+        "prompt": "Standard reasoning effort",
+        "win_rate": 36
+      },
+      "condition_b": {
+        "name": "Reasoning High",
+        "prompt": "Extended reasoning with detailed analysis",
+        "win_rate": 42
+      },
+      "delta": 6,
+      "industry_breakdown": {
+        "Finance": 8,
+        "Legal": 5,
+        "Healthcare": 4,
+        "Software Engineering": 7
+      },
+      "analysis": "High reasoning mode showed consistent improvements across all industries, with Finance and Software Engineering seeing the largest gains."
+    },
+    {
+      "id": "exp003",
+      "name": "Zero-Shot vs Few-Shot",
+      "model": "Claude 3.5",
+      "tasks": 220,
+      "condition_a": {
+        "name": "Zero-Shot",
+        "prompt": "No examples provided",
+        "win_rate": 38
+      },
+      "condition_b": {
+        "name": "Few-Shot (3 examples)",
+        "prompt": "3 examples of expert work",
+        "win_rate": 41
+      },
+      "delta": 3,
+      "industry_breakdown": {
+        "Finance": 4,
+        "Legal": 3,
+        "Healthcare": 2,
+        "Software Engineering": 3
+      },
+      "analysis": "Few-shot prompting showed moderate improvements. Most effective in Finance where examples provided clear structure."
+    },
+    {
+      "id": "exp004",
+      "name": "Standard vs Chain-of-Thought",
+      "model": "GPT-4o",
+      "tasks": 220,
+      "condition_a": {
+        "name": "Standard",
+        "prompt": "Direct answer generation",
+        "win_rate": 32
+      },
+      "condition_b": {
+        "name": "Chain-of-Thought",
+        "prompt": "Step-by-step reasoning before answer",
+        "win_rate": 37
+      },
+      "delta": 5,
+      "industry_breakdown": {
+        "Finance": 6,
+        "Legal": 5,
+        "Healthcare": 4,
+        "Software Engineering": 5
+      },
+      "analysis": "Chain-of-thought prompting improved performance uniformly across industries, particularly in complex reasoning tasks."
+    }
+  ]
+}

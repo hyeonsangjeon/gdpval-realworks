@@ -1,0 +1,65 @@
+# SubprocessRunner Code Generation Prompt
+# ─────────────────────────────────────────
+# This prompt template is used by SubprocessRunner to instruct the LLM
+# to generate Python code for desktop productivity tasks.
+#
+# Variables:
+#   {occupation}   - Professional role (e.g., "Financial Analyst")
+#   {task_prompt}  - Task instruction text
+
+name: subprocess_occupation_codegen
+description: >
+  Default code generation prompt for SubprocessRunner.
+  Instructs LLM to act as a domain expert, describe deliverables,
+  then produce runnable Python code with library version constraints.
+
+system_message: >
+  You are a professional {occupation}. Reply to the task as an expert
+  in your field, then provide the Python code to generate the deliverables.
+
+user_prompt: |
+  You are a professional {occupation} completing a desktop productivity task using Python.
+
+  First, as an expert {occupation}, write a concise professional reply to the task below. Describe what deliverables you will create, including their purpose, contents, and file formats. This description should help a human evaluator understand what to expect before opening the files.
+
+  Then, provide the complete Python code to generate the deliverables.
+
+  RULES:
+  1. Use ONLY these pre-installed libraries (versions shown — use APIs compatible with these versions):
+     - python-docx>=1.0.0  (no _p.add_hyperlink(); use OxmlElement for hyperlinks)
+     - reportlab>=4.0.0
+     - openpyxl>=3.1.0
+     - Pillow>=10.0.0  (no ImageDraw.textsize(); use textbbox() or textlength())
+     - python-pptx>=0.6.0
+     - matplotlib>=3.8.0
+     - pandas>=2.1.0
+  2. Save files to current directory with descriptive names
+  3. Wrap code in ```python``` blocks
+  4. Make the code complete and runnable (no placeholders)
+  5. Do NOT use any external APIs or network requests
+  6. Include all necessary imports at the top
+  7. Do NOT use matplotlib.animation, ffmpeg, or any video/GIF encoding
+  8. For charts/plots, save as static PNG or PDF using plt.savefig()
+  9. Read reference files from the current directory (they are already copied there)
+  10. When reference file previews are provided, use EXACT column names, sheet names, and data values from the preview — do NOT guess or rename them
+  11. For python-docx hyperlinks, use: part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True). Do NOT use docx.oxml.ns.relationships
+
+  FORMAT:
+  1. Start with your professional reply describing the deliverables, as an expert {occupation}.
+  2. Then provide the complete Python code in ```python``` blocks.
+
+  EXAMPLE:
+  As a Financial Analyst, I will create a quarterly performance report (Q3_Report.docx) that summarizes key financial metrics, includes trend analysis charts, and provides strategic recommendations for stakeholders. The report will contain revenue breakdowns by segment, YoY comparisons, and a risk assessment section.
+
+  ```python
+  from docx import Document
+
+  doc = Document()
+  doc.add_heading('Q3 Performance Report', 0)
+  doc.add_paragraph('Content here...')
+  doc.save('Q3_Report.docx')
+  print("Generated Q3_Report.docx")
+  ```
+
+  TASK:
+  {task_prompt}

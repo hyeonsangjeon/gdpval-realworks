@@ -1,0 +1,138 @@
+{
+  "experiment_id": "exp999_smoke_baseline_sample",
+  "experiment_name": "Smoke Baseline Run (Sample)",
+  "condition_name": "Baseline",
+  "execution_mode": "code_interpreter",
+  "model": "gpt-5.2-chat",
+  "started_at": "2026-02-24T02:53:48.295929+00:00",
+  "completed_at": "2026-02-24T03:00:58.176833+00:00",
+  "duration": "7m 9s",
+  "summary": {
+    "total_tasks": 3,
+    "success_count": 3,
+    "error_count": 0,
+    "qa_failed_count": 0,
+    "retried_count": 0,
+    "resume_rounds_used": 0
+  },
+  "qa_stats": {
+    "enabled": true,
+    "avg_score": 8.33,
+    "min_score": 7,
+    "max_score": 9,
+    "passed_count": 3,
+    "failed_count": 0,
+    "undetermined_count": 0
+  },
+  "timing_stats": {
+    "avg_ms": 135629,
+    "min_ms": 29134,
+    "max_ms": 288879,
+    "total_ms": 406887
+  },
+  "sector_stats": {
+    "Government": {
+      "total": 2,
+      "success": 2,
+      "success_rate_pct": 100,
+      "avg_qa_score": 9.0,
+      "avg_latency_ms": 159007
+    },
+    "Real Estate and Rental and Leasing": {
+      "total": 1,
+      "success": 1,
+      "success_rate_pct": 100,
+      "avg_qa_score": 7.0,
+      "avg_latency_ms": 88873
+    }
+  },
+  "results": [
+    {
+      "task_id": "0419f1c3-d669-45d0-81cd-f4d5923b06a5",
+      "sector": "Real Estate and Rental and Leasing",
+      "occupation": "Property, Real Estate, and Community Association Managers",
+      "needs_files": true,
+      "status": "success",
+      "retried": false,
+      "resume_round": null,
+      "content": "As a Property Manager overseeing a multi-family residential portfolio in New York State, I prepared a formal, data-driven Performance Improvement Plan (PIP) for Superintendent John Miller. The primary deliverable is a professionally formatted Word document titled **“John_Miller_PIP_July_2025.docx.”**\n\nThis 2–3 page document serves to clearly document performance deficiencies, set measurable improvement expectations, and outline management support in accordance with company standards and PIP procedures. Specifically:\n\n- **Purpose:** To address recent declines in performance while providing the employee with a fair, structured opportunity to return to satisfactory performance.\n- **Contents:**  \n  1. A factual summary of performance gaps, grounded in analysis of the Work Order Log (timeliness, completion rates, redo rate) and the Resident Complaint Log (communication, professionalism, and quality-of-work themes). Metrics are clearly defined and tied directly to company standards.  \n  2. Three to five specific, measurable performance objectives aligned with the identified gaps.  \n  3. A description of management support, including required training modules (Advanced Plumbing Diagnostics and Customer Service & Professionalism), weekly check-ins, and ongoing guidance.  \n  4. A clear statement of consequences should improvement not be achieved within the 90-day PIP period.  \n  5. A standard acknowledgment and signature section for the employee, manager, and a witness.\n- **File Format:** Microsoft Word (.docx), suitable for HR documentation, employee review meetings, and personnel records.\n\nThe document is ready for review, discussion with the employee, and formal execution as part of the company’s standard performance management process.",
+      "deliverable_text": "As a Property Manager overseeing a multi-family residential portfolio in New York State, I prepared a formal, data-driven Performance Improvement Plan (PIP) for Superintendent John Miller. The primary deliverable is a professionally formatted Word document titled **“John_Miller_PIP_July_2025.docx.”**\n\nThis 2–3 page document serves to clearly document performance deficiencies, set measurable improvement expectations, and outline management support in accordance with company standards and PIP procedures. Specifically:\n\n- **Purpose:** To address recent declines in performance while providing the employee with a fair, structured opportunity to return to satisfactory performance.\n- **Contents:**  \n  1. A factual summary of performance gaps, grounded in analysis of the Work Order Log (timeliness, completion rates, redo rate) and the Resident Complaint Log (communication, professionalism, and quality-of-work themes). Metrics are clearly defined and tied directly to company standards.  \n  2. Three to five specific, measurable performance objectives aligned with the identified gaps.  \n  3. A description of management support, including required training modules (Advanced Plumbing Diagnostics and Customer Service & Professionalism), weekly check-ins, and ongoing guidance.  \n  4. A clear statement of consequences should improvement not be achieved within the 90-day PIP period.  \n  5. A standard acknowledgment and signature section for the employee, manager, and a witness.\n- **File Format:** Microsoft Word (.docx), suitable for HR documentation, employee review meetings, and personnel records.\n\nThe document is ready for review, discussion with the employee, and formal execution as part of the company’s standard performance management process.",
+      "deliverable_files": [
+        "deliverable_files/0419f1c3-d669-45d0-81cd-f4d5923b06a5/John_Miller_PIP_July_2025.docx"
+      ],
+      "deliverable_files_count": 1,
+      "model": "gpt-5.2-chat",
+      "usage": null,
+      "latency_ms": 88873.01,
+      "timestamp": "2026-02-24T02:55:17.173536+00:00",
+      "qa_passed": true,
+      "qa_score": 7,
+      "qa_llm_passed": false,
+      "qa_issues": [
+        "Summary lacks quantified analysis of 4-hour acknowledgement compliance.",
+        "Task volume metrics from the Work Order Log are not explicitly analyzed."
+      ],
+      "qa_issues_count": 2,
+      "qa_suggestion": "Add quantified acknowledgement and task volume metrics to strengthen data-driven justification.",
+      "qa_undetermined": false,
+      "error": null
+    },
+    {
+      "task_id": "dfb4e0cd-a0b7-454e-b943-0dd586c2764c",
+      "sector": "Government",
+      "occupation": "Compliance Officers",
+      "needs_files": true,
+      "status": "success",
+      "retried": false,
+      "resume_round": null,
+      "content": "As a grants management and compliance professional, I completed a targeted spending‑rate risk analysis to proactively support compliance with **2 CFR Part 200** requirements. Based on your request, I reviewed the provided *Award Data Report* and evaluated each award’s expenditure activity relative to time elapsed in the project period as of **03/31/2025**.\n\n**Deliverable Produced**\n\nI created one Excel workbook:\n\n**Spending_Rate_Compliance_Analysis.xlsx**  \n**Purpose:**  \nTo identify awards that present a potential risk of non‑compliance due to unusually fast or slow spending patterns, enabling program and grants staff to prioritize outreach and monitoring.\n\n**Contents:**  \nThe Excel file includes **only those awards that meet at least one of the specified risk criteria**:\n- **Fast Spending:** Over 50% of funds expended with 25% or less of the project period elapsed  \n- **Slow Spending:** Under 25% of funds expended with 75% or more of the project period elapsed  \n\n**Columns Included:**\n- Recipient Award Number  \n- Start Date  \n- End Date  \n- % Time Elapsed (calculated as of 03/31/2025)  \n- Total Awarded Amt  \n- FFR Expenditure Amt  \n- % of Funds Spent  \n- Spending Rate Analysis (identified as *Fast Spending* or *Slow Spending*)\n\nThis file is ready for internal review and can be used directly to determine which recipients should be contacted to discuss spending patterns and ensure ongoing compliance with federal grant regulations.",
+      "deliverable_text": "As a grants management and compliance professional, I completed a targeted spending‑rate risk analysis to proactively support compliance with **2 CFR Part 200** requirements. Based on your request, I reviewed the provided *Award Data Report* and evaluated each award’s expenditure activity relative to time elapsed in the project period as of **03/31/2025**.\n\n**Deliverable Produced**\n\nI created one Excel workbook:\n\n**Spending_Rate_Compliance_Analysis.xlsx**  \n**Purpose:**  \nTo identify awards that present a potential risk of non‑compliance due to unusually fast or slow spending patterns, enabling program and grants staff to prioritize outreach and monitoring.\n\n**Contents:**  \nThe Excel file includes **only those awards that meet at least one of the specified risk criteria**:\n- **Fast Spending:** Over 50% of funds expended with 25% or less of the project period elapsed  \n- **Slow Spending:** Under 25% of funds expended with 75% or more of the project period elapsed  \n\n**Columns Included:**\n- Recipient Award Number  \n- Start Date  \n- End Date  \n- % Time Elapsed (calculated as of 03/31/2025)  \n- Total Awarded Amt  \n- FFR Expenditure Amt  \n- % of Funds Spent  \n- Spending Rate Analysis (identified as *Fast Spending* or *Slow Spending*)\n\nThis file is ready for internal review and can be used directly to determine which recipients should be contacted to discuss spending patterns and ensure ongoing compliance with federal grant regulations.",
+      "deliverable_files": [
+        "deliverable_files/dfb4e0cd-a0b7-454e-b943-0dd586c2764c/Spending_Rate_Compliance_Analysis.xlsx"
+      ],
+      "deliverable_files_count": 1,
+      "model": "gpt-5.2-chat",
+      "usage": null,
+      "latency_ms": 288879.45,
+      "timestamp": "2026-02-24T03:00:15.799586+00:00",
+      "qa_passed": true,
+      "qa_score": 9,
+      "qa_llm_passed": true,
+      "qa_issues": [],
+      "qa_issues_count": 0,
+      "qa_suggestion": "",
+      "qa_undetermined": false,
+      "error": null
+    },
+    {
+      "task_id": "a328feea-47db-4856-b4be-2bdc63dd88fb",
+      "sector": "Government",
+      "occupation": "Administrative Services Managers",
+      "needs_files": true,
+      "status": "success",
+      "retried": false,
+      "resume_round": null,
+      "content": "As the Administrative Services Manager, I created a concise, one-page policy document titled **“Reporting of Unscheduled Absence or Lateness Procedure”** in Microsoft Word format (.docx).  \n\n**Purpose and Use:**  \nThis document establishes a clear and consistent procedure for staff to report unplanned absences or late starts. It is designed to address the issues identified at the Regional Administrative Support Supervisors and Team Leads Forum, improve accuracy in HR time tracking, ensure appropriate handling of MFA case information, and support timely operational coverage in Regional Branches.\n\n**Contents:**  \nThe document includes:\n- **Purpose** – explains why the procedure is required and the outcomes it supports.  \n- **Scope** – identifies who the procedure applies to across Regional Branches.  \n- **Relevant Definitions** – clarifies key terms such as unscheduled absence, lateness, MFA case, and appropriate contact person.  \n- **Procedures** – provides clear, step-by-step instructions requiring staff to report unscheduled absences or lateness by direct phone call to their Supervisor or Team Lead, outlines timing expectations, supports supervisory follow-up, and ensures MFA-related information is communicated to Human Resources.\n\n**File Format:**  \n- One professionally formatted, one-page **Word document (.docx)** suitable for immediate distribution to staff and inclusion in branch procedures or policy manuals.",
+      "deliverable_text": "As the Administrative Services Manager, I created a concise, one-page policy document titled **“Reporting of Unscheduled Absence or Lateness Procedure”** in Microsoft Word format (.docx).  \n\n**Purpose and Use:**  \nThis document establishes a clear and consistent procedure for staff to report unplanned absences or late starts. It is designed to address the issues identified at the Regional Administrative Support Supervisors and Team Leads Forum, improve accuracy in HR time tracking, ensure appropriate handling of MFA case information, and support timely operational coverage in Regional Branches.\n\n**Contents:**  \nThe document includes:\n- **Purpose** – explains why the procedure is required and the outcomes it supports.  \n- **Scope** – identifies who the procedure applies to across Regional Branches.  \n- **Relevant Definitions** – clarifies key terms such as unscheduled absence, lateness, MFA case, and appropriate contact person.  \n- **Procedures** – provides clear, step-by-step instructions requiring staff to report unscheduled absences or lateness by direct phone call to their Supervisor or Team Lead, outlines timing expectations, supports supervisory follow-up, and ensures MFA-related information is communicated to Human Resources.\n\n**File Format:**  \n- One professionally formatted, one-page **Word document (.docx)** suitable for immediate distribution to staff and inclusion in branch procedures or policy manuals.",
+      "deliverable_files": [
+        "deliverable_files/a328feea-47db-4856-b4be-2bdc63dd88fb/Reporting_of_Unscheduled_Absence_or_Lateness_Procedure.docx"
+      ],
+      "deliverable_files_count": 1,
+      "model": "gpt-5.2-chat",
+      "usage": null,
+      "latency_ms": 29134.15,
+      "timestamp": "2026-02-24T03:00:51.120627+00:00",
+      "qa_passed": true,
+      "qa_score": 9,
+      "qa_llm_passed": true,
+      "qa_issues": [
+        "No alternate contact is specified if the supervisor or team lead is unreachable.",
+        "The procedure does not state consequences for non-compliance."
+      ],
+      "qa_issues_count": 2,
+      "qa_suggestion": "Add an alternate contact protocol and brief non-compliance consequences to strengthen clarity and enforcement.",
+      "qa_undetermined": false,
+      "error": null
+    }
+  ]
+}
