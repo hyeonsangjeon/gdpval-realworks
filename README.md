@@ -30,13 +30,14 @@
 
 ---
 
-## Why This Exists
+## The Problem
 
 Most LLM benchmarks test **academic reasoning** — math, code puzzles, trivia.  
-But real professionals need LLMs to do **real work**: build Excel reports, draft legal documents, create sales presentations.
+None of that tells you whether a model can actually **do your job**.
 
-**GDPVal** (GDP-level Validation) evaluates LLMs on **220 real-world expert tasks** spanning 11 sectors and 55 occupations.  
-This project automates the entire pipeline: **run experiments → collect results → visualize on a live dashboard** — all from a single YAML file.
+**GDPVal** (GDP-level Validation) is different: **220 real-world expert tasks** across 11 sectors and 55 occupations — Excel reports, legal docs, sales decks, the stuff people actually get paid for.
+
+This repo automates the entire loop: **configure → run → collect → visualize** — driven by a single YAML file, executed on GitHub Actions, results on a live dashboard.
 
 > 🎯 One YAML file. One button click. Full experiment lifecycle.
 
@@ -193,6 +194,8 @@ Then trigger it from **Actions → Run workflow** with `experiment_yaml: exp001_
 | **`code_interpreter`** | LLM writes + runs code inside Azure/OpenAI's **secure sandbox**. Files generated in the cloud. | ✅ Production — safe, powerful |
 | **`subprocess`** | LLM generates code → executed locally in an isolated temp directory. | Non-OpenAI models (Anthropic, etc.) |
 | **`json_renderer`** | LLM outputs a JSON spec → a **fixed renderer** creates files. Same renderer for all models. | Fair A/B comparison across models |
+
+> 🐳 `subprocess` mode is planned to evolve into a **container-based** execution mode — if time permits and coffee supply holds.
 
 ---
 
