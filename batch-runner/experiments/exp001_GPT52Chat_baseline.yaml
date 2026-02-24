@@ -15,9 +15,9 @@ control:
     - model
     - tasks
     - temperature
-    - prompt_strategy
+    - model 
   changed:
-    - model
+    - prompt_strategy
 
 # Data filter
 data:

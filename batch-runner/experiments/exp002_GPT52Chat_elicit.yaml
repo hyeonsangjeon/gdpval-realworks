@@ -1,7 +1,7 @@
 # Experiment Configuration
 # Full run with GPT-5.2 Chat on all 220 tasks + PROMPT_ELICIT_CAPABILITIES_SUFFIX From A.3 in https://arxiv.org/pdf/2510.04374
 # Compare with exp001_GPT52Chat_baseline (default suffix)
-# If condition_b is absent, automatically runs as Single Test
+# If condition_b is absent, automatically runs as Single Test 
 
 experiment:
   id: "exp002_GPT52Chat_elicit"
