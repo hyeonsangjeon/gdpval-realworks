@@ -21,7 +21,7 @@ control:
 
 # Data filter
 data:
-  source: "HyeonSang/exp002_GPT52Chat_elicit"
+  source: "HyeonSang/exp004_GPT52Chat_elicit_runner_exec"
   filter:
     sector: null
     occupation: null
