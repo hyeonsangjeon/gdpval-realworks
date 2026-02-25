@@ -3,8 +3,8 @@
 - **Condition**: Baseline
 - **Model**: gpt-5.2-chat
 - **Mode**: code_interpreter
-- **Date**: 2026-02-24
-- **Duration**: 22m 39s
+- **Date**: 2026-02-25
+- **Duration**: 17m 54s
 
 ## Summary
 
@@ -16,9 +16,9 @@
 | QA failed | 0 |
 | Retried tasks | 0 |
 | Resume rounds used | 0 |
-| Avg latency | 444,459ms |
-| Max latency | 670,899ms |
-| Total LLM time | 1333s |
+| Avg latency | 350,214ms |
+| Max latency | 636,216ms |
+| Total LLM time | 1050s |
 
 ## QA Statistics
 
@@ -34,32 +34,35 @@
 
 | # | Task ID | Sector | Occupation | Status | Retry | Files | QA | Time |
 |---|---------|--------|------------|--------|-------|-------|----|------|
-| 1 | `0419f1c3…` | Real Estate and Rent | Property, Real  | ✅ success | - | 1 | 8/10 | 670899ms |
-| 2 | `dfb4e0cd…` | Government | Compliance Offi | ✅ success | - | 1 | 9/10 | 61181ms |
-| 3 | `a328feea…` | Government | Administrative  | ✅ success | - | 1 | 9/10 | 601296ms |
+| 1 | `0419f1c3…` | Real Estate and Rent | Property, Real  | ✅ success | - | 1 | 8/10 | 146271ms |
+| 2 | `dfb4e0cd…` | Government | Compliance Offi | ✅ success | - | 1 | 9/10 | 636216ms |
+| 3 | `a328feea…` | Government | Administrative  | ✅ success | - | 1 | 9/10 | 268156ms |
 
 ## Sector Breakdown
 
 | Sector | Tasks | Success | Success% | Avg QA | Avg Latency |
 |--------|-------|---------|----------|--------|-------------|
-| Government | 2 | 2 | 100% | 9.0/10 | 331,239ms |
-| Real Estate and Rental and Leasing | 1 | 1 | 100% | 8.0/10 | 670,899ms |
+| Government | 2 | 2 | 100% | 9.0/10 | 452,186ms |
+| Real Estate and Rental and Leasing | 1 | 1 | 100% | 8.0/10 | 146,271ms |
 
 ## QA Issues
 
 ### ✅ `0419f1c3…` — score 8/10
-- Training modules lack explicit written justification linking each to specific performance gaps.
-- Task volume is mentioned but not clearly analyzed as a performance gap.
-- Text response summarizes deliverable rather than restating key findings.
-  > 💡 Add brief justifications for each training and clarify whether task volume requires improvement.
+- Training module justification is implicit rather than explicitly linked to each performance gap.
+- Task volume is stated without comparison to an expected or historical benchmark.
+  > 💡 Add a brief paragraph explicitly linking each assigned training to specific documented deficiencies and benchmarks.
+
+### ✅ `dfb4e0cd…` — score 9/10
+- Percent columns are shown as decimals rather than formatted percentages.
+  > 💡 Format % Time Elapsed and % of Funds Spent as percentages for clearer interpretation.
 
 ### ✅ `a328feea…` — score 9/10
-- Procedure does not specify alternate contact if Supervisor or Team Lead is unreachable.
-  > 💡 Add a clear secondary contact process when the primary supervisor cannot be reached.
+- No contingency process if Supervisor or Team Lead is unreachable.
+  > 💡 Add a clear backup contact procedure for situations when the primary contact is unavailable.
 
 
 ## Deliverable Files
 
-- `0419f1c3-d669-45d0-81cd-f4d5923b06a5`: deliverable_files/0419f1c3-d669-45d0-81cd-f4d5923b06a5/Performance_Improvement_Plan_John_Miller.docx
-- `dfb4e0cd-a0b7-454e-b943-0dd586c2764c`: deliverable_files/dfb4e0cd-a0b7-454e-b943-0dd586c2764c/Spending_Rate_Compliance_Analysis_As_of_2025-03-31.xlsx
+- `0419f1c3-d669-45d0-81cd-f4d5923b06a5`: deliverable_files/0419f1c3-d669-45d0-81cd-f4d5923b06a5/John_Miller_Performance_Improvement_Plan.docx
+- `dfb4e0cd-a0b7-454e-b943-0dd586c2764c`: deliverable_files/dfb4e0cd-a0b7-454e-b943-0dd586c2764c/Spending_Rate_Compliance_Analysis_as_of_2025-03-31.xlsx
 - `a328feea-47db-4856-b4be-2bdc63dd88fb`: deliverable_files/a328feea-47db-4856-b4be-2bdc63dd88fb/Reporting_of_Unscheduled_Absence_or_Lateness_Policy.docx
