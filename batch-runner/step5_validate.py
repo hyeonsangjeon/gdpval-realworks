@@ -143,7 +143,7 @@ def validate(data_dir: str = None) -> bool:
             if len(row) == 0:
                 continue
             files = row.iloc[0].get("deliverable_files")
-            if not files or (isinstance(files, list) and len(files) == 0):
+            if files is None or (hasattr(files, '__len__') and len(files) == 0):
                 needs_files_missing.append(task_id)
 
         if needs_files_missing:
@@ -162,7 +162,7 @@ def validate(data_dir: str = None) -> bool:
         checked = 0
         for _, row in df.iterrows():
             files = row.get("deliverable_files")
-            if not files or not isinstance(files, list):
+            if files is None or not hasattr(files, '__iter__') or (hasattr(files, '__len__') and len(files) == 0):
                 continue
             for fpath in files:
                 checked += 1
