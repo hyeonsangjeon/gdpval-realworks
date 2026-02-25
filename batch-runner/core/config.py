@@ -109,6 +109,8 @@ PROMPT_PRESETS = {
 
 # ─── Batch Pipeline ───────────────────────────────────────────────────────
 
+SUBPROCESS_TIMEOUT = 600  # subprocess mode: max seconds per code execution (10 min)
+
 # Azure AI 모델 (모두 AzureOpenAI SDK로 호출)
 SUPPORTED_MODELS = [
     "gpt-5.2-chat",       # Azure OpenAI — GPT-5.2

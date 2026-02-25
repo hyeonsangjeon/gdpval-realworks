@@ -7,7 +7,7 @@ environment with strict security controls.
 Security features:
 - Isolated temporary directory
 - Environment variable whitelist (no API keys)
-- 120-second timeout
+- Configurable timeout (see config.SUBPROCESS_TIMEOUT)
 - No network access (subprocess has no credentials)
 """
 
@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from core.config import SUBPROCESS_TIMEOUT
 from core.llm_client import complete
 from core.prompt_loader import load_prompt, render_prompt
 from core.file_preview import generate_all_previews
@@ -239,7 +240,7 @@ class SubprocessRunner:
                     env=safe_env,
                     capture_output=True,
                     text=True,
-                    timeout=120  # 120 seconds max
+                    timeout=SUBPROCESS_TIMEOUT
                 )
 
                 # Check execution result
@@ -281,7 +282,7 @@ class SubprocessRunner:
                     "success": False,
                     "text": "",
                     "files": [],
-                    "error": "Code execution timeout (120 seconds exceeded)"
+                    "error": f"Code execution timeout ({SUBPROCESS_TIMEOUT} seconds exceeded)"
                 }
 
             except Exception as e:
