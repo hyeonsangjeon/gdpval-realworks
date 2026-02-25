@@ -147,10 +147,51 @@ def _describe_image(filepath: str) -> str:
 
 
 def _describe_media(filepath: str) -> str:
-    """Describe a media file"""
+    """Describe a media file with ffmpeg metadata extraction"""
+    import subprocess
+    import json
+
     filename = os.path.basename(filepath)
     size_kb = os.path.getsize(filepath) / 1024
-    return f"[Media file: {filename} ({size_kb:.0f} KB)]"
+
+    # Try to extract metadata using ffprobe
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-print_format", "json",
+             "-show_format", "-show_streams", filepath],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            streams = data.get("streams", [])
+            fmt = data.get("format", {})
+
+            if streams:
+                stream = streams[0]
+                duration = float(fmt.get("duration", 0))
+                sample_rate = stream.get("sample_rate")
+                channels = stream.get("channels")
+                codec_name = stream.get("codec_name", "unknown")
+                bitrate = fmt.get("bit_rate")
+
+                # Format bitrate
+                if bitrate:
+                    bitrate_kbps = int(bitrate) // 1000
+                    bitrate_str = f", Bitrate: {bitrate_kbps}kbps"
+                else:
+                    bitrate_str = ""
+
+                specs = f"Duration: {duration:.1f}s, Sample Rate: {sample_rate}Hz, Channels: {channels}, Codec: {codec_name}{bitrate_str}"
+                return f"[Audio file: {filename} ({size_kb:.0f}KB) - {specs}]"
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
+        # ffprobe not available or error — fall back to basic info
+        pass
+
+    # Fallback: basic file info only
+    return f"[Media file: {filename} ({size_kb:.0f}KB)]"
 
 
 def _describe_generic(filepath: str, file_type: str) -> str:
