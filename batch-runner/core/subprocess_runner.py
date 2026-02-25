@@ -76,6 +76,13 @@ class SubprocessRunner:
                 if previews:
                     task_prompt = task_prompt + "\n\n" + previews
 
+                # Explicitly list available files for LLM code generation
+                available_files = [os.path.basename(f) for f in reference_files]
+                task_prompt = (
+                    task_prompt
+                    + f"\n\n📁 Files available in current directory (you can use them directly): {available_files}"
+                )
+
             # Step 1: Generate code using LLM
             rendered = render_prompt(
                 self.prompt_data,
@@ -206,14 +213,24 @@ class SubprocessRunner:
                 code_path = Path(tmpdir) / "solution.py"
                 code_path.write_text(code, encoding="utf-8")
 
-                # Copy reference files to execution directory
+                # Copy reference files to execution directory and track copied files
+                copied_files = []
                 if reference_files:
                     for src_path in reference_files:
                         if os.path.exists(src_path):
                             try:
+                                filename = os.path.basename(src_path)
                                 shutil.copy(src_path, tmpdir)
+                                copied_files.append(filename)
                             except Exception as e:
                                 print(f"Warning: Failed to copy reference file {src_path}: {e}")
+
+                # Inject available files list into code
+                if copied_files:
+                    files_comment = f"# Available files in current directory: {copied_files}\n"
+                    code = files_comment + code
+                else:
+                    code = "# No reference files available\n" + code
 
                 # 🔒 Security: Whitelist environment variables
                 # Use current Python's PATH so venv packages are available
