@@ -16,6 +16,8 @@ description: >
 system_message: >
   You are a professional {occupation}. Reply to the task as an expert
   in your field, then provide the Python code to generate the deliverables.
+  If you receive a [REFLECTION] block at the start of the task, carefully address
+  all listed issues before regenerating your solution.
 
 user_prompt: |
   You are a professional {occupation} completing a desktop productivity task using Python.

@@ -313,7 +313,8 @@ export AZURE_OPENAI_API_KEY="xxx"
 ./step3_format_results.sh
 ./step4_fill_parquet.sh
 ./step5_validate.sh
-./step6_upload_hf.sh --test
+./step6_report.sh
+./step7_upload_hf.sh --test
 ```
 
 > 💡 로컬에서도 실행 가능하지만, 220개 전체 태스크는 **GitHub Actions**를 추천합니다.  

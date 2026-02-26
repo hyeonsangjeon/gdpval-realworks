@@ -1,0 +1,110 @@
+{
+  "experiment_id": "exp997_smoke_baseline_sample_local_test",
+  "experiment_name": "Smoke Baseline Run (Sample)",
+  "condition_name": "Baseline",
+  "execution_mode": "subprocess",
+  "model": "gpt-5.2-chat",
+  "started_at": "2026-02-26T06:11:03.927734+00:00",
+  "completed_at": "2026-02-26T06:12:05.813140+00:00",
+  "duration": "1m 1s",
+  "summary": {
+    "total_tasks": 2,
+    "success_count": 2,
+    "error_count": 0,
+    "qa_failed_count": 0,
+    "retried_count": 0,
+    "resume_rounds_used": 0
+  },
+  "qa_stats": {
+    "enabled": true,
+    "avg_score": 8.5,
+    "min_score": 8,
+    "max_score": 9,
+    "passed_count": 2,
+    "failed_count": 0,
+    "undetermined_count": 0
+  },
+  "timing_stats": {
+    "avg_ms": 24870,
+    "min_ms": 14888,
+    "max_ms": 34852,
+    "total_ms": 49740
+  },
+  "sector_stats": {
+    "Government": {
+      "total": 1,
+      "success": 1,
+      "success_rate_pct": 100,
+      "avg_qa_score": 9.0,
+      "avg_latency_ms": 14888
+    },
+    "Real Estate and Rental and Leasing": {
+      "total": 1,
+      "success": 1,
+      "success_rate_pct": 100,
+      "avg_qa_score": 8.0,
+      "avg_latency_ms": 34852
+    }
+  },
+  "results": [
+    {
+      "task_id": "0419f1c3-d669-45d0-81cd-f4d5923b06a5",
+      "sector": "Real Estate and Rental and Leasing",
+      "occupation": "Property, Real Estate, and Community Association Managers",
+      "needs_files": true,
+      "status": "success",
+      "retried": false,
+      "resume_round": null,
+      "content": "Generated Performance_Improvement_Plan_John_Miller_2025-07-13.docx\n",
+      "deliverable_text": "As a Property Manager overseeing multi-family residential assets in New York State, I will produce a formal, data-driven Performance Improvement Plan (PIP) document for Superintendent John Miller. The deliverable will be a professionally written Word document titled **“Performance_Improvement_Plan_John_Miller_2025-07-13.docx.”**  \n\n**Purpose:**  \nThe document will clearly document observed performance deficiencies, tie them to objective data from the Work Order Log and Resident Complaint Log, and outline a fair, structured plan for improvement in line with company standards and HR best practices.\n\n**Contents:**  \n1. **Summary of Performance Gaps** – Quantitative analysis of key metrics (acknowledgement/completion timeliness, redo rate, and work order handling) derived from the Work Order Log, along with qualitative themes from resident complaints (communication, professionalism, and work quality).  \n2. **Performance Objectives (3–5)** – Specific, measurable, and time-bound goals aligned with company standards (e.g., 72-hour completion, redo rate below 5%).  \n3. **Support and Resources** – Assigned training modules (Customer Service & Professionalism, Advanced Plumbing Diagnostics, HVAC Fundamentals) with justification and completion timelines within the first 30 days.  \n4. **Consequences Statement** – Clear explanation of potential next steps if improvement benchmarks are not met by the end of the 90-day PIP period.  \n5. **Signatures** – Standard acknowledgement section for Management, Employee, and Witness.\n\n**File Format:**  \n- Microsoft Word document (.docx), approximately 2–3 pages, suitable for HR records and in-person review meetings.\n\nBelow is the complete Python code that reads the provided reference files, analyzes the data, and generates the finalized PIP document in the current directory.",
+      "deliverable_files": [
+        "deliverable_files/0419f1c3-d669-45d0-81cd-f4d5923b06a5/Performance_Improvement_Plan_John_Miller_2025-07-13.docx",
+        "deliverable_files/0419f1c3-d669-45d0-81cd-f4d5923b06a5/Resident Complaint Log.docx",
+        "deliverable_files/0419f1c3-d669-45d0-81cd-f4d5923b06a5/Work Order Log.xlsx"
+      ],
+      "deliverable_files_count": 3,
+      "model": "gpt-5.2-chat",
+      "usage": null,
+      "latency_ms": 34851.88,
+      "timestamp": "2026-02-26T06:11:38.781893+00:00",
+      "qa_passed": true,
+      "qa_score": 8,
+      "qa_llm_passed": true,
+      "qa_issues": [
+        "Summary lacks quantified analysis of acknowledgement-time compliance against the 4-hour standard."
+      ],
+      "qa_issues_count": 1,
+      "qa_suggestion": "Add a clear acknowledgement-time KPI analysis using work order timestamps to strengthen data-driven justification.",
+      "qa_undetermined": false,
+      "error": null
+    },
+    {
+      "task_id": "dfb4e0cd-a0b7-454e-b943-0dd586c2764c",
+      "sector": "Government",
+      "occupation": "Compliance Officers",
+      "needs_files": true,
+      "status": "success",
+      "retried": false,
+      "resume_round": null,
+      "content": "Generated Spending_Rate_Compliance_Analysis_as_of_2025-03-31.xlsx\n",
+      "deliverable_text": "As a grants management compliance professional, I will produce an Excel-based spending rate compliance analysis to proactively identify awards that may present a risk of non-compliance with 2 CFR Part 200. The deliverable will be a single Excel file titled **“Spending_Rate_Compliance_Analysis_as_of_2025-03-31.xlsx.”**  \n\nThis file will include only those awards that meet either of the two supervisory criteria: (1) fast spending (over 50% of funds expended with 25% or less of the project period elapsed) or (2) slow spending (under 25% of funds expended with 75% or more of the project period elapsed), calculated as of **03/31/2025**.  \n\nThe Excel file will contain the following clearly labeled columns to support compliance review and outreach decisions: Recipient Award Number, Start Date, End Date, % Time Elapsed, Total Awarded Amt, FFR Expenditure Amt, % of Funds Spent, and Spending Rate Analysis. The analysis column will explicitly flag each award as either “Fast Spending” or “Slow Spending.” This structured output will allow program and grants management staff to efficiently identify recipients requiring follow-up to ensure spending aligns with federal requirements.",
+      "deliverable_files": [
+        "deliverable_files/dfb4e0cd-a0b7-454e-b943-0dd586c2764c/Spending_Rate_Compliance_Analysis_as_of_2025-03-31.xlsx",
+        "deliverable_files/dfb4e0cd-a0b7-454e-b943-0dd586c2764c/Award Data Report.xlsx"
+      ],
+      "deliverable_files_count": 2,
+      "model": "gpt-5.2-chat",
+      "usage": null,
+      "latency_ms": 14888.17,
+      "timestamp": "2026-02-26T06:11:59.199359+00:00",
+      "qa_passed": true,
+      "qa_score": 9,
+      "qa_llm_passed": true,
+      "qa_issues": [],
+      "qa_issues_count": 0,
+      "qa_suggestion": "",
+      "qa_undetermined": false,
+      "error": null
+    }
+  ]
+}

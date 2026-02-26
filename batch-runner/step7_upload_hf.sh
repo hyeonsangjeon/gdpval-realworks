@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Step 6: Upload dataset to HuggingFace Hub (openai/gdpval 구조와 동일)
+# Step 7: Upload dataset to HuggingFace Hub (openai/gdpval 구조와 동일)
 #
 # Usage:
-#   HF_TOKEN=hf_xxx ./step6_upload_hf.sh            # 완전 자동 (220행 full 검증)
-#   HF_TOKEN=hf_xxx ./step6_upload_hf.sh [repo_id]  # repo override
-#   HF_TOKEN=hf_xxx ./step6_upload_hf.sh --test      # smoke test (parquet 실제 행 수로 검증)
+#   HF_TOKEN=hf_xxx ./step7_upload_hf.sh            # 완전 자동 (220행 full 검증)
+#   HF_TOKEN=hf_xxx ./step7_upload_hf.sh [repo_id]  # repo override
+#   HF_TOKEN=hf_xxx ./step7_upload_hf.sh --test      # smoke test (parquet 실제 행 수로 검증)
 #
 # 업로드 대상: README.md, data/train-*.parquet, deliverable_files/**
 # 제외 대상: .cache/, train/, dataset_dict.json 등 캐시 아티팩트

@@ -142,14 +142,25 @@ jobs:
           cd batch-runner
           bash step5_validate.sh
 
-      # ── Step 6: Upload to HuggingFace (only if not dry_run) ──
-      - name: 'Step 6: Upload to HuggingFace'
+      # ── Step 6: Generate Experiment Report ──
+      - name: 'Step 6: Generate experiment report'
+        if: always()
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+        run: |
+          cd batch-runner
+          bash step6_report.sh
+        continue-on-error: true   # report failure must not block Step 7 upload
+
+      # ── Step 7: Upload to HuggingFace (only if not dry_run) ──
+      - name: 'Step 7: Upload to HuggingFace'
         if: inputs.dry_run != true
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd batch-runner
-          bash step6_upload_hf.sh --test
+          bash step7_upload_hf.sh --test
 
       # ── Create Pull Request (only if not dry_run) ──
       - name: Create Pull Request with results
@@ -172,11 +183,12 @@ jobs:
             - ✅ Step 0: Bootstrap submission repo
             - ✅ Step 1: Prepare tasks
             - ✅ Step 2: Run inference (condition_a)
-            - ✅ Step 2: Run inference (condition_b) - ${{ steps.check_condition_b.outputs.has_condition_b == 'true' && 'Run' || 'Skipped' }}
+            - ✅ Step 2: Run inference (condition_b) — ${{ steps.check_condition_b.outputs.has_condition_b == 'true' && 'Run' || 'Skipped' }}
             - ✅ Step 3: Format results
             - ✅ Step 4: Fill parquet
-            - ✅ Step 5: Validate dataset - ${{ steps.check_smoke_test.outputs.is_smoke_test == 'true' && 'Skipped (smoke test)' || 'Run' }}
-            - ✅ Step 6: Upload to HuggingFace
+            - ✅ Step 5: Validate dataset — ${{ steps.check_smoke_test.outputs.is_smoke_test == 'true' && 'Skipped (smoke test)' || 'Run' }}
+            - ✅ Step 6: Generate experiment report
+            - ✅ Step 7: Upload to HuggingFace
 
             Results uploaded to HuggingFace dataset repository.
             Review and merge to finalize the experiment.

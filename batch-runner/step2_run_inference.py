@@ -426,6 +426,68 @@ def _save_files(files: List[dict], task_id: str) -> List[str]:
     return saved_paths
 
 
+# ── Reflection prompt builder ─────────────────────────────────────────────
+
+
+def _build_reflection_prompt(
+    attempt_num: int,
+    qa_score: int,
+    qa_issues: list,
+    qa_suggestion: str,
+    previous_deliverable_text: str,
+    min_score: int,
+) -> str:
+    """Build a structured reflection prompt for QA retry.
+
+    Transforms raw QA feedback into an actionable critique the LLM
+    can use to genuinely improve its next attempt.
+
+    Args:
+        attempt_num: Current attempt number (1-based, so 2 = first retry)
+        qa_score: QA score from previous attempt (0-10)
+        qa_issues: List of specific issues identified by QA
+        qa_suggestion: Improvement suggestion from QA
+        previous_deliverable_text: Summary of what the previous attempt produced
+                                   (first 500 chars of deliverable_text)
+        min_score: Minimum passing score threshold
+
+    Returns:
+        Structured reflection context string to prepend to the retry instruction
+    """
+    issues_formatted = "\n".join(
+        f"  {i+1}. {issue}" for i, issue in enumerate(qa_issues)
+    ) if qa_issues else "  (No specific issues recorded)"
+
+    prev_summary = (previous_deliverable_text or "")[:500].strip()
+    if len(previous_deliverable_text or "") > 500:
+        prev_summary += "... (truncated)"
+
+    return (
+        f"[REFLECTION — Attempt {attempt_num} | Previous score: {qa_score}/10 "
+        f"(target: {min_score}/10)]\n"
+        f"\n"
+        f"Your previous attempt was reviewed by a QA inspector. "
+        f"Here is the structured critique:\n"
+        f"\n"
+        f"## What you produced (previous attempt)\n"
+        f"{prev_summary}\n"
+        f"\n"
+        f"## Issues identified\n"
+        f"{issues_formatted}\n"
+        f"\n"
+        f"## Improvement suggestion\n"
+        f"  {qa_suggestion or 'Address the issues listed above.'}\n"
+        f"\n"
+        f"## Your task for this attempt\n"
+        f"Carefully review each issue above and produce an improved version "
+        f"that directly addresses all identified weaknesses. "
+        f"Do not simply regenerate the same output — make targeted, specific improvements.\n"
+        f"\n"
+        f"{'='*60}\n"
+        f"ORIGINAL TASK:\n"
+    )
+
+
 # ── Single task execution ──────────────────────────────────────────────────
 
 
@@ -469,8 +531,8 @@ def _execute_single_task(
 
     # Inject error context for retry
     if error_context:
-        # "no deliverable files" 에러 → LLM이 이해할 수 있는 구체적 피드백
         if "no deliverable files" in error_context.lower():
+            # Keep existing no-files feedback unchanged
             instruction += (
                 "\n\n[RETRY - PREVIOUS ATTEMPT FAILED]\n"
                 "Your previous attempt did NOT produce any downloadable files.\n"
@@ -480,7 +542,12 @@ def _execute_single_task(
                 "reportlab for .pdf, python-pptx for .pptx).\n"
                 "Do NOT just describe the deliverable — actually generate the file."
             )
+        elif error_context.startswith("[REFLECTION"):
+            # Reflection retry: structured critique — prepend before instruction
+            # (the reflection prompt already ends with "ORIGINAL TASK:\n")
+            instruction = error_context + instruction
         else:
+            # Infrastructure error retry: append error details after instruction
             instruction += (
                 "\n\n[RETRY - PREVIOUS ATTEMPT FAILED]\n"
                 "The previous code generation produced the following error:\n"
@@ -818,6 +885,7 @@ def run_inference(
         task_id = task["task_id"]
         qa_attempts = 0
         last_qa_feedback = error_context
+        reflection_history = []
 
         # ── best-swap state ──
         best_result = None
@@ -896,6 +964,14 @@ def run_inference(
                 )
                 result["qa"] = qa_result_info
 
+                # Record this QA attempt in history
+                reflection_history.append({
+                    "attempt": qa_attempts + 1,          # 1-based
+                    "score": qa_result_info.get("score"),
+                    "passed": qa_result_info.get("passed"),
+                    "undetermined": qa_result_info.get("undetermined", False),
+                })
+
                 # ── best-swap: 점수 비교 ──
                 current_score = qa_result_info.get("score")
                 if current_score is None:
@@ -951,12 +1027,14 @@ def run_inference(
                           end=" ", flush=True)
                     break
 
-                # Build QA feedback for retry
-                last_qa_feedback = (
-                    f"[QA FEEDBACK - score: {qa_result_info['score']}/10]\n"
-                    f"Issues: {', '.join(qa_result_info['issues'])}\n"
-                    f"Suggestion: {qa_result_info['suggestion']}\n"
-                    f"Please fix these issues and regenerate."
+                # Build structured reflection prompt for retry
+                last_qa_feedback = _build_reflection_prompt(
+                    attempt_num=qa_attempts + 1,
+                    qa_score=qa_result_info["score"],
+                    qa_issues=qa_result_info.get("issues", []),
+                    qa_suggestion=qa_result_info.get("suggestion", ""),
+                    previous_deliverable_text=result.get("deliverable_text", ""),
+                    min_score=qa_cfg.get("min_score", 6),
                 )
                 print(f"\n      🔍 QA: score={qa_result_info['score']}, "
                       f"retrying ({qa_attempts}/{qa_max_retries})...",
@@ -966,7 +1044,15 @@ def run_inference(
             _cleanup_backup()  # 항상 백업 정리
 
         if best_result is not None:
+            best_result["reflection_history"] = reflection_history
+            best_result["reflection_attempts"] = len(reflection_history)
+            if len(reflection_history) > 0:
+                best_result["reflection_final_score"] = best_score
             return best_result
+        result["reflection_history"] = reflection_history
+        result["reflection_attempts"] = len(reflection_history)
+        if len(reflection_history) > 0 and result.get("status") == "success":
+            result["reflection_final_score"] = best_score if best_score >= 0 else None
         return result
 
     # ── Helper: print result status ──
@@ -978,7 +1064,10 @@ def run_inference(
             qa_info = ""
             if result.get("qa"):
                 qa_info = f", QA={result['qa']['score']}"
-            print(f"✓ ({latency:.0f}ms, {file_count} files{qa_info})")
+            reflection_info = ""
+            if result.get("reflection_attempts", 0) > 0:
+                reflection_info = f", reflect×{result['reflection_attempts']}"
+            print(f"✓ ({latency:.0f}ms, {file_count} files{qa_info}{reflection_info})")
         elif result["status"] == "qa_failed":
             qa = result.get("qa", {})
             print(f"✗ QA failed (score={qa.get('score', '?')})")

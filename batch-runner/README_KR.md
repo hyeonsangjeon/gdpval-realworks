@@ -11,7 +11,8 @@ Step 2  추론 실행       →  태스크별 LLM 호출, 증분 저장 (이어�
 Step 3  결과 포맷팅     →  JSON + Markdown 리포트 생성 → results/
 Step 4  Parquet 병합    →  deliverable_text/files를 base parquet에 병합
 Step 5  유효성 검증     →  업로드 전 검증 (220행, 컬럼, 파일 경로)
-Step 6  HF 업로드       →  delete_patterns로 클린 업로드
+Step 6  리포트 생성     →  LLM 내러티브 + 메트릭 → report.md / report.html / report_data.json
+Step 7  HF 업로드       →  delete_patterns로 클린 업로드 (workspace/report/ 포함)
 ```
 
 ## 빠른 시작
@@ -43,8 +44,11 @@ export AZURE_OPENAI_API_KEY="xxx"
 # Step 5: 유효성 검증
 ./step5_validate.sh
 
-# Step 6: HuggingFace 업로드
-./step6_upload_hf.sh HyeonSang/my-experiment-repo
+# Step 6: 실험 리포트 생성
+./step6_report.sh
+
+# Step 7: HuggingFace 업로드
+./step7_upload_hf.sh HyeonSang/my-experiment-repo
 ```
 
 ## 환경 변수
@@ -95,7 +99,20 @@ openai/gdpval  ──duplicate──▶  SUBMISSION_REPO_ID (HF)
 
 업로드 전 무결성 검사: 220행, 필수 컬럼, deliverable 파일 경로 등.
 
-### Step 6: HuggingFace 업로드 (`step6_upload_hf.sh`)
+### Step 6: 리포트 생성 (`step6_report.py`)
+
+`workspace/result.json`을 읽어 `workspace/report/` 아래에 세 개의 파일을 생성합니다:
+
+- **`report_data.json`** — 대시보드 렌더링용 구조화 JSON (메트릭 + LLM 내러티브)
+- **`report.md`** — 실행 요약, 섹터 분석, QA 이슈, 권장사항이 포함된 사람이 읽을 수 있는 Markdown 리포트
+- **`report.html`** — 외부 의존성 없이 브라우저에서 직접 열 수 있는 독립형 HTML 리포트
+
+내러티브 섹션(개요, 품질 분석, 실패 패턴, 권장사항)은 실험과 동일한 모델을 사용한 단일 LLM 호출로 생성됩니다.
+이 단계에서는 채점 점수가 아직 없으므로, 태스크 완료율·Self-QA 점수·레이턴시 패턴·산출물 품질에 집중합니다.
+
+LLM 호출이 실패하면 메트릭 섹션은 그대로 생성되고, 내러티브 필드는 빈 값으로 남습니다.
+
+### Step 7: HuggingFace 업로드 (`step7_upload_hf.sh`)
 
 `delete_patterns`로 HF 원격의 `data/**`, `deliverable_files/**`를 삭제 후 업로드. `reference_files/**`는 제외 (duplicate된 원본 유지).
 
@@ -196,7 +213,8 @@ batch-runner/
 ├── step3_format_results.py/sh   # JSON + Markdown 리포트
 ├── step4_fill_parquet.py/sh     # Parquet 병합
 ├── step5_validate.py/sh         # 업로드 전 검증
-├── step6_upload_hf.sh           # HuggingFace 업로드
+├── step6_report.py/sh           # 실험 리포트 생성 (MD + HTML + JSON)
+├── step7_upload_hf.sh           # HuggingFace 업로드
 │
 ├── core/
 │   ├── config.py                # 중앙 상수 및 경로
@@ -246,7 +264,11 @@ batch-runner/
 ├── workspace/                   # 중간 산출물 (gitignored)
 │   ├── step1_tasks_prepared.json
 │   ├── step2_inference_progress.json
-│   └── step2_inference_results.json
+│   ├── step2_inference_results.json
+│   └── report/                  # Step 6에서 생성
+│       ├── report_data.json
+│       ├── report.md
+│       └── report.html
 │
 └── results/                     # 실험 결과 (JSON + Markdown)
 ```
@@ -275,7 +297,10 @@ Step 4 → workspace/upload/data/train-*.parquet
 Step 5 → 유효성 검증 (통과/실패)
     │
     ▼
-Step 6 → HuggingFace Hub
+Step 6 → workspace/report/{report_data.json, report.md, report.html}
+    │
+    ▼
+Step 7 → HuggingFace Hub
 ```
 
 ## 테스트
@@ -304,9 +329,9 @@ pytest --cov=core --cov-report=html
 - **o-series 모델** (`gpt-5.x`, `o3`, `o4`)은 `temperature` 파라미터를 지원하지 않습니다. `temperature=0`을 전달하면 400 에러가 발생합니다.
 - **`needs_files` 게이트**: 루브릭에서 파일 산출물을 기대하는 태스크는 파일이 생성되지 않으면 실패하여 재시도가 트리거됩니다.
 - **이어하기 동작**: Step 2는 각 태스크 완료 후 진행 상태를 저장합니다. 같은 조건으로 재실행하면 `workspace/step2_inference_progress.json`에서 이어서 `error`/`qa_failed` 태스크만 재실행합니다.
-- **HF 업로드**: Step 6은 `delete_patterns`로 `data/**`와 `deliverable_files/**`를 삭제 후 업로드합니다. `reference_files/**`는 제외됩니다.
+- **HF 업로드**: Step 7은 `delete_patterns`로 `data/**`와 `deliverable_files/**`를 삭제 후 업로드합니다. `reference_files/**`는 제외됩니다. `workspace/report/`는 업로드에 포함됩니다.
 - **`code_interpreter` 모드**는 Azure OpenAI의 Responses API와 내장 Code Interpreter를 활용하는 권장 실행 모드입니다. 보안 샌드박스에서 파일을 생성합니다. Anthropic 등 비 OpenAI 프로바이더는 `subprocess` 또는 `json_renderer`를 사용해야 합니다.
 
 ## GitHub Actions
 
-파이프라인은 GitHub Actions로 자동화할 수 있습니다. `.github/workflows/batch-run.yml`에서 `workflow_dispatch` 설정으로 Actions 탭에서 수동 트리거하여 전체 Step 0–6 파이프라인을 실행할 수 있습니다.
+파이프라인은 GitHub Actions로 자동화할 수 있습니다. `.github/workflows/batch-run.yml`에서 `workflow_dispatch` 설정으로 Actions 탭에서 수동 트리거하여 전체 Step 0–7 파이프라인을 실행할 수 있습니다.

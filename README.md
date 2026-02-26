@@ -252,7 +252,7 @@ gdpval-realworks/
 |---|---|
 | **Trigger** | Manual (`workflow_dispatch`) from Actions tab |
 | **Input** | Experiment YAML filename + optional dry_run flag |
-| **Pipeline** | Step 0 → Step 6 (bootstrap → upload) |
+| **Pipeline** | Step 0 → Step 7 (bootstrap → upload) |
 | **Smart skips** | Smoke tests skip validation; dry_run skips upload + PR |
 | **Auto PR** | Creates a Pull Request with experiment summary |
 | **Artifacts** | Full workspace uploaded for 30 days |
@@ -313,7 +313,8 @@ export AZURE_OPENAI_API_KEY="xxx"
 ./step3_format_results.sh
 ./step4_fill_parquet.sh
 ./step5_validate.sh
-./step6_upload_hf.sh --test
+./step6_report.sh
+./step7_upload_hf.sh --test
 ```
 
 > 💡 Local execution works, but for full 220-task runs we recommend **GitHub Actions**.  
