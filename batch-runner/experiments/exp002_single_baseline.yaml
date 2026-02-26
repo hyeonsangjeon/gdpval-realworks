@@ -39,7 +39,10 @@ condition_a:
       You are a helpful assistant.
     prefix: null
     body: null
-    suffix: null
+    suffix: |
+      Before writing any code, ALWAYS inspect the actual structure of any
+      reference files first (df.columns, df.dtypes, df.head()).
+      Never hardcode column names or assume data types.
 
 # 출력 설정
 output:

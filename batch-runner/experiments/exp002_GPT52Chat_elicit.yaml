@@ -105,6 +105,10 @@ condition_a:
 
       Finally - on the last line of your output text, add CONFIDENCE[XX], where XX is an integer between 0 and 100, inclusive, indicating your confidence that the submission is correct, follows instructions, and is well-formatted.
 
+      Before writing any code, ALWAYS inspect the actual structure of any
+      reference files first (df.columns, df.dtypes, df.head()).
+      Never hardcode column names or assume data types.
+
   # Self-QA: LLM inspects its own output
   qa:
     enabled: true

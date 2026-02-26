@@ -55,6 +55,10 @@ condition_a:
       (e.g. "[Download ...](sandbox:/mnt/data/...)" or similar).
       Only provide a plain-text summary of what was produced.
 
+      Before writing any code, ALWAYS inspect the actual structure of any
+      reference files first (df.columns, df.dtypes, df.head()).
+      Never hardcode column names or assume data types.
+
   # Self-QA: LLM이 자기 결과물을 검수
   qa:
     enabled: true
