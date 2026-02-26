@@ -109,7 +109,7 @@ PROMPT_PRESETS = {
 
 # ─── Batch Pipeline ───────────────────────────────────────────────────────
 
-SUBPROCESS_TIMEOUT = 600  # subprocess mode: max seconds per code execution (10 min)
+SUBPROCESS_TIMEOUT = 570  # subprocess mode: max seconds per code execution (9min 30s)
 
 # Azure AI 모델 (모두 AzureOpenAI SDK로 호출)
 SUPPORTED_MODELS = [

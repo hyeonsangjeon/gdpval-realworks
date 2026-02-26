@@ -83,6 +83,7 @@ jobs:
 
       # ── Step 2a: Run Inference (condition_a) ──
       - name: 'Step 2a: Run inference (condition_a)'
+        timeout-minutes: 330    # ← sufficient time for full run, adjust if needed  condition_a
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
@@ -102,6 +103,7 @@ jobs:
           echo "Condition B exists: $HAS_CONDITION_B"
 
       - name: 'Step 2b: Run inference (condition_b)'
+        timeout-minutes: 330
         if: steps.check_condition_b.outputs.has_condition_b == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

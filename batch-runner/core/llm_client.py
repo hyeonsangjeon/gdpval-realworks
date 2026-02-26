@@ -128,6 +128,7 @@ def create_client(
         azure_endpoint=endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", DEFAULT_ENDPOINT),
         api_key=api_key or os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY"),
         api_version=api_version or DEFAULT_API_VERSION,
+        timeout=480,  # 8min — prevent hang before GitHub Actions 10min no-output kill
     )
 
 
@@ -165,6 +166,7 @@ def create_provider_client(
         return OpenAI(
             api_key=api_key or os.getenv("OPENAI_API_KEY"),
             base_url=endpoint or None,
+            timeout=480,
         )
 
     elif provider == "anthropic":
