@@ -293,3 +293,88 @@ def _preview_image(path: Path, filename: str, file_size: int) -> str:
         info += "\n  (could not read image dimensions)"
 
     return info
+
+
+# ─── Structure info (token-efficient metadata only) ───
+
+
+def build_file_structure_info(reference_files: list) -> str:
+    """Read reference file structure and return a prompt-ready summary.
+
+    Reads column names and shape from each reference file.
+    Supports: .xlsx, .xls, .csv, .tsv, .parquet, .json
+
+    Token-efficient: metadata only, no row content.
+    Returns empty string if no files provided or all fail to read.
+
+    Used by both subprocess_runner.py and code_interpreter.py to prevent
+    LLM from hardcoding column names without inspecting the actual file.
+    """
+    if not reference_files:
+        return ""
+
+    lines = ["## Reference File Structure (auto-detected)"]
+    any_success = False
+
+    for fpath in reference_files:
+        path = Path(fpath)
+        if not path.exists():
+            continue
+        suffix = path.suffix.lower()
+
+        try:
+            if suffix in (".xlsx", ".xls"):
+                import openpyxl
+                wb = openpyxl.load_workbook(fpath, read_only=True, data_only=True)
+                for sheet_name in wb.sheetnames:
+                    ws = wb[sheet_name]
+                    headers = [cell.value for cell in next(ws.iter_rows(max_row=1))]
+                    headers = [str(h) for h in headers if h is not None]
+                    nrows = (ws.max_row or 1) - 1
+                    label = (
+                        f"{path.name} (sheet: {sheet_name})"
+                        if len(wb.sheetnames) > 1
+                        else path.name
+                    )
+                    lines.append(f"\n{label}: ~{nrows} rows × {len(headers)} cols")
+                    lines.append(f"  columns: {headers}")
+                wb.close()
+                any_success = True
+
+            elif suffix in (".csv", ".tsv"):
+                import csv
+                sep = "\t" if suffix == ".tsv" else ","
+                with open(fpath, newline="", encoding="utf-8-sig") as f:
+                    reader = csv.reader(f, delimiter=sep)
+                    headers = next(reader)
+                    nrows = sum(1 for _ in reader)
+                lines.append(f"\n{path.name}: ~{nrows} rows × {len(headers)} cols")
+                lines.append(f"  columns: {headers}")
+                any_success = True
+
+            elif suffix == ".parquet":
+                import pyarrow.parquet as pq
+                schema = pq.read_schema(fpath)
+                meta = pq.read_metadata(fpath)
+                lines.append(f"\n{path.name}: {meta.num_rows} rows × {len(schema.names)} cols")
+                lines.append(f"  columns: {schema.names}")
+                any_success = True
+
+            elif suffix == ".json":
+                import json as _json
+                with open(fpath, encoding="utf-8") as f:
+                    data = _json.load(f)
+                if isinstance(data, list) and data:
+                    keys = list(data[0].keys()) if isinstance(data[0], dict) else []
+                    lines.append(f"\n{path.name}: list of {len(data)} records")
+                    if keys:
+                        lines.append(f"  keys: {keys}")
+                elif isinstance(data, dict):
+                    lines.append(f"\n{path.name}: dict with keys: {list(data.keys())[:20]}")
+                any_success = True
+
+        except Exception:
+            # 읽기 실패 시 조용히 스킵 — 추론 크래시 방지
+            continue
+
+    return "\n".join(lines) if any_success else ""

@@ -25,6 +25,7 @@ from typing import Optional
 from openai import AzureOpenAI
 
 from core.prompt_loader import load_prompt, render_prompt
+from core.file_preview import build_file_structure_info
 
 
 class CodeInterpreterRunner:
@@ -78,6 +79,11 @@ class CodeInterpreterRunner:
         try:
             # Reset uploaded file tracking
             self._uploaded_file_ids = set()
+
+            # Reference 파일 구조 자동 주입 (컬럼명 하드코딩 에러 방지)
+            file_structure_info = build_file_structure_info(reference_files or [])
+            if file_structure_info:
+                task_prompt = file_structure_info + "\n\n" + task_prompt
 
             # 1. Render prompt from YAML template
             rendered = render_prompt(
