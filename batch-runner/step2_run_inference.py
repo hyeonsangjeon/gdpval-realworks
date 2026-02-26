@@ -25,6 +25,7 @@ Usage:
 import argparse
 import json
 import os
+import psutil
 import re
 import sys
 import time
@@ -1058,6 +1059,14 @@ def run_inference(
     # ── Helper: print result status ──
 
     def _print_status(result: dict):
+        # 메모리 사용량 측정
+        try:
+            proc = psutil.Process(os.getpid())
+            mem_mb = proc.memory_info().rss / 1024 / 1024
+            mem_str = f", mem={mem_mb:.0f}MB"
+        except Exception:
+            mem_str = ""
+
         if result["status"] == "success":
             file_count = len(result.get("deliverable_files", []))
             latency = result.get("latency_ms", 0) or 0
@@ -1067,12 +1076,12 @@ def run_inference(
             reflection_info = ""
             if result.get("reflection_attempts", 0) > 0:
                 reflection_info = f", reflect×{result['reflection_attempts']}"
-            print(f"✓ ({latency:.0f}ms, {file_count} files{qa_info}{reflection_info})")
+            print(f"✓ ({latency:.0f}ms, {file_count} files{qa_info}{reflection_info}{mem_str})")
         elif result["status"] == "qa_failed":
             qa = result.get("qa", {})
-            print(f"✗ QA failed (score={qa.get('score', '?')})")
+            print(f"✗ QA failed (score={qa.get('score', '?')}{mem_str})")
         else:
-            print(f"✗ {result.get('error', 'Unknown')}")
+            print(f"✗ {result.get('error', 'Unknown')}{mem_str}")
 
     # ══════════════════════════════════════════════════════════════════════
     # 6. Initial run OR load existing progress
