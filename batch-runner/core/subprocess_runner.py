@@ -16,6 +16,7 @@ import tempfile
 import shutil
 import os
 import re
+import resource
 import sys
 from pathlib import Path
 from typing import Optional
@@ -255,6 +256,10 @@ class SubprocessRunner:
                 # Use the same Python interpreter (preserves venv)
                 python_executable = sys.executable
 
+                def _set_memory_limit():
+                    """Limit subprocess memory to 2GB to prevent runner OOM."""
+                    resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3, 2 * 1024**3))
+
                 # Execute code with timeout
                 result = subprocess.run(
                     [python_executable, str(code_path)],
@@ -262,7 +267,8 @@ class SubprocessRunner:
                     env=safe_env,
                     capture_output=True,
                     text=True,
-                    timeout=SUBPROCESS_TIMEOUT
+                    timeout=SUBPROCESS_TIMEOUT,
+                    preexec_fn=_set_memory_limit,
                 )
 
                 # Check execution result

@@ -23,6 +23,7 @@ Usage:
 """
 
 import argparse
+import gc
 import json
 import os
 import psutil
@@ -1123,6 +1124,10 @@ def run_inference(
             progress["results"].append(result)
             _print_status(result)
 
+            # Periodic GC to prevent memory buildup over long batch runs
+            if (i + 1) % 20 == 0:
+                gc.collect()
+
             # Incremental save
             _save_progress(
                 experiment_id, condition_name, execution_mode,
@@ -1162,6 +1167,10 @@ def run_inference(
             progress = _update_progress_result(progress, result)
             progress["resume_round"] = round_num
             _print_status(result)
+
+            # Periodic GC during resume rounds
+            if fi % 20 == 0:
+                gc.collect()
 
             # Incremental save
             _save_progress(

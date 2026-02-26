@@ -50,11 +50,12 @@ class AnthropicClient:
         text = response.choices[0].message.content
     """
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, timeout: int = 480):
         try:
             import anthropic
             self.client = anthropic.Anthropic(
-                api_key=api_key or os.getenv("ANTHROPIC_API_KEY")
+                api_key=api_key or os.getenv("ANTHROPIC_API_KEY"),
+                timeout=timeout,  # 8min — prevent hang before GitHub Actions 10min no-output kill
             )
         except ImportError:
             raise ImportError(
@@ -171,7 +172,8 @@ def create_provider_client(
 
     elif provider == "anthropic":
         return AnthropicClient(
-            api_key=api_key or os.getenv("ANTHROPIC_API_KEY")
+            api_key=api_key or os.getenv("ANTHROPIC_API_KEY"),
+            timeout=480,  # 8min — prevent hang before GitHub Actions 10min no-output kill
         )
 
     else:
