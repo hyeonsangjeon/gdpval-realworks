@@ -336,7 +336,7 @@ export AZURE_OPENAI_API_KEY="xxx"
 **전현상 (Hyeonsang Jeon)**  
 Sr. Solution Engineer · Global Black Belt — AI Apps | Microsoft Asia, Korea  
 [![GitHub](https://img.shields.io/badge/GitHub-hyeonsangjeon-181717?logo=github)](https://github.com/hyeonsangjeon)
-[![Dashboard](https://img.shields.io/badge/라이브%20대시보드-GDPVal-blueviolet?logo=react)](https://hyeonsangjeon.github.io/gdpval-realworks/experiments)
+[![Dashboard](https://img.shields.io/badge/라이브%20대시보드-GDPVal-blueviolet?logo=react)](https://hyeonsangjeon.github.io/gdpval-realworks/)
 
 ---
 

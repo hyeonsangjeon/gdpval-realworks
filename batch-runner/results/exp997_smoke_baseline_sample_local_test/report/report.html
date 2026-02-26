@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Experiment Report: Smoke Baseline Run (Sample)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         background: #f5f7fa; color: #1a1a2e; line-height: 1.6; }
+  header { background: #1a1a2e; color: #fff; padding: 24px 40px; }
+  header h1 { font-size: 1.6rem; font-weight: 700; }
+  header p { opacity: 0.75; font-size: 0.9rem; margin-top: 6px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px; margin-bottom: 32px; }
+  .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+  .card .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .05em;
+                  color: #888; margin-bottom: 4px; }
+  .card .value { font-size: 1.8rem; font-weight: 700; color: #1a1a2e; }
+  .card .sub { font-size: 0.8rem; color: #888; margin-top: 2px; }
+  section { background: #fff; border-radius: 10px; padding: 28px 32px;
+             box-shadow: 0 2px 8px rgba(0,0,0,.07); margin-bottom: 24px; }
+  h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 16px;
+        padding-bottom: 10px; border-bottom: 2px solid #eef0f4; color: #1a1a2e; }
+  h4 { font-size: 0.95rem; margin: 12px 0 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th { background: #f0f2f8; padding: 10px 12px; text-align: left;
+        font-weight: 600; color: #555; white-space: nowrap; }
+  td { padding: 8px 12px; border-bottom: 1px solid #eef0f4; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr.success td { background: #f0faf4; }
+  tr.error td { background: #fff5f5; }
+  tr.warn td { background: #fffbf0; }
+  tr:hover td { filter: brightness(0.97); }
+  code { background: #f0f2f8; padding: 2px 6px; border-radius: 4px;
+          font-family: 'SF Mono', Consolas, monospace; font-size: 0.85em; }
+  .narrative { color: #333; font-size: 0.93rem; }
+  .narrative p { margin-bottom: 12px; }
+  .qa-issue { border-left: 3px solid #e0a000; padding: 10px 16px; margin: 12px 0;
+               background: #fffbf0; border-radius: 0 6px 6px 0; }
+  .qa-issue ul { margin: 6px 0 0 16px; }
+  .suggestion { color: #666; font-style: italic; margin-top: 6px; font-size: 0.9rem; }
+  .meta-table td { padding: 6px 12px; }
+  .meta-table td:first-child { font-weight: 600; width: 160px; color: #555; }
+  footer { text-align: center; padding: 24px; color: #aaa; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 Smoke Baseline Run (Sample)</h1>
+  <p>exp997_smoke_baseline_sample_local_test · Baseline · gpt-5.2-chat · subprocess</p>
+</header>
+
+<div class="container">
+
+  <!-- Metric Cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="label">Total Tasks</div>
+      <div class="value">2</div>
+    </div>
+    <div class="card">
+      <div class="label">Success Rate</div>
+      <div class="value">100.0%</div>
+      <div class="sub">2 / 2</div>
+    </div>
+    <div class="card">
+      <div class="label">Avg QA Score</div>
+      <div class="value">8.5</div>
+      <div class="sub">out of 10</div>
+    </div>
+    <div class="card">
+      <div class="label">Errors</div>
+      <div class="value">0</div>
+    </div>
+    <div class="card">
+      <div class="label">Retried</div>
+      <div class="value">0</div>
+    </div>
+    <div class="card"><div class="label">File Gen Rate</div><div class="value">1.1%</div><div class="sub">2 / 185 tasks</div></div>
+    
+    
+    <div class="card">
+      <div class="label">Avg Latency</div>
+      <div class="value">24,870</div>
+      <div class="sub">ms</div>
+    </div>
+  </div>
+
+  <!-- Experiment Meta -->
+  <section>
+    <h2>Experiment Details</h2>
+    <table class="meta-table">
+      <tr><td>Experiment ID</td><td><code>exp997_smoke_baseline_sample_local_test</code></td></tr>
+      <tr><td>Condition</td><td>Baseline</td></tr>
+      <tr><td>Model</td><td>gpt-5.2-chat</td></tr>
+      <tr><td>Execution Mode</td><td>subprocess</td></tr>
+      <tr><td>Date</td><td>2026-02-26</td></tr>
+      <tr><td>Duration</td><td>1m 1s</td></tr>
+      <tr><td>Generated At</td><td>2026-02-26T07:14:47.691902+00:00</td></tr>
+    </table>
+  </section>
+
+  <!-- Execution Summary -->
+  <section>
+    <h2>Execution Summary (Self-Assessed)</h2>
+    <p class="narrative" style="color:#888;font-size:0.85rem;margin-bottom:12px;">Based on LLM self-QA confidence scores · External grading scores not yet available</p>
+    <div class="narrative"><p>The Smoke Baseline Run (Sample) experiment executed two tasks under the Baseline condition using the gpt-5.2-chat model in subprocess mode. All tasks completed successfully, yielding a 100% task completion rate with no execution errors or retries. The experiment served as a lightweight validation of end-to-end task handling, latency capture, and self-assessment reporting.</p><p>Based on the LLM’s self-assessed confidence during execution, overall task quality was high, with an average self-QA score of 8.5/10. Scores ranged narrowly between 8 and 9, suggesting consistent internal confidence across tasks. Average latency was 24.9 seconds, with noticeable variance between tasks, highlighting early signals about execution time sensitivity by sector rather than instability or failure.</p><p>Key highlights include clean task completion across both tested sectors and successful generation of expected deliverables without retries, indicating that the baseline configuration is functionally sound for small-scale validation runs.</p></div>
+  </section>
+
+  <!-- Quality Analysis -->
+  <section>
+    <h2>Quality Analysis</h2>
+    <div class="narrative"><p>Self-QA scores indicate generally strong LLM-evaluated quality, with the Government sector task receiving a higher self-assessed confidence (9.0/10) than the Real Estate and Rental and Leasing task (8.0/10). This may reflect differences in task structure, prompt clarity, or domain familiarity rather than any correctness gap, as both tasks were completed without issue.</p><p>Latency showed a clear sector-level divergence: the Government task completed significantly faster (14.9s) than the Real Estate task (34.9s). This suggests that task complexity or output length in the Real Estate domain may be driving longer execution times. Despite this, there was no apparent degradation in self-assessed quality associated with higher latency.</p><p>Deliverable generation quality appears stable for this sample size, with no indications of partial outputs, truncation, or format issues reported. Given the limited scope, these results primarily validate baseline operability rather than robustness under varied or complex workloads.</p></div>
+  </section>
+
+  <!-- Sector Breakdown -->
+  <section>
+    <h2>Sector Breakdown</h2>
+    <table>
+      <thead>
+        <tr><th>Sector</th><th>Tasks</th><th>Success</th><th>Success%</th><th>Avg QA</th><th>Avg Latency</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Government</td><td>1</td><td>1</td><td>100.0%</td><td>9.0/10</td><td>14,888ms</td></tr>
+<tr><td>Real Estate and Rental and Leasing</td><td>1</td><td>1</td><td>100.0%</td><td>8.0/10</td><td>34,852ms</td></tr>
+
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Task Results -->
+  <section>
+    <h2>Task Results</h2>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Task ID</th><th>Sector</th><th>Occupation</th><th>Status</th>
+            <th>Retry</th><th>Files</th><th>QA Score</th><th>Latency</th></tr>
+      </thead>
+      <tbody>
+        <tr class='success'><td>1</td><td><code>0419f1c3-d</code></td><td>Real Estate and Rental an</td><td>Property, Real Estat</td><td>✅ success</td><td>—</td><td>3</td><td>8/10</td><td>34852ms</td></tr>
+<tr class='success'><td>2</td><td><code>dfb4e0cd-a</code></td><td>Government</td><td>Compliance Officers</td><td>✅ success</td><td>—</td><td>2</td><td>9/10</td><td>14888ms</td></tr>
+
+      </tbody>
+    </table>
+  </section>
+
+  
+        <section>
+            <h2>QA Issues</h2>
+            <div class='qa-issue'><h4>✅ <code>0419f1c3-d</code> — score 8/10</h4><ul><li>Summary lacks quantified analysis of acknowledgement-time compliance against the 4-hour standard.</li></ul><p class='suggestion'>💡 Add a clear acknowledgement-time KPI analysis using work order timestamps to strengthen data-driven justification.</p></div>
+        </section>
+  
+  
+        <section>
+            <h2>Recommendations</h2>
+            <div class='narrative'><p>Increase task count and sector diversity in the next run to validate whether observed latency differences persist and to better characterize variability in self-assessed quality.</p><p>Instrument more granular timing metrics (e.g., prompt processing vs. generation time) to help attribute latency differences to specific execution phases.</p><p>Introduce slightly more complex or longer-form tasks to stress-test deliverable generation quality and observe how self-QA confidence scales with increased task difficulty.</p></div>
+        </section>
+
+</div>
+
+<footer>Generated by step6_report.py · 2026-02-26T07:14:47.691902+00:00</footer>
+
+<script>
+// Embedded report data for dashboard consumption
+const report_data = {
+  "meta": {
+    "experiment_id": "exp997_smoke_baseline_sample_local_test",
+    "experiment_name": "Smoke Baseline Run (Sample)",
+    "condition_name": "Baseline",
+    "model": "gpt-5.2-chat",
+    "execution_mode": "subprocess",
+    "date": "2026-02-26",
+    "duration": "1m 1s",
+    "report_scope": "self_assessed_pre_grading"
+  },
+  "summary": {
+    "total_tasks": 2,
+    "success_count": 2,
+    "success_rate_pct": 100.0,
+    "error_count": 0,
+    "retried_count": 0,
+    "avg_qa_score": 8.5,
+    "min_qa_score": 8,
+    "max_qa_score": 9,
+    "avg_latency_ms": 24870,
+    "max_latency_ms": 34852,
+    "total_latency_ms": 49740
+  },
+  "sector_breakdown": [
+    {
+      "sector": "Government",
+      "total": 1,
+      "success": 1,
+      "success_rate_pct": 100.0,
+      "avg_qa_score": 9.0,
+      "avg_latency_ms": 14888
+    },
+    {
+      "sector": "Real Estate and Rental and Leasing",
+      "total": 1,
+      "success": 1,
+      "success_rate_pct": 100.0,
+      "avg_qa_score": 8.0,
+      "avg_latency_ms": 34852
+    }
+  ],
+  "task_results": [
+    {
+      "task_id": "0419f1c3-d669-45d0-81cd-f4d5923b06a5",
+      "sector": "Real Estate and Rental and Leasing",
+      "occupation": "Property, Real Estate, and Community Association Managers",
+      "status": "success",
+      "retried": false,
+      "files_count": 3,
+      "qa_score": 8,
+      "qa_passed": true,
+      "qa_issues": [
+        "Summary lacks quantified analysis of acknowledgement-time compliance against the 4-hour standard."
+      ],
+      "qa_suggestion": "Add a clear acknowledgement-time KPI analysis using work order timestamps to strengthen data-driven justification.",
+      "latency_ms": 34851.88,
+      "deliverable_summary": "As a Property Manager overseeing multi-family residential assets in New York State, I will produce a formal, data-driven Performance Improvement Plan (PIP) document for Superintendent John Miller. The deliverable will be a professionally written Word document titled **“Performance_Improvement_Plan_J"
+    },
+    {
+      "task_id": "dfb4e0cd-a0b7-454e-b943-0dd586c2764c",
+      "sector": "Government",
+      "occupation": "Compliance Officers",
+      "status": "success",
+      "retried": false,
+      "files_count": 2,
+      "qa_score": 9,
+      "qa_passed": true,
+      "qa_issues": [],
+      "qa_suggestion": "",
+      "latency_ms": 14888.17,
+      "deliverable_summary": "As a grants management compliance professional, I will produce an Excel-based spending rate compliance analysis to proactively identify awards that may present a risk of non-compliance with 2 CFR Part 200. The deliverable will be a single Excel file titled **“Spending_Rate_Compliance_Analysis_as_of_"
+    }
+  ],
+  "error_tasks": [],
+  "narrative": {
+    "overview": "The Smoke Baseline Run (Sample) experiment executed two tasks under the Baseline condition using the gpt-5.2-chat model in subprocess mode. All tasks completed successfully, yielding a 100% task completion rate with no execution errors or retries. The experiment served as a lightweight validation of end-to-end task handling, latency capture, and self-assessment reporting.\n\nBased on the LLM’s self-assessed confidence during execution, overall task quality was high, with an average self-QA score of 8.5/10. Scores ranged narrowly between 8 and 9, suggesting consistent internal confidence across tasks. Average latency was 24.9 seconds, with noticeable variance between tasks, highlighting early signals about execution time sensitivity by sector rather than instability or failure.\n\nKey highlights include clean task completion across both tested sectors and successful generation of expected deliverables without retries, indicating that the baseline configuration is functionally sound for small-scale validation runs.",
+    "quality_analysis": "Self-QA scores indicate generally strong LLM-evaluated quality, with the Government sector task receiving a higher self-assessed confidence (9.0/10) than the Real Estate and Rental and Leasing task (8.0/10). This may reflect differences in task structure, prompt clarity, or domain familiarity rather than any correctness gap, as both tasks were completed without issue.\n\nLatency showed a clear sector-level divergence: the Government task completed significantly faster (14.9s) than the Real Estate task (34.9s). This suggests that task complexity or output length in the Real Estate domain may be driving longer execution times. Despite this, there was no apparent degradation in self-assessed quality associated with higher latency.\n\nDeliverable generation quality appears stable for this sample size, with no indications of partial outputs, truncation, or format issues reported. Given the limited scope, these results primarily validate baseline operability rather than robustness under varied or complex workloads.",
+    "failure_patterns": "",
+    "recommendations": "Increase task count and sector diversity in the next run to validate whether observed latency differences persist and to better characterize variability in self-assessed quality.\n\nInstrument more granular timing metrics (e.g., prompt processing vs. generation time) to help attribute latency differences to specific execution phases.\n\nIntroduce slightly more complex or longer-form tasks to stress-test deliverable generation quality and observe how self-QA confidence scales with increased task difficulty."
+  },
+  "generated_at": "2026-02-26T07:14:47.691902+00:00",
+  "file_generation": {
+    "needs_files_total": 185,
+    "files_succeeded": 2,
+    "files_failed": 0,
+    "dummy_files_created": 0,
+    "dummy_task_ids": []
+  },
+  "recovery_stats": {
+    "reflection": {
+      "tasks_with_reflection": 0,
+      "avg_attempts": 0,
+      "per_attempt_avg_score": {
+        "attempt_1": 8.5
+      },
+      "improved": 0,
+      "no_change": 0,
+      "degraded": 0
+    },
+    "resume_rounds": {
+      "rounds_used": 0,
+      "per_round": {}
+    }
+  }
+};
+// Export for external scripts
+if (typeof window !== 'undefined') { window.report_data = report_data; }
+</script>
+</body>
+</html>

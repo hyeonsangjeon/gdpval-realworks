@@ -176,6 +176,15 @@ def validate(data_dir: str = None) -> bool:
     table = pa.concat_tables(tables)
     df = table.to_pandas()
 
+    # Normalise list columns: ndarray / None / scalar → plain Python list
+    _list_cols = [
+        "deliverable_files", "deliverable_file_urls", "deliverable_file_hf_uris",
+        "reference_files", "reference_file_urls", "reference_file_hf_uris",
+    ]
+    for _col in _list_cols:
+        if _col in df.columns:
+            df[_col] = df[_col].apply(_to_list)
+
     print(f"   Parquet files: {len(parquet_files)}")
     print(f"   Rows: {len(df)}")
     print(f"   Columns: {list(df.columns)}")
@@ -194,17 +203,7 @@ def validate(data_dir: str = None) -> bool:
     if missing:
         errors.append(f"Missing required columns: {missing}")
 
-    # ── 3. deliverable_files type ──
-    if "deliverable_files" in df.columns:
-        for idx in range(min(5, len(df))):
-            val = df.iloc[idx]["deliverable_files"]
-            if val is not None and not isinstance(val, (list, type(None))):
-                errors.append(
-                    f"deliverable_files is {type(val).__name__}, expected list"
-                )
-                break
-
-    # ── 4. task_id uniqueness ──
+    # ── 3. task_id uniqueness ──
     if "task_id" in df.columns:
         dupes = df["task_id"].duplicated().sum()
         if dupes > 0:

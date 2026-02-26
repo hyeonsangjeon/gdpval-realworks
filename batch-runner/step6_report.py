@@ -197,7 +197,7 @@ IMPORTANT CONSTRAINTS:
 
 Return ONLY valid JSON with these exact keys (no markdown code fences):
 {{
-  "overview": "2-3 paragraphs: what experiment was run, overall outcome, key highlights",
+  "overview": "2-3 paragraphs describing: what experiment was run, the task execution outcomes based on Self-QA confidence scores, and key highlights. IMPORTANT: These are self-assessed scores from the LLM during execution, NOT external grading results. Frame accordingly — use language like 'self-assessed confidence', 'task completion rate', 'LLM-evaluated quality' rather than 'performance score' or 'grading result'.",
   "quality_analysis": "2-3 paragraphs: QA score patterns, notable issues, occupation/sector observations",
   "failure_patterns": "Analysis of errors and retries. Empty string if no failures.",
   "recommendations": "2-3 actionable suggestions for improving the next experiment run"
@@ -245,6 +245,7 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
             "execution_mode": data.get("execution_mode", ""),
             "date": meta_date,
             "duration": data.get("duration", ""),
+            "report_scope": "self_assessed_pre_grading",
         },
         "summary": summary,
         "sector_breakdown": sector_breakdown,
@@ -390,9 +391,18 @@ def _build_markdown(rd: dict) -> str:
         "",
     ]
 
-    # 2. Executive Summary
+    # 2. Execution Summary
     if narrative.get("overview"):
-        lines += ["## Executive Summary", "", narrative["overview"], ""]
+        lines += [
+            "## Execution Summary *(Self-Assessed, Pre-Grading)*",
+            "",
+            "> **Note:** This summary is based on the LLM's self-assessed confidence scores (Self-QA)"
+            " during task execution — not on external grading results."
+            " Actual grading scores from evaluators are not yet available at this stage.",
+            "",
+            narrative["overview"],
+            "",
+        ]
 
     # 3. Key Metrics
     lines += [
@@ -793,9 +803,10 @@ def _build_html(rd: dict) -> str:
     </table>
   </section>
 
-  <!-- Executive Summary -->
+  <!-- Execution Summary -->
   {f'''<section>
-    <h2>Executive Summary</h2>
+    <h2>Execution Summary (Self-Assessed)</h2>
+    <p class="narrative" style="color:#888;font-size:0.85rem;margin-bottom:12px;">Based on LLM self-QA confidence scores · External grading scores not yet available</p>
     <div class="narrative"><p>{nl2br(narrative['overview'])}</p></div>
   </section>''' if narrative.get('overview') else ''}
 
@@ -848,6 +859,50 @@ if (typeof window !== 'undefined') {{ window.report_data = report_data; }}
 </script>
 </body>
 </html>"""
+
+
+# ── Output path resolution ────────────────────────────────────────────────
+
+
+def _resolve_output_dir(explicit_output_dir: Path = None) -> Path:
+    """Resolve the report output directory.
+
+    Priority:
+      1. CLI --output-dir argument (explicit override)
+      2. results/<experiment_id>/report/  (experiment-scoped, preferred)
+      3. workspace/report/  (fallback)
+
+    Creates the directory if it does not exist.
+    """
+    if explicit_output_dir is not None:
+        out = Path(explicit_output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        return out
+
+    # Try to read experiment_id from workspace JSON files
+    experiment_id = None
+    for json_path in [
+        WORKSPACE_DIR / "step2_inference_results.json",
+        WORKSPACE_DIR / "step1_tasks_prepared.json",
+    ]:
+        if json_path.exists():
+            try:
+                data = json.loads(json_path.read_text())
+                experiment_id = data.get("experiment_id", "").strip()
+                if experiment_id:
+                    break
+            except Exception:
+                pass
+
+    if experiment_id:
+        # batch-runner/results/<experiment_id>/report/
+        out = _SCRIPT_DIR / "results" / experiment_id / "report"
+    else:
+        # fallback
+        out = WORKSPACE_DIR / "report"
+
+    out.mkdir(parents=True, exist_ok=True)
+    return out
 
 
 # ── Main ──────────────────────────────────────────────────────────────────
@@ -948,8 +1003,8 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help=f"Output directory for report files (default: {DEFAULT_OUTPUT_DIR})",
+        default=None,
+        help="Output directory for report files (default: results/<experiment_id>/report/)",
     )
     parser.add_argument(
         "--no-narrative",
@@ -958,9 +1013,11 @@ def main():
     )
     args = parser.parse_args()
 
+    output_dir = _resolve_output_dir(args.output_dir)
+
     generate_report(
         result_json_path=args.result_json,
-        output_dir=args.output_dir,
+        output_dir=output_dir,
         no_narrative=args.no_narrative,
     )
 

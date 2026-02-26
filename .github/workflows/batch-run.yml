@@ -214,5 +214,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: batch-results-${{ github.run_id }}
-          path: batch-runner/workspace/
+          path: |
+            batch-runner/workspace/
+            batch-runner/results/
           retention-days: 30
