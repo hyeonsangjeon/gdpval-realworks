@@ -67,6 +67,39 @@ jobs:
           echo "experiment_name=$EXPERIMENT_NAME" >> $GITHUB_ENV
           echo "📝 Experiment: $EXPERIMENT_NAME"
 
+      # ── Conditional: LibreOffice + Noto Sans fonts ──
+      - name: Read experiment config flags
+        id: read_config
+        run: |
+          YAML_FILE="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
+          INSTALL_LO=$(python3 -c "
+          import yaml
+          with open('$YAML_FILE') as f:
+              cfg = yaml.safe_load(f)
+          print(cfg.get('execution', {}).get('install_libreoffice', False))
+          ")
+          echo "install_libreoffice=$INSTALL_LO" >> $GITHUB_OUTPUT
+
+      - name: Install LibreOffice & Noto Sans fonts
+        if: steps.read_config.outputs.install_libreoffice == 'True'
+        run: |
+          echo "📦 Installing LibreOffice (headless) + Noto Sans fonts..."
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libreoffice-core \
+            libreoffice-calc \
+            libreoffice-impress \
+            libreoffice-writer \
+            fonts-noto-core \
+            fonts-noto-cjk
+          fc-cache -fv
+          echo "✅ LibreOffice version:"
+          libreoffice --version
+          echo "✅ Noto Sans available:"
+          fc-list | grep -i "Noto Sans" | head -5
+          echo "✅ ffmpeg (pre-installed):"
+          ffmpeg -version 2>&1 | head -1
+
       # ── Step 0: Bootstrap ──
       - name: 'Step 0: Bootstrap submission repo'
         env:

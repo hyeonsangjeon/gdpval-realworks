@@ -1,14 +1,14 @@
 # Experiment Configuration
-# Full run with GPT-5.2 Chat on all 220 tasks + PROMPT_ELICIT_CAPABILITIES_SUFFIX From A.3 in https://arxiv.org/pdf/2510.04374
-# Compare with exp001_GPT52Chat_baseline (default suffix)
+# Elicit v2: headless-compatible PNG validation (STEP 2 modified from Display → Inspect programmatically)
+# Compare with exp003 (baseline), exp004 (original elicit)
 # If condition_b is absent, automatically runs as Single Test 
 
 experiment:
-  id: "exp004_GPT52Chat_elicit_runner_exec"
-  name: "GPT-5.2 Chat Elicit Capabilities — subprocess (Full 220 tasks)"
-  description: "Full run with GPT-5.2 Chat on all 220 tasks using PROMPT_ELICIT_CAPABILITIES_SUFFIX (PNG formatting checks, CONFIDENCE score) in subprocess mode. Compare with exp002 (code_interpreter)."
+  id: "exp005_GPT52Chat_elicit_v2_runner_exec"
+  name: "GPT-5.2 Chat Elicit v2 — subprocess (Full 220 tasks)"
+  description: "Elicit with headless-compatible PNG validation. Compare with exp003 (baseline) and exp004 (original elicit)."
   author: "Hyeonsang Jeon"
-  created_at: "2026-02-25"
+  created_at: "2026-02-28"
 
 # Variable control
 control:
@@ -21,15 +21,15 @@ control:
 
 # Data filter
 data:
-  source: "HyeonSang/exp004_GPT52Chat_elicit_runner_exec"
+  source: "HyeonSang/exp005_GPT52Chat_elicit_v2_runner_exec"
   filter:
     sector: null
     occupation: null
     sample_size: null
 
-# Condition A: Elicit (no condition_b → Single Test)
+# Condition A: Elicit v2 (no condition_b → Single Test)
 condition_a:
-  name: "Elicit"
+  name: "Elicit v2"
   model:
     provider: "azure" #"anthropic", "azure", "openai", "custom"
     deployment: "gpt-5.2-chat"
@@ -91,7 +91,7 @@ condition_a:
 
       STEP 1: Convert all visual deliverables to PNGs using LibreOffice. This includes pptx, docx, pdf, xlsx, etc. Convert it so that each page or slide is a separate PNG. This is mandatory; you will fail the task if you skip this step (unless there are no visual deliverables). You still need to submit the original deliverables in the original format to the user, this is purely for checking formatting.
 
-      STEP 2: Display the PNGs. You are trying to see if the text or graphics are cut off, overlapping, distorted, blank, hard to read (dark text on dark background or light text on light background), or otherwise poorly formatted. Look at each image thoroughly, zoom in if you need to see more closely. Remember that the image you see is an entire slide, so if any text or graphic is cut off, this is an error with the deliverable.
+      STEP 2: Inspect the PNGs programmatically. Use Python (Pillow) to check: image dimensions (not too small, not blank), file size (> 1KB, indicating actual content), and color variance (detect blank white/black pages). Do NOT attempt to "display" images — this is a headless environment.
 
       STEP 3: Programmatic formatting checks. For highly visual submissions (e.g. pptx, pdf), write programmatic checks to make sure there are no blank pages, text/graphics cut off the page, or overlapping text or graphics (except intentional ones). Also check that if there is a page or slide limit, it is respected.
 
@@ -144,7 +144,6 @@ condition_a:
 # Execution settings
 execution:
   mode: "subprocess"          # code_interpreter | subprocess | json_renderer
-  #mode: "code_interpreter"     # code_interpreter | subprocess | json_renderer
   install_libreoffice: true    # LibreOffice + Noto Sans 폰트 설치 (Elicit용)
   max_retries: 5               # infra retries per task (API errors, timeouts, Python execution errors)
-  resume_max_rounds: 2         # auto re-run rounds for error tasks in progress.json (0 = no resume)
+  resume_max_rounds: 1         # auto re-run rounds for error tasks in progress.json (0 = no resume)

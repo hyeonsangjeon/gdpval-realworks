@@ -90,6 +90,7 @@ class ExecutionConfig:
     score_type: Literal["tool_assisted", "portable"] = "tool_assisted"
     max_retries: int = 3           # 태스크 내 인프라 리트라이
     resume_max_rounds: int = 3     # progress.json error 태스크 자동 재실행 라운드
+    install_libreoffice: bool = False  # LibreOffice + Noto Sans 설치 (Elicit용)
 
 
 class ExperimentConfig:
@@ -208,6 +209,7 @@ class ExperimentConfig:
             score_type=execution_data.get("score_type", "tool_assisted"),
             max_retries=execution_data.get("max_retries", 3),
             resume_max_rounds=execution_data.get("resume_max_rounds", 3),
+            install_libreoffice=execution_data.get("install_libreoffice", False),
         )
 
         return cls(

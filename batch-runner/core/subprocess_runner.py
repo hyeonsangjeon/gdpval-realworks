@@ -246,6 +246,11 @@ class SubprocessRunner:
                     "LANG": "C.UTF-8",
                     "HOME": tmpdir,
                     "TMPDIR": tmpdir,
+                    # LibreOffice headless 모드에 필요
+                    "XDG_CONFIG_HOME": tmpdir,
+                    "XDG_CACHE_HOME": tmpdir,
+                    # 폰트 접근용
+                    "FONTCONFIG_PATH": "/etc/fonts",
                     # Explicitly NO: AZURE_OPENAI_API_KEY, HF_TOKEN, etc.
                 }
 
