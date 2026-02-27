@@ -45,6 +45,11 @@ This repo automates the entire loop: **configure → run → collect → visuali
 
 ## How It Works
 
+<img src="https://mermaid.ink/img/JSV7aW5pdDogeyd0aGVtZSc6ICdiYXNlJ319JSUKZmxvd2NoYXJ0IExSCiAgICBjZmdbIllBTUwgRXhwZXJpbWVudCBDb25maWc8YnIvPm1vZGVsLCBwcm9tcHRzLCBmaWx0ZXJzLCBTZWxmLVFBLCBleGVjdXRpb24gbW9kZSJdCiAgICBnaGFbIkdpdEh1YiBBY3Rpb25zPGJyLz4od29ya2Zsb3dfZGlzcGF0Y2gpIl0KICAgIHMwWyJTdGVwIDA8YnIvPkJvb3RzdHJhcCJdCiAgICBzMTNbIlN0ZXAgMS0zPGJyLz5QcmVwYXJlLCBJbmZlcmVuY2UsIEZvcm1hdCJdCiAgICBzNDVbIlN0ZXAgNC01PGJyLz5GaWxsIFBhcnF1ZXQsIFZhbGlkYXRlIl0KICAgIHM2WyJTdGVwIDY8YnIvPlVwbG9hZCB0byBIdWdnaW5nRmFjZSJdCiAgICBwclsiQXV0by1jcmVhdGUgUFI8YnIvPndpdGggZXhwZXJpbWVudCBzdW1tYXJ5Il0KICAgIGRhc2hib2FyZFsiUmVhY3QgRGFzaGJvYXJkIChHaXRIdWIgUGFnZXMpPGJyLz5FeHBlcmltZW50IHJlc3VsdHMsIGdyYWRlIGRldGFpbHMsIGNyb3NzLW1vZGVsIGNvbXBhcmlzb24iXQoKICAgIGNmZyAtLT4gZ2hhIC0tPiBzMCAtLT4gczEzIC0tPiBzNDUgLS0-IHM2IC0tPiBwciAtLT4gZGFzaGJvYXJkCgogICAgY2xhc3NEZWYgaW5wdXQgZmlsbDojRUFGMkZGLHN0cm9rZTojMjU2M0VCLGNvbG9yOiMwQjFGM0Esc3Ryb2tlLXdpZHRoOjEuMnB4OwogICAgY2xhc3NEZWYgdHJpZ2dlciBmaWxsOiNGRkY3RTgsc3Ryb2tlOiNEOTc3MDYsY29sb3I6IzRBMkUwMCxzdHJva2Utd2lkdGg6MS4ycHg7CiAgICBjbGFzc0RlZiBleGVjIGZpbGw6I0VFRkRGNCxzdHJva2U6IzE2QTM0QSxjb2xvcjojMEYzRDI2LHN0cm9rZS13aWR0aDoxLjJweDsKICAgIGNsYXNzRGVmIHB1Ymxpc2ggZmlsbDojRUNGRUZGLHN0cm9rZTojMEU3NDkwLGNvbG9yOiMwODMzNDQsc3Ryb2tlLXdpZHRoOjEuMnB4OwogICAgY2xhc3NEZWYgb3V0cHV0IGZpbGw6I0YxRjVGOSxzdHJva2U6IzQ3NTU2OSxjb2xvcjojMEYxNzJBLHN0cm9rZS13aWR0aDoxLjJweDsKCiAgICBjbGFzcyBjZmcgaW5wdXQ7CiAgICBjbGFzcyBnaGEgdHJpZ2dlcjsKICAgIGNsYXNzIHMwLHMxMyxzNDUgZXhlYzsKICAgIGNsYXNzIHM2LHByIHB1Ymxpc2g7CiAgICBjbGFzcyBkYXNoYm9hcmQgb3V0cHV0Owo=" alt="Pipeline Flow" />
+
+<details>
+<summary>Diagram source</summary>
+
 ```mermaid
 %%{init: {'theme': 'base'}}%%
 flowchart LR
@@ -70,7 +75,10 @@ flowchart LR
     class s0,s13,s45 exec;
     class s6,pr publish;
     class dashboard output;
+
 ```
+
+</details>
 
 ---
 
@@ -203,18 +211,31 @@ Then trigger it from **Actions → Run workflow** with `experiment_yaml: exp001_
 Before acceptance, the same LLM working on the task inspects its own output:
 Self-QA scores each output on a 0-10 scale using rubric-based self-evaluation. If the score is below the configured threshold (default: 6), it enters a reflection loop and retries.
 
+<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IExSCiAgICB0YXNrWyJUYXNrIl0gLS0-IGdlblsiTExNIEdlbmVyYXRlcyBPdXRwdXQiXSAtLT4gcWFbIlNlbGYtUUEgSW5zcGVjdHMiXSAtLT4gZ2F0ZXsiU2NvcmUgPj0gNj8ifQogICAgZ2F0ZSAtLT58WWVzfCBhY2NlcHRbIkFjY2VwdCJdCiAgICBnYXRlIC0tPnxOb3wgcmV0cnlbIlJldHJ5ICh1cCB0byAzeCkiXQo=" alt="Self-QA Flow" />
+
+<details>
+<summary>Diagram source</summary>
+
 ```mermaid
 flowchart LR
     task["Task"] --> gen["LLM Generates Output"] --> qa["Self-QA Inspects"] --> gate{"Score >= 6?"}
     gate -->|Yes| accept["Accept"]
     gate -->|No| retry["Retry (up to 3x)"]
+
 ```
+
+</details>
 
 Self-QA checks: Are all requirements met? Are files actually produced? Is the output professional?
 
 ---
 
 ## 🏗️ Architecture
+
+<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICByb290WyJnZHB2YWwtcmVhbHdvcmtzLyJdCgogICAgd2ZbIi5naXRodWIvd29ya2Zsb3dzLzxici8-YmF0Y2gtcnVuLnltbCwgZGVwbG95LnltbCJdCiAgICBiclsiYmF0Y2gtcnVubmVyLzxici8-c3RlcCBzY3JpcHRzLCBjb3JlLCBleHBlcmltZW50cywgcHJvbXB0cywgdGVzdHMiXQogICAgc3JjWyJzcmMvPGJyLz5wYWdlcywgY29tcG9uZW50cyJdCiAgICBkYXRhWyJkYXRhLzxici8-dGVzdHMsIGdyYWRlcyJdCiAgICBzY3JpcHRzWyJzY3JpcHRzLzxici8-YWdncmVnYXRlLXRlc3RzLm1qcywgYWdncmVnYXRlLWdyYWRlcy5tanMiXQoKICAgIHJvb3QgLS0-IHdmCiAgICByb290IC0tPiBicgogICAgcm9vdCAtLT4gc3JjCiAgICByb290IC0tPiBkYXRhCiAgICByb290IC0tPiBzY3JpcHRzCg==" alt="Architecture" />
+
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 flowchart TB
@@ -231,7 +252,10 @@ flowchart TB
     root --> src
     root --> data
     root --> scripts
+
 ```
+
+</details>
 
 ---
 

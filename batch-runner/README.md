@@ -4,6 +4,11 @@ A Python pipeline that runs LLM experiments on the [OpenAI GDPVal](https://huggi
 
 ## Architecture
 
+<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICBzMFsiU3RlcCAwOiBCb290c3RyYXA8YnIvPkR1cGxpY2F0ZSBvcGVuYWkvZ2RwdmFsIHRvIHlvdXIgSEYgcmVwbyArIGxvY2FsIHNuYXBzaG90Il0KICAgIHMxWyJTdGVwIDE6IFByZXBhcmUgVGFza3M8YnIvPkxvYWQgZGF0YXNldCwgYXBwbHkgWUFNTCBmaWx0ZXJzLCBzYXZlIHRvIHdvcmtzcGFjZS8iXQogICAgczJbIlN0ZXAgMjogUnVuIEluZmVyZW5jZTxici8-Q2FsbCBMTE0gcGVyIHRhc2ssIHNhdmUgaW5jcmVtZW50YWxseSAocmVzdW1lLXNhZmUpIl0KICAgIHMzWyJTdGVwIDM6IEZvcm1hdCBSZXN1bHRzPGJyLz5Qcm9kdWNlIEpTT04gKyBNYXJrZG93biByZXBvcnQgaW4gcmVzdWx0cy8iXQogICAgczRbIlN0ZXAgNDogRmlsbCBQYXJxdWV0PGJyLz5NZXJnZSBkZWxpdmVyYWJsZV90ZXh0L2ZpbGVzIGludG8gYmFzZSBwYXJxdWV0Il0KICAgIHM1WyJTdGVwIDU6IFZhbGlkYXRlPGJyLz5QcmUtdXBsb2FkIGNoZWNrcyAoMjIwIHJvd3MsIGNvbHVtbnMsIGZpbGUgcGF0aHMpIl0KICAgIHM2WyJTdGVwIDY6IEdlbmVyYXRlIFJlcG9ydDxici8-TExNIG5hcnJhdGl2ZSArIG1ldHJpY3MgLT4gcmVwb3J0Lm1kL3JlcG9ydC5odG1sL3JlcG9ydF9kYXRhLmpzb24iXQogICAgczdbIlN0ZXAgNzogVXBsb2FkIHRvIEhGPGJyLz5DbGVhbiB1cGxvYWQgd2l0aCBkZWxldGVfcGF0dGVybnMgKGluY2x1ZGVzIHJlcG9ydC8pIl0KICAgIHMwIC0tPiBzMSAtLT4gczIgLS0-IHMzIC0tPiBzNCAtLT4gczUgLS0-IHM2IC0tPiBzNwo=" alt="Pipeline Architecture" />
+
+<details>
+<summary>Diagram source</summary>
+
 ```mermaid
 flowchart TB
     s0["Step 0: Bootstrap<br/>Duplicate openai/gdpval to your HF repo + local snapshot"]
@@ -15,7 +20,10 @@ flowchart TB
     s6["Step 6: Generate Report<br/>LLM narrative + metrics -> report.md/report.html/report_data.json"]
     s7["Step 7: Upload to HF<br/>Clean upload with delete_patterns (includes report/)"]
     s0 --> s1 --> s2 --> s3 --> s4 --> s5 --> s6 --> s7
+
 ```
+
+</details>
 
 ## Quick Start
 
@@ -67,6 +75,11 @@ export AZURE_OPENAI_API_KEY="xxx"
 
 ### Step 0: Bootstrap (`step0_bootstrap.sh`)
 
+<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IExSCiAgICBzcmNbIm9wZW5haS9nZHB2YWwiXSAtLT58ZHVwbGljYXRlfCBoZlsiU1VCTUlTU0lPTl9SRVBPX0lEIChIRikiXQogICAgaGYgLS0-fHNuYXBzaG90X2Rvd25sb2FkfCBzbmFwWyJkYXRhL2dkcHZhbC1sb2NhbC8iXQogICAgc25hcCAtLT4gcGFycXVldFsiZGF0YS90cmFpbi0qLnBhcnF1ZXQiXQogICAgc25hcCAtLT4gcmVmc1sicmVmZXJlbmNlX2ZpbGVzLyoqIl0KICAgIHNuYXAgLS0-IG91dFsiZGVsaXZlcmFibGVfZmlsZXMvIChlbXB0eSkiXQo=" alt="Diagram" />
+
+<details>
+<summary>Diagram source</summary>
+
 ```mermaid
 flowchart LR
     src["openai/gdpval"] -->|duplicate| hf["SUBMISSION_REPO_ID (HF)"]
@@ -74,7 +87,10 @@ flowchart LR
     snap --> parquet["data/train-*.parquet"]
     snap --> refs["reference_files/**"]
     snap --> out["deliverable_files/ (empty)"]
+
 ```
+
+</details>
 
 - Duplicates `openai/gdpval` to your HF repo if it doesn't exist
 - Downloads local snapshot to `data/gdpval-local/`
@@ -208,6 +224,11 @@ All providers return a normalized response shape (`response.choices[0].message.c
 
 ## Project Structure
 
+<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICByb290WyJiYXRjaC1ydW5uZXIvIl0KICAgIHN0ZXBzWyJzdGVwMC1zdGVwNyBzY3JpcHRzIl0KICAgIGNvcmVbImNvcmUvPGJyLz5jb25maWcsIGxsbV9jbGllbnQsIGV4ZWN1dG9yLCBmb3JtYXR0ZXJzLCB1cGxvYWRlcnMiXQogICAgZXhwZXJpbWVudHNbImV4cGVyaW1lbnRzLzxici8-WUFNTCBleHBlcmltZW50IGNvbmZpZ3MiXQogICAgcHJvbXB0c1sicHJvbXB0cy88YnIvPnByb21wdCB0ZW1wbGF0ZXMiXQogICAgdGVzdHNbInRlc3RzLzxici8-dW5pdCArIGludGVncmF0aW9uIHRlc3RzIl0KICAgIHdvcmtzcGFjZVsid29ya3NwYWNlLzxici8-c3RlcDEvc3RlcDIgaW50ZXJtZWRpYXRlIEpTT04gYXJ0aWZhY3RzIl0KICAgIHJlc3VsdHNbInJlc3VsdHMve2V4cGVyaW1lbnRfaWR9L3JlcG9ydC88YnIvPnJlcG9ydF9kYXRhLmpzb24sIHJlcG9ydC5tZCwgcmVwb3J0Lmh0bWwiXQoKICAgIHJvb3QgLS0-IHN0ZXBzCiAgICByb290IC0tPiBjb3JlCiAgICByb290IC0tPiBleHBlcmltZW50cwogICAgcm9vdCAtLT4gcHJvbXB0cwogICAgcm9vdCAtLT4gdGVzdHMKICAgIHJvb3QgLS0-IHdvcmtzcGFjZQogICAgcm9vdCAtLT4gcmVzdWx0cwo=" alt="Pipeline Flow" />
+
+<details>
+<summary>Diagram source</summary>
+
 ```mermaid
 flowchart TB
     root["batch-runner/"]
@@ -226,11 +247,19 @@ flowchart TB
     root --> tests
     root --> workspace
     root --> results
+
 ```
+
+</details>
 
 ## Data Flow
 
 Each step reads from `workspace/` (JSON files), not from prior Python objects. Steps are independently restartable.
+
+<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICBjZmdbIllBTUwgY29uZmlnIl0gLS0-IHMxWyJTdGVwIDEgLT4gd29ya3NwYWNlL3N0ZXAxX3Rhc2tzX3ByZXBhcmVkLmpzb24iXQogICAgczEgLS0-IHMycFsiU3RlcCAyIHByb2dyZXNzIC0-IHdvcmtzcGFjZS9zdGVwMl9pbmZlcmVuY2VfcHJvZ3Jlc3MuanNvbiJdCiAgICBzMnAgLS0-IHMyZlsiU3RlcCAyIGZpbmFsIC0-IHdvcmtzcGFjZS9zdGVwMl9pbmZlcmVuY2VfcmVzdWx0cy5qc29uIl0KICAgIHMyZiAtLT4gczNbIlN0ZXAgMyAtPiByZXN1bHRzL3tleHBfaWR9L3tqc29uLG1kfSJdCiAgICBzMyAtLT4gczRbIlN0ZXAgNCAtPiB3b3Jrc3BhY2UvdXBsb2FkL2RhdGEvdHJhaW4tKi5wYXJxdWV0Il0KICAgIHM0IC0tPiBzNVsiU3RlcCA1IC0-IHZhbGlkYXRpb24gKHBhc3MvZmFpbCkiXQogICAgczUgLS0-IHM2WyJTdGVwIDYgLT4gcmVzdWx0cy97ZXhwZXJpbWVudF9pZH0vcmVwb3J0LyJdCiAgICBzNiAtLT4gczdbIlN0ZXAgNyAtPiBIdWdnaW5nRmFjZSBIdWIiXQo=" alt="Data Flow" />
+
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 flowchart TB
@@ -242,7 +271,10 @@ flowchart TB
     s4 --> s5["Step 5 -> validation (pass/fail)"]
     s5 --> s6["Step 6 -> results/{experiment_id}/report/"]
     s6 --> s7["Step 7 -> HuggingFace Hub"]
+
 ```
+
+</details>
 
 ## Testing
 

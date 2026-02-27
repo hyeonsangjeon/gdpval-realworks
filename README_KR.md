@@ -45,6 +45,11 @@
 
 ## 동작 원리
 
+<img src="https://mermaid.ink/img/JSV7aW5pdDogeyd0aGVtZSc6ICdiYXNlJ319JSUKZmxvd2NoYXJ0IExSCiAgICBjZmdbIllBTUwg7Iuk7ZeYIOyEpOyglSDtjIzsnbw8YnIvPuuqqOuNuCwg7ZSE66Gs7ZSE7Yq4LCDtlYTthLAsIFNlbGYtUUEsIOyLpO2WiSDrqqjrk5wiXQogICAgZ2hhWyJHaXRIdWIgQWN0aW9uczxici8-KHdvcmtmbG93X2Rpc3BhdGNoKSJdCiAgICBzMFsiU3RlcCAwPGJyLz7rtoDtirjsiqTtirjrnqkiXQogICAgczEzWyJTdGVwIDEtMzxici8-642w7J207YSwIOykgOu5hCwg7LaU66GgLCDtj6zrp7ftjIUiXQogICAgczQ1WyJTdGVwIDQtNTxici8-UGFycXVldCDrs5HtlaksIOycoO2aqOyEsSDqsoDspp0iXQogICAgczZbIlN0ZXAgNjxici8-SHVnZ2luZ0ZhY2Ug7JeF66Gc65OcIl0KICAgIHByWyLsi6Ttl5gg7JqU7JW9IFBSPGJyLz7snpDrj5kg7IOd7ISxIl0KICAgIGRhc2hib2FyZFsiUmVhY3Qg64yA7Iuc67O065OcIChHaXRIdWIgUGFnZXMpPGJyLz7si6Ttl5gg6rKw6rO8LCDssYTsoJAg7IOB7IS4LCDrqqjrjbgg6rCEIOu5hOq1kCJdCgogICAgY2ZnIC0tPiBnaGEgLS0-IHMwIC0tPiBzMTMgLS0-IHM0NSAtLT4gczYgLS0-IHByIC0tPiBkYXNoYm9hcmQKCiAgICBjbGFzc0RlZiBpbnB1dCBmaWxsOiNFQUYyRkYsc3Ryb2tlOiMyNTYzRUIsY29sb3I6IzBCMUYzQSxzdHJva2Utd2lkdGg6MS4ycHg7CiAgICBjbGFzc0RlZiB0cmlnZ2VyIGZpbGw6I0ZGRjdFOCxzdHJva2U6I0Q5NzcwNixjb2xvcjojNEEyRTAwLHN0cm9rZS13aWR0aDoxLjJweDsKICAgIGNsYXNzRGVmIGV4ZWMgZmlsbDojRUVGREY0LHN0cm9rZTojMTZBMzRBLGNvbG9yOiMwRjNEMjYsc3Ryb2tlLXdpZHRoOjEuMnB4OwogICAgY2xhc3NEZWYgcHVibGlzaCBmaWxsOiNFQ0ZFRkYsc3Ryb2tlOiMwRTc0OTAsY29sb3I6IzA4MzM0NCxzdHJva2Utd2lkdGg6MS4ycHg7CiAgICBjbGFzc0RlZiBvdXRwdXQgZmlsbDojRjFGNUY5LHN0cm9rZTojNDc1NTY5LGNvbG9yOiMwRjE3MkEsc3Ryb2tlLXdpZHRoOjEuMnB4OwoKICAgIGNsYXNzIGNmZyBpbnB1dDsKICAgIGNsYXNzIGdoYSB0cmlnZ2VyOwogICAgY2xhc3MgczAsczEzLHM0NSBleGVjOwogICAgY2xhc3MgczYscHIgcHVibGlzaDsKICAgIGNsYXNzIGRhc2hib2FyZCBvdXRwdXQ7Cg==" alt="Self-QA 흐름" />
+
+<details>
+<summary>Diagram source</summary>
+
 ```mermaid
 %%{init: {'theme': 'base'}}%%
 flowchart LR
@@ -70,7 +75,10 @@ flowchart LR
     class s0,s13,s45 exec;
     class s6,pr publish;
     class dashboard output;
+
 ```
+
+</details>
 
 ---
 
@@ -203,18 +211,31 @@ execution:
 모든 태스크 출력물은 작업하고 있는 LLM이 스스로 검수한 후 수락됩니다:
 Self-QA는 각 산출물을 루브릭 기반 자기평가로 0~10점 척도에서 점수화합니다. 점수가 설정 임계값(기본 6점) 미만이면 리플렉션 루프로 들어가 재시도합니다.
 
+<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IExSCiAgICB0YXNrWyLtg5zsiqTtgawiXSAtLT4gZ2VuWyJMTE0g7Lac66ClIOyDneyEsSJdIC0tPiBxYVsiU2VsZi1RQSDqsoDsiJgiXSAtLT4gZ2F0ZXsi7KCQ7IiYID49IDY_In0KICAgIGdhdGUgLS0-fOyYiHwgYWNjZXB0WyLsiJjrnb0iXQogICAgZ2F0ZSAtLT587JWE64uI7JikfCByZXRyeVsi7J6s7Iuc64-EICjstZzrjIAgM-2ajCkiXQo=" alt="Self-QA 흐름" />
+
+<details>
+<summary>Diagram source</summary>
+
 ```mermaid
 flowchart LR
     task["태스크"] --> gen["LLM 출력 생성"] --> qa["Self-QA 검수"] --> gate{"점수 >= 6?"}
     gate -->|예| accept["수락"]
     gate -->|아니오| retry["재시도 (최대 3회)"]
+
 ```
+
+</details>
 
 검수 항목: 모든 요구사항 충족? 파일이 실제로 생성됐나? 결과물이 전문적인가?
 
 ---
 
 ## 🏗️ 아키텍처
+
+<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICByb290WyJnZHB2YWwtcmVhbHdvcmtzLyJdCgogICAgd2ZbIi5naXRodWIvd29ya2Zsb3dzLzxici8-YmF0Y2gtcnVuLnltbCwgZGVwbG95LnltbCJdCiAgICBiclsiYmF0Y2gtcnVubmVyLzxici8-c3RlcCDsiqTtgazrpr3tirgsIGNvcmUsIGV4cGVyaW1lbnRzLCBwcm9tcHRzLCB0ZXN0cyJdCiAgICBzcmNbInNyYy88YnIvPnBhZ2VzLCBjb21wb25lbnRzIl0KICAgIGRhdGFbImRhdGEvPGJyLz50ZXN0cywgZ3JhZGVzIl0KICAgIHNjcmlwdHNbInNjcmlwdHMvPGJyLz5hZ2dyZWdhdGUtdGVzdHMubWpzLCBhZ2dyZWdhdGUtZ3JhZGVzLm1qcyJdCgogICAgcm9vdCAtLT4gd2YKICAgIHJvb3QgLS0-IGJyCiAgICByb290IC0tPiBzcmMKICAgIHJvb3QgLS0-IGRhdGEKICAgIHJvb3QgLS0-IHNjcmlwdHMK" alt="프로젝트 구조" />
+
+<details>
+<summary>Diagram source</summary>
 
 ```mermaid
 flowchart TB
@@ -231,7 +252,10 @@ flowchart TB
     root --> src
     root --> data
     root --> scripts
+
 ```
+
+</details>
 
 ---
 
