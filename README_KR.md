@@ -47,38 +47,6 @@
 
 <img src="https://mermaid.ink/img/JSV7aW5pdDogeyd0aGVtZSc6ICdiYXNlJ319JSUKZmxvd2NoYXJ0IExSCiAgICBjZmdbIllBTUwg7Iuk7ZeYIOyEpOyglSDtjIzsnbw8YnIvPuuqqOuNuCwg7ZSE66Gs7ZSE7Yq4LCDtlYTthLAsIFNlbGYtUUEsIOyLpO2WiSDrqqjrk5wiXQogICAgZ2hhWyJHaXRIdWIgQWN0aW9uczxici8-KHdvcmtmbG93X2Rpc3BhdGNoKSJdCiAgICBzMFsiU3RlcCAwPGJyLz7rtoDtirjsiqTtirjrnqkiXQogICAgczEzWyJTdGVwIDEtMzxici8-642w7J207YSwIOykgOu5hCwg7LaU66GgLCDtj6zrp7ftjIUiXQogICAgczQ1WyJTdGVwIDQtNTxici8-UGFycXVldCDrs5HtlaksIOycoO2aqOyEsSDqsoDspp0iXQogICAgczZbIlN0ZXAgNjxici8-SHVnZ2luZ0ZhY2Ug7JeF66Gc65OcIl0KICAgIHByWyLsi6Ttl5gg7JqU7JW9IFBSPGJyLz7snpDrj5kg7IOd7ISxIl0KICAgIGRhc2hib2FyZFsiUmVhY3Qg64yA7Iuc67O065OcIChHaXRIdWIgUGFnZXMpPGJyLz7si6Ttl5gg6rKw6rO8LCDssYTsoJAg7IOB7IS4LCDrqqjrjbgg6rCEIOu5hOq1kCJdCgogICAgY2ZnIC0tPiBnaGEgLS0-IHMwIC0tPiBzMTMgLS0-IHM0NSAtLT4gczYgLS0-IHByIC0tPiBkYXNoYm9hcmQKCiAgICBjbGFzc0RlZiBpbnB1dCBmaWxsOiNFQUYyRkYsc3Ryb2tlOiMyNTYzRUIsY29sb3I6IzBCMUYzQSxzdHJva2Utd2lkdGg6MS4ycHg7CiAgICBjbGFzc0RlZiB0cmlnZ2VyIGZpbGw6I0ZGRjdFOCxzdHJva2U6I0Q5NzcwNixjb2xvcjojNEEyRTAwLHN0cm9rZS13aWR0aDoxLjJweDsKICAgIGNsYXNzRGVmIGV4ZWMgZmlsbDojRUVGREY0LHN0cm9rZTojMTZBMzRBLGNvbG9yOiMwRjNEMjYsc3Ryb2tlLXdpZHRoOjEuMnB4OwogICAgY2xhc3NEZWYgcHVibGlzaCBmaWxsOiNFQ0ZFRkYsc3Ryb2tlOiMwRTc0OTAsY29sb3I6IzA4MzM0NCxzdHJva2Utd2lkdGg6MS4ycHg7CiAgICBjbGFzc0RlZiBvdXRwdXQgZmlsbDojRjFGNUY5LHN0cm9rZTojNDc1NTY5LGNvbG9yOiMwRjE3MkEsc3Ryb2tlLXdpZHRoOjEuMnB4OwoKICAgIGNsYXNzIGNmZyBpbnB1dDsKICAgIGNsYXNzIGdoYSB0cmlnZ2VyOwogICAgY2xhc3MgczAsczEzLHM0NSBleGVjOwogICAgY2xhc3MgczYscHIgcHVibGlzaDsKICAgIGNsYXNzIGRhc2hib2FyZCBvdXRwdXQ7Cg==" alt="Self-QA 흐름" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-%%{init: {'theme': 'base'}}%%
-flowchart LR
-    cfg["YAML 실험 설정 파일<br/>모델, 프롬프트, 필터, Self-QA, 실행 모드"]
-    gha["GitHub Actions<br/>(workflow_dispatch)"]
-    s0["Step 0<br/>부트스트랩"]
-    s13["Step 1-3<br/>데이터 준비, 추론, 포맷팅"]
-    s45["Step 4-5<br/>Parquet 병합, 유효성 검증"]
-    s6["Step 6<br/>HuggingFace 업로드"]
-    pr["실험 요약 PR<br/>자동 생성"]
-    dashboard["React 대시보드 (GitHub Pages)<br/>실험 결과, 채점 상세, 모델 간 비교"]
-
-    cfg --> gha --> s0 --> s13 --> s45 --> s6 --> pr --> dashboard
-
-    classDef input fill:#EAF2FF,stroke:#2563EB,color:#0B1F3A,stroke-width:1.2px;
-    classDef trigger fill:#FFF7E8,stroke:#D97706,color:#4A2E00,stroke-width:1.2px;
-    classDef exec fill:#EEFDF4,stroke:#16A34A,color:#0F3D26,stroke-width:1.2px;
-    classDef publish fill:#ECFEFF,stroke:#0E7490,color:#083344,stroke-width:1.2px;
-    classDef output fill:#F1F5F9,stroke:#475569,color:#0F172A,stroke-width:1.2px;
-
-    class cfg input;
-    class gha trigger;
-    class s0,s13,s45 exec;
-    class s6,pr publish;
-    class dashboard output;
-
-```
-
-</details>
 
 ---
 
@@ -213,18 +181,6 @@ Self-QA는 각 산출물을 루브릭 기반 자기평가로 0~10점 척도에�
 
 <img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IExSCiAgICB0YXNrWyLtg5zsiqTtgawiXSAtLT4gZ2VuWyJMTE0g7Lac66ClIOyDneyEsSJdIC0tPiBxYVsiU2VsZi1RQSDqsoDsiJgiXSAtLT4gZ2F0ZXsi7KCQ7IiYID49IDY_In0KICAgIGdhdGUgLS0-fOyYiHwgYWNjZXB0WyLsiJjrnb0iXQogICAgZ2F0ZSAtLT587JWE64uI7JikfCByZXRyeVsi7J6s7Iuc64-EICjstZzrjIAgM-2ajCkiXQo=" alt="Self-QA 흐름" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-flowchart LR
-    task["태스크"] --> gen["LLM 출력 생성"] --> qa["Self-QA 검수"] --> gate{"점수 >= 6?"}
-    gate -->|예| accept["수락"]
-    gate -->|아니오| retry["재시도 (최대 3회)"]
-
-```
-
-</details>
 
 검수 항목: 모든 요구사항 충족? 파일이 실제로 생성됐나? 결과물이 전문적인가?
 
@@ -234,28 +190,6 @@ flowchart LR
 
 <img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICByb290WyJnZHB2YWwtcmVhbHdvcmtzLyJdCgogICAgd2ZbIi5naXRodWIvd29ya2Zsb3dzLzxici8-YmF0Y2gtcnVuLnltbCwgZGVwbG95LnltbCJdCiAgICBiclsiYmF0Y2gtcnVubmVyLzxici8-c3RlcCDsiqTtgazrpr3tirgsIGNvcmUsIGV4cGVyaW1lbnRzLCBwcm9tcHRzLCB0ZXN0cyJdCiAgICBzcmNbInNyYy88YnIvPnBhZ2VzLCBjb21wb25lbnRzIl0KICAgIGRhdGFbImRhdGEvPGJyLz50ZXN0cywgZ3JhZGVzIl0KICAgIHNjcmlwdHNbInNjcmlwdHMvPGJyLz5hZ2dyZWdhdGUtdGVzdHMubWpzLCBhZ2dyZWdhdGUtZ3JhZGVzLm1qcyJdCgogICAgcm9vdCAtLT4gd2YKICAgIHJvb3QgLS0-IGJyCiAgICByb290IC0tPiBzcmMKICAgIHJvb3QgLS0-IGRhdGEKICAgIHJvb3QgLS0-IHNjcmlwdHMK" alt="프로젝트 구조" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-flowchart TB
-    root["gdpval-realworks/"]
-
-    wf[".github/workflows/<br/>batch-run.yml, deploy.yml"]
-    br["batch-runner/<br/>step 스크립트, core, experiments, prompts, tests"]
-    src["src/<br/>pages, components"]
-    data["data/<br/>tests, grades"]
-    scripts["scripts/<br/>aggregate-tests.mjs, aggregate-grades.mjs"]
-
-    root --> wf
-    root --> br
-    root --> src
-    root --> data
-    root --> scripts
-
-```
-
-</details>
 
 ---
 

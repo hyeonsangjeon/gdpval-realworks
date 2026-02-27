@@ -47,38 +47,6 @@ This repo automates the entire loop: **configure → run → collect → visuali
 
 <img src="https://mermaid.ink/img/JSV7aW5pdDogeyd0aGVtZSc6ICdiYXNlJ319JSUKZmxvd2NoYXJ0IExSCiAgICBjZmdbIllBTUwgRXhwZXJpbWVudCBDb25maWc8YnIvPm1vZGVsLCBwcm9tcHRzLCBmaWx0ZXJzLCBTZWxmLVFBLCBleGVjdXRpb24gbW9kZSJdCiAgICBnaGFbIkdpdEh1YiBBY3Rpb25zPGJyLz4od29ya2Zsb3dfZGlzcGF0Y2gpIl0KICAgIHMwWyJTdGVwIDA8YnIvPkJvb3RzdHJhcCJdCiAgICBzMTNbIlN0ZXAgMS0zPGJyLz5QcmVwYXJlLCBJbmZlcmVuY2UsIEZvcm1hdCJdCiAgICBzNDVbIlN0ZXAgNC01PGJyLz5GaWxsIFBhcnF1ZXQsIFZhbGlkYXRlIl0KICAgIHM2WyJTdGVwIDY8YnIvPlVwbG9hZCB0byBIdWdnaW5nRmFjZSJdCiAgICBwclsiQXV0by1jcmVhdGUgUFI8YnIvPndpdGggZXhwZXJpbWVudCBzdW1tYXJ5Il0KICAgIGRhc2hib2FyZFsiUmVhY3QgRGFzaGJvYXJkIChHaXRIdWIgUGFnZXMpPGJyLz5FeHBlcmltZW50IHJlc3VsdHMsIGdyYWRlIGRldGFpbHMsIGNyb3NzLW1vZGVsIGNvbXBhcmlzb24iXQoKICAgIGNmZyAtLT4gZ2hhIC0tPiBzMCAtLT4gczEzIC0tPiBzNDUgLS0-IHM2IC0tPiBwciAtLT4gZGFzaGJvYXJkCgogICAgY2xhc3NEZWYgaW5wdXQgZmlsbDojRUFGMkZGLHN0cm9rZTojMjU2M0VCLGNvbG9yOiMwQjFGM0Esc3Ryb2tlLXdpZHRoOjEuMnB4OwogICAgY2xhc3NEZWYgdHJpZ2dlciBmaWxsOiNGRkY3RTgsc3Ryb2tlOiNEOTc3MDYsY29sb3I6IzRBMkUwMCxzdHJva2Utd2lkdGg6MS4ycHg7CiAgICBjbGFzc0RlZiBleGVjIGZpbGw6I0VFRkRGNCxzdHJva2U6IzE2QTM0QSxjb2xvcjojMEYzRDI2LHN0cm9rZS13aWR0aDoxLjJweDsKICAgIGNsYXNzRGVmIHB1Ymxpc2ggZmlsbDojRUNGRUZGLHN0cm9rZTojMEU3NDkwLGNvbG9yOiMwODMzNDQsc3Ryb2tlLXdpZHRoOjEuMnB4OwogICAgY2xhc3NEZWYgb3V0cHV0IGZpbGw6I0YxRjVGOSxzdHJva2U6IzQ3NTU2OSxjb2xvcjojMEYxNzJBLHN0cm9rZS13aWR0aDoxLjJweDsKCiAgICBjbGFzcyBjZmcgaW5wdXQ7CiAgICBjbGFzcyBnaGEgdHJpZ2dlcjsKICAgIGNsYXNzIHMwLHMxMyxzNDUgZXhlYzsKICAgIGNsYXNzIHM2LHByIHB1Ymxpc2g7CiAgICBjbGFzcyBkYXNoYm9hcmQgb3V0cHV0Owo=" alt="Pipeline Flow" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-%%{init: {'theme': 'base'}}%%
-flowchart LR
-    cfg["YAML Experiment Config<br/>model, prompts, filters, Self-QA, execution mode"]
-    gha["GitHub Actions<br/>(workflow_dispatch)"]
-    s0["Step 0<br/>Bootstrap"]
-    s13["Step 1-3<br/>Prepare, Inference, Format"]
-    s45["Step 4-5<br/>Fill Parquet, Validate"]
-    s6["Step 6<br/>Upload to HuggingFace"]
-    pr["Auto-create PR<br/>with experiment summary"]
-    dashboard["React Dashboard (GitHub Pages)<br/>Experiment results, grade details, cross-model comparison"]
-
-    cfg --> gha --> s0 --> s13 --> s45 --> s6 --> pr --> dashboard
-
-    classDef input fill:#EAF2FF,stroke:#2563EB,color:#0B1F3A,stroke-width:1.2px;
-    classDef trigger fill:#FFF7E8,stroke:#D97706,color:#4A2E00,stroke-width:1.2px;
-    classDef exec fill:#EEFDF4,stroke:#16A34A,color:#0F3D26,stroke-width:1.2px;
-    classDef publish fill:#ECFEFF,stroke:#0E7490,color:#083344,stroke-width:1.2px;
-    classDef output fill:#F1F5F9,stroke:#475569,color:#0F172A,stroke-width:1.2px;
-
-    class cfg input;
-    class gha trigger;
-    class s0,s13,s45 exec;
-    class s6,pr publish;
-    class dashboard output;
-
-```
-
-</details>
 
 ---
 
@@ -213,18 +181,6 @@ Self-QA scores each output on a 0-10 scale using rubric-based self-evaluation. I
 
 <img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IExSCiAgICB0YXNrWyJUYXNrIl0gLS0-IGdlblsiTExNIEdlbmVyYXRlcyBPdXRwdXQiXSAtLT4gcWFbIlNlbGYtUUEgSW5zcGVjdHMiXSAtLT4gZ2F0ZXsiU2NvcmUgPj0gNj8ifQogICAgZ2F0ZSAtLT58WWVzfCBhY2NlcHRbIkFjY2VwdCJdCiAgICBnYXRlIC0tPnxOb3wgcmV0cnlbIlJldHJ5ICh1cCB0byAzeCkiXQo=" alt="Self-QA Flow" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-flowchart LR
-    task["Task"] --> gen["LLM Generates Output"] --> qa["Self-QA Inspects"] --> gate{"Score >= 6?"}
-    gate -->|Yes| accept["Accept"]
-    gate -->|No| retry["Retry (up to 3x)"]
-
-```
-
-</details>
 
 Self-QA checks: Are all requirements met? Are files actually produced? Is the output professional?
 
@@ -234,28 +190,6 @@ Self-QA checks: Are all requirements met? Are files actually produced? Is the ou
 
 <img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICByb290WyJnZHB2YWwtcmVhbHdvcmtzLyJdCgogICAgd2ZbIi5naXRodWIvd29ya2Zsb3dzLzxici8-YmF0Y2gtcnVuLnltbCwgZGVwbG95LnltbCJdCiAgICBiclsiYmF0Y2gtcnVubmVyLzxici8-c3RlcCBzY3JpcHRzLCBjb3JlLCBleHBlcmltZW50cywgcHJvbXB0cywgdGVzdHMiXQogICAgc3JjWyJzcmMvPGJyLz5wYWdlcywgY29tcG9uZW50cyJdCiAgICBkYXRhWyJkYXRhLzxici8-dGVzdHMsIGdyYWRlcyJdCiAgICBzY3JpcHRzWyJzY3JpcHRzLzxici8-YWdncmVnYXRlLXRlc3RzLm1qcywgYWdncmVnYXRlLWdyYWRlcy5tanMiXQoKICAgIHJvb3QgLS0-IHdmCiAgICByb290IC0tPiBicgogICAgcm9vdCAtLT4gc3JjCiAgICByb290IC0tPiBkYXRhCiAgICByb290IC0tPiBzY3JpcHRzCg==" alt="Architecture" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-flowchart TB
-    root["gdpval-realworks/"]
-
-    wf[".github/workflows/<br/>batch-run.yml, deploy.yml"]
-    br["batch-runner/<br/>step scripts, core, experiments, prompts, tests"]
-    src["src/<br/>pages, components"]
-    data["data/<br/>tests, grades"]
-    scripts["scripts/<br/>aggregate-tests.mjs, aggregate-grades.mjs"]
-
-    root --> wf
-    root --> br
-    root --> src
-    root --> data
-    root --> scripts
-
-```
-
-</details>
 
 ---
 

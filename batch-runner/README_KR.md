@@ -6,24 +6,6 @@
 
 <img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICBzMFsiU3RlcCAwOiDrtoDtirjsiqTtirjrnqk8YnIvPm9wZW5haS9nZHB2YWwg67O17KCcICsg66Gc7LusIOyKpOuDheyDtyDri6TsmrTroZzrk5wiXQogICAgczFbIlN0ZXAgMTog7YOc7Iqk7YGsIOykgOu5hDxici8-642w7J207YSw7IWLIOuhnOuTnCwgWUFNTCDtlYTthLAg7KCB7JqpLCB3b3Jrc3BhY2UvIOyggOyepSJdCiAgICBzMlsiU3RlcCAyOiDstpTroaAg7Iuk7ZaJPGJyLz7tg5zsiqTtgazrs4QgTExNIO2YuOy2nCwg7Kad67aEIOyggOyepSAo7J207Ja07ZWY6riwIOyngOybkCkiXQogICAgczNbIlN0ZXAgMzog6rKw6rO8IO2PrOunt-2MhTxici8-SlNPTiArIE1hcmtkb3duIOumrO2PrO2KuCDsg53shLEgLT4gcmVzdWx0cy8iXQogICAgczRbIlN0ZXAgNDogUGFycXVldCDrs5Htlak8YnIvPmRlbGl2ZXJhYmxlX3RleHQvZmlsZXPrpbwgYmFzZSBwYXJxdWV07JeQIOuzke2VqSJdCiAgICBzNVsiU3RlcCA1OiDsnKDtmqjshLEg6rKA7KadPGJyLz7sl4XroZzrk5wg7KCEIOqygOymnSAoMjIw7ZaJLCDsu6zrn7wsIO2MjOydvCDqsr3roZwpIl0KICAgIHM2WyJTdGVwIDY6IOumrO2PrO2KuCDsg53shLE8YnIvPkxMTSDrgrTrn6zti7DruIwgKyDrqZTtirjrpq0gLT4gcmVwb3J0IO2MjOydvOuTpCJdCiAgICBzN1siU3RlcCA3OiBIRiDsl4XroZzrk5w8YnIvPmRlbGV0ZV9wYXR0ZXJucyDquLDrsJgg7YG066awIOyXheuhnOuTnCJdCiAgICBzMCAtLT4gczEgLS0-IHMyIC0tPiBzMyAtLT4gczQgLS0-IHM1IC0tPiBzNiAtLT4gczcK" alt="파이프라인 아키텍처" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-flowchart TB
-    s0["Step 0: 부트스트랩<br/>openai/gdpval 복제 + 로컬 스냅샷 다운로드"]
-    s1["Step 1: 태스크 준비<br/>데이터셋 로드, YAML 필터 적용, workspace/ 저장"]
-    s2["Step 2: 추론 실행<br/>태스크별 LLM 호출, 증분 저장 (이어하기 지원)"]
-    s3["Step 3: 결과 포맷팅<br/>JSON + Markdown 리포트 생성 -> results/"]
-    s4["Step 4: Parquet 병합<br/>deliverable_text/files를 base parquet에 병합"]
-    s5["Step 5: 유효성 검증<br/>업로드 전 검증 (220행, 컬럼, 파일 경로)"]
-    s6["Step 6: 리포트 생성<br/>LLM 내러티브 + 메트릭 -> report 파일들"]
-    s7["Step 7: HF 업로드<br/>delete_patterns 기반 클린 업로드"]
-    s0 --> s1 --> s2 --> s3 --> s4 --> s5 --> s6 --> s7
-
-```
-
-</details>
 
 ## 빠른 시작
 
@@ -77,20 +59,6 @@ export AZURE_OPENAI_API_KEY="xxx"
 
 <img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IExSCiAgICBzcmNbIm9wZW5haS9nZHB2YWwiXSAtLT58ZHVwbGljYXRlfCBoZlsiU1VCTUlTU0lPTl9SRVBPX0lEIChIRikiXQogICAgaGYgLS0-fHNuYXBzaG90X2Rvd25sb2FkfCBzbmFwWyJkYXRhL2dkcHZhbC1sb2NhbC8iXQogICAgc25hcCAtLT4gcGFycXVldFsiZGF0YS90cmFpbi0qLnBhcnF1ZXQiXQogICAgc25hcCAtLT4gcmVmc1sicmVmZXJlbmNlX2ZpbGVzLyoqIl0KICAgIHNuYXAgLS0-IG91dFsiZGVsaXZlcmFibGVfZmlsZXMvICjruYTslrQg7J6I7J2MKSJdCg==" alt="다이어그램" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-flowchart LR
-    src["openai/gdpval"] -->|duplicate| hf["SUBMISSION_REPO_ID (HF)"]
-    hf -->|snapshot_download| snap["data/gdpval-local/"]
-    snap --> parquet["data/train-*.parquet"]
-    snap --> refs["reference_files/**"]
-    snap --> out["deliverable_files/ (비어 있음)"]
-
-```
-
-</details>
 
 - HF에 `SUBMISSION_REPO_ID`가 없으면 `openai/gdpval`을 duplicate
 - `data/gdpval-local/`에 로컬 스냅샷 다운로드
@@ -224,31 +192,6 @@ Responses API를 지원하지 않는 프로바이더(예: Anthropic)용.
 
 <img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICByb290WyJiYXRjaC1ydW5uZXIvIl0KICAgIHN0ZXBzWyJzdGVwMC1zdGVwNyDsiqTtgazrpr3tirgiXQogICAgY29yZVsiY29yZS88YnIvPmNvbmZpZywgbGxtX2NsaWVudCwgZXhlY3V0b3IsIGZvcm1hdHRlciwgdXBsb2FkZXIiXQogICAgZXhwZXJpbWVudHNbImV4cGVyaW1lbnRzLzxici8-WUFNTCDsi6Ttl5gg7ISk7KCVIl0KICAgIHByb21wdHNbInByb21wdHMvPGJyLz7tlITroaztlITtirgg7YWc7ZSM66a_Il0KICAgIHRlc3RzWyJ0ZXN0cy88YnIvPuuLqOychCArIO2Gte2VqSDthYzsiqTtirgiXQogICAgd29ya3NwYWNlWyJ3b3Jrc3BhY2UvPGJyLz5zdGVwMS9zdGVwMiDspJHqsIQgSlNPTiDsgrDstpzrrLwiXQogICAgcmVzdWx0c1sicmVzdWx0cy97ZXhwZXJpbWVudF9pZH0vcmVwb3J0Lzxici8-cmVwb3J0X2RhdGEuanNvbiwgcmVwb3J0Lm1kLCByZXBvcnQuaHRtbCJdCgogICAgcm9vdCAtLT4gc3RlcHMKICAgIHJvb3QgLS0-IGNvcmUKICAgIHJvb3QgLS0-IGV4cGVyaW1lbnRzCiAgICByb290IC0tPiBwcm9tcHRzCiAgICByb290IC0tPiB0ZXN0cwogICAgcm9vdCAtLT4gd29ya3NwYWNlCiAgICByb290IC0tPiByZXN1bHRzCg==" alt="프로젝트 구조" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-flowchart TB
-    root["batch-runner/"]
-    steps["step0-step7 스크립트"]
-    core["core/<br/>config, llm_client, executor, formatter, uploader"]
-    experiments["experiments/<br/>YAML 실험 설정"]
-    prompts["prompts/<br/>프롬프트 템플릿"]
-    tests["tests/<br/>단위 + 통합 테스트"]
-    workspace["workspace/<br/>step1/step2 중간 JSON 산출물"]
-    results["results/{experiment_id}/report/<br/>report_data.json, report.md, report.html"]
-
-    root --> steps
-    root --> core
-    root --> experiments
-    root --> prompts
-    root --> tests
-    root --> workspace
-    root --> results
-
-```
-
-</details>
 
 ## 데이터 흐름
 
@@ -256,23 +199,6 @@ flowchart TB
 
 <img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICBjZmdbIllBTUwg7ISk7KCVIl0gLS0-IHMxWyJTdGVwIDEgLT4gd29ya3NwYWNlL3N0ZXAxX3Rhc2tzX3ByZXBhcmVkLmpzb24iXQogICAgczEgLS0-IHMycFsiU3RlcCAyIOynhO2WiSAtPiB3b3Jrc3BhY2Uvc3RlcDJfaW5mZXJlbmNlX3Byb2dyZXNzLmpzb24iXQogICAgczJwIC0tPiBzMmZbIlN0ZXAgMiDstZzsooUgLT4gd29ya3NwYWNlL3N0ZXAyX2luZmVyZW5jZV9yZXN1bHRzLmpzb24iXQogICAgczJmIC0tPiBzM1siU3RlcCAzIC0-IHJlc3VsdHMve2V4cF9pZH0ve2pzb24sbWR9Il0KICAgIHMzIC0tPiBzNFsiU3RlcCA0IC0-IHdvcmtzcGFjZS91cGxvYWQvZGF0YS90cmFpbi0qLnBhcnF1ZXQiXQogICAgczQgLS0-IHM1WyJTdGVwIDUgLT4g7Jyg7Zqo7ISxIOqygOymnSAo7Ya16rO8L-yLpO2MqCkiXQogICAgczUgLS0-IHM2WyJTdGVwIDYgLT4gcmVzdWx0cy97ZXhwZXJpbWVudF9pZH0vcmVwb3J0LyJdCiAgICBzNiAtLT4gczdbIlN0ZXAgNyAtPiBIdWdnaW5nRmFjZSBIdWIiXQo=" alt="다이어그램" />
 
-<details>
-<summary>Diagram source</summary>
-
-```mermaid
-flowchart TB
-    cfg["YAML 설정"] --> s1["Step 1 -> workspace/step1_tasks_prepared.json"]
-    s1 --> s2p["Step 2 진행 -> workspace/step2_inference_progress.json"]
-    s2p --> s2f["Step 2 최종 -> workspace/step2_inference_results.json"]
-    s2f --> s3["Step 3 -> results/{exp_id}/{json,md}"]
-    s3 --> s4["Step 4 -> workspace/upload/data/train-*.parquet"]
-    s4 --> s5["Step 5 -> 유효성 검증 (통과/실패)"]
-    s5 --> s6["Step 6 -> results/{experiment_id}/report/"]
-    s6 --> s7["Step 7 -> HuggingFace Hub"]
-
-```
-
-</details>
 
 ## 테스트
 
