@@ -45,6 +45,21 @@ jobs:
         run: |
           pip install -r batch-runner/requirements.txt
 
+      # ── Verify runtime environment ──
+      - name: Verify runtime environment
+        run: |
+          echo "============================================"
+          echo "🔍 Runtime Environment Check"
+          echo "============================================"
+          echo "🐍 Python: $(python3 --version)"
+          echo "📦 pip: $(pip --version)"
+          echo "🎬 ffmpeg: $(ffmpeg -version 2>&1 | head -1)"
+          echo "📄 LibreOffice: $(libreoffice --version 2>/dev/null || echo 'not installed (expected for baseline)')"
+          echo "🔤 Noto Sans: $(fc-list 2>/dev/null | grep -c 'Noto Sans') fonts found"
+          echo "💾 Disk: $(df -h / | tail -1 | awk '{print $4}') available"
+          echo "🧠 Memory: $(free -h | grep Mem | awk '{print $7}') available"
+          echo "============================================"
+
       # ── Validation: Check YAML file exists ──
       - name: Validate experiment YAML exists
         run: |
