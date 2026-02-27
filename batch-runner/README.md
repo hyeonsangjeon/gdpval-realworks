@@ -4,7 +4,23 @@ A Python pipeline that runs LLM experiments on the [OpenAI GDPVal](https://huggi
 
 ## Architecture
 
-<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICBzMFsiU3RlcCAwOiBCb290c3RyYXA8YnIvPkR1cGxpY2F0ZSBvcGVuYWkvZ2RwdmFsIHRvIHlvdXIgSEYgcmVwbyArIGxvY2FsIHNuYXBzaG90Il0KICAgIHMxWyJTdGVwIDE6IFByZXBhcmUgVGFza3M8YnIvPkxvYWQgZGF0YXNldCwgYXBwbHkgWUFNTCBmaWx0ZXJzLCBzYXZlIHRvIHdvcmtzcGFjZS8iXQogICAgczJbIlN0ZXAgMjogUnVuIEluZmVyZW5jZTxici8-Q2FsbCBMTE0gcGVyIHRhc2ssIHNhdmUgaW5jcmVtZW50YWxseSAocmVzdW1lLXNhZmUpIl0KICAgIHMzWyJTdGVwIDM6IEZvcm1hdCBSZXN1bHRzPGJyLz5Qcm9kdWNlIEpTT04gKyBNYXJrZG93biByZXBvcnQgaW4gcmVzdWx0cy8iXQogICAgczRbIlN0ZXAgNDogRmlsbCBQYXJxdWV0PGJyLz5NZXJnZSBkZWxpdmVyYWJsZV90ZXh0L2ZpbGVzIGludG8gYmFzZSBwYXJxdWV0Il0KICAgIHM1WyJTdGVwIDU6IFZhbGlkYXRlPGJyLz5QcmUtdXBsb2FkIGNoZWNrcyAoMjIwIHJvd3MsIGNvbHVtbnMsIGZpbGUgcGF0aHMpIl0KICAgIHM2WyJTdGVwIDY6IEdlbmVyYXRlIFJlcG9ydDxici8-TExNIG5hcnJhdGl2ZSArIG1ldHJpY3MgLT4gcmVwb3J0Lm1kL3JlcG9ydC5odG1sL3JlcG9ydF9kYXRhLmpzb24iXQogICAgczdbIlN0ZXAgNzogVXBsb2FkIHRvIEhGPGJyLz5DbGVhbiB1cGxvYWQgd2l0aCBkZWxldGVfcGF0dGVybnMgKGluY2x1ZGVzIHJlcG9ydC8pIl0KICAgIHMwIC0tPiBzMSAtLT4gczIgLS0-IHMzIC0tPiBzNCAtLT4gczUgLS0-IHM2IC0tPiBzNwo=" alt="Pipeline Architecture" />
+<table>
+<tr>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBBWyJTdGVwIDA6IEJvb3RzdHJhcDxicj5IRiByZXBvICsgc25hcHNob3QiXSAtLT4gQlsiU3RlcCAxOiBQcmVwYXJlPGJyPkZpbHRlciArIGxvYWQgdGFza3MiXQ==" alt="Preparation" width="350" /></td>
+<td align="center" style="font-size:2em;">→</td>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBDWyJTdGVwIDI6IEluZmVyZW5jZTxicj5MTE0gKyBTZWxmLVFBIl0gLS0-IERbIlN0ZXAgMzogRm9ybWF0PGJyPkpTT04gKyBNYXJrZG93biJd" alt="Execution" width="350" /></td>
+</tr>
+<tr>
+<td></td>
+<td align="center" style="font-size:2em;">↓</td>
+<td></td>
+</tr>
+<tr>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBFWyJTdGVwIDQ6IFBhcnF1ZXQ8YnI-TWVyZ2Ugc3VibWlzc2lvbiJdIC0tPiBGWyJTdGVwIDU6IFZhbGlkYXRlPGJyPkludGVncml0eSBjaGVjayJd" alt="Delivery" width="350" /></td>
+<td align="center" style="font-size:2em;">→</td>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBHWyJTdGVwIDY6IFJlcG9ydDxicj5IVE1MICsgSlNPTiJdIC0tPiBIWyJTdGVwIDc6IFVwbG9hZDxicj5IRiArIEF1dG8gUFIiXQ==" alt="Report & Upload" width="350" /></td>
+</tr>
+</table>
 
 
 ## Quick Start

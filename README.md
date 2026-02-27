@@ -45,7 +45,23 @@ This repo automates the entire loop: **configure → run → collect → visuali
 
 ## How It Works
 
-<img src="https://mermaid.ink/img/JSV7aW5pdDogeyd0aGVtZSc6ICdiYXNlJ319JSUKZmxvd2NoYXJ0IExSCiAgICBjZmdbIllBTUwgRXhwZXJpbWVudCBDb25maWc8YnIvPm1vZGVsLCBwcm9tcHRzLCBmaWx0ZXJzLCBTZWxmLVFBLCBleGVjdXRpb24gbW9kZSJdCiAgICBnaGFbIkdpdEh1YiBBY3Rpb25zPGJyLz4od29ya2Zsb3dfZGlzcGF0Y2gpIl0KICAgIHMwWyJTdGVwIDA8YnIvPkJvb3RzdHJhcCJdCiAgICBzMTNbIlN0ZXAgMS0zPGJyLz5QcmVwYXJlLCBJbmZlcmVuY2UsIEZvcm1hdCJdCiAgICBzNDVbIlN0ZXAgNC01PGJyLz5GaWxsIFBhcnF1ZXQsIFZhbGlkYXRlIl0KICAgIHM2WyJTdGVwIDY8YnIvPlVwbG9hZCB0byBIdWdnaW5nRmFjZSJdCiAgICBwclsiQXV0by1jcmVhdGUgUFI8YnIvPndpdGggZXhwZXJpbWVudCBzdW1tYXJ5Il0KICAgIGRhc2hib2FyZFsiUmVhY3QgRGFzaGJvYXJkIChHaXRIdWIgUGFnZXMpPGJyLz5FeHBlcmltZW50IHJlc3VsdHMsIGdyYWRlIGRldGFpbHMsIGNyb3NzLW1vZGVsIGNvbXBhcmlzb24iXQoKICAgIGNmZyAtLT4gZ2hhIC0tPiBzMCAtLT4gczEzIC0tPiBzNDUgLS0-IHM2IC0tPiBwciAtLT4gZGFzaGJvYXJkCgogICAgY2xhc3NEZWYgaW5wdXQgZmlsbDojRUFGMkZGLHN0cm9rZTojMjU2M0VCLGNvbG9yOiMwQjFGM0Esc3Ryb2tlLXdpZHRoOjEuMnB4OwogICAgY2xhc3NEZWYgdHJpZ2dlciBmaWxsOiNGRkY3RTgsc3Ryb2tlOiNEOTc3MDYsY29sb3I6IzRBMkUwMCxzdHJva2Utd2lkdGg6MS4ycHg7CiAgICBjbGFzc0RlZiBleGVjIGZpbGw6I0VFRkRGNCxzdHJva2U6IzE2QTM0QSxjb2xvcjojMEYzRDI2LHN0cm9rZS13aWR0aDoxLjJweDsKICAgIGNsYXNzRGVmIHB1Ymxpc2ggZmlsbDojRUNGRUZGLHN0cm9rZTojMEU3NDkwLGNvbG9yOiMwODMzNDQsc3Ryb2tlLXdpZHRoOjEuMnB4OwogICAgY2xhc3NEZWYgb3V0cHV0IGZpbGw6I0YxRjVGOSxzdHJva2U6IzQ3NTU2OSxjb2xvcjojMEYxNzJBLHN0cm9rZS13aWR0aDoxLjJweDsKCiAgICBjbGFzcyBjZmcgaW5wdXQ7CiAgICBjbGFzcyBnaGEgdHJpZ2dlcjsKICAgIGNsYXNzIHMwLHMxMyxzNDUgZXhlYzsKICAgIGNsYXNzIHM2LHByIHB1Ymxpc2g7CiAgICBjbGFzcyBkYXNoYm9hcmQgb3V0cHV0Owo=" alt="Pipeline Flow" />
+<table>
+<tr>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBBWyJTdGVwIDA6IEJvb3RzdHJhcDxicj5IRiByZXBvICsgc25hcHNob3QiXSAtLT4gQlsiU3RlcCAxOiBQcmVwYXJlPGJyPkZpbHRlciArIGxvYWQgdGFza3MiXQ==" alt="Preparation" width="350" /></td>
+<td align="center" style="font-size:2em;">→</td>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBDWyJTdGVwIDI6IEluZmVyZW5jZTxicj5MTE0gKyBTZWxmLVFBIl0gLS0-IERbIlN0ZXAgMzogRm9ybWF0PGJyPkpTT04gKyBNYXJrZG93biJd" alt="Execution" width="350" /></td>
+</tr>
+<tr>
+<td></td>
+<td align="center" style="font-size:2em;">↓</td>
+<td></td>
+</tr>
+<tr>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBFWyJTdGVwIDQ6IFBhcnF1ZXQ8YnI-TWVyZ2Ugc3VibWlzc2lvbiJdIC0tPiBGWyJTdGVwIDU6IFZhbGlkYXRlPGJyPkludGVncml0eSBjaGVjayJd" alt="Delivery" width="350" /></td>
+<td align="center" style="font-size:2em;">→</td>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBHWyJTdGVwIDY6IFJlcG9ydDxicj5IVE1MICsgSlNPTiJdIC0tPiBIWyJTdGVwIDc6IFVwbG9hZDxicj5IRiArIEF1dG8gUFIiXQ==" alt="Report & Upload" width="350" /></td>
+</tr>
+</table>
 
 
 ---

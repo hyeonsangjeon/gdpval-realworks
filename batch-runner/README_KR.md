@@ -4,7 +4,23 @@
 
 ## 아키텍처
 
-<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICBzMFsiU3RlcCAwOiDrtoDtirjsiqTtirjrnqk8YnIvPm9wZW5haS9nZHB2YWwg67O17KCcICsg66Gc7LusIOyKpOuDheyDtyDri6TsmrTroZzrk5wiXQogICAgczFbIlN0ZXAgMTog7YOc7Iqk7YGsIOykgOu5hDxici8-642w7J207YSw7IWLIOuhnOuTnCwgWUFNTCDtlYTthLAg7KCB7JqpLCB3b3Jrc3BhY2UvIOyggOyepSJdCiAgICBzMlsiU3RlcCAyOiDstpTroaAg7Iuk7ZaJPGJyLz7tg5zsiqTtgazrs4QgTExNIO2YuOy2nCwg7Kad67aEIOyggOyepSAo7J207Ja07ZWY6riwIOyngOybkCkiXQogICAgczNbIlN0ZXAgMzog6rKw6rO8IO2PrOunt-2MhTxici8-SlNPTiArIE1hcmtkb3duIOumrO2PrO2KuCDsg53shLEgLT4gcmVzdWx0cy8iXQogICAgczRbIlN0ZXAgNDogUGFycXVldCDrs5Htlak8YnIvPmRlbGl2ZXJhYmxlX3RleHQvZmlsZXPrpbwgYmFzZSBwYXJxdWV07JeQIOuzke2VqSJdCiAgICBzNVsiU3RlcCA1OiDsnKDtmqjshLEg6rKA7KadPGJyLz7sl4XroZzrk5wg7KCEIOqygOymnSAoMjIw7ZaJLCDsu6zrn7wsIO2MjOydvCDqsr3roZwpIl0KICAgIHM2WyJTdGVwIDY6IOumrO2PrO2KuCDsg53shLE8YnIvPkxMTSDrgrTrn6zti7DruIwgKyDrqZTtirjrpq0gLT4gcmVwb3J0IO2MjOydvOuTpCJdCiAgICBzN1siU3RlcCA3OiBIRiDsl4XroZzrk5w8YnIvPmRlbGV0ZV9wYXR0ZXJucyDquLDrsJgg7YG066awIOyXheuhnOuTnCJdCiAgICBzMCAtLT4gczEgLS0-IHMyIC0tPiBzMyAtLT4gczQgLS0-IHM1IC0tPiBzNiAtLT4gczcK" alt="파이프라인 아키텍처" />
+<table>
+<tr>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBBWyJTdGVwIDA6IOu2gO2KuOyKpO2KuOueqTxicj5IRiDroIjtj6wgKyDsiqTrg4Xsg7ciXSAtLT4gQlsiU3RlcCAxOiDtg5zsiqTtgawg7KSA67mEPGJyPu2VhO2EsCArIOuhnOuTnCJd" alt="준비" width="350" /></td>
+<td align="center" style="font-size:2em;">→</td>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBDWyJTdGVwIDI6IOy2lOuhoDxicj5MTE0gKyBTZWxmLVFBIl0gLS0-IERbIlN0ZXAgMzog7Y-s66e37YyFPGJyPkpTT04gKyBNYXJrZG93biJd" alt="실행" width="350" /></td>
+</tr>
+<tr>
+<td></td>
+<td align="center" style="font-size:2em;">↓</td>
+<td></td>
+</tr>
+<tr>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBFWyJTdGVwIDQ6IFBhcnF1ZXQ8YnI-7KCc7LacIOuNsOydtO2EsCDrs5HtlakiXSAtLT4gRlsiU3RlcCA1OiDqsoDspp08YnI-66y06rKw7ISxIOqygOyCrCJd" alt="산출물" width="350" /></td>
+<td align="center" style="font-size:2em;">→</td>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBHWyJTdGVwIDY6IOumrO2PrO2KuDxicj5IVE1MICsgSlNPTiJdIC0tPiBIWyJTdGVwIDc6IOyXheuhnOuTnDxicj5IRiArIFBSIOyDneyEsSJd" alt="리포트 & 업로드" width="350" /></td>
+</tr>
+</table>
 
 
 ## 빠른 시작

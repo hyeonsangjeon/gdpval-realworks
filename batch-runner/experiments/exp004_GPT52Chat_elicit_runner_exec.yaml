@@ -146,4 +146,4 @@ execution:
   mode: "subprocess"          # code_interpreter | subprocess | json_renderer
   #mode: "code_interpreter"     # code_interpreter | subprocess | json_renderer
   max_retries: 5               # infra retries per task (API errors, timeouts, Python execution errors)
-  resume_max_rounds: 1         # auto re-run rounds for error tasks in progress.json (0 = no resume)
+  resume_max_rounds: 2         # auto re-run rounds for error tasks in progress.json (0 = no resume)

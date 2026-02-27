@@ -45,7 +45,23 @@
 
 ## 동작 원리
 
-<img src="https://mermaid.ink/img/JSV7aW5pdDogeyd0aGVtZSc6ICdiYXNlJ319JSUKZmxvd2NoYXJ0IExSCiAgICBjZmdbIllBTUwg7Iuk7ZeYIOyEpOyglSDtjIzsnbw8YnIvPuuqqOuNuCwg7ZSE66Gs7ZSE7Yq4LCDtlYTthLAsIFNlbGYtUUEsIOyLpO2WiSDrqqjrk5wiXQogICAgZ2hhWyJHaXRIdWIgQWN0aW9uczxici8-KHdvcmtmbG93X2Rpc3BhdGNoKSJdCiAgICBzMFsiU3RlcCAwPGJyLz7rtoDtirjsiqTtirjrnqkiXQogICAgczEzWyJTdGVwIDEtMzxici8-642w7J207YSwIOykgOu5hCwg7LaU66GgLCDtj6zrp7ftjIUiXQogICAgczQ1WyJTdGVwIDQtNTxici8-UGFycXVldCDrs5HtlaksIOycoO2aqOyEsSDqsoDspp0iXQogICAgczZbIlN0ZXAgNjxici8-SHVnZ2luZ0ZhY2Ug7JeF66Gc65OcIl0KICAgIHByWyLsi6Ttl5gg7JqU7JW9IFBSPGJyLz7snpDrj5kg7IOd7ISxIl0KICAgIGRhc2hib2FyZFsiUmVhY3Qg64yA7Iuc67O065OcIChHaXRIdWIgUGFnZXMpPGJyLz7si6Ttl5gg6rKw6rO8LCDssYTsoJAg7IOB7IS4LCDrqqjrjbgg6rCEIOu5hOq1kCJdCgogICAgY2ZnIC0tPiBnaGEgLS0-IHMwIC0tPiBzMTMgLS0-IHM0NSAtLT4gczYgLS0-IHByIC0tPiBkYXNoYm9hcmQKCiAgICBjbGFzc0RlZiBpbnB1dCBmaWxsOiNFQUYyRkYsc3Ryb2tlOiMyNTYzRUIsY29sb3I6IzBCMUYzQSxzdHJva2Utd2lkdGg6MS4ycHg7CiAgICBjbGFzc0RlZiB0cmlnZ2VyIGZpbGw6I0ZGRjdFOCxzdHJva2U6I0Q5NzcwNixjb2xvcjojNEEyRTAwLHN0cm9rZS13aWR0aDoxLjJweDsKICAgIGNsYXNzRGVmIGV4ZWMgZmlsbDojRUVGREY0LHN0cm9rZTojMTZBMzRBLGNvbG9yOiMwRjNEMjYsc3Ryb2tlLXdpZHRoOjEuMnB4OwogICAgY2xhc3NEZWYgcHVibGlzaCBmaWxsOiNFQ0ZFRkYsc3Ryb2tlOiMwRTc0OTAsY29sb3I6IzA4MzM0NCxzdHJva2Utd2lkdGg6MS4ycHg7CiAgICBjbGFzc0RlZiBvdXRwdXQgZmlsbDojRjFGNUY5LHN0cm9rZTojNDc1NTY5LGNvbG9yOiMwRjE3MkEsc3Ryb2tlLXdpZHRoOjEuMnB4OwoKICAgIGNsYXNzIGNmZyBpbnB1dDsKICAgIGNsYXNzIGdoYSB0cmlnZ2VyOwogICAgY2xhc3MgczAsczEzLHM0NSBleGVjOwogICAgY2xhc3MgczYscHIgcHVibGlzaDsKICAgIGNsYXNzIGRhc2hib2FyZCBvdXRwdXQ7Cg==" alt="Self-QA 흐름" />
+<table>
+<tr>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBBWyJTdGVwIDA6IOu2gO2KuOyKpO2KuOueqTxicj5IRiDroIjtj6wgKyDsiqTrg4Xsg7ciXSAtLT4gQlsiU3RlcCAxOiDtg5zsiqTtgawg7KSA67mEPGJyPu2VhO2EsCArIOuhnOuTnCJd" alt="준비" width="350" /></td>
+<td align="center" style="font-size:2em;">→</td>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBDWyJTdGVwIDI6IOy2lOuhoDxicj5MTE0gKyBTZWxmLVFBIl0gLS0-IERbIlN0ZXAgMzog7Y-s66e37YyFPGJyPkpTT04gKyBNYXJrZG93biJd" alt="실행" width="350" /></td>
+</tr>
+<tr>
+<td></td>
+<td align="center" style="font-size:2em;">↓</td>
+<td></td>
+</tr>
+<tr>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBFWyJTdGVwIDQ6IFBhcnF1ZXQ8YnI-7KCc7LacIOuNsOydtO2EsCDrs5HtlakiXSAtLT4gRlsiU3RlcCA1OiDqsoDspp08YnI-66y06rKw7ISxIOqygOyCrCJd" alt="산출물" width="350" /></td>
+<td align="center" style="font-size:2em;">→</td>
+<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBHWyJTdGVwIDY6IOumrO2PrO2KuDxicj5IVE1MICsgSlNPTiJdIC0tPiBIWyJTdGVwIDc6IOyXheuhnOuTnDxicj5IRiArIFBSIOyDneyEsSJd" alt="리포트 & 업로드" width="350" /></td>
+</tr>
+</table>
 
 
 ---
