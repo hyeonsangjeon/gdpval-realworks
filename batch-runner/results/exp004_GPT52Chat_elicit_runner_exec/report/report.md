@@ -6,1359 +6,1390 @@
 | **Condition** | Elicit |
 | **Model** | gpt-5.2-chat |
 | **Execution Mode** | subprocess |
-| **Date** | 2026-02-26 |
-| **Duration** | 123m 20s |
-| **Generated At** | 2026-02-27T01:40:59.674554+00:00 |
+| **Date** | 2026-02-27 |
+| **Duration** | 153m 53s |
+| **Generated At** | 2026-02-27T13:38:30.970792+00:00 |
 
 ## Execution Summary *(Self-Assessed, Pre-Grading)*
 
 > **Note:** This summary is based on the LLM's self-assessed confidence scores (Self-QA) during task execution — not on external grading results. Actual grading scores from evaluators are not yet available at this stage.
 
-This experiment evaluated the GPT-5.2 Chat model in an elicitation-focused subprocess execution across 220 tasks spanning multiple economic sectors. The run emphasized task completion under elicitation conditions, with the model providing self-assessed QA confidence scores during execution. Overall, 191 tasks completed successfully, yielding an 86.8% task completion rate, while 29 tasks resulted in errors. A relatively high retry count (68 tasks) indicates multiple attempts were often required to reach acceptable task completion.
+This experiment executed the full 220-task GPT-5.2 Chat Elicit Capabilities suite in subprocess mode under the Elicit condition. The run achieved a 90.9% task completion rate, with 200 successful tasks and 20 errors. The model generated deliverables for the majority of tasks, with an average latency of approximately 24.8 seconds per task, indicating a relatively heavy execution footprint consistent with multi-step elicitation workflows.
 
-The model reported an average self-assessed QA confidence of 5.92/10, with a wide spread from 2 to 9, suggesting moderate confidence in output quality overall and notable variability across tasks. Average latency was high at approximately 21.7 seconds per task, reflecting the computational and reasoning load of the elicitation setup. Key highlights include perfect task completion in the Information sector and consistently strong completion in Government-related tasks, contrasted with lower success rates in Finance and Retail.
+Across completed tasks, the model reported an average self-assessed QA confidence of 5.87/10, with values spanning from low-confidence outputs (2/10) to high-confidence ones (9/10). These scores represent the model’s internal assessment of answer completeness and alignment with task instructions, not external evaluation. Key highlights include stable completion across most sectors and consistent deliverable generation, albeit with moderate confidence levels suggesting partial fulfillment or cautious self-evaluation rather than strong certainty.
+
+Latency remained relatively uniform across sectors, with most averages falling in the 21–28 second range, suggesting that task complexity and elicitation depth had a greater influence on runtime than domain alone.
 
 ## Key Metrics
 
 | Metric | Value |
 |--------|-------|
 | Total Tasks | 220 |
-| Success | 191 (86.8%) |
-| Errors | 29 |
-| Retried Tasks | 68 |
-| Avg QA Score | 5.92/10 |
+| Success | 200 (90.9%) |
+| Errors | 20 |
+| Retried Tasks | 72 |
+| Avg QA Score | 5.87/10 |
 | Min QA Score | 2/10 |
 | Max QA Score | 9/10 |
-| Avg Latency | 21,734ms |
-| Max Latency | 54,323ms |
-| Total LLM Time | 4781s |
+| Avg Latency | 24,842ms |
+| Max Latency | 56,139ms |
+| Total LLM Time | 5465s |
 
 ## File Generation
 
 | Metric | Value |
 |--------|-------|
 | Tasks requiring files | 185 |
-| Successfully generated | 162 (87.6%) |
-| Failed → dummy created | 23 |
+| Successfully generated | 171 (92.4%) |
+| Failed → dummy created | 14 |
 
 ### Resume Rounds
 
 | Round | Attempted | Recovered | Still Failed |
 |-------|-----------|-----------|--------------|
-| 1 | 68 | 39 | 29 |
+| 1 | 43 | 43 | 0 |
+| 2 | 29 | 9 | 20 |
 
 ## Quality Analysis
 
-Self-assessed QA confidence scores clustered around the mid-range, with most sectors averaging between 5.2 and 6.9. Higher confidence was observed in Government and Retail Trade tasks, which may reflect clearer task structure or more standardized response expectations. Lower average QA scores in Information and Health Care suggest that, while tasks were completed, the model expressed less confidence in output completeness or precision.
+Self-assessed QA scores clustered in the mid-range (5–6/10) across most sectors, indicating that the model generally believed it met core task requirements but often with omissions, uncertainty, or limited depth. Government and Real Estate tasks showed comparatively higher average confidence (6.9 and 6.3 respectively), suggesting clearer instructions or more structured outputs in those domains. Finance and Insurance exhibited the lowest average confidence (5.2/10), which may reflect higher precision requirements or more complex constraint handling.
 
-Sector-wise, no single domain exhibited both low completion and low confidence simultaneously, indicating that failures were not strongly correlated with QA confidence alone. Manufacturing and Real Estate showed balanced outcomes with moderate-to-high confidence and solid completion rates. Deliverable file generation quality, as inferred from self-QA and retries, appears acceptable but inconsistent, particularly in sectors requiring more formal or compliance-oriented outputs.
+Sector-to-sector variance in QA confidence was narrower than expected, implying that the elicitation framework produced broadly consistent output quality regardless of domain. Retail Trade tasks stood out with relatively higher confidence despite a lower success rate, suggesting that when tasks completed, the model felt reasonably aligned, but encountered more execution-level issues overall.
+
+Deliverable file generation quality appeared generally sufficient for task completion, but the moderate self-QA scores imply that outputs may have lacked thoroughness, edge-case coverage, or strong justification. This pattern is consistent with elicitation tasks that require iterative reasoning or domain-specific rigor.
 
 ## Sector Breakdown
 
 | Sector | Tasks | Success | Success% | Avg QA | Avg Latency |
 |--------|-------|---------|----------|--------|-------------|
-| Finance and Insurance | 25 | 17 | 68.0% | 5.65/10 | 22,610ms |
-| Government | 25 | 24 | 96.0% | 6.83/10 | 20,014ms |
-| Health Care and Social Assistance | 25 | 22 | 88.0% | 5.36/10 | 20,991ms |
-| Information | 25 | 25 | 100.0% | 5.16/10 | 23,522ms |
-| Manufacturing | 25 | 23 | 92.0% | 6.09/10 | 22,949ms |
-| Professional, Scientific, and Technical  | 25 | 22 | 88.0% | 5.55/10 | 24,454ms |
-| Real Estate and Rental and Leasing | 25 | 22 | 88.0% | 6.05/10 | 21,730ms |
-| Retail Trade | 20 | 17 | 85.0% | 6.88/10 | 19,558ms |
-| Wholesale Trade | 25 | 19 | 76.0% | 5.89/10 | 19,344ms |
+| Finance and Insurance | 25 | 21 | 84.0% | 5.24/10 | 26,882ms |
+| Government | 25 | 23 | 92.0% | 6.87/10 | 23,432ms |
+| Health Care and Social Assistance | 25 | 24 | 96.0% | 5.46/10 | 23,586ms |
+| Information | 25 | 23 | 92.0% | 5.52/10 | 27,225ms |
+| Manufacturing | 25 | 24 | 96.0% | 5.71/10 | 28,570ms |
+| Professional, Scientific, and Technical  | 25 | 24 | 96.0% | 5.54/10 | 25,724ms |
+| Real Estate and Rental and Leasing | 25 | 24 | 96.0% | 6.33/10 | 24,277ms |
+| Retail Trade | 20 | 17 | 85.0% | 6.35/10 | 21,837ms |
+| Wholesale Trade | 25 | 20 | 80.0% | 5.85/10 | 21,442ms |
 
 ## Task Results
 
 | # | Task ID | Sector | Occupation | Status | Retry | Files | QA Score | Latency |
 |---|---------|--------|------------|--------|-------|-------|----------|---------|
-| 1 | `83d10b06…` | Professional, Scientif | Accountants and Au | ❌ error | Yes | 0 | - | 19012ms |
-| 2 | `7b08cd4d…` | Professional, Scientif | Accountants and Au | ✅ success | - | 2 | 2/10 | 19784ms |
-| 3 | `7d7fc9a7…` | Professional, Scientif | Accountants and Au | ✅ success | - | 7 | 7/10 | 16857ms |
-| 4 | `43dc9778…` | Professional, Scientif | Accountants and Au | ✅ success | - | 16 | 6/10 | 19886ms |
-| 5 | `ee09d943…` | Professional, Scientif | Accountants and Au | ✅ success | - | 18 | 6/10 | 20829ms |
-| 6 | `f84ea6ac…` | Government | Administrative Ser | ✅ success | - | 1 | 2/10 | 17027ms |
-| 7 | `a328feea…` | Government | Administrative Ser | ✅ success | - | 1 | 9/10 | 9547ms |
-| 8 | `27e8912c…` | Government | Administrative Ser | ✅ success | - | 5 | 6/10 | 20442ms |
-| 9 | `17111c03…` | Government | Administrative Ser | ✅ success | - | 3 | 8/10 | 25323ms |
-| 10 | `c44e9b62…` | Government | Administrative Ser | ✅ success | - | 6 | 6/10 | 20666ms |
-| 11 | `99ac6944…` | Information | Audio and Video Te | ✅ success | - | 4 | 4/10 | 30753ms |
-| 12 | `f9a1c16c…` | Information | Audio and Video Te | ✅ success | - | 1 | 5/10 | 17538ms |
-| 13 | `38889c3b…` | Information | Audio and Video Te | ✅ success | - | 1 | 3/10 | 20638ms |
-| 14 | `ff85ee58…` | Information | Audio and Video Te | ✅ success | - | 1 | 2/10 | 24007ms |
-| 15 | `4b894ae3…` | Information | Audio and Video Te | ✅ success | - | 2 | 4/10 | 19046ms |
-| 16 | `1b1ade2d…` | Manufacturing | Buyers and Purchas | ✅ success | - | 1 | 8/10 | 23640ms |
-| 17 | `93b336f3…` | Manufacturing | Buyers and Purchas | ✅ success | - | 1 | 8/10 | 25170ms |
-| 18 | `15ddd28d…` | Manufacturing | Buyers and Purchas | ✅ success | - | 1 | 9/10 | 26185ms |
-| 19 | `24d1e93f…` | Manufacturing | Buyers and Purchas | ✅ success | Yes | 2 | 6/10 | 23335ms |
-| 20 | `05389f78…` | Manufacturing | Buyers and Purchas | ✅ success | - | 3 | 6/10 | 28242ms |
-| 21 | `575f8679…` | Government | Child, Family, and | ✅ success | - | 1 | 8/10 | 17356ms |
-| 22 | `a74ead3b…` | Government | Child, Family, and | ✅ success | - | 2 | 6/10 | 14778ms |
-| 23 | `bbe0a93b…` | Government | Child, Family, and | ✅ success | - | 3 | 7/10 | 21412ms |
-| 24 | `85d95ce5…` | Government | Child, Family, and | ✅ success | Yes | 4 | 4/10 | 32347ms |
-| 25 | `76d10872…` | Government | Child, Family, and | ✅ success | Yes | 5 | 8/10 | 15864ms |
-| 26 | `36d567ba…` | Government | Compliance Officer | ✅ success | - | 1 | 8/10 | 24475ms |
-| 27 | `7bbfcfe9…` | Government | Compliance Officer | ✅ success | - | 1 | 8/10 | 15794ms |
-| 28 | `2696757c…` | Government | Compliance Officer | ✅ success | - | 1 | 6/10 | 15304ms |
-| 29 | `dfb4e0cd…` | Government | Compliance Officer | ✅ success | - | 2 | 9/10 | 10538ms |
-| 30 | `4c18ebae…` | Government | Compliance Officer | ✅ success | - | 3 | 7/10 | 15622ms |
-| 31 | `cebf301e…` | Professional, Scientif | Computer and Infor | ✅ success | - | 1 | 9/10 | 26387ms |
-| 32 | `c2e8f271…` | Professional, Scientif | Computer and Infor | ✅ success | - | 1 | 7/10 | 25662ms |
-| 33 | `2ea2e5b5…` | Professional, Scientif | Computer and Infor | ✅ success | - | 2 | 5/10 | 24751ms |
-| 34 | `c357f0e2…` | Professional, Scientif | Computer and Infor | ✅ success | - | 2 | 4/10 | 25322ms |
-| 35 | `a45bc83b…` | Professional, Scientif | Computer and Infor | ✅ success | - | 5 | 6/10 | 31993ms |
-| 36 | `a10ec48c…` | Real Estate and Rental | Concierges | ✅ success | - | 1 | 2/10 | 20022ms |
-| 37 | `fccaa4a1…` | Real Estate and Rental | Concierges | ✅ success | Yes | 2 | 7/10 | 27847ms |
-| 38 | `f5d428fd…` | Real Estate and Rental | Concierges | ❌ error | Yes | 0 | - | 22465ms |
-| 39 | `2fa8e956…` | Real Estate and Rental | Concierges | ✅ success | Yes | 2 | 3/10 | 17493ms |
-| 40 | `0e4fe8cd…` | Real Estate and Rental | Concierges | ✅ success | - | 1 | 6/10 | 23865ms |
-| 41 | `a0ef404e…` | Real Estate and Rental | Counter and Rental | ✅ success | - | 1 | 9/10 | 17609ms |
-| 42 | `b7a5912e…` | Real Estate and Rental | Counter and Rental | ✅ success | Yes | 2 | 6/10 | 24142ms |
-| 43 | `aa071045…` | Real Estate and Rental | Counter and Rental | ✅ success | Yes | 3 | 7/10 | 21313ms |
-| 44 | `476db143…` | Real Estate and Rental | Counter and Rental | ✅ success | Yes | 4 | 8/10 | 19836ms |
-| 45 | `61f546a8…` | Real Estate and Rental | Counter and Rental | ❌ error | Yes | 0 | - | 31897ms |
-| 46 | `f3351922…` | Finance and Insurance | Customer Service R | ✅ success | - | 1 | 8/10 | 19989ms |
-| 47 | `61717508…` | Finance and Insurance | Customer Service R | ✅ success | Yes | 3 | 8/10 | 25453ms |
-| 48 | `0ed38524…` | Finance and Insurance | Customer Service R | ✅ success | Yes | 3 | 8/10 | 15321ms |
-| 49 | `87da214f…` | Finance and Insurance | Customer Service R | ❌ error | Yes | 0 | - | 24003ms |
-| 50 | `d025a41c…` | Finance and Insurance | Customer Service R | ✅ success | - | 4 | 6/10 | 22532ms |
-| 51 | `401a07f1…` | Information | Editors | ✅ success | - | 1 | 6/10 | 23115ms |
-| 52 | `afe56d05…` | Information | Editors | ✅ success | - | 1 | 6/10 | 47319ms |
-| 53 | `9a8c8e28…` | Information | Editors | ✅ success | - | 3 | 4/10 | 26401ms |
-| 54 | `3a4c347c…` | Information | Editors | ✅ success | - | 2 | 7/10 | 18687ms |
-| 55 | `ec2fccc9…` | Information | Editors | ✅ success | - | 2 | 7/10 | 27506ms |
-| 56 | `8c8fc328…` | Information | Film and Video Edi | ✅ success | - | 2 | 6/10 | 15020ms |
-| 57 | `e222075d…` | Information | Film and Video Edi | ✅ success | - | 6 | 4/10 | 25034ms |
-| 58 | `c94452e4…` | Information | Film and Video Edi | ✅ success | - | 3 | 3/10 | 20686ms |
-| 59 | `75401f7c…` | Information | Film and Video Edi | ✅ success | - | 3 | 3/10 | 24855ms |
-| 60 | `a941b6d8…` | Information | Film and Video Edi | ✅ success | - | 2 | 3/10 | 21351ms |
-| 61 | `8079e27d…` | Finance and Insurance | Financial and Inve | ✅ success | - | 1 | 3/10 | 9711ms |
-| 62 | `e21cd746…` | Finance and Insurance | Financial and Inve | ✅ success | - | 1 | 3/10 | 21116ms |
-| 63 | `9e8607e7…` | Finance and Insurance | Financial and Inve | ❌ error | Yes | 0 | - | 38400ms |
-| 64 | `c7d83f01…` | Finance and Insurance | Financial and Inve | ✅ success | - | 3 | 4/10 | 36581ms |
-| 65 | `46b34f78…` | Finance and Insurance | Financial and Inve | ❌ error | Yes | 0 | - | 25200ms |
-| 66 | `a1963a68…` | Finance and Insurance | Financial Managers | ✅ success | Yes | 1 | 6/10 | 25065ms |
-| 67 | `5f6c57dd…` | Finance and Insurance | Financial Managers | ❌ error | Yes | 0 | - | 21932ms |
-| 68 | `b39a5aa7…` | Finance and Insurance | Financial Managers | ✅ success | Yes | 2 | 3/10 | 21658ms |
-| 69 | `b78fd844…` | Finance and Insurance | Financial Managers | ❌ error | Yes | 0 | - | 29766ms |
-| 70 | `4520f882…` | Finance and Insurance | Financial Managers | ❌ error | Yes | 0 | - | 20436ms |
-| 71 | `ec591973…` | Wholesale Trade | First-Line Supervi | ✅ success | - | 1 | 6/10 | 14443ms |
-| 72 | `62f04c2f…` | Wholesale Trade | First-Line Supervi | ✅ success | - | 2 | 7/10 | 19112ms |
-| 73 | `3f821c2d…` | Wholesale Trade | First-Line Supervi | ✅ success | - | 2 | 4/10 | 19744ms |
-| 74 | `e996036e…` | Wholesale Trade | First-Line Supervi | ❌ error | Yes | 0 | - | 17993ms |
-| 75 | `327fbc21…` | Wholesale Trade | First-Line Supervi | ❌ error | Yes | 0 | - | 17756ms |
-| 76 | `6dcae3f5…` | Health Care and Social | First-Line Supervi | ✅ success | Yes | 3 | 4/10 | 16684ms |
-| 77 | `1aecc095…` | Health Care and Social | First-Line Supervi | ✅ success | - | 4 | 6/10 | 21335ms |
-| 78 | `0353ee0c…` | Health Care and Social | First-Line Supervi | ✅ success | - | 3 | 3/10 | 24788ms |
-| 79 | `40a8c4b1…` | Health Care and Social | First-Line Supervi | ❌ error | Yes | 0 | - | 12236ms |
-| 80 | `4d1a8410…` | Health Care and Social | First-Line Supervi | ✅ success | - | 11 | 4/10 | 18498ms |
-| 81 | `8c823e32…` | Government | First-Line Supervi | ✅ success | Yes | 1 | 6/10 | 22019ms |
-| 82 | `eb54f575…` | Government | First-Line Supervi | ✅ success | Yes | 1 | 9/10 | 32081ms |
-| 83 | `11e1b169…` | Government | First-Line Supervi | ✅ success | Yes | 1 | 8/10 | 17981ms |
-| 84 | `a95a5829…` | Government | First-Line Supervi | ✅ success | - | 2 | 8/10 | 24049ms |
-| 85 | `22c0809b…` | Government | First-Line Supervi | ✅ success | - | 1 | 6/10 | 20048ms |
-| 86 | `bf68f2ad…` | Manufacturing | First-Line Supervi | ✅ success | - | 3 | 4/10 | 15269ms |
-| 87 | `efca245f…` | Manufacturing | First-Line Supervi | ❌ error | Yes | 0 | - | 21203ms |
-| 88 | `9e39df84…` | Manufacturing | First-Line Supervi | ✅ success | - | 2 | 3/10 | 19806ms |
-| 89 | `68d8d901…` | Manufacturing | First-Line Supervi | ✅ success | - | 3 | 6/10 | 16286ms |
-| 90 | `1752cb53…` | Manufacturing | First-Line Supervi | ✅ success | - | 6 | 7/10 | 12933ms |
-| 91 | `bd72994f…` | Retail Trade | First-Line Supervi | ✅ success | - | 2 | 5/10 | 26404ms |
-| 92 | `211d0093…` | Retail Trade | First-Line Supervi | ✅ success | Yes | 2 | 9/10 | 12936ms |
-| 93 | `d4525420…` | Retail Trade | First-Line Supervi | ✅ success | - | 2 | 8/10 | 12792ms |
-| 94 | `45c6237b…` | Retail Trade | First-Line Supervi | ❌ error | Yes | 0 | - | 26954ms |
-| 95 | `cecac8f9…` | Retail Trade | First-Line Supervi | ✅ success | Yes | 5 | 8/10 | 24554ms |
-| 96 | `8f9e8bcd…` | Retail Trade | General and Operat | ✅ success | - | 1 | 8/10 | 21538ms |
-| 97 | `0fad6023…` | Retail Trade | General and Operat | ✅ success | - | 1 | 6/10 | 21103ms |
-| 98 | `02314fc6…` | Retail Trade | General and Operat | ✅ success | Yes | 1 | 8/10 | 20786ms |
-| 99 | `4d61a19a…` | Retail Trade | General and Operat | ✅ success | - | 2 | 7/10 | 23208ms |
-| 100 | `6436ff9e…` | Retail Trade | General and Operat | ✅ success | - | 2 | 8/10 | 19994ms |
-| 101 | `8a7b6fca…` | Manufacturing | Industrial Enginee | ✅ success | Yes | 1 | 6/10 | 18813ms |
-| 102 | `40a99a31…` | Manufacturing | Industrial Enginee | ✅ success | - | 3 | 6/10 | 22328ms |
-| 103 | `b9665ca1…` | Manufacturing | Industrial Enginee | ✅ success | - | 1 | 5/10 | 22256ms |
-| 104 | `c6269101…` | Manufacturing | Industrial Enginee | ✅ success | Yes | 5 | 7/10 | 23053ms |
-| 105 | `be830ca0…` | Manufacturing | Industrial Enginee | ✅ success | - | 8 | 8/10 | 26918ms |
-| 106 | `cd9efc18…` | Professional, Scientif | Lawyers | ✅ success | Yes | 1 | 5/10 | 31608ms |
-| 107 | `a97369c7…` | Professional, Scientif | Lawyers | ✅ success | - | 1 | 6/10 | 27204ms |
-| 108 | `3f625cb2…` | Professional, Scientif | Lawyers | ❌ error | Yes | 0 | - | 30443ms |
-| 109 | `aad21e4c…` | Professional, Scientif | Lawyers | ✅ success | - | 1 | 8/10 | 26408ms |
-| 110 | `8314d1b1…` | Professional, Scientif | Lawyers | ✅ success | - | 1 | 7/10 | 54323ms |
-| 111 | `5e2b6aab…` | Manufacturing | Mechanical Enginee | ✅ success | - | 2 | 4/10 | 37846ms |
-| 112 | `46fc494e…` | Manufacturing | Mechanical Enginee | ✅ success | - | 6 | 3/10 | 32505ms |
-| 113 | `3940b7e7…` | Manufacturing | Mechanical Enginee | ✅ success | - | 2 | 6/10 | 25550ms |
-| 114 | `8077e700…` | Manufacturing | Mechanical Enginee | ✅ success | - | 4 | 4/10 | 25501ms |
-| 115 | `5a2d70da…` | Manufacturing | Mechanical Enginee | ✅ success | - | 4 | 6/10 | 26831ms |
-| 116 | `74d6e8b0…` | Health Care and Social | Medical and Health | ✅ success | - | 1 | 6/10 | 23191ms |
-| 117 | `81db15ff…` | Health Care and Social | Medical and Health | ✅ success | Yes | 1 | 8/10 | 17711ms |
-| 118 | `61b0946a…` | Health Care and Social | Medical and Health | ❌ error | Yes | 0 | - | 23332ms |
-| 119 | `61e7b9c6…` | Health Care and Social | Medical and Health | ✅ success | - | 2 | 3/10 | 11227ms |
-| 120 | `c9bf9801…` | Health Care and Social | Medical and Health | ✅ success | - | 5 | 6/10 | 24150ms |
-| 121 | `f1be6436…` | Health Care and Social | Medical Secretarie | ✅ success | - | 5 | 4/10 | 23730ms |
-| 122 | `41f6ef59…` | Health Care and Social | Medical Secretarie | ✅ success | - | 2 | 8/10 | 14038ms |
-| 123 | `a0552909…` | Health Care and Social | Medical Secretarie | ❌ error | Yes | 0 | - | 23107ms |
-| 124 | `6d2c8e55…` | Health Care and Social | Medical Secretarie | ✅ success | - | 13 | 3/10 | 19728ms |
-| 125 | `4b98ccce…` | Health Care and Social | Medical Secretarie | ✅ success | - | 7 | 6/10 | 21450ms |
-| 126 | `60221cd0…` | Information | News Analysts, Rep | ✅ success | - | 1 | 8/10 | 21226ms |
-| 127 | `ef8719da…` | Information | News Analysts, Rep | ✅ success | - | 1 | 7/10 | 25161ms |
-| 128 | `3baa0009…` | Information | News Analysts, Rep | ✅ success | - | 2 | 5/10 | 19109ms |
-| 129 | `5d0feb24…` | Information | News Analysts, Rep | ✅ success | - | 2 | 7/10 | 23104ms |
-| 130 | `6974adea…` | Information | News Analysts, Rep | ✅ success | - | 8 | 4/10 | 35967ms |
-| 131 | `1a78e076…` | Health Care and Social | Nurse Practitioner | ✅ success | - | 1 | 6/10 | 37654ms |
-| 132 | `1b9ec237…` | Health Care and Social | Nurse Practitioner | ✅ success | - | 2 | 6/10 | 19551ms |
-| 133 | `0112fc9b…` | Health Care and Social | Nurse Practitioner | ✅ success | - | 1 | 8/10 | 17312ms |
-| 134 | `772e7524…` | Health Care and Social | Nurse Practitioner | ✅ success | - | 1 | 8/10 | 14233ms |
-| 135 | `e6429658…` | Health Care and Social | Nurse Practitioner | ✅ success | - | 4 | 6/10 | 28979ms |
-| 136 | `b5d2e6f1…` | Wholesale Trade | Order Clerks | ✅ success | - | 2 | 5/10 | 15235ms |
-| 137 | `f841ddcf…` | Wholesale Trade | Order Clerks | ❌ error | Yes | 0 | - | 15292ms |
-| 138 | `47ef842d…` | Wholesale Trade | Order Clerks | ✅ success | - | 3 | 8/10 | 16105ms |
-| 139 | `1137e2bb…` | Wholesale Trade | Order Clerks | ✅ success | - | 3 | 9/10 | 17530ms |
-| 140 | `c3525d4d…` | Wholesale Trade | Order Clerks | ✅ success | Yes | 5 | 5/10 | 21260ms |
-| 141 | `9a0d8d36…` | Finance and Insurance | Personal Financial | ✅ success | - | 1 | 6/10 | 15386ms |
-| 142 | `664a42e5…` | Finance and Insurance | Personal Financial | ✅ success | - | 1 | 6/10 | 18953ms |
-| 143 | `feb5eefc…` | Finance and Insurance | Personal Financial | ✅ success | - | 1 | 4/10 | 25831ms |
-| 144 | `3600de06…` | Finance and Insurance | Personal Financial | ✅ success | - | 1 | 6/10 | 18040ms |
-| 145 | `c657103b…` | Finance and Insurance | Personal Financial | ✅ success | - | 3 | 6/10 | 17072ms |
-| 146 | `ae0c1093…` | Retail Trade | Private Detectives | ✅ success | - | 2 | 7/10 | 13904ms |
-| 147 | `f9f82549…` | Retail Trade | Private Detectives | ✅ success | - | 2 | 6/10 | 16342ms |
-| 148 | `57b2cdf2…` | Retail Trade | Private Detectives | ✅ success | Yes | 3 | 8/10 | 19581ms |
-| 149 | `84322284…` | Retail Trade | Private Detectives | ✅ success | Yes | 4 | 6/10 | 24368ms |
-| 150 | `a46d5cd2…` | Retail Trade | Private Detectives | ✅ success | Yes | 5 | 8/10 | 20937ms |
-| 151 | `6241e678…` | Information | Producers and Dire | ✅ success | - | 1 | 5/10 | 20373ms |
-| 152 | `e14e32ba…` | Information | Producers and Dire | ✅ success | - | 2 | 6/10 | 24608ms |
-| 153 | `b1a79ce1…` | Information | Producers and Dire | ✅ success | - | 2 | 8/10 | 23393ms |
-| 154 | `e4f664ea…` | Information | Producers and Dire | ✅ success | - | 3 | 5/10 | 18899ms |
-| 155 | `a079d38f…` | Information | Producers and Dire | ✅ success | - | 3 | 7/10 | 14267ms |
-| 156 | `02aa1805…` | Professional, Scientif | Project Management | ✅ success | - | 2 | 3/10 | 19512ms |
-| 157 | `fd6129bd…` | Professional, Scientif | Project Management | ✅ success | - | 3 | 8/10 | 25961ms |
-| 158 | `ce864f41…` | Professional, Scientif | Project Management | ✅ success | - | 5 | 7/10 | 19664ms |
-| 159 | `58ac1cc5…` | Professional, Scientif | Project Management | ✅ success | - | 7 | 6/10 | 24843ms |
-| 160 | `3c19c6d1…` | Professional, Scientif | Project Management | ✅ success | Yes | 5 | 6/10 | 19692ms |
-| 161 | `a99d85fc…` | Real Estate and Rental | Property, Real Est | ✅ success | - | 1 | 6/10 | 21983ms |
-| 162 | `55ddb773…` | Real Estate and Rental | Property, Real Est | ✅ success | - | 2 | 3/10 | 20399ms |
-| 163 | `1e5a1d7f…` | Real Estate and Rental | Property, Real Est | ✅ success | - | 2 | 3/10 | 14647ms |
-| 164 | `0419f1c3…` | Real Estate and Rental | Property, Real Est | ✅ success | Yes | 3 | 8/10 | 17214ms |
-| 165 | `ed2bc14c…` | Real Estate and Rental | Property, Real Est | ✅ success | - | 3 | 9/10 | 21663ms |
-| 166 | `46bc7238…` | Real Estate and Rental | Real Estate Broker | ✅ success | Yes | 7 | 6/10 | 24692ms |
-| 167 | `2d06bc0a…` | Real Estate and Rental | Real Estate Broker | ✅ success | - | 1 | 7/10 | 16612ms |
-| 168 | `fd3ad420…` | Real Estate and Rental | Real Estate Broker | ✅ success | - | 2 | 6/10 | 19048ms |
-| 169 | `0818571f…` | Real Estate and Rental | Real Estate Broker | ✅ success | - | 13 | 6/10 | 27335ms |
-| 170 | `6074bba3…` | Real Estate and Rental | Real Estate Broker | ✅ success | Yes | 4 | 7/10 | 20861ms |
-| 171 | `5ad0c554…` | Real Estate and Rental | Real Estate Sales  | ✅ success | - | 4 | 7/10 | 16835ms |
-| 172 | `11593a50…` | Real Estate and Rental | Real Estate Sales  | ✅ success | - | 3 | 3/10 | 24480ms |
-| 173 | `94925f49…` | Real Estate and Rental | Real Estate Sales  | ✅ success | - | 5 | 6/10 | 21609ms |
-| 174 | `90f37ff3…` | Real Estate and Rental | Real Estate Sales  | ✅ success | Yes | 2 | 8/10 | 22510ms |
-| 175 | `d3d255b2…` | Real Estate and Rental | Real Estate Sales  | ❌ error | Yes | 0 | - | 26867ms |
-| 176 | `403b9234…` | Government | Recreation Workers | ✅ success | - | 1 | 8/10 | 13750ms |
-| 177 | `1bff4551…` | Government | Recreation Workers | ❌ error | Yes | 0 | - | 27896ms |
-| 178 | `650adcb1…` | Government | Recreation Workers | ✅ success | - | 1 | 5/10 | 24310ms |
-| 179 | `01d7e53e…` | Government | Recreation Workers | ✅ success | - | 4 | 6/10 | 19616ms |
-| 180 | `a73fbc98…` | Government | Recreation Workers | ✅ success | Yes | 6 | 6/10 | 22097ms |
-| 181 | `0ec25916…` | Health Care and Social | Registered Nurses | ✅ success | - | 1 | 8/10 | 25803ms |
-| 182 | `116e791e…` | Health Care and Social | Registered Nurses | ✅ success | - | 1 | 5/10 | 30043ms |
-| 183 | `dd724c67…` | Health Care and Social | Registered Nurses | ✅ success | - | 1 | 3/10 | 25799ms |
-| 184 | `7151c60a…` | Health Care and Social | Registered Nurses | ✅ success | - | 5 | 4/10 | 16430ms |
-| 185 | `90edba97…` | Health Care and Social | Registered Nurses | ✅ success | - | 6 | 3/10 | 13754ms |
-| 186 | `91060ff0…` | Retail Trade | Pharmacists | ✅ success | Yes | 1 | 3/10 | 24534ms |
-| 187 | `8384083a…` | Retail Trade | Pharmacists | ✅ success | - | 1 | 6/10 | 16229ms |
-| 188 | `045aba2e…` | Retail Trade | Pharmacists | ✅ success | - | 3 | 6/10 | 14643ms |
-| 189 | `f2986c1f…` | Retail Trade | Pharmacists | ❌ error | Yes | 0 | - | 9895ms |
-| 190 | `ffed32d8…` | Retail Trade | Pharmacists | ❌ error | Yes | 0 | - | 20454ms |
-| 191 | `b3573f20…` | Wholesale Trade | Sales Managers | ✅ success | - | 1 | 3/10 | 17680ms |
-| 192 | `a69be28f…` | Wholesale Trade | Sales Managers | ✅ success | Yes | 10 | 6/10 | 20748ms |
-| 193 | `788d2bc6…` | Wholesale Trade | Sales Managers | ✅ success | Yes | 2 | 6/10 | 23105ms |
-| 194 | `74ed1dc7…` | Wholesale Trade | Sales Managers | ✅ success | - | 2 | 8/10 | 19864ms |
-| 195 | `69a8ef86…` | Wholesale Trade | Sales Managers | ✅ success | - | 3 | 7/10 | 22904ms |
-| 196 | `ab81b076…` | Wholesale Trade | Sales Representati | ❌ error | Yes | 0 | - | 24287ms |
-| 197 | `d7cfae6f…` | Wholesale Trade | Sales Representati | ❌ error | Yes | 0 | - | 19361ms |
-| 198 | `19403010…` | Wholesale Trade | Sales Representati | ✅ success | - | 2 | 6/10 | 22463ms |
-| 199 | `7ed932dd…` | Wholesale Trade | Sales Representati | ❌ error | Yes | 0 | - | 17701ms |
-| 200 | `105f8ad0…` | Wholesale Trade | Sales Representati | ✅ success | - | 2 | 5/10 | 25583ms |
-| 201 | `b57efde3…` | Wholesale Trade | Sales Representati | ✅ success | - | 1 | 6/10 | 21051ms |
-| 202 | `15d37511…` | Wholesale Trade | Sales Representati | ✅ success | - | 2 | 3/10 | 17695ms |
-| 203 | `bb863dd9…` | Wholesale Trade | Sales Representati | ✅ success | - | 3 | 6/10 | 15112ms |
-| 204 | `fe0d3941…` | Wholesale Trade | Sales Representati | ✅ success | - | 4 | 6/10 | 27242ms |
-| 205 | `6a900a40…` | Wholesale Trade | Sales Representati | ✅ success | - | 6 | 6/10 | 14323ms |
-| 206 | `9efbcd35…` | Finance and Insurance | Securities, Commod | ✅ success | - | 1 | 6/10 | 26423ms |
-| 207 | `1d4672c8…` | Finance and Insurance | Securities, Commod | ❌ error | Yes | 0 | - | 17566ms |
-| 208 | `4de6a529…` | Finance and Insurance | Securities, Commod | ❌ error | Yes | 0 | - | 24369ms |
-| 209 | `4c4dc603…` | Finance and Insurance | Securities, Commod | ✅ success | Yes | 2 | 6/10 | 18361ms |
-| 210 | `bb499d9c…` | Finance and Insurance | Securities, Commod | ✅ success | - | 4 | 7/10 | 26093ms |
-| 211 | `5349dd7b…` | Manufacturing | Shipping, Receivin | ✅ success | - | 1 | 7/10 | 24562ms |
-| 212 | `a4a9195c…` | Manufacturing | Shipping, Receivin | ✅ success | - | 1 | 9/10 | 23156ms |
-| 213 | `552b7dd0…` | Manufacturing | Shipping, Receivin | ✅ success | Yes | 4 | 8/10 | 19645ms |
-| 214 | `11dcc268…` | Manufacturing | Shipping, Receivin | ❌ error | Yes | 0 | - | 16719ms |
-| 215 | `76418a2c…` | Manufacturing | Shipping, Receivin | ✅ success | Yes | 4 | 4/10 | 15982ms |
-| 216 | `0e386e32…` | Professional, Scientif | Software Developer | ✅ success | - | 1 | 3/10 | 19492ms |
-| 217 | `7de33b48…` | Professional, Scientif | Software Developer | ✅ success | - | 3 | 4/10 | 19492ms |
-| 218 | `854f3814…` | Professional, Scientif | Software Developer | ❌ error | Yes | 0 | - | 13743ms |
-| 219 | `4122f866…` | Professional, Scientif | Software Developer | ✅ success | - | 2 | 4/10 | 23640ms |
-| 220 | `2c249e0f…` | Professional, Scientif | Software Developer | ✅ success | - | 1 | 3/10 | 24848ms |
+| 1 | `83d10b06…` | Professional, Scientif | Accountants and Au | ✅ success | - | 2 | 6/10 | 20138ms |
+| 2 | `7b08cd4d…` | Professional, Scientif | Accountants and Au | ✅ success | - | 2 | 2/10 | 22008ms |
+| 3 | `7d7fc9a7…` | Professional, Scientif | Accountants and Au | ✅ success | - | 7 | 4/10 | 27323ms |
+| 4 | `43dc9778…` | Professional, Scientif | Accountants and Au | ✅ success | - | 16 | 6/10 | 21744ms |
+| 5 | `ee09d943…` | Professional, Scientif | Accountants and Au | ✅ success | - | 18 | 6/10 | 16037ms |
+| 6 | `f84ea6ac…` | Government | Administrative Ser | ✅ success | - | 1 | 2/10 | 24740ms |
+| 7 | `a328feea…` | Government | Administrative Ser | ✅ success | - | 1 | 9/10 | 11296ms |
+| 8 | `27e8912c…` | Government | Administrative Ser | ✅ success | - | 5 | 6/10 | 26912ms |
+| 9 | `17111c03…` | Government | Administrative Ser | ✅ success | Yes | 3 | 8/10 | 24135ms |
+| 10 | `c44e9b62…` | Government | Administrative Ser | ✅ success | Yes | 6 | 4/10 | 26430ms |
+| 11 | `99ac6944…` | Information | Audio and Video Te | ✅ success | - | 4 | 7/10 | 30128ms |
+| 12 | `f9a1c16c…` | Information | Audio and Video Te | ✅ success | - | 1 | 4/10 | 19640ms |
+| 13 | `38889c3b…` | Information | Audio and Video Te | ✅ success | - | 1 | 3/10 | 32248ms |
+| 14 | `ff85ee58…` | Information | Audio and Video Te | ✅ success | - | 1 | 3/10 | 25226ms |
+| 15 | `4b894ae3…` | Information | Audio and Video Te | ❌ error | Yes | 0 | - | 29267ms |
+| 16 | `1b1ade2d…` | Manufacturing | Buyers and Purchas | ✅ success | - | 1 | 9/10 | 25821ms |
+| 17 | `93b336f3…` | Manufacturing | Buyers and Purchas | ✅ success | - | 1 | 8/10 | 30343ms |
+| 18 | `15ddd28d…` | Manufacturing | Buyers and Purchas | ✅ success | - | 1 | 8/10 | 22715ms |
+| 19 | `24d1e93f…` | Manufacturing | Buyers and Purchas | ✅ success | - | 2 | 6/10 | 20979ms |
+| 20 | `05389f78…` | Manufacturing | Buyers and Purchas | ✅ success | - | 3 | 4/10 | 33778ms |
+| 21 | `575f8679…` | Government | Child, Family, and | ✅ success | - | 1 | 6/10 | 19021ms |
+| 22 | `a74ead3b…` | Government | Child, Family, and | ✅ success | - | 2 | 4/10 | 16748ms |
+| 23 | `bbe0a93b…` | Government | Child, Family, and | ✅ success | - | 3 | 7/10 | 22390ms |
+| 24 | `85d95ce5…` | Government | Child, Family, and | ❌ error | Yes | 0 | - | 32834ms |
+| 25 | `76d10872…` | Government | Child, Family, and | ✅ success | Yes | 5 | 6/10 | 15363ms |
+| 26 | `36d567ba…` | Government | Compliance Officer | ✅ success | - | 1 | 6/10 | 21229ms |
+| 27 | `7bbfcfe9…` | Government | Compliance Officer | ✅ success | - | 1 | 9/10 | 18169ms |
+| 28 | `2696757c…` | Government | Compliance Officer | ✅ success | - | 1 | 9/10 | 17110ms |
+| 29 | `dfb4e0cd…` | Government | Compliance Officer | ✅ success | Yes | 2 | 9/10 | 10181ms |
+| 30 | `4c18ebae…` | Government | Compliance Officer | ✅ success | - | 3 | 6/10 | 24252ms |
+| 31 | `cebf301e…` | Professional, Scientif | Computer and Infor | ✅ success | - | 1 | 8/10 | 22304ms |
+| 32 | `c2e8f271…` | Professional, Scientif | Computer and Infor | ✅ success | - | 1 | 8/10 | 22867ms |
+| 33 | `2ea2e5b5…` | Professional, Scientif | Computer and Infor | ✅ success | Yes | 6 | 8/10 | 22634ms |
+| 34 | `c357f0e2…` | Professional, Scientif | Computer and Infor | ✅ success | - | 2 | 5/10 | 24660ms |
+| 35 | `a45bc83b…` | Professional, Scientif | Computer and Infor | ✅ success | - | 5 | 7/10 | 29434ms |
+| 36 | `a10ec48c…` | Real Estate and Rental | Concierges | ✅ success | - | 1 | 3/10 | 22982ms |
+| 37 | `fccaa4a1…` | Real Estate and Rental | Concierges | ✅ success | - | 2 | 7/10 | 29130ms |
+| 38 | `f5d428fd…` | Real Estate and Rental | Concierges | ✅ success | Yes | 7 | 6/10 | 27292ms |
+| 39 | `2fa8e956…` | Real Estate and Rental | Concierges | ✅ success | - | 2 | 4/10 | 26713ms |
+| 40 | `0e4fe8cd…` | Real Estate and Rental | Concierges | ✅ success | - | 1 | 6/10 | 22710ms |
+| 41 | `a0ef404e…` | Real Estate and Rental | Counter and Rental | ✅ success | Yes | 1 | 9/10 | 31055ms |
+| 42 | `b7a5912e…` | Real Estate and Rental | Counter and Rental | ✅ success | Yes | 2 | 5/10 | 22949ms |
+| 43 | `aa071045…` | Real Estate and Rental | Counter and Rental | ✅ success | Yes | 3 | 8/10 | 18035ms |
+| 44 | `476db143…` | Real Estate and Rental | Counter and Rental | ✅ success | Yes | 4 | 9/10 | 23427ms |
+| 45 | `61f546a8…` | Real Estate and Rental | Counter and Rental | ✅ success | - | 4 | 6/10 | 20074ms |
+| 46 | `f3351922…` | Finance and Insurance | Customer Service R | ✅ success | - | 1 | 8/10 | 17557ms |
+| 47 | `61717508…` | Finance and Insurance | Customer Service R | ✅ success | - | 3 | 4/10 | 28875ms |
+| 48 | `0ed38524…` | Finance and Insurance | Customer Service R | ✅ success | - | 3 | 6/10 | 17690ms |
+| 49 | `87da214f…` | Finance and Insurance | Customer Service R | ❌ error | Yes | 0 | - | 18295ms |
+| 50 | `d025a41c…` | Finance and Insurance | Customer Service R | ✅ success | Yes | 4 | 6/10 | 20513ms |
+| 51 | `401a07f1…` | Information | Editors | ✅ success | - | 1 | 6/10 | 24811ms |
+| 52 | `afe56d05…` | Information | Editors | ✅ success | - | 1 | 6/10 | 35245ms |
+| 53 | `9a8c8e28…` | Information | Editors | ✅ success | Yes | 3 | 6/10 | 35803ms |
+| 54 | `3a4c347c…` | Information | Editors | ✅ success | - | 2 | 8/10 | 21464ms |
+| 55 | `ec2fccc9…` | Information | Editors | ✅ success | - | 2 | 7/10 | 39088ms |
+| 56 | `8c8fc328…` | Information | Film and Video Edi | ✅ success | - | 2 | 8/10 | 19125ms |
+| 57 | `e222075d…` | Information | Film and Video Edi | ✅ success | - | 6 | 4/10 | 31907ms |
+| 58 | `c94452e4…` | Information | Film and Video Edi | ✅ success | - | 2 | 4/10 | 19424ms |
+| 59 | `75401f7c…` | Information | Film and Video Edi | ✅ success | - | 3 | 3/10 | 23859ms |
+| 60 | `a941b6d8…` | Information | Film and Video Edi | ✅ success | - | 2 | 3/10 | 28430ms |
+| 61 | `8079e27d…` | Finance and Insurance | Financial and Inve | ✅ success | - | 1 | 3/10 | 17129ms |
+| 62 | `e21cd746…` | Finance and Insurance | Financial and Inve | ✅ success | Yes | 1 | 4/10 | 27706ms |
+| 63 | `9e8607e7…` | Finance and Insurance | Financial and Inve | ✅ success | Yes | 1 | 6/10 | 43953ms |
+| 64 | `c7d83f01…` | Finance and Insurance | Financial and Inve | ✅ success | - | 4 | 4/10 | 37874ms |
+| 65 | `46b34f78…` | Finance and Insurance | Financial and Inve | ✅ success | Yes | 2 | 5/10 | 32269ms |
+| 66 | `a1963a68…` | Finance and Insurance | Financial Managers | ✅ success | - | 1 | 3/10 | 37671ms |
+| 67 | `5f6c57dd…` | Finance and Insurance | Financial Managers | ❌ error | Yes | 0 | - | 34110ms |
+| 68 | `b39a5aa7…` | Finance and Insurance | Financial Managers | ❌ error | Yes | 0 | - | 23166ms |
+| 69 | `b78fd844…` | Finance and Insurance | Financial Managers | ✅ success | - | 3 | 8/10 | 35941ms |
+| 70 | `4520f882…` | Finance and Insurance | Financial Managers | ✅ success | - | 3 | 4/10 | 20350ms |
+| 71 | `ec591973…` | Wholesale Trade | First-Line Supervi | ✅ success | - | 1 | 6/10 | 17367ms |
+| 72 | `62f04c2f…` | Wholesale Trade | First-Line Supervi | ✅ success | - | 2 | 7/10 | 17474ms |
+| 73 | `3f821c2d…` | Wholesale Trade | First-Line Supervi | ✅ success | Yes | 2 | 4/10 | 21087ms |
+| 74 | `e996036e…` | Wholesale Trade | First-Line Supervi | ❌ error | Yes | 0 | - | 22488ms |
+| 75 | `327fbc21…` | Wholesale Trade | First-Line Supervi | ✅ success | Yes | 3 | 4/10 | 23454ms |
+| 76 | `6dcae3f5…` | Health Care and Social | First-Line Supervi | ✅ success | Yes | 3 | 4/10 | 23875ms |
+| 77 | `1aecc095…` | Health Care and Social | First-Line Supervi | ✅ success | - | 4 | 6/10 | 26615ms |
+| 78 | `0353ee0c…` | Health Care and Social | First-Line Supervi | ✅ success | Yes | 3 | 3/10 | 26247ms |
+| 79 | `40a8c4b1…` | Health Care and Social | First-Line Supervi | ✅ success | - | 4 | 3/10 | 15421ms |
+| 80 | `4d1a8410…` | Health Care and Social | First-Line Supervi | ✅ success | - | 11 | 3/10 | 19186ms |
+| 81 | `8c823e32…` | Government | First-Line Supervi | ✅ success | - | 1 | 8/10 | 34367ms |
+| 82 | `eb54f575…` | Government | First-Line Supervi | ✅ success | Yes | 1 | 7/10 | 31081ms |
+| 83 | `11e1b169…` | Government | First-Line Supervi | ✅ success | Yes | 1 | 8/10 | 33000ms |
+| 84 | `a95a5829…` | Government | First-Line Supervi | ✅ success | - | 2 | 9/10 | 32167ms |
+| 85 | `22c0809b…` | Government | First-Line Supervi | ✅ success | Yes | 1 | 9/10 | 34727ms |
+| 86 | `bf68f2ad…` | Manufacturing | First-Line Supervi | ✅ success | Yes | 3 | 6/10 | 19537ms |
+| 87 | `efca245f…` | Manufacturing | First-Line Supervi | ✅ success | Yes | 3 | 5/10 | 22682ms |
+| 88 | `9e39df84…` | Manufacturing | First-Line Supervi | ✅ success | Yes | 2 | 4/10 | 20059ms |
+| 89 | `68d8d901…` | Manufacturing | First-Line Supervi | ✅ success | - | 3 | 6/10 | 21385ms |
+| 90 | `1752cb53…` | Manufacturing | First-Line Supervi | ✅ success | Yes | 6 | 5/10 | 18940ms |
+| 91 | `bd72994f…` | Retail Trade | First-Line Supervi | ✅ success | - | 2 | 3/10 | 24974ms |
+| 92 | `211d0093…` | Retail Trade | First-Line Supervi | ❌ error | Yes | 0 | - | 14937ms |
+| 93 | `d4525420…` | Retail Trade | First-Line Supervi | ❌ error | Yes | 0 | - | 16915ms |
+| 94 | `45c6237b…` | Retail Trade | First-Line Supervi | ❌ error | Yes | 0 | - | 33481ms |
+| 95 | `cecac8f9…` | Retail Trade | First-Line Supervi | ✅ success | Yes | 5 | 6/10 | 27339ms |
+| 96 | `8f9e8bcd…` | Retail Trade | General and Operat | ✅ success | - | 1 | 7/10 | 20183ms |
+| 97 | `0fad6023…` | Retail Trade | General and Operat | ✅ success | - | 1 | 8/10 | 18465ms |
+| 98 | `02314fc6…` | Retail Trade | General and Operat | ✅ success | - | 1 | 8/10 | 24945ms |
+| 99 | `4d61a19a…` | Retail Trade | General and Operat | ✅ success | Yes | 2 | 6/10 | 25369ms |
+| 100 | `6436ff9e…` | Retail Trade | General and Operat | ✅ success | - | 2 | 8/10 | 19592ms |
+| 101 | `8a7b6fca…` | Manufacturing | Industrial Enginee | ✅ success | - | 1 | 4/10 | 21409ms |
+| 102 | `40a99a31…` | Manufacturing | Industrial Enginee | ✅ success | - | 3 | 7/10 | 32944ms |
+| 103 | `b9665ca1…` | Manufacturing | Industrial Enginee | ✅ success | Yes | 1 | 5/10 | 26951ms |
+| 104 | `c6269101…` | Manufacturing | Industrial Enginee | ✅ success | - | 6 | 6/10 | 24967ms |
+| 105 | `be830ca0…` | Manufacturing | Industrial Enginee | ✅ success | - | 8 | 7/10 | 31213ms |
+| 106 | `cd9efc18…` | Professional, Scientif | Lawyers | ✅ success | - | 1 | 3/10 | 28876ms |
+| 107 | `a97369c7…` | Professional, Scientif | Lawyers | ✅ success | - | 1 | 4/10 | 36951ms |
+| 108 | `3f625cb2…` | Professional, Scientif | Lawyers | ✅ success | Yes | 1 | 8/10 | 30360ms |
+| 109 | `aad21e4c…` | Professional, Scientif | Lawyers | ✅ success | - | 1 | 6/10 | 31778ms |
+| 110 | `8314d1b1…` | Professional, Scientif | Lawyers | ✅ success | - | 1 | 8/10 | 54368ms |
+| 111 | `5e2b6aab…` | Manufacturing | Mechanical Enginee | ✅ success | - | 3 | 3/10 | 42388ms |
+| 112 | `46fc494e…` | Manufacturing | Mechanical Enginee | ✅ success | Yes | 6 | 4/10 | 56139ms |
+| 113 | `3940b7e7…` | Manufacturing | Mechanical Enginee | ❌ error | Yes | 0 | - | 44513ms |
+| 114 | `8077e700…` | Manufacturing | Mechanical Enginee | ✅ success | - | 4 | 4/10 | 41939ms |
+| 115 | `5a2d70da…` | Manufacturing | Mechanical Enginee | ✅ success | Yes | 4 | 5/10 | 33209ms |
+| 116 | `74d6e8b0…` | Health Care and Social | Medical and Health | ✅ success | - | 1 | 7/10 | 33350ms |
+| 117 | `81db15ff…` | Health Care and Social | Medical and Health | ✅ success | - | 2 | 7/10 | 18719ms |
+| 118 | `61b0946a…` | Health Care and Social | Medical and Health | ✅ success | Yes | 3 | 6/10 | 26936ms |
+| 119 | `61e7b9c6…` | Health Care and Social | Medical and Health | ✅ success | - | 2 | 3/10 | 16465ms |
+| 120 | `c9bf9801…` | Health Care and Social | Medical and Health | ✅ success | - | 4 | 7/10 | 33044ms |
+| 121 | `f1be6436…` | Health Care and Social | Medical Secretarie | ✅ success | - | 5 | 3/10 | 17807ms |
+| 122 | `41f6ef59…` | Health Care and Social | Medical Secretarie | ✅ success | - | 2 | 7/10 | 14557ms |
+| 123 | `a0552909…` | Health Care and Social | Medical Secretarie | ❌ error | Yes | 0 | - | 22286ms |
+| 124 | `6d2c8e55…` | Health Care and Social | Medical Secretarie | ✅ success | - | 13 | 3/10 | 24897ms |
+| 125 | `4b98ccce…` | Health Care and Social | Medical Secretarie | ✅ success | - | 7 | 6/10 | 28363ms |
+| 126 | `60221cd0…` | Information | News Analysts, Rep | ✅ success | Yes | 1 | 9/10 | 20190ms |
+| 127 | `ef8719da…` | Information | News Analysts, Rep | ✅ success | - | 1 | 7/10 | 30002ms |
+| 128 | `3baa0009…` | Information | News Analysts, Rep | ✅ success | - | 2 | 7/10 | 26801ms |
+| 129 | `5d0feb24…` | Information | News Analysts, Rep | ✅ success | - | 2 | 8/10 | 34223ms |
+| 130 | `6974adea…` | Information | News Analysts, Rep | ✅ success | - | 8 | 3/10 | 38957ms |
+| 131 | `1a78e076…` | Health Care and Social | Nurse Practitioner | ✅ success | - | 1 | 7/10 | 33139ms |
+| 132 | `1b9ec237…` | Health Care and Social | Nurse Practitioner | ✅ success | - | 2 | 7/10 | 24047ms |
+| 133 | `0112fc9b…` | Health Care and Social | Nurse Practitioner | ✅ success | - | 1 | 8/10 | 19631ms |
+| 134 | `772e7524…` | Health Care and Social | Nurse Practitioner | ✅ success | - | 1 | 8/10 | 18061ms |
+| 135 | `e6429658…` | Health Care and Social | Nurse Practitioner | ✅ success | Yes | 4 | 8/10 | 30182ms |
+| 136 | `b5d2e6f1…` | Wholesale Trade | Order Clerks | ✅ success | - | 2 | 6/10 | 20599ms |
+| 137 | `f841ddcf…` | Wholesale Trade | Order Clerks | ❌ error | Yes | 0 | - | 20208ms |
+| 138 | `47ef842d…` | Wholesale Trade | Order Clerks | ✅ success | - | 3 | 6/10 | 20011ms |
+| 139 | `1137e2bb…` | Wholesale Trade | Order Clerks | ✅ success | - | 3 | 8/10 | 19859ms |
+| 140 | `c3525d4d…` | Wholesale Trade | Order Clerks | ✅ success | - | 5 | 5/10 | 23548ms |
+| 141 | `9a0d8d36…` | Finance and Insurance | Personal Financial | ✅ success | - | 1 | 8/10 | 22397ms |
+| 142 | `664a42e5…` | Finance and Insurance | Personal Financial | ✅ success | - | 2 | 7/10 | 25606ms |
+| 143 | `feb5eefc…` | Finance and Insurance | Personal Financial | ❌ error | Yes | 0 | - | 28796ms |
+| 144 | `3600de06…` | Finance and Insurance | Personal Financial | ✅ success | - | 1 | 7/10 | 23050ms |
+| 145 | `c657103b…` | Finance and Insurance | Personal Financial | ✅ success | - | 3 | 6/10 | 26482ms |
+| 146 | `ae0c1093…` | Retail Trade | Private Detectives | ✅ success | - | 2 | 8/10 | 18650ms |
+| 147 | `f9f82549…` | Retail Trade | Private Detectives | ✅ success | - | 8 | 7/10 | 22841ms |
+| 148 | `57b2cdf2…` | Retail Trade | Private Detectives | ✅ success | Yes | 3 | 9/10 | 25290ms |
+| 149 | `84322284…` | Retail Trade | Private Detectives | ✅ success | Yes | 4 | 8/10 | 25820ms |
+| 150 | `a46d5cd2…` | Retail Trade | Private Detectives | ✅ success | Yes | 5 | 6/10 | 23265ms |
+| 151 | `6241e678…` | Information | Producers and Dire | ❌ error | Yes | 0 | - | 26307ms |
+| 152 | `e14e32ba…` | Information | Producers and Dire | ✅ success | - | 2 | 6/10 | 29655ms |
+| 153 | `b1a79ce1…` | Information | Producers and Dire | ✅ success | - | 2 | 7/10 | 21380ms |
+| 154 | `e4f664ea…` | Information | Producers and Dire | ✅ success | - | 3 | 4/10 | 22002ms |
+| 155 | `a079d38f…` | Information | Producers and Dire | ✅ success | Yes | 3 | 4/10 | 15435ms |
+| 156 | `02aa1805…` | Professional, Scientif | Project Management | ✅ success | - | 2 | 3/10 | 23868ms |
+| 157 | `fd6129bd…` | Professional, Scientif | Project Management | ✅ success | - | 3 | 8/10 | 22464ms |
+| 158 | `ce864f41…` | Professional, Scientif | Project Management | ✅ success | Yes | 5 | 5/10 | 20859ms |
+| 159 | `58ac1cc5…` | Professional, Scientif | Project Management | ✅ success | Yes | 7 | 8/10 | 26029ms |
+| 160 | `3c19c6d1…` | Professional, Scientif | Project Management | ✅ success | Yes | 5 | 6/10 | 21130ms |
+| 161 | `a99d85fc…` | Real Estate and Rental | Property, Real Est | ✅ success | - | 1 | 7/10 | 25351ms |
+| 162 | `55ddb773…` | Real Estate and Rental | Property, Real Est | ✅ success | - | 2 | 3/10 | 28262ms |
+| 163 | `1e5a1d7f…` | Real Estate and Rental | Property, Real Est | ✅ success | - | 2 | 3/10 | 15556ms |
+| 164 | `0419f1c3…` | Real Estate and Rental | Property, Real Est | ✅ success | Yes | 3 | 9/10 | 28399ms |
+| 165 | `ed2bc14c…` | Real Estate and Rental | Property, Real Est | ✅ success | - | 3 | 8/10 | 23490ms |
+| 166 | `46bc7238…` | Real Estate and Rental | Real Estate Broker | ✅ success | - | 7 | 7/10 | 28327ms |
+| 167 | `2d06bc0a…` | Real Estate and Rental | Real Estate Broker | ✅ success | - | 1 | 9/10 | 25975ms |
+| 168 | `fd3ad420…` | Real Estate and Rental | Real Estate Broker | ✅ success | Yes | 2 | 8/10 | 17040ms |
+| 169 | `0818571f…` | Real Estate and Rental | Real Estate Broker | ✅ success | - | 13 | 4/10 | 31603ms |
+| 170 | `6074bba3…` | Real Estate and Rental | Real Estate Broker | ❌ error | Yes | 0 | - | 22773ms |
+| 171 | `5ad0c554…` | Real Estate and Rental | Real Estate Sales  | ✅ success | - | 2 | 6/10 | 19173ms |
+| 172 | `11593a50…` | Real Estate and Rental | Real Estate Sales  | ✅ success | - | 5 | 4/10 | 24900ms |
+| 173 | `94925f49…` | Real Estate and Rental | Real Estate Sales  | ✅ success | - | 5 | 7/10 | 24879ms |
+| 174 | `90f37ff3…` | Real Estate and Rental | Real Estate Sales  | ✅ success | - | 2 | 6/10 | 22005ms |
+| 175 | `d3d255b2…` | Real Estate and Rental | Real Estate Sales  | ✅ success | Yes | 2 | 8/10 | 24824ms |
+| 176 | `403b9234…` | Government | Recreation Workers | ✅ success | - | 1 | 8/10 | 15263ms |
+| 177 | `1bff4551…` | Government | Recreation Workers | ✅ success | - | 1 | 6/10 | 24011ms |
+| 178 | `650adcb1…` | Government | Recreation Workers | ✅ success | - | 1 | 6/10 | 25210ms |
+| 179 | `01d7e53e…` | Government | Recreation Workers | ✅ success | Yes | 4 | 6/10 | 27683ms |
+| 180 | `a73fbc98…` | Government | Recreation Workers | ❌ error | Yes | 0 | - | 17490ms |
+| 181 | `0ec25916…` | Health Care and Social | Registered Nurses | ✅ success | - | 1 | 8/10 | 24636ms |
+| 182 | `116e791e…` | Health Care and Social | Registered Nurses | ✅ success | - | 1 | 6/10 | 30689ms |
+| 183 | `dd724c67…` | Health Care and Social | Registered Nurses | ✅ success | - | 1 | 5/10 | 26962ms |
+| 184 | `7151c60a…` | Health Care and Social | Registered Nurses | ✅ success | - | 5 | 3/10 | 21129ms |
+| 185 | `90edba97…` | Health Care and Social | Registered Nurses | ✅ success | - | 6 | 3/10 | 13410ms |
+| 186 | `91060ff0…` | Retail Trade | Pharmacists | ✅ success | - | 1 | 6/10 | 23838ms |
+| 187 | `8384083a…` | Retail Trade | Pharmacists | ✅ success | - | 1 | 2/10 | 22513ms |
+| 188 | `045aba2e…` | Retail Trade | Pharmacists | ✅ success | - | 3 | 8/10 | 18769ms |
+| 189 | `f2986c1f…` | Retail Trade | Pharmacists | ✅ success | - | 2 | 3/10 | 9079ms |
+| 190 | `ffed32d8…` | Retail Trade | Pharmacists | ✅ success | - | 3 | 5/10 | 20467ms |
+| 191 | `b3573f20…` | Wholesale Trade | Sales Managers | ✅ success | - | 1 | 9/10 | 17598ms |
+| 192 | `a69be28f…` | Wholesale Trade | Sales Managers | ❌ error | Yes | 0 | - | 18359ms |
+| 193 | `788d2bc6…` | Wholesale Trade | Sales Managers | ✅ success | - | 5 | 6/10 | 35723ms |
+| 194 | `74ed1dc7…` | Wholesale Trade | Sales Managers | ✅ success | - | 2 | 9/10 | 20135ms |
+| 195 | `69a8ef86…` | Wholesale Trade | Sales Managers | ✅ success | - | 3 | 8/10 | 24369ms |
+| 196 | `ab81b076…` | Wholesale Trade | Sales Representati | ❌ error | Yes | 0 | - | 37226ms |
+| 197 | `d7cfae6f…` | Wholesale Trade | Sales Representati | ✅ success | Yes | 2 | 6/10 | 26140ms |
+| 198 | `19403010…` | Wholesale Trade | Sales Representati | ✅ success | - | 2 | 4/10 | 19106ms |
+| 199 | `7ed932dd…` | Wholesale Trade | Sales Representati | ❌ error | Yes | 0 | - | 19700ms |
+| 200 | `105f8ad0…` | Wholesale Trade | Sales Representati | ✅ success | Yes | 2 | 4/10 | 17449ms |
+| 201 | `b57efde3…` | Wholesale Trade | Sales Representati | ✅ success | - | 1 | 4/10 | 19671ms |
+| 202 | `15d37511…` | Wholesale Trade | Sales Representati | ✅ success | - | 2 | 3/10 | 16931ms |
+| 203 | `bb863dd9…` | Wholesale Trade | Sales Representati | ✅ success | - | 3 | 4/10 | 13644ms |
+| 204 | `fe0d3941…` | Wholesale Trade | Sales Representati | ✅ success | Yes | 4 | 9/10 | 28841ms |
+| 205 | `6a900a40…` | Wholesale Trade | Sales Representati | ✅ success | - | 6 | 5/10 | 15052ms |
+| 206 | `9efbcd35…` | Finance and Insurance | Securities, Commod | ✅ success | - | 1 | 5/10 | 24157ms |
+| 207 | `1d4672c8…` | Finance and Insurance | Securities, Commod | ✅ success | Yes | 2 | 4/10 | 21597ms |
+| 208 | `4de6a529…` | Finance and Insurance | Securities, Commod | ✅ success | - | 2 | 3/10 | 29566ms |
+| 209 | `4c4dc603…` | Finance and Insurance | Securities, Commod | ✅ success | - | 2 | 3/10 | 27152ms |
+| 210 | `bb499d9c…` | Finance and Insurance | Securities, Commod | ✅ success | - | 4 | 6/10 | 30153ms |
+| 211 | `5349dd7b…` | Manufacturing | Shipping, Receivin | ✅ success | - | 1 | 7/10 | 30738ms |
+| 212 | `a4a9195c…` | Manufacturing | Shipping, Receivin | ✅ success | - | 1 | 8/10 | 30104ms |
+| 213 | `552b7dd0…` | Manufacturing | Shipping, Receivin | ✅ success | - | 4 | 6/10 | 26098ms |
+| 214 | `11dcc268…` | Manufacturing | Shipping, Receivin | ✅ success | Yes | 4 | 4/10 | 21418ms |
+| 215 | `76418a2c…` | Manufacturing | Shipping, Receivin | ✅ success | Yes | 4 | 6/10 | 13973ms |
+| 216 | `0e386e32…` | Professional, Scientif | Software Developer | ✅ success | - | 1 | 4/10 | 23334ms |
+| 217 | `7de33b48…` | Professional, Scientif | Software Developer | ✅ success | - | 1 | 3/10 | 22165ms |
+| 218 | `854f3814…` | Professional, Scientif | Software Developer | ❌ error | Yes | 0 | - | 19221ms |
+| 219 | `4122f866…` | Professional, Scientif | Software Developer | ✅ success | - | 2 | 4/10 | 28357ms |
+| 220 | `2c249e0f…` | Professional, Scientif | Software Developer | ✅ success | - | 1 | 3/10 | 24197ms |
 
 ## QA Issues
 
-### ❌ `7b08cd4d…` — score 2/10
-- Revenue by tour stop is missing and withholding taxes are not calculated.
-- Expenses lack source separation, categories detail, and contain zero placeholder values.
-- Combined totals and net income are not calculated or supported by reference data.
-  > 💡 Populate the P&L with actual reference data, calculate taxes and totals, and separate sources as required.
+### ✅ `83d10b06…` — score 6/10
+- Population v2.xlsx lacks variance and sampling indicator columns required by the task.
+- Sampled column shows zeros; sampled rows are not clearly marked with "1".
+- Sample selection criteria coverage for specified entities, metrics, and geographies is not evidenced.
+  > 💡 Update Population file with variance and sample flags, and clearly evidence criteria coverage in the sample.
 
-### ✅ `7d7fc9a7…` — score 7/10
-- Text response does not summarize key figures or reconciliation results.
-- Assumptions applied are not documented within the response.
-- Produced files list redundantly includes source reference PDFs.
-  > 💡 Include a brief summary of reconciled totals and key assumptions in the response.
+### ❌ `7b08cd4d…` — score 2/10
+- PnL Excel lacks populated revenue, expense, and net income figures.
+- No breakdown by source or combined totals is included.
+- Tour stop details and withholding tax calculations are missing.
+  > 💡 Populate the Excel with complete data from reference files, calculations, and required breakdowns before submission.
+
+### ❌ `7d7fc9a7…` — score 4/10
+- Response provides no evidence schedules reconcile to GL balances.
+- Claims PDF extraction limitation despite accessible invoice data.
+- Workbook content not summarized to confirm required amortization details.
+  > 💡 Include explicit reconciliation results and a concise summary of each tab’s completed calculations.
 
 ### ✅ `43dc9778…` — score 6/10
-- Required schedules like Schedule A, Schedule 1, or Schedule 3 are not addressed.
-- Text response is descriptive but lacks confirmation of completed calculations.
-- CONFIDENCE tag appears unprofessional and unnecessary.
-  > 💡 Explicitly list and include all required schedules supported by the provided tax documents.
+- Text response describes a summary, not confirmed completed Form 1040 line entries.
+- No preview evidence that the PDF contains fully completed IRS forms and schedules.
+- Produced files include source documents beyond the requested tax return deliverable.
+  > 💡 Provide confirmation and excerpts showing the PDF contains fully completed, e-file-ready IRS forms.
 
 ### ✅ `ee09d943…` — score 6/10
-- No evidence the April workbook tabs were actually updated with April data.
-- Text response summarizes intent instead of detailing completed work and findings.
-- No confirmation of TOC updates, CFO notifications, or flagged discrepancies.
-  > 💡 Provide a concise completion summary citing specific tabs updated, checks performed, and any issues flagged to the CFO.
+- Text response summarizes intent but does not evidence completed April updates.
+- Extra source files were produced instead of only the consolidated deliverable.
+- No confirmation of TOC accuracy, tab updates, or CFO issues flagged.
+  > 💡 Provide evidence the April workbook was fully updated and submit only the final consolidated file.
 
 ### ❌ `f84ea6ac…` — score 2/10
-- Word document lacks the required summary table.
-- No five academic articles are identified or summarized.
-- Research requirements are deferred due to claimed lack of internet access.
-  > 💡 Include a complete one-page table summarizing five verified post-2020 public studies.
-
-### ✅ `a328feea…` — score 9/10
-- No backup contact specified if Supervisor or Team Lead is unreachable.
-- Procedure does not state how lateness duration should be estimated or updated.
-  > 💡 Add a brief backup contact and update expectation section to strengthen operational clarity.
+- Required research summary table is missing.
+- Five academic articles are not identified or summarized.
+- Document lacks key findings and government implications.
+  > 💡 Add a one-page table summarizing five post-2020 public studies with required details.
 
 ### ✅ `27e8912c…` — score 6/10
-- Checklist lacks citation or linkage to the NIH or another credible source.
-- Word document does not include the required action-items tracking table.
-- Image sources are not identified as credible or public-domain.
-  > 💡 Add source citations, complete the action-items table with required fields, and document image provenance.
+- Organizational Action Items document lacks the required tracking table and columns.
+- Checklist does not cite or link the NIH or another credible source.
+- Images lack attribution or confirmation of public-domain status.
+  > 💡 Add a structured tracking table, include NIH citation, and document image sources.
 
 ### ✅ `17111c03…` — score 8/10
-- Memo sender line lists only role, not an individual name.
-- Text response summarizes deliverables instead of presenting memo content.
-  > 💡 Add the manager’s name to the memo and include a brief memo excerpt in the text response.
+- Text response describes deliverables instead of summarizing memo content.
+- Memo preview appears truncated, limiting immediate verification.
+- No explicit confirmation volunteers guidance wording matches requirements.
+  > 💡 Briefly summarize memo key points in the text response for quicker reviewer validation.
 
-### ✅ `c44e9b62…` — score 6/10
-- Revised organizational chart is a list, not a visual chart highlighting reduced positions.
-- No evidence the total reductions meet or exceed the required 4% FTE target.
-- Regional Support Services 10% reduction is not clearly demonstrated in outputs.
-  > 💡 Provide a fully visual revised org chart and explicitly quantify how reductions meet the 4% target.
+### ❌ `c44e9b62…` — score 4/10
+- Revised organizational chart shows fractional FTEs, which is invalid for staffing positions.
+- Total FTE reduction incorrectly shows zero despite listed position reductions.
+- Required 10% regional staff reduction is not reflected in regional positions.
+  > 💡 Correct FTE math, apply regional reductions, and present whole-number FTE changes consistently.
 
-### ❌ `99ac6944…` — score 4/10
-- IEM system cannot provide two independent mixes from a single transmitter.
-- Analog mixer lacks onboard compression required by the singers.
-- Total estimated cost exceeds the $3,000 budget.
-  > 💡 Select a mixer with compression and dual-aux sends plus two IEM transmitters to meet requirements.
+### ✅ `99ac6944…` — score 7/10
+- PDF lacks required web links to specific online retailers.
+- Pricing sources are not explicitly cited or verified.
+- No list of tools or spare accessories included.
+  > 💡 Add retailer links, cite pricing sources, and include a small tools and spares list.
 
-### ✅ `f9a1c16c…` — score 5/10
-- Vox1 and Vox2 wedges are missing despite requirement for vocalists to hear monitors.
-- Wedge numbering counterclockwise from stage right is not clearly indicated.
-- Drummer wedge placement at 10 o’clock position is not visually specified.
-  > 💡 Add clearly labeled Vox1 and Vox2 wedges, show counterclockwise wedge numbering, and indicate drummer wedge position.
+### ❌ `f9a1c16c…` — score 4/10
+- Stage plot lacks clear visual icons and readable layout.
+- Wedge numbering counterclockwise from stage right is unclear.
+- Singer monitor wedges and vocal feeds are not explicitly shown.
+  > 💡 Redesign the PDF with clear icons, spatial accuracy, and explicit labeling for monitors and IEM splits.
 
 ### ❌ `38889c3b…` — score 3/10
-- Audio files are silent placeholders, not a real instrumental track.
-- Zip size indicates missing 2:17 master and proper stem audio content.
-- No evidence of drum reference synchronization or required musical keys.
-  > 💡 Provide fully produced audio stems and master meeting length, key, tempo, and format requirements.
+- Delivered stems are silent placeholders, not a real instrumental composition.
+- Musical requirements like key changes, groove, and instrumentation are unmet.
+- No evidence of synchronization or creative use of the provided drum track.
+  > 💡 Produce and deliver actual audio content meeting all musical, technical, and formatting requirements.
 
-### ❌ `ff85ee58…` — score 2/10
-- No final mixed WAV audio file was delivered.
-- Saxophone was not actually resynced or edited.
-- Loudness and peak specifications were not met or verified.
-  > 💡 Deliver a properly processed 24-bit/48kHz WAV mix with resynced sax meeting loudness specs.
-
-### ❌ `4b894ae3…` — score 4/10
-- Final stereo WAV mix was not delivered as required.
-- Actual bass audio edits and mixdown were not performed.
-- Deliverable substitutes instructions for required audio processing.
-  > 💡 Perform the specified bass edits and deliver the final 48kHz/24-bit stereo WAV mix.
-
-### ✅ `1b1ade2d…` — score 8/10
-- Text response focuses on intent rather than summarizing key workflow changes.
-  > 💡 Briefly summarize the revised workflow highlights in the text response for quicker executive review.
+### ❌ `ff85ee58…` — score 3/10
+- No final audio mix was produced as required.
+- Deliverable is a report instead of a 24-bit/48 kHz WAV file.
+- Task requirements were declined due to environment limitations.
+  > 💡 Provide the actual rendered audio mix meeting all technical specifications.
 
 ### ✅ `93b336f3…` — score 8/10
-- Introduces a 49:51 partnership split not specified in the original task.
-- Chief Procurement Officer name and sign-off section are not explicit.
-- Sensitivity analysis on future localisation is brief and not deeply quantified.
-  > 💡 Align assumptions strictly to the brief and expand quantified sensitivities and governance details.
+- Introduces a 49:51 JV ownership split not requested in the original task.
+- Assumes Delhi as assembly location without justification or requirement.
+
+### ✅ `15ddd28d…` — score 8/10
+- Negotiation plan lacks quantified volume and pricing scenarios.
+- Risk mitigation actions during the three-week cutoff are lightly detailed.
+- Fleet and taxi segment transition is not explicitly addressed.
+  > 💡 Add a concise action plan for the first 90 days with volumes, commercials, and interim supply safeguards.
 
 ### ✅ `24d1e93f…` — score 6/10
-- Missing summary sheet with side-by-side NPV comparison and recommendation.
-- Year 1 cash flows are discounted despite discounting specified only for years 2–4.
-- Tooling amortization does not clearly stop after first 100,000 headlamp sets.
-  > 💡 Add a summary sheet, correct discounting logic, fix tooling amortization, and clearly list assumptions.
+- Tooling amortization becomes negative in year four, indicating incorrect amortization logic.
+- Input costs and volumes appear assumed without traceability to attached quotations.
+- NPV sheets lack explicit NPV formula visibility or cash flow sign convention.
+  > 💡 Correct tooling amortization, document all assumed inputs clearly, and validate NPV calculations with transparent formulas.
 
-### ✅ `05389f78…` — score 6/10
-- Comparative cost analysis in INR is missing due to unavailable quotation figures.
-- Replacement supplier recommendation lacks quantified calculations and cost comparisons.
-- Reference quotation file is incomplete and insufficient for required analysis.
-  > 💡 Obtain complete numeric quotations and redo a full INR-based comparative analysis with a clear recommendation.
+### ❌ `05389f78…` — score 4/10
+- Quotation file lacks cost figures required for INR calculations and comparisons.
+- CPO report does not present detailed cost analysis or numerical comparisons.
+- Text response claims completed analysis despite missing input data.
+  > 💡 Include complete quotation data and redo the report with explicit INR cost calculations and comparisons.
 
-### ✅ `575f8679…` — score 8/10
-- Appendix references lack explicit hyperlinks to cited tools and guides.
-- Data analysis section lacks timeline and responsibility assignments.
-- Summative evaluation endpoint timing is not clearly defined.
-  > 💡 Add hyperlinks, an evaluation timeline, and defined endpoints to strengthen rigor and usability.
+### ✅ `575f8679…` — score 6/10
+- Data collection methods lack specificity on tools, timing, and responsible parties.
+- Analysis plan is high-level without clear indicators, benchmarks, or statistical methods.
+- Appendix lacks sample questions, links, or detailed instrument descriptions.
+  > 💡 Expand methodological detail and enrich the appendix with concrete instruments and analytic plans.
 
-### ✅ `a74ead3b…` — score 6/10
-- Content does not closely follow the required manuals as explicitly stated.
-- Evidence of required icebreaker and wrap-up slides is not verified.
-- Session timing and 90-minute structure are not demonstrated.
-  > 💡 Revise slides to explicitly align with manual content and document required session components.
+### ❌ `a74ead3b…` — score 4/10
+- Admits manuals were not accessed, violating requirement to closely follow provided content.
+- No evidence presentations accurately reflect Sessions 13 and 14 manual specifics.
+- Text response includes unnecessary confidence notation and lacks professional completeness.
+  > 💡 Revise presentations using the official manuals directly and align all slides explicitly to Sessions 13 and 14.
 
 ### ✅ `bbe0a93b…` — score 7/10
-- Open web search requirement was not met for the resource guide.
-- Resource guide lacks several requested categories like financial assistance, clothing, and counseling.
-- Resource listings are minimal and omit addresses or hours.
-  > 💡 Conduct a live web search to expand and verify Kent County resources across all requested categories.
+- Resource guide was not created using an open web search as required.
+- Resource guide omits categories like Transportation and Clothing.
+- Spanish assessment retains English Yes/No labels instead of Spanish.
+  > 💡 Conduct a brief web search to expand resources and localize all Spanish labels fully.
 
-### ❌ `85d95ce5…` — score 4/10
-- Report length is 3 pages, not the required 8–15 pages.
-- Used incorrect reference files with a different student name.
-- Final PDF filename formatting is inconsistent and unprofessional.
-  > 💡 Revise using correct student notes, expand all sections to 8–15 pages, and resave a properly named PDF.
+### ✅ `76d10872…` — score 6/10
+- Text response is descriptive and does not summarize report contents.
+- No evidence the PDF follows the Case Creation Guide structure.
+- Extraneous CONFIDENCE tag is unprofessional and unnecessary.
+  > 💡 Include a brief executive summary and confirm guide compliance in the response.
 
-### ✅ `76d10872…` — score 8/10
-- New Case Creation Report content was not previewed for accuracy verification.
-  > 💡 Include a brief content excerpt or summary from the generated report for QA validation.
+### ✅ `36d567ba…` — score 6/10
+- Question 11 on high-risk status is truncated and incomplete.
+- High-risk status topic lacks a complete yes/no prompt with follow-up detail.
+  > 💡 Complete and clarify Question 11 to fully address high-risk status with a yes/no and explanatory follow-up.
 
-### ✅ `36d567ba…` — score 8/10
-- Conflicts of interest topic lacks required Uniform Guidance citation (2 CFR 200.112).
-- Applicant point-of-contact question cites Part 200 generally, not specific relevant sections.
-  > 💡 Add specific 2 CFR citations for all topics 6–10 to strengthen compliance clarity.
+### ✅ `4c18ebae…` — score 6/10
+- Text response defers work to files instead of directly addressing the task.
+- SAR narrative appears truncated and conclusion is incomplete.
+- Excel transaction files content and alignment to narrative are not demonstrated.
+  > 💡 Summarize investigative findings in-text and ensure all deliverables are complete and fully aligned.
 
-### ✅ `7bbfcfe9…` — score 8/10
-- Some §3919 questions test policies and training not expressly required by the statute.
-- SCRA-12d includes credit reporting language not explicit in §3937(c).
-  > 💡 Tighten questions to track statutory text more precisely and avoid implied obligations.
+### ✅ `cebf301e…` — score 8/10
+- No explicit analytics or success metrics defined for the customer portal.
+- In-browser PDF export approach lacks concrete technical detail.
+  > 💡 Add a brief analytics plan and specify the PDF generation strategy to improve completeness.
 
-### ✅ `2696757c…` — score 6/10
-- Required PDF was not produced; only a DOCX file was delivered.
-- Text response claims PDF generation, conflicting with actual file output.
-  > 💡 Convert the document to a single PDF and ensure outputs match stated deliverables.
+### ✅ `c2e8f271…` — score 8/10
+- Backend testing standards for Node services are not explicitly defined.
+- Linting or static analysis enforcement beyond Prettier is not addressed.
+  > 💡 Add brief backend testing and linting standards to strengthen consistency across the stack.
 
-### ✅ `4c18ebae…` — score 7/10
-- Text response describes intent rather than summarizing investigative findings.
-- SAR narrative lacks specific transaction dates, amounts, and account identifiers.
-- Supporting transaction analysis is not clearly linked within the SAR narrative.
-  > 💡 Include explicit transaction examples and reference supporting spreadsheets directly in the SAR narrative.
+### ✅ `2ea2e5b5…` — score 8/10
+- Strategic level classification details are not explicitly listed in the response.
+- Text response does not explicitly show the activity-to-segment mapping tables.
+- Confidence tag is nonstandard for professional deliverables.
+  > 💡 Include explicit tables defining margin impact, time sensitivity, and strategic level mappings in the deliverable.
 
-### ✅ `cebf301e…` — score 9/10
-- One integration section contains an incomplete sentence in the document.
-  > 💡 Review the document for minor truncations and finalize all section sentences.
+### ✅ `c357f0e2…` — score 5/10
+- Only about 45 test cases provided instead of required 80–100.
+- Several modules and edge-case scenarios appear insufficiently covered.
+- Column naming includes an extra unnamed column header anomaly.
+  > 💡 Expand the test plan to 80–100 cases with fuller module, role, and edge-case coverage.
 
-### ✅ `c2e8f271…` — score 7/10
-- Commit message guidelines section is incomplete or truncated.
-- Commit message rules lack concrete examples and conventions.
-  > 💡 Complete the commit message section with clear rules and examples before VP review.
+### ✅ `a45bc83b…` — score 7/10
+- Diagram contains visible typos in multiple service labels.
+- Use of official GCP icons in the diagram is unclear.
+- Diagram visual fidelity is minimal compared to the reference architecture.
+  > 💡 Correct diagram typos and rebuild the PDF using official GCP icons matching the reference style.
 
-### ✅ `2ea2e5b5…` — score 5/10
-- Output does not explicitly provide the required activity classification for margin, time sensitivity, and strategic level.
-- PowerPoint content is not validated against specified classification rules or shown in the response.
-- Original task did not request a presentation format, only classification and grouping.
-  > 💡 Include explicit classification tables mapping all 12 activities to margin impact, time sensitivity, and strategic level.
-
-### ❌ `c357f0e2…` — score 4/10
-- Test cases count is only 36, far below the required 80–100.
-- Column headers do not match the template and appear as Unnamed fields.
-- Role permissions are incorrect, as Viewers can create Ideas.
-  > 💡 Expand to 80–100 cases, fix headers to match the template, and correct role-based permission scenarios.
-
-### ✅ `a45bc83b…` — score 6/10
-- Proposed diagram does not use official GCP icons as explicitly required.
-- Architecture summary inaccurately attributes Layer 3/4 DDoS protection solely to Cloud Armor.
-- Proposed architecture summary document appears truncated and incomplete.
-  > 💡 Revise documents to use official GCP icons, correct security descriptions, and ensure complete content.
-
-### ❌ `a10ec48c…` — score 2/10
-- Document lacks required tables, columns, and restaurant rows.
-- No restaurant links, hours, descriptions, directions, or categories included.
-- Sources were not used and closed restaurants not verified.
-  > 💡 Populate full tables with verified downtown restaurants, required details, links, and directions.
+### ❌ `a10ec48c…` — score 3/10
+- Document lacks required tables with five specified columns.
+- No restaurant entries, links, hours, descriptions, directions, or categories are included.
+- Restaurants are not sourced from the specified website or verified as open.
+  > 💡 Populate the document with fully completed tables for each cuisine category using verified Downtown Sarasota restaurants.
 
 ### ✅ `fccaa4a1…` — score 7/10
-- PDF is three pages; itinerary was intended to be two pages.
-- No visible icons or styled visual elements organizing sections.
-- Age requirement states 2–14 years, conflicting with included 16-year-old guest.
-  > 💡 Revise layout to two pages, add icons and visuals, and correct age requirements for consistency.
+- PDF lacks visual icons to organize sections as requested.
+- Image is a placeholder without documented royalty-free or Google source.
+- Tour operator details are generic and not explicitly sourced from TakeWalks.com.
+  > 💡 Add section icons, properly sourced Statue of Liberty image, and explicitly cite TakeWalks.com details.
 
-### ❌ `2fa8e956…` — score 3/10
-- Document does not list all wineries within one-hour drive as requested.
-- Required formatting, footer, fonts, and purple grape text are missing.
-- Photo is not embedded and sources are not cited.
-  > 💡 Revise the Word document to fully meet content scope, formatting, sourcing, and embedding requirements.
+### ✅ `f5d428fd…` — score 6/10
+- Images are placeholders, not verified royalty-free photos from legitimate sources.
+- No image is provided for Day 7 destination.
+- Research sources are mentioned but not cited or evidenced.
+  > 💡 Replace placeholders with properly sourced royalty-free images and add clear citations for research references.
+
+### ❌ `2fa8e956…` — score 4/10
+- Does not list all wineries within a one-hour drive; only five are included.
+- Document lacks cited sources for wineries, distances, and drive times.
+- Required formatting and embedded photo are not evidenced in the document preview.
+  > 💡 Expand to a comprehensive list with citations, verify formatting, and embed the royalty-free image.
 
 ### ✅ `0e4fe8cd…` — score 6/10
-- Links are placeholders instead of real URLs for most restaurants, services, and activities.
-- Return-home travel logistics and final day details are not clearly included.
-- High-value individual connections are minimally addressed and lack specifics.
-  > 💡 Replace placeholders with verified links, add full return logistics, and expand strategic networking details.
+- Incorrect airport code used for Istanbul; primary airport is IST, not ISL.
+- Some service providers appear generic without confirmed availability or bookings.
+- Limited inclusion of high-value local contacts beyond hotel management.
+  > 💡 Verify factual details like airport codes and strengthen vetted local connections.
 
-### ✅ `b7a5912e…` — score 6/10
-- Booking source revenues do not reconcile with total reported revenue.
-- Payment method revenues do not reconcile with total reported revenue.
-- Text response describes intent rather than summarizing completed results.
-  > 💡 Reconcile all summary revenues to the total and briefly confirm results in the narrative.
+### ✅ `b7a5912e…` — score 5/10
+- Total revenue in daily summary does not match category, booking, and payment totals.
+- Payment method and booking source revenues sum to only half the reported total revenue.
+- Revenue consistency across report sections is not validated or explained.
+  > 💡 Recalculate and reconcile total revenue across all sheets to ensure consistency.
 
-### ✅ `aa071045…` — score 7/10
-- Damage Revenue Report lacks a clear operational conclusions section.
-- Excel preview does not show a dedicated conclusions or insights sheet.
-  > 💡 Add a concise conclusions sheet summarizing trends and maintenance recommendations.
+### ✅ `aa071045…` — score 8/10
+- Damage type breakdown totals are not explicitly summarized on the report summary sheet.
+  > 💡 Add a clear Dent vs Scratch totals section or chart to the summary for faster insight.
 
-### ✅ `476db143…` — score 8/10
-- Inspection notice states belongings removed, which may conflict with pre-move-out inspections.
-  > 💡 Clarify in the email whether belongings may remain if inspection occurs before move-out.
+### ✅ `476db143…` — score 9/10
+- Email notice lacks specific contact information for scheduling changes.
+  > 💡 Add a phone number or email for residents to request alternate inspection dates.
+
+### ✅ `61f546a8…` — score 6/10
+- Section 1 omits M30 carpet replacement despite being required and listed in Section 2.
+- Vendor schedule consistency with provided carpet vendor availability is not demonstrated.
+- Make-ready date adjustments are not clearly validated against the availability report for all units.
+  > 💡 Reconcile vendor listings across sections and explicitly verify all dates against vendor availability and make-ready deadlines.
 
 ### ✅ `f3351922…` — score 8/10
-- Benefits section for transitioning military members is brief and lacks specific program details.
-  > 💡 Expand the benefits section with more military-specific transition details and examples.
+- Benefits section omits clarification that military service does not receive matching contributions.
+- Email uses a generic salutation and signature without client-specific personalization.
+  > 💡 Add brief clarification on military versus civilian matching rules and personalize the greeting and signature.
 
-### ✅ `61717508…` — score 8/10
-- An extra unrequested file was produced (Elder Abuse Internal Policy.pdf).
-- Role-play PDF is very short, limiting discussion depth.
-  > 💡 Remove the extra file and expand role-play scenarios slightly for richer training use.
+### ❌ `61717508…` — score 4/10
+- Required PDFs were not delivered; only PPTX files were provided.
+- Training deck length and PDF format requirements were not verified or met.
+- Role-play examples were not confirmed as a separate PDF with three clear scenarios.
 
-### ✅ `0ed38524…` — score 8/10
-- Minor typos and grammatical errors appear in constituent quotes.
-- One quote contains an extraneous quotation mark affecting professionalism.
-  > 💡 Proofread PDFs for spelling and punctuation consistency before final distribution.
+### ✅ `0ed38524…` — score 6/10
+- District summary PDF exceeds the one-page requirement.
+- Summary lists raw comments instead of synthesized themes by district.
+- Talking points appear incomplete or truncated in content preview.
+  > 💡 Condense summaries into one synthesized page per requirements and fully flesh out concise talking points.
 
 ### ✅ `d025a41c…` — score 6/10
-- Produced extra Word files instead of only the single required Case Feedback document.
-- Case Three content appears truncated and incomplete in the final document.
-- Section titles are not shown in bold as explicitly required.
-  > 💡 Consolidate all cases into one complete document, fix truncation, and format titles correctly.
+- Produced extra Case One, Two, Three files not requested.
+- Bold headings and 1.5 line spacing are not clearly evidenced.
+- Text response describes intent instead of summarizing completed work.
+  > 💡 Deliver only the single formatted Case Feedback document and confirm required formatting explicitly.
 
 ### ✅ `401a07f1…` — score 6/10
-- Document text is truncated and ends mid-sentence.
-- Reference outlets are cited without visible hyperlinks or URLs.
-- Editorial length appears short of the requested 500 words.
-  > 💡 Complete the editorial, ensure ~500 words, and add explicit hyperlinks to all referenced sources.
+- Reference news outlets are mentioned but no clickable hyperlinks are provided.
+- Text response does not include or summarise the editorial content.
+- Verification links for specific factual claims are insufficient.
+  > 💡 Add explicit hyperlinks to specific Nature, Science, Scientific American, and Guardian articles cited.
 
 ### ✅ `afe56d05…` — score 6/10
 - Document appears significantly shorter than the required 2,200–2,300 words.
-- Not all required sections are clearly identifiable in the provided content preview.
-- External resource citations and hyperlinks are not clearly evidenced in the file preview.
-  > 💡 Expand the document to the required length, ensure all specified sections are explicit, and add clearly linked accredited sources.
+- Text response includes irrelevant LibreOffice and PNG conversion commentary.
+  > 💡 Expand the document to the specified length and remove irrelevant production notes.
 
-### ❌ `9a8c8e28…` — score 4/10
-- Files are DOCX, not the required accessible PDF format.
-- Framework guide lacks bibliography with links and CMS change notes.
-- Quiz is very short and may insufficiently assess understanding.
-  > 💡 Convert documents to accessible PDFs and expand content to meet all specified requirements.
+### ✅ `9a8c8e28…` — score 6/10
+- Framework guide is overly brief and lacks detailed best‑practice framework application.
+- Checklist content appears truncated and incomplete for daily editorial use.
+- Quiz depth and answer explanations are insufficiently evidenced in preview.
+  > 💡 Expand all PDFs with more detailed guidance, fuller checklist items, and a robust quiz with explanations.
 
-### ✅ `3a4c347c…` — score 7/10
-- Text response summarizes intent rather than detailing key proposal elements.
-- Budget breakdown clarity versus stated £20-25k range is unclear.
-- Evidence of VT, radio and podcast re-versioning detail is limited.
-  > 💡 Add a concise budget table and explicit VT, radio, and podcast adaptation details.
+### ✅ `3a4c347c…` — score 8/10
+- VT, radio, and podcast re-versioning cadence per week is not explicitly specified.
+- Country diversity across Asia could be more explicitly mapped week by week.
+- Budget breakdown lacks clear line items beyond travel and freelancer costs.
+  > 💡 Add a clearer weekly multimedia plan, explicit country mapping, and a more detailed budget table.
 
 ### ✅ `ec2fccc9…` — score 7/10
-- Secondary keywords list is not clearly shown after the article.
-- Not all referenced artist collections are clearly linked and highlighted.
-- SEO research sources and methodology are not documented.
-  > 💡 Add a clear secondary keyword list, ensure all referenced artists are linked, and briefly note SEO research sources.
+- Secondary keyword list not clearly labeled at article end.
+- Pull quote caption placement is not clearly identifiable.
+- Some headings may not be styled explicitly as H2 or H3.
+  > 💡 Clearly label secondary keywords, format headings with Word styles, and mark the pull quote caption explicitly.
 
-### ✅ `8c8fc328…` — score 6/10
-- Text response describes intent rather than summarizing actual script content.
-- Basic script content with timestamps and scenes is not verifiable from preview.
-- Alignment with provided sequence overview is not explicitly demonstrated.
-  > 💡 Include a brief content summary confirming timestamps, scenes, and alignment with reference sequences.
+### ✅ `8c8fc328…` — score 8/10
+- Estimated runtime states 5 minutes, but timestamps total approximately 6 minutes.
+- Script references narration without clearly indicating adapted versus original voiceover content.
+  > 💡 Align the stated runtime with timestamps and explicitly note where reference voiceover is adapted.
 
 ### ❌ `e222075d…` — score 4/10
-- No 30-second H.264 MP4 edit was delivered as required.
-- Stock footage and music links are placeholders, not direct preview URLs.
-- No scratch voiceover audio track is provided.
-  > 💡 Deliver an actual 30-second MP4 with scratch VO and real preview links to all media.
+- No 30-second H.264 MP4 video export was delivered.
+- Scratch voiceover and edited music track are not included.
+- Actual watermarked preview clips were not assembled into an edit.
+  > 💡 Provide a complete 30-second MP4 edit with scratch VO, music, and watermarked footage assembled.
 
-### ❌ `c94452e4…` — score 3/10
-- Final 15-second H.264 video file was not produced.
-- No actual stock footage or music sources were selected.
-- Response reframed task into planning documents without client approval.
-  > 💡 Produce and export the actual 15-second broadcast-ready video using stock footage and music as specified.
+### ❌ `c94452e4…` — score 4/10
+- No actual 15-second H.264 MP4 export was delivered.
+- Stock footage and music were not sourced, edited, or included.
+- Supers from the provided PSD were not applied in a finished video.
+  > 💡 Produce and export the actual 15-second broadcast-ready MP4 using stock footage, music, and provided supers.
 
 ### ❌ `75401f7c…` — score 3/10
-- Final MP4 showreel video was not delivered.
-- Task required editing footage, not only providing planning documents.
-- No confirmation of correct duration, pacing, or audiovisual sync in an actual edit.
-  > 💡 Produce and deliver the finished 01:20 max H.264 MP4 showreel per the specified edit plan.
+- No final edited MP4 video was delivered.
+- Output provides a plan instead of completing the required edit.
+- Required deliverable format and resolution were not produced.
+  > 💡 Produce and deliver the actual 01:20 MP4 showreel matching all specified technical and creative requirements.
 
 ### ❌ `a941b6d8…` — score 3/10
-- Final composited video file was not created as required.
-- Core VFX tasks were described but not executed.
-- No actual stock smoke footage was sourced or composited.
-  > 💡 Produce the finished MP4 with full compositing, tracking, grading, and effects applied.
+- No composited video file was delivered.
+- Required VFX execution was replaced by planning documents.
+- Base clip matching specs and final render not demonstrated.
+  > 💡 Produce the actual composited video matching all specifications or renegotiate deliverables beforehand.
 
 ### ❌ `8079e27d…` — score 3/10
-- Excel contains zero rows and no company or sub-sector data.
-- Required metrics are placeholders, not populated from public sources.
-- Task requested actual analysis, not a template-only deliverable.
-  > 💡 Populate the Excel with real S&P 500 data sourced from public market websites.
+- No actual S&P 500 data populated; workbook contains only placeholder notes.
+- Does not include all 500 companies or real sub-sector aggregates.
+- Company-level sheet missing required 'No. of Companies' field.
+  > 💡 Populate the Excel with complete, current S&P 500 company and sub-sector data from public sources.
 
-### ❌ `e21cd746…` — score 3/10
-- PDF version of slides was not produced as required.
-- Output text is a planning statement, not substantive client-ready content.
-- Slide content cannot be verified against requirements from the provided preview.
-  > 💡 Produce a PDF of completed slides with verified content covering private targets and public comps.
+### ❌ `e21cd746…` — score 4/10
+- Final deliverable was not converted to PDF as explicitly required.
+- Only a PPTX file was produced with no slide content preview or verification.
+- Public comps and valuation multiples are not evidenced in the output.
+  > 💡 Provide a client-ready PDF with up to five completed slides including private targets and public comps valuations.
+
+### ✅ `9e8607e7…` — score 6/10
+- Required PDF export is missing; only a PPTX file was delivered.
+- Slide count and required section coverage cannot be verified from provided materials.
+  > 💡 Export the presentation to PDF and confirm slide count and section coverage explicitly.
 
 ### ❌ `c7d83f01…` — score 4/10
-- Required Python notebook implementing pricing methods is missing.
-- Monte Carlo and finite-difference implementations are not provided as code.
-- Deliverables claim files that are not actually produced.
-  > 💡 Include the full Python notebook with documented implementations and analyses as specified.
+- Missing the required Python notebook with implemented pricing methodologies.
+- No evidence of actual code for binomial, finite difference, or Monte Carlo methods.
+- Text response promises deliverables not actually provided.
+  > 💡 Provide a complete, well-documented Python notebook implementing and comparing the required methodologies.
 
-### ✅ `a1963a68…` — score 6/10
-- Core content slides appear fewer than required 5-6 with missing regulatory and future-proofing depth.
-- Strategy lacks robust data citations and explicit use of Korean public sources.
-- Actionability is limited with no clear H2 2024 timeline, targets, or KPIs.
-  > 💡 Add two data-backed slides on regulation and long-term innovation with clear H2 2024 actions and metrics.
+### ✅ `46b34f78…` — score 5/10
+- Bond analysis uses unnamed representative issuers instead of specific companies.
+- Report content appears truncated with incomplete sentences.
+- No explicit use or citation of provided reference data sources.
+  > 💡 Name specific issuers, complete all sections, and explicitly reference the provided public data sources.
 
-### ❌ `b39a5aa7…` — score 3/10
-- Media fee and weeks assumptions are incorrect versus provided CBA assumptions.
-- No projections for next two years or Y/Y growth are included.
-- Quarterly results are duplicated and compensation calculations appear incorrect.
-  > 💡 Correct assumptions, add multi-year projection inputs with Y/Y growth, and fix calculation logic.
+### ❌ `a1963a68…` — score 3/10
+- Required PDF format not delivered; only a PPTX file was produced.
+- No evidence the deck contains 5–6 core strategy slides with data-backed content.
+- Text response describes intent but does not present the actual strategy content.
+  > 💡 Convert the deck to PDF and ensure it includes 5–6 data-supported strategy slides meeting all specified areas.
+
+### ✅ `b78fd844…` — score 8/10
+- Text response summarizes deliverables rather than presenting substantive analysis.
+  > 💡 Include a concise executive summary of findings directly in the text response.
+
+### ❌ `4520f882…` — score 4/10
+- Text response describes intent rather than confirming implemented spreadsheet features.
+- No evidence the Excel model enforces specific CBA rules or flags conflicts.
+- Payroll category totals by person are not demonstrated or verified.
+  > 💡 Provide a brief walkthrough or screenshots verifying the Excel model implements and validates CBA requirements.
 
 ### ✅ `ec591973…` — score 6/10
-- Text response is descriptive and does not summarize slide content.
-- Slide content cannot be verified against specific required elements.
-- No confirmation the slide is truly one-page and executive-level.
-  > 💡 Include a brief content summary and confirm all required strategic elements appear on the single slide.
+- Text response describes intent rather than presenting the actual strategy content.
+- Slide content cannot be verified against requirements due to lack of preview.
+- Extraneous confidence tag adds no professional value.
+  > 💡 Include a concise summary or text extract of the slide to validate strategic requirements.
 
 ### ✅ `62f04c2f…` — score 7/10
-- Excel form lacks required freight and restocking fee note at the bottom.
-- Excel form does not include signature spaces for sales rep, GM, and Sales Manager.
-  > 💡 Add the missing fee note and clearly labeled signature and date sections to the Excel form.
+- Excel form lacks required signature spaces for Sales Rep, GM, and Sales Manager.
+- Excel form does not note prepaid freight and restocking fee at the bottom.
+  > 💡 Update the Excel form to add missing policy notes and all required signature and date fields.
 
 ### ❌ `3f821c2d…` — score 4/10
-- Missing omni-level summary table combining stores and e-commerce.
-- EOM inventory, turns, and formulas are largely blank or not calculated.
-- Seasonal turn, receipt budget validation, and January EOM constraint are not demonstrated.
+- Omni-level flow and seasonal turn calculations are missing.
+- EOM Inventory and Turn cells are blank with no working formulas.
+- Side-by-side Store, E-commerce, and Omni tables are incomplete and improperly structured.
+  > 💡 Rebuild the workbook with complete Store, E-commerce, and Omni tables including formulas, EOMs, and seasonal turns.
+
+### ❌ `327fbc21…` — score 4/10
+- Topside May plan is +72% vs LY, not the required -15% target.
+- Summary percent vs LY calculations are incorrect for Total and Comp Stores.
+- Forecast does not align overall volume to the stated topside guidance.
+  > 💡 Rebalance store plans to achieve an overall -15% comp decline and recalculate summary metrics.
 
 ### ❌ `6dcae3f5…` — score 4/10
-- Excel does not document PGY year each PGY-5 met ACGME key indicator requirements.
-- No evidence ACGME requirement numbers from provided link were incorporated.
-- Email contains formatting errors and fragmented metric labels.
-  > 💡 Revise the Excel to include ACGME requirement numbers and PGY attainment, and clean the report formatting.
+- Required ACGME graduation requirement analysis and PGY attainment table is missing.
+- Excel sheets have unnamed columns and unclear metric labels.
+- Yearly interval calculations by PGY are not shown or separated.
+  > 💡 Revise the Excel file to include labeled metrics, PGY-year intervals, and ACGME requirement attainment per resident.
 
 ### ✅ `1aecc095…` — score 6/10
-- Telehealth Roadmap lacks a Visio-style visual workflow and appears text-only.
-- Roadmap does not clearly start from MA placing the initial patient call.
-- An extra unrequested file was produced beyond the specified deliverables.
-  > 💡 Add a one-page visual flow diagram in the Roadmap and remove unrequested files.
+- Telehealth Roadmap lacks Visio-style visual workflow content and decision paths.
+- Use of attached reference materials is not demonstrated or cited.
+- An extra unrequested file was produced.
+  > 💡 Add a true visual roadmap with flow shapes, cite reference sources, and remove unrequested files.
 
 ### ❌ `0353ee0c…` — score 3/10
-- No consolidated presumptive conditions or exposure lists were compiled.
-- Document relies on stated limitations instead of required exhaustive content.
-- PDF content does not reflect information reviewed from provided links.
-  > 💡 Review all provided links and populate the PDF with complete, organized presumptive eligibility details.
+- PDF lacks compiled presumptive conditions, locations, and dates required by task.
+- Content merely lists links instead of consolidating information from Document B.
+- Document is not exhaustive and omits cancer and non-cancer condition lists.
+  > 💡 Extract and organize all presumptive exposures, conditions, locations, and dates into tables within the PDF.
 
-### ❌ `4d1a8410…` — score 4/10
-- Interview schedule document lacks required table with detailed timings, breaks, lunch, and rotations.
-- Personal itineraries omit full-day activities, lunch, breaks, tours, and required timing constraints.
-- Specified constraints for physician breaks, early departure, and tour buffers are unmet.
-  > 💡 Rebuild the schedule table and itineraries to fully satisfy all timing, break, tour, and formatting requirements.
+### ❌ `40a8c4b1…` — score 3/10
+- Text response describes intent, not confirmed completion of scheduling tasks.
+- Produced files include reference documents unnecessarily copied.
+- No evidence unused optional topics were identified and highlighted.
+  > 💡 Verify the Excel content meets all scheduling rules and submit only the completed schedule file.
 
-### ✅ `8c823e32…` — score 6/10
-- Required PDF export was not produced; only a DOCX file was delivered.
-- Training and oversight section appears incomplete or truncated.
-- Text response did not include the actual drafted policy content.
-  > 💡 Complete the policy, finalize all sections, and export the document as a professional PDF.
+### ❌ `4d1a8410…` — score 3/10
+- Interview schedule lacks detailed table with room rotations, applicants, breaks, and buffers.
+- Required constraints not implemented: Dr. Jones 8:50 break and Dr. Garrett early departure.
+- Sample itineraries are incomplete and omit lunch, breaks, and full-day activities.
+  > 💡 Rebuild the schedule as a complete tabular Word document fully satisfying all timing and constraint requirements.
 
-### ✅ `eb54f575…` — score 9/10
-- Text response describes intent rather than summarizing report findings.
-  > 💡 Align the text response with the actual recommendations and data presented in the PDF.
+### ✅ `8c823e32…` — score 8/10
+- PDF length is brief and may limit operational detail depth.
+  > 💡 Consider expanding sections with detailed procedures, diagrams, and compliance checklists.
+
+### ✅ `eb54f575…` — score 7/10
+- PDF content is truncated in the conclusion section.
+- Final recommendation section appears incomplete.
+- Document length seems insufficient for executive report depth.
+  > 💡 Regenerate the PDF ensuring all sections are complete and properly rendered.
 
 ### ✅ `11e1b169…` — score 8/10
-- KRS 503.090 summary omits deadly force standards and statutory limitations.
-- No Kentucky-specific case law or examples are included.
-- Reference guide lacks citations or reference section.
-  > 💡 Add a brief deadly force subsection with Kentucky examples and a short citations list.
+- KRS 503.090 section lacks specific deadly force conditions and statutory language.
+- Content is mostly paragraph-based, limiting quick field reference usability.
+- No citations or case law references included for officer follow-up.
+  > 💡 Add bullet-point checklists and key statutory excerpts to enhance field usability.
 
-### ✅ `a95a5829…` — score 8/10
-- Explicit evaluation criteria for approving or denying requests are not clearly defined.
-  > 💡 Add a brief section specifying standardized evaluation criteria for training approval decisions.
+### ✅ `bf68f2ad…` — score 6/10
+- Weekly demand values in the catch-up plan do not match the provided capacity sheet data.
+- An unnecessary extra file was included beyond the requested deliverables.
+- The narrative response describes intent but does not summarize the actual plan results.
+  > 💡 Align demand figures with the source data and include a concise summary of achieved backlog reduction timing.
 
-### ✅ `22c0809b…` — score 6/10
-- Required PDF format was not produced; only a DOCX file is provided.
-- Text response claims a PDF was generated, which is inaccurate.
-- Deliverable evidence does not confirm a 2–4 page finalized PDF form.
-  > 💡 Export the completed form to PDF and include it as the primary deliverable.
+### ✅ `efca245f…` — score 5/10
+- Capacity increase to 135/day starting February 5 is not reflected in schedules.
+- Stat holidays are not clearly excluded from daily production plans.
+- Scenario 3 assumes overtime despite stated financial inability to pay overtime.
+  > 💡 Revise schedules to reflect capacity changes, holidays, and align assumptions strictly with stated constraints.
 
-### ❌ `bf68f2ad…` — score 4/10
-- Text response is descriptive only and does not include the required brief summary content.
-- Weekly demand values appear inconsistent with stated 438.81 past-due hours.
-- Catch-up plan builds an unrealistic excessive buffer without justification.
-  > 💡 Recalculate demand using the stated backlog, include the actual summary text, and validate capacity assumptions.
-
-### ❌ `9e39df84…` — score 3/10
-- Average Output and Total Output columns are not calculated.
-- Dashboard lacks required PivotTables, charts, and data validation.
-- KPI summary, leaderboard, and YTD calculations are missing.
-  > 💡 Complete formulas, build PivotTables and charts, and fully populate the Dashboard per specifications.
+### ❌ `9e39df84…` — score 4/10
+- Dashboard lacks PivotTables, charts, and data validation controls.
+- Operator data only includes Week 1, not Weeks 1–48 structure.
+- Extra unnamed columns indicate improper table formatting.
+  > 💡 Add full 48-week structured data, PivotTables with slicers, charts, and proper formatting.
 
 ### ✅ `68d8d901…` — score 6/10
-- Text response provides no actual schedules, assignments, or sequences.
-- Excel content is not validated against production target and batch requirements.
-- Unrequested confidence tag and reference file copies add unnecessary clutter.
-  > 💡 Summarize key assumptions and verify the Excel meets the 250,000‑lb full‑batch target.
+- No explicit calculation showing four-week throughput meets 250,000-pound finished product target.
+- Production sequences lack verified sub-step durations per dryer tied to personnel.
+- Output includes regenerated reference files without justification.
+  > 💡 Add clear throughput math, validated cycle counts, and timed per-dryer sequences proving the target is met.
 
-### ✅ `1752cb53…` — score 7/10
-- Text response is generic and does not summarize specific planning decisions.
-- Unnecessary CONFIDENCE tag included in a professional deliverable.
-- No explicit confirmation that all Test Rules constraints were met.
-  > 💡 Add a brief summary confirming rule compliance and key assumptions used in the plan.
+### ✅ `1752cb53…` — score 5/10
+- Text response is generic and lacks confirmation of rule compliance.
+- Includes unprofessional CONFIDENCE tag.
+- No evidence provided that calculations meet planning constraints.
+  > 💡 Summarize key results and explicitly confirm all test rules are satisfied.
 
-### ✅ `bd72994f…` — score 5/10
-- Presentation is PPTX, not the required PDF format.
-- No specific luxury brand or collection is identified.
-- Slides content cannot be verified against styling and look requirements.
-  > 💡 Convert the presentation to PDF and clearly specify and document the chosen brand and looks.
+### ❌ `bd72994f…` — score 3/10
+- Presentation delivered as PPTX, not the required PDF format.
+- No specific brand or official 2025 resort collection was selected.
+- Looks are conceptual text, not styled outfits from an official lookbook.
+  > 💡 Create a 4–6 slide branded PDF using official 2025 resort looks and imagery from one collection.
 
-### ✅ `211d0093…` — score 9/10
-- Closing employee verification instructions are not explicitly stated on the DTL.
-  > 💡 Add a brief line specifying closing employee responsibility to verify completion before filing.
+### ✅ `cecac8f9…` — score 6/10
+- Uses USD currency instead of UK GBP.
+- Team Launch deck is only one page and lacks instructional depth.
+- Promotional offers are not specified or aligned to Marketing Email.
+  > 💡 Localize to GBP, expand the deck content, and clearly detail promotions aligned to references.
 
-### ✅ `d4525420…` — score 8/10
-- Text response describes the deliverable instead of providing the required evaluation paragraph.
-  > 💡 Include the actual 5–7 sentence selection rationale directly in the text response.
+### ✅ `8f9e8bcd…` — score 7/10
+- Homework section appears incomplete or truncated.
+- Homework lacks a due date line.
+- Homework lacks a printed name line.
+  > 💡 Complete the homework section with required fields, due date, and name line.
 
-### ✅ `cecac8f9…` — score 8/10
-- Currency inconsistency between targets PDF using dollars and UK context requiring pounds.
-- Text response describes intent rather than summarising delivered content.
-- Launch deck is brief and may lack operational detail for full weekend use.
-  > 💡 Standardise currency to GBP and expand the launch deck with clearer execution guidance.
-
-### ✅ `8f9e8bcd…` — score 8/10
-- Text response summarizes intent instead of content.
-- Practice section preview appears truncated but likely complete.
-  > 💡 Include a brief content summary in the text response for clarity.
-
-### ✅ `0fad6023…` — score 6/10
-- No visual pan layout; only a table, not a graphical planogram.
-- Total Used and Remaining fields appear not to calculate automatically.
-- Instructions tab is very minimal for beginner Excel users.
-  > 💡 Add automatic formulas, a simple visual pan layout using cell widths, and expand step-by-step instructions.
+### ✅ `0fad6023…` — score 8/10
+- Pan layout is tabular, not a true visual case diagram.
+- Conditional formatting behavior is described but not clearly validated.
+- Several columns have blank headers, reducing clarity.
+  > 💡 Add a simple visual block layout and clearly labeled columns to improve usability and clarity.
 
 ### ✅ `02314fc6…` — score 8/10
-- Checklist does not explicitly state monthly inspection frequency.
-- Loss Prevention review or signature field is missing.
-- Parking lot section lacks cart corrals and striping checks.
-  > 💡 Add explicit monthly frequency and LP review fields, and expand parking lot safety items.
+- Checklist lacks GM and Loss Prevention signature or acknowledgment fields.
+- Text response describes intent rather than summarizing key checklist features.
+- No explicit section-level scoring or weighting is defined.
+  > 💡 Add GM and LP sign-off fields and clarify scoring details to strengthen accountability.
 
-### ✅ `4d61a19a…` — score 7/10
-- Excel template does not show protected or locked fields for non-store columns.
-- PowerPoint content cannot be verified for slide count or required topics.
-- Training deck evidence of mock data sample is not visible.
-  > 💡 Add field protection to the Excel form and include a brief slide-by-slide content checklist.
+### ✅ `4d61a19a…` — score 6/10
+- Excel template lacks store projection and manager sign-off fields.
+- Merchandising notes section is missing from the Excel template.
+- Columns are unnamed and field ownership/editability is unclear.
+  > 💡 Add clearly labeled, protected sections for store projections, sign-off, and merchandising notes with proper column headers.
 
 ### ✅ `6436ff9e…` — score 8/10
-- Optional demographic questions are not clearly visible in the previewed sections.
-- Instructor-specific evaluation could be more clearly separated from class experience.
-  > 💡 Add a clearly labeled demographics section and a distinct instructor evaluation section for clarity.
+- One sentence in the testimonials section appears truncated and incomplete.
+- Marketing consent and privacy disclosure are not explicitly stated.
+  > 💡 Complete the truncated line and add a brief consent and privacy notice section.
 
-### ✅ `8a7b6fca…` — score 6/10
-- PDF contains multiple typos and formatting artifacts like stray characters and misspellings.
-- Decision point labeling and flow arrows are unclear and hard to follow visually.
-- Failure handling text contains errors and weakly connects to manual workflow.
-  > 💡 Clean up text, fix formatting artifacts, and redraw flows for clarity and professional presentation.
+### ❌ `8a7b6fca…` — score 4/10
+- Required PDF process map was not produced.
+- Only a PPTX file was delivered, violating file type requirements.
+- Text response is descriptive but provides no actual process map content.
+  > 💡 Generate and include the finalized process map as a PDF with verified visual content.
 
-### ✅ `40a99a31…` — score 6/10
-- Camera requirement unmet; minimum six cameras not specified or quantified.
-- Safety devices lack quantities for six static zones and six pressure mats.
-- Report is overly brief and lacks detailed compatibility and IO mapping logic.
-  > 💡 Specify quantities per device, expand integration details, and document IO mapping explicitly.
+### ✅ `40a99a31…` — score 7/10
+- Camera quantity minimum of six is not explicitly specified or documented.
+- Static LIDAR requirement for six distinct zones is not clearly itemized.
+- Pressure mat quantity per CNC is not explicitly defined.
+  > 💡 Explicitly document required quantities per device to fully satisfy safety and coverage requirements.
 
 ### ✅ `b9665ca1…` — score 5/10
-- Button box NO channels and pilot lights with ESx.SIG/STP wiring are missing.
-- E-stop series wiring between S11, S12, and S22 is unclear or incorrect.
-- Safety schematic lacks explicit parallel stop button wiring details.
-  > 💡 Revise the schematic to explicitly show all button box channels, pilot lights, and correct E-stop wiring.
+- Schematic conflicts between series E-stop requirement and parallel stop button description.
+- Required ES1.SIG, ES2.SIG, ES3.SIG NO PLC indicator wiring not shown.
+- Several wire labels are incorrect or garbled, reducing assembly usability.
+  > 💡 Revise the schematic to exactly match wiring topology, labels, and button box requirements specified.
 
-### ✅ `c6269101…` — score 7/10
-- Text response describes intent rather than summarizing actual analytical findings.
-- Highest-variability process is not explicitly identified in the narrative.
-- Leadership summary of key results and risks is missing from the text response.
-  > 💡 Add a concise executive summary stating key findings, highest-risk process, and priority actions.
+### ✅ `c6269101…` — score 6/10
+- Text response is high-level and lacks concrete analytical findings.
+- No explicit identification of most variable process in narrative.
+- Capability and stability conclusions are not clearly summarized for leadership.
+  > 💡 Include explicit findings, variability ranking, and clear capability and stability conclusions in the summary.
 
-### ✅ `be830ca0…` — score 8/10
-- Text response includes unnecessary CONFIDENCE tag.
-- Statistical conclusions and operational impacts are not explicitly summarized.
-- Use of Python instead of Minitab may concern strict stakeholders.
-  > 💡 Add a brief summary of key statistical findings and impacts directly in the narrative.
+### ✅ `be830ca0…` — score 7/10
+- Results interpretation for ANOVA and control charts is not explicitly documented.
+- Use of Python charts may not meet expectation of Minitab-equivalent outputs.
+- Text response describes intent but does not summarize actual analytical findings.
+  > 💡 Add explicit statistical conclusions and operational insights directly in the presentation slides.
 
-### ✅ `cd9efc18…` — score 5/10
-- PDF length is five pages, not the required eight to eleven.
-- Execution section lacks specified date, witnesses, and notary details.
-- Temporary local guardian Michael T. Fisher not included.
-  > 💡 Revise the will to add missing appointments, execution details, and expand content to required length.
+### ❌ `cd9efc18…` — score 3/10
+- PDF is only one page, not the required 8–11 pages.
+- Will content is incomplete and omits required beneficiaries, executors, trusts, and fiduciary powers.
+- Execution details are missing, including date, witnesses, and self-proving affidavit.
+  > 💡 Redraft a complete Texas-compliant will and regenerate a full 8–11 page executed-ready PDF.
 
-### ✅ `a97369c7…` — score 6/10
-- Text response summarizes intent rather than providing substantive analysis.
-- Memo does not clearly address Delaware Senate Bill 313.
-- Generated output includes extraneous confidence tag and planning language.
-  > 💡 Ensure the memo fully analyzes all required authorities and remove non-deliverable meta text.
+### ❌ `a97369c7…` — score 4/10
+- Memo misstates Moelis as a Delaware Supreme Court decision.
+- Delaware Senate Bill 313 analysis appears missing or insufficiently addressed.
+- Text response promised hyperlinks and formatting not clearly reflected in the file.
+  > 💡 Revise the memo to correct case citations and explicitly analyze SB 313’s impact on stockholder agreements.
 
-### ✅ `aad21e4c…` — score 8/10
-- Previewed clause text appears truncated mid-word, suggesting potential drafting or export issue.
-  > 💡 Proofread the DOCX to ensure all provisions are complete and properly formatted.
+### ✅ `3f625cb2…` — score 8/10
+- Conclusion preview appears truncated, risking incomplete recommendations.
+- California private right of action discussion is high-level and could be more precise.
+  > 💡 Add a concise final section with concrete next steps and clarify California enforcement versus private claims.
 
-### ✅ `8314d1b1…` — score 7/10
-- Text response summarizes intent rather than substantive analysis.
-- Citations to cases and statutes are not visible in provided preview.
-- Risk-mitigation recommendations are not clearly delineated as a section.
+### ✅ `aad21e4c…` — score 6/10
+- Anti-dilution minimum 10% top-up mechanics are not clearly specified.
+- Minority-investor consent rights over all listed extraordinary actions are not clearly enumerated.
+- Exempt issuance carve-outs for anti-dilution and pre-emptive rights are insufficiently detailed.
+  > 💡 Add explicit anti-dilution, consent rights, and exempt issuance provisions with clear definitions and mechanics.
 
-### ❌ `5e2b6aab…` — score 4/10
-- Required 2D PDF assembly and subassembly drawings were not provided.
-- Stated environment limitations do not satisfy mandatory deliverables.
-- STEP models are described as simplified and may lack manufacturable detail.
-  > 💡 Provide the missing PDF drawings and fully defined manufacturable STEP assemblies to meet requirements.
+### ✅ `8314d1b1…` — score 8/10
+- Text response is a meta-description rather than substantive content.
+  > 💡 Provide a brief substantive summary in the text response alongside the delivered file.
 
-### ❌ `46fc494e…` — score 3/10
-- No transient temperature calculations or node-by-node results are actually presented.
-- Back-face temperature reported as constant 25 C is physically unrealistic under stated heating.
-- Plots and tables lack verifiable numerical data consistent with the specified model.
-  > 💡 Perform and document the full transient 22-node conduction calculation and regenerate plots and tables from computed results.
+### ❌ `5e2b6aab…` — score 3/10
+- Required PDF drawings were not delivered; only DOCX files are provided.
+- STEP ZIP appears to contain placeholder or non-functional CAD models.
+- Design requirements are described but not demonstrated in models or drawings.
+  > 💡 Provide actual STEP geometry and ANSI B PDF drawings that clearly implement all stated requirements.
 
-### ✅ `3940b7e7…` — score 6/10
-- Report section titles do not match the required headings exactly.
-- Text response is a meta-description rather than substantive report content.
-- Aerodynamic performance discussion appears limited or unclear.
+### ❌ `46fc494e…` — score 4/10
+- No explicit numeric back-face temperatures or margins are stated in the report text.
+- Model description conflicts: in-plane conduction used to assess through-thickness back-face temperature.
+- Panel thickness implied by 22 nodes at 0.05 m is unrealistic and unaddressed.
+  > 💡 Include explicit computed temperatures, margins, and reconcile model geometry with physical thickness.
 
 ### ❌ `8077e700…` — score 4/10
-- Required PDF report was not produced; only a DOCX file is provided.
-- Output contains a promise of analysis, not the actual technical analysis.
-- Results and figures for AISI 1045 tempering trends are incomplete or missing.
+- No actual analytical report content was provided, only an intent statement.
+- Required PDF report was not produced; only a DOCX file exists.
+- Results lack analysis of AISI 1045 data and treatment efficiency trends.
+  > 💡 Produce the full analytical report in PDF with data-driven results, figures, and recommendations.
 
-### ✅ `5a2d70da…` — score 6/10
-- Manufacturing steps Excel has malformed columns and minimal step detail.
-- Master Tool List lacks sales tax subtotal and post-tax grand total.
-- Budget compliance is not explicitly demonstrated in the files.
-  > 💡 Fix Excel formatting, add tax calculations, and clearly show total cost within the $7,500 budget.
+### ✅ `5a2d70da…` — score 5/10
+- Master Tool List lacks required subtotal and Suffolk County sales tax grand total.
+- Manufacturing steps file has malformed headers and incomplete operation details.
+- Budget compliance and total spend versus $7,500 are not explicitly shown.
+  > 💡 Add clear cost totals with tax, fix file formatting, and explicitly demonstrate budget compliance.
 
-### ✅ `74d6e8b0…` — score 6/10
-- Specific hormone formulations and dosing ranges are not clearly detailed.
-- Visible in-text citations and a reference list are not clearly demonstrated.
-- Research sources appear generalized rather than explicitly cited.
-  > 💡 Add explicit medication dosing tables and clearly cited references from major menopause societies.
+### ✅ `74d6e8b0…` — score 7/10
+- Citations and reference list are not clearly visible or enumerated in the document preview.
+- Generated text includes irrelevant notes about offline environment and PNG checks.
+- Specific guideline sources and societies are not explicitly named in the visible sections.
+  > 💡 Add a clearly labeled references section citing specific U.S. and international menopause guidelines.
 
-### ✅ `81db15ff…` — score 8/10
-- Text response describes intent rather than summarizing delivered findings.
-- Strategic Recommendation sheet contains an empty first row.
-- Spreadsheet lacks citations or sources for regulatory claims.
-  > 💡 Revise the text summary to reference actual findings and add sources with minor formatting cleanup.
+### ✅ `81db15ff…` — score 7/10
+- Pennsylvania NP independent practice status appears outdated or inaccurate.
+- PA physician chart-signature requirement is oversimplified and may vary by state.
+- Some PA supervision ratios may be inaccurate or overly generalized.
+  > 💡 Verify all scope-of-practice details against current state statutes and licensing board guidance.
+
+### ✅ `61b0946a…` — score 6/10
+- Original task requirements were incomplete and not fully addressed in the proposal.
+- Cost savings analysis lacks explicit calculations tied to freeze/thaw utilization limits.
+- Proposal omits operational workflow for scheduling shared cadaver use across departments.
+  > 💡 Clarify assumptions, add detailed utilization math, and include a concrete interdepartmental scheduling plan.
 
 ### ❌ `61e7b9c6…` — score 3/10
-- Incorrect generic listed: Bijuva contains estradiol/progesterone, not bazedoxifene.
-- Formulary is largely empty and missing most FDA-approved and common off-label menopause medications.
-- Completed file does not fully match template structure and lacks comprehensive pricing data.
-  > 💡 Populate the full formulary with accurate drug data, correct errors, and complete all required medications and prices.
+- Formulary largely incomplete with many blank rows and missing required medications.
+- Incorrect generic listed for Bijuva, indicating a serious clinical accuracy error.
+- Off-label menopause treatments and price sourcing details are not adequately included.
+  > 💡 Complete the template fully, correct drug inaccuracies, and add comprehensive FDA-approved and off-label therapies with verified prices.
 
-### ✅ `c9bf9801…` — score 6/10
-- NCIPC Mentoring Program acknowledgment not evident in guide credits section.
-- Detailed month-by-month timeline with milestones is incomplete or unclear.
-- 4- and 8-month evaluation forms are referenced but not provided or linked.
-  > 💡 Add missing credits, complete the monthly timeline, and include or link evaluation form templates.
+### ✅ `c9bf9801…` — score 7/10
+- 4-month and 8-month evaluation forms are referenced but not included or linked.
+- CDC branding and logo integration are not clearly demonstrated in the guide.
+- Monthly timeline milestones and deliverables are not fully visible in preview.
+  > 💡 Add linked evaluation forms, verify branding elements, and clearly present the full month-by-month timeline.
 
-### ❌ `f1be6436…` — score 4/10
-- Screenshots are placeholders, not real captured sources.
-- Flight details lack airlines, dates, times, and cities.
-- Ground transportation section is incomplete and not itemized.
-  > 💡 Redo the document using real-time sourced data with complete itemization and embedded screenshots.
+### ❌ `f1be6436…` — score 3/10
+- Uses placeholder screenshots and estimated costs instead of real-time sourced data.
+- Several required sections and calculations are incomplete or missing.
+- Physician funding breakdown and discretionary fund impacts are not fully calculated.
+  > 💡 Redo the document using live sources, real screenshots, complete itemization, and full funding calculations.
 
-### ✅ `41f6ef59…` — score 8/10
-- Spreadsheet lacks clearly implemented dropdowns or checkboxes for Yes/No fields.
-- Subscription type validation or predefined dropdown options are not explicitly evident.
-  > 💡 Add Excel data validation dropdowns and checkboxes to improve input consistency and efficiency.
+### ✅ `41f6ef59…` — score 7/10
+- Spreadsheet lacks visible dropdowns or checkboxes for efficient data entry.
+- Excel file name uses underscores instead of specified spaced title.
+- Email subject does not explicitly state third declined payment.
+  > 💡 Add data validation dropdowns and checkboxes, adjust file naming, and clarify the email subject.
 
 ### ❌ `6d2c8e55…` — score 3/10
-- Article PDFs are placeholders rather than actual accessible peer-reviewed articles.
-- Articles are not verified as open-access or published within the last 10 years.
-- Schedule validity against holidays, spacing, and weekday preference is not demonstrated.
-  > 💡 Provide real open-access article PDFs and clearly document compliant scheduling decisions.
+- Article PDFs are placeholders, not actual peer-reviewed accessible articles.
+- No evidence dates, spacing, weekday preference, or holidays were properly validated.
+- Room Availability file update and specific booking details are not clearly demonstrated.
+  > 💡 Replace placeholders with real open-access articles and document verified scheduling compliance in the files.
 
 ### ✅ `4b98ccce…` — score 6/10
-- Text response describes intent rather than confirming completed data accuracy.
-- No evidence Excel sheets contain all patients with exact required fields.
-- Sign-off name and employee ID usage not explicitly verified.
-  > 💡 Confirm and summarize actual Excel contents and sign-offs using the provided employee details.
-
-### ✅ `60221cd0…` — score 8/10
-- Incorrectly states voters are registered with political parties despite Virginia having no party registration.
-  > 💡 Revise the primary election description to accurately reflect Virginia’s open primary system.
+- Excel content not verified against Patient Information Sheet for accuracy and completeness.
+- Signature lines with employee name and ID not confirmed beneath each Excel table.
+- Letters’ inclusion of exact HIPAA clauses and template elements not fully validated.
+  > 💡 Verify Excel data accuracy, confirm signatures, and audit letters against provided clauses and templates.
 
 ### ✅ `ef8719da…` — score 7/10
-- Pitch lacks explicit hyperlinks to cited background articles.
-- Tentative draft submission timeline is not clearly stated.
-- Text response describes deliverable rather than summarizing pitch content.
-  > 💡 Add a clear timeline and a section listing live hyperlinks to sources.
+- Hyperlinks to background sources are not visible in the provided content preview.
+- A tentative draft submission timeline is not evident in the preview.
+- Text response summarizes intent instead of presenting the pitch directly.
+  > 💡 Ensure the document explicitly includes hyperlinks and a clear reporting timeline.
 
-### ✅ `3baa0009…` — score 5/10
-- Article is under the required 300–500 word length.
-- Article does not clearly state or explain negative global growth as specified.
-- Lacks specific forecast figures for global, US, and China growth.
-  > 💡 Expand the article with concrete forecast numbers and explicitly address negative global growth.
+### ✅ `3baa0009…` — score 7/10
+- Article does not explicitly state negative global growth as required.
+- No specific forecast numbers for global, US, or China growth.
+- Chart content is not described or verified to include 2024, 2025, and 2027.
+  > 💡 Explicitly state negative growth, add key forecast figures, and confirm chart years and values.
 
-### ✅ `5d0feb24…` — score 7/10
-- Text response includes extraneous CONFIDENCE tag, which is unprofessional.
-- Response does not explicitly summarize how the arXiv paper’s novel methods are handled.
-- Claims about embedded source links are not clearly evidenced in preview.
-  > 💡 Remove extraneous tags and briefly summarize how the specific arXiv study’s novelty is addressed.
+### ✅ `5d0feb24…` — score 8/10
+- Explicit citations to arXiv:2401.11815 are not clearly evident throughout the redlines.
+- The claim about studying such stars "for the first time" risks overstating prior TRAPPIST-1 research.
+- Some editor notes reference sources generally without inline hyperlinks shown in preview.
+  > 💡 Add clear inline citations to the specific arXiv paper and tighten language around novelty claims.
 
-### ❌ `6974adea…` — score 4/10
-- Text response provides a plan, not the required feature article content.
-- Article word count, SEO headline, standfirst and subheadings are not demonstrated.
-- Compliance with Guardian style and interview-based quotes is not verifiable.
-  > 💡 Provide and verify the full 1,000–1,500 word article content within the Word document.
+### ❌ `6974adea…` — score 3/10
+- The response does not include the actual feature article text.
+- Compliance with word count, style guide, and UK English cannot be verified.
+- SEO headline, standfirst, and subheadings are not demonstrated.
+  > 💡 Provide the full article text or a content preview to enable proper quality verification.
 
-### ✅ `1a78e076…` — score 6/10
-- Document length appears shorter than required 10–15 pages.
-- Evidence coverage of prevalence, morbidity, mortality, and financial impact is unclear.
-- References count and adherence to the 30-source limit are not verified.
-  > 💡 Expand content to meet page length and explicitly address all required data elements with verified references.
+### ✅ `1a78e076…` — score 7/10
+- Document length appears below required 10–15 pages.
+- Explicit morbidity, mortality, and financial impact sections are not clearly demonstrated.
+- Page count and reference count compliance are not verifiable from content.
+  > 💡 Expand content to meet page requirements and explicitly address morbidity, mortality, and financial impact with citations.
 
-### ✅ `1b9ec237…` — score 6/10
-- Slide count and content requirements cannot be verified from the text response alone.
-- Presence and quality of speaker notes are not confirmed.
-- Case study risk factors and AHA stage accuracy are not explicitly evidenced.
-  > 💡 Open and review the PPT to confirm all specified elements and constraints are fully met.
+### ✅ `1b9ec237…` — score 7/10
+- Cannot verify slide count is 20 or fewer.
+- Pre-test question, case study, and speaker notes cannot be confirmed.
+- Inclusion of illustration and properly formatted references is unverified.
+  > 💡 Provide a brief slide-by-slide outline or screenshots to confirm all required elements.
 
 ### ✅ `0112fc9b…` — score 8/10
-- Family history is omitted from the SOAP note.
-- Cranial nerves II, V, and VII are not documented in the neurologic exam.
-  > 💡 Include complete family history and a fully documented cranial nerve exam for thoroughness.
+- Visual acuity not formally assessed despite reported blurry vision.
+- Guardian involvement and consent not addressed for a minor patient.
+- Plan justification for no imaging could reference a specific clinical decision rule.
+  > 💡 Add visual acuity testing, document parent communication, and cite PECARN or similar imaging criteria.
 
 ### ✅ `772e7524…` — score 8/10
-- Differential diagnoses were not explicitly listed in the Assessment section.
-- Antibiotic selection did not address local macrolide resistance considerations.
-- Review of systems was not explicitly documented.
-  > 💡 Add a brief differential, explicit ROS, and antibiotic rationale aligned with current CAP guidelines.
+- Plan lacks explicit follow-up timeframe and return precautions.
+- Disposition decision for outpatient versus inpatient care not clearly stated.
+  > 💡 Add clear follow-up instructions, return precautions, and explicitly document outpatient management rationale.
 
-### ✅ `e6429658…` — score 6/10
-- AbbVie assistance form was not completed in the official PDF format.
-- Appeal letter page length cannot be verified as 2–4 pages.
-- Application completion relied on workaround rather than direct form access.
-  > 💡 Complete the AbbVie application in the official PDF and verify appeal letter length compliance.
+### ✅ `e6429658…` — score 8/10
+- Appeal letter page length cannot be verified from provided preview.
+  > 💡 Include a brief table of contents or page numbering to confirm appeal length.
 
-### ✅ `b5d2e6f1…` — score 5/10
-- Sales by Brand and Sales by Store tabs are not shown or verified in the analysis file.
-- Required pivot tables and specified column headers are not clearly confirmed.
-- Grand totals and calculated ST% fields are not demonstrated.
-  > 💡 Open Weekly_Sales_Analysis.xlsx and verify both pivot tabs include all required fields, calculations, and grand totals.
+### ✅ `b5d2e6f1…` — score 6/10
+- Data tab contains raw data instead of a pivot table as requested.
+- Sales by Brand column headers and order do not exactly match requirements.
+- Grand totals are not clearly labeled or verified on summary tabs.
+  > 💡 Revise pivots to match exact tab purposes, headers, order, and clearly display grand totals.
 
-### ✅ `47ef842d…` — score 8/10
-- Methodology explanation is brief and not explicitly documented in the Excel file.
-- Confidence score is extraneous and not part of the requested deliverables.
-  > 💡 Add a short methodology note within the workbook explaining key calculations and assumptions.
+### ✅ `47ef842d…` — score 6/10
+- Weeks of Supply values are unrealistically high, indicating flawed sales rate aggregation.
+- Weekly unit rate of sale appears incorrectly averaged across stores.
+- Active store definition including out-of-stock percentage is not clearly validated.
+  > 💡 Recalculate weekly sales and WOS at store-level before aggregating to UPC summary.
 
-### ✅ `1137e2bb…` — score 9/10
-- Drill-down capability is implied but not explicitly demonstrated as a pivot table.
-  > 💡 Explicitly note or label the summary as a pivot table with drill-down enabled.
+### ✅ `1137e2bb…` — score 8/10
+- SKU summary is a static table, not a pivot with built-in drill-down.
+- Text response describes intent rather than summarizing completed analysis.
+  > 💡 Convert the SKU summary into a pivot table with PO-level drill-down enabled.
 
 ### ✅ `c3525d4d…` — score 5/10
-- Final store count conflicts with provided final matrix file.
-- Original total program cost does not match Production email estimate.
-- Added and removed stores are not explicitly identified or highlighted.
-  > 💡 Reconcile store counts, correct cost calculations, and clearly flag added and removed stores.
+- Original total program cost does not match Production email figures.
+- Units with overage are shown as decimals instead of whole units.
+- Store comparison lacks explicit identification of removed stores.
+  > 💡 Recalculate costs and units precisely and clearly list added and removed stores from the comparison.
 
-### ✅ `9a0d8d36…` — score 6/10
-- Slide content cannot be verified due to lack of preview.
-- No visible evidence of step-by-step tax calculations.
-- Net proceeds comparison clarity cannot be confirmed.
-  > 💡 Provide a slide-by-slide content summary or export key slides as images for verification.
+### ✅ `9a0d8d36…` — score 8/10
+- Slide content cannot be verified from provided preview.
+  > 💡 Include a brief slide-by-slide outline or screenshots to verify calculations and tax explanations.
 
-### ✅ `664a42e5…` — score 6/10
-- Slide content cannot be verified due to unsupported preview.
-- No explicit confirmation each required topic is covered in slides.
-- 2025 gift tax exclusion amount not stated in the response.
-  > 💡 Provide a slide-by-slide outline or text extract confirming all required elements and figures.
+### ✅ `664a42e5…` — score 7/10
+- Presentation content cannot be verified because PPT slides are not previewable.
+- Text response summarizes intent but does not describe actual slide content.
+- Accuracy of 2025 gift tax exclusion details cannot be confirmed.
+  > 💡 Include a brief slide-by-slide summary or export slides to verifiable images for QA review.
 
-### ❌ `feb5eefc…` — score 4/10
-- Required PDF was not produced; only a Word document was delivered.
-- Text response promises a PDF but output does not match.
-- Compliance with 12-page PDF requirement cannot be verified.
-  > 💡 Convert the document to a PDF and confirm it meets the page limit and stated deliverables.
-
-### ✅ `3600de06…` — score 6/10
-- Slide count and content cannot be verified from the provided preview.
-- Explicit FINRA and NAIC source citations are not confirmed in the deliverable.
-- Text response lacks detailed talking points or slide summaries.
-  > 💡 Include a slide-by-slide outline with citations to clearly demonstrate requirement coverage.
+### ✅ `3600de06…` — score 7/10
+- No explicit confirmation the presentation contains exactly ten slides.
+- FINRA and NAIC sources are summarized without clear in-slide citations.
+- Text response does not verify each required comparison is explicitly covered.
+  > 💡 Add a slide outline with counts and explicit FINRA/NAIC citations to strengthen compliance.
 
 ### ✅ `c657103b…` — score 6/10
-- Starting IRA balance deviates from stated $3.5M anticipated 2025 value.
-- Use of IRS 2025 Uniform Lifetime Table is not documented or validated.
-- PowerPoint template requirement cannot be confirmed from provided content.
-  > 💡 Align assumptions exactly to client data and explicitly document tax and RMD methodologies.
+- PowerPoint does not use the required business digital tunnel template.
+- Excel tax calculations appear overly simplified and not tied to stated marginal brackets.
+- Roth conversion amounts and methodology are not clearly documented year by year.
+  > 💡 Align templates and tax modeling more closely with stated requirements and clearly document assumptions.
 
-### ✅ `ae0c1093…` — score 7/10
-- Observation Form lacks three solid handwritten lines beneath each header.
-  > 💡 Revise the Observation Form to include three solid horizontal lines under every header.
+### ✅ `ae0c1093…` — score 8/10
+- Observation form lacks three solid horizontal lines under each header.
+  > 💡 Add three clearly visible solid lines beneath every header for handwritten notes.
 
-### ✅ `f9f82549…` — score 6/10
-- Flowchart PDF lacks a visual flowchart diagram, presenting only a text list.
-- Separate PowerPoint documents per flowchart header were not provided.
-- Incident details per header cannot be verified from available preview.
-  > 💡 Create a true flowchart PDF and individual PowerPoints per header with detailed incident examples.
+### ✅ `f9f82549…` — score 7/10
+- PDF flowchart is a bullet list, not a visual flowchart diagram.
+- An extra flowchart PPTX was produced though only a PDF was requested.
+- PDF content is minimal for a professional investigative procedure.
+  > 💡 Convert the PDF into a true visual flowchart and remove unrequested deliverables.
 
-### ✅ `57b2cdf2…` — score 8/10
-- Surveillance start time conflicts with stated 7:30 p.m. courtesy start.
-- Surveillance extended past 1:00 a.m. without explicit justification.
-- Bullet points display formatting errors using letter l instead of symbols.
-  > 💡 Clarify timing deviations and correct bullet formatting for greater professionalism.
+### ✅ `57b2cdf2…` — score 9/10
+- Surveillance start time states 7:25 p.m. despite declared 7:30 p.m. window.
+- Surveillance continued until 1:20 a.m., exceeding the client-requested end time.
+  > 💡 Align stated surveillance window exactly with observed start and end times.
 
-### ✅ `84322284…` — score 6/10
-- Text response describes intent rather than summarizing actual investigative findings.
-- Extraneous confidence tag included in a professional deliverable.
-- Report analysis and timeline reconstruction are not demonstrated in the text response.
-  > 💡 Include a concise executive summary of findings and remove nonprofessional metadata.
+### ✅ `84322284…` — score 8/10
+- Text response provides intent summary but lacks substantive analytical findings.
+- Confidence tag is nonstandard and unnecessary for professional deliverables.
+  > 💡 Include a concise executive summary of key findings and concerns directly in the text response.
 
-### ✅ `a46d5cd2…` — score 8/10
-- Text response describes intent rather than summarizing findings.
-- Photographic evidence embedding is not clearly demonstrated in the preview.
-  > 💡 Include a brief executive summary in the text response and clearly label embedded photos in the report.
-
-### ✅ `6241e678…` — score 5/10
-- Schedule includes unrequested tasks like casting, location scouting, and crew hiring.
-- Kickoff call date appears incorrect or missing for July 7, 2025.
-- Client review durations are not clearly shown as two days per asset.
-  > 💡 Revise the schedule to match only requested tasks, correct dates, and clearly mark client review periods.
+### ✅ `a46d5cd2…` — score 6/10
+- Photograph sections contain repeated placeholders without visible embedded images.
+- Report does not explicitly reference or caption specific photographs as evidence.
+  > 💡 Embed and caption key photographs directly within the PDF report sections.
 
 ### ✅ `e14e32ba…` — score 6/10
-- Locations and business hours are missing for all restaurants.
-- Image links point to websites, not actual photos of establishments.
-- Notable dishes and websites are not consistently labeled as required.
-  > 💡 Add explicit locations, business hours, proper photo links, and clearly labeled website and dish sections.
+- Business hours are missing for all listed restaurants.
+- Exact street addresses and locations are not provided.
+- Image fields link to websites, not actual photos.
+  > 💡 Add addresses, hours, and proper photo links to fully meet the brief.
 
-### ✅ `b1a79ce1…` — score 8/10
-- Text response describes intended deliverable rather than summarizing the completed moodboard.
-  > 💡 Briefly describe the key visuals and color palette shown in the final moodboard.
+### ✅ `b1a79ce1…` — score 7/10
+- Text response lacks concrete details of the moodboard’s actual visual contents.
+- No explicit confirmation the PNG includes visible color palette swatches.
+- Unnecessary CONFIDENCE tag adds noise to a professional deliverable.
+  > 💡 Add a brief summary of key colors and reference imagery explicitly shown in the moodboard.
 
-### ✅ `e4f664ea…` — score 5/10
-- Text response is a meta description, not the screenplay itself.
-- Screenplay content cannot be verified from provided preview.
-- Compliance with show-not-tell and formatting is unconfirmed.
-  > 💡 Include or preview key pages of the screenplay to verify formatting and content quality.
+### ❌ `e4f664ea…` — score 4/10
+- The text response promises a screenplay instead of presenting the script content.
+- Compliance with screenplay formatting and show-not-tell cannot be verified from the response.
+- Screenplay PDF content is not previewed or evidenced in the output.
+  > 💡 Include the full screenplay content or clear excerpts demonstrating correct format and execution.
 
-### ✅ `a079d38f…` — score 7/10
-- Summary sheet subtotal is blank, indicating an incomplete cost calculation.
-- Only one videographer is costed despite a two-camera shoot requirement.
-- Videographer hours and cost calculation are unclear or inconsistent.
-  > 💡 Complete the summary totals and clarify crew quantities and hour calculations, especially for videography.
+### ❌ `a079d38f…` — score 4/10
+- Excel sheet lacks calculated estimated costs, subtotal, and total values.
+- Time estimates do not clearly reflect shoot days and setup hours.
+- Video list is not itemized or mapped to shoot days or packages.
+  > 💡 Complete the Excel with formulas, clear day-based scheduling, and explicit mapping to the provided video packages.
 
 ### ❌ `02aa1805…` — score 3/10
-- No Illinois EPA data were pulled; Excel contains zero wells.
-- No viable wells identified or highlighted per criteria.
-- Email lacks specific recommendations and supporting data.
-  > 💡 Retrieve IEPA factsheet data, populate the workbook, and provide data-backed well recommendations.
+- No Illinois EPA data was retrieved or summarized; Excel contains no well records.
+- Required screening and identification of viable wells were not performed.
+- Email provides placeholders instead of highlighted top options and recommendations.
+  > 💡 Retrieve IEPA factsheet data, populate the workbook, and provide concrete well recommendations.
 
 ### ✅ `fd6129bd…` — score 8/10
-- Change Request Form appears to be a blank template rather than a completed example.
-  > 💡 Include a sample completed change request demonstrating required fields and approvals.
+- Text response uses future tense instead of summarizing delivered document contents.
+  > 💡 Add a brief summary of key SOP sections and form fields in the response.
 
-### ✅ `ce864f41…` — score 7/10
-- Text response does not directly answer the three executive questions.
-- PMO and Professional Education labeled underutilized despite being near target range.
-- No explicit confirmation that 15% admin time was excluded in calculations.
-  > 💡 Summarize key findings directly in the text response and clarify utilization thresholds applied.
+### ✅ `ce864f41…` — score 5/10
+- Findings document provides no actual utilization results or identified departments, individuals, or projects.
+- Stakeholder Registry required as a workbook tab but only provided as a separate file.
+- Tracker evidence of 15% admin time exclusion and calculations is not demonstrated.
+  > 💡 Include quantified analysis with named departments, individuals, and projects, and embed the Stakeholder Registry tab in the tracker.
 
-### ✅ `58ac1cc5…` — score 6/10
-- The official Change Control Form.pdf is largely unfilled and not completed as required.
-- The response claims form completion, but relies on a separate summary PDF instead.
-- Risk assessment depth is high-level and may be insufficient for GMP change control.
-  > 💡 Fully complete the official Change Control Form with known details and integrate the risk assessment per SOP.
+### ✅ `58ac1cc5…` — score 8/10
+- The official Change Control Form is largely unfilled beyond the separate summary PDF.
+- Text response describes deliverables rather than summarizing key conclusions or decisions.
+  > 💡 Fully complete the formal Change Control Form fields to strengthen compliance and audit readiness.
 
 ### ✅ `3c19c6d1…` — score 6/10
-- Report content does not explicitly confirm all required slide elements and wording.
-- Generated description overclaims nine slides beyond specified requirements.
-- Dependence on reference files not requested or defined in the original task.
-  > 💡 Explicitly map each required slide to its exact content and verify alignment with the task brief.
+- Text response describes intent instead of summarising actual October progress.
+- Slide content cannot be verified against specified slide-by-slide requirements.
+- Inclusion of CONFIDENCE tag is unnecessary for professional deliverable.
+  > 💡 Provide a brief written summary of October outcomes and explicitly confirm each required slide’s content.
 
-### ✅ `a99d85fc…` — score 6/10
-- Monthly matrix structure and formulas are not clearly verifiable from the file preview.
-- Color-coding for scenarios and editable cells cannot be confirmed.
-- Notes section content is not visible or clearly defined.
-  > 💡 Include clearer labeling, visible notes, and verifiable color-coding and formulas in the workbook.
+### ✅ `a99d85fc…` — score 7/10
+- Notes section below the Annual Rent Matrix is missing.
+- Annual Rent Matrix scenario separation and labeling are not fully clear.
+- Color-coding and editable cell highlighting are not verifiable from content.
+  > 💡 Add a clearly labeled Notes section and verify visual formatting meets requirements.
 
 ### ❌ `55ddb773…` — score 3/10
-- Specific violation types and qualifying questions from the reference PDF were not included.
-- Deliverable is a DOCX, not the requested finalized PDF form.
-- Architectural regulation items were not individually listed as required.
-  > 💡 Extract and transcribe all violation details from the reference PDF and deliver a completed PDF form.
+- Did not include actual violation types and questions from the attached Violations Questions PDF.
+- Provided placeholder sections instead of required detailed content.
+- Final questionnaire PDF was not produced, only a DOCX file.
+  > 💡 Extract and list all violation types and qualifying questions from the attached PDF and deliver a finalized PDF form.
 
 ### ❌ `1e5a1d7f…` — score 3/10
-- The .docx lacks the required table and columns.
-- No weekly schedule tasks are populated from the PM duties.
-- Output does not reflect cyclical weekly structure.
-  > 💡 Populate the .docx with a complete table using the four required columns and PM duties.
+- The .docx file lacks the required table format with four specified columns.
+- No actual weekly schedule content is provided, only a brief description.
+- Tasks are not mapped to times of day or weeks of the month.
+  > 💡 Create a detailed table in the .docx with all required columns and populated weekly tasks based on PM duties.
 
-### ✅ `0419f1c3…` — score 8/10
-- Acknowledgement-time performance is not quantitatively analyzed in the summary section.
-  > 💡 Add explicit metrics and justification linking each assigned training module to specific performance gaps.
+### ✅ `0419f1c3…` — score 9/10
+- Text response is high-level and does not summarize specific findings.
+  > 💡 Include a brief executive summary highlighting key metrics and training recommendations.
 
-### ✅ `ed2bc14c…` — score 9/10
-- Plan lacks explicit KPIs and tracking method tied to the 10% retention goal.
-  > 💡 Add clear metrics, baseline retention rate, and a six-month measurement plan to quantify success.
+### ✅ `ed2bc14c…` — score 8/10
+- Exit survey analysis does not explicitly show categorization across all five required reasons.
+- Renewal emails are described conceptually rather than including short draft message samples.
+  > 💡 Add a brief five-category summary table and sample email language to strengthen completeness.
 
-### ✅ `46bc7238…` — score 6/10
-- Next Steps section is missing from the PDF.
-- One-page flyer template example content is not shown in the PDF.
-- Stock photos are not clearly embedded on each PDF page.
-  > 💡 Add a Next Steps page, include a visible flyer template page, and embed stock images on every page.
+### ✅ `46bc7238…` — score 7/10
+- Next Steps section is not clearly included in the PDF text content.
+- One-page flyer template lacks detailed contact information fields.
+- Cold outreach scripts are brief and not deeply tailored by QSR category.
+  > 💡 Add a clear Next Steps page and expand flyer and scripts for stronger usability.
 
-### ✅ `2d06bc0a…` — score 7/10
-- LOI expiration date is not clearly stated with a specific deadline.
-- Non-binding section appears incomplete or truncated in the document.
-  > 💡 Add a clear 7–10 day expiration date and complete the non-binding language.
+### ✅ `fd3ad420…` — score 8/10
+- Commission splits lack specific percentage examples.
+- PDF shows encoding artifacts in bullet points.
+  > 💡 Add sample split percentages and correct bullet formatting for polish.
 
-### ✅ `fd3ad420…` — score 6/10
-- PDF was not produced; only DOCX files were delivered.
-- Commission splits lack specific percentages for agents and associate brokers.
-- Text response promises PDF generation but does not deliver it.
-  > 💡 Generate and deliver a finalized one-page PDF with explicit commission percentages included.
+### ❌ `0818571f…` — score 4/10
+- Properties are illustrative placeholders, not sourced active listings from Crexi or LoopNet.
+- Photos and maps are placeholders rather than real property-specific materials.
+- No evidence listings were active from June 2025 to present.
+  > 💡 Source real, currently active Crexi or LoopNet listings and replace all placeholder data and images.
 
-### ✅ `0818571f…` — score 6/10
-- Properties are illustrative, not verified active listings from June 2025.
-- Report does not confirm properties were sourced directly from Crexi or LoopNet.
-- Document shows photo and map placeholders without embedded visuals.
-  > 💡 Replace illustrative examples with verified active listings and embed actual photos and maps from source platforms.
+### ✅ `5ad0c554…` — score 6/10
+- Does not explicitly reference or identify items from the 132 Things REALTORS Do for Buyers.
+- Double-sided brochure layout is not demonstrated or specified in the Word file.
+- Use of visuals is minimal and not clearly integrated into the brochure layout.
+  > 💡 Explicitly map brochure sections to numbered items from the 132 Things document and format as a true double-sided layout.
 
-### ✅ `6074bba3…` — score 7/10
-- Pricing recommendations lack explicit low, mid, and high tiers.
-- Subject summary omits square footage and detailed lease terms.
-- Comparable properties lack addresses or location context.
-  > 💡 Add explicit pricing tiers, property size details, lease terms, and clearer comp identification.
+### ❌ `11593a50…` — score 4/10
+- Properties are in Massabama NY 11009, not Massapequa Park NY 11762.
+- Home tour PDF is four pages instead of the required two pages.
+- Listing photos appear to be placeholders, not actual property photos.
+  > 💡 Rebuild the PDFs using verified MLSLI listings in Massapequa Park with correct photos and page limits.
 
-### ✅ `5ad0c554…` — score 7/10
-- Does not explicitly reference or identify items from the 132 Things REALTORS Do for Buyers document.
-- Brochure content is generic and not clearly tied to specific listed buyer services.
-- Images appear produced but not clearly integrated into the Word brochure layout.
-  > 💡 Revise the brochure to explicitly cite and map key milestones to specific items from the 132 Things REALTORS Do for Buyers list and embed visuals.
+### ✅ `94925f49…` — score 7/10
+- No explicit citations or links to reputable school data sources are included.
+- Home listings appear illustrative rather than verifiable current market listings.
+- Community reviews and neighboring schools are minimally addressed or absent.
+  > 💡 Add cited sources and real-time listing references to strengthen credibility and buyer confidence.
 
-### ❌ `11593a50…` — score 3/10
-- No qualifying homes were researched; PDFs only state none found without MLSLI verification.
-- Showing book is one page and lacks required columns, photos, and $/sqft.
-- Data source and Excel file reference wrong location and irrelevant listings.
-  > 💡 Perform a live MLSLI search and generate proper two-page listing and pinned map PDFs with real properties.
+### ✅ `90f37ff3…` — score 6/10
+- Comparable listings lack full addresses and specific listing dates.
+- Market data appears illustrative without cited sources or verification.
+- Requirement for real data pulls from public platforms not met.
+  > 💡 Include verifiable comparables with full addresses, dates, and cited sources from LoopNet or Crexi.
 
-### ✅ `94925f49…` — score 6/10
-- School statistics and home listings are representative examples, not verified real data.
-- Reports lack explicit citations or links to reputable school and MLS sources.
-- Garden City Park report home listings appear truncated or incomplete.
-  > 💡 Replace example data with fully sourced, verifiable statistics and complete real home listings.
+### ✅ `d3d255b2…` — score 8/10
+- Text response describes intent rather than summarizing key findings or recommendations.
+  > 💡 Include a brief executive summary of conclusions and counteroffer in the text response.
 
-### ✅ `90f37ff3…` — score 8/10
-- Comparable listings lack lease or listing dates to confirm three-year requirement.
-- Data sources like LoopNet or Crexi are not explicitly cited.
-  > 💡 Add listing dates and explicit data source citations to strengthen credibility and compliance.
+### ✅ `403b9234…` — score 8/10
+- Text response contains a grammatical error: 'an 9-slide.'
 
-### ✅ `650adcb1…` — score 5/10
-- Sixth tab for interns time off requests is missing.
-- Several requested days off are not fully reflected in the schedule.
-- Required color key on the first excel page is not shown.
-  > 💡 Add the missing time-off tab, correct all requested dates, and include a visible color key.
+### ✅ `1bff4551…` — score 6/10
+- No evidence songs are represented in the Institute’s collection as requested.
+- One selection centers a non-Black original artist, weakening the program focus.
+- Original song includes a non-functional YouTube link.
+  > 💡 Verify collection holdings, replace or justify marginal selections, and provide a valid link for the original song.
+
+### ✅ `650adcb1…` — score 6/10
+- Dustin Herman’s requested time off range is not fully represented.
+- Days with fewer than two interns working are not explicitly identified.
+- December sheet includes an extra blank column reducing clarity.
+  > 💡 Add a summary tab listing understaffed dates and correct all requested time-off entries.
 
 ### ✅ `01d7e53e…` — score 6/10
-- Draft agreement content cannot be verified from provided response or file preview.
-- Extra unrelated file produced beyond requested agreement deliverable.
-- Response does not confirm inclusion of contacts, compliance clauses, and term specifics.
-  > 💡 Provide a brief summary or excerpt confirming all required provisions are included in the draft.
-
-### ✅ `a73fbc98…` — score 6/10
-- Assigned table labels do not match numbered tables shown in the official layouts.
-- The Excel vendor list was not updated with an Assigned Table(s) column.
-- Electricity constraints are not clearly reflected in the table assignments.
-  > 💡 Align table numbering with layouts and update the Excel file to clearly reflect assignments and power usage.
+- Text response summarizes intent instead of presenting agreement content.
+- Use of Summer Fun facilities document appears unrelated to RecFit program.
+- Unable to verify required contacts, indemnification, and term details from preview.
+  > 💡 Include the full agreement text and ensure all specified program and legal requirements are explicitly documented.
 
 ### ✅ `0ec25916…` — score 8/10
-- Table columns are not clearly delineated in the PDF layout.
-  > 💡 Add visible table borders or shading to clearly distinguish the two columns.
+- Bullet points display encoding artifacts instead of standard symbols.
+- Two-column table layout is not clearly visually separated.
+- Receiving clinician line placement appears slightly unclear.
+  > 💡 Replace encoding artifacts and strengthen table borders for clearer visual structure.
 
-### ✅ `116e791e…` — score 5/10
-- Required one-page PDF was not produced; only a Word document provided.
-- Document likely exceeds one page based on length.
-- Text response claims PDF delivery but does not match actual file.
-  > 💡 Convert the care plan into a single-page PDF and ensure the delivered file matches the stated format.
+### ✅ `116e791e…` — score 6/10
+- Required one-page PDF was not produced; only a DOCX file was delivered.
+- Text response claims a PDF deliverable that does not exist.
+- File format does not meet specified submission requirements.
+  > 💡 Convert the care plan to a single-page professionally formatted PDF and resubmit.
 
-### ❌ `dd724c67…` — score 3/10
-- Facility contact list contains only placeholders, not researched Long Island facilities.
-- Did not compile all hospitals and rehabilitation facilities as required.
-- TFU guide lacks explicit ACO REACH PY 2025 condition-specific specifications.
-  > 💡 Populate the spreadsheet with verified Long Island facilities and align TFU details to CMS PY 2025 guidance.
+### ✅ `dd724c67…` — score 5/10
+- Facility list is incomplete and does not include all Long Island hospitals and rehabilitation facilities.
+- TFU timeframes and conditions are not fully aligned with ACO REACH PY 2025 specifications.
+- CMS reference lacks citation and comprehensive condition coverage.
+  > 💡 Expand the facility list comprehensively and update TFU details directly from the ACO REACH PY 2025 methodology.
 
-### ❌ `7151c60a…` — score 4/10
-- Fax cover sheet contains a visible typo and truncated recipient section.
-- Confidentiality statement is separate, not included on the fax cover sheet.
-- Pre-screening checklist preview lacks required table, page numbers, and internal-only fields.
-  > 💡 Revise both documents to fully include all specified elements and correct formatting and content errors.
+### ❌ `7151c60a…` — score 3/10
+- Fax cover sheet lacks required sender, recipient, checkbox options, and confidentiality statement.
+- Pre-screening checklist missing table, required patient elements, page numbers, and staff-only fields.
+- Checklist and fax sheet do not clearly include or display the company logo as specified.
+  > 💡 Revise both Word documents to fully include all specified fields, tables, logos, and regulatory elements.
 
 ### ❌ `90edba97…` — score 3/10
-- Did not enter monthly or annual lab results into the tracker.
-- Medication and treatment changes were not documented per protocols.
-- Claimed missing lab data despite provided Patient Lab Reports file.
-  > 💡 Populate the Excel tracker with all patient labs and protocol-driven treatment changes from the provided reports.
+- Did not enter monthly lab values into tracker; used placeholder text.
+- Failed to apply standing order protocols to document medication changes.
+- Assumed lab data unavailable despite provided Patient Lab Reports.
+  > 💡 Populate tracker with actual lab data and document protocol-driven monthly treatment changes.
 
-### ❌ `91060ff0…` — score 3/10
-- Poster content is largely missing required sections and educational detail.
-- No PDF file produced and layout does not demonstrate 36x24 inch design.
-- Lacks visuals, tables, and comprehensive references for self-guided learning.
-  > 💡 Create a complete 36x24 inch poster with all specified sections, visuals, and export as a PDF.
+### ✅ `91060ff0…` — score 6/10
+- Poster lacks required visuals such as tables, icons, or product comparisons.
+- References are vague and not cited specifically as requested.
+- Content appears text-heavy and not visually engaging for a poster format.
+  > 💡 Add clear visuals, specific citations, and layout elements to enhance engagement and credibility.
 
-### ✅ `8384083a…` — score 6/10
-- Missing explicit formula column for each medication.
-- Miebo standard SIG and days’ supply are incorrect.
-- Miebo is not injectable yet grouped without clarification.
-  > 💡 Add a formula column and correct Miebo dosing and days’ supply using FDA-labeled SIG.
+### ❌ `8384083a…` — score 2/10
+- Missing required medication-specific details like NDCs, strengths, package sizes, and days’ supply.
+- No calculations or tables provided for listed high-cost medications.
+- PDF file not produced; content is incomplete and only a brief DOCX exists.
+  > 💡 Create a complete 1–2 page PDF with a table covering all specified medications and required fields.
 
-### ✅ `045aba2e…` — score 6/10
-- Self-assessment frequency is incorrect; California requires biennial, not annual, completion.
-- Monthly controlled substance inventory reconciliation is not a California legal requirement.
-- Checklist lacks explicit citations to California lawbook or self-assessment sections.
-  > 💡 Revise tasks to match statutory frequencies and add lawbook section references for each checklist item.
+### ✅ `045aba2e…` — score 8/10
+- Checklists lack explicit citations to specific California law or regulation sections.
+- No version date or review owner identified on checklist pages.
+  > 💡 Add regulation citations and a version/date footer to strengthen audit defensibility.
 
-### ❌ `b3573f20…` — score 3/10
-- PDF is only one page instead of the required three pages.
-- Missing major sections like company overview, operations, logistics, and compliance.
-- Content is too sparse to assess operational and sales readiness.
-  > 💡 Expand the document to three pages with comprehensive, clearly labeled questions covering all required areas.
+### ❌ `f2986c1f…` — score 3/10
+- Medications were not identified using Drugs.com as required.
+- MedlinePlus counseling links are missing and marked NA.
+- Spreadsheet contains placeholder content without image-based identification.
+  > 💡 Identify each medication from the image using Drugs.com and populate all fields with verified details and links.
 
-### ✅ `a69be28f…` — score 6/10
-- Final presentation was not delivered as a PDF as explicitly requested.
-- Text response summarizes intent but does not report actual regional top-performing fits.
-- No explicit confirmation or preview of executive summary slide content.
-  > 💡 Export the PPTX to PDF and include a brief written summary of key regional fit winners.
+### ✅ `ffed32d8…` — score 5/10
+- Comparative table omits required drug cost and vial cost breakdowns.
+- Analysis does not show reimbursement calculations per fill and annually.
+- Coverage day mismatch not discussed or justified in assumptions.
+  > 💡 Add a detailed per-drug cost, vial, and reimbursement breakdown table with clear assumptions.
 
 ### ✅ `788d2bc6…` — score 6/10
-- Delivered PPTX instead of requested PDF format.
-- No evidence of TikTok Shop or influencer services aligned to documentation.
-- Slide-level content, visuals, and count were not demonstrated or verified.
-  > 💡 Provide a PDF export and clearly document slide-by-slide content covering all required services.
+- Deck lacks TikTok Shop, influencer marketing, and creator outreach slides.
+- Creative services like A+ Content and Brand Story are missing.
+- Review generation and analytics dashboard services are not fully presented.
+  > 💡 Add dedicated slides covering TikTok, creative optimization, reviews, and analytics to fully match requirements.
 
-### ✅ `74ed1dc7…` — score 8/10
-- Renaming Bulk may conflict with requirement to add order types in addition to existing ones.
-  > 💡 Clarify whether Forecast Bulk is a new type or a reporting sub-class of Bulk.
+### ✅ `74ed1dc7…` — score 9/10
+- Text response includes an unnecessary confidence marker not requested in the task.
+  > 💡 Remove extraneous confidence tags to keep the response strictly professional.
 
-### ✅ `69a8ef86…` — score 7/10
-- Internal process lacks explicit step-by-step actions with timelines and owners.
-- Several required deadlines are not clearly documented in the internal process.
-- Return Issues.docx appears unnecessary and not requested in the task.
-  > 💡 Revise the internal document to list each required step with action, deadline, and responsible team.
+### ✅ `69a8ef86…` — score 8/10
+- Included unrequested Return Issues.docx file.
+- Text response includes nonstandard CONFIDENCE tag.
+  > 💡 Remove extraneous files and metadata to align strictly with deliverable requirements.
 
-### ✅ `19403010…` — score 6/10
-- Sections 3–5 do not clearly show all nine required columns.
-- Top three functions and total rows are not clearly validated for Sections 3–5.
-- Analysis output lacks visible function-level % to total and disco metrics.
-  > 💡 Expand Sections 3–5 to explicitly display all required columns and clearly label top three functions and totals.
+### ✅ `d7cfae6f…` — score 6/10
+- Recap timeframe references Q1 2023 instead of planning-relevant Q1 2024.
+- Text response summarizes intent but does not confirm calculations or results.
+- No explicit confirmation that comments column exists and is blank.
+  > 💡 Clarify timelines and explicitly validate that the recap meets each numeric requirement.
 
-### ✅ `105f8ad0…` — score 5/10
-- No actual online research or cited competitor MSRPs from Macy’s, Ulta, or Sephora.
-- Competitor set definition and brand/channel sources are not documented or traceable.
-- Competitor $/oz averages appear assumed and identical across concentrations without evidence.
-  > 💡 Conduct and document real competitor MSRP research with cited sources and recalibrate $/oz benchmarks by size and concentration.
+### ❌ `19403010…` — score 4/10
+- Section 1 TY and LY sales totals appear double-counted versus source data totals.
+- Section 2 SKU classification criteria cannot be validated from provided recap preview.
+- Sections 3–5 calculations and rankings are not verifiable from the summary preview.
+  > 💡 Recheck aggregations against source totals and clearly validate discontinued logic and function rankings.
 
-### ✅ `b57efde3…` — score 6/10
-- Exhibitor list was not actually reviewed or validated against the official Aqua Nor 2025 list.
-- Prospecting list is very limited with only four companies, not representative of hundreds of exhibitors.
-- Several entries are marked as preliminary desk research rather than confirmed leads.
-  > 💡 Expand and validate the list using the official exhibitor directory and confirmed product portfolios.
+### ❌ `105f8ad0…` — score 4/10
+- No online competitor MSRP research conducted as required; proxies were used instead.
+- EDP and EDT recommendations lack consistent premium relationship across concentrations.
+- Pricing rationales are generic and do not explicitly address COGS, concentration, and benchmarks.
+  > 💡 Conduct required online MSRP research and revise model to enforce clear concentration-based premiums with detailed rationales.
+
+### ❌ `b57efde3…` — score 4/10
+- Did not review or systematically use the official Aqua Nor 2025 exhibitor list.
+- Prospecting list is extremely incomplete and includes placeholder/unvalidated entries.
+- Spreadsheet lacks contact details needed to find and connect with leads.
+  > 💡 Fully review the official exhibitor list and deliver a comprehensive, validated Excel file with real contacts.
 
 ### ❌ `15d37511…` — score 3/10
-- Spreadsheet omits required pricing, cost, margin, and totals.
-- Tiered pricing and discounts are not calculated or applied.
-- Output relies on placeholders despite reference pricing file provided.
-  > 💡 Populate all pricing from the email and fully calculate margins and Year 1 totals.
+- Spreadsheet lacks numeric pricing and costs despite reference email.
+- Margins, percentages, and totals are missing and uncalculated.
+- Tiered pricing and discounts are not applied.
+  > 💡 Populate all pricing from the email and calculate margins, discounts, and Year 1 totals.
 
-### ✅ `bb863dd9…` — score 6/10
-- WHO reference link in the quotation appears truncated.
-- Line-item table with quantities and unit prices is not clearly structured.
-- Total USD amounts per item or overall are not clearly shown.
-  > 💡 Ensure a complete itemized table with quantities, unit and total prices, and a full WHO reference link.
+### ❌ `bb863dd9…` — score 4/10
+- Quotation lacks detailed line items per IEHK module with quantities and pricing.
+- Shelf life and lead time per module are not clearly listed in the quotation.
+- WHO reference link is generic and not the specific IEHK documentation.
+  > 💡 Add a detailed itemized table per module including quantity, price, shelf life, lead time, and a specific WHO IEHK link.
 
-### ✅ `fe0d3941…` — score 6/10
-- Survey was delivered as DOCX instead of required PDF.
-- Survey pages are not clearly separated into two titled pages.
-- Text response claims PDF delivery but files do not match.
-  > 💡 Convert the survey to a properly formatted two-page PDF with correct titles.
+### ✅ `6a900a40…` — score 5/10
+- Revised quotation shows malformed headers and columns, indicating structural Excel errors.
+- Cannot verify red-font general remark about freight validity and reconfirmation.
+- Item remarks and transport option placement below Total EXW are not clearly evidenced.
+  > 💡 Review and correct the revised Excel layout, formatting, and required remarks before submission.
 
-### ✅ `6a900a40…` — score 6/10
-- Quotation header columns appear misaligned, with quantity replacing the column header.
-- Red-font general remark about freight validity cannot be verified in the file preview.
-- Correct discounted unit price and total calculations are not clearly confirmed.
-  > 💡 Review and correct the Excel layout, formatting, and pricing calculations before final submission.
+### ✅ `9efbcd35…` — score 5/10
+- No specific MSCI index performance data or figures are included.
+- Lacks explicit references or citations to MSCI, WSJ, FT, or research sources.
+- Analysis remains high-level and generic, limiting client credibility.
+  > 💡 Add concrete MSCI return data and clearly cite reputable news and research sources.
 
-### ✅ `9efbcd35…` — score 6/10
-- MSCI performance data and specific figures are not explicitly cited or presented.
-- Document relies on generalized themes rather than sourced Q1 2025 performance evidence.
-- Technology section appears truncated, indicating a possible formatting or content error.
-  > 💡 Include explicit MSCI index returns with citations and ensure all sections are complete and proofread.
+### ❌ `1d4672c8…` — score 4/10
+- Used simulated returns instead of extracting MSCI data as required.
+- PDF analysis was not delivered; only a DOCX file was provided.
+- Excel workbook lacks a correlation matrix tab.
+  > 💡 Replace simulated data with MSCI-sourced returns, add a correlation sheet, and export the analysis as PDF.
 
-### ✅ `4c4dc603…` — score 6/10
-- Missing specific numeric targets like target raise, IRR, token supply, and price per token.
-- Team section lacks named key members and roles.
-- Salient market size and valuation frequency are vague or omitted.
-  > 💡 Add concrete numeric metrics and detailed team profiles to meet investor-ready standards.
+### ❌ `4de6a529…` — score 3/10
+- PDF lacks UW/N/OW views, change indicators, conviction levels, and justifications.
+- Asset class tables are placeholders without updated Q1 2025 Stanton views.
+- Deliverable does not reflect minimal quarter-over-quarter review or changes.
+  > 💡 Populate tables with explicit Q1 2025 views, changes, conviction levels, and one-sentence rationales for each line item.
 
-### ✅ `bb499d9c…` — score 7/10
-- Text response does not explicitly confirm all required sections are fully addressed.
-- Document page count compliance with 25-page limit is not evidenced.
-- No visible confirmation of specific regulatory compliance coverage.
-  > 💡 Add a requirements checklist and executive summary confirming scope, compliance, and page length.
+### ❌ `4c4dc603…` — score 3/10
+- No one-page investor-ready Product Summary PDF was produced.
+- Output relied on creating files but provided only a generic promise text response.
+- Wrong source file used and requirements for format and content not evidenced.
+  > 💡 Produce a one-page Product Summary PDF explicitly covering all required sections using the provided IM.
+
+### ✅ `bb499d9c…` — score 6/10
+- Text response describes intent rather than summarizing actual document contents.
+- No evidence the Word document stays within the 25-page limit.
+- Compliance and regulatory specifics are not explicitly confirmed in the response.
+  > 💡 Include a concise section-by-section summary and confirm page count and compliance coverage.
 
 ### ✅ `5349dd7b…` — score 7/10
-- Historical rate increases lack cited sources or evidence of actual searches.
-- Business rate eligibility and assumptions are not clearly documented.
-- Specific flat-rate service names and delivery levels are not specified.
-  > 💡 Add cited sources and explicitly document business-rate programs and flat-rate service definitions.
+- Historical rate increases are estimated without cited research sources.
+- Business rate eligibility and standard delivery speeds are not clearly validated.
+- Carrier flat rate definitions may not align with official offerings.
+  > 💡 Validate all rates and increases with cited carrier sources and confirm business flat rate eligibility.
 
-### ✅ `552b7dd0…` — score 8/10
-- Text response lacks explicit confirmation of summary slide insights and recommendations.
-- An additional Excel file was produced though not explicitly requested.
-  > 💡 Briefly confirm key takeaways and recommendations are clearly presented on the final slide.
+### ✅ `a4a9195c…` — score 8/10
+- Document lacks revision history and approval/signature section.
+  > 💡 Add revision control and approval fields to support formal document governance.
 
-### ❌ `76418a2c…` — score 4/10
-- Completed manifest lacks pick ticket numbers, customers, and correct weights.
-- Shipping methods are incorrect; all shipments show UPS regardless of weight.
-- Savings and costs appear hardcoded and not derived per shipping parameters.
-  > 💡 Recalculate each shipment using pick ticket weights and populate the manifest with correct fields and methods.
+### ✅ `552b7dd0…` — score 6/10
+- Text response provides no actual analysis, metrics, or findings.
+- PowerPoint content cannot be verified against required statistics and summary slide.
+- Unrequested CONFIDENCE tag included in the response.
+  > 💡 Include concrete results and ensure the presentation explicitly covers all required metrics and conclusions.
 
-### ❌ `0e386e32…` — score 3/10
-- ZIP archive is too small to contain a complete production-style codebase.
-- No verifiable source files or code content are provided for inspection.
-- Claims of complete implementation conflict with missing or inaccessible artifacts.
-  > 💡 Provide a fully populated ZIP with inspectable frontend, smart contracts, and documentation files.
+### ❌ `11dcc268…` — score 4/10
+- Moved To line locations are blank and not populated from Inv on line.
+- Partial receipt rule for item P11-P09457-01 is not reflected.
+- Location Report formatting and headers remain largely unfilled.
+  > 💡 Populate all required columns using Inv on line locations and explicitly handle the partial receipt case.
 
-### ❌ `7de33b48…` — score 4/10
-- No ScreenReaderStatusMessage TypeScript JSX implementation is shown or verifiable.
-- Required WCAG ARIA22 tests are not evidenced or described in sufficient detail.
-- Zip contents and filenames cannot be validated against stated requirements.
-  > 💡 Include and verify the actual TSX utility and test files with explicit WCAG ARIA22 assertions.
+### ✅ `76418a2c…` — score 6/10
+- Manifest contains placeholder headers and missing required fields like date and tracking numbers.
+- Savings calculation shows floating-point precision errors.
+- Spreadsheet formatting does not match the provided blank manifest structure.
+  > 💡 Fully populate required fields, correct formatting to match the blank manifest, and round calculated values appropriately.
+
+### ❌ `0e386e32…` — score 4/10
+- ZIP archive size is far too small for a complete frontend and smart contract scaffold.
+- No verifiable evidence of actual code content beyond high-level description.
+- Privacy logic and zkSNARK implementation are not demonstrably included.
+  > 💡 Provide a fully populated codebase with inspectable source files and documented build instructions.
+
+### ❌ `7de33b48…` — score 3/10
+- Zip contents cannot be verified from provided preview.
+- Response describes deliverable but includes no actual code details.
+- Required file list is incomplete and truncated.
+  > 💡 Include verifiable code contents and a complete file list with confirmed implementations.
 
 ### ❌ `4122f866…` — score 4/10
-- Terraform configuration files are not visible or evidenced in the deliverable.
-- Lambda implementation details for reCAPTCHA validation and SES sending are unverified.
-- README lacks required variable definitions, architecture details, and SES/API Gateway setup steps.
-  > 💡 Include full Terraform files, complete Lambda source, and a detailed README matching all specified requirements.
+- Terraform configuration files are not visible or verifiable in the provided preview.
+- Lambda exports.js implementation cannot be inspected to confirm required logic.
+- SES, API Gateway, and IAM resources are not explicitly demonstrated.
+  > 💡 Include and expose all Terraform files and Lambda source code contents for full verification.
 
 ### ❌ `2c249e0f…` — score 3/10
-- OpenAPI 3.0 YAML specification file is completely missing.
-- Deliverable claims files not actually produced.
-- API design details and endpoints are absent.
-  > 💡 Provide the full OpenAPI 3.0 YAML spec and ensure all claimed files are included.
+- Missing required OpenAPI 3.0 YAML specification file.
+- Text response claims files not actually produced.
+- data_flow.txt lacks detailed multistage pipeline and API interactions.
+  > 💡 Provide a complete OpenAPI 3.0 YAML file and expand data_flow.txt with full pipeline details.
 
 ## Failure Analysis
 
-Errors were present in 29 tasks, with Finance and Insurance and Retail Trade showing the lowest success rates. The 68 retried tasks indicate that initial responses frequently did not meet internal acceptance criteria, potentially due to formatting issues, incomplete deliverables, or insufficient adherence to elicitation prompts. Retries appear to have mitigated some failures but at the cost of increased latency. No single sector dominated error counts, suggesting cross-cutting issues related to prompt complexity or subprocess execution stability rather than domain-specific knowledge gaps.
+The run recorded 20 errors and a relatively high retry count of 72 tasks, indicating intermittent instability during execution. Failures were not concentrated in a single sector, though Retail Trade and Wholesale Trade showed comparatively lower completion rates, suggesting susceptibility to task formulation or data-structure issues in those domains. Retries imply transient issues such as subprocess interruptions, timeouts, or partial outputs rather than systematic inability to perform the tasks.
 
 ## Recommendations
 
-Refine prompt templates for sectors with lower success rates (e.g., Finance and Retail) to reduce ambiguity and improve first-pass task completion. Introduce stricter intermediate validation checks to catch common causes of retries earlier in the subprocess. Finally, evaluate latency drivers by profiling retries and long-running tasks, with the goal of reducing average execution time without sacrificing task completeness or self-assessed quality.
+Reduce retry frequency by adjusting subprocess timeouts or introducing intermediate checkpoints for long-running elicitation tasks. This may help preserve partial progress and lower overall execution cost.
+
+Refine elicitation prompts in lower-confidence sectors (notably Finance and Insurance) to clarify constraints, expected output structure, and completeness criteria, which may improve self-assessed QA confidence.
+
+Segment the task suite by complexity or expected reasoning depth and apply adaptive latency or resource allocation, allowing simpler tasks to complete faster while reserving additional time for domains that consistently require longer processing.
 
 ## Deliverable Files
 
+- `83d10b06…` (Professional, Scientific, and Technical Services): 2 file(s)
 - `7b08cd4d…` (Professional, Scientific, and Technical Services): 2 file(s)
 - `7d7fc9a7…` (Professional, Scientific, and Technical Services): 7 file(s)
 - `43dc9778…` (Professional, Scientific, and Technical Services): 16 file(s)
@@ -1372,7 +1403,6 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `f9a1c16c…` (Information): 1 file(s)
 - `38889c3b…` (Information): 1 file(s)
 - `ff85ee58…` (Information): 1 file(s)
-- `4b894ae3…` (Information): 2 file(s)
 - `1b1ade2d…` (Manufacturing): 1 file(s)
 - `93b336f3…` (Manufacturing): 1 file(s)
 - `15ddd28d…` (Manufacturing): 1 file(s)
@@ -1381,7 +1411,6 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `575f8679…` (Government): 1 file(s)
 - `a74ead3b…` (Government): 2 file(s)
 - `bbe0a93b…` (Government): 3 file(s)
-- `85d95ce5…` (Government): 4 file(s)
 - `76d10872…` (Government): 5 file(s)
 - `36d567ba…` (Government): 1 file(s)
 - `7bbfcfe9…` (Government): 1 file(s)
@@ -1390,17 +1419,19 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `4c18ebae…` (Government): 3 file(s)
 - `cebf301e…` (Professional, Scientific, and Technical Services): 1 file(s)
 - `c2e8f271…` (Professional, Scientific, and Technical Services): 1 file(s)
-- `2ea2e5b5…` (Professional, Scientific, and Technical Services): 2 file(s)
+- `2ea2e5b5…` (Professional, Scientific, and Technical Services): 6 file(s)
 - `c357f0e2…` (Professional, Scientific, and Technical Services): 2 file(s)
 - `a45bc83b…` (Professional, Scientific, and Technical Services): 5 file(s)
 - `a10ec48c…` (Real Estate and Rental and Leasing): 1 file(s)
 - `fccaa4a1…` (Real Estate and Rental and Leasing): 2 file(s)
+- `f5d428fd…` (Real Estate and Rental and Leasing): 7 file(s)
 - `2fa8e956…` (Real Estate and Rental and Leasing): 2 file(s)
 - `0e4fe8cd…` (Real Estate and Rental and Leasing): 1 file(s)
 - `a0ef404e…` (Real Estate and Rental and Leasing): 1 file(s)
 - `b7a5912e…` (Real Estate and Rental and Leasing): 2 file(s)
 - `aa071045…` (Real Estate and Rental and Leasing): 3 file(s)
 - `476db143…` (Real Estate and Rental and Leasing): 4 file(s)
+- `61f546a8…` (Real Estate and Rental and Leasing): 4 file(s)
 - `f3351922…` (Finance and Insurance): 1 file(s)
 - `61717508…` (Finance and Insurance): 3 file(s)
 - `0ed38524…` (Finance and Insurance): 3 file(s)
@@ -1412,20 +1443,25 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `ec2fccc9…` (Information): 2 file(s)
 - `8c8fc328…` (Information): 2 file(s)
 - `e222075d…` (Information): 6 file(s)
-- `c94452e4…` (Information): 3 file(s)
+- `c94452e4…` (Information): 2 file(s)
 - `75401f7c…` (Information): 3 file(s)
 - `a941b6d8…` (Information): 2 file(s)
 - `8079e27d…` (Finance and Insurance): 1 file(s)
 - `e21cd746…` (Finance and Insurance): 1 file(s)
-- `c7d83f01…` (Finance and Insurance): 3 file(s)
+- `9e8607e7…` (Finance and Insurance): 1 file(s)
+- `c7d83f01…` (Finance and Insurance): 4 file(s)
+- `46b34f78…` (Finance and Insurance): 2 file(s)
 - `a1963a68…` (Finance and Insurance): 1 file(s)
-- `b39a5aa7…` (Finance and Insurance): 2 file(s)
+- `b78fd844…` (Finance and Insurance): 3 file(s)
+- `4520f882…` (Finance and Insurance): 3 file(s)
 - `ec591973…` (Wholesale Trade): 1 file(s)
 - `62f04c2f…` (Wholesale Trade): 2 file(s)
 - `3f821c2d…` (Wholesale Trade): 2 file(s)
+- `327fbc21…` (Wholesale Trade): 3 file(s)
 - `6dcae3f5…` (Health Care and Social Assistance): 3 file(s)
 - `1aecc095…` (Health Care and Social Assistance): 4 file(s)
 - `0353ee0c…` (Health Care and Social Assistance): 3 file(s)
+- `40a8c4b1…` (Health Care and Social Assistance): 4 file(s)
 - `4d1a8410…` (Health Care and Social Assistance): 11 file(s)
 - `8c823e32…` (Government): 1 file(s)
 - `eb54f575…` (Government): 1 file(s)
@@ -1433,12 +1469,11 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `a95a5829…` (Government): 2 file(s)
 - `22c0809b…` (Government): 1 file(s)
 - `bf68f2ad…` (Manufacturing): 3 file(s)
+- `efca245f…` (Manufacturing): 3 file(s)
 - `9e39df84…` (Manufacturing): 2 file(s)
 - `68d8d901…` (Manufacturing): 3 file(s)
 - `1752cb53…` (Manufacturing): 6 file(s)
 - `bd72994f…` (Retail Trade): 2 file(s)
-- `211d0093…` (Retail Trade): 2 file(s)
-- `d4525420…` (Retail Trade): 2 file(s)
 - `cecac8f9…` (Retail Trade): 5 file(s)
 - `8f9e8bcd…` (Retail Trade): 1 file(s)
 - `0fad6023…` (Retail Trade): 1 file(s)
@@ -1448,21 +1483,22 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `8a7b6fca…` (Manufacturing): 1 file(s)
 - `40a99a31…` (Manufacturing): 3 file(s)
 - `b9665ca1…` (Manufacturing): 1 file(s)
-- `c6269101…` (Manufacturing): 5 file(s)
+- `c6269101…` (Manufacturing): 6 file(s)
 - `be830ca0…` (Manufacturing): 8 file(s)
 - `cd9efc18…` (Professional, Scientific, and Technical Services): 1 file(s)
 - `a97369c7…` (Professional, Scientific, and Technical Services): 1 file(s)
+- `3f625cb2…` (Professional, Scientific, and Technical Services): 1 file(s)
 - `aad21e4c…` (Professional, Scientific, and Technical Services): 1 file(s)
 - `8314d1b1…` (Professional, Scientific, and Technical Services): 1 file(s)
-- `5e2b6aab…` (Manufacturing): 2 file(s)
+- `5e2b6aab…` (Manufacturing): 3 file(s)
 - `46fc494e…` (Manufacturing): 6 file(s)
-- `3940b7e7…` (Manufacturing): 2 file(s)
 - `8077e700…` (Manufacturing): 4 file(s)
 - `5a2d70da…` (Manufacturing): 4 file(s)
 - `74d6e8b0…` (Health Care and Social Assistance): 1 file(s)
-- `81db15ff…` (Health Care and Social Assistance): 1 file(s)
+- `81db15ff…` (Health Care and Social Assistance): 2 file(s)
+- `61b0946a…` (Health Care and Social Assistance): 3 file(s)
 - `61e7b9c6…` (Health Care and Social Assistance): 2 file(s)
-- `c9bf9801…` (Health Care and Social Assistance): 5 file(s)
+- `c9bf9801…` (Health Care and Social Assistance): 4 file(s)
 - `f1be6436…` (Health Care and Social Assistance): 5 file(s)
 - `41f6ef59…` (Health Care and Social Assistance): 2 file(s)
 - `6d2c8e55…` (Health Care and Social Assistance): 13 file(s)
@@ -1482,16 +1518,14 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `1137e2bb…` (Wholesale Trade): 3 file(s)
 - `c3525d4d…` (Wholesale Trade): 5 file(s)
 - `9a0d8d36…` (Finance and Insurance): 1 file(s)
-- `664a42e5…` (Finance and Insurance): 1 file(s)
-- `feb5eefc…` (Finance and Insurance): 1 file(s)
+- `664a42e5…` (Finance and Insurance): 2 file(s)
 - `3600de06…` (Finance and Insurance): 1 file(s)
 - `c657103b…` (Finance and Insurance): 3 file(s)
 - `ae0c1093…` (Retail Trade): 2 file(s)
-- `f9f82549…` (Retail Trade): 2 file(s)
+- `f9f82549…` (Retail Trade): 8 file(s)
 - `57b2cdf2…` (Retail Trade): 3 file(s)
 - `84322284…` (Retail Trade): 4 file(s)
 - `a46d5cd2…` (Retail Trade): 5 file(s)
-- `6241e678…` (Information): 1 file(s)
 - `e14e32ba…` (Information): 2 file(s)
 - `b1a79ce1…` (Information): 2 file(s)
 - `e4f664ea…` (Information): 3 file(s)
@@ -1510,15 +1544,15 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `2d06bc0a…` (Real Estate and Rental and Leasing): 1 file(s)
 - `fd3ad420…` (Real Estate and Rental and Leasing): 2 file(s)
 - `0818571f…` (Real Estate and Rental and Leasing): 13 file(s)
-- `6074bba3…` (Real Estate and Rental and Leasing): 4 file(s)
-- `5ad0c554…` (Real Estate and Rental and Leasing): 4 file(s)
-- `11593a50…` (Real Estate and Rental and Leasing): 3 file(s)
+- `5ad0c554…` (Real Estate and Rental and Leasing): 2 file(s)
+- `11593a50…` (Real Estate and Rental and Leasing): 5 file(s)
 - `94925f49…` (Real Estate and Rental and Leasing): 5 file(s)
 - `90f37ff3…` (Real Estate and Rental and Leasing): 2 file(s)
+- `d3d255b2…` (Real Estate and Rental and Leasing): 2 file(s)
 - `403b9234…` (Government): 1 file(s)
+- `1bff4551…` (Government): 1 file(s)
 - `650adcb1…` (Government): 1 file(s)
 - `01d7e53e…` (Government): 4 file(s)
-- `a73fbc98…` (Government): 6 file(s)
 - `0ec25916…` (Health Care and Social Assistance): 1 file(s)
 - `116e791e…` (Health Care and Social Assistance): 1 file(s)
 - `dd724c67…` (Health Care and Social Assistance): 1 file(s)
@@ -1527,11 +1561,13 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `91060ff0…` (Retail Trade): 1 file(s)
 - `8384083a…` (Retail Trade): 1 file(s)
 - `045aba2e…` (Retail Trade): 3 file(s)
+- `f2986c1f…` (Retail Trade): 2 file(s)
+- `ffed32d8…` (Retail Trade): 3 file(s)
 - `b3573f20…` (Wholesale Trade): 1 file(s)
-- `a69be28f…` (Wholesale Trade): 10 file(s)
-- `788d2bc6…` (Wholesale Trade): 2 file(s)
+- `788d2bc6…` (Wholesale Trade): 5 file(s)
 - `74ed1dc7…` (Wholesale Trade): 2 file(s)
 - `69a8ef86…` (Wholesale Trade): 3 file(s)
+- `d7cfae6f…` (Wholesale Trade): 2 file(s)
 - `19403010…` (Wholesale Trade): 2 file(s)
 - `105f8ad0…` (Wholesale Trade): 2 file(s)
 - `b57efde3…` (Wholesale Trade): 1 file(s)
@@ -1540,13 +1576,16 @@ Refine prompt templates for sectors with lower success rates (e.g., Finance and 
 - `fe0d3941…` (Wholesale Trade): 4 file(s)
 - `6a900a40…` (Wholesale Trade): 6 file(s)
 - `9efbcd35…` (Finance and Insurance): 1 file(s)
+- `1d4672c8…` (Finance and Insurance): 2 file(s)
+- `4de6a529…` (Finance and Insurance): 2 file(s)
 - `4c4dc603…` (Finance and Insurance): 2 file(s)
 - `bb499d9c…` (Finance and Insurance): 4 file(s)
 - `5349dd7b…` (Manufacturing): 1 file(s)
 - `a4a9195c…` (Manufacturing): 1 file(s)
 - `552b7dd0…` (Manufacturing): 4 file(s)
+- `11dcc268…` (Manufacturing): 4 file(s)
 - `76418a2c…` (Manufacturing): 4 file(s)
 - `0e386e32…` (Professional, Scientific, and Technical Services): 1 file(s)
-- `7de33b48…` (Professional, Scientific, and Technical Services): 3 file(s)
+- `7de33b48…` (Professional, Scientific, and Technical Services): 1 file(s)
 - `4122f866…` (Professional, Scientific, and Technical Services): 2 file(s)
 - `2c249e0f…` (Professional, Scientific, and Technical Services): 1 file(s)
