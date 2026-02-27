@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Step 6: Generate Experiment Report
 
-Reads workspace/result.json and generates three output files under workspace/report/:
+Reads workspace/result.json and generates two output files under workspace/report/:
   - report_data.json : structured JSON for dashboard rendering
   - report.md        : human-readable Markdown report
-  - report.html      : standalone HTML (no external dependencies)
 
 Narrative sections (overview, quality_analysis, failure_patterns, recommendations) are
 generated via a single LLM call using the same model as the experiment.
@@ -975,14 +974,13 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
     md_path = output_dir / "report.md"
     md_path.write_text(_build_markdown(rd), encoding="utf-8")
 
-    # Build report.html
-    html_path = output_dir / "report.html"
-    html_path.write_text(_build_html(rd), encoding="utf-8")
+    # NOTE: report.html generation disabled — large HTML files skew GitHub language stats.
+    # html_path = output_dir / "report.html"
+    # html_path.write_text(_build_html(rd), encoding="utf-8")
 
     print(f"\n✅ Step 6 complete:")
     print(f"   {json_path}")
     print(f"   {md_path}")
-    print(f"   {html_path}")
     print(f"\n   Tasks: {summary['total_tasks']}  "
           f"Success: {summary['success_count']} ({summary['success_rate_pct']}%)  "
           f"Errors: {summary['error_count']}")

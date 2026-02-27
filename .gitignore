@@ -33,6 +33,9 @@ batch-runner/workspace/
 CL*
 batch-runner/hf_repo/
 batch-runner/local_repo/
+
+# Experiment report HTML (skews GitHub language stats)
+batch-runner/results/*/report/report.html
 *.parquet
 .huggingface/
 .cache/
