@@ -45,32 +45,31 @@ This repo automates the entire loop: **configure → run → collect → visuali
 
 ## How It Works
 
-```
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │                        YAML Experiment Config                       │
-  │   model, prompts, filters, Self-QA, execution mode — all in one    │
-  └───────────────────────────────┬──────────────────────────────────────┘
-                                  │
-                                  ▼
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │              GitHub Actions  (workflow_dispatch)                     │
-  │                                                                      │
-  │  Step 0  Bootstrap      Clone openai/gdpval → your HF repo          │
-  │  Step 1  Prepare        Load dataset, apply filters                  │
-  │  Step 2  Inference      Call LLM (Azure/OpenAI/Anthropic)            │
-  │  Step 3  Format         JSON + Markdown report                       │
-  │  Step 4  Fill Parquet   Merge results into submission format          │
-  │  Step 5  Validate       Pre-upload integrity checks                  │
-  │  Step 6  Upload         Push to HuggingFace Hub                      │
-  │                                                                      │
-  │  → Auto-creates PR with experiment summary                           │
-  └───────────────────────────────┬──────────────────────────────────────┘
-                                  │
-                                  ▼
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │                     React Dashboard (GitHub Pages)                   │
-  │          Experiment results · Grade details · Cross-model comparison │
-  └──────────────────────────────────────────────────────────────────────┘
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart LR
+    cfg["YAML Experiment Config<br/>model, prompts, filters, Self-QA, execution mode"]
+    gha["GitHub Actions<br/>(workflow_dispatch)"]
+    s0["Step 0<br/>Bootstrap"]
+    s13["Step 1-3<br/>Prepare, Inference, Format"]
+    s45["Step 4-5<br/>Fill Parquet, Validate"]
+    s6["Step 6<br/>Upload to HuggingFace"]
+    pr["Auto-create PR<br/>with experiment summary"]
+    dashboard["React Dashboard (GitHub Pages)<br/>Experiment results, grade details, cross-model comparison"]
+
+    cfg --> gha --> s0 --> s13 --> s45 --> s6 --> pr --> dashboard
+
+    classDef input fill:#EAF2FF,stroke:#2563EB,color:#0B1F3A,stroke-width:1.2px;
+    classDef trigger fill:#FFF7E8,stroke:#D97706,color:#4A2E00,stroke-width:1.2px;
+    classDef exec fill:#EEFDF4,stroke:#16A34A,color:#0F3D26,stroke-width:1.2px;
+    classDef publish fill:#ECFEFF,stroke:#0E7490,color:#083344,stroke-width:1.2px;
+    classDef output fill:#F1F5F9,stroke:#475569,color:#0F172A,stroke-width:1.2px;
+
+    class cfg input;
+    class gha trigger;
+    class s0,s13,s45 exec;
+    class s6,pr publish;
+    class dashboard output;
 ```
 
 ---
@@ -199,14 +198,16 @@ Then trigger it from **Actions → Run workflow** with `experiment_yaml: exp001_
 
 ---
 
-## 🔬 Self-QA: Built-in Quality Gate
+## 🔬 Self-QA: Built-in Quality Reflection Gate
 
-Every task output is inspected by the LLM itself before acceptance:
+Before acceptance, the same LLM working on the task inspects its own output:
+Self-QA scores each output on a 0-10 scale using rubric-based self-evaluation. If the score is below the configured threshold (default: 6), it enters a reflection loop and retries.
 
-```
-Task → LLM generates output → Self-QA inspects → Score ≥ 6? 
-                                                    ├── ✅ Accept
-                                                    └── ❌ Retry (up to 3×)
+```mermaid
+flowchart LR
+    task["Task"] --> gen["LLM Generates Output"] --> qa["Self-QA Inspects"] --> gate{"Score >= 6?"}
+    gate -->|Yes| accept["Accept"]
+    gate -->|No| retry["Retry (up to 3x)"]
 ```
 
 Self-QA checks: Are all requirements met? Are files actually produced? Is the output professional?
@@ -215,31 +216,21 @@ Self-QA checks: Are all requirements met? Are files actually produced? Is the ou
 
 ## 🏗️ Architecture
 
-```
-gdpval-realworks/
-│
-├── .github/workflows/
-│   ├── batch-run.yml          # 🔬 Experiment pipeline (workflow_dispatch)
-│   └── deploy.yml             # 🌐 Dashboard deploy (push to main)
-│
-├── batch-runner/              # 🐍 Python pipeline
-│   ├── step0~step6            # Modular shell + Python scripts
-│   ├── core/                  # Business logic (LLM client, executor, etc.)
-│   ├── experiments/           # YAML experiment configs
-│   ├── prompts/               # Prompt templates
-│   └── tests/                 # pytest suite
-│
-├── src/                       # ⚛️ React + Vite dashboard
-│   ├── pages/                 # Dashboard, ExperimentDetail, GradeDetail
-│   └── components/            # UI components (shadcn/ui + Tailwind)
-│
-├── data/                      # 📊 Experiment results (JSON/YAML)
-│   ├── tests/                 # Experiment test data
-│   └── grades/                # Grading results
-│
-└── scripts/                   # 🔧 Build-time aggregation
-    ├── aggregate-tests.mjs    # Collect experiment data → JSON index
-    └── aggregate-grades.mjs   # Collect grade data → JSON index
+```mermaid
+flowchart TB
+    root["gdpval-realworks/"]
+
+    wf[".github/workflows/<br/>batch-run.yml, deploy.yml"]
+    br["batch-runner/<br/>step scripts, core, experiments, prompts, tests"]
+    src["src/<br/>pages, components"]
+    data["data/<br/>tests, grades"]
+    scripts["scripts/<br/>aggregate-tests.mjs, aggregate-grades.mjs"]
+
+    root --> wf
+    root --> br
+    root --> src
+    root --> data
+    root --> scripts
 ```
 
 ---

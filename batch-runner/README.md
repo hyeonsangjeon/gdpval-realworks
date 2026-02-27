@@ -4,15 +4,17 @@ A Python pipeline that runs LLM experiments on the [OpenAI GDPVal](https://huggi
 
 ## Architecture
 
-```
-Step 0  Bootstrap       →  Duplicate openai/gdpval to your HF repo + local snapshot
-Step 1  Prepare Tasks   →  Load dataset, apply YAML filters, save to workspace/
-Step 2  Run Inference   →  Call LLM for each task, save incrementally (resume-safe)
-Step 3  Format Results  →  Produce JSON + Markdown report in results/
-Step 4  Fill Parquet    →  Merge deliverable_text/files into base parquet
-Step 5  Validate        →  Pre-upload checks (220 rows, columns, file paths)
-Step 6  Generate Report →  LLM narrative + metrics → report.md / report.html / report_data.json
-Step 7  Upload to HF    →  Clean upload with delete_patterns (includes workspace/report/)
+```mermaid
+flowchart TB
+    s0["Step 0: Bootstrap<br/>Duplicate openai/gdpval to your HF repo + local snapshot"]
+    s1["Step 1: Prepare Tasks<br/>Load dataset, apply YAML filters, save to workspace/"]
+    s2["Step 2: Run Inference<br/>Call LLM per task, save incrementally (resume-safe)"]
+    s3["Step 3: Format Results<br/>Produce JSON + Markdown report in results/"]
+    s4["Step 4: Fill Parquet<br/>Merge deliverable_text/files into base parquet"]
+    s5["Step 5: Validate<br/>Pre-upload checks (220 rows, columns, file paths)"]
+    s6["Step 6: Generate Report<br/>LLM narrative + metrics -> report.md/report.html/report_data.json"]
+    s7["Step 7: Upload to HF<br/>Clean upload with delete_patterns (includes report/)"]
+    s0 --> s1 --> s2 --> s3 --> s4 --> s5 --> s6 --> s7
 ```
 
 ## Quick Start
@@ -65,14 +67,13 @@ export AZURE_OPENAI_API_KEY="xxx"
 
 ### Step 0: Bootstrap (`step0_bootstrap.sh`)
 
-```
-openai/gdpval  ──duplicate──▶  SUBMISSION_REPO_ID (HF)
-                                    │
-                                    ▼ snapshot_download
-                             data/gdpval-local/
-                             ├── data/train-*.parquet
-                             ├── reference_files/**
-                             └── deliverable_files/     (empty)
+```mermaid
+flowchart LR
+    src["openai/gdpval"] -->|duplicate| hf["SUBMISSION_REPO_ID (HF)"]
+    hf -->|snapshot_download| snap["data/gdpval-local/"]
+    snap --> parquet["data/train-*.parquet"]
+    snap --> refs["reference_files/**"]
+    snap --> out["deliverable_files/ (empty)"]
 ```
 
 - Duplicates `openai/gdpval` to your HF repo if it doesn't exist
@@ -207,103 +208,40 @@ All providers return a normalized response shape (`response.choices[0].message.c
 
 ## Project Structure
 
-```
-batch-runner/
-├── step0_bootstrap.sh           # HF repo bootstrap
-├── step1_prepare_tasks.py/sh    # YAML → task list
-├── step2_run_inference.py/sh    # LLM inference (resume-safe)
-├── step3_format_results.py/sh   # JSON + Markdown report
-├── step4_fill_parquet.py/sh     # Merge into parquet
-├── step5_validate.py/sh         # Pre-upload validation
-├── step6_report.py/sh           # Generate experiment report (MD + HTML + JSON)
-├── step7_upload_hf.sh           # Upload to HuggingFace
-│
-├── core/
-│   ├── config.py                # Central constants and paths
-│   ├── experiment_config.py     # YAML → ExperimentConfig dataclass
-│   ├── data_loader.py           # HuggingFace dataset loader
-│   ├── domain_filter.py         # Sector/occupation filtering
-│   ├── prompt_builder.py        # Prompt presets and builder
-│   ├── prompt_loader.py         # YAML prompt template loader
-│   ├── llm_client.py            # Provider-agnostic LLM client
-│   ├── executor.py              # Mode dispatcher (code_interpreter/subprocess/json_renderer)
-│   ├── code_interpreter.py      # Responses API + Code Interpreter runner
-│   ├── subprocess_runner.py     # Code gen + safe subprocess runner
-│   ├── json_renderer.py         # JSON spec + fixed renderer
-│   ├── result_collector.py      # Response collection and validation
-│   ├── result_formatter.py      # JSON/Markdown formatting
-│   ├── repo_bootstrapper.py     # HF repo duplication
-│   ├── hf_uploader.py           # HuggingFace upload logic
-│   ├── needs_files.py           # File deliverable detection
-│   ├── file_reader.py           # Reference file readers
-│   ├── file_preview.py          # File content preview
-│   └── evals_submitter.py       # OpenAI Evals submission
-│
-├── experiments/                 # Experiment YAML configs
-│   ├── exp001_GPT52Chat_baseline.yaml
-│   ├── exp002_single_baseline.yaml
-│   └── exp999_smoke_baseline_sample.yaml
-│
-├── prompts/                     # YAML prompt templates
-│   ├── code_interpreter_occupation_codegen.yaml
-│   └── subprocess_occupation_codegen.yaml
-│
-├── tests/                       # Unit + integration tests
-│   ├── test_code_interpreter.py
-│   ├── test_data_loader.py
-│   ├── test_domain_filter.py
-│   ├── test_executor.py
-│   ├── test_experiment_config.py
-│   ├── test_llm_client.py
-│   ├── test_prompt_builder.py
-│   ├── test_result_collector.py
-│   ├── test_result_formatter.py
-│   ├── test_subprocess_runner.py
-│   ├── test_json_renderer.py
-│   ├── test_hf_uploader.py
-│   └── ...
-│
-├── workspace/                   # Intermediate artifacts (gitignored)
-│   ├── step1_tasks_prepared.json
-│   ├── step2_inference_progress.json
-│   └── step2_inference_results.json
-│
-└── results/                     # Experiment outputs (JSON + Markdown)
-    └── <experiment_id>/
-        └── report/              # Generated by Step 6
-            ├── report_data.json
-            ├── report.md
-            └── report.html
+```mermaid
+flowchart TB
+    root["batch-runner/"]
+    steps["step0-step7 scripts"]
+    core["core/<br/>config, llm_client, executor, formatters, uploaders"]
+    experiments["experiments/<br/>YAML experiment configs"]
+    prompts["prompts/<br/>prompt templates"]
+    tests["tests/<br/>unit + integration tests"]
+    workspace["workspace/<br/>step1/step2 intermediate JSON artifacts"]
+    results["results/{experiment_id}/report/<br/>report_data.json, report.md, report.html"]
+
+    root --> steps
+    root --> core
+    root --> experiments
+    root --> prompts
+    root --> tests
+    root --> workspace
+    root --> results
 ```
 
 ## Data Flow
 
 Each step reads from `workspace/` (JSON files), not from prior Python objects. Steps are independently restartable.
 
-```
-YAML config
-    │
-    ▼
-Step 1 → workspace/step1_tasks_prepared.json
-    │
-    ▼
-Step 2 → workspace/step2_inference_progress.json  (incremental, resume-safe)
-       → workspace/step2_inference_results.json   (final)
-    │
-    ▼
-Step 3 → results/<exp_id>/{json, md}
-    │
-    ▼
-Step 4 → workspace/upload/data/train-*.parquet
-    │
-    ▼
-Step 5 → validation (pass/fail)
-    │
-    ▼
-Step 6 → results/<experiment_id>/report/{report_data.json, report.md, report.html}
-    │
-    ▼
-Step 7 → HuggingFace Hub
+```mermaid
+flowchart TB
+    cfg["YAML config"] --> s1["Step 1 -> workspace/step1_tasks_prepared.json"]
+    s1 --> s2p["Step 2 progress -> workspace/step2_inference_progress.json"]
+    s2p --> s2f["Step 2 final -> workspace/step2_inference_results.json"]
+    s2f --> s3["Step 3 -> results/{exp_id}/{json,md}"]
+    s3 --> s4["Step 4 -> workspace/upload/data/train-*.parquet"]
+    s4 --> s5["Step 5 -> validation (pass/fail)"]
+    s5 --> s6["Step 6 -> results/{experiment_id}/report/"]
+    s6 --> s7["Step 7 -> HuggingFace Hub"]
 ```
 
 ## Testing

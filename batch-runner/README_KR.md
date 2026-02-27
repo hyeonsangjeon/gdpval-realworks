@@ -4,15 +4,17 @@
 
 ## 아키텍처
 
-```
-Step 0  부트스트랩      →  openai/gdpval을 HF 레포에 복제 + 로컬 스냅샷 다운로드
-Step 1  태스크 준비     →  데이터셋 로드, YAML 필터 적용, workspace/에 저장
-Step 2  추론 실행       →  태스크별 LLM 호출, 증분 저장 (이어하기 지원)
-Step 3  결과 포맷팅     →  JSON + Markdown 리포트 생성 → results/
-Step 4  Parquet 병합    →  deliverable_text/files를 base parquet에 병합
-Step 5  유효성 검증     →  업로드 전 검증 (220행, 컬럼, 파일 경로)
-Step 6  리포트 생성     →  LLM 내러티브 + 메트릭 → report.md / report.html / report_data.json
-Step 7  HF 업로드       →  delete_patterns로 클린 업로드 (results/<experiment_id>/report/ 포함)
+```mermaid
+flowchart TB
+    s0["Step 0: 부트스트랩<br/>openai/gdpval 복제 + 로컬 스냅샷 다운로드"]
+    s1["Step 1: 태스크 준비<br/>데이터셋 로드, YAML 필터 적용, workspace/ 저장"]
+    s2["Step 2: 추론 실행<br/>태스크별 LLM 호출, 증분 저장 (이어하기 지원)"]
+    s3["Step 3: 결과 포맷팅<br/>JSON + Markdown 리포트 생성 -> results/"]
+    s4["Step 4: Parquet 병합<br/>deliverable_text/files를 base parquet에 병합"]
+    s5["Step 5: 유효성 검증<br/>업로드 전 검증 (220행, 컬럼, 파일 경로)"]
+    s6["Step 6: 리포트 생성<br/>LLM 내러티브 + 메트릭 -> report 파일들"]
+    s7["Step 7: HF 업로드<br/>delete_patterns 기반 클린 업로드"]
+    s0 --> s1 --> s2 --> s3 --> s4 --> s5 --> s6 --> s7
 ```
 
 ## 빠른 시작
@@ -65,14 +67,13 @@ export AZURE_OPENAI_API_KEY="xxx"
 
 ### Step 0: 부트스트랩 (`step0_bootstrap.sh`)
 
-```
-openai/gdpval  ──duplicate──▶  SUBMISSION_REPO_ID (HF)
-                                    │
-                                    ▼ snapshot_download
-                             data/gdpval-local/
-                             ├── data/train-*.parquet
-                             ├── reference_files/**
-                             └── deliverable_files/     (비어 있음)
+```mermaid
+flowchart LR
+    src["openai/gdpval"] -->|duplicate| hf["SUBMISSION_REPO_ID (HF)"]
+    hf -->|snapshot_download| snap["data/gdpval-local/"]
+    snap --> parquet["data/train-*.parquet"]
+    snap --> refs["reference_files/**"]
+    snap --> out["deliverable_files/ (비어 있음)"]
 ```
 
 - HF에 `SUBMISSION_REPO_ID`가 없으면 `openai/gdpval`을 duplicate
@@ -205,103 +206,40 @@ Responses API를 지원하지 않는 프로바이더(예: Anthropic)용.
 
 ## 프로젝트 구조
 
-```
-batch-runner/
-├── step0_bootstrap.sh           # HF 레포 부트스트랩
-├── step1_prepare_tasks.py/sh    # YAML → 태스크 목록
-├── step2_run_inference.py/sh    # LLM 추론 (이어하기 지원)
-├── step3_format_results.py/sh   # JSON + Markdown 리포트
-├── step4_fill_parquet.py/sh     # Parquet 병합
-├── step5_validate.py/sh         # 업로드 전 검증
-├── step6_report.py/sh           # 실험 리포트 생성 (MD + HTML + JSON)
-├── step7_upload_hf.sh           # HuggingFace 업로드
-│
-├── core/
-│   ├── config.py                # 중앙 상수 및 경로
-│   ├── experiment_config.py     # YAML → ExperimentConfig 데이터클래스
-│   ├── data_loader.py           # HuggingFace 데이터셋 로더
-│   ├── domain_filter.py         # 산업/직업별 필터링
-│   ├── prompt_builder.py        # 프롬프트 프리셋 및 빌더
-│   ├── prompt_loader.py         # YAML 프롬프트 템플릿 로더
-│   ├── llm_client.py            # 프로바이더 무관 LLM 클라이언트
-│   ├── executor.py              # 모드 디스패처 (code_interpreter/subprocess/json_renderer)
-│   ├── code_interpreter.py      # Responses API + Code Interpreter 러너
-│   ├── subprocess_runner.py     # 코드 생성 + 안전한 subprocess 러너
-│   ├── json_renderer.py         # JSON 스펙 + 고정 렌더러
-│   ├── result_collector.py      # 응답 수집 및 검증
-│   ├── result_formatter.py      # JSON/Markdown 포맷팅
-│   ├── repo_bootstrapper.py     # HF 레포 복제
-│   ├── hf_uploader.py           # HuggingFace 업로드 로직
-│   ├── needs_files.py           # 파일 산출물 감지
-│   ├── file_reader.py           # 참조 파일 리더
-│   ├── file_preview.py          # 파일 내용 미리보기
-│   └── evals_submitter.py       # OpenAI Evals 제출
-│
-├── experiments/                 # 실험 YAML 설정
-│   ├── exp001_GPT52Chat_baseline.yaml
-│   ├── exp002_single_baseline.yaml
-│   └── exp999_smoke_baseline_sample.yaml
-│
-├── prompts/                     # YAML 프롬프트 템플릿
-│   ├── code_interpreter_occupation_codegen.yaml
-│   └── subprocess_occupation_codegen.yaml
-│
-├── tests/                       # 단위 + 통합 테스트
-│   ├── test_code_interpreter.py
-│   ├── test_data_loader.py
-│   ├── test_domain_filter.py
-│   ├── test_executor.py
-│   ├── test_experiment_config.py
-│   ├── test_llm_client.py
-│   ├── test_prompt_builder.py
-│   ├── test_result_collector.py
-│   ├── test_result_formatter.py
-│   ├── test_subprocess_runner.py
-│   ├── test_json_renderer.py
-│   ├── test_hf_uploader.py
-│   └── ...
-│
-├── workspace/                   # 중간 산출물 (gitignored)
-│   ├── step1_tasks_prepared.json
-│   ├── step2_inference_progress.json
-│   └── step2_inference_results.json
-│
-└── results/                     # 실험 결과 (JSON + Markdown)
-    └── <experiment_id>/
-        └── report/              # Step 6에서 생성
-            ├── report_data.json
-            ├── report.md
-            └── report.html
+```mermaid
+flowchart TB
+    root["batch-runner/"]
+    steps["step0-step7 스크립트"]
+    core["core/<br/>config, llm_client, executor, formatter, uploader"]
+    experiments["experiments/<br/>YAML 실험 설정"]
+    prompts["prompts/<br/>프롬프트 템플릿"]
+    tests["tests/<br/>단위 + 통합 테스트"]
+    workspace["workspace/<br/>step1/step2 중간 JSON 산출물"]
+    results["results/{experiment_id}/report/<br/>report_data.json, report.md, report.html"]
+
+    root --> steps
+    root --> core
+    root --> experiments
+    root --> prompts
+    root --> tests
+    root --> workspace
+    root --> results
 ```
 
 ## 데이터 흐름
 
 각 단계는 `workspace/`의 JSON 파일에서 읽으며, 이전 Python 객체가 아닌 파일 기반으로 동작합니다. 각 단계는 독립적으로 재시작 가능합니다.
 
-```
-YAML 설정
-    │
-    ▼
-Step 1 → workspace/step1_tasks_prepared.json
-    │
-    ▼
-Step 2 → workspace/step2_inference_progress.json  (증분, 이어하기 가능)
-       → workspace/step2_inference_results.json   (최종)
-    │
-    ▼
-Step 3 → results/<exp_id>/{json, md}
-    │
-    ▼
-Step 4 → workspace/upload/data/train-*.parquet
-    │
-    ▼
-Step 5 → 유효성 검증 (통과/실패)
-    │
-    ▼
-Step 6 → results/<experiment_id>/report/{report_data.json, report.md, report.html}
-    │
-    ▼
-Step 7 → HuggingFace Hub
+```mermaid
+flowchart TB
+    cfg["YAML 설정"] --> s1["Step 1 -> workspace/step1_tasks_prepared.json"]
+    s1 --> s2p["Step 2 진행 -> workspace/step2_inference_progress.json"]
+    s2p --> s2f["Step 2 최종 -> workspace/step2_inference_results.json"]
+    s2f --> s3["Step 3 -> results/{exp_id}/{json,md}"]
+    s3 --> s4["Step 4 -> workspace/upload/data/train-*.parquet"]
+    s4 --> s5["Step 5 -> 유효성 검증 (통과/실패)"]
+    s5 --> s6["Step 6 -> results/{experiment_id}/report/"]
+    s6 --> s7["Step 7 -> HuggingFace Hub"]
 ```
 
 ## 테스트
