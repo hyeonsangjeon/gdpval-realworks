@@ -32,7 +32,7 @@ export function useExperiments() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}generated/experiments-index.json`)
+    fetch(`${import.meta.env.BASE_URL}generated/experiments-index.json?t=${Date.now()}`)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to fetch experiments: ${res.status}`)
         return res.json() as Promise<ExperimentsData>

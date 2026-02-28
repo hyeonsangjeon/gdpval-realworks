@@ -38,7 +38,7 @@ export function useGrades() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}generated/grades-index.json`)
+    fetch(`${import.meta.env.BASE_URL}generated/grades-index.json?t=${Date.now()}`)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to fetch grades: ${res.status}`)
         return res.json() as Promise<GradeResult[]>
