@@ -73,6 +73,18 @@ def sample_config_dict():
             "submit_to_evals": False,
             "save_path": "results/exp001",
         },
+        "execution": {
+            "mode": "subprocess",
+            "score_type": "tool_assisted",
+            "max_retries": 5,
+            "resume_max_rounds": 1,
+            "install_libreoffice": True,
+            "tokens": {
+                "code_generation": 12000,
+                "qa_check": 3000,
+                "json_render": 7000,
+            },
+        },
     }
 
 
@@ -175,6 +187,16 @@ class TestExperimentConfigFromDict:
         assert config.output.publish_to_hf is False
         assert config.output.submit_to_evals is False
         assert config.output.save_path == "results/exp001"
+
+    def test_from_dict_execution_tokens(self, sample_config_dict):
+        """Test execution.tokens parsing"""
+        config = ExperimentConfig.from_dict(sample_config_dict)
+        assert config.execution.mode == "subprocess"
+        assert config.execution.max_retries == 5
+        assert config.execution.resume_max_rounds == 1
+        assert config.execution.tokens["code_generation"] == 12000
+        assert config.execution.tokens["qa_check"] == 3000
+        assert config.execution.tokens["json_render"] == 7000
 
 
 class TestExperimentConfigFromYaml:

@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
 
+from core.config import DEFAULT_TOKENS
 from core.subprocess_runner import SubprocessRunner
 
 
@@ -23,6 +24,13 @@ def subprocess_runner(mock_llm_client):
 def test_subprocess_runner_initialization(subprocess_runner):
     """Test SubprocessRunner initializes with llm_client"""
     assert subprocess_runner.llm_client is not None
+    assert subprocess_runner.max_completion_tokens == DEFAULT_TOKENS["code_generation"]
+
+
+def test_subprocess_runner_token_override(mock_llm_client):
+    """Custom max_completion_tokens should override default"""
+    runner = SubprocessRunner(mock_llm_client, max_completion_tokens=2222)
+    assert runner.max_completion_tokens == 2222
 
 
 def test_extract_code_python_block(subprocess_runner):

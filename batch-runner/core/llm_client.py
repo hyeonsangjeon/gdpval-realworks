@@ -8,7 +8,7 @@ from core.config import (
     DEFAULT_MODEL,
     DEFAULT_DEPLOYMENT,
     DEFAULT_API_VERSION,
-    DEFAULT_MAX_COMPLETION_TOKENS,
+    DEFAULT_TOKENS,
 )
 
 
@@ -66,7 +66,7 @@ class AnthropicClient:
         self,
         model: str,
         messages: list[dict],
-        max_tokens: int = DEFAULT_MAX_COMPLETION_TOKENS,
+        max_tokens: int = DEFAULT_TOKENS["code_generation"],
         **kwargs,
     ) -> NormalizedResponse:
         """Call Anthropic API with OpenAI-style messages."""
@@ -189,7 +189,7 @@ def complete(
     client,
     model: str,
     messages: list[dict],
-    max_completion_tokens: int = DEFAULT_MAX_COMPLETION_TOKENS,
+    max_completion_tokens: int = DEFAULT_TOKENS["code_generation"],
     **kwargs,
 ) -> tuple:
     """Provider-agnostic chat completion with latency measurement.

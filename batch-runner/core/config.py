@@ -123,4 +123,14 @@ DEFAULT_MODEL = "gpt-5.2-chat"
 DEFAULT_DEPLOYMENT = "gpt-5.2-chat"
 DEFAULT_ENDPOINT = "https://dlstmvprtus-wingnut0310-ai.openai.azure.com/"
 DEFAULT_API_VERSION = "2025-04-01-preview"
-DEFAULT_MAX_COMPLETION_TOKENS = 16384
+
+# ─── Token Limits ──────────────────────────────────────────────────────────
+
+# YAML execution.tokens가 없을 때 사용하는 기본 토큰 한도
+DEFAULT_TOKENS = {
+    "code_generation": 16384,  # subprocess_runner
+    "qa_check": 4096,          # step2 self-QA
+    "json_render": 8000,       # json_renderer
+}
+
+# NOTE: Legacy aliases removed — use DEFAULT_TOKENS["code_generation"] etc. directly

@@ -31,34 +31,33 @@ def test_code_interpreter_initialization_with_params():
 
 @patch("core.code_interpreter.AzureOpenAI")
 def test_run_mock_success_via_outputs(mock_azure_openai):
-    """Test run method with mocked successful response using outputs field"""
+    """Test run with image-type output (Strategy 1: code_interpreter_call.outputs)"""
     mock_client = MagicMock()
     mock_azure_openai.return_value = mock_client
 
-    # Mock file inside outputs
-    mock_output_file = Mock()
-    mock_output_file.file_id = "file_123"
-    mock_output_file.filename = "output.xlsx"
-
-    mock_files_output = Mock()
-    mock_files_output.type = "files"
-    mock_files_output.files = [mock_output_file]
+    # Responses API outputs only contains "logs" and "image" types.
+    # Non-image files are retrieved via container scan (Strategy 3).
+    mock_image_output = Mock()
+    mock_image_output.type = "image"
+    mock_image_output.file_id = "file_123"
+    mock_image_output.filename = "chart.png"
 
     # Mock code_interpreter_call output item with outputs
     mock_ci_call = Mock()
     mock_ci_call.type = "code_interpreter_call"
     mock_ci_call.container_id = "cntr_abc123"
-    mock_ci_call.outputs = [mock_files_output]
+    mock_ci_call.outputs = [mock_image_output]
 
     mock_response = Mock()
     mock_response.output = [mock_ci_call]
     mock_response.output_text = "Task completed successfully"
+    mock_response.container_id = None  # no response-level container_id
 
     mock_client.responses.create.return_value = mock_response
 
     # Mock file content download via container API
     mock_content = Mock()
-    mock_content.read.return_value = b"fake excel content"
+    mock_content.read.return_value = b"fake png content"
     mock_client.containers.files.content.retrieve.return_value = mock_content
 
     runner = CodeInterpreterRunner(
@@ -67,15 +66,15 @@ def test_run_mock_success_via_outputs(mock_azure_openai):
     )
 
     result = runner.run(
-        task_prompt="Create a spreadsheet",
+        task_prompt="Create a chart",
         model="gpt-5.2-chat",
     )
 
     assert result["success"] is True
     assert result["text"] == "Task completed successfully"
     assert len(result["files"]) == 1
-    assert result["files"][0]["filename"] == "output.xlsx"
-    assert result["files"][0]["content"] == b"fake excel content"
+    assert result["files"][0]["filename"] == "chart.png"
+    assert result["files"][0]["content"] == b"fake png content"
 
 
 @patch("core.code_interpreter.AzureOpenAI")

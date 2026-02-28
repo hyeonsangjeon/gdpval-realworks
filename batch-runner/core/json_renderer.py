@@ -21,6 +21,7 @@ import io
 import re
 from typing import Optional
 
+from core.config import DEFAULT_TOKENS
 from core.llm_client import complete
 
 
@@ -108,14 +109,20 @@ TASK:
 OUTPUT: Only JSON in ```json``` blocks, no explanations.
 """
 
-    def __init__(self, llm_client):
+    def __init__(self, llm_client, max_completion_tokens: Optional[int] = None):
         """
         Initialize JSON renderer with LLM client.
 
         Args:
             llm_client: AzureOpenAI client instance for JSON spec generation
+            max_completion_tokens: Completion token cap override
         """
         self.llm_client = llm_client
+        self.max_completion_tokens = (
+            max_completion_tokens
+            if max_completion_tokens is not None
+            else DEFAULT_TOKENS["json_render"]
+        )
 
     def run(self, task_prompt: str, model: str) -> dict:
         """
@@ -145,7 +152,7 @@ OUTPUT: Only JSON in ```json``` blocks, no explanations.
                 client=self.llm_client,
                 model=model,
                 messages=messages,
-                max_completion_tokens=8000
+                max_completion_tokens=self.max_completion_tokens
             )
 
             response_text = response.choices[0].message.content

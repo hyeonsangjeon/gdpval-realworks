@@ -16,8 +16,10 @@ Usage:
 
 import yaml
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Literal
+
+from core.config import DEFAULT_TOKENS
 
 
 @dataclass
@@ -91,6 +93,7 @@ class ExecutionConfig:
     max_retries: int = 3           # 태스크 내 인프라 리트라이
     resume_max_rounds: int = 3     # progress.json error 태스크 자동 재실행 라운드
     install_libreoffice: bool = False  # LibreOffice + Noto Sans 설치 (Elicit용)
+    tokens: Dict[str, int] = field(default_factory=lambda: dict(DEFAULT_TOKENS))
 
 
 class ExperimentConfig:
@@ -204,12 +207,27 @@ class ExperimentConfig:
 
         # Parse execution (Phase 5-3)
         execution_data = data.get("execution", {})
+        tokens_data = execution_data.get("tokens", {})
+        execution_tokens = dict(DEFAULT_TOKENS)
+        if isinstance(tokens_data, dict):
+            for key in ("code_generation", "qa_check", "json_render"):
+                value = tokens_data.get(key)
+                if value is None:
+                    continue
+                try:
+                    parsed = int(value)
+                    if parsed > 0:
+                        execution_tokens[key] = parsed
+                except (TypeError, ValueError):
+                    continue
+
         execution = ExecutionConfig(
             mode=execution_data.get("mode", "subprocess"),
             score_type=execution_data.get("score_type", "tool_assisted"),
             max_retries=execution_data.get("max_retries", 3),
             resume_max_rounds=execution_data.get("resume_max_rounds", 3),
             install_libreoffice=execution_data.get("install_libreoffice", False),
+            tokens=execution_tokens,
         )
 
         return cls(
@@ -307,6 +325,8 @@ class ExperimentConfig:
                 "score_type": self.execution.score_type,
                 "max_retries": self.execution.max_retries,
                 "resume_max_rounds": self.execution.resume_max_rounds,
+                "install_libreoffice": self.execution.install_libreoffice,
+                "tokens": dict(self.execution.tokens),
             },
         }
 

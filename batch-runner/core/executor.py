@@ -10,6 +10,7 @@ Selects and delegates to appropriate runner based on execution mode:
 from typing import Literal, Optional
 
 from core.code_interpreter import CodeInterpreterRunner
+from core.config import DEFAULT_TOKENS
 from core.subprocess_runner import SubprocessRunner
 from core.json_renderer import JsonRenderer
 
@@ -26,7 +27,8 @@ class TaskExecutor:
         llm_client=None,
         api_key: Optional[str] = None,
         endpoint: Optional[str] = None,
-        prompt_name: Optional[str] = None
+        prompt_name: Optional[str] = None,
+        tokens: Optional[dict] = None,
     ):
         """
         Initialize executor with specified mode.
@@ -37,11 +39,15 @@ class TaskExecutor:
             api_key: Azure OpenAI API key (optional, for code_interpreter)
             endpoint: Azure OpenAI endpoint (optional, for code_interpreter)
             prompt_name: Prompt YAML name for subprocess mode (default: subprocess_occupation_codegen)
+            tokens: Optional token limit overrides
 
         Raises:
             ValueError: If required parameters are missing for the selected mode
         """
         self.mode = mode
+        self.tokens = dict(DEFAULT_TOKENS)
+        if isinstance(tokens, dict):
+            self.tokens.update({k: v for k, v in tokens.items() if v is not None})
 
         if mode == "code_interpreter":
             # Code Interpreter uses its own client
@@ -49,6 +55,7 @@ class TaskExecutor:
                 api_key=api_key,
                 endpoint=endpoint,
                 prompt_name=prompt_name,
+                max_completion_tokens=self.tokens.get("code_generation"),
             )
 
         elif mode == "subprocess":
@@ -57,12 +64,16 @@ class TaskExecutor:
             self.runner = SubprocessRunner(
                 llm_client,
                 prompt_name=prompt_name or SubprocessRunner.DEFAULT_PROMPT,
+                max_completion_tokens=self.tokens.get("code_generation"),
             )
 
         elif mode == "json_renderer":
             if llm_client is None:
                 raise ValueError("json_renderer mode requires llm_client")
-            self.runner = JsonRenderer(llm_client)
+            self.runner = JsonRenderer(
+                llm_client,
+                max_completion_tokens=self.tokens.get("json_render"),
+            )
 
         else:
             raise ValueError(f"Unknown execution mode: {mode}")

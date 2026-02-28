@@ -4,6 +4,7 @@ import json
 import pytest
 from unittest.mock import Mock, MagicMock
 
+from core.config import DEFAULT_TOKENS
 from core.json_renderer import JsonRenderer
 
 
@@ -23,6 +24,13 @@ def json_renderer(mock_llm_client):
 def test_json_renderer_initialization(json_renderer):
     """Test JsonRenderer initializes with llm_client"""
     assert json_renderer.llm_client is not None
+    assert json_renderer.max_completion_tokens == DEFAULT_TOKENS["json_render"]
+
+
+def test_json_renderer_token_override(mock_llm_client):
+    """Custom max_completion_tokens should override default"""
+    renderer = JsonRenderer(mock_llm_client, max_completion_tokens=5555)
+    assert renderer.max_completion_tokens == 5555
 
 
 def test_extract_json_from_code_block(json_renderer):

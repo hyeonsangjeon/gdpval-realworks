@@ -113,6 +113,7 @@ def prepare_tasks(config_path: str) -> dict:
             "mode": config.execution.mode,
             "max_retries": config.execution.max_retries,
             "resume_max_rounds": config.execution.resume_max_rounds,
+            "tokens": dict(config.execution.tokens),
         },
         "total_tasks": len(task_list),
         "needs_files_count": sum(1 for t in task_list if t["needs_files"]),

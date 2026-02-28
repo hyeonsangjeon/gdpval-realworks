@@ -1,7 +1,7 @@
 """Tests for core/executor.py"""
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock, MagicMock, patch
 
 from core.executor import TaskExecutor, ExecutionMode
 
@@ -147,3 +147,37 @@ def test_executor_execute_error_handling():
     assert result["success"] is False
     assert "Test error" in result["error"]
     assert result["files"] == []
+
+
+def test_executor_subprocess_passes_token_override():
+    """TaskExecutor should pass code_generation token to SubprocessRunner"""
+    mock_client = Mock()
+    with patch("core.executor.SubprocessRunner") as mock_runner_cls:
+        mock_runner = Mock()
+        mock_runner_cls.return_value = mock_runner
+
+        TaskExecutor(
+            mode="subprocess",
+            llm_client=mock_client,
+            tokens={"code_generation": 12345},
+        )
+
+        kwargs = mock_runner_cls.call_args.kwargs
+        assert kwargs["max_completion_tokens"] == 12345
+
+
+def test_executor_json_renderer_passes_token_override():
+    """TaskExecutor should pass json_render token to JsonRenderer"""
+    mock_client = Mock()
+    with patch("core.executor.JsonRenderer") as mock_runner_cls:
+        mock_runner = Mock()
+        mock_runner_cls.return_value = mock_runner
+
+        TaskExecutor(
+            mode="json_renderer",
+            llm_client=mock_client,
+            tokens={"json_render": 6789},
+        )
+
+        kwargs = mock_runner_cls.call_args.kwargs
+        assert kwargs["max_completion_tokens"] == 6789

@@ -24,6 +24,7 @@ from typing import Optional
 
 from openai import AzureOpenAI
 
+from core.config import DEFAULT_TOKENS
 from core.prompt_loader import load_prompt, render_prompt
 from core.file_preview import build_file_structure_info
 
@@ -39,6 +40,7 @@ class CodeInterpreterRunner:
         endpoint: Optional[str] = None,
         api_version: str = "2025-03-01-preview",
         prompt_name: Optional[str] = None,
+        max_completion_tokens: Optional[int] = None,
     ):
         self.client = AzureOpenAI(
             api_key=api_key or os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY"),
@@ -49,6 +51,12 @@ class CodeInterpreterRunner:
         self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
         # Track uploaded file IDs to distinguish input vs output
         self._uploaded_file_ids: set = set()
+        # Token limit for Responses API (max_output_tokens)
+        self.max_completion_tokens = (
+            max_completion_tokens
+            if max_completion_tokens is not None
+            else DEFAULT_TOKENS["code_generation"]
+        )
 
     # ── public ─────────────────────────────────────────────────────────
 
@@ -110,6 +118,7 @@ class CodeInterpreterRunner:
                     "type": "code_interpreter",
                     "container": container_cfg,
                 }],
+                max_output_tokens=self.max_completion_tokens,
                 include=["code_interpreter_call.outputs"],
             )
 

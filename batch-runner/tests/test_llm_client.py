@@ -16,7 +16,7 @@ from core.config import (
     DEFAULT_ENDPOINT,
     DEFAULT_MODEL,
     DEFAULT_API_VERSION,
-    DEFAULT_MAX_COMPLETION_TOKENS,
+    DEFAULT_TOKENS,
 )
 
 
@@ -57,7 +57,7 @@ class TestDefaults:
         assert DEFAULT_API_VERSION == "2025-04-01-preview"
 
     def test_default_max_tokens(self):
-        assert DEFAULT_MAX_COMPLETION_TOKENS == 16384
+        assert DEFAULT_TOKENS["code_generation"] == 16384
 
 
 # ─── create_client Tests ─────────────────────────────────────────────────

@@ -1,0 +1,146 @@
+# Experiment Configuration
+# Lightweight Elicit + YAML-driven 16k token budget
+# Compare with exp005 (elicit v2, fixed 4k behavior before TASK17)
+# If condition_b is absent, automatically runs as Single Test 
+
+experiment:
+  id: "exp006_GPT52Chat_token16k_lite_elicit"
+  name: "GPT-5.2 Chat Lightweight Elicit + 16k Tokens — subprocess (Full 220 tasks)"
+  description: "Lightweight elicit prompt with YAML token control (code=16384). Built to reduce truncation and CONFIDENCE code-block errors seen in exp005."
+  author: "Hyeonsang Jeon"
+  created_at: "2026-02-28"
+
+# Variable control
+control:
+  fixed:
+    - model
+    - tasks
+    - temperature
+  changed:
+    - prompt_strategy
+
+# Data filter
+data:
+  source: "HyeonSang/exp006_GPT52Chat_token16k_lite_elicit"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: null
+
+# Condition A: Lightweight Elicit (no condition_b → Single Test)
+condition_a:
+  name: "Lightweight Elicit 16k"
+  model:
+    provider: "azure" #"anthropic", "azure", "openai", "custom"
+    deployment: "gpt-5.2-chat"
+    temperature: 0.0
+    seed: 42
+  prompt:
+    system: |
+      You are a helpful assistant that completes professional tasks.
+      When the task requires creating files (e.g., Excel, Word, PDF, PowerPoint),
+      write Python code that generates those files and save them to the current directory.
+      Use libraries such as openpyxl, python-docx, reportlab, python-pptx, and Pillow.
+      Always produce complete, runnable code.
+    prefix: null
+    body: null
+    suffix: |
+      If the task requires creating deliverable files (documents, spreadsheets,
+      presentations, reports, etc.), you MUST use Python code to generate the
+      actual file(s) and save them to the current directory.
+      Do NOT just describe what you would create — actually execute code to produce
+      downloadable files. The task is NOT complete unless the files are saved.
+
+      In your text response, do NOT include any file download links or sandbox URLs
+      (e.g. "[Download ...](sandbox:/mnt/data/...)" or similar).
+      Only provide a plain-text summary of what was produced.
+
+      Special characters
+      - Never use the character ‑ (U+2011), since it will render poorly on some people's computers. Instead, always use - (U+002D) instead.
+      - Avoid emojis, nonstandard bullet points, and other special characters unless there is an extremely good reason to use them, since these render poorly on some people's computers.
+
+      Graphics embedded within PDFs/slides
+      - Make sure that any diagrams or plots are large enough to be legible (though not so large that they are ugly or cut off). In most cases they should be at least half the page width.
+      - Plots and charts to visualize data are good. Simple graphics (like a flowchart with arrows) are good. But complicated visuals constructed by overlaying shapes into an image often appear unprofessional.
+
+      PDFs
+      - Always use LibreOffice to create the PDF (it must be LibreOffice! If LibreOffice is not installed, you can install it yourself). Other libraries sometimes show weird artifacts on some computers.
+
+      Fonts
+      - Always use fonts which are available across all platforms. We recommend Noto Sans / Noto Serif unless there is an extremely good reason to use something else.
+      - If you must use another font, embed the font in the pptx/word/etc doc.
+
+      Deliverable text
+      - Do not link to submitted files in the deliverable text (links are not supported on the interface where these will be viewed).
+      - Ideal deliverable text is concise and to the point, without any unnecessary fluff. 4 sentences max.
+      - Any deliverables the user asked for should be in files in the container, NOT purely in the deliverable text.
+      - If a portion of the task was unsolvable (for instance, because internet was not available), mention this in the deliverable text.
+      - Your submission should be complete and self-contained. Even if you are unable to fully complete the task due to limitations in the environment, produce as close to a complete solution as possible.
+
+      Verbosity
+      - Always be clear and comprehensive, but avoid extra verbosity when possible.
+
+      Filetypes
+      - If the prompt does not request a specific filetype, use standard filetypes like PDF, PPTX, DOCX, XLSX, MP4, ZIP, etc.
+
+      Video files (mp4, mov)
+      - Extract a string of images from the video files and check the images to see whether the visual elements are corrupted.
+
+      Lightweight mandatory checks
+      - Before submitting, validate outputs in a headless-safe way using Python.
+      - Do NOT spend budget on PNG conversion/display loops unless the user explicitly requests image QA artifacts.
+
+      STEP 1: Programmatic formatting checks. For visual files (pptx/pdf/docx/xlsx), run quick checks for blank pages, obvious truncation, and unreadably small content.
+      STEP 2: Summarize the task deliverable requirements, then confirm each requirement is satisfied by your produced files.
+      STEP 3: Right before submitting, verify the final deliverable set by opening each output file with Python libraries and checking for corruption.
+
+      If checks reveal issues, fix and re-check before final response.
+
+      Finally - on the last line of your OUTPUT TEXT (not inside any Python code block), add CONFIDENCE[XX], where XX is an integer between 0 and 100 inclusive.
+
+      Before writing any code, ALWAYS inspect the actual structure of any
+      reference files first (df.columns, df.dtypes, df.head()).
+      Never hardcode column names or assume data types.
+
+  # Self-QA: LLM inspects its own output
+  qa:
+    enabled: true
+    max_retries: 1              # max regeneration attempts on QA failure
+    model: null                 # null = same model as generation
+    min_score: 5                # scores below this fail QA (1-10)
+    prompt: |
+      You are a strict QA inspector for professional deliverables.
+
+      ## Original Task
+      {instruction}
+
+      ## Generated Output
+      - Text response: {deliverable_text}
+      - Files produced: {deliverable_files}
+
+      ## Inspection Criteria
+      1. Does the output address ALL requirements in the original task?
+      2. Are all required files produced with correct types and content?
+      3. Is the text response complete and professional?
+      4. Are there any obvious errors, missing elements, or placeholder content?
+
+      ## Response Format (JSON only)
+      ```json
+      {{
+        "passed": true,
+        "score": 8,
+        "issues": [],
+        "suggestion": ""
+      }}
+      ```
+
+# Execution settings
+execution:
+  mode: "subprocess"          # code_interpreter | subprocess | json_renderer
+  install_libreoffice: true    # LibreOffice + Noto Sans 폰트 설치 (Elicit용)
+  tokens:
+    code_generation: 16384
+    qa_check: 4096
+    json_render: 8000
+  max_retries: 5               # infra retries per task (API errors, timeouts, Python execution errors)
+  resume_max_rounds: 1         # auto re-run rounds for error tasks in progress.json (0 = no resume)

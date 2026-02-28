@@ -34,7 +34,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 
-from core.config import WORKSPACE_DIR, UPLOAD_DIR, DELIVERABLE_DIR, DEFAULT_LOCAL_PATH
+from core.config import (
+    WORKSPACE_DIR,
+    UPLOAD_DIR,
+    DELIVERABLE_DIR,
+    DEFAULT_LOCAL_PATH,
+    DEFAULT_TOKENS,
+)
 from core.data_loader import GDPValTask
 from core.executor import TaskExecutor
 from core.file_preview import generate_all_previews
@@ -52,6 +58,20 @@ _MODELS_NO_TEMPERATURE: set = set()
 
 
 # ── JSON extraction helper ─────────────────────────────────────────────────
+
+
+def _resolve_token_limit(tokens_cfg: dict, key: str, default: int) -> int:
+    """Get positive int token limit from config with safe fallback."""
+    if not isinstance(tokens_cfg, dict):
+        return default
+    value = tokens_cfg.get(key)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+        return parsed if parsed > 0 else default
+    except (TypeError, ValueError):
+        return default
 
 
 def _extract_json_from_response(raw: str) -> dict:
@@ -248,6 +268,7 @@ def _run_self_qa(
     deliverable_text: str,
     deliverable_files: list,
     client,
+    qa_max_tokens: int = DEFAULT_TOKENS["qa_check"],
 ) -> dict:
     """
     LLM이 QA 검수관 역할로 결과물 평가.
@@ -327,25 +348,22 @@ def _run_self_qa(
         {"role": "user", "content": qa_prompt},
     ]
 
-    # QA 응답은 작은 JSON이지만 잘림 방지를 위해 충분한 여유
-    QA_MAX_TOKENS = 4096
-
     try:
         # temperature=0 지원 여부를 캐시로 판단 (매번 exception 방지)
         if qa_model in _MODELS_NO_TEMPERATURE:
             response, _ = complete(client, qa_model, qa_messages,
-                                   max_completion_tokens=QA_MAX_TOKENS)
+                                   max_completion_tokens=qa_max_tokens)
         else:
             try:
                 response, _ = complete(client, qa_model, qa_messages,
                                        temperature=0,
-                                       max_completion_tokens=QA_MAX_TOKENS)
+                                       max_completion_tokens=qa_max_tokens)
             except Exception as temp_err:
                 if "temperature" in str(temp_err).lower():
                     _MODELS_NO_TEMPERATURE.add(qa_model)
                     print(f"  ℹ️  {qa_model} doesn't support temperature=0 (cached for session)")
                     response, _ = complete(client, qa_model, qa_messages,
-                                           max_completion_tokens=QA_MAX_TOKENS)
+                                           max_completion_tokens=qa_max_tokens)
                 else:
                     raise
 
@@ -793,6 +811,18 @@ def run_inference(
         max_retries = execution_cfg.get("max_retries", prepared.get("max_retries", 3))
     if resume_max_rounds is None:
         resume_max_rounds = execution_cfg.get("resume_max_rounds", 3)
+    tokens_cfg_raw = execution_cfg.get("tokens", {})
+    tokens_cfg = {
+        "code_generation": _resolve_token_limit(
+            tokens_cfg_raw, "code_generation", DEFAULT_TOKENS["code_generation"]
+        ),
+        "qa_check": _resolve_token_limit(
+            tokens_cfg_raw, "qa_check", DEFAULT_TOKENS["qa_check"]
+        ),
+        "json_render": _resolve_token_limit(
+            tokens_cfg_raw, "json_render", DEFAULT_TOKENS["json_render"]
+        ),
+    }
 
     print(f"\n{'='*60}")
     print(f"🚀 Step 2: Run Inference")
@@ -804,15 +834,19 @@ def run_inference(
     print(f"   Tasks:              {len(tasks)}")
     print(f"   Max retries:        {max_retries} (per task, infra)")
     print(f"   Resume max rounds:  {resume_max_rounds} (re-run failed tasks)")
+    print(f"   Tokens:             code={tokens_cfg['code_generation']}, "
+          f"qa={tokens_cfg['qa_check']}, render={tokens_cfg['json_render']}")
 
     # QA config
     qa_cfg = condition.get("qa", {})
     qa_enabled = qa_cfg.get("enabled", False)
     qa_max_retries = qa_cfg.get("max_retries", 2) if qa_enabled else 0
+    qa_max_tokens = tokens_cfg["qa_check"]
     if qa_enabled:
         qa_model = qa_cfg.get("model") or model
         print(f"   Self-QA:            enabled (min_score={qa_cfg.get('min_score', 6)}, "
-              f"max_retries={qa_max_retries}, model={qa_model})")
+              f"max_retries={qa_max_retries}, model={qa_model}, "
+              f"max_tokens={qa_max_tokens})")
 
     # 2. Create LLM client (provider-aware)
     provider = condition.get("model", {}).get("provider", "azure")
@@ -848,7 +882,7 @@ def run_inference(
 
     # 3. Initialize executor (no silent fallback — fail loudly)
     try:
-        executor = TaskExecutor(mode=execution_mode, llm_client=client)
+        executor = TaskExecutor(mode=execution_mode, llm_client=client, tokens=tokens_cfg)
     except Exception as e:
         print(f"❌ Executor init failed for mode '{execution_mode}': {e}")
         print(f"   Fix the issue or change execution.mode in your YAML config.")
@@ -963,6 +997,7 @@ def run_inference(
                     result.get("deliverable_text", ""),
                     result.get("deliverable_files", []),
                     client,
+                    qa_max_tokens=qa_max_tokens,
                 )
                 result["qa"] = qa_result_info
 

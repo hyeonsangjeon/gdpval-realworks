@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from core.config import SUBPROCESS_TIMEOUT
+from core.config import SUBPROCESS_TIMEOUT, DEFAULT_TOKENS
 from core.llm_client import complete
 from core.prompt_loader import load_prompt, render_prompt
 from core.file_preview import generate_all_previews, build_file_structure_info
@@ -32,17 +32,28 @@ class SubprocessRunner:
 
     DEFAULT_PROMPT = "subprocess_occupation_codegen"
 
-    def __init__(self, llm_client, prompt_name: str = DEFAULT_PROMPT):
+    def __init__(
+        self,
+        llm_client,
+        prompt_name: str = DEFAULT_PROMPT,
+        max_completion_tokens: Optional[int] = None,
+    ):
         """
         Initialize Subprocess runner with LLM client.
 
         Args:
             llm_client: AzureOpenAI client instance for code generation
             prompt_name: Name of prompt YAML file in prompts/ (without .yaml)
+            max_completion_tokens: Completion token cap override
         """
         self.llm_client = llm_client
         self.prompt_name = prompt_name
         self.prompt_data = load_prompt(prompt_name)
+        self.max_completion_tokens = (
+            max_completion_tokens
+            if max_completion_tokens is not None
+            else DEFAULT_TOKENS["code_generation"]
+        )
 
     def run(
         self,
@@ -102,11 +113,11 @@ class SubprocessRunner:
                 {"role": "user", "content": rendered["user_prompt"]}
             ]
 
-            response, latency = complete(
+            response, _ = complete(
                 client=self.llm_client,
                 model=model,
                 messages=messages,
-                max_completion_tokens=4000
+                max_completion_tokens=self.max_completion_tokens
             )
 
             response_text = response.choices[0].message.content
@@ -231,12 +242,16 @@ class SubprocessRunner:
                             except Exception as e:
                                 print(f"Warning: Failed to copy reference file {src_path}: {e}")
 
-                # Inject available files list into code
+                # Inject available files list as runtime info (top of code)
                 if copied_files:
-                    files_comment = f"# Available files in current directory: {copied_files}\n"
-                    code = files_comment + code
+                    files_header = (
+                        "import os\n"
+                        f"_AVAILABLE_FILES = {copied_files}\n"
+                        f"# Available files: {', '.join(copied_files)}\n\n"
+                    )
+                    code = files_header + code
                 else:
-                    code = "# No reference files available\n" + code
+                    code = "# No reference files available\n\n" + code
 
                 # 🔒 Security: Whitelist environment variables
                 # Use current Python's PATH so venv packages are available
