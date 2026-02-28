@@ -24,14 +24,31 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+
+    /* Dashboard theme tokens – light */
+    --dash-page: 220 20% 97%;
+    --dash-card: 0 0% 100%;
+    --dash-card-hover: 220 14% 95%;
+    --dash-card-active: 220 14% 92%;
+    --dash-border: 220 13% 90%;
+    --dash-border-subtle: 220 13% 94%;
+    --dash-sticky: 220 20% 97%;
+    --dash-modal: 0 0% 100%;
+    --dash-heading: 220 13% 10%;
+    --dash-text: 220 13% 25%;
+    --dash-text-secondary: 220 9% 42%;
+    --dash-text-muted: 220 9% 54%;
+    --dash-text-faint: 220 9% 68%;
+    --dash-chart-grid: 220 13% 90%;
+    --dash-chart-tick: 220 9% 54%;
   }
 
   .dark {
-    --background: 0 0% 3.9%;
+    --background: 240 44% 7%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 7.8%;
+    --card: 240 35% 9%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
+    --popover: 240 35% 9%;
     --popover-foreground: 0 0% 98%;
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
@@ -46,6 +63,23 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+
+    /* Dashboard theme tokens – dark */
+    --dash-page: 240 44% 7%;
+    --dash-card: 240 35% 9%;
+    --dash-card-hover: 240 28% 12%;
+    --dash-card-active: 240 28% 15%;
+    --dash-border: 240 23% 14%;
+    --dash-border-subtle: 240 23% 10%;
+    --dash-sticky: 240 36% 8%;
+    --dash-modal: 240 25% 10%;
+    --dash-heading: 0 0% 100%;
+    --dash-text: 0 0% 83%;
+    --dash-text-secondary: 0 0% 65%;
+    --dash-text-muted: 0 0% 50%;
+    --dash-text-faint: 0 0% 38%;
+    --dash-chart-grid: 0 0% 100% / 0.06;
+    --dash-chart-tick: 0 0% 40%;
   }
 }
 

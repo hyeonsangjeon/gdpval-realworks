@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
+import { ThemeProvider } from './contexts/ThemeContext'
 import Dashboard from './pages/Dashboard'
 import ExperimentDetail from './pages/ExperimentDetail'
 import GradeDetail from './pages/GradeDetail'
@@ -21,9 +22,11 @@ function AnimatedRoutes() {
 
 function App() {
   return (
-    <Router basename="/gdpval-realworks">
-      <AnimatedRoutes />
-    </Router>
+    <ThemeProvider>
+      <Router basename="/gdpval-realworks">
+        <AnimatedRoutes />
+      </Router>
+    </ThemeProvider>
   )
 }
 

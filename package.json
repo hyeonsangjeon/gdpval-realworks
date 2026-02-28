@@ -1,13 +1,13 @@
 {
   "name": "gdpval-realworks",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "aggregate": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs",
-    "predev": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs",
+    "aggregate": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-reports.mjs",
+    "predev": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-reports.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs",
+    "prebuild": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-reports.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist"

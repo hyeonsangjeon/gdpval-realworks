@@ -1,155 +1,222 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FlaskConical, TrendingUp, CheckCircle, Filter } from 'lucide-react'
-import Header from '../components/Header'
-import StatsCard from '../components/StatsCard'
-import ExperimentCard from '../components/ExperimentCard'
-import GradesSummary from '../components/GradesSummary'
-import { useExperiments } from '../hooks/useExperiments'
-import { useGrades } from '../hooks/useGrades'
+import { Github, Eye, EyeOff, BarChart3, TrendingUp, AlertTriangle, Award, Sun, Moon } from 'lucide-react'
+import ScopeBadge from '../components/ScopeBadge'
+import LeaderboardView from '../components/dashboard/LeaderboardView'
+import TrendView from '../components/dashboard/TrendView'
+import ErrorAnalysisView from '../components/dashboard/ErrorAnalysisView'
+import GradingAnalysisView from '../components/dashboard/GradingAnalysisView'
+import { useReports } from '../hooks/useReports'
+import { useTheme } from '../contexts/ThemeContext'
 
-const CATEGORIES = ['All', 'Finance', 'Legal', 'Healthcare', 'Software Engineering'] as const
-type Category = (typeof CATEGORIES)[number]
+type TabKey = 'leaderboard' | 'trend' | 'errors' | 'grading'
 
-const CATEGORY_STYLE: Record<string, { active: string; inactive: string }> = {
-  All: { active: 'bg-primary text-primary-foreground', inactive: 'bg-muted text-muted-foreground hover:bg-muted/80' },
-  Finance: { active: 'bg-blue-500 text-white', inactive: 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20' },
-  Legal: { active: 'bg-purple-500 text-white', inactive: 'bg-purple-500/10 text-purple-500 hover:bg-purple-500/20' },
-  Healthcare: { active: 'bg-emerald-500 text-white', inactive: 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' },
-  'Software Engineering': { active: 'bg-orange-500 text-white', inactive: 'bg-orange-500/10 text-orange-500 hover:bg-orange-500/20' },
-}
+const TABS: { id: TabKey; label: string; icon: React.ReactNode }[] = [
+  { id: 'leaderboard', label: 'Leaderboard', icon: <BarChart3 className="w-4 h-4" /> },
+  { id: 'trend', label: 'Trends', icon: <TrendingUp className="w-4 h-4" /> },
+  { id: 'errors', label: 'Execution Errors', icon: <AlertTriangle className="w-4 h-4" /> },
+  { id: 'grading', label: 'Grading Analysis', icon: <Award className="w-4 h-4" /> },
+]
 
-function Dashboard() {
-  const { experiments, loading, error } = useExperiments()
-  const { grades } = useGrades()
-  const [selectedCategory, setSelectedCategory] = useState<Category>('All')
+export default function Dashboard() {
+  const navigate = useNavigate()
+  const { reports, experiments, sectorMatrix, generated, loading, error } = useReports()
+  const { isDark, toggle: toggleTheme } = useTheme()
+  const [activeTab, setActiveTab] = useState<TabKey>('leaderboard')
+  const [demoMode, setDemoMode] = useState(false)
 
-  // Calculate stats based on filter
-  const isFiltered = selectedCategory !== 'All'
-  const totalExperiments = experiments.length
+  const displayReports = demoMode ? reports.filter((r) => r.meta.report_scope === 'self_assessed_pre_grading') : reports
+  const displayExperiments = demoMode
+    ? experiments.filter((e) => e.report_scope === 'self_assessed_pre_grading')
+    : experiments
 
-  const avgDelta = isFiltered
-    ? (
-        experiments.reduce((sum, exp) => sum + (exp.industry_breakdown[selectedCategory] || 0), 0) /
-        experiments.length
-      ).toFixed(1)
-    : (experiments.reduce((sum, exp) => sum + exp.delta, 0) / experiments.length).toFixed(1)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-dash-page flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block w-8 h-8 border-2 border-dash-text-faint border-t-dash-heading rounded-full animate-spin mb-4" />
+          <p className="text-dash-text-secondary">Loading experiments...</p>
+        </div>
+      </div>
+    )
+  }
 
-  const totalTasks = isFiltered ? `${selectedCategory}` : '220'
+  if (error) {
+    return (
+      <div className="min-h-screen bg-dash-page flex items-center justify-center">
+        <div className="text-center text-red-400">
+          <p className="font-semibold mb-2">Error loading reports</p>
+          <p className="text-sm text-red-300">{error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Calculate KPIs
+  const bestRate = displayExperiments.length > 0 ? Math.max(...displayExperiments.map((e) => e.success_rate_pct)) : 0
+  const bestQA = displayExperiments.length > 0 ? Math.max(...displayExperiments.map((e) => e.avg_qa_score)) : 0
+
+  const handleSelectExperiment = (shortId: string) => {
+    navigate(`/experiments/${shortId}`)
+  }
 
   return (
     <motion.div
-      className="min-h-screen bg-background"
+      className="min-h-screen bg-dash-page"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <Header />
+      {/* Header */}
+      <motion.header
+        className="border-b border-dash-border bg-dash-card/80 backdrop-blur-sm sticky top-0 z-40"
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-dash-heading">GDPVal RealWorks</h1>
+            {displayReports.length > 0 && <ScopeBadge scope={displayReports[0].meta.report_scope} />}
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-dash-border bg-dash-card hover:bg-dash-card-hover text-dash-text-secondary hover:text-dash-heading transition-all hover:scale-105"
+              title={isDark ? '라이트 모드' : '다크 모드'}
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={() => setDemoMode(!demoMode)}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dash-border bg-dash-card hover:bg-dash-card-hover text-sm text-dash-text-secondary transition-colors"
+            >
+              {demoMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              <span className="text-xs">{demoMode ? 'Demo' : 'Full'}</span>
+            </button>
+            <a
+              href="https://github.com/hyeonsangjeon/gdpval-realworks"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dash-border bg-dash-card hover:bg-dash-card-hover text-dash-text-secondary hover:text-dash-heading transition-colors"
+            >
+              <Github className="w-4 h-4" />
+              <span className="text-xs">GitHub</span>
+            </a>
+          </div>
+        </div>
+      </motion.header>
 
-      {loading && (
-        <div className="container mx-auto px-4 py-8 text-center text-muted-foreground">Loading experiments...</div>
-      )}
-      {error && (
-        <div className="container mx-auto px-4 py-8 text-center text-red-500">Error: {error}</div>
-      )}
-
-      {!loading && !error && <div className="container mx-auto px-4 py-8">
-        {/* Category Filter */}
+      {/* Main Content */}
+      <div className="max-w-[1400px] mx-auto px-6 py-8">
+        {/* Hero KPIs */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+          className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8"
+        >
+          {[
+            {
+              label: 'Best Success Rate',
+              value: `${bestRate.toFixed(1)}%`,
+              unit: 'of 220 tasks',
+            },
+            {
+              label: 'Experiments',
+              value: displayExperiments.length,
+              unit: 'total',
+            },
+            {
+              label: 'Tasks Evaluated',
+              value: displayExperiments.length > 0 ? displayExperiments[0].total_tasks : 0,
+              unit: 'per experiment',
+            },
+            {
+              label: 'Best QA Score',
+              value: bestQA.toFixed(2),
+              unit: 'out of 10',
+            },
+          ].map((kpi, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="rounded-xl bg-dash-card border border-dash-border p-5"
+            >
+              <p className="text-xs font-semibold text-dash-text-muted uppercase tracking-wider mb-2">{kpi.label}</p>
+              <p className="text-2xl font-semibold text-dash-heading font-mono mb-1">
+                {typeof kpi.value === 'number' ? kpi.value : kpi.value}
+              </p>
+              <p className="text-xs text-dash-text-faint">{kpi.unit}</p>
+            </motion.div>
+          ))}
+        </motion.div>
+
+        {/* Tabs */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
           className="mb-6"
         >
-          <div className="flex items-center gap-2 mb-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Filter by Category</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((cat) => {
-              const isActive = selectedCategory === cat
-              const style = CATEGORY_STYLE[cat]
-              return (
-                <motion.button
-                  key={cat}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                    isActive ? style.active : style.inactive
-                  }`}
-                >
-                  {cat === 'All' ? 'All (220 tasks)' : cat}
-                </motion.button>
-              )
-            })}
+          <div className="flex gap-2 border-b border-dash-border pb-4">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
+                  activeTab === tab.id
+                    ? 'border-dash-border bg-dash-card-active text-dash-heading'
+                    : 'border-transparent text-dash-text-muted hover:text-dash-text'
+                }`}
+              >
+                {tab.icon}
+                <span className="text-sm font-medium">{tab.label}</span>
+              </button>
+            ))}
           </div>
         </motion.div>
 
-        {/* Stats Cards */}
+        {/* Tab Content */}
         <AnimatePresence mode="wait">
-          <motion.div
-            key={selectedCategory}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
-          >
-            <StatsCard
-              title="Total Experiments"
-              value={totalExperiments}
-              icon={FlaskConical}
-              description="Benchmark comparisons"
-              delay={0}
-            />
-            <StatsCard
-              title={isFiltered ? `Avg Δ (${selectedCategory})` : 'Average Δ Win Rate'}
-              value={`+${avgDelta}%p`}
-              icon={TrendingUp}
-              description={isFiltered ? `${selectedCategory} category only` : 'Across all experiments'}
-              delay={0.1}
-            />
-            <StatsCard
-              title="Scope"
-              value={totalTasks}
-              icon={CheckCircle}
-              description={isFiltered ? 'Filtered category' : 'GDPVal benchmark (all tasks)'}
-              delay={0.2}
-            />
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Experiments List */}
-        <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-foreground mb-4">
-            Experiments
-            {isFiltered && (
-              <span className="text-base font-normal text-muted-foreground ml-2">
-                — {selectedCategory} results
-              </span>
+          <div key={activeTab}>
+            {activeTab === 'leaderboard' && (
+              <LeaderboardView
+                experiments={displayExperiments}
+                sectorMatrix={sectorMatrix}
+                onSelectExperiment={handleSelectExperiment}
+              />
             )}
-          </h2>
-          {experiments.map((experiment, index) => (
-            <ExperimentCard
-              key={experiment.id}
-              experiment={experiment}
-              index={index}
-              highlightCategory={isFiltered ? selectedCategory : undefined}
-            />
-          ))}
-        </div>
-
-        {/* Grading Results */}
-        {grades.length > 0 && (
-          <div className="mt-10">
-            <GradesSummary grades={grades} />
+            {activeTab === 'trend' && <TrendView experiments={displayExperiments} />}
+            {activeTab === 'errors' && <ErrorAnalysisView experiments={displayExperiments} reports={displayReports} />}
+            {activeTab === 'grading' && <GradingAnalysisView />}
           </div>
-        )}
-      </div>}
+        </AnimatePresence>
+      </div>
+
+      {/* Footer */}
+      <motion.footer
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="border-t border-dash-border bg-dash-card/50 mt-16"
+      >
+        <div className="max-w-[1400px] mx-auto px-6 py-6 flex items-center justify-between text-xs text-dash-text-faint">
+          <div>
+            {generated && (
+              <p>Generated {new Date(generated).toLocaleString()}</p>
+            )}
+          </div>
+          <a href="https://github.com/hyeonsangjeon/gdpval-realworks" className="hover:text-dash-text-secondary transition-colors">
+            GDPVal RealWorks • v0.2.0
+          </a>
+        </div>
+      </motion.footer>
     </motion.div>
   )
 }
-
-export default Dashboard
