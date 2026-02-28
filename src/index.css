@@ -154,4 +154,13 @@
   .glow-destructive {
     box-shadow: 0 0 20px hsl(0 84% 60% / 0.3);
   }
+
+  /* Hide scrollbar but allow scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }

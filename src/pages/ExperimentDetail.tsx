@@ -10,6 +10,7 @@ import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
 } from 'recharts'
 import { useReport } from '../hooks/useReports'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { useTheme } from '../contexts/ThemeContext'
 import ScopeBadge from '../components/ScopeBadge'
 import type { TaskResult } from '../types/report'
@@ -36,6 +37,7 @@ function ExperimentDetail() {
   const navigate = useNavigate()
   const { report, loading, error } = useReport(id)
   const { isDark, toggle: toggleTheme } = useTheme()
+  const isMobile = useIsMobile()
 
   const chartTooltipStyle = {
     background: isDark ? '#1a1a2e' : '#ffffff',
@@ -142,7 +144,7 @@ function ExperimentDetail() {
     >
       {/* Header */}
       <header className="border-b border-dash-border bg-dash-page/90 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center gap-4">
+        <div className="max-w-[1400px] mx-auto px-3 md:px-6 py-3 flex items-center gap-2 md:gap-4">
           <button
             onClick={() => navigate('/')}
             className="text-dash-text-muted hover:text-dash-heading transition p-1 rounded hover:bg-dash-card-hover"
@@ -163,7 +165,7 @@ function ExperimentDetail() {
               </span>
               {meta?.report_scope && <ScopeBadge scope={meta.report_scope} />}
             </div>
-            <p className="text-xs text-dash-text-muted mt-0.5 truncate">{meta?.experiment_name}</p>
+            <p className="text-xs text-dash-text-muted mt-0.5 truncate max-w-[150px] md:max-w-none">{meta?.experiment_name}</p>
           </div>
           <button
             onClick={toggleTheme}
@@ -172,7 +174,7 @@ function ExperimentDetail() {
           >
             {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
-          <div className="text-right text-xs text-dash-text-muted">
+          <div className="text-right text-xs text-dash-text-muted hidden md:block">
             <div>{meta?.date}</div>
             <div>{meta?.duration}</div>
           </div>
@@ -180,13 +182,13 @@ function ExperimentDetail() {
       </header>
 
       {/* Main Content */}
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+      <div className="max-w-[1400px] mx-auto px-3 md:px-6 py-4 md:py-8">
         {/* Quick Stats (6 cards) */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-8"
+          className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3 mb-6 md:mb-8"
         >
           {[
             {
@@ -234,13 +236,13 @@ function ExperimentDetail() {
           className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"
         >
           {/* Sector Bar Chart */}
-          <div className="rounded-xl bg-dash-card border border-dash-border p-4">
+          <div className="rounded-xl bg-dash-card border border-dash-border p-3 md:p-4">
             <h3 className="text-sm font-semibold text-dash-text mb-3">Success Rate by Sector</h3>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={sectorChartData} layout="vertical" margin={{ top: 5, right: 30, left: 150, bottom: 5 }}>
+              <BarChart data={sectorChartData} layout="vertical" margin={{ top: 5, right: isMobile ? 10 : 30, left: isMobile ? 5 : 150, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis type="number" tick={tickStyle} />
-                <YAxis dataKey="name" type="category" tick={tickStyle} width={140} />
+                <YAxis dataKey="name" type="category" tick={{ ...tickStyle, fontSize: isMobile ? 9 : 11 }} width={isMobile ? 100 : 140} />
                 <Tooltip contentStyle={chartTooltipStyle} />
                 <Bar dataKey="success_rate" fill="#10b981" />
               </BarChart>
@@ -288,7 +290,7 @@ function ExperimentDetail() {
                   placeholder="Search task ID, occupation..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="bg-dash-card-hover border border-dash-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-dash-text placeholder-dash-text-faint w-56 focus:outline-none"
+                  className="bg-dash-card-hover border border-dash-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-dash-text placeholder-dash-text-faint w-full md:w-56 focus:outline-none"
                 />
               </div>
               {/* Sector filter */}

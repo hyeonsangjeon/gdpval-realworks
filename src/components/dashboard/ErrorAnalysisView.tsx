@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import type { ExperimentEntry, ReportData } from '../../types/report'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { parseTraceback } from '../../utils/tracebackParser'
 
 /* ─── props ─── */
@@ -26,6 +27,7 @@ function expColor(id: string) { return EXP_COLORS[id] || '#999' }
 /* ─── COMPONENT ─── */
 export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysisViewProps) {
   const { isDark } = useTheme()
+  const isMobile = useIsMobile()
   const [expandedError, setExpandedError] = useState<string | null>(null)
 
   const chartTooltip = {
@@ -183,13 +185,13 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
 
       {/* ─── 2. Exception Type Distribution ─── */}
       {hasErrors && exceptionChartData.length > 0 && (
-        <div className="rounded-xl bg-dash-card border border-dash-border p-4">
+        <div className="rounded-xl bg-dash-card border border-dash-border p-3 md:p-4">
           <h3 className="text-sm font-semibold text-dash-text mb-4">Exception Type Distribution</h3>
           <ResponsiveContainer width="100%" height={Math.max(200, exceptionChartData.length * 36)}>
-            <BarChart data={exceptionChartData} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+            <BarChart data={exceptionChartData} layout="vertical" margin={{ top: 5, right: isMobile ? 10 : 30, left: isMobile ? 5 : 120, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
               <XAxis type="number" tick={tickStyle} allowDecimals={false} />
-              <YAxis dataKey="name" type="category" tick={tickStyle} width={110} />
+              <YAxis dataKey="name" type="category" tick={{ ...tickStyle, fontSize: isMobile ? 9 : 11 }} width={isMobile ? 80 : 110} />
               <Tooltip {...chartTooltip} />
               {sortedExps.map((exp) => (
                 <Bar key={exp.short_id} dataKey={exp.short_id} stackId="a" fill={expColor(exp.short_id)} />
@@ -201,13 +203,13 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
 
       {/* ─── 3. Sector Error Map ─── */}
       {sectorErrors.length > 0 && (
-        <div className="rounded-xl bg-dash-card border border-dash-border p-4">
+        <div className="rounded-xl bg-dash-card border border-dash-border p-3 md:p-4">
           <h3 className="text-sm font-semibold text-dash-text mb-4">Errors by Sector</h3>
-          <ResponsiveContainer width="100%" height={Math.max(180, sectorErrors.length * 36)}>
-            <BarChart data={sectorErrors} layout="vertical" margin={{ top: 5, right: 30, left: 160, bottom: 5 }}>
+          <ResponsiveContainer width="100%" height={Math.max(180, sectorErrors.length * (isMobile ? 44 : 36))}>
+            <BarChart data={sectorErrors} layout="vertical" margin={{ top: 5, right: isMobile ? 10 : 30, left: isMobile ? 5 : 160, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
               <XAxis type="number" tick={tickStyle} allowDecimals={false} />
-              <YAxis dataKey="sector" type="category" tick={tickStyle} width={150} />
+              <YAxis dataKey="sector" type="category" tick={{ ...tickStyle, fontSize: isMobile ? 9 : 11 }} width={isMobile ? 100 : 150} />
               <Tooltip {...chartTooltip} />
               {sortedExps.map((exp) => (
                 <Bar key={exp.short_id} dataKey={exp.short_id} stackId="a" fill={expColor(exp.short_id)} />

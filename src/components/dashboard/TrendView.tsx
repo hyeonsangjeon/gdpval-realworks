@@ -102,7 +102,7 @@ export default function TrendView({ experiments }: TrendViewProps) {
       className="space-y-6"
     >
       {/* 2x2 Chart Grid */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Success Rate Chart */}
         <div className="rounded-xl bg-dash-card border border-dash-border p-4">
           <h3 className="text-sm font-semibold text-dash-text mb-3">Success Rate Trend</h3>

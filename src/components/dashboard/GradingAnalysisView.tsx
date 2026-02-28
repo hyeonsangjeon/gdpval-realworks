@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import { useGrades, GradeResult } from '../../hooks/useGrades'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 /* ─── palette ─── */
 const SCORE_COLORS = {
@@ -28,6 +29,7 @@ const GRADE_EXP_COLORS = [
 export default function GradingAnalysisView() {
   const navigate = useNavigate()
   const { isDark } = useTheme()
+  const isMobile = useIsMobile()
   const { grades, loading, error } = useGrades()
 
   const chartTooltip = {
@@ -151,13 +153,13 @@ export default function GradingAnalysisView() {
 
       {/* ─── 1. Score Distribution (stacked bar — cross-experiment) ─── */}
       {distributionData.length > 1 && (
-        <div className="rounded-xl bg-dash-card border border-dash-border p-4">
+        <div className="rounded-xl bg-dash-card border border-dash-border p-3 md:p-4">
           <h3 className="text-sm font-semibold text-dash-text mb-4">Score Distribution Comparison</h3>
           <ResponsiveContainer width="100%" height={Math.max(180, distributionData.length * 50)}>
-            <BarChart data={distributionData} layout="vertical" margin={{ top: 5, right: 30, left: 140, bottom: 5 }}>
+            <BarChart data={distributionData} layout="vertical" margin={{ top: 5, right: isMobile ? 10 : 30, left: isMobile ? 5 : 140, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
               <XAxis type="number" tick={tickStyle} allowDecimals={false} />
-              <YAxis dataKey="name" type="category" tick={tickStyle} width={130} />
+              <YAxis dataKey="name" type="category" tick={{ ...tickStyle, fontSize: isMobile ? 9 : 11 }} width={isMobile ? 80 : 130} />
               <Tooltip {...chartTooltip} />
               <Bar dataKey="perfect" stackId="a" fill={SCORE_COLORS.perfect} name="Perfect (100%)" />
               <Bar dataKey="partial" stackId="a" fill={SCORE_COLORS.partial} name="Partial" />
