@@ -101,12 +101,12 @@ export default function LeaderboardView({
     [experiments]
   )
 
-  // Filtered + sorted
+  // Filtered (preserve parent sort order: date desc → duration desc)
   const filtered = useMemo(() => {
     let list = [...experiments]
     if (modelFilter !== 'all') list = list.filter((e) => e.model === modelFilter)
     if (modeFilter !== 'all') list = list.filter((e) => e.execution_mode === modeFilter)
-    return list.sort((a, b) => b.success_rate_pct - a.success_rate_pct)
+    return list
   }, [experiments, modelFilter, modeFilter])
 
   // Pagination

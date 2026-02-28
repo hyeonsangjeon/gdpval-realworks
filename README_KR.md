@@ -30,6 +30,12 @@
 
 ---
 
+> 📊 **[라이브 대시보드 → https://hyeonsangjeon.github.io/gdpval-realworks/](https://hyeonsangjeon.github.io/gdpval-realworks/)**
+>
+> Leaderboard · Trends · Execution Errors · Grading Analysis — 실험 결과를 한눈에 확인하세요.
+
+---
+
 ## 문제 인식
 
 대부분의 LLM 벤치마크는 **학술적 추론** — 수학, 코드 퍼즐, 퀴즈를 테스트합니다.  

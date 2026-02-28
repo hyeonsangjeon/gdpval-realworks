@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Github, Eye, EyeOff, BarChart3, TrendingUp, AlertTriangle, Award, Sun, Moon } from 'lucide-react'
@@ -27,9 +27,25 @@ export default function Dashboard() {
   const [demoMode, setDemoMode] = useState(false)
 
   const displayReports = demoMode ? reports.filter((r) => r.meta.report_scope === 'self_assessed_pre_grading') : reports
-  const displayExperiments = demoMode
-    ? experiments.filter((e) => e.report_scope === 'self_assessed_pre_grading')
-    : experiments
+
+  // Parse "138m 37s" → seconds for sorting
+  const parseDuration = (d: string) => {
+    const m = d.match(/(\d+)m/)
+    const s = d.match(/(\d+)s/)
+    return (m ? parseInt(m[1]) * 60 : 0) + (s ? parseInt(s[1]) : 0)
+  }
+
+  // Sort: date desc → duration desc
+  const displayExperiments = useMemo(() => {
+    const list = demoMode
+      ? experiments.filter((e) => e.report_scope === 'self_assessed_pre_grading')
+      : [...experiments]
+    return list.sort((a, b) => {
+      const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime()
+      if (dateDiff !== 0) return dateDiff
+      return parseDuration(b.duration) - parseDuration(a.duration)
+    })
+  }, [experiments, demoMode])
 
   if (loading) {
     return (

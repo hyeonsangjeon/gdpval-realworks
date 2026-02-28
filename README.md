@@ -30,6 +30,12 @@
 
 ---
 
+> 📊 **[Live Dashboard → https://hyeonsangjeon.github.io/gdpval-realworks/](https://hyeonsangjeon.github.io/gdpval-realworks/)**
+>
+> Leaderboard · Trends · Execution Errors · Grading Analysis — all in one place.
+
+---
+
 ## The Problem
 
 Most LLM benchmarks test **academic reasoning** — math, code puzzles, trivia.  
