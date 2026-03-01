@@ -16,11 +16,11 @@ import { onboarding } from '../utils/onboarding'
 
 type TabKey = 'leaderboard' | 'trend' | 'errors' | 'grading'
 
-const TABS: { id: TabKey; label: string; icon: React.ReactNode }[] = [
-  { id: 'leaderboard', label: 'Leaderboard', icon: <BarChart3 className="w-4 h-4" /> },
-  { id: 'trend', label: 'Trends', icon: <TrendingUp className="w-4 h-4" /> },
-  { id: 'errors', label: 'Execution Errors', icon: <AlertTriangle className="w-4 h-4" /> },
-  { id: 'grading', label: 'Grading Analysis', icon: <Award className="w-4 h-4" /> },
+const TABS: { id: TabKey; label: string; icon: React.ReactNode; color: string }[] = [
+  { id: 'leaderboard', label: 'Leaderboard', icon: <BarChart3 className="w-4 h-4" />, color: '#10b981' },
+  { id: 'trend', label: 'Trends', icon: <TrendingUp className="w-4 h-4" />, color: '#3b82f6' },
+  { id: 'errors', label: 'Execution Errors', icon: <AlertTriangle className="w-4 h-4" />, color: '#ef4444' },
+  { id: 'grading', label: 'Grading Analysis', icon: <Award className="w-4 h-4" />, color: '#f59e0b' },
 ]
 
 export default function Dashboard() {
@@ -161,38 +161,61 @@ export default function Dashboard() {
               value: `${bestRate.toFixed(1)}%`,
               unit: 'of 220 tasks',
               tooltip: tooltipTexts.kpi.bestSuccessRate,
+              valueColor: 'text-emerald-400',
+              accentColor: '#10b981',
+              tooltipDir: 'right' as const,
             },
             {
               label: 'Experiments',
               value: displayExperiments.length,
               unit: 'total',
               tooltip: tooltipTexts.kpi.experiments,
+              valueColor: 'text-dash-heading',
+              accentColor: '#3b82f6',
+              tooltipDir: 'right' as const,
             },
             {
               label: 'Tasks Evaluated',
               value: displayExperiments.length > 0 ? displayExperiments[0].total_tasks : 0,
               unit: 'per experiment',
               tooltip: tooltipTexts.kpi.tasksEvaluated,
+              valueColor: 'text-dash-heading',
+              accentColor: '#8b5cf6',
+              tooltipDir: 'right' as const,
             },
             {
               label: 'Best QA Score',
               value: bestQA.toFixed(2),
               unit: 'out of 10',
               tooltip: tooltipTexts.kpi.bestQaScore,
+              valueColor: 'text-amber-400',
+              accentColor: '#f59e0b',
+              tooltipDir: 'left' as const,
             },
           ].map((kpi, idx) => (
             <motion.div
               key={idx}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.05 }}
-              className="rounded-xl bg-dash-card border border-dash-border p-3 md:p-5"
+              whileHover={{ y: -2 }}
+              transition={{ delay: idx * 0.05, type: 'spring', stiffness: 400, damping: 25 }}
+              className="relative rounded-xl bg-dash-card border border-dash-border p-3 md:p-5 overflow-hidden transition-shadow duration-200"
+              style={{
+                boxShadow: isDark
+                  ? '0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04)'
+                  : '0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
+              }}
             >
+              {/* Accent bar */}
+              <div
+                className="absolute right-0 top-0 bottom-0 w-1"
+                style={{ backgroundColor: kpi.accentColor, opacity: 0.6 }}
+              />
               <p className="text-[10px] md:text-xs font-semibold text-dash-text-muted uppercase tracking-wider mb-1 md:mb-2 flex items-center gap-1">
                 {kpi.label}
-                <InfoTooltip content={kpi.tooltip} position="bottom" />
+                <InfoTooltip content={kpi.tooltip} position={kpi.tooltipDir} />
               </p>
-              <p className="text-lg md:text-2xl font-semibold text-dash-heading font-mono mb-1">
+              <p className={`text-lg md:text-2xl font-semibold font-mono mb-1 ${kpi.valueColor}`}>
                 {typeof kpi.value === 'number' ? kpi.value : kpi.value}
               </p>
               <p className="text-xs text-dash-text-faint">{kpi.unit}</p>
@@ -207,39 +230,64 @@ export default function Dashboard() {
           transition={{ duration: 0.3, delay: 0.2 }}
           className="mb-6"
         >
-          <div className="flex gap-1.5 md:gap-2 border-b border-dash-border pb-3 md:pb-4 overflow-x-auto scrollbar-hide -mx-3 px-3 md:mx-0 md:px-0">
+          <div className="flex gap-1.5 md:gap-2 border-b border-dash-border pb-0 overflow-x-auto scrollbar-hide -mx-3 px-3 md:mx-0 md:px-0">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg border transition-all whitespace-nowrap flex-shrink-0 ${
+                className={`relative inline-flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-2 md:py-2.5 rounded-t-lg transition-all whitespace-nowrap flex-shrink-0 ${
                   activeTab === tab.id
-                    ? 'border-dash-border bg-dash-card-active text-dash-heading'
-                    : 'border-transparent text-dash-text-muted hover:text-dash-text'
+                    ? 'text-dash-heading bg-dash-card/50'
+                    : 'text-dash-text-muted hover:text-dash-text hover:bg-dash-card/20'
                 }`}
               >
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{
+                    backgroundColor: tab.color,
+                    opacity: activeTab === tab.id ? 1 : 0.4,
+                  }}
+                />
                 {tab.icon}
                 <span className="text-xs md:text-sm font-medium">{tab.label}</span>
+                {activeTab === tab.id && (
+                  <motion.div
+                    layoutId="tab-accent"
+                    className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full"
+                    style={{ backgroundColor: tab.color }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
               </button>
             ))}
           </div>
         </motion.div>
 
-        {/* Tab Content */}
-        <AnimatePresence mode="wait">
-          <div key={activeTab}>
-            {activeTab === 'leaderboard' && (
-              <LeaderboardView
-                experiments={displayExperiments}
-                sectorMatrix={sectorMatrix}
-                onSelectExperiment={handleSelectExperiment}
-              />
-            )}
-            {activeTab === 'trend' && <TrendView experiments={displayExperiments} />}
-            {activeTab === 'errors' && <ErrorAnalysisView experiments={displayExperiments} reports={displayReports} />}
-            {activeTab === 'grading' && <GradingAnalysisView />}
-          </div>
-        </AnimatePresence>
+        {/* Tab Content — sunken wrapper for depth */}
+        <div
+          className="rounded-xl p-3 md:p-4 -mt-1"
+          style={{
+            background: isDark ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.02)',
+            boxShadow: isDark
+              ? 'inset 0 2px 6px rgba(0,0,0,0.25)'
+              : 'inset 0 1px 4px rgba(0,0,0,0.06)',
+          }}
+        >
+          <AnimatePresence mode="wait">
+            <div key={activeTab}>
+              {activeTab === 'leaderboard' && (
+                <LeaderboardView
+                  experiments={displayExperiments}
+                  sectorMatrix={sectorMatrix}
+                  onSelectExperiment={handleSelectExperiment}
+                />
+              )}
+              {activeTab === 'trend' && <TrendView experiments={displayExperiments} />}
+              {activeTab === 'errors' && <ErrorAnalysisView experiments={displayExperiments} reports={displayReports} />}
+              {activeTab === 'grading' && <GradingAnalysisView />}
+            </div>
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Footer */}

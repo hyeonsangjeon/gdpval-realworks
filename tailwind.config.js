@@ -53,11 +53,13 @@ export default {
         },
         dash: {
           page: "hsl(var(--dash-page))",
+          surface: "hsl(var(--dash-surface))",
           card: "hsl(var(--dash-card))",
           "card-hover": "hsl(var(--dash-card-hover))",
           "card-active": "hsl(var(--dash-card-active))",
           border: "hsl(var(--dash-border))",
           "border-subtle": "hsl(var(--dash-border-subtle))",
+          "border-active": "hsl(var(--dash-border-active))",
           sticky: "hsl(var(--dash-sticky))",
           modal: "hsl(var(--dash-modal))",
           heading: "hsl(var(--dash-heading))",

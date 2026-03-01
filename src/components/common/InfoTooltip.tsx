@@ -118,6 +118,7 @@ export default function InfoTooltip({ content, position = 'top', className = '' 
         }
       }}
       aria-describedby={visible ? tooltipId : undefined}
+      style={{ minWidth: 20, minHeight: 20, padding: 2, cursor: 'help' }}
     >
       <Info className="w-3.5 h-3.5 text-dash-text-muted hover:text-dash-text-secondary transition-colors cursor-help flex-shrink-0" />
       <AnimatePresence>
@@ -134,6 +135,8 @@ export default function InfoTooltip({ content, position = 'top', className = '' 
             style={{
               top: coords?.top ?? -9999,
               left: coords?.left ?? -9999,
+              // Prevent tooltip from blocking clicks on elements beneath
+              pointerEvents: 'none',
               // Bug 1 fix: reset inherited text-transform & letter-spacing
               textTransform: 'none',
               letterSpacing: 'normal',

@@ -27,11 +27,13 @@
 
     /* Dashboard theme tokens – light */
     --dash-page: 220 20% 97%;
+    --dash-surface: 220 18% 96%;
     --dash-card: 0 0% 100%;
     --dash-card-hover: 220 14% 95%;
     --dash-card-active: 220 14% 92%;
     --dash-border: 220 13% 90%;
     --dash-border-subtle: 220 13% 94%;
+    --dash-border-active: 220 13% 85%;
     --dash-sticky: 220 20% 97%;
     --dash-modal: 0 0% 100%;
     --dash-heading: 220 13% 10%;
@@ -66,11 +68,13 @@
 
     /* Dashboard theme tokens – dark */
     --dash-page: 240 44% 7%;
+    --dash-surface: 240 38% 8%;
     --dash-card: 240 35% 9%;
     --dash-card-hover: 240 28% 12%;
     --dash-card-active: 240 28% 15%;
     --dash-border: 240 23% 14%;
     --dash-border-subtle: 240 23% 10%;
+    --dash-border-active: 240 23% 18%;
     --dash-sticky: 240 36% 8%;
     --dash-modal: 240 25% 10%;
     --dash-heading: 0 0% 100%;
