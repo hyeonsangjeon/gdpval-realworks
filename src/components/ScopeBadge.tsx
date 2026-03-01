@@ -1,4 +1,6 @@
 import { CheckCircle, Clock } from 'lucide-react'
+import InfoTooltip from './common/InfoTooltip'
+import { tooltipTexts } from '../data/tooltipTexts'
 
 interface ScopeBadgeProps {
   scope: 'self_assessed_pre_grading' | 'graded'
@@ -23,6 +25,7 @@ export default function ScopeBadge({ scope }: ScopeBadgeProps) {
       <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">
         ⏰ Self-Assessed · Pre-Grading
       </span>
+      <InfoTooltip content={tooltipTexts.badge.selfAssessed} position="bottom" />
     </div>
   )
 }

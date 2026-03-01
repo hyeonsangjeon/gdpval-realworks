@@ -14,6 +14,8 @@ import {
 } from 'recharts'
 import { ExperimentEntry } from '../../types/report'
 import { useTheme } from '../../contexts/ThemeContext'
+import SectionHint from '../common/SectionHint'
+import { sectionHintTexts } from '../../data/tooltipTexts'
 
 interface TrendViewProps {
   experiments: ExperimentEntry[]
@@ -101,6 +103,9 @@ export default function TrendView({ experiments }: TrendViewProps) {
       transition={{ duration: 0.2 }}
       className="space-y-6"
     >
+      {/* Section Hint */}
+      <SectionHint tabId="trend">{sectionHintTexts.trend}</SectionHint>
+
       {/* 2x2 Chart Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Success Rate Chart */}

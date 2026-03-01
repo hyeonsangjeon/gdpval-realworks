@@ -1,14 +1,18 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Github, Eye, EyeOff, BarChart3, TrendingUp, AlertTriangle, Award, Sun, Moon } from 'lucide-react'
+import { Github, Eye, EyeOff, BarChart3, TrendingUp, AlertTriangle, Award, Sun, Moon, HelpCircle } from 'lucide-react'
 import ScopeBadge from '../components/ScopeBadge'
 import LeaderboardView from '../components/dashboard/LeaderboardView'
 import TrendView from '../components/dashboard/TrendView'
 import ErrorAnalysisView from '../components/dashboard/ErrorAnalysisView'
 import GradingAnalysisView from '../components/dashboard/GradingAnalysisView'
+import InfoTooltip from '../components/common/InfoTooltip'
+import AboutModal from '../components/common/AboutModal'
 import { useReports } from '../hooks/useReports'
 import { useTheme } from '../contexts/ThemeContext'
+import { tooltipTexts } from '../data/tooltipTexts'
+import { onboarding } from '../utils/onboarding'
 
 type TabKey = 'leaderboard' | 'trend' | 'errors' | 'grading'
 
@@ -25,6 +29,14 @@ export default function Dashboard() {
   const { isDark, toggle: toggleTheme } = useTheme()
   const [activeTab, setActiveTab] = useState<TabKey>('leaderboard')
   const [demoMode, setDemoMode] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
+
+  // Auto-open AboutModal on first visit
+  useEffect(() => {
+    if (!onboarding.isAboutSeen()) {
+      setAboutOpen(true)
+    }
+  }, [])
 
   const displayReports = demoMode ? reports.filter((r) => r.meta.report_scope === 'self_assessed_pre_grading') : reports
 
@@ -98,6 +110,14 @@ export default function Dashboard() {
             {displayReports.length > 0 && <ScopeBadge scope={displayReports[0].meta.report_scope} />}
           </div>
           <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
+            {/* About / Help */}
+            <button
+              onClick={() => setAboutOpen(true)}
+              className="inline-flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-lg border border-dash-border bg-dash-card hover:bg-dash-card-hover text-dash-text-secondary hover:text-dash-heading transition-all hover:scale-105"
+              title="About this dashboard"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
@@ -140,21 +160,25 @@ export default function Dashboard() {
               label: 'Best Success Rate',
               value: `${bestRate.toFixed(1)}%`,
               unit: 'of 220 tasks',
+              tooltip: tooltipTexts.kpi.bestSuccessRate,
             },
             {
               label: 'Experiments',
               value: displayExperiments.length,
               unit: 'total',
+              tooltip: tooltipTexts.kpi.experiments,
             },
             {
               label: 'Tasks Evaluated',
               value: displayExperiments.length > 0 ? displayExperiments[0].total_tasks : 0,
               unit: 'per experiment',
+              tooltip: tooltipTexts.kpi.tasksEvaluated,
             },
             {
               label: 'Best QA Score',
               value: bestQA.toFixed(2),
               unit: 'out of 10',
+              tooltip: tooltipTexts.kpi.bestQaScore,
             },
           ].map((kpi, idx) => (
             <motion.div
@@ -164,7 +188,10 @@ export default function Dashboard() {
               transition={{ delay: idx * 0.05 }}
               className="rounded-xl bg-dash-card border border-dash-border p-3 md:p-5"
             >
-              <p className="text-[10px] md:text-xs font-semibold text-dash-text-muted uppercase tracking-wider mb-1 md:mb-2">{kpi.label}</p>
+              <p className="text-[10px] md:text-xs font-semibold text-dash-text-muted uppercase tracking-wider mb-1 md:mb-2 flex items-center gap-1">
+                {kpi.label}
+                <InfoTooltip content={kpi.tooltip} position="bottom" />
+              </p>
               <p className="text-lg md:text-2xl font-semibold text-dash-heading font-mono mb-1">
                 {typeof kpi.value === 'number' ? kpi.value : kpi.value}
               </p>
@@ -233,6 +260,9 @@ export default function Dashboard() {
           </a>
         </div>
       </motion.footer>
+
+      {/* About Modal */}
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </motion.div>
   )
 }

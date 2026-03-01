@@ -11,6 +11,9 @@ import {
 import { useGrades, GradeResult } from '../../hooks/useGrades'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import InfoTooltip from '../common/InfoTooltip'
+import SectionHint from '../common/SectionHint'
+import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
 
 /* ─── palette ─── */
 const SCORE_COLORS = {
@@ -144,6 +147,9 @@ export default function GradingAnalysisView() {
         </motion.div>
       )}
 
+      {/* ─── Section Hint ─── */}
+      <SectionHint tabId="grading">{sectionHintTexts.grading}</SectionHint>
+
       {/* ─── 0. Summary Cards per experiment ─── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {grades.map((g, i) => (
@@ -198,7 +204,7 @@ export default function GradingAnalysisView() {
         <div className="rounded-xl bg-dash-card border border-dash-border p-4">
           <div className="flex items-center gap-2 mb-4">
             <AlertCircle className="w-4 h-4 text-purple-400" />
-            <h3 className="text-sm font-semibold text-dash-text">Grader Disagreement</h3>
+            <h3 className="text-sm font-semibold text-dash-text flex items-center gap-1">Grader Disagreement <InfoTooltip content={tooltipTexts.grading.graderDisagreement} position="bottom" /></h3>
           </div>
           {disagreementData.length > 0 ? (
             <div className="space-y-4">
@@ -327,7 +333,7 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-dash-heading font-mono">{s.avg_score_pct}%</p>
-            {s.ci_pct && <p className="text-[10px] text-dash-text-faint">± {s.ci_pct}% CI</p>}
+            {s.ci_pct && <p className="text-[10px] text-dash-text-faint flex items-center gap-0.5 justify-end">± {s.ci_pct}% CI <InfoTooltip content={tooltipTexts.grading.ci} position="left" /></p>}
           </div>
         </div>
 
@@ -348,9 +354,9 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
             )}
           </div>
           <div className="flex justify-between text-[9px] text-dash-text-faint mt-1">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-emerald-500 inline-block" /> Perfect {s.perfect_score}</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-amber-500 inline-block" /> Partial {s.partial_score}</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-red-500 inline-block" /> Zero {s.zero_score}</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-emerald-500 inline-block" /> Perfect {s.perfect_score} <InfoTooltip content={tooltipTexts.grading.perfect} position="bottom" /></span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-amber-500 inline-block" /> Partial {s.partial_score} <InfoTooltip content={tooltipTexts.grading.partial} position="bottom" /></span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-red-500 inline-block" /> Zero {s.zero_score} <InfoTooltip content={tooltipTexts.grading.zero} position="bottom" /></span>
           </div>
         </div>
 

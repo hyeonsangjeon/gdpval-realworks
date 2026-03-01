@@ -8,6 +8,9 @@ import type { ExperimentEntry, ReportData } from '../../types/report'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { parseTraceback } from '../../utils/tracebackParser'
+import InfoTooltip from '../common/InfoTooltip'
+import SectionHint from '../common/SectionHint'
+import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
 
 /* ─── props ─── */
 interface ErrorAnalysisViewProps {
@@ -109,6 +112,9 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
       exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
       className="space-y-6"
     >
+      {/* ─── Section Hint ─── */}
+      <SectionHint tabId="errors">{sectionHintTexts.errors}</SectionHint>
+
       {/* ─── 0. Summary Stats ─── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {sortedExps.map((exp) => {
@@ -129,17 +135,17 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
                   <div className="text-lg font-bold font-mono text-red-400">{errCount}</div>
-                  <div className="text-[9px] text-dash-text-muted">Errors</div>
+                  <div className="text-[9px] text-dash-text-muted flex items-center justify-center gap-0.5">Errors <InfoTooltip content={tooltipTexts.errors.errors} position="bottom" /></div>
                 </div>
                 <div>
                   <div className="text-lg font-bold font-mono text-amber-400">{retriedCount}</div>
-                  <div className="text-[9px] text-dash-text-muted">Retried</div>
+                  <div className="text-[9px] text-dash-text-muted flex items-center justify-center gap-0.5">Retried <InfoTooltip content={tooltipTexts.errors.retried} position="bottom" /></div>
                 </div>
                 <div>
                   <div className="text-lg font-bold font-mono text-emerald-400">
                     {recoveredPct !== null ? `${recoveredPct}%` : '—'}
                   </div>
-                  <div className="text-[9px] text-dash-text-muted">Recovered</div>
+                  <div className="text-[9px] text-dash-text-muted flex items-center justify-center gap-0.5">Recovered <InfoTooltip content={tooltipTexts.errors.recovered} position="bottom" /></div>
                 </div>
               </div>
             </motion.div>
