@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useId, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Info } from 'lucide-react'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -105,6 +106,43 @@ export default function InfoTooltip({ content, position = 'top', className = '' 
     return undefined
   }, [isMobile, visible])
 
+  const tooltipContent = (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          ref={tooltipRef}
+          id={tooltipId}
+          role="tooltip"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: coords ? 1 : 0, scale: coords ? 1 : 0.95 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.15 }}
+          className="fixed z-50"
+          style={{
+            top: coords?.top ?? -9999,
+            left: coords?.left ?? -9999,
+            // Prevent tooltip from blocking clicks on elements beneath
+            pointerEvents: 'none',
+            // Bug 1 fix: reset inherited text-transform & letter-spacing
+            textTransform: 'none',
+            letterSpacing: 'normal',
+          }}
+        >
+          <div
+            className="bg-dash-card border border-dash-border rounded-lg shadow-lg px-3 py-2 text-xs text-dash-text leading-relaxed whitespace-normal"
+            style={{
+              minWidth: 200,
+              maxWidth: isMobile ? 'calc(100vw - 32px)' : 280,
+              overflowWrap: 'break-word',
+            }}
+          >
+            {content}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
   return (
     <span
       ref={triggerRef}
@@ -121,40 +159,7 @@ export default function InfoTooltip({ content, position = 'top', className = '' 
       style={{ minWidth: 20, minHeight: 20, padding: 2, cursor: 'help' }}
     >
       <Info className="w-3.5 h-3.5 text-dash-text-muted hover:text-dash-text-secondary transition-colors cursor-help flex-shrink-0" />
-      <AnimatePresence>
-        {visible && (
-          <motion.div
-            ref={tooltipRef}
-            id={tooltipId}
-            role="tooltip"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: coords ? 1 : 0, scale: coords ? 1 : 0.95 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
-            className="fixed z-50"
-            style={{
-              top: coords?.top ?? -9999,
-              left: coords?.left ?? -9999,
-              // Prevent tooltip from blocking clicks on elements beneath
-              pointerEvents: 'none',
-              // Bug 1 fix: reset inherited text-transform & letter-spacing
-              textTransform: 'none',
-              letterSpacing: 'normal',
-            }}
-          >
-            <div
-              className="bg-dash-card border border-dash-border rounded-lg shadow-lg px-3 py-2 text-xs text-dash-text leading-relaxed whitespace-normal"
-              style={{
-                minWidth: 200,
-                maxWidth: isMobile ? 'calc(100vw - 32px)' : 280,
-                overflowWrap: 'break-word',
-              }}
-            >
-              {content}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {typeof document !== 'undefined' ? createPortal(tooltipContent, document.body) : null}
     </span>
   )
 }

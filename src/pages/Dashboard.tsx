@@ -199,7 +199,7 @@ export default function Dashboard() {
               animate={{ opacity: 1, y: 0 }}
               whileHover={{ y: -2 }}
               transition={{ delay: idx * 0.05, type: 'spring', stiffness: 400, damping: 25 }}
-              className="relative rounded-xl bg-dash-card border border-dash-border p-3 md:p-5 overflow-hidden transition-shadow duration-200"
+              className="relative rounded-xl bg-dash-card border border-dash-border p-3 md:p-5 transition-shadow duration-200"
               style={{
                 boxShadow: isDark
                   ? '0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04)'
@@ -208,7 +208,7 @@ export default function Dashboard() {
             >
               {/* Accent bar */}
               <div
-                className="absolute right-0 top-0 bottom-0 w-1"
+                className="absolute right-0 top-0 bottom-0 w-1 rounded-r-xl"
                 style={{ backgroundColor: kpi.accentColor, opacity: 0.6 }}
               />
               <p className="text-[10px] md:text-xs font-semibold text-dash-text-muted uppercase tracking-wider mb-1 md:mb-2 flex items-center gap-1">
