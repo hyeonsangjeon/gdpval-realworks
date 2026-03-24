@@ -82,7 +82,7 @@ class AnthropicClient:
         # Remove OpenAI-specific kwargs that Anthropic doesn't support
         kwargs_filtered = {
             k: v for k, v in kwargs.items()
-            if k not in ("seed", "max_completion_tokens")
+            if k not in ("seed", "max_completion_tokens", "reasoning_effort")
         }
 
         create_kwargs = dict(
@@ -190,6 +190,7 @@ def complete(
     model: str,
     messages: list[dict],
     max_completion_tokens: int = DEFAULT_TOKENS["code_generation"],
+    reasoning_effort: str | None = None,
     **kwargs,
 ) -> tuple:
     """Provider-agnostic chat completion with latency measurement.
@@ -219,12 +220,18 @@ def complete(
         )
     else:
         # AzureOpenAI or openai.OpenAI
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_completion_tokens=max_completion_tokens,
+        # Note: Anthropic doesn't support reasoning_effort, so it's handled via
+        # kwargs_filtered in AnthropicClient.chat_complete() (filters out the param)
+        create_kwargs = {
+            "model": model,
+            "messages": messages,
+            "max_completion_tokens": max_completion_tokens,
             **kwargs,
-        )
+        }
+        if reasoning_effort is not None:
+            create_kwargs["reasoning_effort"] = reasoning_effort
+
+        response = client.chat.completions.create(**create_kwargs)
 
     latency_ms = (time.time() - start) * 1000
     return response, latency_ms

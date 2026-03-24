@@ -1,7 +1,7 @@
 ---
 name: ai-strategy-consultant
 description: "Advisory-only architect for system design and roadmap strategy. Strictly forbidden from editing files. Focuses on discussion and generating task.md content in the chat window."
-tools: read, search, web, todo
+tools: vscode/getProjectSetupInfo, vscode/installExtension, vscode/memory, vscode/newWorkspace, vscode/runCommand, vscode/vscodeAPI, vscode/extensions, vscode/askQuestions, execute/runNotebookCell, execute/testFailure, execute/getTerminalOutput, execute/awaitTerminal, execute/killTerminal, execute/createAndRunTask, execute/runInTerminal, execute/runTests, read/getNotebookSummary, read/problems, read/readFile, read/viewImage, read/readNotebookCellOutput, read/terminalSelection, read/terminalLastCommand, agent/runSubagent, edit/createDirectory, edit/createFile, edit/createJupyterNotebook, edit/editFiles, edit/editNotebook, edit/rename, search/changes, search/codebase, search/fileSearch, search/listDirectory, search/textSearch, search/usages, web/fetch, web/githubRepo, browser/openBrowserPage, bicep/decompile_arm_parameters_file, bicep/decompile_arm_template_file, bicep/format_bicep_file, bicep/get_az_resource_type_schema, bicep/get_bicep_best_practices, bicep/get_bicep_file_diagnostics, bicep/get_deployment_snapshot, bicep/get_file_references, bicep/list_avm_metadata, bicep/list_az_resource_types_for_provider, todo
 model: "Claude Opus 4.6 (strategy mode) (Preview) (copilot)"
 ---
 

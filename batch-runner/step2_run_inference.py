@@ -916,6 +916,9 @@ def run_inference(
           f"qa={tokens_cfg['qa_check']}, render={tokens_cfg['json_render']}")
     if timeout:
         print(f"   Timeout:            {timeout}s (YAML override)")
+    reasoning_effort_display = condition.get("model", {}).get("reasoning_effort")
+    if reasoning_effort_display:
+        print(f"   Reasoning effort:   {reasoning_effort_display}")
 
     # Wall-clock deadline for relay runs
     wall_deadline = None
@@ -967,8 +970,12 @@ def run_inference(
         sys.exit(1)
 
     # 3. Initialize executor (no silent fallback — fail loudly)
+    reasoning_effort = condition.get("model", {}).get("reasoning_effort")
     try:
-        executor = TaskExecutor(mode=execution_mode, llm_client=client, tokens=tokens_cfg, timeout=timeout)
+        executor = TaskExecutor(
+            mode=execution_mode, llm_client=client, tokens=tokens_cfg,
+            timeout=timeout, reasoning_effort=reasoning_effort,
+        )
     except Exception as e:
         print(f"❌ Executor init failed for mode '{execution_mode}': {e}")
         print(f"   Fix the issue or change execution.mode in your YAML config.")

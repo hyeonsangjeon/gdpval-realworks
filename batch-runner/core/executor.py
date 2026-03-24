@@ -30,6 +30,7 @@ class TaskExecutor:
         prompt_name: Optional[str] = None,
         tokens: Optional[dict] = None,
         timeout: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
     ):
         """
         Initialize executor with specified mode.
@@ -42,6 +43,7 @@ class TaskExecutor:
             prompt_name: Prompt YAML name for subprocess mode (default: subprocess_occupation_codegen)
             tokens: Optional token limit overrides
             timeout: Subprocess timeout override in seconds (None = config default)
+            reasoning_effort: Optional reasoning effort level ("low", "medium", "high")
 
         Raises:
             ValueError: If required parameters are missing for the selected mode
@@ -68,6 +70,7 @@ class TaskExecutor:
                 prompt_name=prompt_name or SubprocessRunner.DEFAULT_PROMPT,
                 max_completion_tokens=self.tokens.get("code_generation"),
                 timeout=timeout,
+                reasoning_effort=reasoning_effort,
             )
 
         elif mode == "json_renderer":

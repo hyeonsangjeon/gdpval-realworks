@@ -38,6 +38,7 @@ class SubprocessRunner:
         prompt_name: str = DEFAULT_PROMPT,
         max_completion_tokens: Optional[int] = None,
         timeout: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
     ):
         """
         Initialize Subprocess runner with LLM client.
@@ -47,6 +48,7 @@ class SubprocessRunner:
             prompt_name: Name of prompt YAML file in prompts/ (without .yaml)
             max_completion_tokens: Completion token cap override
             timeout: Subprocess timeout override in seconds (default: SUBPROCESS_TIMEOUT)
+            reasoning_effort: Optional reasoning effort level ("low", "medium", "high")
         """
         self.llm_client = llm_client
         self.prompt_name = prompt_name
@@ -57,6 +59,7 @@ class SubprocessRunner:
             else DEFAULT_TOKENS["code_generation"]
         )
         self.timeout = timeout or SUBPROCESS_TIMEOUT
+        self.reasoning_effort = reasoning_effort
 
     def run(
         self,
@@ -120,7 +123,8 @@ class SubprocessRunner:
                 client=self.llm_client,
                 model=model,
                 messages=messages,
-                max_completion_tokens=self.max_completion_tokens
+                max_completion_tokens=self.max_completion_tokens,
+                reasoning_effort=self.reasoning_effort,
             )
 
             response_text = response.choices[0].message.content
