@@ -367,8 +367,13 @@ class SubprocessRunner:
                         continue
 
                     try:
+                        # Sanitize filename: replace NTFS-forbidden chars
+                        # (: " < > | * ? \r \n) with underscore.
+                        # LLM-generated filenames may contain these, causing
+                        # actions/upload-artifact failures on Windows/CI.
+                        safe_name = re.sub(r'[:"<>|*?\r\n]', '_', file_path.name)
                         output_files.append({
-                            "filename": file_path.name,
+                            "filename": safe_name,
                             "content": file_path.read_bytes()
                         })
                     except Exception as e:

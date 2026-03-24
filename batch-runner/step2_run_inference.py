@@ -942,11 +942,10 @@ def run_inference(
 
     if provider in ("azure", "azure_openai"):
         endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_ENDPOINT")
-        api_key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY")
-        if not endpoint or not api_key:
-            print("❌ Missing Azure credentials. Set AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY")
+        if not endpoint:
+            print("❌ Missing AZURE_OPENAI_ENDPOINT. Set AZURE_OPENAI_ENDPOINT env var.")
             sys.exit(1)
-        client = create_provider_client("azure", endpoint=endpoint, api_key=api_key)
+        client = create_provider_client("azure", endpoint=endpoint)
         print(f"   Client:             Azure @ {endpoint}")
 
     elif provider == "openai":

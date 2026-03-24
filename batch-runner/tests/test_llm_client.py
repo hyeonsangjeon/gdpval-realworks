@@ -66,48 +66,80 @@ class TestCreateClient:
     """create_client() 팩토리 함수 테스트"""
 
     @patch("core.llm_client.AzureOpenAI")
-    def test_explicit_params(self, mock_cls):
-        """명시적 파라미터로 클라이언트 생성"""
-        client = create_client(
-            endpoint="https://test.openai.azure.com/",
-            api_key="test-key",
-            api_version="2024-12-01-preview",
-        )
-        mock_cls.assert_called_once_with(
-            azure_endpoint="https://test.openai.azure.com/",
-            api_key="test-key",
-            api_version="2024-12-01-preview",
-        )
+    def test_explicit_params_api_key_fallback(self, mock_cls):
+        """DefaultAzureCredential 실패 시 API Key fallback"""
+        with patch.dict("sys.modules", {"azure.identity": None}):
+            # azure.identity import 실패 → API Key fallback
+            client = create_client(
+                endpoint="https://test.openai.azure.com/",
+                api_key="test-key",
+                api_version="2024-12-01-preview",
+            )
+            call_kwargs = mock_cls.call_args[1]
+            assert call_kwargs["azure_endpoint"] == "https://test.openai.azure.com/"
+            assert call_kwargs["api_key"] == "test-key"
+            assert call_kwargs["api_version"] == "2024-12-01-preview"
 
     @patch("core.llm_client.AzureOpenAI")
-    def test_defaults_from_env(self, mock_cls):
-        """환경변수 fallback"""
-        with patch.dict(os.environ, {
-            "AZURE_OPENAI_ENDPOINT": "https://env-endpoint.azure.com/",
-            "AZURE_API_KEY": "env-key",
-        }):
-            create_client()
-            call_kwargs = mock_cls.call_args[1]
-            assert call_kwargs["azure_endpoint"] == "https://env-endpoint.azure.com/"
-            assert call_kwargs["api_key"] == "env-key"
-            assert call_kwargs["api_version"] == DEFAULT_API_VERSION
+    def test_defaults_from_env_api_key_fallback(self, mock_cls):
+        """환경변수 fallback (DefaultAzureCredential 실패 시)"""
+        with patch.dict("sys.modules", {"azure.identity": None}):
+            with patch.dict(os.environ, {
+                "AZURE_OPENAI_ENDPOINT": "https://env-endpoint.azure.com/",
+                "AZURE_API_KEY": "env-key",
+            }):
+                create_client()
+                call_kwargs = mock_cls.call_args[1]
+                assert call_kwargs["azure_endpoint"] == "https://env-endpoint.azure.com/"
+                assert call_kwargs["api_key"] == "env-key"
+                assert call_kwargs["api_version"] == DEFAULT_API_VERSION
 
     @patch("core.llm_client.AzureOpenAI")
     def test_returns_azure_openai_instance(self, mock_cls):
         """반환 타입이 AzureOpenAI mock 인스턴스"""
-        client = create_client(endpoint="https://x.com/", api_key="k")
-        assert client == mock_cls.return_value
+        with patch.dict("sys.modules", {"azure.identity": None}):
+            client = create_client(endpoint="https://x.com/", api_key="k")
+            assert client == mock_cls.return_value
 
     @patch("core.llm_client.AzureOpenAI")
     def test_grok_different_endpoint(self, mock_cls):
-        """Grok용 다른 endpoint — 같은 SDK"""
-        create_client(
-            endpoint="https://grok-resource.azure.com/",
-            api_key="grok-key",
-        )
-        call_kwargs = mock_cls.call_args[1]
-        assert call_kwargs["azure_endpoint"] == "https://grok-resource.azure.com/"
-        assert call_kwargs["api_key"] == "grok-key"
+        """Grok용 다른 endpoint — 같은 SDK (API Key fallback)"""
+        with patch.dict("sys.modules", {"azure.identity": None}):
+            create_client(
+                endpoint="https://grok-resource.azure.com/",
+                api_key="grok-key",
+            )
+            call_kwargs = mock_cls.call_args[1]
+            assert call_kwargs["azure_endpoint"] == "https://grok-resource.azure.com/"
+            assert call_kwargs["api_key"] == "grok-key"
+
+    def test_no_credentials_raises(self):
+        """DefaultAzureCredential 실패 + API Key 없으면 ValueError"""
+        with patch.dict("sys.modules", {"azure.identity": None}):
+            with patch.dict(os.environ, {}, clear=True):
+                with pytest.raises(ValueError, match="No Azure credentials available"):
+                    create_client(endpoint="https://x.com/")
+
+    @patch("core.llm_client.AzureOpenAI")
+    def test_default_azure_credential_priority(self, mock_cls):
+        """DefaultAzureCredential 사용 가능 시 우선 사용"""
+        mock_credential = MagicMock()
+        mock_token_provider = MagicMock()
+        with patch("core.llm_client.DefaultAzureCredential", return_value=mock_credential, create=True):
+            with patch("core.llm_client.get_bearer_token_provider", return_value=mock_token_provider, create=True):
+                # This should fail because the imports are inside create_client
+                # Instead, mock at module level
+                pass
+
+        # Test via import mock
+        mock_identity = MagicMock()
+        mock_identity.DefaultAzureCredential.return_value = mock_credential
+        mock_identity.get_bearer_token_provider.return_value = mock_token_provider
+        with patch.dict("sys.modules", {"azure.identity": mock_identity, "azure": MagicMock()}):
+            create_client(endpoint="https://x.com/", api_key="should-not-be-used")
+            call_kwargs = mock_cls.call_args[1]
+            assert "azure_ad_token_provider" in call_kwargs
+            assert "api_key" not in call_kwargs
 
 
 # ─── complete() Tests ────────────────────────────────────────────────────

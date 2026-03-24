@@ -6,15 +6,14 @@
 # Scope: All 220 tasks (exp012 was Information sector only)
 
 experiment:
-  id: "exp020_GPT54Pro_reasoning_null"
-  name: "GPT-5.4-Pro Reasoning NULL — Full Benchmark (Ablation 4/4)"
+  id: "exp017_GPT52_reasoning_high"
+  name: "GPT-5.2 Reasoning HIGH — Full Benchmark (Ablation 1/4)"
   description: >
-    [ABLATION 4/4] GPT-5.4-Pro with reasoning_effort omitted (null baseline).
-    Multi-agent: gpt-audio-1.5 preprocessor + GPT-5.4-Pro code generation.
+    [ABLATION 1/4] GPT-5.2 with reasoning_effort=high.
+    Multi-agent: gpt-audio-1.5 preprocessor + GPT-5.2 code generation.
     Full 220 tasks across 11 sectors, 55 occupations.
     Compare within series: exp017-020 (reasoning_effort only).
     Baseline comparison: exp012 (GPT-5.2, Information sector).
-    No reasoning_effort parameter sent to API — server applies default behavior.
   author: "Hyeonsang Jeon"
   created_at: "2026-03-24"
 
@@ -28,25 +27,25 @@ control:
     - resume_max_rounds   # 2
     - domain_packages     # full exp011 environment
   changed:
-    - reasoning_effort    # ABLATION VARIABLE (null = omitted from API call)
+    - reasoning_effort    # ABLATION VARIABLE
 
 # Data filter — All sectors (full benchmark)
 data:
-  source: "HyeonSang/exp020_GPT54Pro_reasoning_null"
+  source: "HyeonSang/exp017_GPT52_reasoning_high"
   filter:
     sector: null          # All 11 sectors
     occupation: null      # All 55 occupations
     sample_size: null     # All 220 tasks
 
-# Condition A: Elicit v2 + domain packages + audio preprocessor + NO reasoning_effort
+# Condition A: Elicit v2 + domain packages + audio preprocessor + reasoning_effort=high
 condition_a:
-  name: "GPT-5.4-Pro reasoning=null (omitted) + gpt-audio-1.5 preprocessor"
+  name: "GPT-5.2 reasoning=high + gpt-audio-1.5 preprocessor"
   model:
     provider: "azure"
-    deployment: "gpt-5.4-pro"
+    deployment: "gpt-5.2-chat"
     temperature: 0.0
     seed: null            # Reasoning models may not support determinism
-    # reasoning_effort intentionally omitted — null baseline
+    reasoning_effort: "high"  # ⭐ ABLATION VARIABLE
   prompt:
     system: |
       You are a helpful assistant that completes professional tasks.

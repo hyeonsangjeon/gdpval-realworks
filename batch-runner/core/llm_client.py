@@ -112,10 +112,11 @@ def create_client(
     api_key: str | None = None,
     api_version: str | None = None,
 ) -> AzureOpenAI:
-    """AzureOpenAI 클라이언트 생성 (하위 호환성 유지)
+    """AzureOpenAI 클라이언트 생성 (DefaultAzureCredential 우선, API Key fallback)
 
-    모든 Azure AI 모델(GPT, Grok, Claude)에 동일하게 사용.
-    endpoint만 바꾸면 다른 모델 호출 가능.
+    인증 우선순위:
+    1. DefaultAzureCredential (Entra ID 토큰) — az login / Managed Identity / OIDC
+    2. API Key fallback — AZURE_OPENAI_API_KEY 환경변수
 
     Args:
         endpoint:    Azure endpoint (기본: AZURE_OPENAI_ENDPOINT 환경변수)
@@ -125,12 +126,40 @@ def create_client(
     Returns:
         openai.AzureOpenAI 클라이언트
     """
-    return AzureOpenAI(
-        azure_endpoint=endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", DEFAULT_ENDPOINT),
-        api_key=api_key or os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY"),
-        api_version=api_version or DEFAULT_API_VERSION,
-        timeout=480,  # 8min — prevent hang before GitHub Actions 10min no-output kill
-    )
+    endpoint = endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", DEFAULT_ENDPOINT)
+    api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY")
+    api_version = api_version or DEFAULT_API_VERSION
+
+    # Priority 1: DefaultAzureCredential (Entra ID token)
+    try:
+        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+        credential = DefaultAzureCredential()
+        token_provider = get_bearer_token_provider(
+            credential, "https://cognitiveservices.azure.com/.default"
+        )
+        print("   🔐 Auth: DefaultAzureCredential (Entra ID token)")
+        return AzureOpenAI(
+            azure_endpoint=endpoint,
+            azure_ad_token_provider=token_provider,
+            api_version=api_version,
+            timeout=480,
+        )
+    except Exception as e:
+        # Priority 2: API Key fallback
+        if api_key:
+            print(f"   🔑 Auth: API Key (DefaultAzureCredential unavailable: {e})")
+            return AzureOpenAI(
+                azure_endpoint=endpoint,
+                api_key=api_key,
+                api_version=api_version,
+                timeout=480,
+            )
+        raise ValueError(
+            f"No Azure credentials available.\n"
+            f"  - DefaultAzureCredential failed: {e}\n"
+            f"  - AZURE_OPENAI_API_KEY not set.\n"
+            f"  Run 'az login' or set AZURE_OPENAI_API_KEY."
+        )
 
 
 def create_provider_client(

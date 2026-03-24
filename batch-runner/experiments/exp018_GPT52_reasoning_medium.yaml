@@ -6,11 +6,11 @@
 # Scope: All 220 tasks (exp012 was Information sector only)
 
 experiment:
-  id: "exp019_GPT54Pro_reasoning_low"
-  name: "GPT-5.4-Pro Reasoning LOW — Full Benchmark (Ablation 3/4)"
+  id: "exp018_GPT52_reasoning_medium"
+  name: "GPT-5.2 Reasoning MEDIUM — Full Benchmark (Ablation 2/4)"
   description: >
-    [ABLATION 3/4] GPT-5.4-Pro with reasoning_effort=low.
-    Multi-agent: gpt-audio-1.5 preprocessor + GPT-5.4-Pro code generation.
+    [ABLATION 2/4] GPT-5.2 with reasoning_effort=medium.
+    Multi-agent: gpt-audio-1.5 preprocessor + GPT-5.2 code generation.
     Full 220 tasks across 11 sectors, 55 occupations.
     Compare within series: exp017-020 (reasoning_effort only).
     Baseline comparison: exp012 (GPT-5.2, Information sector).
@@ -31,21 +31,21 @@ control:
 
 # Data filter — All sectors (full benchmark)
 data:
-  source: "HyeonSang/exp019_GPT54Pro_reasoning_low"
+  source: "HyeonSang/exp018_GPT52_reasoning_medium"
   filter:
     sector: null          # All 11 sectors
     occupation: null      # All 55 occupations
     sample_size: null     # All 220 tasks
 
-# Condition A: Elicit v2 + domain packages + audio preprocessor + reasoning_effort=low
+# Condition A: Elicit v2 + domain packages + audio preprocessor + reasoning_effort=medium
 condition_a:
-  name: "GPT-5.4-Pro reasoning=low + gpt-audio-1.5 preprocessor"
+  name: "GPT-5.2 reasoning=medium + gpt-audio-1.5 preprocessor"
   model:
     provider: "azure"
-    deployment: "gpt-5.4-pro"
+    deployment: "gpt-5.2-chat"
     temperature: 0.0
     seed: null            # Reasoning models may not support determinism
-    reasoning_effort: "low"  # ⭐ ABLATION VARIABLE
+    reasoning_effort: "medium"  # ⭐ ABLATION VARIABLE
   prompt:
     system: |
       You are a helpful assistant that completes professional tasks.

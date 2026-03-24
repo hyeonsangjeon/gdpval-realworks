@@ -33,9 +33,11 @@ permissions:
   contents: write        # to commit yaml results
   pull-requests: write   # to create PRs
   actions: write          # for relay self-retrigger (gh workflow run)
+  id-token: write         # for Azure OIDC authentication
 
 env:
   PYTHON_VERSION: '3.11'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   batch-run:
@@ -239,6 +241,13 @@ jobs:
           bash step1_prepare_tasks.sh experiments/${{ inputs.experiment_yaml }}.yaml
 
       # ── Step 2a: Run Inference (condition_a) ──
+      - name: 'Azure Login (OIDC)'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: 'Step 2a: Run inference (condition_a)'
         id: step2a
         timeout-minutes: 330    # ← sufficient time for full run, adjust if needed  condition_a
