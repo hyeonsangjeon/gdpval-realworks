@@ -22,7 +22,7 @@ on:
         description: 'Relay run number (0=initial, 1+=continuation). Auto-set by retrigger.'
         required: false
         type: number
-        default: 290
+        default: 0
       wall_timeout:
         description: 'Wall-clock timeout in minutes for Step 2 (0=no limit, 270 recommended for code_interpreter)'
         required: false
