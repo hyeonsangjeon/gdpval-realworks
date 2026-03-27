@@ -22,12 +22,12 @@ on:
         description: 'Relay run number (0=initial, 1+=continuation). Auto-set by retrigger.'
         required: false
         type: number
-        default: 0
+        default: 290
       wall_timeout:
         description: 'Wall-clock timeout in minutes for Step 2 (0=no limit, 270 recommended for code_interpreter)'
         required: false
         type: number
-        default: 0
+        default: 290
 
 permissions:
   contents: write        # to commit yaml results
