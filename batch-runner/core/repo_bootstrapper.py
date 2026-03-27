@@ -158,12 +158,9 @@ class RepoBootstrapper:
         """Create submission repo from openai/gdpval with deliverables stripped."""
         if self._repo_exists():
             if self._repo_has_content():
-                print(f"\n   Repo already exists with data: {self.submission_repo_id}")
-                print(f"     To re-bootstrap, delete it first:")
-                print(f"       huggingface-cli repo delete {self.submission_repo_id} --repo-type dataset")
-                raise SystemExit(
-                    f"Aborted: repo '{self.submission_repo_id}' already exists."
-                )
+                print(f"\n   \u2705 Repo already exists with data: {self.submission_repo_id}")
+                print(f"   Skipping repo creation (idempotent).")
+                return  # idempotent: already bootstrapped, skip
             else:
                 print(f"\n   Repo exists but is empty (partial bootstrap). Deleting ...")
                 self.api.delete_repo(
