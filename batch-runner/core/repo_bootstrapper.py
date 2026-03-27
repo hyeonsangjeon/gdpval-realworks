@@ -115,13 +115,18 @@ class RepoBootstrapper:
         if not self.token:
             raise ValueError("HF_TOKEN is required.\n   export HF_TOKEN=hf_xxx")
 
-        # 1. Ensure remote repo (abort if exists with content)
+        # 1. Ensure remote repo (skip if already bootstrapped)
         self._ensure_remote_repo()
 
         # 2. Download submission repo to local
         self._download_snapshot(force=force)
 
-        # 3. Validate
+        # 3. Regenerate manifest if missing (idempotent re-run)
+        if not self.manifest_path.exists():
+            print(f"\n   Manifest not found, regenerating from snapshot...")
+            self._generate_manifest_from_dir(str(self.local_path))
+
+        # 4. Validate
         self._validate_snapshot()
 
         print(f"\n   Bootstrap complete!")
