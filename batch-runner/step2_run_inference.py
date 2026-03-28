@@ -1220,6 +1220,10 @@ def run_inference(
         with open(progress_path, "r", encoding="utf-8") as f:
             progress = json.load(f)
 
+        # Relay duration fix: preserve original started_at from first run
+        if "started_at" in progress:
+            started_at = progress["started_at"]
+
         completed_count = sum(1 for r in progress.get("results", [])
                               if r.get("status") == "success")
         pending_count = sum(1 for r in progress.get("results", [])

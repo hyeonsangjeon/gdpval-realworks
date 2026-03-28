@@ -7,7 +7,7 @@
 | **Model** | gpt-5.4 |
 | **Execution Mode** | subprocess |
 | **Date** | 2026-03-27 |
-| **Duration** | 134m 28s |
+| **Duration** | 721m 42s |
 | **Generated At** | 2026-03-27T15:34:44.375983+00:00 |
 | 🤗 HF Dataset | [exp013_GPT54_reasoning_high](https://huggingface.co/datasets/HyeonSang/exp013_GPT54_reasoning_high) |
 | 📊 Self-Report | [self_report.json](https://huggingface.co/datasets/HyeonSang/exp013_GPT54_reasoning_high/blob/main/self_report.json) |
