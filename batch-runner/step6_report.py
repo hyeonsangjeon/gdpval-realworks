@@ -298,8 +298,7 @@ def _compute_recovery_stats(results: list) -> dict:
     for r in results:
         history = r.get("reflection_history", [])
         if len(history) <= 1:
-            if len(history) == 1:
-                attempt_scores["attempt_1"].append(history[0].get("score") or 0)
+            # Skip tasks that never retried — they have no reflection effect
             continue
 
         tasks_with_reflection += 1
@@ -940,8 +939,25 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
         }
         print("   Skipping narrative (--no-narrative)")
     else:
-        print("   Generating narrative via LLM…")
-        narrative = _generate_narrative(data, summary, sector_breakdown)
+        # Try GPT-5.4 Pro (Responses API) first, fallback to standard
+        try:
+            from core.narrative_analyzer import create_narrative_analyzer
+            print("   Generating narrative via GPT-5.4 Pro (Responses API)…")
+            analyzer = create_narrative_analyzer()
+            result = analyzer.analyze(data, summary, sector_breakdown, task_results, error_tasks)
+            narrative = {
+                "overview": result.overview,
+                "quality_analysis": result.quality_analysis,
+                "failure_patterns": result.failure_patterns,
+                "recommendations": result.recommendations,
+            }
+            total_ms = result.call_1_latency_ms + result.call_2_latency_ms
+            print(f"   ✅ Pro narrative generated ({total_ms:,.0f}ms, "
+                  f"{result.total_tokens['input']:,}+{result.total_tokens['output']:,} tokens)")
+        except Exception as exc:
+            print(f"   ⚠️ Pro narrative failed: {exc}")
+            print(f"   Falling back to standard narrative…")
+            narrative = _generate_narrative(data, summary, sector_breakdown)
 
     # Build report_data.json
     rd = _build_report_data(data, narrative, summary, sector_breakdown, task_results, error_tasks)
