@@ -2,7 +2,7 @@
 name: coder
 description: "Default worker for implementing code changes. Writes, edits, and refactors files in batch-runner/, src/, scripts/ following project conventions. Receives narrowly-scoped tasks from the orchestrator and returns concise diffs/summaries."
 tools: vscode, execute, read, edit, search, web, todo
-model: Claude Opus 4.6 (fast mode) (Preview) (copilot)
+model: Claude Opus 4.7 (1M context) (Xhigh reasoning) (Preview) (copilot)
 ---
 
 You are the **coder** worker for the `gdpval-realworks` repo. The orchestrator delegates concrete implementation work to you. You write code; you do not strategize.
