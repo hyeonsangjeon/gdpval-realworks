@@ -13,6 +13,7 @@ import { useReports } from '../hooks/useReports'
 import { useTheme } from '../contexts/ThemeContext'
 import { tooltipTexts } from '../data/tooltipTexts'
 import { onboarding } from '../utils/onboarding'
+import { substituteTaskTotal } from '../lib/textFormat'
 
 type TabKey = 'leaderboard' | 'trend' | 'errors' | 'grading'
 
@@ -84,6 +85,7 @@ export default function Dashboard() {
   // Calculate KPIs
   const bestRate = displayExperiments.length > 0 ? Math.max(...displayExperiments.map((e) => e.success_rate_pct)) : 0
   const bestQA = displayExperiments.length > 0 ? Math.max(...displayExperiments.map((e) => e.avg_qa_score)) : 0
+  const totalTasks = displayExperiments[0]?.total_tasks ?? 220
 
   const handleSelectExperiment = (shortId: string) => {
     navigate(`/experiments/${shortId}`)
@@ -167,7 +169,7 @@ export default function Dashboard() {
             {
               label: 'Best Success Rate',
               value: `${bestRate.toFixed(1)}%`,
-              unit: 'of 220 tasks',
+              unit: `of ${totalTasks} tasks`,
               tooltip: tooltipTexts.kpi.bestSuccessRate,
               valueColor: 'text-emerald-400',
               accentColor: '#10b981',
@@ -177,7 +179,7 @@ export default function Dashboard() {
               label: 'Experiments',
               value: displayExperiments.length,
               unit: 'total',
-              tooltip: tooltipTexts.kpi.experiments,
+              tooltip: substituteTaskTotal(tooltipTexts.kpi.experiments, totalTasks),
               valueColor: 'text-dash-heading',
               accentColor: '#3b82f6',
               tooltipDir: 'right' as const,
@@ -277,6 +279,7 @@ export default function Dashboard() {
                 experiments={displayExperiments}
                 sectorMatrix={sectorMatrix}
                 onSelectExperiment={handleSelectExperiment}
+                totalTasks={totalTasks}
               />
             )}
             {activeTab === 'trend' && <TrendView experiments={displayExperiments} />}
@@ -305,7 +308,7 @@ export default function Dashboard() {
       </motion.footer>
 
       {/* About Modal */}
-      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} totalTasks={totalTasks} />
     </motion.div>
   )
 }

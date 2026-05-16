@@ -2,14 +2,21 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Lightbulb } from 'lucide-react'
 import { onboarding } from '../../utils/onboarding'
+import { substituteTaskTotal } from '../../lib/textFormat'
 
 interface SectionHintProps {
   tabId: string
   children: React.ReactNode
+  totalTasks?: number
 }
 
-export default function SectionHint({ tabId, children }: SectionHintProps) {
+export default function SectionHint({ tabId, children, totalTasks }: SectionHintProps) {
   const [visible, setVisible] = useState(false)
+
+  const resolvedChildren =
+    totalTasks !== undefined && typeof children === 'string'
+      ? substituteTaskTotal(children, totalTasks)
+      : children
 
   useEffect(() => {
     // Show only if not already dismissed (delay to avoid SSR flash)
@@ -34,7 +41,7 @@ export default function SectionHint({ tabId, children }: SectionHintProps) {
           <div className="rounded-lg bg-amber-500/[0.06] border border-amber-500/20 border-l-2 border-l-amber-500/40 px-4 py-3 flex items-start gap-3">
             <Lightbulb className="w-3.5 h-3.5 text-amber-500/70 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-dash-text-secondary leading-relaxed flex-1">
-              {children}
+              {resolvedChildren}
             </p>
             <button
               onClick={handleDismiss}

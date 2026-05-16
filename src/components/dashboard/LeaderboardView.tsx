@@ -6,11 +6,13 @@ import { useTheme } from '../../contexts/ThemeContext'
 import InfoTooltip from '../common/InfoTooltip'
 import SectionHint from '../common/SectionHint'
 import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
+import { substituteTaskTotal } from '../../lib/textFormat'
 
 interface LeaderboardViewProps {
   experiments: ExperimentEntry[]
   sectorMatrix: SectorMatrix
   onSelectExperiment: (shortId: string) => void
+  totalTasks?: number
 }
 
 const EXPERIMENT_COLORS: Record<string, string> = {
@@ -112,6 +114,7 @@ export default function LeaderboardView({
   experiments,
   sectorMatrix,
   onSelectExperiment,
+  totalTasks,
 }: LeaderboardViewProps) {
   const [hoveredRow, setHoveredRow] = useState<string | null>(null)
   const [modelFilter, setModelFilter] = useState<string>('all')
@@ -120,6 +123,8 @@ export default function LeaderboardView({
   const [hoveredCell, setHoveredCell] = useState<string | null>(null)
   const [heatmapMode, setHeatmapMode] = useState<'qa' | 'rate'>('qa')
   const { isDark } = useTheme()
+
+  const effectiveTotalTasks = totalTasks ?? 220
 
   // Unique filter options
   const models = useMemo(
@@ -169,7 +174,7 @@ export default function LeaderboardView({
       className="space-y-6"
     >
       {/* ── Section Hint ── */}
-      <SectionHint tabId="leaderboard">{sectionHintTexts.leaderboard}</SectionHint>
+      <SectionHint tabId="leaderboard">{substituteTaskTotal(sectionHintTexts.leaderboard, effectiveTotalTasks)}</SectionHint>
 
       {/* ── Filter Bar ── */}
       <div className="flex flex-wrap items-center gap-3">
@@ -224,7 +229,7 @@ export default function LeaderboardView({
               <tr className="border-b border-dash-border">
                 <th className="px-4 py-3 text-left text-dash-text-muted font-semibold">Rank</th>
                 <th className="px-4 py-3 text-left text-dash-text-muted font-semibold">
-                  <span className="inline-flex items-center gap-1">Experiment <InfoTooltip content={tooltipTexts.leaderboard.experiment} position="bottom" /></span>
+                  <span className="inline-flex items-center gap-1">Experiment <InfoTooltip content={substituteTaskTotal(tooltipTexts.leaderboard.experiment, effectiveTotalTasks)} position="bottom" /></span>
                 </th>
                 <th className="px-4 py-3 text-left text-dash-text-muted font-semibold">
                   <span className="inline-flex items-center gap-1">Model <InfoTooltip content={tooltipTexts.leaderboard.model} position="bottom" /></span>
@@ -233,7 +238,7 @@ export default function LeaderboardView({
                   <span className="inline-flex items-center gap-1">Strategy <InfoTooltip content={tooltipTexts.leaderboard.strategy} position="bottom" /></span>
                 </th>
                 <th className="px-4 py-3 text-center text-dash-text-muted font-semibold">
-                  <span className="inline-flex items-center gap-1 justify-center">Progress <InfoTooltip content={tooltipTexts.leaderboard.progress} position="bottom" /></span>
+                  <span className="inline-flex items-center gap-1 justify-center">Progress <InfoTooltip content={substituteTaskTotal(tooltipTexts.leaderboard.progress, effectiveTotalTasks)} position="bottom" /></span>
                 </th>
                 <th className="px-4 py-3 text-right text-dash-text-muted font-semibold">
                   <span className="inline-flex items-center gap-1 justify-end">Success Rate <InfoTooltip content={tooltipTexts.leaderboard.successRate} position="bottom" /></span>

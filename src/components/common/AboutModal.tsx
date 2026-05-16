@@ -4,15 +4,18 @@ import { X, Info } from 'lucide-react'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { onboarding } from '../../utils/onboarding'
 import { aboutContent } from '../../data/tooltipTexts'
+import { substituteTaskTotal } from '../../lib/textFormat'
 
 interface AboutModalProps {
   open: boolean
   onClose: () => void
+  totalTasks?: number
 }
 
-export default function AboutModal({ open, onClose }: AboutModalProps) {
+export default function AboutModal({ open, onClose, totalTasks }: AboutModalProps) {
   const isMobile = useIsMobile()
   const modalRef = useRef<HTMLDivElement>(null)
+  const effectiveTotalTasks = totalTasks ?? 220
 
   // Mark as seen + close
   const handleClose = () => {
@@ -104,7 +107,7 @@ export default function AboutModal({ open, onClose }: AboutModalProps) {
                   <h3 className="text-sm font-semibold text-dash-text mb-2">{section.heading}</h3>
                   {'body' in section && (
                     <p className="text-xs text-dash-text-secondary leading-relaxed">
-                      {section.body}
+                      {substituteTaskTotal(section.body, effectiveTotalTasks)}
                     </p>
                   )}
                   {'bullets' in section && section.bullets && (
