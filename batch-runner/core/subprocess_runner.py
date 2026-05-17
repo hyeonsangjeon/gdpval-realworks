@@ -243,9 +243,10 @@ class SubprocessRunner:
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
-                # Save code to file
+                # Path of the script the subprocess will execute. Actual write
+                # happens after the _AVAILABLE_FILES header is prepended below
+                # so the persisted file matches the in-memory `code`.
                 code_path = Path(tmpdir) / "solution.py"
-                code_path.write_text(code, encoding="utf-8")
 
                 # Copy reference files to execution directory and track copied files
                 copied_files = []
