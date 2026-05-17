@@ -55,7 +55,7 @@ A React dashboard that visualizes LLM experiment results on **220 real-world exp
 | **Leaderboard** | Leaderboard | Ranked experiments — strategy, model, progress, success rate, Δ best, QA |
 | **Sector Heatmap** | Leaderboard | 9 sectors × N experiments, color-coded success rate matrix |
 | **Trend Charts** | Trends | Success Rate / QA Score / Latency trends across experiments |
-| **Execution Errors** | Execution Errors | Error distribution, CONFIDENCE NameError banner, recovery funnel |
+| **Execution Errors** | Execution Errors | Exception type distribution chart, recovery funnel, AI failure insights narrative |
 | **Grading Analysis** | Grading Analysis | External evaluation scores (OpenAI Evals integration) |
 | **Experiment Detail** | /experiment/:id | 220-task table, sector/status filters, QA distribution, resume rounds |
 | **Prompt Architecture** | /experiment/:id | System → User Prompt → QA → Config accordion viewer |

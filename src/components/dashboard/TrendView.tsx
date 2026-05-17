@@ -99,6 +99,13 @@ export default function TrendView({ experiments }: TrendViewProps) {
     ? [Math.max(0, Math.floor(Math.min(...chartData.map((d) => d.successRate)) / 5) * 5 - 5), 100]
     : [0, 100]
 
+  const qaScoreDomain: [number, number] = chartData.length > 0
+    ? [
+        Math.max(0, Math.floor(Math.min(...chartData.map((d) => d.qaScore)) * 2) / 2 - 0.5),
+        Math.min(10, Math.ceil(Math.max(...chartData.map((d) => d.qaScore)) * 2) / 2 + 0.5),
+      ]
+    : [0, 7]
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -138,7 +145,7 @@ export default function TrendView({ experiments }: TrendViewProps) {
             <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
               <XAxis dataKey="name" tick={<ClickableAxisTick expMap={expMap} navigate={navigate} isDark={isDark} />} />
-              <YAxis tick={tickStyle} domain={[4, 7]} />
+              <YAxis tick={tickStyle} domain={qaScoreDomain} />
               <Tooltip {...chartTooltipStyle} />
               <Line
                 type="monotone"

@@ -55,7 +55,7 @@
 | **리더보드** | Leaderboard | 실험 랭킹 — 전략, 모델, 진행률, 성공률, Δ best, QA 점수 |
 | **섹터 히트맵** | Leaderboard | 9개 섹터 × N개 실험 성공률 매트릭스 (색상 코딩) |
 | **트렌드 차트** | Trends | 실험 간 성공률 / QA 점수 / 지연시간 추이 |
-| **실행 에러** | Execution Errors | 에러 분포, CONFIDENCE NameError 배너, 복구 퍼널 |
+| **실행 에러** | Execution Errors | 예외 유형 분포 차트, 복구 퍼널, AI 기반 실패 인사이트 내러티브 |
 | **채점 분석** | Grading Analysis | 외부 평가 점수 (OpenAI Evals 연동) |
 | **실험 상세** | /experiment/:id | 220-태스크 테이블, 섹터/상태 필터, QA 분포, 재시도 라운드 |
 | **프롬프트 아키텍처** | /experiment/:id | System → User Prompt → QA → Config 아코디언 뷰어 |

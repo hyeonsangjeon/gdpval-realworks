@@ -260,7 +260,7 @@ Interactive experiment analytics — leaderboard, sector heatmaps, error analysi
 | **Leaderboard** | Ranked experiments with strategy, success rate, QA scores |
 | **Sector Heatmap** | 9 sectors × N experiments success rate matrix |
 | **Trends** | Success rate / QA / latency trend lines across experiments |
-| **Execution Errors** | Error distribution, recovery funnel, CONFIDENCE NameError tracking |
+| **Execution Errors** | Exception type distribution chart, recovery funnel, AI failure insights narrative |
 | **Prompt Viewer** | See exactly what prompt was sent to the LLM — system, user, QA, config |
 | **Grading** | External evaluation scores (OpenAI Evals) |
 | **Experiment Detail** | Drill into 220 tasks — filter by sector, status, search |
