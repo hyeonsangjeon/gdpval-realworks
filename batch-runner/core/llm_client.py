@@ -20,8 +20,9 @@ class _Message:
 
 
 class _Choice:
-    def __init__(self, content: str):
+    def __init__(self, content: str, finish_reason: str | None = None):
         self.message = _Message(content)
+        self.finish_reason = finish_reason
 
 
 class _Usage:
@@ -33,8 +34,8 @@ class _Usage:
 
 class NormalizedResponse:
     """OpenAI-compatible response wrapper for non-OpenAI providers."""
-    def __init__(self, content: str, model: str = "", usage=None):
-        self.choices = [_Choice(content)]
+    def __init__(self, content: str, model: str = "", usage=None, finish_reason: str | None = None):
+        self.choices = [_Choice(content, finish_reason=finish_reason)]
         self.model = model
         self.usage = usage or _Usage()
 
@@ -96,13 +97,50 @@ class AnthropicClient:
 
         response = self.client.messages.create(**create_kwargs)
 
-        content = response.content[0].text if response.content else ""
+        # Anthropic returns a list of content blocks. Extended thinking and
+        # tool use produce ThinkingBlock / ToolUseBlock objects that have no
+        # `.text` attribute — accessing response.content[0].text on those
+        # would raise AttributeError. Concatenate the text from all text blocks
+        # and skip the rest.
+        text_parts = []
+        for block in (response.content or []):
+            if getattr(block, "type", None) == "text":
+                text_parts.append(getattr(block, "text", ""))
+        content = "".join(text_parts)
+
+        # Map Anthropic stop_reason to OpenAI-style finish_reason so callers
+        # that check choices[0].finish_reason == "length" (truncation guard)
+        # work for both providers.
+        finish_reason = self._map_stop_reason(getattr(response, "stop_reason", None))
+
         usage = _Usage(
             prompt_tokens=response.usage.input_tokens,
             completion_tokens=response.usage.output_tokens,
             total_tokens=response.usage.input_tokens + response.usage.output_tokens,
         )
-        return NormalizedResponse(content=content, model=response.model, usage=usage)
+        return NormalizedResponse(
+            content=content,
+            model=response.model,
+            usage=usage,
+            finish_reason=finish_reason,
+        )
+
+    @staticmethod
+    def _map_stop_reason(stop_reason: str | None) -> str | None:
+        """Translate Anthropic stop_reason to OpenAI-style finish_reason.
+
+        Anthropic values: "end_turn", "max_tokens", "stop_sequence", "tool_use".
+        OpenAI values:    "stop", "length", "tool_calls", ...
+        """
+        if stop_reason is None:
+            return None
+        mapping = {
+            "max_tokens": "length",
+            "end_turn": "stop",
+            "stop_sequence": "stop",
+            "tool_use": "tool_calls",
+        }
+        return mapping.get(stop_reason, stop_reason)
 
 
 # ─── Client Factory ──────────────────────────────────────────────────────

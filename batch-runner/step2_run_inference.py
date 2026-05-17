@@ -1001,8 +1001,11 @@ def run_inference(
 
         QA status handling:
         - passed=True  → success (QA 통과)
-        - passed=False → success (파일 생성 = LLM 성능, QA 점수만 낮음)
-        - undetermined → 재시도 후 마지막이면 success (score=None)
+        - passed=False → 재시도 후에도 score < min_score 면 qa_failed
+          (genuine 품질 실패. RETRIABLE_STATUSES 에 포함되어 있어
+          resume rounds / 자동 retry 가 다시 동작함)
+        - undetermined → 재시도 후 마지막이면 success (score=None,
+          QA parse/API 실패만 표시. 품질 실패가 아니므로 retry 대상 아님)
 
         Best-swap: QA 재시도 시 이전 best 파일을 백업.
         새 결과가 더 좋으면 백업 삭제, 더 나쁘면 백업에서 복원.
@@ -1154,6 +1157,15 @@ def run_inference(
                           f"(best score={best_score}) — "
                           f"saving as success",
                           end=" ", flush=True)
+                    # Genuine QA fail (determined, score < min_score, retries
+                    # exhausted): mark the best result as qa_failed so the
+                    # RETRIABLE_STATUSES retry plumbing (resume rounds) +
+                    # _print_status + summary counters fire. The undetermined
+                    # branch above is intentionally left as "success" — it
+                    # only marks QA parse/API failures, not genuine quality
+                    # failures.
+                    if best_result is not None:
+                        best_result["status"] = "qa_failed"
                     break
 
                 # Build structured reflection prompt for retry
