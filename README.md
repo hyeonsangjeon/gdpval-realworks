@@ -41,7 +41,7 @@
 Most LLM benchmarks test **academic reasoning** — math, code puzzles, trivia.  
 None of that tells you whether a model can actually **do your job**.
 
-**GDPVal** (GDP-level Validation) is different: **220 real-world expert tasks** across 11 sectors and 55 occupations — Excel reports, legal docs, sales decks, the stuff people actually get paid for.
+**GDPVal** (GDP-level Validation) is different: **220 real-world expert tasks** across 9 industry sectors and 44 occupations — Excel reports, legal docs, sales decks, the stuff people actually get paid for.
 
 This repo automates the entire loop: **configure → run → collect → visualize** — driven by a single YAML file, executed on GitHub Actions, results on a live dashboard.
 

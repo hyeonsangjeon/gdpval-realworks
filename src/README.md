@@ -7,7 +7,7 @@
 
 ## What This Is
 
-A React dashboard that visualizes LLM experiment results on **220 real-world expert tasks** across 11 sectors and 55 occupations. Compare prompt strategies, track sector-level performance, and drill into individual task outcomes — all without a backend server.
+A React dashboard that visualizes LLM experiment results on **220 real-world expert tasks** across 9 industry sectors and 44 occupations. Compare prompt strategies, track sector-level performance, and drill into individual task outcomes — all without a backend server.
 
 - **Static JSON** generated at build time → zero API calls at runtime
 - **GitHub Pages** auto-deployed on every push to `main`
