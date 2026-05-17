@@ -417,6 +417,9 @@ class RepoBootstrapper:
             f"(policy={active_policy}, needs_files={needs_count}, "
             f"text_only={text_only_count})"
         )
+        print(
+            f"   [manifest] confidence_distribution={confidence_distribution}"
+        )
 
     # -- Download snapshot -------------------------------------------------
 

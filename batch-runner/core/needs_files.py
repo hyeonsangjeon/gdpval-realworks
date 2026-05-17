@@ -33,6 +33,8 @@ Usage:
 """
 
 import json
+import os
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -84,11 +86,28 @@ def resolve_needs_files(
 
 
 class NeedsFilesManifest:
-    """Read-only accessor for step0_needs_files_manifest.json."""
+    """Read-only accessor for step0_needs_files_manifest.json.
+
+    Policy snapshot semantics
+    -------------------------
+    The manifest's ``_summary.active_policy`` field is a snapshot taken at
+    manifest generation time (Step 0).  Runtime changes to
+    ``NEEDS_FILES_POLICY`` do NOT automatically re-evaluate the manifest:
+    each task's top-level ``needs_files`` boolean reflects the policy under
+    which the manifest was generated.  If you change the policy you must
+    regenerate the manifest (re-run Step 0).
+
+    On load, a mismatch between ``_summary.active_policy`` and the runtime
+    ``NEEDS_FILES_POLICY`` environment variable emits a ``RuntimeWarning``.
+    Setting ``NEEDS_FILES_STRICT=1`` upgrades the warning to a ``ValueError``.
+    v1 manifests (no ``active_policy`` field) skip the check entirely so
+    legacy workspaces keep working.
+    """
 
     def __init__(self, data: dict):
         self._data = data
         self._tasks: Dict[str, dict] = data.get("tasks", {})
+        self._check_policy_snapshot()
 
     # ── Constructors ──────────────────────────────────────────────────
 
@@ -113,6 +132,33 @@ class NeedsFilesManifest:
             )
         with open(p, "r", encoding="utf-8") as f:
             return cls(json.load(f))
+
+    # ── Guardrail ─────────────────────────────────────────────────────
+
+    def _check_policy_snapshot(self) -> None:
+        """Verify the manifest's active_policy snapshot matches the runtime env.
+
+        v1 manifests (no ``active_policy``) are skipped.  When the snapshot
+        and ``NEEDS_FILES_POLICY`` disagree, emit a ``RuntimeWarning`` by
+        default or raise ``ValueError`` if ``NEEDS_FILES_STRICT=1``.
+        """
+        manifest_policy = self.summary.get("active_policy")
+        if manifest_policy is None:
+            return  # v1 manifest — no snapshot recorded
+        runtime_policy = os.environ.get("NEEDS_FILES_POLICY", "deliverable_only")
+        if manifest_policy == runtime_policy:
+            return
+        msg = (
+            f"Manifest active_policy={manifest_policy!r} != "
+            f"runtime NEEDS_FILES_POLICY={runtime_policy!r}. "
+            "Manifest is a snapshot taken at Step 0 generation time; "
+            "regenerate the manifest (re-run Step 0) or unset "
+            "NEEDS_FILES_POLICY to match the snapshot."
+        )
+        strict = os.environ.get("NEEDS_FILES_STRICT", "0") == "1"
+        if strict:
+            raise ValueError(msg)
+        warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
     # ── Queries ───────────────────────────────────────────────────────
 
@@ -174,9 +220,10 @@ class NeedsFilesManifest:
 
         For v2 manifests, reads from the precomputed ``policy_results`` block.
         For v1 manifests (no ``policy_results``), only ``deliverable_only`` is
-        reliable and is returned via the original ``needs_files`` flag;
-        other policies cannot be reconstructed without the classifier, so
-        they fall back to the same v1 value (conservative).
+        reconstructible — the recorded ``needs_files`` flag IS the
+        ``deliverable_only`` resolution.  Any other policy raises
+        ``ValueError`` because v1 lacks the classifier signal needed to
+        compute it; callers should regenerate the manifest (re-run Step 0).
         """
         if policy not in NEEDS_FILES_POLICIES_KNOWN:
             raise ValueError(
@@ -186,10 +233,16 @@ class NeedsFilesManifest:
         if entry is None:
             return True  # match needs_files() conservative default
         pr = entry.get("policy_results")
-        if isinstance(pr, dict) and policy in pr:
-            return bool(pr[policy])
-        # v1 fallback: best we can do is the recorded flag (== deliverable_only)
-        return bool(entry.get("needs_files", False))
+        if pr is None:
+            # v1 fallback: only deliverable_only is reliable.
+            if policy == "deliverable_only":
+                return bool(entry.get("needs_files", False))
+            raise ValueError(
+                f"policy_result({policy!r}) unavailable on v1 manifest "
+                f"(task_id={task_id!r}); regenerate the manifest "
+                "(re-run Step 0) to obtain policy_results."
+            )
+        return bool(pr.get(policy, False))
 
     @property
     def summary(self) -> dict:
