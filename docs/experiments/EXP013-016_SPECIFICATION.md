@@ -31,7 +31,7 @@ This ablation study isolates the effect of OpenAI's `reasoning_effort` parameter
 
 ### Control Variables (identical across all 4)
 
-- **Tasks**: All 220 (11 sectors, 55 occupations)
+- **Tasks**: All 220 (9 sectors, 44 occupations)
 - **Model**: gpt-5.4 (Azure deployment, 150 PTU)
 - **Architecture**: Multi-agent (gpt-audio-1.5 preprocessor + GPT-5.4 generation)
 - **Execution**: subprocess mode + domain packages (exp011 environment)
@@ -69,7 +69,7 @@ When `null`, the parameter is **not sent** to OpenAI — this matches legacy beh
 
 ### H5: Sector Sensitivity
 **Prediction**: Complex sectors (Finance, Healthcare, Information) benefit more from reasoning  
-**Measurement**: Success rate delta by sector (11-way comparison)
+**Measurement**: Success rate delta by sector (9-way comparison)
 
 ### H6: Audio Synergy
 **Prediction**: Reasoning + audio preprocessing compounds improvement for Information sector  
@@ -119,7 +119,7 @@ Generate 4-way comparison table:
 - Statistical significance testing (χ² for success rate)
 
 ### Sector-Level Heatmap
-11 sectors × 4 reasoning levels → 44 cells showing:
+9 sectors × 4 reasoning levels → 36 cells showing:
 - Success rate delta vs baseline (exp016)
 - Average QA score
 - Cost per successful task
@@ -165,8 +165,8 @@ control:
 data:
   source: "HyeonSang/exp013_GPT54_reasoning_high"
   filter:
-    sector: null      # All 11 sectors
-    occupation: null  # All 55 occupations
+    sector: null      # All 9 sectors
+    occupation: null  # All 44 occupations
     sample_size: null # All 220 tasks
 
 condition_a:
@@ -205,7 +205,7 @@ After this study, we will know:
 - **Base experiments**: exp012 (multi-agent audio), exp011 (domain packages)
 - **OpenAI docs**: [Reasoning Models Guide](https://platform.openai.com/docs/guides/reasoning)
 - **Azure API version**: `2025-04-01-preview`
-- **Dataset**: GDPVal (220 tasks, 11 sectors, 55 occupations)
+- **Dataset**: GDPVal (220 tasks, 9 sectors, 44 occupations)
 - **Config**: `batch-runner/core/experiment_config.py::ModelConfig.reasoning_effort`
 
 ---

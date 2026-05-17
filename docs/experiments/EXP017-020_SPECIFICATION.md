@@ -32,7 +32,7 @@ This ablation study isolates the effect of OpenAI's `reasoning_effort` parameter
 
 ### Control Variables (identical across all 4 within exp017-020)
 
-- **Tasks**: All 220 (11 sectors, 55 occupations)
+- **Tasks**: All 220 (9 sectors, 44 occupations)
 - **Model**: gpt-5.4-pro (Azure deployment)
 - **Architecture**: Multi-agent (gpt-audio-1.5 preprocessor + GPT-5.4-Pro generation)
 - **Execution**: subprocess mode + domain packages (exp011 environment)
@@ -70,7 +70,7 @@ When `null`, the parameter is **not sent** to OpenAI — this matches legacy beh
 
 ### H5: Sector Sensitivity
 **Prediction**: Complex sectors (Finance, Healthcare, Information) benefit more from reasoning  
-**Measurement**: Success rate delta by sector (11-way comparison)
+**Measurement**: Success rate delta by sector (9-way comparison)
 
 ### H6: Cross-Model Comparison
 **Prediction**: GPT-5.4-Pro outperforms GPT-5.4 at all reasoning levels  
@@ -123,7 +123,7 @@ Compare exp013-016 (gpt-5.4) vs exp017-020 (gpt-5.4-pro) vs exp021-024 (gpt-5.4-
 - Cost-quality Pareto frontier
 
 ### Sector-Level Heatmap
-11 sectors × 4 reasoning levels → 44 cells showing:
+9 sectors × 4 reasoning levels → 36 cells showing:
 - Success rate delta vs baseline (exp020)
 - Average QA score
 - Cost per successful task
@@ -151,8 +151,8 @@ experiment:
 data:
   source: "HyeonSang/exp017_GPT54Pro_reasoning_high"
   filter:
-    sector: null      # All 11 sectors
-    occupation: null  # All 55 occupations
+    sector: null      # All 9 sectors
+    occupation: null  # All 44 occupations
     sample_size: null # All 220 tasks
 
 condition_a:
