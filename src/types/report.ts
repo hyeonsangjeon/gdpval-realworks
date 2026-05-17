@@ -24,6 +24,17 @@ export interface TaskResult {
   instruction?: string
   reference_file_urls?: string[]
   deliverable_files?: string[]
+  // v2 manifest fields (optional — v1 self_reports do not include these)
+  prompt_classification?: PromptClassification | null
+  policy_results?: Record<string, boolean> | null
+  has_deliverable_files?: boolean | null
+}
+
+export interface PromptClassification {
+  requires_file: boolean
+  explicit_exts: string[]
+  inferred_exts: string[]
+  confidence: 'explicit' | 'inferred' | 'ambiguous' | 'text_only'
 }
 
 export interface SectorBreakdown {
@@ -79,6 +90,10 @@ export interface ReportSummary {
   avg_latency_ms: number
   max_latency_ms: number
   total_latency_ms: number
+  // v2 manifest fields (optional — v1 self_reports do not include these)
+  active_policy?: string | null
+  policy_counts?: Record<string, number> | null
+  confidence_distribution?: Record<string, number> | null
 }
 
 export interface Narrative {
