@@ -8,6 +8,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+  PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import { useReport, HF_BASE } from '../hooks/useReports'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -358,6 +359,160 @@ function ExperimentDetail() {
             </motion.div>
           )}
         </div>
+
+        {/* ── v2: Policy Comparison & Confidence Distribution ── */}
+        {(summary?.policy_counts || summary?.confidence_distribution) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Policy Comparison */}
+            {summary?.policy_counts && Object.keys(summary.policy_counts).length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.13 }}
+                className="bg-dash-card border border-dash-border rounded-xl p-4"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-dash-heading">Policy Comparison</h3>
+                  {summary.active_policy && (
+                    <span
+                      className="text-[10px] font-mono px-2 py-0.5 rounded bg-dash-card-hover text-dash-text-secondary"
+                      title="Currently active policy"
+                    >
+                      active: <span className="text-emerald-400">{summary.active_policy}</span>
+                    </span>
+                  )}
+                </div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart
+                    data={Object.entries(summary.policy_counts).map(([policy, count]) => ({
+                      policy,
+                      count: count ?? 0,
+                      isActive: policy === summary.active_policy,
+                    }))}
+                    margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="policy" tick={{ ...tickStyle, fontSize: 10 }} />
+                    <YAxis tick={tickStyle} allowDecimals={false} />
+                    <Tooltip contentStyle={chartTooltipStyle} />
+                    <Bar dataKey="count" name="needs_files">
+                      {Object.entries(summary.policy_counts).map(([policy], i) => (
+                        <Cell
+                          key={i}
+                          fill={policy === summary.active_policy ? '#10b981' : '#6366f1'}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <table className="w-full text-xs mt-2">
+                  <thead>
+                    <tr className="text-[10px] text-dash-text-muted uppercase border-b border-dash-border">
+                      <th className="py-1.5 text-left">Policy</th>
+                      <th className="py-1.5 text-right">needs_files</th>
+                      <th className="py-1.5 text-right">Δ vs active</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(summary.policy_counts).map(([policy, count]) => {
+                      const active = summary.active_policy
+                      const activeCount = active && summary.policy_counts ? summary.policy_counts[active] ?? null : null
+                      const delta = activeCount != null && count != null ? count - activeCount : null
+                      const isActive = policy === active
+                      return (
+                        <tr key={policy} className="border-b border-dash-border-subtle last:border-0">
+                          <td className="py-1.5 text-dash-text font-mono">
+                            {policy}
+                            {isActive && (
+                              <span className="ml-1.5 text-[9px] text-emerald-400">●</span>
+                            )}
+                          </td>
+                          <td className="py-1.5 text-right text-dash-text-secondary font-mono">{count ?? 0}</td>
+                          <td className="py-1.5 text-right font-mono text-dash-text-muted">
+                            {delta == null || isActive ? '—' : delta > 0 ? `+${delta}` : `${delta}`}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </motion.div>
+            )}
+
+            {/* Confidence Distribution */}
+            {summary?.confidence_distribution && Object.keys(summary.confidence_distribution).length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.14 }}
+                className="bg-dash-card border border-dash-border rounded-xl p-4"
+              >
+                <h3 className="text-sm font-semibold text-dash-heading mb-3">Confidence Distribution</h3>
+                {(() => {
+                  const CONFIDENCE_COLORS: Record<string, string> = {
+                    explicit: '#10b981',
+                    inferred: '#6366f1',
+                    ambiguous: '#f59e0b',
+                    text_only: '#6b7280',
+                  }
+                  const entries = Object.entries(summary.confidence_distribution!).map(([k, v]) => ({
+                    name: k,
+                    value: v ?? 0,
+                  }))
+                  const total = entries.reduce((s, e) => s + (e.value || 0), 0)
+                  return (
+                    <>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={entries}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={70}
+                            innerRadius={40}
+                            paddingAngle={2}
+                            label={(entry: { value?: number }) => (entry.value ? String(entry.value) : '')}
+                          >
+                            {entries.map((entry, i) => (
+                              <Cell key={i} fill={CONFIDENCE_COLORS[entry.name] ?? '#9ca3af'} />
+                            ))}
+                          </Pie>
+                          <Tooltip contentStyle={chartTooltipStyle} />
+                          <Legend
+                            verticalAlign="bottom"
+                            iconSize={8}
+                            wrapperStyle={{ fontSize: 10, color: isDark ? '#e5e7eb' : '#374151' }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                        {entries.map((e) => {
+                          const pct = total > 0 ? ((e.value / total) * 100).toFixed(1) : '0.0'
+                          return (
+                            <div key={e.name} className="flex items-center justify-between py-1 border-b border-dash-border-subtle last:border-0">
+                              <span className="flex items-center gap-1.5 text-dash-text-secondary">
+                                <span
+                                  className="inline-block w-2 h-2 rounded-full"
+                                  style={{ background: CONFIDENCE_COLORS[e.name] ?? '#9ca3af' }}
+                                />
+                                <span className="font-mono">{e.name}</span>
+                              </span>
+                              <span className="font-mono text-dash-text">
+                                {e.value} <span className="text-dash-text-muted">({pct}%)</span>
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )
+                })()}
+              </motion.div>
+            )}
+          </div>
+        )}
 
         {/* Charts */}
         <motion.div
