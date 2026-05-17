@@ -254,6 +254,27 @@ def validate(data_dir: str = None) -> bool:
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
 
+        # ── Policy snapshot caveat ───────────────────────────────────
+        # success_rate semantics depend on the policy under which the
+        # manifest was generated.  Surface a WARNING and a JSON caveat
+        # when the snapshot is not the baseline ``deliverable_only`` so
+        # downstream readers (step6, dashboards) cannot silently compare
+        # numbers across policies.
+        active_policy = (
+            manifest.get("_summary", {}).get("active_policy")
+            or "deliverable_only"
+        )
+        if active_policy != "deliverable_only":
+            print(
+                f"[WARN] step5_validate: manifest active_policy="
+                f"{active_policy!r}. success_rate definition differs from "
+                "baseline 'deliverable_only'.",
+                file=sys.stderr,
+            )
+        file_gen_stats["policy_caveat"] = (
+            active_policy if active_policy != "deliverable_only" else None
+        )
+
         needs_files_missing = []
         needs_files_total = 0
 
