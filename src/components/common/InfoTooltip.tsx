@@ -3,17 +3,20 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Info } from 'lucide-react'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { substituteTaskTotal } from '../../lib/textFormat'
 
 interface InfoTooltipProps {
   content: string
   position?: 'top' | 'bottom' | 'left' | 'right'
   className?: string
+  totalTasks?: number
 }
 
 const GAP = 8 // px between icon and tooltip
 const VIEWPORT_PAD = 16 // px padding from viewport edges
 
-export default function InfoTooltip({ content, position = 'top', className = '' }: InfoTooltipProps) {
+export default function InfoTooltip({ content, position = 'top', className = '', totalTasks }: InfoTooltipProps) {
+  const resolvedContent = totalTasks !== undefined ? substituteTaskTotal(content, totalTasks) : content
   const [visible, setVisible] = useState(false)
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
   const triggerRef = useRef<HTMLSpanElement>(null)
@@ -136,7 +139,7 @@ export default function InfoTooltip({ content, position = 'top', className = '' 
               overflowWrap: 'break-word',
             }}
           >
-            {content}
+            {resolvedContent}
           </div>
         </motion.div>
       )}

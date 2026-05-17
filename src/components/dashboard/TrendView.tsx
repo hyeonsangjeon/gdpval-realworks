@@ -95,6 +95,10 @@ export default function TrendView({ experiments }: TrendViewProps) {
     retries: exp.retried_count || 0,
   }))
 
+  const successRateDomain: [number, number] = chartData.length > 0
+    ? [Math.max(0, Math.floor(Math.min(...chartData.map((d) => d.successRate)) / 5) * 5 - 5), 100]
+    : [0, 100]
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -114,7 +118,7 @@ export default function TrendView({ experiments }: TrendViewProps) {
             <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
               <XAxis dataKey="name" tick={<ClickableAxisTick expMap={expMap} navigate={navigate} isDark={isDark} />} />
-              <YAxis tick={tickStyle} domain={[85, 100]} />
+              <YAxis tick={tickStyle} domain={successRateDomain} />
               <Tooltip {...chartTooltipStyle} />
               <Line
                 type="monotone"

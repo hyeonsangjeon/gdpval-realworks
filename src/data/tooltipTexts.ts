@@ -1,23 +1,25 @@
+export const TASK_TOTAL_PLACEHOLDER = '{TASK_TOTAL}'
+
 export const tooltipTexts = {
   kpi: {
     bestSuccessRate:
       'Highest task-completion rate among all experiments. A task is "successful" when the LLM\'s self-assessed QA check passes (pre-grading).',
     experiments:
-      'Total number of experiment runs. Each experiment tests a different prompt strategy or token configuration against the same 220 tasks.',
+      `Total number of experiment runs. Each experiment tests a different prompt strategy or token configuration against the same ${TASK_TOTAL_PLACEHOLDER} tasks.`,
     tasksEvaluated:
-      'Number of real-world professional tasks per experiment. Covers 11 industry sectors and 44 occupations from the GDPVal Gold Subset.',
+      'Number of real-world professional tasks per experiment. Covers 9 industry sectors and 44 occupations from the GDPVal Gold Subset.',
     bestQaScore:
       'Highest average Self-QA score (0–10) across experiments. The LLM inspects its own output after each task and scores it on completeness, accuracy, and format. This is a self-assessed quality measure, not an external grade.',
   },
   leaderboard: {
     experiment:
-      'Unique experiment identifier (e.g., exp003). Click a row to see all 220 task results.',
+      `Unique experiment identifier (e.g., exp003). Click a row to see all ${TASK_TOTAL_PLACEHOLDER} task results.`,
     model:
       'The LLM model used. Currently all experiments run on the same model for controlled comparison.',
     strategy:
       'Prompt strategy used for each experiment. Each experiment tests a different approach to task execution — strategies vary in prompting technique, reasoning steps, and token budget. See each row for the specific strategy applied.',
     progress:
-      'Fraction of tasks completed out of 220 total. Bar color matches the experiment\u2019s assigned color, not completion status.',
+      `Fraction of tasks completed out of ${TASK_TOTAL_PLACEHOLDER} total. Bar color matches the experiment\u2019s assigned color, not completion status.`,
     successRate:
       'Percentage of tasks that passed self-assessed QA. Higher is better. Color: ≥96% green, ≥90% amber, <90% red.',
     deltaBest:
@@ -54,7 +56,7 @@ export const tooltipTexts = {
 
 export const sectionHintTexts = {
   leaderboard:
-    'Each row is one experiment — same 220 real-world tasks, different prompt strategies. Click a row to drill into individual task results.',
+    `Each row is one experiment — same ${TASK_TOTAL_PLACEHOLDER} real-world tasks, different prompt strategies. Click a row to drill into individual task results.`,
   trend:
     'Track how success rates, QA scores, and error counts evolve across experiments. X-axis is ordered by experiment date.',
   errors:
@@ -68,11 +70,11 @@ export const aboutContent = {
   sections: [
     {
       heading: 'What is this?',
-      body: 'This dashboard visualizes results from GDPVal RealWorks — a benchmark that tests LLMs on 220 real-world professional tasks across 11 industry sectors and 44 occupations.',
+      body: `This dashboard visualizes results from GDPVal RealWorks — a benchmark that tests LLMs on ${TASK_TOTAL_PLACEHOLDER} real-world professional tasks across 9 industry sectors and 44 occupations.`,
     },
     {
       heading: 'How to read the data',
-      body: 'Each "experiment" runs the same 220 tasks with a different configuration (prompt strategy, token budget, etc.). Compare experiments on the Leaderboard tab, track progress in Trends, and investigate failures in Error Analysis.',
+      body: `Each "experiment" runs the same ${TASK_TOTAL_PLACEHOLDER} tasks with a different configuration (prompt strategy, token budget, etc.). Compare experiments on the Leaderboard tab, track progress in Trends, and investigate failures in Error Analysis.`,
     },
     {
       heading: 'Key Metrics',
