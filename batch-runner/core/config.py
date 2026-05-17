@@ -136,3 +136,17 @@ DEFAULT_TOKENS = {
 }
 
 # NOTE: Legacy aliases removed — use DEFAULT_TOKENS["code_generation"] etc. directly
+
+
+# ─── needs_files manifest policy ──────────────────────────────────────────
+# Controls how Step 0 resolves ``needs_files`` per task in the V2 manifest.
+# Default = ``deliverable_only`` preserves the regression invariant
+# (Gold Subset: 185 needs_files, 35 text_only).  YAML/env override allows
+# experiments to opt into more permissive policies without touching defaults.
+NEEDS_FILES_POLICIES_KNOWN = (
+    "deliverable_only",
+    "explicit_boost",
+    "union",
+    "intersection",
+)
+NEEDS_FILES_POLICY = os.environ.get("NEEDS_FILES_POLICY", "deliverable_only")
