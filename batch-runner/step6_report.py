@@ -31,13 +31,53 @@ from typing import Any
 _SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
-from core.config import WORKSPACE_DIR
+from core.config import NEEDS_FILES_POLICIES_KNOWN, WORKSPACE_DIR
 
 
 # ── Defaults ──────────────────────────────────────────────────────────────
 
 DEFAULT_RESULT_JSON = WORKSPACE_DIR / "result.json"
 DEFAULT_OUTPUT_DIR = WORKSPACE_DIR / "report"
+
+
+# ── V2 manifest helpers ───────────────────────────────────────────────────
+
+
+def _load_manifest_safe():
+    """Load the needs_files manifest if available; return None on any failure.
+
+    Step 6 must keep working even when Step 0 has not been run (no manifest)
+    or when the manifest is malformed.  Callers should treat ``None`` as
+    "v2 fields unavailable" and fall back to the v1 schema (no new keys).
+    """
+    try:
+        from core.needs_files import NeedsFilesManifest
+        return NeedsFilesManifest.load()
+    except Exception:
+        return None
+
+
+def _manifest_v2_available(manifest) -> bool:
+    """True iff the manifest is a v2 manifest (has ``_summary.active_policy``).
+
+    v1 manifests omit ``active_policy``; in that case we must NOT add any v2
+    fields to the report so downstream consumers see exactly the v1 schema.
+    """
+    if manifest is None:
+        return False
+    return manifest.summary.get("active_policy") is not None
+
+
+def _v2_summary_fields(manifest) -> dict:
+    """Return the v2 summary fields from a manifest, or ``{}`` if v1/None."""
+    if not _manifest_v2_available(manifest):
+        return {}
+    s = manifest.summary
+    return {
+        "active_policy": s.get("active_policy"),
+        "policy_counts": s.get("policy_counts"),
+        "confidence_distribution": s.get("confidence_distribution"),
+    }
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -108,11 +148,12 @@ def _compute_sector_breakdown(data: dict) -> list[dict]:
     return breakdown
 
 
-def _build_task_results(data: dict) -> tuple[list[dict], list[dict]]:
+def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dict]]:
     task_results = []
     error_tasks = []
+    is_v2 = _manifest_v2_available(manifest)
     for r in data.get("results", []):
-        task_results.append({
+        entry = {
             "task_id": r.get("task_id", ""),
             "sector": r.get("sector", ""),
             "occupation": r.get("occupation", ""),
@@ -129,7 +170,16 @@ def _build_task_results(data: dict) -> tuple[list[dict], list[dict]]:
             "instruction": (r.get("instruction") or "")[:2000],
             "reference_file_urls": r.get("reference_file_urls", []),
             "deliverable_files": r.get("deliverable_files", []),
-        })
+        }
+        if is_v2:
+            task_id = r.get("task_id", "")
+            entry["prompt_classification"] = manifest.prompt_classification(task_id)
+            entry["policy_results"] = {
+                p: manifest.policy_result(task_id, p)
+                for p in NEEDS_FILES_POLICIES_KNOWN
+            }
+            entry["has_deliverable_files"] = manifest.has_deliverable_files(task_id)
+        task_results.append(entry)
         if r.get("error"):
             error_tasks.append({
                 "task_id": r.get("task_id", ""),
@@ -927,7 +977,8 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
     # Compute metrics
     summary = _compute_summary(data)
     sector_breakdown = _compute_sector_breakdown(data)
-    task_results, error_tasks = _build_task_results(data)
+    manifest = _load_manifest_safe()
+    task_results, error_tasks = _build_task_results(data, manifest=manifest)
 
     # Generate narrative
     if no_narrative:
@@ -975,6 +1026,11 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
         "dummy_files_created": None,
         "dummy_task_ids": [],
     }
+
+    # V2 manifest summary fields (append-only; absent for v1 / missing manifest)
+    v2_fields = _v2_summary_fields(manifest)
+    if v2_fields:
+        rd["file_generation"].update(v2_fields)
 
     # Inject recovery stats — read from step2_inference_results.json (has reflection_history)
     inference_results_path = WORKSPACE_DIR / "step2_inference_results.json"
