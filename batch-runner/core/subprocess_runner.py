@@ -270,6 +270,10 @@ class SubprocessRunner:
                 else:
                     code = "# No reference files available\n\n" + code
 
+                # Persist the (possibly header-prepended) code so the subprocess
+                # actually executes the version with the _AVAILABLE_FILES hint.
+                code_path.write_text(code, encoding="utf-8")
+
                 # 🔒 Security: Whitelist environment variables
                 # Use current Python's PATH so venv packages are available
                 # but strip API keys and secrets

@@ -1154,6 +1154,15 @@ def run_inference(
                           f"(best score={best_score}) — "
                           f"saving as success",
                           end=" ", flush=True)
+                    # Genuine QA fail (determined, score < min_score, retries
+                    # exhausted): mark the best result as qa_failed so the
+                    # RETRIABLE_STATUSES retry plumbing (resume rounds) +
+                    # _print_status + summary counters fire. The undetermined
+                    # branch above is intentionally left as "success" — it
+                    # only marks QA parse/API failures, not genuine quality
+                    # failures.
+                    if best_result is not None:
+                        best_result["status"] = "qa_failed"
                     break
 
                 # Build structured reflection prompt for retry
