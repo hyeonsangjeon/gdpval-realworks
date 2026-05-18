@@ -150,25 +150,31 @@ def create_client(
     api_key: str | None = None,
     api_version: str | None = None,
 ) -> AzureOpenAI:
-    """AzureOpenAI 클라이언트 생성 (DefaultAzureCredential 우선, API Key fallback)
+    """AzureOpenAI 클라이언트 생성 (DefaultAzureCredential 전용 / OIDC only)
 
-    인증 우선순위:
-    1. DefaultAzureCredential (Entra ID 토큰) — az login / Managed Identity / OIDC
-    2. API Key fallback — AZURE_OPENAI_API_KEY 환경변수
+    인증 정책:
+    - DefaultAzureCredential (Entra ID 토큰) — az login / Managed Identity / OIDC 전용
+    - API Key fallback 비활성화 (Azure 리소스 disableLocalAuth=true). 또한 openai SDK 가
+      AZURE_OPENAI_API_KEY 환경변수를 자동 픽업해 azure_ad_token_provider 를 silently
+      덮어쓰는 문제 회피.
 
     Args:
         endpoint:    Azure endpoint (기본: AZURE_OPENAI_ENDPOINT 환경변수)
-        api_key:     API key       (기본: AZURE_API_KEY 환경변수)
+        api_key:     (deprecated) 사용되지 않음. fail-loud 진단 목적으로만 남김.
         api_version: API version   (기본: 2025-04-01-preview)
 
     Returns:
         openai.AzureOpenAI 클라이언트
+
+    Raises:
+        ValueError: DefaultAzureCredential 가 실패하면 항상 raise.
+                    로컬: `az login`. CI: azure/login@v2 OIDC step 확인.
     """
     endpoint = endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", DEFAULT_ENDPOINT)
     api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY")
     api_version = api_version or DEFAULT_API_VERSION
 
-    # Priority 1: DefaultAzureCredential (Entra ID token)
+    # OIDC only: DefaultAzureCredential (Entra ID token)
     try:
         from azure.identity import DefaultAzureCredential, get_bearer_token_provider
         credential = DefaultAzureCredential()
@@ -183,20 +189,16 @@ def create_client(
             timeout=480,
         )
     except Exception as e:
-        # Priority 2: API Key fallback
-        if api_key:
-            print(f"   🔑 Auth: API Key (DefaultAzureCredential unavailable: {e})")
-            return AzureOpenAI(
-                azure_endpoint=endpoint,
-                api_key=api_key,
-                api_version=api_version,
-                timeout=480,
-            )
+        # API Key fallback disabled — fail loud with OIDC debug guidance.
+        print(f"   ⚠️  DefaultAzureCredential failed: {e}")
+        print(f"   ⚠️  API Key fallback disabled (Azure disableLocalAuth=true)")
+        print(f"   ⚠️  Local: run 'az login' then retry")
+        print(f"   ⚠️  CI: verify azure/login@v2 OIDC step succeeded")
         raise ValueError(
-            f"No Azure credentials available.\n"
+            f"Azure authentication failed.\n"
             f"  - DefaultAzureCredential failed: {e}\n"
-            f"  - AZURE_OPENAI_API_KEY not set.\n"
-            f"  Run 'az login' or set AZURE_OPENAI_API_KEY."
+            f"  - API key fallback disabled (disableLocalAuth=true).\n"
+            f"  Fix: 'az login' locally, or check OIDC config in GitHub Actions."
         )
 
 
@@ -218,7 +220,7 @@ def create_provider_client(
         AzureOpenAI, openai.OpenAI, or AnthropicClient instance
 
     Environment variables (provider별):
-        azure:     AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY
+        azure:     AZURE_OPENAI_ENDPOINT (OIDC only — DefaultAzureCredential, no API key)
         openai:    OPENAI_API_KEY
         anthropic: ANTHROPIC_API_KEY
     """
