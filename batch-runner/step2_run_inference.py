@@ -1372,6 +1372,31 @@ def run_inference(
 
         recovered = 0
         for fi, fail_info in enumerate(failed, 1):
+            # ── Watchdog: wall-clock timeout check (resume round) ──
+            # Without this, a long Round 0 followed by heavy resume retries
+            # silently exceeds the GitHub Actions step timeout — preventing
+            # the relay handoff and forcing a full re-run from scratch.
+            if wall_deadline and time.time() >= wall_deadline:
+                still_remaining = failed[fi - 1:]
+                print(f"\n⏰ Wall timeout reached in Resume Round {round_num} "
+                      f"({wall_timeout}min). Saving checkpoint "
+                      f"({fi - 1}/{len(failed)} retried, "
+                      f"{len(still_remaining)} deferred to relay)...")
+                # Mark unfinished retriable tasks as pending → next relay picks them up
+                still_remaining_ids = {f["task_id"] for f in still_remaining}
+                for r in progress["results"]:
+                    if r["task_id"] in still_remaining_ids:
+                        r["status"] = "pending"
+                        r["error"] = "wall_timeout"
+                        r["timestamp"] = datetime.now(timezone.utc).isoformat()
+                progress["resume_round"] = round_num
+                _save_progress(
+                    experiment_id, condition_name, execution_mode,
+                    total, progress["results"], started_at, progress_path,
+                )
+                print(f"   💾 Checkpoint saved to {progress_path}")
+                sys.exit(EXIT_CHECKPOINT)
+
             task_id = fail_info["task_id"]
             task = task_map.get(task_id)
             if task is None:
