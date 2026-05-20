@@ -1,0 +1,55 @@
+schema_version: "1.0"
+config_name: "default_gpt5pro"
+description: |
+  Default GDPval grading config: gpt-5.4-pro Responses API as judge,
+  high reasoning effort, rubric from openai/gdpval@main, prompt v1.
+
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.4-pro"
+  deployment: "gpt-5.4-pro"
+  api_version: "2025-04-01-preview"
+  endpoint_env: "AZURE_OPENAI_ENDPOINT"
+  timeout_sec: 600
+  reasoning:
+    effort: "high"
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 4096
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "main"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v1"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 800
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  deliverable_extract_max_chars: 4000
+  task_prompt_truncate_chars: 500
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  version: "v1"
+
+output:
+  directory: "data/grades"
+  filename_template: "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json"
+  partial_save_every_n_tasks: 10
+  include_judge_raw: false

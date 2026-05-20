@@ -48,7 +48,6 @@ gdpval-realworks/
 │   │   ├── domain_filter.py          # Sector/occupation filtering
 │   │   ├── needs_files.py            # Task file dependency resolver
 │   │   ├── hf_uploader.py            # HuggingFace upload logic
-│   │   ├── evals_submitter.py        # OpenAI Evals integration
 │   │   └── repo_bootstrapper.py      # Runtime environment setup
 │   ├── experiments/                   # YAML experiment definitions
 │   │   ├── exp001_*.yaml → exp024_*.yaml

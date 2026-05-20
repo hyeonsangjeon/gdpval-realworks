@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Phase A grading infrastructure.** Added rubric-based grading pipeline
+  components: `batch-runner/core/rubric_loader.py`,
+  `batch-runner/core/grader.py`, `batch-runner/prompts/grader_judge.md`,
+  `batch-runner/step8_grade.py`,
+  `batch-runner/grading_configs/default_gpt5pro.yaml`,
+  `batch-runner/schemas/grade.schema.json`,
+  `.github/workflows/grade-run.yml`,
+  `batch-runner/scripts/download_inference_from_hf.py`, and
+  `.github/agents/grading-engineer.md`.
+
+### Removed
+
+- **`core/evals_submitter.py` dead code.** Removed deprecated placeholder
+  hosted-grading submitter and its test file
+  (`tests/test_evals_submitter.py`) in favor of the new self-grading flow.
+
 ### Fixed
 
 - **step2_run_inference: wall-timeout watchdog now also fires inside Resume

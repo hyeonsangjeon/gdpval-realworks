@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GDPVal Grade Result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "experiment_yaml_name",
+    "judge",
+    "rubric",
+    "prompt",
+    "graded_at",
+    "graded_by",
+    "tasks",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "experiment_id": {"type": "string"},
+    "experiment_yaml_name": {"type": "string"},
+    "inference_model": {"type": "string"},
+    "inference_completed_at": {"type": ["string", "null"]},
+    "judge": {
+      "type": "object",
+      "required": [
+        "provider",
+        "api",
+        "model",
+        "deployment",
+        "api_version",
+        "reasoning_effort",
+        "temperature",
+        "seed",
+        "config_name",
+        "config_hash"
+      ],
+      "properties": {
+        "provider": {"type": "string"},
+        "api": {"type": "string"},
+        "model": {"type": "string"},
+        "deployment": {"type": "string"},
+        "api_version": {"type": "string"},
+        "reasoning_effort": {"type": "string"},
+        "temperature": {"type": "number"},
+        "seed": {"type": "integer"},
+        "config_name": {"type": "string"},
+        "config_hash": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "rubric": {
+      "type": "object",
+      "required": ["source", "repo_id", "revision", "commit_sha", "short_sha"],
+      "properties": {
+        "source": {"type": "string"},
+        "repo_id": {"type": "string"},
+        "revision": {"type": "string"},
+        "commit_sha": {"type": "string"},
+        "short_sha": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "prompt": {
+      "type": "object",
+      "required": ["template", "version"],
+      "properties": {
+        "template": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "graded_at": {"type": "string"},
+    "graded_by": {"type": "string"},
+    "graded_by_version": {"type": "string"},
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "task_id",
+          "sector",
+          "occupation",
+          "items",
+          "total_awarded",
+          "total_max",
+          "pct",
+          "critical_fail",
+          "gold_referenced",
+          "judge_call_count",
+          "precheck_count",
+          "judge_total_latency_ms",
+          "judge_input_tokens",
+          "judge_output_tokens",
+          "graded_at"
+        ],
+        "properties": {
+          "task_id": {"type": "string"},
+          "sector": {"type": "string"},
+          "occupation": {"type": "string"},
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "rubric_item_id",
+                "criterion",
+                "max_score",
+                "awarded_score",
+                "verdict",
+                "decided_by",
+                "required",
+                "evidence",
+                "precheck_pattern_id"
+              ],
+              "properties": {
+                "rubric_item_id": {"type": "string"},
+                "criterion": {"type": "string"},
+                "max_score": {"type": "number"},
+                "awarded_score": {"type": "number"},
+                "verdict": {"enum": ["pass", "partial", "fail", "judge_error"]},
+                "decided_by": {"enum": ["precheck", "judge"]},
+                "required": {"type": ["boolean", "null"]},
+                "evidence": {"type": "string", "maxLength": 200},
+                "judge_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+                "judge_latency_ms": {"type": ["number", "null"], "minimum": 0},
+                "precheck_pattern_id": {"type": ["string", "null"]},
+                "judge_raw_response": {"type": ["string", "null"]}
+              },
+              "additionalProperties": true
+            }
+          },
+          "total_awarded": {"type": "number"},
+          "total_max": {"type": "number"},
+          "pct": {"type": "number", "minimum": 0, "maximum": 100},
+          "critical_fail": {"type": "boolean"},
+          "gold_referenced": {"type": "boolean"},
+          "judge_call_count": {"type": "integer", "minimum": 0},
+          "precheck_count": {"type": "integer", "minimum": 0},
+          "judge_total_latency_ms": {"type": "number", "minimum": 0},
+          "judge_input_tokens": {"type": "integer", "minimum": 0},
+          "judge_output_tokens": {"type": "integer", "minimum": 0},
+          "error": {"type": ["string", "null"]},
+          "graded_at": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_tasks", "graded_tasks", "error_tasks", "openai_compat", "wow", "cost"],
+      "properties": {
+        "total_tasks": {"type": "integer", "minimum": 0},
+        "graded_tasks": {"type": "integer", "minimum": 0},
+        "error_tasks": {"type": "integer", "minimum": 0},
+        "openai_compat": {
+          "type": "object",
+          "required": ["avg_score_pct", "ci_pct", "perfect_count", "zero_count", "partial_count", "inconsistent_count"],
+          "properties": {
+            "avg_score_pct": {"type": "number", "minimum": 0, "maximum": 100},
+            "ci_pct": {"type": "number", "minimum": 0},
+            "perfect_count": {"type": "integer", "minimum": 0},
+            "zero_count": {"type": "integer", "minimum": 0},
+            "partial_count": {"type": "integer", "minimum": 0},
+            "inconsistent_count": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": true
+        },
+        "wow": {"type": "object"},
+        "cost": {"type": "object"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
