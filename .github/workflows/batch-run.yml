@@ -250,7 +250,9 @@ jobs:
 
       - name: 'Step 2a: Run inference (condition_a)'
         id: step2a
-        timeout-minutes: 330    # ← sufficient time for full run, adjust if needed  condition_a
+        # Must exceed wall_timeout (default 290min) by enough margin to
+        # cover checkpoint save + HF upload + relay re-trigger handoff.
+        timeout-minutes: 350    # = wall_timeout(290) + 60min margin for relay handoff
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # Removed AZURE_OPENAI_API_KEY — openai SDK auto-detects env key and overrides azure_ad_token_provider. OIDC only via DefaultAzureCredential / azure/login@v2.
@@ -366,7 +368,7 @@ jobs:
           echo "Condition B exists: $HAS_CONDITION_B"
 
       - name: 'Step 2b: Run inference (condition_b)'
-        timeout-minutes: 330
+        timeout-minutes: 350    # mirrors Step 2a — wall_timeout(290) + 60min relay margin
         if: steps.check_condition_b.outputs.has_condition_b == 'true' && steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
