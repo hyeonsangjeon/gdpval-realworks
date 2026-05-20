@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **step2_run_inference: wall-timeout watchdog now also fires inside Resume
+  Rounds (silent relay-bypass fix).** Previously the `wall_deadline` check
+  existed only in the Round 0 (initial run) and Relay-run continuation
+  loops in `batch-runner/step2_run_inference.py`. When Round 0 completed
+  within `wall_timeout`, control fell through to the Resume Round loop
+  (around L1370) which had no deadline check. Heavy resume retries
+  (Self-QA, audio preprocessor, video composition) then silently exceeded
+  the GitHub Actions step hard timeout — on SIGKILL the run could not
+  save a checkpoint or mark `pending` tasks, so the workflow saw
+  `pending=0, needs_relay=false` and skipped the HF checkpoint upload +
+  self-retrigger, forcing a full re-run from scratch
+  (observed in run 26018603400 / exp025: Round 0 finished ~250min,
+  Resume Round 1 SIGKILLed at ~330min with no relay). The Resume Round
+  loop now mirrors the existing watchdog: unfinished retriable tasks are
+  marked `pending(error=wall_timeout)`, `_save_progress()` is called, and
+  the process exits with `EXIT_CHECKPOINT(42)` so the workflow uploads
+  the checkpoint and self-retriggers. Backward compatible — `wall_timeout
+  = 0` (no timeout) short-circuits the guard as before.
+  (PR #41)
+
+- **batch-run workflow: Step 2a/2b `timeout-minutes` widened 330 → 350.**
+  After `wall_timeout` (default 290min) fires, the run still needs time to
+  save the progress checkpoint, upload it to HuggingFace, and dispatch
+  the relay re-trigger. The previous 330min hard step timeout left only
+  ~40min for this handoff, which proved insufficient in practice. The new
+  350min ceiling gives a 60min margin while still staying well under the
+  6h job-level cap. (PR #41)
+
 - **subprocess_runner: `_AVAILABLE_FILES` hint now actually executed.**
   In `core/subprocess_runner.py::_execute_safely`, the `files_header`
   (`_AVAILABLE_FILES = [...]`) prepended to the generated `code` string was
