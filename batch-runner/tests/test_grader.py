@@ -13,13 +13,16 @@ class _FakeTokenProvider:
 
 
 class _FakeClient:
-    def __init__(self):
+    def __init__(self, error=None):
         self.responses = self
         self.calls = 0
+        self.error = error
         self._next_text = '{"verdict":"pass","partial_score":1.0,"evidence":"ok","confidence":0.8,"reasoning":"ok"}'
 
     def create(self, **kwargs):
         self.calls += 1
+        if self.error:
+            raise self.error
 
         class _Usage:
             input_tokens = 10
@@ -82,11 +85,11 @@ def _task(item: RubricItem) -> TaskRubric:
     )
 
 
-def _make_grader(monkeypatch, tmp_path: Path) -> Grader:
+def _make_grader(monkeypatch, tmp_path: Path, fake_client: _FakeClient | None = None) -> Grader:
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
     monkeypatch.setattr("core.grader.DefaultAzureCredential", lambda: object())
     monkeypatch.setattr("core.grader.get_bearer_token_provider", lambda *args, **kwargs: _FakeTokenProvider())
-    fake = _FakeClient()
+    fake = fake_client or _FakeClient()
     monkeypatch.setattr("core.grader.AzureOpenAI", lambda **kwargs: fake)
     g = Grader(config=_config(tmp_path), rubric_loader=_Loader())
     g._fake_client = fake
@@ -160,6 +163,38 @@ def test_judge_parse_retry_then_judge_error(monkeypatch, tmp_path):
     item = RubricItem("r1", "evaluate quality", 3, None)
     ig, _, _ = grader._judge(_task(item), item, [deliverable])
     assert ig.verdict == "judge_error"
+
+
+def test_judge_api_failure_becomes_judge_error(monkeypatch, tmp_path):
+    class _RateLimit(Exception):
+        status_code = 429
+
+    grader = _make_grader(monkeypatch, tmp_path, _FakeClient(error=_RateLimit("rate limited")))
+    deliverable = tmp_path / "d.txt"
+    deliverable.write_text("content", encoding="utf-8")
+
+    item = RubricItem("r1", "evaluate quality", 3, None)
+    ig, input_tokens, output_tokens = grader._judge(_task(item), item, [deliverable])
+    assert ig.verdict == "judge_error"
+    assert ig.evidence == "judge_api_call_failed"
+    assert input_tokens == 0
+    assert output_tokens == 0
+
+
+def test_tpm_delay_between_judge_calls(monkeypatch, tmp_path):
+    sleeps = []
+    now = [100.0]
+
+    monkeypatch.setattr("core.grader.time.time", lambda: now[0])
+    monkeypatch.setattr("core.grader.time.sleep", lambda seconds: sleeps.append(seconds))
+    grader = _make_grader(monkeypatch, tmp_path)
+    grader._min_delay_seconds = 0.5
+
+    grader._apply_tpm_delay()
+    now[0] = 100.1
+    grader._apply_tpm_delay()
+
+    assert sleeps == [pytest.approx(0.4)]
 
 
 def test_aggregate_pct_calculation(monkeypatch, tmp_path):

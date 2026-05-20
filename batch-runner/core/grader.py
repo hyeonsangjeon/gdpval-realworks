@@ -115,6 +115,11 @@ class Grader:
 
         self.prompt_template = self._read_prompt_template(self.config["prompt"]["template"])
         self.prompt_version = self._extract_prompt_version(self.prompt_template)
+        self._min_delay_seconds = (
+            float(self.config.get("tpm_guard", {}).get("min_delay_ms_between_calls", 0))
+            / 1000.0
+        )
+        self._last_judge_call_at: float | None = None
 
     @staticmethod
     def _classify(item: RubricItem) -> tuple[str, Optional[str]]:
@@ -371,7 +376,32 @@ class Grader:
 
         retries = int(self.config.get("grader", {}).get("judge_max_retries", 1))
         for attempt in range(retries + 1):
-            raw, latency_ms, input_tok, output_tok = self._call_judge(prompt)
+            try:
+                raw, latency_ms, input_tok, output_tok = self._call_judge(prompt)
+            except Exception as exc:
+                logger.warning(
+                    "Judge call failed for %s after retries: %s",
+                    item.rubric_item_id,
+                    exc,
+                )
+                return (
+                    ItemGrade(
+                        rubric_item_id=item.rubric_item_id,
+                        criterion=item.criterion,
+                        max_score=item.score,
+                        awarded_score=0.0,
+                        verdict="judge_error",
+                        decided_by="judge",
+                        required=item.required,
+                        evidence="judge_api_call_failed",
+                        judge_confidence=None,
+                        judge_latency_ms=0.0,
+                        precheck_pattern_id=None,
+                        judge_raw_response=str(exc) if self._save_raw() else None,
+                    ),
+                    0,
+                    0,
+                )
             parsed = self._safe_parse_judge_json(raw)
             if parsed is None:
                 if attempt < retries:
@@ -463,6 +493,7 @@ class Grader:
         factor = float(retry_cfg.get("exponential_factor", 2.0))
 
         for attempt in range(max_retries + 1):
+            self._apply_tpm_delay()
             start = time.time()
             try:
                 response = self.client.responses.create(
@@ -488,6 +519,18 @@ class Grader:
                 raise
 
         raise RuntimeError("unreachable")
+
+    def _apply_tpm_delay(self) -> None:
+        if self._min_delay_seconds <= 0:
+            return
+        now = time.time()
+        if self._last_judge_call_at is not None:
+            elapsed = now - self._last_judge_call_at
+            remaining = self._min_delay_seconds - elapsed
+            if remaining > 0:
+                time.sleep(remaining)
+                now = time.time()
+        self._last_judge_call_at = now
 
     def _summarize_deliverables(self, files: list[Path]) -> list[dict]:
         max_chars = int(self.config.get("grader", {}).get("deliverable_extract_max_chars", 4000))

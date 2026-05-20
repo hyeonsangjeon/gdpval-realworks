@@ -49,7 +49,7 @@ prompt:
   version: "v1"
 
 output:
-  directory: "data/grades"
+  directory: "../data/grades"
   filename_template: "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json"
   partial_save_every_n_tasks: 10
   include_judge_raw: false

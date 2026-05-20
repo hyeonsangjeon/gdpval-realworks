@@ -38,6 +38,7 @@ def test_default_config_loads_and_validates():
     path = Path("grading_configs/default_gpt5pro.yaml")
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     validate_grading_config(data)
+    assert data["output"]["directory"] == "../data/grades"
 
 
 def test_missing_required_key_fails(tmp_path):
