@@ -496,12 +496,14 @@ class Grader:
             self._apply_tpm_delay()
             start = time.time()
             try:
+                # Azure OpenAI Responses API for reasoning models (e.g.,
+                # gpt-5.4-pro) does NOT accept temperature/seed. These values
+                # are kept in config as reproducibility metadata only and
+                # stamped into the grade JSON, but are not passed to the SDK.
                 response = self.client.responses.create(
                     model=self.model,
                     input=prompt,
-                    temperature=float(gen.get("temperature", 0)),
                     max_output_tokens=max_output,
-                    seed=int(gen.get("seed", 42)),
                     reasoning={"effort": reasoning.get("effort", "high")},
                 )
                 latency_ms = (time.time() - start) * 1000

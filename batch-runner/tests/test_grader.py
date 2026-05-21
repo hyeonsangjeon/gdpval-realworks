@@ -16,11 +16,13 @@ class _FakeClient:
     def __init__(self, error=None):
         self.responses = self
         self.calls = 0
+        self.last_kwargs = None
         self.error = error
         self._next_text = '{"verdict":"pass","partial_score":1.0,"evidence":"ok","confidence":0.8,"reasoning":"ok"}'
 
     def create(self, **kwargs):
         self.calls += 1
+        self.last_kwargs = kwargs
         if self.error:
             raise self.error
 
@@ -195,6 +197,28 @@ def test_tpm_delay_between_judge_calls(monkeypatch, tmp_path):
     grader._apply_tpm_delay()
 
     assert sleeps == [pytest.approx(0.4)]
+
+
+def test_call_judge_does_not_pass_seed_or_temperature(monkeypatch, tmp_path):
+    """Azure Responses API for reasoning models rejects seed/temperature.
+
+    Regression guard for run #26210354117 where every judge call failed with
+    'Responses.create() got an unexpected keyword argument seed'.
+    """
+    grader = _make_grader(monkeypatch, tmp_path)
+    deliverable = tmp_path / "d.txt"
+    deliverable.write_text("content", encoding="utf-8")
+    item = RubricItem("r1", "evaluate quality", 3, None)
+
+    grader._judge(_task(item), item, [deliverable])
+
+    kwargs = grader._fake_client.last_kwargs
+    assert kwargs is not None
+    assert "seed" not in kwargs
+    assert "temperature" not in kwargs
+    assert kwargs["model"] == "gpt-5.4-pro"
+    assert kwargs["reasoning"] == {"effort": "high"}
+    assert "max_output_tokens" in kwargs
 
 
 def test_aggregate_pct_calculation(monkeypatch, tmp_path):
