@@ -28,6 +28,15 @@ import {
 } from 'recharts'
 import Header from '../components/Header'
 import { useGrades, TaskGrade } from '../hooks/useGrades'
+import type { GradeSummaryV1, TaskGradeV1 } from '../types/grade'
+import {
+  RubricCoverageCard,
+  CriticalItemCard,
+  StructureVsReasoning,
+  SectorHeatmap,
+  ScoreDensityHistogram,
+  RubricSeverityCurve,
+} from '../components/wow'
 
 type TaskFilter = 'all' | 'perfect' | 'partial' | 'zero' | 'error' | 'inconsistent'
 
@@ -295,6 +304,11 @@ function GradeDetail() {
             />
           </div>
         </motion.div>
+
+        {/* ── WOW: Item-level Rubric Insights (v1.0 only) ── */}
+        {grade.schema_version === '1.0' && grade.summary_v1 ? (
+          <WowSection summary={grade.summary_v1} tasksV1={grade.tasks_v1 ?? []} />
+        ) : null}
 
         {/* Score Distribution + Pie — side by side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -653,3 +667,41 @@ function TaskRow({ task, index }: { task: TaskGrade; index: number }) {
 }
 
 export default GradeDetail
+
+function WowSection({ summary, tasksV1 }: { summary: GradeSummaryV1; tasksV1: TaskGradeV1[] }) {
+  const wow = summary.wow
+  const totalItems = tasksV1.reduce((acc, t) => acc + (Array.isArray(t.items) ? t.items.length : 0), 0)
+  const fallbackPcts = tasksV1
+    .filter((t) => !t.error && typeof t.pct === 'number')
+    .map((t) => t.pct)
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.18 }}
+      className="mb-8"
+    >
+      <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
+        <h2 className="text-xl md:text-2xl font-bold text-foreground">
+          WOW — Item-level Rubric Insights
+        </h2>
+        <p className="text-xs text-muted-foreground max-w-xl">
+          Item-level partial credit grading powered by our LLM-judge against
+          open-sourced GDPval rubrics — richer than the legacy task-level binary.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+        <RubricCoverageCard wow={wow} totalItems={totalItems} delay={0.0} />
+        <CriticalItemCard wow={wow} delay={0.05} />
+        <StructureVsReasoning wow={wow} delay={0.1} />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ScoreDensityHistogram wow={wow} fallbackPcts={fallbackPcts} delay={0.15} />
+        <RubricSeverityCurve wow={wow} delay={0.2} />
+      </div>
+      <div className="mt-4">
+        <SectorHeatmap wow={wow} delay={0.25} />
+      </div>
+    </motion.section>
+  )
+}

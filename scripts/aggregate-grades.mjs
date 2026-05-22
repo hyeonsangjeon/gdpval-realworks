@@ -16,12 +16,14 @@ import { join, extname, basename } from 'path';
 const ROOT = new URL('..', import.meta.url).pathname;
 const GRADES_DIR = join(ROOT, 'data', 'grades');
 const OUTPUT_DIR = join(ROOT, 'public', 'generated');
+const PER_GRADE_DIR = join(OUTPUT_DIR, 'grades');
 
 async function dirExists(path) {
   try { await access(path); return true; } catch { return false; }
 }
 
-function processGradesFile(filePath, raw) {
+// ── Legacy (dummy / _meta-based) format ────────────────────────────────────
+function processLegacyGradesFile(filePath, raw) {
   const filename = basename(filePath, '.json');
   const meta = raw._meta || {};
   const tasks = raw.tasks || raw; // support both { _meta, tasks } and bare array
@@ -47,6 +49,7 @@ function processGradesFile(filePath, raw) {
 
   return {
     id: filename,
+    schema_version: null,
     is_dummy: !!meta.is_dummy,
     label: meta.label || filename,
     model: meta.model || 'Unknown',
@@ -64,6 +67,99 @@ function processGradesFile(filePath, raw) {
     },
     tasks,
   };
+}
+
+// ── v1.0 schema (007) ─────────────────────────────────────────────────────
+//
+// Maps raw item-level grade JSON onto the dashboard's existing legacy shape
+// while preserving the full v1 payload in summary_v1 / tasks_v1 so WOW
+// components can consume rich item-level data.
+function processV1GradesFile(filePath, raw) {
+  const filename = basename(filePath, '.json');
+  const rawTasks = Array.isArray(raw.tasks) ? raw.tasks : [];
+  const summary = raw.summary || {};
+  const openaiCompat = summary.openai_compat || {};
+  const wow = summary.wow || {};
+
+  // Convert v1 tasks → legacy-compatible task rows. Snap pct to exact 0/1
+  // when it crosses the openai_compat thresholds (pct >= 99 → perfect,
+  // pct <= 1 → zero) so legacy Status badges agree with summary counts.
+  const tasks = rawTasks.map((t) => {
+    const hasError = t.error !== null && t.error !== undefined && t.error !== '';
+    if (hasError) {
+      return {
+        task_id: t.task_id,
+        num_grades: 0,
+        scores: [],
+        avg_score: null,
+        error: true,
+        error_messages: [String(t.error)],
+      };
+    }
+    const pct = typeof t.pct === 'number' ? t.pct : 0;
+    let avgScore;
+    if (pct >= 99) avgScore = 1.0;
+    else if (pct <= 1) avgScore = 0.0;
+    else avgScore = pct / 100;
+    return {
+      task_id: t.task_id,
+      num_grades: 1,
+      scores: [avgScore],
+      avg_score: avgScore,
+      error: false,
+      error_messages: [],
+    };
+  });
+
+  const totalTasks = typeof summary.total_tasks === 'number'
+    ? summary.total_tasks
+    : rawTasks.length;
+  const errorTasks = typeof summary.error_tasks === 'number'
+    ? summary.error_tasks
+    : tasks.filter((t) => t.error).length;
+  const gradedTasks = typeof summary.graded_tasks === 'number'
+    ? summary.graded_tasks
+    : totalTasks - errorTasks;
+
+  const label = raw.experiment_id || filename;
+  const model = raw.inference_model || (raw.judge && raw.judge.model) || 'Unknown';
+
+  return {
+    id: filename,
+    schema_version: '1.0',
+    is_dummy: false,
+    label,
+    model,
+    dataset_url: null,
+    summary: {
+      total_tasks: totalTasks,
+      graded_tasks: gradedTasks,
+      error_tasks: errorTasks,
+      avg_score_pct: typeof openaiCompat.avg_score_pct === 'number'
+        ? openaiCompat.avg_score_pct
+        : 0,
+      ci_pct: typeof openaiCompat.ci_pct === 'number' ? openaiCompat.ci_pct : null,
+      perfect_score: openaiCompat.perfect_count ?? 0,
+      partial_score: openaiCompat.partial_count ?? 0,
+      zero_score: openaiCompat.zero_count ?? 0,
+      inconsistent_grades: openaiCompat.inconsistent_count ?? 0,
+    },
+    tasks,
+    // v1.0 provenance + full payload (for WOW dashboard components)
+    judge: raw.judge,
+    rubric: raw.rubric,
+    prompt: raw.prompt,
+    graded_at: raw.graded_at,
+    summary_v1: { ...summary, wow, openai_compat: openaiCompat },
+    tasks_v1: rawTasks,
+  };
+}
+
+function processGradesFile(filePath, raw) {
+  if (raw && raw.schema_version === '1.0') {
+    return processV1GradesFile(filePath, raw);
+  }
+  return processLegacyGradesFile(filePath, raw);
 }
 
 // ── Main ──
@@ -93,15 +189,25 @@ async function main() {
   }
 
   await mkdir(OUTPUT_DIR, { recursive: true });
+  await mkdir(PER_GRADE_DIR, { recursive: true });
   await writeFile(
     join(OUTPUT_DIR, 'grades-index.json'),
     JSON.stringify(results, null, 2),
   );
+  // Per-experiment full payloads (incl. tasks_v1 / summary_v1) — optional
+  // companion files for future detail routes; index file remains the contract.
+  for (const r of results) {
+    await writeFile(
+      join(PER_GRADE_DIR, `${r.id}.json`),
+      JSON.stringify(r, null, 2),
+    );
+  }
 
   console.log(`✅ Aggregated ${results.length} grade file(s) → grades-index.json`);
   for (const r of results) {
     const dummy = r.is_dummy ? ' [DUMMY]' : '';
-    console.log(`   ${r.id}: ${r.summary.avg_score_pct}% avg (${r.summary.graded_tasks}/${r.summary.total_tasks} tasks)${dummy}`);
+    const v1 = r.schema_version === '1.0' ? ' [v1.0]' : '';
+    console.log(`   ${r.id}: ${r.summary.avg_score_pct}% avg (${r.summary.graded_tasks}/${r.summary.total_tasks} tasks)${dummy}${v1}`);
   }
 }
 

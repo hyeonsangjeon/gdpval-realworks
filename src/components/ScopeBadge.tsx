@@ -12,7 +12,7 @@ export default function ScopeBadge({ scope }: ScopeBadgeProps) {
       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
         <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
         <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-          ✓ Externally Graded
+          ✓ LLM-Judge Graded
         </span>
       </div>
     )
@@ -23,7 +23,7 @@ export default function ScopeBadge({ scope }: ScopeBadgeProps) {
     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30">
       <Clock className="w-3.5 h-3.5 text-amber-500" />
       <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-        ⏰ Self-Assessed · Pre-Grading
+        ⏰ Awaiting LLM-Judge Grade
       </span>
       <InfoTooltip content={tooltipTexts.badge.selfAssessed} position="bottom" />
     </div>

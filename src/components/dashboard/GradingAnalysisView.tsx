@@ -115,7 +115,7 @@ export default function GradingAnalysisView() {
         <Award className="w-10 h-10 text-dash-text-faint mx-auto mb-4" />
         <h3 className="text-base font-semibold text-dash-text mb-2">No Grading Data Yet</h3>
         <p className="text-sm text-dash-text-muted max-w-md mx-auto">
-          Grading results will appear here after the external evaluation pipeline completes.
+          Grading results will appear here after running the LLM-judge via <code className="text-dash-text-secondary">grade-run.yml</code>.
           This is separate from the self-assessed QA scores shown in other tabs.
         </p>
       </div>
@@ -128,7 +128,7 @@ export default function GradingAnalysisView() {
       transition={{ duration: 0.2 }}
       className="space-y-6"
     >
-      {/* ─── Dummy data banner ─── */}
+      {/* ─── Awaiting grade banner ─── */}
       {grades.some((g) => g.is_dummy) && (
         <motion.div
           initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
@@ -137,10 +137,10 @@ export default function GradingAnalysisView() {
           <div className="flex items-start gap-3">
             <Clock className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="text-sm font-semibold text-amber-300 mb-1">Grading In Progress</h3>
+              <h3 className="text-sm font-semibold text-amber-300 mb-1">Awaiting LLM-Judge Grade</h3>
               <p className="text-xs text-amber-300/80">
-                Some entries are placeholder data while we wait for the external grading pipeline to finish.
-                Results marked as dummy will be replaced with real scores.
+                Some entries are placeholder data while the LLM-judge grade is pending.
+                Run <code className="text-amber-200">grade-run.yml</code> for the experiment to populate real rubric-based scores.
               </p>
             </div>
           </div>

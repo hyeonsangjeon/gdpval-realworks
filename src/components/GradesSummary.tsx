@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { Card, CardContent } from './ui/card'
-import { AlertTriangle, Award, Target, XCircle, BarChart3, AlertCircle, HelpCircle } from 'lucide-react'
+import { AlertTriangle, Award, Target, XCircle, BarChart3, AlertCircle, HelpCircle, Sparkles } from 'lucide-react'
 import { GradeResult } from '../hooks/useGrades'
 
 const STAT_TOOLTIPS: Record<string, string> = {
@@ -101,6 +101,7 @@ function StatMini({ icon: Icon, label, value, color }: { icon: typeof Award; lab
 
 function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
   const s = grade.summary
+  const isV1 = grade.schema_version === '1.0'
 
   return (
     <Link to={`/grades/${grade.id}`} className="block">
@@ -113,7 +114,7 @@ function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
         {/* Dummy banner */}
         {grade.is_dummy && (
           <div className="absolute top-0 left-0 right-0 bg-amber-500/90 text-amber-950 text-center text-[11px] font-bold py-1 tracking-wider uppercase">
-            ⏳ We're still waiting for grading results. This takes a while.
+            ⏳ Awaiting LLM-Judge Grade — run grade-run.yml to populate
           </div>
         )}
 
@@ -121,7 +122,18 @@ function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h3 className="text-lg font-semibold text-foreground">{grade.label}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-foreground">{grade.label}</h3>
+                {isV1 && (
+                  <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gradient-to-r from-fuchsia-500/15 to-violet-500/15 border border-fuchsia-400/30 text-[10px] font-bold uppercase tracking-wider text-fuchsia-400"
+                    title="Item-level rubric grading (schema v1.0)"
+                  >
+                    <Sparkles className="w-2.5 h-2.5" />
+                    WOW
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">{grade.model}</p>
               {grade.dataset_url && (
                 <a

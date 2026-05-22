@@ -3,13 +3,13 @@ export const TASK_TOTAL_PLACEHOLDER = '{TASK_TOTAL}'
 export const tooltipTexts = {
   kpi: {
     bestSuccessRate:
-      'Highest task-completion rate among all experiments. A task is "successful" when the LLM\'s self-assessed QA check passes (pre-grading).',
+      'Highest task-completion rate among all experiments. A task is "successful" when the LLM\'s self-assessed QA check passes (based on self-assessed QA — separate from LLM-judge grade).',
     experiments:
       `Total number of experiment runs. Each experiment tests a different prompt strategy or token configuration against the same ${TASK_TOTAL_PLACEHOLDER} tasks.`,
     tasksEvaluated:
       'Number of real-world professional tasks per experiment. Covers 9 industry sectors and 44 occupations from the GDPVal Gold Subset.',
     bestQaScore:
-      'Highest average Self-QA score (0–10) across experiments. The LLM inspects its own output after each task and scores it on completeness, accuracy, and format. This is a self-assessed quality measure, not an external grade.',
+      'Highest average Self-QA score (0–10) across experiments. The LLM inspects its own output after each task and scores it on completeness, accuracy, and format. This is a self-assessed quality measure, not an LLM-judge grade.',
   },
   leaderboard: {
     experiment:
@@ -38,11 +38,11 @@ export const tooltipTexts = {
   },
   grading: {
     perfect:
-      'Tasks scored 100% by the external grading pipeline. The LLM output fully met all rubric criteria.',
+      'Tasks scored 100% by the LLM-judge (rubric-based, automated). The LLM output fully met all rubric criteria.',
     partial:
-      'Tasks scored between 1–99%. The output met some but not all grading criteria.',
+      'Tasks scored between 1–99% by the LLM-judge. The output met some but not all rubric criteria.',
     zero:
-      'Tasks scored 0%. The output failed to meet any grading criteria or was completely off-target.',
+      'Tasks scored 0% by the LLM-judge. The output failed to meet any rubric criteria or was completely off-target.',
     graderDisagreement:
       'Cases where multiple graders scored the same task differently. High rates may indicate ambiguous rubric criteria.',
     ci:
@@ -50,7 +50,21 @@ export const tooltipTexts = {
   },
   badge: {
     selfAssessed:
-      "Scores are currently based on the LLM's own QA assessment, not external grading. Amber badge = awaiting external evaluation pipeline.",
+      "Score is based on the LLM's own QA self-assessment. Amber badge = LLM-judge grade not yet available (run grade-run.yml to populate).",
+  },
+  wow: {
+    rubricCoverage:
+      "Average pass rate across rubric items per task. OpenAI exposed only task-level 0/1; we expose item-level partial credit derived from the full rubric.",
+    criticalItems:
+      "Pass rate on rubric items with weight ≥ 3 — the highest-stakes 'must-have' requirements. Distinguishes decisive criteria from small formatting items.",
+    structureVsReasoning:
+      "Splits deterministic verification (file format, sheet names, etc.) from LLM judgement (content correctness). Large gap = strong structure but weak reasoning, or vice versa.",
+    sectorHeatmap:
+      "Visualizes per-sector pass rates so weak sector + weak category combinations stand out. Color: 0% red → 100% green.",
+    scoreDensity:
+      "OpenAI's hosted grader produced only 4 task-level scores (0/33/67/100). Our item-level partials roll up to 10 buckets across the full 0–100% range.",
+    rubricSeverity:
+      "Groups rubric items by weight and plots pass rate per weight. A sharp drop signals the difficulty threshold where the model breaks down.",
   },
 } as const
 
@@ -62,7 +76,7 @@ export const sectionHintTexts = {
   errors:
     'Runtime failures during task execution. "Recovered" means the task succeeded after automatic retry. AI Failure Insights are LLM-generated analysis of error patterns.',
   grading:
-    'External evaluation of LLM outputs by an independent grading pipeline. Scores: Perfect (100%), Partial (1-99%), Zero (0%). "Pre-grading" means awaiting external evaluation.',
+    'LLM-judge (rubric-based, automated). Scores: Perfect (100%), Partial (1-99%), Zero (0%). Grading runs separately from inference via grade-run.yml.',
 } as const
 
 export const aboutContent = {
@@ -81,7 +95,7 @@ export const aboutContent = {
       bullets: [
         'Success Rate — Did the LLM produce a valid deliverable?',
         'QA Score (0-10) — Self-assessed quality of the output',
-        'Grading — External evaluation (when available)',
+        'Grading — LLM-judge against open-sourced GDPval rubrics (when available)',
       ],
     },
   ],
