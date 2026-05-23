@@ -53,8 +53,16 @@ async function loadAllReports() {
       const { data, source } = await fetchReportData(subdir.name, reportPath);
       if (source === 'hf') console.log(`  ↓ ${subdir.name}: fetched from HuggingFace`);
 
+      // Extract compact qa map (task_id → qa_score) before stripping the heavy task_results array.
+      // Used by aggregate-grades.mjs for per-experiment Self-QA ↔ Rubric calibration join.
+      const taskQa = {};
+      for (const t of (data.task_results ?? [])) {
+        if (t.task_id && t.qa_score != null) taskQa[t.task_id] = t.qa_score;
+      }
+
       // Strip task_results — heavy per-task data is lazy-loaded from HuggingFace on the detail page
       const { task_results: _ignored, ...indexEntry } = data;
+      indexEntry.task_qa = taskQa;
       indexEntry.short_id = shortId;
 
       reports.push(indexEntry);

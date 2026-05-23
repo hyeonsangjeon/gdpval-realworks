@@ -63,6 +63,18 @@ export const tooltipTexts = {
       'Total number of LLM-judge API calls used during grading. Per-experiment cost proxy.',
     judgeLatency:
       'Total wall-clock seconds spent inside the judge LLM during this grading run.',
+    calibrationMae:
+      'Mean Absolute Error of Self-QA vs Rubric across all tasks. Lower = better model self-awareness. <10pp is well-calibrated.',
+  },
+  calibration: {
+    selfQa:
+      'Self-rated quality score during inference (0-10). The inference model evaluates its own output. Distinct from external rubric judge.',
+    rubric:
+      'Independent rubric-based score by external judge LLM. Objective and decoupled from the inference model.',
+    gap:
+      'Rubric − Self-QA (percentage points). Negative = model overconfident (risk). Positive = model underconfident. |Δ| ≤ 10pp is well-calibrated.',
+    status:
+      'Aligned (|Δ|≤10): well-calibrated. Overconfident (Δ<-10): model overestimates its own work. Underconfident (Δ>10): model underestimates.',
   },
   badge: {
     selfAssessed:

@@ -5,6 +5,7 @@ import type {
   JudgeProvenance,
   RubricProvenance,
   GradePromptInfo,
+  CalibrationCounts,
 } from '../types/grade'
 
 export interface TaskGrade {
@@ -14,6 +15,8 @@ export interface TaskGrade {
   avg_score: number | null
   error: boolean
   error_messages: string[]
+  /** Inference-time Self-QA score (0–10). Enriched from reports-index task_qa map. */
+  qa_score?: number | null
 }
 
 export interface GradeSummary {
@@ -26,6 +29,10 @@ export interface GradeSummary {
   partial_score: number
   zero_score: number
   inconsistent_grades: number
+  /** Mean |Rubric% − SelfQA%| across matched tasks. null when no samples. */
+  calibration_mae?: number | null
+  /** Distribution of calibration categories. null when no samples. */
+  calibration_counts?: CalibrationCounts | null
 }
 
 export interface GradeResult {
