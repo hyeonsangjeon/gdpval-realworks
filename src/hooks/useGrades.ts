@@ -30,9 +30,31 @@ export interface GradeSummary {
 
 export interface GradeResult {
   id: string
+  /** Stable experiment identifier (e.g. "exp998_smoke_baseline_sample").
+   *  Promoted to a 1st-class field by dashboard_cleanup PR #1 so
+   *  ScopeBadge / ExperimentDetail can match grade rows by exact equality
+   *  rather than startsWith heuristics. */
+  experiment_id: string
+  /** Grade lifecycle state, derived in aggregate-grades.mjs.
+   *  - `graded_v1`   — v1.0 schema (rubric-based LLM-judge result)
+   *  - `legacy_dummy`— dummy_gpt5_baseline.json demo data
+   *  - `no_grade`    — present for completeness; aggregator currently never
+   *                    emits this (only files in data/grades/ are read).
+   */
+  grade_status: 'graded_v1' | 'legacy_dummy' | 'no_grade'
   is_dummy: boolean
   label: string
+  /**
+   * @deprecated since dashboard_cleanup PR #1.
+   * Use `inference_model` instead. Retained for legacy callers; equals
+   * `inference_model || ''` and never silently falls back to the judge model.
+   */
   model: string
+  /** Model that produced the inference output. `null` when missing/empty —
+   *  the UI renders "unknown" in that case (no silent judge fallback). */
+  inference_model: string | null
+  /** LLM-judge model that scored the outputs. `null` for legacy dummies. */
+  judge_model: string | null
   dataset_url: string | null
   experiment_type?: 'ab' | 'single'
   summary: GradeSummary

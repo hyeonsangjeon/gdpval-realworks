@@ -5,7 +5,113 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+Releases are grouped under dated headings (`## [YYYY-MM-DD]`). The
+`## [Unreleased]` block at the top stays empty between releases — new
+entries land under a fresh dated heading the day they merge to `main`.
+
 ## [Unreleased]
+
+## [2026-05-23] — Phase A wow follow-up: dashboard cleanup + grading hotfix
+
+### Added
+
+- **Dashboard cleanup spec package + WOW chrome cleanup (PR #1 of
+  `tasks/dashboard_cleanup`).** Threaded `inference_model` vs
+  `judge_model` as separate fields end-to-end so the GradeDetail header
+  no longer misleads users into thinking the judge model solved the
+  tasks. Aggregator (`scripts/aggregate-grades.mjs`) gained:
+  - `grade_status: 'graded_v1' | 'legacy_dummy' | 'no_grade'` derived
+    from `schema_version` / `_meta.is_dummy`.
+  - `experiment_id` lifted to a top-level field (no more brittle
+    `startsWith` matching across the dashboard).
+  - `inference_model` / `judge_model` split — the legacy `model` falsy
+    fallback to `judge.model` was removed.
+  - Unit tests under `scripts/__tests__/aggregate-grades.test.mjs`
+    locking the no-fallback contract + status derivation (3 fixtures).
+  Frontend additions: `src/types/grade.ts` (already shipped in PR #46;
+  unchanged here), `src/lib/format.ts` (`fmtPct` / `fmtLatency`),
+  `src/components/wow/HealthStrip.tsx` (single-Card inline pill strip
+  showing `judge_error_rate`, `judge_pass_rate`, `precheck_pass_rate`,
+  `total_judge_calls`, `total_judge_latency_sec`; err pill turns red
+  + `AlertTriangle` when `judge_error_rate > 5%`). Copy pass 2 across
+  `src/data/tooltipTexts.ts` + `src/components/ScopeBadge.tsx`
+  separates "self-QA" (model judging itself during inference) from
+  "LLM-judge grade" (rubric-based, run via `grade-run.yml`) on every
+  surface — KPI tiles, leaderboard tooltips, About modal bullets,
+  empty-state CTAs.
+
+- **`tasks/dashboard_cleanup/` 8-file spec package.** README + 000
+  overview + 001 (model display) + 002 (banner/status) + 003 (health)
+  + 004 (disagreement guard) + 005 (copy pass 2) + 006 (rollout) +
+  copy_audit.md. Amended in-place after extreme-reasoner +
+  ui-designer deep review (precedence rules, opacity → dashed border,
+  amber → zinc, hard-gate aggregator tests, mandatory grep audit).
+
+### Changed
+
+- **`legacy_dummy` cards on the Grading tab now use `border-dashed`
+  with a neutral `DEMO` badge** (BookOpen icon, zinc palette) instead
+  of `opacity-90` (WCAG AA contrast fix) and instead of the previous
+  amber `⏳ Awaiting LLM-Judge Grade` strip (which misleadingly fired
+  even when v1.0 grades were present). The `⏳ Awaiting` strip is
+  removed from per-card chrome.
+
+- **Grading Analysis tab top banner is now status-aware.** When only
+  legacy demo grades exist, the banner uses a neutral zinc tone with
+  a `BookOpen` icon and points to `grade-run.yml`. When legacy +
+  graded-v1 are mixed, the banner switches to a soft sky tone with an
+  `Info` icon clarifying that some experiments still show demo data
+  alongside fresh LLM-judge results. Amber is no longer used in this
+  surface; it remains reserved for `self_assessed_pre_grading` (a
+  true "awaiting" state on the experiment side).
+
+- **`ScopeBadge` union extended.** `'graded_v1'` (fuchsia, Sparkles
+  icon — "✨ LLM-Judge Graded (v1.0)") and `'legacy_demo'` (zinc,
+  BookOpen — "📚 Legacy Demo") added; pre-existing `'graded'` and
+  `'self_assessed_pre_grading'` variants preserved. `ExperimentDetail`
+  now derives scope via `resolveScope(meta, grades)`: grade-derived
+  status wins when an exact `experiment_id` match exists, otherwise
+  meta is used as fallback.
+
+- **`Grader Disagreement` UI is guarded.** Both the cross-experiment
+  chart in `GradingAnalysisView` and the per-card `Disagreement`
+  StatMini in `GradesSummary` now render only when
+  `inconsistent_grades > 0` (i.e., Phase B multi-judge runs). The
+  underlying counter logic is retained for Phase B.
+
+- **CHANGELOG entries are now grouped under dated release headings
+  (`## [YYYY-MM-DD]`)** instead of a single open-ended `## [Unreleased]`
+  block. The previous entries have been bundled into a single
+  retroactive `## [2026-05-20]` heading since they were committed in
+  PR #41–#46 across May 17–23 with the same broad theme (Phase A core
+  + WOW dashboard). New PRs will open a fresh dated heading at the
+  top.
+
+### Fixed
+
+- **`step8_grade.py` no longer leaves `inference_model` as the empty
+  string.** A new `_resolve_inference_model(inf_results, exp_config)`
+  helper resolves with the priority `inf_results['model']` →
+  `experiment_yaml.condition_a.model.deployment` → `''`, never falling
+  back to `config['judge']['model']`. The dashboard's previous fall-
+  through `model = inference_model || judge.model` made the GradeDetail
+  page show the judge model (`gpt-5.4-pro`) as if it had solved the
+  tasks; the resolver guarantees `inference_model` reflects the actual
+  inference deployment. Whitespace inputs are stripped on both sources.
+  Three new tests in `tests/test_step8_grade.py` lock the contract,
+  including a defensive `inference_model != judge.model` assertion
+  independent of the literal judge string. (PR #47)
+
+- **`grader.per_item_max_output_tokens` raised 800 → 1600 in
+  `grading_configs/default_gpt5pro.yaml`.** The first smoke run on
+  2026-05-21 produced `judge_error_rate = 0.2381` (20 of 84 calls
+  failed); root cause hypothesis is that `gpt-5.4-pro` with
+  `reasoning_effort=high` consumes most of the output-token budget on
+  reasoning tokens, leaving the previous 800 ceiling insufficient to
+  emit the verdict JSON. 1600 ≈ 2× safety margin without meaningful
+  cost impact at the 220-task scale. (PR #47)
+
+## [2026-05-20] — Phase A grading pipeline + WOW dashboard
 
 ### Added
 
@@ -17,13 +123,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `batch-runner/schemas/grade.schema.json`,
   `.github/workflows/grade-run.yml`,
   `batch-runner/scripts/download_inference_from_hf.py`, and
-  `.github/agents/grading-engineer.md`.
+  `.github/agents/grading-engineer.md`. (PR #45)
+
+## [2026-05-20] — Phase A grading pipeline + WOW dashboard
+
+### Added
+
+- **Phase A grading infrastructure.** Added rubric-based grading pipeline
+  components: `batch-runner/core/rubric_loader.py`,
+  `batch-runner/core/grader.py`, `batch-runner/prompts/grader_judge.md`,
+  `batch-runner/step8_grade.py`,
+  `batch-runner/grading_configs/default_gpt5pro.yaml`,
+  `batch-runner/schemas/grade.schema.json`,
+  `.github/workflows/grade-run.yml`,
+  `batch-runner/scripts/download_inference_from_hf.py`, and
+  `.github/agents/grading-engineer.md`. (PR #45)
+
+- **Phase A wow — narrative + dashboard integration.** Threaded schema
+  v1.0 grade JSON into `NarrativeAnalyzer` + `step6_report`
+  (`_load_grade_for_experiment`, `_build_grading_guard_clause`,
+  `_build_grading_results_section`, N3 disclosure paragraph instruction).
+  Added W1–W6 WOW components under `src/components/wow/`
+  (RubricCoverageCard, CriticalItemCard, StructureVsReasoning,
+  SectorHeatmap, ScoreDensityHistogram, RubricSeverityCurve) backed by
+  `src/types/grade.ts` and rendered conditionally via `<WowSection>` in
+  `src/pages/GradeDetail.tsx`. (PR #46)
 
 ### Removed
 
 - **`core/evals_submitter.py` dead code.** Removed deprecated placeholder
   hosted-grading submitter and its test file
   (`tests/test_evals_submitter.py`) in favor of the new self-grading flow.
+  (PR #45)
+
+## [2026-05-17] — Resume Round watchdog + silent corruption fixes
 
 ### Fixed
 

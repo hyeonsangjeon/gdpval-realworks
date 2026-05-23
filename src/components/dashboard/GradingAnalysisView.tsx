@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Award, Target, XCircle, BarChart3, AlertCircle, AlertTriangle, ExternalLink, Clock,
+  Award, Target, XCircle, BarChart3, AlertCircle, AlertTriangle, ExternalLink, BookOpen, Info,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -14,6 +14,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import InfoTooltip from '../common/InfoTooltip'
 import SectionHint from '../common/SectionHint'
 import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
+import { fmtPct } from '../../lib/format'
 
 /* ─── palette ─── */
 const SCORE_COLORS = {
@@ -75,6 +76,18 @@ export default function GradingAnalysisView() {
     ].filter((d) => d.value > 0)
   }, [grades])
 
+  /* ─── derived: status counts (002 D2) ─── */
+  const statusCounts = useMemo(() => ({
+    graded_v1: grades.filter((g) => g.grade_status === 'graded_v1').length,
+    legacy_dummy: grades.filter((g) => g.grade_status === 'legacy_dummy').length,
+  }), [grades])
+
+  type BannerKind = 'none' | 'legacy_only' | 'mixed'
+  const bannerKind: BannerKind =
+    statusCounts.legacy_dummy === 0 ? 'none'
+    : statusCounts.graded_v1 === 0  ? 'legacy_only'
+    :                                 'mixed'
+
   /* ─── derived: disagreement comparison ─── */
   const disagreementData = useMemo(() => {
     return grades.map((g, i) => ({
@@ -87,6 +100,7 @@ export default function GradingAnalysisView() {
       color: GRADE_EXP_COLORS[i % GRADE_EXP_COLORS.length],
     }))
   }, [grades])
+  const hasDisagreement = disagreementData.some((d) => d.inconsistent > 0)
 
   /* ─── loading / error states ─── */
   if (loading) {
@@ -128,19 +142,34 @@ export default function GradingAnalysisView() {
       transition={{ duration: 0.2 }}
       className="space-y-6"
     >
-      {/* ─── Awaiting grade banner ─── */}
-      {grades.some((g) => g.is_dummy) && (
+      {/* ─── Status-aware banner (002 D2) ─── */}
+      {bannerKind === 'legacy_only' && (
         <motion.div
           initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
-          className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
+          className="rounded-xl border border-zinc-500/20 bg-zinc-500/10 p-4"
         >
           <div className="flex items-start gap-3">
-            <Clock className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <BookOpen className="w-5 h-5 text-zinc-300 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="text-sm font-semibold text-amber-300 mb-1">Awaiting LLM-Judge Grade</h3>
-              <p className="text-xs text-amber-300/80">
-                Some entries are placeholder data while the LLM-judge grade is pending.
-                Run <code className="text-amber-200">grade-run.yml</code> for the experiment to populate real rubric-based scores.
+              <h3 className="text-sm font-semibold text-zinc-300 mb-1">Legacy demo grades</h3>
+              <p className="text-xs text-zinc-300/80">
+                Showing legacy demo grades. Run <code className="text-zinc-200">grade-run.yml</code> to get real LLM-judge scores.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+      {bannerKind === 'mixed' && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
+          className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-4"
+        >
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-sky-300 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-semibold text-sky-300 mb-1">Mixed grade sources</h3>
+              <p className="text-xs text-sky-300/80">
+                Some experiments still show legacy demo grades alongside fresh LLM-judge results.
               </p>
             </div>
           </div>
@@ -177,7 +206,7 @@ export default function GradingAnalysisView() {
       )}
 
       {/* ─── 2. Aggregate Pie ─── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className={`grid grid-cols-1 ${hasDisagreement ? 'md:grid-cols-2' : ''} gap-4`}>
         <div className="rounded-xl bg-dash-card border border-dash-border p-4">
           <h3 className="text-sm font-semibold text-dash-text mb-4">Overall Score Breakdown</h3>
           <ResponsiveContainer width="100%" height={260}>
@@ -200,15 +229,15 @@ export default function GradingAnalysisView() {
           </ResponsiveContainer>
         </div>
 
-        {/* ─── 3. Grader Disagreement ─── */}
-        <div className="rounded-xl bg-dash-card border border-dash-border p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertCircle className="w-4 h-4 text-purple-400" />
-            <h3 className="text-sm font-semibold text-dash-text flex items-center gap-1">Grader Disagreement <InfoTooltip content={tooltipTexts.grading.graderDisagreement} position="bottom" /></h3>
-          </div>
-          {disagreementData.length > 0 ? (
+        {/* ─── 3. Grader Disagreement (multi-judge only; hidden when all zero) ─── */}
+        {hasDisagreement && (
+          <div className="rounded-xl bg-dash-card border border-dash-border p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertCircle className="w-4 h-4 text-purple-400" />
+              <h3 className="text-sm font-semibold text-dash-text flex items-center gap-1">Grader Disagreement <InfoTooltip content={tooltipTexts.grading.graderDisagreement} position="bottom" /></h3>
+            </div>
             <div className="space-y-4">
-              {disagreementData.map((d, i) => (
+              {disagreementData.filter((d) => d.inconsistent > 0).map((d, i) => (
                 <div key={i}>
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="text-dash-text-secondary">{d.name}</span>
@@ -226,14 +255,11 @@ export default function GradingAnalysisView() {
                 </div>
               ))}
               <p className="text-[10px] text-dash-text-faint leading-relaxed mt-2">
-                Disagreement = multiple graders scored the same task differently.
-                High rates may indicate ambiguous rubric criteria or borderline outputs.
+                Visible only in multi-judge mode (Phase B). Single-judge runs always show 0.
               </p>
             </div>
-          ) : (
-            <p className="text-xs text-dash-text-muted italic">No disagreement data available.</p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ─── 4. Error Tasks in Grading ─── */}
@@ -288,7 +314,7 @@ export default function GradingAnalysisView() {
             >
               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: GRADE_EXP_COLORS[i % GRADE_EXP_COLORS.length] }} />
               {g.label}
-              {g.is_dummy && <span className="text-[9px] text-amber-400 ml-0.5">(dummy)</span>}
+              {g.grade_status === 'legacy_dummy' && <span className="text-[9px] text-zinc-400 ml-0.5">(demo)</span>}
               <ExternalLink className="w-3 h-3 ml-1" />
             </button>
           ))}
@@ -301,41 +327,87 @@ export default function GradingAnalysisView() {
 /* ─── GradeOverviewCard ─── */
 function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; color: string; onNavigate: () => void }) {
   const s = grade.summary
+  const isLegacyDummy = grade.grade_status === 'legacy_dummy'
+  const wow = grade.summary_v1?.wow
   const stats = [
     { icon: Target, label: 'Graded', value: `${s.graded_tasks}/${s.total_tasks}`, color: 'text-blue-400 bg-blue-500/10' },
     { icon: Award, label: 'Perfect', value: s.perfect_score, color: 'text-emerald-400 bg-emerald-500/10' },
     { icon: BarChart3, label: 'Partial', value: s.partial_score, color: 'text-amber-400 bg-amber-500/10' },
     { icon: XCircle, label: 'Zero', value: s.zero_score, color: 'text-red-400 bg-red-500/10' },
-    { icon: AlertCircle, label: 'Disagree', value: s.inconsistent_grades, color: 'text-purple-400 bg-purple-500/10' },
+    ...(s.inconsistent_grades > 0
+      ? [{ icon: AlertCircle, label: 'Disagree', value: s.inconsistent_grades as number | string, color: 'text-purple-400 bg-purple-500/10' }]
+      : []),
     { icon: AlertTriangle, label: 'Error', value: s.error_tasks, color: 'text-orange-400 bg-orange-500/10' },
   ]
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl bg-dash-card border border-dash-border p-4 hover:border-dash-border-active transition-all cursor-pointer relative overflow-hidden"
+      className={
+        'rounded-xl p-4 hover:border-dash-border-active transition-all cursor-pointer relative overflow-hidden ' +
+        (isLegacyDummy
+          ? 'bg-dash-card/60 border border-dashed border-dash-border'
+          : 'bg-dash-card border border-dash-border')
+      }
       onClick={onNavigate}
     >
-      {grade.is_dummy && (
-        <div className="absolute top-0 left-0 right-0 bg-amber-500/80 text-amber-950 text-center text-[9px] font-bold py-0.5 tracking-wider uppercase">
-          ⏳ Awaiting real grading
-        </div>
-      )}
-      <div className={grade.is_dummy ? 'pt-3' : ''}>
+      <div>
         {/* header */}
         <div className="flex items-start justify-between mb-3">
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
               <h4 className="text-sm font-semibold text-dash-text">{grade.label}</h4>
+              {isLegacyDummy && (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-zinc-500/10 border border-zinc-500/30 text-[9px] font-bold uppercase tracking-wider text-zinc-400"
+                  title="Legacy demonstration data — not a real graded run"
+                >
+                  <BookOpen className="w-2.5 h-2.5" />
+                  DEMO
+                </span>
+              )}
             </div>
-            <p className="text-[10px] text-dash-text-faint font-mono">{grade.model}</p>
+            <div className="text-[10px] text-dash-text-faint space-y-0.5">
+              <div className="flex items-center gap-1">
+                <span className="uppercase tracking-wider opacity-70">Inference</span>
+                {grade.inference_model
+                  ? <span className="font-mono text-dash-text">{grade.inference_model}</span>
+                  : <span className="italic">unknown</span>}
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="uppercase tracking-wider opacity-70">Judge</span>
+                {grade.judge_model
+                  ? <span className="font-mono text-fuchsia-300/80">{grade.judge_model}</span>
+                  : <span className="italic">—</span>}
+              </div>
+            </div>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-dash-heading font-mono">{s.avg_score_pct}%</p>
             {s.ci_pct && <p className="text-[10px] text-dash-text-faint flex items-center gap-0.5 justify-end">± {s.ci_pct}% CI <InfoTooltip content={tooltipTexts.grading.ci} position="left" /></p>}
           </div>
         </div>
+
+        {/* Mini-health pills (graded_v1 only) */}
+        {grade.grade_status === 'graded_v1' && wow && (
+          <div className="flex items-center gap-2 text-[10px] mt-1 mb-3 font-mono">
+            <span
+              className={(wow.judge_error_rate ?? 0) > 0.05
+                ? 'text-red-400 font-semibold'
+                : 'text-emerald-400'}
+              title={tooltipTexts.health.judgeErrorRate}
+            >
+              err {fmtPct(wow.judge_error_rate)}
+            </span>
+            <span className="text-dash-text-muted" title={tooltipTexts.health.judgePassRate}>
+              judge {fmtPct(wow.judge_pass_rate)}
+            </span>
+            <span className="text-dash-text-muted" title={tooltipTexts.health.precheckPassRate}>
+              precheck {fmtPct(wow.precheck_pass_rate)}
+            </span>
+          </div>
+        )}
 
         {/* Score bar */}
         <div className="mb-3">
