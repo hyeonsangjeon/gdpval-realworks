@@ -29,13 +29,17 @@ grader:
   precheck_patterns_version: "v1"
   evidence_max_chars: 200
   judge_max_retries: 1
-  per_item_max_output_tokens: 1600  # bumped from 800 — reasoning models
-                                    # (gpt-5.4-pro effort=high) consume
-                                    # large reasoning-token budgets that
-                                    # count against output_tokens. Smoke
-                                    # at 800 produced 23.8% judge_error
-                                    # (output truncated). 1600 ~ 2x
-                                    # safety margin.
+  per_item_max_output_tokens: 2400  # bumped 800→1600→2400 across smoke runs.
+                                    # gpt-5.4-pro effort=high reasoning
+                                    # tokens count against output budget.
+                                    # 800 → judge_error 23.8%.
+                                    # 1600 → judge_error 11.9% (all
+                                    # remaining were truncation-class
+                                    # `judge_json_parse_failed`). 2400
+                                    # is the next safety step. If still
+                                    # >5%, suspect prompt verbosity
+                                    # (deliverable_extract_max_chars or
+                                    # rubric item criterion length).
   save_raw_responses: false
   fail_on_missing_evidence: true
   deliverable_extract_max_chars: 4000
