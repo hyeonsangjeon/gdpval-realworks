@@ -1,5 +1,11 @@
 # 001 — Inference vs Judge 모델 분리 표시
 
+> **Amendments (post extreme-reasoner / ui-designer review)**:
+> - Legacy `model` 필드는 `@deprecated` 로 마킹. 구현 시 grep으로 잔존 사용처 0건 확인.
+> - 단일 라인 헤더 → **두 줄 stacked + 라벨 + 모노스페이스 pill chip** 패턴.
+> - Inference pill = neutral palette, Judge pill = subtle fuchsia tint
+>   (WOW 시그널과 시각적 연결). InfoTooltip 으로 "별개 파이프라인" 명시.
+
 ## 목적
 
 Dashboard 어디서든 `gpt-5.4-pro` 같은 단일 모델명만 보이면 사용자는 그
@@ -61,7 +67,12 @@ export interface GradeResult {
   id: string
   is_dummy: boolean
   label: string
-  model: string             // legacy: inference 모델 (없으면 '')
+  /**
+   * @deprecated since dashboard_cleanup PR #1.
+   * Use `inference_model` instead. Retained for legacy callers; equals
+   * `inference_model || ''` and never silently falls back to judge model.
+   */
+  model: string
   dataset_url: string | null
 
   // ─ 신규/명확화 ─
@@ -82,7 +93,11 @@ export interface GradeResult {
 }
 ```
 
-## D3 — GradeDetail.tsx 헤더
+**Implementation gate**: 구현 시 `rg "grade\.model|grades?\.\.\.model" src/` 로
+잔존 사용처를 0건으로 만든 뒤 머지. 잔존이 있으면 `inference_model` 또는
+`judge_model` 로 치환.
+
+## D3 — GradeDetail.tsx 헤더 (ui-designer Layout A)
 
 ### 기존
 ```tsx
@@ -96,32 +111,45 @@ export interface GradeResult {
 
 ```tsx
 <h1>{grade.label}</h1>
-<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-  {grade.inference_model ? (
-    <span className="font-mono">
-      <span className="text-foreground/60">Inference</span>{' '}
-      <span className="text-foreground font-medium">{grade.inference_model}</span>
+<div className="flex flex-col gap-1 text-sm mt-2">
+  <div className="flex flex-wrap items-center gap-2">
+    <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+      Inference
     </span>
-  ) : (
-    <span className="font-mono text-amber-500/80">Inference model unknown</span>
-  )}
-  <span>•</span>
-  {grade.judge_model ? (
-    <span className="font-mono">
-      <span className="text-foreground/60">Graded by</span>{' '}
-      <span className="text-foreground font-medium">{grade.judge_model}</span>
+    {grade.inference_model ? (
+      <span className="px-2 py-0.5 rounded bg-foreground/5 border border-border
+                       font-mono text-xs text-foreground">
+        {grade.inference_model}
+      </span>
+    ) : (
+      <span className="font-mono text-xs italic text-amber-500/80">unknown</span>
+    )}
+    <span className="text-muted-foreground">· {grade.summary.total_tasks} tasks</span>
+  </div>
+  <div className="flex flex-wrap items-center gap-2">
+    <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+      Graded by
     </span>
-  ) : (
-    <span className="font-mono text-amber-500/80">Judge model unknown (legacy)</span>
-  )}
-  <span>•</span>
-  <span>{grade.summary.total_tasks} tasks</span>
+    {grade.judge_model ? (
+      <span className="px-2 py-0.5 rounded bg-fuchsia-500/10 border border-fuchsia-400/20
+                       font-mono text-xs text-fuchsia-300">
+        {grade.judge_model}
+      </span>
+    ) : (
+      <span className="font-mono text-xs italic text-muted-foreground">— (legacy)</span>
+    )}
+    <InfoTooltip content={tooltipTexts.grading.judgeVsInference} />
+  </div>
 </div>
 ```
 
-Tooltip 추가 (i 풍선): "Inference model produced the deliverable. Judge
-model scored it against open-sourced GDPval rubrics. These are separate
-pipelines."
+라벨로 시각적 separator 역할 → 좁은 화면에서도 의미 보존 (wrap 가능).
+Inference pill = neutral palette (subject), Judge pill = subtle fuchsia
+(WOW palette 와 연결, anti-conflation).
+
+InfoTooltip 신규 키: `tooltipTexts.grading.judgeVsInference`:
+> "LLM-judge model evaluates outputs against the rubric. Distinct from
+> the inference model that produced them."
 
 ## D4 — GradesSummary.tsx 카드 헤더
 
@@ -129,16 +157,16 @@ pipelines."
 
 ```tsx
 <div className="text-xs text-muted-foreground space-y-0.5">
-  <div>
-    Inference:{' '}
+  <div className="flex items-center gap-1">
+    <span className="text-[10px] uppercase tracking-wider opacity-70">Inference</span>
     {grade.inference_model
       ? <span className="font-mono text-foreground">{grade.inference_model}</span>
       : <span className="italic">unknown</span>}
   </div>
-  <div>
-    Judge:{' '}
+  <div className="flex items-center gap-1">
+    <span className="text-[10px] uppercase tracking-wider opacity-70">Judge</span>
     {grade.judge_model
-      ? <span className="font-mono text-foreground">{grade.judge_model}</span>
+      ? <span className="font-mono text-fuchsia-300/80">{grade.judge_model}</span>
       : <span className="italic">—</span>}
   </div>
 </div>
@@ -152,16 +180,24 @@ GradeOverviewCard 내부 모델 표시도 동일 패턴으로.
 
 | 시나리오 | 기대 결과 |
 |---|---|
-| inference_model="" + judge.model="gpt-5.4-pro" (현재 smoke) | header: "Inference model unknown · Graded by gpt-5.4-pro · 3 tasks" |
-| inference_model="gpt-5.2-chat" + judge.model="gpt-5.4-pro" (Track 1 후) | header: "Inference gpt-5.2-chat · Graded by gpt-5.4-pro · 3 tasks" |
-| dummy 파일 (meta.model="gpt-5") | header: "Inference gpt-5 · Judge model unknown (legacy) · 220 tasks" |
+| inference_model="" + judge.model="gpt-5.4-pro" (Track 1 머지 전 grade) | Inference: unknown / Graded by gpt-5.4-pro |
+| inference_model="gpt-5.2-chat" + judge.model="gpt-5.4-pro" (Track 1 후) | Inference: gpt-5.2-chat / Graded by gpt-5.4-pro |
+| dummy 파일 (meta.model="gpt-5") | Inference: gpt-5 / Graded by — (legacy) |
 
 수동 회귀: `npm run dev` 후 `/grades/dummy_gpt5_baseline` 페이지가 깨지지
 않는지 확인.
 
+## Aggregator unit test (T1, 003-rollout §gate)
+
+`scripts/__tests__/aggregate-grades.test.mjs` (또는 동등) 신설:
+- fixture: minimal v1 grade with `inference_model: ""` → 출력 `inference_model: null`
+- fixture: schema_version="1.0" → `grade_status: 'graded_v1'`
+- fixture: `_meta.is_dummy: true` → `grade_status: 'legacy_dummy'`
+
 ## 비고
 
-- "Inference model unknown" 은 Track 1 핫픽스로 사라질 예정. 그래도
-  defensive 하게 처리.
 - 추후 Phase B에서 같은 experiment에 judge 가 여러 개 있을 때 selector
   추가 — 이 spec 1차에선 미구현, 데이터 모델만 준비.
+- `judge_model: string | null` (singular) — Phase B multi-judge 시 별도
+  필드 (`other_judges: string[]`) 추가 검토.
+

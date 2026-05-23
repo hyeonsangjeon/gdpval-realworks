@@ -84,17 +84,54 @@ npm run dev
 ### Stage 2 — PR #1 (Dashboard cleanup)
 
 1. `feat/dashboard-cleanup` 브랜치 생성
-2. spec 001~005 일괄 구현
-3. `npm run aggregate && npm run build` 통과
-4. 수동 시각 회귀 3 항목 통과
-5. PR open
+2. spec 001~005 일괄 구현 (구현 순서는 §"구현 권장 순서" 참조)
+3. **HARD GATE — aggregator unit test** (`scripts/__tests__/aggregate-grades.test.mjs`):
+   - fixture A: minimal v1 grade with `inference_model: ""` → 출력
+     `inference_model: null` (never falls back to judge.model)
+   - fixture B: `schema_version: '1.0'` → `grade_status: 'graded_v1'`
+   - fixture C: `_meta.is_dummy: true` → `grade_status: 'legacy_dummy'`
+4. **HARD GATE — grep audit** (005-copy-pass2 정의):
+   ```bash
+   rg -i "self-?QA|self-?assess|LLM-?judge|external grad|grading pipeline|pre-?grad|Awaiting" \
+      src/ scripts/aggregate-grades.mjs
+   ```
+   결과를 PR description 표에 첨부, EDIT/DELETE 행 모두 처리.
+5. `npm run aggregate && npm run build` 통과
+6. **HARD GATE — 시각 회귀** (3 항목):
+   - `/grades/dummy_gpt5_baseline` 페이지 정상 렌더링, DEMO badge + dashed border, opacity 사용 안 함
+   - `/grades/exp998_smoke_baseline_sample__...` 헤더 "Inference / Graded by" 두 줄, HealthStrip pill row (err pill calm 또는 red), WowSection
+   - Dashboard → Grading Analysis 탭: mixed banner sky tone (graded_v1 + dummy 혼재), Disagreement 섹션 사라짐
+7. PR open
+
+**합격 기준**:
+- [ ] `npm run build` 무에러
+- [ ] aggregator unit test 3 fixture 통과
+- [ ] grep audit 결과 첨부 + 모든 EDIT/DELETE 처리
+- [ ] 시각 회귀 3 항목 통과
+- [ ] tooltipTexts 신규 키 (`health.*`, `grading.judgeVsInference`) orphan 없음
+
+### 구현 권장 순서 (extreme-reasoner)
+
+5 spec이 3개 파일 (aggregate-grades.mjs, useGrades.ts,
+GradingAnalysisView.tsx) overlap. 권장:
+
+1. **First (foundational, serial)**:
+   - 001 D1 + 002 D1 (aggregator + grade_status + experiment_id + unit test) — 하나의 commit
+   - 001 D2 + 002 type addition (`useGrades.ts`) — typing only
+2. **Second (parallelizable)**:
+   - 001 D3 + 003 D1/D2 (`GradeDetail.tsx`, `HealthStrip.tsx`, `format.ts`)
+   - 001 D4 + 002 D3 + 004 D2 (`GradesSummary.tsx`) — DEMO badge + per-card Disagreement guard
+   - 001 D5 + 002 D2 + 003 D3 + 004 D1 (`GradingAnalysisView.tsx`) — 4 spec touchpoint 동시
+3. **Third (low risk, last)**:
+   - 002 D4 (`ScopeBadge.tsx` + `ExperimentDetail.tsx`)
+   - 005 copy pass — last, UI 확정 후
 
 ### Stage 3 — exp025 실 채점 (별도, 본 spec 외)
 
 PR #1 머지 후 진행:
 1. `grade-run.yml` workflow_dispatch (exp025, 220 tasks, ~$70)
 2. Stage 1 smoke 데이터 기준 8h 이내 완료 예상
-3. Dashboard 시각 확인 (HealthRow alert 없음, WOW 카드 풍부함)
+3. Dashboard 시각 확인 (HealthStrip alert 없음, WOW 카드 풍부함)
 
 ## 운영 정책 (PR #1 머지 후)
 
