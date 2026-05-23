@@ -213,3 +213,72 @@ def test_exit_2_when_no_inference_results(monkeypatch, tmp_path):
 
     monkeypatch.setattr("sys.argv", ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml"])
     assert s8.main() == 2
+
+
+def test_inference_model_resolved_from_inf_results_when_present(monkeypatch, tmp_path):
+    """inf_results['model'] takes priority when populated."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    monkeypatch.setattr("sys.argv", ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml", "--force"])
+    assert s8.main() == 0
+
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["inference_model"] == "gpt-5.2-chat"
+    # never silently fall back to the judge model
+    assert payload["inference_model"] != payload["judge"]["model"]
+
+
+def test_inference_model_falls_back_to_experiment_yaml(monkeypatch, tmp_path):
+    """When inf_results['model'] is blank, pull deployment from experiment yaml."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    # Simulate HF-reconstruct path that leaves model="" on the inference dict.
+    inf_path = tmp_path / "workspace" / "step2_inference_results.json"
+    inf = json.loads(inf_path.read_text(encoding="utf-8"))
+    inf["model"] = ""
+    inf_path.write_text(json.dumps(inf), encoding="utf-8")
+
+    monkeypatch.setattr("sys.argv", ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml", "--force"])
+    assert s8.main() == 0
+
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["inference_model"] == "gpt-5.2-chat"  # from yaml.condition_a.model.deployment
+
+
+def test_inference_model_never_falls_back_to_judge_model(monkeypatch, tmp_path):
+    """Defensive: even with both inf model empty and a degenerate yaml, never
+    leak judge model into inference_model."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    # Wipe model in both sources.
+    inf_path = tmp_path / "workspace" / "step2_inference_results.json"
+    inf = json.loads(inf_path.read_text(encoding="utf-8"))
+    inf["model"] = ""
+    inf_path.write_text(json.dumps(inf), encoding="utf-8")
+
+    # Patch _resolve_inference_model's exp_config branch by giving an
+    # experiment yaml with no deployment field.
+    yaml_path = tmp_path / "experiments" / "exp998_smoke_baseline_sample.yaml"
+    yaml_data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    yaml_data["condition_a"]["model"]["deployment"] = ""
+    yaml_path.write_text(yaml.safe_dump(yaml_data), encoding="utf-8")
+
+    monkeypatch.setattr("sys.argv", ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml", "--force"])
+    # ExperimentConfig default deployment is "gpt-4" when empty — but the
+    # important guarantee is: inference_model must NEVER equal judge.model
+    # just because both sources were missing. Verify by reading the payload.
+    assert s8.main() == 0
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["inference_model"] != "gpt-5.4-pro"  # judge model
