@@ -15,8 +15,10 @@ import { useIsMobile } from '../hooks/useIsMobile'
 import { useTheme } from '../contexts/ThemeContext'
 import ScopeBadge from '../components/ScopeBadge'
 import { useExperimentPrompt } from '../hooks/useExperimentPrompt'
+import { useGrades, GradeResult } from '../hooks/useGrades'
 import PromptArchitectureView from '../components/dashboard/PromptArchitectureView'
 import type { TaskResult } from '../types/report'
+import type { ReportMeta } from '../types/report'
 
 // ── Color helpers ──
 function rateColor(rate: number) {
@@ -30,6 +32,20 @@ function qaColor(score: number | null) {
   if (score >= 7) return '#10b981'
   if (score >= 5) return '#f59e0b'
   return '#ef4444'
+}
+
+// Grade-derived scope wins over the meta-recorded scope when a grade row
+// exists for this experiment (match by exact experiment_id, never startsWith).
+function resolveScope(
+  meta: ReportMeta | undefined,
+  grades: GradeResult[],
+): 'self_assessed_pre_grading' | 'graded' | 'graded_v1' | 'legacy_demo' {
+  if (!meta) return 'self_assessed_pre_grading'
+  const match = grades.find((g) => g.experiment_id === meta.experiment_id)
+  if (match?.grade_status === 'graded_v1') return 'graded_v1'
+  if (match?.grade_status === 'legacy_dummy') return 'legacy_demo'
+  if (meta.report_scope === 'graded') return 'graded'
+  return 'self_assessed_pre_grading'
 }
 
 type SortKey = 'task_id' | 'sector' | 'occupation' | 'status' | 'qa_score' | 'latency_ms'
@@ -62,10 +78,12 @@ function ExperimentDetail() {
   const [showPromptArch, setShowPromptArch] = useState(false)
   const [qaScoreFilter, setQaScoreFilter] = useState<number | 'all'>('all')
   const { prompt: promptArch, description: expDescription } = useExperimentPrompt(id)
+  const { grades } = useGrades()
 
   // ── Derived data ──
   const meta = report?.meta
   const summary = report?.summary
+  const resolvedScope = useMemo(() => resolveScope(meta, grades), [meta, grades])
   const sectors = useMemo(
     () => [...new Set(report?.task_results?.map((t) => t.sector) || [])].sort(),
     [report]
@@ -171,7 +189,7 @@ function ExperimentDetail() {
                  meta?.execution_mode === 'json_renderer' ? '📄 JSON' :
                  meta?.execution_mode}
               </span>
-              {meta?.report_scope && <ScopeBadge scope={meta.report_scope} />}
+              {meta?.report_scope && <ScopeBadge scope={resolvedScope} />}
             </div>
             <p className="text-xs text-dash-text-muted mt-0.5 truncate max-w-[150px] md:max-w-none">{meta?.experiment_name}</p>
             {expDescription && (
@@ -260,7 +278,7 @@ function ExperimentDetail() {
           >
             <div className="flex items-center gap-2 mb-3">
               <h3 className="text-sm font-semibold text-dash-heading">Execution Summary</h3>
-              <ScopeBadge scope={meta?.report_scope ?? 'self_assessed_pre_grading'} />
+              <ScopeBadge scope={resolvedScope} />
             </div>
             <p className="text-xs text-dash-text-secondary leading-relaxed whitespace-pre-line">
               {report.narrative.overview}

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { Card, CardContent } from './ui/card'
-import { AlertTriangle, Award, Target, XCircle, BarChart3, AlertCircle, HelpCircle, Sparkles } from 'lucide-react'
+import { AlertTriangle, Award, Target, XCircle, BarChart3, AlertCircle, HelpCircle, Sparkles, BookOpen } from 'lucide-react'
 import { GradeResult } from '../hooks/useGrades'
 
 const STAT_TOOLTIPS: Record<string, string> = {
@@ -102,6 +102,7 @@ function StatMini({ icon: Icon, label, value, color }: { icon: typeof Award; lab
 function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
   const s = grade.summary
   const isV1 = grade.schema_version === '1.0'
+  const isLegacyDummy = grade.grade_status === 'legacy_dummy'
 
   return (
     <Link to={`/grades/${grade.id}`} className="block">
@@ -110,19 +111,19 @@ function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.1 }}
     >
-      <Card className="bg-card/50 backdrop-blur border-border relative overflow-hidden hover:border-primary/50 transition-all duration-300 cursor-pointer">
-        {/* Dummy banner */}
-        {grade.is_dummy && (
-          <div className="absolute top-0 left-0 right-0 bg-amber-500/90 text-amber-950 text-center text-[11px] font-bold py-1 tracking-wider uppercase">
-            ⏳ Awaiting LLM-Judge Grade — run grade-run.yml to populate
-          </div>
-        )}
-
-        <CardContent className={`p-6 ${grade.is_dummy ? 'pt-10' : ''}`}>
+      <Card
+        className={
+          'backdrop-blur relative overflow-hidden hover:border-primary/50 transition-all duration-300 cursor-pointer ' +
+          (isLegacyDummy
+            ? 'bg-card/30 border-border/60 border-dashed'
+            : 'bg-card/50 border-border')
+        }
+      >
+        <CardContent className="p-6">
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-semibold text-foreground">{grade.label}</h3>
                 {isV1 && (
                   <span
@@ -133,8 +134,30 @@ function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
                     WOW
                   </span>
                 )}
+                {isLegacyDummy && (
+                  <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-zinc-500/10 border border-zinc-500/30 text-[10px] font-bold uppercase tracking-wider text-zinc-400"
+                    title="Legacy demonstration data — not a real graded run"
+                  >
+                    <BookOpen className="w-2.5 h-2.5" />
+                    DEMO
+                  </span>
+                )}
               </div>
-              <p className="text-sm text-muted-foreground">{grade.model}</p>
+              <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] uppercase tracking-wider opacity-70">Inference</span>
+                  {grade.inference_model
+                    ? <span className="font-mono text-foreground">{grade.inference_model}</span>
+                    : <span className="italic">unknown</span>}
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] uppercase tracking-wider opacity-70">Judge</span>
+                  {grade.judge_model
+                    ? <span className="font-mono text-fuchsia-300/80">{grade.judge_model}</span>
+                    : <span className="italic">—</span>}
+                </div>
+              </div>
               {grade.dataset_url && (
                 <a
                   href={grade.dataset_url}
@@ -198,12 +221,14 @@ function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
               value={s.zero_score}
               color="bg-red-500/10 text-red-500"
             />
-            <StatMini
-              icon={AlertCircle}
-              label="Disagreement"
-              value={s.inconsistent_grades}
-              color="bg-purple-500/10 text-purple-500"
-            />
+            {s.inconsistent_grades > 0 && (
+              <StatMini
+                icon={AlertCircle}
+                label="Disagreement"
+                value={s.inconsistent_grades}
+                color="bg-purple-500/10 text-purple-500"
+              />
+            )}
             <StatMini
               icon={AlertTriangle}
               label="Errors"
@@ -225,9 +250,9 @@ function GradesSummary({ grades }: GradesSummaryProps) {
     <div className="space-y-4">
       <h2 className="text-2xl font-bold text-foreground mb-4">
         Grading Results
-        {grades.some(g => g.is_dummy) && (
-          <span className="ml-2 text-sm font-normal text-amber-500">
-            (includes dummy data)
+        {grades.some(g => g.grade_status === 'legacy_dummy') && (
+          <span className="ml-2 text-sm font-normal text-zinc-400">
+            (includes legacy demo data)
           </span>
         )}
       </h2>

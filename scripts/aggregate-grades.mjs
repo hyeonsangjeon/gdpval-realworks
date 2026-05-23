@@ -22,6 +22,20 @@ async function dirExists(path) {
   try { await access(path); return true; } catch { return false; }
 }
 
+/**
+ * inconsistent_grades: count of tasks where multiple judges produced
+ * different scores. Always 0 for single-judge runs (Phase A). Populated
+ * by Phase B multi-judge aggregator.
+ */
+
+// Best-effort experiment_id extraction from a 4-tuple filename:
+//   <exp>__<judge>__<rubric_sha>__<v>.json  →  <exp>
+// Falls back to the bare filename when no `__` separator is present.
+function experimentIdFromFilename(filename) {
+  const idx = filename.indexOf('__');
+  return idx > 0 ? filename.slice(0, idx) : filename;
+}
+
 // ── Legacy (dummy / _meta-based) format ────────────────────────────────────
 function processLegacyGradesFile(filePath, raw) {
   const filename = basename(filePath, '.json');
@@ -47,12 +61,26 @@ function processLegacyGradesFile(filePath, raw) {
     return unique.size > 1;
   }).length;
 
+  // dummy_gpt5_baseline.json _meta.model represents the inference model
+  // (it's the legacy demo's own "Model:" header). No judge metadata exists
+  // for legacy dummies, so judge_model is null. Never fall back to judge.
+  const inference_model = meta.model && String(meta.model).trim() ? meta.model : null;
+  const judge_model = null;
+  const model = inference_model || '';
+
+  const is_dummy = !!meta.is_dummy;
+  const grade_status = is_dummy ? 'legacy_dummy' : 'no_grade';
+
   return {
     id: filename,
+    experiment_id: meta.experiment_id || experimentIdFromFilename(filename),
+    grade_status,
     schema_version: null,
-    is_dummy: !!meta.is_dummy,
+    is_dummy,
     label: meta.label || filename,
-    model: meta.model || 'Unknown',
+    model,
+    inference_model,
+    judge_model,
     dataset_url: meta.dataset_url || null,
     summary: {
       total_tasks: tasks.length,
@@ -121,16 +149,33 @@ function processV1GradesFile(filePath, raw) {
     ? summary.graded_tasks
     : totalTasks - errorTasks;
 
-  const label = raw.experiment_id || filename;
-  const model = raw.inference_model || (raw.judge && raw.judge.model) || 'Unknown';
+  // v1 path: prefer human-readable label/title from raw, fall back through
+  // experiment_id, finally filename. Aggregator caller may add a `label`
+  // field to grade JSON in future spec versions; this is forward-compatible.
+  const label = raw.label || raw.title || raw.experiment_id || filename;
+  const experiment_id = raw.experiment_id || experimentIdFromFilename(filename);
+
+  // Explicit fields with no silent fallback. Empty / missing inference_model
+  // surfaces as null in the dashboard so the UI can render "unknown" instead
+  // of inheriting the judge model name (the bug fixed in this PR).
+  const inference_model = typeof raw.inference_model === 'string' && raw.inference_model.trim()
+    ? raw.inference_model
+    : null;
+  const judge_model = raw.judge && raw.judge.model ? raw.judge.model : null;
+  // Legacy `model` field: inference only. Never falls back to judge.
+  const model = inference_model || '';
 
   return {
     id: filename,
+    experiment_id,
+    grade_status: 'graded_v1',
     schema_version: '1.0',
     is_dummy: false,
     label,
     model,
-    dataset_url: null,
+    inference_model,
+    judge_model,
+    dataset_url: raw.dataset_url || null,
     summary: {
       total_tasks: totalTasks,
       graded_tasks: gradedTasks,
@@ -155,7 +200,7 @@ function processV1GradesFile(filePath, raw) {
   };
 }
 
-function processGradesFile(filePath, raw) {
+export function processGradesFile(filePath, raw) {
   if (raw && raw.schema_version === '1.0') {
     return processV1GradesFile(filePath, raw);
   }
@@ -211,4 +256,18 @@ async function main() {
   }
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+// Only run as a script when invoked directly (`node aggregate-grades.mjs`).
+// When imported as a module (e.g. from unit tests) the side-effecting `main`
+// is suppressed so test harnesses can call `processGradesFile` cleanly.
+const invokedDirectly = (() => {
+  try {
+    const entry = process.argv[1] ? new URL(`file://${process.argv[1]}`).href : '';
+    return entry === import.meta.url;
+  } catch {
+    return false;
+  }
+})();
+
+if (invokedDirectly) {
+  main().catch(err => { console.error(err); process.exit(1); });
+}

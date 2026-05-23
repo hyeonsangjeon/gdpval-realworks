@@ -8,10 +8,10 @@ import {
   XCircle,
   BarChart3,
   AlertCircle,
-  AlertTriangle,
   Filter,
   ExternalLink,
   HelpCircle,
+  BookOpen,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import {
@@ -36,7 +36,10 @@ import {
   SectorHeatmap,
   ScoreDensityHistogram,
   RubricSeverityCurve,
+  HealthStrip,
 } from '../components/wow'
+import InfoTooltip from '../components/common/InfoTooltip'
+import { tooltipTexts } from '../data/tooltipTexts'
 
 type TaskFilter = 'all' | 'perfect' | 'partial' | 'zero' | 'error' | 'inconsistent'
 
@@ -216,10 +219,10 @@ function GradeDetail() {
           transition={{ duration: 0.3, delay: 0.1 }}
           className="mb-6 md:mb-8"
         >
-          {grade.is_dummy && (
-            <div className="mb-3 inline-flex items-center gap-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-3 py-1.5 rounded-md text-sm font-medium">
-              <AlertTriangle className="h-4 w-4" />
-              ⏳ We're still waiting for grading results. This takes a while.
+          {grade.grade_status === 'legacy_dummy' && (
+            <div className="mb-3 inline-flex items-center gap-2 bg-zinc-500/10 text-zinc-300 border border-zinc-500/30 px-3 py-1.5 rounded-md text-sm font-medium">
+              <BookOpen className="h-4 w-4" />
+              Legacy demo grades — this card shows demonstration data, not a real LLM-judge run.
             </div>
           )}
           <div className="flex flex-wrap items-center gap-3 mb-1">
@@ -238,13 +241,20 @@ function GradeDetail() {
             )}
           </div>
           <p className="text-base text-muted-foreground mb-2">Grading Results</p>
-          <div className="flex flex-wrap items-center gap-3 text-sm md:text-base text-muted-foreground">
-            <span>{grade.model}</span>
-            <span>•</span>
-            <span>{s.total_tasks} tasks</span>
-            {grade.dataset_url && (
-              <>
-                <span>•</span>
+          <div className="flex flex-col gap-1 text-sm mt-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Inference
+              </span>
+              {grade.inference_model ? (
+                <span className="px-2 py-0.5 rounded bg-foreground/5 border border-border font-mono text-xs text-foreground">
+                  {grade.inference_model}
+                </span>
+              ) : (
+                <span className="font-mono text-xs italic text-amber-500/80">unknown</span>
+              )}
+              <span className="text-muted-foreground">· {s.total_tasks} tasks</span>
+              {grade.dataset_url && (
                 <a
                   href={grade.dataset_url}
                   target="_blank"
@@ -253,8 +263,21 @@ function GradeDetail() {
                 >
                   HuggingFace <ExternalLink className="h-3 w-3" />
                 </a>
-              </>
-            )}
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Graded by
+              </span>
+              {grade.judge_model ? (
+                <span className="px-2 py-0.5 rounded bg-fuchsia-500/10 border border-fuchsia-400/20 font-mono text-xs text-fuchsia-300">
+                  {grade.judge_model}
+                </span>
+              ) : (
+                <span className="font-mono text-xs italic text-muted-foreground">— (legacy)</span>
+              )}
+              <InfoTooltip content={tooltipTexts.grading.judgeVsInference} />
+            </div>
           </div>
         </motion.div>
 
@@ -304,6 +327,11 @@ function GradeDetail() {
             />
           </div>
         </motion.div>
+
+        {/* ── HealthStrip: judge run-quality diagnostics (v1.0 only) ── */}
+        {grade.schema_version === '1.0' && grade.summary_v1 ? (
+          <HealthStrip summaryV1={grade.summary_v1} delay={0.2} />
+        ) : null}
 
         {/* ── WOW: Item-level Rubric Insights (v1.0 only) ── */}
         {grade.schema_version === '1.0' && grade.summary_v1 ? (

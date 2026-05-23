@@ -3,13 +3,13 @@ export const TASK_TOTAL_PLACEHOLDER = '{TASK_TOTAL}'
 export const tooltipTexts = {
   kpi: {
     bestSuccessRate:
-      'Highest task-completion rate among all experiments. A task is "successful" when the LLM\'s self-assessed QA check passes (based on self-assessed QA — separate from LLM-judge grade).',
+      "Highest task-completion rate based on the LLM's self-QA check during inference. This is the model judging its own deliverable — NOT the same as the LLM-judge grade (rubric-based, run via grade-run.yml). Both signals are independent.",
     experiments:
       `Total number of experiment runs. Each experiment tests a different prompt strategy or token configuration against the same ${TASK_TOTAL_PLACEHOLDER} tasks.`,
     tasksEvaluated:
       'Number of real-world professional tasks per experiment. Covers 9 industry sectors and 44 occupations from the GDPVal Gold Subset.',
     bestQaScore:
-      'Highest average Self-QA score (0–10) across experiments. The LLM inspects its own output after each task and scores it on completeness, accuracy, and format. This is a self-assessed quality measure, not an LLM-judge grade.',
+      'Highest average Self-QA score (0–10): the LLM rates its own output right after generation. Useful for runtime quality signal but does NOT imply rubric correctness — for that see the LLM-judge grade (Grading Analysis tab).',
   },
   leaderboard: {
     experiment:
@@ -21,11 +21,11 @@ export const tooltipTexts = {
     progress:
       `Fraction of tasks completed out of ${TASK_TOTAL_PLACEHOLDER} total. Bar color matches the experiment\u2019s assigned color, not completion status.`,
     successRate:
-      'Percentage of tasks that passed self-assessed QA. Higher is better. Color: ≥96% green, ≥90% amber, <90% red.',
+      "Percentage of tasks that passed the LLM's self-QA check. Self-assessed (model judging itself) — separate from the LLM-judge grade. Colors: ≥96% green, ≥90% amber, <90% red.",
     deltaBest:
       "Difference from the best experiment's success rate. 0% means this is the top performer.",
     qaScore:
-      'Average quality score (0–10) across completed tasks. Self-assessed by the LLM after each task.',
+      'Average self-QA score (0–10), model rates its own output. Independent from the LLM-judge grade (see Grading Analysis tab).',
     tasks: 'Completed tasks / total tasks.',
   },
   errors: {
@@ -44,13 +44,29 @@ export const tooltipTexts = {
     zero:
       'Tasks scored 0% by the LLM-judge. The output failed to meet any rubric criteria or was completely off-target.',
     graderDisagreement:
-      'Cases where multiple graders scored the same task differently. High rates may indicate ambiguous rubric criteria.',
+      'Cases where multiple judges scored the same task differently. Visible only in multi-judge mode (Phase B). High rates may indicate ambiguous rubric criteria.',
     ci:
       '95% confidence interval for the overall score, calculated via bootstrap sampling.',
+    judgeVsInference:
+      'LLM-judge model evaluates outputs against the rubric. Distinct from the inference model that produced them.',
+  },
+  health: {
+    row:
+      'Run-quality diagnostics: judge call success rate, pass rates by decision type, and cost/latency totals. Distinct from the score itself.',
+    judgeErrorRate:
+      'Percentage of judge calls that failed (timeout, parse error, or hit token limit). Alert threshold > 5% — unreliable run.',
+    judgePassRate:
+      'Pass rate among LLM-judge-decided rubric items (content-quality criteria). Distinct from precheck (deterministic structural checks).',
+    precheckPassRate:
+      'Pass rate among deterministically checked items (filename, sheet name, format).',
+    judgeCalls:
+      'Total number of LLM-judge API calls used during grading. Per-experiment cost proxy.',
+    judgeLatency:
+      'Total wall-clock seconds spent inside the judge LLM during this grading run.',
   },
   badge: {
     selfAssessed:
-      "Score is based on the LLM's own QA self-assessment. Amber badge = LLM-judge grade not yet available (run grade-run.yml to populate).",
+      "This experiment has no LLM-judge grade yet. Numbers shown come from the model's own self-QA check during inference (independent signal). Run grade-run.yml to generate rubric-based grades.",
   },
   wow: {
     rubricCoverage:
@@ -70,7 +86,7 @@ export const tooltipTexts = {
 
 export const sectionHintTexts = {
   leaderboard:
-    `Each row is one experiment — same ${TASK_TOTAL_PLACEHOLDER} real-world tasks, different prompt strategies. Click a row to drill into individual task results.`,
+    `Each row is one experiment — same ${TASK_TOTAL_PLACEHOLDER} real-world tasks, different prompt strategies. Numbers here reflect inference-time self-QA. For rubric-based grades, switch to the Grading Analysis tab.`,
   trend:
     'Track how success rates, QA scores, and error counts evolve across experiments. X-axis is ordered by experiment date.',
   errors:
@@ -93,9 +109,10 @@ export const aboutContent = {
     {
       heading: 'Key Metrics',
       bullets: [
-        'Success Rate — Did the LLM produce a valid deliverable?',
-        'QA Score (0-10) — Self-assessed quality of the output',
-        'Grading — LLM-judge against open-sourced GDPval rubrics (when available)',
+        'Success Rate — Did inference complete with a deliverable that passed self-QA?',
+        "Self-QA Score (0-10) — Model's own rating of its output (runtime signal)",
+        'LLM-Judge Grade — Independent rubric-based scoring run via grade-run.yml (Grading Analysis tab)',
+        'Note: Self-QA and LLM-judge grade are independent signals — high self-QA does not guarantee high rubric grade.',
       ],
     },
   ],
