@@ -1,4 +1,11 @@
 import { useState, useEffect } from 'react'
+import type {
+  GradeSummaryV1,
+  TaskGradeV1,
+  JudgeProvenance,
+  RubricProvenance,
+  GradePromptInfo,
+} from '../types/grade'
 
 export interface TaskGrade {
   task_id: string
@@ -30,6 +37,15 @@ export interface GradeResult {
   experiment_type?: 'ab' | 'single'
   summary: GradeSummary
   tasks: TaskGrade[]
+
+  // ── v1.0 additions (007 schema) ──
+  schema_version?: '1.0' | null
+  judge?: JudgeProvenance
+  rubric?: RubricProvenance
+  prompt?: GradePromptInfo
+  graded_at?: string
+  summary_v1?: GradeSummaryV1
+  tasks_v1?: TaskGradeV1[]
 }
 
 export function useGrades() {

@@ -32,12 +32,18 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from core.config import NEEDS_FILES_POLICIES_KNOWN, WORKSPACE_DIR
+from core.narrative_analyzer import (
+    _build_grade_source,
+    _build_grading_guard_clause,
+    _build_grading_results_section,
+)
 
 
 # ── Defaults ──────────────────────────────────────────────────────────────
 
 DEFAULT_RESULT_JSON = WORKSPACE_DIR / "result.json"
 DEFAULT_OUTPUT_DIR = WORKSPACE_DIR / "report"
+GRADE_DIR = _SCRIPT_DIR.parent / "data" / "grades"
 
 
 # ── V2 manifest helpers ───────────────────────────────────────────────────
@@ -92,6 +98,26 @@ def _find_result_json(default_path: Path) -> Path:
     print("   Run step3_format_results.sh first (it writes workspace/result.json),")
     print("   or specify --result-json path/to/result.json")
     sys.exit(1)
+
+
+def _load_grade_for_experiment(exp_id: str) -> dict | None:
+    """Load the most recent schema v1.0 grade JSON for an experiment."""
+    candidates = sorted(
+        GRADE_DIR.glob(f"{exp_id}__*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for path in candidates:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                grade = json.load(f)
+        except Exception:
+            continue
+        if grade.get("_meta", {}).get("is_dummy") is True:
+            continue
+        if grade.get("schema_version") == "1.0":
+            return grade
+    return None
 
 
 def _compute_summary(data: dict) -> dict:
@@ -193,13 +219,20 @@ def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dic
 # ── LLM Narrative ─────────────────────────────────────────────────────────
 
 
-def _generate_narrative(data: dict, summary: dict, sector_breakdown: list[dict]) -> dict:
+def _generate_narrative(
+    data: dict,
+    summary: dict,
+    sector_breakdown: list[dict],
+    grade: dict | None = None,
+) -> dict:
     """Call Azure OpenAI once and return narrative dict. Never crashes."""
     empty = {
         "overview": "",
         "quality_analysis": "",
         "failure_patterns": "",
         "recommendations": "",
+        "grading_referenced": grade is not None,
+        "grade_source": _build_grade_source(grade),
     }
 
     try:
@@ -216,6 +249,8 @@ def _generate_narrative(data: dict, summary: dict, sector_breakdown: list[dict])
 
         error_count = summary["error_count"]
         retried_count = summary["retried_count"]
+        grading_guard = _build_grading_guard_clause(grade)
+        grading_results_section = _build_grading_results_section(grade)
 
         prompt_content = f"""You are a technical evaluator reviewing an LLM experiment run.
 
@@ -237,10 +272,12 @@ Sector breakdown:
 {sector_lines}
 
 IMPORTANT CONSTRAINTS:
-- Grading scores do NOT exist yet. Do NOT mention or predict grades.
+{grading_guard}
 - Focus ONLY on: task completion, Self-QA scores, latency patterns, sector/occupation observations, deliverable file generation quality.
 - Write as a technical evaluator, NOT a marketer.
 - Be concise and factual.
+
+{grading_results_section}
 
 Return ONLY valid JSON with these exact keys (no markdown code fences):
 {{
@@ -267,6 +304,8 @@ Return ONLY valid JSON with these exact keys (no markdown code fences):
         for key in ("overview", "quality_analysis", "failure_patterns", "recommendations"):
             if key not in narrative:
                 narrative[key] = ""
+        narrative["grading_referenced"] = grade is not None
+        narrative["grade_source"] = _build_grade_source(grade)
         return narrative
 
     except Exception as exc:
@@ -303,6 +342,8 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
             "quality_analysis": narrative.get("quality_analysis", ""),
             "failure_patterns": narrative.get("failure_patterns", ""),
             "recommendations": narrative.get("recommendations", ""),
+            "grading_referenced": bool(narrative.get("grading_referenced", False)),
+            "grade_source": narrative.get("grade_source"),
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -987,20 +1028,27 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
             "quality_analysis": "",
             "failure_patterns": "",
             "recommendations": "",
+            "grading_referenced": False,
+            "grade_source": None,
         }
         print("   Skipping narrative (--no-narrative)")
     else:
+        grade = _load_grade_for_experiment(data.get("experiment_id", ""))
         # Try GPT-5.4 Pro (Responses API) first, fallback to standard
         try:
             from core.narrative_analyzer import create_narrative_analyzer
             print("   Generating narrative via GPT-5.4 Pro (Responses API)…")
             analyzer = create_narrative_analyzer()
-            result = analyzer.analyze(data, summary, sector_breakdown, task_results, error_tasks)
+            result = analyzer.analyze(
+                data, summary, sector_breakdown, task_results, error_tasks, grade=grade
+            )
             narrative = {
                 "overview": result.overview,
                 "quality_analysis": result.quality_analysis,
                 "failure_patterns": result.failure_patterns,
                 "recommendations": result.recommendations,
+                "grading_referenced": result.grading_referenced,
+                "grade_source": result.grade_source,
             }
             total_ms = result.call_1_latency_ms + result.call_2_latency_ms
             print(f"   ✅ Pro narrative generated ({total_ms:,.0f}ms, "
@@ -1008,7 +1056,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
         except Exception as exc:
             print(f"   ⚠️ Pro narrative failed: {exc}")
             print(f"   Falling back to standard narrative…")
-            narrative = _generate_narrative(data, summary, sector_breakdown)
+            narrative = _generate_narrative(data, summary, sector_breakdown, grade=grade)
 
     # Build report_data.json
     rd = _build_report_data(data, narrative, summary, sector_breakdown, task_results, error_tasks)

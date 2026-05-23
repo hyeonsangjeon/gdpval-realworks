@@ -42,6 +42,166 @@ class NarrativeResult:
     call_1_latency_ms: float = 0.0
     call_2_latency_ms: float = 0.0
     total_tokens: dict = field(default_factory=lambda: {"input": 0, "output": 0})
+    grading_referenced: bool = False
+    grade_source: dict | None = None
+
+
+# ─── Grading Prompt Helpers ───────────────────────────────────────────────
+
+
+def _get_nested(source: dict | None, path: list[str], default=None):
+    """Read a nested dict key path without raising on malformed grade data."""
+    current = source
+    for key in path:
+        if not isinstance(current, dict):
+            return default
+        current = current.get(key)
+    return default if current is None else current
+
+
+def _format_pct(value, decimals: int = 1, scale_fraction: bool = True) -> str:
+    """Format a percent-like value, accepting either 0-1 rates or 0-100 values."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if scale_fraction and abs(number) <= 1:
+        number *= 100
+    return f"{number:.{decimals}f}%"
+
+
+def _build_grade_source(grade: dict | None) -> dict | None:
+    """Return compact grade provenance for report_data.json."""
+    if grade is None:
+        return None
+    return {
+        "model": _get_nested(grade, ["judge", "model"], ""),
+        "rubric_sha": _get_nested(grade, ["rubric", "short_sha"], ""),
+        "prompt_v": _get_nested(grade, ["prompt", "version"], ""),
+        "graded_at": grade.get("graded_at", ""),
+    }
+
+
+def _build_grading_guard_clause(grade: dict | None) -> str:
+    """Return narrative guard text for pre-grading vs grade-aware prompts."""
+    if grade is None:
+        return (
+            "- Grading scores do NOT exist yet. Do NOT mention or predict "
+            "grades. Focus only on execution metrics and Self-QA scores."
+        )
+
+    judge_model = _get_nested(grade, ["judge", "model"], "unknown judge")
+    reasoning_effort = _get_nested(grade, ["judge", "reasoning_effort"], "unknown")
+    rubric_repo = _get_nested(grade, ["rubric", "repo_id"], "openai/gdpval")
+    rubric_sha = _get_nested(grade, ["rubric", "short_sha"], "unknown")
+
+    return f"""- Grading scores ARE available (see GRADING RESULTS section below).
+- Source: rubric-based LLM-judge ({judge_model}, reasoning_effort={reasoning_effort}).
+- This is NOT human expert review; it is an automated LLM-judge score
+  against open-sourced GDPval rubrics ({rubric_repo} @ {rubric_sha}).
+- Refer to scores as "LLM-judge grade" or "rubric-based score"; avoid
+  wording that implies human expert review or OpenAI-hosted official scoring.
+- Highlight: weakest sector, strongest sector, critical_item_pass_rate,
+  precheck vs judge breakdown."""
+
+
+def _build_grading_disclosure_paragraph(grade: dict | None) -> str:
+    """Disclosure paragraph the model must include in overview when grades exist."""
+    judge_model = _get_nested(grade, ["judge", "model"], "unknown judge")
+    rubric_sha = _get_nested(grade, ["rubric", "short_sha"], "unknown")
+    return (
+        f"The grading shown is automated via LLM-judge ({judge_model}) against "
+        "open-sourced GDPval rubrics ([openai/gdpval]"
+        "(https://huggingface.co/datasets/openai/gdpval), "
+        f"commit `{rubric_sha}`). OpenAI ended hosted grading and open-sourced "
+        "their rubrics for community self-evaluation."
+    )
+
+
+def _format_sector_grade_line(sector: str, metrics: dict) -> str:
+    """Format one sector line for the GRADING RESULTS prompt section."""
+    return (
+        f"  - {sector}: avg_pct={_format_pct(metrics.get('avg_pct'), decimals=1)}, "
+        f"crit={_format_pct(metrics.get('critical_item_pass_rate'), decimals=0)}, "
+        f"pre={_format_pct(metrics.get('precheck_pass_rate'), decimals=0)}, "
+        f"judge={_format_pct(metrics.get('judge_pass_rate'), decimals=0)}"
+    )
+
+
+def _rank_grade_sectors(grade: dict | None) -> tuple[list[str], list[str]]:
+    """Return formatted weakest and strongest sector lines, ranked by avg_pct."""
+    by_sector = _get_nested(grade, ["summary", "wow", "by_sector"], {})
+    if not isinstance(by_sector, dict):
+        return ["  - n/a"], ["  - n/a"]
+
+    ranked = []
+    for sector, metrics in by_sector.items():
+        if not isinstance(metrics, dict):
+            continue
+        try:
+            avg_pct = float(metrics.get("avg_pct"))
+        except (TypeError, ValueError):
+            avg_pct = float("-inf")
+        ranked.append((avg_pct, sector, metrics))
+
+    if not ranked:
+        return ["  - n/a"], ["  - n/a"]
+
+    weakest = [
+        _format_sector_grade_line(sector, metrics)
+        for _, sector, metrics in sorted(ranked, key=lambda item: item[0])[:3]
+    ]
+    strongest = [
+        _format_sector_grade_line(sector, metrics)
+        for _, sector, metrics in sorted(ranked, key=lambda item: item[0], reverse=True)[:3]
+    ]
+    return weakest, strongest
+
+
+def _build_grading_results_section(grade: dict | None) -> str:
+    """Build the optional GRADING RESULTS prompt section from schema v1 grade JSON."""
+    if grade is None:
+        return ""
+
+    openai_compat = _get_nested(grade, ["summary", "openai_compat"], {})
+    wow = _get_nested(grade, ["summary", "wow"], {})
+    if not isinstance(openai_compat, dict):
+        openai_compat = {}
+    if not isinstance(wow, dict):
+        wow = {}
+
+    total_tasks = (
+        openai_compat.get("total_tasks")
+        or _get_nested(grade, ["summary", "total_tasks"], "")
+        or ""
+    )
+    weakest, strongest = _rank_grade_sectors(grade)
+
+    return f"""
+## GRADING RESULTS (LLM-judge, rubric-based)
+
+Judge: {_get_nested(grade, ["judge", "model"], "unknown")} (reasoning_effort={_get_nested(grade, ["judge", "reasoning_effort"], "unknown")}, temperature={_get_nested(grade, ["judge", "temperature"], "unknown")})
+Rubric source: {_get_nested(grade, ["rubric", "repo_id"], "openai/gdpval")} @ {_get_nested(grade, ["rubric", "short_sha"], "unknown")}
+
+Overall:
+  - Average score: {_format_pct(openai_compat.get("avg_score_pct"), decimals=1)} (± {_format_pct(openai_compat.get("ci_pct"), decimals=1)})
+  - Perfect tasks (100%): {openai_compat.get("perfect_count", "n/a")}/{total_tasks or "n/a"}
+  - Zero tasks (0%): {openai_compat.get("zero_count", "n/a")}/{total_tasks or "n/a"}
+  - Critical item pass rate: {_format_pct(wow.get("critical_item_pass_rate"), decimals=0)}
+  - Precheck pass rate: {_format_pct(wow.get("precheck_pass_rate"), decimals=0)}
+  - Judge pass rate: {_format_pct(wow.get("judge_pass_rate"), decimals=0)}
+
+By sector (top 3 weakest):
+{chr(10).join(weakest)}
+
+By sector (top 3 strongest):
+{chr(10).join(strongest)}
+
+Failure pattern hint (precheck vs judge):
+  - Precheck failures dominate: deliverable structure issues (file naming, format)
+  - Judge failures dominate: content quality / domain reasoning issues
+  - Mixed: see by_rubric_category
+"""
 
 
 # ─── NarrativeAnalyzer ────────────────────────────────────────────────────
@@ -94,6 +254,7 @@ class NarrativeAnalyzer:
         sector_breakdown: list[dict],
         task_results: list[dict],
         error_tasks: list[dict],
+        grade: dict | None = None,
     ) -> NarrativeResult:
         """Run 2-call sequential analysis and return NarrativeResult.
 
@@ -103,6 +264,7 @@ class NarrativeAnalyzer:
             sector_breakdown: List of per-sector stat dicts
             task_results:     ALL task result dicts (full 220)
             error_tasks:      Error task dicts with error messages
+            grade:            Optional schema v1.0 grade JSON dict
 
         Returns:
             NarrativeResult with all four narrative sections + metrics
@@ -115,7 +277,7 @@ class NarrativeAnalyzer:
         self._start_heartbeat()
         try:
             call1_result, call1_latency, c1_in, c1_out = self._call_1_sector_analysis(
-                data, summary, sector_breakdown
+                data, summary, sector_breakdown, grade=grade
             )
         finally:
             self._stop_heartbeat()
@@ -129,7 +291,7 @@ class NarrativeAnalyzer:
         self._start_heartbeat()
         try:
             call2_result, call2_latency, c2_in, c2_out = self._call_2_deep_analysis(
-                call1_result, task_results, error_tasks
+                call1_result, task_results, error_tasks, grade=grade
             )
         finally:
             self._stop_heartbeat()
@@ -146,16 +308,36 @@ class NarrativeAnalyzer:
             call_1_latency_ms=call1_latency,
             call_2_latency_ms=call2_latency,
             total_tokens={"input": total_input, "output": total_output},
+            grading_referenced=grade is not None,
+            grade_source=_build_grade_source(grade),
         )
 
     # ── Call 1 ─────────────────────────────────────────────────────────
 
     def _call_1_sector_analysis(
-        self, data: dict, summary: dict, sector_breakdown: list[dict]
+        self,
+        data: dict,
+        summary: dict,
+        sector_breakdown: list[dict],
+        grade: dict | None = None,
     ) -> tuple[dict, float, int, int]:
         """Sector-level analysis → overview + quality_analysis."""
 
         meta = data.get("meta", data)  # support both report_data and raw data
+        grading_guard = _build_grading_guard_clause(grade)
+        grading_overview_instruction = ""
+        overview_grading_clause = ""
+        if grade is not None:
+            disclosure = _build_grading_disclosure_paragraph(grade)
+            grading_overview_instruction = (
+                '\n- In the "overview" field, you MUST include exactly one paragraph '
+                "explaining that grading is automated LLM-judge based, citing the "
+                "judge model and the rubric source/commit. Use this verbatim "
+                f"paragraph: {disclosure}"
+            )
+            overview_grading_clause = (
+                f" Include this exact disclosure paragraph once: {disclosure}"
+            )
 
         sector_lines = "\n".join(
             f"  - {s['sector']}: {s['success']}/{s['total']} success "
@@ -183,15 +365,15 @@ Sector breakdown:
 {sector_lines}
 
 IMPORTANT CONSTRAINTS:
-- Grading scores do NOT exist yet. Do NOT mention or predict grades.
+{grading_guard}
 - Focus ONLY on: task completion, Self-QA scores, latency patterns, sector/occupation observations, deliverable file generation quality.
 - Use "self-assessed confidence" / "LLM-evaluated quality" framing.
 - Write as a technical evaluator, NOT a marketer.
-- Be concise and factual.
+- Be concise and factual.{grading_overview_instruction}
 
 Return ONLY valid JSON (no markdown code fences) with these exact keys:
 {{
-  "overview": "3-4 paragraphs: what experiment was run, task execution outcomes based on Self-QA confidence scores, and key highlights. Use language like 'self-assessed confidence', 'task completion rate', 'LLM-evaluated quality'.",
+  "overview": "3-4 paragraphs: what experiment was run, task execution outcomes based on Self-QA confidence scores, and key highlights. Use language like 'self-assessed confidence', 'task completion rate', 'LLM-evaluated quality'.{overview_grading_clause}",
   "quality_analysis": "3-4 paragraphs: QA score distribution patterns, notable sector-level differences, occupation-specific observations, latency correlations with quality."
 }}"""
 
@@ -204,9 +386,15 @@ Return ONLY valid JSON (no markdown code fences) with these exact keys:
     # ── Call 2 ─────────────────────────────────────────────────────────
 
     def _call_2_deep_analysis(
-        self, call1_result: dict, task_results: list[dict], error_tasks: list[dict]
+        self,
+        call1_result: dict,
+        task_results: list[dict],
+        error_tasks: list[dict],
+        grade: dict | None = None,
     ) -> tuple[dict, float, int, int]:
         """Deep analysis with ALL task results → failure_patterns + recommendations."""
+        grading_guard = _build_grading_guard_clause(grade)
+        grading_results_section = _build_grading_results_section(grade)
 
         # Build compact task details for ALL tasks
         task_details = []
@@ -241,6 +429,11 @@ FULL TASK RESULTS ({len(task_results)} tasks):
 
 ERROR TASKS ({len(error_tasks)} errors):
 {error_json}
+
+IMPORTANT CONSTRAINTS:
+{grading_guard}
+
+{grading_results_section}
 
 ANALYSIS INSTRUCTIONS:
 1. Examine ALL {len(task_results)} tasks — not just failures.
