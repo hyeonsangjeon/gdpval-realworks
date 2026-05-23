@@ -2,6 +2,7 @@
   "schema_version": "1.0",
   "experiment_id": "exp998_smoke_baseline_sample",
   "experiment_yaml_name": "exp998_smoke_baseline_sample",
+  "source_inference_experiment_id": "exp999_smoke_baseline_sample",
   "inference_model": "gpt-5.2-chat",
   "inference_completed_at": null,
   "judge": {

@@ -287,3 +287,88 @@ def test_inference_model_never_falls_back_to_judge_model(monkeypatch, tmp_path):
     # And in this degraded case the resolver must surface an empty
     # string (defensive default).
     assert payload["inference_model"] == ""
+
+
+# ── Phase 2: source_inference_experiment_id linkage ──────────────────────────
+# Three tests verifying the explicit pointer from grade JSON to the
+# inference run that produced the deliverables (spec:
+# TASK_GRADE_SOURCE_LINKAGE_BACKEND.md). Keeps Phase 1 behavior unchanged
+# when no override is supplied (default == experiment_yaml_name).
+
+def test_T_A_source_inference_experiment_id_field_present(monkeypatch, tmp_path):
+    """T-A. Grade JSON written by step8 contains source_inference_experiment_id."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml", "--force"],
+    )
+    assert s8.main() == 0
+
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+
+    assert "source_inference_experiment_id" in payload, (
+        "Phase 2: source_inference_experiment_id must be emitted in every new grade"
+    )
+    assert isinstance(payload["source_inference_experiment_id"], str)
+    assert payload["source_inference_experiment_id"], "must be non-empty by default"
+    # source_inference_run_dir is optional; type must be str|None.
+    assert "source_inference_run_dir" in payload
+    assert payload["source_inference_run_dir"] is None or isinstance(
+        payload["source_inference_run_dir"], str
+    )
+
+
+def test_T_B_default_source_id_equals_experiment_yaml_name(monkeypatch, tmp_path):
+    """T-B. Default value equals args.experiment_yaml_name when no override."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml", "--force"],
+    )
+    assert s8.main() == 0
+
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+
+    # No --source-experiment-id given → mirror experiment_yaml_name.
+    assert payload["source_inference_experiment_id"] == "exp998_smoke_baseline_sample"
+    assert payload["source_inference_experiment_id"] == payload["experiment_yaml_name"]
+
+
+def test_T_C_source_experiment_id_cli_override(monkeypatch, tmp_path):
+    """T-C. --source-experiment-id <id> overrides the default."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "step8_grade.py",
+            "exp998_smoke_baseline_sample",
+            "--config",
+            "grading_configs/default.yaml",
+            "--force",
+            "--source-experiment-id",
+            "exp999_smoke_baseline_sample",
+        ],
+    )
+    assert s8.main() == 0
+
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+
+    # The override must win and must not mutate experiment_id / yaml_name.
+    assert payload["source_inference_experiment_id"] == "exp999_smoke_baseline_sample"
+    assert payload["experiment_id"] == "exp998_smoke_baseline_sample"
+    assert payload["experiment_yaml_name"] == "exp998_smoke_baseline_sample"
