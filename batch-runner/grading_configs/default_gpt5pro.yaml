@@ -29,7 +29,13 @@ grader:
   precheck_patterns_version: "v1"
   evidence_max_chars: 200
   judge_max_retries: 1
-  per_item_max_output_tokens: 800
+  per_item_max_output_tokens: 1600  # bumped from 800 — reasoning models
+                                    # (gpt-5.4-pro effort=high) consume
+                                    # large reasoning-token budgets that
+                                    # count against output_tokens. Smoke
+                                    # at 800 produced 23.8% judge_error
+                                    # (output truncated). 1600 ~ 2x
+                                    # safety margin.
   save_raw_responses: false
   fail_on_missing_evidence: true
   deliverable_extract_max_chars: 4000

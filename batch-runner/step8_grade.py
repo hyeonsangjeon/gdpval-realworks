@@ -242,6 +242,30 @@ def _compute_summary(task_dicts: list[dict]) -> dict:
     }
 
 
+def _resolve_inference_model(
+    inf_results: dict, exp_config: ExperimentConfig | None
+) -> str:
+    """Return the deployment that actually produced the inference output.
+
+    Priority:
+      1. inf_results['model']  — what step2 (or HF reconstruct) recorded
+      2. exp_config.condition_a.model.deployment — fallback to the
+         experiment yaml (source of truth for the inference run)
+      3. '' — defensive default
+
+    Inference vs judge are different pipelines. Never fall back to
+    config['judge']['model'] here — that would silently mislead the UI.
+    """
+    candidate = (inf_results.get("model") or "").strip()
+    if candidate:
+        return candidate
+    if exp_config is not None:
+        deployment = getattr(getattr(exp_config.condition_a, "model", None), "deployment", "")
+        if deployment and str(deployment).strip():
+            return str(deployment).strip()
+    return ""
+
+
 def _build_grade_payload(
     exp_name: str,
     inf_results: dict,
@@ -250,12 +274,13 @@ def _build_grade_payload(
     loader: RubricLoader,
     prompt_version: str,
     task_dicts: list[dict],
+    exp_config: ExperimentConfig | None = None,
 ) -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
         "experiment_id": exp_name,
         "experiment_yaml_name": exp_name,
-        "inference_model": inf_results.get("model") or "",
+        "inference_model": _resolve_inference_model(inf_results, exp_config),
         "inference_completed_at": inf_results.get("completed_at"),
         "judge": {
             "provider": config["judge"]["provider"],
@@ -318,7 +343,7 @@ def main() -> int:
     config_hash = hash_config(str(config_path))
 
     try:
-        _ = load_experiment_yaml(args.experiment_yaml_name)
+        exp_config = load_experiment_yaml(args.experiment_yaml_name)
     except Exception as exc:
         print(f"ERROR: experiment yaml load failed: {exc}", file=sys.stderr)
         return 1
@@ -395,6 +420,7 @@ def main() -> int:
                 loader,
                 grader.prompt_version,
                 task_payloads,
+                exp_config=exp_config,
             )
             _validate_schema(partial)
             _save_json(out_path, partial)
@@ -407,6 +433,7 @@ def main() -> int:
         loader,
         grader.prompt_version,
         task_payloads,
+        exp_config=exp_config,
     )
     _validate_schema(final)
     _save_json(out_path, final)
