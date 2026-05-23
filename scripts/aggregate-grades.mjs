@@ -68,12 +68,19 @@ function buildCalibration(tasks) {
 // Strict rules:
 //   - Dummy grades have no real inference run → always null (caller must not
 //     accidentally pick up unrelated qa values from a same-task-id report).
-//   - Otherwise, look up the experiment's task_qa map by grade.experiment_id.
-//     Missing experiment or missing task → null. Never falls back to a
+//   - Otherwise, prefer Phase 2's explicit `source_inference_experiment_id`
+//     pointer when present; fall back to `experiment_id` (Phase 1 default).
+//     This lets renamed/relabeled experiments carry an explicit source link
+//     while legacy grades (no Phase 2 field) keep working unchanged.
+//   - Missing experiment or missing task → null. Never falls back to a
 //     global / cross-experiment map.
-function makeQaResolver(experiment_id, is_dummy, taskQaByExperiment) {
+function makeQaResolver(experiment_id, is_dummy, taskQaByExperiment, source_experiment_id = null) {
   if (is_dummy) return () => null;
-  const qaMap = taskQaByExperiment?.get(experiment_id) ?? null;
+  // Phase 2: source pointer wins when explicitly set & non-empty.
+  const lookupKey = (typeof source_experiment_id === 'string' && source_experiment_id.trim())
+    ? source_experiment_id
+    : experiment_id;
+  const qaMap = taskQaByExperiment?.get(lookupKey) ?? null;
   if (!qaMap) return () => null;
   return (taskId) => {
     if (!taskId) return null;
@@ -175,9 +182,15 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
   // field to grade JSON in future spec versions; this is forward-compatible.
   const label = raw.label || raw.title || raw.experiment_id || filename;
   const experiment_id = raw.experiment_id || experimentIdFromFilename(filename);
+  // Phase 2: explicit pointer to the inference run that produced these
+  // deliverables. Null/empty ⇒ fall back to experiment_id (Phase 1 behavior).
+  const source_experiment_id = typeof raw.source_inference_experiment_id === 'string'
+    && raw.source_inference_experiment_id.trim()
+      ? raw.source_inference_experiment_id
+      : null;
 
   // Strict per-experiment Self-QA resolver. v1 grades are never dummies.
-  const qaFor = makeQaResolver(experiment_id, false, taskQaByExperiment);
+  const qaFor = makeQaResolver(experiment_id, false, taskQaByExperiment, source_experiment_id);
 
   // Convert v1 tasks → legacy-compatible task rows. Snap pct to exact 0/1
   // when it crosses the openai_compat thresholds (pct >= 99 → perfect,
@@ -242,6 +255,7 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
   return {
     id: filename,
     experiment_id,
+    source_inference_experiment_id: source_experiment_id,
     grade_status: 'graded_v1',
     schema_version: '1.0',
     is_dummy: false,

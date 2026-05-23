@@ -48,6 +48,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tasks", help="Comma-separated task ids")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of tasks")
     parser.add_argument("--source", choices=["local", "hf"], default="local")
+    parser.add_argument(
+        "--source-experiment-id",
+        default=None,
+        help=(
+            "Phase 2 source linkage: experiment_id of the inference run that "
+            "produced the deliverables being graded. Defaults to "
+            "experiment_yaml_name. Useful when the grade exp name diverges "
+            "from the inference run directory (e.g. re-grading a renamed run)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -266,6 +276,23 @@ def _resolve_inference_model(
     return ""
 
 
+def _resolve_source_inference_run_dir(source_id: str) -> str | None:
+    """Best-effort: return repo-relative path to the inference run directory.
+
+    Returns ``"batch-runner/results/<source_id>"`` if that directory exists
+    (relative to the current working directory of step8, which is the
+    repo-root or batch-runner/). Otherwise None (debug-only field per spec).
+    """
+    if not source_id:
+        return None
+    candidate = Path("results") / source_id
+    if candidate.exists():
+        # step8 is invoked from inside batch-runner/, so prefix that segment
+        # to produce a repo-root-relative path consistent with the spec.
+        return f"batch-runner/results/{source_id}"
+    return None
+
+
 def _build_grade_payload(
     exp_name: str,
     inf_results: dict,
@@ -275,11 +302,15 @@ def _build_grade_payload(
     prompt_version: str,
     task_dicts: list[dict],
     exp_config: ExperimentConfig | None = None,
+    source_experiment_id: str | None = None,
 ) -> dict:
+    src_id = (source_experiment_id or exp_name or "").strip() or exp_name
     return {
         "schema_version": SCHEMA_VERSION,
         "experiment_id": exp_name,
         "experiment_yaml_name": exp_name,
+        "source_inference_experiment_id": src_id,
+        "source_inference_run_dir": _resolve_source_inference_run_dir(src_id),
         "inference_model": _resolve_inference_model(inf_results, exp_config),
         "inference_completed_at": inf_results.get("completed_at"),
         "judge": {
@@ -421,6 +452,7 @@ def main() -> int:
                 grader.prompt_version,
                 task_payloads,
                 exp_config=exp_config,
+                source_experiment_id=args.source_experiment_id,
             )
             _validate_schema(partial)
             _save_json(out_path, partial)
@@ -434,6 +466,7 @@ def main() -> int:
         grader.prompt_version,
         task_payloads,
         exp_config=exp_config,
+        source_experiment_id=args.source_experiment_id,
     )
     _validate_schema(final)
     _save_json(out_path, final)
