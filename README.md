@@ -110,7 +110,8 @@ Go to **Settings → Secrets and variables → Actions → New repository secret
 
 #### 📄 GitHub Pages
 
-**Settings → Pages → Source** → change to **"GitHub Actions"** (not "Deploy from a branch")
+**Settings → Pages → Source** must be set to **"GitHub Actions"** (not "Deploy from a branch").
+The `deploy.yml` workflow uploads the build artifact via `actions/deploy-pages` — no `gh-pages` branch is used.
 
 #### 🔓 Workflow Permissions
 
@@ -243,9 +244,9 @@ Self-QA checks: Are all requirements met? Are files actually produced? Is the ou
 
 | Feature | Detail |
 |---|---|
-| **Trigger** | Push to `main` (auto) or manual |
-| **Build** | Aggregate test/grade data → React build → GitHub Pages |
-| **Scope** | Only runs when `data/`, `src/`, or `scripts/` change |
+| **Trigger** | Push to `main` (auto, scoped to `data/`, `src/`, `scripts/`) or manual `workflow_dispatch` |
+| **Build** | Aggregate test/grade data → React build → `actions/deploy-pages` artifact upload |
+| **Source** | GitHub Pages **Source: GitHub Actions** (no `gh-pages` branch) |
 
 ---
 

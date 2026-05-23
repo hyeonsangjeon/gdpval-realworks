@@ -10,8 +10,7 @@
     "dev": "vite",
     "prebuild": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-reports.mjs && node scripts/aggregate-experiments.mjs",
     "build": "tsc && vite build",
-    "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
@@ -31,7 +30,6 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
-    "gh-pages": "^6.1.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.3",
