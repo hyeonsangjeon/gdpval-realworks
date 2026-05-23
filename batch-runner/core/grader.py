@@ -28,6 +28,32 @@ logger = logging.getLogger(__name__)
 Verdict = Literal["pass", "partial", "fail", "judge_error"]
 DecidedBy = Literal["precheck", "judge"]
 
+
+def _extract_finish_reason(response, max_output: int, output_tokens: int) -> str:
+    """Best-effort finish_reason for Azure OpenAI Responses API.
+
+    The Responses API exposes the reason variably across SDK versions —
+    sometimes as `response.status`, sometimes nested under
+    `response.incomplete_details.reason`, sometimes only inferable from
+    `usage.output_tokens >= max_output`. We try in this order:
+      1. response.incomplete_details.reason  (canonical)
+      2. response.status                     (some SDK versions)
+      3. heuristic: output_tokens >= max_output → "length"
+      4. ""                                  (unknown)
+    """
+    incomplete = getattr(response, "incomplete_details", None)
+    reason = getattr(incomplete, "reason", None) if incomplete is not None else None
+    if isinstance(reason, str) and reason:
+        return reason.lower()
+
+    status = getattr(response, "status", None)
+    if isinstance(status, str) and status in {"incomplete", "length", "max_tokens"}:
+        return status.lower() if status != "max_tokens" else "length"
+
+    if max_output > 0 and output_tokens >= max_output:
+        return "length"
+    return ""
+
 PRECHECK_PATTERNS: list[tuple[str, str]] = [
     (
         r"\b(file|workbook|document|pdf|deliverable).*(named|basename|filename|extension|exists?|is a|is an|single|exactly one)\b",
@@ -377,7 +403,7 @@ class Grader:
         retries = int(self.config.get("grader", {}).get("judge_max_retries", 1))
         for attempt in range(retries + 1):
             try:
-                raw, latency_ms, input_tok, output_tok = self._call_judge(prompt)
+                raw, latency_ms, input_tok, output_tok, finish_reason = self._call_judge(prompt)
             except Exception as exc:
                 logger.warning(
                     "Judge call failed for %s after retries: %s",
@@ -419,7 +445,11 @@ class Grader:
                         verdict="judge_error",
                         decided_by="judge",
                         required=item.required,
-                        evidence="judge_json_parse_failed",
+                        evidence=(
+                            "judge_json_parse_failed:truncated_at_max_tokens"
+                            if finish_reason in {"length", "incomplete"}
+                            else "judge_json_parse_failed"
+                        ),
                         judge_confidence=None,
                         judge_latency_ms=latency_ms,
                         judge_raw_response=raw if self._save_raw() else None,
@@ -481,7 +511,15 @@ class Grader:
 
         raise RuntimeError("unreachable")
 
-    def _call_judge(self, prompt: str) -> tuple[str, float, int, int]:
+    def _call_judge(self, prompt: str) -> tuple[str, float, int, int, str]:
+        """Call the Responses API judge.
+
+        Returns (text, latency_ms, input_tokens, output_tokens, finish_reason).
+        finish_reason is one of "stop", "length", "incomplete", "error", or
+        "" when the SDK does not expose one. Used by the caller to tag
+        parse failures so the evidence string distinguishes truncation
+        from genuine JSON malformation.
+        """
         gen = self.config.get("judge", {}).get("generation", {})
         reasoning = self.config.get("judge", {}).get("reasoning", {})
         per_item_max = int(self.config.get("grader", {}).get("per_item_max_output_tokens", 800))
@@ -511,7 +549,8 @@ class Grader:
                 usage = getattr(response, "usage", None)
                 input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
                 output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-                return text, latency_ms, input_tokens, output_tokens
+                finish_reason = _extract_finish_reason(response, max_output, output_tokens)
+                return text, latency_ms, input_tokens, output_tokens, finish_reason
             except Exception as exc:
                 status = getattr(exc, "status_code", None)
                 if status in (429, 500, 502, 503, 504) and attempt < max_retries:

@@ -277,3 +277,87 @@ def test_grade_task_no_deliverables_graceful(monkeypatch, tmp_path):
     task = _task(item)
     tg = grader.grade_task(task, str(tmp_path / "not_found"))
     assert tg.error == "no_deliverables"
+
+
+def test_extract_finish_reason_from_incomplete_details():
+    """Canonical path: response.incomplete_details.reason."""
+    from core.grader import _extract_finish_reason
+
+    class _Incomplete:
+        reason = "max_output_tokens"
+
+    class _Resp:
+        incomplete_details = _Incomplete()
+        status = None
+
+    assert _extract_finish_reason(_Resp(), 1600, 1600) == "max_output_tokens"
+
+
+def test_extract_finish_reason_falls_back_to_status():
+    from core.grader import _extract_finish_reason
+
+    class _Resp:
+        incomplete_details = None
+        status = "incomplete"
+
+    assert _extract_finish_reason(_Resp(), 1600, 1500) == "incomplete"
+
+
+def test_extract_finish_reason_normalizes_max_tokens_to_length():
+    from core.grader import _extract_finish_reason
+
+    class _Resp:
+        incomplete_details = None
+        status = "max_tokens"
+
+    assert _extract_finish_reason(_Resp(), 1600, 1600) == "length"
+
+
+def test_extract_finish_reason_heuristic_when_usage_at_ceiling():
+    """When SDK exposes neither incomplete_details nor a useful status,
+    infer truncation from usage.output_tokens >= max_output."""
+    from core.grader import _extract_finish_reason
+
+    class _Resp:
+        incomplete_details = None
+        status = "completed"
+
+    assert _extract_finish_reason(_Resp(), 1600, 1600) == "length"
+    assert _extract_finish_reason(_Resp(), 1600, 1500) == ""
+
+
+def test_judge_json_parse_failure_evidence_tags_truncation(monkeypatch, tmp_path):
+    """When parse fails AND finish_reason indicates truncation, evidence
+    must be `judge_json_parse_failed:truncated_at_max_tokens` so operators
+    can distinguish prompt-budget failures from genuine model malformation.
+    """
+    grader = _make_grader(monkeypatch, tmp_path)
+    # Patch _call_judge to return non-JSON text with a length finish_reason.
+    monkeypatch.setattr(
+        grader,
+        "_call_judge",
+        lambda prompt: ("{\"verdict\":\"pa", 12.0, 100, 200, "length"),
+    )
+    item = RubricItem("r1", "evaluate quality", 3, None)
+    deliverable = tmp_path / "d.txt"
+    deliverable.write_text("content", encoding="utf-8")
+    result = grader._judge(_task(item), item, [deliverable])
+    assert result[0].verdict == "judge_error"
+    assert result[0].evidence == "judge_json_parse_failed:truncated_at_max_tokens"
+
+
+def test_judge_json_parse_failure_evidence_plain_when_not_truncated(monkeypatch, tmp_path):
+    """When parse fails but finish_reason is NOT length/incomplete, evidence
+    should be the plain `judge_json_parse_failed` (no truncation suffix)."""
+    grader = _make_grader(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        grader,
+        "_call_judge",
+        lambda prompt: ("not json at all", 12.0, 100, 50, "stop"),
+    )
+    item = RubricItem("r1", "evaluate quality", 3, None)
+    deliverable = tmp_path / "d.txt"
+    deliverable.write_text("content", encoding="utf-8")
+    result = grader._judge(_task(item), item, [deliverable])
+    assert result[0].verdict == "judge_error"
+    assert result[0].evidence == "judge_json_parse_failed"
