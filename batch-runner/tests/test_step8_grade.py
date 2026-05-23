@@ -275,10 +275,15 @@ def test_inference_model_never_falls_back_to_judge_model(monkeypatch, tmp_path):
     yaml_path.write_text(yaml.safe_dump(yaml_data), encoding="utf-8")
 
     monkeypatch.setattr("sys.argv", ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml", "--force"])
-    # ExperimentConfig default deployment is "gpt-4" when empty — but the
-    # important guarantee is: inference_model must NEVER equal judge.model
-    # just because both sources were missing. Verify by reading the payload.
     assert s8.main() == 0
     out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["inference_model"] != "gpt-5.4-pro"  # judge model
+    # Independent of the literal judge string: inference_model must
+    # never equal whatever judge.model resolved to.
+    assert payload["inference_model"] != payload["judge"]["model"], (
+        "inference_model leaked judge model — _resolve_inference_model "
+        "must never read config['judge']."
+    )
+    # And in this degraded case the resolver must surface an empty
+    # string (defensive default).
+    assert payload["inference_model"] == ""

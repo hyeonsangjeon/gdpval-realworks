@@ -261,8 +261,8 @@ def _resolve_inference_model(
         return candidate
     if exp_config is not None:
         deployment = getattr(getattr(exp_config.condition_a, "model", None), "deployment", "")
-        if deployment:
-            return str(deployment)
+        if deployment and str(deployment).strip():
+            return str(deployment).strip()
     return ""
 
 
