@@ -432,8 +432,16 @@ def render_temp_config(
     # Config name & filename uniqueness.
     rendered["config_name"] = f"sweep__{variant.name}"
     out_block = rendered.setdefault("output", {})
-    if "directory" not in out_block:
-        out_block["directory"] = "../data/grades"
+
+    # CRITICAL: redirect output to the sweep's per-variant runs dir so we
+    # never overwrite production data/grades/*.json. The path is relative
+    # to step8_grade's cwd (batch-runner/), so we go up one level then
+    # into the absolute sweep dir.
+    variant_dir = output_dir / "runs" / variant.name
+    variant_dir.mkdir(parents=True, exist_ok=True)
+    # Use absolute path (config.yaml is portable but cwd is batch-runner).
+    out_block["directory"] = str(variant_dir.resolve())
+
     if "filename_template" not in out_block:
         out_block["filename_template"] = (
             "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json"
@@ -442,8 +450,6 @@ def render_temp_config(
         rendered["prompt"] = {"template": "prompts/grader_judge.md", "version": "v1"}
 
     # Persist
-    variant_dir = output_dir / "runs" / variant.name
-    variant_dir.mkdir(parents=True, exist_ok=True)
     cfg_path = variant_dir / "config.yaml"
     with open(cfg_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(rendered, f, sort_keys=False)
@@ -558,22 +564,27 @@ def run_step8_grade(
             f"step8_grade.py exited {proc.returncode}; see {log_path}"
         )
 
-    # Locate the produced grade JSON: data/grades/<filename> per template.
+    # Locate the produced grade JSON. Output directory is the variant's
+    # runs/<name>/ folder (redirected by render_temp_config so we never
+    # touch production data/grades/*.json). We expect the templated
+    # filename to land there; if not, fall back to any *.json in the dir.
     expected_name = _expected_grade_filename(config_path, benchmark)
-    src = (REPO_ROOT / "data" / "grades" / expected_name).resolve()
+    src = (variant_dir / expected_name).resolve()
     if not src.exists():
-        # Fallback: search by exp_id prefix.
         candidates = sorted(
-            (REPO_ROOT / "data" / "grades").glob(
-                f"{benchmark['experiment_yaml_name']}__*.json"
-            ),
+            variant_dir.glob(f"{benchmark['experiment_yaml_name']}__*.json"),
             key=lambda p: p.stat().st_mtime,
         )
+        # Filter out the grade.json target itself in case of a re-run.
+        candidates = [c for c in candidates if c.resolve() != grade_target.resolve()]
         if not candidates:
             raise RuntimeError(f"no grade.json produced; expected {src}")
         src = candidates[-1]
 
-    shutil.move(str(src), str(grade_target))
+    if src.resolve() != grade_target.resolve():
+        # copy2 preserves the source for debugging/audit; the consolidated
+        # name 'grade.json' is what downstream metrics extraction uses.
+        shutil.copy2(str(src), str(grade_target))
     return grade_target
 
 

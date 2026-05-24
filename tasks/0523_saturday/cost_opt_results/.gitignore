@@ -1,9 +1,16 @@
-# Keep this directory tracked, but exclude raw sweep artifacts. Each
-# sweep run creates a timestamped subdir with rendered configs, grade
-# JSONs, and a progress.json — those stay local. RESULTS.md from any
-# sweep is explicitly allow-listed so the headline numbers can be
-# committed alongside the spec when desired.
-*
-!.gitignore
-!README.md
-!*.md
+# Sweep runs produce grade JSONs, configs, logs that are large and
+# reproducible. Ignore those, but keep:
+#   - the .gitignore itself
+#   - any markdown report (RESULTS.md, PHASE_*.md, etc.) at any depth
+#   - the operator README
+#
+# Strategy: blacklist by extension instead of "* + !*/" which gets
+# fragile fast.
+
+*.json
+*.yaml
+*.yml
+*.log
+*.lock
+*.tmp
+__pycache__/
