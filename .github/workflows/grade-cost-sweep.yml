@@ -3,6 +3,11 @@ name: Run Grading Cost Optimization Sweep
 on:
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: "Branch/ref to checkout for the sweep code (workflow must be triggered from a ref whose OIDC subject is federated, typically 'main')"
+        required: false
+        type: string
+        default: "feat/grade-cost-sweep"
       phases:
         description: "Which phases to run (comma-separated: A,B,C)"
         required: false
@@ -57,8 +62,11 @@ jobs:
         with:
           # Need full history so a follow-up commit doesn't trip on shallow.
           fetch-depth: 0
-          # Stay on the feat branch the sweep was triggered from.
-          ref: ${{ github.ref }}
+          # The workflow is triggered from main (where the federated OIDC
+          # credential is registered) but the sweep code (Track 1/2 fixes,
+          # dispatcher) lives on the feature branch. Checkout the source_ref
+          # input so we run the right code while OIDC stays valid.
+          ref: ${{ inputs.source_ref }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -171,8 +179,9 @@ jobs:
             exit 0
           fi
           git commit -m "chore(sweep): record results for phases=${{ inputs.phases }} (subdir=${{ inputs.output_subdir }})"
-          # Push to the same branch the workflow was triggered from.
-          git push origin "HEAD:${{ github.ref_name }}"
+          # Push back to the source branch we checked out from (not the
+          # trigger ref, which is main and is OIDC-only).
+          git push origin "HEAD:${{ inputs.source_ref }}"
 
       - name: Upload sweep artifacts
         if: always()
