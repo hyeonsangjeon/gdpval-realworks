@@ -17,9 +17,14 @@
     "A4_model_std",
     "A4_model_mini",
     "A4_model_nano",
-    "DV_gpt4o_medium_b8"
+    "DV_gpt4o_medium_b8",
+    "B1_baseline_ref",
+    "B2_std_med_b8",
+    "B3_tiered_pro_std_b8",
+    "B4_tiered_with_mini_b8",
+    "B5_tiered_with_nano_b8"
   ],
-  "cumulative_cost_usd": 26.6624,
+  "cumulative_cost_usd": 37.224999999999994,
   "results": {
     "A1_pro_minimal": {
       "name": "A1_pro_minimal",
@@ -260,6 +265,81 @@
       "judge_output_tokens": 0,
       "smoke_cost_usd": 0.0,
       "full_run_cost_usd": 0.0
+    },
+    "B1_baseline_ref": {
+      "name": "B1_baseline_ref",
+      "phase": "B",
+      "repeat_index": null,
+      "avg_score_pct": 78.72,
+      "critical_item_pass_rate": 1.0,
+      "judge_error_rate": 0.0595,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 84,
+      "judge_total_latency_sec": 8411.29,
+      "judge_input_tokens": 137742,
+      "judge_output_tokens": 87063,
+      "smoke_cost_usd": 7.2899,
+      "full_run_cost_usd": 534.59
+    },
+    "B2_std_med_b8": {
+      "name": "B2_std_med_b8",
+      "phase": "B",
+      "repeat_index": null,
+      "avg_score_pct": 72.41,
+      "critical_item_pass_rate": 1.0,
+      "judge_error_rate": 0.0,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 18,
+      "judge_total_latency_sec": 565.3,
+      "judge_input_tokens": 32796,
+      "judge_output_tokens": 47742,
+      "smoke_cost_usd": 0.8801,
+      "full_run_cost_usd": 64.54
+    },
+    "B3_tiered_pro_std_b8": {
+      "name": "B3_tiered_pro_std_b8",
+      "phase": "B",
+      "repeat_index": null,
+      "avg_score_pct": 68.42,
+      "critical_item_pass_rate": 1.0,
+      "judge_error_rate": 0.0476,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 16,
+      "judge_total_latency_sec": 576.18,
+      "judge_input_tokens": 27755,
+      "judge_output_tokens": 39972,
+      "smoke_cost_usd": 0.7384,
+      "full_run_cost_usd": 54.15
+    },
+    "B4_tiered_with_mini_b8": {
+      "name": "B4_tiered_with_mini_b8",
+      "phase": "B",
+      "repeat_index": null,
+      "avg_score_pct": 67.55,
+      "critical_item_pass_rate": 1.0,
+      "judge_error_rate": 0.0595,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 19,
+      "judge_total_latency_sec": 755.25,
+      "judge_input_tokens": 32781,
+      "judge_output_tokens": 51750,
+      "smoke_cost_usd": 0.9402,
+      "full_run_cost_usd": 68.94
+    },
+    "B5_tiered_with_nano_b8": {
+      "name": "B5_tiered_with_nano_b8",
+      "phase": "B",
+      "repeat_index": null,
+      "avg_score_pct": 66.0,
+      "critical_item_pass_rate": 0.0,
+      "judge_error_rate": 0.0595,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 15,
+      "judge_total_latency_sec": 557.32,
+      "judge_input_tokens": 25982,
+      "judge_output_tokens": 38939,
+      "smoke_cost_usd": 0.714,
+      "full_run_cost_usd": 52.36
     }
   },
   "consecutive_429_per_model": {},
@@ -272,5 +352,5 @@
     "A4": "A4_model_nano"
   },
   "winner": "A4_model_mini",
-  "finished_at": "2026-05-24T13:34:18Z"
+  "finished_at": "2026-05-24T17:00:31Z"
 }
