@@ -1,9 +1,9 @@
 # Grading Cost Sweep — Results
 
-- **Run**: 2026-05-24T05:59:40Z → 2026-05-24T17:00:31Z
+- **Run**: 2026-05-24T05:59:40Z → 2026-05-24T18:38:20Z
 - **Plan**: cost_opt_sweep_v1
 - **Benchmark**: exp998_smoke_baseline_sample, 3 tasks, rubric `11e7900`
-- **Cumulative cost**: $37.22 / cap $80
+- **Cumulative cost**: $42.36 / cap $80
 
 ## TL;DR
 
@@ -45,6 +45,17 @@
 | B3_tiered_pro_std_b8 | 68.42 | 1.00 | 4.8% | 16 | 576s | $0.74 | $54.15 |
 | B4_tiered_with_mini_b8 | 67.55 | 1.00 | 5.9% | 19 | 755s | $0.94 | $68.94 |
 | B5_tiered_with_nano_b8 | 66.00 | 0.00 | 5.9% | 15 | 557s | $0.71 | $52.36 |
+
+## Phase C: Stability runs
+
+| variant | avg_score | crit_pass | err | calls | latency | smoke $ | full $ |
+|---|---|---|---|---|---|---|---|
+| B3_tiered_pro_std_b8__rep0 | 67.08 | 1.00 | 9.5% | 14 | 553s | $0.71 | $51.81 |
+| B3_tiered_pro_std_b8__rep1 | 71.88 | 1.00 | 4.8% | 20 | 748s | $0.99 | $72.82 |
+| B3_tiered_pro_std_b8__rep2 | 70.32 | 1.00 | 4.8% | 16 | 603s | $0.81 | $59.32 |
+| B2_std_med_b8__rep0 | 70.57 | 1.00 | 0.0% | 16 | 483s | $0.80 | $58.31 |
+| B2_std_med_b8__rep1 | 74.02 | 1.00 | 2.4% | 20 | 575s | $0.91 | $66.54 |
+| B2_std_med_b8__rep2 | 69.83 | 1.00 | 9.5% | 18 | 563s | $0.93 | $68.08 |
 
 ## Diversity Validator
 
