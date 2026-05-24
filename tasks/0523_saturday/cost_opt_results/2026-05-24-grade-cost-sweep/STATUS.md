@@ -79,6 +79,7 @@ gh workflow run grade-cost-sweep.yml \
 
 | 시각 (UTC) | 이벤트 | 비고 |
 |---|---|---|
+| 2026-05-24 11:56 | Phase A run 26353454477 cancelled (350m timeout) — **11/15 partial**, $19.44 spent, all critical_pass=1.0 | partial 결과 commit + resume 트리거 |
 | 2026-05-24 05:57 | Phase A run 26353454477 시작 | 첫 trigger 실패 후 source_ref input 추가하여 재시도 |
 | 2026-05-24 05:54 | 첫 GH Actions sweep run 26353388215 — OIDC fail (AADSTS700213, 미등록 ref) | 워크플로우 ref 처리 수정 trigger |
 | 2026-05-24 04:42 | 로컬 sweep 시도 2회 — 모두 auth 차단 (`PHASE_A_AUTH_BLOCKED.md`) | $0 spent |
