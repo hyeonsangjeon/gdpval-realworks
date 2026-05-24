@@ -1,0 +1,9 @@
+# Keep this directory tracked, but exclude raw sweep artifacts. Each
+# sweep run creates a timestamped subdir with rendered configs, grade
+# JSONs, and a progress.json — those stay local. RESULTS.md from any
+# sweep is explicitly allow-listed so the headline numbers can be
+# committed alongside the spec when desired.
+*
+!.gitignore
+!README.md
+!*.md
