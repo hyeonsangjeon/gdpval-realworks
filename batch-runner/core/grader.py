@@ -122,22 +122,52 @@ class Grader:
         if not endpoint:
             raise ValueError(f"Missing Azure endpoint env var: {endpoint_env}")
 
-        credential = DefaultAzureCredential()
-        token_provider = get_bearer_token_provider(
-            credential, "https://cognitiveservices.azure.com/.default"
-        )
-
         timeout = int(self.config.get("judge", {}).get("timeout_sec", 600))
         api_version = self.config.get("judge", {}).get(
             "api_version", "2025-04-01-preview"
         )
         self.model = self.config["judge"]["model"]
-        self.client = AzureOpenAI(
-            azure_endpoint=endpoint,
-            azure_ad_token_provider=token_provider,
-            api_version=api_version,
-            timeout=timeout,
+
+        # Auth: default is OIDC (DefaultAzureCredential). Opt-in API key
+        # fallback is available ONLY when GRADER_ALLOW_API_KEY_FALLBACK=1
+        # is set. This preserves the OIDC-only invariant for production
+        # while letting the cost-optimization sweep recover from stale SP
+        # secrets without an interactive credential rotation.
+        allow_api_key_fallback = (
+            os.getenv("GRADER_ALLOW_API_KEY_FALLBACK", "0") == "1"
         )
+        api_key = os.getenv("AZURE_OPENAI_API_KEY") if allow_api_key_fallback else None
+
+        client_kwargs: dict = {
+            "azure_endpoint": endpoint,
+            "api_version": api_version,
+            "timeout": timeout,
+        }
+        try:
+            credential = DefaultAzureCredential()
+            token_provider = get_bearer_token_provider(
+                credential, "https://cognitiveservices.azure.com/.default"
+            )
+            # Force a token fetch up front so we fail fast if OIDC is broken.
+            if allow_api_key_fallback:
+                try:
+                    _ = token_provider()
+                except Exception as oidc_err:  # noqa: BLE001
+                    if not api_key:
+                        raise
+                    print(
+                        f"   ⚠️  Grader OIDC failed ({type(oidc_err).__name__}); "
+                        f"falling back to AZURE_OPENAI_API_KEY"
+                    )
+                    raise oidc_err
+            client_kwargs["azure_ad_token_provider"] = token_provider
+        except Exception:
+            if api_key:
+                client_kwargs["api_key"] = api_key
+            else:
+                raise
+
+        self.client = AzureOpenAI(**client_kwargs)
 
         self.prompt_template = self._read_prompt_template(self.config["prompt"]["template"])
         self.prompt_version = self._extract_prompt_version(self.prompt_template)

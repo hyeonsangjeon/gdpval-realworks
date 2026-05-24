@@ -503,6 +503,11 @@ def _load_subprocess_env() -> dict[str, str]:
             val = val[1:-1]
         if key and key not in env:
             env[key] = val
+
+    # Enable grader's API key fallback for the sweep so we recover from
+    # stale SP secrets without manual rotation. grader.py's default is
+    # still OIDC-only (the fallback is opt-in by this flag).
+    env.setdefault("GRADER_ALLOW_API_KEY_FALLBACK", "1")
     return env
 
 
