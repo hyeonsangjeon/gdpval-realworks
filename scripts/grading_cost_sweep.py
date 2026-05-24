@@ -48,6 +48,7 @@ DEFAULT_OUTPUT_ROOT = REPO_ROOT / "tasks" / "0523_saturday" / "cost_opt_results"
 SWEEP_TEMPLATE = BATCH_RUNNER / "grading_configs" / "_sweep_template.yaml"
 BASELINE_CONFIG = BATCH_RUNNER / "grading_configs" / "default_gpt5pro.yaml"
 STEP8 = BATCH_RUNNER / "step8_grade.py"
+BATCH_RUNNER_ENV = BATCH_RUNNER / ".env"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 # Hard-coded model TPM table for the current Azure deployment. Update
@@ -469,6 +470,42 @@ def _expected_grade_filename(config_path: Path, benchmark: dict[str, Any]) -> st
     )
 
 
+def _load_subprocess_env() -> dict[str, str]:
+    """Build the env dict for step8_grade subprocesses.
+
+    Strategy: start from os.environ, then overlay batch-runner/.env so that
+    AZURE_OPENAI_ENDPOINT and SP credentials are present. We do not mutate
+    the parent process env to avoid surprising callers. Quoted values
+    (single or double) are stripped. Lines that do not match KEY=VALUE or
+    that start with '#' are ignored. Caller-set env vars take precedence
+    over .env (so CI overrides work).
+    """
+    env = dict(os.environ)
+    if not BATCH_RUNNER_ENV.exists():
+        LOG.warning(
+            "batch-runner/.env not found at %s; subprocess relies on parent env only",
+            BATCH_RUNNER_ENV,
+        )
+        return env
+
+    for raw_line in BATCH_RUNNER_ENV.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if " #" in line:
+            line = line.split(" #", 1)[0].rstrip()
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip()
+        if (val.startswith('"') and val.endswith('"')) or (
+            val.startswith("'") and val.endswith("'")
+        ):
+            val = val[1:-1]
+        if key and key not in env:
+            env[key] = val
+    return env
+
+
 def run_step8_grade(
     config_path: Path,
     benchmark: dict[str, Any],
@@ -477,7 +514,11 @@ def run_step8_grade(
 ) -> Path:
     """Invoke step8_grade.py for the variant. Returns the moved grade.json path.
 
-    Subprocess inherits parent env (OIDC token, AZURE_OPENAI_ENDPOINT).
+    Subprocess inherits parent env (OIDC token, AZURE_OPENAI_ENDPOINT) plus
+    any KEY=VALUE pairs from batch-runner/.env. The .env loading is needed
+    because step8_grade.py and core/* do not call load_dotenv themselves;
+    they only read from os.environ. Without this, AZURE_OPENAI_ENDPOINT
+    and SP credentials are missing and grader initialization fails fast.
     """
     log_path = variant_dir / "run.log"
     grade_target = variant_dir / "grade.json"
@@ -493,6 +534,8 @@ def run_step8_grade(
         "--force",
     ]
 
+    sub_env = _load_subprocess_env()
+
     with open(log_path, "w", encoding="utf-8") as logf:
         logf.write(f"# {' '.join(cmd)}\n# cwd={BATCH_RUNNER}\n\n")
         logf.flush()
@@ -502,6 +545,7 @@ def run_step8_grade(
             stdout=logf,
             stderr=subprocess.STDOUT,
             check=False,
+            env=sub_env,
         )
 
     if proc.returncode != 0:
