@@ -18,6 +18,8 @@
     "schema_version": {"const": "1.0"},
     "experiment_id": {"type": "string"},
     "experiment_yaml_name": {"type": "string"},
+    "source_inference_experiment_id": {"type": ["string", "null"]},
+    "source_inference_run_dir": {"type": ["string", "null"]},
     "inference_model": {"type": "string"},
     "inference_completed_at": {"type": ["string", "null"]},
     "judge": {

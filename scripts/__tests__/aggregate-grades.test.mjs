@@ -449,3 +449,56 @@ test('T5: error tasks are excluded from calibration_counts (neither sampled nor 
   // MAE over the single matched sample = |+10| / 1 = 10.
   assert.equal(out.summary.calibration_mae, 10);
 });
+
+// ── T6 — Phase 2: source_inference_experiment_id wins over experiment_id ──
+// A grade carries an explicit source pointer to a *different* experiment id
+// than its own. The qa map is keyed by the source id (expB). Resolver MUST
+// look up via the source pointer, ignoring the grade's own experiment_id
+// (expA). Verifies the priority order documented on `makeQaResolver`.
+test('T6: v1 grade with source_inference_experiment_id resolves qa via the source pointer', () => {
+  const raw = {
+    schema_version: '1.0',
+    experiment_id: 'expA',
+    source_inference_experiment_id: 'expB',
+    inference_model: 'gpt-5.2-chat',
+    judge: { model: 'gpt-5.4-pro' },
+    summary: {
+      total_tasks: 2,
+      graded_tasks: 2,
+      error_tasks: 0,
+      openai_compat: {
+        avg_score_pct: 75, ci_pct: 0,
+        perfect_count: 0, partial_count: 2, zero_count: 0, inconsistent_count: 0,
+      },
+      wow: {},
+    },
+    tasks: [
+      { task_id: 'shared-1', pct: 80, error: null },  // expB.qa=7 → Δ=+10 (calibrated boundary)
+      { task_id: 'shared-2', pct: 70, error: null },  // expB.qa=6 → Δ=+10 (calibrated boundary)
+    ],
+  };
+  // expA has its OWN map with different scores — these MUST NOT leak in
+  // when a source pointer is provided. Strict source-key priority.
+  const taskQaByExperiment = new Map([
+    ['expA', { 'shared-1': 1, 'shared-2': 1 }],
+    ['expB', { 'shared-1': 7, 'shared-2': 6 }],
+  ]);
+
+  const out = processGradesFile('expA__judge__sha__v1.json', raw, taskQaByExperiment);
+
+  // qa_score must come from expB's map, not expA's.
+  assert.equal(out.tasks[0].qa_score, 7, 'shared-1 qa must come from expB (source)');
+  assert.equal(out.tasks[1].qa_score, 6, 'shared-2 qa must come from expB (source)');
+  assert.equal(out.tasks_v1[0].qa_score, 7);
+  assert.equal(out.tasks_v1[1].qa_score, 6);
+
+  // MAE = (|+10| + |+10|) / 2 = 10
+  assert.equal(out.summary.calibration_mae, 10);
+  assert.deepEqual(out.summary.calibration_counts, {
+    calibrated: 2, overconfident: 0, underconfident: 0, unmatched: 0,
+  });
+
+  // Surface the pointer on the aggregated row so the dashboard can render it.
+  assert.equal(out.source_inference_experiment_id, 'expB');
+  assert.equal(out.experiment_id, 'expA', 'experiment_id field must be preserved unchanged');
+});
