@@ -4,11 +4,11 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "aggregate": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-reports.mjs && node scripts/aggregate-experiments.mjs",
+    "aggregate": "node scripts/aggregate-tests.mjs && node scripts/aggregate-reports.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-experiments.mjs",
     "test:aggregate": "node --test scripts/__tests__/aggregate-grades.test.mjs",
-    "predev": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-reports.mjs && node scripts/aggregate-experiments.mjs",
+    "predev": "node scripts/aggregate-tests.mjs && node scripts/aggregate-reports.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-experiments.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/aggregate-tests.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-reports.mjs && node scripts/aggregate-experiments.mjs",
+    "prebuild": "node scripts/aggregate-tests.mjs && node scripts/aggregate-reports.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-experiments.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

@@ -12,6 +12,9 @@ import {
   ExternalLink,
   HelpCircle,
   BookOpen,
+  TrendingDown,
+  TrendingUp,
+  AlertTriangle,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import {
@@ -41,7 +44,16 @@ import {
 import InfoTooltip from '../components/common/InfoTooltip'
 import { tooltipTexts } from '../data/tooltipTexts'
 
-type TaskFilter = 'all' | 'perfect' | 'partial' | 'zero' | 'error' | 'inconsistent'
+type TaskFilter =
+  | 'all'
+  | 'perfect'
+  | 'partial'
+  | 'zero'
+  | 'error'
+  | 'inconsistent'
+  | 'calibrated'
+  | 'overconfident'
+  | 'underconfident'
 
 const TERM_DEFINITIONS: Record<string, string> = {
   graded: 'Tasks that received a score — excludes any that errored out.',
@@ -52,6 +64,9 @@ const TERM_DEFINITIONS: Record<string, string> = {
   errors: 'Tasks that could not be evaluated due to API failures, timeouts, or parsing issues.',
   inconsistent: 'Multiple graders scored the same task differently.',
   disagreement: 'Multiple graders scored the same task differently — indicates ambiguous rubric or borderline output.',
+  calibrated: 'Tasks where |Rubric − Self-QA| ≤ 10pp. Model self-assessment matches external rubric.',
+  overconfident: 'Tasks where Rubric − Self-QA < −10pp. Model rated itself higher than rubric. Risk signal.',
+  underconfident: 'Tasks where Rubric − Self-QA > +10pp. Model underestimated its own work.',
 }
 
 const FILTER_LABELS: Record<Exclude<TaskFilter, 'all'>, string> = {
@@ -60,6 +75,34 @@ const FILTER_LABELS: Record<Exclude<TaskFilter, 'all'>, string> = {
   zero: 'Zero',
   error: 'Error',
   inconsistent: 'Inconsistent',
+  calibrated: 'Calibrated',
+  overconfident: 'Overconfident',
+  underconfident: 'Underconfident',
+}
+
+// Compute Δ = Rubric% − SelfQA%. Returns null if any input is missing.
+function computeDelta(qa_score: number | null | undefined, avg_score: number | null | undefined): number | null {
+  if (qa_score == null || avg_score == null) return null
+  return (avg_score * 100) - (qa_score * 10)
+}
+
+function gapStyle(delta: number | null): { className: string; severe: boolean } {
+  if (delta == null) return { className: 'text-muted-foreground', severe: false }
+  const abs = Math.abs(delta)
+  if (abs <= 10) return { className: 'text-muted-foreground bg-muted/30', severe: false }
+  if (abs <= 30) return { className: 'text-amber-500 bg-amber-500/10', severe: false }
+  return { className: 'text-red-500 bg-red-500/10', severe: true }
+}
+
+function calibStatus(delta: number | null): {
+  icon: typeof Target | null
+  label: string
+  className: string
+} {
+  if (delta == null) return { icon: null, label: '—', className: 'text-muted-foreground' }
+  if (Math.abs(delta) <= 10) return { icon: Target, label: 'Aligned', className: 'text-muted-foreground' }
+  if (delta < -10) return { icon: TrendingDown, label: 'Over', className: 'text-red-500' }
+  return { icon: TrendingUp, label: 'Under', className: 'text-amber-500' }
 }
 
 function TermTooltip({ term, definition, className }: { term: string; definition?: string; className?: string }) {
@@ -144,6 +187,18 @@ function GradeDetail() {
           return t.error
         case 'inconsistent':
           return !t.error && t.scores.length > 1 && new Set(t.scores).size > 1
+        case 'calibrated': {
+          const delta = computeDelta(t.qa_score, t.avg_score)
+          return delta != null && Math.abs(delta) <= 10
+        }
+        case 'overconfident': {
+          const delta = computeDelta(t.qa_score, t.avg_score)
+          return delta != null && delta < -10
+        }
+        case 'underconfident': {
+          const delta = computeDelta(t.qa_score, t.avg_score)
+          return delta != null && delta > 10
+        }
         default:
           return true
       }
@@ -553,23 +608,27 @@ function GradeDetail() {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <Filter className="h-4 w-4 text-muted-foreground" />
-                  {(['all', 'perfect', 'partial', 'zero', 'error', 'inconsistent'] as TaskFilter[]).map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setTaskFilter(f)}
-                      className={`relative group px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                        taskFilter === f
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >
-                      {f === 'all' ? 'All' : FILTER_LABELS[f]}
-                      {f !== 'all' && (
-                        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 rounded-md bg-popover border border-border text-xs text-popover-foreground px-2.5 py-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-md text-center leading-relaxed whitespace-normal font-normal">
-                          {TERM_DEFINITIONS[f]}
-                        </span>
+                  {(['all', 'perfect', 'partial', 'zero', 'error', 'inconsistent', 'calibrated', 'overconfident', 'underconfident'] as TaskFilter[]).map((f, idx) => (
+                    <span key={f} className="inline-flex items-center">
+                      {idx === 6 && (
+                        <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
                       )}
-                    </button>
+                      <button
+                        onClick={() => setTaskFilter(f)}
+                        className={`relative group px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                          taskFilter === f
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        {f === 'all' ? 'All' : FILTER_LABELS[f]}
+                        {f !== 'all' && (
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 rounded-md bg-popover border border-border text-xs text-popover-foreground px-2.5 py-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-md text-center leading-relaxed whitespace-normal font-normal">
+                            {TERM_DEFINITIONS[f]}
+                          </span>
+                        )}
+                      </button>
+                    </span>
                   ))}
                 </div>
               </div>
@@ -583,6 +642,15 @@ function GradeDetail() {
                       <th className="text-left py-2 px-3 text-muted-foreground font-medium">Task ID</th>
                       <th className="text-center py-2 px-3 text-muted-foreground font-medium">Scores</th>
                       <th className="text-center py-2 px-3 text-muted-foreground font-medium">Avg</th>
+                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">
+                        <span title={tooltipTexts.calibration.selfQa}>Self-QA</span>
+                      </th>
+                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">
+                        <span title={tooltipTexts.calibration.gap}>Δ Gap</span>
+                      </th>
+                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">
+                        <span title={tooltipTexts.calibration.status}>Calib.</span>
+                      </th>
                       <th className="text-center py-2 px-3 text-muted-foreground font-medium">Status</th>
                     </tr>
                   </thead>
@@ -597,6 +665,19 @@ function GradeDetail() {
                     … and {filteredTasks.length - 50} more tasks (showing first 50 only)
                   </p>
                 )}
+                {(() => {
+                  const counts = s.calibration_counts
+                  if (!counts) return null
+                  const total = s.total_tasks ?? grade.tasks.length
+                  const errorCount = s.error_tasks ?? 0
+                  const evaluable = total - errorCount
+                  const matched = evaluable - counts.unmatched
+                  return (
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      Self-QA matched: {matched}/{evaluable} tasks{counts.unmatched > 0 && ` (${counts.unmatched} unmatched)`}
+                    </p>
+                  )
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -688,6 +769,47 @@ function TaskRow({ task, index }: { task: TaskGrade; index: number }) {
       </td>
       <td className="py-2 px-3 text-center font-mono text-sm">
         {task.avg_score !== null ? `${(task.avg_score * 100).toFixed(0)}%` : '—'}
+      </td>
+      {/* Self-QA */}
+      <td className="py-2 px-3 text-center">
+        {task.qa_score != null ? (
+          <div className="flex flex-col items-center leading-tight">
+            <span className="font-semibold">{Math.round(task.qa_score * 10)}%</span>
+            <span className="text-xs text-muted-foreground">{task.qa_score.toFixed(1)}/10</span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      {/* Δ Gap */}
+      <td className="py-2 px-3 text-center">
+        {(() => {
+          const delta = computeDelta(task.qa_score, task.avg_score)
+          if (delta == null) return <span className="text-muted-foreground">—</span>
+          const { className, severe } = gapStyle(delta)
+          const sign = delta > 0 ? '▲' : delta < 0 ? '▼' : '─'
+          const num = delta > 0 ? `+${Math.round(delta)}` : `${Math.round(delta)}`
+          return (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${className}`}>
+              <span>{sign}</span>
+              <span>{num}</span>
+              {severe && <AlertTriangle className="h-3 w-3" />}
+            </span>
+          )
+        })()}
+      </td>
+      {/* Calibration status */}
+      <td className="py-2 px-3 text-center">
+        {(() => {
+          const delta = computeDelta(task.qa_score, task.avg_score)
+          const { icon: Icon, label, className } = calibStatus(delta)
+          return (
+            <span className={`inline-flex items-center gap-1 text-xs ${className}`}>
+              {Icon && <Icon className="h-3.5 w-3.5" />}
+              <span>{label}</span>
+            </span>
+          )
+        })()}
       </td>
       <td className="py-2 px-3 text-center">{getStatusBadge()}</td>
     </tr>

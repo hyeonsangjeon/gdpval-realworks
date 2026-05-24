@@ -36,11 +36,68 @@ function experimentIdFromFilename(filename) {
   return idx > 0 ? filename.slice(0, idx) : filename;
 }
 
+// ── Calibration helpers ────────────────────────────────────────────────────
+// Build summary-level calibration stats from a list of legacy-shaped task rows
+// already decorated with `qa_score` (0-10) and `avg_score` (0-1).
+// Convention: delta = (avg_score * 100) - (qa_score * 10). Positive Δ ⇒ rubric
+// > self (model underconfident); negative Δ ⇒ rubric < self (overconfident).
+function buildCalibration(tasks) {
+  const samples = [];
+  let unmatched = 0;
+  for (const t of tasks) {
+    if (t.error) continue;
+    if (t.qa_score == null) { unmatched++; continue; }
+    if (t.avg_score == null) continue;
+    const delta = (t.avg_score * 100) - (t.qa_score * 10);
+    samples.push(delta);
+  }
+  const calibration_mae = samples.length > 0
+    ? Number((samples.reduce((s, d) => s + Math.abs(d), 0) / samples.length).toFixed(2))
+    : null;
+  const calibration_counts = {
+    calibrated: samples.filter(d => Math.abs(d) <= 10).length,
+    overconfident: samples.filter(d => d < -10).length,
+    underconfident: samples.filter(d => d > 10).length,
+    unmatched,
+  };
+  return { calibration_mae, calibration_counts };
+}
+
+// ── qa_score resolution (strict per-experiment) ───────────────────────────
+// Returns a function (taskId) → qa_score|null for a given grade.
+// Strict rules:
+//   - Dummy grades have no real inference run → always null (caller must not
+//     accidentally pick up unrelated qa values from a same-task-id report).
+//   - Otherwise, look up the experiment's task_qa map by grade.experiment_id.
+//     Missing experiment or missing task → null. Never falls back to a
+//     global / cross-experiment map.
+function makeQaResolver(experiment_id, is_dummy, taskQaByExperiment) {
+  if (is_dummy) return () => null;
+  const qaMap = taskQaByExperiment?.get(experiment_id) ?? null;
+  if (!qaMap) return () => null;
+  return (taskId) => {
+    if (!taskId) return null;
+    const v = qaMap[taskId];
+    return typeof v === 'number' ? v : null;
+  };
+}
+
 // ── Legacy (dummy / _meta-based) format ────────────────────────────────────
-function processLegacyGradesFile(filePath, raw) {
+function processLegacyGradesFile(filePath, raw, taskQaByExperiment = new Map()) {
   const filename = basename(filePath, '.json');
   const meta = raw._meta || {};
-  const tasks = raw.tasks || raw; // support both { _meta, tasks } and bare array
+  const rawTasks = raw.tasks || raw; // support both { _meta, tasks } and bare array
+
+  const is_dummy = !!meta.is_dummy;
+  const experiment_id = meta.experiment_id || experimentIdFromFilename(filename);
+  const qaFor = makeQaResolver(experiment_id, is_dummy, taskQaByExperiment);
+
+  // Decorate each task with qa_score (null when no match) so the GradeDetail
+  // table can render Self-QA / Δ Gap / Calibration columns.
+  const tasks = rawTasks.map(t => ({
+    ...t,
+    qa_score: qaFor(t.task_id),
+  }));
 
   const gradedTasks = tasks.filter(t => !t.error && t.avg_score !== null);
   const errorTasks = tasks.filter(t => t.error);
@@ -68,12 +125,14 @@ function processLegacyGradesFile(filePath, raw) {
   const judge_model = null;
   const model = inference_model || '';
 
-  const is_dummy = !!meta.is_dummy;
   const grade_status = is_dummy ? 'legacy_dummy' : 'no_grade';
+
+  // Self-QA vs Rubric calibration stats (null when no tasks have qa_score).
+  const { calibration_mae, calibration_counts } = buildCalibration(tasks);
 
   return {
     id: filename,
-    experiment_id: meta.experiment_id || experimentIdFromFilename(filename),
+    experiment_id,
     grade_status,
     schema_version: null,
     is_dummy,
@@ -92,6 +151,8 @@ function processLegacyGradesFile(filePath, raw) {
       partial_score: partial,
       zero_score: zero,
       inconsistent_grades: inconsistent,
+      calibration_mae,
+      calibration_counts,
     },
     tasks,
   };
@@ -102,17 +163,27 @@ function processLegacyGradesFile(filePath, raw) {
 // Maps raw item-level grade JSON onto the dashboard's existing legacy shape
 // while preserving the full v1 payload in summary_v1 / tasks_v1 so WOW
 // components can consume rich item-level data.
-function processV1GradesFile(filePath, raw) {
+function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
   const filename = basename(filePath, '.json');
   const rawTasks = Array.isArray(raw.tasks) ? raw.tasks : [];
   const summary = raw.summary || {};
   const openaiCompat = summary.openai_compat || {};
   const wow = summary.wow || {};
 
+  // v1 path: prefer human-readable label/title from raw, fall back through
+  // experiment_id, finally filename. Aggregator caller may add a `label`
+  // field to grade JSON in future spec versions; this is forward-compatible.
+  const label = raw.label || raw.title || raw.experiment_id || filename;
+  const experiment_id = raw.experiment_id || experimentIdFromFilename(filename);
+
+  // Strict per-experiment Self-QA resolver. v1 grades are never dummies.
+  const qaFor = makeQaResolver(experiment_id, false, taskQaByExperiment);
+
   // Convert v1 tasks → legacy-compatible task rows. Snap pct to exact 0/1
   // when it crosses the openai_compat thresholds (pct >= 99 → perfect,
   // pct <= 1 → zero) so legacy Status badges agree with summary counts.
   const tasks = rawTasks.map((t) => {
+    const qa_score = qaFor(t.task_id);
     const hasError = t.error !== null && t.error !== undefined && t.error !== '';
     if (hasError) {
       return {
@@ -122,6 +193,7 @@ function processV1GradesFile(filePath, raw) {
         avg_score: null,
         error: true,
         error_messages: [String(t.error)],
+        qa_score,
       };
     }
     const pct = typeof t.pct === 'number' ? t.pct : 0;
@@ -136,8 +208,12 @@ function processV1GradesFile(filePath, raw) {
       avg_score: avgScore,
       error: false,
       error_messages: [],
+      qa_score,
     };
   });
+
+  // Decorate raw v1 tasks too — GradeDetail page reads from tasks_v1 directly.
+  const tasks_v1 = rawTasks.map((t) => ({ ...t, qa_score: qaFor(t.task_id) }));
 
   const totalTasks = typeof summary.total_tasks === 'number'
     ? summary.total_tasks
@@ -149,12 +225,6 @@ function processV1GradesFile(filePath, raw) {
     ? summary.graded_tasks
     : totalTasks - errorTasks;
 
-  // v1 path: prefer human-readable label/title from raw, fall back through
-  // experiment_id, finally filename. Aggregator caller may add a `label`
-  // field to grade JSON in future spec versions; this is forward-compatible.
-  const label = raw.label || raw.title || raw.experiment_id || filename;
-  const experiment_id = raw.experiment_id || experimentIdFromFilename(filename);
-
   // Explicit fields with no silent fallback. Empty / missing inference_model
   // surfaces as null in the dashboard so the UI can render "unknown" instead
   // of inheriting the judge model name (the bug fixed in this PR).
@@ -164,6 +234,10 @@ function processV1GradesFile(filePath, raw) {
   const judge_model = raw.judge && raw.judge.model ? raw.judge.model : null;
   // Legacy `model` field: inference only. Never falls back to judge.
   const model = inference_model || '';
+
+  // Self-QA vs Rubric calibration stats — computed from legacy-shaped `tasks`
+  // (which carry the snapped avg_score) so MAE aligns with rendered scores.
+  const { calibration_mae, calibration_counts } = buildCalibration(tasks);
 
   return {
     id: filename,
@@ -188,6 +262,8 @@ function processV1GradesFile(filePath, raw) {
       partial_score: openaiCompat.partial_count ?? 0,
       zero_score: openaiCompat.zero_count ?? 0,
       inconsistent_grades: openaiCompat.inconsistent_count ?? 0,
+      calibration_mae,
+      calibration_counts,
     },
     tasks,
     // v1.0 provenance + full payload (for WOW dashboard components)
@@ -195,16 +271,46 @@ function processV1GradesFile(filePath, raw) {
     rubric: raw.rubric,
     prompt: raw.prompt,
     graded_at: raw.graded_at,
-    summary_v1: { ...summary, wow, openai_compat: openaiCompat },
-    tasks_v1: rawTasks,
+    summary_v1: { ...summary, wow, openai_compat: openaiCompat, calibration_mae, calibration_counts },
+    tasks_v1,
   };
 }
 
-export function processGradesFile(filePath, raw) {
+export function processGradesFile(filePath, raw, taskQaByExperiment = new Map()) {
   if (raw && raw.schema_version === '1.0') {
-    return processV1GradesFile(filePath, raw);
+    return processV1GradesFile(filePath, raw, taskQaByExperiment);
   }
-  return processLegacyGradesFile(filePath, raw);
+  return processLegacyGradesFile(filePath, raw, taskQaByExperiment);
+}
+
+// ── taskQaByExperiment lookup ─────────────────────────────────────────────
+// Build Map<experiment_id, Record<task_id, qa_score>> from reports-index.json.
+// STRICT: reports-index is the only source. No fallback to batch-runner/results/
+// — the previous global-task_id map produced incorrect cross-experiment matches
+// because GDPVal task_ids are shared across all experiments running the same
+// dataset. Missing reports-index ⇒ empty Map ⇒ all qa_score = null.
+async function buildTaskQaByExperiment() {
+  const map = new Map();
+  const indexPath = join(OUTPUT_DIR, 'reports-index.json');
+  let raw;
+  try {
+    raw = JSON.parse(await readFile(indexPath, 'utf-8'));
+  } catch (err) {
+    // ENOENT = file not yet generated (first build, fresh repo) — silent fallback.
+    // Other errors (parse failure, permission, etc.) deserve a warning so they
+    // are not silently masked as "no qa_score available".
+    if (err && err.code !== 'ENOENT') {
+      console.warn(`⚠️  reports-index.json unreadable (${err.message}); all qa_score will be null.`);
+    }
+    return map;
+  }
+  for (const report of raw.reports ?? []) {
+    const expId = report?.meta?.experiment_id;
+    if (expId && report.task_qa && typeof report.task_qa === 'object') {
+      map.set(expId, report.task_qa);
+    }
+  }
+  return map;
 }
 
 // ── Main ──
@@ -222,12 +328,19 @@ async function main() {
     return;
   }
 
+  // Build experiment_id → task_qa lookup once for all grade files.
+  // Strict per-experiment matching; reports-index.json is the sole source.
+  const taskQaByExperiment = await buildTaskQaByExperiment();
+  const totalQaTasks = Array.from(taskQaByExperiment.values())
+    .reduce((n, m) => n + Object.keys(m).length, 0);
+  console.log(`ℹ️  task_qa lookup built: ${taskQaByExperiment.size} experiment(s), ${totalQaTasks} task(s)`);
+
   const results = [];
   for (const file of jsonFiles) {
     const content = await readFile(join(GRADES_DIR, file), 'utf-8');
     try {
       const data = JSON.parse(content);
-      results.push(processGradesFile(file, data));
+      results.push(processGradesFile(file, data, taskQaByExperiment));
     } catch (err) {
       console.error(`⚠️  ${file} 파싱 실패:`, err.message);
     }

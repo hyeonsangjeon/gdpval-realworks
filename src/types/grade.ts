@@ -35,6 +35,19 @@ export interface TaskGradeV1 {
   judge_output_tokens?: number
   error: string | null
   graded_at?: string
+  /** Inference-time Self-QA score (0–10). Phase 1: enriched from reports-index task_qa map. */
+  qa_score?: number | null
+}
+
+export interface CalibrationCounts {
+  /** |Rubric% − SelfQA%| ≤ 10 */
+  calibrated: number
+  /** Rubric% − SelfQA% < -10 (model overestimates its own work) */
+  overconfident: number
+  /** Rubric% − SelfQA% > 10 (model underestimates its own work) */
+  underconfident: number
+  /** Task has no qa_score (excluding errors) */
+  unmatched: number
 }
 
 export interface OpenAICompatSummary {
@@ -97,6 +110,10 @@ export interface GradeSummaryV1 {
   openai_compat: OpenAICompatSummary
   wow: WowSummary
   cost?: GradeCostSummary
+  /** Mean |Rubric% − SelfQA%| across matched tasks. null when no samples. */
+  calibration_mae?: number | null
+  /** Distribution of calibration categories. null when no samples. */
+  calibration_counts?: CalibrationCounts | null
 }
 
 export interface JudgeProvenance {

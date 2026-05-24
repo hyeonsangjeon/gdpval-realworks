@@ -93,6 +93,13 @@ export default function HealthStrip({ summaryV1, delay = 0 }: Props) {
               value={fmtLatency(cost?.total_judge_latency_sec)}
               tooltip={tooltipTexts.health.judgeLatency}
             />
+            <NeutralPill
+              label="MAE"
+              value={summaryV1.calibration_mae != null
+                ? `${summaryV1.calibration_mae.toFixed(1)}pp`
+                : '—'}
+              tooltip={tooltipTexts.health.calibrationMae}
+            />
           </div>
         </CardContent>
       </Card>

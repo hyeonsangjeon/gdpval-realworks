@@ -128,6 +128,8 @@ export interface ReportData {
   narrative: Narrative
   recovery_stats: RecoveryStats
   file_generation?: FileGeneration
+  /** task_id → Self-QA score (0–10). Enriched in scripts/aggregate-reports.mjs for Phase 1 calibration. */
+  task_qa?: Record<string, number>
 }
 
 export interface ExperimentEntry {
