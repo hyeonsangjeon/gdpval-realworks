@@ -1,0 +1,190 @@
+name: Run Grading Cost Optimization Sweep
+
+on:
+  workflow_dispatch:
+    inputs:
+      phases:
+        description: "Which phases to run (comma-separated: A,B,C)"
+        required: false
+        type: string
+        default: "A"
+      experiment_yaml:
+        description: "Benchmark experiment YAML name (without .yaml)"
+        required: true
+        type: string
+        default: "exp998_smoke_baseline_sample"
+      output_subdir:
+        description: "Sub-folder under tasks/0523_saturday/cost_opt_results/"
+        required: false
+        type: string
+        default: "2026-05-24-grade-cost-sweep"
+      max_cost_usd:
+        description: "Hard cap on cumulative estimated cost (USD)"
+        required: false
+        type: number
+        default: 80
+      resume:
+        description: "Resume an existing sweep (skip already-completed variants)"
+        required: false
+        type: boolean
+        default: false
+      commit_results:
+        description: "Commit RESULTS.md/winner_config.yaml back to the branch"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  # Allow only one sweep at a time per output subdir.
+  group: cost-sweep-${{ inputs.output_subdir }}
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    # Long-running: Phase A alone can take 1-3 hours; A+B+C up to ~5 hours.
+    # GitHub Actions hard limit is 6 hours (360 min) on the free tier so we
+    # stay just under that.
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Need full history so a follow-up commit doesn't trip on shallow.
+          fetch-depth: 0
+          # Stay on the feat branch the sweep was triggered from.
+          ref: ${{ github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install batch-runner dependencies
+        run: |
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Azure Login (OIDC, federated)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download inference results from HF (for benchmark experiment)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd batch-runner
+          # Skip if already cached locally (shouldn't be in a clean runner,
+          # but guards against re-runs.)
+          if [ ! -f workspace/step2_inference_results.json ]; then
+            python scripts/download_inference_from_hf.py \
+              --experiment "${{ inputs.experiment_yaml }}" \
+              --output workspace/step2_inference_results.json
+          fi
+
+      - name: Prepare sweep output directory
+        id: prep
+        run: |
+          SWEEP_DIR="tasks/0523_saturday/cost_opt_results/${{ inputs.output_subdir }}"
+          mkdir -p "$SWEEP_DIR"
+          echo "sweep_dir=$SWEEP_DIR" >> "$GITHUB_OUTPUT"
+          echo "Sweep directory: $SWEEP_DIR"
+          ls -la "$SWEEP_DIR/" || true
+
+      - name: Run sweep
+        id: sweep
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          # GH Actions environment has working OIDC via azure/login; the
+          # API key fallback is therefore not needed. Leaving it OFF
+          # preserves the headline "OIDC only" rule for the production CI.
+        run: |
+          set -euo pipefail
+          SWEEP_DIR="${{ steps.prep.outputs.sweep_dir }}"
+          RESUME_FLAG=""
+          if [[ "${{ inputs.resume }}" == "true" ]]; then
+            RESUME_FLAG="--resume $SWEEP_DIR"
+          fi
+          # tee for live logs and persisted log under the sweep dir.
+          # Note: pipefail above so the python exit code propagates.
+          python scripts/grading_cost_sweep.py \
+            --plan tasks/0523_saturday/grading_cost_sweep_plan.yaml \
+            --output-dir "$SWEEP_DIR" \
+            --phases "${{ inputs.phases }}" \
+            --max-cost "${{ inputs.max_cost_usd }}" \
+            $RESUME_FLAG \
+            2>&1 | tee "$SWEEP_DIR/phase_${{ inputs.phases }}_$(date -u +%Y%m%dT%H%M%SZ).log"
+
+          # Exit codes 0=success, 1=no-winner, 2=cost-cap, 3=validation.
+          # We do NOT fail the job on 1 or 2 — those are informational and
+          # the RESULTS.md should still be inspected by the operator.
+          echo "sweep_exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Sweep result summary
+        if: always()
+        run: |
+          SWEEP_DIR="${{ steps.prep.outputs.sweep_dir }}"
+          echo "=== Sweep dir contents ==="
+          ls -la "$SWEEP_DIR/" || true
+          echo ""
+          echo "=== RESULTS.md head ==="
+          head -60 "$SWEEP_DIR/RESULTS.md" 2>/dev/null || echo "(no RESULTS.md yet)"
+          echo ""
+          echo "=== progress.json summary ==="
+          python3 -c "
+          import json, sys
+          try:
+              with open('$SWEEP_DIR/progress.json') as f:
+                  p = json.load(f)
+              print('completed   :', len(p.get('completed', [])))
+              print('cumulative \$:', p.get('cumulative_cost_usd', 0))
+              print('aborted     :', p.get('aborted', False))
+              if p.get('abort_reason'):
+                  print('reason      :', p['abort_reason'])
+              winners = p.get('phase_a_winners', {})
+              if winners:
+                  print('phase A axis winners:', winners)
+          except FileNotFoundError:
+              print('(no progress.json yet)')
+          "
+
+      - name: Commit RESULTS.md / winner_config.yaml back to branch
+        if: always() && inputs.commit_results == true
+        run: |
+          SWEEP_DIR="${{ steps.prep.outputs.sweep_dir }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Stage only the human-readable / decision-relevant artifacts.
+          # Raw per-variant grade JSONs are excluded by cost_opt_results/.gitignore.
+          git add "$SWEEP_DIR" || true
+          if git diff --staged --quiet; then
+            echo "Nothing new to commit (sweep produced no markdown changes)."
+            exit 0
+          fi
+          git commit -m "chore(sweep): record results for phases=${{ inputs.phases }} (subdir=${{ inputs.output_subdir }})"
+          # Push to the same branch the workflow was triggered from.
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      - name: Upload sweep artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cost-sweep-${{ inputs.phases }}-${{ inputs.output_subdir }}
+          path: |
+            tasks/0523_saturday/cost_opt_results/${{ inputs.output_subdir }}/RESULTS.md
+            tasks/0523_saturday/cost_opt_results/${{ inputs.output_subdir }}/summary.json
+            tasks/0523_saturday/cost_opt_results/${{ inputs.output_subdir }}/winner_config.yaml
+            tasks/0523_saturday/cost_opt_results/${{ inputs.output_subdir }}/progress.json
+            tasks/0523_saturday/cost_opt_results/${{ inputs.output_subdir }}/runs/**/grade.json
+            tasks/0523_saturday/cost_opt_results/${{ inputs.output_subdir }}/runs/**/run.log
+          if-no-files-found: warn
+          retention-days: 30
