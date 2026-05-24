@@ -12,9 +12,14 @@
     "A3_std_batch_1",
     "A3_std_batch_4",
     "A3_std_batch_8",
-    "A3_std_batch_12"
+    "A3_std_batch_12",
+    "A4_model_pro",
+    "A4_model_std",
+    "A4_model_mini",
+    "A4_model_nano",
+    "DV_gpt4o_medium_b8"
   ],
-  "cumulative_cost_usd": 19.4368,
+  "cumulative_cost_usd": 26.6624,
   "results": {
     "A1_pro_minimal": {
       "name": "A1_pro_minimal",
@@ -180,9 +185,92 @@
       "judge_output_tokens": 50922,
       "smoke_cost_usd": 0.9271,
       "full_run_cost_usd": 67.99
+    },
+    "A4_model_pro": {
+      "name": "A4_model_pro",
+      "phase": "A",
+      "repeat_index": null,
+      "avg_score_pct": 72.92,
+      "critical_item_pass_rate": 1.0,
+      "judge_error_rate": 0.0238,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 84,
+      "judge_total_latency_sec": 4503.87,
+      "judge_input_tokens": 106196,
+      "judge_output_tokens": 71397,
+      "smoke_cost_usd": 5.8768,
+      "full_run_cost_usd": 430.96
+    },
+    "A4_model_std": {
+      "name": "A4_model_std",
+      "phase": "A",
+      "repeat_index": null,
+      "avg_score_pct": 74.42,
+      "critical_item_pass_rate": 1.0,
+      "judge_error_rate": 0.0,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 84,
+      "judge_total_latency_sec": 480.52,
+      "judge_input_tokens": 106168,
+      "judge_output_tokens": 37758,
+      "smoke_cost_usd": 1.0972,
+      "full_run_cost_usd": 80.46
+    },
+    "A4_model_mini": {
+      "name": "A4_model_mini",
+      "phase": "A",
+      "repeat_index": null,
+      "avg_score_pct": 77.91,
+      "critical_item_pass_rate": 1.0,
+      "judge_error_rate": 0.0,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 84,
+      "judge_total_latency_sec": 298.88,
+      "judge_input_tokens": 106168,
+      "judge_output_tokens": 36350,
+      "smoke_cost_usd": 0.2516,
+      "full_run_cost_usd": 18.45
+    },
+    "A4_model_nano": {
+      "name": "A4_model_nano",
+      "phase": "A",
+      "repeat_index": null,
+      "avg_score_pct": 9.76,
+      "critical_item_pass_rate": 0.0,
+      "judge_error_rate": 1.0,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 84,
+      "judge_total_latency_sec": 0.0,
+      "judge_input_tokens": 0,
+      "judge_output_tokens": 0,
+      "smoke_cost_usd": 0.0,
+      "full_run_cost_usd": 0.0
+    },
+    "DV_gpt4o_medium_b8": {
+      "name": "DV_gpt4o_medium_b8",
+      "phase": "DV",
+      "repeat_index": null,
+      "avg_score_pct": 9.76,
+      "critical_item_pass_rate": 0.0,
+      "judge_error_rate": 1.0,
+      "precheck_pass_rate": 0.8,
+      "judge_call_count": 12,
+      "judge_total_latency_sec": 0.0,
+      "judge_input_tokens": 0,
+      "judge_output_tokens": 0,
+      "smoke_cost_usd": 0.0,
+      "full_run_cost_usd": 0.0
     }
   },
   "consecutive_429_per_model": {},
   "aborted": false,
-  "abort_reason": null
+  "abort_reason": null,
+  "phase_a_winners": {
+    "A1": "A1_pro_minimal",
+    "A2": "A2_std_extract_1500",
+    "A3": "A3_std_batch_4",
+    "A4": "A4_model_nano"
+  },
+  "winner": "A4_model_mini",
+  "finished_at": "2026-05-24T13:34:18Z"
 }
