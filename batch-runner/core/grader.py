@@ -122,22 +122,52 @@ class Grader:
         if not endpoint:
             raise ValueError(f"Missing Azure endpoint env var: {endpoint_env}")
 
-        credential = DefaultAzureCredential()
-        token_provider = get_bearer_token_provider(
-            credential, "https://cognitiveservices.azure.com/.default"
-        )
-
         timeout = int(self.config.get("judge", {}).get("timeout_sec", 600))
         api_version = self.config.get("judge", {}).get(
             "api_version", "2025-04-01-preview"
         )
         self.model = self.config["judge"]["model"]
-        self.client = AzureOpenAI(
-            azure_endpoint=endpoint,
-            azure_ad_token_provider=token_provider,
-            api_version=api_version,
-            timeout=timeout,
+
+        # Auth: default is OIDC (DefaultAzureCredential). Opt-in API key
+        # fallback is available ONLY when GRADER_ALLOW_API_KEY_FALLBACK=1
+        # is set. This preserves the OIDC-only invariant for production
+        # while letting the cost-optimization sweep recover from stale SP
+        # secrets without an interactive credential rotation.
+        allow_api_key_fallback = (
+            os.getenv("GRADER_ALLOW_API_KEY_FALLBACK", "0") == "1"
         )
+        api_key = os.getenv("AZURE_OPENAI_API_KEY") if allow_api_key_fallback else None
+
+        client_kwargs: dict = {
+            "azure_endpoint": endpoint,
+            "api_version": api_version,
+            "timeout": timeout,
+        }
+        try:
+            credential = DefaultAzureCredential()
+            token_provider = get_bearer_token_provider(
+                credential, "https://cognitiveservices.azure.com/.default"
+            )
+            # Force a token fetch up front so we fail fast if OIDC is broken.
+            if allow_api_key_fallback:
+                try:
+                    _ = token_provider()
+                except Exception as oidc_err:  # noqa: BLE001
+                    if not api_key:
+                        raise
+                    print(
+                        f"   ⚠️  Grader OIDC failed ({type(oidc_err).__name__}); "
+                        f"falling back to AZURE_OPENAI_API_KEY"
+                    )
+                    raise oidc_err
+            client_kwargs["azure_ad_token_provider"] = token_provider
+        except Exception:
+            if api_key:
+                client_kwargs["api_key"] = api_key
+            else:
+                raise
+
+        self.client = AzureOpenAI(**client_kwargs)
 
         self.prompt_template = self._read_prompt_template(self.config["prompt"]["template"])
         self.prompt_version = self._extract_prompt_version(self.prompt_template)
@@ -146,6 +176,135 @@ class Grader:
             / 1000.0
         )
         self._last_judge_call_at: float | None = None
+
+        # --- Optional: prompt-level batching + tiered judge routing ------
+        # These are no-ops when the grading config does not set them; the
+        # single-item path above is left untouched. See `core.grader_batch`
+        # for the implementation. Note: `judge_call_count` becomes per-API-call
+        # (not per-item) the moment batching is active.
+        self.batch_size = int(self.config.get("grader", {}).get("batch_size", 1) or 1)
+        self.judge_routing = self.config.get("judge_routing") or None
+        self._use_batch = (self.batch_size > 1) or bool(self.judge_routing)
+        self._tier_judges: dict[str, "object"] = {}
+        if self._use_batch:
+            self._build_tier_judges()
+
+    # ------------------------------------------------------------------
+    # Batch / tier routing (no-op unless config opts in)
+    # ------------------------------------------------------------------
+
+    def _build_tier_judges(self) -> None:
+        """Instantiate one `BatchJudge` per active tier.
+
+        Tier resolution order: pro > mini > standard. The 'standard' tier
+        is always present and uses the top-level `judge` block as its
+        defaults so that a plain `batch_size: 8` config (no routing)
+        Just Works using the same model as single-item mode.
+        """
+        from core.grader_batch import BatchJudge  # local import; avoid cycle
+
+        # Load the batch prompt template. Falls back to a sibling file next
+        # to the configured single-item prompt template.
+        batch_prompt_path = self._resolve_batch_prompt_path()
+        batch_prompt_template = self._read_prompt_template(batch_prompt_path)
+
+        base_judge_cfg = dict(self.config.get("judge", {}))
+        base_judge_cfg.setdefault(
+            "reasoning_effort", base_judge_cfg.get("reasoning", {}).get("effort", "high")
+        )
+        base_judge_cfg.setdefault(
+            "max_output_tokens",
+            base_judge_cfg.get("generation", {}).get(
+                "max_output_tokens",
+                self.config.get("grader", {}).get("per_item_max_output_tokens", 2400),
+            ),
+        )
+        grader_cfg = self.config.get("grader", {})
+        tpm_guard = self.config.get("tpm_guard", {})
+
+        def _tier_cfg(tier_block: dict | None, defaults: dict) -> dict:
+            cfg = dict(defaults)
+            if tier_block:
+                for k in ("model", "deployment", "reasoning_effort", "max_output_tokens"):
+                    if k in tier_block and tier_block[k] is not None:
+                        cfg[k] = tier_block[k]
+            return cfg
+
+        routing = self.judge_routing or {}
+        tier_standard_block = routing.get("tier_standard") or {}
+        tier_pro_block = routing.get("tier_pro") or {}
+        tier_mini_block = routing.get("tier_mini") or {}
+
+        standard_cfg = _tier_cfg(tier_standard_block, base_judge_cfg)
+        self._tier_judges["standard"] = BatchJudge(
+            client=self.client,
+            judge_config=standard_cfg,
+            tpm_guard=tpm_guard,
+            prompt_template=batch_prompt_template,
+            grader_config=grader_cfg,
+        )
+
+        if tier_pro_block:
+            pro_cfg = _tier_cfg(tier_pro_block, base_judge_cfg)
+            self._tier_judges["pro"] = BatchJudge(
+                client=self.client,
+                judge_config=pro_cfg,
+                tpm_guard=tpm_guard,
+                prompt_template=batch_prompt_template,
+                grader_config=grader_cfg,
+            )
+
+        if tier_mini_block:
+            mini_defaults = dict(base_judge_cfg)
+            mini_defaults["reasoning_effort"] = tier_mini_block.get("reasoning_effort", "minimal")
+            mini_defaults["max_output_tokens"] = int(tier_mini_block.get("max_output_tokens", 400))
+            mini_cfg = _tier_cfg(tier_mini_block, mini_defaults)
+            self._tier_judges["mini"] = BatchJudge(
+                client=self.client,
+                judge_config=mini_cfg,
+                tpm_guard=tpm_guard,
+                prompt_template=batch_prompt_template,
+                grader_config=grader_cfg,
+            )
+
+    def _resolve_batch_prompt_path(self) -> str:
+        """Locate the batch-mode prompt template.
+
+        Default rule: sibling file named `grader_judge_batch.md` next to the
+        configured single-item prompt template. Caller can override via
+        `prompt.batch_template` in the grading config.
+        """
+        override = self.config.get("prompt", {}).get("batch_template")
+        if override:
+            return str(override)
+        single_path = Path(self.config["prompt"]["template"])
+        candidate = single_path.with_name("grader_judge_batch.md")
+        return str(candidate)
+
+    def _route_to_tier(self, item: RubricItem) -> str:
+        """Return the tier name for one judge item: 'pro' | 'mini' | 'standard'."""
+        if not self.judge_routing:
+            return "standard"
+
+        pro = (self.judge_routing.get("tier_pro") or {}) if "pro" in self._tier_judges else {}
+        route_when = pro.get("route_when") or {}
+        weight_gte = route_when.get("weight_gte")
+        if weight_gte is not None:
+            try:
+                if int(item.score) >= int(weight_gte):
+                    return "pro"
+            except (TypeError, ValueError):
+                pass
+
+        mini = (self.judge_routing.get("tier_mini") or {}) if "mini" in self._tier_judges else {}
+        patterns = mini.get("criterion_pattern_match") or []
+        if patterns:
+            crit_lower = item.criterion.lower()
+            for pat in patterns:
+                if isinstance(pat, str) and pat.lower() in crit_lower:
+                    return "mini"
+
+        return "standard"
 
     @staticmethod
     def _classify(item: RubricItem) -> tuple[str, Optional[str]]:
@@ -157,6 +316,9 @@ class Grader:
     def grade_task(self, task: TaskRubric, deliverable_dir: str) -> TaskGrade:
         deliverable_path = Path(deliverable_dir)
         files = self._list_files(deliverable_path)
+
+        if self._use_batch:
+            return self._grade_task_batched(task, deliverable_path, files)
 
         no_deliverables = not deliverable_path.exists() or not files
         items: list[ItemGrade] = []
@@ -199,6 +361,83 @@ class Grader:
                 judge_input_tokens += in_tok
                 judge_output_tokens += out_tok
             items.append(ig)
+
+        grade = self._aggregate(items, task)
+        grade.judge_call_count = judge_call_count
+        grade.precheck_count = precheck_count
+        grade.judge_total_latency_ms = round(judge_total_latency_ms, 2)
+        grade.judge_input_tokens = judge_input_tokens
+        grade.judge_output_tokens = judge_output_tokens
+        if no_deliverables:
+            grade.error = "no_deliverables"
+        return grade
+
+    def _grade_task_batched(
+        self, task: TaskRubric, deliverable_path: Path, files: list[Path]
+    ) -> TaskGrade:
+        """Batched + tier-routed grading path.
+
+        Differences vs the single-item path:
+        - `judge_call_count` counts Responses API invocations (one per batch),
+          NOT one per rubric item. A batch of 8 items that succeeds in one
+          call contributes 1 to `judge_call_count`. A batch that triggers
+          the `chunk_size // 2` fallback contributes 2.
+        - Item order in the output matches `task.rubric_items` order.
+        - Prechecks still happen first and are NEVER sent to the judge,
+          honoring the project's hard rule #2.
+        """
+        no_deliverables = not deliverable_path.exists() or not files
+
+        # Pre-allocate per-index slots so output order matches input order.
+        item_slots: list[Optional[ItemGrade]] = [None] * len(task.rubric_items)
+        judge_buckets: dict[str, list[tuple[int, RubricItem]]] = {}
+
+        precheck_count = 0
+        judge_call_count = 0
+        judge_total_latency_ms = 0.0
+        judge_input_tokens = 0
+        judge_output_tokens = 0
+
+        # Pass 1 — prechecks (or forced fail when deliverable is absent).
+        for idx, item in enumerate(task.rubric_items):
+            mode, pattern_id = self._classify(item)
+            if no_deliverables:
+                if mode == "judge":
+                    item_slots[idx] = self._absent_judge_item(item)
+                    # absent-judge does not consume an API call
+                else:
+                    item_slots[idx] = self._fail_precheck_item(item, pattern_id, "deliverable absent")
+                    precheck_count += 1
+                continue
+
+            if mode == "precheck":
+                precheck_count += 1
+                pre = self._run_precheck(pattern_id, item, files)
+                if pre is None:
+                    judge_buckets.setdefault(self._route_to_tier(item), []).append((idx, item))
+                else:
+                    verdict, evidence = pre
+                    item_slots[idx] = self._to_item_grade_from_precheck(
+                        item, pattern_id, verdict, evidence
+                    )
+            else:
+                judge_buckets.setdefault(self._route_to_tier(item), []).append((idx, item))
+
+        # Pass 2 — dispatch judge buckets in chunks of `batch_size`.
+        for tier_name, entries in judge_buckets.items():
+            judge = self._tier_judges.get(tier_name) or self._tier_judges["standard"]
+            for chunk_start in range(0, len(entries), self.batch_size):
+                chunk = entries[chunk_start : chunk_start + self.batch_size]
+                chunk_items = [it for _, it in chunk]
+                result = judge.judge_items_batch(task, chunk_items, files)
+                judge_call_count += result.num_api_calls
+                judge_total_latency_ms += result.total_latency_ms
+                judge_input_tokens += result.input_tokens
+                judge_output_tokens += result.output_tokens
+                for (idx, _), graded_item in zip(chunk, result.items):
+                    item_slots[idx] = graded_item
+
+        items: list[ItemGrade] = [it for it in item_slots if it is not None]
 
         grade = self._aggregate(items, task)
         grade.judge_call_count = judge_call_count

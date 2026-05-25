@@ -1,0 +1,186 @@
+schema_version: "1.0"
+plan_name: "cost_opt_sweep_v1"
+description: |
+  Autonomous grading cost optimization sweep for TASK_GRADE_COST_SWEEP
+  Track 2. Driven by `scripts/grading_cost_sweep.py`. Renders each variant
+  on top of `batch-runner/grading_configs/_sweep_template.yaml` and invokes
+  `step8_grade.py` per variant. Production grade JSONs are NOT touched;
+  outputs land in `tasks/0523_saturday/cost_opt_results/<ts>/`.
+
+fixed_benchmark:
+  experiment_yaml_name: "exp998_smoke_baseline_sample"
+  task_limit: 3                     # 94 rubric items
+  rubric_sha: "11e7900"
+
+global_constraints:
+  cost_cap_usd: 80
+  max_wall_clock_min: 240
+  abort_on_first_quota_exceed: true
+
+acceptance:
+  baseline_avg_score_pct: 77.83     # exp998 default_gpt5pro reference
+  avg_score_delta_pp: 2.0
+  critical_item_pass_rate_min: 1.0
+  judge_error_rate_max: 0.05
+  precheck_pass_rate_min: 0.7
+
+baseline:
+  config_path: "batch-runner/grading_configs/default_gpt5pro.yaml"
+  expected_metrics:
+    avg_score_pct: 77.83
+    judge_call_count: 84
+    judge_total_latency_sec: 8530
+    judge_error_rate: 0.0595
+    judge_input_tokens: 137756
+    judge_output_tokens: 89263
+    smoke_cost_usd: 7.42
+
+# ============================================================
+# Phase A: Single-axis sweeps
+# ============================================================
+phase_a_single_axis:
+  # A1. reasoning_effort sweep (model fixed: gpt-5.4-pro)
+  - name: "A1_pro_minimal"
+    judge: { model: "gpt-5.4-pro", deployment: "gpt-5.4-pro", reasoning_effort: "minimal" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+  - name: "A1_pro_low"
+    judge: { model: "gpt-5.4-pro", deployment: "gpt-5.4-pro", reasoning_effort: "low" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+  - name: "A1_pro_medium"
+    judge: { model: "gpt-5.4-pro", deployment: "gpt-5.4-pro", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+  - name: "A1_pro_high"
+    judge: { model: "gpt-5.4-pro", deployment: "gpt-5.4-pro", reasoning_effort: "high" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+
+  # A2. deliverable extract chars sweep (gpt-5.4 standard, medium)
+  - name: "A2_std_extract_1000"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1000, batch_size: 1 }
+  - name: "A2_std_extract_1500"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+  - name: "A2_std_extract_2500"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 2500, batch_size: 1 }
+
+  # A3. batch_size sweep (gpt-5.4 standard, medium, extract 1500)
+  - name: "A3_std_batch_1"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+  - name: "A3_std_batch_4"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 4 }
+  - name: "A3_std_batch_8"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 8 }
+  - name: "A3_std_batch_12"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 12 }
+
+  # A4. model sweep (medium, extract 1500, batch 1)
+  - name: "A4_model_pro"
+    judge: { model: "gpt-5.4-pro", deployment: "gpt-5.4-pro", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+  - name: "A4_model_std"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+  - name: "A4_model_mini"
+    judge: { model: "gpt-5.4-mini", deployment: "gpt-5.4-mini", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+  - name: "A4_model_nano"
+    judge: { model: "gpt-5.4-nano", deployment: "gpt-5.4-nano", reasoning_effort: "minimal" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 1 }
+
+# ============================================================
+# Phase B: Combinations
+# ============================================================
+phase_b_combinations:
+  - name: "B1_baseline_ref"
+    inherit_from: "baseline"
+
+  - name: "B2_std_med_b8"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 8 }
+
+  # Tiered configs: top-level judge.model is the STANDARD tier (Track 1 cache-key contract).
+  - name: "B3_tiered_pro_std_b8"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 8 }
+    judge_routing:
+      tier_pro:
+        model: "gpt-5.4-pro"
+        deployment: "gpt-5.4-pro"
+        reasoning_effort: "high"
+        route_when: { weight_gte: 4 }
+      tier_standard:
+        model: "gpt-5.4"
+        deployment: "gpt-5.4"
+        reasoning_effort: "medium"
+
+  - name: "B4_tiered_with_mini_b8"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 8 }
+    judge_routing:
+      tier_pro:
+        model: "gpt-5.4-pro"
+        deployment: "gpt-5.4-pro"
+        reasoning_effort: "high"
+        route_when: { weight_gte: 4 }
+      tier_standard:
+        model: "gpt-5.4"
+        deployment: "gpt-5.4"
+        reasoning_effort: "medium"
+      tier_mini:
+        model: "gpt-5.4-mini"
+        deployment: "gpt-5.4-mini"
+        reasoning_effort: "minimal"
+        criterion_pattern_match:
+          - "executive summary"
+          - "section titled"
+          - "contains a header"
+
+  - name: "B5_tiered_with_nano_b8"
+    judge: { model: "gpt-5.4", deployment: "gpt-5.4", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 8 }
+    judge_routing:
+      tier_pro:
+        model: "gpt-5.4-pro"
+        deployment: "gpt-5.4-pro"
+        reasoning_effort: "high"
+        route_when: { weight_gte: 4 }
+      tier_standard:
+        model: "gpt-5.4"
+        deployment: "gpt-5.4"
+        reasoning_effort: "medium"
+      tier_mini:
+        model: "gpt-5.4-nano"
+        deployment: "gpt-5.4-nano"
+        reasoning_effort: "minimal"
+        criterion_pattern_match:
+          - "executive summary"
+          - "section titled"
+          - "contains a header"
+
+# ============================================================
+# Phase C: Stability
+# ============================================================
+phase_c_stability:
+  repeat_count: 3
+  pick_top_n_from_phase_b: 2
+  variance_threshold:
+    avg_score_pct_std: 1.5
+    judge_error_rate_std: 0.02
+
+# ============================================================
+# Optional diversity validator (sanity, 1 run, advisory only)
+# ============================================================
+diversity_validator:
+  enabled: true
+  variant:
+    name: "DV_gpt4o_medium_b8"
+    judge: { model: "gpt-4o", deployment: "gpt-4o", reasoning_effort: "medium" }
+    grader: { deliverable_extract_max_chars: 1500, batch_size: 8 }
+  purpose: |
+    Sanity check verdict agreement across model families. Advisory only —
+    not used for winner selection.

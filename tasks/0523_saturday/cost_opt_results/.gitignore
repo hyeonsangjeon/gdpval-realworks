@@ -1,0 +1,16 @@
+# Sweep runs produce grade JSONs, configs, logs that are large and
+# reproducible. Ignore those, but keep:
+#   - the .gitignore itself
+#   - any markdown report (RESULTS.md, PHASE_*.md, etc.) at any depth
+#   - the operator README
+#
+# Strategy: blacklist by extension instead of "* + !*/" which gets
+# fragile fast.
+
+*.json
+*.yaml
+*.yml
+*.log
+*.lock
+*.tmp
+__pycache__/

@@ -1,0 +1,118 @@
+schema_version: "1.0"
+config_name: "_sweep_template"
+description: |
+  Reference grading config showing the v1.0 schema PLUS the optional
+  prompt-level batching and tiered judge routing knobs added by
+  TASK_GRADE_COST_SWEEP Track 1. This file is intentionally not used
+  directly — `scripts/grading_cost_sweep.py` (Track 2) renders concrete
+  variants on top of this shape. Validated by `validate_grading_config`.
+
+# ---------------------------------------------------------------------
+# Single-tier judge (unchanged from existing v1.0 schema). When a
+# `judge_routing` block is present below, this top-level `judge` acts as
+# the DEFAULT tier_standard config for fields the per-tier block omits.
+# ---------------------------------------------------------------------
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.4"
+  deployment: "gpt-5.4"
+  api_version: "2025-04-01-preview"
+  endpoint_env: "AZURE_OPENAI_ENDPOINT"
+  timeout_sec: 600
+  reasoning:
+    effort: "medium"
+  generation:
+    temperature: 0           # reproducibility metadata only (not sent to API)
+    seed: 42                 # reproducibility metadata only (not sent to API)
+    max_output_tokens: 4096
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "main"
+  cache_dir: "data/gdpval-local"
+
+# ---------------------------------------------------------------------
+# Grader knobs. `batch_size` and the optional `judge_routing` block
+# below activate the prompt-level batching helper
+# (`core.grader_batch.BatchJudge`). When neither is set, behaviour is
+# identical to the legacy single-item judge path.
+# ---------------------------------------------------------------------
+grader:
+  precheck_patterns_version: "v1"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  deliverable_extract_max_chars: 1500
+  task_prompt_truncate_chars: 500
+  # Number of rubric items to judge per Responses API call. 1 = legacy
+  # single-item behaviour. Tested values: 4, 8, 12. Above 12 risks
+  # output truncation and triggers the chunk_size // 2 fallback.
+  batch_size: 8
+
+tpm_guard:
+  # Set ≤ 70% of the model's published TPM. See validator in the sweep
+  # dispatcher (Track 2). Default conservative value here.
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  version: "v1"
+  # Optional: override the auto-resolved batch prompt path. Defaults to
+  # the sibling file `prompts/grader_judge_batch.md` when omitted.
+  # batch_template: "prompts/grader_judge_batch.md"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json"
+  partial_save_every_n_tasks: 10
+  include_judge_raw: false
+
+# ---------------------------------------------------------------------
+# OPTIONAL: tiered judge routing. When present, items are routed to one
+# of three tiers BEFORE prompt batching. Routing precedence:
+#   1) tier_pro     when route_when.weight_gte matches item.score
+#   2) tier_mini    when criterion_pattern_match contains a substring
+#                   present in item.criterion (case-insensitive)
+#   3) tier_standard (default fallback — always active)
+#
+# Each tier may override `model`, `deployment`, `reasoning_effort`, and
+# `max_output_tokens`. Fields omitted inherit from the top-level `judge`
+# block. tier_mini defaults: reasoning_effort="minimal",
+# max_output_tokens=400.
+#
+# REMOVE this block entirely to disable tiered routing. With routing
+# disabled, all judge items go to a single BatchJudge built from the
+# top-level `judge` config.
+# ---------------------------------------------------------------------
+# judge_routing:
+#   tier_pro:
+#     model: "gpt-5.4-pro"
+#     deployment: "gpt-5.4-pro"
+#     reasoning_effort: "high"
+#     max_output_tokens: 2400
+#     route_when:
+#       weight_gte: 4         # items with score >= 4 go to pro tier
+#   tier_standard:
+#     model: "gpt-5.4"
+#     deployment: "gpt-5.4"
+#     reasoning_effort: "medium"
+#     max_output_tokens: 1600
+#   tier_mini:
+#     model: "gpt-5.4-mini"
+#     deployment: "gpt-5.4-mini"
+#     reasoning_effort: "minimal"
+#     max_output_tokens: 400
+#     criterion_pattern_match:
+#       - "executive summary"
+#       - "section titled"
+#       - "contains a header"
