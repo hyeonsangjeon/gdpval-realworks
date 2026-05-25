@@ -1,19 +1,45 @@
 schema_version: "1.0"
 config_name: "default_gpt5pro"
 description: |
-  Default GDPval grading config: gpt-5.4-pro Responses API as judge,
-  high reasoning effort, rubric from openai/gdpval@main, prompt v1.
+  Cost-optimized grading config selected by automated sweep
+  (tasks/0523_saturday/TASK_GRADE_COST_SWEEP.md).
+
+  Variant: A4_model_mini
+  Sweep run: 2026-05-24 grade-cost-sweep (Phase A+B+C)
+  Total sweep spend: $42.36
+
+  Smoke benchmark vs baseline (default_gpt5pro.yaml on exp998):
+    avg_score_pct           : 77.91  (baseline 77.83, delta +0.08pp)
+    critical_item_pass_rate : 1.00   (baseline 1.00)
+    judge_error_rate        : 0.0%   (baseline 5.9%)
+    precheck_pass_rate      : 0.80   (baseline 0.80)
+    wall-clock (3 tasks)    : 299s   (baseline 142m)
+    smoke cost              : $0.25  (baseline $7.42)
+
+  Projected full-run cost (220 tasks, linear extrapolation x 73.3):
+    baseline   : $493
+    this config: $18 (-96.3%)
+
+  ⚠️ Caveats:
+  - Smoke = 3-task baseline_sample only. Recommend one manual full-run
+    validation before promoting to default.
+  - Single measurement: Phase C stability did not exercise A4_model_mini
+    (dispatcher's Phase C is restricted to Phase B variants). Consider
+    running this config 3 times to verify avg_score variance < 1.5pp.
+  - Pricing estimates use working tenant-pricing approximations
+    (PRICING_USD_PER_1M in scripts/grading_cost_sweep.py); verify
+    against actual billing before committing to a budget.
 
 judge:
   provider: "azure_openai"
   api: "responses"
-  model: "gpt-5.4-pro"
-  deployment: "gpt-5.4-pro"
+  model: "gpt-5.4-mini"
+  deployment: "gpt-5.4-mini"
   api_version: "2025-04-01-preview"
   endpoint_env: "AZURE_OPENAI_ENDPOINT"
   timeout_sec: 600
   reasoning:
-    effort: "high"
+    effort: "medium"
   generation:
     temperature: 0
     seed: 42
@@ -29,21 +55,13 @@ grader:
   precheck_patterns_version: "v1"
   evidence_max_chars: 200
   judge_max_retries: 1
-  per_item_max_output_tokens: 2400  # bumped 800→1600→2400 across smoke runs.
-                                    # gpt-5.4-pro effort=high reasoning
-                                    # tokens count against output budget.
-                                    # 800 → judge_error 23.8%.
-                                    # 1600 → judge_error 11.9% (all
-                                    # remaining were truncation-class
-                                    # `judge_json_parse_failed`). 2400
-                                    # is the next safety step. If still
-                                    # >5%, suspect prompt verbosity
-                                    # (deliverable_extract_max_chars or
-                                    # rubric item criterion length).
+  per_item_max_output_tokens: 2400
   save_raw_responses: false
   fail_on_missing_evidence: true
-  deliverable_extract_max_chars: 4000
+  deliverable_extract_max_chars: 1500  # 4000 -> 1500 from A2 sweep
   task_prompt_truncate_chars: 500
+  # batch_size kept at 1 — A3 sweep showed batch=4 reduces calls 3x but
+  # costs 3.6pp of score. Batching is not used by the winner.
 
 tpm_guard:
   max_concurrent: 1
@@ -62,4 +80,3 @@ output:
   directory: "../data/grades"
   filename_template: "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json"
   partial_save_every_n_tasks: 10
-  include_judge_raw: false
