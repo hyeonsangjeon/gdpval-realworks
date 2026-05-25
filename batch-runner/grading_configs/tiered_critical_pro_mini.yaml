@@ -1,0 +1,96 @@
+schema_version: "1.0"
+config_name: "tiered_critical_pro_mini"
+description: |
+  Tiered grading config: pro for critical (weight >= 4), mini for the rest.
+  This is the ORIGINAL hypothesis from
+  tasks/0523_saturday/TASK_GRADE_COST_OPTIMIZATION.md (cost optimization spec)
+  that the sweep replaced with single-mini. We re-test it on a full
+  220-task experiment (exp003) to validate or reject that downgrade.
+
+  Routing rules:
+    Tier "standard" (default): gpt-5.4-mini, reasoning_effort=medium
+                                Same as current default_gpt5pro.yaml.
+    Tier "pro" (critical): gpt-5.4-pro, reasoning_effort=high
+                            Activates when rubric_item.weight >= 4.
+
+  Cache-key compatibility:
+    Top-level `judge.model` = "gpt-5.4-mini" so the grade filename
+    template emits "<exp>__gpt-5_4-mini__<rubric>__v1.json" — identical
+    to the current default's filename. This means a head-to-head run
+    against default_gpt5pro.yaml will OVERWRITE the same filename;
+    deliberate filename collisions are managed by `--force` flag and
+    by running them in sequence with manual checkpoint.
+
+  Validation gate (TASK_TIERED_VALIDATION.md acceptance criteria):
+    - critical_item_pass_rate: tiered >= mini (preserved)
+    - avg_score_pct: |tiered - mini| <= 5pp
+    - judge_error_rate: <= 5%
+    - cost: <= 2x mini full-run cost
+
+  IF this config wins on exp003 full-run, promote to default_gpt5pro.yaml
+  in a follow-up PR. Otherwise keep single-mini default and retain this
+  config as a named alternative for high-stakes runs.
+
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.4-mini"
+  deployment: "gpt-5.4-mini"
+  api_version: "2025-04-01-preview"
+  endpoint_env: "AZURE_OPENAI_ENDPOINT"
+  timeout_sec: 600
+  reasoning:
+    effort: "medium"
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 4096
+
+judge_routing:
+  tier_pro:
+    model: "gpt-5.4-pro"
+    deployment: "gpt-5.4-pro"
+    reasoning_effort: "high"
+    max_output_tokens: 4096
+    route_when:
+      weight_gte: 4
+  tier_standard:
+    model: "gpt-5.4-mini"
+    deployment: "gpt-5.4-mini"
+    reasoning_effort: "medium"
+    max_output_tokens: 4096
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "main"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v1"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  deliverable_extract_max_chars: 1500
+  task_prompt_truncate_chars: 500
+  batch_size: 1  # no batching; sweep Phase A found variance cost too high
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  version: "v1"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json"
+  partial_save_every_n_tasks: 10
