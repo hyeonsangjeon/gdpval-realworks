@@ -92,5 +92,9 @@ prompt:
 
 output:
   directory: "../data/grades"
-  filename_template: "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json"
+  # NOTE: filename includes "-tiered" suffix so this config's output
+  # does NOT collide with default_gpt5pro.yaml's (which also uses
+  # judge_slug=gpt-5_4-mini at the top level). Required for head-to-head
+  # comparison on exp003.
+  filename_template: "{exp_id}__{judge_slug}-tiered__{rubric_short_sha}__{prompt_v}.json"
   partial_save_every_n_tasks: 10
