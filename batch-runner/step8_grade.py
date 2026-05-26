@@ -443,19 +443,32 @@ def main() -> int:
         )
 
         if partial_every > 0 and idx % partial_every == 0:
-            partial = _build_grade_payload(
-                args.experiment_yaml_name,
-                inf_results,
-                config,
-                config_hash,
-                loader,
-                grader.prompt_version,
-                task_payloads,
-                exp_config=exp_config,
-                source_experiment_id=args.source_experiment_id,
-            )
-            _validate_schema(partial)
-            _save_json(out_path, partial)
+            try:
+                partial = _build_grade_payload(
+                    args.experiment_yaml_name,
+                    inf_results,
+                    config,
+                    config_hash,
+                    loader,
+                    grader.prompt_version,
+                    task_payloads,
+                    exp_config=exp_config,
+                    source_experiment_id=args.source_experiment_id,
+                )
+                _validate_schema(partial)
+                _save_json(out_path, partial)
+            except Exception as save_exc:
+                import traceback
+                print(
+                    f"\n!! PARTIAL SAVE FAILED at idx={idx} task={task.task_id[:8]} !!",
+                    file=sys.stderr,
+                )
+                print(
+                    f"   Exception: {type(save_exc).__name__}: {save_exc}",
+                    file=sys.stderr,
+                )
+                traceback.print_exc(file=sys.stderr)
+                raise
 
     final = _build_grade_payload(
         args.experiment_yaml_name,

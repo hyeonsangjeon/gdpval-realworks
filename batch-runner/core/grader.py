@@ -895,6 +895,16 @@ class Grader:
         total_awarded = sum(it.awarded_score for it in items)
         total_max = task.max_score
         pct = (total_awarded / total_max * 100.0) if total_max else 0.0
+        # Clamp pct to [0, 100] for grade.schema.json v1.0 compatibility
+        # (schema enforces minimum=0, maximum=100). Anomalies (e.g. rubric
+        # items with negative max_score from penalty-style criteria, or
+        # judge-awarded scores exceeding the listed max) remain visible
+        # in the raw `total_awarded` / `total_max` fields; the clamp only
+        # affects the headline pct. Without this clamp a single anomalous
+        # task crashes the next partial_save schema validation and exits
+        # the whole grading run silently (observed: exp003 task #44 = 108.9%,
+        # task #45 = 229.3% → partial save #5 at task 50 fails).
+        pct = max(0.0, min(100.0, pct))
         critical_fail = any(bool(it.required) and it.verdict in ("fail", "judge_error") for it in items)
         return TaskGrade(
             task_id=task.task_id,
