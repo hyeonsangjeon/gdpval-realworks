@@ -174,6 +174,38 @@ jobs:
             -f resume_chunk=$NEXT_CHUNK
           echo "[auto-resume] chunk $NEXT_CHUNK dispatched"
 
+      - name: Auto-analyze (final chunk only)
+        if: steps.grade.outputs.rc == '0' && inputs.dry_run == false
+        run: |
+          # rc=0 means step8 completed all tasks (either single-shot or last
+          # resume chunk). Locate the just-written grade JSON and emit a
+          # markdown analysis (wall-clock, latency, tokens, cost estimate,
+          # top-5 slowest, quality summary).
+          GRADE_FILE=$(ls -t data/grades/${{ inputs.experiment_yaml }}__*.json 2>/dev/null | head -1)
+          if [[ -z "$GRADE_FILE" || ! -f "$GRADE_FILE" ]]; then
+            echo "[analyze] no grade file found for ${{ inputs.experiment_yaml }}; skipping"
+            exit 0
+          fi
+          OUT="${GRADE_FILE%.json}.analysis.md"
+          python scripts/analyze_grade_run.py "$GRADE_FILE" --out "$OUT"
+          echo "[analyze] wrote $OUT"
+          echo "----- preview -----"
+          head -40 "$OUT"
+
+      - name: Commit analysis
+        if: steps.grade.outputs.rc == '0' && inputs.dry_run == false
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/grades/*.analysis.md 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "[analyze] no analysis changes to commit"
+            exit 0
+          fi
+          git commit -m "docs(grading): auto-analysis for ${{ inputs.experiment_yaml }} (${{ inputs.grading_config }})"
+          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git push
+
       - name: Upload grade artifact
         if: always() && inputs.dry_run == false
         uses: actions/upload-artifact@v4
