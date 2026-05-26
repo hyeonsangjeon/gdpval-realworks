@@ -1,0 +1,62 @@
+schema_version: "1.0"
+config_name: "validation_pro_only"
+description: |
+  Restoration of the prior gpt-5.4-pro default config for direct head-to-head
+  measurement on exp003 (220 tasks).
+
+  Goal: verify the sweep's $493 full-run projection (smoke 3-task extrapolation)
+  by actually running 220 tasks. Also measure wall-clock and critical_item_pass_rate
+  for comparison against the hybrid config.
+
+  Filename suffix '-prosolo' so this grade JSON does NOT collide with either
+  the current default (mini) grade or the hybrid grade for the same exp.
+
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.4-pro"
+  deployment: "gpt-5.4-pro"
+  api_version: "2025-04-01-preview"
+  endpoint_env: "AZURE_OPENAI_ENDPOINT"
+  timeout_sec: 600
+  reasoning:
+    effort: "high"
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 4096
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "main"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v1"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  deliverable_extract_max_chars: 4000
+  task_prompt_truncate_chars: 500
+  batch_size: 1
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  version: "v1"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__{judge_slug}-prosolo__{rubric_short_sha}__{prompt_v}.json"
+  partial_save_every_n_tasks: 10

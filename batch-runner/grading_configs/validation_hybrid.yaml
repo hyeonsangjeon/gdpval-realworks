@@ -1,0 +1,91 @@
+schema_version: "1.0"
+config_name: "validation_hybrid"
+description: |
+  Hybrid grading config (user proposal 2026-05-26):
+    - tier_pro      = gpt-5.4-pro      high effort   for weight >= 4 critical items
+    - tier_standard = gpt-5.4          medium effort for the rest of judge items
+    - tier_mini     = gpt-5.4-mini     minimal       for fuzzy-precheck-like items
+
+  Rationale: GPT Pro research (tasks/0526_tuesday/ + earlier) showed that
+  the OpenAI public automated grader is GPT-5-high based, so a tiered config
+  that puts pro+high on the most decisive items is the closest practical proxy.
+  gpt-5.4 standard handles the long tail more cheaply than pro; mini absorbs
+  pattern-matchable fuzzy items.
+
+  Filename suffix '-hybrid' to keep this grade JSON distinct from the current
+  mini default and from validation_pro_only.yaml's grade.
+
+judge:
+  # Top-level judge is the STANDARD tier — its model determines the
+  # cache key and the grade JSON's judge_slug ("gpt-5_4").
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.4"
+  deployment: "gpt-5.4"
+  api_version: "2025-04-01-preview"
+  endpoint_env: "AZURE_OPENAI_ENDPOINT"
+  timeout_sec: 600
+  reasoning:
+    effort: "medium"
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 4096
+
+judge_routing:
+  tier_pro:
+    model: "gpt-5.4-pro"
+    deployment: "gpt-5.4-pro"
+    reasoning_effort: "high"
+    max_output_tokens: 4096
+    route_when:
+      weight_gte: 4
+  tier_standard:
+    model: "gpt-5.4"
+    deployment: "gpt-5.4"
+    reasoning_effort: "medium"
+    max_output_tokens: 4096
+  tier_mini:
+    model: "gpt-5.4-mini"
+    deployment: "gpt-5.4-mini"
+    reasoning_effort: "minimal"
+    max_output_tokens: 400
+    criterion_pattern_match:
+      - "executive summary"
+      - "section titled"
+      - "contains a header"
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "main"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v1"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  deliverable_extract_max_chars: 1500
+  task_prompt_truncate_chars: 500
+  batch_size: 1
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  version: "v1"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__{judge_slug}-hybrid__{rubric_short_sha}__{prompt_v}.json"
+  partial_save_every_n_tasks: 10
