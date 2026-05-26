@@ -4,7 +4,7 @@ description: |
   Hybrid grading config (user proposal 2026-05-26):
     - tier_pro      = gpt-5.4-pro      high effort   for weight >= 4 critical items
     - tier_standard = gpt-5.4          medium effort for the rest of judge items
-    - tier_mini     = gpt-5.4-mini     minimal       for fuzzy-precheck-like items
+    - tier_mini     = gpt-5.4-mini     low effort    for fuzzy-precheck-like items (mini doesn't support 'minimal')
 
   Rationale: GPT Pro research (tasks/0526_tuesday/ + earlier) showed that
   the OpenAI public automated grader is GPT-5-high based, so a tiered config
@@ -48,7 +48,8 @@ judge_routing:
   tier_mini:
     model: "gpt-5.4-mini"
     deployment: "gpt-5.4-mini"
-    reasoning_effort: "minimal"
+    # gpt-5.4-mini does not accept 'minimal'; valid: none/low/medium/high/xhigh
+    reasoning_effort: "low"
     max_output_tokens: 400
     criterion_pattern_match:
       - "executive summary"

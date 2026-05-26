@@ -87,7 +87,7 @@ output:
 #
 # Each tier may override `model`, `deployment`, `reasoning_effort`, and
 # `max_output_tokens`. Fields omitted inherit from the top-level `judge`
-# block. tier_mini defaults: reasoning_effort="minimal",
+# block. tier_mini defaults: reasoning_effort="low"  # mini does not support "minimal",
 # max_output_tokens=400.
 #
 # REMOVE this block entirely to disable tiered routing. With routing
@@ -110,7 +110,7 @@ output:
 #   tier_mini:
 #     model: "gpt-5.4-mini"
 #     deployment: "gpt-5.4-mini"
-#     reasoning_effort: "minimal"
+#     reasoning_effort: "low"  # mini: "minimal" is rejected by Azure
 #     max_output_tokens: 400
 #     criterion_pattern_match:
 #       - "executive summary"

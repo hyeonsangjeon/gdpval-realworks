@@ -256,7 +256,11 @@ class Grader:
 
         if tier_mini_block:
             mini_defaults = dict(base_judge_cfg)
-            mini_defaults["reasoning_effort"] = tier_mini_block.get("reasoning_effort", "minimal")
+            # NOTE: 'minimal' is NOT supported by gpt-5.4-mini (Azure rejects
+            # with HTTP 400 'Unsupported value'). Valid effort levels for the
+            # mini model are: none, low, medium, high, xhigh. We default to
+            # 'low' (the lightest valid level) for the cost-efficient tier.
+            mini_defaults["reasoning_effort"] = tier_mini_block.get("reasoning_effort", "low")
             mini_defaults["max_output_tokens"] = int(tier_mini_block.get("max_output_tokens", 400))
             mini_cfg = _tier_cfg(tier_mini_block, mini_defaults)
             self._tier_judges["mini"] = BatchJudge(
