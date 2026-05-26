@@ -27,11 +27,22 @@ on:
         required: false
         type: boolean
         default: false
+      resume:
+        description: "Resume from existing partial grade JSON (chunked execution)"
+        required: false
+        type: boolean
+        default: false
+      resume_chunk:
+        description: "Current chunk index (auto-incremented on self-retrigger). Safety cap = 10."
+        required: false
+        type: number
+        default: 0
 
 permissions:
   contents: write
   id-token: write
   pull-requests: write
+  actions: write  # required for self-retrigger via gh workflow run
 
 concurrency:
   group: grade-${{ inputs.experiment_yaml }}-${{ inputs.grading_config }}
@@ -40,7 +51,11 @@ concurrency:
 jobs:
   grade:
     runs-on: ubuntu-latest
-    timeout-minutes: 480
+    # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
+    # extended. We set 320min so step8_grade.py's internal 4h time guard (env
+    # GRADER_TIME_BUDGET_SEC=14400) trips first, partial-saves, and exits 7,
+    # leaving ~40min headroom for the commit + retrigger steps below.
+    timeout-minutes: 320
 
     steps:
       - uses: actions/checkout@v4
@@ -73,8 +88,13 @@ jobs:
             --output workspace/step2_inference_results.json
 
       - name: Run grading
+        id: grade
         env:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          # 4-hour internal time budget. step8_grade.py partial-saves and
+          # exits 7 when this trips, letting the workflow self-retrigger
+          # below before the 320-min job timeout-kills the runner.
+          GRADER_TIME_BUDGET_SEC: "14400"
         run: |
           cd batch-runner
           ARGS=(
@@ -83,7 +103,12 @@ jobs:
             --source local
           )
 
-          if [[ "${{ inputs.force }}" == "true" ]]; then
+          # --force and --resume are mutually exclusive in semantics; only
+          # the first chunk should honor --force, subsequent resume chunks
+          # must NOT pass it (would wipe the partial).
+          if [[ "${{ inputs.resume }}" == "true" ]]; then
+            ARGS+=(--resume)
+          elif [[ "${{ inputs.force }}" == "true" ]]; then
             ARGS+=(--force)
           fi
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
@@ -93,10 +118,21 @@ jobs:
             ARGS+=(--limit "${{ inputs.tasks_limit }}")
           fi
 
+          set +e
           python step8_grade.py "${ARGS[@]}"
+          RC=$?
+          set -e
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          echo "[grade-step] step8_grade.py exited with rc=$RC"
+          # Treat 0 (done) and 7 (chunk-resume) as success at the step
+          # level so subsequent commit/retrigger steps always run. Any
+          # other non-zero is a real failure → fail loud below.
+          if [[ "$RC" != "0" && "$RC" != "7" ]]; then
+            exit "$RC"
+          fi
 
       - name: Commit grade result
-        if: inputs.dry_run == false
+        if: always() && (steps.grade.outputs.rc == '0' || steps.grade.outputs.rc == '7') && inputs.dry_run == false
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -105,8 +141,38 @@ jobs:
             echo "No grade file changes (likely skip-cache hit)"
             exit 0
           fi
-          git commit -m "chore(grades): grade ${{ inputs.experiment_yaml }} via ${{ inputs.grading_config }}"
+          if [[ "${{ steps.grade.outputs.rc }}" == "7" ]]; then
+            MSG="chore(grades): partial chunk ${{ inputs.resume_chunk }} for ${{ inputs.experiment_yaml }} via ${{ inputs.grading_config }}"
+          else
+            MSG="chore(grades): grade ${{ inputs.experiment_yaml }} via ${{ inputs.grading_config }}"
+          fi
+          git commit -m "$MSG"
+          # Resilient push: another auto-chunk commit could land between our
+          # checkout and push. Pull --rebase once and retry.
+          git pull --rebase origin "${GITHUB_REF_NAME}" || true
           git push
+
+      - name: Auto-retrigger next chunk (time budget hit)
+        if: steps.grade.outputs.rc == '7' && inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEXT_CHUNK=$(( ${{ inputs.resume_chunk }} + 1 ))
+          if [[ $NEXT_CHUNK -gt 10 ]]; then
+            echo "::error::resume_chunk=$NEXT_CHUNK exceeds safety cap (10). Aborting auto-resume; investigate manually."
+            exit 1
+          fi
+          echo "[auto-resume] triggering chunk $NEXT_CHUNK for ${{ inputs.experiment_yaml }} / ${{ inputs.grading_config }}"
+          gh workflow run grade-run.yml \
+            --ref "${GITHUB_REF_NAME}" \
+            -f experiment_yaml="${{ inputs.experiment_yaml }}" \
+            -f grading_config="${{ inputs.grading_config }}" \
+            -f force=false \
+            -f tasks_limit=${{ inputs.tasks_limit }} \
+            -f dry_run=false \
+            -f resume=true \
+            -f resume_chunk=$NEXT_CHUNK
+          echo "[auto-resume] chunk $NEXT_CHUNK dispatched"
 
       - name: Upload grade artifact
         if: always() && inputs.dry_run == false

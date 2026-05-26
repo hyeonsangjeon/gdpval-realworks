@@ -13,7 +13,9 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import sys
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,6 +50,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tasks", help="Comma-separated task ids")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of tasks")
     parser.add_argument("--source", choices=["local", "hf"], default="local")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume an in-progress grade run. Reads any existing grade JSON at "
+            "the templated output path, skips tasks whose task_id is already "
+            "graded, and continues. Combined with the time guard (env "
+            "GRADER_TIME_BUDGET_SEC, default 14400 = 4h), this lets a long "
+            "grade run chunk itself across multiple GH Actions invocations. "
+            "Exit code 7 is returned when the time budget is hit BEFORE "
+            "completing all tasks; the caller (workflow) should re-invoke "
+            "with --resume to continue from the partial."
+        ),
+    )
     parser.add_argument(
         "--source-experiment-id",
         default=None,
@@ -411,8 +427,8 @@ def main() -> int:
     )
     out_path = out_dir / out_name
 
-    if out_path.exists() and not args.force:
-        print(f"SKIP - exists: {out_path}. Use --force to overwrite.")
+    if out_path.exists() and not args.force and not args.resume:
+        print(f"SKIP - exists: {out_path}. Use --force to overwrite or --resume to continue.")
         return 0
 
     tasks = filter_tasks(inf_results, args.tasks, args.limit)
@@ -429,8 +445,70 @@ def main() -> int:
 
     partial_every = int(config.get("output", {}).get("partial_save_every_n_tasks", 10))
     task_payloads: list[dict] = []
+    completed_task_ids: set[str] = set()
+
+    # Resume: load existing partial JSON if present and harvest completed task_ids
+    if args.resume and out_path.exists():
+        try:
+            with open(out_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            task_payloads = list(existing.get("tasks", []))
+            completed_task_ids = {t.get("task_id") for t in task_payloads if t.get("task_id")}
+            print(
+                f"[resume] loaded {len(completed_task_ids)} previously graded tasks from {out_path}",
+                file=sys.stderr,
+            )
+        except Exception as exc:
+            print(f"WARNING: --resume failed to load {out_path} ({exc}); starting fresh", file=sys.stderr)
+            task_payloads = []
+            completed_task_ids = set()
+
+    # Time guard: pre-empt GH Actions hard 6h limit. Default 4h (14400s)
+    # leaves ~80 min for the workflow's retrigger + setup overhead and the
+    # final partial save. Caller can override via env (e.g. shorter budgets
+    # for tighter chunks, or longer for self-hosted runners).
+    time_budget_sec = int(os.getenv("GRADER_TIME_BUDGET_SEC", "14400"))
+    grade_loop_start = time.monotonic()
+    GRADE_EXIT_RESUME = 7  # contract with grade-run.yml's auto-trigger step
 
     for idx, task_result in enumerate(tasks, start=1):
+        # Resume skip
+        if task_result["task_id"] in completed_task_ids:
+            continue
+
+        # Time-budget pre-check (before starting an expensive judge call)
+        elapsed_sec = time.monotonic() - grade_loop_start
+        if time_budget_sec > 0 and elapsed_sec > time_budget_sec:
+            graded_count = len(task_payloads)
+            remaining = len(tasks) - graded_count
+            print(
+                f"\n[time-guard] elapsed {elapsed_sec/60:.1f}min > budget "
+                f"{time_budget_sec/60:.0f}min; graded={graded_count}/{len(tasks)} "
+                f"remaining={remaining}. Saving partial and requesting resume.",
+                file=sys.stderr,
+            )
+            try:
+                partial = _build_grade_payload(
+                    args.experiment_yaml_name,
+                    inf_results,
+                    config,
+                    config_hash,
+                    loader,
+                    grader.prompt_version,
+                    task_payloads,
+                    exp_config=exp_config,
+                    source_experiment_id=args.source_experiment_id,
+                )
+                _validate_schema(partial)
+                _save_json(out_path, partial)
+                print(f"[time-guard] partial saved → {out_path}", file=sys.stderr)
+            except Exception as save_exc:
+                import traceback
+                print(f"[time-guard] partial save FAILED: {save_exc}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+                # Still exit with 7 so caller retriggers; we have what we have
+            return GRADE_EXIT_RESUME
+
         task = loader.load(task_result["task_id"])
         deliverable_dir = resolve_deliverable_dir(task_result)
         grade = grader.grade_task(task, deliverable_dir)
