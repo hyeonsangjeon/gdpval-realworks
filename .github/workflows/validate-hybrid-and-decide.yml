@@ -1,0 +1,161 @@
+name: Validate Hybrid (C') and Auto-decide Full Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      experiment_yaml:
+        description: "Experiment YAML name (without .yaml)"
+        required: true
+        type: string
+        default: "exp003_GPT52Chat_baseline_runner_exec"
+      hybrid_config:
+        description: "Hybrid grading config under batch-runner/grading_configs/"
+        required: true
+        type: string
+        default: "validation_hybrid.yaml"
+      pair_limit:
+        description: "Number of tasks to grade with mini for pair-wise comparison"
+        required: false
+        type: number
+        default: 28
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: write
+  actions: write  # dispatch grade-run.yml on PROCEED
+
+concurrency:
+  group: validate-hybrid-${{ inputs.experiment_yaml }}
+  cancel-in-progress: false
+
+jobs:
+  validate-and-decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90  # mini --limit 28 should finish in ~30 min; 90 leaves headroom
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download inference results from HF
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd batch-runner
+          python scripts/download_inference_from_hf.py \
+            --experiment "${{ inputs.experiment_yaml }}" \
+            --output workspace/step2_inference_results.json
+
+      - name: Step1 — verify hybrid partial JSON exists (required for comparison)
+        id: check_hybrid
+        run: |
+          HYBRID_FILE=$(ls data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-hybrid__*.json 2>/dev/null | head -1)
+          if [[ -z "$HYBRID_FILE" || ! -f "$HYBRID_FILE" ]]; then
+            echo "::error::No hybrid grade JSON found at data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-hybrid__*.json"
+            exit 1
+          fi
+          echo "hybrid_file=$HYBRID_FILE" >> "$GITHUB_OUTPUT"
+          GRADED=$(python -c "import json; print(json.load(open('$HYBRID_FILE'))['summary']['graded_tasks'])")
+          echo "[check] hybrid file = $HYBRID_FILE (graded $GRADED tasks)"
+
+      - name: Step2 — run mini default --limit pair_limit
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          PYTHONUNBUFFERED: "1"
+          GRADER_TIME_BUDGET_SEC: "5400"  # 90 min hard cap (way more than needed)
+        run: |
+          cd batch-runner
+          python step8_grade.py \
+            "${{ inputs.experiment_yaml }}" \
+            --config grading_configs/default_gpt5pro.yaml \
+            --source local \
+            --limit ${{ inputs.pair_limit }} \
+            --force
+
+      - name: Step3 — pair-wise compare hybrid vs mini
+        id: compare
+        run: |
+          HYBRID_FILE="${{ steps.check_hybrid.outputs.hybrid_file }}"
+          MINI_FILE=$(ls data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-mini__*.json 2>/dev/null | head -1)
+          if [[ -z "$MINI_FILE" ]]; then
+            echo "::error::No mini grade JSON found after step8 run"
+            exit 1
+          fi
+          mkdir -p data/grades/_validation
+          OUT_MD="data/grades/_validation/COMPARE_${{ inputs.experiment_yaml }}_hybrid_vs_mini.md"
+          OUT_DEC="data/grades/_validation/DECISION_${{ inputs.experiment_yaml }}.json"
+
+          python scripts/compare_grades.py \
+            "$HYBRID_FILE" "$MINI_FILE" \
+            --out-md "$OUT_MD" \
+            --out-decision "$OUT_DEC"
+
+          DECISION=$(python -c "import json; print(json.load(open('$OUT_DEC'))['decision'])")
+          echo "decision=$DECISION" >> "$GITHUB_OUTPUT"
+          echo "[decision] $DECISION"
+          echo "----- comparison preview -----"
+          head -40 "$OUT_MD"
+
+      - name: Step4 — commit validation artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-mini__*.json \
+                  data/grades/_validation/
+          if git diff --staged --quiet; then
+            echo "[commit] nothing to commit"
+            exit 0
+          fi
+          git commit -m "validate(grading): C' pair-wise hybrid vs mini for ${{ inputs.experiment_yaml }} → decision=${{ steps.compare.outputs.decision }}"
+          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git push
+
+      - name: Step5 — auto-dispatch hybrid full run (PROCEED only)
+        if: steps.compare.outputs.decision == 'PROCEED'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Pre-clean the hybrid partial JSON so full run starts from scratch.
+          # The partial is preserved by git history; we delete + commit to
+          # avoid the --resume code path picking it up by mistake.
+          HYBRID_FILE="${{ steps.check_hybrid.outputs.hybrid_file }}"
+          git rm -f "$HYBRID_FILE" || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(grades): clear hybrid partial pre-full-run (validate decision=PROCEED)"
+            git pull --rebase origin "${GITHUB_REF_NAME}" || true
+            git push
+          fi
+          echo "[dispatch] PROCEED → triggering grade-run.yml hybrid full run"
+          gh workflow run grade-run.yml \
+            --ref "${GITHUB_REF_NAME}" \
+            -f experiment_yaml="${{ inputs.experiment_yaml }}" \
+            -f grading_config="${{ inputs.hybrid_config }}" \
+            -f force=true \
+            -f tasks_limit=0 \
+            -f dry_run=false \
+            -f resume=false \
+            -f resume_chunk=0
+          echo "[dispatch] hybrid full run dispatched"
+
+      - name: Step5b — ABORT notice
+        if: steps.compare.outputs.decision == 'ABORT'
+        run: |
+          echo "::warning::Hybrid validation ABORTED. See data/grades/_validation/COMPARE_${{ inputs.experiment_yaml }}_hybrid_vs_mini.md for details. No full run will be dispatched."
