@@ -91,6 +91,11 @@ jobs:
         id: grade
         env:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          # Force unbuffered Python stdout so per-task progress prints
+          # appear in the GH Actions log in real time. Without this, GHA's
+          # pipe-style stdout triggers full-buffer mode and the log looks
+          # frozen for many minutes between flushes.
+          PYTHONUNBUFFERED: "1"
           # 4-hour internal time budget. step8_grade.py partial-saves and
           # exits 7 when this trips, letting the workflow self-retrigger
           # below before the 320-min job timeout-kills the runner.
