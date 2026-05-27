@@ -1,0 +1,11 @@
+{
+  "decision": "PROCEED",
+  "ratio": 0.7777561734396268,
+  "threshold": 0.7,
+  "hybrid_critical_pass": 0.4,
+  "mini_critical_pass": 0.5143,
+  "hybrid_avg": 44.12,
+  "mini_avg": 55.78,
+  "task_pairs": 12,
+  "rationale": "hybrid critical_pass 0.400 / mini critical_pass 0.514 = 0.78 \u2265 0.7. Hybrid stays within tolerance; full run carries usable signal."
+}
