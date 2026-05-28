@@ -211,6 +211,82 @@ jobs:
           git pull --rebase origin "${GITHUB_REF_NAME}" || true
           git push
 
+      # ----------------------------------------------------------------
+      # Auto follow-up (head-to-head full comparison) — only fires on rc=0
+      # (a full run completion, not a chunk-resume mid-stream).
+      #
+      # Two paths, mutually exclusive:
+      #   A) hybrid full done → dispatch mini default full for the same exp
+      #   B) mini default full done AND hybrid full already exists →
+      #      run compare_grades.py on the FULL 220-task pair and commit
+      # ----------------------------------------------------------------
+
+      - name: Auto-dispatch mini default full (when hybrid full completes)
+        if: |
+          steps.grade.outputs.rc == '0' &&
+          inputs.dry_run == false &&
+          contains(inputs.grading_config, 'validation_hybrid')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Skip if a near-complete mini default grade already exists for this exp
+          # (treat >= 200 graded tasks as "covers full" tolerance for resume edge cases).
+          MINI_FILE=$(ls data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-mini__*.json 2>/dev/null | head -1)
+          if [[ -n "$MINI_FILE" && -f "$MINI_FILE" ]]; then
+            MINI_GRADED=$(python -c "import json; print(json.load(open('$MINI_FILE'))['summary']['graded_tasks'])")
+            if [[ "$MINI_GRADED" -ge "200" ]]; then
+              echo "[follow-up] mini default grade already covers $MINI_GRADED tasks; skipping dispatch"
+              exit 0
+            fi
+            echo "[follow-up] mini default has $MINI_GRADED < 200; will force-rerun"
+          fi
+          echo "[follow-up] hybrid full done → dispatching mini default full for head-to-head comparison"
+          gh workflow run grade-run.yml \
+            --ref "${GITHUB_REF_NAME}" \
+            -f experiment_yaml="${{ inputs.experiment_yaml }}" \
+            -f grading_config="default_gpt5pro.yaml" \
+            -f force=true \
+            -f tasks_limit=0 \
+            -f dry_run=false \
+            -f resume=false \
+            -f resume_chunk=0
+
+      - name: Auto-compare hybrid vs mini (when mini default full completes)
+        if: |
+          steps.grade.outputs.rc == '0' &&
+          inputs.dry_run == false &&
+          contains(inputs.grading_config, 'default_gpt5pro')
+        run: |
+          HYBRID_FILE=$(ls data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-hybrid__*.json 2>/dev/null | head -1)
+          MINI_FILE=$(ls data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-mini__*.json 2>/dev/null | head -1)
+          if [[ -z "$HYBRID_FILE" || -z "$MINI_FILE" || ! -f "$HYBRID_FILE" || ! -f "$MINI_FILE" ]]; then
+            echo "[compare-full] missing hybrid or mini grade JSON; skipping"
+            exit 0
+          fi
+          HYBRID_GRADED=$(python -c "import json; print(json.load(open('$HYBRID_FILE'))['summary']['graded_tasks'])")
+          MINI_GRADED=$(python -c "import json; print(json.load(open('$MINI_FILE'))['summary']['graded_tasks'])")
+          if [[ "$HYBRID_GRADED" -lt "200" || "$MINI_GRADED" -lt "200" ]]; then
+            echo "[compare-full] hybrid=$HYBRID_GRADED mini=$MINI_GRADED; need >=200 on both, skipping"
+            exit 0
+          fi
+          mkdir -p data/grades/_validation
+          OUT_MD="data/grades/_validation/COMPARE_FULL_${{ inputs.experiment_yaml }}_hybrid_vs_mini.md"
+          OUT_DEC="data/grades/_validation/DECISION_FULL_${{ inputs.experiment_yaml }}.json"
+          python scripts/compare_grades.py "$HYBRID_FILE" "$MINI_FILE" \
+            --out-md "$OUT_MD" --out-decision "$OUT_DEC"
+          echo "----- full-run decision -----"
+          cat "$OUT_DEC"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/grades/_validation/
+          if git diff --staged --quiet; then
+            echo "[compare-full] no diff to commit"
+            exit 0
+          fi
+          git commit -m "compare(grading): full-run hybrid vs mini default for ${{ inputs.experiment_yaml }}"
+          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git push
+
       - name: Upload grade artifact
         if: always() && inputs.dry_run == false
         uses: actions/upload-artifact@v4
