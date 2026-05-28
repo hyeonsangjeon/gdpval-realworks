@@ -2,12 +2,21 @@
 
 Usage:
     pytest tests/test_main.py -v
+
+NOTE: `main.py` was the pre-pipeline monolith; the project has since been
+split into step1_prepare_tasks.py / step2_run_inference.py / ... and the
+monolith was removed. These tests are kept as legacy reference but skip
+at collection time when `main` is not importable so the rest of the
+suite can collect.
 """
+
+import pytest
+
+pytest.importorskip("main")
 
 import os
 import sys
 import json
-import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from types import SimpleNamespace

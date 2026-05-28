@@ -123,7 +123,12 @@ class TestGDPValDataLoader:
             loader.load()
 
         assert "Local snapshot not found" in str(exc_info.value)
-        assert "download()" in str(exc_info.value)
+        # Error now points the operator at step0_bootstrap.sh (the canonical
+        # entry point) instead of the old download() helper. Either string is
+        # accepted so the assertion survives future wording changes that keep
+        # the same intent.
+        msg = str(exc_info.value)
+        assert ("step0_bootstrap.sh" in msg) or ("download()" in msg)
 
     def test_parse_task_with_all_fields(self):
         """Test _parse_task with all fields present"""

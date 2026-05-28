@@ -2,12 +2,17 @@
 
 Usage:
     pytest tests/test_main_hf_integration.py -v
+
+NOTE: `main.py` was removed when the project was split into step1..step7.
+Kept as legacy reference; importorskip at collection time so the rest of
+the test suite can collect.
 """
 
 import pytest
 from unittest.mock import patch, Mock, MagicMock
 from pathlib import Path
 
+pytest.importorskip("main")
 # Skip if huggingface_hub not available
 pytest.importorskip("huggingface_hub")
 
