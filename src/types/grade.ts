@@ -116,6 +116,25 @@ export interface GradeSummaryV1 {
   calibration_counts?: CalibrationCounts | null
 }
 
+export interface JudgeTierConfig {
+  model?: string
+  deployment?: string
+  reasoning_effort?: string
+  max_output_tokens?: number
+}
+
+/**
+ * Tier-routing block emitted by hybrid grading configs (see
+ * `batch-runner/grading_configs/validation_hybrid.yaml`). Present only
+ * when the grade JSON was produced by a tiered judge config; absent for
+ * single-model runs (default_gpt5pro, validation_pro_only, ...).
+ */
+export interface JudgeRouting {
+  tier_pro?: JudgeTierConfig
+  tier_standard?: JudgeTierConfig
+  tier_mini?: JudgeTierConfig
+}
+
 export interface JudgeProvenance {
   provider: string
   api: string
@@ -125,6 +144,12 @@ export interface JudgeProvenance {
   reasoning_effort: string
   temperature: number
   seed?: number
+  /** Grading config name (e.g. 'default_gpt5pro', 'validation_hybrid'). */
+  config_name?: string
+  /** Stable 16-char hash of the config used as part of the cache key. */
+  config_hash?: string
+  /** Tier-routing block, present only on hybrid runs. */
+  routing?: JudgeRouting
 }
 
 export interface RubricProvenance {

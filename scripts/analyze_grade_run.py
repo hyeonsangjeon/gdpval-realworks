@@ -19,8 +19,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# input, output per 1M tokens (USD). Edit to keep current. Conservative
-# Azure OpenAI list prices as of 2025-Q2.
+# input, output per 1M tokens (USD). Edit to keep current. These are
+# Azure OpenAI list prices as of 2025-Q2 (best-effort). For internal/external
+# tenant negotiated rates, override via OVERRIDE_PRICING below or fork.
+# Source: https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/
+# Last reviewed: 2026-05-28 (best-effort; check before quoting numbers).
 PRICING_USD_PER_M_TOKENS = {
     "gpt-5.4-pro":  (5.00, 15.00),
     "gpt-5.4":      (1.25,  5.00),
@@ -42,9 +45,16 @@ def _price_for(model: str) -> tuple[float, float]:
     return PRICING_USD_PER_M_TOKENS.get(model, (0.0, 0.0))
 
 
-def _estimate_cost(in_tok: int, out_tok: int, model: str) -> float:
+def _estimate_cost(in_tok: int, out_tok: int, model: str) -> dict:
+    """Return cost as {input_usd, output_usd, total_usd} for transparency."""
     pi, po = _price_for(model)
-    return (in_tok / 1_000_000.0) * pi + (out_tok / 1_000_000.0) * po
+    in_cost = (in_tok / 1_000_000.0) * pi
+    out_cost = (out_tok / 1_000_000.0) * po
+    return {
+        "input_usd": round(in_cost, 4),
+        "output_usd": round(out_cost, 4),
+        "total_usd": round(in_cost + out_cost, 4),
+    }
 
 
 def _hybrid_cost_estimate(grade: dict, total_in: int, total_out: int) -> dict:
@@ -57,10 +67,13 @@ def _hybrid_cost_estimate(grade: dict, total_in: int, total_out: int) -> dict:
     routing = grade.get("judge", {}).get("routing")
     if not routing:
         m = grade["judge"]["model"]
+        c = _estimate_cost(total_in, total_out, m)
         return {
             "mode": "single",
             "model": m,
-            "cost_usd": _estimate_cost(total_in, total_out, m),
+            "cost_usd": c["total_usd"],
+            "input_usd": c["input_usd"],
+            "output_usd": c["output_usd"],
         }
 
     # tier proxy: count items decided_by != precheck and split by ... we have
@@ -76,11 +89,13 @@ def _hybrid_cost_estimate(grade: dict, total_in: int, total_out: int) -> dict:
 
     per_model = []
     for m in tier_models:
+        c = _estimate_cost(total_in, total_out, m)
         per_model.append({
             "model": m,
-            "cost_at_100pct": _estimate_cost(total_in, total_out, m),
+            "cost_at_100pct": c["total_usd"],
+            "input_usd_at_100pct": c["input_usd"],
+            "output_usd_at_100pct": c["output_usd"],
         })
-    # range estimate
     costs = [p["cost_at_100pct"] for p in per_model]
     return {
         "mode": "routing_blended_estimate",
@@ -172,7 +187,10 @@ def analyze(path: Path) -> dict:
 
 def _fmt_cost(c: dict) -> str:
     if c["mode"] == "single":
-        return f"${c['cost_usd']:.2f}  (model={c['model']})"
+        return (
+            f"${c['cost_usd']:.2f}  (model={c['model']}; "
+            f"in=${c.get('input_usd', 0):.2f}, out=${c.get('output_usd', 0):.2f})"
+        )
     if c["mode"] == "routing_blended_estimate":
         return (
             f"${c['cost_usd_min']:.2f} ~ ${c['cost_usd_max']:.2f} "
