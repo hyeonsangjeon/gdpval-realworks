@@ -372,3 +372,153 @@ def test_T_C_source_experiment_id_cli_override(monkeypatch, tmp_path):
     assert payload["source_inference_experiment_id"] == "exp999_smoke_baseline_sample"
     assert payload["experiment_id"] == "exp998_smoke_baseline_sample"
     assert payload["experiment_yaml_name"] == "exp998_smoke_baseline_sample"
+
+
+# ---------------------------------------------------------------------------
+# --resume + time-budget (chunked auto-resume) tests
+# ---------------------------------------------------------------------------
+
+def _seed_partial_grade(tmp_path: Path, task_ids: list[str]) -> Path:
+    """Drop a valid partial grade JSON at the templated output path."""
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": "1.0",
+        "tasks": [
+            {
+                "task_id": tid,
+                "sector": "s",
+                "occupation": "o",
+                "items": [],
+                "total_awarded": 2,
+                "total_max": 2,
+                "pct": 100.0,
+                "critical_fail": False,
+                "gold_referenced": False,
+                "judge_call_count": 0,
+                "precheck_count": 1,
+                "judge_total_latency_ms": 0,
+                "judge_input_tokens": 0,
+                "judge_output_tokens": 0,
+                "graded_at": "2026-05-27T00:00:00Z",
+                "error": None,
+            }
+            for tid in task_ids
+        ],
+    }
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    return out
+
+
+def test_resume_skips_already_completed_tasks(monkeypatch, tmp_path):
+    """--resume must skip tasks whose task_id is in the existing grade JSON,
+    so the underlying Grader is only called for the remaining ones."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    grader_instance = {}
+
+    class _TrackGrader(_FakeGrader):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            grader_instance["g"] = self
+
+    monkeypatch.setattr(s8, "Grader", _TrackGrader)
+
+    # Seed partial with task-001 and task-002 already graded.
+    _seed_partial_grade(tmp_path, ["task-001", "task-002"])
+
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+        "--resume",
+    ])
+    rc = s8.main()
+    assert rc == 0
+    # Only task-003 should have hit the grader.
+    assert grader_instance["g"].calls == 1
+
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    ids = [t["task_id"] for t in payload["tasks"]]
+    assert ids == ["task-001", "task-002", "task-003"]
+
+
+def test_resume_without_existing_file_starts_fresh(monkeypatch, tmp_path):
+    """--resume on a clean workspace must NOT crash; it should grade everything."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    grader_instance = {}
+
+    class _TrackGrader(_FakeGrader):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            grader_instance["g"] = self
+
+    monkeypatch.setattr(s8, "Grader", _TrackGrader)
+
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+        "--resume",
+    ])
+    rc = s8.main()
+    assert rc == 0
+    assert grader_instance["g"].calls == 3  # all three
+
+
+def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path):
+    """When GRADER_TIME_BUDGET_SEC elapses before all tasks are graded, step8
+    must (a) save a valid partial JSON and (b) return exit code 7 so the
+    workflow's auto-retrigger step fires."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    grader_instance = {}
+
+    class _TrackGrader(_FakeGrader):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            grader_instance["g"] = self
+
+    monkeypatch.setattr(s8, "Grader", _TrackGrader)
+
+    # Fake clock: call #1 = loop start (t=0); call #2+ = past deadline (t=9999s).
+    times = iter([0.0] + [9999.0] * 50)
+    monkeypatch.setattr(s8.time, "monotonic", lambda: next(times))
+    monkeypatch.setenv("GRADER_TIME_BUDGET_SEC", "100")
+
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+        "--force",
+    ])
+    rc = s8.main()
+    assert rc == 7
+    # Time guard trips BEFORE the first grade_task call.
+    assert grader_instance["g"].calls == 0
+    # Partial grade JSON written (empty tasks list but valid schema).
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    assert out.exists()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "1.0"
+    assert payload["tasks"] == []
+
+
+def test_time_budget_zero_disables_guard(monkeypatch, tmp_path):
+    """GRADER_TIME_BUDGET_SEC=0 must disable the deadline check entirely
+    (escape hatch for self-hosted runners or debugging)."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    monkeypatch.setenv("GRADER_TIME_BUDGET_SEC", "0")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+        "--force",
+    ])
+    rc = s8.main()
+    assert rc == 0
