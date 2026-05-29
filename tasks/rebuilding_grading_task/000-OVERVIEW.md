@@ -12,15 +12,15 @@
 
 ## PR 분할 (SPEC §6 + 본 작업자 분해)
 
-### PR1 — Score-Math Sign-Bug Fix (선행, 필수)
+### PR1 — Score-Math Sign-Bug Fix (선행, 필수)  ✅ **CLOSED** — see [PR1_REPORT.md](./PR1_REPORT.md)
 
 | # | task | 상태 |
 |---|---|---|
-| 100 | [sign-aware aggregate](./100-sign-aware-aggregate.md) | ☐ |
-| 101 | [critical redefinition](./101-critical-redefinition.md) | ☐ |
-| 102 | [non-positive total_max handling](./102-handle-nonpositive-total-max.md) | ☐ |
-| 103 | [backfill existing grades](./103-backfill-existing-grades.md) | ☐ |
-| 104 | [regression sweep + report](./104-pr1-regression-sweep.md) | ☐ |
+| 100 | [sign-aware aggregate](./100-sign-aware-aggregate.md) | ✅ `240b860` |
+| 101 | [critical redefinition](./101-critical-redefinition.md) | ✅ `ad3b922` |
+| 102 | [non-positive total_max handling](./102-handle-nonpositive-total-max.md) | ✅ `b9c46e8` |
+| 103 | [backfill existing grades](./103-backfill-existing-grades.md) | ✅ `933c25e` |
+| 104 | [regression sweep + report](./104-pr1-regression-sweep.md) | ✅ (this commit) |
 
 **Acceptance**: PR1 끝나면 main 헤드라인 지표(`avg_score_pct`, `critical_item_pass_rate`)가 sign-aware로 신뢰 가능.
 
