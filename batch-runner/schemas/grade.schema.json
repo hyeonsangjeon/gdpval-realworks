@@ -135,6 +135,7 @@
           "total_awarded": {"type": "number"},
           "total_max": {"type": "number"},
           "pct": {"type": "number", "minimum": 0, "maximum": 100},
+          "pct_raw": {"type": "number", "description": "Un-clamped pct (PR1 task 102). Can be negative when negative-magnitude penalties dominate; can theoretically exceed 100 if the judge over-awards. The clamped `pct` field above is used for schema validity and dashboard display; pct_raw exposes the underlying ratio for diagnostics."},
           "critical_fail": {"type": "boolean"},
           "gold_referenced": {"type": "boolean"},
           "judge_call_count": {"type": "integer", "minimum": 0},

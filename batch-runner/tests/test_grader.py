@@ -527,3 +527,106 @@ def test_critical_fail_uses_sign_aware_did_right(monkeypatch, tmp_path):
         _task(item_d),
     )
     assert tg.critical_fail is False
+
+
+# ---------------------------------------------------------------------------
+# PR1 task 102 — positive-only denominator + pct_raw diagnostics
+# ---------------------------------------------------------------------------
+
+def test_max_score_excludes_negative_items():
+    """TaskRubric.max_score must sum positive item scores only.
+    Negative penalty items still count in total_awarded (via judge output)
+    but never as part of the maximum-achievable denominator."""
+    from core.rubric_loader import RubricItem, TaskRubric
+    task = TaskRubric(
+        task_id="t", sector="s", occupation="o", prompt="p",
+        rubric_items=[
+            RubricItem("r1", "good thing", 5, None),     # +5
+            RubricItem("r2", "good thing", 2, None),     # +2
+            RubricItem("r3", "bad penalty", -85, None),  # -85 (excluded)
+        ],
+        rubric_pretty="", reference_files=[], gold_deliverable_files=[],
+    )
+    assert task.max_score == 7, "max_score must sum positive scores only"
+
+
+def test_pct_raw_preserves_negative_value(monkeypatch, tmp_path):
+    """When a task has more penalty than credit, pct_raw must reflect the
+    true negative ratio while pct is clamped to 0."""
+    from core.grader import ItemGrade
+    from core.rubric_loader import RubricItem, TaskRubric
+    grader = _make_grader(monkeypatch, tmp_path)
+    task = TaskRubric(
+        task_id="t", sector="s", occupation="o", prompt="p",
+        rubric_items=[
+            RubricItem("r1", "good", 10, None),
+            RubricItem("r2", "bad penalty", -85, None),
+        ],
+        rubric_pretty="", reference_files=[], gold_deliverable_files=[],
+    )
+    tg = grader._aggregate(
+        [
+            # model satisfied the good criterion (full credit)
+            ItemGrade(rubric_item_id="r1", criterion="good", max_score=10,
+                      awarded_score=10, verdict="pass", decided_by="judge",
+                      required=None, evidence="e"),
+            # model violated the penalty criterion (pass on negative item = bad)
+            ItemGrade(rubric_item_id="r2", criterion="bad", max_score=-85,
+                      awarded_score=-85.0, verdict="pass", decided_by="judge",
+                      required=None, evidence="e"),
+        ],
+        task,
+    )
+    # denominator = 10 (positive only)
+    assert tg.total_max == 10
+    # total_awarded = 10 + (-85) = -75
+    assert tg.total_awarded == -75.0
+    # raw pct = -75 / 10 * 100 = -750%
+    assert tg.pct_raw == -750.0
+    # clamped pct = 0 (schema-safe headline)
+    assert tg.pct == 0.0
+    # critical_fail = True (the -85 penalty was applied)
+    assert tg.critical_fail is True
+
+
+def test_pct_raw_emitted_in_json(monkeypatch, tmp_path):
+    from dataclasses import asdict
+    from core.grader import ItemGrade
+    from core.rubric_loader import RubricItem, TaskRubric
+    grader = _make_grader(monkeypatch, tmp_path)
+    task = TaskRubric(
+        task_id="t", sector="s", occupation="o", prompt="p",
+        rubric_items=[RubricItem("r1", "x", 4, None)],
+        rubric_pretty="", reference_files=[], gold_deliverable_files=[],
+    )
+    tg = grader._aggregate(
+        [ItemGrade(rubric_item_id="r1", criterion="x", max_score=4,
+                   awarded_score=4, verdict="pass", decided_by="judge",
+                   required=None, evidence="e")],
+        task,
+    )
+    serialized = asdict(tg)
+    assert serialized["pct_raw"] == 100.0
+    assert serialized["pct"] == 100.0
+
+
+def test_zero_total_max_degenerate_task(monkeypatch, tmp_path):
+    """Task with no positive items: total_max=0 — pct=0 (no crash), pct_raw
+    surfaces the absolute awarded value as diagnostic signal."""
+    from core.grader import ItemGrade
+    from core.rubric_loader import RubricItem, TaskRubric
+    grader = _make_grader(monkeypatch, tmp_path)
+    task = TaskRubric(
+        task_id="t", sector="s", occupation="o", prompt="p",
+        rubric_items=[RubricItem("r1", "bad", -20, None)],
+        rubric_pretty="", reference_files=[], gold_deliverable_files=[],
+    )
+    tg = grader._aggregate(
+        [ItemGrade(rubric_item_id="r1", criterion="bad", max_score=-20,
+                   awarded_score=-20.0, verdict="pass", decided_by="judge",
+                   required=None, evidence="e")],
+        task,
+    )
+    assert tg.total_max == 0
+    assert tg.pct == 0.0
+    assert tg.pct_raw == -20.0

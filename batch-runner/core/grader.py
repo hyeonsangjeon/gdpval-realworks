@@ -137,6 +137,12 @@ class TaskGrade:
     judge_input_tokens: int
     judge_output_tokens: int
     error: Optional[str] = None
+    # PR1 task 102 — un-clamped pct for diagnostics. pct above is clamped
+    # to [0, 100] for schema compatibility; pct_raw preserves the actual
+    # ratio (can be < 0 when negative penalties dominate, can theoretically
+    # exceed 100 if a judge over-awards). Used by analyzers / dashboard
+    # to surface scoring anomalies that the clamp would otherwise hide.
+    pct_raw: float = 0.0
 
 
 class Grader:
@@ -943,7 +949,25 @@ class Grader:
 
         total_awarded = sum(it.awarded_score for it in items)
         total_max = task.max_score
-        pct = (total_awarded / total_max * 100.0) if total_max else 0.0        # Clamp pct to [0, 100] for grade.schema.json v1.0 compatibility
+        pct = (total_awarded / total_max * 100.0) if total_max else 0.0
+        # PR1 task 102 — preserve un-clamped pct for diagnostics BEFORE the
+        # [0,100] clamp below. pct_raw can be < 0 when negative penalties
+        # dominate (catastrophic violation), or > 100 if a judge over-awards.
+        # total_max now always >= 0 by virtue of rubric_loader's positive-only
+        # sum (task 102 rubric_loader change), so the only edge case is
+        # total_max == 0 (no positive items in rubric — degenerate task).
+        pct_raw = pct
+        if total_max == 0 and total_awarded != 0:
+            # No positive denominator but the model still received some
+            # (necessarily negative) score. Flag rather than silently zero.
+            logger.warning(
+                "task %s has total_max=0 (no positive rubric items) but "
+                "total_awarded=%s; reporting pct=0 and pct_raw=%s",
+                task.task_id, total_awarded, total_awarded,
+            )
+            pct_raw = float(total_awarded)
+
+        # Clamp pct to [0, 100] for grade.schema.json v1.0 compatibility
         # (schema enforces minimum=0, maximum=100). Anomalies (e.g. rubric
         # items with negative max_score from penalty-style criteria, or
         # judge-awarded scores exceeding the listed max) remain visible
@@ -978,6 +1002,7 @@ class Grader:
             judge_total_latency_ms=0.0,
             judge_input_tokens=0,
             judge_output_tokens=0,
+            pct_raw=round(pct_raw, 2),
         )
 
     def _absent_judge_item(self, item: RubricItem) -> ItemGrade:

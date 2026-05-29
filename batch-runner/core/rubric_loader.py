@@ -39,7 +39,23 @@ class TaskRubric:
 
     @property
     def max_score(self) -> int:
-        return sum(it.score for it in self.rubric_items)
+        """Maximum achievable positive score on this task.
+
+        PR1 task 102 — was `sum(it.score for it in rubric_items)`, which
+        arithmetically summed positive AND negative item scores and
+        produced `total_max <= 0` for 4 of 220 exp003 tasks (one as low
+        as -330). That collapsed pct into mathematical nonsense which
+        the downstream [0,100] clamp silently hid.
+
+        New definition: sum of POSITIVE item scores only. Negative
+        penalty items still subtract from `total_awarded` (via the judge's
+        emitted awarded_score), so the resulting pct sits in
+        `[-penalty_ceiling, 100]` — the clamp then correctly floors
+        catastrophic violations at 0 while preserving the raw value in
+        `TaskGrade.pct_raw` for diagnostics.
+        See: data/grades/_validation/SCORE_MATH_AUDIT.md (Option 1).
+        """
+        return sum(max(0, it.score) for it in self.rubric_items)
 
 
 class RubricLoader:
