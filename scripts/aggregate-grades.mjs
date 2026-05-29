@@ -257,7 +257,7 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
     experiment_id,
     source_inference_experiment_id: source_experiment_id,
     grade_status: 'graded_v1',
-    schema_version: '1.0',
+    schema_version: raw.schema_version || '1.0',
     is_dummy: false,
     label,
     model,
@@ -291,7 +291,10 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
 }
 
 export function processGradesFile(filePath, raw, taskQaByExperiment = new Map()) {
-  if (raw && raw.schema_version === '1.0') {
+  // PR1 task 103 — schema 1.1 is a superset of 1.0 (adds model_did_right,
+  // pct_raw, sign-aware critical_item_pass_rate). Route both through the
+  // same v1 processor.
+  if (raw && (raw.schema_version === '1.0' || raw.schema_version === '1.1')) {
     return processV1GradesFile(filePath, raw, taskQaByExperiment);
   }
   return processLegacyGradesFile(filePath, raw, taskQaByExperiment);

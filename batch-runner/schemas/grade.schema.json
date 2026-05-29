@@ -15,7 +15,7 @@
     "summary"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"enum": ["1.0", "1.1"], "description": "1.0 = v1 grade JSON (legacy, pre-sign-aware). 1.1 = v2sm-backfilled or freshly-graded with PR1 sign-aware math (model_did_right, |max_score|>=4 critical, positive-only denominator, pct_raw diagnostic)."},
     "experiment_id": {"type": "string"},
     "experiment_yaml_name": {"type": "string"},
     "source_inference_experiment_id": {"type": ["string", "null"]},
