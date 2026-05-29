@@ -361,3 +361,97 @@ def test_judge_json_parse_failure_evidence_plain_when_not_truncated(monkeypatch,
     result = grader._judge(_task(item), item, [deliverable])
     assert result[0].verdict == "judge_error"
     assert result[0].evidence == "judge_json_parse_failed"
+
+
+# ---------------------------------------------------------------------------
+# PR1 task 100 — sign-aware model_did_right normalization
+# ---------------------------------------------------------------------------
+
+def _aggregate_one(grader, max_score, verdict, awarded=0.0):
+    """Build a one-item TaskRubric+_aggregate harness for a single (max_score, verdict)."""
+    from core.grader import ItemGrade
+    item = RubricItem("r1", "x", max_score, None)
+    t = _task(item)
+    tg = grader._aggregate(
+        [
+            ItemGrade(
+                rubric_item_id="r1",
+                criterion="x",
+                max_score=max_score,
+                awarded_score=awarded,
+                verdict=verdict,
+                decided_by="judge",
+                required=None,
+                evidence="e",
+            )
+        ],
+        t,
+    )
+    return tg.items[0]
+
+
+def test_model_did_right_positive_pass(monkeypatch, tmp_path):
+    """Positive item, verdict='pass' → did_right=True."""
+    grader = _make_grader(monkeypatch, tmp_path)
+    it = _aggregate_one(grader, max_score=2, verdict="pass", awarded=2)
+    assert it.model_did_right is True
+
+
+def test_model_did_right_positive_fail(monkeypatch, tmp_path):
+    """Positive item, verdict='fail' → did_right=False."""
+    grader = _make_grader(monkeypatch, tmp_path)
+    it = _aggregate_one(grader, max_score=2, verdict="fail")
+    assert it.model_did_right is False
+
+
+def test_model_did_right_positive_partial(monkeypatch, tmp_path):
+    """Positive item, verdict='partial' is NOT 'pass' → did_right=False (strict)."""
+    grader = _make_grader(monkeypatch, tmp_path)
+    it = _aggregate_one(grader, max_score=4, verdict="partial", awarded=2)
+    assert it.model_did_right is False
+
+
+def test_model_did_right_negative_pass_means_violation(monkeypatch, tmp_path):
+    """Negative item, verdict='pass' means the bad thing happened (penalty
+    applied) → did_right=False."""
+    grader = _make_grader(monkeypatch, tmp_path)
+    it = _aggregate_one(grader, max_score=-85, verdict="pass", awarded=-85.0)
+    assert it.model_did_right is False
+
+
+def test_model_did_right_negative_fail_means_clean(monkeypatch, tmp_path):
+    """Negative item, verdict='fail' means the bad thing did NOT happen
+    (no penalty) → did_right=True."""
+    grader = _make_grader(monkeypatch, tmp_path)
+    it = _aggregate_one(grader, max_score=-60, verdict="fail", awarded=0)
+    assert it.model_did_right is True
+
+
+def test_model_did_right_judge_error_is_conservative(monkeypatch, tmp_path):
+    """judge_error → did_right=False regardless of sign (conservative)."""
+    grader = _make_grader(monkeypatch, tmp_path)
+    pos = _aggregate_one(grader, max_score=4, verdict="judge_error")
+    neg = _aggregate_one(grader, max_score=-20, verdict="judge_error")
+    assert pos.model_did_right is False
+    assert neg.model_did_right is False
+
+
+def test_model_did_right_persisted_in_json(monkeypatch, tmp_path):
+    """asdict() in step8_grade._task_to_dict should emit the new field."""
+    from dataclasses import asdict
+    grader = _make_grader(monkeypatch, tmp_path)
+    from core.grader import ItemGrade
+    item = RubricItem("r1", "x", -85, None)
+    t = _task(item)
+    tg = grader._aggregate(
+        [
+            ItemGrade(
+                rubric_item_id="r1", criterion="x", max_score=-85,
+                awarded_score=0.0, verdict="fail", decided_by="judge",
+                required=None, evidence="e",
+            )
+        ],
+        t,
+    )
+    serialized = asdict(tg)
+    assert serialized["items"][0]["model_did_right"] is True

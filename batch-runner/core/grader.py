@@ -87,6 +87,12 @@ class ItemGrade:
     judge_latency_ms: Optional[float] = None
     precheck_pattern_id: Optional[str] = None
     judge_raw_response: Optional[str] = None
+    # PR1 task 100 — sign-aware normalization. Computed in _aggregate.
+    # True iff the deliverable did the *right* thing for this item,
+    # independent of item-score sign. For positive items right=pass;
+    # for negative (penalty) items right=fail (i.e. the bad thing did
+    # NOT happen). judge_error is conservatively right=False.
+    model_did_right: bool = False
 
 
 @dataclass
@@ -896,6 +902,20 @@ class Grader:
 
     @staticmethod
     def _aggregate(items: list[ItemGrade], task: TaskRubric) -> TaskGrade:
+        # PR1 task 100 — sign-aware model_did_right normalization.
+        # GDPVal rubric items can carry negative max_score (penalty/anti-
+        # criteria). For those, verdict='pass' means the bad thing HAPPENED,
+        # not the model satisfied something good. Normalize to a unified
+        # 'did right' flag so downstream metrics (critical_item_pass_rate
+        # in PR1 task 101) treat positive and negative items consistently.
+        for it in items:
+            if it.verdict == "judge_error":
+                it.model_did_right = False
+            elif (it.max_score or 0) < 0:
+                it.model_did_right = (it.verdict != "pass")
+            else:
+                it.model_did_right = (it.verdict == "pass")
+
         total_awarded = sum(it.awarded_score for it in items)
         total_max = task.max_score
         pct = (total_awarded / total_max * 100.0) if total_max else 0.0

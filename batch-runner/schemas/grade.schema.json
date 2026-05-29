@@ -126,7 +126,8 @@
                 "judge_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
                 "judge_latency_ms": {"type": ["number", "null"], "minimum": 0},
                 "precheck_pattern_id": {"type": ["string", "null"]},
-                "judge_raw_response": {"type": ["string", "null"]}
+                "judge_raw_response": {"type": ["string", "null"]},
+                "model_did_right": {"type": "boolean", "description": "Sign-aware right-outcome flag (PR1 task 100). For positive max_score items, true iff verdict='pass'. For negative max_score (penalty) items, true iff verdict!='pass' (i.e. violation did NOT occur). judge_error is conservatively false."}
               },
               "additionalProperties": true
             }
