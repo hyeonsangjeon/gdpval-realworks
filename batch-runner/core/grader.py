@@ -28,6 +28,31 @@ logger = logging.getLogger(__name__)
 Verdict = Literal["pass", "partial", "fail", "judge_error"]
 DecidedBy = Literal["precheck", "judge"]
 
+# ---------------------------------------------------------------------------
+# PR1 task 101 — critical-item project convention.
+#
+# GDPVal v2 rubric exposes a `required` field on each item, but in practice
+# it is `null` for every observed rubric (verified across 220 task / 10,453
+# items in exp003; see data/grades/_validation/SCORE_MATH_AUDIT.md). With
+# no authoritative criticality signal from the rubric authors we adopt a
+# project-level convention: an item is critical iff its score magnitude
+# meets MAGNITUDE_THRESHOLD. This covers both high-positive must-have
+# criteria AND high-negative penalty criteria (the 94 negative-magnitude
+# items previously excluded from the critical set under the legacy
+# `score >= 4` rule).
+#
+# Threshold value is a heuristic. Re-evaluate (e.g. raise to 5) if a future
+# rubric-author signal becomes available or if gold-ceiling validation
+# (PR3 task 300) shows the boundary mis-classifies items.
+MAGNITUDE_THRESHOLD = 4
+
+
+def _is_critical_item(max_score: int | float | None) -> bool:
+    try:
+        return abs(max_score or 0) >= MAGNITUDE_THRESHOLD
+    except Exception:
+        return False
+
 
 def _extract_finish_reason(response, max_output: int, output_tokens: int) -> str:
     """Best-effort finish_reason for Azure OpenAI Responses API.
@@ -918,8 +943,7 @@ class Grader:
 
         total_awarded = sum(it.awarded_score for it in items)
         total_max = task.max_score
-        pct = (total_awarded / total_max * 100.0) if total_max else 0.0
-        # Clamp pct to [0, 100] for grade.schema.json v1.0 compatibility
+        pct = (total_awarded / total_max * 100.0) if total_max else 0.0        # Clamp pct to [0, 100] for grade.schema.json v1.0 compatibility
         # (schema enforces minimum=0, maximum=100). Anomalies (e.g. rubric
         # items with negative max_score from penalty-style criteria, or
         # judge-awarded scores exceeding the listed max) remain visible
@@ -929,7 +953,16 @@ class Grader:
         # the whole grading run silently (observed: exp003 task #44 = 108.9%,
         # task #45 = 229.3% → partial save #5 at task 50 fails).
         pct = max(0.0, min(100.0, pct))
-        critical_fail = any(bool(it.required) and it.verdict in ("fail", "judge_error") for it in items)
+        # PR1 task 101 — critical_fail uses magnitude + sign-aware did_right.
+        # Was: `bool(it.required) and verdict in ('fail','judge_error')` — but
+        # `it.required` is null across all observed GDPVal rubrics, so this
+        # branch never fired and critical_fail was effectively always False.
+        # Now: any critical-magnitude item where the model did NOT do the
+        # right thing (covers both positive must-haves and negative penalties).
+        critical_fail = any(
+            _is_critical_item(it.max_score) and not it.model_did_right
+            for it in items
+        )
         return TaskGrade(
             task_id=task.task_id,
             sector=task.sector,

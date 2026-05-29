@@ -455,3 +455,75 @@ def test_model_did_right_persisted_in_json(monkeypatch, tmp_path):
     )
     serialized = asdict(tg)
     assert serialized["items"][0]["model_did_right"] is True
+
+
+# ---------------------------------------------------------------------------
+# PR1 task 101 — critical redefinition (magnitude + sign-aware)
+# ---------------------------------------------------------------------------
+
+def test_is_critical_item_magnitude_threshold():
+    """|max_score| >= MAGNITUDE_THRESHOLD covers both positive must-haves
+    and negative penalty items; below threshold (positive or negative) is
+    not critical."""
+    from core.grader import _is_critical_item, MAGNITUDE_THRESHOLD
+    assert MAGNITUDE_THRESHOLD == 4, "Project convention; bump deliberately"
+    # positive
+    assert _is_critical_item(4) is True
+    assert _is_critical_item(5) is True
+    assert _is_critical_item(100) is True
+    assert _is_critical_item(3) is False
+    assert _is_critical_item(0) is False
+    # negative
+    assert _is_critical_item(-4) is True
+    assert _is_critical_item(-85) is True
+    assert _is_critical_item(-3) is False
+    assert _is_critical_item(-1) is False
+    # degenerate
+    assert _is_critical_item(None) is False
+
+
+def test_critical_fail_uses_sign_aware_did_right(monkeypatch, tmp_path):
+    """critical_fail should fire when ANY critical-magnitude item has
+    model_did_right=False. Should NOT depend on the (always-null) required
+    field anymore."""
+    from core.grader import ItemGrade
+    grader = _make_grader(monkeypatch, tmp_path)
+
+    # Case A: positive critical item, verdict=fail → did_right=False → critical_fail=True
+    item_a = RubricItem("r1", "x", 5, None)
+    tg = grader._aggregate(
+        [ItemGrade(rubric_item_id="r1", criterion="x", max_score=5,
+                   awarded_score=0, verdict="fail", decided_by="judge",
+                   required=None, evidence="e")],
+        _task(item_a),
+    )
+    assert tg.critical_fail is True
+
+    # Case B: negative critical item, verdict=pass (penalty applied!) → did_right=False → critical_fail=True
+    item_b = RubricItem("r1", "x", -85, None)
+    tg = grader._aggregate(
+        [ItemGrade(rubric_item_id="r1", criterion="x", max_score=-85,
+                   awarded_score=-85.0, verdict="pass", decided_by="judge",
+                   required=None, evidence="e")],
+        _task(item_b),
+    )
+    assert tg.critical_fail is True
+
+    # Case C: negative critical item, verdict=fail (no penalty) → did_right=True → critical_fail=False
+    tg = grader._aggregate(
+        [ItemGrade(rubric_item_id="r1", criterion="x", max_score=-85,
+                   awarded_score=0.0, verdict="fail", decided_by="judge",
+                   required=None, evidence="e")],
+        _task(item_b),
+    )
+    assert tg.critical_fail is False
+
+    # Case D: positive non-critical item (score=2), verdict=fail → critical_fail=False
+    item_d = RubricItem("r1", "x", 2, None)
+    tg = grader._aggregate(
+        [ItemGrade(rubric_item_id="r1", criterion="x", max_score=2,
+                   awarded_score=0, verdict="fail", decided_by="judge",
+                   required=None, evidence="e")],
+        _task(item_d),
+    )
+    assert tg.critical_fail is False

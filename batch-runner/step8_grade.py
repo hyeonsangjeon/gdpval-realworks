@@ -25,7 +25,7 @@ import yaml
 from jsonschema import validate
 
 from core.experiment_config import ExperimentConfig
-from core.grader import Grader
+from core.grader import Grader, _is_critical_item
 from core.rubric_loader import RubricLoader
 
 SCHEMA_VERSION = "1.0"
@@ -230,9 +230,19 @@ def _compute_summary(task_dicts: list[dict]) -> dict:
                     judge_pass += 1
                 if item.get("verdict") == "judge_error":
                     judge_errors += 1
-            if (item.get("max_score") or 0) >= 3:
+            # PR1 task 101 — critical_item_pass_rate uses sign-aware
+            # MAGNITUDE_THRESHOLD (|max_score| >= 4) and ItemGrade
+            # .model_did_right (filled by core.grader._aggregate in
+            # PR1 task 100), NOT raw `verdict == 'pass'`.
+            #
+            # The legacy `(max_score or 0) >= 3` here was both
+            # wrong-threshold (project convention is 4) and wrong-sign
+            # (negative penalty items were excluded entirely, and
+            # 'pass' on a negative item meant the model violated).
+            # See data/grades/_validation/SCORE_MATH_AUDIT.md.
+            if _is_critical_item(item.get("max_score")):
                 critical_items += 1
-                if item.get("verdict") == "pass":
+                if bool(item.get("model_did_right", False)):
                     critical_pass += 1
 
     return {
