@@ -24,7 +24,7 @@
 
 **Acceptance**: PR1 끝나면 main 헤드라인 지표(`avg_score_pct`, `critical_item_pass_rate`)가 sign-aware로 신뢰 가능.
 
-### PR2 — Tool-Calling Grader Rebuild (메인, 새 세션 권장)
+### PR2 — Tool-Calling Grader Rebuild (메인, 새 세션 권장)  ✅ **CLOSED** — see [PR2_REPORT.md](./PR2_REPORT.md)
 
 | # | task | 상태 |
 |---|---|---|
