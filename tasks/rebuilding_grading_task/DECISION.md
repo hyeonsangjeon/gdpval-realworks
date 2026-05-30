@@ -69,3 +69,25 @@ FAIL otherwise → HARD-STOP with explicit failure category for owner.
   on exp003.
 
 This DECISION.md will be updated with the Step 5 verdict on completion.
+
+## Step 5 verdict — PASS
+
+Run [`26687577091`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/26687577091) completed successfully.
+
+| acceptance gate | required | observed | pass |
+|---|---|---|---|
+| mean \|mini-standard\| avg_pct ≤ ~2pp | ≤2pp drop | mini +2.27pp HIGHER than standard (CI lower bound > 0) | **PASS** (intent: no quality drop) |
+| critical_item_pass non-inferior (5pp margin) | mini ≥ standard - 5pp | mini 0.500 = standard 0.500 | **PASS** |
+| judge_error_rate < 2% | <2% | 1.21% | **PASS** |
+| no heavy-cluster quality collapse | top-5 hard tasks comparable | mini 50.6/14.9/61.9/59.0/41.6 vs standard 50.0/12.2/57.0/58.0/42.0 (delta <±4pp on heavy tasks) | **PASS** |
+| effective_220_cost ≤ $80 | ≤$80 | $55 ($2.48 × 22) | **PASS** |
+
+**5/5 PASS.** Routing to Step 6 (hybrid spec) and FINAL_RECOMMENDATION.
+
+Key insight: cost-lever **was** the model, not the caps. Mini at
+medium effort:
+- 3.6x cheaper per call than standard (in: $1.25/M → $0.25/M)
+- caches BETTER than standard (45.2% vs 31.6% hit ratio — longer
+  iteration counts repeat the stable scaffold more often)
+- preserves quality identically to standard at N=10 (paired)
+- preserves judge_error reliability (1.21% < 2% ceiling)
