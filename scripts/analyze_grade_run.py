@@ -31,6 +31,11 @@ PRICING_USD_PER_M_TOKENS = {
     "gpt-5.4-nano": (0.075, 0.30),
 }
 
+# PR3 Step 0 — cached input is billed at 50% of standard input rate
+# (Azure Responses API automatic prompt caching, parity with OpenAI public
+# pricing). Confirm against billing for negotiated tenant rates.
+CACHED_INPUT_DISCOUNT = 0.50
+
 
 def _parse_iso(s: str | None) -> datetime | None:
     if not s:
@@ -123,9 +128,11 @@ def analyze(path: Path) -> dict:
     precheck_counts = [t.get("precheck_count", 0) or 0 for t in tasks]
     in_tokens = [t.get("judge_input_tokens", 0) or 0 for t in tasks]
     out_tokens = [t.get("judge_output_tokens", 0) or 0 for t in tasks]
+    cached_tokens = [t.get("judge_cached_tokens", 0) or 0 for t in tasks]
 
     total_in = sum(in_tokens)
     total_out = sum(out_tokens)
+    total_cached = sum(cached_tokens)
     total_latency_sec = sum(latencies) / 1000.0
     total_calls = sum(judge_calls)
     total_precheck = sum(precheck_counts)
@@ -148,6 +155,25 @@ def analyze(path: Path) -> dict:
     )
 
     cost = _hybrid_cost_estimate(grade, total_in, total_out)
+
+    # PR3 Step 0 — effective (cache-discounted) cost. Skipped if the run
+    # used the legacy v1 path (no cached_tokens captured).
+    effective_cost = None
+    cache_hit_ratio = None
+    if total_in > 0:
+        cache_hit_ratio = round(total_cached / total_in, 4)
+        model = grade["judge"].get("model", "")
+        pi, po = PRICING_USD_PER_M_TOKENS.get(model, (0.0, 0.0))
+        eff_in_cost = ((total_in - total_cached) * pi
+                       + total_cached * pi * CACHED_INPUT_DISCOUNT) / 1_000_000.0
+        eff_out_cost = total_out * po / 1_000_000.0
+        effective_cost = {
+            "input_usd": round(eff_in_cost, 4),
+            "output_usd": round(eff_out_cost, 4),
+            "total_usd": round(eff_in_cost + eff_out_cost, 4),
+            "cache_hit_ratio": cache_hit_ratio,
+            "cached_tokens": total_cached,
+        }
 
     return {
         "path": str(path),
@@ -178,9 +204,12 @@ def analyze(path: Path) -> dict:
 
         "total_input_tokens": total_in,
         "total_output_tokens": total_out,
+        "total_cached_tokens": total_cached,
         "avg_tokens_per_task_io": (round(total_in / max(1, len(tasks))), round(total_out / max(1, len(tasks)))),
 
         "cost_estimate": cost,
+        "effective_cost": effective_cost,    # cache-discounted, None if no cached_tokens captured
+        "cache_hit_ratio": cache_hit_ratio,
         "top5_slowest": enriched[:5],
     }
 
@@ -227,7 +256,14 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
     lines.append(f"- per-task avg (in,out): {a['avg_tokens_per_task_io']}")
     lines.append("")
     lines.append("## Cost estimate")
-    lines.append(f"- {_fmt_cost(a['cost_estimate'])}")
+    lines.append(f"- raw: {_fmt_cost(a['cost_estimate'])}")
+    ec = a.get("effective_cost")
+    if ec is not None:
+        lines.append(
+            f"- effective (cached-discounted): ${ec['total_usd']:.2f}  "
+            f"(cache_hit_ratio={ec['cache_hit_ratio']*100:.1f}%, "
+            f"cached_tokens={ec['cached_tokens']:,})"
+        )
     lines.append("")
     lines.append("## Top-5 slowest tasks")
     lines.append("| task_id | latency (s) | calls | tokens (in,out) | pct | critical_fail |")

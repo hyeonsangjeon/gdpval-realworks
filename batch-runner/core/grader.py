@@ -143,6 +143,10 @@ class TaskGrade:
     # exceed 100 if a judge over-awards). Used by analyzers / dashboard
     # to surface scoring anomalies that the clamp would otherwise hide.
     pct_raw: float = 0.0
+    # PR3 Step 0 — cached input tokens (Azure Responses API automatic
+    # prompt caching). 0 for legacy v1 path; populated by ToolCallingJudge
+    # via side-channel _last_cached_tokens. Used for effective-cost math.
+    judge_cached_tokens: int = 0
 
 
 class Grader:
@@ -378,6 +382,8 @@ class Grader:
         judge_total_latency_ms = 0.0
         judge_input_tokens = 0
         judge_output_tokens = 0
+        # PR3 Step 0 — cached-tokens accumulator (v2 path only)
+        judge_cached_tokens = 0
 
         for item in task.rubric_items:
             mode, pattern_id = self._classify(item)
@@ -395,22 +401,26 @@ class Grader:
                 precheck_count += 1
                 pre = self._run_precheck(pattern_id, item, files)
                 if pre is None:
+                    self._last_cached_tokens = 0
                     ig, in_tok, out_tok = self._judge(task, item, files)
                     judge_call_count += 1
                     judge_total_latency_ms += ig.judge_latency_ms or 0.0
                     judge_input_tokens += in_tok
                     judge_output_tokens += out_tok
+                    judge_cached_tokens += getattr(self, '_last_cached_tokens', 0)
                 else:
                     verdict, evidence = pre
                     ig = self._to_item_grade_from_precheck(
                         item, pattern_id, verdict, evidence
                     )
             else:
+                self._last_cached_tokens = 0
                 ig, in_tok, out_tok = self._judge(task, item, files)
                 judge_call_count += 1
                 judge_total_latency_ms += ig.judge_latency_ms or 0.0
                 judge_input_tokens += in_tok
                 judge_output_tokens += out_tok
+                judge_cached_tokens += getattr(self, '_last_cached_tokens', 0)
             items.append(ig)
 
         grade = self._aggregate(items, task)
@@ -419,6 +429,7 @@ class Grader:
         grade.judge_total_latency_ms = round(judge_total_latency_ms, 2)
         grade.judge_input_tokens = judge_input_tokens
         grade.judge_output_tokens = judge_output_tokens
+        grade.judge_cached_tokens = judge_cached_tokens
         if no_deliverables:
             grade.error = "no_deliverables"
         return grade
@@ -1130,6 +1141,7 @@ class Grader:
         self, task: TaskRubric, item: RubricItem, files: list[Path]
     ) -> tuple[ItemGrade, int, int]:
         if not files:
+            self._last_cached_tokens = 0
             return self._absent_judge_item(item), 0, 0
         deliverable_dir = str(files[0].parent)
         file_names = [f.name for f in files]
@@ -1139,6 +1151,10 @@ class Grader:
             deliverable_dir=deliverable_dir,
             file_names=file_names,
         )
+        # PR3 Step 0 — expose cached input tokens via instance side-channel.
+        # Avoids changing the (ItemGrade, in_tok, out_tok) tuple shape used
+        # by both v1 and v2 grader dispatch paths.
+        self._last_cached_tokens = result.cached_tokens
         ig = ItemGrade(
             rubric_item_id=item.rubric_item_id,
             criterion=item.criterion,

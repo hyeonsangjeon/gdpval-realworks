@@ -75,6 +75,7 @@ class ToolCallingResult:
     latency_ms: float
     input_tokens: int
     output_tokens: int
+    cached_tokens: int            # cached input tokens (Responses API)
     routing_modality: str
     raw_text: str              # final model JSON (debugging)
 
@@ -176,6 +177,7 @@ class ToolCallingJudge:
         iterations = 0
         input_tok_total = 0
         output_tok_total = 0
+        cached_tok_total = 0
         wall_start = time.time()
         final_text = ""
         judge_error: Optional[str] = None
@@ -201,6 +203,12 @@ class ToolCallingJudge:
             usage = getattr(response, "usage", None)
             input_tok_total += int(getattr(usage, "input_tokens", 0) or 0)
             output_tok_total += int(getattr(usage, "output_tokens", 0) or 0)
+            # PR3 Step 0 — cached_tokens (Azure Responses API automatic prompt
+            # caching). Field path: usage.input_tokens_details.cached_tokens.
+            # Older SDKs may not expose the details object; default 0.
+            details = getattr(usage, "input_tokens_details", None)
+            if details is not None:
+                cached_tok_total += int(getattr(details, "cached_tokens", 0) or 0)
 
             output_items = list(getattr(response, "output", []) or [])
             function_calls = [o for o in output_items
@@ -248,6 +256,7 @@ class ToolCallingJudge:
             latency_ms=latency_ms,
             input_tokens=input_tok_total,
             output_tokens=output_tok_total,
+            cached_tokens=cached_tok_total,
             judge_error=judge_error,
         )
 
@@ -473,6 +482,7 @@ class ToolCallingJudge:
         latency_ms: float,
         input_tokens: int,
         output_tokens: int,
+        cached_tokens: int,
         judge_error: Optional[str],
     ) -> ToolCallingResult:
         if judge_error is not None or not final_text.strip():
@@ -489,6 +499,7 @@ class ToolCallingJudge:
                 latency_ms=latency_ms,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
                 routing_modality=routing_modality,
                 raw_text=final_text,
             )
@@ -508,6 +519,7 @@ class ToolCallingJudge:
                 latency_ms=latency_ms,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
                 routing_modality=routing_modality,
                 raw_text=final_text,
             )
@@ -553,6 +565,7 @@ class ToolCallingJudge:
             latency_ms=latency_ms,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cached_tokens=cached_tokens,
             routing_modality=routing_modality,
             raw_text=final_text,
         )
