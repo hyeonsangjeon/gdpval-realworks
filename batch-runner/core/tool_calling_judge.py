@@ -166,7 +166,7 @@ class ToolCallingJudge:
     audio_perception: Any = None
     task_prompt_truncate: int = 500
     prompt_cache_key: str = "gdpval_v2_judge"
-    compact_threshold: Optional[int] = 60000
+    compact_threshold: Optional[int] = None
 
     # Cached: split prompt template into stable + variable halves once at
     # construction (or first use). The stable half is the ``instructions=``
@@ -226,10 +226,17 @@ class ToolCallingJudge:
                     prompt_cache_key=self.prompt_cache_key,
                     parallel_tool_calls=False,
                 )
+                # PR3 step 1b — context_management server-side compaction.
+                # The SDK signature exposes a dict shape but Azure's
+                # current API rev for gpt-5.4 rejects dict with HTTP 400
+                # ('expected an array of objects'). Disabled by default
+                # until the array contract is documented; set
+                # compact_threshold=None to opt out (default).
                 if self.compact_threshold:
-                    create_kwargs["context_management"] = {
-                        "auto_compact_threshold": int(self.compact_threshold),
-                    }
+                    create_kwargs["context_management"] = [
+                        {"type": "auto_compact",
+                         "threshold": int(self.compact_threshold)}
+                    ]
                 response = self.client.responses.create(**create_kwargs)
             except TypeError as exc:
                 # SDK older than expected — fall back to the legacy call

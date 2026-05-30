@@ -1155,6 +1155,11 @@ class Grader:
         # Avoids changing the (ItemGrade, in_tok, out_tok) tuple shape used
         # by both v1 and v2 grader dispatch paths.
         self._last_cached_tokens = result.cached_tokens
+        # PR3 fix \u2014 judge_error strings can exceed the schema's 200-char
+        # evidence cap (e.g. an Azure BadRequestError). Truncate so the
+        # final grade JSON still validates.
+        _ev_max = int(self.config.get("grader", {}).get("evidence_max_chars", 200))
+        _ev = (result.evidence or (result.judge_error or ""))[:_ev_max]
         ig = ItemGrade(
             rubric_item_id=item.rubric_item_id,
             criterion=item.criterion,
@@ -1163,7 +1168,7 @@ class Grader:
             verdict=result.verdict,
             decided_by="judge",
             required=item.required,
-            evidence=result.evidence or (result.judge_error or ""),
+            evidence=_ev,
             judge_confidence=result.confidence,
             judge_latency_ms=round(result.latency_ms, 2),
             judge_raw_response=result.raw_text if self._save_raw() else None,
