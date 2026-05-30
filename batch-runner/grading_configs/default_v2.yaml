@@ -1,0 +1,116 @@
+schema_version: "2.0"
+config_name: "default_v2"
+description: |
+  Default v2 grading config — tool-calling judge with read_deliverable
+  file inspection. SPEC: tasks/rebuilding_grading_task/SPEC_GRADING_PIPELINE_V2.md §8.
+
+  Activated grader path (vs default_gpt5pro.yaml):
+    * judge.tools.read_deliverable present -> Grader._judge dispatches
+      to ToolCallingJudge instead of the legacy text-extract Judge.
+    * judge model = gpt-5.4 reasoning_effort=medium (single tier;
+      no pro/standard/mini routing). Same family as the cost-sweep
+      winner, one tier up to absorb the agentic tool-call burden.
+    * perception sub-judges (visual / audio) wired through the same
+      Responses API client; perception.visual.model and
+      perception.audio.model selected per modality (gpt-5.4 vision /
+      gpt-audio-1.5).
+    * deliverable_extract_max_chars / batch_size / tier blocks removed.
+    * critical rule: |max_score| >= 4 (sign-aware, PR1 task 101).
+
+  Cost note: per-task spend will be HIGHER than the v1 mini config
+  ($18 full-run baseline) because of perception escalations on
+  visual/audio items + tool round trips. PR3 task 302 re-estimates the
+  full-run cost and the $2,400/mo budget envelope.
+
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.4"
+  deployment: "gpt-5.4"
+  api_version: "2025-04-01-preview"
+  endpoint_env: "AZURE_OPENAI_ENDPOINT"
+  timeout_sec: 600
+  reasoning:
+    effort: "medium"     # mini->standard only for tool-orchestration reliability
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 2400
+
+  # v2 trigger — presence of judge.tools.read_deliverable activates the
+  # ToolCallingJudge dispatch in core.grader.Grader.
+  tools:
+    read_deliverable:
+      env: "exp011_subprocess"   # reuse exp011 lib surface; no new sandbox
+      ops:
+        - inspect_structure
+        - read_content
+        - inspect_formatting
+        - render_to_image
+        - probe_audio
+        - probe_video
+      read_only: true
+      per_item_call_cap: 8       # hard cap, judge gets cap_exceeded envelope
+      max_iterations: 10         # hard cap, judge_error=max_iterations_exceeded
+
+  # Perception sub-judges. Activated only when grader_routing classifies
+  # the criterion as VISUAL or AUDIO (per task 204). All other criteria
+  # stay on the cheap text/formatting tool path. See task 205/206.
+  perception:
+    visual:
+      model: "gpt-5.4"
+      vision: true
+      call_cap_per_task: 5
+    audio:
+      model: "gpt-audio-1.5"
+      endpoint_env: "AZURE_AUDIO_ENDPOINT"
+      call_cap_per_task: 3
+      trim_seconds: 30
+
+  # Critical-item rule (PR1 task 101). |max_score| >= 4 captures both
+  # high-positive must-have items and high-negative penalty items.
+  critical:
+    rule: "abs_max_score_threshold"
+    threshold: 4
+    sign_aware: true
+
+  # Score-math posture (PR1 tasks 100 + 102).
+  scoring:
+    sign_aware_pct: true
+    handle_nonpositive_total_max: "explicit"   # no [0,100] clamp hiding
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "main"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v1"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  task_prompt_truncate_chars: 500
+  # deliverable_extract_max_chars: REMOVED (legacy text-extract path)
+  # batch_size: REMOVED  (v2 is single-item; tier batching retired)
+  grades_per_task: 3              # bootstrap CI per SPEC §7.5
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"          # legacy field — kept for back-compat
+  tool_template: "prompts/grader_judge_v2.md"  # PR2 task 203 — actual v2 template
+  version: "v2"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__judge_{judge_slug}__rubric_v2_tools.json"

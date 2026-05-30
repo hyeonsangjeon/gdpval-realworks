@@ -78,8 +78,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def validate_grading_config(config: dict) -> None:
-    if config.get("schema_version") != "1.0":
-        raise ValueError("grading config schema_version must be 1.0")
+    # PR2 task 208 — accept both schema 1.0 (legacy v1, text-extract path)
+    # and 2.0 (v2 tool-calling path). The validator branches on the
+    # presence of judge.tools.read_deliverable, not on the literal
+    # version string, so user-authored v1 configs that forget to bump
+    # schema_version still validate correctly.
+    schema_version = config.get("schema_version")
+    if schema_version not in ("1.0", "2.0"):
+        raise ValueError("grading config schema_version must be '1.0' or '2.0'")
 
     required = [
         "schema_version",
@@ -98,6 +104,48 @@ def validate_grading_config(config: dict) -> None:
         if key not in judge:
             raise ValueError(f"missing config key: judge.{key}")
 
+    # --- v2 tool-calling block (optional) ------------------------------
+    tools = (judge.get("tools") or {})
+    if tools:
+        rd = tools.get("read_deliverable")
+        if rd is None:
+            raise ValueError(
+                "judge.tools present but missing read_deliverable block"
+            )
+        ops = rd.get("ops")
+        if not isinstance(ops, list) or not ops:
+            raise ValueError(
+                "judge.tools.read_deliverable.ops must be a non-empty list"
+            )
+        allowed_ops = {"inspect_structure", "read_content",
+                       "inspect_formatting", "render_to_image",
+                       "probe_audio", "probe_video"}
+        bad = [op for op in ops if op not in allowed_ops]
+        if bad:
+            raise ValueError(
+                f"judge.tools.read_deliverable.ops contains unknown ops: {bad}"
+            )
+
+    # --- v2 perception block (optional) --------------------------------
+    perception = (judge.get("perception") or {})
+    if perception:
+        for sub in ("visual", "audio"):
+            sub_cfg = perception.get(sub)
+            if sub_cfg is not None and "model" not in sub_cfg:
+                raise ValueError(
+                    f"judge.perception.{sub} present but missing 'model'"
+                )
+
+    # --- v2 critical block (optional) ----------------------------------
+    critical = (judge.get("critical") or {})
+    if critical:
+        rule = critical.get("rule")
+        if rule not in (None, "abs_max_score_threshold"):
+            raise ValueError(
+                f"judge.critical.rule unknown: {rule!r}; "
+                "expected 'abs_max_score_threshold'"
+            )
+
     rubric = config.get("rubric", {})
     for key in ["repo_id", "revision", "cache_dir"]:
         if key not in rubric:
@@ -108,6 +156,11 @@ def validate_grading_config(config: dict) -> None:
         raise ValueError("missing config key: prompt.template/prompt.version")
     if not Path(prompt["template"]).exists():
         raise ValueError(f"prompt template not found: {prompt['template']}")
+    # v2 configs MAY also set prompt.tool_template; if set, must exist.
+    if "tool_template" in prompt and not Path(prompt["tool_template"]).exists():
+        raise ValueError(
+            f"prompt.tool_template not found: {prompt['tool_template']}"
+        )
 
     output = config.get("output", {})
     if "directory" not in output or "filename_template" not in output:

@@ -36,7 +36,7 @@
 | 205 | [vision perception (gpt-5.4 vision)](./205-vision-judge.md) | ✅ (this commit) |
 | 206 | [audio perception (gpt-audio-1.5)](./206-audio-judge.md) | ✅ (this commit) |
 | 207 | [legacy removal](./207-legacy-removal.md) | ☐ |
-| 208 | [config schema + validator 업데이트](./208-config-schema-update.md) | ☐ |
+| 208 | [config schema + validator 업데이트](./208-config-schema-update.md) | ✅ (this commit) |
 
 ### PR3 — Validation Gates (새 세션, PR2 후)
 
@@ -66,6 +66,7 @@
 | perception routing 테스트 위치 | 기존 `test_grader_routing.py`(tier routing)와 분리해 `test_perception_routing.py` 신규 | concern 분리 — 207에서 legacy tier 테스트 삭제해도 modality routing 테스트는 살아남 |
 | perception 클래스 의존성 주입 방향 | `client`을 생성자에 inject (클래스 내부 생성 X) | main judge가 Responses API 클라이언트 소유 + 테스트에서 FakeClient 제공 용이 |
 | audio deployment 누락 처리 | `judge()` 호출 시점에 endpoint env 체크, 누락이면 `judge_error=endpoint_missing` graceful return | import-time hard fail 피하고 audio 항목에서만 결속 (main judge는 계속 동작) |
+| grade-run.yml default config 교체 타이밍 | 208에서 교체 하지 않음 — PR3 task 302 비용 검증 이후 별도 commit으로 전환 | 명시적 테스트 없이 default를 v2로 돌리면 다음 trigger에서 러닝웨이 cost 위험. 사용자는 명시적으로 default_v2.yaml 지정 가능. |
 
 ## 작업 흐름 (자동, 사용자 개입 없음)
 
