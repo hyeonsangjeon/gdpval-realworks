@@ -28,7 +28,7 @@
 
 | # | task | 상태 |
 |---|---|---|
-| 200 | [exp011 env audit](./200-env-audit.md) | ☐ (spec only this session) |
+| 200 | [exp011 env audit](./200-env-audit.md) → [PR2_ENV_AUDIT.md](./PR2_ENV_AUDIT.md) | ✅ (this commit) |
 | 201 | [read_deliverable tool 정의/구현](./201-tool-interface.md) | ☐ |
 | 202 | [judge prompt v2 (tool-aware)](./202-judge-prompt-tool-aware.md) | ☐ |
 | 203 | [메인 grader rewrite (tool-calling)](./203-grader-main-rewrite.md) | ☐ |
@@ -59,6 +59,9 @@
 | Grading skills 추출 | PR2 종료 후 grading-engineer agent용으로 추출 | 코드 안정화 후 skill 문서화가 자연 |
 | tool 구현 방식 | library tool-calling (SPEC §4.2) 채택 | SPEC 명시 + 현 사용자 인프라(Azure Responses API) 부합 |
 | prompt version bump | v1 → v2 archive 보존 | tool-aware 전환 명시 |
+| PDF→image 백엔드 | `pdf2image+poppler` 대신 `PyMuPDF` (`fitz`) | 이미 requirements에 있고 wheel-only, GHA system 패키지 불필요 (task 200 audit) |
+| 오디오/비디오 probe 백엔드 | `ffmpeg-python`/`moviepy` 대신 `PyAV` (`av`) 우선 | wheel이 ffmpeg 동봉, `grade-run.yml`에 `apt-get install ffmpeg` 추가 불필요 (task 200 audit) |
+| `soundfile` 명시 의존 | 201에서 `requirements.txt`에 명시 추가 | 현재는 `librosa`/`pedalboard`의 transitive — 명시화로 fragility 제거 (task 200 audit) |
 
 ## 작업 흐름 (자동, 사용자 개입 없음)
 
