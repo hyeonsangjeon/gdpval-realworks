@@ -16,14 +16,14 @@ experiment:
     auto-retry now firing). Goal: quantitatively compare success_rate /
     qa_failed_count / resume_rounds_used against the pre-fix exp013 baseline.
     Multi-agent: gpt-audio-1.5 preprocessor + GPT-5.4 code generation.
-    Full 220 tasks across 11 sectors, 55 occupations.
+    Full 220 tasks across 9 sectors, 44 occupations.
   author: "Hyeonsang Jeon"
   created_at: "2026-05-17"
 
 # Variable control
 control:
   fixed:
-    - tasks               # All 220 tasks (11 sectors, 55 occupations)
+    - tasks               # All 220 tasks (9 sectors, 44 occupations)
     - temperature         # 0.0
     - preprocessor        # gpt-audio-1.5
     - execution_mode      # subprocess
@@ -36,8 +36,8 @@ control:
 data:
   source: "HyeonSang/exp025_GPT54_high_postfix"
   filter:
-    sector: null          # All 11 sectors
-    occupation: null      # All 55 occupations
+    sector: null          # All 9 sectors
+    occupation: null      # All 44 occupations
     sample_size: null     # All 220 tasks
 
 # Condition A: Elicit v2 + domain packages + audio preprocessor + reasoning_effort=high

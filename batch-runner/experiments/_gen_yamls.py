@@ -55,7 +55,7 @@ for exp_id, model_short, deployment, effort, ablation_num, series in configs:
   description: >
     {desc_first}
     Multi-agent: gpt-audio-1.5 preprocessor + {display_model} code generation.
-    Full 220 tasks across 11 sectors, 55 occupations.
+    Full 220 tasks across 9 sectors, 44 occupations.
     Compare within series: {series} (reasoning_effort only).
     Baseline comparison: exp012 (GPT-5.2, Information sector)."""
     
@@ -76,7 +76,7 @@ for exp_id, model_short, deployment, effort, ablation_num, series in configs:
     control_block = f"""# Variable control
 control:
   fixed:
-    - tasks               # All 220 tasks (11 sectors, 55 occupations)
+    - tasks               # All 220 tasks (9 sectors, 44 occupations)
     - temperature         # 0.0
     - preprocessor        # gpt-audio-1.5
     - execution_mode      # subprocess
@@ -91,8 +91,8 @@ control:
 data:
   source: "HyeonSang/{full_id}"
   filter:
-    sector: null          # All 11 sectors
-    occupation: null      # All 55 occupations
+    sector: null          # All 9 sectors
+    occupation: null      # All 44 occupations
     sample_size: null     # All 220 tasks
 """
     
