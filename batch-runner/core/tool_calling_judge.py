@@ -122,7 +122,11 @@ class ToolCallingJudge:
         client:                  object with ``.responses.create(**kwargs)``
                                  (Azure OpenAI Responses client or a fake).
         model:                   deployment name (e.g. ``"gpt-5.4"``).
-        prompt_template:         contents of ``prompts/grader_judge_v2.md``.
+        prompt_template:         contents of ``prompts/grader_judge_v2.md``
+                                 — must contain a ``<!-- ===SPLIT=== -->``
+                                 marker separating the stable scaffold
+                                 (sent as ``instructions=``, cached server-
+                                 side) from the per-item variable content.
         reasoning_effort:        ``"low" | "medium" | "high"``.
         max_output_tokens:       per-call output budget.
         per_item_tool_call_cap:  hard upper bound on tool dispatches for
@@ -140,6 +144,15 @@ class ToolCallingJudge:
         audio_perception:        optional ``AudioPerception`` instance
                                  (task 206), same shape.
         task_prompt_truncate:    chars kept of the original task prompt.
+        prompt_cache_key:        optional stable key passed to
+                                 ``responses.create(prompt_cache_key=...)``.
+                                 Default = ``"gdpval_v2_judge"``.
+        compact_threshold:       optional Azure Responses API
+                                 ``context_management.auto_compact_threshold``
+                                 token count. Default = 60000 (only the
+                                 long tool-loop tasks like the 49-call
+                                 monster trip it; light/medium tasks stay
+                                 fully cacheable).
     """
 
     client: Any
@@ -152,6 +165,14 @@ class ToolCallingJudge:
     vision_perception: Any = None
     audio_perception: Any = None
     task_prompt_truncate: int = 500
+    prompt_cache_key: str = "gdpval_v2_judge"
+    compact_threshold: Optional[int] = 60000
+
+    # Cached: split prompt template into stable + variable halves once at
+    # construction (or first use). The stable half is the ``instructions=``
+    # argument across every call — byte-identical → server-side cache hit.
+    _stable_instructions: Optional[str] = field(default=None, init=False)
+    _variable_template: Optional[str] = field(default=None, init=False)
 
     # ------------------------------------------------------------------
     # Public surface
@@ -167,11 +188,14 @@ class ToolCallingJudge:
     ) -> ToolCallingResult:
         """Grade one rubric item by letting the judge inspect files via tools."""
         decision = classify_criterion(item.criterion)
-        prompt = self._build_initial_prompt(task, item, file_names, decision)
+        # PR3 step 1a — split the prompt template into stable scaffold
+        # (cached server-side via instructions=) and per-item variable.
+        self._ensure_split()
+        variable_prompt = self._render_variable(task, item, file_names, decision)
         tools = self._build_tools_for(decision.modality.value)
 
         messages: List[Dict[str, Any]] = [
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": variable_prompt}
         ]
         tool_calls_made = 0
         iterations = 0
@@ -185,13 +209,47 @@ class ToolCallingJudge:
         while iterations < self.max_iterations:
             iterations += 1
             try:
-                response = self.client.responses.create(
+                # PR3 step 1a — instructions + prompt_cache_key make the
+                # stable scaffold cacheable. compact_threshold (1b) is
+                # set high enough that only long tool loops trip it,
+                # leaving light/medium tasks fully prefix-cacheable.
+                # parallel_tool_calls=False (1d) on the loop avoids
+                # interleaved out-of-order tool outputs that confuse the
+                # final JSON envelope.
+                create_kwargs = dict(
                     model=self.model,
+                    instructions=self._stable_instructions,
                     input=messages,
                     tools=tools,
                     reasoning={"effort": self.reasoning_effort},
                     max_output_tokens=self.max_output_tokens,
+                    prompt_cache_key=self.prompt_cache_key,
+                    parallel_tool_calls=False,
                 )
+                if self.compact_threshold:
+                    create_kwargs["context_management"] = {
+                        "auto_compact_threshold": int(self.compact_threshold),
+                    }
+                response = self.client.responses.create(**create_kwargs)
+            except TypeError as exc:
+                # SDK older than expected — fall back to the legacy call
+                # shape (no instructions / cache_key / compaction). Log
+                # once and keep going so the run isn't blocked.
+                logger.warning(
+                    "ToolCallingJudge SDK fallback (%s); using legacy call shape",
+                    exc,
+                )
+                try:
+                    response = self.client.responses.create(
+                        model=self.model,
+                        input=messages,
+                        tools=tools,
+                        reasoning={"effort": self.reasoning_effort},
+                        max_output_tokens=self.max_output_tokens,
+                    )
+                except Exception as exc2:  # noqa: BLE001
+                    judge_error = f"{type(exc2).__name__}: {exc2}"
+                    break
             except Exception as exc:  # noqa: BLE001
                 judge_error = f"{type(exc).__name__}: {exc}"
                 logger.warning(
@@ -263,6 +321,59 @@ class ToolCallingJudge:
     # ------------------------------------------------------------------
     # Prompt / tools
     # ------------------------------------------------------------------
+
+    SPLIT_MARKER = "<!-- ===SPLIT=== -->"
+
+    def _ensure_split(self) -> None:
+        """Lazy split of ``self.prompt_template`` at ``SPLIT_MARKER``.
+
+        If the marker is absent (legacy v2 prompt), the whole template
+        becomes the variable half and instructions stays an empty
+        string — caching benefit is lost but correctness preserved.
+        """
+        if self._stable_instructions is not None:
+            return
+        if self.SPLIT_MARKER in self.prompt_template:
+            head, tail = self.prompt_template.split(self.SPLIT_MARKER, 1)
+            self._stable_instructions = head.strip()
+            self._variable_template = tail.strip()
+        else:
+            self._stable_instructions = ""
+            self._variable_template = self.prompt_template
+
+    def _render_variable(
+        self,
+        task: TaskRubric,
+        item: RubricItem,
+        file_names: List[str],
+        decision,
+    ) -> str:
+        """Fill per-item placeholders in the variable-half template."""
+        prompt = self._variable_template or self.prompt_template
+        prompt = prompt.replace("{{sector}}", task.sector or "")
+        prompt = prompt.replace("{{occupation}}", task.occupation or "")
+        prompt = prompt.replace(
+            "{{task_prompt_truncated_500}}",
+            (task.prompt or "")[:self.task_prompt_truncate],
+        )
+        prompt = prompt.replace("{{rubric_item_id}}", str(item.rubric_item_id))
+        prompt = prompt.replace("{{max_score}}", str(item.score))
+        prompt = prompt.replace(
+            "{{required}}",
+            "null" if item.required is None else json.dumps(item.required),
+        )
+        prompt = prompt.replace("{{criterion}}", item.criterion or "")
+        prompt = prompt.replace("{{routing_modality}}", decision.modality.value)
+        prompt = prompt.replace("{{routing_preferred_op}}", decision.preferred_op)
+        block = "\n".join(
+            f"- path: `{fn}`" for fn in file_names
+        ) if file_names else ""
+        prompt = re.sub(
+            r"\{\{#each deliverable_files\}\}[\s\S]*?\{\{/each\}\}",
+            block,
+            prompt,
+        )
+        return prompt
 
     def _build_initial_prompt(
         self,

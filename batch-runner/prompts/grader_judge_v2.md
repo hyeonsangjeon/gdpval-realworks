@@ -58,6 +58,35 @@ On failure, do NOT retry the same call — adapt: try a different `op`, a
 different `path`, or fall back to `fail` if no path through the tool
 can ground the verdict.
 
+## Required output (JSON ONLY, after you finish tool calls)
+
+Return a single JSON object with EXACTLY these fields and types:
+
+```json
+{
+  "verdict": "pass" | "partial" | "fail",
+  "partial_score": <float 0.0~1.0>,
+  "evidence": "<= 200 char direct quote from a tool response, PII redacted",
+  "confidence": <float 0.0~1.0>,
+  "reasoning": "<= 300 char brief justification, may mention which ops were called",
+  "tool_calls_made": <int>
+}
+```
+
+- `verdict="pass"` iff `partial_score == 1.0`
+- `verdict="fail"` iff `partial_score == 0.0`
+- `verdict="partial"` iff `0.0 < partial_score < 1.0`
+- If the deliverable is absent or unrelated, return:
+  {"verdict":"fail","partial_score":0.0,"evidence":"deliverable absent","confidence":1.0,"reasoning":"No deliverable file matching the criterion was provided.","tool_calls_made":0}
+
+DO NOT include any text outside the JSON object. DO NOT wrap the JSON
+in markdown code fences. Return the JSON as the entire response body.
+
+<!-- ===SPLIT=== -->
+<!-- Below this marker = per-item variable content sent as `input=`.   -->
+<!-- Above this marker = stable scaffold sent as `instructions=` so    -->
+<!-- the Azure Responses API can cache the prefix (PR3 step 1a).       -->
+
 ## Routing hint (chosen by the harness for this criterion)
 
 The harness inspected the criterion text and recommends this primary
@@ -96,28 +125,4 @@ listed paths; do not invent paths.
 (If the list above is empty, return verdict=`fail` immediately with
 evidence `"deliverable absent"` and skip all tool calls.)
 
-## Required output (JSON ONLY, after you finish tool calls)
-
-Return a single JSON object with EXACTLY these fields and types:
-
-```json
-{
-  "verdict": "pass" | "partial" | "fail",
-  "partial_score": <float 0.0~1.0>,
-  "evidence": "<= 200 char direct quote from a tool response, PII redacted",
-  "confidence": <float 0.0~1.0>,
-  "reasoning": "<= 300 char brief justification, may mention which ops were called",
-  "tool_calls_made": <int>
-}
-```
-
-- `verdict="pass"` iff `partial_score == 1.0`
-- `verdict="fail"` iff `partial_score == 0.0`
-- `verdict="partial"` iff `0.0 < partial_score < 1.0`
-- If the deliverable is absent or unrelated, return:
-  {"verdict":"fail","partial_score":0.0,"evidence":"deliverable absent","confidence":1.0,"reasoning":"No deliverable file matching the criterion was provided.","tool_calls_made":0}
-
-DO NOT include any text outside the JSON object. DO NOT wrap the JSON
-in markdown code fences. Return the JSON as the entire response body.
-
-<!-- prompt_version: v2 -->
+<!-- prompt_version: v2.1 -->
