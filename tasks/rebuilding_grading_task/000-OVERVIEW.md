@@ -32,7 +32,7 @@
 | 201 | [read_deliverable tool 정의/구현](./201-tool-interface.md) | ✅ (this commit) |
 | 202 | [judge prompt v2 (tool-aware)](./202-judge-prompt-tool-aware.md) | ✅ (this commit) |
 | 203 | [메인 grader rewrite (tool-calling)](./203-grader-main-rewrite.md) | ☐ |
-| 204 | [modality routing](./204-perception-routing.md) | ☐ |
+| 204 | [modality routing](./204-perception-routing.md) | ✅ (this commit) |
 | 205 | [vision perception (gpt-5.4 vision)](./205-vision-judge.md) | ☐ |
 | 206 | [audio perception (gpt-audio-1.5)](./206-audio-judge.md) | ☐ |
 | 207 | [legacy removal](./207-legacy-removal.md) | ☐ |
@@ -63,6 +63,7 @@
 | 오디오/비디오 probe 백엔드 | `ffmpeg-python`/`moviepy` 대신 `PyAV` (`av`) 우선 | wheel이 ffmpeg 동봉, `grade-run.yml`에 `apt-get install ffmpeg` 추가 불필요 (task 200 audit) |
 | `soundfile` 명시 의존 | 201에서 `requirements.txt`에 명시 추가 | 현재는 `librosa`/`pedalboard`의 transitive — 명시화로 fragility 제거 (task 200 audit) |
 | v1 prompt 조기 교체 여부 | 교체하지 않고 `grader_judge_v2.md` 별도 신규 생성 + `grader_judge_v1_archive.md` 복사 보존. PR2 끝나고 207에서 v1 삽제 | 203 ToolCallingJudge는 legacy Judge와 공존 예정 — 둘 다 프롬프트 파일 필요 |
+| perception routing 테스트 위치 | 기존 `test_grader_routing.py`(tier routing)와 분리해 `test_perception_routing.py` 신규 | concern 분리 — 207에서 legacy tier 테스트 삭제해도 modality routing 테스트는 살아남 |
 
 ## 작업 흐름 (자동, 사용자 개입 없음)
 
