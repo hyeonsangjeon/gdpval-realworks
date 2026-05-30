@@ -42,10 +42,10 @@
 
 | # | task | 상태 |
 |---|---|---|
-| 300 | [gold-ceiling test](./300-gold-ceiling.md) | ☐ |
-| 301 | [exp003 재채점 + formatting 격차 붕괴 + bare-CSV evidence](./301-exp003-revalidation.md) | ☐ |
-| 302 | [cost budget 재추정](./302-cost-budget-recheck.md) | ☐ |
-| 303 | [variance + bootstrap CI + judge_error rate](./303-variance-and-error.md) | ☐ |
+| 300 | [gold-ceiling test](./300-gold-ceiling.md) | ⚠️ PARTIAL — v2 path live-verified on 3-task smoke (run `26677864500`, judge_error 1.19%, evidence tool-grounded). Gold-subset run pending. See [PR3_SMOKE_FINDINGS.md](./PR3_SMOKE_FINDINGS.md). |
+| 301 | [exp003 재채점 + formatting 격차 붕괴 + bare-CSV evidence](./301-exp003-revalidation.md) | 🚫 BLOCKED on 302 cost decision (smoke projects $52/run, over $50 ceiling) |
+| 302 | [cost budget 재추정](./302-cost-budget-recheck.md) | ⚠️ STOP+ALERT triggered — $52/run projection at N=3 over user $50 ceiling. User pick A/B/C in PR3_SMOKE_FINDINGS.md. |
+| 303 | [variance + bootstrap CI + judge_error rate](./303-variance-and-error.md) | ⏸ deferred until 301 produces a stable per-task baseline |
 
 ## 자율 판단 결정 기록 (working memo)
 
