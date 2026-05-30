@@ -33,8 +33,8 @@
 | 202 | [judge prompt v2 (tool-aware)](./202-judge-prompt-tool-aware.md) | ✅ (this commit) |
 | 203 | [메인 grader rewrite (tool-calling)](./203-grader-main-rewrite.md) | ☐ |
 | 204 | [modality routing](./204-perception-routing.md) | ✅ (this commit) |
-| 205 | [vision perception (gpt-5.4 vision)](./205-vision-judge.md) | ☐ |
-| 206 | [audio perception (gpt-audio-1.5)](./206-audio-judge.md) | ☐ |
+| 205 | [vision perception (gpt-5.4 vision)](./205-vision-judge.md) | ✅ (this commit) |
+| 206 | [audio perception (gpt-audio-1.5)](./206-audio-judge.md) | ✅ (this commit) |
 | 207 | [legacy removal](./207-legacy-removal.md) | ☐ |
 | 208 | [config schema + validator 업데이트](./208-config-schema-update.md) | ☐ |
 
@@ -64,6 +64,8 @@
 | `soundfile` 명시 의존 | 201에서 `requirements.txt`에 명시 추가 | 현재는 `librosa`/`pedalboard`의 transitive — 명시화로 fragility 제거 (task 200 audit) |
 | v1 prompt 조기 교체 여부 | 교체하지 않고 `grader_judge_v2.md` 별도 신규 생성 + `grader_judge_v1_archive.md` 복사 보존. PR2 끝나고 207에서 v1 삽제 | 203 ToolCallingJudge는 legacy Judge와 공존 예정 — 둘 다 프롬프트 파일 필요 |
 | perception routing 테스트 위치 | 기존 `test_grader_routing.py`(tier routing)와 분리해 `test_perception_routing.py` 신규 | concern 분리 — 207에서 legacy tier 테스트 삭제해도 modality routing 테스트는 살아남 |
+| perception 클래스 의존성 주입 방향 | `client`을 생성자에 inject (클래스 내부 생성 X) | main judge가 Responses API 클라이언트 소유 + 테스트에서 FakeClient 제공 용이 |
+| audio deployment 누락 처리 | `judge()` 호출 시점에 endpoint env 체크, 누락이면 `judge_error=endpoint_missing` graceful return | import-time hard fail 피하고 audio 항목에서만 결속 (main judge는 계속 동작) |
 
 ## 작업 흐름 (자동, 사용자 개입 없음)
 
