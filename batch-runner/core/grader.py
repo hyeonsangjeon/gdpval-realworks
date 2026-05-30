@@ -226,6 +226,16 @@ class Grader:
         if self._use_batch:
             self._build_tier_judges()
 
+        # --- PR2 task 203: v2 tool-calling judge opt-in ------------------
+        # Activated when the grading config sets `judge.tools.read_deliverable`
+        # (a structure unique to v2 configs). When set we instantiate a
+        # `ToolCallingJudge`; `_judge()` then dispatches to it instead of
+        # the legacy text-extraction path. Tier batching + tool-calling
+        # are mutually exclusive — v2 configs do not set judge_routing.
+        self._tool_judge = None
+        if self._is_tool_calling_config():
+            self._tool_judge = self._build_tool_calling_judge()
+
     # ------------------------------------------------------------------
     # Batch / tier routing (no-op unless config opts in)
     # ------------------------------------------------------------------
@@ -674,6 +684,12 @@ class Grader:
     def _judge(
         self, task: TaskRubric, item: RubricItem, files: list[Path]
     ) -> tuple[ItemGrade, int, int]:
+        # PR2 task 203 — v2 tool-calling dispatch. Enabled by config
+        # (judge.tools.read_deliverable present). Legacy text-extraction
+        # path runs only when this dispatch is inactive.
+        if self._tool_judge is not None:
+            return self._judge_via_tool_calling(task, item, files)
+
         if not files:
             return self._absent_judge_item(item), 0, 0
 
@@ -1054,6 +1070,90 @@ class Grader:
     @staticmethod
     def _read_prompt_template(path: str) -> str:
         return Path(path).read_text(encoding="utf-8")
+
+    # ------------------------------------------------------------------
+    # PR2 task 203 — tool-calling judge helpers
+    # ------------------------------------------------------------------
+
+    def _is_tool_calling_config(self) -> bool:
+        """True when the grading config opts into the v2 tool-calling path.
+
+        Trigger: ``judge.tools.read_deliverable`` present. We look at the
+        *presence* of the block, not its content, so the v2 default
+        config and any user override both activate.
+        """
+        return bool(
+            (self.config.get("judge") or {})
+            .get("tools", {})
+            .get("read_deliverable")
+        )
+
+    def _build_tool_calling_judge(self):
+        """Instantiate a ``ToolCallingJudge`` from this Grader's config.
+
+        Pulls the v2 prompt template path from ``prompt.tool_template``
+        (falls back to the standard ``prompts/grader_judge_v2.md`` sibling
+        of the configured v1 template).
+        """
+        from core.tool_calling_judge import ToolCallingJudge  # local; avoid cycle
+
+        judge_cfg = self.config.get("judge", {})
+        tool_prompt_path = (
+            self.config.get("prompt", {}).get("tool_template")
+            or str(Path(self.config["prompt"]["template"]).with_name(
+                "grader_judge_v2.md"))
+        )
+        tool_prompt = self._read_prompt_template(tool_prompt_path)
+
+        per_item_cap = int(
+            (judge_cfg.get("tools", {}).get("read_deliverable", {})
+             .get("per_item_call_cap", 8))
+        )
+        max_iter = int(
+            (judge_cfg.get("tools", {}).get("read_deliverable", {})
+             .get("max_iterations", 10))
+        )
+
+        return ToolCallingJudge(
+            client=self.client,
+            model=self.model,
+            prompt_template=tool_prompt,
+            reasoning_effort=(judge_cfg.get("reasoning") or {})
+                .get("effort", "medium"),
+            max_output_tokens=int((judge_cfg.get("generation") or {})
+                .get("max_output_tokens", 2400)),
+            per_item_tool_call_cap=per_item_cap,
+            max_iterations=max_iter,
+        )
+
+    def _judge_via_tool_calling(
+        self, task: TaskRubric, item: RubricItem, files: list[Path]
+    ) -> tuple[ItemGrade, int, int]:
+        if not files:
+            return self._absent_judge_item(item), 0, 0
+        deliverable_dir = str(files[0].parent)
+        file_names = [f.name for f in files]
+        self._apply_tpm_delay()
+        result = self._tool_judge.judge_item(
+            task=task, item=item,
+            deliverable_dir=deliverable_dir,
+            file_names=file_names,
+        )
+        ig = ItemGrade(
+            rubric_item_id=item.rubric_item_id,
+            criterion=item.criterion,
+            max_score=item.score,
+            awarded_score=result.awarded_score,
+            verdict=result.verdict,
+            decided_by="judge",
+            required=item.required,
+            evidence=result.evidence or (result.judge_error or ""),
+            judge_confidence=result.confidence,
+            judge_latency_ms=round(result.latency_ms, 2),
+            judge_raw_response=result.raw_text if self._save_raw() else None,
+        )
+        return ig, result.input_tokens, result.output_tokens
+
 
     @staticmethod
     def _extract_prompt_version(prompt_text: str) -> str:
