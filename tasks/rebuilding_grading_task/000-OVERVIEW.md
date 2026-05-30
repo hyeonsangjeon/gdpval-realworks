@@ -29,7 +29,7 @@
 | # | task | 상태 |
 |---|---|---|
 | 200 | [exp011 env audit](./200-env-audit.md) → [PR2_ENV_AUDIT.md](./PR2_ENV_AUDIT.md) | ✅ (this commit) |
-| 201 | [read_deliverable tool 정의/구현](./201-tool-interface.md) | ☐ |
+| 201 | [read_deliverable tool 정의/구현](./201-tool-interface.md) | ✅ (this commit) |
 | 202 | [judge prompt v2 (tool-aware)](./202-judge-prompt-tool-aware.md) | ☐ |
 | 203 | [메인 grader rewrite (tool-calling)](./203-grader-main-rewrite.md) | ☐ |
 | 204 | [modality routing](./204-perception-routing.md) | ☐ |
