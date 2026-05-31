@@ -1,0 +1,20 @@
+[
+  {
+    "rid": "vis-1",
+    "verdict": "judge_error",
+    "decided_by": "judge",
+    "routing_modality": "visual",
+    "perception_called": false,
+    "tools_used": [],
+    "evidence": "PermissionDeniedError: Error code: 403 - {'error': {'code': 'AuthenticationTypeDisabled', 'message': 'Key based authenti"
+  },
+  {
+    "rid": "txt-1",
+    "verdict": "judge_error",
+    "decided_by": "judge",
+    "routing_modality": "text",
+    "perception_called": false,
+    "tools_used": [],
+    "evidence": "PermissionDeniedError: Error code: 403 - {'error': {'code': 'AuthenticationTypeDisabled', 'message': 'Key based authenti"
+  }
+]

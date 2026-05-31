@@ -78,6 +78,10 @@ class ToolCallingResult:
     cached_tokens: int            # cached input tokens (Responses API)
     routing_modality: str
     raw_text: str              # final model JSON (debugging)
+    # PR3 (0531) perception-wiring instrumentation. Proves at runtime
+    # whether a perception sub-judge actually fired for this item.
+    tools_used: List[str] = field(default_factory=list)  # dispatched fn names, in order
+    perception_called: bool = False  # vision_judge or audio_judge dispatched
 
 
 # ----------------------------------------------------------------------
@@ -202,6 +206,7 @@ class ToolCallingJudge:
         input_tok_total = 0
         output_tok_total = 0
         cached_tok_total = 0
+        tools_used: List[str] = []
         wall_start = time.time()
         final_text = ""
         judge_error: Optional[str] = None
@@ -297,6 +302,7 @@ class ToolCallingJudge:
                         ))
                         continue
                     tool_calls_made += 1
+                    tools_used.append(self._fc_name(fc))
                     result = self._dispatch_tool(fc, deliverable_dir, decision)
                     messages.append(self._function_call_output_message(fc, result))
                 # Loop again to let the model react to the tool outputs.
@@ -323,7 +329,19 @@ class ToolCallingJudge:
             output_tokens=output_tok_total,
             cached_tokens=cached_tok_total,
             judge_error=judge_error,
+            tools_used=tools_used,
         )
+
+    def reset_perception(self) -> None:
+        """Reset per-task call counters/caches on the perception sub-judges.
+
+        VisionPerception/AudioPerception enforce a per-task call cap, so the
+        grader must reset them at each task boundary. No-op when a sub-judge
+        is not wired.
+        """
+        for p in (self.vision_perception, self.audio_perception):
+            if p is not None and hasattr(p, "reset"):
+                p.reset()
 
     # ------------------------------------------------------------------
     # Prompt / tools
@@ -602,7 +620,12 @@ class ToolCallingJudge:
         output_tokens: int,
         cached_tokens: int,
         judge_error: Optional[str],
+        tools_used: Optional[List[str]] = None,
     ) -> ToolCallingResult:
+        tools_used = list(tools_used or [])
+        perception_called = any(
+            t in ("vision_judge", "audio_judge") for t in tools_used
+        )
         if judge_error is not None or not final_text.strip():
             return ToolCallingResult(
                 verdict="judge_error",
@@ -620,6 +643,8 @@ class ToolCallingJudge:
                 cached_tokens=cached_tokens,
                 routing_modality=routing_modality,
                 raw_text=final_text,
+                tools_used=tools_used,
+                perception_called=perception_called,
             )
 
         parsed = _safe_json_loads(final_text)
@@ -640,6 +665,8 @@ class ToolCallingJudge:
                 cached_tokens=cached_tokens,
                 routing_modality=routing_modality,
                 raw_text=final_text,
+                tools_used=tools_used,
+                perception_called=perception_called,
             )
 
         verdict = str(parsed.get("verdict", "fail")).lower()
@@ -686,4 +713,6 @@ class ToolCallingJudge:
             cached_tokens=cached_tokens,
             routing_modality=routing_modality,
             raw_text=final_text,
+            tools_used=tools_used,
+            perception_called=perception_called,
         )

@@ -118,6 +118,12 @@ class ItemGrade:
     # for negative (penalty) items right=fail (i.e. the bad thing did
     # NOT happen). judge_error is conservatively right=False.
     model_did_right: bool = False
+    # PR3 (0531) perception-wiring instrumentation (v2 tool-calling path
+    # only; None/empty on v1 + precheck items). Proves at runtime which
+    # modality an item routed to and whether a perception sub-judge fired.
+    routing_modality: Optional[str] = None
+    perception_called: bool = False
+    tools_used: Optional[list[str]] = None
 
 
 @dataclass
@@ -371,6 +377,10 @@ class Grader:
     def grade_task(self, task: TaskRubric, deliverable_dir: str) -> TaskGrade:
         deliverable_path = Path(deliverable_dir)
         files = self._list_files(deliverable_path)
+
+        # PR3 (0531) — reset per-task perception call caps before each task.
+        if self._tool_judge is not None:
+            self._tool_judge.reset_perception()
 
         if self._use_batch:
             return self._grade_task_batched(task, deliverable_path, files)
@@ -1125,6 +1135,34 @@ class Grader:
              .get("max_iterations", 10))
         )
 
+        # PR3 (0531) perception wiring. Read judge.perception.{visual,audio}
+        # and instantiate the sub-judges, sharing this Grader's Azure client.
+        # Previously these blocks were validated by step8 but never wired,
+        # so visual/audio criteria were silently graded by the text judge.
+        vision_perception = None
+        audio_perception = None
+        perception_cfg = judge_cfg.get("perception") or {}
+        vis_cfg = perception_cfg.get("visual") or {}
+        aud_cfg = perception_cfg.get("audio") or {}
+        if vis_cfg.get("model"):
+            from core.perception.vision import VisionPerception  # local import
+            vision_perception = VisionPerception(
+                client=self.client,
+                deployment=str(vis_cfg["model"]),
+                call_cap=int(vis_cfg.get("call_cap_per_task", 5)),
+                reasoning_effort=(judge_cfg.get("reasoning") or {})
+                    .get("effort", "medium"),
+            )
+        if aud_cfg.get("model"):
+            from core.perception.audio import AudioPerception  # local import
+            audio_perception = AudioPerception(
+                client=self.client,
+                deployment=str(aud_cfg["model"]),
+                call_cap=int(aud_cfg.get("call_cap_per_task", 3)),
+                trim_seconds=int(aud_cfg.get("trim_seconds", 30)),
+                endpoint_env=str(aud_cfg.get("endpoint_env", "AZURE_AUDIO_ENDPOINT")),
+            )
+
         return ToolCallingJudge(
             client=self.client,
             model=self.model,
@@ -1135,6 +1173,8 @@ class Grader:
                 .get("max_output_tokens", 2400)),
             per_item_tool_call_cap=per_item_cap,
             max_iterations=max_iter,
+            vision_perception=vision_perception,
+            audio_perception=audio_perception,
         )
 
     def _judge_via_tool_calling(
@@ -1172,6 +1212,9 @@ class Grader:
             judge_confidence=result.confidence,
             judge_latency_ms=round(result.latency_ms, 2),
             judge_raw_response=result.raw_text if self._save_raw() else None,
+            routing_modality=result.routing_modality,
+            perception_called=result.perception_called,
+            tools_used=list(result.tools_used),
         )
         return ig, result.input_tokens, result.output_tokens
 
