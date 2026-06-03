@@ -1,3 +1,10 @@
+> ⛔ SUPERSEDED (2026-06-01) — 이 문서의 "default_v2_mini를 production default로" 권고는 폐기됨.
+> 근거: (1) v2-mini는 현재 default(v1-mini) 대비 critical_pass에서 9~15pp 후퇴(같은 10-task, 같은 집계).
+> (2) 후퇴 3건은 전부 formatting(perception 밖), standard 대비 leniency 38건 중 32건은 text — 둘 다 perception wiring으로 안 고쳐짐(phase0).
+> (3) perception이 만질 수 있는 visual+audio는 전체 critical의 6%(29/483), 7개 task에 한정(modality_distribution.md). benchmark-wide flip 정당화 불가.
+> 결정: v2-mini default flip 폐기. v1(default_gpt5pro) 유지. perception wiring 브랜치는 flip과 분리된 기술 PR로만 평가.
+> 상세: tasks/0531_sunday/ (PERCEPTION_THESIS_REPORT.md, modality_distribution.md).
+
 # PR3 FINAL_RECOMMENDATION — gdpval-realworks grading v2 cost-quality decision
 
 > Computed under TASK_grading_v2_cost_decision.md persistence protocol.
