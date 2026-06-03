@@ -189,13 +189,16 @@ class ToolCallingJudge:
         item: RubricItem,
         deliverable_dir: str,
         file_names: List[str],
+        reference_file_names: Optional[List[str]] = None,
     ) -> ToolCallingResult:
         """Grade one rubric item by letting the judge inspect files via tools."""
         decision = classify_criterion(item.criterion)
         # PR3 step 1a — split the prompt template into stable scaffold
         # (cached server-side via instructions=) and per-item variable.
         self._ensure_split()
-        variable_prompt = self._render_variable(task, item, file_names, decision)
+        variable_prompt = self._render_variable(
+            task, item, file_names, decision, reference_file_names or []
+        )
         tools = self._build_tools_for(decision.modality.value)
 
         messages: List[Dict[str, Any]] = [
@@ -372,6 +375,7 @@ class ToolCallingJudge:
         item: RubricItem,
         file_names: List[str],
         decision,
+        reference_file_names: Optional[List[str]] = None,
     ) -> str:
         """Fill per-item placeholders in the variable-half template."""
         prompt = self._variable_template or self.prompt_template
@@ -398,6 +402,14 @@ class ToolCallingJudge:
             block,
             prompt,
         )
+        reference_block = "\n".join(
+            f"- path: `{fn}`" for fn in (reference_file_names or [])
+        )
+        prompt = re.sub(
+            r"\{\{#each reference_files\}\}[\s\S]*?\{\{/each\}\}",
+            reference_block,
+            prompt,
+        )
         return prompt
 
     def _build_initial_prompt(
@@ -406,6 +418,7 @@ class ToolCallingJudge:
         item: RubricItem,
         file_names: List[str],
         decision,
+        reference_file_names: Optional[List[str]] = None,
     ) -> str:
         prompt = self.prompt_template
         prompt = prompt.replace("{{sector}}", task.sector or "")
@@ -430,6 +443,14 @@ class ToolCallingJudge:
         prompt = re.sub(
             r"\{\{#each deliverable_files\}\}[\s\S]*?\{\{/each\}\}",
             block,
+            prompt,
+        )
+        reference_block = "\n".join(
+            f"- path: `{fn}`" for fn in (reference_file_names or [])
+        )
+        prompt = re.sub(
+            r"\{\{#each reference_files\}\}[\s\S]*?\{\{/each\}\}",
+            reference_block,
             prompt,
         )
         return prompt

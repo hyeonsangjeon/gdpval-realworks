@@ -111,10 +111,11 @@ op likely to ground the verdict:
 - criterion:
   {{criterion}}
 
-## Candidate deliverable files
+## Selected candidate deliverable files
 
-The LLM under test produced these files. Use `read_deliverable` with the
-listed paths; do not invent paths.
+The harness selected these files as the candidate deliverable(s) produced
+by the LLM under test for this rubric item. Use `read_deliverable` with
+the listed paths; do not invent paths.
 
 {{#each deliverable_files}}
 - path: `{{filename}}`
@@ -124,5 +125,15 @@ listed paths; do not invent paths.
 
 (If the list above is empty, return verdict=`fail` immediately with
 evidence `"deliverable absent"` and skip all tool calls.)
+
+## Reference input files (NOT candidate deliverables)
+
+The following files were task inputs echoed into the deliverable folder.
+Use them only when the criterion explicitly requires comparison against
+input/reference material. Do not grade them as candidate deliverables.
+
+{{#each reference_files}}
+- path: `{{filename}}`
+{{/each}}
 
 <!-- prompt_version: v2.1 -->

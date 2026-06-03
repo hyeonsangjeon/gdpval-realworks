@@ -11,7 +11,7 @@ import logging
 import os
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -20,6 +20,12 @@ from PyPDF2 import PdfReader
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import AzureOpenAI
 
+from core.deliverable_selector import (
+    CriterionTargetPlan,
+    DeliverableSelection,
+    plan_targets_for_criterion,
+    select_deliverables,
+)
 from core.file_reader import read_reference_file
 from core.rubric_loader import RubricItem, TaskRubric
 
@@ -124,6 +130,15 @@ class ItemGrade:
     routing_modality: Optional[str] = None
     perception_called: bool = False
     tools_used: Optional[list[str]] = None
+    target_scope: Optional[str] = None
+    target_ids: Optional[list[str]] = None
+    child_grades: Optional[list[dict]] = None
+    aggregation_rule: Optional[str] = None
+    selected_paths: Optional[list[str]] = None
+    support_paths_visible: Optional[list[str]] = None
+    selection_status: Optional[str] = None
+    selection_error: Optional[str] = None
+    score_excluded: bool = False
 
 
 @dataclass
@@ -153,6 +168,11 @@ class TaskGrade:
     # prompt caching). 0 for legacy v1 path; populated by ToolCallingJudge
     # via side-channel _last_cached_tokens. Used for effective-cost math.
     judge_cached_tokens: int = 0
+    selected_deliverables: Optional[dict] = None
+    reference_files_excluded: list[str] = field(default_factory=list)
+    selection_rule: Optional[str] = None
+    selection_status: Optional[str] = None
+    selection_error: Optional[str] = None
 
 
 class Grader:
@@ -381,6 +401,7 @@ class Grader:
         # PR3 (0531) — reset per-task perception call caps before each task.
         if self._tool_judge is not None:
             self._tool_judge.reset_perception()
+            return self._grade_task_with_selector(task, deliverable_path, files)
 
         if self._use_batch:
             return self._grade_task_batched(task, deliverable_path, files)
@@ -443,6 +464,379 @@ class Grader:
         if no_deliverables:
             grade.error = "no_deliverables"
         return grade
+
+    def _grade_task_with_selector(
+        self, task: TaskRubric, deliverable_path: Path, files: list[Path]
+    ) -> TaskGrade:
+        """Tool-calling path with deterministic deliverable selection.
+
+        The selector only decides which files are visible to each item. The
+        judge/precheck verdict logic stays on the existing code paths.
+        """
+        selection = self._select_deliverables(task, deliverable_path, files)
+        file_map = self._relative_file_map(deliverable_path, files)
+        reference_file_names = list(selection.reference_files_excluded)
+
+        items: list[ItemGrade] = []
+        judge_call_count = 0
+        precheck_count = 0
+        judge_total_latency_ms = 0.0
+        judge_input_tokens = 0
+        judge_output_tokens = 0
+        judge_cached_tokens = 0
+
+        for item in task.rubric_items:
+            mode, pattern_id = self._classify(item)
+            plan = plan_targets_for_criterion(selection, item.criterion)
+
+            if selection.selection_status == "selection_error":
+                ig = self._selection_ungraded_item(
+                    item,
+                    f"selection_error: {selection.selection_error or 'ambiguous candidate selection'}",
+                    selection,
+                    plan,
+                )
+                items.append(ig)
+                continue
+
+            if selection.selection_status == "no_generated_candidate":
+                evidence = "no generated deliverable after reference set-diff"
+                if mode == "precheck":
+                    ig = self._fail_precheck_item(item, pattern_id, evidence)
+                    precheck_count += 1
+                else:
+                    ig = self._fail_judge_item(item, evidence)
+                self._attach_target_audit(ig, plan, selection)
+                items.append(ig)
+                continue
+
+            if selection.selection_status == "wrong_format_primary":
+                evidence = selection.selection_error or "wrong_format_primary"
+                if self._is_overall_style_item(item):
+                    ig = self._selection_ungraded_item(
+                        item,
+                        f"wrong_format_primary: {evidence}",
+                        selection,
+                        plan,
+                    )
+                elif mode == "precheck":
+                    ig = self._fail_precheck_item(item, pattern_id, evidence)
+                    precheck_count += 1
+                    self._attach_target_audit(ig, plan, selection)
+                else:
+                    ig = self._fail_judge_item(item, evidence)
+                    self._attach_target_audit(ig, plan, selection)
+                items.append(ig)
+                continue
+
+            if plan.target_scope == "split_children":
+                ig, in_tok, out_tok, calls, latency, cached = self._judge_split_children(
+                    task,
+                    item,
+                    selection,
+                    deliverable_path,
+                    reference_file_names,
+                    plan,
+                )
+                judge_call_count += calls
+                judge_total_latency_ms += latency
+                judge_input_tokens += in_tok
+                judge_output_tokens += out_tok
+                judge_cached_tokens += cached
+                items.append(ig)
+                continue
+
+            selected_files = self._paths_for_selected(plan.selected_paths, file_map)
+            if not selected_files:
+                ig = self._selection_ungraded_item(
+                    item,
+                    "selection_error: no selected target files for criterion",
+                    selection,
+                    plan,
+                )
+                items.append(ig)
+                continue
+
+            if mode == "precheck":
+                precheck_count += 1
+                pre = self._run_precheck(pattern_id, item, selected_files)
+                if pre is None:
+                    self._last_cached_tokens = 0
+                    ig, in_tok, out_tok = self._judge_via_tool_calling_selected(
+                        task,
+                        item,
+                        deliverable_path,
+                        plan.selected_paths,
+                        reference_file_names,
+                    )
+                    judge_call_count += 1
+                    judge_total_latency_ms += ig.judge_latency_ms or 0.0
+                    judge_input_tokens += in_tok
+                    judge_output_tokens += out_tok
+                    judge_cached_tokens += getattr(self, "_last_cached_tokens", 0)
+                else:
+                    verdict, evidence = pre
+                    ig = self._to_item_grade_from_precheck(
+                        item, pattern_id, verdict, evidence
+                    )
+            else:
+                self._last_cached_tokens = 0
+                ig, in_tok, out_tok = self._judge_via_tool_calling_selected(
+                    task,
+                    item,
+                    deliverable_path,
+                    plan.selected_paths,
+                    reference_file_names,
+                )
+                judge_call_count += 1
+                judge_total_latency_ms += ig.judge_latency_ms or 0.0
+                judge_input_tokens += in_tok
+                judge_output_tokens += out_tok
+                judge_cached_tokens += getattr(self, "_last_cached_tokens", 0)
+
+            self._attach_target_audit(ig, plan, selection)
+            items.append(ig)
+
+        grade = self._aggregate(items, task)
+        grade.judge_call_count = judge_call_count
+        grade.precheck_count = precheck_count
+        grade.judge_total_latency_ms = round(judge_total_latency_ms, 2)
+        grade.judge_input_tokens = judge_input_tokens
+        grade.judge_output_tokens = judge_output_tokens
+        grade.judge_cached_tokens = judge_cached_tokens
+        self._attach_selection_audit(grade, selection)
+        if selection.selection_status == "selection_error":
+            grade.error = selection.selection_status
+        return grade
+
+    def _select_deliverables(
+        self, task: TaskRubric, deliverable_path: Path, files: list[Path]
+    ) -> DeliverableSelection:
+        rel_files = [self._relative_file_name(deliverable_path, path) for path in files]
+        return select_deliverables(
+            task_id=task.task_id,
+            deliverable_files=rel_files,
+            reference_files=task.reference_files,
+            instruction=task.prompt,
+            rubric_items=task.rubric_items,
+        )
+
+    def _relative_file_map(self, deliverable_path: Path, files: list[Path]) -> dict[str, Path]:
+        mapping: dict[str, Path] = {}
+        for path in files:
+            rel = self._relative_file_name(deliverable_path, path)
+            mapping[rel] = path
+            mapping[path.name] = path
+        return mapping
+
+    @staticmethod
+    def _relative_file_name(deliverable_path: Path, path: Path) -> str:
+        try:
+            return path.relative_to(deliverable_path).as_posix()
+        except ValueError:
+            return path.name
+
+    @staticmethod
+    def _paths_for_selected(selected_paths: list[str], file_map: dict[str, Path]) -> list[Path]:
+        paths: list[Path] = []
+        for selected in selected_paths:
+            path = file_map.get(selected) or file_map.get(Path(selected).name)
+            if path is not None:
+                paths.append(path)
+        return paths
+
+    def _judge_split_children(
+        self,
+        task: TaskRubric,
+        item: RubricItem,
+        selection: DeliverableSelection,
+        deliverable_path: Path,
+        reference_file_names: list[str],
+        plan: CriterionTargetPlan,
+    ) -> tuple[ItemGrade, int, int, int, float, int]:
+        child_items: list[ItemGrade] = []
+        child_grades: list[dict] = []
+        input_tokens = 0
+        output_tokens = 0
+        cached_tokens = 0
+        latency_ms = 0.0
+        calls = 0
+
+        target_by_id = {target.target_id: target for target in selection.primary_targets}
+        for target_id in plan.target_ids:
+            target = target_by_id.get(target_id)
+            if target is None:
+                continue
+            self._last_cached_tokens = 0
+            child, in_tok, out_tok = self._judge_via_tool_calling_selected(
+                task,
+                item,
+                deliverable_path,
+                list(target.paths),
+                reference_file_names,
+            )
+            calls += 1
+            input_tokens += in_tok
+            output_tokens += out_tok
+            cached_tokens += getattr(self, "_last_cached_tokens", 0)
+            latency_ms += child.judge_latency_ms or 0.0
+            child_items.append(child)
+            child_grades.append(
+                {
+                    "target_id": target_id,
+                    "selected_paths": list(target.paths),
+                    "verdict": child.verdict,
+                    "awarded_score": child.awarded_score,
+                    "evidence": child.evidence,
+                    "judge_confidence": child.judge_confidence,
+                }
+            )
+
+        if not child_items:
+            ig = self._selection_ungraded_item(
+                item,
+                "selection_error: split_children had no child targets",
+                selection,
+                plan,
+            )
+            return ig, input_tokens, output_tokens, calls, latency_ms, cached_tokens
+
+        if any(child.verdict == "judge_error" for child in child_items):
+            verdict: Verdict = "judge_error"
+            partial = 0.0
+        else:
+            partials = [self._partial_from_item(child) for child in child_items]
+            if any(child.verdict == "fail" for child in child_items):
+                partial = min(partials)
+            else:
+                partial = sum(partials) / len(partials)
+            verdict = self._verdict_from_partial(partial)
+
+        evidence = self._truncate(
+            " | ".join(
+                f"{grade['target_id']}: {grade['evidence']}" for grade in child_grades
+            ),
+            int(self.config.get("grader", {}).get("evidence_max_chars", 200)),
+        )
+        awarded = float(item.score) * partial
+        confidence_values = [
+            child.judge_confidence for child in child_items if child.judge_confidence is not None
+        ]
+        confidence = (
+            sum(confidence_values) / len(confidence_values)
+            if confidence_values else None
+        )
+
+        ig = ItemGrade(
+            rubric_item_id=item.rubric_item_id,
+            criterion=item.criterion,
+            max_score=item.score,
+            awarded_score=awarded,
+            verdict=verdict,
+            decided_by="judge",
+            required=item.required,
+            evidence=evidence or "split children produced no evidence",
+            judge_confidence=confidence,
+            judge_latency_ms=round(latency_ms, 2),
+            child_grades=child_grades,
+        )
+        self._attach_target_audit(ig, plan, selection)
+        return ig, input_tokens, output_tokens, calls, latency_ms, cached_tokens
+
+    @staticmethod
+    def _partial_from_item(item: ItemGrade) -> float:
+        if item.verdict == "pass":
+            return 1.0
+        if item.verdict == "fail":
+            return 0.0
+        if item.max_score:
+            try:
+                return max(0.0, min(1.0, float(item.awarded_score) / float(item.max_score)))
+            except ZeroDivisionError:
+                return 0.0
+        return 0.0
+
+    @staticmethod
+    def _verdict_from_partial(partial: float) -> Verdict:
+        if partial >= 1.0:
+            return "pass"
+        if partial <= 0.0:
+            return "fail"
+        return "partial"
+
+    def _selection_ungraded_item(
+        self,
+        item: RubricItem,
+        evidence: str,
+        selection: DeliverableSelection,
+        plan: CriterionTargetPlan,
+    ) -> ItemGrade:
+        ig = ItemGrade(
+            rubric_item_id=item.rubric_item_id,
+            criterion=item.criterion,
+            max_score=item.score,
+            awarded_score=0.0,
+            verdict="judge_error",
+            decided_by="judge",
+            required=item.required,
+            evidence=self._truncate(
+                evidence,
+                int(self.config.get("grader", {}).get("evidence_max_chars", 200)),
+            ),
+            judge_confidence=None,
+            judge_latency_ms=0.0,
+            score_excluded=True,
+        )
+        self._attach_target_audit(ig, plan, selection)
+        return ig
+
+    def _fail_judge_item(self, item: RubricItem, evidence: str) -> ItemGrade:
+        return ItemGrade(
+            rubric_item_id=item.rubric_item_id,
+            criterion=item.criterion,
+            max_score=item.score,
+            awarded_score=0.0,
+            verdict="fail",
+            decided_by="judge",
+            required=item.required,
+            evidence=self._truncate(
+                evidence,
+                int(self.config.get("grader", {}).get("evidence_max_chars", 200)),
+            ),
+            judge_confidence=1.0,
+            judge_latency_ms=0.0,
+        )
+
+    @staticmethod
+    def _is_overall_style_item(item: RubricItem) -> bool:
+        return "overall formatting and style of the deliverable" in item.criterion.casefold()
+
+    @staticmethod
+    def _attach_target_audit(
+        item_grade: ItemGrade,
+        plan: CriterionTargetPlan,
+        selection: DeliverableSelection,
+    ) -> None:
+        audit = plan.to_audit_dict(item_grade.rubric_item_id)
+        item_grade.target_scope = audit["target_scope"]
+        item_grade.target_ids = audit["target_ids"]
+        if item_grade.child_grades is None:
+            item_grade.child_grades = audit["child_grades"]
+        item_grade.aggregation_rule = audit["aggregation_rule"]
+        item_grade.selected_paths = audit["selected_paths"]
+        item_grade.support_paths_visible = audit["support_paths_visible"]
+        item_grade.selection_status = selection.selection_status
+        item_grade.selection_error = selection.selection_error
+
+    @staticmethod
+    def _attach_selection_audit(
+        grade: TaskGrade, selection: DeliverableSelection
+    ) -> None:
+        grade.selected_deliverables = selection.to_dict()
+        grade.reference_files_excluded = list(selection.reference_files_excluded)
+        grade.selection_rule = selection.selection_rule
+        grade.selection_status = selection.selection_status
+        grade.selection_error = selection.selection_error
 
     def _grade_task_batched(
         self, task: TaskRubric, deliverable_path: Path, files: list[Path]
@@ -977,15 +1371,18 @@ class Grader:
         # 'did right' flag so downstream metrics (critical_item_pass_rate
         # in PR1 task 101) treat positive and negative items consistently.
         for it in items:
-            if it.verdict == "judge_error":
+            if it.score_excluded:
+                it.model_did_right = True
+            elif it.verdict == "judge_error":
                 it.model_did_right = False
             elif (it.max_score or 0) < 0:
                 it.model_did_right = (it.verdict != "pass")
             else:
                 it.model_did_right = (it.verdict == "pass")
 
-        total_awarded = sum(it.awarded_score for it in items)
-        total_max = task.max_score
+        scored_items = [it for it in items if not it.score_excluded]
+        total_awarded = sum(it.awarded_score for it in scored_items)
+        total_max = sum(max(0, it.max_score) for it in scored_items)
         pct = (total_awarded / total_max * 100.0) if total_max else 0.0
         # PR1 task 102 — preserve un-clamped pct for diagnostics BEFORE the
         # [0,100] clamp below. pct_raw can be < 0 when negative penalties
@@ -1022,7 +1419,7 @@ class Grader:
         # right thing (covers both positive must-haves and negative penalties).
         critical_fail = any(
             _is_critical_item(it.max_score) and not it.model_did_right
-            for it in items
+            for it in scored_items
         )
         return TaskGrade(
             task_id=task.task_id,
@@ -1185,11 +1582,31 @@ class Grader:
             return self._absent_judge_item(item), 0, 0
         deliverable_dir = str(files[0].parent)
         file_names = [f.name for f in files]
+        return self._judge_via_tool_calling_selected(
+            task,
+            item,
+            Path(deliverable_dir),
+            file_names,
+            reference_file_names=[],
+        )
+
+    def _judge_via_tool_calling_selected(
+        self,
+        task: TaskRubric,
+        item: RubricItem,
+        deliverable_dir: Path,
+        file_names: list[str],
+        reference_file_names: list[str],
+    ) -> tuple[ItemGrade, int, int]:
+        if not file_names:
+            self._last_cached_tokens = 0
+            return self._absent_judge_item(item), 0, 0
         self._apply_tpm_delay()
         result = self._tool_judge.judge_item(
             task=task, item=item,
-            deliverable_dir=deliverable_dir,
+            deliverable_dir=str(deliverable_dir),
             file_names=file_names,
+            reference_file_names=reference_file_names,
         )
         # PR3 Step 0 — expose cached input tokens via instance side-channel.
         # Avoids changing the (ItemGrade, in_tok, out_tok) tuple shape used

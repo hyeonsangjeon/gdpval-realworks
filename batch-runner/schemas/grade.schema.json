@@ -127,7 +127,16 @@
                 "judge_latency_ms": {"type": ["number", "null"], "minimum": 0},
                 "precheck_pattern_id": {"type": ["string", "null"]},
                 "judge_raw_response": {"type": ["string", "null"]},
-                "model_did_right": {"type": "boolean", "description": "Sign-aware right-outcome flag (PR1 task 100). For positive max_score items, true iff verdict='pass'. For negative max_score (penalty) items, true iff verdict!='pass' (i.e. violation did NOT occur). judge_error is conservatively false."}
+                "model_did_right": {"type": "boolean", "description": "Sign-aware right-outcome flag (PR1 task 100). For positive max_score items, true iff verdict='pass'. For negative max_score (penalty) items, true iff verdict!='pass' (i.e. violation did NOT occur). judge_error is conservatively false."},
+                "target_scope": {"type": ["string", "null"], "enum": ["manifest", "file_target", "primary_bundle", "split_children", "selection_error", null]},
+                "target_ids": {"type": ["array", "null"], "items": {"type": "string"}},
+                "child_grades": {"type": ["array", "null"], "items": {"type": "object"}},
+                "aggregation_rule": {"type": ["string", "null"], "enum": ["blocking_min_else_mean", null]},
+                "selected_paths": {"type": ["array", "null"], "items": {"type": "string"}},
+                "support_paths_visible": {"type": ["array", "null"], "items": {"type": "string"}},
+                "selection_status": {"type": ["string", "null"]},
+                "selection_error": {"type": ["string", "null"]},
+                "score_excluded": {"type": "boolean"}
               },
               "additionalProperties": true
             }
@@ -143,6 +152,12 @@
           "judge_total_latency_ms": {"type": "number", "minimum": 0},
           "judge_input_tokens": {"type": "integer", "minimum": 0},
           "judge_output_tokens": {"type": "integer", "minimum": 0},
+          "judge_cached_tokens": {"type": "integer", "minimum": 0},
+          "selected_deliverables": {"type": ["object", "null"]},
+          "reference_files_excluded": {"type": "array", "items": {"type": "string"}},
+          "selection_rule": {"type": ["string", "null"]},
+          "selection_status": {"type": ["string", "null"]},
+          "selection_error": {"type": ["string", "null"]},
           "error": {"type": ["string", "null"]},
           "graded_at": {"type": "string"}
         },
