@@ -168,9 +168,11 @@ def test_wrong_format_fails_manifest_but_excludes_overall_style(monkeypatch, tmp
 def test_split_children_routes_each_primary_and_aggregates(monkeypatch, tmp_path):
     from core.rubric_loader import RubricItem, TaskRubric
 
+    evidence_13 = "session 13 polished " + ("a" * 130)
+    evidence_14 = "session 14 readable " + ("b" * 130)
     responses = ScriptedResponses([
-        _response(output=[_final(_payload("pass", 1.0, "session 13 polished"))]),
-        _response(output=[_final(_payload("partial", 0.5, "session 14 readable"))]),
+        _response(output=[_final(_payload("pass", 1.0, evidence_13))]),
+        _response(output=[_final(_payload("partial", 0.5, evidence_14))]),
     ])
     fake_client = SimpleNamespace(responses=responses)
     grader = _grader(monkeypatch, fake_client)
@@ -212,6 +214,10 @@ def test_split_children_routes_each_primary_and_aggregates(monkeypatch, tmp_path
     assert style.target_scope == "split_children"
     assert style.aggregation_rule == "blocking_min_else_mean"
     assert len(style.child_grades) == 2
+    assert style.evidence == "split_children: see child_grades for 2 per-target evidence entries"
+    assert len(style.evidence) <= 200
+    assert style.child_grades[0]["evidence"] == evidence_13
+    assert style.child_grades[1]["evidence"] == evidence_14
     assert style.verdict == "partial"
     assert style.awarded_score == 3.0
     assert grade.judge_call_count == 2

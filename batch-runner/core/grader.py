@@ -712,11 +712,9 @@ class Grader:
                 partial = sum(partials) / len(partials)
             verdict = self._verdict_from_partial(partial)
 
-        evidence = self._truncate(
-            " | ".join(
-                f"{grade['target_id']}: {grade['evidence']}" for grade in child_grades
-            ),
-            int(self.config.get("grader", {}).get("evidence_max_chars", 200)),
+        evidence = (
+            "split_children: see child_grades for "
+            f"{len(child_grades)} per-target evidence entries"
         )
         awarded = float(item.score) * partial
         confidence_values = [
