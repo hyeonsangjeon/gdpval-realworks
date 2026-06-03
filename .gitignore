@@ -277,3 +277,5 @@ data/gdpval-local/
 
 # IDE auto-backup files
 .history/
+tasks/*/render_probe/
+batch-runner/data/
