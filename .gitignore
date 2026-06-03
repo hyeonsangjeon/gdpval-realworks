@@ -45,6 +45,7 @@ batch-runner/results/*/report/report_data.json
 # step3 intermediate artifacts — CI 산출물, git 불필요 (report/report.md는 유지)
 batch-runner/results/*/*.json
 batch-runner/results/*/*.md
+tasks/0601_monday/smoke_regrade_outputs/
 *.parquet
 .huggingface/
 .cache/
