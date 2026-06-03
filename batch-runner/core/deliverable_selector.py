@@ -435,11 +435,14 @@ def _classify_task(
     if _looks_like_format_variant(generated):
         return "format_variants"
 
-    if _has_separate_deliverable_language(text):
-        return "separate_equivalent"
-
     non_image_docs = [p for p in generated if _extension(p) not in IMAGE_EXTENSIONS]
     images = [p for p in generated if _extension(p) in IMAGE_EXTENSIONS]
+
+    if _has_single_primary_with_support(generated, text, required_exts):
+        return "main_plus_support"
+
+    if _has_separate_deliverable_language(text):
+        return "separate_equivalent"
 
     if (
         len(non_image_docs) >= 2
@@ -466,22 +469,64 @@ def _classify_task(
     return "ambiguous"
 
 
+def _has_single_primary_with_support(
+    generated: list[str],
+    text: str,
+    required_exts: set[str],
+) -> bool:
+    if not required_exts or not _is_single_extension_family(required_exts):
+        return False
+
+    primary_matches = _filter_by_extensions(generated, required_exts)
+    if len(primary_matches) != 1:
+        return False
+
+    single_primary_signal = (
+        _has_single_primary_language(text) or _is_single_extension_family(required_exts)
+    )
+    if not single_primary_signal:
+        return False
+
+    primary = primary_matches[0]
+    support = [p for p in generated if p != primary]
+    return bool(support)
+
+
+def _is_single_extension_family(required_exts: set[str]) -> bool:
+    families = [
+        {".pdf"},
+        WORD_EXTENSIONS,
+        SPREADSHEET_EXTENSIONS,
+        PRESENTATION_EXTENSIONS,
+        {".zip"},
+        AUDIO_EXTENSIONS,
+        VIDEO_EXTENSIONS,
+        {".ipynb"},
+    ]
+    return any(required_exts <= family for family in families)
+
+
 def _has_separate_deliverable_language(text: str) -> bool:
+    # The noun list is intentionally deliverable/file-shaped. Content nouns
+    # like mixes, channels, outputs, tracks, tabs, slides, and sections are not
+    # multi-deliverable evidence on their own. Keep the numeric phrase in one
+    # sentence so "two inputs. The document ..." cannot become two documents.
+    noun = (
+        r"(?:deliverables?|files?|documents?|pdfs?|\.pdf|docx|\.docx|"
+        r"workbooks?|spreadsheets?|decks?|presentations?|pptx|\.pptx|"
+        r"forms?|reports?|letters?|emails?|memos?|guides?|checklists?|sheets?)"
+    )
+    phrase = r"(?:[a-z0-9_/\-]+\s+){0,4}"
     patterns = [
-        r"two separate",
-        r"two distinct",
-        r"three separate",
-        r"exactly two",
-        r"exactly three",
-        r"provides two",
-        r"provides three",
-        r"two deliverables",
-        r"three deliverables",
+        rf"(?:two|three|exactly two|exactly three)\s+"
+        rf"(?:separate\s+|distinct\s+)?{phrase}{noun}\b",
+        rf"provides?\s+(?:two|three)\s+"
+        rf"(?:separate\s+|distinct\s+)?{phrase}{noun}\b",
         r"both deliverable files",
-        r"one .* and one ",
-        r"standalone .* file",
+        rf"one\s+{noun}\b[^.]*\band\s+one\s+{noun}\b",
+        r"standalone [^.]{0,80} file",
         r"separate file",
-        r"each .* as a standalone",
+        r"each [^.]{0,80} as a standalone",
     ]
     return any(re.search(pattern, text) for pattern in patterns)
 
