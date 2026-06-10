@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -21,6 +22,17 @@ import pandas as pd
 import yaml
 from huggingface_hub import hf_hub_download, snapshot_download
 from huggingface_hub.errors import EntryNotFoundError
+
+
+def _hf_token() -> str | None:
+    """Resolve the HF auth token from the standard env vars.
+
+    The workflow injects ``HF_TOKEN`` for the download step, but the
+    huggingface_hub auto-pickup does not always fire, so we pass it
+    explicitly. Without it the requests go out anonymous (low rate
+    limit) and the sequential relay trips HTTP 429 on repeated chunks.
+    """
+    return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
 
 
 def parse_args() -> argparse.Namespace:
@@ -86,11 +98,13 @@ def _build_inference_from_parquet(parquet_path: str, experiment: str, repo_id: s
 
 
 def _download_or_reconstruct_inference(experiment: str, repo_id: str, out: Path) -> None:
+    token = _hf_token()
     try:
         step2_file = hf_hub_download(
             repo_id=repo_id,
             repo_type="dataset",
             filename="step2_inference_results.json",
+            token=token,
         )
         shutil.copy(step2_file, out)
         return
@@ -99,6 +113,7 @@ def _download_or_reconstruct_inference(experiment: str, repo_id: str, out: Path)
             repo_id=repo_id,
             repo_type="dataset",
             filename="data/train-00000-of-00001.parquet",
+            token=token,
         )
         reconstructed = _build_inference_from_parquet(parquet_file, experiment, repo_id)
         out.write_text(json.dumps(reconstructed, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -119,6 +134,7 @@ def main() -> int:
             repo_type="dataset",
             local_dir=tmp,
             allow_patterns=["deliverable_files/**"],
+            token=_hf_token(),
         )
         src = Path(tmp) / "deliverable_files"
         dst = Path("workspace") / "upload" / "deliverable_files"
