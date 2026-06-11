@@ -4,9 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'data/tests/**'      # yaml 파일 변경 시
-      - 'src/**'              # 소스 변경 시
-      - 'scripts/**'          # 스크립트 변경 시
+      - 'data/tests/**'                 # aggregate-tests → tests-index
+      - 'data/grades/**'                # aggregate-grades → grades-index
+      - 'batch-runner/experiments/**'   # aggregate-experiments → experiments-index
+      - 'batch-runner/results/**'       # aggregate-reports → reports-index
+      - 'src/**'                        # 소스 변경 시
+      - 'scripts/**'                    # aggregate 스크립트 변경 시
 
   workflow_dispatch:          # 수동 실행 가능
 
