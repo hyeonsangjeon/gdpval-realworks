@@ -15,7 +15,7 @@ import InfoTooltip from '../common/InfoTooltip'
 import SectionHint from '../common/SectionHint'
 import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
 import { fmtPct } from '../../lib/format'
-import { isHiddenGrade } from '../../lib/officialFilter'
+import { isHiddenGrade, isOfficialGrade } from '../../lib/officialFilter'
 
 /* ─── palette ─── */
 const SCORE_COLORS = {
@@ -337,6 +337,7 @@ export default function GradingAnalysisView({ debug = false }: { debug?: boolean
 function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; color: string; onNavigate: () => void }) {
   const s = grade.summary
   const isLegacyDummy = grade.grade_status === 'legacy_dummy'
+  const isOfficial = isOfficialGrade(grade)
   const wow = grade.summary_v1?.wow
   const stats = [
     { icon: Target, label: 'Graded', value: `${s.graded_tasks}/${s.total_tasks}`, color: 'text-blue-400 bg-blue-500/10' },
@@ -367,6 +368,15 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
               <h4 className="text-sm font-semibold text-dash-text">{grade.label}</h4>
+              {isOfficial && (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-bold uppercase tracking-wider text-emerald-400"
+                  title="Curated official baseline run"
+                >
+                  <Award className="w-2.5 h-2.5" />
+                  OFFICIAL
+                </span>
+              )}
               {isLegacyDummy && (
                 <span
                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-zinc-500/10 border border-zinc-500/30 text-[9px] font-bold uppercase tracking-wider text-zinc-400"
