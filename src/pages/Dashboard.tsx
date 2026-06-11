@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Github, Eye, EyeOff, BarChart3, TrendingUp, AlertTriangle, Award, Sun, Moon, HelpCircle } from 'lucide-react'
 import ScopeBadge from '../components/ScopeBadge'
@@ -14,6 +14,7 @@ import { useTheme } from '../contexts/ThemeContext'
 import { tooltipTexts } from '../data/tooltipTexts'
 import { onboarding } from '../utils/onboarding'
 import { substituteTaskTotal } from '../lib/textFormat'
+import { isHiddenExperiment } from '../lib/officialFilter'
 
 type TabKey = 'leaderboard' | 'trend' | 'errors' | 'grading'
 
@@ -26,6 +27,10 @@ const TABS: { id: TabKey; label: string; icon: React.ReactNode; color: string }[
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  // `?debug=1` reveals demo/smoke entries that are hidden in the default view.
+  // Display toggle only (not access control) — demo/smoke are not sensitive.
+  const debug = searchParams.get('debug') === '1'
   const { reports, experiments, sectorMatrix, generated, loading, error } = useReports()
   const { isDark, toggle: toggleTheme } = useTheme()
   const [activeTab, setActiveTab] = useState<TabKey>('leaderboard')
@@ -50,15 +55,17 @@ export default function Dashboard() {
 
   // Sort: date desc → duration desc
   const displayExperiments = useMemo(() => {
-    const list = demoMode
+    let list = demoMode
       ? experiments.filter((e) => e.report_scope === 'self_assessed_pre_grading')
       : [...experiments]
+    // Phase 1: hide smoke/test runs from the default view (?debug=1 restores).
+    if (!debug) list = list.filter((e) => !isHiddenExperiment(e))
     return list.sort((a, b) => {
       const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime()
       if (dateDiff !== 0) return dateDiff
       return parseDuration(b.duration) - parseDuration(a.duration)
     })
-  }, [experiments, demoMode])
+  }, [experiments, demoMode, debug])
 
   if (loading) {
     return (
@@ -284,7 +291,7 @@ export default function Dashboard() {
             )}
             {activeTab === 'trend' && <TrendView experiments={displayExperiments} />}
             {activeTab === 'errors' && <ErrorAnalysisView experiments={displayExperiments} reports={displayReports} />}
-            {activeTab === 'grading' && <GradingAnalysisView />}
+            {activeTab === 'grading' && <GradingAnalysisView debug={debug} />}
         </div>
       </div>
 

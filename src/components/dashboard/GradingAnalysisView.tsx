@@ -15,6 +15,7 @@ import InfoTooltip from '../common/InfoTooltip'
 import SectionHint from '../common/SectionHint'
 import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
 import { fmtPct } from '../../lib/format'
+import { isHiddenGrade } from '../../lib/officialFilter'
 
 /* ─── palette ─── */
 const SCORE_COLORS = {
@@ -30,11 +31,19 @@ const GRADE_EXP_COLORS = [
 ]
 
 /* ─── component ─── */
-export default function GradingAnalysisView() {
+export default function GradingAnalysisView({ debug = false }: { debug?: boolean }) {
   const navigate = useNavigate()
   const { isDark } = useTheme()
   const isMobile = useIsMobile()
-  const { grades, loading, error } = useGrades()
+  const { grades: allGrades, loading, error } = useGrades()
+
+  // Phase 1: hide legacy demo + smoke grade cards from the default view.
+  // `?debug=1` (passed from Dashboard) restores them. Display filter only —
+  // the grades-index JSON is untouched. exp003 grades never match.
+  const grades = useMemo(
+    () => (debug ? allGrades : allGrades.filter((g) => !isHiddenGrade(g))),
+    [allGrades, debug],
+  )
 
   const chartTooltip = {
     contentStyle: {
