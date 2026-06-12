@@ -1,0 +1,48 @@
+{
+  "n": 4,
+  "calls": 10,
+  "prompt": "current/A (constant)",
+  "meta_MAE": 0.312,
+  "render_MAE": 0.47,
+  "delta_MAE": 0.158,
+  "meta_bias": -0.062,
+  "render_bias": 0.47,
+  "rows": [
+    {
+      "id": "a74ead3b",
+      "owner": 3.0,
+      "meta": 3.5,
+      "render": 3.88,
+      "d_meta": 0.5,
+      "d_render": 0.88,
+      "pngs": 8
+    },
+    {
+      "id": "ec591973",
+      "owner": 2.5,
+      "meta": 2.25,
+      "render": 3.5,
+      "d_meta": -0.25,
+      "d_render": 1.0,
+      "pngs": 1
+    },
+    {
+      "id": "9a0d8d36",
+      "owner": 3.5,
+      "meta": 3.5,
+      "render": 3.5,
+      "d_meta": 0.0,
+      "d_render": 0.0,
+      "pngs": 8
+    },
+    {
+      "id": "403b9234",
+      "owner": 3.5,
+      "meta": 3.0,
+      "render": 3.5,
+      "d_meta": -0.5,
+      "d_render": 0.0,
+      "pngs": 8
+    }
+  ]
+}
