@@ -1,7 +1,7 @@
 # [분석] text criterion mini vs 5.4 신뢰도
 
 > **벤치마크 분석** — production 모델 결정용이 아님(production은 전부 5.4로 이미 기움, 예산 여유). mini의 신뢰 불가가 *판단형*(formatting/visual)에 국한인지 *사실 확인형*(text)에서도 그런지의 **경계 지도**를 그린다.
-> **git 상태 변경 없음**(read-only, 미커밋). **220 재채점 없음** — 기존 220 mini grade JSON 재사용 + text item 30개만 gpt-5.4 소규모 재채점. 인증: 로컬 `az login`(user, tenant 16b3c013), stale SP env unset(`.env` 불변).
+> **git 상태 변경 없음**(read-only, 미커밋). **220 재채점 없음** — 기존 220 mini grade JSON 재사용 + text item 30개만 gpt-5.4 소규모 재채점. 인증: 로컬 `az login`(user, tenant <AZURE_TENANT_ID>), stale SP env unset(`.env` 불변).
 
 ## 한 줄 결론
 
@@ -83,4 +83,4 @@ text item **30개** mini vs 5.4: **verdict 일치율 86.7%(26/30)**, numeric **9
 - mini 원본: `data/grades/exp003_...rubric_v2_tools_mini.json`.
 
 ### 부록 — 제약 준수
-git 상태 변경 없음(read-only, 미커밋). 220 재채점 없음(text 30개만, <$0.5). 새 대규모 Azure run 없음. 로컬 az login(user, tenant 16b3c013), stale SP env unset(`.env` 불변), secret 미조작. 소표본 한계 명시, 단정 회피, production(전부 5.4) 불변.
+git 상태 변경 없음(read-only, 미커밋). 220 재채점 없음(text 30개만, <$0.5). 새 대규모 Azure run 없음. 로컬 az login(user, tenant <AZURE_TENANT_ID>), stale SP env unset(`.env` 불변), secret 미조작. 소표본 한계 명시, 단정 회피, production(전부 5.4) 불변.

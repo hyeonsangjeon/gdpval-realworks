@@ -8,9 +8,9 @@ gold 20 실채점 완료. stale SP env를 현재 셸에서 unset해 CLI credenti
 `az account show`:
 
 ```text
-subscription: MCAPS-Hybrid-REQ-138900-2026-hjeon
-tenant: 16b3c013-d300-468d-ac64-7eda0820b6d3
-user: hjeon@microsoft.com
+subscription: <SUBSCRIPTION_NAME>
+tenant: <AZURE_TENANT_ID>
+user: <USER_UPN>
 ```
 
 `.env` 파일 자체는 수정하지 않았다. 실행 셸에서만:

@@ -116,4 +116,4 @@
 - `tasks/0607_sunday/vision_validation/login.sh` — 인증 헬퍼(사용자 실행용)
 
 ### 부록 — 인증 메모(우회 없음)
-로컬 `az`가 서비스 프린시플(테넌트 6d93cc9b)로 잡혀 AOAI 리소스 테넌트(16b3c013)와 불일치 → Conditional Access(AADSTS53003) 차단. **secret 우회 없이**, 사용자 대화형 계정(`hjeon@microsoft.com`)을 리소스 테넌트 구독으로 `az account set` 전환해 해소(`.env` 불변, SP secret 미조작). 토큰은 `DefaultAzureCredential` Entra ID(AD token)로만 발급.
+로컬 `az`가 서비스 프린시플(테넌트 <SP_TENANT_ID>)로 잡혀 AOAI 리소스 테넌트(<AZURE_TENANT_ID>)와 불일치 → Conditional Access(AADSTS53003) 차단. **secret 우회 없이**, 사용자 대화형 계정(`<USER_UPN>`)을 리소스 테넌트 구독으로 `az account set` 전환해 해소(`.env` 불변, SP secret 미조작). 토큰은 `DefaultAzureCredential` Entra ID(AD token)로만 발급.
