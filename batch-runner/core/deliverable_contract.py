@@ -193,6 +193,18 @@ def infer_deliverable_contract(
     text = task_text or ""
 
     detections = _detect_extensions(text)
+
+    # A literal type token ("csv", "pdf", "xlsx", …) frequently names an *input*
+    # file rather than the deliverable. When a high-confidence detection matches a
+    # reference file's extension it is ambiguous, so downgrade it to "medium":
+    # the type is still expected (and a mismatch still warns), but a valid output
+    # of a different type is no longer hard-blocked / sent into a wasted repair.
+    ref_exts = {Path(r).suffix.lower() for r in reference_files if Path(r).suffix}
+    for d in detections:
+        if d["confidence"] == "high" and d["ext"].lower() in ref_exts:
+            d["confidence"] = "medium"
+            d["note"] = d["note"] + " — also an input file type; confidence reduced"
+
     expected = [d["ext"] for d in detections]
     notes = [d["note"] for d in detections]
 

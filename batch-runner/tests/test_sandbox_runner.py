@@ -331,3 +331,70 @@ def test_manifest_has_no_temp_paths():
     blob = _json.dumps(result["sandbox_manifest"])
     assert "gdpval_qa_" not in blob
     assert "/var/folders" not in blob and "/tmp/" not in blob
+
+
+# ── import probe wiring (regression: probe was fed an empty list) ──────────
+
+def _xlsx_bytes():
+    import io
+    openpyxl = pytest.importorskip("openpyxl")
+    buf = io.BytesIO()
+    openpyxl.Workbook().save(buf)
+    return buf.getvalue()
+
+
+def test_manifest_import_probe_reflects_resolved_deps():
+    _xlsx = _xlsx_bytes()
+    runner = _runner_no_render()
+    code = _fake_response("```python\nprint('x')\n```")
+    task = "Create an Excel xlsx workbook from data.xlsx"
+    with patch.object(sr, "complete", lambda **k: (code, {})), \
+         patch.object(runner, "_execute",
+                      return_value=("local", {"success": True, "text": "",
+                                              "files": [{"filename": "report.xlsx", "content": _xlsx}]})):
+        result = runner.run(task_prompt=task, model="m", reference_files=["data.xlsx"])
+    probe = result["sandbox_manifest"]["dependency_import_probe"]
+    union = set(probe["available"]) | set(probe["missing"]) | set(probe["not_checked"])
+    # Regression guard: the probe must reflect the resolved deps, not be empty.
+    assert union, "import probe was empty — not wired to the resolved dependencies"
+    # openpyxl is predicted from the .xlsx reference and installed in the test env.
+    assert "openpyxl" in probe["available"]
+    assert probe["env"] == "host"  # local execution probes the host interpreter
+
+
+# ── tail redaction (regression: local crash leaked the temp path) ─────────
+
+def test_sanitize_tail_redacts_and_trims():
+    import os
+    import tempfile
+    from core.sandbox_runner import _sanitize_tail
+    tmp = tempfile.gettempdir()
+    redacted = _sanitize_tail(f'File "{tmp}/tmpABC/solution.py", line 3\nRuntimeError: boom')
+    assert tmp not in redacted
+    assert "<tmp>" in redacted
+    assert "RuntimeError: boom" in redacted          # useful text preserved
+    home = os.path.expanduser("~")
+    assert home not in _sanitize_tail(f"opened {home}/secret/data.xlsx")
+    assert _sanitize_tail("x" * 1000, limit=100) == "x" * 100   # trimming applied
+    assert _sanitize_tail(None) == ""
+
+
+def test_manifest_redacts_local_paths_on_real_crash():
+    """Exercise the REAL local runner so the traceback embeds an absolute path."""
+    import json as _json
+    import os
+    import tempfile
+    runner = SandboxRunner(
+        llm_client=object(), use_docker="never",
+        output_qa={"enabled": True, "render": False}, repair={"enabled": False},
+    )
+    code = _fake_response("Build it.\n```python\nraise RuntimeError('boom from solution')\n```")
+    with patch.object(sr, "complete", lambda **k: (code, {})):
+        result = runner.run(task_prompt="Create a PDF report", model="m", reference_files=[])
+    blob = _json.dumps(result["sandbox_manifest"])
+    assert tempfile.gettempdir() not in blob
+    assert "/var/folders" not in blob
+    assert os.path.expanduser("~") not in blob
+    # The error itself is preserved (redacted, not dropped).
+    tail = result["sandbox_manifest"]["attempts"][0]["stderr_tail"]
+    assert "RuntimeError" in tail and "<tmp>" in tail

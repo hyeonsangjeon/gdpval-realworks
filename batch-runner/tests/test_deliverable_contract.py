@@ -152,3 +152,64 @@ def test_contract_prompt_section_has_no_format_braces():
     section = c.to_prompt_section()
     assert "{" not in section and "}" not in section
     assert "DELIVERABLE CONTRACT" in section
+
+
+# ── reference-aware confidence downgrade (regression) ─────────────────────
+
+def test_high_confidence_downgraded_when_token_matches_reference():
+    # "csv" is a literal (normally high-confidence) token, but here it names the
+    # INPUT file — so the contract must not stay high and hard-block a valid
+    # differently-typed output.
+    c = infer_deliverable_contract(
+        "Clean the attached CSV and return the deduplicated result.",
+        ["raw_sales.csv"],
+    )
+    assert ".csv" in c.expected_extensions
+    assert c.confidence == "medium"
+
+
+def test_high_confidence_kept_when_no_matching_reference():
+    # Same prompt, but no .csv input -> the token refers to the deliverable.
+    c = infer_deliverable_contract(
+        "Clean the attached CSV and return the deduplicated result.",
+        ["notes.txt"],
+    )
+    assert c.confidence == "high"
+
+
+def test_input_typed_token_does_not_block_valid_other_output(tmp_path):
+    c = infer_deliverable_contract(
+        "Review the attached PDF and produce your written analysis.",
+        ["brief.pdf"],
+    )
+    out = tmp_path / "analysis.docx"
+    out.write_bytes(b"PK\x03\x04realish")
+    v = validate_contract(c, [out])
+    assert v.ok is True          # not blocked: the pdf token referred to the input
+    assert v.warnings            # the mismatch is still surfaced as a warning
+
+
+def test_output_typed_token_still_blocks_when_distinct_from_input(tmp_path):
+    # xlsx names the INPUT (downgraded) but pptx is clearly the requested OUTPUT,
+    # so a wrong-typed deliverable must still block.
+    c = infer_deliverable_contract(
+        "Convert the attached xlsx workbook into a pptx slide deck.",
+        ["data.xlsx"],
+    )
+    assert c.confidence == "high"
+    wrong = tmp_path / "deck.docx"
+    wrong.write_bytes(b"PK\x03\x04realish")
+    v = validate_contract(c, [wrong])
+    assert v.ok is False
+    assert any(".pptx" in e or ".xlsx" in e for e in v.blocking_errors)
+
+
+def test_multi_type_contract_is_any_of(tmp_path):
+    # Documents current behavior: a multi-type contract is satisfied by producing
+    # at least one of the expected types (any-of, not all-of).
+    c = infer_deliverable_contract("Create a pptx deck and an xlsx model", [])
+    assert {".pptx", ".xlsx"} <= set(c.expected_extensions)
+    only_pptx = tmp_path / "deck.pptx"
+    only_pptx.write_bytes(b"PK\x03\x04realish")
+    v = validate_contract(c, [only_pptx])
+    assert v.ok is True

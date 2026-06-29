@@ -62,6 +62,43 @@ def _sha256_text(text: str) -> str:
     import hashlib
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
+
+# Local filesystem roots that must never appear in the manifest or repair prompt.
+# Computed once; longest first so nested roots (e.g. the temp dir under $HOME) are
+# redacted before the shorter prefix.
+_REDACT_ROOTS = sorted(
+    {
+        r
+        for r in (
+            os.path.realpath(tempfile.gettempdir()),
+            tempfile.gettempdir(),
+            "/private/var/folders",
+            "/var/folders",
+            os.path.expanduser("~"),
+        )
+        if r and r not in ("/", "")
+    },
+    key=len,
+    reverse=True,
+)
+
+
+def _sanitize_tail(text: Optional[str], limit: int = 600) -> str:
+    """Trim to the last ``limit`` chars and redact local absolute paths.
+
+    stdout/stderr tails come from executed code (e.g. a traceback referencing the
+    sandbox temp dir). Redacting host roots keeps the manifest and repair prompt
+    free of local filesystem layout while preserving the useful error text.
+    """
+    if not text:
+        return ""
+    s = text[-limit:]
+    for root in _REDACT_ROOTS:
+        if root in s:
+            repl = "~" if root == os.path.expanduser("~") else "<tmp>"
+            s = s.replace(root, repl)
+    return s
+
 # Cache for the (relatively expensive) `docker info` probe.
 _DOCKER_AVAILABLE: Optional[bool] = None
 
@@ -323,11 +360,13 @@ class SandboxRunner:
         result["deliverable_text"] = deliverable_text
 
         # Inspect the produced artifacts in an isolated workspace.
-        analysis = self._analyze_output(result, ref_files, contract, task_prompt, executor_used)
+        analysis = self._analyze_output(
+            result, ref_files, contract, task_prompt, executor_used, manifest
+        )
 
         blocking = list(analysis["blocking_errors"])
         if not result.get("success"):
-            tail = (result.get("error") or "")[-600:]
+            tail = _sanitize_tail(result.get("error"), limit=600)
             blocking.insert(0, f"execution_failed: {tail}")
 
         status = self._status_for(attempt_idx, result, analysis, blocking)
@@ -355,8 +394,8 @@ class SandboxRunner:
                 "code_sha256": _sha256_text(code),
                 "blocking_errors": blocking,
                 "generated_artifacts": analysis["artifact_names"],
-                "stdout_tail": (result.get("text") or "")[-600:],
-                "stderr_tail": (result.get("error") or "")[-600:],
+                "stdout_tail": _sanitize_tail(result.get("text"), limit=600),
+                "stderr_tail": _sanitize_tail(result.get("error"), limit=600),
             },
         }
 
@@ -367,6 +406,7 @@ class SandboxRunner:
         contract: DeliverableContract,
         task_prompt: str,
         executor_used: str,
+        dep_manifest: Optional[DependencyManifest] = None,
     ) -> dict:
         """Materialize returned files and run contract + verify + render QA."""
         files = result.get("files") or []
@@ -403,10 +443,11 @@ class SandboxRunner:
             for rr in output_qa_dict.get("render_reports", []):
                 rr["rendered_images"] = [os.path.basename(p) for p in rr.get("rendered_images", [])]
 
-            # Importability probe (accurate only for local execution).
+            # Importability probe of the resolved dependencies (accurate only for
+            # local execution; for Docker the host can't see image packages).
+            required_pkgs = list(getattr(dep_manifest, "required", []) or [])
             probe = probe_imports(
-                result.get("metadata", {}).get("dependencies", {}).get("required", [])
-                if isinstance(result.get("metadata"), dict) else [],
+                required_pkgs,
                 enabled=(executor_used == "local"),
                 env="host" if executor_used == "local" else "image",
             )
@@ -595,8 +636,8 @@ class SandboxRunner:
         lines.append("")
         lines.append(contract.to_prompt_section())
 
-        stdout_tail = (result.get("text") or "")[-800:]
-        stderr_tail = (result.get("error") or "")[-800:]
+        stdout_tail = _sanitize_tail(result.get("text"), limit=800)
+        stderr_tail = _sanitize_tail(result.get("error"), limit=800)
         if stdout_tail.strip():
             lines += ["", "Previous stdout (tail):", stdout_tail]
         if stderr_tail.strip():
