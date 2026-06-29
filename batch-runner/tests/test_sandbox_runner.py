@@ -193,3 +193,141 @@ def test_run_selects_skills_for_video_task():
 def _dummy_manifest():
     from core.dependency_resolver import DependencyManifest
     return DependencyManifest()
+
+
+# ── output control loop: repair + manifest ───────────────────────────────
+
+def _docx_bytes(text="content"):
+    import io
+    docx = pytest.importorskip("docx")
+    buf = io.BytesIO()
+    d = docx.Document()
+    d.add_paragraph(text)
+    d.save(buf)
+    return buf.getvalue()
+
+
+def _pptx_bytes():
+    import io
+    pptx = pytest.importorskip("pptx")
+    buf = io.BytesIO()
+    prs = pptx.Presentation()
+    prs.slides.add_slide(prs.slide_layouts[6])
+    prs.save(buf)
+    return buf.getvalue()
+
+
+def _runner_no_render(**kw):
+    # Render off keeps the loop fast/hermetic; contract drives the repair.
+    return SandboxRunner(
+        llm_client=object(), use_docker="never",
+        output_qa={"enabled": True, "render": False}, **kw
+    )
+
+
+def test_repair_loop_produces_repaired_ok():
+    """Attempt 0 emits the wrong type, attempt 1 emits the right one."""
+    _pptx = _pptx_bytes()
+    _docx = _docx_bytes()
+    runner = _runner_no_render()
+    code = _fake_response("Deck.\n```python\nprint('build')\n```")
+    exec_results = [
+        ("local", {"success": True, "text": "r0",
+                   "files": [{"filename": "deck.docx", "content": _docx}]}),
+        ("local", {"success": True, "text": "r1",
+                   "files": [{"filename": "deck.pptx", "content": _pptx}]}),
+    ]
+    with patch.object(sr, "complete", lambda **k: (code, {})), \
+         patch.object(runner, "_execute", side_effect=exec_results):
+        result = runner.run(task_prompt="Create a PowerPoint pptx deck for the board",
+                            model="m", reference_files=[])
+
+    assert result["final_status"] == "repaired_ok"
+    assert result["qa_ok"] is True
+    statuses = [a["status"] for a in result["metadata"]["attempts"]]
+    assert statuses == ["failed_contract", "repaired_ok"]
+    names = [f["filename"] for f in result["files"]]
+    assert "deck.pptx" in names and "deck.docx" not in names
+
+
+def test_clean_first_attempt_does_not_repair():
+    _pptx = _pptx_bytes()
+    runner = _runner_no_render()
+    code = _fake_response("Deck.\n```python\nprint('build')\n```")
+    mock_exec = patch.object(
+        runner, "_execute",
+        return_value=("local", {"success": True, "text": "ok",
+                                "files": [{"filename": "deck.pptx", "content": _pptx}]}),
+    )
+    with patch.object(sr, "complete", lambda **k: (code, {})), mock_exec as m:
+        result = runner.run(task_prompt="Create a pptx deck", model="m", reference_files=[])
+    assert result["final_status"] == "ok"
+    assert len(result["metadata"]["attempts"]) == 1
+    m.assert_called_once()
+
+
+def test_repair_disabled_runs_single_attempt():
+    _docx = _docx_bytes()
+    runner = SandboxRunner(
+        llm_client=object(), use_docker="never",
+        repair={"enabled": False},
+        output_qa={"enabled": True, "render": False},
+    )
+    code = _fake_response("```python\nprint('x')\n```")
+    with patch.object(sr, "complete", lambda **k: (code, {})), \
+         patch.object(runner, "_execute",
+                      return_value=("local", {"success": True, "text": "",
+                                              "files": [{"filename": "out.docx", "content": _docx}]})):
+        result = runner.run(task_prompt="Create a pptx deck", model="m", reference_files=[])
+    assert len(result["metadata"]["attempts"]) == 1
+    assert result["final_status"] == "failed_contract"
+    # success still reflects that code executed and a file was produced.
+    assert result["success"] is True
+
+
+def test_failed_contract_after_repair_keeps_best():
+    _docx = _docx_bytes()
+    runner = _runner_no_render()
+    code = _fake_response("```python\nprint('x')\n```")
+    with patch.object(sr, "complete", lambda **k: (code, {})), \
+         patch.object(runner, "_execute",
+                      return_value=("local", {"success": True, "text": "",
+                                              "files": [{"filename": "out.docx", "content": _docx}]})):
+        result = runner.run(task_prompt="Create a pptx deck", model="m", reference_files=[])
+    assert result["final_status"] == "failed_contract"
+    assert len(result["metadata"]["attempts"]) == 2
+
+
+def test_manifest_schema_present():
+    _pptx = _pptx_bytes()
+    runner = _runner_no_render()
+    code = _fake_response("```python\nprint('x')\n```")
+    with patch.object(sr, "complete", lambda **k: (code, {})), \
+         patch.object(runner, "_execute",
+                      return_value=("local", {"success": True, "text": "",
+                                              "files": [{"filename": "deck.pptx", "content": _pptx}]})):
+        result = runner.run(task_prompt="Create a pptx deck", model="m", reference_files=[])
+    m = result["sandbox_manifest"]
+    for key in ["schema_version", "execution_mode", "sandbox_backend", "selected_skills",
+                "dependency_resolution", "dependency_import_probe", "deliverable_contract",
+                "generated_artifacts", "verification_report", "attempts", "final_status"]:
+        assert key in m, key
+    assert m["execution_mode"] == "sandbox"
+    assert m["final_status"] == "ok"
+    # manifest.json is also emitted as a deliverable file.
+    assert "manifest.json" in [f["filename"] for f in result["files"]]
+
+
+def test_manifest_has_no_temp_paths():
+    import json as _json
+    _pptx = _pptx_bytes()
+    runner = _runner_no_render()
+    code = _fake_response("```python\nprint('x')\n```")
+    with patch.object(sr, "complete", lambda **k: (code, {})), \
+         patch.object(runner, "_execute",
+                      return_value=("local", {"success": True, "text": "",
+                                              "files": [{"filename": "deck.pptx", "content": _pptx}]})):
+        result = runner.run(task_prompt="Create a pptx deck", model="m", reference_files=[])
+    blob = _json.dumps(result["sandbox_manifest"])
+    assert "gdpval_qa_" not in blob
+    assert "/var/folders" not in blob and "/tmp/" not in blob

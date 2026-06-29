@@ -236,6 +236,27 @@ execution:
     memory_gb: 5
     cpus: 2.0
     max_skills: 5
+    # ── Output control loop (Phase 2) ────────────────────────────────────
+    # Skills give the sandbox eyes/ears on INPUTS; the blocks below verify
+    # the OUTPUTS the model generates and repair them when they fall short.
+    repair:
+      enabled: true
+      max_attempts: 1          # repair retries after attempt 0 (bounded)
+    output_qa:
+      enabled: true
+      render: true             # rasterize deliverables for deterministic QA
+      max_pages_per_artifact: 3
+      blank_page_threshold: 0.999   # per-page near-white warning ratio
+      vision:
+        enabled: false         # optional LLM vision QA (off by default)
+        provider: "azure"
+        deployment: "gpt-5.4"
+        max_images: 6
+    manifest:
+      enabled: true
+      filename: "manifest.json"
+    cache:
+      enabled: true            # cache rendered PNGs / perception by sha256
   tokens:
     code_generation: 16384
     qa_check: 4096

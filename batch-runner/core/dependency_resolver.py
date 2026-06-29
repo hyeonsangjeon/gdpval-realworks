@@ -321,3 +321,71 @@ def resolve(
         in_base=in_base,
         missing_from_base=missing,
     )
+
+
+# ── import-time probe (Part F) ───────────────────────────────────────────────
+# pip-name → import-name, derived by inverting IMPORT_TO_PIP. Lets us actually
+# *check* whether a predicted package can be imported in the execution env.
+PIP_TO_IMPORT: Dict[str, str] = {pip: imp for imp, pip in IMPORT_TO_PIP.items()}
+
+
+def _import_name_for_pip(pip_name: str) -> str:
+    if pip_name in PIP_TO_IMPORT:
+        return PIP_TO_IMPORT[pip_name]
+    # Common convention: distribution dashes become import underscores.
+    return pip_name.replace("-", "_")
+
+
+@dataclass
+class ImportProbe:
+    """Result of probing whether predicted packages are importable here."""
+
+    available: List[str] = field(default_factory=list)
+    missing: List[str] = field(default_factory=list)
+    not_checked: List[str] = field(default_factory=list)
+    env: str = "host"  # "host" (this interpreter) | "image" (informational)
+
+    def to_dict(self) -> dict:
+        return {
+            "available": self.available,
+            "missing": self.missing,
+            "not_checked": self.not_checked,
+            "env": self.env,
+        }
+
+
+def probe_imports(
+    packages: List[str],
+    finder=None,
+    enabled: bool = True,
+    env: str = "host",
+) -> ImportProbe:
+    """Probe importability of ``packages`` without importing them.
+
+    Uses :func:`importlib.util.find_spec` (injectable via ``finder`` for tests).
+    When ``enabled`` is False every package is reported ``not_checked`` — used for
+    Docker execution, where the host interpreter cannot see the image's packages.
+    """
+    pkgs = sorted({p for p in (packages or []) if p})
+    if not enabled:
+        return ImportProbe(not_checked=pkgs, env=env)
+
+    import importlib.util as _ilu
+    find = finder or _ilu.find_spec
+
+    available, missing, not_checked = [], [], []
+    for pkg in pkgs:
+        mod = _import_name_for_pip(pkg)
+        try:
+            spec = find(mod)
+            (available if spec is not None else missing).append(pkg)
+        except ModuleNotFoundError:
+            missing.append(pkg)
+        except Exception:
+            not_checked.append(pkg)
+    return ImportProbe(
+        available=sorted(available),
+        missing=sorted(missing),
+        not_checked=sorted(not_checked),
+        env=env,
+    )

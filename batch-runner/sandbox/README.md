@@ -45,12 +45,23 @@ For each task the runner:
 
 1. Selects relevant **skills** and resolves the **pip dependencies** the task
    needs (from reference-file extensions, task keywords, and the generated
-   code's imports).
-2. Copies reference files and the `skills/` package into a temp dir.
-3. Writes `solution.py` and runs it as
+   code's imports), and probes which are importable in the environment.
+2. Infers a deterministic **deliverable contract** (expected file types/count)
+   and injects it into the codegen prompt so the model knows what to produce.
+3. Copies reference files and the `skills/` package into a temp dir.
+4. Writes `solution.py` and runs it as
    `docker run --rm --network none … gdpval-sandbox:latest python -u solution.py`.
-4. Collects newly created files (excluding inputs, the script, and `skills/`) as
-   deliverables.
+5. Selects the **generated artifacts** (reference files and the script are
+   excluded via a before/after snapshot), then **verifies** them (non-empty,
+   openable, correct type) and runs **render QA** (PDF/Office rasterized to PNG
+   with blank-page detection; optional LLM vision QA behind config).
+6. If a blocking failure is found and repair is enabled, builds a focused
+   **repair prompt** with the concrete failure and retries (bounded; default 1).
+7. Writes a `manifest.json` (contract, dependency probe, per-attempt status,
+   verification/render reports, and `final_status`) alongside the deliverables.
+
+Skills give the sandbox eyes/ears on the **inputs**; the contract + verifier +
+render QA + repair loop verify and fix the **outputs**.
 
 ## Configure in an experiment YAML
 
@@ -63,6 +74,24 @@ execution:
     memory_gb: 5
     cpus: 2.0                       # optional CPU cap
     max_skills: 5                  # skill manuals injected into the prompt
+    repair:                        # bounded output repair loop
+      enabled: true
+      max_attempts: 1              # repair retries after attempt 0
+    output_qa:                     # verify + render generated deliverables
+      enabled: true
+      render: true                 # rasterize PDF/Office to PNG for QA
+      max_pages_per_artifact: 3
+      blank_page_threshold: 0.999  # per-page near-white warning ratio
+      vision:                      # optional LLM vision QA (off by default)
+        enabled: false
+        provider: azure
+        deployment: gpt-5.4
+        max_images: 6
+    manifest:                      # per-run manifest.json
+      enabled: true
+      filename: manifest.json
+    cache:                         # cache rendered PNGs / perception by sha256
+      enabled: true
 ```
 
 The same `SANDBOX_IMAGE` env var read by `build.sh` is also the default image

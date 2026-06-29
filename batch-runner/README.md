@@ -205,6 +205,17 @@ code execution (see [`sandbox/README.md`](sandbox/README.md)):
   toolkits for audio/video/document/image/data are selected per task, documented
   in the prompt, and mounted in the sandbox, giving generated code *vision*
   (video frame-by-frame, image OCR) and *hearing* (audio FFT/sampling/loudness).
+- **Output control loop** (`core/deliverable_contract.py`,
+  `core/artifact_verifier.py`, `core/output_qa.py`) — skills perceive the
+  *inputs*; this layer verifies the *outputs*. Before codegen a deterministic
+  **deliverable contract** declares what file(s) the task should produce; after
+  execution the generated artifacts are selected (reference files excluded),
+  **verified** (non-empty, openable, correct type), and **render-QA'd** (PDF/Office
+  rasterized to PNG with blank-page detection; optional LLM vision QA behind
+  `output_qa.vision.enabled`). Blocking failures trigger a **bounded repair loop**
+  that feeds the concrete failure back to the model (default 1 retry). Every run
+  writes a `manifest.json` recording the contract, dependency probe, per-attempt
+  status, and `final_status` (`ok` / `repaired_ok` / `failed_*`).
 - Pairs with the `video_analyzer` (vision) and `audio_analyzer` (hearing)
   preprocessors. See `experiments/exp026_sandbox_skills_multimodal.yaml`.
 
@@ -223,6 +234,20 @@ execution:
     memory_gb: 5
     cpus: 2.0
     max_skills: 5
+    repair:                      # bounded output repair loop
+      enabled: true
+      max_attempts: 1
+    output_qa:                   # verify + render the generated deliverables
+      enabled: true
+      render: true
+      max_pages_per_artifact: 3
+      blank_page_threshold: 0.999
+      vision:                    # optional LLM vision QA (off by default)
+        enabled: false
+    manifest:                    # per-run manifest.json
+      enabled: true
+    cache:                       # cache rendered PNGs / perception by sha256
+      enabled: true
 ```
 
 | Mode | Compatible Providers | Security | Best For |

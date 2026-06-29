@@ -96,6 +96,11 @@ class TaskExecutor:
                 memory_gb=opts.get("memory_gb"),
                 cpus=opts.get("cpus"),
                 max_skills=opts.get("max_skills", 5),
+                repair=opts.get("repair"),
+                output_qa=opts.get("output_qa"),
+                manifest=opts.get("manifest"),
+                cache=opts.get("cache"),
+                contract=opts.get("contract"),
             )
 
         elif mode == "json_renderer":
