@@ -201,9 +201,13 @@ Then trigger it from **Actions → Run workflow** with `experiment_yaml: exp001_
 |---|---|---|
 | **`code_interpreter`** | LLM writes + runs code inside Azure/OpenAI's **secure sandbox**. Files generated in the cloud. | ✅ Production — safe, powerful |
 | **`subprocess`** | LLM generates code → executed locally in an isolated temp directory. | Non-OpenAI models (Anthropic, etc.) |
+| **`sandbox`** | 🐳 Container evolution of `subprocess`: per-task **dependency discovery** + famous **Agent Skills** (audio/video/document/image/data) + **multimodal perception** (vision for video, hearing for audio). Runs in an isolated Docker container (`--network none`, resource caps) with a hardened **local fallback** when Docker is unavailable. | Multimodal tasks; reproducible, skill-aware execution |
 | **`json_renderer`** | LLM outputs a JSON spec → a **fixed renderer** creates files. Same renderer for all models. | Fair A/B comparison across models |
 
-> 🐳 `subprocess` mode is planned to evolve into a **container-based** execution mode — if time permits and coffee supply holds.
+> 🐳 `sandbox` mode realizes the **container-based** evolution of `subprocess`.
+> Build the image with `bash batch-runner/sandbox/build.sh`, then set
+> `execution.mode: sandbox` (see `batch-runner/sandbox/README.md` and
+> `experiments/exp026_sandbox_skills_multimodal.yaml`).
 
 ---
 

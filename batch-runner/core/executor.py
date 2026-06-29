@@ -4,6 +4,7 @@ Task Executor - Mode dispatcher for file generation.
 Selects and delegates to appropriate runner based on execution mode:
 - code_interpreter: Azure OpenAI Responses API (OpenAI models only)
 - subprocess: LLM code generation + safe execution (all models)
+- sandbox: LLM code generation + skill-aware containerized execution (all models)
 - json_renderer: JSON spec + fixed renderer (fair comparison mode)
 """
 
@@ -12,10 +13,11 @@ from typing import Literal, Optional
 from core.code_interpreter import CodeInterpreterRunner
 from core.config import DEFAULT_TOKENS
 from core.subprocess_runner import SubprocessRunner
+from core.sandbox_runner import SandboxRunner
 from core.json_renderer import JsonRenderer
 
 # Execution modes
-ExecutionMode = Literal["code_interpreter", "subprocess", "json_renderer"]
+ExecutionMode = Literal["code_interpreter", "subprocess", "sandbox", "json_renderer"]
 
 
 class TaskExecutor:
@@ -31,19 +33,24 @@ class TaskExecutor:
         tokens: Optional[dict] = None,
         timeout: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
+        sandbox_options: Optional[dict] = None,
     ):
         """
         Initialize executor with specified mode.
 
         Args:
-            mode: Execution mode (code_interpreter, subprocess, json_renderer)
-            llm_client: AzureOpenAI client (required for subprocess and json_renderer)
+            mode: Execution mode (code_interpreter, subprocess, sandbox, json_renderer)
+            llm_client: AzureOpenAI client (required for subprocess, sandbox, json_renderer)
             api_key: Azure OpenAI API key (optional, for code_interpreter)
             endpoint: Azure OpenAI endpoint (optional, for code_interpreter)
-            prompt_name: Prompt YAML name for subprocess mode (default: subprocess_occupation_codegen)
+            prompt_name: Prompt YAML name for subprocess/sandbox mode
             tokens: Optional token limit overrides
-            timeout: Subprocess timeout override in seconds (None = config default)
+            timeout: Subprocess/sandbox timeout override in seconds (None = config default)
             reasoning_effort: Optional reasoning effort level ("low", "medium", "high")
+            sandbox_options: Optional dict of sandbox-mode settings from the
+                experiment YAML ``execution.sandbox`` block. Keys: image (str),
+                use_docker ("auto"|"never"|"always"), memory_gb (int),
+                cpus (float), skills_dir (str), max_skills (int).
 
         Raises:
             ValueError: If required parameters are missing for the selected mode
@@ -71,6 +78,24 @@ class TaskExecutor:
                 max_completion_tokens=self.tokens.get("code_generation"),
                 timeout=timeout,
                 reasoning_effort=reasoning_effort,
+            )
+
+        elif mode == "sandbox":
+            if llm_client is None:
+                raise ValueError("sandbox mode requires llm_client")
+            opts = dict(sandbox_options or {})
+            self.runner = SandboxRunner(
+                llm_client,
+                prompt_name=prompt_name or opts.get("prompt_name") or SandboxRunner.DEFAULT_PROMPT,
+                max_completion_tokens=self.tokens.get("code_generation"),
+                timeout=timeout,
+                reasoning_effort=reasoning_effort,
+                skills_dir=opts.get("skills_dir"),
+                image=opts.get("image"),
+                use_docker=opts.get("use_docker", "auto"),
+                memory_gb=opts.get("memory_gb"),
+                cpus=opts.get("cpus"),
+                max_skills=opts.get("max_skills", 5),
             )
 
         elif mode == "json_renderer":
@@ -124,6 +149,15 @@ class TaskExecutor:
                 )
 
             elif self.mode == "subprocess":
+                return self.runner.run(
+                    task_prompt=task_prompt,
+                    model=model,
+                    reference_files=reference_files,
+                    occupation=occupation,
+                    experiment_prompt=experiment_prompt,
+                )
+
+            elif self.mode == "sandbox":
                 return self.runner.run(
                     task_prompt=task_prompt,
                     model=model,

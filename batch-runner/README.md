@@ -150,7 +150,7 @@ condition_a:
     max_retries: 3
 
 execution:
-  mode: "code_interpreter"    # code_interpreter | subprocess | json_renderer
+  mode: "code_interpreter"    # code_interpreter | subprocess | sandbox | json_renderer
   max_retries: 5
   resume_max_rounds: 3
 ```
@@ -188,10 +188,48 @@ Designed for controlled A/B testing across different models.
 - Eliminates code generation skill as a variable — isolates the model's understanding of the task
 - Suitable for any model provider
 
+### `sandbox` — Containerized, Skill-Aware Multimodal Execution
+
+The container evolution of `subprocess`. Adds three capabilities on top of local
+code execution (see [`sandbox/README.md`](sandbox/README.md)):
+
+- **Container isolation** — generated `solution.py` runs in a disposable Docker
+  container (`--network none`, `--memory`, `--pids-limit`, `no-new-privileges`)
+  built from `requirements.txt` + system tools (ffmpeg, poppler, tesseract,
+  libreoffice, graphviz, GDAL, …). Falls back to the hardened local subprocess
+  when Docker is unavailable (`use_docker: auto`).
+- **Per-task dependency discovery** (`core/dependency_resolver.py`) — derives the
+  pip packages each task needs from reference-file extensions, task keywords, and
+  the generated code's imports, and flags anything missing from the image.
+- **Agent Skills** (`skills/` + `core/skills_registry.py`) — famous-library
+  toolkits for audio/video/document/image/data are selected per task, documented
+  in the prompt, and mounted in the sandbox, giving generated code *vision*
+  (video frame-by-frame, image OCR) and *hearing* (audio FFT/sampling/loudness).
+- Pairs with the `video_analyzer` (vision) and `audio_analyzer` (hearing)
+  preprocessors. See `experiments/exp026_sandbox_skills_multimodal.yaml`.
+
+Build the image once, then select the mode:
+
+```bash
+bash sandbox/build.sh           # builds gdpval-sandbox:latest
+```
+
+```yaml
+execution:
+  mode: sandbox
+  sandbox:
+    image: gdpval-sandbox:latest
+    use_docker: auto             # auto | never | always
+    memory_gb: 5
+    cpus: 2.0
+    max_skills: 5
+```
+
 | Mode | Compatible Providers | Security | Best For |
 |------|---------------------|----------|----------|
 | `code_interpreter` | Azure OpenAI, OpenAI | Sandboxed (cloud) | Production runs, complex file generation |
 | `subprocess` | Any | Isolated temp dir | Non-OpenAI models |
+| `sandbox` | Any | Container (`--network none`) + local fallback | Multimodal/skill-aware, reproducible execution |
 | `json_renderer` | Any | No code execution | Fair cross-model comparison |
 
 ## Multi-Provider Support

@@ -48,6 +48,7 @@ from core.llm_client import create_client, create_provider_client, complete
 from core.needs_files import NeedsFilesManifest
 from core.prompt_builder import PromptBuilder, PromptConfig as BuilderPromptConfig
 from core.audio_analyzer import analyze_audio_files, filter_audio_files
+from core.video_analyzer import analyze_video_files, filter_video_files
 
 
 # ── Constants ──────────────────────────────────────────────────────────────
@@ -110,6 +111,42 @@ def _run_preprocessors(
                     system_prompt=pp_system,
                     audio_paths=audio_files,
                     task_instruction=task_instruction if include_task else None,
+                )
+                if analysis:
+                    results.append(analysis)
+            except Exception as exc:
+                print(f"      ⚠️  Preprocessor '{pp_type}' error (non-fatal): {exc}")
+                continue
+        elif pp_type == "video_analyzer":
+            # Trigger: only run when video reference files are present.
+            video_files = filter_video_files(abs_ref_files)
+            if not video_files:
+                continue
+
+            pp_model = pp_cfg.get("model", {})
+            pp_provider = pp_model.get("provider", "azure")
+            pp_deployment = pp_model.get("deployment", "gpt-5.2")
+            pp_system = pp_cfg.get("system", "You are a video analysis agent.")
+            include_task = pp_cfg.get("include_task_instruction", False)
+
+            # Optional frame-sampling overrides from YAML.
+            frames_per_video = pp_cfg.get("frames_per_video", 8)
+            max_total_frames = pp_cfg.get("max_total_frames", 24)
+            frame_max_width = pp_cfg.get("frame_max_width", 768)
+            frame_detail = pp_cfg.get("frame_detail", "auto")
+
+            try:
+                pp_client = create_provider_client(pp_provider)
+                analysis = analyze_video_files(
+                    client=pp_client,
+                    model_deployment=pp_deployment,
+                    system_prompt=pp_system,
+                    video_paths=video_files,
+                    task_instruction=task_instruction if include_task else None,
+                    frames_per_video=frames_per_video,
+                    max_total_frames=max_total_frames,
+                    frame_max_width=frame_max_width,
+                    frame_detail=frame_detail,
                 )
                 if analysis:
                     results.append(analysis)
@@ -901,6 +938,8 @@ def run_inference(
             tokens_cfg_raw, "json_render", DEFAULT_TOKENS["json_render"]
         ),
     }
+    # Sandbox-mode settings (execution.sandbox block in the experiment YAML).
+    sandbox_options = execution_cfg.get("sandbox", {}) or {}
 
     print(f"\n{'='*60}")
     print(f"🚀 Step 2: Run Inference")
@@ -974,6 +1013,7 @@ def run_inference(
         executor = TaskExecutor(
             mode=execution_mode, llm_client=client, tokens=tokens_cfg,
             timeout=timeout, reasoning_effort=reasoning_effort,
+            sandbox_options=sandbox_options,
         )
     except Exception as e:
         print(f"❌ Executor init failed for mode '{execution_mode}': {e}")
