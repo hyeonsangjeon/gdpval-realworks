@@ -78,6 +78,18 @@ def _select_backend() -> Optional[str]:
     return None
 
 
+def frame_backend_available() -> Optional[str]:
+    """Public host-side probe: which video frame backend (if any) is importable.
+
+    Returns "cv2", "av", or None. Used by the inference orchestrator to warn
+    (before a large run) when a ``video_analyzer`` preprocessor is configured but
+    the host lacks the frame backend it needs — in which case video preprocessing
+    silently no-ops. This does not import the generated task code; it only checks
+    optional package availability.
+    """
+    return _select_backend()
+
+
 def _encode_jpeg_from_bgr(frame, max_width: int) -> Optional[bytes]:
     """Resize a cv2 BGR frame and JPEG-encode it. Returns bytes or None."""
     import cv2

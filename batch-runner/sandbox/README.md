@@ -31,6 +31,42 @@ This produces `gdpval-sandbox:latest` (override with `SANDBOX_IMAGE`).
 > ⚠️ The image is large (LibreOffice, GDAL, full scientific stack). The first
 > build takes a while; subsequent builds reuse cached layers.
 
+### Rebuild & arm64 recovery
+
+If Docker Desktop is reset (or the image is pruned), `gdpval-sandbox:latest`
+must be rebuilt before any Docker-backed run — `use_docker: auto` will otherwise
+fall back to the local subprocess sandbox. Rebuild with `bash sandbox/build.sh`
+from `batch-runner/`.
+
+**Known arm64 (Apple Silicon) blocker:** `requirements.txt` pins
+`aspose-words>=25.0.0`, which ships **no arm64 wheel**, so a native `arm64`
+build fails at that layer. Options for local verification on Apple Silicon:
+
+- Build for amd64 under emulation: `docker build --platform linux/amd64 …`
+  (slower, but matches CI), **or**
+- Build a temporary **trimmed** image with `aspose-words` removed from a scratch
+  copy of `requirements.txt` (only `.docx` via `aspose-words` is affected;
+  `python-docx`/LibreOffice paths still work). Do **not** commit the trimmed
+  requirements.
+- After a local `buildx` build, if `docker image inspect gdpval-sandbox:latest`
+  can't see the image (classic-store registration quirk), re-register it with
+  `docker tag <image-id> gdpval-sandbox:latest`.
+
+CI runners (`ubuntu-latest`, amd64) build the full image without this blocker.
+
+## Host-side perception dependencies (video preprocessing)
+
+The audio/video **preprocessors** run on the **host/orchestrator**, not inside
+the sandbox. Audio analysis only base64-encodes the file, but **video** frame
+sampling needs a frame backend — `opencv-python` (`cv2`) or `av` (PyAV), both
+pinned in `batch-runner/requirements.txt`. If neither is importable on the host,
+`video_analyzer` silently no-ops and no frames are ever sent to the model.
+
+`step2_run_inference.py` prints a one-time **preflight warning** at startup when
+a `video_analyzer` preprocessor is configured but no host frame backend is
+found, so a hybrid run never silently skips video perception. Install the host
+perception deps (`pip install -r requirements.txt`) to enable it.
+
 ## How the runner uses it
 
 `core/sandbox_runner.py` decides at runtime via `execution.sandbox.use_docker`:

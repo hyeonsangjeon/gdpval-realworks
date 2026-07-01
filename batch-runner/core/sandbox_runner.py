@@ -57,6 +57,13 @@ DEFAULT_SANDBOX_IMAGE = os.getenv("SANDBOX_IMAGE", "gdpval-sandbox:latest")
 
 MANIFEST_SCHEMA_VERSION = "1.0"
 
+# Minimum code_generation budget considered safe when reasoning_effort is "high".
+# gpt-5.4 at high reasoning can spend >32k tokens on hidden reasoning on complex
+# GDPVal sandbox prompts, leaving no room for visible code ("No Python code
+# found") — and can also exceed the 480s LLM-client timeout. Below this budget
+# with high effort we warn loudly. See tasks/0701_wednesday/sandbox_ab_smoke_pr57.md.
+SAFE_HIGH_CODE_BUDGET = 32768
+
 
 def _sha256_text(text: str) -> str:
     import hashlib
@@ -177,6 +184,20 @@ class SandboxRunner:
         self.memory_gb = memory_gb or SUBPROCESS_MEMORY_GB
         self.cpus = cpus
         self.max_skills = max_skills
+
+        # Guard: a high-reasoning + small-budget sandbox codegen config is a known
+        # empty-output / timeout trap. Warn once at construction so a large run is
+        # never silently misconfigured (warning only — behavior is unchanged, and
+        # this is scoped to sandbox mode). See SAFE_HIGH_CODE_BUDGET above.
+        if (self.reasoning_effort or "").lower() == "high" \
+                and self.max_completion_tokens < SAFE_HIGH_CODE_BUDGET:
+            print(
+                f"⚠️  [sandbox] reasoning_effort='high' with code_generation="
+                f"{self.max_completion_tokens} risks EMPTY output (reasoning can "
+                f"consume the whole budget) and may exceed the 480s client timeout. "
+                f"Recommend reasoning_effort<=medium and/or code_generation>="
+                f"{SAFE_HIGH_CODE_BUDGET}."
+            )
 
         # Output control-loop configuration (conservative defaults).
         self.repair_cfg = {"enabled": True, "max_attempts": 1, **(repair or {})}

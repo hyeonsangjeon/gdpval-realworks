@@ -48,7 +48,11 @@ from core.llm_client import create_client, create_provider_client, complete
 from core.needs_files import NeedsFilesManifest
 from core.prompt_builder import PromptBuilder, PromptConfig as BuilderPromptConfig
 from core.audio_analyzer import analyze_audio_files, filter_audio_files
-from core.video_analyzer import analyze_video_files, filter_video_files
+from core.video_analyzer import (
+    analyze_video_files,
+    filter_video_files,
+    frame_backend_available,
+)
 
 
 # ── Constants ──────────────────────────────────────────────────────────────
@@ -958,6 +962,27 @@ def run_inference(
     reasoning_effort_display = condition.get("model", {}).get("reasoning_effort")
     if reasoning_effort_display:
         print(f"   Reasoning effort:   {reasoning_effort_display}")
+
+    # Preflight: if a video_analyzer preprocessor is configured but the host has
+    # no frame backend (cv2/av), video preprocessing will silently no-op for the
+    # whole run. Surface that ONCE here so a hybrid run's "video perception" is
+    # never assumed to have happened when it did not. (Docker task execution is
+    # unaffected; this is about the host-side preprocessor only.)
+    _preprocs = condition.get("preprocessors", []) or []
+    _has_video_pp = any(
+        (pp or {}).get("type") == "video_analyzer" for pp in _preprocs
+    )
+    if _has_video_pp:
+        _backend = frame_backend_available()
+        if _backend:
+            print(f"   Video preproc:      host frame backend '{_backend}' available")
+        else:
+            print(
+                "   Video preproc:      ⚠️  configured but NO host frame backend "
+                "(cv2/av) — video preprocessing will be SKIPPED (no-op). Install "
+                "the host perception deps (opencv-python / av are pinned in "
+                "batch-runner/requirements.txt) to enable it."
+            )
 
     # Wall-clock deadline for relay runs
     wall_deadline = None

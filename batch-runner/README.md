@@ -228,10 +228,11 @@ bash sandbox/build.sh           # builds gdpval-sandbox:latest
 ```yaml
 execution:
   mode: sandbox
+  timeout: 1200                  # exec ceiling; 4K/video renders need >720s
   sandbox:
     image: gdpval-sandbox:latest
     use_docker: auto             # auto | never | always
-    memory_gb: 5
+    memory_gb: 8                 # video-heavy (4K) tasks; 5 GB OOM-killed a 657 MB clip
     cpus: 2.0
     max_skills: 5
     repair:                      # bounded output repair loop
@@ -249,6 +250,14 @@ execution:
     cache:                       # cache rendered PNGs / perception by sha256
       enabled: true
 ```
+
+> **Sandbox codegen safety:** keep `condition.model.reasoning_effort` at
+> `medium` or lower for `sandbox` mode. `high` reasoning on complex GDPVal
+> prompts can consume the entire completion budget on hidden reasoning (empty
+> visible output → "No Python code found") and exceed the 480s LLM-client
+> timeout. `SandboxRunner` warns at construction if `high` is paired with a
+> `code_generation` budget below 32768. See
+> `tasks/0701_wednesday/sandbox_ab_smoke_pr57.md`.
 
 | Mode | Compatible Providers | Security | Best For |
 |------|---------------------|----------|----------|

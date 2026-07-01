@@ -398,3 +398,39 @@ def test_manifest_redacts_local_paths_on_real_crash():
     # The error itself is preserved (redacted, not dropped).
     tail = result["sandbox_manifest"]["attempts"][0]["stderr_tail"]
     assert "RuntimeError" in tail and "<tmp>" in tail
+
+
+# ── reasoning-effort / budget guard (PR #57 hardening) ───────────────────
+
+def test_high_reasoning_low_budget_warns(capsys):
+    """high reasoning + small code budget is the known empty-output/timeout trap."""
+    SandboxRunner(
+        llm_client=object(), use_docker="never",
+        reasoning_effort="high", max_completion_tokens=16384,
+    )
+    out = capsys.readouterr().out
+    assert "reasoning_effort='high'" in out
+    assert "16384" in out
+    assert str(sr.SAFE_HIGH_CODE_BUDGET) in out
+
+
+def test_high_reasoning_safe_budget_no_warn(capsys):
+    """At/above SAFE_HIGH_CODE_BUDGET, high reasoning must not warn."""
+    SandboxRunner(
+        llm_client=object(), use_docker="never",
+        reasoning_effort="high", max_completion_tokens=sr.SAFE_HIGH_CODE_BUDGET,
+    )
+    assert "reasoning_effort='high'" not in capsys.readouterr().out
+
+
+def test_medium_reasoning_low_budget_no_warn(capsys):
+    """The guard is scoped to high effort; medium/low never warn."""
+    SandboxRunner(
+        llm_client=object(), use_docker="never",
+        reasoning_effort="medium", max_completion_tokens=16384,
+    )
+    assert "reasoning_effort='high'" not in capsys.readouterr().out
+
+
+def test_safe_high_code_budget_constant():
+    assert sr.SAFE_HIGH_CODE_BUDGET == 32768

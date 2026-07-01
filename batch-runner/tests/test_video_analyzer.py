@@ -170,3 +170,21 @@ def test_analyze_no_frames_extracted(tmp_path):
          patch.object(va, "extract_keyframes", lambda *a, **k: ({}, [])):
         out = analyze_video_files(client, "m", "sys", [str(clip)])
     assert out == ""
+
+
+# ── public host-backend probe (PR #57 preflight) ────────────────────────
+
+def test_frame_backend_available_aliases_select_backend():
+    from core.video_analyzer import frame_backend_available
+    # Mirrors _select_backend exactly (may be None when cv2/av absent).
+    with patch.object(va, "_select_backend", return_value="cv2"):
+        assert frame_backend_available() == "cv2"
+    with patch.object(va, "_select_backend", return_value="av"):
+        assert frame_backend_available() == "av"
+    with patch.object(va, "_select_backend", return_value=None):
+        assert frame_backend_available() is None
+
+
+def test_frame_backend_available_real_returns_str_or_none():
+    from core.video_analyzer import frame_backend_available
+    assert frame_backend_available() in (None, "cv2", "av")

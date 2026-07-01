@@ -11,7 +11,7 @@
 
 experiment:
   id: "exp026_sandbox_skills_multimodal"
-  name: "Sandbox + Skills + Multimodal (GPT-5.4 high)"
+  name: "Sandbox + Skills + Multimodal (GPT-5.4 medium)"
   description: >
     Evolution of subprocess mode into a containerized **sandbox** execution mode
     with three additions over exp025: (1) per-task dependency discovery, (2)
@@ -28,7 +28,7 @@ control:
   fixed:
     - tasks               # All 220 tasks (9 sectors, 44 occupations)
     - temperature         # 0.0
-    - reasoning_effort    # high (matches exp025)
+    - reasoning_effort    # medium (see condition_a note: "high" is unsafe in sandbox)
     - domain_packages     # full exp011 environment (baked into sandbox image)
   changed:
     - execution_mode      # subprocess → sandbox
@@ -43,15 +43,26 @@ data:
     occupation: null      # All 44 occupations
     sample_size: null     # All 220 tasks
 
-# Condition A: sandbox + skills + audio/video perception + reasoning=high
+# Condition A: sandbox + skills + audio/video perception + reasoning=medium
 condition_a:
-  name: "GPT-5.4 high + sandbox + skills + audio/video perception"
+  name: "GPT-5.4 medium + sandbox + skills + audio/video perception"
   model:
     provider: "azure"
     deployment: "gpt-5.4"
     temperature: 0.0
     seed: null
-    reasoning_effort: "high"
+    # ── Sandbox reasoning-effort safety (PR #57 A/B smoke finding) ────────
+    # reasoning_effort="high" is UNSAFE for sandbox codegen on complex GDPVal
+    # prompts: gpt-5.4 spends the entire completion budget on hidden reasoning
+    # (empty visible content -> "No Python code found") AND a single call
+    # exceeds the 480s LLM-client timeout (measured: high did not return within
+    # the timeout and retried). Empirical probe on a representative task:
+    #   high   -> exceeded 480s client timeout (unusable)
+    #   medium -> 15,732 reasoning + 9,048 visible = 24,780 tokens, 318s, finish=stop
+    # "medium" preserves strong reasoning while fitting the timeout and the
+    # 32768-token code_generation budget below. See
+    # tasks/0701_wednesday/sandbox_ab_smoke_pr57.md.
+    reasoning_effort: "medium"
   prompt:
     system: |
       You are a helpful assistant that completes professional tasks.
@@ -227,13 +238,18 @@ condition_a:
 # Execution settings
 execution:
   mode: "sandbox"
-  timeout: 720
+  # Video-heavy tasks (e.g. a 657 MB / 4K reference) are marginal at 720s: the
+  # A/B smoke saw the film/video task exhaust the timeout on the compositing
+  # pass. 1200s gives large ffmpeg/moviepy renders room before the resume round.
+  timeout: 1200
   install_libreoffice: true
   # Sandbox-specific settings (consumed by core/sandbox_runner.py).
   sandbox:
     image: "gdpval-sandbox:latest"
     use_docker: "auto"        # auto | never | always
-    memory_gb: 5
+    # 5 GB OOM-killed the 657 MB / 4K video task (exit 137) in the A/B smoke.
+    # 8 GB covers 4K frame buffers + moviepy/ffmpeg working set for the full run.
+    memory_gb: 8
     cpus: 2.0
     max_skills: 5
     # ── Output control loop (Phase 2) ────────────────────────────────────
@@ -258,7 +274,12 @@ execution:
     cache:
       enabled: true            # cache rendered PNGs / perception by sha256
   tokens:
-    code_generation: 16384
+    # 16384 truncates gpt-5.4 at medium reasoning (measured 24,780 completion
+    # tokens on a representative sandbox task) -> EMPTY visible output. 32768
+    # leaves ~8k headroom above that for the generated code block. Raising this
+    # does NOT increase reasoning (that is controlled by reasoning_effort); it
+    # only prevents truncation. See sandbox_ab_smoke_pr57.md.
+    code_generation: 32768
     qa_check: 4096
     json_render: 8000
   max_retries: 5
