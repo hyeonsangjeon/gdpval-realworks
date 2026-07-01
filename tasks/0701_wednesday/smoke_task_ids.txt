@@ -1,0 +1,13 @@
+# Bounded A/B sandbox smoke — pinned task subset (PR #57)
+# 6 representative GDPVal tasks. The 3 audio/video tasks are where conditions
+# A (skills-only) and B (hybrid) actually differ (audio/video GPT preprocessors
+# trigger only on those). The 3 doc/deck tasks are deliverable-type controls
+# (A and B are identical for them — no audio/video reference).
+#
+# id                                    category / why
+a941b6d8-4289-4500-b45a-f8e4fc94a724   # VIDEO .mp4 (Film/Video Editors) — A/B crux, video_analyzer
+38889c3b-e3d4-49c8-816a-3cc8e5313aba   # AUDIO .wav (Music Producer) — A/B crux, audio_analyzer
+ff85ee58-bc9f-4aa2-806d-87edeabb1b81   # AUDIO .mp3+.wav (Sound Engineer) — A/B crux, audio_analyzer
+7d7fc9a7-21a7-4b83-906f-416dea5ad04f   # XLSX deliverable + .pdf ref (Accountant) — spreadsheet + confusing-ext control
+e6429658-4de1-42dd-a9e0-2d2b9b02fb10   # DOCX report + .png ref (Nurse Practitioner) — document + image control
+5a2d70da-0a42-4a6b-a3ca-763e03f070a5   # PPTX/multi (.pdf/.pptx/.step/.xlsx, Mechanical Engineer) — deck + multi-file + confusing-ext
