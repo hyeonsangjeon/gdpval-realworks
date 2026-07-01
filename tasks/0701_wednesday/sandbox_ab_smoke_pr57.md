@@ -1,6 +1,6 @@
 # Sandbox A/B Smoke — PR #57 (skills-only vs hybrid perception)
 
-Branch: `hyeonsangjeon-sandbox-skills-multimodal-eval` · Scope: bounded smoke, **not** a full run · Date: 2025-07-01
+Branch: `hyeonsangjeon-sandbox-skills-multimodal-eval` · Scope: bounded smoke, **not** a full run · Date: 2026-07-01
 
 ## Core question
 

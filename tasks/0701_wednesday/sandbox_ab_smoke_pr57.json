@@ -2,7 +2,7 @@
   "schema": "sandbox_ab_smoke/v1",
   "pr": 57,
   "branch": "hyeonsangjeon-sandbox-skills-multimodal-eval",
-  "date": "2025-07-01",
+  "date": "2026-07-01",
   "backend": "docker",
   "image": "gdpval-sandbox:latest",
   "config": {
