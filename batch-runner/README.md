@@ -252,12 +252,16 @@ execution:
 ```
 
 > **Sandbox codegen safety:** keep `condition.model.reasoning_effort` at
-> `medium` or lower for `sandbox` mode. `high` reasoning on complex GDPVal
-> prompts can consume the entire completion budget on hidden reasoning (empty
-> visible output → "No Python code found") and exceed the 480s LLM-client
-> timeout. `SandboxRunner` warns at construction if `high` is paired with a
-> `code_generation` budget below 32768. See
-> `tasks/0701_wednesday/sandbox_ab_smoke_pr57.md`.
+> `low` for `sandbox` mode. gpt-5.4 draws hidden reasoning tokens from the *same*
+> completion budget as the visible code, so `high` — and even `medium` on
+> reference-heavy tasks — can consume nearly the whole budget on reasoning,
+> emptying the visible output ("No Python code found") and exceeding the 480s
+> LLM-client timeout. A post-hardening probe on a representative task measured
+> `medium` at 31,146/32,768 completion tokens (95%, intermittently empty) vs
+> `low` at 10,139/32,768 (31%, stable, finish=stop). `SandboxRunner` still warns
+> at construction if `high` is paired with a `code_generation` budget below
+> 32768. See
+> `tasks/0702_thursday/sandbox_post_hardening_docker_verification_pr57.md`.
 
 | Mode | Compatible Providers | Security | Best For |
 |------|---------------------|----------|----------|

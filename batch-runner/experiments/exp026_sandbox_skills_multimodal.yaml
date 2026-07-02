@@ -11,7 +11,7 @@
 
 experiment:
   id: "exp026_sandbox_skills_multimodal"
-  name: "Sandbox + Skills + Multimodal (GPT-5.4 medium)"
+  name: "Sandbox + Skills + Multimodal (GPT-5.4 low)"
   description: >
     Evolution of subprocess mode into a containerized **sandbox** execution mode
     with three additions over exp025: (1) per-task dependency discovery, (2)
@@ -28,7 +28,7 @@ control:
   fixed:
     - tasks               # All 220 tasks (9 sectors, 44 occupations)
     - temperature         # 0.0
-    - reasoning_effort    # medium (see condition_a note: "high" is unsafe in sandbox)
+    - reasoning_effort    # low (see condition_a note: high/medium starve sandbox codegen)
     - domain_packages     # full exp011 environment (baked into sandbox image)
   changed:
     - execution_mode      # subprocess → sandbox
@@ -43,26 +43,32 @@ data:
     occupation: null      # All 44 occupations
     sample_size: null     # All 220 tasks
 
-# Condition A: sandbox + skills + audio/video perception + reasoning=medium
+# Condition A: sandbox + skills + audio/video perception + reasoning=low
 condition_a:
-  name: "GPT-5.4 medium + sandbox + skills + audio/video perception"
+  name: "GPT-5.4 low + sandbox + skills + audio/video perception"
   model:
     provider: "azure"
     deployment: "gpt-5.4"
     temperature: 0.0
     seed: null
-    # ── Sandbox reasoning-effort safety (PR #57 A/B smoke finding) ────────
-    # reasoning_effort="high" is UNSAFE for sandbox codegen on complex GDPVal
-    # prompts: gpt-5.4 spends the entire completion budget on hidden reasoning
-    # (empty visible content -> "No Python code found") AND a single call
-    # exceeds the 480s LLM-client timeout (measured: high did not return within
-    # the timeout and retried). Empirical probe on a representative task:
+    # ── Sandbox reasoning-effort safety (PR #57 smoke + post-hardening probe) ─
+    # reasoning_effort must stay LOW for sandbox codegen. gpt-5.4 draws hidden
+    # reasoning tokens from the SAME completion budget as the visible code, so
+    # heavier reasoning empties the visible output ("No Python code found") and
+    # can exceed the 480s LLM-client timeout. Empirical probes on a representative
+    # reference-heavy accountant task (7d7fc9a7), code_generation=32768:
     #   high   -> exceeded 480s client timeout (unusable)
-    #   medium -> 15,732 reasoning + 9,048 visible = 24,780 tokens, 318s, finish=stop
-    # "medium" preserves strong reasoning while fitting the timeout and the
-    # 32768-token code_generation budget below. See
-    # tasks/0701_wednesday/sandbox_ab_smoke_pr57.md.
-    reasoning_effort: "medium"
+    #   medium -> MARGINAL: reasoning alone reached 22,790 tok and completion hit
+    #             31,146/32,768 (95%); a slightly larger reasoning draw returns
+    #             0 visible tokens -> "No Python code found" (reproduced live in
+    #             a real step2 run before this pass).
+    #   low    -> SAFE: 2,758 reasoning + ~7,381 visible = 10,139/32,768 (31%),
+    #             106s, finish=stop; ran end-to-end in Docker (final_status=ok).
+    # "low" keeps ~69% budget headroom and ~3.3x lower latency with comparable
+    # code output, so reasoning variance cannot intermittently starve the visible
+    # deliverable. See tasks/0702_thursday/
+    # sandbox_post_hardening_docker_verification_pr57.md.
+    reasoning_effort: "low"
   prompt:
     system: |
       You are a helpful assistant that completes professional tasks.
@@ -274,11 +280,13 @@ execution:
     cache:
       enabled: true            # cache rendered PNGs / perception by sha256
   tokens:
-    # 16384 truncates gpt-5.4 at medium reasoning (measured 24,780 completion
-    # tokens on a representative sandbox task) -> EMPTY visible output. 32768
-    # leaves ~8k headroom above that for the generated code block. Raising this
-    # does NOT increase reasoning (that is controlled by reasoning_effort); it
-    # only prevents truncation. See sandbox_ab_smoke_pr57.md.
+    # 16384 truncates gpt-5.4 sandbox codegen -> EMPTY visible output. 32768
+    # gives the visible code block ~69% headroom above low-reasoning usage
+    # (measured 10,139 completion tokens at reasoning_effort=low on a
+    # representative reference-heavy task). Raising this does NOT increase
+    # reasoning (that is controlled by reasoning_effort); it only prevents
+    # truncation. See tasks/0702_thursday/
+    # sandbox_post_hardening_docker_verification_pr57.md.
     code_generation: 32768
     qa_check: 4096
     json_render: 8000
