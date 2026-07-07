@@ -547,18 +547,25 @@ Each phase is small, reversible, and green-before-next. **P0 is mandatory first.
 - [ ] Authoring guide (P4) explains brace rules and the two reflection loops.
 - [ ] PR #57 remains open; changes land as additive commits on the sandbox branch.
 
-**Open questions for the owner**
-1. **Spec selector ergonomics:** keep the existing `execution.sandbox.prompt_name`,
-   or add the `prompt_spec` synonym for readability? (1-line additive change.)
-2. **Reflection shape:** ship P1 as the safe **string-table**, or go straight to the
-   **monolithic `reflection_template`** (clearer authoring, stricter newline test)?
-3. **Perception depth:** accept Option A (label stays with analyzers), or is moving
-   labels into `perception_header` (Option B) worth the analyzer return-contract
-   change for full single-surface authoring?
-4. **Golden fixtures:** which real task ids should seed the fixtures (a
-   reference-heavy accountant task + the 4K video task are the known stress cases)?
-5. **Scope of `sections` toggling:** should we expose `enabled` to experiment YAML
-   (per-run section on/off) now, or keep toggles spec-only until there's demand?
+**Resolved decisions (owner, 2026-07-07)**
+1. **Spec selector:** Keep the existing `execution.sandbox.prompt_name` **only** —
+   no `prompt_spec` synonym. Zero new experiment-YAML wiring; avoids duplicate keys.
+2. **Reflection shape:** Ship P1 as the safe **string-table** (Python keeps
+   layout/slicing/redaction; only literals move to YAML). Promote to a monolithic
+   `reflection_template` later only if authors ask for it.
+3. **Perception depth:** **Option A** — analyzers keep their self-labeled
+   `[AUDIO ANALYSIS]`/`[VIDEO ANALYSIS]` blocks; sandbox receives that text as a
+   named `perception_analysis` section and controls only placement/order. No
+   analyzer return-contract change; non-sandbox modes untouched.
+4. **Golden fixtures:** **Four** — audio `4b894ae3` + 4K video `a941b6d8` (both
+   already run locally), one **doc-only/no-reference** task (covers empty
+   perception/preview sections), and one **accounting/spreadsheet** task (covers
+   contract extension inference). The concrete xlsx task id is picked during P0
+   from local reference-heavy data.
+5. **Section-toggle exposure:** **Spec-only for now** (YAGNI). Section on/off lives
+   in the prompt-spec YAML; per-run A/B is done via an alternate spec selected with
+   `prompt_name`. Do not add an experiment-YAML `sections` override layer until
+   there is real demand.
 
 ---
 
