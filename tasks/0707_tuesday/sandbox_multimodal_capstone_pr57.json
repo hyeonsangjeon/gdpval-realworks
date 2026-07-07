@@ -1,0 +1,65 @@
+{
+  "pr": 57,
+  "branch": "hyeonsangjeon-sandbox-skills-multimodal-eval",
+  "pass": "runtime multimodal capstone (audio + 4K video), real Docker end-to-end",
+  "scope": "sandbox mode only; subprocess/code_interpreter/json_renderer unchanged",
+  "harness_bug_fixed": {
+    "symbol": "core/sandbox_runner.docker_image_exists",
+    "cause": "docker image inspect <name:tag> returns 'No such image' under Docker Desktop containerd image store even when image is present; caused silent local fallback",
+    "fix": "fall back to `docker image ls --quiet <image>` when inspect reports absent; fast path preserved",
+    "tests_added": 3,
+    "tests_file": "tests/test_sandbox_runner.py",
+    "test_sandbox_runner_pass": "30/30",
+    "py_compile": "ok"
+  },
+  "capstones": [
+    {
+      "task_id": "4b894ae3",
+      "modality": "audio",
+      "backend": "docker",
+      "execution_mode": "sandbox",
+      "reasoning_effort": "low",
+      "preprocessor": {"name": "audio_analyzer", "model": "gpt-audio-1.5", "ran": true, "chars_injected": 799},
+      "selected_skills": ["audio", "document", "data", "video"],
+      "deliverable_contract": {"expected_extensions": [".docx", ".wav"], "confidence": "medium"},
+      "primary_artifacts": ["EDIT_REPORT.docx", "FULL_EDIT_MIX.wav", "STEM_BASS_EDITED.wav"],
+      "verification_ok": true,
+      "blocking_errors": [],
+      "self_qa_score": 7,
+      "reflect_rounds": 1,
+      "final_status": "ok",
+      "runtime_sec": 269,
+      "files": 4
+    },
+    {
+      "task_id": "a941b6d8",
+      "modality": "video",
+      "backend": "docker",
+      "execution_mode": "sandbox",
+      "reasoning_effort": "low",
+      "preprocessor": {"name": "video_analyzer", "model": "gpt-5.4", "ran": true, "host_frame_backend": "cv2", "clips": 2, "resolution": "3840x2160", "frames_per_clip": 8, "vision_calls_ms": [27612, 25020], "chars_injected": 8814},
+      "selected_skills": ["video", "data", "document", "image"],
+      "deliverable_contract": {"expected_extensions": [".mp4", ".png"], "confidence": "medium"},
+      "primary_artifacts": ["teleportation_composite.mp4", "teleportation_composite_raw.mp4", "teleportation_preview.png", "teleportation_storyboard.png"],
+      "verification_ok": true,
+      "blocking_errors": [],
+      "self_qa_score": 6,
+      "reflect_rounds": 1,
+      "final_status": "ok",
+      "runtime_sec": 1211,
+      "files": 5,
+      "container_mem_peak_gib": 3.12,
+      "container_mem_limit_gib": 7.65,
+      "oom": false
+    }
+  ],
+  "resource_hardening_validated": {"memory_gb": 8, "timeout_sec": 1200, "oom_observed": false},
+  "manifest_quality": {"schema_version": "1.0", "relative_paths": true, "leak_scan_matches": 0},
+  "merge_readiness": "runtime-safe: reset Docker env rebuilds + runs sandbox path; both modalities end-to-end ok in Docker; one real bug fixed + regression-tested",
+  "residual_risks": [
+    "video_analyzer needs host cv2/av; no-ops with preflight warning if absent",
+    "deep audio validation needs host soundfile/ffprobe (non-blocking warning otherwise)",
+    "4K video tasks are time-heavy (~20 min each); schedule full 220 accordingly"
+  ],
+  "constraints": {"full_220_run": false, "actions_dispatch": false, "merged": false, "pr_body_edited": false, "committed": ["report", "sandbox_runner_fix", "sandbox_runner_tests"]}
+}

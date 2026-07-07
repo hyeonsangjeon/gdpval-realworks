@@ -132,7 +132,17 @@ def docker_available(refresh: bool = False) -> bool:
 
 
 def docker_image_exists(image: str) -> bool:
-    """Return True if the sandbox image is present locally."""
+    """Return True if the sandbox image is present locally.
+
+    ``docker image inspect <name:tag>`` is the natural check, but under Docker
+    Desktop's containerd image store (the current default) tag→image resolution
+    for that endpoint intermittently fails with "No such image" even when the
+    tag is present and runnable — most reproducibly right after a daemon
+    restart. ``docker image ls -q <ref>`` resolves the same tag reliably in that
+    store, so we fall back to it before concluding the image is missing. Without
+    this, a present, working sandbox image is misdetected as absent and the
+    runner silently degrades to hardened local execution.
+    """
     try:
         proc = subprocess.run(
             ["docker", "image", "inspect", image],
@@ -140,7 +150,19 @@ def docker_image_exists(image: str) -> bool:
             text=True,
             timeout=15,
         )
-        return proc.returncode == 0
+        if proc.returncode == 0:
+            return True
+    except Exception:
+        pass
+    # Fallback: reliable under the containerd snapshotter image store.
+    try:
+        proc = subprocess.run(
+            ["docker", "image", "ls", "--quiet", image],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return proc.returncode == 0 and bool(proc.stdout.strip())
     except Exception:
         return False
 

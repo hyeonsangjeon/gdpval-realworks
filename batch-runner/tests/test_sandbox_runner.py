@@ -43,6 +43,46 @@ def test_docker_image_exists_handles_missing_daemon():
     assert isinstance(docker_image_exists("definitely-not-a-real-image:xyz"), bool)
 
 
+def _fake_run_factory(inspect_rc, ls_stdout, ls_rc=0):
+    """Build a fake subprocess.run that distinguishes the inspect vs ls calls."""
+    calls = []
+
+    def _fake_run(cmd, *args, **kwargs):
+        calls.append(cmd)
+        if cmd[:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=inspect_rc, stdout="", stderr="")
+        if cmd[:3] == ["docker", "image", "ls"]:
+            return SimpleNamespace(returncode=ls_rc, stdout=ls_stdout, stderr="")
+        raise AssertionError(f"unexpected docker cmd: {cmd}")
+
+    return _fake_run, calls
+
+
+def test_docker_image_exists_falls_back_to_ls_under_containerd_store():
+    # Reproduces the Docker Desktop containerd-store quirk: `image inspect
+    # name:tag` fails with "No such image" but the tag IS present, so
+    # `image ls -q` resolves it. The runner must still report the image present.
+    fake_run, calls = _fake_run_factory(inspect_rc=1, ls_stdout="2df0878a9edf\n")
+    with patch.object(sr.subprocess, "run", fake_run):
+        assert docker_image_exists("gdpval-sandbox:latest") is True
+    # It must have consulted the reliable ls fallback after inspect failed.
+    assert any(c[:3] == ["docker", "image", "ls"] for c in calls)
+
+
+def test_docker_image_exists_false_when_both_inspect_and_ls_empty():
+    fake_run, _ = _fake_run_factory(inspect_rc=1, ls_stdout="")
+    with patch.object(sr.subprocess, "run", fake_run):
+        assert docker_image_exists("no-such-image:latest") is False
+
+
+def test_docker_image_exists_fast_path_skips_ls_when_inspect_ok():
+    fake_run, calls = _fake_run_factory(inspect_rc=0, ls_stdout="should-not-be-read")
+    with patch.object(sr.subprocess, "run", fake_run):
+        assert docker_image_exists("gdpval-sandbox:latest") is True
+    # inspect succeeded → the ls fallback must not run.
+    assert all(c[:3] != ["docker", "image", "ls"] for c in calls)
+
+
 # ── construction ─────────────────────────────────────────────────────────
 
 def test_init_wires_registry_and_base_packages():
