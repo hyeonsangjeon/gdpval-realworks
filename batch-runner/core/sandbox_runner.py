@@ -45,10 +45,15 @@ from core.dependency_resolver import (
     probe_imports,
     resolve,
 )
-from core.file_preview import build_file_structure_info, generate_all_previews
+
 from core.llm_client import complete
 from core.output_qa import run_output_qa
 from core.prompt_loader import load_prompt, render_prompt
+from core.prompt_sections import (
+    DEFAULT_SECTIONS,
+    SectionContext,
+    assemble_sections,
+)
 from core.sandbox_cache import build_cache
 from core.skills_registry import SkillsRegistry
 from core.subprocess_runner import SubprocessRunner, extract_code, extract_description
@@ -635,40 +640,24 @@ class SandboxRunner:
         contract: Optional[DeliverableContract] = None,
         reflection: Optional[str] = None,
     ) -> str:
-        parts: List[str] = []
+        """Assemble the sandbox prompt from spec-ordered sections.
 
-        # A repair reflection (if any) goes first so the model addresses it.
-        if reflection:
-            parts.append(reflection)
-
-        file_structure_info = build_file_structure_info(reference_files or [])
-        if file_structure_info:
-            parts.append(file_structure_info)
-
-        skills_manual = self.registry.render_manual(skills)
-        if skills_manual:
-            parts.append(skills_manual)
-
-        dep_hint = manifest.to_prompt_hint()
-        if dep_hint:
-            parts.append(dep_hint)
-
-        if contract is not None:
-            parts.append(contract.to_prompt_section())
-
-        parts.append(task_prompt)
-
-        if reference_files:
-            previews = generate_all_previews(reference_files)
-            if previews:
-                parts.append(previews)
-            available_files = [os.path.basename(f) for f in reference_files]
-            parts.append(
-                f"📁 Files available in the sandbox working directory "
-                f"(use them directly): {available_files}"
-            )
-
-        return "\n\n".join(parts)
+        Structure (section order + presence) is owned by the prompt spec's
+        ``sections:`` list, falling back to ``DEFAULT_SECTIONS`` (today's order).
+        Each section's text comes from a thin provider in ``core.prompt_sections``;
+        this method only builds the context and delegates the assembly.
+        """
+        ctx = SectionContext(
+            task_prompt=task_prompt,
+            ref_files=reference_files or [],
+            skills=skills,
+            manifest=manifest,
+            contract=contract,
+            reflection=reflection,
+            registry=self.registry,
+        )
+        section_order = self.prompt_data.get("sections") or DEFAULT_SECTIONS
+        return assemble_sections(section_order, ctx)
 
     def _build_reflection(
         self,

@@ -101,6 +101,28 @@ user_prompt: |
   {task_prompt}
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sandbox prompt STRUCTURE (order + presence of the augmented sections)
+# ─────────────────────────────────────────────────────────────────────────────
+# Owned here so a researcher can reorder/drop sections in one place. The runner
+# (core/sandbox_runner.py::_augment_prompt) renders each id via a thin provider in
+# core/prompt_sections.py and joins non-empty blocks with a blank line. If this
+# key is removed, the runner falls back to core.prompt_sections.DEFAULT_SECTIONS
+# (this exact order). An unknown id fails loudly. Set `enabled: false` on an entry
+# to drop it without deleting the line. Known ids: reflection, file_structure,
+# skills_manual, deps_hint, contract, perception_analysis, task, previews,
+# available_files.
+sections:
+  - id: reflection          # self-repair block (loop 2), first so the model addresses it
+  - id: file_structure      # tabular reference-file schema (columns/sheets)
+  - id: skills_manual       # "AVAILABLE SKILLS" — selected Skills + their API
+  - id: deps_hint           # "Likely libraries" pre-installed for this task
+  - id: contract            # DELIVERABLE CONTRACT — expected output type(s)
+  # - id: perception_analysis  # host audio/video analysis (enabled via spec in P3)
+  - id: task                # the task instruction text
+  - id: previews            # reference-file content previews
+  - id: available_files     # "Files available in the sandbox working directory: [...]"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Self-repair reflection wording (sandbox loop 2)
 # ─────────────────────────────────────────────────────────────────────────────
 # Emitted by core/sandbox_runner.py::_build_reflection when an attempt fails the
