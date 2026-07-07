@@ -5,6 +5,13 @@
 > PR #57 (branch `hyeonsangjeon-sandbox-skills-multimodal-eval`) — this doc is a
 > design artifact only; **no code is changed by this document**.
 
+> **Implementation status: SHIPPED on PR #57.** All phases landed behind the
+> golden harness (zero default byte-drift; the 9 pre-existing goldens are
+> unchanged). Commits: **P0** golden harness `047d9bb` · **P1** reflection
+> string-table `f791db7` · **P2** spec-driven sections `eec8a77` · **P3**
+> perception section (Option A) `99f3519` · **P4** authoring guide (this pass).
+> Researcher-facing guide: `batch-runner/prompts/sandbox_prompt_authoring.md`.
+
 ## TL;DR — biggest decisions & risks
 - **Decision:** Make `core/sandbox_runner.py::_augment_prompt` a *thin assembler*
   that iterates an ordered `sections:` list authored in

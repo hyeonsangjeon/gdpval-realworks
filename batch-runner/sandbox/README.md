@@ -99,6 +99,13 @@ For each task the runner:
 Skills give the sandbox eyes/ears on the **inputs**; the contract + verifier +
 render QA + repair loop verify and fix the **outputs**.
 
+The codegen prompt itself — persona, rules, the order of the injected context
+blocks, the self-repair wording, and where perception is placed — is authored in a
+single spec file, `prompts/sandbox_occupation_codegen.yaml`. See
+[`prompts/sandbox_prompt_authoring.md`](../prompts/sandbox_prompt_authoring.md)
+for how to edit it (and how to A/B an alternate spec via `prompt_name` without
+touching Python).
+
 ## Configure in an experiment YAML
 
 ```yaml
