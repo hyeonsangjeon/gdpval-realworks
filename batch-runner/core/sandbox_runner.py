@@ -106,6 +106,26 @@ def _sanitize_tail(text: Optional[str], limit: int = 600) -> str:
             s = s.replace(root, repl)
     return s
 
+
+# Built-in fallback for the self-repair reflection wording. The canonical copy
+# lives in the prompt spec (`reflection_strings:` in the codegen YAML) so it can
+# be edited in one place; these defaults keep _build_reflection working when a
+# spec omits the block. Keep them in sync with prompts/sandbox_occupation_codegen.yaml.
+_DEFAULT_REFLECTION_STRINGS = {
+    "open": "[REFLECTION]",
+    "intro": (
+        "Your previous attempt did NOT satisfy the deliverable contract. "
+        "Regenerate the COMPLETE solution and fix every issue below."
+    ),
+    "blocking_header": "Blocking problems to fix:",
+    "warnings_header": "Secondary warnings (address if relevant):",
+    "stdout_header": "Previous stdout (tail):",
+    "stderr_header": "Previous stderr/error (tail):",
+    "code_header": "Your previous code (fix and resend in full):",
+    "code_fence": "----",
+    "close": "[/REFLECTION]",
+}
+
 # Cache for the (relatively expensive) `docker info` probe.
 _DOCKER_AVAILABLE: Optional[bool] = None
 
@@ -658,13 +678,19 @@ class SandboxRunner:
         result: dict,
         analysis: dict,
     ) -> str:
-        """A focused [REFLECTION] block fed back to the model for the next attempt."""
+        """A focused [REFLECTION] block fed back to the model for the next attempt.
+
+        The wording is authored in the prompt spec (``reflection_strings:`` in the
+        codegen YAML) so a researcher can edit it in one place; this method owns
+        only the layout and the safety limits. Missing keys fall back to
+        ``_DEFAULT_REFLECTION_STRINGS``.
+        """
+        s = {**_DEFAULT_REFLECTION_STRINGS, **(self.prompt_data.get("reflection_strings") or {})}
         lines = [
-            "[REFLECTION]",
-            "Your previous attempt did NOT satisfy the deliverable contract. "
-            "Regenerate the COMPLETE solution and fix every issue below.",
+            s["open"],
+            s["intro"],
             "",
-            "Blocking problems to fix:",
+            s["blocking_header"],
         ]
         for err in blocking_errors[:12]:
             lines.append(f"- {err}")
@@ -672,7 +698,7 @@ class SandboxRunner:
         warnings = analysis.get("warnings") or []
         if warnings:
             lines.append("")
-            lines.append("Secondary warnings (address if relevant):")
+            lines.append(s["warnings_header"])
             for w in warnings[:6]:
                 lines.append(f"- {w}")
 
@@ -682,15 +708,15 @@ class SandboxRunner:
         stdout_tail = _sanitize_tail(result.get("text"), limit=800)
         stderr_tail = _sanitize_tail(result.get("error"), limit=800)
         if stdout_tail.strip():
-            lines += ["", "Previous stdout (tail):", stdout_tail]
+            lines += ["", s["stdout_header"], stdout_tail]
         if stderr_tail.strip():
-            lines += ["", "Previous stderr/error (tail):", stderr_tail]
+            lines += ["", s["stderr_header"], stderr_tail]
 
         # Include the prior code when short enough to be useful context.
         if code and len(code) <= 4000:
-            lines += ["", "Your previous code (fix and resend in full):",
-                      "----", code, "----"]
-        lines.append("[/REFLECTION]")
+            lines += ["", s["code_header"],
+                      s["code_fence"], code, s["code_fence"]]
+        lines.append(s["close"])
         return "\n".join(lines)
 
     def _metadata(self, executor_used: str, skills, manifest: DependencyManifest) -> dict:

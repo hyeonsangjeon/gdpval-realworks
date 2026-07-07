@@ -258,3 +258,34 @@ def test_build_reflection_golden(runner):
     assert "/workspace/solution.py" in reflection
     _assert_no_host_roots(reflection)
     _assert_golden("repair_accounting.reflection.txt", reflection)
+
+
+def test_reflection_wording_is_spec_driven(runner):
+    """Editing reflection_strings in the spec must change the emitted wording.
+
+    Proves the P1 externalization is live (not dead config): overriding the open/
+    close markers on the loaded spec surfaces them in _build_reflection output.
+    """
+    r = SandboxRunner(llm_client=SimpleNamespace(), use_docker="never")
+    r.prompt_data = dict(r.prompt_data)  # shallow copy — don't mutate shared spec
+    r.prompt_data["reflection_strings"] = {
+        **(r.prompt_data.get("reflection_strings") or {}),
+        "open": "<<REPAIR-OPEN>>",
+        "close": "<<REPAIR-CLOSE>>",
+    }
+    out = r._build_reflection(
+        _contract([".xlsx"], "high"), ["missing .xlsx"], "", {"text": "", "error": ""}, {}
+    )
+    assert out.startswith("<<REPAIR-OPEN>>")
+    assert out.rstrip().endswith("<<REPAIR-CLOSE>>")
+
+
+def test_reflection_falls_back_when_spec_omits_strings():
+    """A spec without reflection_strings must still yield the built-in wording."""
+    r = SandboxRunner(llm_client=SimpleNamespace(), use_docker="never")
+    r.prompt_data = {k: v for k, v in r.prompt_data.items() if k != "reflection_strings"}
+    out = r._build_reflection(
+        _contract([".xlsx"], "high"), ["missing .xlsx"], "", {"text": "", "error": ""}, {}
+    )
+    assert out.startswith("[REFLECTION]")
+    assert out.rstrip().endswith("[/REFLECTION]")

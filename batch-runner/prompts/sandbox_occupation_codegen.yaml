@@ -99,3 +99,27 @@ user_prompt: |
 
   TASK:
   {task_prompt}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Self-repair reflection wording (sandbox loop 2)
+# ─────────────────────────────────────────────────────────────────────────────
+# Emitted by core/sandbox_runner.py::_build_reflection when an attempt fails the
+# deliverable contract, so the model can fix the exact issues on the next attempt.
+# Edit the wording HERE — the runner owns only the layout and the safety limits
+# (at most 12 blocking errors, 6 warnings, and the prior code echoed when
+# <= 4000 chars). Any key omitted below falls back to the runner's built-in
+# default (core.sandbox_runner._DEFAULT_REFLECTION_STRINGS), so this block is
+# optional. NOTE: values beginning with '[' MUST stay quoted, or YAML parses
+# them as a flow sequence instead of a string.
+reflection_strings:
+  open: "[REFLECTION]"
+  intro: >-
+    Your previous attempt did NOT satisfy the deliverable contract. Regenerate
+    the COMPLETE solution and fix every issue below.
+  blocking_header: "Blocking problems to fix:"
+  warnings_header: "Secondary warnings (address if relevant):"
+  stdout_header: "Previous stdout (tail):"
+  stderr_header: "Previous stderr/error (tail):"
+  code_header: "Your previous code (fix and resend in full):"
+  code_fence: "----"
+  close: "[/REFLECTION]"
