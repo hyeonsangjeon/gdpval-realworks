@@ -1,0 +1,38 @@
+## Reference File Structure (auto-detected)
+
+ledger.csv: ~2 rows × 3 cols
+  columns: ['date', 'account', 'amount']
+
+🧰 AVAILABLE SKILLS (pre-installed in the sandbox; import directly):
+
+Import with: `from skills import data`
+Use these helpers instead of hand-rolling perception/IO. They wrap famous libraries with safe defaults.
+
+── Skill `data` — Data Toolkit  (matched files: .csv, .xlsx; keywords: spreadsheet, model)
+Load tables and build spreadsheets/charts.
+  data.read_table(path) -> df; data.quick_chart(df, out)
+
+📦 Likely libraries for this task (pre-installed): openpyxl, pandas
+
+DELIVERABLE CONTRACT (what the evaluator expects you to PRODUCE):
+- Expected file type(s): .xlsx
+- Minimum deliverable files: 1
+- Deliverable name should reference: model
+- Confidence in this contract: high
+Save real, openable file(s) of the expected type(s) to the working directory. Do NOT count reference/input files as your deliverable, and do NOT describe the file only in text. If you cannot produce the exact type, produce the closest standard professional format and say so.
+
+Build a quarterly financial model spreadsheet from the ledger and add a summary chart.
+
+═══ REFERENCE FILES PREVIEW ═══
+The following reference files are available in the current directory.
+Use EXACT column names, sheet names, and data values shown below.
+
+
+📊 ledger.csv (58 B)
+  Columns: date, account, amount
+  First 2 rows:
+    [1] 2026-01-01 | cash | 100
+    [2] 2026-01-02 | ar | 250
+═══ END REFERENCE FILES ═══
+
+📁 Files available in the sandbox working directory (use them directly): ['ledger.csv']
