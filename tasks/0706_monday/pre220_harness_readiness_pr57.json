@@ -1,0 +1,84 @@
+{
+  "report": "pre220_harness_readiness_pr57",
+  "method": "model-free deterministic sweep (no LLM, no Docker, no Azure auth)",
+  "n_tasks": 220,
+  "n_sectors": 9,
+  "harness_errors": 0,
+  "zero_skill_tasks": 0,
+  "contract_confidence_dist": {
+    "medium": 132,
+    "high": 80,
+    "low": 8
+  },
+  "contract_ext_dist": {
+    ".pdf": 108,
+    ".xlsx": 100,
+    ".docx": 78,
+    ".pptx": 33,
+    ".png": 32,
+    ".wav": 15,
+    ".mp4": 13,
+    ".zip": 7,
+    ".html": 6,
+    ".md": 4,
+    ".json": 3,
+    ".mp3": 2
+  },
+  "missing_from_base_pkg_dist": {},
+  "modality_counts": {
+    "audio": 4,
+    "video": 1,
+    "image": 8
+  },
+  "reference_data_gap": {
+    "declared_ref_files": 261,
+    "resolved": 255,
+    "missing": 6,
+    "tasks_with_all_refs_missing": [
+      "a941b6d8"
+    ],
+    "tasks_missing_some_refs": [
+      "4b894ae3 (3/6)",
+      "75401f7c (1/2)",
+      "a941b6d8 (2/2)"
+    ],
+    "note": "all 6 missing files are large A/V media in the Information sector; re-fetchable via reference_file_urls (HuggingFace)"
+  },
+  "empty_contract_ext_tasks": [
+    "36d567ba",
+    "a0ef404e",
+    "f3351922",
+    "c7d83f01",
+    "d4525420",
+    "74d6e8b0",
+    "0112fc9b",
+    "772e7524"
+  ],
+  "modality_task_ids": {
+    "audio": [
+      "38889c3b",
+      "ff85ee58",
+      "4b894ae3",
+      "75401f7c"
+    ],
+    "video": [
+      "a941b6d8"
+    ],
+    "image": [
+      "4d1a8410",
+      "b9665ca1",
+      "e6429658",
+      "e4f664ea",
+      "11593a50",
+      "94925f49",
+      "f2986c1f",
+      "fe0d3941"
+    ]
+  },
+  "verdict": {
+    "harness_robust_across_220": true,
+    "image_covers_predicted_deps": true,
+    "blocker_for_full_220": false,
+    "pre_220_action": "re-fetch 6 missing A/V media files before running the multimodal tasks; otherwise harness is ready"
+  }
+}

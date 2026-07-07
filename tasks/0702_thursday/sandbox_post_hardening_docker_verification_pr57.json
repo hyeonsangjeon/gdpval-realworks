@@ -1,0 +1,90 @@
+{
+  "report": "sandbox_post_hardening_docker_verification_pr57",
+  "pr": 57,
+  "branch": "hyeonsangjeon-sandbox-skills-multimodal-eval",
+  "pre_verification_head": "203790c",
+  "identity": "Hyeonsangjeon (owner identity configured in the worktree)",
+  "pr_state": {"state": "OPEN", "isDraft": false, "mergeable": "MERGEABLE", "forbidden_word_in_title": false},
+  "docker": {
+    "daemon_version": "29.1.3",
+    "images_before": 0,
+    "image": "gdpval-sandbox:latest",
+    "arch": "arm64",
+    "size_bytes": 2214283898,
+    "arm64_workaround": "aspose-words>=25.0.0 has no arm64 wheel; built from a temporary trimmed context, no tracked file modified",
+    "build_minutes_approx": 8
+  },
+  "disk_data_volume": {"free_before": "27Gi", "free_after": "12-13Gi", "used_after_pct": 94},
+  "checks": {
+    "docker_run_tool_smoke": {
+      "python": "3.11.15-aarch64",
+      "modules_ok": ["openpyxl", "fitz", "cv2", "av", "docx", "pptx", "pandas"],
+      "tools": ["libreoffice-7.4.7.2", "ffmpeg", "tesseract"],
+      "pass": true
+    },
+    "synthetic_harness_docker_smoke": {
+      "use_docker": "always",
+      "sandbox_backend": "docker",
+      "final_status": "ok",
+      "primary": "quarterly_revenue.xlsx",
+      "verifier_openable": true,
+      "path_leaks": false,
+      "pass": true
+    },
+    "host_video_preflight_warning": {
+      "host_cv2_av_present": false,
+      "frame_backend_available": null,
+      "warning_fires_on_exp026_condition_a": true,
+      "pass": true
+    },
+    "real_single_task_capstone": {
+      "task_id": "7d7fc9a7-21a7-4b83-906f-416dea5ad04f",
+      "occupation": "Accountants and Auditors",
+      "reference_files": 6,
+      "auth": "DefaultAzureCredential (Entra ID, owner az login)",
+      "code_generation_budget": 32768,
+      "probe": {
+        "high":   {"finish": "timeout>480s", "usable": false},
+        "medium": {"finish": "stop", "completion_tokens": 31146, "reasoning_tokens": 22790, "visible_chars": 30094, "budget_pct": 95, "latency_s": 347, "note": "MARGINAL; live step2 run returned empty ('No Python code found')"},
+        "low":    {"finish": "stop", "completion_tokens": 10139, "reasoning_tokens": 2758, "visible_chars": 28598, "budget_pct": 31, "latency_s": 106, "note": "SAFE; ~69% headroom, 3.3x faster"}
+      },
+      "end_to_end_low": {
+        "status": "success",
+        "sandbox_backend": "docker",
+        "final_status": "ok",
+        "execution_mode": "sandbox",
+        "selected_skills": ["document", "data", "audio", "video"],
+        "primary_artifacts": ["Schedule.xlsx", "Summary.pdf", "Reconciliation_Chart.png"],
+        "contract_extensions": [".xlsx", ".pdf", ".png"],
+        "verification_ok": true,
+        "blocking_errors": [],
+        "schema_version": "1.0",
+        "manifest_path_leaks": false,
+        "deliverable_count": 6,
+        "latency_s": 112
+      },
+      "classification": "model-quality/config (empty visible content), NOT a harness bug"
+    }
+  },
+  "fix": {
+    "file": "batch-runner/experiments/exp026_sandbox_skills_multimodal.yaml",
+    "change": "condition_a.model.reasoning_effort medium -> low; code_generation stays 32768; labels/comments updated",
+    "docs": "batch-runner/README.md sandbox-safety caution updated to recommend low with measured headroom",
+    "guard_changed": false,
+    "modes_untouched": ["subprocess", "code_interpreter", "json_renderer"],
+    "tests": {"test_sandbox_runner": "pass", "test_video_analyzer": "pass", "test_executor": "pass", "total_passed": 65}
+  },
+  "verdict": {
+    "harness_merge_ready": true,
+    "empty_output_edge_removed": true,
+    "residual_risk": "low: 'low' reasoning trades depth for reliable visible output; deliverable quality judged downstream by grader",
+    "pr57_open_unmerged": true
+  },
+  "constraints_respected": {
+    "full_220_run": false,
+    "actions_dispatch": false,
+    "merged": false,
+    "pr_title_body_edited": false,
+    "committed_binaries_or_local_data": false
+  }
+}

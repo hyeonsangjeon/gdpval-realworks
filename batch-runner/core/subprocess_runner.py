@@ -27,6 +27,54 @@ from core.prompt_loader import load_prompt, render_prompt
 from core.file_preview import generate_all_previews, build_file_structure_info
 
 
+# ── Reusable, runner-agnostic helpers (shared with SandboxRunner) ────────────
+
+def sanitize_code(code: str) -> str:
+    """Strip evaluation harness tags that don't belong in executable code."""
+    return re.sub(
+        r'^\s*CONFIDENCE\s*\[\s*\d+\s*\]\s*$',
+        '',
+        code,
+        flags=re.MULTILINE,
+    ).strip()
+
+
+def extract_code(text: str) -> Optional[str]:
+    """Extract Python code from ```python``` fenced blocks (with fallbacks)."""
+    pattern = r"```python\s*\n(.*?)```"
+    matches = re.findall(pattern, text, re.DOTALL)
+    if matches:
+        combined = "\n\n".join(m.strip() for m in matches)
+        return sanitize_code(combined)
+
+    # Fallback: fenced block without a language specifier.
+    pattern = r"```\s*\n(.*?)```"
+    matches = re.findall(pattern, text, re.DOTALL)
+    if matches:
+        code = matches[0].strip()
+        if "import" in code or "def " in code or "print" in code:
+            return sanitize_code(code)
+
+    # Fallback: code block opened but never closed (LLM truncation).
+    pattern = r"```python\s*\n(.+)"
+    match = re.search(pattern, text, re.DOTALL)
+    if match:
+        code = match.group(1).strip()
+        code = re.sub(r'`{1,3}\s*$', '', code).strip()
+        if code:
+            return sanitize_code(code)
+
+    return None
+
+
+def extract_description(text: str) -> str:
+    """Return the non-code descriptive text from an LLM response."""
+    cleaned = re.sub(r"```[\w]*\s*\n.*?```", "", text, flags=re.DOTALL)
+    cleaned = re.sub(r"```[\w]*\s*\n.*$", "", cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned
+
+
 class SubprocessRunner:
     """LLM code generation → safe subprocess execution"""
 
@@ -159,77 +207,42 @@ class SubprocessRunner:
     def _extract_description(self, text: str) -> str:
         """Extract non-code descriptive text from LLM response.
 
-        Strips code blocks and returns the remaining text as a
-        meta description of what deliverables were created.
-
-        Args:
-            text: Full LLM response text
-
-        Returns:
-            Descriptive text with code blocks removed
+        Delegates to the module-level :func:`extract_description` (shared with
+        SandboxRunner); kept as a method for backward compatibility.
         """
-        # Remove all closed code blocks (```python...``` or ```...```)
-        cleaned = re.sub(r"```[\w]*\s*\n.*?```", "", text, flags=re.DOTALL)
-        # Remove unclosed code blocks (LLM truncation or trailing code)
-        cleaned = re.sub(r"```[\w]*\s*\n.*$", "", cleaned, flags=re.DOTALL)
-        # Clean up excessive whitespace
-        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
-        return cleaned
+        return extract_description(text)
 
     def _sanitize_code(self, code: str) -> str:
         """Strip evaluation harness tags that don't belong in executable code."""
-        return re.sub(
-            r'^\s*CONFIDENCE\s*\[\s*\d+\s*\]\s*$',
-            '',
-            code,
-            flags=re.MULTILINE,
-        ).strip()
+        return sanitize_code(code)
 
     def _extract_code(self, text: str) -> Optional[str]:
+        """Extract Python code from ```python``` code blocks.
+
+        Delegates to the module-level :func:`extract_code` (shared with
+        SandboxRunner); kept as a method for backward compatibility.
         """
-        Extract Python code from ```python``` code blocks.
+        return extract_code(text)
 
-        Args:
-            text: LLM response text
+    def run_code(
+        self,
+        code: str,
+        reference_files: Optional[list] = None,
+        skills_dir: Optional[str] = None,
+    ) -> dict:
+        """Execute already-extracted code in the hardened local sandbox.
 
-        Returns:
-            Extracted code or None if not found
+        Public wrapper around :meth:`_execute_safely` used by SandboxRunner's
+        local fallback so the Docker and local paths share identical security
+        controls and (optionally) the mounted ``skills`` package.
         """
-        # Pattern: ```python ... ``` (flexible whitespace)
-        pattern = r"```python\s*\n(.*?)```"
-        matches = re.findall(pattern, text, re.DOTALL)
-
-        if matches:
-            # Concatenate all code blocks if multiple
-            combined = "\n\n".join(m.strip() for m in matches)
-            return self._sanitize_code(combined)
-
-        # Fallback: Try without language specifier
-        pattern = r"```\s*\n(.*?)```"
-        matches = re.findall(pattern, text, re.DOTALL)
-
-        if matches:
-            # Check if it looks like Python code
-            code = matches[0].strip()
-            if "import" in code or "def " in code or "print" in code:
-                return self._sanitize_code(code)
-
-        # Fallback: Code block opened but never closed (LLM truncation)
-        pattern = r"```python\s*\n(.+)"
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            code = match.group(1).strip()
-            # Remove trailing ``` if partially present
-            code = re.sub(r'`{1,3}\s*$', '', code).strip()
-            if code:
-                return self._sanitize_code(code)
-
-        return None
+        return self._execute_safely(code, reference_files, skills_dir=skills_dir)
 
     def _execute_safely(
         self,
         code: str,
-        reference_files: Optional[list] = None
+        reference_files: Optional[list] = None,
+        skills_dir: Optional[str] = None,
     ) -> dict:
         """
         Execute code in isolated temporary directory with security controls.
@@ -237,6 +250,9 @@ class SubprocessRunner:
         Args:
             code: Python code to execute
             reference_files: Optional list of file paths to copy
+            skills_dir: Optional path to the ``skills`` package. When provided it
+                is copied into the execution directory and added to PYTHONPATH so
+                generated code can ``from skills import audio, video, ...``.
 
         Returns:
             dict with success, text, files, error
@@ -259,6 +275,21 @@ class SubprocessRunner:
                                 copied_files.append(filename)
                             except Exception as e:
                                 print(f"Warning: Failed to copy reference file {src_path}: {e}")
+
+                # Mount the skills package so generated code can import it
+                # (`from skills import audio, video, ...`). Copied into the
+                # isolated tmpdir; PYTHONPATH is extended below.
+                skills_mounted = False
+                if skills_dir and os.path.isdir(skills_dir):
+                    try:
+                        shutil.copytree(
+                            skills_dir,
+                            os.path.join(tmpdir, "skills"),
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+                        )
+                        skills_mounted = True
+                    except Exception as e:
+                        print(f"Warning: Failed to mount skills package: {e}")
 
                 # Inject available files list as runtime info (top of code)
                 if copied_files:
@@ -294,6 +325,10 @@ class SubprocessRunner:
                 # Preserve VIRTUAL_ENV and related paths for package access
                 if "VIRTUAL_ENV" in os.environ:
                     safe_env["VIRTUAL_ENV"] = os.environ["VIRTUAL_ENV"]
+
+                # Make the mounted skills package importable.
+                if skills_mounted:
+                    safe_env["PYTHONPATH"] = tmpdir
 
                 # Use the same Python interpreter (preserves venv)
                 python_executable = sys.executable

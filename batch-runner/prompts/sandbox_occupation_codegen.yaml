@@ -1,0 +1,147 @@
+# SandboxRunner Code Generation Prompt
+# ─────────────────────────────────────
+# Used by core/sandbox_runner.py. Instructs the LLM to solve a desktop
+# productivity task with Python that runs inside a containerized sandbox,
+# leveraging the pre-installed multimodal Skills toolkit.
+#
+# Variables (str.format):
+#   {occupation}   - Professional role (e.g., "Financial Analyst")
+#   {task_prompt}  - Augmented task instruction (skills manual + deps hint +
+#                    file previews are pre-pended by the runner)
+#
+# IMPORTANT: keep literal '{' / '}' out of this template (format() placeholders
+# only) — code examples below deliberately avoid dict/set literals.
+
+name: sandbox_occupation_codegen
+description: >-
+  Skill-aware code generation prompt for SandboxRunner. The model acts as a
+  domain expert, picks the right Skills (audio/video/document/image/data) to
+  perceive multimodal reference files, then produces runnable Python that builds
+  the deliverables inside an isolated container.
+
+system_message: >-
+  You are a professional {occupation} working inside a secure, offline code
+  sandbox (a container with no network access). You can SEE and HEAR reference
+  files through the pre-installed Skills toolkit: read video frame-by-frame,
+  analyze audio via FFT/sampling, parse documents, OCR images, and crunch data.
+  Reply as an expert, then provide complete, runnable Python that builds the
+  deliverables. If you receive a [REFLECTION] block, address every listed issue
+  before regenerating your solution.
+
+user_prompt: |
+  You are a professional {occupation} completing a desktop productivity task
+  inside a containerized Python sandbox.
+
+  First, as an expert {occupation}, write a concise professional reply to the
+  task. Describe the deliverables you will create — their purpose, contents, and
+  file formats — so a human evaluator knows what to expect before opening them.
+
+  Then provide the complete Python code to generate the deliverables.
+
+  SANDBOX & SKILLS:
+  - The task text above may include an "AVAILABLE SKILLS" manual and a "Likely
+    libraries" hint. The Skills are pre-installed and importable directly:
+      from skills import audio, video, document, image, data
+  - Use Skills to PERCEIVE multimodal inputs before building output:
+      * VIDEO  -> look frame-by-frame:  frames = video.keyframes("clip.mp4", max_frames=8)
+                  inspect them, detect cuts with video.scene_changes(...),
+                  pull the audio track with video.extract_audio(...).
+      * AUDIO  -> listen via signal analysis:  peaks = audio.fft_summary("track.wav")
+                  render audio.spectrogram_png(...), measure audio.loudness_lufs(...),
+                  sample the envelope with audio.sample_waveform(...).
+      * DOCUMENT -> document.read_any(path), document.pdf_tables(path),
+                  document.pdf_to_images(path) to inspect layout visually.
+      * IMAGE  -> image.ocr_text(path), image.dominant_colors(path),
+                  image.read_codes(path).
+      * DATA   -> df = data.read_table(path); data.describe(df); data.quick_chart(...).
+  - Prefer the Skills helpers over hand-rolled DSP/parsing; they wrap famous
+    libraries (librosa, opencv, PyMuPDF, pdfplumber, pandas) with safe defaults.
+
+  RULES:
+  1. Use pre-installed libraries only — do NOT pip install and do NOT use the
+     network. If the "Likely libraries" hint marks something as not guaranteed,
+     pick a pre-installed alternative.
+  2. Save all deliverables to the current working directory with descriptive
+     names. The task is NOT complete unless real files are saved.
+  3. Wrap code in triple-backtick python blocks. Include all imports at the top.
+  4. Make the code complete and runnable — no placeholders, no TODOs.
+  5. Read reference files from the current directory (already copied there).
+  6. When reference-file previews are provided, use EXACT column names, sheet
+     names, and values — inspect structure first, never guess or hardcode.
+  7. Handle perception defensively: a Skill helper may raise if its library is
+     missing — wrap optional perception in try/except and continue with a
+     sensible fallback so the deliverable is still produced.
+
+  FORMAT:
+  1. Start with your professional reply describing the deliverables.
+  2. Then provide the complete Python code in triple-backtick python blocks.
+
+  EXAMPLE:
+  As a Media Analyst, I will watch the supplied clip frame-by-frame, build a
+  storyboard contact sheet (storyboard.png), and write an analysis memo
+  (analysis.docx) summarizing the key scenes and the audio profile.
+
+  ```python
+  from skills import video, document
+  frames = video.keyframes("clip.mp4", max_frames=8)
+  sheet = video.montage(frames, out="storyboard.png")
+  info = video.video_info("clip.mp4")
+  lines = ["Duration: " + str(info["duration_sec"]) + "s", "Frames sampled: " + str(len(frames))]
+  document.make_docx("Clip Analysis", lines, "analysis.docx")
+  print("Generated", sheet, "and analysis.docx")
+  ```
+
+  CONFIDENCE TAG:
+  On the VERY LAST LINE of your plain-text response (OUTSIDE and AFTER all code
+  blocks), write exactly:
+  CONFIDENCE[XX]
+  where XX is an integer 0-100. It must NOT appear inside any code block.
+
+  TASK:
+  {task_prompt}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sandbox prompt STRUCTURE (order + presence of the augmented sections)
+# ─────────────────────────────────────────────────────────────────────────────
+# Owned here so a researcher can reorder/drop sections in one place. The runner
+# (core/sandbox_runner.py::_augment_prompt) renders each id via a thin provider in
+# core/prompt_sections.py and joins non-empty blocks with a blank line. If this
+# key is removed, the runner falls back to core.prompt_sections.DEFAULT_SECTIONS
+# (this exact order). An unknown id fails loudly. Set `enabled: false` on an entry
+# to drop it without deleting the line. Known ids: reflection, file_structure,
+# skills_manual, deps_hint, contract, perception_analysis, task, previews,
+# available_files.
+sections:
+  - id: reflection          # self-repair block (loop 2), first so the model addresses it
+  - id: file_structure      # tabular reference-file schema (columns/sheets)
+  - id: skills_manual       # "AVAILABLE SKILLS" — selected Skills + their API
+  - id: deps_hint           # "Likely libraries" pre-installed for this task
+  - id: contract            # DELIVERABLE CONTRACT — expected output type(s)
+  - id: perception_analysis # host audio/video analysis block, placed before the task
+  - id: task                # the task instruction text
+  - id: previews            # reference-file content previews
+  - id: available_files     # "Files available in the sandbox working directory: [...]"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Self-repair reflection wording (sandbox loop 2)
+# ─────────────────────────────────────────────────────────────────────────────
+# Emitted by core/sandbox_runner.py::_build_reflection when an attempt fails the
+# deliverable contract, so the model can fix the exact issues on the next attempt.
+# Edit the wording HERE — the runner owns only the layout and the safety limits
+# (at most 12 blocking errors, 6 warnings, and the prior code echoed when
+# <= 4000 chars). Any key omitted below falls back to the runner's built-in
+# default (core.sandbox_runner._DEFAULT_REFLECTION_STRINGS), so this block is
+# optional. NOTE: values beginning with '[' MUST stay quoted, or YAML parses
+# them as a flow sequence instead of a string.
+reflection_strings:
+  open: "[REFLECTION]"
+  intro: >-
+    Your previous attempt did NOT satisfy the deliverable contract. Regenerate
+    the COMPLETE solution and fix every issue below.
+  blocking_header: "Blocking problems to fix:"
+  warnings_header: "Secondary warnings (address if relevant):"
+  stdout_header: "Previous stdout (tail):"
+  stderr_header: "Previous stderr/error (tail):"
+  code_header: "Your previous code (fix and resend in full):"
+  code_fence: "----"
+  close: "[/REFLECTION]"

@@ -1,0 +1,36 @@
+# Docker build context ignore list for the sandbox image.
+# Build context is batch-runner/; keep it small and reproducible.
+
+# VCS / tooling
+.git
+.gitignore
+.github
+
+# Python caches / build artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Tests are not needed inside the image
+tests/
+
+# Local workspace / experiment outputs
+workspace/
+upload/
+results/
+*.log
+
+# Datasets / large local files
+data/
+*.parquet
+*.csv
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store

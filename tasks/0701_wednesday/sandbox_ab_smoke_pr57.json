@@ -1,0 +1,320 @@
+{
+  "schema": "sandbox_ab_smoke/v1",
+  "pr": 57,
+  "branch": "hyeonsangjeon-sandbox-skills-multimodal-eval",
+  "date": "2026-07-01",
+  "backend": "docker",
+  "image": "gdpval-sandbox:latest",
+  "config": {
+    "reasoning_effort": "low",
+    "code_generation_tokens": 32768,
+    "repair_max_attempts": 1,
+    "resume_max_rounds": 1,
+    "output_qa_vision_enabled": false,
+    "output_control_loop": true
+  },
+  "conditions": {
+    "A": "skills_only (preprocessors stripped)",
+    "B": "hybrid (skills + gpt audio/video preprocessors)"
+  },
+  "aggregate": {
+    "A_ok": 6,
+    "A_total": 6,
+    "B_ok": 5,
+    "B_total": 6,
+    "B_failed": [
+      "a941b6d8-4289-4500-b45a-f8e4fc94a724"
+    ]
+  },
+  "preprocessor_evidence": {
+    "audio_injected_chars": {
+      "38889c3b": 820,
+      "ff85ee58": 2334
+    },
+    "video_preprocessor": "skipped_both_rounds_no_cv2_av_on_host"
+  },
+  "key_findings": [
+    "reasoning_high_yields_empty_output_used_low+32768",
+    "docker_image_store_needs_retag_for_inspect",
+    "video_657MB_marginal_vs_5GB_and_720s"
+  ],
+  "video_failure": {
+    "round0": "memory_error exit137 5GB limit",
+    "resume": "sandbox exit1 runtime crash in generated composite_final",
+    "classification": "harness_resource_limit + codegen_variance (NOT preprocessor)"
+  },
+  "merge_safety": "safe_from_smoke_perspective; no harness bug; manifests clean; recommendations non-blocking",
+  "pr_status": "open_unmerged",
+  "tasks": [
+    {
+      "task_id": "7d7fc9a7-21a7-4b83-906f-416dea5ad04f",
+      "label": "XLSX (+pdf ref) (Accountant)",
+      "A": {
+        "final_status": "ok",
+        "attempts": 1,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".xlsx",
+          ".pdf",
+          ".png"
+        ],
+        "contract_conf": "medium",
+        "blocking": [],
+        "skills": [
+          "document",
+          "data",
+          "audio",
+          "video"
+        ],
+        "gen_count": 4,
+        "primary_count": 3,
+        "latency_s": 99.3
+      },
+      "B": {
+        "final_status": "ok",
+        "attempts": 1,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".xlsx",
+          ".pdf",
+          ".png"
+        ],
+        "contract_conf": "medium",
+        "blocking": [],
+        "skills": [
+          "document",
+          "data",
+          "audio",
+          "video"
+        ],
+        "gen_count": 4,
+        "primary_count": 3,
+        "latency_s": 259.6,
+        "preprocessor": "none"
+      }
+    },
+    {
+      "task_id": "e6429658-4de1-42dd-a9e0-2d2b9b02fb10",
+      "label": "DOCX (+png ref) (Nurse Practitioner)",
+      "A": {
+        "final_status": "ok",
+        "attempts": 1,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".pdf",
+          ".png"
+        ],
+        "contract_conf": "high",
+        "blocking": [],
+        "skills": [
+          "document",
+          "image",
+          "data"
+        ],
+        "gen_count": 5,
+        "primary_count": 3,
+        "latency_s": 173.4
+      },
+      "B": {
+        "final_status": "ok",
+        "attempts": 1,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".pdf",
+          ".png"
+        ],
+        "contract_conf": "high",
+        "blocking": [],
+        "skills": [
+          "document",
+          "image",
+          "data"
+        ],
+        "gen_count": 5,
+        "primary_count": 3,
+        "latency_s": 123.3,
+        "preprocessor": "none"
+      }
+    },
+    {
+      "task_id": "5a2d70da-0a42-4a6b-a3ca-763e03f070a5",
+      "label": "PPTX multi-file (Mechanical Engineer)",
+      "A": {
+        "final_status": "repaired_ok",
+        "attempts": 2,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".xlsx",
+          ".png"
+        ],
+        "contract_conf": "medium",
+        "blocking": [],
+        "skills": [
+          "document",
+          "data",
+          "audio"
+        ],
+        "gen_count": 3,
+        "primary_count": 3,
+        "latency_s": 96.3
+      },
+      "B": {
+        "final_status": "ok",
+        "attempts": 1,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".xlsx",
+          ".png"
+        ],
+        "contract_conf": "medium",
+        "blocking": [],
+        "skills": [
+          "document",
+          "data",
+          "audio"
+        ],
+        "gen_count": 3,
+        "primary_count": 3,
+        "latency_s": 112.5,
+        "preprocessor": "none"
+      }
+    },
+    {
+      "task_id": "ff85ee58-bc9f-4aa2-806d-87edeabb1b81",
+      "label": "AUDIO .mp3+.wav (Sound Engineer)",
+      "A": {
+        "final_status": "ok",
+        "attempts": 1,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".mp3",
+          ".wav",
+          ".png"
+        ],
+        "contract_conf": "medium",
+        "blocking": [],
+        "skills": [
+          "audio",
+          "data",
+          "document",
+          "image"
+        ],
+        "gen_count": 2,
+        "primary_count": 2,
+        "latency_s": 142.1
+      },
+      "B": {
+        "final_status": "ok",
+        "attempts": 1,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".json",
+          ".mp3",
+          ".wav",
+          ".pdf",
+          ".png"
+        ],
+        "contract_conf": "high",
+        "blocking": [],
+        "skills": [
+          "audio",
+          "data",
+          "document",
+          "image"
+        ],
+        "gen_count": 7,
+        "primary_count": 6,
+        "latency_s": 241.6,
+        "preprocessor": "audio_injected"
+      }
+    },
+    {
+      "task_id": "38889c3b-e3d4-49c8-816a-3cc8e5313aba",
+      "label": "AUDIO .wav (Music Producer)",
+      "A": {
+        "final_status": "ok",
+        "attempts": 1,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".mp4",
+          ".wav",
+          ".zip"
+        ],
+        "contract_conf": "high",
+        "blocking": [],
+        "skills": [
+          "audio",
+          "video",
+          "data",
+          "document"
+        ],
+        "gen_count": 12,
+        "primary_count": 8,
+        "latency_s": 174.7
+      },
+      "B": {
+        "final_status": "ok",
+        "attempts": 1,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".mp4",
+          ".wav",
+          ".zip"
+        ],
+        "contract_conf": "high",
+        "blocking": [],
+        "skills": [
+          "audio",
+          "data",
+          "video",
+          "document"
+        ],
+        "gen_count": 9,
+        "primary_count": 7,
+        "latency_s": 159.8,
+        "preprocessor": "audio_injected"
+      }
+    },
+    {
+      "task_id": "a941b6d8-4289-4500-b45a-f8e4fc94a724",
+      "label": "VIDEO .mp4 (Film/Video Editor)",
+      "A": {
+        "final_status": "repaired_ok",
+        "attempts": 2,
+        "backend": "docker",
+        "verify_ok": true,
+        "contract_ext": [
+          ".mp4"
+        ],
+        "contract_conf": "medium",
+        "blocking": [],
+        "skills": [
+          "video",
+          "document",
+          "image"
+        ],
+        "gen_count": 1,
+        "primary_count": 1,
+        "latency_s": 938.2
+      },
+      "B": {
+        "final_status": "failed_execution",
+        "backend": "docker",
+        "gen_count": null,
+        "primary_count": 0,
+        "latency_s": 1052.4,
+        "preprocessor": "video_skipped_no_cv2_av"
+      }
+    }
+  ]
+}

@@ -181,3 +181,90 @@ def test_executor_json_renderer_passes_token_override():
 
         kwargs = mock_runner_cls.call_args.kwargs
         assert kwargs["max_completion_tokens"] == 6789
+
+
+# ── Sandbox mode ───────────────────────────────────────────────────────────
+
+
+def test_executor_initialization_sandbox():
+    """Test executor initializes sandbox mode with llm_client"""
+    mock_client = Mock()
+    executor = TaskExecutor(mode="sandbox", llm_client=mock_client)
+    assert executor.mode == "sandbox"
+    assert executor.runner is not None
+
+
+def test_executor_sandbox_requires_llm_client():
+    """Test sandbox mode raises error without llm_client"""
+    with pytest.raises(ValueError, match="sandbox mode requires llm_client"):
+        TaskExecutor(mode="sandbox")
+
+
+def test_executor_validate_mode_sandbox_all_providers():
+    """Sandbox mode works with all providers (no provider restriction)"""
+    for provider in ("azure", "openai", "anthropic"):
+        valid, error = TaskExecutor.validate_mode("sandbox", provider)
+        assert valid is True
+        assert error is None
+
+
+def test_executor_sandbox_passes_options_and_tokens():
+    """TaskExecutor should forward sandbox_options + token override to SandboxRunner"""
+    mock_client = Mock()
+    with patch("core.executor.SandboxRunner") as mock_runner_cls:
+        mock_runner_cls.return_value = Mock()
+
+        TaskExecutor(
+            mode="sandbox",
+            llm_client=mock_client,
+            tokens={"code_generation": 4242},
+            sandbox_options={
+                "image": "custom-sandbox:1.0",
+                "use_docker": "always",
+                "memory_gb": 7,
+                "cpus": 3.0,
+                "max_skills": 4,
+            },
+        )
+
+        kwargs = mock_runner_cls.call_args.kwargs
+        assert kwargs["max_completion_tokens"] == 4242
+        assert kwargs["image"] == "custom-sandbox:1.0"
+        assert kwargs["use_docker"] == "always"
+        assert kwargs["memory_gb"] == 7
+        assert kwargs["cpus"] == 3.0
+        assert kwargs["max_skills"] == 4
+
+
+def test_executor_sandbox_defaults_when_no_options():
+    """Sandbox mode should use sane defaults when no sandbox_options given"""
+    mock_client = Mock()
+    with patch("core.executor.SandboxRunner") as mock_runner_cls:
+        mock_runner_cls.return_value = Mock()
+
+        TaskExecutor(mode="sandbox", llm_client=mock_client)
+
+        kwargs = mock_runner_cls.call_args.kwargs
+        assert kwargs["use_docker"] == "auto"
+        assert kwargs["max_skills"] == 5
+
+
+def test_executor_execute_sandbox_delegates():
+    """Test executor.execute delegates to the sandbox runner"""
+    mock_client = Mock()
+    executor = TaskExecutor(mode="sandbox", llm_client=mock_client)
+    executor.runner.run = Mock(return_value={
+        "success": True,
+        "text": "sandbox response",
+        "files": [],
+    })
+
+    result = executor.execute(
+        task_prompt="Test task",
+        model="gpt-5.4",
+        reference_files=["/data/clip.mp4"],
+    )
+
+    assert result["success"] is True
+    assert result["text"] == "sandbox response"
+    executor.runner.run.assert_called_once()
