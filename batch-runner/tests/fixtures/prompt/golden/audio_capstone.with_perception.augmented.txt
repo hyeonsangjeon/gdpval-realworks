@@ -1,0 +1,43 @@
+[REFLECTION]
+Previous attempt produced no .wav. Regenerate.
+[/REFLECTION]
+
+🧰 AVAILABLE SKILLS (pre-installed in the sandbox; import directly):
+
+Import with: `from skills import audio, document`
+Use these helpers instead of hand-rolling perception/IO. They wrap famous libraries with safe defaults.
+
+── Skill `audio` — Audio Perception  (matched files: .wav; keywords: mix, stem)
+Listen via FFT/sampling and edit waveforms.
+  audio.fft_summary(path) -> dict; audio.loudness_lufs(path) -> float
+
+── Skill `document` — Document Toolkit  (matched files: .docx; keywords: report, memo)
+Read and author documents.
+  document.make_docx(title, lines, out); document.read_any(path) -> str
+
+📦 Likely libraries for this task (pre-installed): librosa, python-docx, soundfile
+⚠️  Not guaranteed in the sandbox image: aspose-words — prefer alternatives that are pre-installed.
+
+DELIVERABLE CONTRACT (what the evaluator expects you to PRODUCE):
+- Expected file type(s): .wav, .docx
+- Minimum deliverable files: 1
+- Deliverable name should reference: mix
+- Confidence in this contract: medium
+Save real, openable file(s) of the expected type(s) to the working directory. Do NOT count reference/input files as your deliverable, and do NOT describe the file only in text. If you cannot produce the exact type, produce the closest standard professional format and say so.
+
+[AUDIO ANALYSIS]
+Tempo ~120 BPM; integrated loudness -14 LUFS; 3 stems detected.
+[/AUDIO ANALYSIS]
+
+Edit the supplied stems, produce a balanced mix, and write an edit report.
+
+═══ REFERENCE FILES PREVIEW ═══
+The following reference files are available in the current directory.
+Use EXACT column names, sheet names, and data values shown below.
+
+
+📎 State_of_Affairs_STEM.wav (512 B)
+  Type: .wav — preview not supported, file is copied to working directory
+═══ END REFERENCE FILES ═══
+
+📁 Files available in the sandbox working directory (use them directly): ['State_of_Affairs_STEM.wav']

@@ -122,6 +122,7 @@ class TaskExecutor:
         occupation: str = "professional",
         experiment_prompt: Optional[dict] = None,
         verbose: bool = False,
+        perception_text: Optional[str] = None,
     ) -> dict:
         """
         Execute task using selected runner.
@@ -134,6 +135,10 @@ class TaskExecutor:
             experiment_prompt: Optional prompt overrides from experiment YAML
                 Keys: system (str), prefix (str|None), body (str|None), suffix (str|None)
             verbose: Print detailed debug info (code_interpreter mode only)
+            perception_text: Optional host audio/video analysis block. Only the
+                sandbox runner consumes it (it owns placement via the
+                ``perception_analysis`` spec section); other modes ignore it since
+                step2 still prepends perception to the task prompt for them.
 
         Returns:
             dict with standardized format:
@@ -169,6 +174,7 @@ class TaskExecutor:
                     reference_files=reference_files,
                     occupation=occupation,
                     experiment_prompt=experiment_prompt,
+                    perception_text=perception_text,
                 )
 
             elif self.mode == "json_renderer":

@@ -283,6 +283,7 @@ class SandboxRunner:
         reference_files: Optional[list] = None,
         occupation: str = "professional",
         experiment_prompt: Optional[dict] = None,
+        perception_text: Optional[str] = None,
     ) -> dict:
         """Generate code, run it in the sandbox, then verify/QA/repair the output.
 
@@ -291,6 +292,10 @@ class SandboxRunner:
         the deliverable contract → deterministic verify + render QA. If blocking
         failures remain and the repair budget allows, build a focused reflection
         and regenerate. A ``manifest.json`` capturing every attempt is emitted.
+
+        ``perception_text`` is the optional host audio/video analysis block. The
+        sandbox owns its *placement* (the ``perception_analysis`` spec section),
+        so step2 passes it through here instead of prepending it to the task.
         """
         try:
             ref_files = reference_files or []
@@ -320,6 +325,7 @@ class SandboxRunner:
                     skills=skills,
                     contract=contract,
                     reflection=reflection,
+                    perception_text=perception_text,
                 )
                 attempts.append(attempt["report"])
 
@@ -357,6 +363,7 @@ class SandboxRunner:
         skills,
         contract: DeliverableContract,
         reflection: Optional[str],
+        perception_text: Optional[str] = None,
     ) -> dict:
         manifest = resolve(
             reference_files=ref_files,
@@ -364,7 +371,8 @@ class SandboxRunner:
             base_packages=self._base_packages,
         )
         augmented = self._augment_prompt(
-            task_prompt, ref_files, skills, manifest, contract, reflection
+            task_prompt, ref_files, skills, manifest, contract, reflection,
+            perception_text=perception_text,
         )
         rendered = render_prompt(
             self.prompt_data,
@@ -639,6 +647,7 @@ class SandboxRunner:
         manifest: DependencyManifest,
         contract: Optional[DeliverableContract] = None,
         reflection: Optional[str] = None,
+        perception_text: Optional[str] = None,
     ) -> str:
         """Assemble the sandbox prompt from spec-ordered sections.
 
@@ -646,6 +655,8 @@ class SandboxRunner:
         ``sections:`` list, falling back to ``DEFAULT_SECTIONS`` (today's order).
         Each section's text comes from a thin provider in ``core.prompt_sections``;
         this method only builds the context and delegates the assembly.
+        ``perception_text`` (host audio/video analysis) fills the optional
+        ``perception_analysis`` section when the spec enables it.
         """
         ctx = SectionContext(
             task_prompt=task_prompt,
@@ -655,6 +666,7 @@ class SandboxRunner:
             contract=contract,
             reflection=reflection,
             registry=self.registry,
+            perception_text=perception_text,
         )
         section_order = self.prompt_data.get("sections") or DEFAULT_SECTIONS
         return assemble_sections(section_order, ctx)

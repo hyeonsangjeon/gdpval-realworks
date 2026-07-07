@@ -698,10 +698,19 @@ def _execute_single_task(
         if not abs_ref_files:
             abs_ref_files = None  # all missing → treat as no files
 
-    # ── Preprocessor: enrich prompt with audio analysis (if configured) ──
+    # ── Preprocessor: enrich prompt with audio/video analysis (if configured) ──
     preprocessor_prefix = _run_preprocessors(condition, abs_ref_files, instruction)
+    perception_text = None
     if preprocessor_prefix:
-        instruction = preprocessor_prefix + "\n\n" + instruction
+        if execution_mode == "sandbox":
+            # Sandbox owns perception PLACEMENT via its `perception_analysis` spec
+            # section (prompts/sandbox_occupation_codegen.yaml), so pass the block
+            # through rather than prepending it here. This is byte-equivalent to the
+            # prepend (perception is the outermost prefix before the task either way)
+            # while making the section spec-controllable.
+            perception_text = preprocessor_prefix
+        else:
+            instruction = preprocessor_prefix + "\n\n" + instruction
         print(f"      🎵 Preprocessor injected {len(preprocessor_prefix)} chars into prompt")
 
     try:
@@ -741,6 +750,7 @@ def _execute_single_task(
             occupation=task_info.get("occupation", "professional"),
             experiment_prompt=experiment_prompt,
             verbose=verbose,
+            perception_text=perception_text,
         )
         latency_ms = (time.time() - start) * 1000
 

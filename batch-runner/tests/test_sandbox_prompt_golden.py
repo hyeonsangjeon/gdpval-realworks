@@ -289,3 +289,59 @@ def test_reflection_falls_back_when_spec_omits_strings():
     )
     assert out.startswith("[REFLECTION]")
     assert out.rstrip().endswith("[/REFLECTION]")
+
+
+_PERCEPTION_BLOCK = (
+    "[AUDIO ANALYSIS]\n"
+    "Tempo ~120 BPM; integrated loudness -14 LUFS; 3 stems detected.\n"
+    "[/AUDIO ANALYSIS]"
+)
+
+
+def test_perception_passthrough_equals_prepend(runner, tmp_path):
+    """Option A byte-identity: perception as a section == prepending it to the task.
+
+    Proves step2's sandbox pass-through (perception_text) produces exactly the same
+    assembled prompt as the legacy prepend-into-task behavior, so enabling the
+    perception_analysis section causes zero drift on real perception runs.
+    """
+    task_prompt, refs, skills, manifest, contract, _, _ = _build_inputs(
+        SCENARIOS["audio_capstone"], tmp_path
+    )
+    sandbox_reflection = "[REFLECTION]\nFix the missing mix.\n[/REFLECTION]"
+
+    old = runner._augment_prompt(  # perception glued to front of task, section off
+        _PERCEPTION_BLOCK + "\n\n" + task_prompt, refs, skills, manifest, contract,
+        sandbox_reflection, perception_text=None,
+    )
+    new = runner._augment_prompt(  # perception passed as its own section
+        task_prompt, refs, skills, manifest, contract,
+        sandbox_reflection, perception_text=_PERCEPTION_BLOCK,
+    )
+    assert new == old
+    assert (_PERCEPTION_BLOCK + "\n\n" + task_prompt) in new  # sits right before task
+
+
+def test_perception_section_golden(runner, tmp_path):
+    """Lock the assembled prompt when perception + a repair reflection are present."""
+    task_prompt, refs, skills, manifest, contract, _, _ = _build_inputs(
+        SCENARIOS["audio_capstone"], tmp_path
+    )
+    reflection = "[REFLECTION]\nPrevious attempt produced no .wav. Regenerate.\n[/REFLECTION]"
+    augmented = runner._augment_prompt(
+        task_prompt, refs, skills, manifest, contract, reflection,
+        perception_text=_PERCEPTION_BLOCK,
+    )
+    _assert_no_host_roots(augmented)
+    _assert_golden("audio_capstone.with_perception.augmented.txt", augmented)
+
+
+def test_perception_omitted_when_absent(runner, tmp_path):
+    """No perception_text → perception_analysis section is dropped (default output)."""
+    task_prompt, refs, skills, manifest, contract, _, _ = _build_inputs(
+        SCENARIOS["audio_capstone"], tmp_path
+    )
+    with_none = runner._augment_prompt(
+        task_prompt, refs, skills, manifest, contract, None, perception_text=None
+    )
+    assert "[AUDIO ANALYSIS]" not in with_none

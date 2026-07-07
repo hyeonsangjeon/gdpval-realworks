@@ -117,7 +117,7 @@ sections:
   - id: skills_manual       # "AVAILABLE SKILLS" — selected Skills + their API
   - id: deps_hint           # "Likely libraries" pre-installed for this task
   - id: contract            # DELIVERABLE CONTRACT — expected output type(s)
-  # - id: perception_analysis  # host audio/video analysis (enabled via spec in P3)
+  - id: perception_analysis # host audio/video analysis block, placed before the task
   - id: task                # the task instruction text
   - id: previews            # reference-file content previews
   - id: available_files     # "Files available in the sandbox working directory: [...]"
