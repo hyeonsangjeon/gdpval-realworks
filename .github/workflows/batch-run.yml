@@ -294,7 +294,7 @@ jobs:
             echo "📌 Using pinned digest forwarded from a previous relay leg: $RESOLVED_DIGEST"
           else
             echo "🔎 Resolving ${IMAGE_REPO}:latest to an immutable digest..."
-            DIGEST=$(docker buildx imagetools inspect "${IMAGE_REPO}:latest" --format '{{.Manifest.Digest}}' | tr -d '"' | tr -d '[:space:]')
+            DIGEST=$(docker buildx imagetools inspect "${IMAGE_REPO}:latest" --format '{{json .Manifest}}' | jq -r '.digest')
             if ! echo "$DIGEST" | grep -qE '^sha256:[0-9a-f]{64}$'; then
               echo "FATAL: could not resolve an immutable digest for ${IMAGE_REPO}:latest (got '$DIGEST')"
               exit 1
