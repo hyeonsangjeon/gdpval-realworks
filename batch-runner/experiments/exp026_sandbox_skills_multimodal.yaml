@@ -256,7 +256,12 @@ execution:
     # .yaml (sections, reflection_strings, perception placement). To A/B an
     # alternate design without code changes, copy that file and set:
     #   prompt_name: "your_variant"   # see prompts/sandbox_prompt_authoring.md
-    use_docker: "auto"        # auto | never | always
+    use_docker: "always"      # auto | never | always
+    # In CI the sandbox image is guaranteed present: batch-run.yml's
+    # "Sandbox: pull & verify image" preflight pulls it from GHCR and loud-fails
+    # before any model spend if it is missing. "always" therefore makes a mid-run
+    # Docker daemon loss fail LOUD per-task instead of silently falling back to
+    # local execution (fixes the pilot's silent-fallback finding).
     # 5 GB OOM-killed the 657 MB / 4K video task (exit 137) in the A/B smoke.
     # 8 GB covers 4K frame buffers + moviepy/ffmpeg working set for the full run.
     memory_gb: 8

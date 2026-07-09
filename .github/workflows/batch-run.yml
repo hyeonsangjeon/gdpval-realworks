@@ -28,12 +28,18 @@ on:
         required: false
         type: number
         default: 290
+      sandbox_image_digest:
+        description: 'Pinned ghcr.io/...@sha256 digest forwarded across relay legs so every leg pulls the SAME immutable image. Leave empty on the manual leg 0 (it will be resolved automatically).'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write        # to commit yaml results
   pull-requests: write   # to create PRs
   actions: write          # for relay self-retrigger (gh workflow run)
   id-token: write         # for Azure OIDC authentication
+  packages: read          # to pull the sandbox image from GHCR (sandbox mode only)
 
 env:
   PYTHON_VERSION: '3.11'
@@ -144,10 +150,30 @@ jobs:
           owner = source.split('/')[0] if '/' in source else 'HyeonSang'
           print(owner)
           ")
+          # ── Sandbox mode detection (safe defaults; never exit/raise) ──
+          # These gate the GHCR image pull. Baselines have no execution.mode:
+          # sandbox, so uses_sandbox stays 'false' and the pull step is skipped
+          # entirely (strict NO-OP for non-sandbox experiments).
+          USES_SANDBOX=$(python3 -c "
+          import yaml
+          with open('$YAML_FILE') as f:
+              cfg = yaml.safe_load(f)
+          mode = cfg.get('execution', {}).get('mode')
+          print('true' if mode == 'sandbox' else 'false')
+          ")
+          SANDBOX_IMAGE=$(python3 -c "
+          import yaml
+          with open('$YAML_FILE') as f:
+              cfg = yaml.safe_load(f)
+          image = cfg.get('execution', {}).get('sandbox', {}).get('image') or 'gdpval-sandbox:latest'
+          print(image)
+          ")
           echo "install_libreoffice=$INSTALL_LO" >> $GITHUB_OUTPUT
           echo "wall_timeout=$WALL_TIMEOUT" >> $GITHUB_OUTPUT
           echo "relay_max_runs=$RELAY_MAX_RUNS" >> $GITHUB_OUTPUT
           echo "repo_owner=$REPO_OWNER" >> $GITHUB_OUTPUT
+          echo "uses_sandbox=$USES_SANDBOX" >> $GITHUB_OUTPUT
+          echo "sandbox_image=$SANDBOX_IMAGE" >> $GITHUB_OUTPUT
 
       - name: Install LibreOffice & Noto Sans fonts
         if: steps.read_config.outputs.install_libreoffice == 'True'
@@ -239,6 +265,66 @@ jobs:
         run: |
           cd batch-runner
           bash step1_prepare_tasks.sh experiments/${{ inputs.experiment_yaml }}.yaml
+
+      # ── Sandbox: pull the prebuilt image from GHCR & verify (sandbox mode only) ──
+      # Runs ONLY for execution.mode: sandbox experiments; baselines skip it
+      # entirely (strict NO-OP). NOT continue-on-error on purpose: if the image
+      # cannot be made available we abort HERE, before any Azure login or model
+      # spend, rather than silently falling back to slow/unhardened local exec.
+      - name: 'Sandbox: pull & verify image'
+        id: sandbox_pull
+        if: steps.read_config.outputs.uses_sandbox == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          INPUT_DIGEST: ${{ inputs.sandbox_image_digest }}
+          RETAG_TARGET: ${{ steps.read_config.outputs.sandbox_image }}
+        run: |
+          set -euo pipefail
+          IMAGE_REPO="ghcr.io/hyeonsangjeon/gdpval-sandbox"
+
+          echo "🔐 Logging in to GHCR..."
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+          # Resolve to an IMMUTABLE digest so every relay leg pulls the exact
+          # same image. Pinning the digest across legs prevents mid-run :latest
+          # drift (a rebuild between legs) from corrupting a single experiment.
+          if [ -n "$INPUT_DIGEST" ]; then
+            RESOLVED_DIGEST="$INPUT_DIGEST"
+            echo "📌 Using pinned digest forwarded from a previous relay leg: $RESOLVED_DIGEST"
+          else
+            echo "🔎 Resolving ${IMAGE_REPO}:latest to an immutable digest..."
+            DIGEST=$(docker buildx imagetools inspect "${IMAGE_REPO}:latest" --format '{{.Manifest.Digest}}' | tr -d '"' | tr -d '[:space:]')
+            if ! echo "$DIGEST" | grep -qE '^sha256:[0-9a-f]{64}$'; then
+              echo "FATAL: could not resolve an immutable digest for ${IMAGE_REPO}:latest (got '$DIGEST')"
+              exit 1
+            fi
+            RESOLVED_DIGEST="${IMAGE_REPO}@${DIGEST}"
+            echo "📌 Resolved digest: $RESOLVED_DIGEST"
+          fi
+
+          echo "⬇️  Pulling $RESOLVED_DIGEST ..."
+          docker pull "$RESOLVED_DIGEST"
+
+          # Retag to the name core/sandbox_runner.py actually looks for. The
+          # config image (execution.sandbox.image) WINS over the SANDBOX_IMAGE
+          # env var (self.image = image or DEFAULT_SANDBOX_IMAGE), so exporting
+          # an env var would be a silent no-op — we must retag to the config name.
+          echo "🏷️  Retagging to runner-resolved name: $RETAG_TARGET"
+          docker tag "$RESOLVED_DIGEST" "$RETAG_TARGET"
+
+          # Loud fail BEFORE any model spend if the image is somehow unavailable.
+          docker image inspect "$RETAG_TARGET" >/dev/null || { echo 'FATAL: sandbox image unavailable — aborting before any model spend'; exit 1; }
+
+          # Expose the pinned digest so the relay step can forward it to the next
+          # leg, keeping the whole experiment on one immutable image.
+          echo "digest=$RESOLVED_DIGEST" >> "$GITHUB_OUTPUT"
+          {
+            echo "### 🐳 Sandbox image ready"
+            echo ""
+            echo "- Pinned digest: \`$RESOLVED_DIGEST\`"
+            echo "- Retagged as: \`$RETAG_TARGET\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # ── Step 2a: Run Inference (condition_a) ──
       - name: 'Azure Login (OIDC)'
@@ -339,6 +425,10 @@ jobs:
         if: steps.check_relay.outputs.needs_relay == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pinned digest from the preflight (empty for non-sandbox runs, where
+          # the pull step is skipped). Forwarding it keeps every relay leg on the
+          # exact same immutable image.
+          SANDBOX_IMAGE_DIGEST: ${{ steps.sandbox_pull.outputs.digest }}
         run: |
           NEXT_RELAY=$(( ${{ inputs.relay_run }} + 1 ))
           MAX_RELAYS="${{ steps.read_config.outputs.relay_max_runs }}"
@@ -353,7 +443,8 @@ jobs:
             -f experiment_yaml="${{ inputs.experiment_yaml }}" \
             -f relay_run="$NEXT_RELAY" \
             -f wall_timeout="${{ inputs.wall_timeout }}" \
-            -f dry_run="${{ inputs.dry_run }}"
+            -f dry_run="${{ inputs.dry_run }}" \
+            -f sandbox_image_digest="$SANDBOX_IMAGE_DIGEST"
 
           echo "Relay run #$NEXT_RELAY triggered. This run will now exit."
           exit 0
