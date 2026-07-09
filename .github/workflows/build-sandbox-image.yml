@@ -1,0 +1,72 @@
+# Build & publish the GDPVal sandbox image to GitHub Container Registry (GHCR).
+#
+# WHY THIS EXISTS
+#   The sandbox image is the execution backend for `execution.mode: sandbox`.
+#   It is large (~8.46 GB): LibreOffice, GDAL/GEOS/PROJ, the full scientific /
+#   multimodal Python stack, tesseract, graphviz, weasyprint, ffmpeg, etc.
+#   Building it on every batch run is wasteful and local Docker Desktop is
+#   flaky, so we build it ONCE here and have batch-run.yml PULL it.
+#
+#   amd64 ONLY. requirements.txt pins aspose-words>=25.0.0, which ships no
+#   arm64 wheel — an arm64 build fails outright. CI ubuntu-latest is amd64 and
+#   reliable, so we deliberately do not add linux/arm64.
+#
+# FIRST-BUILD FOLLOW-UP (manual, one time)
+#   The first push creates a PRIVATE GHCR package `gdpval-sandbox`. Verify it is
+#   linked to this repo with inherited "Actions read" access so batch-run.yml
+#   can pull it with the default GITHUB_TOKEN. If a pull 403s, either link the
+#   package to the repo (Package settings -> Manage Actions access) or make the
+#   package public.
+name: Build Sandbox Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - batch-runner/requirements.txt
+      - batch-runner/sandbox/Dockerfile
+      - 'batch-runner/skills/**'
+
+concurrency:
+  group: build-sandbox-image
+  cancel-in-progress: true
+
+# Least privilege: only what buildx needs to push to GHCR. No id-token, no
+# contents:write.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-sandbox-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push sandbox image
+        uses: docker/build-push-action@v6
+        with:
+          context: batch-runner
+          file: batch-runner/sandbox/Dockerfile
+          # amd64 ONLY — arm64 fails on aspose-words>=25.0.0 (no arm64 wheel).
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/hyeonsangjeon/gdpval-sandbox:latest
+            ghcr.io/hyeonsangjeon/gdpval-sandbox:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-sandbox:buildcache
+          cache-to: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-sandbox:buildcache,mode=max
