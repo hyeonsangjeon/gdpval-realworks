@@ -89,13 +89,14 @@ class OutputConfig:
 @dataclass
 class ExecutionConfig:
     """Execution mode configuration (Phase 5-3)"""
-    mode: Literal["code_interpreter", "subprocess", "json_renderer"] = "subprocess"
+    mode: Literal["code_interpreter", "subprocess", "json_renderer", "sandbox"] = "subprocess"
     score_type: Literal["tool_assisted", "portable"] = "tool_assisted"
     max_retries: int = 3           # Infrastructure retries within task execution
     resume_max_rounds: int = 3     # Auto-retry rounds for error tasks in progress.json
     install_libreoffice: bool = False  # Install LibreOffice + Noto Sans (for Elicit)
     tokens: Dict[str, int] = field(default_factory=lambda: dict(DEFAULT_TOKENS))
     timeout: Optional[int] = None  # subprocess timeout override (seconds)
+    sandbox: Optional[Dict[str, Any]] = None  # sandbox-mode settings (execution.sandbox block)
 
 
 class ExperimentConfig:
@@ -231,6 +232,7 @@ class ExperimentConfig:
             install_libreoffice=execution_data.get("install_libreoffice", False),
             tokens=execution_tokens,
             timeout=execution_data.get("timeout"),
+            sandbox=execution_data.get("sandbox"),
         )
 
         return cls(

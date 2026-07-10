@@ -4,6 +4,11 @@ Usage:
     pytest tests/test_experiment_config.py -v
 """
 
+import json
+import sys
+import types
+from types import SimpleNamespace
+
 import pytest
 from pathlib import Path
 from core.experiment_config import (
@@ -352,3 +357,138 @@ class TestDataClasses:
         assert condition.name == "Test"
         assert condition.model.provider == "azure"
         assert condition.prompt.system == "test"
+
+
+# ── Regression: execution.sandbox + timeout propagation (config drop bug) ──────
+EXPERIMENTS_DIR = Path(__file__).resolve().parent.parent / "experiments"
+EXP026_YAML = EXPERIMENTS_DIR / "exp026_sandbox_skills_multimodal.yaml"
+EXP026S_YAML = EXPERIMENTS_DIR / "exp026s_sandbox_ci_smoke.yaml"
+
+
+def _fake_task(task_id: str, occupation: str):
+    """Minimal stand-in for a GDPValTask (no dataset snapshot required)."""
+    return SimpleNamespace(
+        task_id=task_id,
+        sector="Finance and Insurance",
+        occupation=occupation,
+        prompt="Prepare a short financial summary document.",
+        reference_files=[],
+        reference_file_urls=[],
+    )
+
+
+class TestExecutionSandboxPropagation:
+    """Guards the config-propagation fix.
+
+    Bug: ExecutionConfig never parsed ``execution.sandbox`` and step1 dropped
+    both ``timeout`` and ``sandbox`` from the prepared-tasks JSON, so a CI
+    sandbox run silently fell back to defaults (timeout 570 / use_docker auto /
+    memory 5GB) instead of the hardened 1200 / always / 8GB.
+    """
+
+    def test_execution_config_defaults_sandbox_to_none(self):
+        """New field exists and defaults to None (no behaviour change by default)."""
+        from core.experiment_config import ExecutionConfig
+
+        assert ExecutionConfig().sandbox is None
+
+    def test_from_dict_without_sandbox_is_none(self, sample_config_dict):
+        """A config with no execution.sandbox block yields sandbox=None."""
+        config = ExperimentConfig.from_dict(sample_config_dict)
+        assert config.execution.sandbox is None
+
+    def test_from_dict_parses_sandbox_block(self, sample_config_dict):
+        """execution.sandbox + timeout survive from_dict parsing."""
+        sample_config_dict["execution"]["mode"] = "sandbox"
+        sample_config_dict["execution"]["timeout"] = 1200
+        sample_config_dict["execution"]["sandbox"] = {
+            "use_docker": "always",
+            "memory_gb": 8,
+        }
+        config = ExperimentConfig.from_dict(sample_config_dict)
+
+        assert config.execution.mode == "sandbox"
+        assert config.execution.timeout == 1200
+        assert config.execution.sandbox == {"use_docker": "always", "memory_gb": 8}
+
+    def test_exp026_parses_sandbox_hardening(self):
+        """(a) The real exp026 YAML exposes the sandbox hardening + timeout."""
+        config = ExperimentConfig.from_yaml(str(EXP026_YAML))
+
+        assert config.execution.mode == "sandbox"
+        assert config.execution.timeout == 1200
+        assert isinstance(config.execution.sandbox, dict)
+        assert config.execution.sandbox["use_docker"] == "always"
+        assert config.execution.sandbox["memory_gb"] == 8
+
+    def test_exp026s_smoke_parses_bounded_scope(self):
+        """(b) The new CI smoke YAML keeps the hardening but bounds the scope."""
+        config = ExperimentConfig.from_yaml(str(EXP026S_YAML))
+
+        assert config.execution.mode == "sandbox"
+        assert config.execution.timeout == 1200
+        assert config.execution.sandbox["use_docker"] == "always"
+        assert config.execution.sandbox["memory_gb"] == 8
+        assert config.data_filter.sample_size == 1
+        assert config.data_filter.occupation == "Accountants and Auditors"
+
+    def test_step1_prepares_execution_sandbox_and_timeout(self, tmp_path, monkeypatch):
+        """(c) step1's prepared-tasks JSON now carries timeout + sandbox.
+
+        Exercises the REAL step1 output construction with the dataset loader and
+        needs-files manifest mocked out — no network, no model, no Docker, no
+        local snapshot. ``core.data_loader`` imports the heavy ``prepare_dataset``
+        (pyarrow) at module load, so in a minimal env we inject a lightweight
+        stub; in CI (pyarrow present) the real module imports and the stub is
+        never used.
+        """
+        try:
+            import prepare_dataset  # noqa: F401
+        except Exception:
+            stub = types.ModuleType("prepare_dataset")
+            stub.GDPValDataset = type("GDPValDataset", (), {})
+            stub.GDPValTask = type("GDPValTask", (), {})
+            monkeypatch.setitem(sys.modules, "prepare_dataset", stub)
+
+        import step1_prepare_tasks as step1
+
+        fake_tasks = [
+            _fake_task("acct-001", "Accountants and Auditors"),
+            _fake_task("dev-001", "Software Developers"),
+        ]
+
+        class _FakeLoader:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def load(self):
+                return fake_tasks
+
+        class _FakeManifest:
+            @staticmethod
+            def load():
+                raise FileNotFoundError
+
+        monkeypatch.setattr(step1, "GDPValDataLoader", _FakeLoader)
+        monkeypatch.setattr(step1, "NeedsFilesManifest", _FakeManifest)
+        monkeypatch.setattr(step1, "WORKSPACE_DIR", tmp_path)
+
+        output = step1.prepare_tasks(str(EXP026S_YAML))
+
+        exec_block = output["execution"]
+        assert "timeout" in exec_block, "step1 dropped execution.timeout"
+        assert "sandbox" in exec_block, "step1 dropped execution.sandbox"
+        assert exec_block["timeout"] == 1200
+        assert exec_block["sandbox"]["use_docker"] == "always"
+        assert exec_block["sandbox"]["memory_gb"] == 8
+        # occupation filter + sample_size:1 -> exactly one task
+        assert output["total_tasks"] == 1
+
+        # The persisted JSON (what step2 actually reads) mirrors it.
+        written = json.loads(
+            (tmp_path / "step1_tasks_prepared.json").read_text(encoding="utf-8")
+        )
+        assert written["execution"]["timeout"] == 1200
+        assert written["execution"]["sandbox"]["use_docker"] == "always"
+        assert written["execution"]["sandbox"]["memory_gb"] == 8
+        assert written["total_tasks"] == 1
