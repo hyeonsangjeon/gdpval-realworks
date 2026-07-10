@@ -863,6 +863,10 @@ class SandboxRunner:
             "-e", "HOME=/work",
             "-e", "LANG=C.UTF-8",
             "-e", f"PYTHONPATH={pythonpath}",
+            # Container runs as root; without this, importing skills writes
+            # root-owned __pycache__/*.pyc into the bind-mounted tmpdir, which
+            # then breaks host cleanup (rmtree EPERM: Operation not permitted).
+            "-e", "PYTHONDONTWRITEBYTECODE=1",
         ]
         if self.cpus:
             cmd += ["--cpus", str(self.cpus)]
