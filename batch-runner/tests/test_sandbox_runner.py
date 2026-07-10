@@ -160,6 +160,8 @@ def test_docker_command_security_flags(tmp_path):
     assert "no-new-privileges" in joined
     assert "--cpus 1.5" in joined
     assert "/work:/opt/gdpval" in joined  # mounted + baked skills both on path
+    # Prevent root-owned __pycache__ in the bind-mounted tmpdir (host rmtree EPERM).
+    assert "PYTHONDONTWRITEBYTECODE=1" in joined
     assert cmd[-3:] == ["python", "-u", "solution.py"]
 
 
