@@ -152,17 +152,29 @@ def test_execute_auto_falls_back_when_no_docker():
 
 def test_docker_command_security_flags(tmp_path):
     runner = SandboxRunner(llm_client=object(), use_docker="never", memory_gb=3, cpus=1.5)
-    cmd = runner._docker_command(str(tmp_path), skills_mounted=True)
+    with patch.object(sr.os, "getuid", return_value=1234, create=True), \
+         patch.object(sr.os, "getgid", return_value=5678, create=True):
+        cmd = runner._docker_command(str(tmp_path), skills_mounted=True)
     joined = " ".join(cmd)
     assert "--network none" in joined
     assert "--memory 3g" in joined
     assert "--pids-limit 512" in joined
     assert "no-new-privileges" in joined
+    assert "--user 1234:5678" in joined
     assert "--cpus 1.5" in joined
     assert "/work:/opt/gdpval" in joined  # mounted + baked skills both on path
     # Prevent root-owned __pycache__ in the bind-mounted tmpdir (host rmtree EPERM).
     assert "PYTHONDONTWRITEBYTECODE=1" in joined
-    assert cmd[-3:] == ["python", "-u", "solution.py"]
+    assert cmd[-4:] == [runner.image, "python", "-u", "solution.py"]
+
+
+def test_docker_command_without_posix_ids_omits_user(tmp_path):
+    runner = SandboxRunner(llm_client=object(), use_docker="never")
+    with patch.object(sr.os, "getuid", None, create=True), \
+         patch.object(sr.os, "getgid", None, create=True):
+        cmd = runner._docker_command(str(tmp_path), skills_mounted=False)
+    assert "--user" not in cmd
+    assert cmd[-4:] == [runner.image, "python", "-u", "solution.py"]
 
 
 def test_docker_command_pythonpath_without_mount(tmp_path):
