@@ -301,4 +301,6 @@ execution:
     json_render: 8000
   max_retries: 5
   resume_max_rounds: 2
-  relay_max_runs: 5
+  # Existing 220 checkpoint needs manual relay 6 continuation; heavy multimodal
+  # retries can span multiple ~290-minute legs.
+  relay_max_runs: 10

@@ -858,14 +858,18 @@ class SandboxRunner:
             "--memory-swap", f"{self.memory_gb}g",
             "--pids-limit", "512",
             "--security-opt", "no-new-privileges",
+        ]
+        getuid = getattr(os, "getuid", None)
+        getgid = getattr(os, "getgid", None)
+        if callable(getuid) and callable(getgid):
+            cmd += ["--user", f"{getuid()}:{getgid()}"]
+        cmd += [
             "-v", f"{workdir}:/work:rw",
             "-w", "/work",
             "-e", "HOME=/work",
             "-e", "LANG=C.UTF-8",
             "-e", f"PYTHONPATH={pythonpath}",
-            # Container runs as root; without this, importing skills writes
-            # root-owned __pycache__/*.pyc into the bind-mounted tmpdir, which
-            # then breaks host cleanup (rmtree EPERM: Operation not permitted).
+            # Keep bytecode artifacts out of the bind-mounted workdir.
             "-e", "PYTHONDONTWRITEBYTECODE=1",
         ]
         if self.cpus:
