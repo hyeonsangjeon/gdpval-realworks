@@ -22,7 +22,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   route schema, API compatibility, binary decode, memory, timeout, and backend
   failures to distinct prompt-authored strategies; chained tracebacks prefer
   the final exception. Best-attempt and manifest backend selection now preserve
-  actual execution evidence instead of an earlier compile-only failure.
+  actual execution evidence instead of an earlier compile-only failure. Shipped
+  through PR #71 (`aa6c35c9`); the backend-only merge triggered no workflow, so
+  an owner-approved bounded runtime canary remains pending.
 - **Grading Track 2 merge and deploy** — squash-merged the reviewed hardening through PR #69 (`6ad789a7`) and verified successful `Aggregate Tests & Deploy` run 29357775581. The merge did not dispatch any paid grading, batch, or cost-sweep workflow; live Ubuntu renderer and limited Azure vision canaries remain explicit follow-up gates.
 - **Dashboard diagnostic scope consistency** — register exp027 as a diagnostic
   report hidden from every default cross-run surface, including leaderboard,
