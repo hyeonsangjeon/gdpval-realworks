@@ -12,7 +12,30 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Inference config and subset integrity** — preserve `model.reasoning_effort`
+  from experiment YAML through prepared tasks, add validated ordered
+  `data.filter.task_ids`, and carry canonical task scope through Steps 4 and 5.
+  Explicit subset runs now retain exactly their selected rows (including failed
+  tasks), reject duplicate/missing/unexpected result IDs, and cannot create
+  placeholders for unselected benchmark tasks. `execution.sandbox` also
+  survives config round-trips.
+- **Sandbox provenance privacy** — persist only bounded hashes, counts, token
+  usage, latency, stable error categories, skill-match evidence, preprocessor
+  status, and CI identifiers. Raw model/process/preprocessor text, exception
+  messages, generated filenames, arbitrary attempt fields, and heavy QA reports
+  are excluded from checkpoints and self-reports.
 - **`batch-runner/scripts/download_inference_from_hf.py`** — pass `HF_TOKEN` explicitly to `hf_hub_download()` (×2) and `snapshot_download()` via a new `_hf_token()` helper. The grade pipeline's "Download inference results from HF" step injects `HF_TOKEN` env, but `huggingface_hub` auto-pickup did not fire, so requests went out **anonymous** (CI log: `unauthenticated requests to HF Hub`). Under the sequential grade relay this tripped HTTP **429 Too Many Requests** on the inference parquet, breaking a chunk mid-run (e.g. 5.4 220 re-grade chunk-2 resume). Authenticated requests have a much higher rate limit → relay no longer 429s on repeated chunk downloads. No behavior change for single runs.
+
+### Added
+- **`exp027_GPT54_default_subprocess_bridge50`** — checked-in 50-task,
+  9-sector diagnostic subprocess comparator for the historical exp026
+  Sandbox/Skills runner bundle. Includes pinned 42 non-success-union tasks, six
+  media controls, two general controls, source revisions, selection provenance,
+  and analysis guardrails against causal or population-level overclaiming.
+- **Repository completion records** — `.github/copilot-instructions.md` now
+  requires every repository-changing task to refresh
+  `tasks/LATEST_TASK_RESULT/README.md` and the `[Unreleased]` changelog before
+  completion is reported.
 
 ### Changed
 - **`.github/agents/azure-infra-engineer.md`** — rebuilt for Opus 4.8 Copilot (`model: Claude Opus 4.8 (copilot)`, `tools: vscode, execute, read, edit, search, web, todo`). Reframed from a generic Azure/PowerShell advisor into an **end-to-end coding-agent infra provisioner** covering the full **Microsoft Fabric → networking/identity → Azure AI Foundry** estate as ordered layers (foundation, network/identity, Fabric capacity+OneLake+lakehouse, Foundry hub/project+model deployments+connections, operate/verify). Adds OIDC-only auth rule (no client secrets, mirrors grading pipeline), Bicep-first IaC conventions, runtime-proof verification (declaration ≠ wired), least-privilege RBAC, what-if-before-deploy, cost/destructive ops gated to owner, CHANGELOG discipline, and inter-agent handoffs (deployment-engineer / extreme-reasoner / first-reviewer / git-committer).

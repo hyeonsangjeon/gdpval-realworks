@@ -1,0 +1,294 @@
+# exp027 - paired subprocess bridge for exp026 sandbox analysis
+#
+# Historical correction: exp026 declared reasoning_effort=low, but Step 1
+# dropped that field before Runs #91/#92. Its effective runtime setting was
+# therefore server default (reasoning_effort omitted). This control deliberately
+# uses null so it matches the actual exp026 runtime rather than its YAML label.
+
+experiment:
+  id: "exp027_GPT54_default_subprocess_bridge50"
+  name: "GPT-5.4 Default Reasoning - Subprocess Bridge 50"
+  description: >
+    A 50-task diagnostic subprocess comparator for exp026. It freezes the
+    actual exp026 model behavior (server-default reasoning), 32K code budget,
+    timeout, audio/video preprocessors, and Self-QA. It uses the coherent exp025
+    subprocess condition prompt while exp026 uses Skills-specific guidance, so
+    results describe the whole runner/prompt bundle and do not isolate sandbox
+    causally.
+  author: "Hyeonsang Jeon"
+  created_at: "2026-07-14"
+
+control:
+  fixed:
+    - tasks
+    - model
+    - temperature
+    - reasoning_effort
+    - code_generation_tokens
+    - timeout
+    - audio_video_preprocessors
+    - self_qa
+  changed:
+    - execution_mode
+    - condition_prompt
+    - runner_codegen_prompt
+    - sandbox_skills_contract_qa_repair_bundle
+
+selection:
+  strategy: "union of exp025/exp026 non-successes plus paired-success controls"
+  exp025_revision: "44423f97f355c4ec22163c4a45db99b95f1bb757"
+  exp026_revision: "47aed3c0b13eaa90eb02803bec9d5c75e559f416"
+  group_a_non_success_union: 42
+  group_b_media_controls: 6
+  group_c_general_controls: 2
+  task_ids_sha256: "33b18c57f4a5227ebeccbdc68480b9b702df7927928ac086f63114bb5676a47a"
+
+data:
+  source: "HyeonSang/exp027_GPT54_default_subprocess_bridge50"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: null
+    task_ids:
+      - "02aa1805-c658-4069-8a6a-02dec146063a"
+      - "0353ee0c-18b5-4ad3-88e8-e001d223e1d7"
+      - "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+      - "105f8ad0-8dd2-422f-9e88-2be5fbd2b215"
+      - "11593a50-734d-4449-b5b4-f8986a133fd8"
+      - "11dcc268-cb07-4d3a-a184-c6d7a19349bc"
+      - "15d37511-75c5-4c7f-81f1-16e00c0d95f3"
+      - "1752cb53-5983-46b6-92ee-58ac85a11283"
+      - "1d4672c8-b0a7-488f-905f-9ab4e25a19f7"
+      - "24d1e93f-9018-45d4-b522-ad89dfd78079"
+      - "327fbc21-7d26-4964-bf7c-f4f41e55c54d"
+      - "38889c3b-e3d4-49c8-816a-3cc8e5313aba"
+      - "3940b7e7-ec4f-4cea-8097-3ab4cfdcaaa6"
+      - "3c19c6d1-672c-467a-8437-6fe21afb8eae"
+      - "3f821c2d-ab97-46ec-a0fb-b8f73c2682bc"
+      - "403b9234-6299-4b5f-a106-70c1bc11ec4c"
+      - "40a8c4b1-b169-4f92-a38b-7f79685037ec"
+      - "4122f866-01fa-400b-904d-fa171cdab7c7"
+      - "476db143-163a-4537-9e21-fe46adad703b"
+      - "4b894ae3-1f23-4560-b13d-07ed1132074e"
+      - "4d1a8410-e9c5-4be5-ab43-cc55563c594c"
+      - "5349dd7b-bf0a-4544-9a17-75b7013767e6"
+      - "5ad0c554-a7a2-48cd-b41a-ebc1bff4a9de"
+      - "6074bba3-7e3a-4b1c-b8c6-a15bb6695c3b"
+      - "61f546a8-c374-467f-95cc-d0d9b5656eb6"
+      - "6a900a40-8d2b-4064-a5b1-13a60bc173d8"
+      - "6d2c8e55-fe20-45c6-bdaf-93e676868503"
+      - "75401f7c-396d-406d-b08e-938874ad1045"
+      - "7d7fc9a7-21a7-4b83-906f-416dea5ad04f"
+      - "7de33b48-5163-4f50-b5f3-8deea8185e57"
+      - "8079e27d-b6f3-4f75-a9b5-db27903c798d"
+      - "854f3814-681c-4950-91ac-55b0db0e3781"
+      - "87da214f-fd92-4c58-9854-f4d0d10adce0"
+      - "8c8fc328-69fc-4559-a13f-82087baef0a1"
+      - "90edba97-74f0-425a-8ff6-8b93182eb7cb"
+      - "94925f49-36bc-42da-b45b-61078d329300"
+      - "99ac6944-4ec6-4848-959c-a460ac705c6f"
+      - "a73fbc98-90d4-4134-a54f-2b1d0c838791"
+      - "a941b6d8-4289-4500-b45a-f8e4fc94a724"
+      - "b57efde3-26d6-4742-bbff-2b63c43b4baa"
+      - "c94452e4-39cd-4846-b73a-ab75933d1ad7"
+      - "dfb4e0cd-a0b7-454e-b943-0dd586c2764c"
+      - "e222075d-5d62-4757-ae3c-e34b0846583b"
+      - "e996036e-8287-4e7f-8d0a-90a57cb53c45"
+      - "f1be6436-ffff-4fee-9e66-d550291a1735"
+      - "f2986c1f-2bbf-4b83-bc93-624a9d617f45"
+      - "f5d428fd-b38e-41f0-8783-35423dab80f6"
+      - "f84ea6ac-8f9f-428c-b96c-d0884e30f7c7"
+      - "f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb"
+      - "ff85ee58-bc9f-4aa2-806d-87edeabb1b81"
+
+condition_a:
+  name: "GPT-5.4 server-default + subprocess + audio/video perception"
+  model:
+    provider: "azure"
+    deployment: "gpt-5.4"
+    temperature: 0.0
+    seed: null
+    reasoning_effort: null
+  prompt:
+    system: |
+      You are a helpful assistant that completes professional tasks.
+      When the task requires creating files (e.g., Excel, Word, PDF, PowerPoint),
+      write Python code that generates those files and save them to the current directory.
+      Use libraries such as openpyxl, python-docx, reportlab, python-pptx, and Pillow.
+      Always produce complete, runnable code.
+    prefix: null
+    body: null
+    suffix: |
+      If the task requires creating deliverable files (documents, spreadsheets,
+      presentations, reports, etc.), you MUST use Python code to generate the
+      actual file(s) and save them to the current directory.
+      Do NOT just describe what you would create — actually execute code to produce
+      downloadable files. The task is NOT complete unless the files are saved.
+
+      In your text response, do NOT include any file download links or sandbox URLs
+      (e.g. "[Download ...](sandbox:/mnt/data/...)" or similar).
+      Only provide a plain-text summary of what was produced.
+
+      IMPORTANT — Defensive coding:
+      Before writing any code, ALWAYS inspect the actual structure of any
+      reference files first (df.columns, df.dtypes, df.head()).
+      Never hardcode column names or assume data types.
+      Use the exact column names found in the file.
+
+      Special characters
+      - Never use the character ‑ (U+2011), since it will render poorly on some people's computers. Instead, always use - (U+002D) instead.
+      - Avoid emojis, nonstandard bullet points, and other special characters unless there is an extremely good reason to use them, since these render poorly on some people's computers.
+
+      Graphics embedded within PDFs/slides
+      - Make sure that any diagrams or plots are large enough to be legible (though not so large that they are ugly or cut off). In most cases they should be at least half the page width.
+      - Plots and charts to visualize data are good. Simple graphics (like a flowchart with arrows) are good. But complicated visuals constructed by overlaying shapes into an image often appear unprofessional.
+
+      PDFs
+      - Always use LibreOffice to create the PDF (it must be LibreOffice! If LibreOffice is not installed, you can install it yourself). Other libraries sometimes show weird artifacts on some computers.
+
+      Fonts
+      - Always use fonts which are available across all platforms. We recommend Noto Sans / Noto Serif unless there is an extremely good reason to use something else.
+      - If you must use another font, embed the font in the pptx/word/etc doc.
+
+      Deliverable text
+      - Do not link to submitted files in the deliverable text (links are not supported on the interface where these will be viewed).
+      - Ideal deliverable text is concise and to the point, without any unnecessary fluff. 4 sentences max.
+      - Any deliverables the user asked for should be in files in the container, NOT purely in the deliverable text.
+      - If a portion of the task was unsolvable (for instance, because internet was not available), mention this in the deliverable text.
+      - Your submission should be complete and self-contained. Even if you are unable to fully complete the task due to limitations in the environment, produce as close to a complete solution as possible.
+
+      Verbosity
+      - Always be clear and comprehensive, but avoid extra verbosity when possible.
+
+      Filetypes
+      - If the prompt does not request a specific filetype, use standard filetypes like PDF, PPTX, DOCX, XLSX, MP4, ZIP, etc.
+
+      Video files (mp4, mov)
+      - Extract a string of images from the video files and check the images to see whether the visual elements are corrupted.
+
+      Code structure:
+      Write all code in a SINGLE ```python``` code block.
+      Do not split code across multiple code blocks — this can cause
+      syntax errors when blocks are concatenated.
+
+      Lightweight mandatory checks
+      After generating files, do a quick validation pass (5 lines max):
+      - Verify each file exists and has non-zero size
+      - For Excel/DOCX/PPTX: open with the same library and confirm no exception
+      - Do NOT do multi-step visual inspection or PNG conversion
+      If any file is missing or corrupt, fix and regenerate.
+
+      Available packages
+      - The following specialized packages are installed and available for use:
+      - Audio: soundfile, pydub, pedalboard, pyloudnorm, librosa, mutagen, ffmpeg-python, moviepy, av
+      - For reading WAV files, ALWAYS use `soundfile.read()` instead of the standard library `wave` module.
+        The standard `wave` module does NOT support WAVE_FORMAT_EXTENSIBLE (24-bit/48kHz) files.
+      - For audio effects (reverb, delay, EQ), use `pedalboard`.
+      - For loudness measurement (LUFS), use `pyloudnorm`.
+      - Memory-efficient audio processing (IMPORTANT):
+        * HARD LIMIT: Your process has a 5GB virtual memory cap. Exceeding it kills the process immediately.
+        * Before heavy DSP (time_stretch, pitch_shift, STFT), convert stereo to mono
+          if the task does not explicitly require stereo output: `y = librosa.to_mono(y)`
+        * For files longer than 30 seconds, prefer `soundfile` streaming or chunk-based
+          processing over loading the entire file into memory.
+        * Use `dtype='float32'` (not float64) when loading with soundfile: `sf.read(path, dtype='float32')`
+        * Prefer `pedalboard` for real-time-style effects — it is far more memory-efficient
+          than librosa's FFT-based equivalents (e.g., use `pedalboard.time_stretch()` over
+          `librosa.effects.time_stretch()`).
+      - Documents: aspose-words, camelot-py, docx2txt, fpdf2, PyMuPDF, weasyprint, cairosvg
+      - Data/ML: scikit-learn, xgboost, lightgbm, catboost, statsmodels, scipy, networkx
+      - NLP: nltk, textblob, fuzzywuzzy, rapidfuzz, wordcloud
+      - GIS: geopandas, geopy, folium, shapely, rasterio
+      - Vision: opencv-python, pytesseract, pdf2image, pyzbar, qrcode
+      - Visualization: bokeh, plotly, plotnine, seaborn, matplotlib-venn
+      - `ffmpeg`, `tesseract`, `ghostscript`, `graphviz`, `wkhtmltopdf` are available as system commands.
+      - `LibreOffice` is available for document conversion.
+
+      Audio analysis data
+      - When audio analysis data is provided in the [AUDIO ANALYSIS] section above,
+        use it to inform your code. Trust the analysis values rather than guessing.
+      - The analysis was performed by a specialized audio model that listened to the
+        reference audio files. Use its findings (BPM, key, timing, levels, etc.) directly.
+  preprocessors:
+    - type: "audio_analyzer"          # hearing
+      model:
+        provider: "azure"
+        deployment: "gpt-audio-1.5"
+      trigger: "has_audio_files"
+      inject_as: "prompt_prefix"
+      include_task_instruction: true
+      system: |
+        You are an audio analysis agent.
+        You will receive a task description and one or more audio files.
+        Listen to the audio and provide analysis that is relevant
+        to completing the task.
+        Return your analysis as structured JSON.
+        Only include information you can actually determine from listening.
+        Do not guess or fabricate values.
+        Respond with JSON only. No prose.
+
+    - type: "video_analyzer"          # vision (frame-by-frame)
+      model:
+        provider: "azure"
+        deployment: "gpt-5.4"
+      trigger: "has_video_files"
+      inject_as: "prompt_prefix"
+      include_task_instruction: true
+      frames_per_video: 8
+      max_total_frames: 24
+      frame_max_width: 768
+      frame_detail: "auto"
+      system: |
+        You are a video analysis agent.
+        You will receive a task description, per-video metadata, and several
+        frames sampled across each video's timeline (each labeled with its
+        timestamp in seconds).
+        Examine the frames and describe what is happening on screen as it relates
+        to completing the task: visible content/text, scene changes, notable
+        timestamps, and whether any frame looks corrupted.
+        Return your analysis as structured JSON.
+        Only include information you can actually determine from the frames.
+        Do not guess or fabricate values.
+        Respond with JSON only. No prose.
+  qa:
+    enabled: true
+    max_retries: 1
+    model: null
+    min_score: 5
+    prompt: |
+      You are a strict QA inspector for professional deliverables.
+
+      ## Original Task
+      {instruction}
+
+      ## Generated Output
+      - Text response: {deliverable_text}
+      - Files produced: {deliverable_files}
+
+      ## Inspection Criteria
+      1. Does the output address ALL requirements in the original task?
+      2. Are all required files produced with correct types and content?
+      3. Is the text response complete and professional?
+      4. Are there any obvious errors, missing elements, or placeholder content?
+
+      ## Response Format (JSON only)
+      ```json
+      {{
+        "passed": true,
+        "score": 8,
+        "issues": [],
+        "suggestion": ""
+      }}
+      ```
+
+execution:
+  mode: "subprocess"
+  timeout: 1200
+  install_libreoffice: true
+  tokens:
+    code_generation: 32768
+    qa_check: 4096
+    json_render: 8000
+  max_retries: 5
+  resume_max_rounds: 2
+  relay_max_runs: 5

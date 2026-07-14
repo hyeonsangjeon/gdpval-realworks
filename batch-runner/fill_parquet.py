@@ -73,6 +73,7 @@ def fill_parquet(
     dry_run: bool = False,
     submission_repo_id: Optional[str] = None,
     compact: bool = True,
+    selected_task_ids: Optional[List[str]] = None,
 ) -> dict:
     """Merge experiment JSON results into parquet deliverable columns.
 
@@ -88,6 +89,9 @@ def fill_parquet(
         dry_run: If True, print stats but don't write.
         submission_repo_id: If set, regenerate deliverable_file_urls and
                             deliverable_file_hf_uris per this repo.
+        selected_task_ids: Exact subset retained in compact mode. Failed
+                   selected tasks remain so validation can represent
+                   their outcome explicitly.
 
     Returns:
         Dict with merge statistics:
@@ -121,8 +125,29 @@ def fill_parquet(
     experiment_id = data.get("experiment_id", "unknown")
     print(f"📊 JSON: {json_path} ({len(results)} results, experiment={experiment_id})")
 
+    result_ids = [r["task_id"] for r in results]
+    if len(result_ids) != len(set(result_ids)):
+        raise ValueError("result task IDs must be unique")
+
     # Build lookup: task_id -> result dict
     result_map = {r["task_id"]: r for r in results}
+
+    if selected_task_ids is not None:
+        if len(selected_task_ids) != len(set(selected_task_ids)):
+            raise ValueError("selected_task_ids must not contain duplicates")
+        if len(result_ids) != len(selected_task_ids):
+            raise ValueError(
+                "result count does not match selected_task_ids: "
+                f"results={len(result_ids)}, selected={len(selected_task_ids)}"
+            )
+        selected_set = set(selected_task_ids)
+        missing_results = selected_set - set(result_map)
+        unexpected_results = set(result_map) - selected_set
+        if missing_results or unexpected_results:
+            raise ValueError(
+                "result task IDs do not match selected_task_ids: "
+                f"missing={len(missing_results)}, unexpected={len(unexpected_results)}"
+            )
 
     # Stats
     stats = {
@@ -195,12 +220,25 @@ def fill_parquet(
     print(f"  errors with text        : {stats['errors_with_text']}")
     print(f"{'='*50}")
 
-    # Compact mode: extract only tasks with results
+    # Compact mode: exact prepared subset when provided, legacy successes otherwise.
     if compact:
-        filled_task_ids = [r["task_id"] for r in results
-                          if r.get("status") == "success"]
-        df = df[df["task_id"].isin(filled_task_ids)].copy()
-        print(f"📦 Compact mode: extracted {len(df)} rows (tasks with results only)")
+        if selected_task_ids is not None:
+            parquet_index = df.set_index("task_id", drop=False)
+            unknown_ids = [
+                task_id for task_id in selected_task_ids
+                if task_id not in parquet_index.index
+            ]
+            if unknown_ids:
+                raise ValueError(
+                    f"selected_task_ids missing from parquet: {', '.join(unknown_ids[:5])}"
+                )
+            df = parquet_index.loc[selected_task_ids].reset_index(drop=True).copy()
+            print(f"📦 Compact mode: retained exact selected scope ({len(df)} rows)")
+        else:
+            filled_task_ids = [r["task_id"] for r in results
+                              if r.get("status") == "success"]
+            df = df[df["task_id"].isin(filled_task_ids)].copy()
+            print(f"📦 Compact mode: extracted {len(df)} rows (successful tasks only)")
         stats["output_rows"] = len(df)
     else:
         print(f"📦 Full mode: keeping all {len(df)} rows")

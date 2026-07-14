@@ -4,6 +4,7 @@ Usage:
     pytest tests/test_experiment_config.py -v
 """
 
+import hashlib
 import json
 import sys
 import types
@@ -165,6 +166,7 @@ class TestExperimentConfigFromDict:
         assert config.data_filter.sector == "Finance and Insurance"
         assert config.data_filter.occupation is None
         assert config.data_filter.sample_size == 10
+        assert config.data_filter.task_ids is None
 
     def test_from_dict_conditions(self, sample_config_dict):
         """Test condition configurations (A/B test)"""
@@ -268,6 +270,23 @@ class TestExperimentConfigValidation:
         assert len(errors) > 0
         assert any("provider" in e for e in errors)
 
+    def test_validate_task_ids_rejects_duplicates_and_sampling(self, sample_config_dict):
+        sample_config_dict["data"]["filter"]["task_ids"] = ["task-1", "task-1"]
+        config = ExperimentConfig.from_dict(sample_config_dict)
+
+        errors = config.validate()
+
+        assert any("duplicates" in error for error in errors)
+        assert any("mutually exclusive" in error for error in errors)
+
+    def test_validate_task_ids_rejects_empty_list(self, sample_config_dict):
+        sample_config_dict["data"]["filter"]["sample_size"] = None
+        sample_config_dict["data"]["filter"]["task_ids"] = []
+
+        errors = ExperimentConfig.from_dict(sample_config_dict).validate()
+
+        assert any("non-empty list" in error for error in errors)
+
 
 class TestExperimentConfigToDict:
     """Test suite for to_dict() method"""
@@ -319,12 +338,14 @@ class TestDataClasses:
             sector="Finance",
             occupation="Analyst",
             sample_size=5,
+            task_ids=None,
         )
 
         assert config.source == "test"
         assert config.sector == "Finance"
         assert config.occupation == "Analyst"
         assert config.sample_size == 5
+        assert config.task_ids is None
 
     def test_control_config(self):
         """Test ControlConfig"""
@@ -361,8 +382,14 @@ class TestDataClasses:
 
 # ── Regression: execution.sandbox + timeout propagation (config drop bug) ──────
 EXPERIMENTS_DIR = Path(__file__).resolve().parent.parent / "experiments"
+EXP025_YAML = EXPERIMENTS_DIR / "exp025_GPT54_high_postfix.yaml"
 EXP026_YAML = EXPERIMENTS_DIR / "exp026_sandbox_skills_multimodal.yaml"
 EXP026S_YAML = EXPERIMENTS_DIR / "exp026s_sandbox_ci_smoke.yaml"
+EXP027_YAML = EXPERIMENTS_DIR / "exp027_GPT54_default_subprocess_bridge50.yaml"
+EXP027_SELECTION = (
+    EXPERIMENTS_DIR.parent.parent
+    / "tasks" / "0714_tuesday" / "exp027_bridge50_selection.json"
+)
 
 
 def _fake_task(task_id: str, occupation: str):
@@ -491,4 +518,129 @@ class TestExecutionSandboxPropagation:
         assert written["execution"]["timeout"] == 1200
         assert written["execution"]["sandbox"]["use_docker"] == "always"
         assert written["execution"]["sandbox"]["memory_gb"] == 8
+        assert written["condition_a"]["model"]["reasoning_effort"] == "low"
+        assert written["task_scope"]["mode"] == "filtered"
+        assert written["task_scope"]["expected_count"] == 1
         assert written["total_tasks"] == 1
+
+    def test_to_dict_preserves_sandbox_block(self):
+        config = ExperimentConfig.from_yaml(str(EXP026_YAML))
+
+        roundtrip = ExperimentConfig.from_dict(config.to_dict())
+
+        assert roundtrip.execution.sandbox == config.execution.sandbox
+
+
+class TestExplicitTaskIdFilter:
+    def _prepare(self, tmp_path, monkeypatch, task_ids, sample_size=None):
+        try:
+            import prepare_dataset  # noqa: F401
+        except Exception:
+            stub = types.ModuleType("prepare_dataset")
+            stub.GDPValDataset = type("GDPValDataset", (), {})
+            stub.GDPValTask = type("GDPValTask", (), {})
+            monkeypatch.setitem(sys.modules, "prepare_dataset", stub)
+
+        import yaml
+        import step1_prepare_tasks as step1
+
+        config = {
+            "experiment": {"id": "exp-filter", "name": "Filter test"},
+            "data": {
+                "source": "test/source",
+                "filter": {"task_ids": task_ids, "sample_size": sample_size},
+            },
+            "condition_a": {
+                "name": "A",
+                "model": {
+                    "provider": "azure",
+                    "deployment": "gpt-5.4",
+                    "reasoning_effort": "low",
+                },
+                "prompt": {"system": "test"},
+            },
+        }
+        config_path = tmp_path / "filter.yaml"
+        config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+        fake_tasks = [
+            _fake_task("task-1", "Analyst"),
+            _fake_task("task-2", "Analyst"),
+            _fake_task("task-3", "Analyst"),
+        ]
+
+        class _FakeLoader:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def load(self):
+                return fake_tasks
+
+        class _FakeManifest:
+            @staticmethod
+            def load():
+                raise FileNotFoundError
+
+        monkeypatch.setattr(step1, "GDPValDataLoader", _FakeLoader)
+        monkeypatch.setattr(step1, "NeedsFilesManifest", _FakeManifest)
+        monkeypatch.setattr(step1, "WORKSPACE_DIR", tmp_path)
+        return step1.prepare_tasks(str(config_path))
+
+    def test_step1_preserves_explicit_order_and_reasoning(self, tmp_path, monkeypatch):
+        output = self._prepare(tmp_path, monkeypatch, ["task-3", "task-1"])
+
+        assert [task["task_id"] for task in output["tasks"]] == ["task-3", "task-1"]
+        assert output["condition_a"]["model"]["reasoning_effort"] == "low"
+
+    def test_step1_rejects_unknown_task_id(self, tmp_path, monkeypatch):
+        with pytest.raises(ValueError, match="unknown task IDs: missing"):
+            self._prepare(tmp_path, monkeypatch, ["task-1", "missing"])
+
+    def test_step1_rejects_task_ids_with_sample_size(self, tmp_path, monkeypatch):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            self._prepare(tmp_path, monkeypatch, ["task-1"], sample_size=1)
+
+    def test_exp027_bridge_task_set_and_controls_are_frozen(self):
+        config = ExperimentConfig.from_yaml(str(EXP027_YAML))
+        task_ids = config.data_filter.task_ids
+
+        assert config.validate() == []
+        assert task_ids is not None
+        assert len(task_ids) == len(set(task_ids)) == 50
+        assert task_ids == sorted(task_ids)
+        digest = hashlib.sha256(("\n".join(task_ids) + "\n").encode("utf-8")).hexdigest()
+        assert digest == "33b18c57f4a5227ebeccbdc68480b9b702df7927928ac086f63114bb5676a47a"
+        assert config.execution.mode == "subprocess"
+        assert config.execution.timeout == 1200
+        assert config.execution.tokens["code_generation"] == 32768
+        assert config.condition_a.model.reasoning_effort is None
+        assert [
+            preprocessor["type"] for preprocessor in config.condition_a.preprocessors or []
+        ] == ["audio_analyzer", "video_analyzer"]
+
+    def test_exp027_condition_policy_is_coherent_subprocess_control(self):
+        import yaml
+
+        exp025 = yaml.safe_load(EXP025_YAML.read_text(encoding="utf-8"))
+        exp026 = yaml.safe_load(EXP026_YAML.read_text(encoding="utf-8"))
+        exp027 = yaml.safe_load(EXP027_YAML.read_text(encoding="utf-8"))
+
+        assert exp027["condition_a"]["prompt"] == exp025["condition_a"]["prompt"]
+        assert exp027["condition_a"]["qa"] == exp025["condition_a"]["qa"]
+        assert exp027["condition_a"]["preprocessors"] == [
+            exp025["condition_a"]["preprocessors"][0],
+            exp026["condition_a"]["preprocessors"][1],
+        ]
+
+    def test_exp027_selection_groups_match_yaml(self):
+        selection = json.loads(EXP027_SELECTION.read_text(encoding="utf-8"))
+        config = ExperimentConfig.from_yaml(str(EXP027_YAML))
+        groups = selection["groups"]
+
+        assert [len(groups[name]) for name in ("group_a", "group_b", "group_c")] == [42, 6, 2]
+        grouped_ids = sorted(
+            task_id for group in groups.values() for task_id in group
+        )
+        assert grouped_ids == config.data_filter.task_ids
+        digest = hashlib.sha256(("\n".join(grouped_ids) + "\n").encode("utf-8")).hexdigest()
+        assert digest == selection["task_ids_sha256"]

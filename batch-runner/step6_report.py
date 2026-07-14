@@ -191,6 +191,7 @@ def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dic
             "qa_issues": r.get("qa_issues", []),
             "qa_suggestion": r.get("qa_suggestion", ""),
             "latency_ms": r.get("latency_ms", 0),
+            "observability": r.get("observability", {}),
             "deliverable_summary": (r.get("deliverable_text") or "")[:300],
             # task context fields (for detail modal)
             "instruction": (r.get("instruction") or "")[:2000],

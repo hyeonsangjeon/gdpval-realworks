@@ -150,6 +150,7 @@ def format_results():
             # model
             "model": r.get("model"),
             "usage": r.get("usage"),
+            "observability": r.get("observability", {}),
             "latency_ms": r.get("latency_ms", 0),
             "timestamp": r.get("timestamp"),
             # qa

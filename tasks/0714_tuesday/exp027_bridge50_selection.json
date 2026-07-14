@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "exp025_revision": "44423f97f355c4ec22163c4a45db99b95f1bb757",
+  "exp026_revision": "47aed3c0b13eaa90eb02803bec9d5c75e559f416",
+  "group_a_selection_rule": "non_success_union",
+  "group_b_selection_rule": "media_controls",
+  "group_c_selection_rule": "general_controls",
+  "groups": {
+    "group_a": [
+      "02aa1805-c658-4069-8a6a-02dec146063a",
+      "0353ee0c-18b5-4ad3-88e8-e001d223e1d7",
+      "0818571f-5ff7-4d39-9d2c-ced5ae44299e",
+      "105f8ad0-8dd2-422f-9e88-2be5fbd2b215",
+      "11593a50-734d-4449-b5b4-f8986a133fd8",
+      "11dcc268-cb07-4d3a-a184-c6d7a19349bc",
+      "15d37511-75c5-4c7f-81f1-16e00c0d95f3",
+      "1752cb53-5983-46b6-92ee-58ac85a11283",
+      "1d4672c8-b0a7-488f-905f-9ab4e25a19f7",
+      "24d1e93f-9018-45d4-b522-ad89dfd78079",
+      "327fbc21-7d26-4964-bf7c-f4f41e55c54d",
+      "3940b7e7-ec4f-4cea-8097-3ab4cfdcaaa6",
+      "3c19c6d1-672c-467a-8437-6fe21afb8eae",
+      "3f821c2d-ab97-46ec-a0fb-b8f73c2682bc",
+      "40a8c4b1-b169-4f92-a38b-7f79685037ec",
+      "4122f866-01fa-400b-904d-fa171cdab7c7",
+      "476db143-163a-4537-9e21-fe46adad703b",
+      "4d1a8410-e9c5-4be5-ab43-cc55563c594c",
+      "5349dd7b-bf0a-4544-9a17-75b7013767e6",
+      "5ad0c554-a7a2-48cd-b41a-ebc1bff4a9de",
+      "6074bba3-7e3a-4b1c-b8c6-a15bb6695c3b",
+      "61f546a8-c374-467f-95cc-d0d9b5656eb6",
+      "6a900a40-8d2b-4064-a5b1-13a60bc173d8",
+      "6d2c8e55-fe20-45c6-bdaf-93e676868503",
+      "75401f7c-396d-406d-b08e-938874ad1045",
+      "7d7fc9a7-21a7-4b83-906f-416dea5ad04f",
+      "7de33b48-5163-4f50-b5f3-8deea8185e57",
+      "8079e27d-b6f3-4f75-a9b5-db27903c798d",
+      "854f3814-681c-4950-91ac-55b0db0e3781",
+      "87da214f-fd92-4c58-9854-f4d0d10adce0",
+      "90edba97-74f0-425a-8ff6-8b93182eb7cb",
+      "94925f49-36bc-42da-b45b-61078d329300",
+      "a73fbc98-90d4-4134-a54f-2b1d0c838791",
+      "a941b6d8-4289-4500-b45a-f8e4fc94a724",
+      "b57efde3-26d6-4742-bbff-2b63c43b4baa",
+      "c94452e4-39cd-4846-b73a-ab75933d1ad7",
+      "e222075d-5d62-4757-ae3c-e34b0846583b",
+      "e996036e-8287-4e7f-8d0a-90a57cb53c45",
+      "f1be6436-ffff-4fee-9e66-d550291a1735",
+      "f2986c1f-2bbf-4b83-bc93-624a9d617f45",
+      "f5d428fd-b38e-41f0-8783-35423dab80f6",
+      "f84ea6ac-8f9f-428c-b96c-d0884e30f7c7"
+    ],
+    "group_b": [
+      "38889c3b-e3d4-49c8-816a-3cc8e5313aba",
+      "4b894ae3-1f23-4560-b13d-07ed1132074e",
+      "8c8fc328-69fc-4559-a13f-82087baef0a1",
+      "99ac6944-4ec6-4848-959c-a460ac705c6f",
+      "f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb",
+      "ff85ee58-bc9f-4aa2-806d-87edeabb1b81"
+    ],
+    "group_c": [
+      "403b9234-6299-4b5f-a106-70c1bc11ec4c",
+      "dfb4e0cd-a0b7-454e-b943-0dd586c2764c"
+    ]
+  },
+  "expected_coverage": {
+    "task_count": 50,
+    "sector_count": 9,
+    "occupation_count": 26
+  },
+  "task_ids_sha256": "33b18c57f4a5227ebeccbdc68480b9b702df7927928ac086f63114bb5676a47a"
+}
