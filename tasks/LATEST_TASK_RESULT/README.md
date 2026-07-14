@@ -1,58 +1,56 @@
 # Latest Task Result
 
 - Updated: 2026-07-14
-- Status: Implementation merged; exp027 Actions run in progress
+- Status: exp027 completed; result PR held for dashboard scope guard
 
 ## Task
 
-Analyze `exp026_sandbox_skills_multimodal`, add behavior-neutral sandbox
-observability, and prepare one bounded subprocess comparator before changing
-Sandbox or Agent Skills behavior. Keep the canonical result synchronized after
-the implementation merge and experiment dispatch.
+Complete the bounded exp027 subprocess diagnostic, compare it with exp026 on
+the exact pinned 50-task set, and prevent the diagnostic subset from changing
+the default 220-task dashboard scope before its result report is merged.
 
 ## Result
 
-- Confirmed from Actions Runs #91/#92 and the Step 1/2 data path that historical
-  `exp025` and `exp026` dropped their declared `reasoning_effort`; both actually
-  used the deployment's server-default reasoning behavior.
-- Added privacy-bounded sandbox provenance: prompt/code hashes, token usage,
-  latency, stable error categories, skill match evidence, preprocessor status,
-  and CI run identity. Raw response text, stdout/stderr, exception messages,
-  generated filenames, and heavy verification reports are not persisted.
-- Added deterministic `data.filter.task_ids` support and propagated exact task
-  scope through task preparation, parquet filling, validation, formatting, and
-  self-report generation. Duplicate/missing/unexpected task IDs fail closed.
-- Added `exp027_GPT54_default_subprocess_bridge50`, an outcome-selected 50-task
-  diagnostic comparator covering 9 sectors and 26 occupations. It uses the
-  coherent post-fix subprocess prompt/QA/audio setup, the exp026 video
-  preprocessor, server-default reasoning, 32K code tokens, and a 1,200-second
-  timeout. The comparison measures the runner/prompt bundle and is not a causal
-  estimate of Sandbox or Skills alone.
-- Added checked-in 42/6/2 task-group provenance with task-list SHA-256
-  `33b18c57f4a5227ebeccbdc68480b9b702df7927928ac086f63114bb5676a47a`.
-- PR [#64](https://github.com/hyeonsangjeon/gdpval-realworks/pull/64)
-  was squash-merged to `main` as
-  `4306fa55d5df32314c449e89243638c24e1d686a`.
 - Actions run
   [#93](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29324114951)
-  was dispatched from that merge commit for
-  `exp027_GPT54_default_subprocess_bridge50`. Step 1 completed, the sandbox
-  image step was correctly skipped for subprocess mode, and Step 2a inference
-  is currently in progress. No relay or result PR exists yet.
+  completed successfully in 2h47m54s without a relay. Steps 1-7, exact 50-row
+  validation, report generation, and Hugging Face upload all passed.
+- exp027 produced 23 successes, 14 QA failures, and 13 errors across the
+  outcome-selected diagnostic set. Average Self-QA was 5.08 and average task
+  latency was 76.78s. Result PR
+  [#66](https://github.com/hyeonsangjeon/gdpval-realworks/pull/66) is open.
+- On identical task IDs, exp026 changed from 30/14/6 success/QA-failed/error to
+  exp027's 23/14/13. Paired Self-QA was effectively unchanged. This
+  directionally supports the complete sandbox/skills/repair bundle for
+  execution reliability, but does not isolate any individual component.
+- Added a standard-library reproducibility script with immutable HF revisions,
+  content hashes, deterministic bootstrap settings, and checked-in paired
+  analysis. Outcome-based selection is explicitly treated as diagnostic rather
+  than population-level or confirmatory inference.
+- Added a dashboard scope guard: exp027 is hidden from the default cross-run
+  views and error narratives but restored by `?debug=1`; direct detail access is
+  preserved. Existing valid subsets such as exp012 remain visible, and global
+  benchmark copy remains fixed at 220 tasks.
 
 ## Verification
 
-- Nine changed Python modules compile with `py_compile`.
-- Focused regression suite: 206 passed, 0 failed.
-- `git diff --check`: passed.
-- Independent final code review: APPROVE, with no blocker, major, or minor
-  findings.
-- GitHub confirms PR #64 is merged and Actions #93 is running on head SHA
-  `4306fa55d5df32314c449e89243638c24e1d686a`.
+- Actions #93 concluded with `success`; HF self-report and parquet both contain
+  exactly 50 tasks and matching metrics.
+- Dashboard/aggregate Node tests: 19 passed.
+- Paired-analysis Python tests: 6 passed; pinned live calculation reproduced
+  all checked metrics and source hashes.
+- TypeScript `--noEmit`: passed.
+- Production Vite build: passed.
+- Python compile and `git diff --check`: passed.
+- Validation-generated `public/generated`, `dist`, and cache directories were
+  removed from the worktree.
 
 ## Remaining Work
 
-- Monitor Actions #93 and any automatically triggered relay legs through Steps
-  3-7 and the generated result PR.
-- Compare exp027 and exp026 on the pinned 50-task set before changing Skills
-  selection, manifest delivery policy, or repair behavior.
+- Merge the dashboard diagnostic-scope guard before PR #66.
+- Merge PR #66, verify Pages deployment, and confirm exp027 is available only
+  via debug/direct detail without changing the default 220-task KPI.
+- Prioritize syntax preflight, schema introspection, exception-specific repair,
+  binary-safe ffmpeg handling, and bounded video memory before any Skills
+  selector change. Skills and perception changes still require separate
+  controlled ablations.
