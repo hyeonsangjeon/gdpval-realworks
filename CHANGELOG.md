@@ -17,7 +17,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   trends, error narratives, header scope, and future grade cards. `?debug=1`
   restores the aligned experiment/report set, direct detail URLs remain
   available, existing valid subsets such as exp012 stay visible, and global
-  benchmark KPI copy remains fixed at 220 tasks.
+  benchmark KPI copy remains fixed at 220 tasks. Shipped through PR #67
+  (`92efc105`) and verified on the deployed site: the default leaderboard/error
+  views exclude exp027 (22 experiments), while `?debug=1` restores it (23
+  experiments) and direct detail navigation remains available.
 - **Inference config and subset integrity** — preserve `model.reasoning_effort`
   from experiment YAML through prepared tasks, add validated ordered
   `data.filter.task_ids`, and carry canonical task scope through Steps 4 and 5.
@@ -40,8 +43,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   and analysis guardrails against causal or population-level overclaiming. The
   implementation landed through PR #64 (`4306fa55`). Actions run #93 completed
   without relay in 2h47m54s: 23 success, 14 QA-failed, and 13 error tasks, with
-  a 5.08 average Self-QA. HF upload completed and result PR #66 is open pending
-  the dashboard diagnostic-scope guard.
+  a 5.08 average Self-QA. HF upload completed; result PR #66 was merged as
+  `2a33c998` after the scope guard and Pages deployment `29342879619` published
+  the report. The raw generated index contains exp027, while the default UI
+  keeps official benchmark scope and KPI copy at 220 tasks.
 - **Pinned exp026/exp027 paired analysis** — add a standard-library analyzer,
   immutable HF revisions and content hashes, deterministic 10,000-resample
   bootstrap settings, unit tests, and a checked-in diagnostic report. The same
