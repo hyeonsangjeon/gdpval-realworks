@@ -139,9 +139,32 @@ reflection_strings:
     Your previous attempt did NOT satisfy the deliverable contract. Regenerate
     the COMPLETE solution and fix every issue below.
   blocking_header: "Blocking problems to fix:"
+  strategy_header: "Required repair strategy:"
   warnings_header: "Secondary warnings (address if relevant):"
   stdout_header: "Previous stdout (tail):"
   stderr_header: "Previous stderr/error (tail):"
   code_header: "Your previous code (fix and resend in full):"
   code_fence: "----"
   close: "[/REFLECTION]"
+
+# Error-category-specific guidance used only after a failed attempt. The runner
+# owns classification; this prompt spec owns the wording.
+repair_guidance:
+  syntax_error: >-
+    Rebuild the complete script, then validate it with compile before
+    returning it. Check every quote, bracket, f-string expression, and embedded
+    multi-line file body; do not patch only the reported line.
+  schema_error: >-
+    Inspect the actual sheets, header rows, column names, merged ranges, and
+    data types before accessing fields. Normalize discovered headers instead of
+    assuming a fixed schema.
+  api_compatibility: >-
+    Verify the installed library's supported API and enum/value types, then use
+    a compatible public method instead of the failed attribute or assignment.
+  binary_decode_error: >-
+    Capture subprocess and media-tool output as bytes, then decode with an
+    explicit error policy only when human-readable text is required.
+  out_of_memory: >-
+    Switch to streaming or chunked processing, reduce frame/image resolution,
+    release intermediate arrays, and prefer ffmpeg pipelines over loading full
+    media into memory.

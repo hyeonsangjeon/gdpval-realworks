@@ -102,6 +102,15 @@ def test_compact_observability_keeps_only_provenance():
                 "status": "ok",
                 "prompt_sha256": "a" * 64,
                 "generated_artifacts": [secret_filename],
+                "preflight": {
+                    "ok": False,
+                    "stage": "compile",
+                    "error_type": "SyntaxError",
+                    "line": 12,
+                    "offset": 4,
+                    "target_python": "3.11",
+                    "raw_source": secret_filename,
+                },
             }],
             "best_attempt": 0,
             "final_status": "ok",
@@ -115,6 +124,14 @@ def test_compact_observability_keeps_only_provenance():
     assert observed["sandbox"]["best_attempt"] == 0
     assert "verification_report" not in observed["sandbox"]
     assert observed["sandbox"]["attempts"][0]["generated_artifact_count"] == 1
+    assert observed["sandbox"]["attempts"][0]["preflight"] == {
+        "ok": False,
+        "stage": "compile",
+        "error_type": "SyntaxError",
+        "line": 12,
+        "offset": 4,
+        "target_python": "3.11",
+    }
     assert secret_filename not in str(observed)
 
 

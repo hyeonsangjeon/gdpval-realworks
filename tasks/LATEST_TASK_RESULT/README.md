@@ -1,13 +1,14 @@
 # Latest Task Result
 
-- Updated: 2026-07-14
+- Updated: 2026-07-15
 - Status: Completed and deployed
 
 ## Task
 
-Complete the bounded exp027 subprocess diagnostic, compare it with exp026 on
-the exact pinned 50-task set, and prevent the diagnostic subset from changing
-the default 220-task dashboard scope before its result report is merged.
+Use the exp026/exp027 paired evidence to harden generated-code execution before
+changing Skills selection: reject invalid Python before its body runs, route
+runtime failures to category-specific repair strategies, and preserve bounded
+provenance across local and Docker backends.
 
 ## Result
 
@@ -41,6 +42,24 @@ the default 220-task dashboard scope before its result report is merged.
   Pages run
   [29342879619](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29342879619)
   succeeded and published exp027.
+- Added a trusted launcher shared by local and Docker execution. It compiles the
+  untouched `solution.py` with the actual target interpreter, emits a bounded
+  schema-validated preflight record over stderr before untrusted code starts,
+  and executes with `runpy` so `_AVAILABLE_FILES` remains available without
+  breaking `from __future__` imports.
+- Invalid Python consumes the existing bounded repair attempt but never reaches
+  its body. Prompt-spec guidance now differs for syntax, input schema, API
+  compatibility, binary decode, and memory failures.
+- Added stable execution categories shared by local and Docker paths, including
+  chained-exception handling, real OOM variants, binary output, timeout,
+  backend-unavailable, and stderr-empty nonzero exits.
+- Removed the writable preflight sidecar design. The trusted protocol accepts
+  only the first 1,024-byte record, validates every field type, ignores later
+  spoof records, and survives `chdir`, `os._exit`, SIGKILL, and non-UTF-8 output.
+- Best-attempt selection now distinguishes compile-only failures from body
+  execution so a repaired runtime failure cannot be hidden behind an earlier
+  syntax failure. Manifests use `not_executed` unless compile success proves the
+  selected backend reached the generated body.
 
 ## Verification
 
@@ -64,12 +83,18 @@ the default 220-task dashboard scope before its result report is merged.
   detail page with the expected metrics. GitHub Pages serves the direct SPA
   deep link through its 404 fallback, so the initial HTTP response remains 404
   even though the application recovers and renders correctly.
+- Four changed Python modules compile successfully.
+- Focused sandbox/local execution regression suite: 195 passed, 0 failed, 0
+  skipped, including the actual `gdpval-sandbox:latest` Python 3.11 boundary.
+- `git diff --check` passed; executable sidecar references are absent; editor
+  diagnostics and independent final review reported no findings.
 
 ## Remaining Work
 
-- Prioritize syntax preflight, schema introspection, exception-specific repair,
-  binary-safe ffmpeg handling, and bounded video memory before any Skills
-  selector change. Skills and perception changes still require separate
-  controlled ablations.
+- Add a normalized workbook/document schema manifest before generation and
+  repair, then harden ffmpeg/video execution with bounded output and explicit
+  container cleanup.
+- Skills and perception changes still require separate controlled ablations;
+  the paired run did not justify changing the selector yet.
 - Run rubric-based LLM-judge grading separately if exp027 needs quality
   comparison beyond Self-QA.
