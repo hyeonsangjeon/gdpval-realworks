@@ -1,13 +1,14 @@
 # Latest Task Result
 
 - Updated: 2026-07-14
-- Status: Implementation validated; exp027 dispatch pending merge
+- Status: Implementation merged; exp027 Actions run in progress
 
 ## Task
 
 Analyze `exp026_sandbox_skills_multimodal`, add behavior-neutral sandbox
 observability, and prepare one bounded subprocess comparator before changing
-Sandbox or Agent Skills behavior.
+Sandbox or Agent Skills behavior. Keep the canonical result synchronized after
+the implementation merge and experiment dispatch.
 
 ## Result
 
@@ -29,6 +30,15 @@ Sandbox or Agent Skills behavior.
   estimate of Sandbox or Skills alone.
 - Added checked-in 42/6/2 task-group provenance with task-list SHA-256
   `33b18c57f4a5227ebeccbdc68480b9b702df7927928ac086f63114bb5676a47a`.
+- PR [#64](https://github.com/hyeonsangjeon/gdpval-realworks/pull/64)
+  was squash-merged to `main` as
+  `4306fa55d5df32314c449e89243638c24e1d686a`.
+- Actions run
+  [#93](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29324114951)
+  was dispatched from that merge commit for
+  `exp027_GPT54_default_subprocess_bridge50`. Step 1 completed, the sandbox
+  image step was correctly skipped for subprocess mode, and Step 2a inference
+  is currently in progress. No relay or result PR exists yet.
 
 ## Verification
 
@@ -37,11 +47,12 @@ Sandbox or Agent Skills behavior.
 - `git diff --check`: passed.
 - Independent final code review: APPROVE, with no blocker, major, or minor
   findings.
+- GitHub confirms PR #64 is merged and Actions #93 is running on head SHA
+  `4306fa55d5df32314c449e89243638c24e1d686a`.
 
 ## Remaining Work
 
-- Merge the implementation PR.
-- Dispatch `Run GDPVal Batch Experiment` for
-  `exp027_GPT54_default_subprocess_bridge50` and monitor all relay legs.
+- Monitor Actions #93 and any automatically triggered relay legs through Steps
+  3-7 and the generated result PR.
 - Compare exp027 and exp026 on the pinned 50-task set before changing Skills
   selection, manifest delivery policy, or repair behavior.
