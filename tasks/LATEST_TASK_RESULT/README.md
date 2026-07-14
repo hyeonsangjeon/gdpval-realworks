@@ -1,7 +1,7 @@
 # Latest Task Result
 
 - Updated: 2026-07-14
-- Status: exp027 completed; result PR held for dashboard scope guard
+- Status: Completed and deployed
 
 ## Task
 
@@ -31,6 +31,16 @@ the default 220-task dashboard scope before its result report is merged.
   views and error narratives but restored by `?debug=1`; direct detail access is
   preserved. Existing valid subsets such as exp012 remain visible, and global
   benchmark copy remains fixed at 220 tasks.
+- Dashboard guard PR
+  [#67](https://github.com/hyeonsangjeon/gdpval-realworks/pull/67) was
+  squash-merged as `92efc10518e0cbcd23adcf54b68e8c7355228645`; Pages run
+  [29342635220](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29342635220)
+  succeeded.
+- Result PR [#66](https://github.com/hyeonsangjeon/gdpval-realworks/pull/66)
+  was then squash-merged as `2a33c99813bec08b598e5dd272916207c18594da`;
+  Pages run
+  [29342879619](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29342879619)
+  succeeded and published exp027.
 
 ## Verification
 
@@ -44,13 +54,22 @@ the default 220-task dashboard scope before its result report is merged.
 - Python compile and `git diff --check`: passed.
 - Validation-generated `public/generated`, `dist`, and cache directories were
   removed from the worktree.
+- Deployed `reports-index.json` contains 23 raw experiments, including exp027 at
+  23/50, 46.0%, and Self-QA 5.08; exp026 remains 200/220, 90.9%, and 6.24.
+- Browser default view shows 22 experiments, excludes exp027 from leaderboard
+  and Execution Errors, and keeps both KPI/copy values at 220 tasks.
+- Browser `?debug=1` view restores 23 experiments and exp027's 23/50 metrics
+  while retaining the 220-task global KPI.
+- Clicking exp027 and directly opening `/experiments/exp027` both render the
+  detail page with the expected metrics. GitHub Pages serves the direct SPA
+  deep link through its 404 fallback, so the initial HTTP response remains 404
+  even though the application recovers and renders correctly.
 
 ## Remaining Work
 
-- Merge the dashboard diagnostic-scope guard before PR #66.
-- Merge PR #66, verify Pages deployment, and confirm exp027 is available only
-  via debug/direct detail without changing the default 220-task KPI.
 - Prioritize syntax preflight, schema introspection, exception-specific repair,
   binary-safe ffmpeg handling, and bounded video memory before any Skills
   selector change. Skills and perception changes still require separate
   controlled ablations.
+- Run rubric-based LLM-judge grading separately if exp027 needs quality
+  comparison beyond Self-QA.
