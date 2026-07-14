@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-15
-- Status: PR open; runtime verification pending
+- Status: Merged and deployed; runtime grading verification pending
 
 ## Task
 
@@ -18,13 +18,11 @@ task. It must be refreshed before a task is reported complete.
 
 ## Result
 
-- The validated implementation was committed as `eb8b7cac5ac0566168a6cd95efac0906e7d8730f`
-  and pushed to `origin/feat/grading-track2-hardening`. Direct `main` push was
-  intentionally avoided; the existing dirty main worktree and staged sandbox
-  changes were preserved.
 - Pull request [#69](https://github.com/hyeonsangjeon/gdpval-realworks/pull/69)
-  is open against `main`. The branch includes the latest main changes through
-  the exp027 result/dashboard scope updates and is merge-conflict free.
+  was squash-merged to `main` as commit
+  `6ad789a7e482a56f004bc8c24ce0c604679c30b5`. The remote feature branch was
+  deleted after merge, and the existing dirty local main worktree plus staged
+  sandbox changes were preserved.
 - Visual grading is harness-owned. Selected PDF, XLSX/XLSM, PPTX, and image
   surfaces are rendered and judged before the main judge receives trusted
   provenance; the model cannot request image bytes or invoke vision directly.
@@ -54,7 +52,9 @@ task. It must be refreshed before a task is reported complete.
 - Track 2, manifest/downloader security, immutable rubric and inference
   identity, step8 persistence, analyzer, schema, and shared grader suite:
   **447 passed**, with one existing PyPDF2 deprecation warning.
-- Dashboard grade aggregation suite: **13 passed**.
+- Latest-main dashboard and aggregation suite: **19 passed**.
+- Production Vite build passed after installing the lockfile-pinned Node
+  dependencies in the isolated merge worktree.
 - Workflow assertions passed for pre-checkout input validation, quoted env
   inputs, pinned revision propagation, resume bound 0–10, committed-only relay,
   strict rebase, unchanged pre/post grade blob, and repeated schema validation.
@@ -62,6 +62,10 @@ task. It must be refreshed before a task is reported complete.
   config, and workflow files; `git diff --check` reported no issues.
 - `extreme-reasoner` and `first-reviewer` both returned final **APPROVE** with
   no blocking, major, or minor code findings.
+- GitHub Actions run
+  [29357775581](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29357775581)
+  (`Aggregate Tests & Deploy`) completed successfully after the merge. No
+  grading, batch, or cost-sweep workflow was automatically dispatched.
 
 ## Remaining Work
 
