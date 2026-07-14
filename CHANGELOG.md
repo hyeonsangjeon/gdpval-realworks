@@ -12,6 +12,7 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Grading Track 2 merge and deploy** — squash-merged the reviewed hardening through PR #69 (`6ad789a7`) and verified successful `Aggregate Tests & Deploy` run 29357775581. The merge did not dispatch any paid grading, batch, or cost-sweep workflow; live Ubuntu renderer and limited Azure vision canaries remain explicit follow-up gates.
 - **Dashboard diagnostic scope consistency** — register exp027 as a diagnostic
   report hidden from every default cross-run surface, including leaderboard,
   trends, error narratives, header scope, and future grade cards. `?debug=1`
