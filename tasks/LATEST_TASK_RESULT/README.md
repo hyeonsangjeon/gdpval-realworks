@@ -3,8 +3,8 @@
 This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
-- Updated: 2026-07-14
-- Status: Implementation complete; runtime verification pending
+- Updated: 2026-07-15
+- Status: PR open; runtime verification pending
 
 ## Task
 
@@ -22,6 +22,9 @@ task. It must be refreshed before a task is reported complete.
   and pushed to `origin/feat/grading-track2-hardening`. Direct `main` push was
   intentionally avoided; the existing dirty main worktree and staged sandbox
   changes were preserved.
+- Pull request [#69](https://github.com/hyeonsangjeon/gdpval-realworks/pull/69)
+  is open against `main`. The branch includes the latest main changes through
+  the exp027 result/dashboard scope updates and is merge-conflict free.
 - Visual grading is harness-owned. Selected PDF, XLSX/XLSM, PPTX, and image
   surfaces are rendered and judged before the main judge receives trusted
   provenance; the model cannot request image bytes or invoke vision directly.
