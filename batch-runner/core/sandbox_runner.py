@@ -75,6 +75,93 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
+def _response_usage(response) -> Optional[dict]:
+    """Return a compact, provider-tolerant token usage record."""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+
+    def _get(obj, key):
+        return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+    result = {
+        "prompt_tokens": _get(usage, "prompt_tokens"),
+        "completion_tokens": _get(usage, "completion_tokens"),
+        "total_tokens": _get(usage, "total_tokens"),
+    }
+    details = _get(usage, "completion_tokens_details")
+    reasoning_tokens = _get(details, "reasoning_tokens") if details is not None else None
+    if reasoning_tokens is not None:
+        result["reasoning_tokens"] = reasoning_tokens
+    return result
+
+
+def _github_run_context() -> dict:
+    """Capture non-secret CI identifiers for relay/attempt correlation."""
+    keys = {
+        "run_id": "GITHUB_RUN_ID",
+        "run_number": "GITHUB_RUN_NUMBER",
+        "run_attempt": "GITHUB_RUN_ATTEMPT",
+        "workflow": "GITHUB_WORKFLOW",
+        "sha": "GITHUB_SHA",
+    }
+    return {name: os.environ[env] for name, env in keys.items() if os.getenv(env)}
+
+
+def _text_fingerprint(text: Optional[str]) -> dict:
+    """Describe text without persisting its potentially sensitive contents."""
+    value = text or ""
+    return {
+        "chars": len(value),
+        "sha256": _sha256_text(value) if value else None,
+    }
+
+
+def _error_category(text: Optional[str]) -> Optional[str]:
+    """Classify execution errors without retaining their raw messages."""
+    lowered = (text or "").lower()
+    if not lowered:
+        return None
+    categories = (
+        ("timeout", ("timed out", "timeout")),
+        ("out_of_memory", ("out of memory", "oom", "exit code 137")),
+        ("syntax_error", ("syntaxerror", "indentationerror")),
+        ("import_error", ("importerror", "modulenotfounderror")),
+        ("permission_error", ("permissionerror", "permission denied")),
+        ("file_not_found", ("filenotfounderror", "no such file")),
+        ("type_error", ("typeerror",)),
+        ("value_error", ("valueerror",)),
+    )
+    for category, markers in categories:
+        if any(
+            bool(re.search(r"\boom\b", lowered)) if marker == "oom"
+            else marker in lowered
+            for marker in markers
+        ):
+            return category
+    return "execution_error"
+
+
+def _blocking_error_categories(errors: List[str]) -> List[str]:
+    """Reduce blocking details to stable, non-sensitive category labels."""
+    categories: List[str] = []
+    for error in errors:
+        lowered = (error or "").lower()
+        if lowered.startswith("execution_failed:"):
+            category = _error_category(error) or "execution_error"
+        elif "no runnable python" in lowered or lowered == "no_code":
+            category = "no_code"
+        elif "deliverable" in lowered or "primary" in lowered or "contract" in lowered:
+            category = "deliverable_contract"
+        elif "blank" in lowered or "render" in lowered or "verification" in lowered:
+            category = "output_verification"
+        else:
+            category = "output_validation"
+        if category not in categories:
+            categories.append(category)
+    return categories
+
+
 # Local filesystem roots that must never appear in the manifest or repair prompt.
 # Computed once; longest first so nested roots (e.g. the temp dir under $HOME) are
 # redacted before the shorter prefix.
@@ -384,7 +471,10 @@ class SandboxRunner:
             {"role": "system", "content": rendered["system_message"]},
             {"role": "user", "content": rendered["user_prompt"]},
         ]
-        response, _ = complete(
+        prompt_sha256 = _sha256_text(
+            rendered["system_message"] + "\n\n" + rendered["user_prompt"]
+        )
+        response, llm_latency_ms = complete(
             client=self.llm_client,
             model=model,
             messages=messages,
@@ -417,9 +507,16 @@ class SandboxRunner:
                     "attempt": attempt_idx,
                     "status": "failed_execution",
                     "executor": "none",
-                    "blocking_errors": ["no_code"],
-                    "stdout_tail": "",
-                    "stderr_tail": response_text[:300],
+                    "prompt_sha256": prompt_sha256,
+                    "llm_latency_ms": (
+                        round(float(llm_latency_ms), 2)
+                        if isinstance(llm_latency_ms, (int, float)) else None
+                    ),
+                    "usage": _response_usage(response),
+                    "blocking_error_count": 1,
+                    "blocking_error_categories": ["no_code"],
+                    "response": _text_fingerprint(response_text),
+                    "error_category": "no_code",
                 },
             }
 
@@ -467,11 +564,19 @@ class SandboxRunner:
                 "attempt": attempt_idx,
                 "status": status,
                 "executor": executor_used,
+                "prompt_sha256": prompt_sha256,
                 "code_sha256": _sha256_text(code),
-                "blocking_errors": blocking,
+                "llm_latency_ms": (
+                    round(float(llm_latency_ms), 2)
+                    if isinstance(llm_latency_ms, (int, float)) else None
+                ),
+                "usage": _response_usage(response),
+                "blocking_error_count": len(blocking),
+                "blocking_error_categories": _blocking_error_categories(blocking),
                 "generated_artifacts": analysis["artifact_names"],
-                "stdout_tail": _sanitize_tail(result.get("text"), limit=600),
-                "stderr_tail": _sanitize_tail(result.get("error"), limit=600),
+                "stdout": _text_fingerprint(result.get("text")),
+                "stderr": _text_fingerprint(result.get("error")),
+                "error_category": _error_category(result.get("error")),
             },
         }
 
@@ -622,7 +727,10 @@ class SandboxRunner:
             "schema_version": MANIFEST_SCHEMA_VERSION,
             "execution_mode": "sandbox",
             "sandbox_backend": "docker" if executor_used == "docker" else "local_fallback",
+            "sandbox_image": self.image if executor_used == "docker" else None,
+            "run_context": _github_run_context(),
             "selected_skills": [s.name for s in skills],
+            "selected_skills_detail": [s.to_dict() for s in skills],
             "dependency_resolution": manifest.to_dict(),
             "dependency_import_probe": best.get("import_probe"),
             "deliverable_contract": contract.to_dict(),
@@ -635,6 +743,7 @@ class SandboxRunner:
             "render_report": (best.get("output_qa") or {}).get("render_reports"),
             "vision_qa_report": (best.get("output_qa") or {}).get("vision_qa"),
             "attempts": attempts,
+            "best_attempt": best.get("report", {}).get("attempt"),
             "final_status": final_status,
         }
 

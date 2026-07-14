@@ -20,11 +20,11 @@ from core.sandbox_runner import (
 
 # ── helpers ──────────────────────────────────────────────────────────────
 
-def _fake_response(content: str):
+def _fake_response(content: str, usage=None):
     """Build a minimal object shaped like an OpenAI chat completion."""
     msg = SimpleNamespace(content=content)
     choice = SimpleNamespace(message=msg)
-    return SimpleNamespace(choices=[choice])
+    return SimpleNamespace(choices=[choice], usage=usage)
 
 
 def _patch_complete(content: str):
@@ -240,6 +240,12 @@ def test_run_selects_skills_for_video_task():
         )
     assert result["success"] is True
     assert "video" in result["metadata"]["skills"]
+    video = next(
+        skill for skill in result["sandbox_manifest"]["selected_skills_detail"]
+        if skill["name"] == "video"
+    )
+    assert video["score"] > 0
+    assert ".mp4" in video["matched_extensions"]
 
 
 # ── shared fixtures ──────────────────────────────────────────────────────
@@ -362,12 +368,21 @@ def test_manifest_schema_present():
                                               "files": [{"filename": "deck.pptx", "content": _pptx}]})):
         result = runner.run(task_prompt="Create a pptx deck", model="m", reference_files=[])
     m = result["sandbox_manifest"]
-    for key in ["schema_version", "execution_mode", "sandbox_backend", "selected_skills",
+    for key in ["schema_version", "execution_mode", "sandbox_backend", "sandbox_image",
+                "run_context",
+                "selected_skills", "selected_skills_detail",
                 "dependency_resolution", "dependency_import_probe", "deliverable_contract",
-                "generated_artifacts", "verification_report", "attempts", "final_status"]:
+                "generated_artifacts", "verification_report", "attempts", "best_attempt",
+                "final_status"]:
         assert key in m, key
     assert m["execution_mode"] == "sandbox"
     assert m["final_status"] == "ok"
+    assert m["sandbox_image"] is None
+    assert isinstance(m["run_context"], dict)
+    assert m["best_attempt"] == 0
+    assert len(m["attempts"][0]["prompt_sha256"]) == 64
+    assert "usage" in m["attempts"][0]
+    assert "llm_latency_ms" in m["attempts"][0]
     # manifest.json is also emitted as a deliverable file.
     assert "manifest.json" in [f["filename"] for f in result["files"]]
 
@@ -434,7 +449,7 @@ def test_sanitize_tail_redacts_and_trims():
 
 
 def test_manifest_redacts_local_paths_on_real_crash():
-    """Exercise the REAL local runner so the traceback embeds an absolute path."""
+    """Persist only a fingerprint/category for a real local crash."""
     import json as _json
     import os
     import tempfile
@@ -449,9 +464,32 @@ def test_manifest_redacts_local_paths_on_real_crash():
     assert tempfile.gettempdir() not in blob
     assert "/var/folders" not in blob
     assert os.path.expanduser("~") not in blob
-    # The error itself is preserved (redacted, not dropped).
-    tail = result["sandbox_manifest"]["attempts"][0]["stderr_tail"]
-    assert "RuntimeError" in tail and "<tmp>" in tail
+    attempt = result["sandbox_manifest"]["attempts"][0]
+    assert attempt["error_category"] == "execution_error"
+    assert attempt["stderr"]["chars"] > 0
+    assert len(attempt["stderr"]["sha256"]) == 64
+    assert "RuntimeError" not in blob
+    assert "boom from solution" not in blob
+
+
+def test_manifest_never_persists_sensitive_process_text():
+    import json as _json
+    secret = "token=super-sensitive-value /arbitrary/private/input.csv"
+    runner = _runner_no_render(repair={"enabled": False})
+    response = _fake_response("```python\nprint('x')\n```")
+    with patch.object(sr, "complete", lambda **k: (response, {})), \
+         patch.object(runner, "_execute", return_value=(
+             "local",
+             {"success": False, "text": secret, "error": secret, "files": []},
+         )):
+        result = runner.run(task_prompt="Create a PDF", model="m", reference_files=[])
+
+    blob = _json.dumps(result["sandbox_manifest"])
+    assert secret not in blob
+    assert "super-sensitive-value" not in blob
+    attempt = result["sandbox_manifest"]["attempts"][0]
+    assert attempt["stdout"]["chars"] == len(secret)
+    assert attempt["stderr"]["chars"] == len(secret)
 
 
 # ── reasoning-effort / budget guard (PR #57 hardening) ───────────────────

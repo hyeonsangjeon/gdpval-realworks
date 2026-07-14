@@ -69,6 +69,7 @@ class DataFilterConfig:
     sector: Optional[str] = None
     occupation: Optional[str] = None
     sample_size: Optional[int] = None
+    task_ids: Optional[List[str]] = None
 
 
 @dataclass
@@ -190,6 +191,7 @@ class ExperimentConfig:
             sector=filter_data.get("sector"),
             occupation=filter_data.get("occupation"),
             sample_size=filter_data.get("sample_size"),
+            task_ids=filter_data.get("task_ids"),
         )
 
         # Parse condition A
@@ -318,6 +320,7 @@ class ExperimentConfig:
                     "sector": self.data_filter.sector,
                     "occupation": self.data_filter.occupation,
                     "sample_size": self.data_filter.sample_size,
+                    "task_ids": self.data_filter.task_ids,
                 },
             },
             "condition_a": self._condition_to_dict(self.condition_a),
@@ -337,6 +340,7 @@ class ExperimentConfig:
                 "install_libreoffice": self.execution.install_libreoffice,
                 "tokens": dict(self.execution.tokens),
                 "timeout": self.execution.timeout,
+                "sandbox": self.execution.sandbox,
             },
         }
 
@@ -402,9 +406,20 @@ class ExperimentConfig:
                 errors.append(f"condition_b.model.provider must be one of {valid_providers}")
 
         # Validate execution mode (Phase 5-3)
-        valid_modes = ["code_interpreter", "subprocess", "json_renderer"]
+        valid_modes = ["code_interpreter", "subprocess", "sandbox", "json_renderer"]
         if self.execution.mode not in valid_modes:
             errors.append(f"execution.mode must be one of {valid_modes}")
+
+        task_ids = self.data_filter.task_ids
+        if task_ids is not None:
+            if not isinstance(task_ids, list) or not task_ids or not all(
+                isinstance(task_id, str) and task_id.strip() for task_id in task_ids
+            ):
+                errors.append("data.filter.task_ids must be a non-empty list of non-empty strings")
+            elif len(task_ids) != len(set(task_ids)):
+                errors.append("data.filter.task_ids must not contain duplicates")
+            if self.data_filter.sample_size is not None:
+                errors.append("data.filter.task_ids and sample_size are mutually exclusive")
 
         # Validate code_interpreter mode requires OpenAI/Azure
         if self.execution.mode == "code_interpreter":

@@ -50,6 +50,27 @@ def prepare_tasks(config_path: str) -> dict:
         tasks = [t for t in tasks if t.occupation.lower() == flt.occupation.lower()]
         print(f"🔍 Filtered by occupation '{flt.occupation}': {len(tasks)} tasks")
 
+    if flt.task_ids is not None:
+        if not isinstance(flt.task_ids, list) or not flt.task_ids or not all(
+            isinstance(task_id, str) and task_id.strip() for task_id in flt.task_ids
+        ):
+            raise ValueError(
+                "data.filter.task_ids must be a non-empty list of non-empty strings"
+            )
+        if len(flt.task_ids) != len(set(flt.task_ids)):
+            raise ValueError("data.filter.task_ids must not contain duplicates")
+        if flt.sample_size is not None:
+            raise ValueError("data.filter.task_ids and sample_size are mutually exclusive")
+
+        task_by_id = {task.task_id: task for task in tasks}
+        missing_ids = [task_id for task_id in flt.task_ids if task_id not in task_by_id]
+        if missing_ids:
+            preview = ", ".join(missing_ids[:5])
+            suffix = "..." if len(missing_ids) > 5 else ""
+            raise ValueError(f"data.filter.task_ids contains unknown task IDs: {preview}{suffix}")
+        tasks = [task_by_id[task_id] for task_id in flt.task_ids]
+        print(f"🎯 Selected {len(tasks)} explicit task IDs")
+
     if flt.sample_size and flt.sample_size < len(tasks):
         random.seed(42)
         tasks = random.sample(tasks, flt.sample_size)
@@ -86,6 +107,7 @@ def prepare_tasks(config_path: str) -> dict:
                 "deployment": cond.model.deployment,
                 "temperature": cond.model.temperature,
                 "seed": cond.model.seed,
+                "reasoning_effort": cond.model.reasoning_effort,
             },
             "prompt": {
                 "system": cond.prompt.system,
@@ -112,6 +134,19 @@ def prepare_tasks(config_path: str) -> dict:
         "description": config.description,
         "config_path": str(config_path),
         "source": config.data_filter.source,
+        "task_scope": {
+            "mode": (
+                "explicit_ids" if config.data_filter.task_ids is not None
+                else "filtered" if any((
+                    config.data_filter.sector,
+                    config.data_filter.occupation,
+                    config.data_filter.sample_size is not None,
+                ))
+                else "full"
+            ),
+            "expected_count": len(task_list),
+            "task_ids": [task["task_id"] for task in task_list],
+        },
         "execution": {
             "mode": config.execution.mode,
             "max_retries": config.execution.max_retries,

@@ -2,7 +2,7 @@
 """Step 5: Validate — Pre-upload validation of the dataset.
 
 Checks that the local snapshot is ready for HuggingFace upload:
-  1. 220 rows in parquet
+    1. Exact prepared task scope (220 rows for full runs, selected IDs for subsets)
   2. All required columns present
   3. deliverable_files is list type
   4. deliverable_files paths exist locally
@@ -58,6 +58,50 @@ def _to_list(val) -> list:
 
 
 DUMMY_FILENAME = "failed_to_generate.txt"
+
+
+def _load_expected_task_scope() -> dict:
+    """Load prepared scope, defaulting to the legacy 220-task benchmark."""
+    prepared_path = WORKSPACE_DIR / "step1_tasks_prepared.json"
+    if not prepared_path.exists():
+        return {"mode": "full", "expected_count": 220, "task_ids": None}
+    prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
+    scope = prepared.get("task_scope") or {}
+    mode = scope.get("mode", "full")
+    if mode == "full":
+        return {"mode": "full", "expected_count": 220, "task_ids": None}
+    task_ids = scope.get("task_ids")
+    if not isinstance(task_ids, list) or not task_ids:
+        raise ValueError("prepared subset task_scope must contain non-empty task_ids")
+    if len(task_ids) != len(set(task_ids)):
+        raise ValueError("prepared subset task_scope contains duplicate task IDs")
+    expected_count = scope.get("expected_count", len(task_ids))
+    if expected_count != len(task_ids):
+        raise ValueError("prepared task_scope expected_count does not match task_ids")
+    return {"mode": mode, "expected_count": expected_count, "task_ids": task_ids}
+
+
+def _task_scope_errors(actual_task_ids: list[str], scope: dict) -> list[str]:
+    """Return row-count and identity errors for full or subset submissions."""
+    expected_count = int(scope["expected_count"])
+    errors = []
+    if len(actual_task_ids) != expected_count:
+        errors.append(
+            f"Row count: {len(actual_task_ids)} "
+            f"(expected {expected_count} for {scope['mode']})"
+        )
+    expected_ids = scope.get("task_ids")
+    if expected_ids is not None:
+        actual_set = set(actual_task_ids)
+        expected_set = set(expected_ids)
+        missing = expected_set - actual_set
+        unexpected = actual_set - expected_set
+        if missing or unexpected:
+            errors.append(
+                "Task scope mismatch: "
+                f"missing={len(missing)}, unexpected={len(unexpected)}"
+            )
+    return errors
 
 
 def _create_dummy_file(task_id: str, error_summary: str = "") -> Path:
@@ -157,6 +201,12 @@ def validate(data_dir: str = None) -> bool:
 
     errors = []
     warnings = []
+    try:
+        task_scope = _load_expected_task_scope()
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        errors.append(f"Invalid prepared task scope: {exc}")
+        _print_result(errors, warnings)
+        return False
 
     # ── Load parquet ──
     try:
@@ -189,9 +239,13 @@ def validate(data_dir: str = None) -> bool:
     print(f"   Rows: {len(df)}")
     print(f"   Columns: {list(df.columns)}")
 
-    # ── 1. Row count ──
-    if len(df) != 220:
-        errors.append(f"Row count: {len(df)} (expected 220)")
+    # ── 1. Row count + selected task identity ──
+    if "task_id" in df.columns:
+        errors.extend(_task_scope_errors(df["task_id"].tolist(), task_scope))
+    elif len(df) != task_scope["expected_count"]:
+        errors.append(
+            f"Row count: {len(df)} (expected {task_scope['expected_count']})"
+        )
 
     # ── 2. Required columns ──
     required = {
@@ -278,7 +332,13 @@ def validate(data_dir: str = None) -> bool:
         needs_files_missing = []
         needs_files_total = 0
 
+        selected_scope = (
+            set(task_scope["task_ids"])
+            if task_scope.get("task_ids") is not None else None
+        )
         for task_id, info in manifest.get("tasks", {}).items():
+            if selected_scope is not None and task_id not in selected_scope:
+                continue
             if not info.get("needs_files"):
                 continue
             needs_files_total += 1

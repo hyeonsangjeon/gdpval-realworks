@@ -24,6 +24,7 @@ Usage:
 
 import argparse
 import gc
+import hashlib
 import json
 import os
 import psutil
@@ -72,6 +73,7 @@ def _run_preprocessors(
     condition: dict,
     abs_ref_files: list[str] | None,
     task_instruction: str,
+    observations: Optional[list[dict]] = None,
 ) -> str:
     """Run preprocessors defined in condition YAML (e.g. audio_analyzer).
 
@@ -88,17 +90,34 @@ def _run_preprocessors(
     for pp_cfg in preprocessors:
         pp_type = pp_cfg.get("type", "")
         trigger = pp_cfg.get("trigger", "")
+        observation = {
+            "type": pp_type or "unknown",
+            "trigger": trigger or None,
+            "status": "configured",
+            "matched_file_count": 0,
+            "matched_extensions": [],
+        }
 
         if pp_type == "audio_analyzer":
             # Check trigger condition
             if trigger == "has_audio_files":
                 audio_files = filter_audio_files(abs_ref_files)
                 if not audio_files:
+                    observation["status"] = "skipped_no_matching_files"
+                    if observations is not None:
+                        observations.append(observation)
                     continue
             else:
                 audio_files = filter_audio_files(abs_ref_files)
                 if not audio_files:
+                    observation["status"] = "skipped_no_matching_files"
+                    if observations is not None:
+                        observations.append(observation)
                     continue
+            observation["matched_file_count"] = len(audio_files)
+            observation["matched_extensions"] = sorted({
+                Path(path).suffix.lower() for path in audio_files
+            })
 
             # Create a separate client for the preprocessor model
             pp_model = pp_cfg.get("model", {})
@@ -106,6 +125,8 @@ def _run_preprocessors(
             pp_deployment = pp_model.get("deployment", "gpt-audio-1.5")
             pp_system = pp_cfg.get("system", "You are an audio analysis agent.")
             include_task = pp_cfg.get("include_task_instruction", False)
+            observation["provider"] = pp_provider
+            observation["model"] = pp_deployment
 
             try:
                 pp_client = create_provider_client(pp_provider)
@@ -118,20 +139,46 @@ def _run_preprocessors(
                 )
                 if analysis:
                     results.append(analysis)
+                    observation.update({
+                        "status": "success",
+                        "analysis_chars": len(analysis),
+                        "analysis_sha256": hashlib.sha256(
+                            analysis.encode("utf-8")
+                        ).hexdigest(),
+                    })
+                else:
+                    observation["status"] = "empty_result"
             except Exception as exc:
-                print(f"      ⚠️  Preprocessor '{pp_type}' error (non-fatal): {exc}")
-                continue
+                print(
+                    f"      ⚠️  Preprocessor '{pp_type}' error (non-fatal): "
+                    f"{type(exc).__name__}"
+                )
+                observation.update({
+                    "status": "error",
+                    "error_type": type(exc).__name__,
+                })
+            if observations is not None:
+                observations.append(observation)
         elif pp_type == "video_analyzer":
             # Trigger: only run when video reference files are present.
             video_files = filter_video_files(abs_ref_files)
             if not video_files:
+                observation["status"] = "skipped_no_matching_files"
+                if observations is not None:
+                    observations.append(observation)
                 continue
+            observation["matched_file_count"] = len(video_files)
+            observation["matched_extensions"] = sorted({
+                Path(path).suffix.lower() for path in video_files
+            })
 
             pp_model = pp_cfg.get("model", {})
             pp_provider = pp_model.get("provider", "azure")
             pp_deployment = pp_model.get("deployment", "gpt-5.2")
             pp_system = pp_cfg.get("system", "You are a video analysis agent.")
             include_task = pp_cfg.get("include_task_instruction", False)
+            observation["provider"] = pp_provider
+            observation["model"] = pp_deployment
 
             # Optional frame-sampling overrides from YAML.
             frames_per_video = pp_cfg.get("frames_per_video", 8)
@@ -154,13 +201,76 @@ def _run_preprocessors(
                 )
                 if analysis:
                     results.append(analysis)
+                    observation.update({
+                        "status": "success",
+                        "analysis_chars": len(analysis),
+                        "analysis_sha256": hashlib.sha256(
+                            analysis.encode("utf-8")
+                        ).hexdigest(),
+                    })
+                else:
+                    observation["status"] = "empty_result"
             except Exception as exc:
-                print(f"      ⚠️  Preprocessor '{pp_type}' error (non-fatal): {exc}")
-                continue
+                print(
+                    f"      ⚠️  Preprocessor '{pp_type}' error (non-fatal): "
+                    f"{type(exc).__name__}"
+                )
+                observation.update({
+                    "status": "error",
+                    "error_type": type(exc).__name__,
+                })
+            if observations is not None:
+                observations.append(observation)
         else:
             print(f"      ⚠️  Unknown preprocessor type: '{pp_type}' — skipping")
+            observation["status"] = "skipped_unknown_type"
+            if observations is not None:
+                observations.append(observation)
 
     return "\n\n".join(results)
+
+
+def _build_execution_observability(
+    result: Optional[dict],
+    preprocessor_observations: list[dict],
+) -> dict:
+    """Build compact task provenance without duplicating heavy QA reports."""
+    observability = {"preprocessors": preprocessor_observations}
+    manifest = (result or {}).get("sandbox_manifest") or {}
+    if manifest:
+        attempts = []
+        for attempt in manifest.get("attempts") or []:
+            attempts.append({
+                "attempt": attempt.get("attempt"),
+                "status": attempt.get("status"),
+                "executor": attempt.get("executor"),
+                "prompt_sha256": attempt.get("prompt_sha256"),
+                "code_sha256": attempt.get("code_sha256"),
+                "llm_latency_ms": attempt.get("llm_latency_ms"),
+                "usage": attempt.get("usage"),
+                "blocking_error_count": attempt.get("blocking_error_count", 0),
+                "blocking_error_categories": (
+                    attempt.get("blocking_error_categories") or []
+                ),
+                "generated_artifact_count": len(
+                    attempt.get("generated_artifacts") or []
+                ),
+                "stdout": attempt.get("stdout"),
+                "stderr": attempt.get("stderr"),
+                "response": attempt.get("response"),
+                "error_category": attempt.get("error_category"),
+            })
+        observability["sandbox"] = {
+            "schema_version": manifest.get("schema_version"),
+            "backend": manifest.get("sandbox_backend"),
+            "image": manifest.get("sandbox_image"),
+            "run_context": manifest.get("run_context") or {},
+            "selected_skills": manifest.get("selected_skills_detail") or [],
+            "attempts": attempts,
+            "best_attempt": manifest.get("best_attempt"),
+            "final_status": manifest.get("final_status"),
+        }
+    return observability
 
 
 # ── JSON extraction helper ─────────────────────────────────────────────────
@@ -699,7 +809,13 @@ def _execute_single_task(
             abs_ref_files = None  # all missing → treat as no files
 
     # ── Preprocessor: enrich prompt with audio/video analysis (if configured) ──
-    preprocessor_prefix = _run_preprocessors(condition, abs_ref_files, instruction)
+    preprocessor_observations: list[dict] = []
+    preprocessor_prefix = _run_preprocessors(
+        condition,
+        abs_ref_files,
+        instruction,
+        observations=preprocessor_observations,
+    )
     perception_text = None
     if preprocessor_prefix:
         if execution_mode == "sandbox":
@@ -738,6 +854,9 @@ def _execute_single_task(
                     "completion_tokens": response.usage.completion_tokens,
                     "total_tokens": response.usage.total_tokens,
                 },
+                "observability": _build_execution_observability(
+                    None, preprocessor_observations
+                ),
                 "latency_ms": round(latency_ms, 2),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -777,6 +896,9 @@ def _execute_single_task(
                     "deliverable_files": [],
                     "model": model,
                     "usage": None,
+                    "observability": _build_execution_observability(
+                        result, preprocessor_observations
+                    ),
                     "latency_ms": round(latency_ms, 2),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
@@ -789,6 +911,9 @@ def _execute_single_task(
                 "deliverable_files": deliverable_files,
                 "model": model,
                 "usage": None,
+                "observability": _build_execution_observability(
+                    result, preprocessor_observations
+                ),
                 "latency_ms": round(latency_ms, 2),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -802,6 +927,9 @@ def _execute_single_task(
                 "deliverable_files": [],
                 "model": model,
                 "usage": None,
+                "observability": _build_execution_observability(
+                    result, preprocessor_observations
+                ),
                 "latency_ms": round(latency_ms, 2),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -816,6 +944,9 @@ def _execute_single_task(
             "deliverable_files": [],
             "model": model,
             "usage": None,
+            "observability": _build_execution_observability(
+                None, preprocessor_observations
+            ),
             "latency_ms": None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
