@@ -7,6 +7,9 @@ import yaml
 import step8_grade as s8
 
 
+INFERENCE_SHA = "a" * 40
+
+
 class _FakeLoader:
     def __init__(self, *args, **kwargs):
         self.rubric_sha = "11e7900cdcac61bc4daf59e65feb238acda98fbf"
@@ -68,12 +71,56 @@ class _FakeGrader:
         )
 
 
+def test_compute_summary_includes_perception_in_total_cost_volume():
+    task = {
+        "pct": 50.0,
+        "error": None,
+        "items": [],
+        "judge_call_count": 2,
+        "judge_input_tokens": 100,
+        "judge_output_tokens": 20,
+        "judge_cached_tokens": 10,
+        "judge_total_latency_ms": 40.0,
+        "perception_call_count": 3,
+        "perception_input_tokens": 60,
+        "perception_output_tokens": 15,
+        "perception_cached_tokens": 6,
+        "perception_total_latency_ms": 30.0,
+        "render_call_count": 3,
+        "render_total_latency_ms": 12.0,
+        "usage_complete": True,
+    }
+
+    cost = s8._compute_summary([task])["cost"]
+
+    assert cost["total_judge_calls"] == 5
+    assert cost["total_main_judge_calls"] == 2
+    assert cost["total_perception_calls"] == 3
+    assert cost["total_input_tokens"] == 160
+    assert cost["total_output_tokens"] == 35
+    assert cost["total_cached_tokens"] == 16
+    assert cost["main_input_tokens"] == 100
+    assert cost["perception_input_tokens"] == 60
+    assert cost["total_judge_latency_sec"] == 0.07
+    assert cost["total_render_calls"] == 3
+    assert cost["total_render_latency_sec"] == 0.01
+    assert cost["usage_complete"] is True
+
+
 def _setup_workspace(tmp_path: Path):
     (tmp_path / "experiments").mkdir(parents=True, exist_ok=True)
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
     (tmp_path / "prompts").mkdir(parents=True, exist_ok=True)
     (tmp_path / "grading_configs").mkdir(parents=True, exist_ok=True)
     (tmp_path / "schemas").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "core").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "scripts").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "step8_grade.py").write_text("# test step8\n", encoding="utf-8")
+    (tmp_path / "core" / "grader.py").write_text("# test core\n", encoding="utf-8")
+    (tmp_path / "requirements.txt").write_text("PyYAML\n", encoding="utf-8")
+    (tmp_path / "scripts" / "download_inference_from_hf.py").write_text(
+        "# test downloader\n", encoding="utf-8"
+    )
 
     exp = {
         "experiment": {"id": "exp998_smoke_baseline_sample", "name": "x", "description": "", "author": "a", "created_at": "2026-01-01"},
@@ -89,6 +136,8 @@ def _setup_workspace(tmp_path: Path):
 
     inf = {
         "experiment_id": "exp998_smoke_baseline_sample",
+        "source_repo_id": "owner/repo",
+        "source_revision": INFERENCE_SHA,
         "model": "gpt-5.2-chat",
         "completed_at": "2026-05-20T00:00:00Z",
         "results": [
@@ -98,8 +147,17 @@ def _setup_workspace(tmp_path: Path):
         ],
     }
     (tmp_path / "workspace" / "step2_inference_results.json").write_text(json.dumps(inf), encoding="utf-8")
+    for task in inf["results"]:
+        for relative_path in task["deliverable_files"]:
+            deliverable = tmp_path / "workspace" / "upload" / relative_path
+            deliverable.parent.mkdir(parents=True, exist_ok=True)
+            deliverable.write_bytes(b"test deliverable")
 
     (tmp_path / "prompts" / "grader_judge.md").write_text("<!-- prompt_version: v1 -->\n{{#each deliverable_files}}{{/each}}", encoding="utf-8")
+    (tmp_path / "prompts" / "grader_judge_v2.md").write_text(
+        "<!-- prompt_version: v2 -->\n{{#each deliverable_files}}{{/each}}",
+        encoding="utf-8",
+    )
     cfg = {
         "schema_version": "1.0",
         "config_name": "default_gpt5pro",
@@ -114,6 +172,161 @@ def _setup_workspace(tmp_path: Path):
     # Reuse repo schema
     schema_src = Path("schemas/grade.schema.json").read_text(encoding="utf-8")
     (tmp_path / "schemas" / "grade.schema.json").write_text(schema_src, encoding="utf-8")
+
+
+_RENDERER_FINGERPRINT = {
+    "libreoffice_binary": "soffice",
+    "libreoffice_version": "LibreOffice 24.2.7.2",
+    "pymupdf_version": "1.26.3",
+}
+
+
+def _configure_track2(tmp_path: Path) -> None:
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["schema_version"] = "2.0"
+    config["judge"]["tools"] = {
+        "read_deliverable": {"ops": ["inspect_structure"]}
+    }
+    config["judge"]["perception"] = {
+        "visual": {"model": "gpt-5.4", "vision": True}
+    }
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+
+def test_compute_grader_source_hash_is_deterministic_and_content_sensitive(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    first = s8.compute_grader_source_hash(config_path, config)
+    second = s8.compute_grader_source_hash(config_path, config)
+    assert first == second
+    assert len(first) == 64
+
+    (tmp_path / "unrelated.txt").write_text("not grading source\n", encoding="utf-8")
+    assert s8.compute_grader_source_hash(config_path, config) == first
+
+    (tmp_path / "core" / "grader.py").write_text(
+        "# changed test core\n", encoding="utf-8"
+    )
+    assert s8.compute_grader_source_hash(config_path, config) != first
+
+
+def test_compute_grader_source_hash_changes_when_source_path_changes(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    first = s8.compute_grader_source_hash(config_path, config)
+
+    renamed = tmp_path / "prompts" / "renamed.md"
+    renamed.write_bytes((tmp_path / "prompts" / "grader_judge.md").read_bytes())
+    config["prompt"]["template"] = "prompts/renamed.md"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    assert s8.compute_grader_source_hash(config_path, config) != first
+
+
+def test_track2_fallback_tool_prompt_is_in_grader_source_hash(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert "tool_template" not in config["prompt"]
+
+    first = s8.compute_grader_source_hash(config_path, config)
+    fallback = tmp_path / "prompts" / "grader_judge_v2.md"
+    fallback.write_text("<!-- prompt_version: v2-changed -->\n", encoding="utf-8")
+
+    assert s8.compute_grader_source_hash(config_path, config) != first
+
+
+def test_compute_grader_source_hash_rejects_symlink(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    prompt_path = tmp_path / "prompts" / "grader_judge.md"
+    target = tmp_path / "prompts" / "target.md"
+    target.write_bytes(prompt_path.read_bytes())
+    prompt_path.unlink()
+    prompt_path.symlink_to(target)
+
+    with pytest.raises(ValueError, match="symlink"):
+        s8.compute_grader_source_hash(config_path, config)
+
+
+def test_compute_grader_source_hash_rejects_outside_and_duplicate_paths(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-prompt.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    config["prompt"]["template"] = str(outside)
+    with pytest.raises(ValueError, match="outside batch-runner"):
+        s8.compute_grader_source_hash(config_path, config)
+
+    config["prompt"]["template"] = "prompts/grader_judge.md"
+    config["prompt"]["tool_template"] = "prompts/grader_judge.md"
+    with pytest.raises(ValueError, match="duplicate grader source path"):
+        s8.compute_grader_source_hash(config_path, config)
+
+
+def test_v1_source_repo_fallback_does_not_apply_to_track2():
+    inference = {"source": "legacy/repo"}
+
+    assert s8.source_inference_repo_id(inference, "1.0") == "legacy/repo"
+    assert s8.source_inference_repo_id(inference, "2.0") is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source_repo_id", None),
+        ("source_repo_id", "owner/repo/extra"),
+        ("source_revision", None),
+        ("source_revision", "A" * 40),
+        ("source_revision", "a" * 39),
+    ],
+)
+def test_track2_rejects_missing_or_invalid_inference_identity_before_grader(
+    monkeypatch, tmp_path, field, value
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    inference_path = tmp_path / "workspace" / "step2_inference_results.json"
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    if value is None:
+        inference.pop(field)
+    else:
+        inference[field] = value
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed for invalid inference identity")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() != 0
 
 
 def test_skip_when_grade_exists(monkeypatch, tmp_path):
@@ -181,6 +394,42 @@ def test_limit_n_tasks(monkeypatch, tmp_path):
     assert len(payload["tasks"]) == 2
 
 
+def test_track2_limit_three_mock_smoke(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["output"]["filename_template"] = (
+        "{exp_id}__{judge_slug}__{rubric_sha}__{prompt_v}.json"
+    )
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+        "--force", "--limit", "3",
+    ])
+
+    assert s8.main() == 0
+    out = (
+        tmp_path
+        / "data/grades"
+        / (
+            "exp998_smoke_baseline_sample__gpt-5_4-pro__"
+            f"{_FakeLoader().rubric_sha}__v1.json"
+        )
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert len(payload["tasks"]) == 3
+    assert payload["rubric"]["commit_sha"] == _FakeLoader().rubric_sha
+    assert payload["renderer_fingerprint"] == _RENDERER_FINGERPRINT
+
+
 def test_tasks_filter(monkeypatch, tmp_path):
     _setup_workspace(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -204,6 +453,141 @@ def test_tasks_filter(monkeypatch, tmp_path):
     payload = json.loads(out.read_text(encoding="utf-8"))
     ids = [t["task_id"] for t in payload["tasks"]]
     assert ids == ["task-002", "task-003"]
+
+
+@pytest.mark.parametrize(
+    "argv_suffix",
+    [
+        ["--tasks", "task-missing"],
+        ["--tasks", "task-001,task-001"],
+    ],
+)
+def test_new_run_rejects_invalid_requested_task_ids_before_grader(
+    monkeypatch, tmp_path, argv_suffix
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed for invalid --tasks")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+        *argv_suffix,
+    ])
+
+    assert s8.main() != 0
+
+
+def test_new_run_rejects_duplicate_inference_task_ids_before_grader(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    inference_path = tmp_path / "workspace" / "step2_inference_results.json"
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    inference["results"].append(dict(inference["results"][0]))
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed for duplicate inference IDs")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() != 0
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    [
+        "/tmp/secret.txt",
+        "../secret.txt",
+        "deliverable_files/task-002/other.txt",
+        "deliverable_files/task-001/../secret.txt",
+    ],
+)
+def test_new_run_rejects_unconfined_manifest_path_before_grader(
+    monkeypatch, tmp_path, bad_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    inference_path = tmp_path / "workspace" / "step2_inference_results.json"
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    inference["results"][0]["deliverable_files"] = [bad_path]
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed for an unsafe manifest")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() != 0
+
+
+def test_new_run_rejects_symlinked_deliverable_before_grader(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    deliverable = (
+        tmp_path / "workspace/upload/deliverable_files/task-001/Sample.xlsx"
+    )
+    outside = tmp_path / "secret.txt"
+    outside.write_text("secret", encoding="utf-8")
+    deliverable.unlink()
+    deliverable.symlink_to(outside)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed for a symlinked deliverable")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() != 0
+
+
+def test_new_run_rejects_symlinked_workspace_ancestor_before_grader(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    real_workspace = tmp_path / "real-workspace"
+    (tmp_path / "workspace").rename(real_workspace)
+    (tmp_path / "workspace").symlink_to(real_workspace, target_is_directory=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed through workspace symlink")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() != 0
 
 
 def test_exit_2_when_no_inference_results(monkeypatch, tmp_path):
@@ -378,36 +762,104 @@ def test_T_C_source_experiment_id_cli_override(monkeypatch, tmp_path):
 # --resume + time-budget (chunked auto-resume) tests
 # ---------------------------------------------------------------------------
 
-def _seed_partial_grade(tmp_path: Path, task_ids: list[str]) -> Path:
+def _seed_partial_grade(
+    tmp_path: Path,
+    task_ids: list[str],
+    renderer_fingerprint: dict[str, str] | None = None,
+) -> Path:
     """Drop a valid partial grade JSON at the templated output path."""
     out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
     out.parent.mkdir(parents=True, exist_ok=True)
+    task_rows = [
+        {
+            "task_id": tid,
+            "sector": "s",
+            "occupation": "o",
+            "items": [],
+            "total_awarded": 2,
+            "total_max": 2,
+            "pct": 100.0,
+            "critical_fail": False,
+            "gold_referenced": False,
+            "judge_call_count": 0,
+            "precheck_count": 1,
+            "judge_total_latency_ms": 0,
+            "judge_input_tokens": 0,
+            "judge_output_tokens": 0,
+            "graded_at": "2026-05-27T00:00:00Z",
+            "error": None,
+        }
+        for tid in task_ids
+    ]
     payload = {
         "schema_version": "1.0",
-        "tasks": [
-            {
-                "task_id": tid,
-                "sector": "s",
-                "occupation": "o",
-                "items": [],
-                "total_awarded": 2,
-                "total_max": 2,
-                "pct": 100.0,
-                "critical_fail": False,
-                "gold_referenced": False,
-                "judge_call_count": 0,
-                "precheck_count": 1,
-                "judge_total_latency_ms": 0,
-                "judge_input_tokens": 0,
-                "judge_output_tokens": 0,
-                "graded_at": "2026-05-27T00:00:00Z",
-                "error": None,
-            }
-            for tid in task_ids
-        ],
+        "experiment_id": "exp998_smoke_baseline_sample",
+        "experiment_yaml_name": "exp998_smoke_baseline_sample",
+        "source_inference_repo_id": "owner/repo",
+        "source_inference_revision": INFERENCE_SHA,
+        "grader_source_hash": s8.compute_grader_source_hash(
+            tmp_path / "grading_configs" / "default.yaml",
+            yaml.safe_load(
+                (tmp_path / "grading_configs" / "default.yaml").read_text(
+                    encoding="utf-8"
+                )
+            ),
+        ),
+        "judge": {
+            "provider": "azure_openai",
+            "api": "responses",
+            "model": "gpt-5.4-pro",
+            "deployment": "gpt-5.4-pro",
+            "api_version": "2025-04-01-preview",
+            "reasoning_effort": "high",
+            "temperature": 0,
+            "seed": 42,
+            "config_name": "default_gpt5pro",
+            "config_hash": s8.hash_config(
+                str(tmp_path / "grading_configs" / "default.yaml")
+            ),
+        },
+        "rubric": {
+            "source": "huggingface",
+            "repo_id": "openai/gdpval",
+            "revision": "main",
+            "commit_sha": _FakeLoader().rubric_sha,
+            "short_sha": _FakeLoader().rubric_short_sha,
+        },
+        "prompt": {"template": "prompts/grader_judge.md", "version": "v1"},
+        "graded_at": "2026-05-27T00:00:00Z",
+        "graded_by": "step8_grade.py",
+        "tasks": task_rows,
+        "summary": s8._compute_summary(task_rows),
     }
+    if renderer_fingerprint is not None:
+        payload["renderer_fingerprint"] = renderer_fingerprint
     out.write_text(json.dumps(payload), encoding="utf-8")
     return out
+
+
+def test_github_output_helper_writes_exact_repo_relative_grade_path(
+    monkeypatch, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    github_output = tmp_path / "github-output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+    out_path = tmp_path / "data" / "grades" / "grade.json"
+
+    grade_file = s8._repo_relative_grade_file(out_path)
+    s8._write_github_output("grade_file", grade_file)
+
+    assert grade_file == "data/grades/grade.json"
+    assert github_output.read_text(encoding="utf-8") == (
+        "grade_file=data/grades/grade.json\n"
+    )
+
+
+def test_github_output_helper_rejects_multiline_value(monkeypatch, tmp_path):
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "github-output.txt"))
+
+    with pytest.raises(ValueError, match="single line"):
+        s8._write_github_output("grade_file", "data/grades/a.json\nother=value")
 
 
 def test_resume_skips_already_completed_tasks(monkeypatch, tmp_path):
@@ -468,6 +920,476 @@ def test_resume_without_existing_file_starts_fresh(monkeypatch, tmp_path):
     assert grader_instance["g"].calls == 3  # all three
 
 
+def test_track2_resume_without_partial_fails_before_grader(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not start a fresh Track 2 resume")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() != 0
+
+
+def test_track2_resume_same_fingerprint_succeeds(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT))
+    grader_instance = {}
+
+    class _TrackGrader(_FakeGrader):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            grader_instance["grader"] = self
+
+    monkeypatch.setattr(s8, "Grader", _TrackGrader)
+    _seed_partial_grade(
+        tmp_path, ["task-001", "task-002"], dict(_RENDERER_FINGERPRINT)
+    )
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() == 0
+    assert grader_instance["grader"].calls == 1
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["renderer_fingerprint"] == _RENDERER_FINGERPRINT
+
+
+def test_track2_valid_cache_hit_checks_fingerprint_and_skips(
+    monkeypatch, tmp_path, capsys
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    fingerprint_calls = []
+
+    def get_fingerprint():
+        fingerprint_calls.append(True)
+        return dict(_RENDERER_FINGERPRINT)
+
+    monkeypatch.setattr(s8, "get_renderer_fingerprint", get_fingerprint)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed for a valid cache hit")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    _seed_partial_grade(
+        tmp_path,
+        ["task-001", "task-002", "task-003"],
+        dict(_RENDERER_FINGERPRINT),
+    )
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+    ])
+
+    assert s8.main() == 0
+    assert fingerprint_calls == [True]
+    assert "SKIP - exists" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "task_ids",
+    [
+        ["task-001"],
+        ["task-001", "task-002", "task-extra"],
+        ["task-001", "task-001", "task-003"],
+    ],
+)
+def test_track2_cache_hit_rejects_incomplete_extra_or_duplicate_task_set(
+    monkeypatch, tmp_path, task_ids
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed after task-set rejection")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    _seed_partial_grade(tmp_path, task_ids, dict(_RENDERER_FINGERPRINT))
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+    ])
+
+    assert s8.main() != 0
+
+
+@pytest.mark.parametrize(
+    "task_ids",
+    [
+        ["task-001", "task-extra"],
+        ["task-001", "task-001"],
+    ],
+)
+def test_track2_resume_rejects_extra_or_duplicate_task_set_before_grader(
+    monkeypatch, tmp_path, task_ids
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed after task-set rejection")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    _seed_partial_grade(tmp_path, task_ids, dict(_RENDERER_FINGERPRINT))
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() != 0
+
+
+def test_track2_resume_rejects_schema_invalid_partial_before_grader(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed for schema-invalid partial")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    out = _seed_partial_grade(
+        tmp_path, ["task-001"], dict(_RENDERER_FINGERPRINT)
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    del payload["summary"]
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() != 0
+
+
+@pytest.mark.parametrize("resume", [False, True])
+def test_track2_cache_or_resume_rejects_missing_task_id_before_grader(
+    monkeypatch, tmp_path, resume
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed without task_id")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    task_ids = ["task-001"] if resume else [
+        "task-001", "task-002", "task-003"
+    ]
+    out = _seed_partial_grade(
+        tmp_path, task_ids, dict(_RENDERER_FINGERPRINT)
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    del payload["tasks"][0]["task_id"]
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    argv = [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+    ]
+    if resume:
+        argv.append("--resume")
+    monkeypatch.setattr("sys.argv", argv)
+
+    assert s8.main() != 0
+
+
+@pytest.mark.parametrize(
+    ("identity_path", "replacement"),
+    [
+        (("experiment_id",), "other-experiment"),
+        (("rubric", "commit_sha"), "0" * 40),
+        (("prompt", "version"), "v9"),
+        (("judge", "config_hash"), "f" * 16),
+        (("source_inference_repo_id",), "other/repo"),
+        (("source_inference_revision",), "b" * 40),
+        (("grader_source_hash",), "0" * 64),
+        (("renderer_fingerprint",), {
+            "libreoffice_binary": "soffice",
+            "libreoffice_version": "LibreOffice 25.0",
+            "pymupdf_version": "1.26.3",
+        }),
+    ],
+)
+@pytest.mark.parametrize("missing", [False, True])
+def test_track2_cache_hit_rejects_each_missing_or_mismatched_identity_before_grader(
+    monkeypatch, tmp_path, identity_path, replacement, missing
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed after cache rejection")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    out = _seed_partial_grade(
+        tmp_path, ["task-001"], dict(_RENDERER_FINGERPRINT)
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    parent = payload
+    for key in identity_path[:-1]:
+        parent = parent[key]
+    if missing:
+        del parent[identity_path[-1]]
+    else:
+        parent[identity_path[-1]] = replacement
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+    ])
+
+    assert s8.main() != 0
+
+
+def test_track2_cache_hit_rejects_malformed_json_before_grader(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed for malformed cache JSON")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    out = _seed_partial_grade(
+        tmp_path, ["task-001"], dict(_RENDERER_FINGERPRINT)
+    )
+    out.write_text("{not-json", encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+    ])
+
+    assert s8.main() != 0
+
+
+@pytest.mark.parametrize(
+    ("identity_path", "replacement"),
+    [
+        (("experiment_id",), "other-experiment"),
+        (("rubric", "commit_sha"), "0" * 40),
+        (("prompt", "version"), "v9"),
+        (("judge", "config_hash"), "f" * 16),
+        (("source_inference_repo_id",), "other/repo"),
+        (("source_inference_revision",), "b" * 40),
+        (("grader_source_hash",), "0" * 64),
+    ],
+)
+@pytest.mark.parametrize("missing", [False, True])
+def test_track2_resume_rejects_each_missing_or_mismatched_identity_before_grader(
+    monkeypatch, tmp_path, identity_path, replacement, missing
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed after identity rejection")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    out = _seed_partial_grade(
+        tmp_path, ["task-001"], dict(_RENDERER_FINGERPRINT)
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    parent = payload
+    for key in identity_path[:-1]:
+        parent = parent[key]
+    if missing:
+        del parent[identity_path[-1]]
+    else:
+        parent[identity_path[-1]] = replacement
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() != 0
+
+
+@pytest.mark.parametrize("existing_fingerprint", [None, {
+    "libreoffice_binary": "soffice",
+    "libreoffice_version": "LibreOffice 25.0",
+    "pymupdf_version": "1.26.3",
+}])
+def test_track2_resume_rejects_missing_or_mismatched_fingerprint_before_grading(
+    monkeypatch, tmp_path, existing_fingerprint
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT))
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed after fingerprint rejection")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    _seed_partial_grade(
+        tmp_path, ["task-001"], existing_fingerprint
+    )
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() != 0
+
+
+def test_resume_rejects_malformed_partial_before_grading(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed for malformed resume JSON")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("{not-json", encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() != 0
+
+
+def test_track2_fingerprint_failure_happens_before_grader_construction(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    def fail_fingerprint():
+        raise s8.ReadDeliverableError("LibreOffice unavailable")
+
+    monkeypatch.setattr(s8, "get_renderer_fingerprint", fail_fingerprint)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed without a fingerprint")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() != 0
+
+
+def test_legacy_resume_never_probes_renderer(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr(
+        s8,
+        "get_renderer_fingerprint",
+        lambda: pytest.fail("legacy resume must not probe LibreOffice"),
+    )
+    _seed_partial_grade(tmp_path, ["task-001", "task-002"])
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() == 0
+
+
+def test_track2_dry_run_does_not_probe_renderer(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8,
+        "get_renderer_fingerprint",
+        lambda: pytest.fail("dry-run must not probe LibreOffice"),
+    )
+
+    class _NoInitGrader:
+        @staticmethod
+        def _classify(item):
+            return "precheck", "file_exists_or_name"
+
+    monkeypatch.setattr(s8, "Grader", _NoInitGrader)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--dry-run",
+    ])
+
+    assert s8.main() == 0
+
+
 def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path):
     """When GRADER_TIME_BUDGET_SEC elapses before all tasks are graded, step8
     must (a) save a valid partial JSON and (b) return exit code 7 so the
@@ -484,8 +1406,9 @@ def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path):
 
     monkeypatch.setattr(s8, "Grader", _TrackGrader)
 
-    # Fake clock: call #1 = loop start (t=0); call #2+ = past deadline (t=9999s).
-    times = iter([0.0] + [9999.0] * 50)
+    # Fake clock: loop start and first check are within budget; the second
+    # check is past the deadline, after one task made durable progress.
+    times = iter([0.0, 0.0] + [9999.0] * 50)
     monkeypatch.setattr(s8.time, "monotonic", lambda: next(times))
     monkeypatch.setenv("GRADER_TIME_BUDGET_SEC", "100")
 
@@ -496,14 +1419,139 @@ def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path):
     ])
     rc = s8.main()
     assert rc == 7
-    # Time guard trips BEFORE the first grade_task call.
-    assert grader_instance["g"].calls == 0
-    # Partial grade JSON written (empty tasks list but valid schema).
+    assert grader_instance["g"].calls == 1
+    # Partial grade JSON contains the newly completed task.
     out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
     assert out.exists()
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "1.0"
-    assert payload["tasks"] == []
+    assert [task["task_id"] for task in payload["tasks"]] == ["task-001"]
+
+
+def test_time_budget_without_new_progress_never_requests_resume(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    grader_instance = {}
+
+    class _TrackGrader(_FakeGrader):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            grader_instance["grader"] = self
+
+    monkeypatch.setattr(s8, "Grader", _TrackGrader)
+    times = iter([0.0] + [9999.0] * 20)
+    monkeypatch.setattr(s8.time, "monotonic", lambda: next(times))
+    monkeypatch.setenv("GRADER_TIME_BUDGET_SEC", "100")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    rc = s8.main()
+
+    assert rc == 5
+    assert rc != 7
+    assert grader_instance["grader"].calls == 0
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("failure_mode", ["raise", "corrupt"])
+def test_time_budget_partial_persistence_failure_never_requests_resume(
+    monkeypatch, tmp_path, failure_mode
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    times = iter([0.0, 0.0] + [9999.0] * 20)
+    monkeypatch.setattr(s8.time, "monotonic", lambda: next(times))
+    monkeypatch.setenv("GRADER_TIME_BUDGET_SEC", "100")
+
+    def fail_save(path, payload):
+        if failure_mode == "raise":
+            raise OSError("disk full")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{corrupt-json", encoding="utf-8")
+
+    monkeypatch.setattr(s8, "_save_json", fail_save)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    rc = s8.main()
+
+    assert rc == 5
+    assert rc != 7
+
+
+def test_atomic_save_failure_preserves_existing_file(monkeypatch, tmp_path):
+    output = tmp_path / "grade.json"
+    output.write_text('{"old":true}', encoding="utf-8")
+
+    def fail_replace(self, target):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        s8._save_json(output, {"new": True})
+
+    assert output.read_text(encoding="utf-8") == '{"old":true}'
+    assert list(tmp_path.glob(".grade.json.*.tmp")) == []
+
+
+def test_grade_workflow_rc7_requires_valid_committed_partial():
+    workflow_path = Path("../.github/workflows/grade-run.yml")
+    workflow = workflow_path.read_text(
+        encoding="utf-8"
+    )
+    parsed = yaml.safe_load(workflow)
+    steps = parsed["jobs"]["grade"]["steps"]
+    by_name = {step.get("name"): step for step in steps if step.get("name")}
+    download = by_name["Download inference results from HF"]
+    commit = by_name["Commit grade result"]
+    retrigger = by_name["Auto-retrigger next chunk (time budget hit)"]
+
+    assert "inference_revision:" in workflow
+    assert 'default: ""' in workflow
+    assert download["id"] == "inference"
+    assert '--revision "$GRADE_INFERENCE_REVISION"' in download["run"]
+    assert 'payload.get("source_revision")' in download["run"]
+    assert 'output.write(f"revision={revision}\\n")' in download["run"]
+
+    script = commit["run"]
+    assert commit["id"] == "commit_grade"
+    assert 'git add -- "$GRADE_FILE"' in script
+    assert script.count("validate(instance=payload, schema=schema)") == 2
+    assert "GRADE_BLOB_SHA=" in script
+    assert "POST_REBASE_GRADE_BLOB_SHA=" in script
+    assert '[[ "$POST_REBASE_GRADE_BLOB_SHA" != "$GRADE_BLOB_SHA" ]]' in script
+    assert 'git pull --rebase origin "${GITHUB_REF_NAME}"' in script
+    assert 'git pull --rebase origin "${GITHUB_REF_NAME}" || true' not in script
+    assert "rc=7 requires a newly persisted partial grade diff" in script
+    assert script.index('git pull --rebase origin "${GITHUB_REF_NAME}"') < script.rindex(
+        "validate(instance=payload, schema=schema)"
+    )
+    assert script.rindex("validate(instance=payload, schema=schema)") < script.index(
+        'echo "committed=true"'
+    )
+
+    assert "steps.commit_grade.outputs.committed == 'true'" in retrigger["if"]
+    assert '-f inference_revision="$RESOLVED_INFERENCE_REVISION"' in retrigger["run"]
+
+    assert workflow.index("- name: Validate workflow inputs") < workflow.index(
+        "- uses: actions/checkout@v4"
+    )
+    assert "resume_chunk must be between 0 and 10" in workflow
+    assert "resume requires the pinned inference_revision" in workflow
+    assert '-f experiment_yaml="$GRADE_EXPERIMENT_YAML"' in retrigger["run"]
+    assert '-f grading_config="$GRADE_CONFIG"' in retrigger["run"]
+    assert '--revision "${{ inputs.inference_revision }}"' not in workflow
 
 
 def test_time_budget_zero_disables_guard(monkeypatch, tmp_path):

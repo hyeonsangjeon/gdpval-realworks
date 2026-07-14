@@ -13,6 +13,8 @@ import re
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from core.grader_routing import is_overall_style_criterion
+
 
 DOCUMENT_EXTENSIONS = {
     ".pdf",
@@ -319,7 +321,7 @@ def plan_targets_for_criterion(
             selected_paths=_flatten_paths(targets),
         )
 
-    if _is_overall_style_criterion(criterion_norm):
+    if is_overall_style_criterion(criterion_norm):
         if selection.task_class == "separate_equivalent" and len(targets) > 1:
             return CriterionTargetPlan(
                 target_scope="split_children",
@@ -698,10 +700,6 @@ def _is_cross_file_criterion(criterion: str) -> bool:
             criterion,
         )
     )
-
-
-def _is_overall_style_criterion(criterion: str) -> bool:
-    return "overall formatting and style of the deliverable" in criterion
 
 
 def _match_file_specific_target(

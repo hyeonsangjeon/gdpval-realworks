@@ -12,6 +12,11 @@ on:
         required: true
         type: string
         default: "default_gpt5pro.yaml"
+      inference_revision:
+        description: "Full HF dataset commit SHA for resume; blank resolves initial main"
+        required: false
+        type: string
+        default: ""
       force:
         description: "Overwrite existing grade file (skip cache)"
         required: false
@@ -50,7 +55,11 @@ concurrency:
 
 jobs:
   grade:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
+      GRADE_CONFIG: ${{ inputs.grading_config }}
+      GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
     # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
     # extended. We set 320min so step8_grade.py's internal 4h time guard (env
     # GRADER_TIME_BUDGET_SEC=14400) trips first, partial-saves, and exits 7,
@@ -58,6 +67,32 @@ jobs:
     timeout-minutes: 320
 
     steps:
+      - name: Validate workflow inputs
+        env:
+          RESUME_ENABLED: ${{ inputs.resume }}
+          RESUME_CHUNK: ${{ inputs.resume_chunk }}
+        run: |
+          if [[ ! "$GRADE_EXPERIMENT_YAML" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::experiment_yaml must be a safe basename"
+            exit 1
+          fi
+          if [[ ! "$GRADE_CONFIG" =~ ^[A-Za-z0-9._-]+\.ya?ml$ ]]; then
+            echo "::error::grading_config must be a safe YAML basename"
+            exit 1
+          fi
+          if [[ -n "$GRADE_INFERENCE_REVISION" && ! "$GRADE_INFERENCE_REVISION" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::inference_revision must be blank or a full 40-character SHA"
+            exit 1
+          fi
+          if [[ ! "$RESUME_CHUNK" =~ ^[0-9]+$ ]] || (( 10#$RESUME_CHUNK > 10 )); then
+            echo "::error::resume_chunk must be between 0 and 10"
+            exit 1
+          fi
+          if [[ "$RESUME_ENABLED" == "true" && -z "$GRADE_INFERENCE_REVISION" ]]; then
+            echo "::error::resume requires the pinned inference_revision"
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - name: Setup Python
@@ -71,6 +106,63 @@ jobs:
           cd batch-runner
           pip install -r requirements.txt
 
+      - name: Determine renderer requirement
+        id: renderer
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          cd batch-runner
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          import yaml
+
+          from step8_grade import requires_track2_office_renderer
+
+          config_dir = Path("grading_configs").resolve()
+          config_path = (config_dir / os.environ["GRADE_CONFIG"]).resolve()
+          config_path.relative_to(config_dir)
+          with config_path.open("r", encoding="utf-8") as handle:
+              config = yaml.safe_load(handle)
+          required = (
+              os.environ.get("DRY_RUN", "false").lower() != "true"
+              and requires_track2_office_renderer(config)
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"required={'true' if required else 'false'}\n")
+          PY
+
+      - name: Install grading render dependencies
+        if: steps.renderer.outputs.required == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libreoffice-core \
+            libreoffice-calc \
+            libreoffice-impress \
+            fonts-dejavu-core \
+            fonts-liberation2 \
+            fontconfig
+          libreoffice --headless --version
+          FONT_FAMILIES="$(fc-match --format '%{family}\n' 'Liberation Sans')"
+          if ! printf '%s\n' "$FONT_FAMILIES" | tr ',' '\n' | awk '
+            {
+              gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+              if ($0 == "Liberation Sans") found = 1
+            }
+            END { exit(found ? 0 : 1) }
+          '; then
+            echo "::error::fc-match did not resolve exact family token Liberation Sans"
+            exit 1
+          fi
+
+      - name: Preflight grading renderer
+        if: steps.renderer.outputs.required == 'true'
+        run: |
+          cd batch-runner
+          python scripts/preflight_grading_renderer.py
+
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
@@ -79,13 +171,30 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Download inference results from HF
+        id: inference
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd batch-runner
           python scripts/download_inference_from_hf.py \
-            --experiment "${{ inputs.experiment_yaml }}" \
-            --output workspace/step2_inference_results.json
+            --experiment "$GRADE_EXPERIMENT_YAML" \
+            --output workspace/step2_inference_results.json \
+            --revision "$GRADE_INFERENCE_REVISION"
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          payload = json.loads(
+              Path("workspace/step2_inference_results.json").read_text(encoding="utf-8")
+          )
+          revision = payload.get("source_revision")
+          if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
+              raise SystemExit("canonical source_revision is not a full lowercase HF SHA")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"revision={revision}\n")
+          PY
 
       - name: Run grading
         id: grade
@@ -103,8 +212,8 @@ jobs:
         run: |
           cd batch-runner
           ARGS=(
-            "${{ inputs.experiment_yaml }}"
-            --config "grading_configs/${{ inputs.grading_config }}"
+            "$GRADE_EXPERIMENT_YAML"
+            --config "grading_configs/$GRADE_CONFIG"
             --source local
           )
 
@@ -137,41 +246,111 @@ jobs:
           fi
 
       - name: Commit grade result
+        id: commit_grade
         if: always() && (steps.grade.outputs.rc == '0' || steps.grade.outputs.rc == '7') && inputs.dry_run == false
         run: |
+          GRADE_FILE="${{ steps.grade.outputs.grade_file }}"
+          if [[ -z "$GRADE_FILE" || ! -f "$GRADE_FILE" ]]; then
+            echo "::error::resolved grade file is missing: $GRADE_FILE"
+            exit 1
+          fi
+          python - "$GRADE_FILE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          from jsonschema import validate
+
+          grade_path = Path(sys.argv[1])
+          schema_path = Path("batch-runner/schemas/grade.schema.json")
+          payload = json.loads(grade_path.read_text(encoding="utf-8"))
+          schema = json.loads(schema_path.read_text(encoding="utf-8"))
+          validate(instance=payload, schema=schema)
+          if not isinstance(payload.get("tasks"), list):
+              raise SystemExit("grade payload has no tasks array")
+          PY
+          GRADE_BLOB_SHA="$(python - "$GRADE_FILE" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+          PY
+          )"
+          if [[ ! "$GRADE_BLOB_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::failed to compute pre-rebase grade SHA-256"
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/grades/
+          git add -- "$GRADE_FILE"
           if git diff --staged --quiet; then
+            if [[ "${{ steps.grade.outputs.rc }}" == "7" ]]; then
+              echo "::error::rc=7 requires a newly persisted partial grade diff"
+              exit 1
+            fi
+            echo "committed=false" >> "$GITHUB_OUTPUT"
             echo "No grade file changes (likely skip-cache hit)"
             exit 0
           fi
           if [[ "${{ steps.grade.outputs.rc }}" == "7" ]]; then
-            MSG="chore(grades): partial chunk ${{ inputs.resume_chunk }} for ${{ inputs.experiment_yaml }} via ${{ inputs.grading_config }}"
+            MSG="chore(grades): partial chunk ${{ inputs.resume_chunk }} for $GRADE_EXPERIMENT_YAML via $GRADE_CONFIG"
           else
-            MSG="chore(grades): grade ${{ inputs.experiment_yaml }} via ${{ inputs.grading_config }}"
+            MSG="chore(grades): grade $GRADE_EXPERIMENT_YAML via $GRADE_CONFIG"
           fi
           git commit -m "$MSG"
-          # Resilient push: another auto-chunk commit could land between our
-          # checkout and push. Pull --rebase once and retry.
-          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          if [[ ! -f "$GRADE_FILE" ]]; then
+            echo "::error::grade file disappeared after rebase: $GRADE_FILE"
+            exit 1
+          fi
+          POST_REBASE_GRADE_BLOB_SHA="$(python - "$GRADE_FILE" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+          PY
+          )"
+          if [[ "$POST_REBASE_GRADE_BLOB_SHA" != "$GRADE_BLOB_SHA" ]]; then
+            echo "::error::grade file changed during rebase"
+            exit 1
+          fi
+          python - "$GRADE_FILE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          from jsonschema import validate
+
+          grade_path = Path(sys.argv[1])
+          schema_path = Path("batch-runner/schemas/grade.schema.json")
+          payload = json.loads(grade_path.read_text(encoding="utf-8"))
+          schema = json.loads(schema_path.read_text(encoding="utf-8"))
+          validate(instance=payload, schema=schema)
+          if not isinstance(payload.get("tasks"), list):
+              raise SystemExit("post-rebase grade payload has no tasks array")
+          PY
           git push
+          echo "committed=true" >> "$GITHUB_OUTPUT"
 
       - name: Auto-retrigger next chunk (time budget hit)
-        if: steps.grade.outputs.rc == '7' && inputs.dry_run == false
+        if: steps.grade.outputs.rc == '7' && steps.commit_grade.outputs.committed == 'true' && inputs.dry_run == false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESOLVED_INFERENCE_REVISION: ${{ steps.inference.outputs.revision }}
         run: |
           NEXT_CHUNK=$(( ${{ inputs.resume_chunk }} + 1 ))
           if [[ $NEXT_CHUNK -gt 10 ]]; then
             echo "::error::resume_chunk=$NEXT_CHUNK exceeds safety cap (10). Aborting auto-resume; investigate manually."
             exit 1
           fi
-          echo "[auto-resume] triggering chunk $NEXT_CHUNK for ${{ inputs.experiment_yaml }} / ${{ inputs.grading_config }}"
+          echo "[auto-resume] triggering chunk $NEXT_CHUNK for $GRADE_EXPERIMENT_YAML / $GRADE_CONFIG"
           gh workflow run grade-run.yml \
             --ref "${GITHUB_REF_NAME}" \
-            -f experiment_yaml="${{ inputs.experiment_yaml }}" \
-            -f grading_config="${{ inputs.grading_config }}" \
+            -f experiment_yaml="$GRADE_EXPERIMENT_YAML" \
+            -f grading_config="$GRADE_CONFIG" \
+            -f inference_revision="$RESOLVED_INFERENCE_REVISION" \
             -f force=false \
             -f tasks_limit=${{ inputs.tasks_limit }} \
             -f dry_run=false \
@@ -183,13 +362,13 @@ jobs:
         if: steps.grade.outputs.rc == '0' && inputs.dry_run == false
         run: |
           # rc=0 means step8 completed all tasks (either single-shot or last
-          # resume chunk). Locate the just-written grade JSON and emit a
+          # resume chunk). Analyze the exact resolved grade JSON and emit a
           # markdown analysis (wall-clock, latency, tokens, cost estimate,
           # top-5 slowest, quality summary).
-          GRADE_FILE=$(ls -t data/grades/${{ inputs.experiment_yaml }}__*.json 2>/dev/null | head -1)
+          GRADE_FILE="${{ steps.grade.outputs.grade_file }}"
           if [[ -z "$GRADE_FILE" || ! -f "$GRADE_FILE" ]]; then
-            echo "[analyze] no grade file found for ${{ inputs.experiment_yaml }}; skipping"
-            exit 0
+            echo "::error::resolved grade file is missing for $GRADE_EXPERIMENT_YAML: $GRADE_FILE"
+            exit 1
           fi
           OUT="${GRADE_FILE%.json}.analysis.md"
           python scripts/analyze_grade_run.py "$GRADE_FILE" --out "$OUT"
@@ -207,8 +386,8 @@ jobs:
             echo "[analyze] no analysis changes to commit"
             exit 0
           fi
-          git commit -m "docs(grading): auto-analysis for ${{ inputs.experiment_yaml }} (${{ inputs.grading_config }})"
-          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git commit -m "docs(grading): auto-analysis for $GRADE_EXPERIMENT_YAML ($GRADE_CONFIG)"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
 
       # ----------------------------------------------------------------
@@ -228,10 +407,11 @@ jobs:
           contains(inputs.grading_config, 'validation_hybrid')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESOLVED_INFERENCE_REVISION: ${{ steps.inference.outputs.revision }}
         run: |
           # Skip if a near-complete mini default grade already exists for this exp
           # (treat >= 200 graded tasks as "covers full" tolerance for resume edge cases).
-          MINI_FILE=$(ls data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-mini__*.json 2>/dev/null | head -1)
+          MINI_FILE=$(ls "data/grades/${GRADE_EXPERIMENT_YAML}"__gpt-5_4-mini__*.json 2>/dev/null | head -1)
           if [[ -n "$MINI_FILE" && -f "$MINI_FILE" ]]; then
             MINI_GRADED=$(python -c "import json; print(json.load(open('$MINI_FILE'))['summary']['graded_tasks'])")
             if [[ "$MINI_GRADED" -ge "200" ]]; then
@@ -243,8 +423,9 @@ jobs:
           echo "[follow-up] hybrid full done → dispatching mini default full for head-to-head comparison"
           gh workflow run grade-run.yml \
             --ref "${GITHUB_REF_NAME}" \
-            -f experiment_yaml="${{ inputs.experiment_yaml }}" \
+            -f experiment_yaml="$GRADE_EXPERIMENT_YAML" \
             -f grading_config="default_gpt5pro.yaml" \
+            -f inference_revision="$RESOLVED_INFERENCE_REVISION" \
             -f force=true \
             -f tasks_limit=0 \
             -f dry_run=false \
@@ -257,8 +438,8 @@ jobs:
           inputs.dry_run == false &&
           contains(inputs.grading_config, 'default_gpt5pro')
         run: |
-          HYBRID_FILE=$(ls data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-hybrid__*.json 2>/dev/null | head -1)
-          MINI_FILE=$(ls data/grades/${{ inputs.experiment_yaml }}__gpt-5_4-mini__*.json 2>/dev/null | head -1)
+          HYBRID_FILE=$(ls "data/grades/${GRADE_EXPERIMENT_YAML}"__gpt-5_4-hybrid__*.json 2>/dev/null | head -1)
+          MINI_FILE=$(ls "data/grades/${GRADE_EXPERIMENT_YAML}"__gpt-5_4-mini__*.json 2>/dev/null | head -1)
           if [[ -z "$HYBRID_FILE" || -z "$MINI_FILE" || ! -f "$HYBRID_FILE" || ! -f "$MINI_FILE" ]]; then
             echo "[compare-full] missing hybrid or mini grade JSON; skipping"
             exit 0
@@ -270,8 +451,8 @@ jobs:
             exit 0
           fi
           mkdir -p data/grades/_validation
-          OUT_MD="data/grades/_validation/COMPARE_FULL_${{ inputs.experiment_yaml }}_hybrid_vs_mini.md"
-          OUT_DEC="data/grades/_validation/DECISION_FULL_${{ inputs.experiment_yaml }}.json"
+          OUT_MD="data/grades/_validation/COMPARE_FULL_${GRADE_EXPERIMENT_YAML}_hybrid_vs_mini.md"
+          OUT_DEC="data/grades/_validation/DECISION_FULL_${GRADE_EXPERIMENT_YAML}.json"
           python scripts/compare_grades.py "$HYBRID_FILE" "$MINI_FILE" \
             --out-md "$OUT_MD" --out-decision "$OUT_DEC"
           echo "----- full-run decision -----"
@@ -283,14 +464,14 @@ jobs:
             echo "[compare-full] no diff to commit"
             exit 0
           fi
-          git commit -m "compare(grading): full-run hybrid vs mini default for ${{ inputs.experiment_yaml }}"
-          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git commit -m "compare(grading): full-run hybrid vs mini default for $GRADE_EXPERIMENT_YAML"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
 
       - name: Upload grade artifact
-        if: always() && inputs.dry_run == false
+        if: always() && inputs.dry_run == false && steps.grade.outputs.grade_file != ''
         uses: actions/upload-artifact@v4
         with:
-          name: grade-${{ inputs.experiment_yaml }}
-          path: data/grades/${{ inputs.experiment_yaml }}__*.json
+          name: grade-${{ env.GRADE_EXPERIMENT_YAML }}
+          path: ${{ steps.grade.outputs.grade_file }}
           retention-days: 30

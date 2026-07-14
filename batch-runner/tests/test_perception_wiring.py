@@ -4,9 +4,8 @@ Proves at runtime (not by config inspection) that:
   1. A v2 config with judge.perception.{visual,audio} causes Grader to
      instantiate and inject VisionPerception/AudioPerception into the
      ToolCallingJudge (previously left None -> dead config).
-  2. When the model dispatches a vision_judge call on a VISUAL item, the
-     ToolCallingResult instrumentation records perception_called=True and
-     tools_used contains 'vision_judge'.
+  2. The harness renders and invokes vision before the main VISUAL request,
+      while the main model receives neither a vision tool nor image bytes.
   3. A v2 config WITHOUT a perception block leaves the sub-judges None.
 """
 
@@ -57,6 +56,7 @@ class FakeVision:
     def __init__(self):
         self.calls = 0
         self.reset_count = 0
+        self.remaining_calls = 5
 
     def reset(self):
         self.reset_count += 1
@@ -69,6 +69,9 @@ class FakeVision:
                 "verdict": "pass", "partial_score": 1.0,
                 "evidence": "chart has titled axes", "confidence": 0.9,
                 "reasoning": "looks good", "judge_error": None,
+                "api_call_count": 1, "input_tokens": 20,
+                "output_tokens": 5, "cached_tokens": 2,
+                "latency_ms": 10.0, "usage_complete": True,
             },
         )
 
@@ -90,7 +93,7 @@ def _v2_cfg(with_perception: bool) -> dict:
         "generation": {"max_output_tokens": 2400},
         "tools": {"read_deliverable": {
             "ops": ["inspect_structure", "read_content", "inspect_formatting",
-                    "render_to_image", "probe_audio", "probe_video"],
+                    "probe_audio", "probe_video"],
             "per_item_call_cap": 8, "max_iterations": 6}},
     }
     if with_perception:
@@ -126,6 +129,15 @@ def test_grader_wires_perception_subjudges(monkeypatch):
     assert tj.audio_perception.client is fake_client
     assert tj.vision_perception.deployment == "gpt-5.4"
     assert tj.audio_perception.deployment == "gpt-audio-1.5"
+    assert getattr(tj.before_upstream_call, "__self__", None) is grader
+    assert getattr(
+        tj.vision_perception.before_upstream_call, "__self__", None
+    ) is grader
+    cache_key = json.loads(tj.prompt_cache_key)
+    assert cache_key == [
+        "unknown_experiment", "gpt-5.4", "unknown_rubric", "v2.2"
+    ]
+    assert grader.prompt_version == "v2.2"
 
 
 def test_grader_no_perception_block_leaves_subjudges_none(monkeypatch):
@@ -144,22 +156,35 @@ def test_grader_no_perception_block_leaves_subjudges_none(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 2. Instrumentation records a real vision_judge dispatch
+# 2. Instrumentation records a real harness visual prepass
 # ---------------------------------------------------------------------------
 
-def test_vision_dispatch_sets_perception_called_instrumentation():
+def test_harness_visual_prepass_sets_perception_instrumentation(
+    monkeypatch, tmp_path
+):
     from core.tool_calling_judge import ToolCallingJudge
+    import core.tool_calling_judge as tool_judge_mod
     from core.rubric_loader import RubricItem, TaskRubric
 
     final = json.dumps({"verdict": "pass", "partial_score": 1.0,
                         "evidence": "chart titled axes present",
                         "confidence": 0.9, "reasoning": "ok"})
-    # Round 1: model asks for vision_judge. Round 2: final message.
     client = SimpleNamespace(responses=ScriptedResponses([
-        _response(output=[_fc("vision_judge",
-                              {"criterion": "chart polish", "image_b64": "x"})]),
         _response(output=[_msg(final)]),
     ]))
+    (tmp_path / "chart.png").write_bytes(b"source image")
+    monkeypatch.setattr(
+        tool_judge_mod,
+        "read_deliverable",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "data": {
+                "source_kind": "image", "scope": {},
+                "renderer": {"rasterizer": "pillow"},
+                "byte_size": 8, "base64": "aW1hZ2U=",
+            },
+        },
+    )
     fake_vision = FakeVision()
     judge = ToolCallingJudge(
         client=client, model="gpt-5.4",
@@ -174,13 +199,21 @@ def test_vision_dispatch_sets_perception_called_instrumentation():
                       reference_files=[], gold_deliverable_files=[])
 
     res = judge.judge_item(task=task, item=item,
-                           deliverable_dir="/tmp", file_names=["chart.png"])
+                           deliverable_dir=str(tmp_path), file_names=["chart.png"])
 
     assert res.routing_modality == "visual"
     assert res.perception_called is True
-    assert "vision_judge" in res.tools_used
+    assert res.tools_used == [
+        "harness_render_to_image", "harness_vision_perception"
+    ]
     assert fake_vision.calls == 1
     assert res.verdict == "pass"
+    assert res.perception_call_count == 1
+    assert res.render_call_count == 1
+    request = client.responses.calls[0]
+    assert [tool["name"] for tool in request["tools"]] == ["read_deliverable"]
+    assert "vision_judge" not in json.dumps(request)
+    assert "image_b64" not in json.dumps(request)
 
 
 def test_text_item_has_no_perception_call():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import importlib
 import io
 import os
 from pathlib import Path
@@ -10,10 +11,16 @@ from pathlib import Path
 import pytest
 
 from core.tools import (
+    get_renderer_fingerprint,
+    MODEL_READ_DELIVERABLE_OPS,
+    MODEL_READ_DELIVERABLE_TOOL_SCHEMA,
     READ_DELIVERABLE_OPS,
     READ_DELIVERABLE_TOOL_SCHEMA,
+    RendererDependencyError,
     read_deliverable,
 )
+
+read_deliverable_module = importlib.import_module("core.tools.read_deliverable")
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────
@@ -74,6 +81,20 @@ def pdf_file(base_dir: Path) -> Path:
 
 
 @pytest.fixture
+def pptx_file(base_dir: Path) -> Path:
+    pytest.importorskip("pptx")
+    from pptx import Presentation
+
+    presentation = Presentation()
+    for title in ("Overview", "Details"):
+        slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+        slide.shapes.title.text = title
+    p = base_dir / "slides.pptx"
+    presentation.save(p)
+    return p
+
+
+@pytest.fixture
 def png_file(base_dir: Path) -> Path:
     pytest.importorskip("PIL")
     from PIL import Image
@@ -89,6 +110,19 @@ def txt_file(base_dir: Path) -> Path:
     return p
 
 
+def _fake_convert_to_pdf(source: Path, out_dir: Path, pages: int = 2) -> Path:
+    pytest.importorskip("reportlab")
+    from reportlab.pdfgen import canvas
+
+    output = out_dir / f"{source.stem}.pdf"
+    document = canvas.Canvas(str(output))
+    for page in range(1, pages + 1):
+        document.drawString(100, 750, f"Rendered page {page}")
+        document.showPage()
+    document.save()
+    return output
+
+
 # ── Schema / surface ─────────────────────────────────────────────────
 
 
@@ -96,6 +130,16 @@ def test_ops_constant_matches_schema_enum():
     enum = READ_DELIVERABLE_TOOL_SCHEMA["parameters"]["properties"]["op"]["enum"]
     assert tuple(enum) == READ_DELIVERABLE_OPS
     assert len(READ_DELIVERABLE_OPS) == 6
+
+
+def test_model_schema_excludes_harness_only_render_op():
+    enum = MODEL_READ_DELIVERABLE_TOOL_SCHEMA[
+        "parameters"
+    ]["properties"]["op"]["enum"]
+    assert tuple(enum) == MODEL_READ_DELIVERABLE_OPS
+    assert "render_to_image" in READ_DELIVERABLE_OPS
+    assert "render_to_image" not in MODEL_READ_DELIVERABLE_OPS
+    assert "base64" not in str(MODEL_READ_DELIVERABLE_TOOL_SCHEMA).lower()
 
 
 # ── Path safety ──────────────────────────────────────────────────────
@@ -247,8 +291,11 @@ def test_inspect_formatting_docx(base_dir, docx_file):
 # ── render_to_image ──────────────────────────────────────────────────
 
 
-def test_render_to_image_pdf(base_dir, pdf_file):
+def test_render_to_image_pdf(base_dir, pdf_file, monkeypatch):
     pytest.importorskip("fitz")
+    monkeypatch.setattr(
+        read_deliverable_module, "_pymupdf_runtime_version", lambda: "9.9.9"
+    )
     r = read_deliverable(
         "render_to_image", pdf_file.name,
         base_dir=str(base_dir), scope={"page": 1},
@@ -259,6 +306,9 @@ def test_render_to_image_pdf(base_dir, pdf_file):
     raw = base64.b64decode(payload["base64"])
     assert raw.startswith(b"\x89PNG")
     assert payload["byte_size"] <= 5 * 1024 * 1024
+    assert payload["scope"] == {"page": 1}
+    assert payload["source_page_count"] == 1
+    assert payload["renderer"]["pymupdf_version"] == "9.9.9"
 
 
 def test_render_to_image_png(base_dir, png_file):
@@ -271,13 +321,98 @@ def test_render_to_image_png(base_dir, png_file):
     assert raw.startswith(b"\x89PNG")
 
 
-def test_render_to_image_rejects_xlsx(base_dir, xlsx_file):
+def test_render_to_image_xlsx_uses_original_path_and_is_read_only(
+    base_dir, xlsx_file, monkeypatch
+):
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.load_workbook(xlsx_file)
+    workbook.create_sheet("Details")["A1"] = "second sheet"
+    workbook.save(xlsx_file)
+    workbook.close()
+    source_before = xlsx_file.read_bytes()
+    observed = {}
+
+    def fake_convert(source: Path, out_dir: Path) -> Path:
+        observed["source"] = source
+        observed["bytes"] = source.read_bytes()
+        return _fake_convert_to_pdf(source, out_dir, pages=2)
+
+    monkeypatch.setattr(
+        read_deliverable_module, "_convert_office_to_pdf", fake_convert
+    )
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "get_renderer_fingerprint",
+        lambda: {
+            "libreoffice_binary": "soffice",
+            "libreoffice_version": "LibreOffice 24.2.7.2",
+            "pymupdf_version": "1.26.3",
+        },
+    )
     r = read_deliverable(
         "render_to_image", xlsx_file.name,
-        base_dir=str(base_dir), scope={"sheet": "Summary"},
+        base_dir=str(base_dir), scope={"workbook_page": 1},
+    )
+    assert r["ok"] is True
+    payload = r["data"]
+    assert payload["source_kind"] == "xlsx"
+    assert payload["scope"] == {"workbook_page": 1}
+    assert payload["source_sheet_count"] == 2
+    assert payload["converted_page_count"] == 2
+    assert payload["renderer"]["converter"] == "libreoffice"
+    assert payload["renderer"]["libreoffice_binary"] == "soffice"
+    assert payload["renderer"]["libreoffice_version"] == "LibreOffice 24.2.7.2"
+    assert payload["renderer"]["pymupdf_version"] == "1.26.3"
+    assert "/usr/" not in str(payload["renderer"])
+    assert base64.b64decode(payload["base64"]).startswith(b"\x89PNG")
+    assert observed["source"] == xlsx_file
+    assert observed["bytes"] == source_before
+    assert xlsx_file.read_bytes() == source_before
+
+
+def test_render_to_image_pptx_selected_slide(
+    base_dir, pptx_file, monkeypatch
+):
+    monkeypatch.setattr(
+        read_deliverable_module, "_convert_office_to_pdf", _fake_convert_to_pdf
+    )
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "get_renderer_fingerprint",
+        lambda: {
+            "libreoffice_binary": "libreoffice",
+            "libreoffice_version": "LibreOffice 24.2.7.2",
+            "pymupdf_version": "1.26.3",
+        },
+    )
+    r = read_deliverable(
+        "render_to_image", pptx_file.name,
+        base_dir=str(base_dir), scope={"slide": 2},
+    )
+    assert r["ok"] is True
+    payload = r["data"]
+    assert payload["source_kind"] == "pptx"
+    assert payload["scope"] == {"slide": 2}
+    assert payload["source_slide_count"] == 2
+    assert payload["converted_page_count"] == 2
+    assert payload["renderer"]["libreoffice_binary"] == "libreoffice"
+    assert payload["renderer"]["libreoffice_version"] == "LibreOffice 24.2.7.2"
+    assert payload["renderer"]["pymupdf_version"] == "1.26.3"
+    assert base64.b64decode(payload["base64"]).startswith(b"\x89PNG")
+
+
+def test_render_xlsx_missing_libreoffice_is_actionable(
+    base_dir, xlsx_file, monkeypatch
+):
+    monkeypatch.setattr(read_deliverable_module, "_find_soffice", lambda: None)
+    r = read_deliverable(
+        "render_to_image", xlsx_file.name,
+        base_dir=str(base_dir), scope={"workbook_page": 1},
     )
     assert r["ok"] is False
-    assert r["error_type"] == "op_error"
+    assert r["error_type"] == "dependency_missing"
+    assert "LibreOffice" in r["error"]
+    assert "install" in r["error"].lower()
 
 
 def test_render_pdf_out_of_range(base_dir, pdf_file):
@@ -287,6 +422,281 @@ def test_render_pdf_out_of_range(base_dir, pdf_file):
         base_dir=str(base_dir), scope={"page": 99},
     )
     assert r["ok"] is False
+    assert r["error_type"] == "bad_scope"
+    assert "out of range" in r["error"]
+
+
+@pytest.mark.parametrize("page", [0, -1, 1.5, True, "first"])
+def test_render_pdf_rejects_invalid_page_scope(base_dir, pdf_file, page):
+    r = read_deliverable(
+        "render_to_image", pdf_file.name,
+        base_dir=str(base_dir), scope={"page": page},
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "bad_scope"
+    assert "positive 1-based integer" in r["error"]
+
+
+@pytest.mark.parametrize("legacy_scope", [{"sheet": "Summary"}, {"sheet_page": 1}])
+def test_render_xlsx_rejects_named_sheet_scope(
+    base_dir, xlsx_file, monkeypatch, legacy_scope
+):
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "_convert_office_to_pdf",
+        lambda *_: pytest.fail("conversion must not run for an invalid sheet"),
+    )
+    r = read_deliverable(
+        "render_to_image", xlsx_file.name,
+        base_dir=str(base_dir), scope=legacy_scope,
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "unsupported_scope"
+    assert "workbook_page" in r["error"]
+
+
+def test_render_xlsx_unknown_key_beats_legacy_scope(
+    base_dir, xlsx_file, monkeypatch
+):
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "_convert_office_to_pdf",
+        lambda *_: pytest.fail("conversion must not run for invalid scope"),
+    )
+    result = read_deliverable(
+        "render_to_image", xlsx_file.name, base_dir=str(base_dir),
+        scope={"sheet": "Summary", "bogus": 1},
+    )
+    assert result["ok"] is False
+    assert result["error_type"] == "bad_scope"
+    assert "bogus" in result["error"]
+
+
+def test_render_xlsx_rejects_workbook_page_after_first(
+    base_dir, xlsx_file, monkeypatch
+):
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "_convert_office_to_pdf",
+        lambda *_: pytest.fail("conversion must not run for unsupported page"),
+    )
+    r = read_deliverable(
+        "render_to_image", xlsx_file.name,
+        base_dir=str(base_dir), scope={"workbook_page": 2},
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "unsupported_scope"
+    assert "only workbook_page=1" in r["error"]
+
+
+def test_render_pptx_rejects_out_of_range_slide(
+    base_dir, pptx_file, monkeypatch
+):
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "_convert_office_to_pdf",
+        lambda *_: pytest.fail("conversion must not run for an invalid slide"),
+    )
+    r = read_deliverable(
+        "render_to_image", pptx_file.name,
+        base_dir=str(base_dir), scope={"slide": 3},
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "bad_scope"
+    assert "out of range" in r["error"]
+
+
+@pytest.mark.parametrize(
+    "fixture_name,scope",
+    [
+        ("pdf_file", {"slide": 1}),
+        ("pptx_file", {"page": 1}),
+        ("xlsx_file", {"page": 1}),
+        ("png_file", {"page": 1}),
+    ],
+)
+def test_render_rejects_unknown_scope_keys(
+    request, base_dir, fixture_name, scope
+):
+    path = request.getfixturevalue(fixture_name)
+    r = read_deliverable(
+        "render_to_image", path.name, base_dir=str(base_dir), scope=scope,
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "bad_scope"
+    assert "unknown scope keys" in r["error"]
+
+
+def test_render_rejects_non_object_scope(base_dir, pdf_file):
+    r = read_deliverable(
+        "render_to_image", pdf_file.name,
+        base_dir=str(base_dir), scope=[1],  # type: ignore[arg-type]
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "bad_scope"
+
+
+def test_render_to_image_still_rejects_unsupported_text(base_dir, txt_file):
+    r = read_deliverable(
+        "render_to_image", txt_file.name, base_dir=str(base_dir),
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "unsupported_scope"
+    assert "not supported for kind=txt" in r["error"]
+
+
+def test_render_to_image_still_rejects_docx(base_dir, docx_file):
+    r = read_deliverable(
+        "render_to_image", docx_file.name, base_dir=str(base_dir),
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "unsupported_scope"
+    assert "not supported for kind=docx" in r["error"]
+
+
+def test_libreoffice_conversion_uses_isolated_profile_and_allowlisted_env(
+    base_dir, xlsx_file, monkeypatch
+):
+    observed = {}
+    monkeypatch.setattr(
+        read_deliverable_module, "_find_soffice", lambda: "/usr/bin/soffice"
+    )
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "must-not-leak")
+    monkeypatch.setenv("SECRET_TOKEN", "must-not-leak")
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        observed["env"] = kwargs["env"]
+        output = Path(command[command.index("--outdir") + 1]) / "report.pdf"
+        output.write_bytes(b"%PDF-fake")
+        return type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(read_deliverable_module.subprocess, "run", fake_run)
+    with read_deliverable_module.tempfile.TemporaryDirectory() as temp:
+        read_deliverable_module._convert_office_to_pdf(xlsx_file, Path(temp))
+
+    command = observed["command"]
+    assert "--headless" in command
+    assert "--safe-mode" in command
+    assert "--norestore" in command
+    assert any(arg.startswith("-env:UserInstallation=file:") for arg in command)
+    assert all(
+        key in {"PATH", "HOME", "TMPDIR", "LANG"} or key.startswith("LC_")
+        for key in observed["env"]
+    )
+    assert "AZURE_OPENAI_API_KEY" not in observed["env"]
+    assert "SECRET_TOKEN" not in observed["env"]
+
+
+def test_renderer_fingerprint_is_cached_by_selected_executable_and_isolated(
+    monkeypatch,
+):
+    observed = []
+    read_deliverable_module._renderer_fingerprint_for_executable.cache_clear()
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "_find_soffice",
+        lambda: "/opt/libreoffice/program/soffice",
+    )
+    monkeypatch.setattr(
+        read_deliverable_module, "_pymupdf_runtime_version", lambda: "1.26.3"
+    )
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "must-not-leak")
+    monkeypatch.setenv("SECRET_TOKEN", "must-not-leak")
+
+    def fake_run(command, **kwargs):
+        observed.append((command, kwargs))
+        return type(
+            "Completed",
+            (),
+            {
+                "returncode": 0,
+                "stdout": "LibreOffice 24.2.7.2 build:abc\nextra\n",
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr(read_deliverable_module.subprocess, "run", fake_run)
+
+    first = get_renderer_fingerprint()
+    second = get_renderer_fingerprint()
+
+    assert first == second == {
+        "libreoffice_binary": "soffice",
+        "libreoffice_version": "LibreOffice 24.2.7.2 build:abc",
+        "pymupdf_version": "1.26.3",
+    }
+    assert len(observed) == 1
+    command, kwargs = observed[0]
+    assert command == [
+        "/opt/libreoffice/program/soffice", "--headless", "--version"
+    ]
+    assert kwargs["shell"] is False
+    assert kwargs["check"] is False
+    assert kwargs["timeout"] <= 10
+    assert kwargs["env"]["HOME"] == kwargs["env"]["TMPDIR"]
+    assert all(
+        key in {"PATH", "HOME", "TMPDIR", "LANG"} or key.startswith("LC_")
+        for key in kwargs["env"]
+    )
+    assert "AZURE_OPENAI_API_KEY" not in kwargs["env"]
+    assert "SECRET_TOKEN" not in kwargs["env"]
+    assert all("/opt/libreoffice" not in value for value in first.values())
+
+
+def test_renderer_fingerprint_fails_closed_when_libreoffice_missing(monkeypatch):
+    read_deliverable_module._renderer_fingerprint_for_executable.cache_clear()
+    monkeypatch.setattr(read_deliverable_module, "_find_soffice", lambda: None)
+
+    with pytest.raises(RendererDependencyError, match="LibreOffice executable"):
+        get_renderer_fingerprint()
+
+
+def test_renderer_fingerprint_fails_closed_on_bad_version_probe(monkeypatch):
+    read_deliverable_module._renderer_fingerprint_for_executable.cache_clear()
+    monkeypatch.setattr(
+        read_deliverable_module, "_find_soffice", lambda: "/usr/bin/soffice"
+    )
+    monkeypatch.setattr(
+        read_deliverable_module.subprocess,
+        "run",
+        lambda *args, **kwargs: type(
+            "Completed",
+            (),
+            {"returncode": 1, "stdout": "", "stderr": "probe failed"},
+        )(),
+    )
+
+    with pytest.raises(RendererDependencyError, match="exit 1"):
+        get_renderer_fingerprint()
+
+
+def test_renderer_fingerprint_bounds_version_to_first_line(monkeypatch):
+    read_deliverable_module._renderer_fingerprint_for_executable.cache_clear()
+    monkeypatch.setattr(
+        read_deliverable_module, "_find_soffice", lambda: "/usr/bin/soffice"
+    )
+    monkeypatch.setattr(
+        read_deliverable_module, "_pymupdf_runtime_version", lambda: "1.26.3"
+    )
+    monkeypatch.setattr(
+        read_deliverable_module.subprocess,
+        "run",
+        lambda *args, **kwargs: type(
+            "Completed",
+            (),
+            {
+                "returncode": 0,
+                "stdout": ("L" * 500) + "\nsecond line must not appear",
+                "stderr": "",
+            },
+        )(),
+    )
+
+    fingerprint = get_renderer_fingerprint()
+
+    assert fingerprint["libreoffice_version"] == "L" * 200
+    assert "second line" not in fingerprint["libreoffice_version"]
 
 
 # ── render_to_image size cap (downsample) ────────────────────────────

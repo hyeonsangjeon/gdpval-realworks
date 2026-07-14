@@ -14,7 +14,9 @@ import hashlib
 import json
 import math
 import os
+import re
 import sys
+import tempfile
 import time
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -22,14 +24,23 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from jsonschema import validate
+from jsonschema import SchemaError, ValidationError, validate
 
 from core.experiment_config import ExperimentConfig
-from core.grader import Grader, _is_critical_item
+from core.grader import Grader, _is_critical_item, resolve_tool_prompt_path
+from core.inference_manifest import (
+    canonical_task_id,
+    canonicalize_inference_payload,
+    task_deliverable_dir,
+    validate_local_deliverables,
+)
 from core.rubric_loader import RubricLoader
+from core.tools import ReadDeliverableError, get_renderer_fingerprint
 
 SCHEMA_VERSION = "1.0"
 GRADED_BY_VERSION = "0.1.0"
+FULL_HF_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+FULL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _now_iso() -> str:
@@ -39,6 +50,170 @@ def _now_iso() -> str:
 def hash_config(path: str) -> str:
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()[:16]
+
+
+def _batch_runner_root() -> Path:
+    cwd = Path.cwd().resolve()
+    if (cwd / "step8_grade.py").is_file():
+        return cwd
+    nested = cwd / "batch-runner"
+    if (nested / "step8_grade.py").is_file():
+        return nested.resolve()
+    return cwd
+
+
+def _checked_grader_source_file(batch_root: Path, path: Path) -> tuple[str, Path]:
+    candidate = path if path.is_absolute() else batch_root / path
+    candidate = Path(os.path.abspath(candidate))
+    try:
+        relative = candidate.relative_to(batch_root)
+    except ValueError as exc:
+        raise ValueError(f"grader source path is outside batch-runner: {path}") from exc
+
+    current = batch_root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(f"grader source path must not be a symlink: {relative}")
+    if not candidate.is_file():
+        raise ValueError(f"grader source file is missing: {relative}")
+    if candidate.resolve() != candidate:
+        raise ValueError(f"grader source path must not traverse a symlink: {relative}")
+    return f"batch-runner/{relative.as_posix()}", candidate
+
+
+def compute_grader_source_hash(config_path: str | Path, config: dict) -> str:
+    batch_root = _batch_runner_root()
+    core_root = batch_root / "core"
+    if core_root.is_symlink() or not core_root.is_dir():
+        raise ValueError("grader source directory is missing or symlinked: core")
+
+    core_python_files: list[Path] = []
+    for candidate in core_root.rglob("*"):
+        if candidate.is_symlink():
+            raise ValueError(
+                f"grader source path must not be a symlink: {candidate.relative_to(batch_root)}"
+            )
+        if candidate.is_file() and candidate.suffix == ".py":
+            core_python_files.append(candidate)
+    if not core_python_files:
+        raise ValueError("grader source directory contains no Python files: core")
+
+    source_paths = [
+        batch_root / "step8_grade.py",
+        *core_python_files,
+        batch_root / "schemas" / "grade.schema.json",
+        batch_root / "requirements.txt",
+        batch_root / "scripts" / "download_inference_from_hf.py",
+        Path(config_path),
+        Path(config["prompt"]["template"]),
+    ]
+    if config.get("prompt", {}).get("tool_template") or (
+        (config.get("judge") or {}).get("tools", {}).get("read_deliverable")
+    ):
+        source_paths.append(resolve_tool_prompt_path(config))
+
+    checked: dict[str, Path] = {}
+    for source_path in source_paths:
+        relative, candidate = _checked_grader_source_file(batch_root, source_path)
+        if relative in checked:
+            raise ValueError(f"duplicate grader source path: {relative}")
+        checked[relative] = candidate
+
+    digest = hashlib.sha256()
+    digest.update(b"gdpval-grader-source-v1\x00")
+    for relative, candidate in sorted(checked.items()):
+        relative_bytes = relative.encode("utf-8")
+        content = candidate.read_bytes()
+        digest.update(len(relative_bytes).to_bytes(8, "big"))
+        digest.update(relative_bytes)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
+
+
+def _config_name_slug(config_name: Any) -> str:
+    if not isinstance(config_name, str) or not config_name.strip():
+        raise ValueError("config_name must be a non-empty string")
+    if any(char in config_name for char in ("\r", "\n", "/", "\\")):
+        raise ValueError("config_name must not contain newlines or path separators")
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", config_name.strip())
+    slug = slug.strip("._-")
+    if not slug:
+        raise ValueError("config_name has no filesystem-safe characters")
+    return slug
+
+
+def resolve_grade_output_path(
+    config: dict,
+    *,
+    experiment_id: str,
+    judge_slug: str,
+    config_hash: str,
+    rubric_sha: str,
+    rubric_short_sha: str,
+    prompt_version: str,
+    inference_sha: str | None = None,
+    grader_source_hash: str | None = None,
+) -> Path:
+    if config.get("schema_version") == "2.0":
+        if not FULL_HF_SHA_RE.fullmatch(rubric_sha):
+            raise ValueError(
+                "Track 2 rubric_sha must be a full 40-character lowercase HF commit SHA"
+            )
+        if not isinstance(inference_sha, str) or not FULL_HF_SHA_RE.fullmatch(
+            inference_sha
+        ):
+            raise ValueError(
+                "Track 2 inference_sha must be a full 40-character lowercase HF commit SHA"
+            )
+        if not isinstance(grader_source_hash, str) or not FULL_SHA256_RE.fullmatch(
+            grader_source_hash
+        ):
+            raise ValueError(
+                "Track 2 grader_source_hash must be a full 64-character lowercase SHA-256"
+            )
+    out_name = config["output"]["filename_template"].format(
+        exp_id=experiment_id,
+        judge_slug=judge_slug,
+        config_name=_config_name_slug(config.get("config_name")),
+        config_hash=config_hash,
+        rubric_sha=rubric_sha,
+        rubric_short_sha=rubric_short_sha,
+        prompt_v=prompt_version,
+        inference_sha=inference_sha or "",
+        inference_short_sha=(inference_sha or "")[:7],
+        grader_source_hash=grader_source_hash or "",
+        grader_source_hash_short=(grader_source_hash or "")[:16],
+    )
+    if any(char in out_name for char in ("\r", "\n")) or Path(out_name).name != out_name:
+        raise ValueError("formatted grade filename must be a single safe path component")
+    return Path(config["output"]["directory"]) / out_name
+
+
+def _repo_relative_grade_file(out_path: Path) -> str:
+    cwd = Path.cwd().resolve()
+    repo_root = cwd.parent if cwd.name == "batch-runner" else cwd
+    try:
+        relative = out_path.resolve().relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError("grade output path must remain inside the repository") from exc
+    value = relative.as_posix()
+    if not value or any(char in value for char in ("\r", "\n")):
+        raise ValueError("grade output path is not safe for GITHUB_OUTPUT")
+    return value
+
+
+def _write_github_output(name: str, value: str) -> None:
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+        raise ValueError("invalid GitHub output name")
+    if any(char in value for char in ("\r", "\n")):
+        raise ValueError("GitHub output value must be a single line")
+    output_path = os.getenv("GITHUB_OUTPUT")
+    if not output_path:
+        return
+    with open(output_path, "a", encoding="utf-8") as handle:
+        handle.write(f"{name}={value}\n")
 
 
 def parse_args() -> argparse.Namespace:
@@ -118,8 +293,12 @@ def validate_grading_config(config: dict) -> None:
                 "judge.tools.read_deliverable.ops must be a non-empty list"
             )
         allowed_ops = {"inspect_structure", "read_content",
-                       "inspect_formatting", "render_to_image",
-                       "probe_audio", "probe_video"}
+                       "inspect_formatting", "probe_audio", "probe_video"}
+        if "render_to_image" in ops:
+            raise ValueError(
+                "judge.tools.read_deliverable.ops must not expose "
+                "render_to_image; visual rendering is harness-owned"
+            )
         bad = [op for op in ops if op not in allowed_ops]
         if bad:
             raise ValueError(
@@ -174,6 +353,188 @@ def validate_grading_config(config: dict) -> None:
         raise ValueError("tpm_guard.max_concurrent must be >= 1")
 
 
+def requires_track2_office_renderer(config: dict) -> bool:
+    if config.get("schema_version") != "2.0":
+        return False
+    judge = config.get("judge")
+    if not isinstance(judge, dict):
+        return False
+    tools = judge.get("tools")
+    read_tool = tools.get("read_deliverable") if isinstance(tools, dict) else None
+    perception = judge.get("perception")
+    visual = perception.get("visual") if isinstance(perception, dict) else None
+    return (
+        isinstance(read_tool, dict)
+        and isinstance(read_tool.get("ops"), list)
+        and bool(read_tool["ops"])
+        and isinstance(visual, dict)
+        and bool(visual.get("model"))
+    )
+
+
+def source_inference_repo_id(inference_results: dict, schema_version: str) -> str | None:
+    value = inference_results.get("source_repo_id")
+    if value is None and schema_version != "2.0":
+        value = inference_results.get("source")
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def source_inference_revision(inference_results: dict) -> str | None:
+    value = inference_results.get("source_revision")
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def resolve_source_inference_identity(
+    inference_results: dict, schema_version: str
+) -> tuple[str | None, str | None]:
+    repo_id = source_inference_repo_id(inference_results, schema_version)
+    revision = source_inference_revision(inference_results)
+    if schema_version == "2.0":
+        if repo_id is None or not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*",
+            repo_id,
+        ):
+            raise ValueError(
+                "Track 2 source_repo_id must be a canonical owner/name"
+            )
+        if revision is None or not FULL_HF_SHA_RE.fullmatch(revision):
+            raise ValueError(
+                "Track 2 source_revision must be a full 40-character lowercase HF commit SHA"
+            )
+    return repo_id, revision
+
+
+def _validate_track2_resume_identity(
+    existing: dict,
+    *,
+    experiment_id: str,
+    rubric_commit_sha: str,
+    prompt_version: str,
+    config_hash: str,
+    source_inference_repo_id: str,
+    source_inference_revision: str,
+    grader_source_hash: str,
+    renderer_fingerprint: dict[str, str] | None,
+) -> None:
+    checks = (
+        ("experiment_id", existing.get("experiment_id"), experiment_id),
+        (
+            "rubric.commit_sha",
+            (existing.get("rubric") or {}).get("commit_sha")
+            if isinstance(existing.get("rubric"), dict) else None,
+            rubric_commit_sha,
+        ),
+        (
+            "prompt.version",
+            (existing.get("prompt") or {}).get("version")
+            if isinstance(existing.get("prompt"), dict) else None,
+            prompt_version,
+        ),
+        (
+            "judge.config_hash",
+            (existing.get("judge") or {}).get("config_hash")
+            if isinstance(existing.get("judge"), dict) else None,
+            config_hash,
+        ),
+        (
+            "source_inference_repo_id",
+            existing.get("source_inference_repo_id"),
+            source_inference_repo_id,
+        ),
+        (
+            "source_inference_revision",
+            existing.get("source_inference_revision"),
+            source_inference_revision,
+        ),
+        (
+            "grader_source_hash",
+            existing.get("grader_source_hash"),
+            grader_source_hash,
+        ),
+    )
+    if renderer_fingerprint is not None:
+        checks += ((
+            "renderer_fingerprint",
+            existing.get("renderer_fingerprint"),
+            renderer_fingerprint,
+        ),)
+    for field_name, actual, expected in checks:
+        if actual != expected:
+            state = "missing" if actual is None else "mismatch"
+            raise ValueError(
+                f"Track 2 resume identity {state} for {field_name}: "
+                f"existing={actual!r}, current={expected!r}"
+            )
+
+
+def _load_existing_grade(path: Path) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            existing = json.load(handle)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"could not load existing grade JSON: {exc}") from exc
+    if not isinstance(existing, dict):
+        raise ValueError("top-level JSON must be an object")
+    if not isinstance(existing.get("tasks"), list):
+        raise ValueError("top-level tasks must be an array")
+    return existing
+
+
+def _task_ids(rows: list[dict], *, label: str) -> list[str]:
+    task_ids: list[str] = []
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise ValueError(f"{label} task at index {index} must be an object")
+        task_id = row.get("task_id")
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ValueError(
+                f"{label} task at index {index} has no non-empty task_id"
+            )
+        if task_id in seen:
+            duplicates.add(task_id)
+        seen.add(task_id)
+        task_ids.append(task_id)
+    if duplicates:
+        raise ValueError(
+            f"{label} contains duplicate task_ids: {sorted(duplicates)}"
+        )
+    return task_ids
+
+
+def _validate_track2_task_set(
+    existing: dict,
+    expected_tasks: list[dict],
+    *,
+    require_complete: bool,
+) -> set[str]:
+    try:
+        _validate_schema(existing)
+    except (SchemaError, ValidationError) as exc:
+        raise ValueError(
+            f"existing Track 2 grade schema validation failed: {exc.message}"
+        ) from exc
+
+    expected_ids = _task_ids(expected_tasks, label="current inference")
+    existing_ids = _task_ids(existing["tasks"], label="existing grade")
+    expected_set = set(expected_ids)
+    existing_set = set(existing_ids)
+    extra = sorted(existing_set - expected_set)
+    missing = sorted(expected_set - existing_set)
+    if extra:
+        raise ValueError(f"existing grade contains unexpected task_ids: {extra}")
+    if require_complete and missing:
+        raise ValueError(f"existing grade is incomplete; missing task_ids: {missing}")
+    return existing_set
+
+
 def load_experiment_yaml(experiment_yaml_name: str) -> ExperimentConfig:
     path = Path("experiments") / f"{experiment_yaml_name}.yaml"
     return ExperimentConfig.from_yaml(str(path))
@@ -184,25 +545,47 @@ def load_local_inference_results() -> dict:
     if not path.exists():
         raise FileNotFoundError(str(path))
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        return canonicalize_inference_payload(json.load(f))
 
 
 def filter_tasks(inference_results: dict, tasks_csv: str | None, limit: int) -> list[dict]:
-    tasks = list(inference_results.get("results", []))
-    if tasks_csv:
-        wanted = {x.strip() for x in tasks_csv.split(",") if x.strip()}
-        tasks = [t for t in tasks if t.get("task_id") in wanted]
-    if limit and limit > 0:
+    raw_tasks = inference_results.get("results")
+    if not isinstance(raw_tasks, list):
+        raise ValueError("inference results must contain a results array")
+    source_ids = _task_ids(raw_tasks, label="inference results")
+    if not source_ids:
+        raise ValueError("inference results contain no tasks")
+    if limit < 0:
+        raise ValueError("--limit must be >= 0")
+
+    tasks = list(raw_tasks)
+    if tasks_csv is not None:
+        requested = [part.strip() for part in tasks_csv.split(",") if part.strip()]
+        if not requested:
+            raise ValueError("--tasks must include at least one task_id")
+        duplicate_requests = sorted({
+            task_id for task_id in requested if requested.count(task_id) > 1
+        })
+        if duplicate_requests:
+            raise ValueError(
+                f"--tasks contains duplicate task_ids: {duplicate_requests}"
+            )
+        source_set = set(source_ids)
+        missing = sorted(set(requested) - source_set)
+        if missing:
+            raise ValueError(f"--tasks requested unknown task_ids: {missing}")
+        wanted = set(requested)
+        tasks = [task for task in tasks if task["task_id"] in wanted]
+    if limit > 0:
         tasks = tasks[:limit]
     return tasks
 
 
 def resolve_deliverable_dir(task_result: dict) -> str:
-    deliverable_files = task_result.get("deliverable_files") or []
-    if deliverable_files:
-        first = Path(deliverable_files[0])
-        return str((Path("workspace") / "upload" / first.parent).resolve())
-    return str((Path("workspace") / "upload" / "deliverable_files" / task_result.get("task_id", "")).resolve())
+    task_id = canonical_task_id(task_result.get("task_id"))
+    return str(Path(os.path.abspath(
+        task_deliverable_dir(Path("workspace") / "upload", task_id)
+    )))
 
 
 def _judge_slug(model: str) -> str:
@@ -217,8 +600,25 @@ def _read_schema() -> dict:
 
 def _save_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temp_path.replace(path)
+        temp_path = None
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
 
 
 def _ci_pct(values: list[float]) -> float:
@@ -258,28 +658,53 @@ def _compute_summary(task_dicts: list[dict]) -> dict:
     all_items = 0
     all_pass = 0
 
-    total_calls = 0
-    total_in_tok = 0
-    total_out_tok = 0
-    total_latency_ms = 0.0
+    main_calls = 0
+    main_in_tok = 0
+    main_out_tok = 0
+    main_cached_tok = 0
+    main_latency_ms = 0.0
+    perception_calls = 0
+    perception_in_tok = 0
+    perception_out_tok = 0
+    perception_cached_tok = 0
+    perception_latency_ms = 0.0
+    render_calls = 0
+    render_latency_ms = 0.0
+    usage_complete = True
 
     for task in task_dicts:
-        total_calls += int(task.get("judge_call_count", 0))
-        total_in_tok += int(task.get("judge_input_tokens", 0))
-        total_out_tok += int(task.get("judge_output_tokens", 0))
-        total_latency_ms += float(task.get("judge_total_latency_ms", 0.0))
+        main_calls += int(task.get("judge_call_count", 0))
+        main_in_tok += int(task.get("judge_input_tokens", 0))
+        main_out_tok += int(task.get("judge_output_tokens", 0))
+        main_cached_tok += int(task.get("judge_cached_tokens", 0))
+        main_latency_ms += float(task.get("judge_total_latency_ms", 0.0))
+        perception_calls += int(task.get("perception_call_count", 0))
+        perception_in_tok += int(task.get("perception_input_tokens", 0))
+        perception_out_tok += int(task.get("perception_output_tokens", 0))
+        perception_cached_tok += int(task.get("perception_cached_tokens", 0))
+        perception_latency_ms += float(
+            task.get("perception_total_latency_ms", 0.0)
+        )
+        render_calls += int(task.get("render_call_count", 0))
+        render_latency_ms += float(task.get("render_total_latency_ms", 0.0))
+        usage_complete = usage_complete and bool(
+            task.get("usage_complete", True)
+        )
 
         for item in task.get("items", []):
-            all_items += 1
-            if item.get("verdict") == "pass":
-                all_pass += 1
-            if item.get("decided_by") == "precheck":
-                pre_items += 1
+            score_excluded = bool(item.get("score_excluded", False))
+            if not score_excluded:
+                all_items += 1
                 if item.get("verdict") == "pass":
-                    pre_pass += 1
+                    all_pass += 1
+            if item.get("decided_by") == "precheck":
+                if not score_excluded:
+                    pre_items += 1
+                    if item.get("verdict") == "pass":
+                        pre_pass += 1
             if item.get("decided_by") == "judge":
                 judge_items += 1
-                if item.get("verdict") == "pass":
+                if item.get("verdict") == "pass" and not score_excluded:
                     judge_pass += 1
                 if item.get("verdict") == "judge_error":
                     judge_errors += 1
@@ -293,7 +718,10 @@ def _compute_summary(task_dicts: list[dict]) -> dict:
             # (negative penalty items were excluded entirely, and
             # 'pass' on a negative item meant the model violated).
             # See data/grades/_validation/SCORE_MATH_AUDIT.md.
-            if _is_critical_item(item.get("max_score")):
+            if (
+                not score_excluded
+                and _is_critical_item(item.get("max_score"))
+            ):
                 critical_items += 1
                 if bool(item.get("model_did_right", False)):
                     critical_pass += 1
@@ -322,11 +750,31 @@ def _compute_summary(task_dicts: list[dict]) -> dict:
             "rubric_severity_curve": [],
         },
         "cost": {
-            "total_judge_calls": total_calls,
-            "total_input_tokens": total_in_tok,
-            "total_output_tokens": total_out_tok,
+            "total_judge_calls": main_calls + perception_calls,
+            "total_main_judge_calls": main_calls,
+            "total_perception_calls": perception_calls,
+            "total_input_tokens": main_in_tok + perception_in_tok,
+            "total_output_tokens": main_out_tok + perception_out_tok,
+            "total_cached_tokens": main_cached_tok + perception_cached_tok,
+            "main_input_tokens": main_in_tok,
+            "main_output_tokens": main_out_tok,
+            "main_cached_tokens": main_cached_tok,
+            "perception_input_tokens": perception_in_tok,
+            "perception_output_tokens": perception_out_tok,
+            "perception_cached_tokens": perception_cached_tok,
             "estimated_cost_usd": 0.0,
-            "total_judge_latency_sec": round(total_latency_ms / 1000.0, 2),
+            "total_judge_latency_sec": round(
+                (main_latency_ms + perception_latency_ms) / 1000.0, 2
+            ),
+            "total_main_judge_latency_sec": round(
+                main_latency_ms / 1000.0, 2
+            ),
+            "total_perception_latency_sec": round(
+                perception_latency_ms / 1000.0, 2
+            ),
+            "total_render_calls": render_calls,
+            "total_render_latency_sec": round(render_latency_ms / 1000.0, 2),
+            "usage_complete": usage_complete,
         },
     }
 
@@ -380,8 +828,12 @@ def _build_grade_payload(
     loader: RubricLoader,
     prompt_version: str,
     task_dicts: list[dict],
+    grader_source_hash: str,
+    source_inference_repo_id: str | None,
+    source_inference_revision: str | None,
     exp_config: ExperimentConfig | None = None,
     source_experiment_id: str | None = None,
+    renderer_fingerprint: dict[str, str] | None = None,
 ) -> dict:
     src_id = (source_experiment_id or exp_name or "").strip() or exp_name
     return {
@@ -390,6 +842,10 @@ def _build_grade_payload(
         "experiment_yaml_name": exp_name,
         "source_inference_experiment_id": src_id,
         "source_inference_run_dir": _resolve_source_inference_run_dir(src_id),
+        "source_inference_repo_id": source_inference_repo_id,
+        "source_inference_revision": source_inference_revision,
+        "grader_source_hash": grader_source_hash,
+        "renderer_fingerprint": renderer_fingerprint,
         "inference_model": _resolve_inference_model(inf_results, exp_config),
         "inference_completed_at": inf_results.get("completed_at"),
         "judge": {
@@ -401,6 +857,7 @@ def _build_grade_payload(
             "reasoning_effort": config.get("judge", {}).get("reasoning", {}).get("effort", "high"),
             "temperature": config.get("judge", {}).get("generation", {}).get("temperature", 0),
             "seed": config.get("judge", {}).get("generation", {}).get("seed", 42),
+            "perception": config.get("judge", {}).get("perception", {}),
             "config_name": config.get("config_name", "unknown"),
             "config_hash": config_hash,
         },
@@ -461,12 +918,26 @@ def main() -> int:
     if args.source == "local":
         try:
             inf_results = load_local_inference_results()
-        except FileNotFoundError:
-            print("ERROR: inference results not found", file=sys.stderr)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"ERROR: inference results unavailable or invalid: {exc}", file=sys.stderr)
             return 2
     else:
         print("ERROR: --source hf is not implemented in Phase A. Use scripts/download_inference_from_hf.py first.", file=sys.stderr)
         return 2
+
+    try:
+        inference_repo_id, inference_revision = resolve_source_inference_identity(
+            inf_results, str(config.get("schema_version", ""))
+        )
+    except ValueError as exc:
+        print(f"ERROR: inference identity validation failed: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        grader_source_hash = compute_grader_source_hash(config_path, config)
+    except (KeyError, OSError, ValueError) as exc:
+        print(f"ERROR: grader source hash failed: {exc}", file=sys.stderr)
+        return 1
 
     try:
         loader = RubricLoader(
@@ -474,57 +945,164 @@ def main() -> int:
             revision=config["rubric"]["revision"],
             cache_dir=config["rubric"]["cache_dir"],
         )
-        _ = loader.rubric_short_sha
+        rubric_sha = loader.rubric_sha
+        rubric_short_sha = loader.rubric_short_sha
     except Exception as exc:
         print(f"ERROR: rubric loader init failed: {exc}", file=sys.stderr)
         return 3
 
     judge_slug = _judge_slug(config["judge"]["model"])
     prompt_v = config["prompt"]["version"]
-    out_dir = Path(config["output"]["directory"])
-    out_name = config["output"]["filename_template"].format(
-        exp_id=args.experiment_yaml_name,
-        judge_slug=judge_slug,
-        rubric_short_sha=loader.rubric_short_sha,
-        prompt_v=prompt_v,
-    )
-    out_path = out_dir / out_name
+    try:
+        out_path = resolve_grade_output_path(
+            config,
+            experiment_id=args.experiment_yaml_name,
+            judge_slug=judge_slug,
+            config_hash=config_hash,
+            rubric_sha=rubric_sha,
+            rubric_short_sha=rubric_short_sha,
+            prompt_version=prompt_v,
+            inference_sha=inference_revision,
+            grader_source_hash=grader_source_hash,
+        )
+        _write_github_output("grade_file", _repo_relative_grade_file(out_path))
+    except (KeyError, ValueError) as exc:
+        print(f"ERROR: grade output path resolution failed: {exc}", file=sys.stderr)
+        return 1
 
-    if out_path.exists() and not args.force and not args.resume:
-        print(f"SKIP - exists: {out_path}. Use --force to overwrite or --resume to continue.")
-        return 0
-
-    tasks = filter_tasks(inf_results, args.tasks, args.limit)
+    try:
+        tasks = filter_tasks(inf_results, args.tasks, args.limit)
+    except ValueError as exc:
+        print(f"ERROR: invalid grading task selection: {exc}", file=sys.stderr)
+        return 1
 
     if args.dry_run:
         _print_dry_run_stats(tasks, loader)
         return 0
 
     try:
+        tasks = validate_local_deliverables(
+            tasks, Path("workspace") / "upload"
+        )
+    except ValueError as exc:
+        print(f"ERROR: deliverable tree validation failed: {exc}", file=sys.stderr)
+        return 1
+
+    renderer_fingerprint: dict[str, str] | None = None
+    renderer_required = requires_track2_office_renderer(config)
+    if renderer_required:
+        try:
+            renderer_fingerprint = get_renderer_fingerprint()
+        except ReadDeliverableError as exc:
+            print(
+                f"ERROR: Track 2 renderer fingerprint failed: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+    if out_path.exists() and not args.force and not args.resume:
+        if config.get("schema_version") == "2.0":
+            try:
+                existing = _load_existing_grade(out_path)
+                _validate_track2_resume_identity(
+                    existing,
+                    experiment_id=args.experiment_yaml_name,
+                    rubric_commit_sha=rubric_sha,
+                    prompt_version=prompt_v,
+                    config_hash=config_hash,
+                    source_inference_repo_id=inference_repo_id,
+                    source_inference_revision=inference_revision,
+                    grader_source_hash=grader_source_hash,
+                    renderer_fingerprint=(
+                        renderer_fingerprint if renderer_required else None
+                    ),
+                )
+                _validate_track2_task_set(
+                    existing, tasks, require_complete=True
+                )
+            except ValueError as exc:
+                print(f"ERROR: Track 2 cache identity validation failed: {exc}", file=sys.stderr)
+                return 1
+        print(
+            f"SKIP - exists: {out_path}. "
+            "Use --force to overwrite or --resume to continue."
+        )
+        return 0
+
+    if (
+        args.resume
+        and config.get("schema_version") == "2.0"
+        and not out_path.exists()
+    ):
+        print(
+            f"ERROR: --resume Track 2 partial not found at {out_path}; "
+            "refusing to start a fresh paid run",
+            file=sys.stderr,
+        )
+        return 1
+
+    task_payloads: list[dict] = []
+    completed_task_ids: set[str] = set()
+
+    if args.resume and out_path.exists():
+        try:
+            existing = _load_existing_grade(out_path)
+            existing_tasks = existing["tasks"]
+        except ValueError as exc:
+            print(
+                f"ERROR: --resume could not load existing partial "
+                f"{out_path}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+        if config.get("schema_version") == "2.0":
+            try:
+                _validate_track2_resume_identity(
+                    existing,
+                    experiment_id=args.experiment_yaml_name,
+                    rubric_commit_sha=loader.rubric_sha,
+                    prompt_version=prompt_v,
+                    config_hash=config_hash,
+                    source_inference_repo_id=inference_repo_id,
+                    source_inference_revision=inference_revision,
+                    grader_source_hash=grader_source_hash,
+                    renderer_fingerprint=(
+                        renderer_fingerprint if renderer_required else None
+                    ),
+                )
+                completed_task_ids = _validate_track2_task_set(
+                    existing, tasks, require_complete=False
+                )
+            except ValueError as exc:
+                print(f"ERROR: --resume {exc}", file=sys.stderr)
+                return 1
+
+        task_payloads = list(existing_tasks)
+        if config.get("schema_version") != "2.0":
+            completed_task_ids = {
+                task.get("task_id")
+                for task in task_payloads
+                if isinstance(task, dict) and task.get("task_id")
+            }
+        print(
+            f"[resume] loaded {len(completed_task_ids)} previously graded "
+            f"tasks from {out_path}",
+            file=sys.stderr,
+        )
+
+    try:
+        config["_runtime"] = {
+            "experiment_id": args.experiment_yaml_name,
+            "rubric_sha": loader.rubric_sha,
+        }
         grader = Grader(config=config, rubric_loader=loader)
     except Exception as exc:
         print(f"ERROR: judge initialization failed: {exc}", file=sys.stderr)
         return 4
 
     partial_every = int(config.get("output", {}).get("partial_save_every_n_tasks", 10))
-    task_payloads: list[dict] = []
-    completed_task_ids: set[str] = set()
-
-    # Resume: load existing partial JSON if present and harvest completed task_ids
-    if args.resume and out_path.exists():
-        try:
-            with open(out_path, "r", encoding="utf-8") as f:
-                existing = json.load(f)
-            task_payloads = list(existing.get("tasks", []))
-            completed_task_ids = {t.get("task_id") for t in task_payloads if t.get("task_id")}
-            print(
-                f"[resume] loaded {len(completed_task_ids)} previously graded tasks from {out_path}",
-                file=sys.stderr,
-            )
-        except Exception as exc:
-            print(f"WARNING: --resume failed to load {out_path} ({exc}); starting fresh", file=sys.stderr)
-            task_payloads = []
-            completed_task_ids = set()
+    initial_completed_count = len(task_payloads)
 
     # Time guard: pre-empt GH Actions hard 6h limit. Default 4h (14400s)
     # leaves ~80 min for the workflow's retrigger + setup overhead and the
@@ -533,6 +1111,7 @@ def main() -> int:
     time_budget_sec = int(os.getenv("GRADER_TIME_BUDGET_SEC", "14400"))
     grade_loop_start = time.monotonic()
     GRADE_EXIT_RESUME = 7  # contract with grade-run.yml's auto-trigger step
+    GRADE_EXIT_PERSISTENCE_FAILURE = 5
 
     for idx, task_result in enumerate(tasks, start=1):
         # Resume skip
@@ -544,6 +1123,13 @@ def main() -> int:
         if time_budget_sec > 0 and elapsed_sec > time_budget_sec:
             graded_count = len(task_payloads)
             remaining = len(tasks) - graded_count
+            if graded_count <= initial_completed_count:
+                print(
+                    "[time-guard] no new task completed in this chunk; "
+                    "refusing to request another paid resume",
+                    file=sys.stderr,
+                )
+                return GRADE_EXIT_PERSISTENCE_FAILURE
             print(
                 f"\n[time-guard] elapsed {elapsed_sec/60:.1f}min > budget "
                 f"{time_budget_sec/60:.0f}min; graded={graded_count}/{len(tasks)} "
@@ -559,17 +1145,25 @@ def main() -> int:
                     loader,
                     grader.prompt_version,
                     task_payloads,
+                    grader_source_hash,
+                    inference_repo_id,
+                    inference_revision,
                     exp_config=exp_config,
                     source_experiment_id=args.source_experiment_id,
+                    renderer_fingerprint=renderer_fingerprint,
                 )
                 _validate_schema(partial)
                 _save_json(out_path, partial)
+                persisted = _load_existing_grade(out_path)
+                _validate_schema(persisted)
+                if persisted != partial:
+                    raise ValueError("persisted partial does not match payload")
                 print(f"[time-guard] partial saved → {out_path}", file=sys.stderr)
             except Exception as save_exc:
                 import traceback
                 print(f"[time-guard] partial save FAILED: {save_exc}", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
-                # Still exit with 7 so caller retriggers; we have what we have
+                return GRADE_EXIT_PERSISTENCE_FAILURE
             return GRADE_EXIT_RESUME
 
         task = loader.load(task_result["task_id"])
@@ -593,8 +1187,12 @@ def main() -> int:
                     loader,
                     grader.prompt_version,
                     task_payloads,
+                    grader_source_hash,
+                    inference_repo_id,
+                    inference_revision,
                     exp_config=exp_config,
                     source_experiment_id=args.source_experiment_id,
+                    renderer_fingerprint=renderer_fingerprint,
                 )
                 _validate_schema(partial)
                 _save_json(out_path, partial)
@@ -619,8 +1217,12 @@ def main() -> int:
         loader,
         grader.prompt_version,
         task_payloads,
+        grader_source_hash,
+        inference_repo_id,
+        inference_revision,
         exp_config=exp_config,
         source_experiment_id=args.source_experiment_id,
+        renderer_fingerprint=renderer_fingerprint,
     )
     _validate_schema(final)
     _save_json(out_path, final)

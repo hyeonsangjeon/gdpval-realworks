@@ -1,4 +1,6 @@
 import json
+from copy import deepcopy
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
@@ -108,6 +110,42 @@ def _minimal_payload() -> dict:
     }
 
 
+def _valid_visual_provenance() -> dict:
+    return {
+        "path": "slides/report.pptx",
+        "source_sha256": "a" * 64,
+        "scope": {"slide": 1},
+        "renderer_metadata": {
+            "kind": "image_png_base64",
+            "source_kind": "pptx",
+            "source_slide_count": 4,
+            "converted_page_count": 4,
+            "renderer": {
+                "converter": "libreoffice",
+                "rasterizer": "pymupdf",
+                "dpi": 150,
+                "libreoffice_binary": "soffice",
+                "libreoffice_version": "LibreOffice 24.2.7.2",
+                "pymupdf_version": "1.26.3",
+            },
+            "byte_size": 1024,
+        },
+        "coverage_metadata": {
+            "coverage_mode": "sampled_first_surface",
+            "criterion_scope": "overall_style",
+            "sampled_surface_count": 1,
+            "total_surface_count": 4,
+        },
+        "vision": {
+            "verdict": "pass",
+            "evidence": "title is visible",
+            "confidence": 0.9,
+            "reasoning": "render inspected",
+            "judge_error": None,
+        },
+    }
+
+
 def test_minimal_valid_grade_passes_schema():
     validate(instance=_minimal_payload(), schema=_load_schema())
 
@@ -139,3 +177,127 @@ def test_actual_smoke_output_passes_schema(tmp_path):
     p.write_text(json.dumps(payload), encoding="utf-8")
     loaded = json.loads(p.read_text(encoding="utf-8"))
     validate(instance=loaded, schema=_load_schema())
+
+
+def test_pinned_inference_and_grader_source_identity_pass_schema():
+    payload = _minimal_payload()
+    payload["source_inference_repo_id"] = "owner/repo"
+    payload["source_inference_revision"] = "a" * 40
+    payload["grader_source_hash"] = "b" * 64
+
+    validate(instance=payload, schema=_load_schema())
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source_inference_repo_id", "owner/repo/extra"),
+        ("source_inference_revision", "A" * 40),
+        ("source_inference_revision", "a" * 39),
+        ("grader_source_hash", "B" * 64),
+        ("grader_source_hash", "b" * 63),
+    ],
+)
+def test_noncanonical_pinning_identity_fails_schema(field, value):
+    payload = _minimal_payload()
+    payload[field] = value
+
+    with pytest.raises(ValidationError):
+        validate(instance=payload, schema=_load_schema())
+
+
+def test_track2_renderer_fingerprint_and_visual_provenance_pass_schema():
+    payload = _minimal_payload()
+    payload["renderer_fingerprint"] = {
+        "libreoffice_binary": "soffice",
+        "libreoffice_version": "LibreOffice 24.2.7.2",
+        "pymupdf_version": "1.26.3",
+    }
+    payload["tasks"][0]["items"][0]["visual_provenance"] = [
+        _valid_visual_provenance()
+    ]
+
+    validate(instance=payload, schema=_load_schema())
+
+
+def test_visual_provenance_rejects_base64_field():
+    payload = _minimal_payload()
+    provenance = _valid_visual_provenance()
+    provenance["base64"] = "must-not-persist"
+    payload["tasks"][0]["items"][0]["visual_provenance"] = [provenance]
+
+    with pytest.raises(ValidationError):
+        validate(instance=payload, schema=_load_schema())
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    ["/absolute/report.pdf", "C:\\absolute\\report.pdf", "safe/../report.pdf"],
+)
+@pytest.mark.parametrize("location", ["parent", "child"])
+def test_visual_provenance_rejects_unconfined_paths(bad_path, location):
+    payload = _minimal_payload()
+    provenance = _valid_visual_provenance()
+    provenance["path"] = bad_path
+    item = payload["tasks"][0]["items"][0]
+    if location == "parent":
+        item["visual_provenance"] = [provenance]
+    else:
+        item["child_grades"] = [{"visual_provenance": [provenance]}]
+
+    with pytest.raises(ValidationError):
+        validate(instance=payload, schema=_load_schema())
+
+
+@pytest.mark.parametrize("location", ["parent", "child"])
+def test_visual_provenance_rejects_nested_renderer_base64(location):
+    payload = _minimal_payload()
+    provenance = _valid_visual_provenance()
+    provenance["renderer_metadata"]["renderer"]["base64"] = "forbidden"
+    item = payload["tasks"][0]["items"][0]
+    if location == "parent":
+        item["visual_provenance"] = [provenance]
+    else:
+        item["child_grades"] = [{"visual_provenance": [provenance]}]
+
+    with pytest.raises(ValidationError):
+        validate(instance=payload, schema=_load_schema())
+
+
+def test_itemgrade_asdict_with_parent_and_child_provenance_passes_schema():
+    from core.grader import ItemGrade
+
+    payload = _minimal_payload()
+    provenance = _valid_visual_provenance()
+    item = ItemGrade(
+        rubric_item_id="visual-1",
+        criterion="Overall Style",
+        max_score=4,
+        awarded_score=4.0,
+        verdict="pass",
+        decided_by="judge",
+        required=None,
+        evidence="visible professional layout",
+        routing_modality="mixed",
+        perception_called=True,
+        tools_used=["harness_render_to_image", "harness_vision_perception"],
+        visual_provenance=[deepcopy(provenance)],
+        child_grades=[
+            {
+                "target_id": "report",
+                "visual_provenance": [deepcopy(provenance)],
+            }
+        ],
+    )
+    payload["tasks"][0]["items"][0] = asdict(item)
+
+    validate(instance=payload, schema=_load_schema())
+
+
+def test_legacy_child_without_visual_provenance_remains_schema_compatible():
+    payload = _minimal_payload()
+    payload["tasks"][0]["items"][0]["child_grades"] = [
+        {"target_id": "legacy-child", "verdict": "pass"}
+    ]
+
+    validate(instance=payload, schema=_load_schema())

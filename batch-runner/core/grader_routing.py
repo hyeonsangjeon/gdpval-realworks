@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Iterable
 
 
@@ -79,10 +80,20 @@ def _make_re(words: Iterable[str]) -> re.Pattern[str]:
 _VIS_RE = _make_re(_VISUAL_KEYWORDS)
 _AUD_RE = _make_re(_AUDIO_KEYWORDS)
 _FMT_RE = _make_re(_FORMATTING_KEYWORDS)
+_OVERALL_STYLE_RE = re.compile(
+    r"\boverall\b(?:\W+\w+){0,4}\W+"
+    r"(?:style|styling|format(?:ted|ting)?|presentation|polish)\b",
+    flags=re.IGNORECASE,
+)
 
 
 def _hits(rx: re.Pattern[str], text: str) -> tuple[str, ...]:
     return tuple(sorted({m.group(1).lower() for m in rx.finditer(text)}))
+
+
+def is_overall_style_criterion(criterion_text: str) -> bool:
+    """Return whether a criterion asks for deliverable-wide visual polish."""
+    return bool(_OVERALL_STYLE_RE.search(criterion_text or ""))
 
 
 def classify_criterion(criterion_text: str) -> RoutingDecision:
@@ -93,6 +104,13 @@ def classify_criterion(criterion_text: str) -> RoutingDecision:
     visual judgment subsumes the formatting check.
     """
     text = criterion_text or ""
+
+    if is_overall_style_criterion(text):
+        return RoutingDecision(
+            modality=Modality.VISUAL,
+            preferred_op="render_to_image",
+            matched_keywords=_hits(_FMT_RE, text),
+        )
 
     vis = _hits(_VIS_RE, text)
     if vis:
@@ -120,6 +138,29 @@ def classify_criterion(criterion_text: str) -> RoutingDecision:
         preferred_op="read_content",
         matched_keywords=(),
     )
+
+
+def resolve_runtime_routing(
+    criterion_text: str, selected_paths: Iterable[str]
+) -> RoutingDecision:
+    """Apply target-aware policy without changing criterion classification."""
+    decision = classify_criterion(criterion_text)
+    suffixes = {
+        Path(path).suffix.lower()
+        for path in selected_paths
+        if isinstance(path, str) and path
+    }
+    if (
+        is_overall_style_criterion(criterion_text)
+        and suffixes
+        and suffixes.issubset({".doc", ".docx"})
+    ):
+        return RoutingDecision(
+            modality=Modality.FORMATTING,
+            preferred_op="inspect_formatting",
+            matched_keywords=decision.matched_keywords,
+        )
+    return decision
 
 
 def inventory(criteria: Iterable[str]) -> dict[str, int]:
