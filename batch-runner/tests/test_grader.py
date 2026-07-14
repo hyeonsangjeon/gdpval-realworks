@@ -630,3 +630,39 @@ def test_zero_total_max_degenerate_task(monkeypatch, tmp_path):
     assert tg.total_max == 0
     assert tg.pct == 0.0
     assert tg.pct_raw == -20.0
+
+
+def test_list_files_accepts_regular_nested_tree(tmp_path):
+    grader = object.__new__(Grader)
+    root = tmp_path / "deliverables"
+    nested = root / "nested"
+    nested.mkdir(parents=True)
+    expected = nested / "out.txt"
+    expected.write_text("ok", encoding="utf-8")
+
+    assert grader._list_files(root) == [expected]
+
+
+@pytest.mark.parametrize("symlink_kind", ["file", "directory", "parent"])
+def test_list_files_rejects_symlink_layers(tmp_path, symlink_kind):
+    grader = object.__new__(Grader)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret", encoding="utf-8")
+
+    if symlink_kind == "parent":
+        linked_parent = tmp_path / "linked-parent"
+        linked_parent.symlink_to(outside, target_is_directory=True)
+        deliverable_dir = linked_parent
+    else:
+        deliverable_dir = tmp_path / "deliverables"
+        deliverable_dir.mkdir()
+        if symlink_kind == "file":
+            (deliverable_dir / "secret.txt").symlink_to(outside / "secret.txt")
+        else:
+            (deliverable_dir / "linked-dir").symlink_to(
+                outside, target_is_directory=True
+            )
+
+    with pytest.raises(ValueError, match="symlink"):
+        grader._list_files(deliverable_dir)

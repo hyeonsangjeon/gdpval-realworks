@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import importlib
 import io
 import json
 from types import SimpleNamespace
@@ -11,6 +12,8 @@ from typing import Any
 import pytest
 
 from core.perception import VISION_CALL_CAP, VisionPerception, VisionVerdict
+
+vision_module = importlib.import_module("core.perception.vision")
 
 
 # ── Fakes ────────────────────────────────────────────────────────────
@@ -36,7 +39,14 @@ class FakeResponses:
         self.calls.append(kwargs)
         if self.raise_with is not None:
             raise self.raise_with
-        return SimpleNamespace(output_text=self.text)
+        return SimpleNamespace(
+            output_text=self.text,
+            usage=SimpleNamespace(
+                input_tokens=123,
+                output_tokens=17,
+                input_tokens_details=SimpleNamespace(cached_tokens=11),
+            ),
+        )
 
 
 class FakeClient:
@@ -56,6 +66,31 @@ def test_happy_path_parses_verdict():
     assert v.partial_score == 1.0
     assert "chart" in v.evidence.lower()
     assert vp.calls_used == 1
+    assert v.api_call_count == 1
+    assert v.input_tokens == 123
+    assert v.output_tokens == 17
+    assert v.cached_tokens == 11
+    assert v.usage_complete is True
+
+
+def test_usage_latency_and_guard_are_recorded_exactly(monkeypatch):
+    ticks = iter([10.0, 10.25])
+    monkeypatch.setattr(vision_module.time, "perf_counter", lambda: next(ticks))
+    guarded = []
+    vp = VisionPerception(
+        client=FakeClient(FakeResponses()),
+        before_upstream_call=lambda: guarded.append("guard"),
+    )
+
+    verdict = vp.judge(criterion="chart", image_b64=_png_b64())
+
+    assert guarded == ["guard"]
+    assert verdict.api_call_count == 1
+    assert verdict.input_tokens == 123
+    assert verdict.output_tokens == 17
+    assert verdict.cached_tokens == 11
+    assert verdict.latency_ms == 250.0
+    assert verdict.usage_complete is True
 
 
 def test_request_shape_includes_image_and_model():
@@ -64,6 +99,8 @@ def test_request_shape_includes_image_and_model():
     vp.judge(criterion="x", image_b64=_png_b64())
     sent = client.responses.calls[0]
     assert sent["model"] == "gpt-5.4"
+    assert "temperature" not in sent
+    assert "seed" not in sent
     # The user content must include an input_image block with a data URL.
     content = sent["input"][0]["content"]
     kinds = {block["type"] for block in content}
@@ -81,6 +118,7 @@ def test_call_cap_short_circuits_after_limit():
     over = vp.judge(criterion="c", image_b64=img)
     assert over.verdict == "judge_error"
     assert over.judge_error == "cap_exceeded"
+    assert over.api_call_count == 0
     # Only 2 actual upstream calls made.
     assert len(client.responses.calls) == 2
 
@@ -91,7 +129,9 @@ def test_cache_key_skips_upstream_call():
     img = _png_b64()
     v1 = vp.judge(criterion="x", image_b64=img, cache_key="report.pdf#p1")
     v2 = vp.judge(criterion="x", image_b64=img, cache_key="report.pdf#p1")
-    assert v1 is v2
+    assert v1.api_call_count == 1
+    assert v2.api_call_count == 0
+    assert v2.input_tokens == 0
     assert len(client.responses.calls) == 1
 
 
@@ -102,6 +142,7 @@ def test_corrupt_image_returns_judge_error():
     v = vp.judge(criterion="x", image_b64=bad)
     assert v.verdict == "judge_error"
     assert v.judge_error == "bad_image"
+    assert v.api_call_count == 0
     assert vp.calls_used == 0  # cap counter NOT incremented for bad payload
 
 
@@ -112,9 +153,42 @@ def test_upstream_exception_returns_judge_error():
     assert v.verdict == "judge_error"
     assert v.judge_error is not None
     assert "RuntimeError" in v.judge_error
+    assert v.api_call_count == 1
+    assert v.usage_complete is False
     # The cap counter SHOULD increment because we actually issued the
     # request (the failure happened upstream).
     assert vp.calls_used == 1
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"verdict": "judge_error", "partial_score": 0.0,
+         "evidence": "visible issue", "confidence": 0.5, "reasoning": "x"},
+        {"verdict": "pass", "partial_score": 0.5,
+         "evidence": "visible issue", "confidence": 0.5, "reasoning": "x"},
+        {"verdict": "partial", "partial_score": 1.0,
+         "evidence": "visible issue", "confidence": 0.5, "reasoning": "x"},
+        {"verdict": "fail", "partial_score": 0.0,
+         "evidence": "", "confidence": 0.5, "reasoning": "x"},
+        {"verdict": "fail", "partial_score": 0.0,
+         "evidence": "visible issue", "confidence": 1.5, "reasoning": "x"},
+        {"verdict": "fail", "partial_score": 0.0,
+         "evidence": "visible issue", "confidence": float("nan"), "reasoning": "x"},
+        ["not", "an", "object"],
+    ],
+)
+def test_invalid_semantic_envelope_is_fail_closed(payload):
+    client = FakeClient(FakeResponses(text=json.dumps(payload)))
+    verdict = VisionPerception(client=client).judge(
+        criterion="chart", image_b64=_png_b64()
+    )
+
+    assert verdict.verdict == "judge_error"
+    assert verdict.judge_error == "invalid_vision_envelope"
+    assert verdict.api_call_count == 1
+    assert verdict.input_tokens == 123
+    assert verdict.output_tokens == 17
 
 
 def test_reset_clears_counter_and_cache():

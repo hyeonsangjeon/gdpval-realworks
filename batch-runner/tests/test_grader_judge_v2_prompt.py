@@ -13,14 +13,24 @@ def _read(name: str) -> str:
 
 def test_v2_prompt_exists_and_has_version_tag():
     text = _read("grader_judge_v2.md")
-    assert "prompt_version: v2" in text
+    assert "prompt_version: v2.2" in text
 
 
-def test_v2_prompt_lists_all_six_tool_ops():
+def test_v2_prompt_lists_only_model_callable_ops():
     text = _read("grader_judge_v2.md")
     for op in ("inspect_structure", "read_content", "inspect_formatting",
-               "render_to_image", "probe_audio", "probe_video"):
+               "probe_audio", "probe_video"):
         assert op in text, f"op {op} missing from v2 prompt"
+    assert "| `render_to_image` |" not in text
+
+
+def test_v2_prompt_describes_harness_owned_trusted_visual_evidence():
+    text = _read("grader_judge_v2.md")
+    assert "TRUSTED_VISUAL_EVIDENCE_BEGIN" in text
+    assert "TRUSTED_VISUAL_EVIDENCE_END" in text
+    assert "harness-owned" in text
+    assert "never receive" in text.lower()
+    assert "image bytes" in text.lower()
 
 
 def test_v2_prompt_drops_inline_extract_block():
@@ -35,7 +45,8 @@ def test_v2_prompt_demands_tool_grounded_evidence():
     text = _read("grader_judge_v2.md")
     # Must mention that evidence has to come from a tool response, not
     # from fabricated content.
-    assert "Tool-grounded evidence" in text or "tool response" in text.lower()
+    assert "Grounded evidence" in text
+    assert "trusted visual evidence" in text.lower()
 
 
 def test_v2_prompt_has_routing_hint_placeholders():

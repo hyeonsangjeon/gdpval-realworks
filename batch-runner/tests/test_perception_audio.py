@@ -30,7 +30,14 @@ class FakeResponses:
         self.calls.append(kwargs)
         if self.raise_with is not None:
             raise self.raise_with
-        return SimpleNamespace(output_text=self.text)
+        return SimpleNamespace(
+            output_text=self.text,
+            usage=SimpleNamespace(
+                input_tokens=70,
+                output_tokens=12,
+                input_tokens_details=SimpleNamespace(cached_tokens=5),
+            ),
+        )
 
 
 class FakeClient:
@@ -73,6 +80,11 @@ def test_happy_path_parses_verdict(wav_file):
     assert v.verdict == "pass"
     assert v.partial_score == 1.0
     assert ap.calls_used == 1
+    assert v.api_call_count == 1
+    assert v.input_tokens == 70
+    assert v.output_tokens == 12
+    assert v.cached_tokens == 5
+    assert v.usage_complete is True
 
 
 def test_request_shape_includes_audio_block(wav_file):
@@ -81,6 +93,8 @@ def test_request_shape_includes_audio_block(wav_file):
     ap.judge(criterion="x", audio_path=str(wav_file))
     sent = client.responses.calls[0]
     assert sent["model"] == "gpt-audio-1.5"
+    assert sent["temperature"] == 0
+    assert "seed" not in sent
     content = sent["input"][0]["content"]
     kinds = {b["type"] for b in content}
     assert {"input_text", "input_audio"}.issubset(kinds)
@@ -96,6 +110,7 @@ def test_call_cap_short_circuits(wav_file):
     over = ap.judge(criterion="b", audio_path=str(wav_file))
     assert over.verdict == "judge_error"
     assert over.judge_error == "cap_exceeded"
+    assert over.api_call_count == 0
     assert len(client.responses.calls) == 1
 
 
@@ -105,6 +120,7 @@ def test_missing_file_returns_judge_error(tmp_path):
     v = ap.judge(criterion="x", audio_path=str(tmp_path / "nope.wav"))
     assert v.verdict == "judge_error"
     assert v.judge_error.startswith("FileNotFoundError")
+    assert v.api_call_count == 0
     assert ap.calls_used == 0
 
 
@@ -114,6 +130,8 @@ def test_upstream_exception_graceful(wav_file):
     v = ap.judge(criterion="x", audio_path=str(wav_file))
     assert v.verdict == "judge_error"
     assert "RuntimeError" in v.judge_error
+    assert v.api_call_count == 1
+    assert v.usage_complete is False
 
 
 def test_endpoint_unset_graceful(monkeypatch, wav_file):
@@ -125,6 +143,7 @@ def test_endpoint_unset_graceful(monkeypatch, wav_file):
     v = ap.judge(criterion="x", audio_path=str(wav_file))
     assert v.verdict == "judge_error"
     assert v.judge_error == "endpoint_missing"
+    assert v.api_call_count == 0
     # No upstream call made.
     assert len(client.responses.calls) == 0
 

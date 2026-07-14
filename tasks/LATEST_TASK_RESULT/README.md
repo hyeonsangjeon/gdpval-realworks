@@ -1,47 +1,71 @@
 # Latest Task Result
 
+This is the canonical rolling record of the most recently completed repository
+task. It must be refreshed before a task is reported complete.
+
 - Updated: 2026-07-14
-- Status: Implementation validated; exp027 dispatch pending merge
+- Status: Implementation complete; runtime verification pending
 
 ## Task
 
-Analyze `exp026_sandbox_skills_multimodal`, add behavior-neutral sandbox
-observability, and prepare one bounded subprocess comparator before changing
-Sandbox or Agent Skills behavior.
+- Resume the interrupted grading work after the clean selector/audit 220-task
+  regrade.
+- Implement Track 2 render + vision for Overall Style and visual criteria,
+  prioritizing PDF, XLSX, and PPTX without permitting text-only visual grades.
+- Make future paid grading reproducible and fail-closed across rubric,
+  inference, renderer, grader source, cache, resume, path, persistence, and
+  workflow boundaries.
 
 ## Result
 
-- Confirmed from Actions Runs #91/#92 and the Step 1/2 data path that historical
-  `exp025` and `exp026` dropped their declared `reasoning_effort`; both actually
-  used the deployment's server-default reasoning behavior.
-- Added privacy-bounded sandbox provenance: prompt/code hashes, token usage,
-  latency, stable error categories, skill match evidence, preprocessor status,
-  and CI run identity. Raw response text, stdout/stderr, exception messages,
-  generated filenames, and heavy verification reports are not persisted.
-- Added deterministic `data.filter.task_ids` support and propagated exact task
-  scope through task preparation, parquet filling, validation, formatting, and
-  self-report generation. Duplicate/missing/unexpected task IDs fail closed.
-- Added `exp027_GPT54_default_subprocess_bridge50`, an outcome-selected 50-task
-  diagnostic comparator covering 9 sectors and 26 occupations. It uses the
-  coherent post-fix subprocess prompt/QA/audio setup, the exp026 video
-  preprocessor, server-default reasoning, 32K code tokens, and a 1,200-second
-  timeout. The comparison measures the runner/prompt bundle and is not a causal
-  estimate of Sandbox or Skills alone.
-- Added checked-in 42/6/2 task-group provenance with task-list SHA-256
-  `33b18c57f4a5227ebeccbdc68480b9b702df7927928ac086f63114bb5676a47a`.
+- Visual grading is harness-owned. Selected PDF, XLSX/XLSM, PPTX, and image
+  surfaces are rendered and judged before the main judge receives trusted
+  provenance; the model cannot request image bytes or invoke vision directly.
+  DOC/DOCX-only Overall Style uses formatting inspection, and mixed split
+  targets preserve child routing and provenance.
+- Invalid main/vision envelopes, renderer errors, unsupported scopes, file
+  caps, and task-wide vision budget failures become usage-preserving,
+  score-excluded `judge_error` results. The checked-in 220-task inventory has
+  467 supported vision calls and a task maximum of 68 under hard cap 72.
+- Rubrics and inference inputs are pinned to immutable full Hugging Face commit
+  SHAs. Rubric parquet snapshots use verified per-SHA manifests; inference JSON
+  and staged deliverables share one revision and replace stale content
+  atomically. Task/path manifests are confined to exact regular files under
+  `deliverable_files/<task_id>/`, with symlink and path-escape rejection.
+- Active v2 output identity includes config, full rubric SHA, full inference
+  SHA, prompt version, renderer fingerprint, and the grading implementation
+  source hash. Cache requires a complete exact task set; resume requires a
+  schema-valid unique subset with every identity unchanged.
+- Chunk persistence is atomic and fail-closed. A relay occurs only after new
+  durable progress, exact-file schema validation, a real staged diff, strict
+  rebase with unchanged grade SHA-256, post-rebase schema validation, and a
+  successful push. Workflow string inputs are validated before checkout and
+  resume remains pinned to the original inference SHA.
 
 ## Verification
 
-- Nine changed Python modules compile with `py_compile`.
-- Focused regression suite: 206 passed, 0 failed.
-- `git diff --check`: passed.
-- Independent final code review: APPROVE, with no blocker, major, or minor
-  findings.
+- Track 2, manifest/downloader security, immutable rubric and inference
+  identity, step8 persistence, analyzer, schema, and shared grader suite:
+  **447 passed**, with one existing PyPDF2 deprecation warning.
+- Dashboard grade aggregation suite: **13 passed**.
+- Workflow assertions passed for pre-checkout input validation, quoted env
+  inputs, pinned revision propagation, resume bound 0–10, committed-only relay,
+  strict rebase, unchanged pre/post grade blob, and repeated schema validation.
+- VS Code diagnostics reported no errors in touched Python, test, schema,
+  config, and workflow files; `git diff --check` reported no issues.
+- `extreme-reasoner` and `first-reviewer` both returned final **APPROVE** with
+  no blocking, major, or minor code findings.
 
 ## Remaining Work
 
-- Merge the implementation PR.
-- Dispatch `Run GDPVal Batch Experiment` for
-  `exp027_GPT54_default_subprocess_bridge50` and monitor all relay legs.
-- Compare exp027 and exp026 on the pinned 50-task set before changing Skills
-  selection, manifest delivery policy, or repair behavior.
+- Verify pinned HF revision download, protected-branch rebase/push behavior,
+  and the strict relay guard on an actual GitHub-hosted runner.
+- Run the model-free renderer preflight on an actual Ubuntu 24.04 GitHub-hosted
+  runner; this SSH host has no LibreOffice binary.
+- Run an owner-approved, limited paid Track 2 canary to verify Azure image-input
+  behavior, usage fields, observed cost, and quality before any full regrade.
+- `tests/test_deliverable_selector.py` was not collected locally because the
+  available test environment lacks `pyarrow`; selector routing is covered by
+  focused pure-function and grader integration tests.
+- No live grading workflow was dispatched, no HF/Azure/model call was made,
+  and no production grade JSON was generated by this task.

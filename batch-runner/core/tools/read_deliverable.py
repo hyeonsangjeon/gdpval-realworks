@@ -19,9 +19,10 @@ Design rules (per task spec 201):
    Tool-calling judges serialize this directly back to JSON.
 4. Large outputs (image bytes, raw content) are size-capped so the judge
    cannot accidentally inflate context by asking for a huge file.
-5. Pure-Python fallbacks are preferred over system binaries. PDF
-   rendering uses ``PyMuPDF`` (fitz), not poppler. Audio/video probing
-   uses ``PyAV`` (``av``), not the ``ffmpeg`` binary. See
+5. PDF rendering uses ``PyMuPDF`` (fitz), not poppler. XLSX/PPTX inputs
+    are converted read-only in an isolated temp directory with LibreOffice,
+    then rasterized with PyMuPDF. Audio/video probing uses ``PyAV`` (``av``),
+    not the ``ffmpeg`` binary. See
    ``tasks/rebuilding_grading_task/PR2_ENV_AUDIT.md`` for the rationale.
 """
 
@@ -30,12 +31,17 @@ from __future__ import annotations
 import base64
 import io
 import os
+import shutil
+import subprocess
+import tempfile
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 # ── Constants ─────────────────────────────────────────────────────────
 
-#: Operations the judge is allowed to invoke.
+#: Full public Python API. The harness uses render_to_image internally;
+#: MODEL_READ_DELIVERABLE_OPS below is the smaller model-callable surface.
 READ_DELIVERABLE_OPS: Tuple[str, ...] = (
     "inspect_structure",
     "read_content",
@@ -52,9 +58,11 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB before/after downsample
 MAX_CELLS_FORMATTING = 5_000  # inspect_formatting iterates capped cells
 MAX_PAGES_DEFAULT = 200       # PDF page-iteration safety cap
 MAX_SHEETS = 100              # workbook safety cap
+RENDERER_VERSION_TIMEOUT_SEC = 10
+RENDERER_VERSION_MAX_CHARS = 200
 
-#: JSON-schema fragment the Responses-API tool-calling judge gets in its
-#: ``tools=[...]`` parameter. The judge sees these arg names verbatim.
+#: Full six-op schema retained for public API compatibility and direct
+#: harness tests. Do not send this schema to the main model.
 READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
     "type": "function",
     "name": "read_deliverable",
@@ -75,7 +83,7 @@ READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
                     "inspect_structure: file type + sheets/pages/slides summary. "
                     "read_content: textual content (no truncation up to cap). "
                     "inspect_formatting: cell fills/fonts/borders/charts/styles. "
-                    "render_to_image: PNG (base64) of a page/sheet for vision. "
+                    "render_to_image: PNG (base64) of an allowed first/page surface. "
                     "probe_audio: sample-rate/channels/duration/peak/silence. "
                     "probe_video: codec/duration/resolution/fps."
                 ),
@@ -88,9 +96,44 @@ READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
                 "type": ["object", "null"],
                 "description": (
                     "Optional op-specific scope, e.g. "
-                    "{'sheet': 'Summary'} or {'page': 1} or "
+                    "{'workbook_page': 1}, {'slide': 1}, {'page': 1}, or "
                     "{'page_start': 1, 'page_end': 3}."
                 ),
+                "additionalProperties": True,
+            },
+        },
+        "required": ["op", "path"],
+        "additionalProperties": False,
+    },
+}
+
+# The public Python API retains render_to_image for the harness. The model
+# only receives this reduced schema and cannot request image bytes directly.
+MODEL_READ_DELIVERABLE_OPS: Tuple[str, ...] = tuple(
+    op for op in READ_DELIVERABLE_OPS if op != "render_to_image"
+)
+MODEL_READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
+    "type": "function",
+    "name": "read_deliverable",
+    "description": (
+        "Read-only inspection of an allowlisted candidate or reference file. "
+        "Use this to verify structure, content, formatting, audio, or video "
+        "metadata. Visual rendering is performed only by the grading harness."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "op": {
+                "type": "string",
+                "enum": list(MODEL_READ_DELIVERABLE_OPS),
+            },
+            "path": {
+                "type": "string",
+                "description": "Exact path from an allowlist in the prompt.",
+            },
+            "scope": {
+                "type": ["object", "null"],
+                "description": "Optional op-specific content/formatting scope.",
                 "additionalProperties": True,
             },
         },
@@ -105,6 +148,18 @@ READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
 
 class ReadDeliverableError(Exception):
     """Raised for non-recoverable misuse (programmer error)."""
+
+
+class RendererDependencyError(ReadDeliverableError):
+    """Raised when an external renderer required by an op is unavailable."""
+
+
+class InvalidScope(ReadDeliverableError):
+    """Raised when a render scope has invalid keys or values."""
+
+
+class UnsupportedScope(ReadDeliverableError):
+    """Raised when a validly-shaped render scope is not implemented."""
 
 
 def _envelope_error(msg: str, kind: str = "error") -> Dict[str, Any]:
@@ -492,21 +547,60 @@ def _downsample_to_cap(png: bytes) -> bytes:
         return png
     from PIL import Image  # type: ignore
     img = Image.open(io.BytesIO(png))
-    scale = (MAX_IMAGE_BYTES / len(png)) ** 0.5
-    new_size = (max(64, int(img.width * scale)), max(64, int(img.height * scale)))
-    img = img.resize(new_size, Image.LANCZOS)
-    return _png_bytes_from_pil(img)
+    while len(png) > MAX_IMAGE_BYTES and max(img.size) > 64:
+        scale = min(0.9, (MAX_IMAGE_BYTES / len(png)) ** 0.5 * 0.95)
+        new_size = (
+            max(64, int(img.width * scale)),
+            max(64, int(img.height * scale)),
+        )
+        if new_size == img.size:
+            break
+        img = img.resize(new_size, Image.LANCZOS)
+        png = _png_bytes_from_pil(img)
+    if len(png) > MAX_IMAGE_BYTES:
+        raise ReadDeliverableError(
+            f"rendered image exceeds {MAX_IMAGE_BYTES} byte cap after downsampling"
+        )
+    return png
 
 
-def _render_pdf_page(p: Path, page: int) -> bytes:
+def _positive_int(value: Any, label: str) -> int:
+    if isinstance(value, bool):
+        raise InvalidScope(f"{label} must be a positive 1-based integer")
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+    else:
+        raise InvalidScope(f"{label} must be a positive 1-based integer")
+    if parsed < 1:
+        raise InvalidScope(f"{label} must be a positive 1-based integer")
+    return parsed
+
+
+def _validate_scope_keys(
+    scope: Dict[str, Any],
+    *,
+    allowed: set[str],
+    source_kind: str,
+) -> None:
+    unknown = sorted(set(scope) - allowed)
+    if unknown:
+        raise InvalidScope(
+            f"unknown scope keys for {source_kind}: {unknown}; "
+            f"allowed keys: {sorted(allowed)}"
+        )
+
+
+def _render_pdf_page(p: Path, page: int) -> Tuple[bytes, int]:
     import fitz  # type: ignore
     doc = fitz.open(str(p))
     try:
         if page < 1 or page > doc.page_count:
-            raise ReadDeliverableError(
+            raise InvalidScope(
                 f"page {page} out of range 1..{doc.page_count}")
         pix = doc.load_page(page - 1).get_pixmap(dpi=150)
-        return pix.tobytes("png")
+        return pix.tobytes("png"), doc.page_count
     finally:
         doc.close()
 
@@ -516,29 +610,295 @@ def _render_image(p: Path) -> bytes:
     return _png_bytes_from_pil(Image.open(p))
 
 
+def _find_soffice() -> Optional[str]:
+    for executable in ("soffice", "libreoffice"):
+        found = shutil.which(executable)
+        if found:
+            return found
+    return None
+
+
+def _minimal_libreoffice_env(work_dir: Path) -> Dict[str, str]:
+    environment = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(work_dir),
+        "TMPDIR": str(work_dir),
+    }
+    for key, value in os.environ.items():
+        if key == "LANG" or key.startswith("LC_"):
+            environment[key] = value
+    environment.setdefault("LC_ALL", "C.UTF-8")
+    return environment
+
+
+def _pymupdf_runtime_version() -> str:
+    try:
+        import fitz  # type: ignore
+    except ImportError as exc:
+        raise RendererDependencyError(
+            "PyMuPDF is required for grading renders"
+        ) from exc
+
+    for candidate in (
+        getattr(fitz, "__version__", None),
+        getattr(fitz, "VersionBind", None),
+    ):
+        if candidate is not None and str(candidate).strip():
+            return str(candidate).strip()
+    version_tuple = getattr(fitz, "version", None)
+    if isinstance(version_tuple, (tuple, list)) and version_tuple:
+        candidate = str(version_tuple[0]).strip()
+        if candidate:
+            return candidate
+    raise RendererDependencyError("PyMuPDF runtime version is unavailable")
+
+
+@lru_cache(maxsize=8)
+def _renderer_fingerprint_for_executable(executable: str) -> Dict[str, str]:
+    with tempfile.TemporaryDirectory(
+        prefix="gdpval-grade-renderer-version-"
+    ) as temp:
+        work_dir = Path(temp)
+        try:
+            completed = subprocess.run(
+                [executable, "--headless", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=RENDERER_VERSION_TIMEOUT_SEC,
+                check=False,
+                env=_minimal_libreoffice_env(work_dir),
+                shell=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RendererDependencyError(
+                "LibreOffice version probe timed out"
+            ) from exc
+        except OSError as exc:
+            raise RendererDependencyError(
+                f"LibreOffice version probe failed: {exc}"
+            ) from exc
+
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "no output")[-300:]
+        raise RendererDependencyError(
+            "LibreOffice version probe failed "
+            f"(exit {completed.returncode}): {detail}"
+        )
+    output = completed.stdout or completed.stderr or ""
+    first_line = output.splitlines()[0].strip() if output.splitlines() else ""
+    if not first_line:
+        raise RendererDependencyError(
+            "LibreOffice version probe returned no version"
+        )
+    return {
+        "libreoffice_binary": Path(executable).name,
+        "libreoffice_version": first_line[:RENDERER_VERSION_MAX_CHARS],
+        "pymupdf_version": _pymupdf_runtime_version(),
+    }
+
+
+def get_renderer_fingerprint() -> Dict[str, str]:
+    """Return the exact fail-closed Office renderer dependency fingerprint."""
+    executable = _find_soffice()
+    if executable is None:
+        raise RendererDependencyError(
+            "LibreOffice executable not found; install soffice/libreoffice "
+            "to render XLSX or PPTX deliverables"
+        )
+    try:
+        return dict(_renderer_fingerprint_for_executable(executable))
+    except ReadDeliverableError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise RendererDependencyError(
+            f"renderer fingerprint probe failed: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+def _convert_office_to_pdf(source: Path, out_dir: Path) -> Path:
+    soffice = _find_soffice()
+    if soffice is None:
+        raise RendererDependencyError(
+            "LibreOffice executable not found; install soffice/libreoffice "
+            "to render XLSX or PPTX deliverables"
+        )
+    profile_dir = out_dir / "libreoffice-profile"
+    profile_dir.mkdir()
+    command = [
+        soffice,
+        "--headless",
+        "--safe-mode",
+        "--norestore",
+        "--nologo",
+        "--nodefault",
+        "--nofirststartwizard",
+        "--nolockcheck",
+        f"-env:UserInstallation={profile_dir.as_uri()}",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        str(out_dir),
+        str(source),
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+            env=_minimal_libreoffice_env(out_dir),
+            shell=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ReadDeliverableError(
+            "LibreOffice conversion timed out after 120 seconds"
+        ) from exc
+    pdf_path = out_dir / f"{source.stem}.pdf"
+    if completed.returncode != 0 or not pdf_path.is_file():
+        detail = (completed.stderr or completed.stdout or "no converter output")[-300:]
+        raise ReadDeliverableError(
+            f"LibreOffice conversion failed (exit {completed.returncode}): {detail}"
+        )
+    return pdf_path
+
+
+def _xlsx_sheet_count(source: Path) -> int:
+    import openpyxl  # type: ignore
+
+    workbook = openpyxl.load_workbook(
+        source,
+        data_only=True,
+        read_only=True,
+        keep_vba=source.suffix.lower() == ".xlsm",
+    )
+    try:
+        sheet_count = len(workbook.sheetnames)
+        if sheet_count == 0:
+            raise ReadDeliverableError("workbook has no sheets to render")
+        return sheet_count
+    finally:
+        workbook.close()
+
+
 def _op_render_to_image(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
     kind = _kind_of(p)
     if kind == "pdf":
-        page = int(scope.get("page", 1))
-        png = _render_pdf_page(p, page)
+        _validate_scope_keys(scope, allowed={"page"}, source_kind="pdf")
+        page = _positive_int(scope.get("page", 1), "page")
+        png, page_count = _render_pdf_page(p, page)
         png = _downsample_to_cap(png)
         return {
             "kind": "image_png_base64",
             "page": page,
+            "source_kind": "pdf",
+            "scope": {"page": page},
+            "source_page_count": page_count,
+            "renderer": {
+                "rasterizer": "pymupdf",
+                "pymupdf_version": _pymupdf_runtime_version(),
+                "dpi": 150,
+            },
+            "base64": base64.b64encode(png).decode("ascii"),
+            "byte_size": len(png),
+        }
+    if kind == "xlsx":
+        unknown_keys = sorted(
+            set(scope) - {"workbook_page", "sheet", "sheet_page"}
+        )
+        if unknown_keys:
+            raise InvalidScope(
+                f"unknown scope keys for {p.suffix.lower().lstrip('.')}: "
+                f"{unknown_keys}; allowed keys: ['workbook_page']"
+            )
+        legacy_keys = sorted(set(scope).intersection({"sheet", "sheet_page"}))
+        if legacy_keys:
+            raise UnsupportedScope(
+                "named sheet/sheet_page rendering is not supported; "
+                "use {'workbook_page': 1} to sample the first converted "
+                "workbook page"
+            )
+        _validate_scope_keys(
+            scope, allowed={"workbook_page"}, source_kind=p.suffix.lower().lstrip(".")
+        )
+        workbook_page = _positive_int(
+            scope.get("workbook_page", 1), "workbook_page"
+        )
+        if workbook_page != 1:
+            raise UnsupportedScope(
+                "only workbook_page=1 is supported; generic workbook page "
+                "discovery is deferred"
+            )
+        sheet_count = _xlsx_sheet_count(p)
+        renderer_fingerprint = get_renderer_fingerprint()
+        with tempfile.TemporaryDirectory(prefix="gdpval-grade-render-") as temp:
+            out_dir = Path(temp)
+            converted = _convert_office_to_pdf(p, out_dir)
+            png, converted_page_count = _render_pdf_page(
+                converted, workbook_page
+            )
+        png = _downsample_to_cap(png)
+        return {
+            "kind": "image_png_base64",
+            "source_kind": "xlsx",
+            "scope": {"workbook_page": workbook_page},
+            "source_sheet_count": sheet_count,
+            "converted_page_count": converted_page_count,
+            "renderer": {
+                "converter": "libreoffice",
+                "rasterizer": "pymupdf",
+                "dpi": 150,
+                **renderer_fingerprint,
+            },
+            "base64": base64.b64encode(png).decode("ascii"),
+            "byte_size": len(png),
+        }
+    if kind == "pptx":
+        from pptx import Presentation  # type: ignore
+
+        _validate_scope_keys(scope, allowed={"slide"}, source_kind="pptx")
+        slide = _positive_int(scope.get("slide", 1), "slide")
+        slide_count = len(Presentation(str(p)).slides)
+        if slide > slide_count:
+            raise InvalidScope(
+                f"slide {slide} out of range 1..{slide_count}"
+            )
+        renderer_fingerprint = get_renderer_fingerprint()
+        with tempfile.TemporaryDirectory(prefix="gdpval-grade-render-") as temp:
+            out_dir = Path(temp)
+            converted = _convert_office_to_pdf(p, out_dir)
+            png, converted_page_count = _render_pdf_page(converted, slide)
+        png = _downsample_to_cap(png)
+        return {
+            "kind": "image_png_base64",
+            "source_kind": "pptx",
+            "scope": {"slide": slide},
+            "source_slide_count": slide_count,
+            "converted_page_count": converted_page_count,
+            "renderer": {
+                "converter": "libreoffice",
+                "rasterizer": "pymupdf",
+                "dpi": 150,
+                **renderer_fingerprint,
+            },
             "base64": base64.b64encode(png).decode("ascii"),
             "byte_size": len(png),
         }
     if kind == "image":
+        _validate_scope_keys(scope, allowed=set(), source_kind="image")
         png = _downsample_to_cap(_render_image(p))
         return {
             "kind": "image_png_base64",
+            "source_kind": "image",
+            "scope": {},
+            "renderer": {"rasterizer": "pillow"},
             "base64": base64.b64encode(png).decode("ascii"),
             "byte_size": len(png),
         }
-    # xlsx/docx/pptx → would need LibreOffice headless; out of v2 scope.
-    raise ReadDeliverableError(
+    raise UnsupportedScope(
         f"render_to_image not supported for kind={kind}; "
-        "supported: pdf, image. Use inspect_structure/read_content instead."
+        "supported: pdf, xlsx, pptx, image. "
+        "Use inspect_structure/read_content instead."
     )
 
 
@@ -699,6 +1059,8 @@ def read_deliverable(
             f"unknown op {op!r}; allowed: {list(READ_DELIVERABLE_OPS)}",
             kind="bad_op",
         )
+    if scope is not None and not isinstance(scope, dict):
+        return _envelope_error("scope must be an object or null", kind="bad_scope")
     resolved = _resolve_trusted_path(path, base_dir)
     if resolved is None:
         return _envelope_error(
@@ -709,11 +1071,18 @@ def read_deliverable(
     try:
         data = fn(resolved, scope or {})
         return _envelope_ok(data)
+    except RendererDependencyError as exc:
+        return _envelope_error(str(exc), kind="dependency_missing")
+    except InvalidScope as exc:
+        return _envelope_error(str(exc), kind="bad_scope")
+    except UnsupportedScope as exc:
+        return _envelope_error(str(exc), kind="unsupported_scope")
     except ReadDeliverableError as exc:
         return _envelope_error(str(exc), kind="op_error")
     except ImportError as exc:
+        package = "PyMuPDF" if exc.name == "fitz" else exc.name
         return _envelope_error(
-            f"required library missing: {exc.name}",
+            f"required Python library missing: {package}",
             kind="dependency_missing",
         )
     except Exception as exc:  # noqa: BLE001

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pytest
 
 from core.deliverable_selector import (
     ITEM_TARGET_AUDIT_SCHEMA,
@@ -359,12 +360,17 @@ def test_no_generated_candidate_is_distinct_from_selection_error():
     assert selection.primary_targets == []
 
 
-def test_criterion_routing_uses_hybrid_policy_for_overall_style():
+@pytest.mark.parametrize(
+    "criterion",
+    [
+        "Overall Style",
+        "Overall formatting and style of the deliverable",
+        "The overall presentation and professional polish",
+    ],
+)
+def test_criterion_routing_uses_hybrid_policy_for_overall_style(criterion):
     separate = _select(next(f for f in GOLD_FIXTURES if f["task_id"] == "a74ead3b"))
-    plan = plan_targets_for_criterion(
-        separate,
-        _actual_criterion("a74ead3b", "Overall formatting and style"),
-    )
+    plan = plan_targets_for_criterion(separate, criterion)
     assert plan.target_scope == "split_children"
     assert plan.aggregation_rule == "blocking_min_else_mean"
     assert set(plan.target_ids) == {
@@ -373,10 +379,7 @@ def test_criterion_routing_uses_hybrid_policy_for_overall_style():
     }
 
     main = _select(next(f for f in GOLD_FIXTURES if f["task_id"] == "99ac6944"))
-    main_plan = plan_targets_for_criterion(
-        main,
-        _actual_criterion("99ac6944", "Overall formatting and style"),
-    )
+    main_plan = plan_targets_for_criterion(main, criterion)
     assert main_plan.target_scope == "file_target"
     assert main_plan.selected_paths == [_path("99ac6944", "West_Coast_Tour_IEM_Mobile_Setup.pdf")]
 
