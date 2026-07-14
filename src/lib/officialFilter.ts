@@ -15,6 +15,14 @@
  */
 import type { GradeResult } from '../hooks/useGrades'
 import type { ExperimentEntry } from '../types/report'
+import {
+  isHiddenDiagnosticExperimentId,
+  isHiddenOfficialExperiment,
+  isSmokeExperimentId,
+  OFFICIAL_TASK_COUNT,
+} from './officialExperimentScope.js'
+
+export { OFFICIAL_TASK_COUNT }
 
 /**
  * Smoke / test identifier. `exp99x` is the reserved smoke namespace
@@ -22,8 +30,7 @@ import type { ExperimentEntry } from '../types/report'
  * literally contains "smoke". Never matches official ids exp003–exp025.
  */
 export function isSmokeId(s: string | null | undefined): boolean {
-  if (!s) return false
-  return /(^|[_-])exp99\d/i.test(s) || /smoke/i.test(s)
+  return isSmokeExperimentId(s)
 }
 
 /** Legacy demonstration grade (e.g. `dummy_gpt5_baseline`) — not a real run. */
@@ -72,16 +79,19 @@ export function isHiddenGrade(g: GradeResult): boolean {
     isDemoGrade(g) ||
     isSmokeId(g.experiment_id) ||
     isSmokeId(g.id) ||
+    isHiddenDiagnosticExperimentId(g.experiment_id) ||
+    isHiddenDiagnosticExperimentId(g.id) ||
     isLegacyExp003(g)
   )
 }
 
 /**
  * True when an experiment (inference report) should be hidden from the default
- * view — currently only smoke/test runs (the `exp999` "Smoke Baseline").
+ * view: smoke/test runs and explicitly registered diagnostic reports.
+ * `?debug=1` still exposes every underlying report.
  */
 export function isHiddenExperiment(
-  e: Pick<ExperimentEntry, 'short_id' | 'experiment_name'>,
+  e: Pick<ExperimentEntry, 'short_id' | 'experiment_name' | 'total_tasks'>,
 ): boolean {
-  return isSmokeId(e.short_id) || isSmokeId(e.experiment_name)
+  return isHiddenOfficialExperiment(e)
 }

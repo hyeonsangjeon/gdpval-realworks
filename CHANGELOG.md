@@ -12,6 +12,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Dashboard diagnostic scope consistency** — register exp027 as a diagnostic
+  report hidden from every default cross-run surface, including leaderboard,
+  trends, error narratives, header scope, and future grade cards. `?debug=1`
+  restores the aligned experiment/report set, direct detail URLs remain
+  available, existing valid subsets such as exp012 stay visible, and global
+  benchmark KPI copy remains fixed at 220 tasks. Shipped through PR #67
+  (`92efc105`) and verified on the deployed site: the default leaderboard/error
+  views exclude exp027 (22 experiments), while `?debug=1` restores it (23
+  experiments) and direct detail navigation remains available.
 - **Inference config and subset integrity** — preserve `model.reasoning_effort`
   from experiment YAML through prepared tasks, add validated ordered
   `data.filter.task_ids`, and carry canonical task scope through Steps 4 and 5.
@@ -33,7 +42,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   9-sector diagnostic subprocess comparator for the historical exp026
   Sandbox/Skills runner bundle. Includes pinned 42 non-success-union tasks, six
   media controls, two general controls, source revisions, selection provenance,
-  and analysis guardrails against causal or population-level overclaiming.
+  and analysis guardrails against causal or population-level overclaiming. The
+  implementation landed through PR #64 (`4306fa55`). Actions run #93 completed
+  without relay in 2h47m54s: 23 success, 14 QA-failed, and 13 error tasks, with
+  a 5.08 average Self-QA. HF upload completed; result PR #66 was merged as
+  `2a33c998` after the scope guard and Pages deployment `29342879619` published
+  the report. The raw generated index contains exp027, while the default UI
+  keeps official benchmark scope and KPI copy at 220 tasks.
+- **Pinned exp026/exp027 paired analysis** — add a standard-library analyzer,
+  immutable HF revisions and content hashes, deterministic 10,000-resample
+  bootstrap settings, unit tests, and a checked-in diagnostic report. The same
+  50 tasks show exp026 30/14/6 versus exp027 23/14/13
+  success/QA-failed/error, while paired Self-QA is effectively unchanged.
+  Outcome-selected statistics are explicitly non-confirmatory.
 - **Repository completion records** — `.github/copilot-instructions.md` now
   requires every repository-changing task to refresh
   `tasks/LATEST_TASK_RESULT/README.md` and the `[Unreleased]` changelog before

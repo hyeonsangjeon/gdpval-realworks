@@ -14,7 +14,10 @@ import { useTheme } from '../contexts/ThemeContext'
 import { tooltipTexts } from '../data/tooltipTexts'
 import { onboarding } from '../utils/onboarding'
 import { substituteTaskTotal } from '../lib/textFormat'
-import { isHiddenExperiment } from '../lib/officialFilter'
+import { OFFICIAL_TASK_COUNT } from '../lib/officialFilter'
+import {
+  getDashboardDisplayData,
+} from '../lib/officialExperimentScope.js'
 
 type TabKey = 'leaderboard' | 'trend' | 'errors' | 'grading'
 
@@ -28,8 +31,8 @@ const TABS: { id: TabKey; label: string; icon: React.ReactNode; color: string }[
 export default function Dashboard() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  // `?debug=1` reveals demo/smoke entries that are hidden in the default view.
-  // Display toggle only (not access control) — demo/smoke are not sensitive.
+  // `?debug=1` reveals demo/smoke/subset entries hidden in the default view.
+  // Display toggle only (not access control) — these reports are not sensitive.
   const debug = searchParams.get('debug') === '1'
   const { reports, experiments, sectorMatrix, generated, loading, error } = useReports()
   const { isDark, toggle: toggleTheme } = useTheme()
@@ -44,8 +47,6 @@ export default function Dashboard() {
     }
   }, [])
 
-  const displayReports = demoMode ? reports.filter((r) => r.meta.report_scope === 'self_assessed_pre_grading') : reports
-
   // Parse "138m 37s" → seconds for sorting
   const parseDuration = (d: string) => {
     const m = d.match(/(\d+)m/)
@@ -53,19 +54,22 @@ export default function Dashboard() {
     return (m ? parseInt(m[1]) * 60 : 0) + (s ? parseInt(s[1]) : 0)
   }
 
-  // Sort: date desc → duration desc
-  const displayExperiments = useMemo(() => {
-    let list = demoMode
-      ? experiments.filter((e) => e.report_scope === 'self_assessed_pre_grading')
-      : [...experiments]
-    // Phase 1: hide smoke/test runs from the default view (?debug=1 restores).
-    if (!debug) list = list.filter((e) => !isHiddenExperiment(e))
-    return list.sort((a, b) => {
+  // Scope experiments and report narratives/errors together, then sort.
+  const displayData = useMemo(() => {
+    const scoped = getDashboardDisplayData(
+      experiments,
+      reports,
+      { debug, demoMode },
+    )
+    scoped.experiments.sort((a, b) => {
       const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime()
       if (dateDiff !== 0) return dateDiff
       return parseDuration(b.duration) - parseDuration(a.duration)
     })
-  }, [experiments, demoMode, debug])
+    return scoped
+  }, [experiments, reports, demoMode, debug])
+  const displayExperiments = displayData.experiments
+  const displayReports = displayData.reports
 
   if (loading) {
     return (
@@ -92,7 +96,8 @@ export default function Dashboard() {
   // Calculate KPIs
   const bestRate = displayExperiments.length > 0 ? Math.max(...displayExperiments.map((e) => e.success_rate_pct)) : 0
   const bestQA = displayExperiments.length > 0 ? Math.max(...displayExperiments.map((e) => e.avg_qa_score)) : 0
-  const totalTasks = displayExperiments[0]?.total_tasks ?? 220
+  // Keep global benchmark copy stable even when debug mode reveals subsets.
+  const totalTasks = OFFICIAL_TASK_COUNT
 
   const handleSelectExperiment = (shortId: string) => {
     navigate(`/experiments/${shortId}`)
@@ -193,7 +198,7 @@ export default function Dashboard() {
             },
             {
               label: 'Tasks Evaluated',
-              value: displayExperiments.length > 0 ? displayExperiments[0].total_tasks : 0,
+              value: displayExperiments.length > 0 ? totalTasks : 0,
               unit: 'per experiment',
               tooltip: tooltipTexts.kpi.tasksEvaluated,
               valueColor: 'text-dash-heading',
