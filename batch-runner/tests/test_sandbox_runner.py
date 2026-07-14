@@ -128,6 +128,8 @@ def test_execute_always_without_docker_errors():
     assert used == "docker"
     assert result["success"] is False
     assert "Docker daemon unavailable" in result["error"]
+    assert result["error_category"] == "backend_unavailable"
+    assert result["preflight"] is None
 
 
 def test_execute_always_missing_image_errors():
@@ -137,6 +139,29 @@ def test_execute_always_missing_image_errors():
         used, result = runner._execute("print('x')", [], manifest=_dummy_manifest())
     assert result["success"] is False
     assert "not found" in result["error"]
+    assert result["error_category"] == "backend_unavailable"
+
+
+def test_backend_unavailable_manifest_is_not_executed():
+    runner = SandboxRunner(
+        llm_client=object(),
+        use_docker="always",
+        repair={"enabled": False},
+        output_qa={"enabled": True, "render": False},
+    )
+    response = _fake_response("```python\nprint('x')\n```")
+
+    with patch.object(sr, "complete", lambda **kwargs: (response, {})), \
+         patch.object(sr, "docker_available", return_value=False):
+        result = runner.run(
+            task_prompt="Create a PDF report",
+            model="m",
+            reference_files=[],
+        )
+
+    assert result["error_category"] == "backend_unavailable"
+    assert result["sandbox_manifest"]["sandbox_backend"] == "not_executed"
+    assert result["sandbox_manifest"]["attempts"][0]["error_category"] == "backend_unavailable"
 
 
 def test_execute_auto_falls_back_when_no_docker():
@@ -165,7 +190,7 @@ def test_docker_command_security_flags(tmp_path):
     assert "/work:/opt/gdpval" in joined  # mounted + baked skills both on path
     # Prevent root-owned __pycache__ in the bind-mounted tmpdir (host rmtree EPERM).
     assert "PYTHONDONTWRITEBYTECODE=1" in joined
-    assert cmd[-4:] == [runner.image, "python", "-u", "solution.py"]
+    assert cmd[-4:] == [runner.image, "python", "-u", sr.RUNNER_FILENAME]
 
 
 def test_docker_command_without_posix_ids_omits_user(tmp_path):
@@ -174,7 +199,7 @@ def test_docker_command_without_posix_ids_omits_user(tmp_path):
          patch.object(sr.os, "getgid", None, create=True):
         cmd = runner._docker_command(str(tmp_path), skills_mounted=False)
     assert "--user" not in cmd
-    assert cmd[-4:] == [runner.image, "python", "-u", "solution.py"]
+    assert cmd[-4:] == [runner.image, "python", "-u", sr.RUNNER_FILENAME]
 
 
 def test_docker_command_pythonpath_without_mount(tmp_path):
@@ -227,6 +252,10 @@ def test_run_no_code_returns_failure():
     assert result["success"] is False
     assert "No Python code" in result["error"]
     assert result["metadata"]["executor"] == "none"
+    assert result["sandbox_manifest"]["sandbox_backend"] == "not_executed"
+    assert len(result["sandbox_manifest"]["attempts"]) == 1
+    assert result["sandbox_manifest"]["attempts"][0]["error_category"] == "no_code"
+    assert result["sandbox_manifest"]["attempts"][0]["response"]["sha256"]
 
 
 def test_run_selects_skills_for_video_task():
@@ -308,6 +337,347 @@ def test_repair_loop_produces_repaired_ok():
     assert statuses == ["failed_contract", "repaired_ok"]
     names = [f["filename"] for f in result["files"]]
     assert "deck.pptx" in names and "deck.docx" not in names
+
+
+def test_syntax_preflight_skips_execution_then_repairs():
+    """Invalid Python never executes; one guided regeneration can recover."""
+    _pptx = _pptx_bytes()
+    runner = _runner_no_render()
+    responses = [
+        _fake_response('```python\ncontent = """unterminated\n```'),
+        _fake_response("```python\nprint('build')\n```"),
+    ]
+    prompts = []
+
+    def _complete(**kwargs):
+        prompts.append(kwargs["messages"][1]["content"])
+        return responses[len(prompts) - 1], {}
+
+    with patch.object(sr, "complete", _complete), \
+         patch.object(
+             runner,
+             "_execute",
+             side_effect=[
+                 (
+                     "local",
+                     {
+                         "success": False,
+                         "text": "",
+                         "files": [],
+                         "error": "SyntaxError at line 1",
+                         "error_category": "syntax_error",
+                         "preflight": {
+                             "ok": False,
+                             "stage": "compile",
+                             "error_type": "SyntaxError",
+                             "line": 1,
+                             "offset": 11,
+                             "target_python": "3.11.15",
+                         },
+                     },
+                 ),
+                 (
+                     "local",
+                     {
+                         "success": True,
+                         "text": "ok",
+                         "files": [{"filename": "deck.pptx", "content": _pptx}],
+                         "preflight": {
+                             "ok": True,
+                             "stage": "compile",
+                             "target_python": "3.11.15",
+                         },
+                     },
+                 ),
+             ],
+         ) as execute:
+        result = runner.run(
+            task_prompt="Create a pptx deck",
+            model="m",
+            reference_files=[],
+        )
+
+    assert execute.call_count == 2
+    attempts = result["sandbox_manifest"]["attempts"]
+    assert [attempt["executor"] for attempt in attempts] == ["local", "local"]
+    assert attempts[0]["blocking_error_categories"] == ["syntax_error"]
+    assert attempts[0]["preflight"]["error_type"] == "SyntaxError"
+    assert attempts[1]["preflight"]["ok"] is True
+    assert result["final_status"] == "repaired_ok"
+    assert "Required repair strategy:" in prompts[1]
+    assert "validate it with compile" in prompts[1]
+
+
+def test_terminal_syntax_preflight_records_not_executed_backend():
+    runner = _runner_no_render(repair={"enabled": False})
+    response = _fake_response('```python\nvalue = """unterminated\n```')
+
+    with patch.object(sr, "complete", lambda **kwargs: (response, {})), \
+         patch.object(
+             runner,
+             "_execute",
+             return_value=(
+                 "local",
+                 {
+                     "success": False,
+                     "text": "",
+                     "files": [],
+                     "error": "SyntaxError at line 1",
+                     "error_category": "syntax_error",
+                     "preflight": {
+                         "ok": False,
+                         "stage": "compile",
+                         "error_type": "SyntaxError",
+                         "line": 1,
+                         "offset": 9,
+                         "target_python": "3.11.15",
+                     },
+                 },
+             ),
+         ) as execute:
+        result = runner.run(
+            task_prompt="Create a PDF report",
+            model="m",
+            reference_files=[],
+        )
+
+    execute.assert_called_once()
+    assert result["sandbox_manifest"]["sandbox_backend"] == "not_executed"
+    assert result["sandbox_manifest"]["attempts"][0]["preflight"]["ok"] is False
+
+
+def test_local_preflight_uses_actual_host_interpreter():
+    import sys
+
+    runner = _runner_no_render()
+    code = "try:\n    raise ValueError('x')\nexcept* ValueError:\n    pass\n"
+
+    result = runner._local.run_code(code)
+
+    expected_version = ".".join(map(str, sys.version_info[:3]))
+    assert result["preflight"]["target_python"] == expected_version
+    assert result["preflight"]["ok"] is (sys.version_info >= (3, 11))
+
+
+def test_local_preflight_catches_compile_stage_error():
+    runner = _runner_no_render()
+
+    result = runner._local.run_code("return 1")
+
+    assert result["preflight"]["ok"] is False
+    assert result["preflight"]["stage"] == "compile"
+    assert result["preflight"]["error_type"] == "SyntaxError"
+
+
+@pytest.mark.skipif(
+    not sr.docker_available() or not sr.docker_image_exists(sr.DEFAULT_SANDBOX_IMAGE),
+    reason="gdpval sandbox image unavailable",
+)
+def test_docker_preflight_uses_python_311_and_rejects_312_syntax():
+    py311 = "try:\n    raise ValueError('x')\nexcept* ValueError:\n    pass\n"
+
+    def run_launcher(source):
+        from core.subprocess_runner import (
+            RUNNER_FILENAME,
+            build_execution_launcher,
+            parse_execution_streams,
+        )
+
+        launcher = build_execution_launcher([])
+        harness = (
+            "from pathlib import Path\n"
+            "import runpy\n"
+            f"Path('solution.py').write_text({source!r}, encoding='utf-8')\n"
+            f"Path({RUNNER_FILENAME!r}).write_text({launcher!r}, encoding='utf-8')\n"
+            "try:\n"
+            f"    runpy.run_path({RUNNER_FILENAME!r}, run_name='__main__')\n"
+            "except SyntaxError:\n"
+            "    pass\n"
+        )
+        completed = sr.subprocess.run(
+            [
+                "docker", "run", "--rm", sr.DEFAULT_SANDBOX_IMAGE,
+                "python", "-c", harness,
+            ],
+            capture_output=True,
+            text=False,
+            timeout=60,
+        )
+        _, stderr, preflight, _ = parse_execution_streams(
+            completed.stdout,
+            completed.stderr,
+        )
+        assert completed.returncode == 0, stderr
+        return preflight
+
+    accepted = run_launcher(py311)
+    rejected = run_launcher("type Alias = int")
+
+    assert accepted["ok"] is True
+    assert accepted["target_python"].startswith("3.11.")
+    assert rejected["ok"] is False
+    assert rejected["target_python"].startswith("3.11.")
+
+
+def test_runtime_failure_beats_prior_preflight_failure_as_best_attempt():
+    runner = _runner_no_render()
+    responses = [
+        _fake_response('```python\nvalue = """unterminated\n```'),
+        _fake_response("```python\nraise RuntimeError('runtime failure')\n```"),
+    ]
+    calls = 0
+
+    def _complete(**kwargs):
+        nonlocal calls
+        response = responses[calls]
+        calls += 1
+        return response, {}
+
+    with patch.object(sr, "complete", _complete), \
+         patch.object(
+             runner,
+             "_execute",
+             side_effect=[
+                 (
+                     "local",
+                     {
+                         "success": False,
+                         "text": "",
+                         "files": [],
+                         "error": "SyntaxError at line 1",
+                         "error_category": "syntax_error",
+                         "preflight": {
+                             "ok": False,
+                             "stage": "compile",
+                             "error_type": "SyntaxError",
+                             "line": 1,
+                             "offset": 9,
+                             "target_python": "3.11.15",
+                         },
+                     },
+                 ),
+                 (
+                     "local",
+                     {
+                         "success": False,
+                         "text": "",
+                         "files": [],
+                         "error": "RuntimeError: runtime failure",
+                         "error_category": "execution_error",
+                         "preflight": {
+                             "ok": True,
+                             "stage": "compile",
+                             "target_python": "3.11.15",
+                         },
+                     },
+                 ),
+             ],
+         ) as execute:
+        result = runner.run(
+            task_prompt="Create a PDF report",
+            model="m",
+            reference_files=[],
+        )
+
+    assert execute.call_count == 2
+    assert result["sandbox_manifest"]["best_attempt"] == 1
+    assert result["sandbox_manifest"]["sandbox_backend"] == "local_fallback"
+    assert result["sandbox_manifest"]["final_status"] == "failed_execution"
+    assert result["error_category"] == "execution_error"
+
+
+def test_docker_oom_returns_structured_category():
+    runner = _runner_no_render()
+    completed = SimpleNamespace(returncode=137, stdout="", stderr="")
+
+    with patch.object(sr.subprocess, "run", return_value=completed):
+        result = runner._execute_docker("print('x')", [])
+
+    assert result["error_category"] == "out_of_memory"
+    assert result["error"].startswith("memory_error:")
+
+
+def test_docker_binary_decode_failure_returns_structured_category():
+    runner = _runner_no_render()
+    decode_error = UnicodeDecodeError("utf-8", b"\xa9", 0, 1, "invalid")
+
+    with patch.object(sr.subprocess, "run", side_effect=decode_error):
+        result = runner._execute_docker("print('x')", [])
+
+    assert result["error_category"] == "binary_decode_error"
+    assert "not valid UTF-8" in result["error"]
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "Traceback (most recent call last):\nOSError: [Errno 12] Cannot allocate memory\n",
+        "Traceback (most recent call last):\nRuntimeError: CUDA out of memory\n",
+    ],
+)
+def test_docker_runtime_oom_message_uses_structured_category(stderr):
+    from core.subprocess_runner import PREFLIGHT_PREFIX
+
+    runner = _runner_no_render()
+    protocol = (
+        PREFLIGHT_PREFIX
+        + '{"ok":true,"stage":"compile","target_python":"3.11.15"}\n'
+    )
+    completed = SimpleNamespace(
+        returncode=1,
+        stdout=b"",
+        stderr=(protocol + stderr).encode("utf-8"),
+    )
+
+    with patch.object(sr.subprocess, "run", return_value=completed):
+        result = runner._execute_docker("print('x')", [])
+
+    assert result["error_category"] == "out_of_memory"
+    assert result["preflight"]["ok"] is True
+
+
+@pytest.mark.parametrize(
+    ("error", "category", "guidance"),
+    [
+        (
+            "KeyError: 'Invoice Date'",
+            "schema_error",
+            "Inspect the actual sheets, header rows, column names",
+        ),
+        (
+            "AttributeError: object has no attribute add_hyperlink",
+            "api_compatibility",
+            "Verify the installed library's supported API",
+        ),
+        (
+            "UnicodeDecodeError: utf-8 codec cannot decode byte 0xa9",
+            "binary_decode_error",
+            "Capture subprocess and media-tool output as bytes",
+        ),
+        (
+            "OutOfMemoryError: Failed to allocate 24883200 bytes",
+            "out_of_memory",
+            "Switch to streaming or chunked processing",
+        ),
+    ],
+)
+def test_reflection_uses_exception_specific_guidance(error, category, guidance):
+    from core.deliverable_contract import infer_deliverable_contract
+
+    runner = _runner_no_render()
+    contract = infer_deliverable_contract("Create a PDF report", [], {})
+    blocking = [f"execution_failed: {error}"]
+
+    reflection = runner._build_reflection(
+        contract,
+        blocking,
+        code="print('x')",
+        result={"text": "", "error": error},
+        analysis={"warnings": []},
+    )
+
+    assert sr._blocking_error_categories(blocking) == [category]
+    assert guidance in reflection
 
 
 def test_clean_first_attempt_does_not_repair():

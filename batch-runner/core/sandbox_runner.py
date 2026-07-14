@@ -45,6 +45,7 @@ from core.dependency_resolver import (
     probe_imports,
     resolve,
 )
+from core.execution_errors import classify_execution_error
 
 from core.llm_client import complete
 from core.output_qa import run_output_qa
@@ -56,7 +57,14 @@ from core.prompt_sections import (
 )
 from core.sandbox_cache import build_cache
 from core.skills_registry import SkillsRegistry
-from core.subprocess_runner import SubprocessRunner, extract_code, extract_description
+from core.subprocess_runner import (
+    RUNNER_FILENAME,
+    SubprocessRunner,
+    build_execution_launcher,
+    extract_code,
+    extract_description,
+    parse_execution_streams,
+)
 
 DEFAULT_SANDBOX_IMAGE = os.getenv("SANDBOX_IMAGE", "gdpval-sandbox:latest")
 
@@ -117,38 +125,17 @@ def _text_fingerprint(text: Optional[str]) -> dict:
     }
 
 
-def _error_category(text: Optional[str]) -> Optional[str]:
-    """Classify execution errors without retaining their raw messages."""
-    lowered = (text or "").lower()
-    if not lowered:
-        return None
-    categories = (
-        ("timeout", ("timed out", "timeout")),
-        ("out_of_memory", ("out of memory", "oom", "exit code 137")),
-        ("syntax_error", ("syntaxerror", "indentationerror")),
-        ("import_error", ("importerror", "modulenotfounderror")),
-        ("permission_error", ("permissionerror", "permission denied")),
-        ("file_not_found", ("filenotfounderror", "no such file")),
-        ("type_error", ("typeerror",)),
-        ("value_error", ("valueerror",)),
-    )
-    for category, markers in categories:
-        if any(
-            bool(re.search(r"\boom\b", lowered)) if marker == "oom"
-            else marker in lowered
-            for marker in markers
-        ):
-            return category
-    return "execution_error"
-
-
 def _blocking_error_categories(errors: List[str]) -> List[str]:
     """Reduce blocking details to stable, non-sensitive category labels."""
     categories: List[str] = []
     for error in errors:
         lowered = (error or "").lower()
-        if lowered.startswith("execution_failed:"):
-            category = _error_category(error) or "execution_error"
+        if lowered.startswith("syntax_preflight_failed:"):
+            category = "syntax_error"
+        elif lowered.startswith("execution_failed["):
+            category = lowered.split("[", 1)[1].split("]", 1)[0]
+        elif lowered.startswith("execution_failed:"):
+            category = classify_execution_error(error) or "execution_error"
         elif "no runnable python" in lowered or lowered == "no_code":
             category = "no_code"
         elif "deliverable" in lowered or "primary" in lowered or "contract" in lowered:
@@ -532,15 +519,66 @@ class SandboxRunner:
         executor_used, result = self._execute(code, ref_files, manifest)
         result["deliverable_text"] = deliverable_text
 
+        preflight = result.get("preflight")
+        if isinstance(preflight, dict) and preflight.get("ok") is False:
+            location = f"line {preflight.get('line')}"
+            if preflight.get("offset") is not None:
+                location += f", column {preflight['offset']}"
+            blocking = [
+                "syntax_preflight_failed: "
+                f"{preflight.get('error_type', 'SyntaxError')} at {location}"
+            ]
+            analysis = {"warnings": []}
+            return {
+                "no_code": False,
+                "executor": executor_used,
+                "result": result,
+                "manifest": manifest,
+                "code": code,
+                "blocking_errors": blocking,
+                "artifacts": [],
+                "contract_validation": None,
+                "verification": None,
+                "output_qa": None,
+                "import_probe": None,
+                "reflection_for_next": self._build_reflection(
+                    contract, blocking, code, result, analysis
+                ),
+                "report": {
+                    "attempt": attempt_idx,
+                    "status": "failed_execution",
+                    "executor": executor_used,
+                    "prompt_sha256": prompt_sha256,
+                    "code_sha256": _sha256_text(code),
+                    "llm_latency_ms": (
+                        round(float(llm_latency_ms), 2)
+                        if isinstance(llm_latency_ms, (int, float)) else None
+                    ),
+                    "usage": _response_usage(response),
+                    "blocking_error_count": 1,
+                    "blocking_error_categories": ["syntax_error"],
+                    "generated_artifacts": [],
+                    "preflight": preflight,
+                    "error_category": "syntax_error",
+                },
+            }
+
         # Inspect the produced artifacts in an isolated workspace.
         analysis = self._analyze_output(
             result, ref_files, contract, task_prompt, executor_used, manifest
         )
 
         blocking = list(analysis["blocking_errors"])
+        execution_error_category = (
+            result.get("error_category")
+            or classify_execution_error(result.get("error"))
+        )
         if not result.get("success"):
             tail = _sanitize_tail(result.get("error"), limit=600)
-            blocking.insert(0, f"execution_failed: {tail}")
+            blocking.insert(
+                0,
+                f"execution_failed[{execution_error_category or 'execution_error'}]: {tail}",
+            )
 
         status = self._status_for(attempt_idx, result, analysis, blocking)
         reflection_for_next = self._build_reflection(
@@ -574,9 +612,10 @@ class SandboxRunner:
                 "blocking_error_count": len(blocking),
                 "blocking_error_categories": _blocking_error_categories(blocking),
                 "generated_artifacts": analysis["artifact_names"],
+                "preflight": preflight,
                 "stdout": _text_fingerprint(result.get("text")),
                 "stderr": _text_fingerprint(result.get("error")),
-                "error_category": _error_category(result.get("error")),
+                "error_category": execution_error_category,
             },
         }
 
@@ -654,12 +693,23 @@ class SandboxRunner:
 
     @staticmethod
     def _is_better(candidate: dict, current: dict) -> bool:
-        """Prefer clean > more artifacts > fewer blocking > executed."""
+        """Prefer clean, then actually executed attempts, then useful output."""
         def score(a: dict):
             ok = 1 if not a["blocking_errors"] else 0
-            ran = 1 if a["result"].get("success") else 0
+            preflight = a.get("result", {}).get("preflight") or {}
+            execution_attempted = 1 if (
+                a.get("executor") in {"local", "docker"}
+                and preflight.get("ok") is True
+            ) else 0
+            succeeded = 1 if a["result"].get("success") else 0
             nfiles = len(a["result"].get("files") or [])
-            return (ok, ran, nfiles, -len(a["blocking_errors"]))
+            return (
+                ok,
+                execution_attempted,
+                succeeded,
+                nfiles,
+                -len(a["blocking_errors"]),
+            )
         return score(candidate) > score(current)
 
     @staticmethod
@@ -723,10 +773,19 @@ class SandboxRunner:
         self, executor_used, skills, manifest, contract, attempts, best,
         final_status, ref_files,
     ) -> dict:
+        preflight = best.get("result", {}).get("preflight") or {}
+        backend = {
+            "docker": "docker",
+            "local": "local_fallback",
+            "preflight": "not_executed",
+            "none": "not_executed",
+        }.get(executor_used, "not_executed")
+        if preflight.get("ok") is not True:
+            backend = "not_executed"
         return {
             "schema_version": MANIFEST_SCHEMA_VERSION,
             "execution_mode": "sandbox",
-            "sandbox_backend": "docker" if executor_used == "docker" else "local_fallback",
+            "sandbox_backend": backend,
             "sandbox_image": self.image if executor_used == "docker" else None,
             "run_context": _github_run_context(),
             "selected_skills": [s.name for s in skills],
@@ -805,6 +864,13 @@ class SandboxRunner:
         for err in blocking_errors[:12]:
             lines.append(f"- {err}")
 
+        categories = _blocking_error_categories(blocking_errors)
+        guidance_map = self.prompt_data.get("repair_guidance") or {}
+        guidance = [guidance_map[category] for category in categories if guidance_map.get(category)]
+        if guidance:
+            lines += ["", s.get("strategy_header", "Required repair strategy:")]
+            lines.extend(f"- {item}" for item in guidance)
+
         warnings = analysis.get("warnings") or []
         if warnings:
             lines.append("")
@@ -856,6 +922,8 @@ class SandboxRunner:
                     "success": False,
                     "text": "",
                     "files": [],
+                    "preflight": None,
+                    "error_category": "backend_unavailable",
                     "error": f"Sandbox image '{self.image}' not found. Build it: "
                              f"bash sandbox/build.sh",
                 }
@@ -865,6 +933,8 @@ class SandboxRunner:
                 "success": False,
                 "text": "",
                 "files": [],
+                "preflight": None,
+                "error_category": "backend_unavailable",
                 "error": "Docker daemon unavailable but use_docker='always'.",
             }
         else:
@@ -900,60 +970,97 @@ class SandboxRunner:
                     except Exception as e:
                         print(f"Warning: failed to mount skills package: {e}")
 
-                # Prepend the available-files hint (mirrors subprocess mode).
-                if copied_files:
-                    header = (
-                        "import os\n"
-                        f"_AVAILABLE_FILES = {copied_files}\n"
-                        f"# Available files: {', '.join(copied_files)}\n\n"
-                    )
-                    code = header + code
-                else:
-                    code = "# No reference files available\n\n" + code
                 (Path(tmpdir) / "solution.py").write_text(code, encoding="utf-8")
+                (Path(tmpdir) / RUNNER_FILENAME).write_text(
+                    build_execution_launcher(copied_files),
+                    encoding="utf-8",
+                )
 
                 cmd = self._docker_command(tmpdir, skills_mounted)
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
-                    text=True,
+                    text=False,
                     timeout=self.timeout + 30,  # allow container start overhead
+                )
+                stdout_text, stderr_text, preflight, decode_error = parse_execution_streams(
+                    result.stdout,
+                    result.stderr,
                 )
 
                 if result.returncode in (137, -9):
                     return {
                         "success": False,
-                        "text": result.stdout,
+                        "text": stdout_text,
                         "files": [],
+                        "preflight": preflight,
+                        "error_category": "out_of_memory",
                         "error": f"memory_error: container killed "
                                  f"(exit {result.returncode}, limit {self.memory_gb}GB)",
                     }
                 if result.returncode != 0:
+                    category = (
+                        "binary_decode_error"
+                        if decode_error
+                        else (
+                            classify_execution_error(stderr_text) or "execution_error"
+                        )
+                    )
                     return {
                         "success": False,
-                        "text": result.stdout,
+                        "text": stdout_text,
                         "files": [],
-                        "error": f"Sandbox execution failed (exit {result.returncode}):\n{result.stderr[-1500:]}",
+                        "preflight": preflight,
+                        "error_category": category,
+                        "error": f"Sandbox execution failed (exit {result.returncode}):\n{stderr_text[-1500:]}",
+                    }
+
+                if decode_error:
+                    return {
+                        "success": False,
+                        "text": stdout_text,
+                        "files": [],
+                        "preflight": preflight,
+                        "error_category": "binary_decode_error",
+                        "error": "Sandbox execution output was not valid UTF-8 text",
                     }
 
                 return {
                     "success": True,
-                    "text": result.stdout,
+                    "text": stdout_text,
                     "files": self._collect_output_files(tmpdir, copied_files),
+                    "preflight": preflight,
                 }
 
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as exc:
+                stdout_text, _, preflight, _ = parse_execution_streams(
+                    exc.stdout,
+                    exc.stderr,
+                )
+                return {
+                    "success": False,
+                    "text": stdout_text,
+                    "files": [],
+                    "preflight": preflight,
+                    "error_category": "timeout",
+                    "error": f"Sandbox execution timeout ({self.timeout}s exceeded)",
+                }
+            except UnicodeDecodeError:
                 return {
                     "success": False,
                     "text": "",
                     "files": [],
-                    "error": f"Sandbox execution timeout ({self.timeout}s exceeded)",
+                    "preflight": None,
+                    "error_category": "binary_decode_error",
+                    "error": "Sandbox execution output was not valid UTF-8 text",
                 }
             except Exception as e:
                 return {
                     "success": False,
                     "text": "",
                     "files": [],
+                    "preflight": None,
+                    "error_category": classify_execution_error(str(e)),
                     "error": f"Sandbox execution error: {str(e)}",
                 }
 
@@ -983,14 +1090,17 @@ class SandboxRunner:
         ]
         if self.cpus:
             cmd += ["--cpus", str(self.cpus)]
-        cmd += [self.image, "python", "-u", "solution.py"]
+        cmd += [self.image, "python", "-u", RUNNER_FILENAME]
         return cmd
 
     @staticmethod
     def _collect_output_files(workdir: str, copied_files: List[str]) -> list:
         """Collect generated files (exclude script, inputs, skills, bytecode)."""
         output_files = []
-        skip_names = {"solution.py"} | set(copied_files)
+        skip_names = {
+            "solution.py",
+            RUNNER_FILENAME,
+        } | set(copied_files)
         for file_path in Path(workdir).iterdir():
             if file_path.is_dir():           # skip skills/, __pycache__, etc.
                 continue

@@ -14,6 +14,7 @@ Security features:
 import subprocess
 import tempfile
 import shutil
+import json
 import os
 import re
 import resource
@@ -25,9 +26,132 @@ from core.config import SUBPROCESS_TIMEOUT, SUBPROCESS_MEMORY_GB, DEFAULT_TOKENS
 from core.llm_client import complete
 from core.prompt_loader import load_prompt, render_prompt
 from core.file_preview import generate_all_previews, build_file_structure_info
+from core.execution_errors import classify_execution_error
 
 
 # ── Reusable, runner-agnostic helpers (shared with SandboxRunner) ────────────
+
+RUNNER_FILENAME = ".gdpval_runner.py"
+PREFLIGHT_PREFIX = "__GDPVAL_PREFLIGHT_V1__"
+PREFLIGHT_MAX_LINE_BYTES = 1024
+
+
+def build_execution_launcher(available_files: list[str]) -> str:
+    """Return trusted code that compiles then executes untouched solution.py.
+
+    ``runpy`` injects the historical ``_AVAILABLE_FILES`` and ``os`` globals
+    without prepending statements to generated source, so valid ``__future__``
+    imports remain at the beginning of ``solution.py``.
+    """
+    return f'''import json
+import os
+import runpy
+import sys
+
+def emit_preflight(meta):
+    sys.stderr.write({PREFLIGHT_PREFIX!r} + json.dumps(meta, separators=(",", ":")) + "\\n")
+    sys.stderr.flush()
+
+meta = {{
+    "stage": "compile",
+    "target_python": ".".join(map(str, sys.version_info[:3])),
+}}
+with open("solution.py", "r", encoding="utf-8") as source_file:
+    source = source_file.read()
+try:
+    compile(source, "solution.py", "exec", dont_inherit=True)
+except SyntaxError as exc:
+    meta.update({{
+        "ok": False,
+        "error_type": type(exc).__name__,
+        "line": exc.lineno,
+        "offset": exc.offset,
+    }})
+    emit_preflight(meta)
+    raise
+
+meta["ok"] = True
+emit_preflight(meta)
+runpy.run_path(
+    "solution.py",
+    run_name="__main__",
+    init_globals={{"_AVAILABLE_FILES": {available_files!r}, "os": os}},
+)
+'''
+
+
+def _decode_process_output(value: bytes | str | None) -> tuple[str, bool]:
+    """Decode process output without allowing binary data to escape handling."""
+    if value is None:
+        return "", False
+    if isinstance(value, str):
+        return value, False
+    try:
+        return value.decode("utf-8"), False
+    except UnicodeDecodeError:
+        return value.decode("utf-8", errors="replace"), True
+
+
+def _bounded_preflight(raw) -> Optional[dict]:
+    if not isinstance(raw, dict):
+        return None
+    ok = raw.get("ok")
+    stage = raw.get("stage")
+    error_type = raw.get("error_type")
+    line = raw.get("line")
+    offset = raw.get("offset")
+    target_python = raw.get("target_python")
+    if not isinstance(ok, bool):
+        return None
+    if stage != "compile":
+        return None
+    if error_type is not None and not isinstance(error_type, str):
+        return None
+    if line is not None and (not isinstance(line, int) or isinstance(line, bool)):
+        return None
+    if offset is not None and (not isinstance(offset, int) or isinstance(offset, bool)):
+        return None
+    if not isinstance(target_python, str) or not re.fullmatch(r"\d+\.\d+\.\d+", target_python):
+        return None
+    return {
+        "ok": ok,
+        "stage": stage,
+        "error_type": error_type,
+        "line": line,
+        "offset": offset,
+        "target_python": target_python,
+    }
+
+
+def parse_execution_streams(
+    stdout: bytes | str | None,
+    stderr: bytes | str | None,
+) -> tuple[str, str, Optional[dict], bool]:
+    """Decode output and consume the first launcher-owned protocol record."""
+    stdout_text, stdout_decode_error = _decode_process_output(stdout)
+    stderr_text, stderr_decode_error = _decode_process_output(stderr)
+    preflight = None
+    cleaned_lines = []
+    consumed = False
+    prefix_bytes = PREFLIGHT_PREFIX.encode("ascii")
+    for line in stderr_text.splitlines(keepends=True):
+        encoded = line.encode("utf-8", errors="replace")
+        if not consumed and encoded.startswith(prefix_bytes):
+            consumed = True
+            if len(encoded) <= PREFLIGHT_MAX_LINE_BYTES:
+                payload = line[len(PREFLIGHT_PREFIX):].strip()
+                try:
+                    preflight = _bounded_preflight(json.loads(payload))
+                except (ValueError, TypeError):
+                    preflight = None
+            continue
+        cleaned_lines.append(line)
+    return (
+        stdout_text,
+        "".join(cleaned_lines),
+        preflight,
+        stdout_decode_error or stderr_decode_error,
+    )
 
 def sanitize_code(code: str) -> str:
     """Strip evaluation harness tags that don't belong in executable code."""
@@ -259,10 +383,11 @@ class SubprocessRunner:
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
-                # Path of the script the subprocess will execute. Actual write
-                # happens after the _AVAILABLE_FILES header is prepended below
-                # so the persisted file matches the in-memory `code`.
+                # Keep generated source byte-for-byte intact. A trusted launcher
+                # compiles it with the actual target interpreter, then injects
+                # harness globals via runpy without breaking __future__ imports.
                 code_path = Path(tmpdir) / "solution.py"
+                runner_path = Path(tmpdir) / RUNNER_FILENAME
 
                 # Copy reference files to execution directory and track copied files
                 copied_files = []
@@ -291,20 +416,11 @@ class SubprocessRunner:
                     except Exception as e:
                         print(f"Warning: Failed to mount skills package: {e}")
 
-                # Inject available files list as runtime info (top of code)
-                if copied_files:
-                    files_header = (
-                        "import os\n"
-                        f"_AVAILABLE_FILES = {copied_files}\n"
-                        f"# Available files: {', '.join(copied_files)}\n\n"
-                    )
-                    code = files_header + code
-                else:
-                    code = "# No reference files available\n\n" + code
-
-                # Persist the (possibly header-prepended) code so the subprocess
-                # actually executes the version with the _AVAILABLE_FILES hint.
                 code_path.write_text(code, encoding="utf-8")
+                runner_path.write_text(
+                    build_execution_launcher(copied_files),
+                    encoding="utf-8",
+                )
 
                 # 🔒 Security: Whitelist environment variables
                 # Use current Python's PATH so venv packages are available
@@ -351,48 +467,73 @@ class SubprocessRunner:
 
                 # Execute code with timeout
                 result = subprocess.run(
-                    [python_executable, str(code_path)],
+                    [python_executable, str(runner_path)],
                     cwd=tmpdir,
                     env=safe_env,
                     capture_output=True,
-                    text=True,
+                    text=False,
                     timeout=self.timeout,
                     preexec_fn=_set_memory_limit,
+                )
+                stdout_text, stderr_text, preflight, decode_error = parse_execution_streams(
+                    result.stdout,
+                    result.stderr,
                 )
 
                 # Check for OOM (killed by signal 9 or exit 137)
                 if result.returncode == -9 or result.returncode == 137:
                     return {
                         "success": False,
-                        "text": result.stdout,
+                        "text": stdout_text,
                         "files": [],
+                        "preflight": preflight,
+                        "error_category": "out_of_memory",
                         "error": f"memory_error: process killed (exit code {result.returncode}, limit {SUBPROCESS_MEMORY_GB}GB)"
                     }
 
                 # Check for MemoryError in stderr
                 if result.returncode != 0 and (
-                    "MemoryError" in result.stderr
-                    or "Cannot allocate memory" in result.stderr
+                    "MemoryError" in stderr_text
+                    or "Cannot allocate memory" in stderr_text
                 ):
                     return {
                         "success": False,
-                        "text": result.stdout,
+                        "text": stdout_text,
                         "files": [],
-                        "error": f"memory_error: {result.stderr[-500:]}"
+                        "preflight": preflight,
+                        "error_category": "out_of_memory",
+                        "error": f"memory_error: {stderr_text[-500:]}"
+                    }
+
+                if decode_error:
+                    return {
+                        "success": False,
+                        "text": stdout_text,
+                        "files": [],
+                        "preflight": preflight,
+                        "error_category": "binary_decode_error",
+                        "error": "Code execution output was not valid UTF-8 text",
                     }
 
                 # Check execution result
                 if result.returncode != 0:
                     return {
                         "success": False,
-                        "text": result.stdout,
+                        "text": stdout_text,
                         "files": [],
-                        "error": f"Code execution failed (exit code {result.returncode}):\n{result.stderr}"
+                        "preflight": preflight,
+                        "error_category": (
+                            classify_execution_error(stderr_text) or "execution_error"
+                        ),
+                        "error": f"Code execution failed (exit code {result.returncode}):\n{stderr_text}"
                     }
 
                 # Collect generated files (denylist: exclude script + inputs + bytecode)
                 output_files = []
-                skip_names = {"solution.py"} | set(copied_files)
+                skip_names = {
+                    "solution.py",
+                    RUNNER_FILENAME,
+                } | set(copied_files)
                 skip_suffixes = {".pyc"}
 
                 for file_path in Path(tmpdir).iterdir():
@@ -421,16 +562,33 @@ class SubprocessRunner:
 
                 return {
                     "success": True,
-                    "text": result.stdout,
-                    "files": output_files
+                    "text": stdout_text,
+                    "files": output_files,
+                    "preflight": preflight,
                 }
 
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as exc:
+                stdout_text, _, preflight, _ = parse_execution_streams(
+                    exc.stdout,
+                    exc.stderr,
+                )
+                return {
+                    "success": False,
+                    "text": stdout_text,
+                    "files": [],
+                    "preflight": preflight,
+                    "error_category": "timeout",
+                    "error": f"Code execution timeout ({self.timeout} seconds exceeded)"
+                }
+
+            except UnicodeDecodeError:
                 return {
                     "success": False,
                     "text": "",
                     "files": [],
-                    "error": f"Code execution timeout ({self.timeout} seconds exceeded)"
+                    "preflight": None,
+                    "error_category": "binary_decode_error",
+                    "error": "Code execution output was not valid UTF-8 text",
                 }
 
             except Exception as e:
@@ -438,5 +596,7 @@ class SubprocessRunner:
                     "success": False,
                     "text": "",
                     "files": [],
+                    "preflight": None,
+                    "error_category": classify_execution_error(str(e)),
                     "error": f"Execution error: {str(e)}"
                 }

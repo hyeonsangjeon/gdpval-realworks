@@ -240,6 +240,17 @@ def _build_execution_observability(
     if manifest:
         attempts = []
         for attempt in manifest.get("attempts") or []:
+            preflight = attempt.get("preflight")
+            bounded_preflight = None
+            if isinstance(preflight, dict):
+                bounded_preflight = {
+                    "ok": preflight.get("ok"),
+                    "stage": preflight.get("stage"),
+                    "error_type": preflight.get("error_type"),
+                    "line": preflight.get("line"),
+                    "offset": preflight.get("offset"),
+                    "target_python": preflight.get("target_python"),
+                }
             attempts.append({
                 "attempt": attempt.get("attempt"),
                 "status": attempt.get("status"),
@@ -258,6 +269,7 @@ def _build_execution_observability(
                 "stdout": attempt.get("stdout"),
                 "stderr": attempt.get("stderr"),
                 "response": attempt.get("response"),
+                "preflight": bounded_preflight,
                 "error_category": attempt.get("error_category"),
             })
         observability["sandbox"] = {

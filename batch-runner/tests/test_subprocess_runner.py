@@ -6,7 +6,12 @@ from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
 
 from core.config import DEFAULT_TOKENS
-from core.subprocess_runner import SubprocessRunner
+from core.subprocess_runner import (
+    PREFLIGHT_MAX_LINE_BYTES,
+    PREFLIGHT_PREFIX,
+    SubprocessRunner,
+    parse_execution_streams,
+)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
@@ -82,6 +87,60 @@ def test_extract_code_no_block(subprocess_runner):
     assert code is None
 
 
+def test_preflight_protocol_uses_first_bounded_record():
+    valid = (
+        PREFLIGHT_PREFIX
+        + '{"ok":true,"stage":"compile","target_python":"3.11.15"}\n'
+    )
+    spoofed = (
+        PREFLIGHT_PREFIX
+        + '{"ok":false,"stage":"compile","target_python":"9.9.9"}\n'
+    )
+
+    _, cleaned, preflight, decode_error = parse_execution_streams(
+        b"",
+        (valid + "user stderr\n" + spoofed).encode("utf-8"),
+    )
+
+    assert preflight["ok"] is True
+    assert preflight["target_python"] == "3.11.15"
+    assert "user stderr" in cleaned
+    assert PREFLIGHT_PREFIX in cleaned  # later untrusted lookalikes are ordinary stderr
+    assert decode_error is False
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "[]",
+        '"not-an-object"',
+        '{"ok":"yes","stage":"compile","target_python":"3.11.15"}',
+        '{"ok":true,"stage":"other","target_python":"3.11.15"}',
+    ],
+)
+def test_preflight_protocol_rejects_invalid_schema(payload):
+    line = f"{PREFLIGHT_PREFIX}{payload}\n"
+
+    _, _, preflight, _ = parse_execution_streams(b"", line.encode("utf-8"))
+
+    assert preflight is None
+
+
+def test_preflight_protocol_rejects_oversized_first_record():
+    oversized = PREFLIGHT_PREFIX + ("x" * PREFLIGHT_MAX_LINE_BYTES) + "\n"
+    valid_later = (
+        PREFLIGHT_PREFIX
+        + '{"ok":true,"stage":"compile","target_python":"3.11.15"}\n'
+    )
+
+    _, _, preflight, _ = parse_execution_streams(
+        b"",
+        (oversized + valid_later).encode("utf-8"),
+    )
+
+    assert preflight is None
+
+
 def test_execute_safely_simple_script(subprocess_runner):
     """Test safe execution of simple Python script"""
     code = """
@@ -95,6 +154,39 @@ with open("output.txt", "w") as f:
     assert "Hello from subprocess!" in result["text"]
     assert len(result["files"]) == 1
     assert result["files"][0]["filename"] == "output.txt"
+    assert result["preflight"]["ok"] is True
+
+
+def test_preflight_survives_chdir_and_protocol_spoof(subprocess_runner):
+    code = (
+        "import os\n"
+        "import sys\n"
+        "os.chdir('/')\n"
+        f"sys.stderr.write({PREFLIGHT_PREFIX!r} + '[]\\n')\n"
+        "print('done')\n"
+    )
+
+    result = subprocess_runner._execute_safely(code)
+
+    assert result["success"] is True
+    assert result["preflight"]["ok"] is True
+    assert "done" in result["text"]
+
+
+def test_preflight_survives_untrusted_os_exit(subprocess_runner):
+    result = subprocess_runner._execute_safely("import os\nos._exit(7)\n")
+
+    assert result["success"] is False
+    assert result["preflight"]["ok"] is True
+    assert result["error_category"] == "execution_error"
+
+
+def test_binary_output_preserves_preflight(subprocess_runner):
+    result = subprocess_runner._execute_safely("import os\nos.write(1, b'\\xff')\n")
+
+    assert result["success"] is False
+    assert result["preflight"]["ok"] is True
+    assert result["error_category"] == "binary_decode_error"
 
 
 def test_execute_safely_file_generation(subprocess_runner):
@@ -133,6 +225,7 @@ time.sleep(200)  # Exceeds 3s test timeout
 
     assert result["success"] is False
     assert "timeout" in result["error"].lower()
+    assert result["error_category"] == "timeout"
 
 
 def test_execute_safely_error_handling(subprocess_runner):
@@ -144,6 +237,7 @@ raise ValueError("Test error")
 
     assert result["success"] is False
     assert "ValueError" in result["error"] or "Test error" in result["text"]
+    assert result["error_category"] == "value_error"
 
 
 def test_execute_safely_no_api_keys_in_env(subprocess_runner):
@@ -273,7 +367,23 @@ def test_oom_exit_code_minus9(subprocess_runner):
 
     assert result["success"] is False
     assert result["error"].startswith("memory_error:")
+    assert result["error_category"] == "out_of_memory"
     assert "-9" in result["error"]
+
+
+@pytest.mark.skipif(platform.system() == "Windows", reason="POSIX signal required")
+def test_real_sigkill_preserves_successful_preflight(subprocess_runner):
+    code = (
+        "import os\n"
+        "import signal\n"
+        "os.kill(os.getpid(), signal.SIGKILL)\n"
+    )
+
+    result = subprocess_runner._execute_safely(code)
+
+    assert result["error_category"] == "out_of_memory"
+    assert result["preflight"]["ok"] is True
+    assert result["preflight"]["stage"] == "compile"
 
 
 def test_oom_exit_code_137(subprocess_runner):
@@ -288,6 +398,7 @@ def test_oom_exit_code_137(subprocess_runner):
 
     assert result["success"] is False
     assert result["error"].startswith("memory_error:")
+    assert result["error_category"] == "out_of_memory"
     assert "137" in result["error"]
 
 
@@ -303,6 +414,7 @@ def test_oom_memory_error_in_stderr(subprocess_runner):
 
     assert result["success"] is False
     assert result["error"].startswith("memory_error:")
+    assert result["error_category"] == "out_of_memory"
 
 
 def test_oom_cannot_allocate_in_stderr(subprocess_runner):
@@ -317,6 +429,18 @@ def test_oom_cannot_allocate_in_stderr(subprocess_runner):
 
     assert result["success"] is False
     assert result["error"].startswith("memory_error:")
+    assert result["error_category"] == "out_of_memory"
+
+
+def test_binary_decode_error_has_structured_category(subprocess_runner):
+    decode_error = UnicodeDecodeError("utf-8", b"\xa9", 0, 1, "invalid")
+
+    with patch("subprocess.run", side_effect=decode_error):
+        result = subprocess_runner._execute_safely("print('hi')")
+
+    assert result["success"] is False
+    assert result["error_category"] == "binary_decode_error"
+    assert "not valid UTF-8" in result["error"]
 
 
 def test_generic_error_not_tagged_as_oom(subprocess_runner):
@@ -332,6 +456,7 @@ def test_generic_error_not_tagged_as_oom(subprocess_runner):
     assert result["success"] is False
     assert not result["error"].startswith("memory_error:")
     assert "Code execution failed" in result["error"]
+    assert result["error_category"] == "file_not_found"
 
 
 def test_memory_limit_graceful_on_unsupported_os(subprocess_runner):

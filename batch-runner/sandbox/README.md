@@ -84,16 +84,24 @@ For each task the runner:
    code's imports), and probes which are importable in the environment.
 2. Infers a deterministic **deliverable contract** (expected file types/count)
    and injects it into the codegen prompt so the model knows what to produce.
-3. Copies reference files and the `skills/` package into a temp dir.
-4. Writes `solution.py` and runs it as
-   `docker run --rm --network none … gdpval-sandbox:latest python -u solution.py`.
-5. Selects the **generated artifacts** (reference files and the script are
-   excluded via a before/after snapshot), then **verifies** them (non-empty,
+3. Writes generated code unchanged to `solution.py`. A trusted launcher compiles
+  it with the actual target interpreter before running it: Python 3.11 in the
+  Docker image, or the current host Python for local fallback. Invalid code
+  never reaches its body and consumes the existing bounded repair attempt with
+  syntax-specific guidance. The launcher sends bounded compile provenance to
+  the parent over stderr before untrusted code starts.
+4. Copies reference files and the `skills/` package into a temp dir.
+5. Runs the trusted `.gdpval_runner.py` as
+  `docker run --rm --network none … gdpval-sandbox:latest python -u .gdpval_runner.py`;
+  the launcher compiles and executes the untouched `solution.py` via `runpy`.
+6. Selects the **generated artifacts** (copied input names, `solution.py`, the
+  trusted runner, directories, and bytecode are excluded), then **verifies** them (non-empty,
    openable, correct type) and runs **render QA** (PDF/Office rasterized to PNG
    with blank-page detection; optional LLM vision QA behind config).
-6. If a blocking failure is found and repair is enabled, builds a focused
-   **repair prompt** with the concrete failure and retries (bounded; default 1).
-7. Writes a `manifest.json` (contract, dependency probe, per-attempt status,
+7. If a blocking failure is found and repair is enabled, classifies syntax,
+  schema, API compatibility, binary decode, and memory failures, then builds a
+  focused **repair prompt** with the matching strategy (bounded; default 1).
+8. Writes a `manifest.json` (contract, dependency probe, per-attempt status,
    verification/render reports, and `final_status`) alongside the deliverables.
 
 Skills give the sandbox eyes/ears on the **inputs**; the contract + verifier +
@@ -143,7 +151,8 @@ the runner looks for, so they stay in sync.
 ## Security posture
 
 The threat model is *untrusted, LLM-generated code*. Isolation comes from the
-container namespaces, no network, and the resource caps above. Code runs as the
-image's default user inside a disposable container that is removed (`--rm`) after
-each task. When Docker is unavailable the local fallback still applies the
-existing subprocess hardening (isolated temp dir, restricted execution).
+container namespaces, no network, and the resource caps above. On POSIX hosts,
+the runner passes the host numeric UID/GID with `--user`; otherwise the image
+default user is used. The disposable container is removed (`--rm`) after each
+task. When Docker is unavailable the local fallback still applies the existing
+subprocess hardening (isolated temp dir, restricted execution).

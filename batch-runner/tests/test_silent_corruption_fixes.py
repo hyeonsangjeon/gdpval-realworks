@@ -35,7 +35,7 @@ import pytest
 
 
 class TestFix1AvailableFilesPersisted:
-    """Verify the files_header prepend is actually written to the executed file."""
+    """Verify trusted launcher globals reach untouched generated source."""
 
     def _make_runner(self):
         from core.subprocess_runner import SubprocessRunner
@@ -44,12 +44,7 @@ class TestFix1AvailableFilesPersisted:
     def test_available_files_hint_is_executed_by_subprocess(self, tmp_path):
         """With reference files, the subprocess must observe _AVAILABLE_FILES.
 
-        Before fix: header was prepended only to the local variable `code` and
-        never written back, so the subprocess executed the original solution
-        without _AVAILABLE_FILES defined → NameError if the code references it.
-
-        After fix: the modified `code` is persisted to code_path, so the
-        subprocess sees the hint.
+        The launcher injects the global without prepending code to solution.py.
         """
         runner = self._make_runner()
         ref_file = tmp_path / "data.csv"
@@ -66,26 +61,29 @@ class TestFix1AvailableFilesPersisted:
         assert "FILES:" in result["text"]
         assert "data.csv" in result["text"]
 
-    def test_no_reference_files_regression_marker_persisted(self, tmp_path):
-        """Without reference files, the 'No reference files available' marker
-        must also reach the executed file (else-branch of the prepend).
-
-        This locks the symmetric else-branch fix.
-        """
+    def test_no_reference_files_injects_empty_available_files(self, tmp_path):
         runner = self._make_runner()
-        # Use a tiny program that prints itself's first line via __file__.
-        user_code = (
-            "with open(__file__, 'r', encoding='utf-8') as fh:\n"
-            "    print(fh.readline().rstrip())\n"
-        )
+        user_code = "print('FILES:', _AVAILABLE_FILES)"
 
         result = runner._execute_safely(user_code, reference_files=None)
 
         assert result["success"] is True, f"subprocess failed: {result.get('error')}"
-        # The else-branch prepends "# No reference files available\n\n" to code.
-        # After fix, that header is in the executed file, so __file__ readline
-        # returns the comment line.
-        assert "No reference files available" in result["text"]
+        assert "FILES: []" in result["text"]
+
+    def test_future_import_remains_first_with_reference_files(self, tmp_path):
+        runner = self._make_runner()
+        ref_file = tmp_path / "data.csv"
+        ref_file.write_text("x\n1\n", encoding="utf-8")
+        user_code = (
+            "from __future__ import annotations\n"
+            "print('FILES:', _AVAILABLE_FILES)\n"
+        )
+
+        result = runner._execute_safely(user_code, reference_files=[str(ref_file)])
+
+        assert result["success"] is True, result.get("error")
+        assert "data.csv" in result["text"]
+        assert result["preflight"]["ok"] is True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
