@@ -31,7 +31,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   9-sector diagnostic subprocess comparator for the historical exp026
   Sandbox/Skills runner bundle. Includes pinned 42 non-success-union tasks, six
   media controls, two general controls, source revisions, selection provenance,
-  and analysis guardrails against causal or population-level overclaiming.
+  and analysis guardrails against causal or population-level overclaiming. The
+  implementation landed through PR #64 (`4306fa55`); Actions run #93 was
+  dispatched from that merge commit and is currently executing Step 2a
+  inference, with no relay or result PR yet.
 - **Repository completion records** — `.github/copilot-instructions.md` now
   requires every repository-changing task to refresh
   `tasks/LATEST_TASK_RESULT/README.md` and the `[Unreleased]` changelog before
