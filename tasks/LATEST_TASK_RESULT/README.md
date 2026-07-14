@@ -1,7 +1,7 @@
 # Latest Task Result
 
 - Updated: 2026-07-15
-- Status: Completed and deployed
+- Status: Merged; runtime canary pending
 
 ## Task
 
@@ -19,7 +19,7 @@ provenance across local and Docker backends.
 - exp027 produced 23 successes, 14 QA failures, and 13 errors across the
   outcome-selected diagnostic set. Average Self-QA was 5.08 and average task
   latency was 76.78s. Result PR
-  [#66](https://github.com/hyeonsangjeon/gdpval-realworks/pull/66) is open.
+  [#66](https://github.com/hyeonsangjeon/gdpval-realworks/pull/66) was merged.
 - On identical task IDs, exp026 changed from 30/14/6 success/QA-failed/error to
   exp027's 23/14/13. Paired Self-QA was effectively unchanged. This
   directionally supports the complete sandbox/skills/repair bundle for
@@ -60,6 +60,11 @@ provenance across local and Docker backends.
   execution so a repaired runtime failure cannot be hidden behind an earlier
   syntax failure. Manifests use `not_executed` unless compile success proves the
   selected backend reached the generated body.
+- Sandbox preflight PR
+  [#71](https://github.com/hyeonsangjeon/gdpval-realworks/pull/71) was
+  squash-merged to `main` as
+  `aa6c35c985c3bdb11cf98f4e0c4a4747968d9f8c`. No workflow was automatically
+  dispatched by this backend-only merge.
 
 ## Verification
 
@@ -98,3 +103,6 @@ provenance across local and Docker backends.
   the paired run did not justify changing the selector yet.
 - Run rubric-based LLM-judge grading separately if exp027 needs quality
   comparison beyond Self-QA.
+- Run an owner-approved bounded sandbox canary before treating the repair
+  strategy as production-validated; no paid model or batch run was dispatched
+  by PR #71.
