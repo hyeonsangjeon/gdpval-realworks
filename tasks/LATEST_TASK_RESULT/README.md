@@ -18,6 +18,10 @@ task. It must be refreshed before a task is reported complete.
 
 ## Result
 
+- The validated implementation was committed as `eb8b7cac5ac0566168a6cd95efac0906e7d8730f`
+  and pushed to `origin/feat/grading-track2-hardening`. Direct `main` push was
+  intentionally avoided; the existing dirty main worktree and staged sandbox
+  changes were preserved.
 - Visual grading is harness-owned. Selected PDF, XLSX/XLSM, PPTX, and image
   surfaces are rendered and judged before the main judge receives trusted
   provenance; the model cannot request image bytes or invoke vision directly.
