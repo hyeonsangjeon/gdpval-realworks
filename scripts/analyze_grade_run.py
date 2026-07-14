@@ -8,7 +8,7 @@ Usage:
 The pricing table is a coarse estimate (Azure OpenAI list prices, 2025-Q2);
 edit `PRICING_USD_PER_M_TOKENS` to keep current. `estimated_cost_usd` written
 by step8 is always 0.0; this script computes a price-table-based estimate from
-actual `judge_input_tokens` + `judge_output_tokens`.
+actual main-judge and perception input/output tokens.
 """
 from __future__ import annotations
 
@@ -112,6 +112,184 @@ def _hybrid_cost_estimate(grade: dict, total_in: int, total_out: int) -> dict:
     }
 
 
+def _perception_usage_by_modality(grade: dict) -> dict[str, dict[str, int]]:
+    usage: dict[str, dict[str, int]] = {}
+
+    def add(modality: str, in_tok: int, out_tok: int, cached_tok: int) -> None:
+        bucket = usage.setdefault(
+            modality, {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
+        )
+        bucket["input_tokens"] += in_tok
+        bucket["output_tokens"] += out_tok
+        bucket["cached_tokens"] += cached_tok
+
+    task_total = {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
+    item_total = {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
+    for task in grade.get("tasks", []):
+        task_total["input_tokens"] += int(task.get("perception_input_tokens", 0) or 0)
+        task_total["output_tokens"] += int(task.get("perception_output_tokens", 0) or 0)
+        task_total["cached_tokens"] += int(task.get("perception_cached_tokens", 0) or 0)
+        for item in task.get("items", []):
+            in_tok = int(item.get("perception_input_tokens", 0) or 0)
+            out_tok = int(item.get("perception_output_tokens", 0) or 0)
+            cached_tok = int(item.get("perception_cached_tokens", 0) or 0)
+            if not (in_tok or out_tok or cached_tok):
+                continue
+            modality = str(item.get("routing_modality") or "unknown")
+            parent_usage = {
+                "input_tokens": in_tok,
+                "output_tokens": out_tok,
+                "cached_tokens": cached_tok,
+            }
+            if modality == "mixed" and isinstance(item.get("child_grades"), list):
+                child_usage = {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cached_tokens": 0,
+                }
+                child_buckets: list[tuple[str, dict[str, int]]] = []
+                for child in item["child_grades"]:
+                    if not isinstance(child, dict):
+                        continue
+                    child_values = {
+                        "input_tokens": int(
+                            child.get("perception_input_tokens", 0) or 0
+                        ),
+                        "output_tokens": int(
+                            child.get("perception_output_tokens", 0) or 0
+                        ),
+                        "cached_tokens": int(
+                            child.get("perception_cached_tokens", 0) or 0
+                        ),
+                    }
+                    if not any(child_values.values()):
+                        continue
+                    child_modality = str(
+                        child.get("routing_modality") or "unknown"
+                    )
+                    if child_modality not in {"visual", "audio"}:
+                        child_modality = "unknown"
+                    child_buckets.append((child_modality, child_values))
+                    for key in child_usage:
+                        child_usage[key] += child_values[key]
+                if all(
+                    child_usage[key] <= parent_usage[key]
+                    for key in parent_usage
+                ):
+                    for child_modality, values in child_buckets:
+                        add(
+                            child_modality,
+                            values["input_tokens"],
+                            values["output_tokens"],
+                            values["cached_tokens"],
+                        )
+                    residual = {
+                        key: parent_usage[key] - child_usage[key]
+                        for key in parent_usage
+                    }
+                    if any(residual.values()):
+                        add(
+                            "unknown",
+                            residual["input_tokens"],
+                            residual["output_tokens"],
+                            residual["cached_tokens"],
+                        )
+                else:
+                    add("unknown", in_tok, out_tok, cached_tok)
+            else:
+                if modality not in {"visual", "audio"}:
+                    modality = "unknown"
+                add(modality, in_tok, out_tok, cached_tok)
+            item_total["input_tokens"] += in_tok
+            item_total["output_tokens"] += out_tok
+            item_total["cached_tokens"] += cached_tok
+
+    remainder = {
+        key: max(0, task_total[key] - item_total[key])
+        for key in task_total
+    }
+    if any(remainder.values()):
+        add(
+            "unknown",
+            remainder["input_tokens"],
+            remainder["output_tokens"],
+            remainder["cached_tokens"],
+        )
+    return usage
+
+
+def _combined_cost_estimate(
+    grade: dict,
+    main_in: int,
+    main_out: int,
+    perception_usage: dict[str, dict[str, int]],
+) -> dict:
+    main = _hybrid_cost_estimate(grade, main_in, main_out)
+    if not perception_usage:
+        return main
+
+    main_model = grade.get("judge", {}).get("model", "")
+    perception_cfg = grade.get("judge", {}).get("perception", {}) or {}
+    components = []
+    unpriced_models = []
+    perception_total = 0.0
+    for modality, token_usage in sorted(perception_usage.items()):
+        model = (
+            (perception_cfg.get(modality) or {}).get("model")
+            if modality in {"visual", "audio"} else None
+        ) or main_model
+        priced = model in PRICING_USD_PER_M_TOKENS
+        estimate = _estimate_cost(
+            token_usage["input_tokens"], token_usage["output_tokens"], model
+        )
+        if not priced:
+            unpriced_models.append(model)
+        perception_total += estimate["total_usd"]
+        components.append({
+            "modality": modality,
+            "model": model,
+            **token_usage,
+            **estimate,
+            "pricing_available": priced,
+        })
+
+    out = {
+        "mode": "main_plus_perception",
+        "main": main,
+        "perception": components,
+        "pricing_complete": not unpriced_models,
+        "unpriced_models": sorted(set(unpriced_models)),
+    }
+    if main.get("mode") == "single":
+        out["cost_usd"] = round(main["cost_usd"] + perception_total, 4)
+    else:
+        out["cost_usd_min"] = round(
+            main.get("cost_usd_min", 0.0) + perception_total, 4
+        )
+        out["cost_usd_max"] = round(
+            main.get("cost_usd_max", 0.0) + perception_total, 4
+        )
+    return out
+
+
+def _effective_component(
+    in_tok: int, out_tok: int, cached_tok: int, model: str
+) -> dict:
+    pi, po = _price_for(model)
+    input_usd = (
+        (in_tok - cached_tok) * pi
+        + cached_tok * pi * CACHED_INPUT_DISCOUNT
+    ) / 1_000_000.0
+    output_usd = out_tok * po / 1_000_000.0
+    return {
+        "model": model,
+        "input_usd": input_usd,
+        "output_usd": output_usd,
+        "total_usd": input_usd + output_usd,
+        "pricing_available": model in PRICING_USD_PER_M_TOKENS,
+    }
+
+
 def analyze(path: Path) -> dict:
     grade = json.loads(path.read_text())
     tasks = grade.get("tasks", [])
@@ -123,28 +301,91 @@ def analyze(path: Path) -> dict:
     wall_last = max(graded_ats) if graded_ats else None
     wall_clock_sec = (wall_last - wall_first).total_seconds() if wall_first and wall_last else None
 
-    latencies = [t.get("judge_total_latency_ms", 0) or 0 for t in tasks]
-    judge_calls = [t.get("judge_call_count", 0) or 0 for t in tasks]
+    main_latencies = [t.get("judge_total_latency_ms", 0) or 0 for t in tasks]
+    perception_latencies = [
+        t.get("perception_total_latency_ms", 0) or 0 for t in tasks
+    ]
+    latencies = [
+        main + perception
+        for main, perception in zip(main_latencies, perception_latencies)
+    ]
+    main_calls = [t.get("judge_call_count", 0) or 0 for t in tasks]
+    perception_calls = [
+        t.get("perception_call_count", 0) or 0 for t in tasks
+    ]
+    judge_calls = [
+        main + perception
+        for main, perception in zip(main_calls, perception_calls)
+    ]
     precheck_counts = [t.get("precheck_count", 0) or 0 for t in tasks]
-    in_tokens = [t.get("judge_input_tokens", 0) or 0 for t in tasks]
-    out_tokens = [t.get("judge_output_tokens", 0) or 0 for t in tasks]
-    cached_tokens = [t.get("judge_cached_tokens", 0) or 0 for t in tasks]
+    main_in_tokens = [t.get("judge_input_tokens", 0) or 0 for t in tasks]
+    main_out_tokens = [t.get("judge_output_tokens", 0) or 0 for t in tasks]
+    main_cached_tokens = [t.get("judge_cached_tokens", 0) or 0 for t in tasks]
+    perception_in_tokens = [
+        t.get("perception_input_tokens", 0) or 0 for t in tasks
+    ]
+    perception_out_tokens = [
+        t.get("perception_output_tokens", 0) or 0 for t in tasks
+    ]
+    perception_cached_tokens = [
+        t.get("perception_cached_tokens", 0) or 0 for t in tasks
+    ]
+    in_tokens = [
+        main + perception
+        for main, perception in zip(main_in_tokens, perception_in_tokens)
+    ]
+    out_tokens = [
+        main + perception
+        for main, perception in zip(main_out_tokens, perception_out_tokens)
+    ]
+    cached_tokens = [
+        main + perception
+        for main, perception in zip(
+            main_cached_tokens, perception_cached_tokens
+        )
+    ]
 
     total_in = sum(in_tokens)
     total_out = sum(out_tokens)
     total_cached = sum(cached_tokens)
     total_latency_sec = sum(latencies) / 1000.0
     total_calls = sum(judge_calls)
+    total_main_calls = sum(main_calls)
+    total_perception_calls = sum(perception_calls)
     total_precheck = sum(precheck_counts)
+    total_main_in = sum(main_in_tokens)
+    total_main_out = sum(main_out_tokens)
+    total_main_cached = sum(main_cached_tokens)
+    total_perception_in = sum(perception_in_tokens)
+    total_perception_out = sum(perception_out_tokens)
+    total_perception_cached = sum(perception_cached_tokens)
+    total_main_latency_sec = sum(main_latencies) / 1000.0
+    total_perception_latency_sec = sum(perception_latencies) / 1000.0
+    total_render_calls = sum(t.get("render_call_count", 0) or 0 for t in tasks)
+    total_render_latency_sec = sum(
+        t.get("render_total_latency_ms", 0) or 0 for t in tasks
+    ) / 1000.0
+    usage_complete = all(t.get("usage_complete", True) for t in tasks)
 
     # Top-5 slowest tasks
     enriched = sorted(
         [
             {
                 "task_id": t.get("task_id"),
-                "latency_sec": (t.get("judge_total_latency_ms", 0) or 0) / 1000.0,
-                "calls": t.get("judge_call_count", 0),
-                "tokens_io": (t.get("judge_input_tokens", 0), t.get("judge_output_tokens", 0)),
+                "latency_sec": (
+                    (t.get("judge_total_latency_ms", 0) or 0)
+                    + (t.get("perception_total_latency_ms", 0) or 0)
+                ) / 1000.0,
+                "calls": (
+                    (t.get("judge_call_count", 0) or 0)
+                    + (t.get("perception_call_count", 0) or 0)
+                ),
+                "tokens_io": (
+                    (t.get("judge_input_tokens", 0) or 0)
+                    + (t.get("perception_input_tokens", 0) or 0),
+                    (t.get("judge_output_tokens", 0) or 0)
+                    + (t.get("perception_output_tokens", 0) or 0),
+                ),
                 "pct": t.get("pct"),
                 "critical_fail": t.get("critical_fail"),
             }
@@ -154,7 +395,10 @@ def analyze(path: Path) -> dict:
         reverse=True,
     )
 
-    cost = _hybrid_cost_estimate(grade, total_in, total_out)
+    perception_usage = _perception_usage_by_modality(grade)
+    cost = _combined_cost_estimate(
+        grade, total_main_in, total_main_out, perception_usage
+    )
 
     # PR3 Step 0 — effective (cache-discounted) cost. Skipped if the run
     # used the legacy v1 path (no cached_tokens captured).
@@ -162,17 +406,38 @@ def analyze(path: Path) -> dict:
     cache_hit_ratio = None
     if total_in > 0:
         cache_hit_ratio = round(total_cached / total_in, 4)
-        model = grade["judge"].get("model", "")
-        pi, po = PRICING_USD_PER_M_TOKENS.get(model, (0.0, 0.0))
-        eff_in_cost = ((total_in - total_cached) * pi
-                       + total_cached * pi * CACHED_INPUT_DISCOUNT) / 1_000_000.0
-        eff_out_cost = total_out * po / 1_000_000.0
+        main_model = grade["judge"].get("model", "")
+        components = [
+            _effective_component(
+                total_main_in, total_main_out, total_main_cached, main_model
+            )
+        ]
+        perception_cfg = grade.get("judge", {}).get("perception", {}) or {}
+        for modality, token_usage in sorted(perception_usage.items()):
+            model = (
+                (perception_cfg.get(modality) or {}).get("model")
+                if modality in {"visual", "audio"} else None
+            ) or main_model
+            components.append(_effective_component(
+                token_usage["input_tokens"],
+                token_usage["output_tokens"],
+                token_usage["cached_tokens"],
+                model,
+            ))
+        eff_in_cost = sum(component["input_usd"] for component in components)
+        eff_out_cost = sum(component["output_usd"] for component in components)
+        unpriced_models = sorted({
+            component["model"] for component in components
+            if not component["pricing_available"]
+        })
         effective_cost = {
             "input_usd": round(eff_in_cost, 4),
             "output_usd": round(eff_out_cost, 4),
             "total_usd": round(eff_in_cost + eff_out_cost, 4),
             "cache_hit_ratio": cache_hit_ratio,
             "cached_tokens": total_cached,
+            "pricing_complete": not unpriced_models,
+            "unpriced_models": unpriced_models,
         }
 
     return {
@@ -199,12 +464,27 @@ def analyze(path: Path) -> dict:
         "p95_latency_per_task_sec": round(sorted(latencies)[int(len(latencies)*0.95)] / 1000.0, 1) if latencies else 0,
 
         "total_judge_calls": total_calls,
+        "total_main_judge_calls": total_main_calls,
+        "total_perception_calls": total_perception_calls,
         "total_precheck_decisions": total_precheck,
         "judge_call_share_pct": round(100.0 * total_calls / max(1, total_calls + total_precheck), 1),
 
         "total_input_tokens": total_in,
         "total_output_tokens": total_out,
         "total_cached_tokens": total_cached,
+        "main_input_tokens": total_main_in,
+        "main_output_tokens": total_main_out,
+        "main_cached_tokens": total_main_cached,
+        "perception_input_tokens": total_perception_in,
+        "perception_output_tokens": total_perception_out,
+        "perception_cached_tokens": total_perception_cached,
+        "sum_main_judge_latency_min": round(total_main_latency_sec / 60.0, 1),
+        "sum_perception_latency_min": round(
+            total_perception_latency_sec / 60.0, 1
+        ),
+        "total_render_calls": total_render_calls,
+        "sum_render_latency_min": round(total_render_latency_sec / 60.0, 1),
+        "usage_complete": usage_complete,
         "avg_tokens_per_task_io": (round(total_in / max(1, len(tasks))), round(total_out / max(1, len(tasks)))),
 
         "cost_estimate": cost,
@@ -225,6 +505,14 @@ def _fmt_cost(c: dict) -> str:
             f"${c['cost_usd_min']:.2f} ~ ${c['cost_usd_max']:.2f} "
             f"(tiers={','.join(c['tier_models'])}) [NOTE: per-tier token split not recorded]"
         )
+    if c["mode"] == "main_plus_perception":
+        if "cost_usd" in c:
+            value = f"${c['cost_usd']:.2f}"
+        else:
+            value = f"${c['cost_usd_min']:.2f} ~ ${c['cost_usd_max']:.2f}"
+        if not c.get("pricing_complete", False):
+            value += f" [UNPRICED: {','.join(c.get('unpriced_models', []))}]"
+        return value
     return "n/a"
 
 
@@ -250,9 +538,21 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
     lines.append(f"- per-task: avg={a['avg_latency_per_task_sec']}s, p50={a['median_latency_per_task_sec']}s, p95={a['p95_latency_per_task_sec']}s")
     lines.append("")
     lines.append("## Volume")
-    lines.append(f"- judge calls: {a['total_judge_calls']}  |  precheck decisions: {a['total_precheck_decisions']}  "
+    lines.append(f"- total API calls: {a['total_judge_calls']} "
+                 f"(main={a['total_main_judge_calls']}, perception={a['total_perception_calls']})  |  "
+                 f"precheck decisions: {a['total_precheck_decisions']}  "
                  f"(judge share {a['judge_call_share_pct']}%)")
     lines.append(f"- tokens: in={a['total_input_tokens']:,}  out={a['total_output_tokens']:,}")
+    lines.append(
+        f"- main tokens: in={a['main_input_tokens']:,} out={a['main_output_tokens']:,}; "
+        f"perception tokens: in={a['perception_input_tokens']:,} "
+        f"out={a['perception_output_tokens']:,}"
+    )
+    lines.append(
+        f"- render: calls={a['total_render_calls']}, "
+        f"latency={a['sum_render_latency_min']} min; "
+        f"usage_complete={a['usage_complete']}"
+    )
     lines.append(f"- per-task avg (in,out): {a['avg_tokens_per_task_io']}")
     lines.append("")
     lines.append("## Cost estimate")

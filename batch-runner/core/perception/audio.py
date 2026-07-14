@@ -30,6 +30,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
@@ -48,6 +49,12 @@ class AudioVerdict:
     confidence: float
     reasoning: str
     judge_error: Optional[str] = None
+    api_call_count: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    latency_ms: float = 0.0
+    usage_complete: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -57,6 +64,12 @@ class AudioVerdict:
             "confidence": self.confidence,
             "reasoning": self.reasoning,
             "judge_error": self.judge_error,
+            "api_call_count": self.api_call_count,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cached_tokens": self.cached_tokens,
+            "latency_ms": self.latency_ms,
+            "usage_complete": self.usage_complete,
         }
 
 
@@ -194,6 +207,11 @@ class AudioPerception:
             )
         b64 = base64.b64encode(data).decode("ascii")
         self._calls_used += 1
+        call_started = time.perf_counter()
+        input_tokens = 0
+        output_tokens = 0
+        cached_tokens = 0
+        usage_complete = False
         try:
             response = self.client.responses.create(
                 model=self.deployment,
@@ -210,6 +228,18 @@ class AudioPerception:
                 ],
                 temperature=0,
             )
+            latency_ms = (time.perf_counter() - call_started) * 1000.0
+            usage = getattr(response, "usage", None)
+            usage_complete = usage is not None and all(
+                hasattr(usage, field_name)
+                for field_name in ("input_tokens", "output_tokens")
+            )
+            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+            details = getattr(usage, "input_tokens_details", None)
+            cached_tokens = int(getattr(details, "cached_tokens", 0) or 0)
+            if details is None or not hasattr(details, "cached_tokens"):
+                usage_complete = False
             text = getattr(response, "output_text", "") or ""
             payload = _parse_json_envelope(text)
             return AudioVerdict(
@@ -218,8 +248,15 @@ class AudioPerception:
                 evidence=str(payload.get("evidence", ""))[:200],
                 confidence=float(payload.get("confidence", 0.0)),
                 reasoning=str(payload.get("reasoning", ""))[:300],
+                api_call_count=1,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+                latency_ms=latency_ms,
+                usage_complete=usage_complete,
             )
         except Exception as exc:  # noqa: BLE001
+            latency_ms = (time.perf_counter() - call_started) * 1000.0
             return AudioVerdict(
                 verdict="judge_error",
                 partial_score=0.0,
@@ -227,4 +264,10 @@ class AudioPerception:
                 confidence=0.0,
                 reasoning=f"audio call failed: {type(exc).__name__}",
                 judge_error=f"{type(exc).__name__}: {exc}",
+                api_call_count=1,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+                latency_ms=latency_ms,
+                usage_complete=usage_complete,
             )

@@ -46,7 +46,6 @@ judge:
         - inspect_structure
         - read_content
         - inspect_formatting
-        - render_to_image
         - probe_audio
         - probe_video
       read_only: true
@@ -60,7 +59,7 @@ judge:
     visual:
       model: "gpt-5.4"
       vision: true
-      call_cap_per_task: 5
+      call_cap_per_task: 72  # checked-in 220 inventory: max 68 supported calls
     audio:
       model: "gpt-audio-1.5"
       endpoint_env: "AZURE_AUDIO_ENDPOINT"
@@ -109,8 +108,8 @@ tpm_guard:
 prompt:
   template: "prompts/grader_judge.md"          # legacy field — kept for back-compat
   tool_template: "prompts/grader_judge_v2.md"  # PR2 task 203 — actual v2 template
-  version: "v2"
+  version: "v2.2"
 
 output:
   directory: "../data/grades"
-  filename_template: "{exp_id}__judge_{judge_slug}__rubric_v2_tools.json"
+  filename_template: "{exp_id}__judge_{judge_slug}__{config_name}__cfg_{config_hash}__rubric_{rubric_sha}__inference_{inference_sha}__src_{grader_source_hash_short}__{prompt_v}.json"

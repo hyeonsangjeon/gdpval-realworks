@@ -93,6 +93,106 @@ def test_single_model_cost_is_nonzero(tmp_path: Path):
     assert cost["cost_usd"] < 0.02
 
 
+def test_perception_usage_is_included_and_reported_separately(tmp_path: Path):
+    grade = _grade_json(model="gpt-5.4", n_tasks=1)
+    task = grade["tasks"][0]
+    task.update({
+        "judge_call_count": 2,
+        "judge_input_tokens": 100,
+        "judge_output_tokens": 20,
+        "judge_cached_tokens": 10,
+        "judge_total_latency_ms": 40,
+        "perception_call_count": 3,
+        "perception_input_tokens": 60,
+        "perception_output_tokens": 15,
+        "perception_cached_tokens": 6,
+        "perception_total_latency_ms": 30,
+        "render_call_count": 3,
+        "render_total_latency_ms": 12,
+        "usage_complete": True,
+    })
+
+    analyzed = _run(tmp_path, grade)["this"]
+
+    assert analyzed["total_judge_calls"] == 5
+    assert analyzed["total_main_judge_calls"] == 2
+    assert analyzed["total_perception_calls"] == 3
+    assert analyzed["total_input_tokens"] == 160
+    assert analyzed["total_output_tokens"] == 35
+    assert analyzed["total_cached_tokens"] == 16
+    assert analyzed["main_input_tokens"] == 100
+    assert analyzed["perception_input_tokens"] == 60
+    assert analyzed["top5_slowest"][0]["latency_sec"] == 0.07
+    assert analyzed["total_render_calls"] == 3
+    assert analyzed["usage_complete"] is True
+    combined_cost = analyzed["cost_estimate"]["cost_usd"]
+    main_only = 100 / 1_000_000 * 1.25 + 20 / 1_000_000 * 5.0
+    assert combined_cost > main_only
+
+
+def test_visual_perception_uses_its_own_model_price(tmp_path: Path):
+    grade = _grade_json(model="gpt-5.4-mini", n_tasks=1)
+    grade["judge"]["perception"] = {"visual": {"model": "gpt-5.4"}}
+    task = grade["tasks"][0]
+    task.update({
+        "perception_call_count": 1,
+        "perception_input_tokens": 1_000_000,
+        "perception_output_tokens": 0,
+        "perception_cached_tokens": 0,
+        "perception_total_latency_ms": 10,
+    })
+    task["items"] = [{
+        "routing_modality": "visual",
+        "perception_input_tokens": 1_000_000,
+        "perception_output_tokens": 0,
+        "perception_cached_tokens": 0,
+    }]
+
+    cost = _run(tmp_path, grade)["this"]["cost_estimate"]
+
+    assert cost["mode"] == "main_plus_perception"
+    visual = cost["perception"][0]
+    assert visual["model"] == "gpt-5.4"
+    assert visual["input_usd"] == 1.25
+    assert cost["pricing_complete"] is True
+
+
+def test_mixed_parent_prices_visual_child_with_visual_model(tmp_path: Path):
+    grade = _grade_json(model="gpt-5.4-mini", n_tasks=1)
+    grade["judge"]["perception"] = {"visual": {"model": "gpt-5.4"}}
+    task = grade["tasks"][0]
+    task.update({
+        "perception_call_count": 1,
+        "perception_input_tokens": 1_000_000,
+        "perception_output_tokens": 0,
+        "perception_cached_tokens": 0,
+        "perception_total_latency_ms": 10,
+    })
+    task["items"] = [{
+        "routing_modality": "mixed",
+        "perception_input_tokens": 1_000_000,
+        "perception_output_tokens": 0,
+        "perception_cached_tokens": 0,
+        "child_grades": [
+            {"routing_modality": "formatting"},
+            {
+                "routing_modality": "visual",
+                "perception_input_tokens": 1_000_000,
+                "perception_output_tokens": 0,
+                "perception_cached_tokens": 0,
+            },
+        ],
+    }]
+
+    cost = _run(tmp_path, grade)["this"]["cost_estimate"]
+
+    assert cost["mode"] == "main_plus_perception"
+    assert len(cost["perception"]) == 1
+    assert cost["perception"][0]["modality"] == "visual"
+    assert cost["perception"][0]["model"] == "gpt-5.4"
+    assert cost["perception"][0]["input_usd"] == 1.25
+
+
 def test_routing_emits_blended_estimate(tmp_path: Path):
     routing = {
         "tier_pro": {"model": "gpt-5.4-pro"},

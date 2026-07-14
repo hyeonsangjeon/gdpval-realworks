@@ -33,7 +33,8 @@ batch-runner/workspace/
 CL*
 batch-runner/hf_repo/
 batch-runner/local_repo/
-batch-runner/scripts/      
+batch-runner/scripts/*
+!batch-runner/scripts/preflight_grading_renderer.py
 
 
 # Experiment report HTML (skews GitHub language stats)

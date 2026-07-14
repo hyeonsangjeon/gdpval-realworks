@@ -16,9 +16,9 @@ Design notes (task 205):
 * Image cache: ``(path, page)`` rendered once per task and reused —
   prevents the judge from burning tokens re-rendering the same chart
   on a second item.
-* Per-task call cap = 5. A sixth ``judge`` call short-circuits with a
-  ``judge_error="cap_exceeded"`` verdict so the main judge can fall
-  back to text+formatting evidence.
+* Per-task call cap = 5. The harness preflights the full bounded visual
+    plan against the remaining cap before rendering. A cap error is returned
+    to the grader as a score-excluded visual ``judge_error``.
 * Graceful degradation on dependency errors: a corrupt PNG or a
   Responses-API exception returns ``judge_error`` rather than raising.
 """
@@ -27,7 +27,10 @@ from __future__ import annotations
 
 import base64
 import json
-from dataclasses import dataclass, field
+import math
+import time
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, Optional
 
 #: Hard per-task ceiling on vision sub-judge invocations.
@@ -42,6 +45,12 @@ class VisionVerdict:
     confidence: float
     reasoning: str
     judge_error: Optional[str] = None  # set when verdict == 'judge_error'
+    api_call_count: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    latency_ms: float = 0.0
+    usage_complete: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -51,6 +60,12 @@ class VisionVerdict:
             "confidence": self.confidence,
             "reasoning": self.reasoning,
             "judge_error": self.judge_error,
+            "api_call_count": self.api_call_count,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cached_tokens": self.cached_tokens,
+            "latency_ms": self.latency_ms,
+            "usage_complete": self.usage_complete,
         }
 
 
@@ -79,6 +94,59 @@ def _parse_json_envelope(text: str) -> Dict[str, Any]:
     return json.loads(t)
 
 
+class InvalidVisionEnvelope(ValueError):
+    """Raised when the vision model returns a syntactically valid bad grade."""
+
+
+def _validate_vision_envelope(text: str) -> Dict[str, Any]:
+    try:
+        parsed = _parse_json_envelope(text)
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise InvalidVisionEnvelope("response is not valid JSON") from exc
+    if not isinstance(parsed, Mapping):
+        raise InvalidVisionEnvelope("response must be a JSON object")
+
+    verdict = parsed.get("verdict")
+    if verdict not in {"pass", "partial", "fail"}:
+        raise InvalidVisionEnvelope("verdict must be pass, partial, or fail")
+
+    partial_raw = parsed.get("partial_score")
+    confidence_raw = parsed.get("confidence")
+    if isinstance(partial_raw, bool) or not isinstance(partial_raw, (int, float)):
+        raise InvalidVisionEnvelope("partial_score must be a number")
+    if isinstance(confidence_raw, bool) or not isinstance(
+        confidence_raw, (int, float)
+    ):
+        raise InvalidVisionEnvelope("confidence must be a number")
+    partial = float(partial_raw)
+    confidence = float(confidence_raw)
+    if not math.isfinite(partial) or not 0.0 <= partial <= 1.0:
+        raise InvalidVisionEnvelope("partial_score must be within [0, 1]")
+    if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+        raise InvalidVisionEnvelope("confidence must be within [0, 1]")
+    if (
+        (verdict == "pass" and partial != 1.0)
+        or (verdict == "fail" and partial != 0.0)
+        or (verdict == "partial" and not 0.0 < partial < 1.0)
+    ):
+        raise InvalidVisionEnvelope("verdict and partial_score are inconsistent")
+
+    evidence = parsed.get("evidence")
+    reasoning = parsed.get("reasoning")
+    if not isinstance(evidence, str) or not evidence.strip() or len(evidence) > 200:
+        raise InvalidVisionEnvelope("evidence must be a non-empty string <= 200 chars")
+    if not isinstance(reasoning, str) or not reasoning.strip() or len(reasoning) > 300:
+        raise InvalidVisionEnvelope("reasoning must be a non-empty string <= 300 chars")
+
+    return {
+        "verdict": verdict,
+        "partial_score": partial,
+        "evidence": evidence.strip(),
+        "confidence": confidence,
+        "reasoning": reasoning.strip(),
+    }
+
+
 @dataclass
 class VisionPerception:
     """Thin Responses-API wrapper for image-grounded item judgment.
@@ -97,6 +165,7 @@ class VisionPerception:
     deployment: str = "gpt-5.4"
     call_cap: int = VISION_CALL_CAP
     reasoning_effort: str = "medium"
+    before_upstream_call: Optional[Callable[[], None]] = None
 
     _calls_used: int = field(default=0, init=False)
     _cache: Dict[str, VisionVerdict] = field(default_factory=dict, init=False)
@@ -104,6 +173,10 @@ class VisionPerception:
     @property
     def calls_used(self) -> int:
         return self._calls_used
+
+    @property
+    def remaining_calls(self) -> int:
+        return max(0, self.call_cap - self._calls_used)
 
     def reset(self) -> None:
         """Clear per-task call counter and image cache."""
@@ -119,7 +192,14 @@ class VisionPerception:
     ) -> VisionVerdict:
         """Run the vision sub-judge against a single criterion."""
         if cache_key is not None and cache_key in self._cache:
-            return self._cache[cache_key]
+            return replace(
+                self._cache[cache_key],
+                api_call_count=0,
+                input_tokens=0,
+                output_tokens=0,
+                cached_tokens=0,
+                latency_ms=0.0,
+            )
 
         if self._calls_used >= self.call_cap:
             verdict = VisionVerdict(
@@ -150,8 +230,18 @@ class VisionPerception:
                 judge_error="bad_image",
             )
 
-        self._calls_used += 1
+        call_started = 0.0
+        api_attempted = False
+        input_tokens = 0
+        output_tokens = 0
+        cached_tokens = 0
+        usage_complete = False
         try:
+            if self.before_upstream_call is not None:
+                self.before_upstream_call()
+            call_started = time.perf_counter()
+            api_attempted = True
+            self._calls_used += 1
             response = self.client.responses.create(
                 model=self.deployment,
                 input=[
@@ -166,18 +256,58 @@ class VisionPerception:
                     }
                 ],
                 reasoning={"effort": self.reasoning_effort},
-                temperature=0,
             )
+            latency_ms = (time.perf_counter() - call_started) * 1000.0
+            usage = getattr(response, "usage", None)
+            usage_complete = usage is not None and all(
+                hasattr(usage, field_name)
+                for field_name in ("input_tokens", "output_tokens")
+            )
+            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+            details = getattr(usage, "input_tokens_details", None)
+            cached_tokens = int(getattr(details, "cached_tokens", 0) or 0)
+            if details is None or not hasattr(details, "cached_tokens"):
+                usage_complete = False
             text = getattr(response, "output_text", "") or ""
-            payload = _parse_json_envelope(text)
+            payload = _validate_vision_envelope(text)
             verdict = VisionVerdict(
-                verdict=str(payload.get("verdict", "fail")),
-                partial_score=float(payload.get("partial_score", 0.0)),
-                evidence=str(payload.get("evidence", ""))[:200],
-                confidence=float(payload.get("confidence", 0.0)),
-                reasoning=str(payload.get("reasoning", ""))[:300],
+                verdict=payload["verdict"],
+                partial_score=payload["partial_score"],
+                evidence=payload["evidence"],
+                confidence=payload["confidence"],
+                reasoning=payload["reasoning"],
+                api_call_count=1,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+                latency_ms=latency_ms,
+                usage_complete=usage_complete,
+            )
+        except InvalidVisionEnvelope as exc:
+            latency_ms = (
+                (time.perf_counter() - call_started) * 1000.0
+                if call_started else 0.0
+            )
+            verdict = VisionVerdict(
+                verdict="judge_error",
+                partial_score=0.0,
+                evidence="",
+                confidence=0.0,
+                reasoning=f"invalid vision response envelope: {exc}"[:300],
+                judge_error="invalid_vision_envelope",
+                api_call_count=int(api_attempted),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+                latency_ms=latency_ms,
+                usage_complete=usage_complete,
             )
         except Exception as exc:  # noqa: BLE001
+            latency_ms = (
+                (time.perf_counter() - call_started) * 1000.0
+                if call_started else 0.0
+            )
             verdict = VisionVerdict(
                 verdict="judge_error",
                 partial_score=0.0,
@@ -185,6 +315,12 @@ class VisionPerception:
                 confidence=0.0,
                 reasoning=f"vision call failed: {type(exc).__name__}",
                 judge_error=f"{type(exc).__name__}: {exc}",
+                api_call_count=int(api_attempted),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+                latency_ms=latency_ms,
+                usage_complete=usage_complete,
             )
         if cache_key is not None:
             self._cache[cache_key] = verdict

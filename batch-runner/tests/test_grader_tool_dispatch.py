@@ -83,8 +83,7 @@ def test_grader_dispatch_uses_tool_calling_judge_when_configured(monkeypatch, tm
             "tools": {
                 "read_deliverable": {
                     "ops": ["inspect_structure", "read_content",
-                            "inspect_formatting", "render_to_image",
-                            "probe_audio", "probe_video"],
+                            "inspect_formatting", "probe_audio", "probe_video"],
                     "per_item_call_cap": 8,
                     "max_iterations": 6,
                 },
@@ -116,6 +115,14 @@ def test_grader_dispatch_uses_tool_calling_judge_when_configured(monkeypatch, tm
     assert ig.evidence == "kind=xlsx"
     assert in_tok == 80
     assert out_tok == 20
+    op_enum = fake_client.responses.calls[0]["tools"][0][
+        "parameters"
+    ]["properties"]["op"]["enum"]
+    assert op_enum == [
+        "inspect_structure", "read_content", "inspect_formatting",
+        "probe_audio", "probe_video",
+    ]
+    assert "render_to_image" not in op_enum
 
 
 def test_grader_without_tools_block_uses_legacy_path(monkeypatch, tmp_path):

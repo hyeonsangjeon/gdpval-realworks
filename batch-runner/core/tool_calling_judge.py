@@ -14,11 +14,12 @@ Why standalone (and not a method on ``Grader``):
 
 Loop shape::
 
+    visual_evidence = harness_render_and_perceive(selected_paths)
     while not done and iterations < cap:
         response = client.responses.create(
             model=...,
             input=messages,
-            tools=[READ_DELIVERABLE_TOOL_SCHEMA, ...],
+            tools=[MODEL_READ_DELIVERABLE_TOOL_SCHEMA, ...],
             reasoning={"effort": ...},
         )
         for item in response.output:
@@ -41,22 +42,180 @@ is suggested up front.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import math
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core.grader_routing import classify_criterion
+from core.grader_routing import (
+    RoutingDecision,
+    classify_criterion,
+    is_overall_style_criterion,
+)
 from core.rubric_loader import RubricItem, TaskRubric
 from core.tools import (
-    READ_DELIVERABLE_OPS,
-    READ_DELIVERABLE_TOOL_SCHEMA,
+    MODEL_READ_DELIVERABLE_OPS,
+    MODEL_READ_DELIVERABLE_TOOL_SCHEMA,
     read_deliverable,
 )
 
 logger = logging.getLogger(__name__)
+
+_VISUAL_RENDER_SCOPES: Dict[str, Dict[str, int]] = {
+    ".pdf": {"page": 1},
+    ".xlsx": {"workbook_page": 1},
+    ".xlsm": {"workbook_page": 1},
+    ".pptx": {"slide": 1},
+    ".png": {},
+    ".jpg": {},
+    ".jpeg": {},
+    ".gif": {},
+    ".bmp": {},
+    ".webp": {},
+}
+_VISUAL_FILE_CAP = 3
+_RENDERER_METADATA_KEYS = (
+    "kind",
+    "source_kind",
+    "source_page_count",
+    "source_sheet_count",
+    "source_slide_count",
+    "converted_page_count",
+    "renderer",
+    "byte_size",
+)
+
+
+@dataclass
+class VisualEvidenceEntry:
+    path: str
+    source_sha256: str
+    scope: Dict[str, Any]
+    renderer_metadata: Dict[str, Any]
+    coverage_metadata: Dict[str, Any]
+    vision: Dict[str, Any]
+    render_latency_ms: float = 0.0
+
+    def to_prompt_dict(self) -> Dict[str, Any]:
+        return {
+            "path": self.path,
+            "source_sha256": self.source_sha256,
+            "scope": self.scope,
+            "renderer_metadata": self.renderer_metadata,
+            "coverage_metadata": self.coverage_metadata,
+            "vision": {
+                key: self.vision.get(key)
+                for key in (
+                    "verdict", "partial_score", "evidence", "confidence",
+                    "reasoning", "judge_error",
+                )
+            },
+        }
+
+    def to_provenance_dict(self) -> Dict[str, Any]:
+        path = Path(self.path)
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or "\\" in self.path
+            or any(char in self.path for char in ("\r", "\n"))
+            or re.match(r"^[A-Za-z]:", self.path)
+        ):
+            raise ValueError("visual provenance path must be relative and confined")
+        return {
+            "path": path.as_posix(),
+            "source_sha256": self.source_sha256,
+            "scope": dict(self.scope),
+            "renderer_metadata": dict(self.renderer_metadata),
+            "coverage_metadata": dict(self.coverage_metadata),
+            "vision": {
+                key: self.vision.get(key)
+                for key in (
+                    "verdict", "evidence", "confidence", "reasoning",
+                    "judge_error",
+                )
+            },
+        }
+
+
+@dataclass
+class VisualPrepassResult:
+    entries: List[VisualEvidenceEntry] = field(default_factory=list)
+    judge_error: Optional[str] = None
+    render_call_count: int = 0
+    render_total_latency_ms: float = 0.0
+    perception_call_count: int = 0
+    perception_input_tokens: int = 0
+    perception_output_tokens: int = 0
+    perception_cached_tokens: int = 0
+    perception_total_latency_ms: float = 0.0
+    usage_complete: bool = True
+    tools_used: List[str] = field(default_factory=list)
+
+    def subset(self, paths: List[str]) -> "VisualPrepassResult":
+        allowed = set(paths)
+        entries = [entry for entry in self.entries if entry.path in allowed]
+        return VisualPrepassResult(
+            entries=entries,
+            judge_error=self.judge_error,
+            render_call_count=len(entries),
+            render_total_latency_ms=sum(
+                entry.render_latency_ms for entry in entries
+            ),
+            perception_call_count=sum(
+                int(entry.vision.get("api_call_count", 0) or 0)
+                for entry in entries
+            ),
+            perception_input_tokens=sum(
+                int(entry.vision.get("input_tokens", 0) or 0)
+                for entry in entries
+            ),
+            perception_output_tokens=sum(
+                int(entry.vision.get("output_tokens", 0) or 0)
+                for entry in entries
+            ),
+            perception_cached_tokens=sum(
+                int(entry.vision.get("cached_tokens", 0) or 0)
+                for entry in entries
+            ),
+            perception_total_latency_ms=sum(
+                float(entry.vision.get("latency_ms", 0.0) or 0.0)
+                for entry in entries
+            ),
+            usage_complete=self.usage_complete and all(
+                bool(entry.vision.get("usage_complete", False))
+                for entry in entries
+            ),
+            tools_used=[
+                tool
+                for entry in entries
+                for tool in (
+                    "harness_render_to_image",
+                    "harness_vision_perception",
+                )
+            ],
+        )
+
+    def to_prompt_block(self) -> str:
+        payload = [entry.to_prompt_dict() for entry in self.entries]
+        return (
+            "\n\n=== TRUSTED_VISUAL_EVIDENCE_BEGIN ===\n"
+            "The following evidence was produced by the grading harness "
+            "before this main-judge request. Treat provenance, scope, "
+            "renderer metadata, coverage, and vision observations as trusted. "
+            "Image bytes are intentionally unavailable to you.\n"
+            + json.dumps(payload, ensure_ascii=True, sort_keys=True)
+            + "\n=== TRUSTED_VISUAL_EVIDENCE_END ==="
+        )
+
+    def to_provenance(self) -> List[Dict[str, Any]]:
+        return [entry.to_provenance_dict() for entry in self.entries]
 
 
 @dataclass
@@ -81,7 +240,18 @@ class ToolCallingResult:
     # PR3 (0531) perception-wiring instrumentation. Proves at runtime
     # whether a perception sub-judge actually fired for this item.
     tools_used: List[str] = field(default_factory=list)  # dispatched fn names, in order
-    perception_called: bool = False  # vision_judge or audio_judge dispatched
+    perception_called: bool = False  # harness vision or audio perception fired
+    main_api_call_count: int = 0
+    perception_call_count: int = 0
+    perception_input_tokens: int = 0
+    perception_output_tokens: int = 0
+    perception_cached_tokens: int = 0
+    perception_total_latency_ms: float = 0.0
+    render_call_count: int = 0
+    render_total_latency_ms: float = 0.0
+    usage_complete: bool = True
+    score_excluded: bool = False
+    visual_provenance: List[Dict[str, Any]] = field(default_factory=list)
 
 
 # ----------------------------------------------------------------------
@@ -99,17 +269,26 @@ def _strip_code_fence(text: str) -> str:
     return t
 
 
+def _bounded_json_int(value: str) -> int | str:
+    """Avoid Python's global giant-int conversion limit escaping the parser."""
+    if len(value.lstrip("-")) > 100:
+        return value
+    return int(value)
+
+
 def _safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
     try:
-        return json.loads(_strip_code_fence(text))
-    except json.JSONDecodeError:
+        parsed = json.loads(_strip_code_fence(text), parse_int=_bounded_json_int)
+        return dict(parsed) if isinstance(parsed, Mapping) else None
+    except (json.JSONDecodeError, TypeError, ValueError):
         # try to recover the first {...} block
         m = re.search(r"\{[\s\S]*\}", text)
         if not m:
             return None
         try:
-            return json.loads(m.group(0))
-        except json.JSONDecodeError:
+            parsed = json.loads(m.group(0), parse_int=_bounded_json_int)
+            return dict(parsed) if isinstance(parsed, Mapping) else None
+        except (json.JSONDecodeError, TypeError, ValueError):
             return None
 
 
@@ -140,11 +319,10 @@ class ToolCallingJudge:
         max_iterations:          hard upper bound on response.create
                                  iterations (one tool round = one
                                  iteration).
-        vision_perception:       optional ``VisionPerception`` instance
-                                 (task 205). When provided AND the routing
-                                 modality is VISUAL, the harness will
-                                 expose a ``vision_judge`` tool to the
-                                 model.
+        vision_perception:       optional ``VisionPerception`` instance.
+                     For VISUAL items the harness renders and
+                     invokes it before the first main request;
+                     it is never exposed as a model tool.
         audio_perception:        optional ``AudioPerception`` instance
                                  (task 206), same shape.
         task_prompt_truncate:    chars kept of the original task prompt.
@@ -157,6 +335,8 @@ class ToolCallingJudge:
                                  long tool-loop tasks like the 49-call
                                  monster trip it; light/medium tasks stay
                                  fully cacheable).
+        before_upstream_call:     optional zero-argument TPM guard invoked
+                     before each main-judge or vision API call.
     """
 
     client: Any
@@ -166,17 +346,43 @@ class ToolCallingJudge:
     max_output_tokens: int = 2400
     per_item_tool_call_cap: int = 8
     max_iterations: int = 10
+    model_read_ops: Tuple[str, ...] = MODEL_READ_DELIVERABLE_OPS
     vision_perception: Any = None
     audio_perception: Any = None
     task_prompt_truncate: int = 500
-    prompt_cache_key: str = "gdpval_v2_judge"
+    prompt_cache_key: Optional[str] = None
     compact_threshold: Optional[int] = None
+    before_upstream_call: Optional[Callable[[], None]] = None
 
     # Cached: split prompt template into stable + variable halves once at
     # construction (or first use). The stable half is the ``instructions=``
     # argument across every call — byte-identical → server-side cache hit.
     _stable_instructions: Optional[str] = field(default=None, init=False)
     _variable_template: Optional[str] = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        if not self.model_read_ops:
+            raise ValueError("model_read_ops must contain at least one operation")
+        invalid_ops = set(self.model_read_ops) - set(MODEL_READ_DELIVERABLE_OPS)
+        if invalid_ops:
+            raise ValueError(
+                f"model_read_ops contains unsupported operations: "
+                f"{sorted(invalid_ops)}"
+            )
+        if self.prompt_cache_key is None:
+            match = re.search(
+                r"prompt_version:\s*([A-Za-z0-9_.-]+)", self.prompt_template
+            )
+            prompt_version = match.group(1) if match else "unknown_prompt"
+            self.prompt_cache_key = json.dumps(
+                (
+                    "unknown_experiment",
+                    self.model,
+                    "unknown_rubric",
+                    prompt_version,
+                ),
+                separators=(",", ":"),
+            )
 
     # ------------------------------------------------------------------
     # Public surface
@@ -190,15 +396,50 @@ class ToolCallingJudge:
         deliverable_dir: str,
         file_names: List[str],
         reference_file_names: Optional[List[str]] = None,
+        visual_prepass: Optional[VisualPrepassResult] = None,
+        routing_decision: Optional[RoutingDecision] = None,
     ) -> ToolCallingResult:
         """Grade one rubric item by letting the judge inspect files via tools."""
-        decision = classify_criterion(item.criterion)
+        decision = routing_decision or classify_criterion(item.criterion)
         # PR3 step 1a — split the prompt template into stable scaffold
         # (cached server-side via instructions=) and per-item variable.
         self._ensure_split()
         variable_prompt = self._render_variable(
             task, item, file_names, decision, reference_file_names or []
         )
+        prepass = visual_prepass or VisualPrepassResult()
+        if decision.modality.value == "visual":
+            if visual_prepass is None:
+                prepass = self.preflight_visual(
+                    item=item,
+                    deliverable_dir=deliverable_dir,
+                    file_names=file_names,
+                )
+            expected_paths = self._planned_visual_names(file_names)
+            observed_paths = [entry.path for entry in prepass.entries]
+            if prepass.judge_error is None and observed_paths != expected_paths:
+                prepass.judge_error = (
+                    "required_visual_prepass_incomplete:"
+                    f"expected={expected_paths},observed={observed_paths}"
+                )
+            if prepass.judge_error is not None:
+                return self._build_result(
+                    item=item,
+                    routing_modality="visual",
+                    final_text="",
+                    tool_calls_made=0,
+                    iterations=0,
+                    latency_ms=0.0,
+                    input_tokens=0,
+                    output_tokens=0,
+                    cached_tokens=0,
+                    judge_error=prepass.judge_error,
+                    tools_used=self._visual_tools_used(prepass),
+                    main_api_call_count=0,
+                    visual_prepass=prepass,
+                    usage_complete=prepass.usage_complete,
+                )
+            variable_prompt += prepass.to_prompt_block()
         tools = self._build_tools_for(decision.modality.value)
 
         messages: List[Dict[str, Any]] = [
@@ -209,14 +450,18 @@ class ToolCallingJudge:
         input_tok_total = 0
         output_tok_total = 0
         cached_tok_total = 0
-        tools_used: List[str] = []
-        wall_start = time.time()
+        tools_used: List[str] = self._visual_tools_used(prepass)
+        main_api_call_count = 0
+        main_latency_ms = 0.0
+        usage_complete = prepass.usage_complete
         final_text = ""
         judge_error: Optional[str] = None
 
         while iterations < self.max_iterations:
             iterations += 1
+            call_started: Optional[float] = None
             try:
+                self._guard_upstream_call()
                 # PR3 step 1a — instructions + prompt_cache_key make the
                 # stable scaffold cacheable. compact_threshold (1b) is
                 # set high enough that only long tool loops trip it,
@@ -245,8 +490,16 @@ class ToolCallingJudge:
                         {"type": "auto_compact",
                          "threshold": int(self.compact_threshold)}
                     ]
+                call_started = time.perf_counter()
+                main_api_call_count += 1
                 response = self.client.responses.create(**create_kwargs)
+                main_latency_ms += (time.perf_counter() - call_started) * 1000.0
             except TypeError as exc:
+                if call_started is not None:
+                    main_latency_ms += (
+                        time.perf_counter() - call_started
+                    ) * 1000.0
+                usage_complete = False
                 # SDK older than expected — fall back to the legacy call
                 # shape (no instructions / cache_key / compaction). Log
                 # once and keep going so the run isn't blocked.
@@ -255,6 +508,9 @@ class ToolCallingJudge:
                     exc,
                 )
                 try:
+                    self._guard_upstream_call()
+                    call_started = time.perf_counter()
+                    main_api_call_count += 1
                     response = self.client.responses.create(
                         model=self.model,
                         input=messages,
@@ -262,10 +518,22 @@ class ToolCallingJudge:
                         reasoning={"effort": self.reasoning_effort},
                         max_output_tokens=self.max_output_tokens,
                     )
+                    main_latency_ms += (
+                        time.perf_counter() - call_started
+                    ) * 1000.0
                 except Exception as exc2:  # noqa: BLE001
+                    if call_started is not None:
+                        main_latency_ms += (
+                            time.perf_counter() - call_started
+                        ) * 1000.0
                     judge_error = f"{type(exc2).__name__}: {exc2}"
                     break
             except Exception as exc:  # noqa: BLE001
+                if call_started is not None:
+                    main_latency_ms += (
+                        time.perf_counter() - call_started
+                    ) * 1000.0
+                usage_complete = False
                 judge_error = f"{type(exc).__name__}: {exc}"
                 logger.warning(
                     "ToolCallingJudge upstream call failed for %s: %s",
@@ -274,6 +542,11 @@ class ToolCallingJudge:
                 break
 
             usage = getattr(response, "usage", None)
+            if usage is None or not all(
+                hasattr(usage, field_name)
+                for field_name in ("input_tokens", "output_tokens")
+            ):
+                usage_complete = False
             input_tok_total += int(getattr(usage, "input_tokens", 0) or 0)
             output_tok_total += int(getattr(usage, "output_tokens", 0) or 0)
             # PR3 Step 0 — cached_tokens (Azure Responses API automatic prompt
@@ -282,6 +555,8 @@ class ToolCallingJudge:
             details = getattr(usage, "input_tokens_details", None)
             if details is not None:
                 cached_tok_total += int(getattr(details, "cached_tokens", 0) or 0)
+            else:
+                usage_complete = False
 
             output_items = list(getattr(response, "output", []) or [])
             function_calls = [o for o in output_items
@@ -290,10 +565,13 @@ class ToolCallingJudge:
                             if self._item_type(o) == "message"]
 
             if function_calls:
-                # Echo every assistant function_call into the next input
-                # batch, then append our tool outputs.
+                # Preserve all assistant output items (including reasoning)
+                # in original order, then append function outputs.
+                messages.extend(
+                    self._serialize_output_item(output_item)
+                    for output_item in output_items
+                )
                 for fc in function_calls:
-                    messages.append(self._function_call_message(fc))
                     if tool_calls_made >= self.per_item_tool_call_cap:
                         # Refuse to execute; tell the model so it can
                         # finalize on what it already has.
@@ -305,8 +583,17 @@ class ToolCallingJudge:
                         ))
                         continue
                     tool_calls_made += 1
-                    tools_used.append(self._fc_name(fc))
-                    result = self._dispatch_tool(fc, deliverable_dir, decision)
+                    tool_name = self._fc_name(fc)
+                    tools_used.append(tool_name)
+                    result = self._dispatch_tool(
+                        fc,
+                        deliverable_dir,
+                        allowed_paths=set(file_names).union(
+                            reference_file_names or []
+                        ),
+                    )
+                    if tool_name == "audio_judge":
+                        self._accumulate_perception_result(prepass, result)
                     messages.append(self._function_call_output_message(fc, result))
                 # Loop again to let the model react to the tool outputs.
                 continue
@@ -320,19 +607,21 @@ class ToolCallingJudge:
         else:
             judge_error = "max_iterations_exceeded"
 
-        latency_ms = (time.time() - wall_start) * 1000.0
         return self._build_result(
             item=item,
             routing_modality=decision.modality.value,
             final_text=final_text,
             tool_calls_made=tool_calls_made,
             iterations=iterations,
-            latency_ms=latency_ms,
+            latency_ms=main_latency_ms,
             input_tokens=input_tok_total,
             output_tokens=output_tok_total,
             cached_tokens=cached_tok_total,
             judge_error=judge_error,
             tools_used=tools_used,
+            main_api_call_count=main_api_call_count,
+            visual_prepass=prepass,
+            usage_complete=usage_complete,
         )
 
     def reset_perception(self) -> None:
@@ -393,7 +682,12 @@ class ToolCallingJudge:
         )
         prompt = prompt.replace("{{criterion}}", item.criterion or "")
         prompt = prompt.replace("{{routing_modality}}", decision.modality.value)
-        prompt = prompt.replace("{{routing_preferred_op}}", decision.preferred_op)
+        preferred_op = (
+            "harness_trusted_visual_evidence"
+            if decision.modality.value == "visual"
+            else decision.preferred_op
+        )
+        prompt = prompt.replace("{{routing_preferred_op}}", preferred_op)
         block = "\n".join(
             f"- path: `{fn}`" for fn in file_names
         ) if file_names else ""
@@ -435,7 +729,12 @@ class ToolCallingJudge:
         )
         prompt = prompt.replace("{{criterion}}", item.criterion or "")
         prompt = prompt.replace("{{routing_modality}}", decision.modality.value)
-        prompt = prompt.replace("{{routing_preferred_op}}", decision.preferred_op)
+        preferred_op = (
+            "harness_trusted_visual_evidence"
+            if decision.modality.value == "visual"
+            else decision.preferred_op
+        )
+        prompt = prompt.replace("{{routing_preferred_op}}", preferred_op)
 
         block = "\n".join(
             f"- path: `{fn}`" for fn in file_names
@@ -456,34 +755,14 @@ class ToolCallingJudge:
         return prompt
 
     def _build_tools_for(self, modality: str) -> List[Dict[str, Any]]:
-        tools: List[Dict[str, Any]] = [READ_DELIVERABLE_TOOL_SCHEMA]
-        if modality == "visual" and self.vision_perception is not None:
-            tools.append(self._vision_tool_schema())
+        read_schema = json.loads(json.dumps(MODEL_READ_DELIVERABLE_TOOL_SCHEMA))
+        read_schema["parameters"]["properties"]["op"]["enum"] = list(
+            self.model_read_ops
+        )
+        tools: List[Dict[str, Any]] = [read_schema]
         if modality == "audio" and self.audio_perception is not None:
             tools.append(self._audio_tool_schema())
         return tools
-
-    @staticmethod
-    def _vision_tool_schema() -> Dict[str, Any]:
-        return {
-            "type": "function",
-            "name": "vision_judge",
-            "description": (
-                "Ask the vision sub-judge to grade the criterion against "
-                "a PNG image you got back from read_deliverable(op="
-                "'render_to_image', ...). Use only for VISUAL items."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "criterion": {"type": "string"},
-                    "image_b64": {"type": "string"},
-                    "cache_key": {"type": ["string", "null"]},
-                },
-                "required": ["criterion", "image_b64"],
-                "additionalProperties": False,
-            },
-        }
 
     @staticmethod
     def _audio_tool_schema() -> Dict[str, Any]:
@@ -514,48 +793,379 @@ class ToolCallingJudge:
         self,
         function_call: Any,
         deliverable_dir: str,
-        decision,
+        allowed_paths: set[str],
     ) -> Dict[str, Any]:
         name = self._fc_name(function_call)
         raw_args = self._fc_arguments(function_call)
         try:
-            args = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args or {})
-        except json.JSONDecodeError:
-            return {"ok": False, "error": "invalid JSON arguments",
+            parsed = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {"ok": False, "error": "arguments must be a JSON object",
                     "error_type": "bad_args"}
+        if not isinstance(parsed, Mapping):
+            return {"ok": False, "error": "arguments must be a JSON object",
+                    "error_type": "bad_args"}
+        args = dict(parsed)
 
         if name == "read_deliverable":
             op = args.get("op")
             path = args.get("path")
             scope = args.get("scope")
-            if op not in READ_DELIVERABLE_OPS:
+            if op not in self.model_read_ops:
                 return {"ok": False, "error": f"unknown op {op!r}",
                         "error_type": "bad_op"}
-            return read_deliverable(op, path, base_dir=deliverable_dir, scope=scope)
-
-        if name == "vision_judge":
-            if self.vision_perception is None:
-                return {"ok": False, "error": "vision sub-judge not configured",
-                        "error_type": "no_perception"}
-            v = self.vision_perception.judge(
-                criterion=args.get("criterion", ""),
-                image_b64=args.get("image_b64", ""),
-                cache_key=args.get("cache_key"),
-            )
-            return {"ok": v.judge_error is None, "data": v.to_dict()}
+            if not isinstance(path, str) or path not in allowed_paths:
+                return {
+                    "ok": False,
+                    "error": "path is not in the selected/reference allowlist",
+                    "error_type": "bad_path",
+                }
+            try:
+                return read_deliverable(
+                    op, path, base_dir=deliverable_dir, scope=scope
+                )
+            except Exception as exc:  # noqa: BLE001
+                return {
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "error_type": "tool_exception",
+                }
 
         if name == "audio_judge":
             if self.audio_perception is None:
                 return {"ok": False, "error": "audio sub-judge not configured",
                         "error_type": "no_perception"}
-            v = self.audio_perception.judge(
-                criterion=args.get("criterion", ""),
-                audio_path=args.get("audio_path", ""),
-            )
-            return {"ok": v.judge_error is None, "data": v.to_dict()}
+            audio_path = args.get("audio_path")
+            if not isinstance(audio_path, str) or audio_path not in allowed_paths:
+                return {
+                    "ok": False,
+                    "error": "audio_path is not in the selected/reference allowlist",
+                    "error_type": "bad_path",
+                }
+            base = Path(deliverable_dir).resolve()
+            resolved_audio_path = (base / audio_path).resolve()
+            try:
+                resolved_audio_path.relative_to(base)
+            except ValueError:
+                return {
+                    "ok": False,
+                    "error": "audio_path escapes deliverable_dir",
+                    "error_type": "bad_path",
+                }
+            if not resolved_audio_path.is_file():
+                return {
+                    "ok": False,
+                    "error": "audio_path does not resolve to a file",
+                    "error_type": "bad_path",
+                }
+            try:
+                v = self.audio_perception.judge(
+                    criterion=args.get("criterion", ""),
+                    audio_path=str(resolved_audio_path),
+                )
+                return {"ok": v.judge_error is None, "data": v.to_dict()}
+            except Exception as exc:  # noqa: BLE001
+                return {
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "error_type": "perception_exception",
+                }
 
         return {"ok": False, "error": f"unknown function {name!r}",
                 "error_type": "bad_function"}
+
+    def _guard_upstream_call(self) -> None:
+        if self.before_upstream_call is not None:
+            self.before_upstream_call()
+
+    @staticmethod
+    def _accumulate_perception_result(
+        instrumentation: VisualPrepassResult,
+        result: Mapping[str, Any],
+    ) -> None:
+        data = result.get("data") or {}
+        if not isinstance(data, Mapping):
+            instrumentation.usage_complete = False
+            return
+        try:
+            instrumentation.perception_call_count += int(
+                data.get("api_call_count", 0) or 0
+            )
+            instrumentation.perception_input_tokens += int(
+                data.get("input_tokens", 0) or 0
+            )
+            instrumentation.perception_output_tokens += int(
+                data.get("output_tokens", 0) or 0
+            )
+            instrumentation.perception_cached_tokens += int(
+                data.get("cached_tokens", 0) or 0
+            )
+            instrumentation.perception_total_latency_ms += float(
+                data.get("latency_ms", 0.0) or 0.0
+            )
+        except (TypeError, ValueError):
+            instrumentation.usage_complete = False
+            return
+        instrumentation.usage_complete = (
+            instrumentation.usage_complete
+            and bool(data.get("usage_complete", False))
+        )
+
+    def preflight_visual(
+        self,
+        *,
+        item: RubricItem,
+        deliverable_dir: str,
+        file_names: List[str],
+    ) -> VisualPrepassResult:
+        """Render and perceive every bounded visual path before main judging."""
+        result = VisualPrepassResult()
+        if self.vision_perception is None:
+            result.judge_error = "required_visual_perception_unconfigured"
+            return result
+
+        planned_names = self._planned_visual_names(file_names)
+        if not planned_names:
+            result.judge_error = "required_visual_render_target_unavailable"
+            return result
+        if len(planned_names) > _VISUAL_FILE_CAP:
+            result.judge_error = (
+                "required_visual_file_cap_exceeded:"
+                f"planned={len(planned_names)},cap={_VISUAL_FILE_CAP}"
+            )
+            return result
+
+        planned: List[Tuple[str, Path, Dict[str, int]]] = []
+        base = Path(deliverable_dir).resolve()
+        for file_name in planned_names:
+            scope = _VISUAL_RENDER_SCOPES.get(Path(file_name).suffix.lower())
+            if scope is None:
+                result.judge_error = (
+                    "required_visual_render_unsupported_path:"
+                    f"{file_name}:supported extensions are "
+                    f"{sorted(_VISUAL_RENDER_SCOPES)}"
+                )
+                return result
+            source = (base / file_name).resolve()
+            try:
+                source.relative_to(base)
+            except ValueError:
+                result.judge_error = (
+                    f"required_visual_bad_path:{file_name}:escapes deliverable_dir"
+                )
+                return result
+            if not source.is_file():
+                result.judge_error = (
+                    f"required_visual_bad_path:{file_name}:file not found"
+                )
+                return result
+            normalized_name = source.relative_to(base).as_posix()
+            planned.append((normalized_name, source, dict(scope)))
+
+        remaining = self._remaining_vision_calls()
+        if remaining is not None and remaining < len(planned):
+            result.judge_error = (
+                "required_visual_cap_preflight_failed:"
+                f"planned={len(planned)},remaining={remaining}"
+            )
+            return result
+
+        for file_name, source, scope in planned:
+            try:
+                source_sha256 = self._sha256_file(source)
+            except Exception as exc:  # noqa: BLE001
+                result.judge_error = (
+                    f"required_visual_hash_failed:{file_name}:"
+                    f"{type(exc).__name__}:{exc}"
+                )
+                return result
+
+            render_started = time.perf_counter()
+            result.render_call_count += 1
+            result.tools_used.append("harness_render_to_image")
+            try:
+                rendered = read_deliverable(
+                    "render_to_image",
+                    file_name,
+                    base_dir=deliverable_dir,
+                    scope=scope,
+                )
+            except Exception as exc:  # noqa: BLE001
+                rendered = {
+                    "ok": False,
+                    "error_type": "render_exception",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            render_latency_ms = (
+                time.perf_counter() - render_started
+            ) * 1000.0
+            result.render_total_latency_ms += render_latency_ms
+            if not isinstance(rendered, Mapping) or not rendered.get("ok"):
+                error_type = (
+                    rendered.get("error_type", "render_error")
+                    if isinstance(rendered, Mapping) else "bad_render_envelope"
+                )
+                error = (
+                    rendered.get("error", "unknown_error")
+                    if isinstance(rendered, Mapping) else "non-object render result"
+                )
+                result.judge_error = (
+                    "required_visual_render_failed:"
+                    f"{file_name}:{error_type}:{error}"
+                )
+                return result
+
+            render_data = rendered.get("data") or {}
+            if not isinstance(render_data, Mapping):
+                result.judge_error = (
+                    f"required_visual_render_failed:{file_name}:bad_render_data"
+                )
+                return result
+            image_b64 = render_data.get("base64")
+            if not isinstance(image_b64, str) or not image_b64:
+                result.judge_error = (
+                    f"required_visual_render_failed:{file_name}:missing_image_bytes"
+                )
+                return result
+
+            result.tools_used.append("harness_vision_perception")
+            try:
+                verdict = self.vision_perception.judge(
+                    criterion=item.criterion,
+                    image_b64=image_b64,
+                )
+                verdict_data = verdict.to_dict()
+            except Exception as exc:  # noqa: BLE001
+                result.usage_complete = False
+                result.judge_error = (
+                    "required_visual_perception_failed:"
+                    f"{file_name}:{type(exc).__name__}:{exc}"
+                )
+                return result
+            if not isinstance(verdict_data, Mapping):
+                result.usage_complete = False
+                result.judge_error = (
+                    f"required_visual_perception_failed:{file_name}:bad_verdict"
+                )
+                return result
+            verdict_payload = dict(verdict_data)
+            try:
+                api_calls = int(
+                    verdict_payload.get("api_call_count", 1) or 0
+                )
+                result.perception_call_count += api_calls
+                result.perception_input_tokens += int(
+                    verdict_payload.get("input_tokens", 0) or 0
+                )
+                result.perception_output_tokens += int(
+                    verdict_payload.get("output_tokens", 0) or 0
+                )
+                result.perception_cached_tokens += int(
+                    verdict_payload.get("cached_tokens", 0) or 0
+                )
+                result.perception_total_latency_ms += float(
+                    verdict_payload.get("latency_ms", 0.0) or 0.0
+                )
+            except (TypeError, ValueError):
+                result.usage_complete = False
+                result.judge_error = (
+                    "required_visual_perception_failed:"
+                    f"{file_name}:malformed_usage"
+                )
+                return result
+            result.usage_complete = result.usage_complete and bool(
+                verdict_payload.get("usage_complete", False)
+            )
+            vision_verdict = verdict_payload.get("verdict")
+            vision_error = verdict_payload.get("judge_error")
+            if vision_error or vision_verdict not in {"pass", "partial", "fail"}:
+                result.judge_error = (
+                    "required_visual_perception_failed:"
+                    f"{file_name}:{vision_error or 'invalid_vision_envelope'}"
+                )
+                return result
+
+            renderer_metadata = {
+                key: render_data[key]
+                for key in _RENDERER_METADATA_KEYS
+                if key in render_data
+            }
+            result.entries.append(
+                VisualEvidenceEntry(
+                    path=file_name,
+                    source_sha256=source_sha256,
+                    scope=dict(render_data.get("scope") or scope),
+                    renderer_metadata=renderer_metadata,
+                    coverage_metadata=self._coverage_metadata(
+                        item, render_data
+                    ),
+                    vision=verdict_payload,
+                    render_latency_ms=render_latency_ms,
+                )
+            )
+        return result
+
+    def _remaining_vision_calls(self) -> Optional[int]:
+        remaining = getattr(self.vision_perception, "remaining_calls", None)
+        if isinstance(remaining, int):
+            return max(0, remaining)
+        call_cap = getattr(self.vision_perception, "call_cap", None)
+        calls_used = getattr(self.vision_perception, "calls_used", None)
+        if isinstance(call_cap, int) and isinstance(calls_used, int):
+            return max(0, call_cap - calls_used)
+        return None
+
+    @staticmethod
+    def _planned_visual_names(file_names: List[str]) -> List[str]:
+        return sorted(
+            dict.fromkeys(file_names), key=lambda name: (name.casefold(), name)
+        )
+
+    @classmethod
+    def planned_supported_visual_names(cls, file_names: List[str]) -> List[str]:
+        """Return the stable, bounded-call candidates for task budgeting."""
+        return [
+            name
+            for name in cls._planned_visual_names(file_names)
+            if Path(name).suffix.lower() in _VISUAL_RENDER_SCOPES
+        ]
+
+    @staticmethod
+    def _sha256_file(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    @staticmethod
+    def _coverage_metadata(
+        item: RubricItem, render_data: Mapping[str, Any]
+    ) -> Dict[str, Any]:
+        source_kind = str(render_data.get("source_kind") or "")
+        total_key = {
+            "pdf": "source_page_count",
+            "pptx": "source_slide_count",
+            "xlsx": "converted_page_count",
+            "image": None,
+        }.get(source_kind)
+        total_surfaces = 1 if source_kind == "image" else (
+            render_data.get(total_key) if total_key else None
+        )
+        return {
+            "coverage_mode": "sampled_first_surface",
+            "criterion_scope": (
+                "overall_style"
+                if is_overall_style_criterion(item.criterion)
+                else "generic_visual_fallback"
+            ),
+            "sampled_surface_count": 1,
+            "total_surface_count": total_surfaces,
+        }
+
+    @staticmethod
+    def _visual_tools_used(prepass: VisualPrepassResult) -> List[str]:
+        return list(prepass.tools_used)
 
     # ------------------------------------------------------------------
     # Response item shape adapters
@@ -589,24 +1199,49 @@ class ToolCallingJudge:
             return str(fc.get("call_id", ""))
         return str(getattr(fc, "call_id", ""))
 
-    @classmethod
-    def _function_call_message(cls, fc: Any) -> Dict[str, Any]:
-        """Echo an assistant function_call back into the next input batch."""
+    @staticmethod
+    def _serialize_output_item(output_item: Any) -> Dict[str, Any]:
+        """Serialize an SDK/dict response item for tool continuation."""
+        if isinstance(output_item, Mapping):
+            return dict(output_item)
+        model_dump = getattr(output_item, "model_dump", None)
+        if callable(model_dump):
+            try:
+                try:
+                    dumped = model_dump(mode="json", exclude_none=True)
+                except TypeError:
+                    dumped = model_dump()
+            except Exception:  # noqa: BLE001
+                dumped = None
+            if isinstance(dumped, Mapping):
+                return dict(dumped)
+        fields = (
+            "type", "id", "status", "role", "content", "summary",
+            "call_id", "name", "arguments",
+        )
         return {
-            "type": "function_call",
-            "call_id": cls._fc_call_id(fc),
-            "name": cls._fc_name(fc),
-            "arguments": cls._fc_arguments(fc),
+            field_name: getattr(output_item, field_name)
+            for field_name in fields
+            if hasattr(output_item, field_name)
+            and getattr(output_item, field_name) is not None
         }
 
     @classmethod
     def _function_call_output_message(
         cls, fc: Any, result: Dict[str, Any]
     ) -> Dict[str, Any]:
+        try:
+            output = json.dumps(result)
+        except (TypeError, ValueError) as exc:
+            output = json.dumps({
+                "ok": False,
+                "error": f"tool output serialization failed: {type(exc).__name__}",
+                "error_type": "tool_serialization_error",
+            })
         return {
             "type": "function_call_output",
             "call_id": cls._fc_call_id(fc),
-            "output": json.dumps(result),
+            "output": output,
         }
 
     @staticmethod
@@ -642,11 +1277,28 @@ class ToolCallingJudge:
         cached_tokens: int,
         judge_error: Optional[str],
         tools_used: Optional[List[str]] = None,
+        main_api_call_count: int = 0,
+        visual_prepass: Optional[VisualPrepassResult] = None,
+        usage_complete: bool = True,
     ) -> ToolCallingResult:
         tools_used = list(tools_used or [])
-        perception_called = any(
-            t in ("vision_judge", "audio_judge") for t in tools_used
+        prepass = visual_prepass or VisualPrepassResult()
+        perception_called = (
+            prepass.perception_call_count > 0
+            or any(t == "audio_judge" for t in tools_used)
         )
+        instrumentation = {
+            "main_api_call_count": main_api_call_count,
+            "perception_call_count": prepass.perception_call_count,
+            "perception_input_tokens": prepass.perception_input_tokens,
+            "perception_output_tokens": prepass.perception_output_tokens,
+            "perception_cached_tokens": prepass.perception_cached_tokens,
+            "perception_total_latency_ms": prepass.perception_total_latency_ms,
+            "render_call_count": prepass.render_call_count,
+            "render_total_latency_ms": prepass.render_total_latency_ms,
+            "usage_complete": usage_complete and prepass.usage_complete,
+            "visual_provenance": prepass.to_provenance(),
+        }
         if judge_error is not None or not final_text.strip():
             return ToolCallingResult(
                 verdict="judge_error",
@@ -666,6 +1318,8 @@ class ToolCallingJudge:
                 raw_text=final_text,
                 tools_used=tools_used,
                 perception_called=perception_called,
+                score_excluded=True,
+                **instrumentation,
             )
 
         parsed = _safe_json_loads(final_text)
@@ -688,20 +1342,80 @@ class ToolCallingJudge:
                 raw_text=final_text,
                 tools_used=tools_used,
                 perception_called=perception_called,
+                score_excluded=True,
+                **instrumentation,
             )
 
-        verdict = str(parsed.get("verdict", "fail")).lower()
+        verdict_raw = parsed.get("verdict")
+        partial_raw = parsed.get("partial_score")
+        confidence_raw = parsed.get("confidence")
+        invalid_envelope = False
+        verdict = verdict_raw.lower() if isinstance(verdict_raw, str) else ""
         if verdict not in {"pass", "partial", "fail"}:
-            verdict = "fail"
-        partial = float(parsed.get("partial_score", 0.0) or 0.0)
-        partial = max(0.0, min(1.0, partial))
-        if verdict == "pass":
-            partial = 1.0
-        elif verdict == "fail":
-            partial = 0.0
-        elif partial <= 0.0 or partial >= 1.0:
-            verdict = "fail"
-            partial = 0.0
+            invalid_envelope = True
+
+        partial = 0.0
+        if (
+            isinstance(partial_raw, bool)
+            or not isinstance(partial_raw, (int, float))
+        ):
+            invalid_envelope = True
+        else:
+            try:
+                partial = float(partial_raw)
+            except (OverflowError, TypeError, ValueError):
+                invalid_envelope = True
+            else:
+                if not math.isfinite(partial) or not 0.0 <= partial <= 1.0:
+                    invalid_envelope = True
+
+        if not invalid_envelope and (
+            (verdict == "pass" and partial != 1.0)
+            or (verdict == "fail" and partial != 0.0)
+            or (verdict == "partial" and not 0.0 < partial < 1.0)
+        ):
+            invalid_envelope = True
+
+        confidence: Optional[float] = None
+        if (
+            isinstance(confidence_raw, bool)
+            or not isinstance(confidence_raw, (int, float))
+        ):
+            invalid_envelope = True
+        else:
+            try:
+                confidence = float(confidence_raw)
+            except (OverflowError, TypeError, ValueError):
+                invalid_envelope = True
+            else:
+                if (
+                    not math.isfinite(confidence)
+                    or not 0.0 <= confidence <= 1.0
+                ):
+                    invalid_envelope = True
+
+        if invalid_envelope:
+            return ToolCallingResult(
+                verdict="judge_error",
+                partial_score=0.0,
+                awarded_score=0.0,
+                evidence="",
+                confidence=None,
+                reasoning="",
+                judge_error="invalid_final_envelope",
+                tool_calls_made=tool_calls_made,
+                iterations=iterations,
+                latency_ms=latency_ms,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+                routing_modality=routing_modality,
+                raw_text=final_text,
+                tools_used=tools_used,
+                perception_called=perception_called,
+                score_excluded=True,
+                **instrumentation,
+            )
 
         evidence = str(parsed.get("evidence") or "").strip()[:200]
         if not evidence:
@@ -709,12 +1423,6 @@ class ToolCallingJudge:
             partial = 0.0
             evidence = "missing evidence"
 
-        confidence: Optional[float] = None
-        if parsed.get("confidence") is not None:
-            try:
-                confidence = max(0.0, min(1.0, float(parsed.get("confidence"))))
-            except (TypeError, ValueError):
-                confidence = None
         reasoning = str(parsed.get("reasoning") or "")[:300]
 
         awarded = float(item.score) * partial
@@ -736,4 +1444,6 @@ class ToolCallingJudge:
             raw_text=final_text,
             tools_used=tools_used,
             perception_called=perception_called,
+            score_excluded=False,
+            **instrumentation,
         )

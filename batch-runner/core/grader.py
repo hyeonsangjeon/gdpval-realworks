@@ -27,9 +27,28 @@ from core.deliverable_selector import (
     select_deliverables,
 )
 from core.file_reader import read_reference_file
+from core.grader_routing import (
+    Modality,
+    RoutingDecision,
+    classify_criterion,
+    is_overall_style_criterion,
+    resolve_runtime_routing,
+)
 from core.rubric_loader import RubricItem, TaskRubric
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_tool_prompt_path(config: dict) -> Path:
+    """Return the exact tool prompt path used by the v2 judge."""
+    prompt_config = config.get("prompt") or {}
+    configured = prompt_config.get("tool_template")
+    if configured:
+        return Path(str(configured))
+    template = prompt_config.get("template")
+    if not template:
+        raise ValueError("prompt.template is required")
+    return Path(str(template)).with_name("grader_judge_v2.md")
 
 Verdict = Literal["pass", "partial", "fail", "judge_error"]
 DecidedBy = Literal["precheck", "judge"]
@@ -130,6 +149,7 @@ class ItemGrade:
     routing_modality: Optional[str] = None
     perception_called: bool = False
     tools_used: Optional[list[str]] = None
+    visual_provenance: list[dict] = field(default_factory=list)
     target_scope: Optional[str] = None
     target_ids: Optional[list[str]] = None
     child_grades: Optional[list[dict]] = None
@@ -139,6 +159,18 @@ class ItemGrade:
     selection_status: Optional[str] = None
     selection_error: Optional[str] = None
     score_excluded: bool = False
+    judge_call_count: int = 0
+    judge_input_tokens: int = 0
+    judge_output_tokens: int = 0
+    judge_cached_tokens: int = 0
+    perception_call_count: int = 0
+    perception_input_tokens: int = 0
+    perception_output_tokens: int = 0
+    perception_cached_tokens: int = 0
+    perception_total_latency_ms: float = 0.0
+    render_call_count: int = 0
+    render_total_latency_ms: float = 0.0
+    usage_complete: bool = True
 
 
 @dataclass
@@ -173,6 +205,24 @@ class TaskGrade:
     selection_rule: Optional[str] = None
     selection_status: Optional[str] = None
     selection_error: Optional[str] = None
+    perception_call_count: int = 0
+    perception_input_tokens: int = 0
+    perception_output_tokens: int = 0
+    perception_cached_tokens: int = 0
+    perception_total_latency_ms: float = 0.0
+    render_call_count: int = 0
+    render_total_latency_ms: float = 0.0
+    usage_complete: bool = True
+
+
+@dataclass(frozen=True)
+class _RuntimeCriterionPlan:
+    target_plan: CriterionTargetPlan
+    item_decision: RoutingDecision
+    target_decisions: dict[str, RoutingDecision]
+    visual_paths: tuple[str, ...]
+    supported_visual_call_count: int
+    requires_visual: bool
 
 
 class Grader:
@@ -476,6 +526,15 @@ class Grader:
         selection = self._select_deliverables(task, deliverable_path, files)
         file_map = self._relative_file_map(deliverable_path, files)
         reference_file_names = list(selection.reference_files_excluded)
+        runtime_plans = [
+            self._runtime_criterion_plan(
+                selection,
+                item,
+                plan_targets_for_criterion(selection, item.criterion),
+            )
+            for item in task.rubric_items
+        ]
+        visual_budget_error = self._task_visual_budget_error(runtime_plans)
 
         items: list[ItemGrade] = []
         judge_call_count = 0
@@ -485,9 +544,9 @@ class Grader:
         judge_output_tokens = 0
         judge_cached_tokens = 0
 
-        for item in task.rubric_items:
+        for item, runtime_plan in zip(task.rubric_items, runtime_plans):
             mode, pattern_id = self._classify(item)
-            plan = plan_targets_for_criterion(selection, item.criterion)
+            plan = runtime_plan.target_plan
 
             if selection.selection_status == "selection_error":
                 ig = self._selection_ungraded_item(
@@ -512,7 +571,7 @@ class Grader:
 
             if selection.selection_status == "wrong_format_primary":
                 evidence = selection.selection_error or "wrong_format_primary"
-                if self._is_overall_style_item(item):
+                if is_overall_style_criterion(item.criterion):
                     ig = self._selection_ungraded_item(
                         item,
                         f"wrong_format_primary: {evidence}",
@@ -529,6 +588,35 @@ class Grader:
                 items.append(ig)
                 continue
 
+            if visual_budget_error and runtime_plan.requires_visual:
+                if plan.target_scope == "split_children":
+                    ig, in_tok, out_tok, calls, latency, cached = self._judge_split_children(
+                        task,
+                        item,
+                        selection,
+                        deliverable_path,
+                        reference_file_names,
+                        plan,
+                        runtime_plan=runtime_plan,
+                        preflight_error=visual_budget_error,
+                    )
+                    judge_call_count += calls
+                    judge_total_latency_ms += latency
+                    judge_input_tokens += in_tok
+                    judge_output_tokens += out_tok
+                    judge_cached_tokens += cached
+                else:
+                    ig = self._selection_ungraded_item(
+                        item,
+                        visual_budget_error,
+                        selection,
+                        plan,
+                    )
+                    ig.routing_modality = Modality.VISUAL.value
+                    ig.tools_used = []
+                items.append(ig)
+                continue
+
             if plan.target_scope == "split_children":
                 ig, in_tok, out_tok, calls, latency, cached = self._judge_split_children(
                     task,
@@ -537,6 +625,7 @@ class Grader:
                     deliverable_path,
                     reference_file_names,
                     plan,
+                    runtime_plan=runtime_plan,
                 )
                 judge_call_count += calls
                 judge_total_latency_ms += latency
@@ -568,6 +657,7 @@ class Grader:
                         deliverable_path,
                         plan.selected_paths,
                         reference_file_names,
+                        routing_decision=runtime_plan.item_decision,
                     )
                     judge_call_count += 1
                     judge_total_latency_ms += ig.judge_latency_ms or 0.0
@@ -587,6 +677,7 @@ class Grader:
                     deliverable_path,
                     plan.selected_paths,
                     reference_file_names,
+                    routing_decision=runtime_plan.item_decision,
                 )
                 judge_call_count += 1
                 judge_total_latency_ms += ig.judge_latency_ms or 0.0
@@ -604,10 +695,107 @@ class Grader:
         grade.judge_input_tokens = judge_input_tokens
         grade.judge_output_tokens = judge_output_tokens
         grade.judge_cached_tokens = judge_cached_tokens
+        self._aggregate_tool_instrumentation(grade, items)
         self._attach_selection_audit(grade, selection)
         if selection.selection_status == "selection_error":
             grade.error = selection.selection_status
         return grade
+
+    def _runtime_criterion_plan(
+        self,
+        selection: DeliverableSelection,
+        item: RubricItem,
+        plan: CriterionTargetPlan,
+    ) -> _RuntimeCriterionPlan:
+        item_decision = resolve_runtime_routing(
+            item.criterion, plan.selected_paths
+        )
+        target_decisions: dict[str, RoutingDecision] = {}
+        raw_visual_paths: list[str] = []
+        if plan.target_scope == "split_children":
+            target_by_id = {
+                target.target_id: target for target in selection.primary_targets
+            }
+            for target_id in plan.target_ids:
+                target = target_by_id.get(target_id)
+                if target is None:
+                    continue
+                decision = resolve_runtime_routing(item.criterion, target.paths)
+                target_decisions[target_id] = decision
+                if decision.modality is Modality.VISUAL:
+                    raw_visual_paths.extend(target.paths)
+        elif item_decision.modality is Modality.VISUAL:
+            raw_visual_paths.extend(plan.selected_paths)
+
+        visual_paths = tuple(sorted(
+            dict.fromkeys(raw_visual_paths),
+            key=lambda path: (path.casefold(), path),
+        ))
+        supported_visual_call_count = len(
+            self._tool_judge.planned_supported_visual_names(raw_visual_paths)
+        )
+        return _RuntimeCriterionPlan(
+            target_plan=plan,
+            item_decision=item_decision,
+            target_decisions=target_decisions,
+            visual_paths=visual_paths,
+            supported_visual_call_count=supported_visual_call_count,
+            requires_visual=bool(raw_visual_paths),
+        )
+
+    def _task_visual_budget_error(
+        self, runtime_plans: list[_RuntimeCriterionPlan]
+    ) -> str | None:
+        vision = getattr(self._tool_judge, "vision_perception", None)
+        if vision is None:
+            return None
+        cap = getattr(vision, "call_cap", None)
+        if not isinstance(cap, int):
+            cap = getattr(vision, "remaining_calls", None)
+        if not isinstance(cap, int) or cap < 0:
+            return None
+        required = sum(
+            plan.supported_visual_call_count for plan in runtime_plans
+        )
+        if required <= cap:
+            return None
+        return (
+            "task_visual_budget_exceeded:"
+            f"required_calls={required},cap={cap}"
+        )
+
+    @staticmethod
+    def _aggregate_tool_instrumentation(
+        grade: TaskGrade, items: list[ItemGrade]
+    ) -> None:
+        """Use per-item runtime instrumentation as the task-level truth."""
+        grade.judge_call_count = sum(item.judge_call_count for item in items)
+        grade.judge_total_latency_ms = round(sum(
+            float(item.judge_latency_ms or 0.0) for item in items
+        ), 2)
+        grade.judge_input_tokens = sum(item.judge_input_tokens for item in items)
+        grade.judge_output_tokens = sum(item.judge_output_tokens for item in items)
+        grade.judge_cached_tokens = sum(item.judge_cached_tokens for item in items)
+        grade.perception_call_count = sum(
+            item.perception_call_count for item in items
+        )
+        grade.perception_input_tokens = sum(
+            item.perception_input_tokens for item in items
+        )
+        grade.perception_output_tokens = sum(
+            item.perception_output_tokens for item in items
+        )
+        grade.perception_cached_tokens = sum(
+            item.perception_cached_tokens for item in items
+        )
+        grade.perception_total_latency_ms = round(sum(
+            item.perception_total_latency_ms for item in items
+        ), 2)
+        grade.render_call_count = sum(item.render_call_count for item in items)
+        grade.render_total_latency_ms = round(sum(
+            item.render_total_latency_ms for item in items
+        ), 2)
+        grade.usage_complete = all(item.usage_complete for item in items)
 
     def _select_deliverables(
         self, task: TaskRubric, deliverable_path: Path, files: list[Path]
@@ -653,6 +841,8 @@ class Grader:
         deliverable_path: Path,
         reference_file_names: list[str],
         plan: CriterionTargetPlan,
+        runtime_plan: _RuntimeCriterionPlan,
+        preflight_error: str | None = None,
     ) -> tuple[ItemGrade, int, int, int, float, int]:
         child_items: list[ItemGrade] = []
         child_grades: list[dict] = []
@@ -663,6 +853,139 @@ class Grader:
         calls = 0
 
         target_by_id = {target.target_id: target for target in selection.primary_targets}
+        visual_prepass = None
+        visual_target_ids = {
+            target_id
+            for target_id, decision in runtime_plan.target_decisions.items()
+            if decision.modality is Modality.VISUAL
+        }
+        parent_modalities = {
+            decision.modality.value
+            for decision in runtime_plan.target_decisions.values()
+        }
+        parent_routing_modality = (
+            next(iter(parent_modalities))
+            if len(parent_modalities) == 1 else "mixed"
+        )
+        if preflight_error is not None:
+            from core.tool_calling_judge import VisualPrepassResult
+
+            visual_prepass = VisualPrepassResult(judge_error=preflight_error)
+        elif runtime_plan.visual_paths:
+            visual_prepass = self._tool_judge.preflight_visual(
+                item=item,
+                deliverable_dir=str(deliverable_path),
+                file_names=list(runtime_plan.visual_paths),
+            )
+            entry_paths = {entry.path for entry in visual_prepass.entries}
+            all_children_covered = all(
+                set(target_by_id[target_id].paths).issubset(entry_paths)
+                for target_id in plan.target_ids
+                if target_id in target_by_id and target_id in visual_target_ids
+            )
+            if visual_prepass.judge_error is None and not all_children_covered:
+                visual_prepass.judge_error = (
+                    "required_visual_prepass_incomplete_for_split_children"
+                )
+            if visual_prepass.judge_error is not None:
+                for target_id in plan.target_ids:
+                    target = target_by_id.get(target_id)
+                    if target is None:
+                        continue
+                    child_decision = runtime_plan.target_decisions[target_id]
+                    child_prepass = (
+                        visual_prepass.subset(list(target.paths))
+                        if child_decision.modality is Modality.VISUAL else None
+                    )
+                    child_grades.append({
+                        "target_id": target_id,
+                        "selected_paths": list(target.paths),
+                        "verdict": "judge_error",
+                        "awarded_score": 0.0,
+                        "evidence": visual_prepass.judge_error[:200],
+                        "judge_confidence": None,
+                        "routing_modality": child_decision.modality.value,
+                        "perception_called": (
+                            child_prepass is not None
+                            and child_prepass.perception_call_count > 0
+                        ),
+                        "tools_used": (
+                            list(child_prepass.tools_used)
+                            if child_prepass is not None else []
+                        ),
+                        "visual_provenance": (
+                            child_prepass.to_provenance()
+                            if child_prepass is not None else []
+                        ),
+                        "score_excluded": True,
+                        "judge_call_count": 0,
+                        "judge_input_tokens": 0,
+                        "judge_output_tokens": 0,
+                        "judge_cached_tokens": 0,
+                        "perception_call_count": (
+                            child_prepass.perception_call_count
+                            if child_prepass is not None else 0
+                        ),
+                        "perception_input_tokens": (
+                            child_prepass.perception_input_tokens
+                            if child_prepass is not None else 0
+                        ),
+                        "perception_output_tokens": (
+                            child_prepass.perception_output_tokens
+                            if child_prepass is not None else 0
+                        ),
+                        "perception_cached_tokens": (
+                            child_prepass.perception_cached_tokens
+                            if child_prepass is not None else 0
+                        ),
+                        "perception_total_latency_ms": round(
+                            child_prepass.perception_total_latency_ms, 2
+                        ) if child_prepass is not None else 0.0,
+                        "render_call_count": (
+                            child_prepass.render_call_count
+                            if child_prepass is not None else 0
+                        ),
+                        "render_total_latency_ms": round(
+                            child_prepass.render_total_latency_ms, 2
+                        ) if child_prepass is not None else 0.0,
+                        "usage_complete": (
+                            child_prepass.usage_complete
+                            if child_prepass is not None else True
+                        ),
+                    })
+                ig = ItemGrade(
+                    rubric_item_id=item.rubric_item_id,
+                    criterion=item.criterion,
+                    max_score=item.score,
+                    awarded_score=0.0,
+                    verdict="judge_error",
+                    decided_by="judge",
+                    required=item.required,
+                    evidence=visual_prepass.judge_error[:200],
+                    judge_confidence=None,
+                    judge_latency_ms=0.0,
+                    routing_modality=parent_routing_modality,
+                    perception_called=(visual_prepass.perception_call_count > 0),
+                    tools_used=list(visual_prepass.tools_used),
+                    visual_provenance=visual_prepass.to_provenance(),
+                    child_grades=child_grades,
+                    score_excluded=True,
+                    perception_call_count=visual_prepass.perception_call_count,
+                    perception_input_tokens=visual_prepass.perception_input_tokens,
+                    perception_output_tokens=visual_prepass.perception_output_tokens,
+                    perception_cached_tokens=visual_prepass.perception_cached_tokens,
+                    perception_total_latency_ms=round(
+                        visual_prepass.perception_total_latency_ms, 2
+                    ),
+                    render_call_count=visual_prepass.render_call_count,
+                    render_total_latency_ms=round(
+                        visual_prepass.render_total_latency_ms, 2
+                    ),
+                    usage_complete=visual_prepass.usage_complete,
+                )
+                self._attach_target_audit(ig, plan, selection)
+                return ig, 0, 0, 0, 0.0, 0
+
         for target_id in plan.target_ids:
             target = target_by_id.get(target_id)
             if target is None:
@@ -674,8 +997,14 @@ class Grader:
                 deliverable_path,
                 list(target.paths),
                 reference_file_names,
+                visual_prepass=(
+                    visual_prepass.subset(list(target.paths))
+                    if visual_prepass is not None
+                    and target_id in visual_target_ids else None
+                ),
+                routing_decision=runtime_plan.target_decisions[target_id],
             )
-            calls += 1
+            calls += child.judge_call_count
             input_tokens += in_tok
             output_tokens += out_tok
             cached_tokens += getattr(self, "_last_cached_tokens", 0)
@@ -689,6 +1018,25 @@ class Grader:
                     "awarded_score": child.awarded_score,
                     "evidence": child.evidence,
                     "judge_confidence": child.judge_confidence,
+                    "routing_modality": child.routing_modality,
+                    "perception_called": child.perception_called,
+                    "tools_used": list(child.tools_used or []),
+                    "visual_provenance": list(child.visual_provenance),
+                    "score_excluded": child.score_excluded,
+                    "judge_call_count": child.judge_call_count,
+                    "judge_input_tokens": child.judge_input_tokens,
+                    "judge_output_tokens": child.judge_output_tokens,
+                    "judge_cached_tokens": child.judge_cached_tokens,
+                    "perception_call_count": child.perception_call_count,
+                    "perception_input_tokens": child.perception_input_tokens,
+                    "perception_output_tokens": child.perception_output_tokens,
+                    "perception_cached_tokens": child.perception_cached_tokens,
+                    "perception_total_latency_ms": (
+                        child.perception_total_latency_ms
+                    ),
+                    "render_call_count": child.render_call_count,
+                    "render_total_latency_ms": child.render_total_latency_ms,
+                    "usage_complete": child.usage_complete,
                 }
             )
 
@@ -724,6 +1072,29 @@ class Grader:
             sum(confidence_values) / len(confidence_values)
             if confidence_values else None
         )
+        child_modalities = {child.routing_modality for child in child_items}
+        routing_modality = (
+            child_items[0].routing_modality
+            if len(child_modalities) == 1 else "mixed"
+        )
+        visual_children = [
+            child for child in child_items
+            if child.routing_modality == Modality.VISUAL.value
+        ]
+        if visual_children:
+            perception_called = all(
+                child.perception_called
+                and child.verdict != "judge_error"
+                and not child.score_excluded
+                for child in visual_children
+            )
+        else:
+            perception_called = False
+        tools_used = [
+            tool
+            for child in child_items
+            for tool in (child.tools_used or [])
+        ]
 
         ig = ItemGrade(
             rubric_item_id=item.rubric_item_id,
@@ -736,7 +1107,40 @@ class Grader:
             evidence=evidence or "split children produced no evidence",
             judge_confidence=confidence,
             judge_latency_ms=round(latency_ms, 2),
+            routing_modality=routing_modality,
+            perception_called=perception_called,
+            tools_used=tools_used,
+            visual_provenance=[
+                provenance
+                for child in child_items
+                for provenance in child.visual_provenance
+            ],
             child_grades=child_grades,
+            score_excluded=(verdict == "judge_error"),
+            judge_call_count=sum(child.judge_call_count for child in child_items),
+            judge_input_tokens=sum(child.judge_input_tokens for child in child_items),
+            judge_output_tokens=sum(child.judge_output_tokens for child in child_items),
+            judge_cached_tokens=sum(child.judge_cached_tokens for child in child_items),
+            perception_call_count=sum(
+                child.perception_call_count for child in child_items
+            ),
+            perception_input_tokens=sum(
+                child.perception_input_tokens for child in child_items
+            ),
+            perception_output_tokens=sum(
+                child.perception_output_tokens for child in child_items
+            ),
+            perception_cached_tokens=sum(
+                child.perception_cached_tokens for child in child_items
+            ),
+            perception_total_latency_ms=round(sum(
+                child.perception_total_latency_ms for child in child_items
+            ), 2),
+            render_call_count=sum(child.render_call_count for child in child_items),
+            render_total_latency_ms=round(sum(
+                child.render_total_latency_ms for child in child_items
+            ), 2),
+            usage_complete=all(child.usage_complete for child in child_items),
         )
         self._attach_target_audit(ig, plan, selection)
         return ig, input_tokens, output_tokens, calls, latency_ms, cached_tokens
@@ -804,10 +1208,6 @@ class Grader:
             judge_confidence=1.0,
             judge_latency_ms=0.0,
         )
-
-    @staticmethod
-    def _is_overall_style_item(item: RubricItem) -> bool:
-        return "overall formatting and style of the deliverable" in item.criterion.casefold()
 
     @staticmethod
     def _attach_target_audit(
@@ -914,9 +1314,30 @@ class Grader:
         return grade
 
     def _list_files(self, deliverable_dir: Path) -> list[Path]:
-        if not deliverable_dir.exists() or not deliverable_dir.is_dir():
+        absolute = Path(os.path.abspath(deliverable_dir))
+        current = Path(absolute.anchor)
+        for part in absolute.parts[1:]:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError(
+                    f"deliverable path contains a symlink component: {current}"
+                )
+        if not absolute.exists() or not absolute.is_dir():
             return []
-        return sorted([p for p in deliverable_dir.rglob("*") if p.is_file()])
+        base = absolute.resolve()
+        files: list[Path] = []
+        for path in absolute.rglob("*"):
+            if path.is_symlink():
+                raise ValueError(f"deliverable tree contains a symlink: {path}")
+            if path.is_file():
+                try:
+                    path.resolve().relative_to(base)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"deliverable file escapes task directory: {path}"
+                    ) from exc
+                files.append(path)
+        return sorted(files)
 
     def _run_precheck(
         self,
@@ -1514,12 +1935,24 @@ class Grader:
         from core.tool_calling_judge import ToolCallingJudge  # local; avoid cycle
 
         judge_cfg = self.config.get("judge", {})
-        tool_prompt_path = (
-            self.config.get("prompt", {}).get("tool_template")
-            or str(Path(self.config["prompt"]["template"]).with_name(
-                "grader_judge_v2.md"))
-        )
+        tool_prompt_path = resolve_tool_prompt_path(self.config)
         tool_prompt = self._read_prompt_template(tool_prompt_path)
+        tool_prompt_version = self._extract_prompt_version(tool_prompt)
+        self.prompt_version = tool_prompt_version
+        runtime = self.config.get("_runtime") or {}
+        prompt_cache_key = json.dumps(
+            (
+                str(runtime.get("experiment_id") or "unknown_experiment"),
+                str(self.model),
+                str(
+                    runtime.get("rubric_sha")
+                    or self.config.get("rubric", {}).get("revision")
+                    or "unknown_rubric"
+                ),
+                tool_prompt_version,
+            ),
+            separators=(",", ":"),
+        )
 
         per_item_cap = int(
             (judge_cfg.get("tools", {}).get("read_deliverable", {})
@@ -1528,6 +1961,10 @@ class Grader:
         max_iter = int(
             (judge_cfg.get("tools", {}).get("read_deliverable", {})
              .get("max_iterations", 10))
+        )
+        model_read_ops = tuple(
+            (judge_cfg.get("tools", {}).get("read_deliverable", {})
+             .get("ops") or [])
         )
 
         # PR3 (0531) perception wiring. Read judge.perception.{visual,audio}
@@ -1539,6 +1976,7 @@ class Grader:
         perception_cfg = judge_cfg.get("perception") or {}
         vis_cfg = perception_cfg.get("visual") or {}
         aud_cfg = perception_cfg.get("audio") or {}
+        generation_cfg = judge_cfg.get("generation") or {}
         if vis_cfg.get("model"):
             from core.perception.vision import VisionPerception  # local import
             vision_perception = VisionPerception(
@@ -1547,6 +1985,7 @@ class Grader:
                 call_cap=int(vis_cfg.get("call_cap_per_task", 5)),
                 reasoning_effort=(judge_cfg.get("reasoning") or {})
                     .get("effort", "medium"),
+                before_upstream_call=self._apply_tpm_delay,
             )
         if aud_cfg.get("model"):
             from core.perception.audio import AudioPerception  # local import
@@ -1568,8 +2007,11 @@ class Grader:
                 .get("max_output_tokens", 2400)),
             per_item_tool_call_cap=per_item_cap,
             max_iterations=max_iter,
+            model_read_ops=model_read_ops,
             vision_perception=vision_perception,
             audio_perception=audio_perception,
+            prompt_cache_key=prompt_cache_key,
+            before_upstream_call=self._apply_tpm_delay,
         )
 
     def _judge_via_tool_calling(
@@ -1595,16 +2037,19 @@ class Grader:
         deliverable_dir: Path,
         file_names: list[str],
         reference_file_names: list[str],
+        visual_prepass=None,
+        routing_decision: RoutingDecision | None = None,
     ) -> tuple[ItemGrade, int, int]:
         if not file_names:
             self._last_cached_tokens = 0
             return self._absent_judge_item(item), 0, 0
-        self._apply_tpm_delay()
         result = self._tool_judge.judge_item(
             task=task, item=item,
             deliverable_dir=str(deliverable_dir),
             file_names=file_names,
             reference_file_names=reference_file_names,
+            visual_prepass=visual_prepass,
+            routing_decision=routing_decision,
         )
         # PR3 Step 0 — expose cached input tokens via instance side-channel.
         # Avoids changing the (ItemGrade, in_tok, out_tok) tuple shape used
@@ -1630,6 +2075,22 @@ class Grader:
             routing_modality=result.routing_modality,
             perception_called=result.perception_called,
             tools_used=list(result.tools_used),
+            visual_provenance=list(result.visual_provenance),
+            score_excluded=result.score_excluded,
+            judge_call_count=result.main_api_call_count,
+            judge_input_tokens=result.input_tokens,
+            judge_output_tokens=result.output_tokens,
+            judge_cached_tokens=result.cached_tokens,
+            perception_call_count=result.perception_call_count,
+            perception_input_tokens=result.perception_input_tokens,
+            perception_output_tokens=result.perception_output_tokens,
+            perception_cached_tokens=result.perception_cached_tokens,
+            perception_total_latency_ms=round(
+                result.perception_total_latency_ms, 2
+            ),
+            render_call_count=result.render_call_count,
+            render_total_latency_ms=round(result.render_total_latency_ms, 2),
+            usage_complete=result.usage_complete,
         )
         return ig, result.input_tokens, result.output_tokens
 

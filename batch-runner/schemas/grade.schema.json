@@ -1,6 +1,96 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "GDPVal Grade Result",
+  "$defs": {
+    "visualScope": {
+      "type": "object",
+      "properties": {
+        "page": {"type": "integer", "minimum": 1},
+        "workbook_page": {"type": "integer", "minimum": 1},
+        "slide": {"type": "integer", "minimum": 1}
+      },
+      "maxProperties": 1,
+      "additionalProperties": false
+    },
+    "visualRenderer": {
+      "type": "object",
+      "required": ["rasterizer"],
+      "properties": {
+        "converter": {"type": "string", "enum": ["libreoffice"]},
+        "rasterizer": {"type": "string", "enum": ["pymupdf", "pillow"]},
+        "dpi": {"type": "integer", "minimum": 1},
+        "libreoffice_binary": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
+        "libreoffice_version": {"type": "string", "minLength": 1},
+        "pymupdf_version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "visualRendererMetadata": {
+      "type": "object",
+      "required": ["kind", "source_kind", "renderer", "byte_size"],
+      "properties": {
+        "kind": {"const": "image_png_base64"},
+        "source_kind": {"type": "string", "enum": ["pdf", "xlsx", "pptx", "image"]},
+        "source_page_count": {"type": "integer", "minimum": 1},
+        "source_sheet_count": {"type": "integer", "minimum": 1},
+        "source_slide_count": {"type": "integer", "minimum": 1},
+        "converted_page_count": {"type": "integer", "minimum": 1},
+        "renderer": {"$ref": "#/$defs/visualRenderer"},
+        "byte_size": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "visualCoverageMetadata": {
+      "type": "object",
+      "required": ["coverage_mode", "criterion_scope", "sampled_surface_count", "total_surface_count"],
+      "properties": {
+        "coverage_mode": {"const": "sampled_first_surface"},
+        "criterion_scope": {"type": "string", "enum": ["overall_style", "generic_visual_fallback"]},
+        "sampled_surface_count": {"type": "integer", "minimum": 1},
+        "total_surface_count": {"type": ["integer", "null"], "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "visualVision": {
+      "type": "object",
+      "required": ["verdict", "evidence", "confidence", "reasoning", "judge_error"],
+      "properties": {
+        "verdict": {"type": ["string", "null"], "enum": ["pass", "partial", "fail", "judge_error", null]},
+        "evidence": {"type": ["string", "null"], "maxLength": 200},
+        "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "reasoning": {"type": ["string", "null"], "maxLength": 300},
+        "judge_error": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "visualProvenanceEntry": {
+      "type": "object",
+      "required": ["path", "source_sha256", "scope", "renderer_metadata", "coverage_metadata", "vision"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\r\\n]+$"
+        },
+        "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "scope": {"$ref": "#/$defs/visualScope"},
+        "renderer_metadata": {"$ref": "#/$defs/visualRendererMetadata"},
+        "coverage_metadata": {"$ref": "#/$defs/visualCoverageMetadata"},
+        "vision": {"$ref": "#/$defs/visualVision"}
+      },
+      "additionalProperties": false
+    },
+    "childGrade": {
+      "type": "object",
+      "properties": {
+        "visual_provenance": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/visualProvenanceEntry"}
+        }
+      },
+      "additionalProperties": true
+    }
+  },
   "type": "object",
   "required": [
     "schema_version",
@@ -20,6 +110,25 @@
     "experiment_yaml_name": {"type": "string"},
     "source_inference_experiment_id": {"type": ["string", "null"]},
     "source_inference_run_dir": {"type": ["string", "null"]},
+    "source_inference_repo_id": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "source_inference_revision": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "grader_source_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "renderer_fingerprint": {
+      "type": ["object", "null"],
+      "required": ["libreoffice_binary", "libreoffice_version", "pymupdf_version"],
+      "properties": {
+        "libreoffice_binary": {"type": "string", "minLength": 1},
+        "libreoffice_version": {"type": "string", "minLength": 1},
+        "pymupdf_version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
     "inference_model": {"type": "string"},
     "inference_completed_at": {"type": ["string", "null"]},
     "judge": {
@@ -128,15 +237,34 @@
                 "precheck_pattern_id": {"type": ["string", "null"]},
                 "judge_raw_response": {"type": ["string", "null"]},
                 "model_did_right": {"type": "boolean", "description": "Sign-aware right-outcome flag (PR1 task 100). For positive max_score items, true iff verdict='pass'. For negative max_score (penalty) items, true iff verdict!='pass' (i.e. violation did NOT occur). judge_error is conservatively false."},
+                "routing_modality": {"type": ["string", "null"], "enum": ["visual", "audio", "formatting", "text", "mixed", null]},
+                "perception_called": {"type": "boolean"},
+                "tools_used": {"type": ["array", "null"], "items": {"type": "string"}},
+                "visual_provenance": {
+                  "type": "array",
+                  "items": {"$ref": "#/$defs/visualProvenanceEntry"}
+                },
                 "target_scope": {"type": ["string", "null"], "enum": ["manifest", "file_target", "primary_bundle", "split_children", "selection_error", null]},
                 "target_ids": {"type": ["array", "null"], "items": {"type": "string"}},
-                "child_grades": {"type": ["array", "null"], "items": {"type": "object"}},
+                "child_grades": {"type": ["array", "null"], "items": {"$ref": "#/$defs/childGrade"}},
                 "aggregation_rule": {"type": ["string", "null"], "enum": ["blocking_min_else_mean", null]},
                 "selected_paths": {"type": ["array", "null"], "items": {"type": "string"}},
                 "support_paths_visible": {"type": ["array", "null"], "items": {"type": "string"}},
                 "selection_status": {"type": ["string", "null"]},
                 "selection_error": {"type": ["string", "null"]},
-                "score_excluded": {"type": "boolean"}
+                "score_excluded": {"type": "boolean"},
+                "judge_call_count": {"type": "integer", "minimum": 0},
+                "judge_input_tokens": {"type": "integer", "minimum": 0},
+                "judge_output_tokens": {"type": "integer", "minimum": 0},
+                "judge_cached_tokens": {"type": "integer", "minimum": 0},
+                "perception_call_count": {"type": "integer", "minimum": 0},
+                "perception_input_tokens": {"type": "integer", "minimum": 0},
+                "perception_output_tokens": {"type": "integer", "minimum": 0},
+                "perception_cached_tokens": {"type": "integer", "minimum": 0},
+                "perception_total_latency_ms": {"type": "number", "minimum": 0},
+                "render_call_count": {"type": "integer", "minimum": 0},
+                "render_total_latency_ms": {"type": "number", "minimum": 0},
+                "usage_complete": {"type": "boolean"}
               },
               "additionalProperties": true
             }
@@ -153,6 +281,14 @@
           "judge_input_tokens": {"type": "integer", "minimum": 0},
           "judge_output_tokens": {"type": "integer", "minimum": 0},
           "judge_cached_tokens": {"type": "integer", "minimum": 0},
+          "perception_call_count": {"type": "integer", "minimum": 0},
+          "perception_input_tokens": {"type": "integer", "minimum": 0},
+          "perception_output_tokens": {"type": "integer", "minimum": 0},
+          "perception_cached_tokens": {"type": "integer", "minimum": 0},
+          "perception_total_latency_ms": {"type": "number", "minimum": 0},
+          "render_call_count": {"type": "integer", "minimum": 0},
+          "render_total_latency_ms": {"type": "number", "minimum": 0},
+          "usage_complete": {"type": "boolean"},
           "selected_deliverables": {"type": ["object", "null"]},
           "reference_files_excluded": {"type": "array", "items": {"type": "string"}},
           "selection_rule": {"type": ["string", "null"]},
