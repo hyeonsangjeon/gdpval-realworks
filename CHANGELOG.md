@@ -118,7 +118,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   JSON output. Giant JSON integers are rejected before float conversion, so
   progress merging and report aggregation cannot fail with numeric overflow.
   Shipped through PR #76 (`3258b5c3`) and verified by successful automatic
-  `Aggregate Tests & Deploy` run 29423221608; no paid workflow was dispatched.
+  `Aggregate Tests & Deploy` run 29423221608; the merge automatically
+  dispatched no paid workflow. A separate owner-dispatched grading run
+  29423860683 later failed at HF download before model grading or paid inference.
 - **`exp027_GPT54_default_subprocess_bridge50`** — checked-in 50-task,
   9-sector diagnostic subprocess comparator for the historical exp026
   Sandbox/Skills runner bundle. Includes pinned 42 non-success-union tasks, six
