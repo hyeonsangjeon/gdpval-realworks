@@ -62,13 +62,17 @@ def _usage(
 
 def _response(*, output: list[dict] | None = None, output_text: str = "",
               in_tok: int = 100, out_tok: int = 30,
-              cached_tok: int = 7) -> SimpleNamespace:
+              cached_tok: int = 7, status: str | None = None,
+              incomplete_reason: str | None = None) -> SimpleNamespace:
     return SimpleNamespace(
         output=output or [],
         output_text=output_text,
         usage=_usage(in_tok, out_tok, cached_tok),
-        incomplete_details=None,
-        status=None,
+        incomplete_details=(
+            SimpleNamespace(reason=incomplete_reason)
+            if incomplete_reason is not None else None
+        ),
+        status=status,
     )
 
 
@@ -230,6 +234,103 @@ def test_tool_round_then_final(deliverable_dir, task_and_item):
     types = [m.get("type") for m in second_input if isinstance(m, dict)]
     assert "function_call" in types
     assert "function_call_output" in types
+
+
+def test_empty_final_response_retries_once_without_tools(
+    deliverable_dir, task_and_item, caplog
+):
+    task, item = task_and_item
+    first = _response(
+        output=[_fc(
+            "c1", "read_deliverable",
+            op="inspect_structure", path="report.xlsx",
+        )],
+        in_tok=100,
+        out_tok=30,
+        cached_tok=7,
+    )
+    empty = _response(
+        output=[{"type": "reasoning", "id": "r1", "summary": []}],
+        in_tok=200,
+        out_tok=2400,
+        cached_tok=50,
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+    )
+    final = _response(
+        output=[_final(json.dumps({
+            "verdict": "pass",
+            "partial_score": 1.0,
+            "evidence": "all subdivisions are represented",
+            "confidence": 0.9,
+            "reasoning": "verified from prior tool evidence",
+        }))],
+        in_tok=210,
+        out_tok=60,
+        cached_tok=55,
+    )
+    client = FakeClient(ScriptedResponses([first, empty, final]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        empty_final_retries=1,
+    )
+
+    with caplog.at_level("WARNING", logger="core.tool_calling_judge"):
+        result = judge.judge_item(
+            task=task,
+            item=item,
+            deliverable_dir=str(deliverable_dir),
+            file_names=["report.xlsx"],
+        )
+
+    assert result.verdict == "pass"
+    assert result.main_api_call_count == 3
+    assert result.iterations == 3
+    assert result.input_tokens == 510
+    assert result.output_tokens == 2490
+    assert result.cached_tokens == 112
+    retry = client.responses.calls[2]
+    assert "tools" not in retry
+    assert "parallel_tool_calls" not in retry
+    assert retry["reasoning"] == {"effort": "low"}
+    assert retry["input"][-1]["content"] == (
+        tool_calling_judge_module._EMPTY_FINAL_RETRY_PROMPT
+    )
+    assert "max_output_tokens" in caplog.text
+    assert "all subdivisions are represented" not in caplog.text
+
+
+def test_empty_final_retry_budget_exhaustion_stays_fail_closed(
+    deliverable_dir, task_and_item
+):
+    task, item = task_and_item
+    empty = _response(
+        out_tok=2400,
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+    )
+    client = FakeClient(ScriptedResponses([empty, empty]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        empty_final_retries=1,
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "judge_error"
+    assert result.judge_error == "empty_final_text"
+    assert result.main_api_call_count == 2
+    assert result.iterations == 2
+    assert len(client.responses.calls) == 2
 
 
 # ── Tool-cap enforcement ────────────────────────────────────────────

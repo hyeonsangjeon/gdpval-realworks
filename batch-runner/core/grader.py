@@ -2007,6 +2007,9 @@ class Grader:
                 .get("max_output_tokens", 2400)),
             per_item_tool_call_cap=per_item_cap,
             max_iterations=max_iter,
+            empty_final_retries=int(
+                self.config.get("grader", {}).get("judge_max_retries", 1)
+            ),
             model_read_ops=model_read_ops,
             vision_perception=vision_perception,
             audio_perception=audio_perception,

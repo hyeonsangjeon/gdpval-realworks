@@ -68,12 +68,32 @@ from core.tools import (
 logger = logging.getLogger(__name__)
 
 _PROMPT_CACHE_KEY_MAX_CHARS = 64
+_EMPTY_FINAL_RETRY_PROMPT = (
+    "Your previous response contained no final verdict. Do not call any more "
+    "tools. Using the evidence already returned, respond now with only the "
+    "required JSON verdict envelope."
+)
 
 
 def _bounded_prompt_cache_key(value: str) -> str:
     if len(value) <= _PROMPT_CACHE_KEY_MAX_CHARS:
         return value
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _response_finish_reason(
+    response: Any, max_output_tokens: int, output_tokens: int
+) -> str:
+    incomplete = getattr(response, "incomplete_details", None)
+    reason = getattr(incomplete, "reason", None) if incomplete is not None else None
+    if isinstance(reason, str) and reason:
+        return reason.lower()
+    status = getattr(response, "status", None)
+    if isinstance(status, str) and status:
+        return status.lower()
+    if max_output_tokens > 0 and output_tokens >= max_output_tokens:
+        return "max_output_tokens"
+    return "unknown"
 
 _VISUAL_RENDER_SCOPES: Dict[str, Dict[str, int]] = {
     ".pdf": {"page": 1},
@@ -327,6 +347,8 @@ class ToolCallingJudge:
         max_iterations:          hard upper bound on response.create
                                  iterations (one tool round = one
                                  iteration).
+        empty_final_retries:     bounded retries when a response contains no
+                     final message after tool evidence is ready.
         vision_perception:       optional ``VisionPerception`` instance.
                      For VISUAL items the harness renders and
                      invokes it before the first main request;
@@ -354,6 +376,7 @@ class ToolCallingJudge:
     max_output_tokens: int = 2400
     per_item_tool_call_cap: int = 8
     max_iterations: int = 10
+    empty_final_retries: int = 1
     model_read_ops: Tuple[str, ...] = MODEL_READ_DELIVERABLE_OPS
     vision_perception: Any = None
     audio_perception: Any = None
@@ -371,6 +394,8 @@ class ToolCallingJudge:
     def __post_init__(self) -> None:
         if not self.model_read_ops:
             raise ValueError("model_read_ops must contain at least one operation")
+        if self.empty_final_retries < 0:
+            raise ValueError("empty_final_retries must be non-negative")
         invalid_ops = set(self.model_read_ops) - set(MODEL_READ_DELIVERABLE_OPS)
         if invalid_ops:
             raise ValueError(
@@ -466,6 +491,8 @@ class ToolCallingJudge:
         usage_complete = prepass.usage_complete
         final_text = ""
         judge_error: Optional[str] = None
+        finalization_only = False
+        empty_final_retries_used = 0
 
         while iterations < self.max_iterations:
             iterations += 1
@@ -489,6 +516,10 @@ class ToolCallingJudge:
                     prompt_cache_key=self.prompt_cache_key,
                     parallel_tool_calls=False,
                 )
+                if finalization_only:
+                    create_kwargs.pop("tools")
+                    create_kwargs.pop("parallel_tool_calls")
+                    create_kwargs["reasoning"] = {"effort": "low"}
                 # PR3 step 1b — context_management server-side compaction.
                 # The SDK signature exposes a dict shape but Azure's
                 # current API rev for gpt-5.4 rejects dict with HTTP 400
@@ -521,13 +552,18 @@ class ToolCallingJudge:
                     self._guard_upstream_call()
                     call_started = time.perf_counter()
                     main_api_call_count += 1
-                    response = self.client.responses.create(
+                    fallback_kwargs = dict(
                         model=self.model,
                         input=messages,
-                        tools=tools,
-                        reasoning={"effort": self.reasoning_effort},
+                        reasoning={
+                            "effort": "low" if finalization_only
+                            else self.reasoning_effort
+                        },
                         max_output_tokens=self.max_output_tokens,
                     )
+                    if not finalization_only:
+                        fallback_kwargs["tools"] = tools
+                    response = self.client.responses.create(**fallback_kwargs)
                     main_latency_ms += (
                         time.perf_counter() - call_started
                     ) * 1000.0
@@ -557,8 +593,14 @@ class ToolCallingJudge:
                 for field_name in ("input_tokens", "output_tokens")
             ):
                 usage_complete = False
-            input_tok_total += int(getattr(usage, "input_tokens", 0) or 0)
-            output_tok_total += int(getattr(usage, "output_tokens", 0) or 0)
+            response_input_tokens = int(
+                getattr(usage, "input_tokens", 0) or 0
+            )
+            response_output_tokens = int(
+                getattr(usage, "output_tokens", 0) or 0
+            )
+            input_tok_total += response_input_tokens
+            output_tok_total += response_output_tokens
             # PR3 Step 0 — cached_tokens (Azure Responses API automatic prompt
             # caching). Field path: usage.input_tokens_details.cached_tokens.
             # Older SDKs may not expose the details object; default 0.
@@ -613,6 +655,33 @@ class ToolCallingJudge:
                 final_text = self._extract_text(messages_out[0])
             else:
                 final_text = getattr(response, "output_text", "") or ""
+            if (
+                not final_text.strip()
+                and empty_final_retries_used < self.empty_final_retries
+                and iterations < self.max_iterations
+            ):
+                finish_reason = _response_finish_reason(
+                    response,
+                    self.max_output_tokens,
+                    response_output_tokens,
+                )
+                logger.warning(
+                    "ToolCallingJudge empty final response for %s (%s); "
+                    "retrying finalization without tools",
+                    item.rubric_item_id,
+                    finish_reason,
+                )
+                messages.extend(
+                    self._serialize_output_item(output_item)
+                    for output_item in output_items
+                )
+                messages.append({
+                    "role": "user",
+                    "content": _EMPTY_FINAL_RETRY_PROMPT,
+                })
+                empty_final_retries_used += 1
+                finalization_only = True
+                continue
             break
         else:
             judge_error = "max_iterations_exceeded"

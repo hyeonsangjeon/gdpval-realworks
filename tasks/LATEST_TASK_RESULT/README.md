@@ -4,12 +4,12 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-15
-- Status: Vision canary acceptance failed; invalid results reverted and fixes verified
+- Status: Vision path verified; one text finalization failure stopped fail-closed
 
 ## Task
 
-- Merge the downloader direct-entry fix and rerun the separately approved
-  Azure Vision canary on exactly one pinned exp003 XLSX task.
+- Merge the canary runtime guards and rerun the separately approved Azure
+  Vision canary on exactly one pinned exp003 XLSX task.
 - Accept only one render call, one perception call, complete usage accounting,
   relative-path visual provenance, and effective cost below USD 1.
 - Revert any committed result that fails those gates and do not dispatch a
@@ -17,46 +17,51 @@ task. It must be refreshed before a task is reported complete.
 
 ## Result
 
-- PR #78 merged as `1f9a5a42`, and run
-  [29424766879](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29424766879)
+- PR #80 merged as `16a4e5d1`, and run
+  [29429183215](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29429183215)
   used the approved experiment, `default_v2_mini.yaml`, inference revision
   `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`, task
   `83d10b06-26d1-4636-a32c-23f92c57f30b`, and selected `Sample.xlsx`.
 - Input validation, renderer installation/preflight, Azure OIDC, pinned HF
-  download, one XLSX render, and one vision request ran. No child or relay run
-  was dispatched, and no API-key fallback or secret exposure was found.
-- Acceptance failed. All 35 main requests returned HTTP 400 because the
-  106-character `prompt_cache_key` exceeded Azure's 64-character limit. The
-  vision request recorded 1,108 input and 248 output tokens but returned an
-  invalid semantic envelope. All 36 judged items were `judge_error`, aggregate
-  usage was incomplete, and the score-only summary incorrectly displayed 100%.
-- The invalid grade commit `da1d57a8` and analysis commit `a1cc84da` are
-  reverted by this change; both generated files are absent from the resulting
-  tree.
-- Long cache identities now use a deterministic 64-character SHA-256 key. The
-  vision prompt states the exact envelope contract, semantic strings are safely
-  normalized and bounded, and validation failures log only their reason.
-- Track 2 now atomically persists a diagnostic but exits nonzero after a real
-  main/perception/render runtime failure or incomplete usage. Error tasks no
-  longer inflate score summaries, and cache/resume rejects failed diagnostics
-  before constructing a grader. Existing call-free `selection_error` and
-  `no_deliverables` diagnostics retain their prior behavior.
+  download, one XLSX render, and one vision request all passed. The visual item
+  returned `partial` with `perception_called=true`, complete usage, and one
+  provenance entry for relative path `Sample.xlsx`; no image payload, absolute
+  path, or traversal path was persisted.
+- The run produced 18 pass, 15 fail, 4 partial, and 1 `judge_error` across 38
+  items. The sole error was text item `e52880a4-767f-47ea-97ea-a1cbc37256f6`:
+  after five successful `read_deliverable` calls, its sixth main response
+  contained no final message (`empty_final_text`). The task stopped with exit
+  code 6, uploaded only a diagnostic artifact, and skipped grade commit,
+  analysis, relay, and all auto-dispatch steps.
+- Accounting was complete: 127 main calls plus one perception call, one render,
+  2,699,883 input tokens, 43,901 output tokens, and 828,416 cached tokens. The
+  repository price table estimates USD 0.72 raw / USD 0.62 cache-discounted,
+  below the approved per-run ceiling; the diagnostic task score was 57.21% but
+  remained excluded from the valid-task average because `error=judge_error`.
+- Tool-calling finalization now retries an empty final response at most once
+  using the evidence already collected. The retry removes all tools and
+  parallel-tool settings, lowers reasoning effort to `low`, preserves ordered
+  response context, and includes its calls, latency, and token usage in normal
+  accounting. A second empty or malformed response remains fail-closed.
 
 ## Verification
 
-- Affected wiring, vision, tool-calling, Step 8, cache, resume, and workflow
-  suite: **161 passed**.
+- Focused success, retry-budget exhaustion, and config-wiring tests: **3
+  passed**; affected tool-calling, wiring, and Step 8 suite: **145 passed**.
 - Broader non-integration suite excluding the unavailable local GDPVal parquet
-  fixture: **1,125 passed, 2 skipped, 37 deselected**. The omitted selector
+  fixture: **1,124 passed, 5 skipped, 37 deselected**. The omitted selector
   module failed collection only because
   `data/gdpval-local/data/train-00000-of-00001.parquet` is not present.
-- Static diagnostics found no errors in the seven changed Python files.
+- Static diagnostics found no errors in the four changed Python files, and an
+  independent review reported no blocking findings.
 - `git diff --check` passed.
 
 ## Remaining Work
 
-- Merge the canary hardening and artifact reverts, then rerun the exact same
-  one-task canary once from the resulting `main`.
+- Merge the bounded empty-final retry fix.
+- Do not rerun the paid task without renewed cost approval: another full task
+  run is expected to push cumulative canary spend above the original USD 1
+  approval even though a single run remains below USD 1.
 - Require successful main verdicts, exactly one render and perception call,
   complete main/perception usage, valid relative-path provenance, and effective
   cost below USD 1.
