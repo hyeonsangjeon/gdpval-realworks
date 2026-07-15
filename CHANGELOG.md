@@ -12,6 +12,11 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **GitHub-hosted grading renderer verified** — model-free rerun 29393149367
+  passed on `main` commit `f97cc170` after PR #74 fixed the direct script import
+  boundary. Evidence recorded `ok=true`, exact Liberation Sans resolution,
+  LibreOffice 24.2.7.2, PyMuPDF 1.28.0, and successful XLSX/PPTX PNG renders.
+  No HF, Azure, batch, or model call was present in the workflow.
 - **Renderer preflight direct-entry import** — make
   `scripts/preflight_grading_renderer.py` add its own batch-runner root and load
   only the lightweight `core.tools` package surface when executed as a file.

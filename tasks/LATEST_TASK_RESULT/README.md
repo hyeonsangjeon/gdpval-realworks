@@ -1,7 +1,7 @@
 # Latest Task Result
 
 - Updated: 2026-07-15
-- Status: Hosted import failure fixed; renderer rerun pending
+- Status: GitHub-hosted renderer preflight passed
 
 ## Task
 
@@ -24,6 +24,10 @@
   preserved that evidence. The script now inserts its own batch-runner root and
   bootstraps only the lightweight `core.tools` namespace, avoiding unrelated
   dataset/pyarrow imports.
+- Import fix PR #74 was squash-merged as `f97cc170`. The model-free rerun
+  [29393149367](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29393149367)
+  then completed successfully on that exact `main` SHA. Every workflow step,
+  including seven-day evidence artifact upload, passed.
 - Added `.github/workflows/grading-renderer-preflight.yml`, dispatched manually
   on `main` only with `contents: read`, no environment, no OIDC, and no secret
   references. Checkout, Python setup, and artifact upload actions are pinned to
@@ -56,12 +60,14 @@
 - `git diff --check` passed.
 - `extreme-reasoner` approved the no-secret/no-cost workflow design with the
   shared dependency and action-pinning conditions implemented.
+- Hosted evidence reported `ok=true`, exact font family `Liberation Sans`,
+  LibreOffice `24.2.7.2 420(Build:2)`, and PyMuPDF `1.28.0`. The synthetic XLSX
+  first workbook page rendered to a 17,358-byte PNG; PPTX slide 1 rendered to
+  an 18,637-byte PNG.
+- Run head SHA matched `f97cc170c1d3f79d7cadde24ae14d12682d1eabe`.
 
 ## Remaining Work
 
-- Merge the import fix PR and rerun the same model-free workflow from `main`.
-- Record the successful run SHA, conclusion, and evidence JSON. Do not bypass a
-  second failure.
 - This preflight does not approve paid grading. The limited Azure vision canary
   remains a separate owner-approved step after renderer success.
 - No HF/Azure request, batch run, or model call has been performed.
