@@ -52,6 +52,13 @@ entries land under a fresh dated heading the day they merge to `main`.
 - **`batch-runner/scripts/download_inference_from_hf.py`** — pass `HF_TOKEN` explicitly to `hf_hub_download()` (×2) and `snapshot_download()` via a new `_hf_token()` helper. The grade pipeline's "Download inference results from HF" step injects `HF_TOKEN` env, but `huggingface_hub` auto-pickup did not fire, so requests went out **anonymous** (CI log: `unauthenticated requests to HF Hub`). Under the sequential grade relay this tripped HTTP **429 Too Many Requests** on the inference parquet, breaking a chunk mid-run (e.g. 5.4 220 re-grade chunk-2 resume). Authenticated requests have a much higher rate limit → relay no longer 429s on repeated chunk downloads. No behavior change for single runs.
 
 ### Added
+- **Model-free grading renderer preflight** — add a manual, `main`-only Ubuntu
+  24.04 workflow with read-only repository permission, commit-pinned actions,
+  no credentials or model calls, exact LibreOffice/font checks, strict JSON
+  success validation, and seven-day evidence artifacts. A shared
+  `requirements-renderer.txt` keeps the dedicated workflow and full grading
+  environment on the same openpyxl, python-pptx, Pillow, and PyMuPDF lower
+  bounds.
 - **`exp027_GPT54_default_subprocess_bridge50`** — checked-in 50-task,
   9-sector diagnostic subprocess comparator for the historical exp026
   Sandbox/Skills runner bundle. Includes pinned 42 non-success-union tasks, six

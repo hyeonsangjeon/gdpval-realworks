@@ -1,0 +1,5 @@
+# Shared by grade-run.yml and grading-renderer-preflight.yml.
+openpyxl>=3.1.0
+python-pptx>=0.6.0
+Pillow>=10.0.0
+PyMuPDF>=1.21.0
