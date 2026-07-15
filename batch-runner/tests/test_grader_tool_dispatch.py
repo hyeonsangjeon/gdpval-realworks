@@ -90,12 +90,13 @@ def test_grader_dispatch_uses_tool_calling_judge_when_configured(monkeypatch, tm
             },
         },
         "prompt": {"template": str(prompt_v1)},
-        "grader": {"evidence_max_chars": 200},
+        "grader": {"evidence_max_chars": 200, "judge_max_retries": 2},
         "tpm_guard": {},
     }
 
     grader = Grader(cfg, rubric_loader=None)
     assert grader._tool_judge is not None, "tool-calling judge should be active"
+    assert grader._tool_judge.finalization_retries == 1
 
     item = RubricItem(
         rubric_item_id="r1",

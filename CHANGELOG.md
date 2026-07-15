@@ -20,6 +20,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   tracked. The modified public tree passes Gitleaks v8.30.1 with zero findings
   and contains no matching account relationship, exact monthly operating
   budget, personal email, Azure resource identifier, or local-path patterns.
+- **Finalization retry cost guardrails** — normalize configured finalization
+  retries to zero or one, so `judge_max_retries` values above one cannot expand
+  the paid recovery budget. If a supposedly tool-free finalization response
+  unexpectedly requests a function call, reject it without dispatching any
+  read or perception tool and return a score-excluded error. Deterministic tests
+  now prove two-call latency, TPM-guard, token/cache, and incomplete-usage
+  accounting across malformed-final recovery.
 - **Tool-calling malformed-final recovery** — extend the bounded
   finalization-only retry from empty output to syntactically unparseable final
   JSON, as observed for two text criteria in canary run 29432455047. The retry
