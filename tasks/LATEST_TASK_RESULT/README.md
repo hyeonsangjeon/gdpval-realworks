@@ -1,7 +1,7 @@
 # Latest Task Result
 
 - Updated: 2026-07-15
-- Status: Implemented and validated; merge pending
+- Status: Merged and deployed; runtime canary pending
 
 ## Task
 
@@ -42,6 +42,12 @@ available.
 - Added sandbox documentation for enabling and interpreting the metrics. No
   existing experiment config or result fixture was rewritten, and no paid model,
   batch, grading, or canary run was dispatched.
+- Feature PR [#76](https://github.com/hyeonsangjeon/gdpval-realworks/pull/76)
+  was squash-merged to `main` as `3258b5c3265136b06a4661c16a521bd8c4887005`.
+  Automatic `Aggregate Tests & Deploy` run
+  [29423221608](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29423221608)
+  completed successfully. It was the only workflow tied to the merge SHA; no
+  paid batch, grading, cost-sweep, or sandbox canary workflow ran.
 
 ## Verification
 
