@@ -4,7 +4,7 @@
 
 ## 목적
 
-v2 grader (tool-calling + vision + audio)의 실제 비용 측정. $2,400/월 예산 안에 들어오는지 확인.
+v2 grader (tool-calling + vision + audio)의 실제 비용을 측정하고 외부에서 설정한 운영 한도를 준수하는지 확인.
 
 ## 작업
 
@@ -14,13 +14,13 @@ v2 grader (tool-calling + vision + audio)의 실제 비용 측정. $2,400/월 �
    - tool 호출 횟수 평균
    - vision 호출 횟수 (per task cap 5 적용 시)
    - audio 호출 횟수
-3. 월 capacity 계산: $2,400 / per-run cost
+3. 운영 capacity 계산: configured operating limit / per-run cost
 4. 보고서 `tasks/rebuilding_grading_task/PR3_COST_BUDGET.md`
 
 ## Acceptance
 
 - per-run cost < $50 (이전 mini $18 대비 3× 이내)
-- 월 capacity ≥ 30 runs
+- configured operating limit 내 반복 실행 가능
 - 만약 초과 시:
   - vision/audio cap 강화
   - 또는 routing pattern 좁히기 (예: vision은 명시적 visual 키워드 있는 항목만)

@@ -18,7 +18,7 @@ Sweep winner(`A4_model_mini` = 단일 mini)가 **smoke 3-task** 기준으로만 
 
 - HF dataset `HyeonSang/exp003_GPT52Chat_baseline_runner_exec` 에 **deliverables 629개** 존재 (대조: exp001 = 0, 사용 불가)
 - GPT-5.2-chat baseline 실험이라 다양한 sector/occupation 커버
-- 비용 추정: 풀런 1회 ~$18 (mini) ~ $25-30 (tiered) = 합산 **~$45**, 월예산 $2,500 안에서 안전
+- 비용 추정: 풀런 1회 ~$18 (mini) ~ $25-30 (tiered) = 합산 **~$45**, configured run-level cost guard 내에서 실행
 
 ## Acceptance criteria (tiered 채택 조건)
 
@@ -70,7 +70,7 @@ Step 9: Acceptance 미통과 시:
 
 - Run A 또는 B에서 critical_pass < 0.95 → 즉시 중단 + 보고
 - GH Actions timeout (480분) 초과 시 partial 결과로 분석
-- 누적 비용 $60 초과 시 abort (월예산 보호)
+- 누적 비용 $60 초과 시 abort (run-level cost guard)
 - HF download가 또 0 파일이면 즉시 보고 (다른 후보 실험 선택)
 
 ## Files

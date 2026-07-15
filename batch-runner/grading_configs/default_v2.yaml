@@ -20,7 +20,7 @@ description: |
   Cost note: per-task spend will be HIGHER than the v1 mini config
   ($18 full-run baseline) because of perception escalations on
   visual/audio items + tool round trips. PR3 task 302 re-estimates the
-  full-run cost and the $2,400/mo budget envelope.
+  full-run cost against a configured operating envelope.
 
 judge:
   provider: "azure_openai"

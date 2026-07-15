@@ -47,6 +47,13 @@ batch-runner/results/*/report/report_data.json
 batch-runner/results/*/*.json
 batch-runner/results/*/*.md
 tasks/0601_monday/smoke_regrade_outputs/
+
+# Personal task specifications are local by default. Keep only the repository
+# completion record public unless a task document is explicitly force-added.
+tasks/**
+!tasks/LATEST_TASK_RESULT/
+!tasks/LATEST_TASK_RESULT/README.md
+
 *.parquet
 .huggingface/
 .cache/

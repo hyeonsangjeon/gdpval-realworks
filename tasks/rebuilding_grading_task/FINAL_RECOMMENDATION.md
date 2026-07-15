@@ -70,7 +70,7 @@ within sampling noise.
    format-driven criteria (the "Overall formatting and style" gap
    pattern that motivated PR2).
 2. **Cost gap closed**: v2 mini at $55/run is ~3× v1 mini's $18 but
-   well under monthly $2400 envelope at 30+ runs/month.
+   well within the externally configured operating envelope.
 3. **Future-proofing**: read_deliverable + perception routing scaffolding
    is the right substrate for the next iteration (gold-ceiling check,
    bare-CSV detection, audio-quality grading) which v1 cannot support.

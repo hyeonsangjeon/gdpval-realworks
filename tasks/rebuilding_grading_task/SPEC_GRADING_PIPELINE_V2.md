@@ -243,7 +243,7 @@ judge:
 ## 9. 리스크 / Open questions
 
 - **tool-use 비결정성**: tool 출력 때문에 temp=0이어도 run간 편차 발생 가능 → 3회+bootstrap, error_rate 모니터로 대응.
-- **새 비용**: vision/audio 경로로 per-task 비용이 옛날 $18보다 오름. perception 라우팅으로 bound하되 **새 파이프라인 비용 재추정 필요**(아직 미산정). $2,400/월 예산 내 확인.
+- **새 비용**: vision/audio 경로로 per-task 비용이 옛날 $18보다 오름. perception 라우팅으로 bound하되 **새 파이프라인 비용 재추정 필요**(아직 미산정). 운영 한도는 저장소 외부 설정으로 검증.
 - **env 가용성 확정**: ffmpeg/soundfile/openpyxl 등 실제 Dockerfile/requirements에서 검증 후 진행(내 기억 아닌 repo가 authoritative).
 - **threshold=4 적정성**: 저자 signal 부재 하의 임의 경계. gold-ceiling 검증과 함께 민감도 점검 여지.
 - **vision 모델 충분성**: gpt-5.4 vision이 시각 항목을 충분히 판단하는지 — 부족하면 해당 항목만 상향(전체 모델 교체 아님).

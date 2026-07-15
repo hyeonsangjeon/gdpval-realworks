@@ -56,4 +56,4 @@ If a real exp003 full grade is needed urgently:
 
 ## Cost impact
 
-This bug blocked the head-to-head full validation but did not consume excess Azure credit (each fail at task #50 ≈ ~2.5h of mini-tier grading; tiered ≈ ~4h). Total ~$30 spent across both attempts. Within $2,500 monthly cap.
+This bug blocked the head-to-head full validation but did not consume excess Azure credit (each fail at task #50 ≈ ~2.5h of mini-tier grading; tiered ≈ ~4h). Total ~$30 spent across both attempts, within the configured run-level cost guard.
