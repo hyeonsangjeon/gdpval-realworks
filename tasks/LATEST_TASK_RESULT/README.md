@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-16
-- Status: Canary accepted; finalization guardrails validated; merge pending
+- Status: Canary accepted; finalization guardrails merged
 
 ## Task
 
@@ -47,6 +47,10 @@ task. It must be refreshed before a task is reported complete.
 - Deterministic coverage proves both upstream guard invocations, summed latency,
   input/output/cache totals, and `usage_complete=false` propagation when retry
   usage is missing. No paid workflow was dispatched for this guardrail work.
+- Guardrails PR [#88](https://github.com/hyeonsangjeon/gdpval-realworks/pull/88)
+  was squash-merged to `main` as `2728ef7d5fa7d24c24401cf303a27e5fcd933e24`.
+  The merge triggered no GitHub Actions workflow, including no paid grading,
+  batch, cost-sweep, sandbox, or canary run.
 
 ## Verification
 
@@ -61,7 +65,7 @@ task. It must be refreshed before a task is reported complete.
 
 ## Remaining Work
 
-- Merge the finalization guardrails; no additional canary is needed because run
-  29435264166 already passed every approved acceptance gate.
+- No additional canary is needed because run 29435264166 already passed every
+  approved acceptance gate.
 - Do not expand this one-task canary into a full grading run without separate
   scope and cost approval.
