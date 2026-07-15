@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-15
-- Status: Implementation verified; public deployment pending
+- Status: Public deployment complete and verified
 
 ## Task
 
@@ -51,6 +51,11 @@ task. It must be refreshed before a task is reported complete.
   controls, `muted`, `loop`, `playsInline`, optional poster/captions, and no
   autoplay under reduced-motion. The supplied chat MP4 was not mounted into the
   remote container, so no unreviewed video asset was copied into the repository.
+- Rebasing preserved the latest opt-in Job Performance Metrics integration,
+  then Field Notes commit `8ac9c20` was fast-forwarded to `main`. GitHub Pages
+  workflow
+  [29425800514](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29425800514)
+  completed successfully.
 
 ## Verification
 
@@ -80,6 +85,11 @@ task. It must be refreshed before a task is reported complete.
   SVG geometry across animation frames. `first-reviewer` returned final
   **APPROVE** after native video controls and static reduced-motion branches
   were added.
+- Public GitHub Pages smoke tests covered all five notes at 1280×900 and
+  390×844. Every route rendered one hero and one chart with no overflow or
+  page errors; `/journal?view=timeline#history` preserved its query/hash while
+  redirecting to `/notes`, the dashboard showed `Notes`, and exp025 exposed
+  three `Related Notes` links.
 - The production build emits separate notes page/article/content chunks,
   keeping article bodies out of the initial dashboard bundle.
 - `first-reviewer` returned final **APPROVE** with no blocking, major, or minor
@@ -87,8 +97,6 @@ task. It must be refreshed before a task is reported complete.
 
 ## Remaining Work
 
-- Push the reviewed commit to `main`, verify the triggered GitHub Pages workflow,
-  and smoke-test `/notes` on the public site.
 - External grades for exp026 remain pending, so the published columns preserve
   their explicit Self-QA and pre-grading caveats.
 - To use the supplied example as a real hero, place a reviewed MP4/WebM under

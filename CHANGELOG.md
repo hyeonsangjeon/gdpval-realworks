@@ -86,7 +86,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   large-label summary on mobile) and an evidence-caveated Recharts comparison.
   The same hero slot supports GitHub Pages static MP4/WebM assets with native
   controls, `muted`/`loop`/`playsInline`, optional captions, BASE_URL-safe paths,
-  and reduced-motion-aware autoplay.
+  and reduced-motion-aware autoplay. Shipped on `main` as `8ac9c20` through
+  successful Pages run
+  [29425800514](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29425800514).
 - **Model-free grading renderer preflight** — add a manual, `main`-only Ubuntu
   24.04 workflow with read-only repository permission, commit-pinned actions,
   no credentials or model calls, exact LibreOffice/font checks, strict JSON
