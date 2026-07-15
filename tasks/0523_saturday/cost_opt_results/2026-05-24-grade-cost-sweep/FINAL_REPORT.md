@@ -18,7 +18,7 @@
 | wall-clock (smoke 3 tasks) | **299s** | 142 min | **-96.5%** |
 | smoke cost | **$0.25** | $7.42 | **-96.6%** |
 | projected full-run (220 tasks) | **$18.45** | $493 | **-96.3%** |
-| projected monthly capacity ($2,500 budget) | **~135 runs** | ~5 runs | **27×** |
+| projected fixed-budget efficiency | **27×** | 1× | **27×** |
 
 ### Config: [`winner_config.yaml`](./winner_config.yaml)
 ```yaml

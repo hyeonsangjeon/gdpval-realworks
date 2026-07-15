@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-exp998 smoke run 실측 기준 채점 한 번에 **84 judge calls / 142분 / 22.7만 토큰**이 드는 상태. 220-task 풀런 외삽 시 **~$540/회**로 월예산($2,500/internal tenant)을 4회면 소진한다.
+exp998 smoke run 실측 기준 채점 한 번에 **84 judge calls / 142분 / 22.7만 토큰**이 드는 상태. 220-task 풀런 외삽 시 **~$540/회**로 반복적인 benchmark 실행이 운영상 비현실적이다.
 
 원인: (1) rubric item 1개 = judge 호출 1회, (2) `max_concurrent: 1` 직렬 실행, (3) `reasoning_effort: high` + `gpt-5.4-pro` 조합으로 호출당 100s+, (4) precheck 비중이 10/94 = 10.6%로 낮음.
 
@@ -25,7 +25,7 @@ exp998 smoke run 실측 기준 채점 한 번에 **84 judge calls / 142분 / 22.
 ### 비용 추정 (gpt-5.4-pro, $15/$60 per 1M tok 가정)
 - smoke 1회: **~$7.4**
 - 220-task 풀런 외삽 (×73): **~$540/회**
-- 월예산 $2,500 → **4~5회/월**만 가능 → 벤치마크 반복 불가
+- 현재 per-run 비용으로는 반복 benchmark 실행이 제한됨
 
 ### 운영 제약 (확정)
 - Azure OpenAI **PAYG (Global Standard)** 가정. quota 추가 신청 진행 중 (gpt-5.5 = 300 kTPM).

@@ -25,7 +25,7 @@
 - ✅ step8_grade.py pct clamp + traceback fix (commit `486e4a4` on main)
 - ✅ tiered routing 코드 (Track 1, PR #53)
 - ✅ exp003 HF dataset에 deliverables 629개 검증됨
-- ✅ Azure SP credentials (internal tenant) OIDC 동작 검증됨
+- ✅ Azure OIDC credentials 동작 검증됨
 - ✅ 51 grader + 5 schema tests pass
 
 ## Config 사양
@@ -89,7 +89,7 @@ Step 8: CHANGELOG에 기록
 |---|---|
 | 하이브리드 완주 ✓ + critical_pass(hybrid) ≥ critical_pass(pro) − 0.05 + cost ≤ 50% pro | hybrid가 default 후보 |
 | 하이브리드 critical_pass(hybrid) > critical_pass(mini default) + 0.1 + cost ≤ $200 | hybrid 채택 강력 권장 |
-| pro 풀런 cost > $400 | pro single은 default 후보 제외 (월예산 부담) |
+| pro 풀런 cost > $400 | pro single은 default 후보 제외 (운영 비용 부담) |
 | 어느 한 쪽이 timeout으로 실패 | 그 config는 timeout 대응 (chunk 분할) 추가 작업 필요 |
 
 ## 예상 비용
@@ -100,7 +100,7 @@ Step 8: CHANGELOG에 기록
 | Y (hybrid) | ~$170~220 | ~4~6h |
 | 합계 | ~$660~715 | (병렬 실행) |
 
-월예산 $2,500 내 합리적 (~28%). 절반 사용해도 검증 1회 가치.
+검증 비용은 운영자가 승인한 run-level cost guard 내에서만 집행한다.
 
 ## Stop conditions
 
@@ -119,7 +119,6 @@ Step 8: CHANGELOG에 기록
 
 ## Out of scope
 
-- External tenant swap 구현 (별도 `tasks/external_tenant_add/TASK_TENANT_SWAP.md`)
 - Pairwise human ranking 구현 (OpenAI official spec; 별도 future task)
 - step8 추가 robustness (현재 fix로 task #50 류는 해결됨)
 - Cost reduction beyond hybrid (예: pro effort=medium 같은 micro-tuning) — 이번 결과 보고 결정
