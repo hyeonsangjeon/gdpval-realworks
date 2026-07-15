@@ -12,6 +12,13 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Grade downloader direct-entry import** — make
+  `scripts/download_inference_from_hf.py` bootstrap the batch-runner root and
+  lightweight `core.inference_manifest` package when executed as a file.
+  Approved canary run 29423860683 passed renderer preflight and Azure OIDC but
+  stopped before HF download or any model call because direct execution could
+  not resolve `core`; the grade commit step now also requires the grading step
+  itself to have completed successfully.
 - **GitHub-hosted grading renderer verified** — model-free rerun 29393149367
   passed on `main` commit `f97cc170` after PR #74 fixed the direct script import
   boundary. Evidence recorded `ok=true`, exact Liberation Sans resolution,

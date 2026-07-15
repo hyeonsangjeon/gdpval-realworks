@@ -16,7 +16,9 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
+import types
 import uuid
 from pathlib import Path
 
@@ -24,6 +26,15 @@ import pandas as pd
 import yaml
 from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 from huggingface_hub.errors import EntryNotFoundError
+
+BATCH_RUNNER_ROOT = Path(__file__).resolve().parent.parent
+if str(BATCH_RUNNER_ROOT) not in sys.path:
+    sys.path.insert(0, str(BATCH_RUNNER_ROOT))
+if "core" not in sys.modules:
+    core_package = types.ModuleType("core")
+    core_package.__path__ = [str(BATCH_RUNNER_ROOT / "core")]
+    core_package.__package__ = "core"
+    sys.modules["core"] = core_package
 
 from core.inference_manifest import (
     canonicalize_inference_payload,
