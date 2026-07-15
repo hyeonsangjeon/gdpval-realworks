@@ -12,6 +12,13 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Renderer preflight direct-entry import** — make
+  `scripts/preflight_grading_renderer.py` add its own batch-runner root and load
+  only the lightweight `core.tools` package surface when executed as a file.
+  GitHub-hosted run 29392707519 had installed LibreOffice and renderer Python
+  dependencies successfully but failed before rendering because direct script
+  execution could not resolve `core`; the fix also avoids pulling unrelated
+  dataset/pyarrow imports into the four-package renderer environment.
 - **Sandbox generated-code preflight and targeted repair** — local and Docker
   backends now execute untouched `solution.py` through a trusted launcher that
   compiles with the actual target Python before `runpy` starts untrusted code.
