@@ -274,7 +274,7 @@ def test_empty_final_response_retries_once_without_tools(
         client=client,
         model="gpt-5.4-mini",
         prompt_template=PROMPT_TEMPLATE,
-        empty_final_retries=1,
+        finalization_retries=1,
     )
 
     with caplog.at_level("WARNING", logger="core.tool_calling_judge"):
@@ -296,7 +296,7 @@ def test_empty_final_response_retries_once_without_tools(
     assert "parallel_tool_calls" not in retry
     assert retry["reasoning"] == {"effort": "low"}
     assert retry["input"][-1]["content"] == (
-        tool_calling_judge_module._EMPTY_FINAL_RETRY_PROMPT
+        tool_calling_judge_module._FINALIZATION_RETRY_PROMPT
     )
     assert "max_output_tokens" in caplog.text
     assert "all subdivisions are represented" not in caplog.text
@@ -316,7 +316,7 @@ def test_empty_final_retry_budget_exhaustion_stays_fail_closed(
         client=client,
         model="gpt-5.4-mini",
         prompt_template=PROMPT_TEMPLATE,
-        empty_final_retries=1,
+        finalization_retries=1,
     )
 
     result = judge.judge_item(
@@ -328,6 +328,86 @@ def test_empty_final_retry_budget_exhaustion_stays_fail_closed(
 
     assert result.verdict == "judge_error"
     assert result.judge_error == "empty_final_text"
+    assert result.main_api_call_count == 2
+    assert result.iterations == 2
+    assert len(client.responses.calls) == 2
+
+
+def test_malformed_final_json_retries_once_without_tools(
+    deliverable_dir, task_and_item, caplog
+):
+    task, item = task_and_item
+    malformed = _response(
+        output=[_final('{"verdict":"pass","partial_score":')],
+        in_tok=200,
+        out_tok=80,
+        cached_tok=50,
+    )
+    final = _response(
+        output=[_final(json.dumps({
+            "verdict": "pass",
+            "partial_score": 1.0,
+            "evidence": "all divisions are represented",
+            "confidence": 0.9,
+            "reasoning": "verified from prior tool evidence",
+        }))],
+        in_tok=210,
+        out_tok=60,
+        cached_tok=55,
+    )
+    client = FakeClient(ScriptedResponses([malformed, final]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=1,
+    )
+
+    with caplog.at_level("WARNING", logger="core.tool_calling_judge"):
+        result = judge.judge_item(
+            task=task,
+            item=item,
+            deliverable_dir=str(deliverable_dir),
+            file_names=["report.xlsx"],
+        )
+
+    assert result.verdict == "pass"
+    assert result.main_api_call_count == 2
+    assert result.iterations == 2
+    assert result.input_tokens == 410
+    assert result.output_tokens == 140
+    assert result.cached_tokens == 105
+    retry = client.responses.calls[1]
+    assert "tools" not in retry
+    assert retry["reasoning"] == {"effort": "low"}
+    assert "final_json_parse_failed" in caplog.text
+    assert '"partial_score":' not in caplog.text
+
+
+def test_malformed_final_retry_budget_exhaustion_stays_fail_closed(
+    deliverable_dir, task_and_item
+):
+    task, item = task_and_item
+    malformed = _response(
+        output=[_final('{"verdict":"pass","partial_score":')]
+    )
+    client = FakeClient(ScriptedResponses([malformed, malformed]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=1,
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "judge_error"
+    assert result.judge_error == "final_json_parse_failed"
     assert result.main_api_call_count == 2
     assert result.iterations == 2
     assert len(client.responses.calls) == 2
@@ -1227,8 +1307,12 @@ def test_unparseable_final_text_is_judge_error(deliverable_dir, task_and_item):
     client = FakeClient(ScriptedResponses([_response(output=[_final(
         "this is not json at all"
     )])]))
-    judge = ToolCallingJudge(client=client, model="gpt-5.4",
-                             prompt_template=PROMPT_TEMPLATE)
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=0,
+    )
     res = judge.judge_item(task=task, item=item,
                            deliverable_dir=str(deliverable_dir),
                            file_names=["report.xlsx"])

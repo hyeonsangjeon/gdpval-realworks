@@ -12,6 +12,12 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Tool-calling malformed-final recovery** — extend the bounded
+  finalization-only retry from empty output to syntactically unparseable final
+  JSON, as observed for two text criteria in canary run 29432455047. The retry
+  reuses ordered evidence with no tools, low reasoning, and complete usage
+  accounting. Valid JSON objects with invalid semantic envelopes are not
+  retried, and retry exhaustion remains fail-closed.
 - **Tool-calling empty-final recovery** — when a Responses API tool loop ends
   with an empty final message (observed after five successful reads in canary
   run 29429183215), issue at most one finalization-only retry using the existing
