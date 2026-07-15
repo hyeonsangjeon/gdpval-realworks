@@ -31,7 +31,7 @@ task. It must be refreshed before a task is reported complete.
   invalid semantic envelope. All 36 judged items were `judge_error`, aggregate
   usage was incomplete, and the score-only summary incorrectly displayed 100%.
 - The invalid grade commit `da1d57a8` and analysis commit `a1cc84da` were
-  reverted by `f8eeffe1` and `788c2a85`; both generated files are absent from
+  reverted by `8cddfda` and `9508d83`; both generated files are absent from
   the resulting tree.
 - Long cache identities now use a deterministic 64-character SHA-256 key. The
   vision prompt states the exact envelope contract, semantic strings are safely
