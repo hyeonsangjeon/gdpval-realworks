@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,28 @@ FINGERPRINT = {
     "pymupdf_version": "1.26.3",
 }
 PNG = preflight.PNG_SIGNATURE + b"mock-rendered-png"
+
+
+def test_direct_script_entrypoint_resolves_core_import():
+    batch_root = Path(__file__).resolve().parents[1]
+    script = batch_root / "scripts" / "preflight_grading_renderer.py"
+
+    completed = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=batch_root,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode in {0, 1}
+    assert completed.stderr == ""
+    lines = completed.stdout.splitlines()
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert isinstance(payload.get("ok"), bool)
+    assert "No module named 'core'" not in completed.stdout
 
 
 def _successful_render(source_kind, scope):

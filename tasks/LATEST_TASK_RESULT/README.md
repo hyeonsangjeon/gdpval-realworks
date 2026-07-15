@@ -1,7 +1,7 @@
 # Latest Task Result
 
 - Updated: 2026-07-15
-- Status: Renderer preflight implementation verified; runtime run pending
+- Status: Hosted import failure fixed; renderer rerun pending
 
 ## Task
 
@@ -14,6 +14,16 @@
 
 ## Result
 
+- Preflight workflow PR #73 was squash-merged to `main` as `fa8bf4f1` and
+  model-free run
+  [29392707519](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29392707519)
+  was dispatched. LibreOffice/font installation and renderer Python dependency
+  installation succeeded; no Azure, HF, batch, or model step existed.
+- The first run failed before rendering because direct execution from
+  `batch-runner/scripts` could not import `core`. The uploaded failure artifact
+  preserved that evidence. The script now inserts its own batch-runner root and
+  bootstraps only the lightweight `core.tools` namespace, avoiding unrelated
+  dataset/pyarrow imports.
 - Added `.github/workflows/grading-renderer-preflight.yml`, dispatched manually
   on `main` only with `contents: read`, no environment, no OIDC, and no secret
   references. Checkout, Python setup, and artifact upload actions are pinned to
@@ -35,7 +45,12 @@
   skipped, and 37 deselected. This combines the broad suite, seven
   data-module suites, and the actual-parquet selector suite without overlap.
 - Workflow contract, renderer script, and read-deliverable focused coverage is
-  included in that total; its direct run completed with **62 passed**.
+  included in that total. After the import fix, its direct run completed with
+  **63 passed**.
+- Overlay-free direct execution now emits one valid JSON line and reaches the
+  expected local `RendererDependencyError` because this SSH host has no
+  LibreOffice; it no longer raises `ModuleNotFoundError` for `core` or
+  `pyarrow`.
 - Shared renderer requirements include and package set were verified, and all
   four declarations parse successfully with the standard requirement parser.
 - `git diff --check` passed.
@@ -44,9 +59,9 @@
 
 ## Remaining Work
 
-- Open and merge the dedicated workflow PR, then dispatch it once from `main`.
-- Record the GitHub-hosted run SHA, conclusion, and evidence JSON in this
-  rolling result. A failed preflight must be fixed and rerun without bypass.
+- Merge the import fix PR and rerun the same model-free workflow from `main`.
+- Record the successful run SHA, conclusion, and evidence JSON. Do not bypass a
+  second failure.
 - This preflight does not approve paid grading. The limited Azure vision canary
   remains a separate owner-approved step after renderer success.
-- No workflow, HF/Azure request, or model call has been performed yet.
+- No HF/Azure request, batch run, or model call has been performed.

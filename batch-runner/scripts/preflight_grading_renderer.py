@@ -13,9 +13,19 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
+
+BATCH_RUNNER_ROOT = Path(__file__).resolve().parent.parent
+if str(BATCH_RUNNER_ROOT) not in sys.path:
+    sys.path.insert(0, str(BATCH_RUNNER_ROOT))
+if "core" not in sys.modules:
+    core_package = types.ModuleType("core")
+    core_package.__path__ = [str(BATCH_RUNNER_ROOT / "core")]
+    core_package.__package__ = "core"
+    sys.modules["core"] = core_package
 
 from core.tools import get_renderer_fingerprint, read_deliverable
 from core.tools.read_deliverable import MAX_IMAGE_BYTES
