@@ -91,6 +91,20 @@ def _build_sector_stats(results: list) -> dict:
     return out
 
 
+def _write_json_outputs(data: dict, *paths: Path) -> None:
+    """Serialize once with strict JSON, then write identical output files."""
+    serialized = json.dumps(
+        data,
+        indent=2,
+        ensure_ascii=False,
+        default=str,
+        allow_nan=False,
+    )
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(serialized, encoding="utf-8")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 
@@ -203,14 +217,10 @@ def format_results():
     }
 
     json_path = results_dir / f"{experiment_id}.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(final_json, f, indent=2, ensure_ascii=False, default=str)
-
-    # Also write to workspace/result.json so step6 reads it directly
     workspace_result = WORKSPACE_DIR / "result.json"
-    WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
-    with open(workspace_result, "w", encoding="utf-8") as f:
-        json.dump(final_json, f, indent=2, ensure_ascii=False, default=str)
+    # Serialize before either file is opened so invalid numeric values cannot
+    # leave one output updated and the other stale or emit non-standard JSON.
+    _write_json_outputs(final_json, json_path, workspace_result)
 
     # 5. Build Markdown report
     success_rate = round(summary["success"] / summary["total"] * 100) if summary["total"] else 0

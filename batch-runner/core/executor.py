@@ -34,6 +34,7 @@ class TaskExecutor:
         timeout: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
         sandbox_options: Optional[dict] = None,
+        metrics_options: Optional[dict] = None,
     ):
         """
         Initialize executor with specified mode.
@@ -51,6 +52,7 @@ class TaskExecutor:
                 experiment YAML ``execution.sandbox`` block. Keys: image (str),
                 use_docker ("auto"|"never"|"always"), memory_gb (int),
                 cpus (float), skills_dir (str), max_skills (int).
+            metrics_options: Optional opt-in ``execution.metrics`` settings.
 
         Raises:
             ValueError: If required parameters are missing for the selected mode
@@ -84,6 +86,7 @@ class TaskExecutor:
             if llm_client is None:
                 raise ValueError("sandbox mode requires llm_client")
             opts = dict(sandbox_options or {})
+            metric_opts = metrics_options if isinstance(metrics_options, dict) else None
             self.runner = SandboxRunner(
                 llm_client,
                 prompt_name=prompt_name or opts.get("prompt_name") or SandboxRunner.DEFAULT_PROMPT,
@@ -101,6 +104,7 @@ class TaskExecutor:
                 manifest=opts.get("manifest"),
                 cache=opts.get("cache"),
                 contract=opts.get("contract"),
+                metrics=metric_opts,
             )
 
         elif mode == "json_renderer":

@@ -218,6 +218,7 @@ def test_executor_sandbox_passes_options_and_tokens():
             mode="sandbox",
             llm_client=mock_client,
             tokens={"code_generation": 4242},
+            metrics_options={"enabled": True},
             sandbox_options={
                 "image": "custom-sandbox:1.0",
                 "use_docker": "always",
@@ -234,6 +235,7 @@ def test_executor_sandbox_passes_options_and_tokens():
         assert kwargs["memory_gb"] == 7
         assert kwargs["cpus"] == 3.0
         assert kwargs["max_skills"] == 4
+        assert kwargs["metrics"] == {"enabled": True}
 
 
 def test_executor_sandbox_defaults_when_no_options():

@@ -71,6 +71,27 @@ entries land under a fresh dated heading the day they merge to `main`.
   `requirements-renderer.txt` keeps the dedicated workflow and full grading
   environment on the same openpyxl, python-pptx, Pillow, and PyMuPDF lower
   bounds.
+- **Opt-in job performance metrics** — experiments may enable
+  `execution.metrics.enabled` to record bounded per-task wall, model, tool,
+  verification, dependency, Self-QA, and orchestration times plus execution,
+  sandbox, tool-call, Self-QA-call, and resumed job-run counts. Resume rounds
+  preserve cumulative task lifetime, while `time_to_valid_artifact_ms` requires
+  a saved file and successful sandbox verification. Step 6 adds coverage,
+  average/P50/P95 job time, successful/failed averages, time-to-valid-file,
+  phase totals, and call totals only when measured data exists. The experiment
+  detail page conditionally exposes the aggregate panel, sortable Job Time
+  column, and per-task metrics; legacy configs, manifests, result JSON, and UI
+  remain unchanged when metrics are omitted. Activation requires the literal
+  boolean `true`; unrecognized fields are discarded. Durations and counters
+  use finite schema bounds with overflow-safe resume merging and strict JSON
+  serialization. Time-to-valid requires both a verified sandbox status and at
+  least one non-manifest artifact, so text-only and manifest-only tasks cannot
+  inflate the metric. Wall-timeout checkpoints retain pending task objects, and
+  relay completion replaces them through the same metric-merging path so prior
+  task lifetime is not lost. Step 3 serializes once with `allow_nan=False`
+  before opening either result destination, preventing split or non-standard
+  JSON output. Giant JSON integers are rejected before float conversion, so
+  progress merging and report aggregation cannot fail with numeric overflow.
 - **`exp027_GPT54_default_subprocess_bridge50`** — checked-in 50-task,
   9-sector diagnostic subprocess comparator for the historical exp026
   Sandbox/Skills runner bundle. Includes pinned 42 non-success-union tasks, six

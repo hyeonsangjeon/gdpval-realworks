@@ -149,6 +149,7 @@ export default function PromptArchitectureView({ prompt, shortId: _shortId }: { 
             { l: 'resume_rounds', v: ec.resume_max_rounds ?? '—' },
             { l: 'max_retries', v: ec.max_retries },
             { l: 'libreoffice', v: ec.install_libreoffice ? '✅' : '—' },
+            ...(ec.metrics ? [{ l: 'job_metrics', v: ec.metrics.enabled ? 'enabled' : 'disabled' }] : []),
           ].map(({ l, v }) => (
             <div key={l} className="flex justify-between">
               <span className="text-dash-text-muted">{l}</span>

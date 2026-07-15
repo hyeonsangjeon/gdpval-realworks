@@ -28,6 +28,56 @@ export interface TaskResult {
   prompt_classification?: PromptClassification | null
   policy_results?: Record<string, boolean> | null
   has_deliverable_files?: boolean | null
+  observability?: {
+    execution_metrics?: TaskExecutionMetrics
+    [key: string]: unknown
+  }
+}
+
+export interface TaskExecutionMetrics {
+  schema_version: string
+  task_wall_time_ms: number
+  time_to_valid_artifact_ms: number | null
+  model_time_ms: number
+  tool_time_ms: number
+  verification_time_ms: number
+  dependency_time_ms: number
+  self_qa_time_ms: number
+  orchestration_time_ms: number
+  execution_attempt_count: number
+  sandbox_attempt_count: number
+  tool_call_count: number
+  self_qa_call_count: number
+  job_run_count: number
+  validated_artifact_count: number
+}
+
+export interface ExecutionMetricsSummary {
+  schema_version: string
+  measured_tasks: number
+  total_tasks: number
+  coverage_pct: number
+  avg_task_wall_time_ms: number
+  p50_task_wall_time_ms: number
+  p95_task_wall_time_ms: number
+  max_task_wall_time_ms: number
+  avg_successful_task_wall_time_ms: number | null
+  avg_failed_task_wall_time_ms: number | null
+  measured_time_to_valid_artifact_tasks: number
+  avg_time_to_valid_artifact_ms: number | null
+  p50_time_to_valid_artifact_ms: number | null
+  p95_time_to_valid_artifact_ms: number | null
+  total_model_time_ms: number
+  total_tool_time_ms: number
+  total_verification_time_ms: number
+  total_dependency_time_ms: number
+  total_self_qa_time_ms: number
+  total_orchestration_time_ms: number
+  total_execution_attempts: number
+  total_sandbox_attempts: number
+  total_tool_calls: number
+  total_self_qa_calls: number
+  total_job_runs: number
 }
 
 export interface PromptClassification {
@@ -128,6 +178,7 @@ export interface ReportData {
   narrative: Narrative
   recovery_stats: RecoveryStats
   file_generation?: FileGeneration
+  execution_metrics?: ExecutionMetricsSummary
   /** task_id → Self-QA score (0–10). Enriched in scripts/aggregate-reports.mjs for Phase 1 calibration. */
   task_qa?: Record<string, number>
 }

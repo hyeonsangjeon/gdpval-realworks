@@ -32,6 +32,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from core.config import NEEDS_FILES_POLICIES_KNOWN, WORKSPACE_DIR
+from core.execution_metrics import bounded_count, bounded_duration_ms
 from core.narrative_analyzer import (
     _build_grade_source,
     _build_grading_guard_clause,
@@ -142,6 +143,102 @@ def _compute_summary(data: dict) -> dict:
         "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else 0,
         "max_latency_ms": round(max(latencies)) if latencies else 0,
         "total_latency_ms": round(sum(latencies)) if latencies else 0,
+    }
+
+
+def _metric_number(value) -> float | None:
+    return bounded_duration_ms(value)
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    """Return a linearly interpolated percentile for a non-empty sample."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return round(ordered[0], 2)
+    position = (len(ordered) - 1) * percentile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = position - lower
+    return round(ordered[lower] * (1 - weight) + ordered[upper] * weight, 2)
+
+
+def _compute_execution_metrics(data: dict) -> dict | None:
+    """Aggregate opt-in job metrics; return ``None`` for legacy experiments."""
+    results = data.get("results", [])
+    measured: list[tuple[dict, dict, float]] = []
+    for result in results:
+        raw = (result.get("observability") or {}).get("execution_metrics")
+        if not isinstance(raw, dict):
+            continue
+        wall_time = _metric_number(raw.get("task_wall_time_ms"))
+        if wall_time is not None:
+            measured.append((result, raw, wall_time))
+
+    if not measured:
+        return None
+
+    wall_times = [wall_time for _, _, wall_time in measured]
+    successful_wall_times = [
+        wall_time for result, _, wall_time in measured
+        if result.get("status") == "success"
+    ]
+    failed_wall_times = [
+        wall_time for result, _, wall_time in measured
+        if result.get("status") != "success"
+    ]
+    valid_artifact_times = [
+        value
+        for _, raw, wall_time in measured
+        if (value := _metric_number(raw.get("time_to_valid_artifact_ms"))) is not None
+        and value <= wall_time
+        and (bounded_count(raw.get("validated_artifact_count")) or 0) > 0
+    ]
+
+    def average(values: list[float]) -> float | None:
+        return round(sum(values) / len(values), 2) if values else None
+
+    def total(field: str) -> float:
+        return round(sum(
+            value
+            for _, raw, _ in measured
+            if (value := _metric_number(raw.get(field))) is not None
+        ), 2)
+
+    def count(field: str) -> int:
+        return sum(
+            value
+            for _, raw, _ in measured
+            if (value := bounded_count(raw.get(field))) is not None
+        )
+
+    return {
+        "schema_version": "1.0",
+        "measured_tasks": len(measured),
+        "total_tasks": len(results),
+        "coverage_pct": round(len(measured) / len(results) * 100, 1) if results else 0.0,
+        "avg_task_wall_time_ms": average(wall_times),
+        "p50_task_wall_time_ms": _percentile(wall_times, 0.50),
+        "p95_task_wall_time_ms": _percentile(wall_times, 0.95),
+        "max_task_wall_time_ms": round(max(wall_times), 2),
+        "avg_successful_task_wall_time_ms": average(successful_wall_times),
+        "avg_failed_task_wall_time_ms": average(failed_wall_times),
+        "measured_time_to_valid_artifact_tasks": len(valid_artifact_times),
+        "avg_time_to_valid_artifact_ms": average(valid_artifact_times),
+        "p50_time_to_valid_artifact_ms": _percentile(valid_artifact_times, 0.50),
+        "p95_time_to_valid_artifact_ms": _percentile(valid_artifact_times, 0.95),
+        "total_model_time_ms": total("model_time_ms"),
+        "total_tool_time_ms": total("tool_time_ms"),
+        "total_verification_time_ms": total("verification_time_ms"),
+        "total_dependency_time_ms": total("dependency_time_ms"),
+        "total_self_qa_time_ms": total("self_qa_time_ms"),
+        "total_orchestration_time_ms": total("orchestration_time_ms"),
+        "total_execution_attempts": count("execution_attempt_count"),
+        "total_sandbox_attempts": count("sandbox_attempt_count"),
+        "total_tool_calls": count("tool_call_count"),
+        "total_self_qa_calls": count("self_qa_call_count"),
+        "total_job_runs": count("job_run_count"),
     }
 
 
@@ -321,7 +418,8 @@ Return ONLY valid JSON with these exact keys (no markdown code fences):
 
 def _build_report_data(data: dict, narrative: dict, summary: dict,
                        sector_breakdown: list[dict], task_results: list[dict],
-                       error_tasks: list[dict]) -> dict:
+                       error_tasks: list[dict],
+                       execution_metrics: dict | None = None) -> dict:
     meta_date = (data.get("started_at") or "")[:10]
     report = {
         "meta": {
@@ -350,6 +448,8 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
     }
     if "_narrative_error" in narrative:
         report["narrative_error"] = narrative["_narrative_error"]
+    if execution_metrics:
+        report["execution_metrics"] = execution_metrics
     return report
 
 
@@ -484,6 +584,24 @@ def _build_markdown(rd: dict) -> str:
         f"| 📊 Grading | ⏳ Awaiting (`scores.json`) |",
         "",
     ]
+
+    execution_metrics = rd.get("execution_metrics")
+    if execution_metrics:
+        valid_time = execution_metrics.get("avg_time_to_valid_artifact_ms")
+        lines += [
+            "## Job Performance",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
+            f"| Measured tasks | {execution_metrics['measured_tasks']} / {execution_metrics['total_tasks']} ({execution_metrics['coverage_pct']}%) |",
+            f"| Avg job time | {execution_metrics['avg_task_wall_time_ms']:,.0f}ms |",
+            f"| P50 job time | {execution_metrics['p50_task_wall_time_ms']:,.0f}ms |",
+            f"| P95 job time | {execution_metrics['p95_task_wall_time_ms']:,.0f}ms |",
+            f"| Avg time to valid artifact | {valid_time:,.0f}ms |" if valid_time is not None else "| Avg time to valid artifact | N/A |",
+            f"| Tool calls | {execution_metrics['total_tool_calls']} |",
+            f"| Execution attempts | {execution_metrics['total_execution_attempts']} |",
+            "",
+        ]
 
     # 2. Execution Summary
     if narrative.get("overview"):
@@ -675,7 +793,13 @@ def _build_html(rd: dict) -> str:
         return esc(s).replace("\n\n", "</p><p>").replace("\n", "<br>")
 
     # Embed report_data as inline JS
-    data_json = json.dumps(rd, ensure_ascii=False, indent=2, default=str)
+    data_json = json.dumps(
+        rd,
+        ensure_ascii=False,
+        indent=2,
+        default=str,
+        allow_nan=False,
+    )
 
     # File generation metric card
     fg = rd.get("file_generation") or {}
@@ -1018,6 +1142,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
 
     # Compute metrics
     summary = _compute_summary(data)
+    execution_metrics = _compute_execution_metrics(data)
     sector_breakdown = _compute_sector_breakdown(data)
     manifest = _load_manifest_safe()
     task_results, error_tasks = _build_task_results(data, manifest=manifest)
@@ -1060,7 +1185,15 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
             narrative = _generate_narrative(data, summary, sector_breakdown, grade=grade)
 
     # Build report_data.json
-    rd = _build_report_data(data, narrative, summary, sector_breakdown, task_results, error_tasks)
+    rd = _build_report_data(
+        data,
+        narrative,
+        summary,
+        sector_breakdown,
+        task_results,
+        error_tasks,
+        execution_metrics=execution_metrics,
+    )
 
     # Inject file generation stats from step5_validate.py
     validate_stats_path = WORKSPACE_DIR / "validate_stats.json"
@@ -1093,7 +1226,14 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
 
     json_path = output_dir / "report_data.json"
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(rd, f, indent=2, ensure_ascii=False, default=str)
+        json.dump(
+            rd,
+            f,
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+            allow_nan=False,
+        )
 
     # Build report.md
     md_path = output_dir / "report.md"
