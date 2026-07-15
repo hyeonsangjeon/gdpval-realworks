@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-15
-- Status: Vision path verified; one text finalization failure stopped fail-closed
+- Status: Vision path verified; bounded finalization recovery merged
 
 ## Task
 
@@ -43,6 +43,8 @@ task. It must be refreshed before a task is reported complete.
   parallel-tool settings, lowers reasoning effort to `low`, preserves ordered
   response context, and includes its calls, latency, and token usage in normal
   accounting. A second empty or malformed response remains fail-closed.
+- The recovery shipped through PR #81 as `a68a3efe`. No further paid workflow
+  was dispatched after the fix.
 
 ## Verification
 
@@ -58,7 +60,6 @@ task. It must be refreshed before a task is reported complete.
 
 ## Remaining Work
 
-- Merge the bounded empty-final retry fix.
 - Do not rerun the paid task without renewed cost approval: another full task
   run is expected to push cumulative canary spend above the original USD 1
   approval even though a single run remains below USD 1.

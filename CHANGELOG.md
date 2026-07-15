@@ -18,7 +18,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   evidence. The retry removes tools and parallel tool calls, lowers reasoning
   to `low`, preserves ordered response items, and keeps complete call, latency,
   input, output, and cache accounting. Retry exhaustion remains a score-excluded
-  `empty_final_text` error and Track 2 still exits fail-closed.
+  `empty_final_text` error and Track 2 still exits fail-closed. Shipped through
+  PR #81 (`a68a3efe`).
 - **Grading canary runtime fail-closed guards** — revert the invalid grade and
   analysis produced by run 29424766879 after 35 Azure requests rejected a
   106-character `prompt_cache_key` and the single vision response failed its
