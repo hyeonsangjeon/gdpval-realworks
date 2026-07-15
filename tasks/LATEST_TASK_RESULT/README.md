@@ -41,13 +41,17 @@ available.
   existing table, modal, and metric cards without placeholders for new fields.
 - Added sandbox documentation for enabling and interpreting the metrics. No
   existing experiment config or result fixture was rewritten, and no paid model,
-  batch, grading, or canary run was dispatched.
+  batch, grading, or canary run was automatically dispatched by the feature.
 - Feature PR [#76](https://github.com/hyeonsangjeon/gdpval-realworks/pull/76)
   was squash-merged to `main` as `3258b5c3265136b06a4661c16a521bd8c4887005`.
   Automatic `Aggregate Tests & Deploy` run
   [29423221608](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29423221608)
-  completed successfully. It was the only workflow tied to the merge SHA; no
-  paid batch, grading, cost-sweep, or sandbox canary workflow ran.
+  completed successfully and was the only workflow automatically triggered by
+  the merge. A separate owner-dispatched grading run
+  [29423860683](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29423860683)
+  later targeted the same SHA and failed while downloading inference results
+  from Hugging Face. `Run grading` and artifact upload were skipped, so it made
+  no model/API grading call or paid inference request.
 
 ## Verification
 
