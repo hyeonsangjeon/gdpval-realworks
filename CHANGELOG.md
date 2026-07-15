@@ -96,6 +96,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 - **`batch-runner/scripts/download_inference_from_hf.py`** — pass `HF_TOKEN` explicitly to `hf_hub_download()` (×2) and `snapshot_download()` via a new `_hf_token()` helper. The grade pipeline's "Download inference results from HF" step injects `HF_TOKEN` env, but `huggingface_hub` auto-pickup did not fire, so requests went out **anonymous** (CI log: `unauthenticated requests to HF Hub`). Under the sequential grade relay this tripped HTTP **429 Too Many Requests** on the inference parquet, breaking a chunk mid-run (e.g. 5.4 220 re-grade chunk-2 resume). Authenticated requests have a much higher rate limit → relay no longer 429s on repeated chunk downloads. No behavior change for single runs.
 
 ### Added
+- **Prompt-complexity Field Note** — add a sixth Korean RealWorks Field Note
+  comparing completion rate and Self-QA across the exp003 baseline, exp004
+  Elicit, and exp005 headless-Elicit subprocess runs. The article defines
+  Elicit as the GDPVal study's five-step verification prompt rather than a
+  separate model or service, and identifies headless-Elicit as the same design
+  with STEP 2 changed from display inspection to Pillow checks. It separates
+  surviving-result self-assessment from whole-run coverage and avoids treating
+  the comparison as a prompt-only A/B because runner settings also changed. A
+  dedicated responsive hero and dual Recharts comparison visualize
+  95.9/90.9/90.5% completion against 6.18/5.87/6.16 Self-QA, while the
+  prompt-strategy question, first timeline event, and exp003-exp005 detail pages
+  link to the new note.
 - **RealWorks Field Notes** — add lazy-loaded `/notes` and `/notes/:slug`
   routes with nine question-led experiment groups, a nine-event chronology,
   and five evidence-linked Korean columns spanning CI/runtime constraints,
