@@ -430,6 +430,110 @@ def test_track2_limit_three_mock_smoke(monkeypatch, tmp_path):
     assert payload["renderer_fingerprint"] == _RENDERER_FINGERPRINT
 
 
+def test_track2_runtime_judge_error_stops_and_persists_diagnostic(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["output"]["filename_template"] = (
+        "{exp_id}__{judge_slug}__{rubric_sha}__{prompt_v}.json"
+    )
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    grader_instance = {}
+
+    class _RuntimeFailureGrader(_FakeGrader):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            grader_instance["grader"] = self
+
+        def grade_task(self, task, deliverable_dir):
+            grade = super().grade_task(task, deliverable_dir)
+            item = grade.items[0]
+            item.verdict = "judge_error"
+            item.decided_by = "judge"
+            item.awarded_score = 0.0
+            item.evidence = "BadRequestError: invalid prompt_cache_key"
+            item.score_excluded = True
+            item.judge_call_count = 1
+            item.usage_complete = False
+            grade.total_awarded = 0.0
+            grade.total_max = 0
+            grade.pct = 0.0
+            grade.pct_raw = 0.0
+            grade.judge_call_count = 1
+            grade.precheck_count = 0
+            grade.usage_complete = False
+            return grade
+
+    monkeypatch.setattr(s8, "Grader", _RuntimeFailureGrader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() == 6
+    assert grader_instance["grader"].calls == 1
+    out = (
+        tmp_path
+        / "data/grades"
+        / (
+            "exp998_smoke_baseline_sample__gpt-5_4-pro__"
+            f"{_FakeLoader().rubric_sha}__v1.json"
+        )
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["tasks"][0]["error"] == "judge_error"
+    assert payload["summary"]["graded_tasks"] == 0
+    assert payload["summary"]["error_tasks"] == 1
+    assert payload["summary"]["openai_compat"]["avg_score_pct"] == 0.0
+    assert payload["summary"]["openai_compat"]["perfect_count"] == 0
+    assert payload["summary"]["wow"]["judge_error_rate"] == 1.0
+    assert payload["summary"]["cost"]["usage_complete"] is False
+
+
+def test_track2_runtime_error_allows_call_free_unscorable_selection():
+    task = {
+        "task_id": "task-001",
+        "error": "selection_error",
+        "usage_complete": True,
+        "items": [{
+            "verdict": "judge_error",
+            "evidence": "wrong_format_primary: expected PDF",
+            "judge_call_count": 0,
+            "perception_call_count": 0,
+            "render_call_count": 0,
+            "usage_complete": True,
+        }],
+    }
+
+    assert s8._track2_task_runtime_error(task) is None
+
+
+def test_track2_incomplete_usage_is_runtime_failure():
+    task = {
+        "task_id": "task-001",
+        "error": None,
+        "usage_complete": False,
+        "items": [{
+            "verdict": "pass",
+            "evidence": "visible chart title",
+            "judge_call_count": 0,
+            "perception_call_count": 1,
+            "render_call_count": 1,
+            "usage_complete": False,
+        }],
+    }
+
+    assert s8._track2_task_runtime_error(task) == "usage_incomplete"
+
+
 def test_tasks_filter(monkeypatch, tmp_path):
     _setup_workspace(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -786,6 +890,7 @@ def _seed_partial_grade(
             "judge_total_latency_ms": 0,
             "judge_input_tokens": 0,
             "judge_output_tokens": 0,
+            "usage_complete": True,
             "graded_at": "2026-05-27T00:00:00Z",
             "error": None,
         }
@@ -969,6 +1074,39 @@ def test_track2_resume_same_fingerprint_succeeds(monkeypatch, tmp_path):
     out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["renderer_fingerprint"] == _RENDERER_FINGERPRINT
+
+
+def test_track2_resume_rejects_runtime_failure_before_grader(
+    monkeypatch, tmp_path, capsys
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not resume a Track 2 runtime failure")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    out = _seed_partial_grade(
+        tmp_path, ["task-001"], dict(_RENDERER_FINGERPRINT)
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    payload["tasks"][0]["error"] = "judge_error"
+    payload["tasks"][0]["usage_complete"] = False
+    payload["summary"] = s8._compute_summary(payload["tasks"])
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() != 0
+    assert "runtime failures" in capsys.readouterr().err
 
 
 def test_track2_valid_cache_hit_checks_fingerprint_and_skips(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import importlib
 import io
 import json
@@ -24,6 +25,29 @@ tool_calling_judge_module = importlib.import_module("core.tool_calling_judge")
 
 
 # ── Helpers / fakes ──────────────────────────────────────────────────
+
+
+def test_prompt_cache_key_respects_azure_length_limit():
+    exact_key = "x" * 64
+    exact = ToolCallingJudge(
+        client=None,
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        prompt_cache_key=exact_key,
+    )
+    long_key = "x" * 65
+    bounded = ToolCallingJudge(
+        client=None,
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        prompt_cache_key=long_key,
+    )
+
+    assert exact.prompt_cache_key == exact_key
+    assert bounded.prompt_cache_key == hashlib.sha256(
+        long_key.encode("utf-8")
+    ).hexdigest()
+    assert len(bounded.prompt_cache_key) == 64
 
 
 def _usage(

@@ -11,6 +11,7 @@ Proves at runtime (not by config inspection) that:
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -119,7 +120,12 @@ def test_grader_wires_perception_subjudges(monkeypatch):
     fake_client = SimpleNamespace(responses=ScriptedResponses([]))
     monkeypatch.setattr(grader_mod, "AzureOpenAI", lambda **kw: fake_client)
 
-    grader = Grader(_v2_cfg(with_perception=True), rubric_loader=None)
+    config = _v2_cfg(with_perception=True)
+    config["_runtime"] = {
+        "experiment_id": "exp003_GPT52Chat_baseline_runner_exec",
+        "rubric_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+    }
+    grader = Grader(config, rubric_loader=None)
     tj = grader._tool_judge
     assert tj is not None
     assert tj.vision_perception is not None, "VisionPerception must be wired"
@@ -133,10 +139,20 @@ def test_grader_wires_perception_subjudges(monkeypatch):
     assert getattr(
         tj.vision_perception.before_upstream_call, "__self__", None
     ) is grader
-    cache_key = json.loads(tj.prompt_cache_key)
-    assert cache_key == [
-        "unknown_experiment", "gpt-5.4", "unknown_rubric", "v2.2"
-    ]
+    raw_cache_key = json.dumps(
+        (
+            "exp003_GPT52Chat_baseline_runner_exec",
+            "gpt-5.4",
+            "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+            "v2.2",
+        ),
+        separators=(",", ":"),
+    )
+    assert len(raw_cache_key) > 64
+    assert tj.prompt_cache_key == hashlib.sha256(
+        raw_cache_key.encode("utf-8")
+    ).hexdigest()
+    assert len(tj.prompt_cache_key) == 64
     assert grader.prompt_version == "v2.2"
 
 

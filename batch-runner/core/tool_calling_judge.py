@@ -67,6 +67,14 @@ from core.tools import (
 
 logger = logging.getLogger(__name__)
 
+_PROMPT_CACHE_KEY_MAX_CHARS = 64
+
+
+def _bounded_prompt_cache_key(value: str) -> str:
+    if len(value) <= _PROMPT_CACHE_KEY_MAX_CHARS:
+        return value
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
 _VISUAL_RENDER_SCOPES: Dict[str, Dict[str, int]] = {
     ".pdf": {"page": 1},
     ".xlsx": {"workbook_page": 1},
@@ -326,9 +334,9 @@ class ToolCallingJudge:
         audio_perception:        optional ``AudioPerception`` instance
                                  (task 206), same shape.
         task_prompt_truncate:    chars kept of the original task prompt.
-        prompt_cache_key:        optional stable key passed to
-                                 ``responses.create(prompt_cache_key=...)``.
-                                 Default = ``"gdpval_v2_judge"``.
+        prompt_cache_key:        optional stable identity normalized to the
+                     Azure 64-character limit before it is passed
+                     to ``responses.create(prompt_cache_key=...)``.
         compact_threshold:       optional Azure Responses API
                                  ``context_management.auto_compact_threshold``
                                  token count. Default = 60000 (only the
@@ -369,12 +377,13 @@ class ToolCallingJudge:
                 f"model_read_ops contains unsupported operations: "
                 f"{sorted(invalid_ops)}"
             )
-        if self.prompt_cache_key is None:
+        cache_key = self.prompt_cache_key
+        if cache_key is None:
             match = re.search(
                 r"prompt_version:\s*([A-Za-z0-9_.-]+)", self.prompt_template
             )
             prompt_version = match.group(1) if match else "unknown_prompt"
-            self.prompt_cache_key = json.dumps(
+            cache_key = json.dumps(
                 (
                     "unknown_experiment",
                     self.model,
@@ -383,6 +392,7 @@ class ToolCallingJudge:
                 ),
                 separators=(",", ":"),
             )
+        self.prompt_cache_key = _bounded_prompt_cache_key(cache_key)
 
     # ------------------------------------------------------------------
     # Public surface

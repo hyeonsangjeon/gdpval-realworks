@@ -4,103 +4,60 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-15
-- Status: Public deployment complete and verified
+- Status: Vision canary acceptance failed; invalid results reverted and fixes verified
 
 ## Task
 
-- Add independent RealWorks field notes that group runs by research question
-  and decision while preserving a chronological record of failures and
-  milestones.
-- Cover engineering constraints, actual AI task performance, and domain-level
-  observations without presenting inference Self-QA as external quality.
-- Connect the notes to the existing dashboard and experiment details, then
-  refine their typography, spacing, and naming so they cannot be mistaken for
-  the official GDPVal paper or its authors' journal.
+- Merge the downloader direct-entry fix and rerun the separately approved
+  Azure Vision canary on exactly one pinned exp003 XLSX task.
+- Accept only one render call, one perception call, complete usage accounting,
+  relative-path visual provenance, and effective cost below USD 1.
+- Revert any committed result that fails those gates and do not dispatch a
+  child, relay, or full grading run.
 
 ## Result
 
-- Added lazy-loaded `/notes` and `/notes/:slug` routes under the public name
-  **RealWorks Field Notes**, with nine question-led experiment groups and nine
-  dated timeline events. Existing `/journal` links redirect to `/notes`.
-- Published five Korean columns covering the 290/350/360-minute execution
-  boundaries, silent-corruption fixes, audio/video perception, an exp026
-  finance-task comparison, and the subprocess-to-Docker-sandbox decision.
-- Each article includes related experiment IDs, explicit evidence links,
-  comparison caveats, and a clear boundary between execution status, file
-  integrity, requirement fidelity, Self-QA, and pending external grading.
-- Added a dashboard Notes entry point and related-notes links on experiment
-  detail pages. A shared lightweight catalog keeps titles, lenses, slugs, and
-  experiment relationships synchronized without loading article bodies into
-  the dashboard bundle.
-- Field-note links for exp026 use its verified public detail URL, while the
-  latest clean build also aggregates exp026 successfully with the current
-  23-report dashboard dataset.
-- Added an explicit "OpenAI GDPVal을 활용한 독립 프로젝트 기록" label,
-  Korean `Gowun Batang`/`Noto Sans KR` reading fonts, responsive editorial
-  spacing, dark/light theme support, and accessible navigation/evidence states.
-- Added five evidence-oriented hero scenes: runtime boundaries, measurement
-  integrity, multimodal perception, task-level evidence burden, and the
-  subprocess-to-sandbox transition. Desktop uses motion-aware inline SVG;
-  mobile uses dedicated large-label summaries rather than unreadable scaled
-  diagrams.
-- Added five Recharts comparisons for relay recovery, pre/post integrity
-  completion, Information-sector completion, same-occupation Self-QA, and the
-  completion/latency tradeoff between execution modes. Every chart includes a
-  plain-language caveat and screen-reader data.
-- Added a BASE_URL-safe static video hero contract for GitHub Pages with native
-  controls, `muted`, `loop`, `playsInline`, optional poster/captions, and no
-  autoplay under reduced-motion. The supplied chat MP4 was not mounted into the
-  remote container, so no unreviewed video asset was copied into the repository.
-- Rebasing preserved the latest opt-in Job Performance Metrics integration,
-  then Field Notes commit `8ac9c20` was fast-forwarded to `main`. GitHub Pages
-  workflow
-  [29425800514](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29425800514)
-  completed successfully.
+- PR #78 merged as `1f9a5a42`, and run
+  [29424766879](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29424766879)
+  used the approved experiment, `default_v2_mini.yaml`, inference revision
+  `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`, task
+  `83d10b06-26d1-4636-a32c-23f92c57f30b`, and selected `Sample.xlsx`.
+- Input validation, renderer installation/preflight, Azure OIDC, pinned HF
+  download, one XLSX render, and one vision request ran. No child or relay run
+  was dispatched, and no API-key fallback or secret exposure was found.
+- Acceptance failed. All 35 main requests returned HTTP 400 because the
+  106-character `prompt_cache_key` exceeded Azure's 64-character limit. The
+  vision request recorded 1,108 input and 248 output tokens but returned an
+  invalid semantic envelope. All 36 judged items were `judge_error`, aggregate
+  usage was incomplete, and the score-only summary incorrectly displayed 100%.
+- The invalid grade commit `da1d57a8` and analysis commit `a1cc84da` were
+  reverted by `f8eeffe1` and `788c2a85`; both generated files are absent from
+  the resulting tree.
+- Long cache identities now use a deterministic 64-character SHA-256 key. The
+  vision prompt states the exact envelope contract, semantic strings are safely
+  normalized and bounded, and validation failures log only their reason.
+- Track 2 now atomically persists a diagnostic but exits nonzero after a real
+  main/perception/render runtime failure or incomplete usage. Error tasks no
+  longer inflate score summaries, and cache/resume rejects failed diagnostics
+  before constructing a grader. Existing call-free `selection_error` and
+  `no_deliverables` diagnostics retain their prior behavior.
 
 ## Verification
 
-- `npm run build` completed successfully after the final changes; TypeScript
-  compilation and Vite production bundling passed.
-- VS Code diagnostics reported no errors in all field-notes implementation
-  files and the three existing integration points.
-- Browser checks covered desktop and 390px mobile notes views, article detail,
-  nine timeline events, exp025 related-note links, and absence of horizontal
-  overflow. The exp026 article link resolves to the public detail URL with
-  `target="_blank"` and `rel="noopener noreferrer"`.
-- `/journal/:slug` was verified to redirect to the matching `/notes/:slug` URL.
-  The public header reads `RealWorks Field Notes`, and the dashboard entry reads
-  `Notes`.
-- At 390px, measured question/card/body text has no final line under 55px and no
-  horizontal overflow. Evidence-number contrast is **5.61:1** in light mode and
-  **8.05:1** in dark mode; both Korean web fonts loaded successfully.
-- `ui-designer` returned final **APPROVE** across 12 desktop/mobile,
-  light/dark route combinations; no remaining naming, hierarchy, spacing,
-  typography, or contrast issue affected the reading flow.
-- Five notes across desktop/mobile rendered exactly one nonblank hero and one
-  chart each with no runtime errors or horizontal overflow. Mobile hero text is
-  at least 11px; desktop SVG text is at least 14px. Chart text contrast is
-  **5.61:1** light / **8.05:1** dark, and all series colors exceed **3:1** on
-  both themes.
-- Reduced-motion browser emulation produced no animation/transition and stable
-  SVG geometry across animation frames. `first-reviewer` returned final
-  **APPROVE** after native video controls and static reduced-motion branches
-  were added.
-- Public GitHub Pages smoke tests covered all five notes at 1280×900 and
-  390×844. Every route rendered one hero and one chart with no overflow or
-  page errors; `/journal?view=timeline#history` preserved its query/hash while
-  redirecting to `/notes`, the dashboard showed `Notes`, and exp025 exposed
-  three `Related Notes` links.
-- The production build emits separate notes page/article/content chunks,
-  keeping article bodies out of the initial dashboard bundle.
-- `first-reviewer` returned final **APPROVE** with no blocking, major, or minor
-  findings after factual, link, accessibility, and catalog fixes.
+- Affected wiring, vision, tool-calling, Step 8, cache, resume, and workflow
+  suite: **161 passed**.
+- Broader non-integration suite excluding the unavailable local GDPVal parquet
+  fixture: **1,125 passed, 2 skipped, 37 deselected**. The omitted selector
+  module failed collection only because
+  `data/gdpval-local/data/train-00000-of-00001.parquet` is not present.
+- Static diagnostics found no errors in the seven changed Python files.
+- `git diff --check` passed.
 
 ## Remaining Work
 
-- External grades for exp026 remain pending, so the published columns preserve
-  their explicit Self-QA and pre-grading caveats.
-- To use the supplied example as a real hero, place a reviewed MP4/WebM under
-  `public/media/notes/` and point the article's `hero.src` at that static path;
-  GitHub Pages can serve and play the file.
-- Existing unrelated build warnings remain: exp002 report fetch returns HF 401,
-  and the main dashboard chunk is above Vite's 500 kB advisory threshold.
+- Merge the canary hardening and artifact reverts, then rerun the exact same
+  one-task canary once from the resulting `main`.
+- Require successful main verdicts, exactly one render and perception call,
+  complete main/perception usage, valid relative-path provenance, and effective
+  cost below USD 1.
+- Do not expand to a full grading run from this canary.

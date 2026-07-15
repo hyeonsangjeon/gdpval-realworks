@@ -12,6 +12,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Grading canary runtime fail-closed guards** — revert the invalid grade and
+  analysis produced by run 29424766879 after 35 Azure requests rejected a
+  106-character `prompt_cache_key` and the single vision response failed its
+  semantic envelope. Tool-calling cache identities are now deterministically
+  bounded to Azure's 64-character limit, while the vision prompt states the
+  exact score/confidence/string contract and logs only safe validation reasons.
+  Track 2 persists a schema-valid diagnostic but exits nonzero after an actual
+  main/perception/render runtime failure or incomplete usage, excludes error
+  tasks from score summaries, and rejects failed cache/resume artifacts before
+  grader construction. Call-free selection and missing-deliverable diagnostics
+  retain their existing behavior.
 - **Grade downloader direct-entry import** — make
   `scripts/download_inference_from_hf.py` bootstrap the batch-runner root and
   lightweight `core.inference_manifest` package when executed as a file.
