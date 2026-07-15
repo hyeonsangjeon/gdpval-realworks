@@ -412,6 +412,7 @@ class ToolCallingJudge:
             raise ValueError("model_read_ops must contain at least one operation")
         if self.finalization_retries < 0:
             raise ValueError("finalization_retries must be non-negative")
+        self.finalization_retries = min(self.finalization_retries, 1)
         invalid_ops = set(self.model_read_ops) - set(MODEL_READ_DELIVERABLE_OPS)
         if invalid_ops:
             raise ValueError(
@@ -633,6 +634,14 @@ class ToolCallingJudge:
                             if self._item_type(o) == "message"]
 
             if function_calls:
+                if finalization_only:
+                    judge_error = "unexpected_tool_call_during_finalization"
+                    logger.warning(
+                        "ToolCallingJudge rejected tool call during finalization "
+                        "for %s",
+                        item.rubric_item_id,
+                    )
+                    break
                 # Preserve all assistant output items (including reasoning)
                 # in original order, then append function outputs.
                 messages.extend(
