@@ -17,6 +17,10 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        'journal-sans': ['"Noto Sans KR"', '"Apple SD Gothic Neo"', '"Malgun Gothic"', 'sans-serif'],
+        'journal-serif': ['"Gowun Batang"', '"AppleMyungjo"', '"Nanum Myeongjo"', 'Batang', 'serif'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

@@ -59,6 +59,7 @@ A React dashboard that visualizes LLM experiment results on **220 real-world exp
 | **Grading Analysis** | Grading Analysis | External evaluation scores (OpenAI Evals integration) |
 | **Experiment Detail** | /experiment/:id | 220-task table, sector/status filters, QA distribution, resume rounds |
 | **Prompt Architecture** | /experiment/:id | System → User Prompt → QA → Config accordion viewer |
+| **RealWorks Field Notes** | /notes | Responsive SVG/video heroes, evidence-caveated charts, question tracks, timeline events, and task reviews |
 | **Dark / Light Theme** | global | Toggle in header |
 
 ---

@@ -59,6 +59,7 @@
 | **채점 분석** | Grading Analysis | 외부 평가 점수 (OpenAI Evals 연동) |
 | **실험 상세** | /experiment/:id | 220-태스크 테이블, 섹터/상태 필터, QA 분포, 재시도 라운드 |
 | **프롬프트 아키텍처** | /experiment/:id | System → User Prompt → QA → Config 아코디언 뷰어 |
+| **RealWorks Field Notes** | /notes | 반응형 SVG/비디오 히어로, 근거·주의가 포함된 차트, 질문 트랙, 타임라인, 작업 해부 |
 | **다크/라이트 테마** | 전역 | 헤더에서 토글 |
 
 ---

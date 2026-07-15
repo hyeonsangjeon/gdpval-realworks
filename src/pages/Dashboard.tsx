@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Github, Eye, EyeOff, BarChart3, TrendingUp, AlertTriangle, Award, Sun, Moon, HelpCircle } from 'lucide-react'
+import { Github, Eye, EyeOff, BarChart3, TrendingUp, AlertTriangle, Award, Sun, Moon, HelpCircle, BookOpen } from 'lucide-react'
 import ScopeBadge from '../components/ScopeBadge'
 import LeaderboardView from '../components/dashboard/LeaderboardView'
 import TrendView from '../components/dashboard/TrendView'
@@ -123,6 +123,14 @@ export default function Dashboard() {
             {displayReports.length > 0 && <ScopeBadge scope={displayReports[0].meta.report_scope} />}
           </div>
           <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
+            <button
+              onClick={() => navigate('/notes')}
+              className="inline-flex items-center justify-center md:justify-start gap-1.5 w-8 h-8 md:w-auto md:h-9 md:px-3 rounded-lg border border-dash-border bg-dash-card hover:bg-dash-card-hover text-dash-text-secondary hover:text-dash-heading transition-colors"
+              title="RealWorks Field Notes"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span className="text-xs hidden lg:inline">Notes</span>
+            </button>
             {/* About / Help */}
             <button
               onClick={() => setAboutOpen(true)}

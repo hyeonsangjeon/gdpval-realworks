@@ -200,9 +200,10 @@ execution:
 |---|---|---|
 | **`code_interpreter`** | LLM이 Azure/OpenAI **보안 샌드박스** 안에서 코드를 작성하고 실행. 파일이 클라우드에서 생성됨. | ✅ 프로덕션 — 안전하고 강력 |
 | **`subprocess`** | LLM이 코드 생성 → 로컬 격리 임시 디렉토리에서 실행. | OpenAI 외 모델 (Anthropic 등) |
+| **`sandbox`** | 작업별 의존성 탐색, 문서·이미지·데이터·오디오·비디오 Agent Skills, audio/video perception을 격리 실행 경로에 결합. | 멀티모달·재현 가능한 실무 태스크 |
 | **`json_renderer`** | LLM이 JSON 스펙 출력 → **고정 렌더러**가 파일 생성. 모든 모델에 동일한 렌더러 사용. | 모델 간 공정한 A/B 비교 |
 
-> 🐳 `subprocess` 모드는 **컨테이너 기반** 실행으로 진화 예정입니다 — 시간이 허락한다면... 그리고 커피가 바닥나지 않는다면.
+> 🐳 `sandbox`는 `subprocess`에서 드러난 실행 환경의 한계를 분리·관찰하기 위한 후속 실행 모드입니다. 공개 결과는 [exp026 상세](https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp026)에서 확인할 수 있습니다.
 
 ---
 
@@ -253,7 +254,7 @@ Self-QA는 각 산출물을 루브릭 기반 자기평가로 0~10점 척도에�
 
 > **[→ 라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)**
 
-인터랙티브 실험 분석 — 리더보드, 섹터 히트맵, 에러 분석, 프롬프트 아키텍처 뷰어.
+인터랙티브 실험 분석 — 리더보드, 섹터 히트맵, 에러 분석, 프롬프트 아키텍처 뷰어, 근거가 연결된 RealWorks 독립 기록.
 
 | 기능 | 설명 |
 |------|------|
@@ -264,6 +265,7 @@ Self-QA는 각 산출물을 루브릭 기반 자기평가로 0~10점 척도에�
 | **프롬프트 뷰어** | LLM에 전달된 프롬프트 구조 확인 — system, user, QA, config |
 | **채점 분석** | 외부 평가 점수 (OpenAI Evals) |
 | **실험 상세** | 220개 태스크 드릴다운 — 섹터, 상태 필터, 검색 |
+| **RealWorks Field Notes** | 반응형 히어로 장면, 근거·주의가 포함된 비교 차트, 실패·의사결정의 독립 기록 |
 
 React 18 + TypeScript + Vite + Tailwind + Recharts + Framer Motion으로 구축.  
 `main` 브랜치 푸시 시 GitHub Pages에 자동 배포됩니다.

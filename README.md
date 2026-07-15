@@ -258,7 +258,7 @@ Self-QA checks: Are all requirements met? Are files actually produced? Is the ou
 
 > **[→ Live Dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/)**
 
-Interactive experiment analytics — leaderboard, sector heatmaps, error analysis, prompt architecture viewer.
+Interactive experiment analytics — leaderboard, sector heatmaps, error analysis, prompt architecture viewer, and evidence-linked RealWorks field notes.
 
 | Feature | Description |
 |---------|-------------|
@@ -269,6 +269,7 @@ Interactive experiment analytics — leaderboard, sector heatmaps, error analysi
 | **Prompt Viewer** | See exactly what prompt was sent to the LLM — system, user, QA, config |
 | **Grading** | External evaluation scores (OpenAI Evals) |
 | **Experiment Detail** | Drill into 220 tasks — filter by sector, status, search |
+| **RealWorks Field Notes** | Independent reviews with responsive hero scenes, evidence-caveated comparison charts, and a chronological decision record |
 
 Built with React 18 + TypeScript + Vite + Tailwind + Recharts + Framer Motion.  
 Deployed automatically to GitHub Pages on every push to `main`.

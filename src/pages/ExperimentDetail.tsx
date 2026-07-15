@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, CheckCircle2, XCircle, RefreshCw,
-  X, Search, Sun, Moon, Code2, ChevronDown, ChevronRight, Timer,
+  X, Search, Sun, Moon, Code2, ChevronDown, ChevronRight,
+  Timer, BookOpen, ArrowRight,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -19,6 +20,7 @@ import { useGrades, GradeResult } from '../hooks/useGrades'
 import PromptArchitectureView from '../components/dashboard/PromptArchitectureView'
 import type { TaskResult } from '../types/report'
 import type { ReportMeta } from '../types/report'
+import { getJournalLinksForExperiment, lensLabels } from '../data/journalLinks'
 
 // ── Color helpers ──
 function rateColor(rate: number) {
@@ -93,6 +95,7 @@ function ExperimentDetail() {
   // ── Derived data ──
   const meta = report?.meta
   const summary = report?.summary
+  const relatedJournalArticles = getJournalLinksForExperiment(id)
   const resolvedScope = useMemo(() => resolveScope(meta, grades), [meta, grades])
   const sectors = useMemo(
     () => [...new Set(report?.task_results?.map((t) => t.sector) || [])].sort(),
@@ -222,6 +225,13 @@ function ExperimentDetail() {
             </a>
           )}
           <button
+            onClick={() => navigate('/notes')}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-dash-border bg-dash-card hover:bg-dash-card-hover text-dash-text-secondary hover:text-dash-heading transition-all"
+            title="RealWorks Field Notes"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+          </button>
+          <button
             onClick={toggleTheme}
             className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-dash-border bg-dash-card hover:bg-dash-card-hover text-dash-text-secondary hover:text-dash-heading transition-all"
             title={isDark ? '라이트 모드' : '다크 모드'}
@@ -298,6 +308,40 @@ function ExperimentDetail() {
               {report.narrative.overview}
             </p>
           </motion.div>
+        )}
+
+        {relatedJournalArticles.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.07 }}
+            className="bg-dash-card border border-dash-border rounded-xl overflow-hidden mb-6"
+          >
+            <div className="px-4 py-3 border-b border-dash-border flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-emerald-500" />
+                <h3 className="text-sm font-semibold text-dash-heading">Related Notes</h3>
+              </div>
+              <Link to="/notes" className="inline-flex items-center gap-1 text-[10px] text-dash-text-muted hover:text-emerald-500 transition-colors">
+                모든 기록 <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="grid md:grid-cols-2">
+              {relatedJournalArticles.map((article, index) => (
+                <Link
+                  key={article.slug}
+                  to={`/notes/${article.slug}`}
+                  className={`group px-4 py-4 hover:bg-dash-card-hover transition-colors ${index % 2 === 0 ? 'md:border-r md:border-dash-border' : ''} ${index >= 2 ? 'border-t border-dash-border' : index === 1 ? 'border-t md:border-t-0 border-dash-border' : ''}`}
+                >
+                  <div className="text-[10px] text-dash-text-muted mb-1.5">{lensLabels[article.lens]}</div>
+                  <div className="flex items-start justify-between gap-3">
+                    <h4 className="text-xs font-medium text-dash-heading leading-relaxed group-hover:text-emerald-500 transition-colors">{article.title}</h4>
+                    <ArrowRight className="w-3 h-3 text-dash-text-faint flex-shrink-0 mt-0.5" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </motion.section>
         )}
 
         {/* ── Key Metrics (Extended) ── */}

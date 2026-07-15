@@ -71,6 +71,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 - **`batch-runner/scripts/download_inference_from_hf.py`** — pass `HF_TOKEN` explicitly to `hf_hub_download()` (×2) and `snapshot_download()` via a new `_hf_token()` helper. The grade pipeline's "Download inference results from HF" step injects `HF_TOKEN` env, but `huggingface_hub` auto-pickup did not fire, so requests went out **anonymous** (CI log: `unauthenticated requests to HF Hub`). Under the sequential grade relay this tripped HTTP **429 Too Many Requests** on the inference parquet, breaking a chunk mid-run (e.g. 5.4 220 re-grade chunk-2 resume). Authenticated requests have a much higher rate limit → relay no longer 429s on repeated chunk downloads. No behavior change for single runs.
 
 ### Added
+- **RealWorks Field Notes** — add lazy-loaded `/notes` and `/notes/:slug`
+  routes with nine question-led experiment groups, a nine-event chronology,
+  and five evidence-linked Korean columns spanning CI/runtime constraints,
+  silent-corruption measurement changes, multimodal perception, task-level
+  output review, and the subprocess-to-sandbox decision. The dashboard and
+  experiment detail pages now link into the notes, while articles link back to
+  available experiment details and source evidence. Legacy `/journal` links
+  redirect to the canonical `/notes` paths. The independent-project label,
+  Korean reading fonts, responsive editorial rhythm, accessible evidence
+  numbering, and explicit Self-QA boundaries distinguish these notes from the
+  official GDPVal paper and pending external grades. Each published note opens
+  with a story-specific responsive hero (animated inline SVG on desktop,
+  large-label summary on mobile) and an evidence-caveated Recharts comparison.
+  The same hero slot supports GitHub Pages static MP4/WebM assets with native
+  controls, `muted`/`loop`/`playsInline`, optional captions, BASE_URL-safe paths,
+  and reduced-motion-aware autoplay.
 - **Model-free grading renderer preflight** — add a manual, `main`-only Ubuntu
   24.04 workflow with read-only repository permission, commit-pinned actions,
   no credentials or model calls, exact LibreOffice/font checks, strict JSON
