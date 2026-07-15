@@ -68,10 +68,10 @@ from core.tools import (
 logger = logging.getLogger(__name__)
 
 _PROMPT_CACHE_KEY_MAX_CHARS = 64
-_EMPTY_FINAL_RETRY_PROMPT = (
-    "Your previous response contained no final verdict. Do not call any more "
+_FINALIZATION_RETRY_PROMPT = (
+    "Your previous response was missing or malformed. Do not call any more "
     "tools. Using the evidence already returned, respond now with only the "
-    "required JSON verdict envelope."
+    "required valid JSON verdict envelope."
 )
 
 
@@ -320,6 +320,22 @@ def _safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
             return None
 
 
+def _finalization_retry_reason(
+    final_text: str,
+    response: Any,
+    max_output_tokens: int,
+    output_tokens: int,
+) -> Optional[str]:
+    if not final_text.strip():
+        finish_reason = _response_finish_reason(
+            response, max_output_tokens, output_tokens
+        )
+        return f"empty_final_text:{finish_reason}"
+    if _safe_json_loads(final_text) is None:
+        return "final_json_parse_failed"
+    return None
+
+
 # ----------------------------------------------------------------------
 # Judge
 # ----------------------------------------------------------------------
@@ -347,8 +363,8 @@ class ToolCallingJudge:
         max_iterations:          hard upper bound on response.create
                                  iterations (one tool round = one
                                  iteration).
-        empty_final_retries:     bounded retries when a response contains no
-                     final message after tool evidence is ready.
+        finalization_retries:    bounded retries when a final response is
+                     missing or malformed after evidence is ready.
         vision_perception:       optional ``VisionPerception`` instance.
                      For VISUAL items the harness renders and
                      invokes it before the first main request;
@@ -376,7 +392,7 @@ class ToolCallingJudge:
     max_output_tokens: int = 2400
     per_item_tool_call_cap: int = 8
     max_iterations: int = 10
-    empty_final_retries: int = 1
+    finalization_retries: int = 1
     model_read_ops: Tuple[str, ...] = MODEL_READ_DELIVERABLE_OPS
     vision_perception: Any = None
     audio_perception: Any = None
@@ -394,8 +410,8 @@ class ToolCallingJudge:
     def __post_init__(self) -> None:
         if not self.model_read_ops:
             raise ValueError("model_read_ops must contain at least one operation")
-        if self.empty_final_retries < 0:
-            raise ValueError("empty_final_retries must be non-negative")
+        if self.finalization_retries < 0:
+            raise ValueError("finalization_retries must be non-negative")
         invalid_ops = set(self.model_read_ops) - set(MODEL_READ_DELIVERABLE_OPS)
         if invalid_ops:
             raise ValueError(
@@ -492,7 +508,7 @@ class ToolCallingJudge:
         final_text = ""
         judge_error: Optional[str] = None
         finalization_only = False
-        empty_final_retries_used = 0
+        finalization_retries_used = 0
 
         while iterations < self.max_iterations:
             iterations += 1
@@ -655,21 +671,22 @@ class ToolCallingJudge:
                 final_text = self._extract_text(messages_out[0])
             else:
                 final_text = getattr(response, "output_text", "") or ""
+            retry_reason = _finalization_retry_reason(
+                final_text,
+                response,
+                self.max_output_tokens,
+                response_output_tokens,
+            )
             if (
-                not final_text.strip()
-                and empty_final_retries_used < self.empty_final_retries
+                retry_reason is not None
+                and finalization_retries_used < self.finalization_retries
                 and iterations < self.max_iterations
             ):
-                finish_reason = _response_finish_reason(
-                    response,
-                    self.max_output_tokens,
-                    response_output_tokens,
-                )
                 logger.warning(
-                    "ToolCallingJudge empty final response for %s (%s); "
+                    "ToolCallingJudge invalid final response for %s (%s); "
                     "retrying finalization without tools",
                     item.rubric_item_id,
-                    finish_reason,
+                    retry_reason,
                 )
                 messages.extend(
                     self._serialize_output_item(output_item)
@@ -677,9 +694,9 @@ class ToolCallingJudge:
                 )
                 messages.append({
                     "role": "user",
-                    "content": _EMPTY_FINAL_RETRY_PROMPT,
+                    "content": _FINALIZATION_RETRY_PROMPT,
                 })
-                empty_final_retries_used += 1
+                finalization_retries_used += 1
                 finalization_only = True
                 continue
             break

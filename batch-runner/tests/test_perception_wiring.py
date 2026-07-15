@@ -153,7 +153,7 @@ def test_grader_wires_perception_subjudges(monkeypatch):
         raw_cache_key.encode("utf-8")
     ).hexdigest()
     assert len(tj.prompt_cache_key) == 64
-    assert tj.empty_final_retries == 1
+    assert tj.finalization_retries == 1
     assert grader.prompt_version == "v2.2"
 
 
