@@ -413,6 +413,130 @@ def test_malformed_final_retry_budget_exhaustion_stays_fail_closed(
     assert len(client.responses.calls) == 2
 
 
+def test_finalization_retry_setting_is_clamped_to_one(
+    deliverable_dir, task_and_item
+):
+    task, item = task_and_item
+    malformed = _response(output=[_final('{"verdict":"pass","partial_score":')])
+    unused_valid = _response(output=[_final(json.dumps({
+        "verdict": "pass",
+        "partial_score": 1.0,
+        "evidence": "unused",
+        "confidence": 0.9,
+        "reasoning": "unused",
+    }))])
+    scripted = ScriptedResponses([malformed, malformed, unused_valid])
+    judge = ToolCallingJudge(
+        client=FakeClient(scripted),
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=2,
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert judge.finalization_retries == 1
+    assert result.verdict == "judge_error"
+    assert result.judge_error == "final_json_parse_failed"
+    assert result.main_api_call_count == 2
+    assert len(scripted.calls) == 2
+    assert len(scripted.script) == 1
+
+
+def test_finalization_tool_call_is_rejected_without_dispatch(
+    deliverable_dir, task_and_item, monkeypatch, caplog
+):
+    task, item = task_and_item
+    malformed = _response(output=[_final('{"verdict":"pass","partial_score":')])
+    unexpected_tool_call = _response(output=[_fc(
+        "unexpected",
+        "read_deliverable",
+        op="inspect_structure",
+        path="report.xlsx",
+    )])
+    client = FakeClient(ScriptedResponses([malformed, unexpected_tool_call]))
+    monkeypatch.setattr(
+        tool_calling_judge_module,
+        "read_deliverable",
+        lambda *args, **kwargs: pytest.fail("finalization must not dispatch tools"),
+    )
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=1,
+    )
+
+    with caplog.at_level("WARNING", logger="core.tool_calling_judge"):
+        result = judge.judge_item(
+            task=task,
+            item=item,
+            deliverable_dir=str(deliverable_dir),
+            file_names=["report.xlsx"],
+        )
+
+    assert result.verdict == "judge_error"
+    assert result.judge_error == "unexpected_tool_call_during_finalization"
+    assert result.score_excluded is True
+    assert result.main_api_call_count == 2
+    assert result.tool_calls_made == 0
+    assert result.tools_used == []
+    assert "rejected tool call during finalization" in caplog.text
+
+
+def test_malformed_retry_accounts_latency_guard_and_missing_usage(
+    deliverable_dir, task_and_item, monkeypatch
+):
+    task, item = task_and_item
+    ticks = iter([1.0, 1.125, 2.0, 2.250])
+    monkeypatch.setattr(
+        tool_calling_judge_module.time, "perf_counter", lambda: next(ticks)
+    )
+    malformed = _response(
+        output=[_final('{"verdict":"pass","partial_score":')],
+        in_tok=41,
+        out_tok=6,
+        cached_tok=4,
+    )
+    final = _response(output=[_final(json.dumps({
+        "verdict": "pass",
+        "partial_score": 1.0,
+        "evidence": "recovered",
+        "confidence": 0.9,
+        "reasoning": "valid JSON",
+    }))])
+    final.usage = None
+    guarded = []
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([malformed, final])),
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=1,
+        before_upstream_call=lambda: guarded.append("main"),
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "pass"
+    assert guarded == ["main", "main"]
+    assert result.main_api_call_count == 2
+    assert result.latency_ms == 375.0
+    assert result.input_tokens == 41
+    assert result.output_tokens == 6
+    assert result.cached_tokens == 4
+    assert result.usage_complete is False
+
+
 # ── Tool-cap enforcement ────────────────────────────────────────────
 
 

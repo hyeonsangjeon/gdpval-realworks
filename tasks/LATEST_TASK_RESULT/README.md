@@ -4,69 +4,64 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-16
-- Status: Prompt-complexity Field Note published and production-verified
+- Status: Canary accepted; finalization guardrails validated; merge pending
 
 ## Task
 
-- Write the missing Field Note for the question "Did a more complex prompt
-  outperform the baseline?" using the exp001-exp005 experiment record.
-- Compare completion rate and Self-QA without conflating whole-run coverage,
-  surviving-result self-assessment, execution modes, or runner changes.
-- Give first-time readers a plain definition of Elicit and headless-Elicit,
-  then connect the note to the question track, chronology, and relevant
-  experiment pages.
+- Verify the post-PR83 one-task Azure Vision canary against the approved XLSX
+  scope without dispatching another paid run.
+- Bound finalization recovery to at most one retry even when configuration asks
+  for more.
+- Reject unexpected function calls during tool-free finalization and prove that
+  latency, TPM guards, tokens, cache usage, and incomplete usage remain exact.
 
 ## Result
 
-- Added `/notes/when-more-prompt-is-less` as the sixth RealWorks Field Note.
-  Its opening definition states that Elicit is not a separate model or service:
-  it is the GDPVal study's prompt strategy for making the model render, inspect,
-  and confidence-report its own deliverable in five steps. Headless-Elicit keeps
-  those five steps but changes STEP 2 from displaying PNGs to Pillow checks.
-- Restricted the quantitative comparison to the common subprocess surface:
-  exp003 completed 211/220 (95.9%) with 6.18 Self-QA, exp004 completed 200/220
-  (90.9%) with 5.87, and exp005 completed 199/220 (90.5%) with 6.16. The note
-  presents the divergence as lower coverage with a recovered average among
-  scored survivors, not as recovered end-to-end quality.
-- Excluded exp001 and exp002 from performance conclusions because their
-  canonical reports are unavailable. The article also identifies the
-  LibreOffice setting change in exp004 and resume-round change in exp005, so it
-  does not claim a causal prompt-only result.
-- Added a responsive prompt-complexity hero that shows the actual baseline,
-  five-step Elicit, and STEP 2 headless adaptation, plus a dual-axis
-  completion/Self-QA chart. The prompt-strategy question, first timeline event,
-  and exp003-exp005 Related Notes sections link to the article.
-- Squash-merged the reviewed change through PR #84 as `c9cb607`. Automatic
-  `Aggregate Tests & Deploy` run
-  [29437433192](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29437433192)
-  completed all 12 build and GitHub Pages deployment steps successfully.
-- Closed stale-base documentation PR #85 without merging after it displayed
-  unrelated privacy changes, then rebuilt this completion record from the
-  current `main` branch.
+- Post-PR83 run
+  [29435264166](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29435264166)
+  completed successfully on `1b1efd47` for the single approved exp003 task
+  `83d10b06-26d1-4636-a32c-23f92c57f30b`, pinned inference revision
+  `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`, `default_v2_mini.yaml`, and
+  `Sample.xlsx`.
+- All 38 item verdicts were valid: 17 pass, 18 fail, and 3 partial, with no
+  `judge_error` and no task error. The task received 31.9/63 (50.63%). A fail
+  verdict is a valid quality judgment here; it is distinct from runtime or
+  parser failure.
+- The visual acceptance path used exactly one render and one perception call.
+  Visual item `a64588ed-db04-4b8b-b3b8-3674ddcf10d1` routed to `visual`, set
+  `perception_called=true`, and retained relative provenance `Sample.xlsx`
+  without an absolute/traversal path or persisted image payload.
+- Usage accounting was complete: 127 main calls plus one perception call;
+  2,833,647 main input, 43,646 main output, 913,152 cached, 1,182 perception
+  input, and 176 perception output tokens. Analysis estimated USD 0.75 raw and
+  USD 0.64 cache-discounted, below the per-run USD 1 gate.
+- Grade commit `a7c76fa` and analysis commit `e0ea080` landed on `main`. Relay,
+  next-chunk, mini-full, and hybrid/mini comparison dispatches were skipped.
+- `ToolCallingJudge.finalization_retries` is now clamped to at most one while
+  preserving zero as disabled. This prevents larger `judge_max_retries` values
+  from silently increasing the finalization cost ceiling.
+- A function call returned during finalization now becomes
+  `unexpected_tool_call_during_finalization` without dispatching a file-read,
+  audio, vision, or other tool. The result remains score-excluded and
+  fail-closed.
+- Deterministic coverage proves both upstream guard invocations, summed latency,
+  input/output/cache totals, and `usage_complete=false` propagation when retry
+  usage is missing. No paid workflow was dispatched for this guardrail work.
 
 ## Verification
 
-- `npm run build` passed after the article, hero, chart, and Elicit-definition
-  changes; TypeScript and Vite reported no errors.
-- `npm run test:aggregate` passed all 24 tests, including three new contracts
-  for the article links and metrics, source five-step design, mobile x-axis
-  labels, and reduced-motion series configuration.
-- VS Code diagnostics reported no errors in the four changed TypeScript files.
-- Production-preview checks passed at 1280x900 and 390x844 in light and dark
-  themes with no runtime errors or horizontal overflow. The page rendered one
-  hero, three completion bars, one Self-QA line, all three mobile x-axis labels,
-  and seven evidence links including the GDPVal Appendix A.3 source.
-- Reduced-motion emulation removed the animated SVG node and retained the
-  static scan line; after layout settled, the chart produced zero further path
-  mutations for one second. The question-track link and all exp003-exp005
-  Related Notes links resolved to the new article.
-- The deployed `/notes` index returned HTTP 200 and linked to the production
-  article. The public article rendered the Elicit definition, Appendix A.3
-  source, actual five-step hero, three bars, one line, and all three mobile
-  x-axis labels with no runtime errors or horizontal overflow. Public
-  reduced-motion verification again observed zero post-settle chart mutations.
+- Focused clamp, tool-rejection, malformed recovery, accounting, and config
+  wiring tests: **6 passed** under the real Python 3.11 sandbox environment.
+- Affected tool-calling, wiring, selector, and Step 8 suite: **166 passed**.
+- Broader non-integration suite excluding only the unavailable local GDPVal
+  parquet fixture: **1,128 passed, 6 skipped, 37 deselected**. The omitted
+  selector module requires
+  `data/gdpval-local/data/train-00000-of-00001.parquet`.
+- Python compilation, static diagnostics, and `git diff --check` passed.
 
 ## Remaining Work
 
-- A controlled prompt-only rerun and external grading would still be required
-  before making a causal quality claim about Elicit versus baseline.
+- Merge the finalization guardrails; no additional canary is needed because run
+  29435264166 already passed every approved acceptance gate.
+- Do not expand this one-task canary into a full grading run without separate
+  scope and cost approval.
