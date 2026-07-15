@@ -27,11 +27,14 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import math
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 #: Hard per-task ceiling on vision sub-judge invocations.
 VISION_CALL_CAP = 5
@@ -75,11 +78,16 @@ _VISION_PROMPT_HEADER = (
     "You are a vision sub-judge for the GDPval grading pipeline. The "
     "image below is a rendered page/sheet from the LLM-under-test's "
     "deliverable. Grade ONE rubric criterion against what you SEE in "
-    "the image only. Return the same JSON envelope as the main judge: "
-    "{verdict, partial_score, evidence, confidence, reasoning}. The "
-    "evidence MUST describe a visible feature (e.g., 'x-axis labels "
-    "truncated', 'no chart title'); do not invent text not present in "
-    "the image. Keep evidence <= 200 chars. Return JSON only."
+    "the image only. Return exactly one JSON object with these keys: "
+    "verdict, partial_score, evidence, confidence, reasoning. verdict "
+    "must be one of the lowercase strings pass, partial, or fail. "
+    "partial_score must be 1.0 for pass, 0.0 for fail, or strictly "
+    "between 0.0 and 1.0 for partial. confidence must be a number from "
+    "0.0 through 1.0. evidence MUST describe a visible feature (for "
+    "example, 'x-axis labels truncated' or 'no chart title'); do not "
+    "invent text not present in the image. Keep evidence within 200 "
+    "characters and reasoning within 300 characters. Return JSON only, "
+    "without Markdown fences or extra text."
 )
 
 
@@ -106,7 +114,12 @@ def _validate_vision_envelope(text: str) -> Dict[str, Any]:
     if not isinstance(parsed, Mapping):
         raise InvalidVisionEnvelope("response must be a JSON object")
 
-    verdict = parsed.get("verdict")
+    verdict_raw = parsed.get("verdict")
+    verdict = (
+        verdict_raw.strip().lower()
+        if isinstance(verdict_raw, str)
+        else verdict_raw
+    )
     if verdict not in {"pass", "partial", "fail"}:
         raise InvalidVisionEnvelope("verdict must be pass, partial, or fail")
 
@@ -133,17 +146,17 @@ def _validate_vision_envelope(text: str) -> Dict[str, Any]:
 
     evidence = parsed.get("evidence")
     reasoning = parsed.get("reasoning")
-    if not isinstance(evidence, str) or not evidence.strip() or len(evidence) > 200:
-        raise InvalidVisionEnvelope("evidence must be a non-empty string <= 200 chars")
-    if not isinstance(reasoning, str) or not reasoning.strip() or len(reasoning) > 300:
-        raise InvalidVisionEnvelope("reasoning must be a non-empty string <= 300 chars")
+    if not isinstance(evidence, str) or not evidence.strip():
+        raise InvalidVisionEnvelope("evidence must be a non-empty string")
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        raise InvalidVisionEnvelope("reasoning must be a non-empty string")
 
     return {
         "verdict": verdict,
         "partial_score": partial,
-        "evidence": evidence.strip(),
+        "evidence": evidence.strip()[:200],
         "confidence": confidence,
-        "reasoning": reasoning.strip(),
+        "reasoning": reasoning.strip()[:300],
     }
 
 
@@ -285,6 +298,7 @@ class VisionPerception:
                 usage_complete=usage_complete,
             )
         except InvalidVisionEnvelope as exc:
+            logger.warning("Vision response failed envelope validation: %s", exc)
             latency_ms = (
                 (time.perf_counter() - call_started) * 1000.0
                 if call_started else 0.0

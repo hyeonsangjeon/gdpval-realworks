@@ -532,6 +532,17 @@ def _validate_track2_task_set(
         raise ValueError(f"existing grade contains unexpected task_ids: {extra}")
     if require_complete and missing:
         raise ValueError(f"existing grade is incomplete; missing task_ids: {missing}")
+    runtime_errors = [
+        (task["task_id"], error)
+        for task in existing["tasks"]
+        if (error := _track2_task_runtime_error(task)) is not None
+    ]
+    if runtime_errors:
+        raise ValueError(
+            f"existing grade contains runtime failures: {runtime_errors}"
+        )
+    if existing["summary"]["cost"].get("usage_complete") is not True:
+        raise ValueError("existing grade has incomplete aggregate usage")
     return existing_set
 
 
@@ -581,6 +592,44 @@ def filter_tasks(inference_results: dict, tasks_csv: str | None, limit: int) -> 
     return tasks
 
 
+def _track2_task_runtime_error(task: dict) -> str | None:
+    existing_error = task.get("error")
+    if existing_error and existing_error not in {
+        "no_deliverables",
+        "selection_error",
+    }:
+        return str(existing_error)
+
+    items = task.get("items")
+    if not isinstance(items, list):
+        return "invalid_items"
+    for item in items:
+        if not isinstance(item, dict):
+            return "invalid_item"
+        if item.get("verdict") != "judge_error":
+            continue
+        call_count = sum(
+            int(item.get(field, 0) or 0)
+            for field in (
+                "judge_call_count",
+                "perception_call_count",
+                "render_call_count",
+            )
+        )
+        evidence = str(item.get("evidence") or "")
+        if call_count > 0 or evidence.startswith((
+            "required_visual_",
+            "task_visual_budget_exceeded",
+        )):
+            return "judge_error"
+
+    if task.get("usage_complete") is not True:
+        return "usage_incomplete"
+    if any(item.get("usage_complete") is not True for item in items):
+        return "usage_incomplete"
+    return None
+
+
 def resolve_deliverable_dir(task_result: dict) -> str:
     task_id = canonical_task_id(task_result.get("task_id"))
     return str(Path(os.path.abspath(
@@ -588,6 +637,17 @@ def resolve_deliverable_dir(task_result: dict) -> str:
     )))
 
 
+    runtime_errors = [
+        (task["task_id"], error)
+        for task in existing["tasks"]
+        if (error := _track2_task_runtime_error(task)) is not None
+    ]
+    if runtime_errors:
+        raise ValueError(
+            f"existing grade contains runtime failures: {runtime_errors}"
+        )
+    if existing["summary"]["cost"].get("usage_complete") is not True:
+        raise ValueError("existing grade has incomplete aggregate usage")
 def _judge_slug(model: str) -> str:
     return model.replace(".", "_")
 
@@ -639,14 +699,15 @@ def _task_to_dict(task_grade) -> dict:
 
 def _compute_summary(task_dicts: list[dict]) -> dict:
     total = len(task_dicts)
-    graded_tasks = sum(1 for t in task_dicts if not t.get("error"))
+    scored_tasks = [task for task in task_dicts if not task.get("error")]
+    graded_tasks = len(scored_tasks)
     error_tasks = total - graded_tasks
-    pcts = [float(t["pct"]) for t in task_dicts]
+    pcts = [float(task["pct"]) for task in scored_tasks]
     avg_pct = (sum(pcts) / len(pcts)) if pcts else 0.0
 
     perfect = sum(1 for x in pcts if x >= 99.0)
     zero = sum(1 for x in pcts if x <= 1.0)
-    partial = total - perfect - zero
+    partial = graded_tasks - perfect - zero
 
     pre_items = 0
     pre_pass = 0
@@ -1112,6 +1173,7 @@ def main() -> int:
     grade_loop_start = time.monotonic()
     GRADE_EXIT_RESUME = 7  # contract with grade-run.yml's auto-trigger step
     GRADE_EXIT_PERSISTENCE_FAILURE = 5
+    GRADE_EXIT_RUNTIME_FAILURE = 6
 
     for idx, task_result in enumerate(tasks, start=1):
         # Resume skip
@@ -1170,12 +1232,53 @@ def main() -> int:
         deliverable_dir = resolve_deliverable_dir(task_result)
         grade = grader.grade_task(task, deliverable_dir)
         row = _task_to_dict(grade)
+        runtime_error = None
+        if config.get("schema_version") == "2.0":
+            runtime_error = _track2_task_runtime_error(row)
+            if runtime_error is not None and not row.get("error"):
+                row["error"] = runtime_error
         task_payloads.append(row)
 
         print(
             f"[{idx}/{len(tasks)}] {task.task_id[:8]} -> {grade.pct:.1f}% "
             f"({grade.total_awarded:.1f}/{grade.total_max})"
         )
+
+        if runtime_error is not None:
+            try:
+                diagnostic = _build_grade_payload(
+                    args.experiment_yaml_name,
+                    inf_results,
+                    config,
+                    config_hash,
+                    loader,
+                    grader.prompt_version,
+                    task_payloads,
+                    grader_source_hash,
+                    inference_repo_id,
+                    inference_revision,
+                    exp_config=exp_config,
+                    source_experiment_id=args.source_experiment_id,
+                    renderer_fingerprint=renderer_fingerprint,
+                )
+                _validate_schema(diagnostic)
+                _save_json(out_path, diagnostic)
+                persisted = _load_existing_grade(out_path)
+                _validate_schema(persisted)
+                if persisted != diagnostic:
+                    raise ValueError("persisted diagnostic does not match payload")
+            except Exception as save_exc:
+                print(
+                    f"ERROR: Track 2 runtime diagnostic save failed: {save_exc}",
+                    file=sys.stderr,
+                )
+                return GRADE_EXIT_PERSISTENCE_FAILURE
+            print(
+                "ERROR: Track 2 grading stopped after runtime failure "
+                f"for {task.task_id}: {runtime_error}",
+                file=sys.stderr,
+            )
+            return GRADE_EXIT_RUNTIME_FAILURE
 
         if partial_every > 0 and idx % partial_every == 0:
             try:

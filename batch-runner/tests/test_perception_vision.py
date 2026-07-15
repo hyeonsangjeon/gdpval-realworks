@@ -105,8 +105,31 @@ def test_request_shape_includes_image_and_model():
     content = sent["input"][0]["content"]
     kinds = {block["type"] for block in content}
     assert {"input_text", "input_image"}.issubset(kinds)
+    prompt = next(b["text"] for b in content if b["type"] == "input_text")
+    assert "partial_score must be 1.0 for pass" in prompt
+    assert "confidence must be a number from 0.0 through 1.0" in prompt
+    assert "reasoning within 300 characters" in prompt
     image_block = next(b for b in content if b["type"] == "input_image")
     assert image_block["image_url"].startswith("data:image/png;base64,")
+
+
+def test_semantic_strings_are_normalized_and_bounded():
+    payload = {
+        "verdict": " PASS ",
+        "partial_score": 1.0,
+        "evidence": "e" * 220,
+        "confidence": 0.9,
+        "reasoning": "r" * 350,
+    }
+    client = FakeClient(FakeResponses(text=json.dumps(payload)))
+
+    verdict = VisionPerception(client=client).judge(
+        criterion="chart", image_b64=_png_b64()
+    )
+
+    assert verdict.verdict == "pass"
+    assert len(verdict.evidence) == 200
+    assert len(verdict.reasoning) == 300
 
 
 def test_call_cap_short_circuits_after_limit():
@@ -189,6 +212,26 @@ def test_invalid_semantic_envelope_is_fail_closed(payload):
     assert verdict.api_call_count == 1
     assert verdict.input_tokens == 123
     assert verdict.output_tokens == 17
+
+
+def test_invalid_semantic_envelope_logs_only_validation_reason(caplog):
+    payload = {
+        "verdict": "pass",
+        "partial_score": 0.5,
+        "evidence": "visible issue",
+        "confidence": 0.5,
+        "reasoning": "private model text",
+    }
+    client = FakeClient(FakeResponses(text=json.dumps(payload)))
+
+    with caplog.at_level("WARNING", logger="core.perception.vision"):
+        verdict = VisionPerception(client=client).judge(
+            criterion="chart", image_b64=_png_b64()
+        )
+
+    assert verdict.judge_error == "invalid_vision_envelope"
+    assert "verdict and partial_score are inconsistent" in caplog.text
+    assert "private model text" not in caplog.text
 
 
 def test_reset_clears_counter_and_cache():
