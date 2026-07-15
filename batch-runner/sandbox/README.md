@@ -119,6 +119,8 @@ touching Python).
 ```yaml
 execution:
   mode: sandbox
+  metrics:
+    enabled: true                 # opt-in; omitted means no metrics keys
   sandbox:
     image: gdpval-sandbox:latest   # or your custom tag
     use_docker: auto               # auto | never | always
@@ -147,6 +149,26 @@ execution:
 
 The same `SANDBOX_IMAGE` env var read by `build.sh` is also the default image
 the runner looks for, so they stay in sync.
+
+## Job performance metrics
+
+Job metrics are opt-in through `execution.metrics.enabled`. Configs that omit
+the block keep the legacy prepared-task, manifest, result, and dashboard JSON
+shapes; no `metrics: null` or empty report block is emitted.
+
+Enabled runs record a bounded `observability.execution_metrics` object per
+task. It includes total wall time across generation and Self-QA retries, model,
+tool, verification, dependency, Self-QA, and orchestration time, plus execution,
+sandbox, tool-call, Self-QA-call, and resumed job-run counts. Resume rounds add
+to the same task lifetime instead of replacing earlier timing evidence.
+
+`time_to_valid_artifact_ms` is set only after a task saves a file and, for the
+sandbox backend, deterministic verification reports `ok` or `repaired_ok`.
+Text-only tasks and tasks that never produce a verified file keep it `null`.
+Step 6 emits the top-level `execution_metrics` aggregate only when at least one
+task has measured data. The dashboard then shows average/P50/P95 job time,
+successful and failed job averages, time to valid file, phase totals, and call
+counts; reports from earlier experiments render unchanged.
 
 ## Security posture
 

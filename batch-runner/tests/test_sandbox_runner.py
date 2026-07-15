@@ -221,7 +221,11 @@ def test_run_end_to_end_local_fallback():
         "print('finished')\n"
         "```\n"
     )
-    runner = SandboxRunner(llm_client=object(), use_docker="never")
+    runner = SandboxRunner(
+        llm_client=object(),
+        use_docker="never",
+        metrics={"enabled": True},
+    )
     with _patch_complete(code_block):
         result = runner.run(
             task_prompt="Write the word done to a file",
@@ -239,6 +243,47 @@ def test_run_end_to_end_local_fallback():
     assert meta["image"] is None
     assert "skills" in meta
     assert "dependencies" in meta
+    metrics = result["execution_metrics"]
+    assert metrics["schema_version"] == "1.0"
+    assert metrics["task_wall_time_ms"] >= metrics["tool_time_ms"] >= 0
+    assert metrics["model_time_ms"] >= 0
+    assert metrics["verification_time_ms"] >= 0
+    assert metrics["dependency_time_ms"] >= 0
+    assert metrics["attempt_count"] == 1
+    assert metrics["tool_call_count"] == 1
+
+
+def test_run_omits_execution_metrics_by_default():
+    code_block = "```python\nprint('finished')\n```"
+    runner = SandboxRunner(llm_client=object(), use_docker="never")
+    with _patch_complete(code_block):
+        result = runner.run(
+            task_prompt="Print a completion message",
+            model="fake-model",
+            reference_files=[],
+        )
+
+    assert result["success"] is True
+    assert "execution_metrics" not in result
+    assert "phase_times_ms" not in result["sandbox_manifest"]["attempts"][0]
+    assert "tool_call_count" not in result["sandbox_manifest"]["attempts"][0]
+
+
+@pytest.mark.parametrize("metrics", [{}, {"enabled": False}, {"enabled": "false"}])
+def test_run_requires_literal_true_to_enable_execution_metrics(metrics):
+    runner = SandboxRunner(
+        llm_client=object(),
+        use_docker="never",
+        metrics=metrics,
+    )
+    with _patch_complete("```python\nprint('finished')\n```"):
+        result = runner.run(
+            task_prompt="Print a completion message",
+            model="fake-model",
+            reference_files=[],
+        )
+
+    assert "execution_metrics" not in result
 
 
 def test_run_no_code_returns_failure():

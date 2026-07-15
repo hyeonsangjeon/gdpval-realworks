@@ -44,6 +44,12 @@ from core.config import (
 )
 from core.data_loader import GDPValTask
 from core.executor import TaskExecutor
+from core.execution_metrics import (
+    add_counts,
+    add_durations_ms,
+    bounded_count,
+    bounded_duration_ms,
+)
 from core.file_preview import generate_all_previews
 from core.llm_client import create_client, create_provider_client, complete
 from core.needs_files import NeedsFilesManifest
@@ -65,6 +71,23 @@ EXIT_CHECKPOINT = 42  # checkpoint saved, relay retrigger needed
 
 # Cache of models that don't support temperature=0 (learned at runtime, reused in session)
 _MODELS_NO_TEMPERATURE: set = set()
+
+_METRIC_DURATION_FIELDS = (
+    "task_wall_time_ms",
+    "model_time_ms",
+    "tool_time_ms",
+    "verification_time_ms",
+    "dependency_time_ms",
+    "self_qa_time_ms",
+    "orchestration_time_ms",
+)
+_METRIC_COUNT_FIELDS = (
+    "execution_attempt_count",
+    "sandbox_attempt_count",
+    "tool_call_count",
+    "self_qa_call_count",
+    "job_run_count",
+)
 
 
 # ── Preprocessor helper ───────────────────────────────────────────────────
@@ -236,6 +259,11 @@ def _build_execution_observability(
 ) -> dict:
     """Build compact task provenance without duplicating heavy QA reports."""
     observability = {"preprocessors": preprocessor_observations}
+    execution_metrics = _bounded_execution_metrics(
+        (result or {}).get("execution_metrics")
+    )
+    if execution_metrics:
+        observability["execution_metrics"] = execution_metrics
     manifest = (result or {}).get("sandbox_manifest") or {}
     if manifest:
         attempts = []
@@ -283,6 +311,91 @@ def _build_execution_observability(
             "final_status": manifest.get("final_status"),
         }
     return observability
+
+
+def _bounded_execution_metrics(raw: Optional[dict]) -> Optional[dict]:
+    """Keep only finite, non-negative execution metrics and stable counters."""
+    if not isinstance(raw, dict):
+        return None
+
+    bounded = {"schema_version": "1.0"}
+    for key in (*_METRIC_DURATION_FIELDS, "time_to_valid_artifact_ms"):
+        value = raw.get(key)
+        if value is None and key == "time_to_valid_artifact_ms":
+            bounded[key] = None
+            continue
+        parsed = bounded_duration_ms(value)
+        if parsed is not None:
+            bounded[key] = parsed
+
+    for key in (*_METRIC_COUNT_FIELDS, "attempt_count"):
+        parsed = bounded_count(raw.get(key))
+        if parsed is not None:
+            bounded[key] = parsed
+
+    validated_artifact_count = bounded_count(raw.get("validated_artifact_count"))
+    if validated_artifact_count is not None:
+        bounded["validated_artifact_count"] = validated_artifact_count
+
+    wall_time = bounded.get("task_wall_time_ms")
+    if wall_time is None:
+        return None
+    valid_time = bounded.get("time_to_valid_artifact_ms")
+    if valid_time is not None and valid_time > wall_time:
+        bounded["time_to_valid_artifact_ms"] = None
+
+    return bounded if len(bounded) > 1 else None
+
+
+def _merge_execution_metrics(previous: Optional[dict], current: Optional[dict]) -> Optional[dict]:
+    """Combine opt-in metrics when a resume round replaces an earlier result."""
+    previous = _bounded_execution_metrics(previous)
+    current = _bounded_execution_metrics(current)
+    if not previous:
+        return current
+    if not current:
+        return previous
+
+    merged = {
+        "schema_version": current.get("schema_version", previous["schema_version"]),
+    }
+    for key in _METRIC_DURATION_FIELDS:
+        combined = add_durations_ms(
+            previous.get(key, 0) or 0,
+            current.get(key, 0) or 0,
+        )
+        if combined is None:
+            return current
+        merged[key] = combined
+    for key in _METRIC_COUNT_FIELDS:
+        combined = add_counts(
+            previous.get(key, 0) or 0,
+            current.get(key, 0) or 0,
+        )
+        if combined is None:
+            return current
+        merged[key] = combined
+
+    merged["validated_artifact_count"] = max(
+        previous.get("validated_artifact_count", 0) or 0,
+        current.get("validated_artifact_count", 0) or 0,
+    )
+
+    previous_valid = previous.get("time_to_valid_artifact_ms")
+    current_valid = current.get("time_to_valid_artifact_ms")
+    if previous_valid is not None:
+        merged["time_to_valid_artifact_ms"] = previous_valid
+    elif current_valid is not None:
+        merged_valid = add_durations_ms(
+            previous.get("task_wall_time_ms", 0) or 0,
+            current_valid,
+        )
+        if merged_valid is None:
+            return current
+        merged["time_to_valid_artifact_ms"] = merged_valid
+    else:
+        merged["time_to_valid_artifact_ms"] = None
+    return _bounded_execution_metrics(merged) or current
 
 
 # ── JSON extraction helper ─────────────────────────────────────────────────
@@ -996,7 +1109,14 @@ def _save_progress(
 
     tmp_path = path.with_suffix(".json.tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+        json.dump(
+            data,
+            f,
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+            allow_nan=False,
+        )
     tmp_path.rename(path)
 
 
@@ -1022,6 +1142,11 @@ def _update_progress_result(progress: dict, new_result: dict) -> dict:
     replaced = False
     for r in progress.get("results", []):
         if r["task_id"] == new_result["task_id"]:
+            previous_metrics = (r.get("observability") or {}).get("execution_metrics")
+            current_metrics = (new_result.get("observability") or {}).get("execution_metrics")
+            merged_metrics = _merge_execution_metrics(previous_metrics, current_metrics)
+            if merged_metrics:
+                new_result.setdefault("observability", {})["execution_metrics"] = merged_metrics
             updated.append(new_result)
             replaced = True
         else:
@@ -1097,6 +1222,9 @@ def run_inference(
     }
     # Sandbox-mode settings (execution.sandbox block in the experiment YAML).
     sandbox_options = execution_cfg.get("sandbox", {}) or {}
+    metrics_cfg_raw = execution_cfg.get("metrics")
+    metrics_cfg = metrics_cfg_raw if isinstance(metrics_cfg_raw, dict) else {}
+    metrics_enabled = metrics_cfg.get("enabled") is True
 
     print(f"\n{'='*60}")
     print(f"🚀 Step 2: Run Inference")
@@ -1112,6 +1240,8 @@ def run_inference(
           f"qa={tokens_cfg['qa_check']}, render={tokens_cfg['json_render']}")
     if timeout:
         print(f"   Timeout:            {timeout}s (YAML override)")
+    if metrics_enabled:
+        print("   Job metrics:        enabled (optional execution_metrics v1.0)")
     reasoning_effort_display = condition.get("model", {}).get("reasoning_effort")
     if reasoning_effort_display:
         print(f"   Reasoning effort:   {reasoning_effort_display}")
@@ -1192,6 +1322,7 @@ def run_inference(
             mode=execution_mode, llm_client=client, tokens=tokens_cfg,
             timeout=timeout, reasoning_effort=reasoning_effort,
             sandbox_options=sandbox_options,
+            metrics_options=metrics_cfg,
         )
     except Exception as e:
         print(f"❌ Executor init failed for mode '{execution_mode}': {e}")
@@ -1232,6 +1363,20 @@ def run_inference(
         import tempfile
 
         task_id = task["task_id"]
+        job_started = time.perf_counter()
+        execution_attempt_count = 0
+        sandbox_attempt_count = 0
+        tool_call_count = 0
+        validated_artifact_count = 0
+        self_qa_call_count = 0
+        self_qa_time_ms = 0.0
+        phase_totals = {
+            "model_time_ms": 0.0,
+            "tool_time_ms": 0.0,
+            "verification_time_ms": 0.0,
+            "dependency_time_ms": 0.0,
+        }
+        time_to_valid_artifact_ms = None
         qa_attempts = 0
         last_qa_feedback = error_context
         reflection_history = []
@@ -1266,6 +1411,75 @@ def run_inference(
                 shutil.rmtree(backup_dir, ignore_errors=True)
                 backup_dir = None
 
+        def _record_execution_metrics(task_result: dict) -> None:
+            nonlocal execution_attempt_count, sandbox_attempt_count
+            nonlocal tool_call_count, validated_artifact_count
+            nonlocal time_to_valid_artifact_ms
+            execution_attempt_count += 1
+            raw = _bounded_execution_metrics(
+                (task_result.get("observability") or {}).get("execution_metrics")
+            ) or {}
+            sandbox_attempt_count += int(
+                raw.get("sandbox_attempt_count", raw.get("attempt_count", 0)) or 0
+            )
+            tool_call_count += int(raw.get("tool_call_count", 0) or 0)
+            validated_artifact_count = max(
+                validated_artifact_count,
+                int(raw.get("validated_artifact_count", 0) or 0),
+            )
+            for key in phase_totals:
+                phase_totals[key] += float(raw.get(key, 0) or 0)
+            sandbox_observability = (task_result.get("observability") or {}).get("sandbox")
+            sandbox_valid = (
+                isinstance(sandbox_observability, dict)
+                and sandbox_observability.get("final_status") in {"ok", "repaired_ok"}
+                and int(raw.get("validated_artifact_count", 0) or 0) > 0
+            )
+            if (
+                time_to_valid_artifact_ms is None
+                and task_result.get("status") == "success"
+                and task_result.get("deliverable_files")
+                and sandbox_valid
+            ):
+                time_to_valid_artifact_ms = round(
+                    (time.perf_counter() - job_started) * 1000,
+                    2,
+                )
+
+        def _attach_job_metrics(task_result: dict) -> dict:
+            if not metrics_enabled:
+                return task_result
+            task_wall_time_ms = round(
+                (time.perf_counter() - job_started) * 1000,
+                2,
+            )
+            measured_phase_time_ms = (
+                sum(phase_totals.values()) + self_qa_time_ms
+            )
+            metrics = {
+                "schema_version": "1.0",
+                "task_wall_time_ms": task_wall_time_ms,
+                "time_to_valid_artifact_ms": time_to_valid_artifact_ms,
+                **{key: round(value, 2) for key, value in phase_totals.items()},
+                "self_qa_time_ms": round(self_qa_time_ms, 2),
+                "orchestration_time_ms": round(
+                    max(0.0, task_wall_time_ms - measured_phase_time_ms),
+                    2,
+                ),
+                "execution_attempt_count": execution_attempt_count,
+                "sandbox_attempt_count": sandbox_attempt_count,
+                "tool_call_count": tool_call_count,
+                "self_qa_call_count": self_qa_call_count,
+                "job_run_count": 1,
+                "validated_artifact_count": validated_artifact_count,
+            }
+            bounded_metrics = _bounded_execution_metrics(metrics)
+            if bounded_metrics:
+                task_result.setdefault("observability", {})[
+                    "execution_metrics"
+                ] = bounded_metrics
+            return task_result
+
         try:
             while True:
                 if qa_attempts > 0:
@@ -1289,6 +1503,8 @@ def run_inference(
                     error_context=last_qa_feedback,
                     verbose=verbose,
                 )
+                if metrics_enabled:
+                    _record_execution_metrics(result)
 
                 # If execution failed, return best if available
                 if result["status"] != "success":
@@ -1298,13 +1514,14 @@ def run_inference(
                         print(f"\n      ⚠️  Re-execution failed, "
                               f"keeping best result (score={best_score})",
                               end=" ", flush=True)
-                        return best_result
+                        return _attach_job_metrics(best_result)
                     break
 
                 if not qa_enabled:
                     break
 
                 # Run Self-QA (파일이 workspace에 저장된 상태 → file_preview로 실제 내용 확인)
+                qa_started = time.perf_counter()
                 qa_result_info = _run_self_qa(
                     task, condition,
                     result.get("deliverable_text", ""),
@@ -1312,6 +1529,9 @@ def run_inference(
                     client,
                     qa_max_tokens=qa_max_tokens,
                 )
+                if metrics_enabled:
+                    self_qa_call_count += 1
+                    self_qa_time_ms += (time.perf_counter() - qa_started) * 1000
                 result["qa"] = qa_result_info
 
                 # Record this QA attempt in history
@@ -1407,12 +1627,12 @@ def run_inference(
             best_result["reflection_attempts"] = len(reflection_history)
             if len(reflection_history) > 0:
                 best_result["reflection_final_score"] = best_score
-            return best_result
+            return _attach_job_metrics(best_result)
         result["reflection_history"] = reflection_history
         result["reflection_attempts"] = len(reflection_history)
         if len(reflection_history) > 0 and result.get("status") == "success":
             result["reflection_final_score"] = best_score if best_score >= 0 else None
-        return result
+        return _attach_job_metrics(result)
 
     # ── Helper: print result status ──
 
@@ -1471,14 +1691,10 @@ def run_inference(
                 r["task_id"] for r in progress.get("results", [])
                 if r.get("status") == "pending"
             }
-            # Remove pending entries — they'll be re-executed below
-            progress["results"] = [
-                r for r in progress["results"] if r.get("status") != "pending"
-            ]
             remaining_tasks = [t for t in tasks if t["task_id"] in pending_task_ids]
 
             print(f"\n── Relay Run: {len(remaining_tasks)} pending tasks ──")
-            done_count = len(progress["results"])
+            done_count = len(progress["results"]) - pending_count
 
             for i, task in enumerate(remaining_tasks):
                 # ── Watchdog: wall-clock timeout check ──
@@ -1487,13 +1703,13 @@ def run_inference(
                     print(f"\n⏰ Wall timeout reached again ({wall_timeout}min). "
                           f"Saving checkpoint ({i} more completed, "
                           f"{len(still_remaining)} still pending)...")
-                    for rt in still_remaining:
-                        progress["results"].append({
-                            "task_id": rt["task_id"],
-                            "status": "pending",
-                            "error": "wall_timeout",
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        })
+                    pending_timestamp = datetime.now(timezone.utc).isoformat()
+                    still_remaining_ids = {rt["task_id"] for rt in still_remaining}
+                    for existing in progress["results"]:
+                        if existing["task_id"] in still_remaining_ids:
+                            existing["status"] = "pending"
+                            existing["error"] = "wall_timeout"
+                            existing["timestamp"] = pending_timestamp
                     _save_progress(
                         experiment_id, condition_name, execution_mode,
                         total, progress["results"], started_at, progress_path,
@@ -1507,7 +1723,7 @@ def run_inference(
                       end=" ", flush=True)
 
                 result = _run_task_with_qa(task)
-                progress["results"].append(result)
+                progress = _update_progress_result(progress, result)
                 _print_status(result)
 
                 if (i + 1) % 20 == 0:
@@ -1685,7 +1901,14 @@ def run_inference(
 
     output_path = WORKSPACE_DIR / "step2_inference_results.json"
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(final_output, f, indent=2, ensure_ascii=False, default=str)
+        json.dump(
+            final_output,
+            f,
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+            allow_nan=False,
+        )
 
     print(f"\n{'='*60}")
     print(f"✅ Step 2 complete: {output_path}")

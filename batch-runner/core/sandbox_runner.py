@@ -28,6 +28,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -46,6 +47,11 @@ from core.dependency_resolver import (
     resolve,
 )
 from core.execution_errors import classify_execution_error
+from core.execution_metrics import (
+    add_durations_ms,
+    bounded_count,
+    bounded_duration_ms,
+)
 
 from core.llm_client import complete
 from core.output_qa import run_output_qa
@@ -102,6 +108,11 @@ def _response_usage(response) -> Optional[dict]:
     if reasoning_tokens is not None:
         result["reasoning_tokens"] = reasoning_tokens
     return result
+
+
+def _numeric_metric(value) -> Optional[float]:
+    """Return a bounded timing value, otherwise ``None``."""
+    return bounded_duration_ms(value)
 
 
 def _github_run_context() -> dict:
@@ -289,6 +300,7 @@ class SandboxRunner:
         manifest: Optional[dict] = None,
         cache: Optional[dict] = None,
         contract: Optional[dict] = None,
+        metrics: Optional[dict] = None,
     ):
         self.llm_client = llm_client
         self.prompt_name = prompt_name
@@ -337,6 +349,9 @@ class SandboxRunner:
         }
         self.cache_cfg = {"enabled": False, **(cache or {})}
         self.contract_cfg = dict(contract or {})
+        self.metrics_enabled = (
+            isinstance(metrics, dict) and metrics.get("enabled") is True
+        )
         self._cache = build_cache(self.cache_cfg)
 
         self.registry = SkillsRegistry(skills_dir)
@@ -371,6 +386,7 @@ class SandboxRunner:
         sandbox owns its *placement* (the ``perception_analysis`` spec section),
         so step2 passes it through here instead of prepending it to the task.
         """
+        run_started = time.perf_counter()
         try:
             ref_files = reference_files or []
 
@@ -415,7 +431,14 @@ class SandboxRunner:
                     break
                 reflection = attempt["reflection_for_next"]
 
-            return self._finalize(best, attempts, skills, contract, ref_files)
+            finalized = self._finalize(best, attempts, skills, contract, ref_files)
+            if self.metrics_enabled:
+                task_wall_time_ms = bounded_duration_ms(
+                    (time.perf_counter() - run_started) * 1000,
+                )
+                if task_wall_time_ms is not None:
+                    finalized["execution_metrics"]["task_wall_time_ms"] = task_wall_time_ms
+            return finalized
 
         except Exception as e:  # pragma: no cover - defensive
             return {
@@ -439,11 +462,14 @@ class SandboxRunner:
         reflection: Optional[str],
         perception_text: Optional[str] = None,
     ) -> dict:
+        dependency_time_ms = 0.0
+        dependency_started = time.perf_counter()
         manifest = resolve(
             reference_files=ref_files,
             task_text=task_prompt,
             base_packages=self._base_packages,
         )
+        dependency_time_ms += (time.perf_counter() - dependency_started) * 1000
         augmented = self._augment_prompt(
             task_prompt, ref_files, skills, manifest, contract, reflection,
             perception_text=perception_text,
@@ -495,11 +521,12 @@ class SandboxRunner:
                     "status": "failed_execution",
                     "executor": "none",
                     "prompt_sha256": prompt_sha256,
-                    "llm_latency_ms": (
-                        round(float(llm_latency_ms), 2)
-                        if isinstance(llm_latency_ms, (int, float)) else None
-                    ),
+                    "llm_latency_ms": _numeric_metric(llm_latency_ms),
                     "usage": _response_usage(response),
+                    **self._attempt_metrics(
+                        llm_latency_ms=llm_latency_ms,
+                        dependency_time_ms=dependency_time_ms,
+                    ),
                     "blocking_error_count": 1,
                     "blocking_error_categories": ["no_code"],
                     "response": _text_fingerprint(response_text),
@@ -509,14 +536,18 @@ class SandboxRunner:
 
         deliverable_text = extract_description(response_text)
         # Re-resolve including the code's imports for a sharper missing-dep signal.
+        dependency_started = time.perf_counter()
         manifest = resolve(
             reference_files=ref_files,
             task_text=task_prompt,
             code=code,
             base_packages=self._base_packages,
         )
+        dependency_time_ms += (time.perf_counter() - dependency_started) * 1000
 
+        tool_started = time.perf_counter()
         executor_used, result = self._execute(code, ref_files, manifest)
+        tool_time_ms = (time.perf_counter() - tool_started) * 1000
         result["deliverable_text"] = deliverable_text
 
         preflight = result.get("preflight")
@@ -550,11 +581,14 @@ class SandboxRunner:
                     "executor": executor_used,
                     "prompt_sha256": prompt_sha256,
                     "code_sha256": _sha256_text(code),
-                    "llm_latency_ms": (
-                        round(float(llm_latency_ms), 2)
-                        if isinstance(llm_latency_ms, (int, float)) else None
-                    ),
+                    "llm_latency_ms": _numeric_metric(llm_latency_ms),
                     "usage": _response_usage(response),
+                    **self._attempt_metrics(
+                        llm_latency_ms=llm_latency_ms,
+                        tool_time_ms=tool_time_ms,
+                        dependency_time_ms=dependency_time_ms,
+                        tool_call_count=1,
+                    ),
                     "blocking_error_count": 1,
                     "blocking_error_categories": ["syntax_error"],
                     "generated_artifacts": [],
@@ -564,9 +598,11 @@ class SandboxRunner:
             }
 
         # Inspect the produced artifacts in an isolated workspace.
+        verification_started = time.perf_counter()
         analysis = self._analyze_output(
             result, ref_files, contract, task_prompt, executor_used, manifest
         )
+        verification_time_ms = (time.perf_counter() - verification_started) * 1000
 
         blocking = list(analysis["blocking_errors"])
         execution_error_category = (
@@ -604,11 +640,15 @@ class SandboxRunner:
                 "executor": executor_used,
                 "prompt_sha256": prompt_sha256,
                 "code_sha256": _sha256_text(code),
-                "llm_latency_ms": (
-                    round(float(llm_latency_ms), 2)
-                    if isinstance(llm_latency_ms, (int, float)) else None
-                ),
+                "llm_latency_ms": _numeric_metric(llm_latency_ms),
                 "usage": _response_usage(response),
+                **self._attempt_metrics(
+                    llm_latency_ms=llm_latency_ms,
+                    tool_time_ms=tool_time_ms,
+                    verification_time_ms=verification_time_ms,
+                    dependency_time_ms=dependency_time_ms,
+                    tool_call_count=1,
+                ),
                 "blocking_error_count": len(blocking),
                 "blocking_error_categories": _blocking_error_categories(blocking),
                 "generated_artifacts": analysis["artifact_names"],
@@ -754,6 +794,16 @@ class SandboxRunner:
         result["metadata"] = metadata
         result["final_status"] = final_status
         result["qa_ok"] = not best["blocking_errors"]
+        if self.metrics_enabled:
+            validated_artifact_count = (
+                len(best.get("artifacts") or [])
+                if final_status in {"ok", "repaired_ok"}
+                else 0
+            )
+            result["execution_metrics"] = self._aggregate_execution_metrics(
+                attempts,
+                validated_artifact_count=validated_artifact_count,
+            )
 
         manifest_doc = self._build_manifest(
             executor_used, skills, manifest, contract, attempts, best,
@@ -764,10 +814,74 @@ class SandboxRunner:
             files = list(result.get("files") or [])
             files.append({
                 "filename": self.manifest_cfg.get("filename", "manifest.json"),
-                "content": json.dumps(manifest_doc, indent=2, default=str).encode("utf-8"),
+                "content": json.dumps(
+                    manifest_doc,
+                    indent=2,
+                    default=str,
+                    allow_nan=False,
+                ).encode("utf-8"),
             })
             result["files"] = files
         return result
+
+    @staticmethod
+    def _aggregate_execution_metrics(
+        attempts: List[dict],
+        validated_artifact_count: int = 0,
+    ) -> dict:
+        """Aggregate bounded phase timings for a newly executed sandbox task."""
+        totals = {
+            "model_time_ms": 0.0,
+            "tool_time_ms": 0.0,
+            "verification_time_ms": 0.0,
+            "dependency_time_ms": 0.0,
+        }
+        for attempt in attempts:
+            phase_times = attempt.get("phase_times_ms") or {}
+            for output_key, phase_key in (
+                ("model_time_ms", "model"),
+                ("tool_time_ms", "tool"),
+                ("verification_time_ms", "verification"),
+                ("dependency_time_ms", "dependency"),
+            ):
+                value = _numeric_metric(phase_times.get(phase_key))
+                if value is not None:
+                    combined = add_durations_ms(totals[output_key], value)
+                    totals[output_key] = combined if combined is not None else totals[output_key]
+
+        attempt_count = bounded_count(len(attempts)) or 0
+        tool_call_count = bounded_count(sum(
+            int(attempt.get("tool_call_count") or 0) for attempt in attempts
+        )) or 0
+
+        return {
+            "schema_version": "1.0",
+            "task_wall_time_ms": 0.0,
+            **{key: round(value, 2) for key, value in totals.items()},
+            "attempt_count": attempt_count,
+            "tool_call_count": tool_call_count,
+            "validated_artifact_count": bounded_count(validated_artifact_count) or 0,
+        }
+
+    def _attempt_metrics(
+        self,
+        llm_latency_ms=None,
+        tool_time_ms: float = 0.0,
+        verification_time_ms: float = 0.0,
+        dependency_time_ms: float = 0.0,
+        tool_call_count: int = 0,
+    ) -> dict:
+        if not self.metrics_enabled:
+            return {}
+        return {
+            "phase_times_ms": {
+                "model": _numeric_metric(llm_latency_ms),
+                "tool": round(tool_time_ms, 2),
+                "verification": round(verification_time_ms, 2),
+                "dependency": round(dependency_time_ms, 2),
+            },
+            "tool_call_count": tool_call_count,
+        }
 
     def _build_manifest(
         self, executor_used, skills, manifest, contract, attempts, best,

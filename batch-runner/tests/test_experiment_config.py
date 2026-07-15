@@ -204,6 +204,33 @@ class TestExperimentConfigFromDict:
         assert config.execution.tokens["code_generation"] == 12000
         assert config.execution.tokens["qa_check"] == 3000
         assert config.execution.tokens["json_render"] == 7000
+        assert config.execution.metrics is None
+        assert "metrics" not in config.to_dict()["execution"]
+
+    def test_from_dict_execution_metrics_opt_in(self, sample_config_dict):
+        sample_config_dict["execution"]["metrics"] = {
+            "enabled": True,
+            "raw_output": "must-not-survive",
+        }
+
+        config = ExperimentConfig.from_dict(sample_config_dict)
+
+        assert config.execution.metrics == {"enabled": True}
+        assert config.to_dict()["execution"]["metrics"] == {"enabled": True}
+
+    @pytest.mark.parametrize(
+        "metrics",
+        [{}, {"enabled": False}, {"enabled": "false"}, {"enabled": 1}, []],
+    )
+    def test_from_dict_execution_metrics_requires_literal_true(
+        self, sample_config_dict, metrics
+    ):
+        sample_config_dict["execution"]["metrics"] = metrics
+
+        config = ExperimentConfig.from_dict(sample_config_dict)
+
+        assert config.execution.metrics is None
+        assert "metrics" not in config.to_dict()["execution"]
 
 
 class TestExperimentConfigFromYaml:

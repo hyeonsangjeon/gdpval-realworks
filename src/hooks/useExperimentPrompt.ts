@@ -18,6 +18,7 @@ export interface PromptArchitecture {
     resume_max_rounds: number | null
     max_retries: number
     install_libreoffice: boolean
+    metrics?: { enabled?: boolean }
   }
 }
 

@@ -472,11 +472,149 @@ class TestFix3RunTaskWithQA:
         results = progress["results"]
         assert len(results) == 1
         assert results[0]["status"] == "success"
+        assert "execution_metrics" not in results[0].get("observability", {})
+
+    def test_opt_in_job_metrics_include_phase_times_and_counts(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, workspace = patched_run_inference
+        prepared_path = workspace / "step1_tasks_prepared.json"
+        prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
+        prepared["execution"]["metrics"] = {"enabled": True}
+        prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
+
+        def execute_with_metrics(*args, **kwargs):
+            return {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "hello",
+                "deliverable_files": ["deliverable_files/t1/out.pdf"],
+                "latency_ms": 10,
+                "observability": {
+                    "sandbox": {"final_status": "ok"},
+                    "execution_metrics": {
+                        "schema_version": "1.0",
+                        "task_wall_time_ms": 9,
+                        "model_time_ms": 4,
+                        "tool_time_ms": 2,
+                        "verification_time_ms": 1,
+                        "dependency_time_ms": 0.5,
+                        "attempt_count": 1,
+                        "tool_call_count": 1,
+                        "validated_artifact_count": 1,
+                    }
+                },
+            }
+
+        monkeypatch.setattr(s2, "_execute_single_task", execute_with_metrics)
+        monkeypatch.setattr(
+            s2,
+            "_run_self_qa",
+            lambda *a, **k: {
+                "passed": True,
+                "score": 9,
+                "issues": [],
+                "suggestion": "",
+                "undetermined": False,
+                "llm_passed": True,
+            },
+        )
+
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=1,
+        )
+
+        result = _read_progress(workspace)["results"][0]
+        metrics = result["observability"]["execution_metrics"]
+        assert metrics["schema_version"] == "1.0"
+        assert metrics["task_wall_time_ms"] >= 0
+        assert metrics["time_to_valid_artifact_ms"] is not None
+        assert metrics["model_time_ms"] == 4
+        assert metrics["tool_time_ms"] == 2
+        assert metrics["verification_time_ms"] == 1
+        assert metrics["dependency_time_ms"] == 0.5
+        assert metrics["self_qa_time_ms"] >= 0
+        assert metrics["orchestration_time_ms"] >= 0
+        assert metrics["execution_attempt_count"] == 1
+        assert metrics["sandbox_attempt_count"] == 1
+        assert metrics["tool_call_count"] == 1
+        assert metrics["self_qa_call_count"] == 1
+        assert metrics["job_run_count"] == 1
+        assert metrics["validated_artifact_count"] == 1
+
+    @pytest.mark.parametrize(
+        ("sandbox", "validated_count", "files"),
+        [
+            (None, 1, ["deliverable_files/t1/out.pdf"]),
+            ({"final_status": "ok"}, 0, ["deliverable_files/t1/manifest.json"]),
+        ],
+    )
+    def test_time_to_valid_artifact_requires_sandbox_verification_and_real_artifact(
+        self,
+        patched_run_inference,
+        monkeypatch,
+        sandbox,
+        validated_count,
+        files,
+    ):
+        s2, workspace = patched_run_inference
+        prepared_path = workspace / "step1_tasks_prepared.json"
+        prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
+        prepared["execution"]["metrics"] = {"enabled": True}
+        prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
+
+        observability = {
+            "execution_metrics": {
+                "schema_version": "1.0",
+                "task_wall_time_ms": 10,
+                "validated_artifact_count": validated_count,
+            }
+        }
+        if sandbox is not None:
+            observability["sandbox"] = sandbox
+
+        monkeypatch.setattr(
+            s2,
+            "_execute_single_task",
+            lambda *a, **k: {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "hello",
+                "deliverable_files": files,
+                "latency_ms": 10,
+                "observability": observability,
+            },
+        )
+        monkeypatch.setattr(
+            s2,
+            "_run_self_qa",
+            lambda *a, **k: {
+                "passed": True,
+                "score": 9,
+                "issues": [],
+                "suggestion": "",
+                "undetermined": False,
+                "llm_passed": True,
+            },
+        )
+
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=1,
+        )
+
+        metrics = _read_progress(workspace)["results"][0]["observability"][
+            "execution_metrics"
+        ]
+        assert metrics["time_to_valid_artifact_ms"] is None
 
     def test_qa_undetermined_keeps_status_success(
         self, patched_run_inference, monkeypatch
     ):
-        """Undetermined-on-final-attempt → status remains "success" (intentional)."""
+        """Undetermined-on-final-attempt remains a successful task."""
         s2, workspace = patched_run_inference
 
         monkeypatch.setattr(s2, "_execute_single_task", self._success_execute)
@@ -498,9 +636,243 @@ class TestFix3RunTaskWithQA:
             resume_max_rounds=1,
         )
 
-        progress = _read_progress(workspace)
-        results = progress["results"]
+        results = _read_progress(workspace)["results"]
         assert len(results) == 1
-        # The undetermined branch must remain status="success" — fix 3 only
-        # touches the genuine-fail branch.
         assert results[0]["status"] == "success"
+
+
+def test_update_progress_result_accumulates_metrics_across_resume_rounds():
+    from step2_run_inference import _update_progress_result
+
+    progress = {
+        "results": [{
+            "task_id": "t1",
+            "status": "error",
+            "observability": {"execution_metrics": {
+                "schema_version": "1.0",
+                "task_wall_time_ms": 100,
+                "model_time_ms": 40,
+                "tool_time_ms": 20,
+                "verification_time_ms": 10,
+                "dependency_time_ms": 5,
+                "self_qa_time_ms": 0,
+                "orchestration_time_ms": 25,
+                "time_to_valid_artifact_ms": None,
+                "execution_attempt_count": 1,
+                "sandbox_attempt_count": 1,
+                "tool_call_count": 1,
+                "self_qa_call_count": 0,
+                "job_run_count": 1,
+            }},
+        }]
+    }
+    new_result = {
+        "task_id": "t1",
+        "status": "success",
+        "observability": {"execution_metrics": {
+            "schema_version": "1.0",
+            "task_wall_time_ms": 70,
+            "model_time_ms": 30,
+            "tool_time_ms": 15,
+            "verification_time_ms": 8,
+            "dependency_time_ms": 2,
+            "self_qa_time_ms": 5,
+            "orchestration_time_ms": 10,
+            "time_to_valid_artifact_ms": 60,
+            "execution_attempt_count": 1,
+            "sandbox_attempt_count": 2,
+            "tool_call_count": 2,
+            "self_qa_call_count": 1,
+            "job_run_count": 1,
+        }},
+    }
+
+    merged = _update_progress_result(progress, new_result)
+    metrics = merged["results"][0]["observability"]["execution_metrics"]
+    assert metrics["task_wall_time_ms"] == 170
+    assert metrics["model_time_ms"] == 70
+    assert metrics["tool_time_ms"] == 35
+    assert metrics["orchestration_time_ms"] == 35
+    assert metrics["time_to_valid_artifact_ms"] == 160
+    assert metrics["execution_attempt_count"] == 2
+    assert metrics["sandbox_attempt_count"] == 3
+    assert metrics["tool_call_count"] == 3
+    assert metrics["self_qa_call_count"] == 1
+    assert metrics["job_run_count"] == 2
+
+
+def test_bounded_execution_metrics_rejects_invalid_time_to_valid_and_counts():
+    from step2_run_inference import _bounded_execution_metrics
+
+    bounded = _bounded_execution_metrics({
+        "schema_version": "untrusted",
+        "task_wall_time_ms": 100,
+        "time_to_valid_artifact_ms": 101,
+        "tool_call_count": 1.0,
+        "self_qa_call_count": "1",
+        "job_run_count": 1,
+    })
+
+    assert bounded["schema_version"] == "1.0"
+    assert bounded["time_to_valid_artifact_ms"] is None
+    assert "tool_call_count" not in bounded
+    assert "self_qa_call_count" not in bounded
+    assert bounded["job_run_count"] == 1
+
+
+def test_bounded_execution_metrics_rejects_giant_json_integer_without_raising():
+    from step2_run_inference import _bounded_execution_metrics
+
+    assert _bounded_execution_metrics({
+        "schema_version": "1.0",
+        "task_wall_time_ms": 10**400,
+        "job_run_count": 1,
+    }) is None
+
+
+def test_merge_execution_metrics_overflow_falls_back_to_current_run():
+    from core.execution_metrics import MAX_DURATION_MS
+    from step2_run_inference import _merge_execution_metrics
+
+    previous = {
+        "schema_version": "1.0",
+        "task_wall_time_ms": MAX_DURATION_MS,
+        "job_run_count": 1,
+    }
+    current = {
+        "schema_version": "1.0",
+        "task_wall_time_ms": 1,
+        "job_run_count": 1,
+    }
+
+    merged = _merge_execution_metrics(previous, current)
+    assert merged["task_wall_time_ms"] == 1
+    assert merged["job_run_count"] == 1
+    assert merged["time_to_valid_artifact_ms"] is None
+
+
+def test_resume_timeout_relay_preserves_cumulative_task_metrics(
+    patched_run_inference, monkeypatch
+):
+    s2, workspace = patched_run_inference
+    prepared_path = workspace / "step1_tasks_prepared.json"
+    prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
+    prepared["execution"]["mode"] = "sandbox"
+    prepared["execution"]["metrics"] = {"enabled": True}
+    prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
+
+    progress = {
+        "experiment_id": "exp_test",
+        "condition": "test_condition",
+        "execution_mode": "sandbox",
+        "started_at": "2026-07-15T00:00:00+00:00",
+        "resume_round": 0,
+        "results": [{
+            "task_id": "t1",
+            "status": "error",
+            "error": "initial failure",
+            "observability": {"execution_metrics": {
+                "schema_version": "1.0",
+                "task_wall_time_ms": 100,
+                "model_time_ms": 40,
+                "tool_time_ms": 20,
+                "verification_time_ms": 10,
+                "dependency_time_ms": 5,
+                "self_qa_time_ms": 0,
+                "orchestration_time_ms": 25,
+                "time_to_valid_artifact_ms": None,
+                "execution_attempt_count": 1,
+                "sandbox_attempt_count": 1,
+                "tool_call_count": 1,
+                "self_qa_call_count": 0,
+                "job_run_count": 1,
+                "validated_artifact_count": 0,
+            }},
+        }],
+    }
+    (workspace / "step2_inference_progress.json").write_text(
+        json.dumps(progress),
+        encoding="utf-8",
+    )
+
+    first_time_values = iter([0, 61])
+    monkeypatch.setattr(s2.time, "time", lambda: next(first_time_values))
+    with pytest.raises(SystemExit) as exit_info:
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=True,
+            resume_max_rounds=1,
+            wall_timeout=1,
+        )
+    assert exit_info.value.code == s2.EXIT_CHECKPOINT
+
+    checkpoint = _read_progress(workspace)
+    assert len(checkpoint["results"]) == 1
+    assert checkpoint["results"][0]["status"] == "pending"
+    assert checkpoint["results"][0]["observability"]["execution_metrics"][
+        "task_wall_time_ms"
+    ] == 100
+
+    monkeypatch.setattr(s2.time, "time", lambda: 0)
+    perf_values = iter([0, 0.060, 0.061, 0.066, 0.070])
+    monkeypatch.setattr(s2.time, "perf_counter", lambda: next(perf_values))
+    monkeypatch.setattr(
+        s2,
+        "_execute_single_task",
+        lambda *a, **k: {
+            "task_id": "t1",
+            "status": "success",
+            "deliverable_text": "recovered",
+            "deliverable_files": ["deliverable_files/t1/out.pdf"],
+            "latency_ms": 10,
+            "observability": {
+                "sandbox": {"final_status": "ok"},
+                "execution_metrics": {
+                    "schema_version": "1.0",
+                    "task_wall_time_ms": 55,
+                    "model_time_ms": 30,
+                    "tool_time_ms": 15,
+                    "verification_time_ms": 8,
+                    "dependency_time_ms": 2,
+                    "attempt_count": 2,
+                    "tool_call_count": 2,
+                    "validated_artifact_count": 1,
+                },
+            },
+        },
+    )
+    monkeypatch.setattr(
+        s2,
+        "_run_self_qa",
+        lambda *a, **k: {
+            "passed": True,
+            "score": 9,
+            "issues": [],
+            "suggestion": "",
+            "undetermined": False,
+            "llm_passed": True,
+        },
+    )
+
+    s2.run_inference(
+        condition_key="condition_a",
+        resume=True,
+        resume_max_rounds=1,
+        wall_timeout=1,
+    )
+
+    final_progress = _read_progress(workspace)
+    assert len(final_progress["results"]) == 1
+    result = final_progress["results"][0]
+    assert result["status"] == "success"
+    metrics = result["observability"]["execution_metrics"]
+    assert metrics["task_wall_time_ms"] == 170
+    assert metrics["model_time_ms"] == 70
+    assert metrics["tool_time_ms"] == 35
+    assert metrics["time_to_valid_artifact_ms"] == 160
+    assert metrics["execution_attempt_count"] == 2
+    assert metrics["sandbox_attempt_count"] == 3
+    assert metrics["tool_call_count"] == 3
+    assert metrics["self_qa_call_count"] == 1
+    assert metrics["job_run_count"] == 2
+    assert metrics["validated_artifact_count"] == 1

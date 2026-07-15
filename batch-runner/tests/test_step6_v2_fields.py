@@ -332,10 +332,14 @@ def test_build_task_results_no_manifest_omits_v2_fields():
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _write_workspace(tmp_path: Path, manifest_data: dict | None) -> tuple[Path, Path]:
+def _write_workspace(
+    tmp_path: Path,
+    manifest_data: dict | None,
+    result_payload: dict | None = None,
+) -> tuple[Path, Path]:
     """Lay out a minimal workspace and return (result_json, output_dir)."""
     tmp_path.mkdir(parents=True, exist_ok=True)
-    result_payload = _make_result_payload()
+    result_payload = result_payload or _make_result_payload()
     result_json = tmp_path / "result.json"
     result_json.write_text(json.dumps(result_payload), encoding="utf-8")
 
@@ -349,7 +353,12 @@ def _write_workspace(tmp_path: Path, manifest_data: dict | None) -> tuple[Path, 
     return result_json, output_dir
 
 
-def _run_step6(monkeypatch, tmp_path: Path, manifest_data: dict | None) -> dict:
+def _run_step6(
+    monkeypatch,
+    tmp_path: Path,
+    manifest_data: dict | None,
+    result_payload: dict | None = None,
+) -> dict:
     """Run ``generate_report`` against an isolated workspace and return the
     parsed ``report_data.json`` dict."""
     monkeypatch.setattr(step6_report, "WORKSPACE_DIR", tmp_path)
@@ -360,7 +369,11 @@ def _run_step6(monkeypatch, tmp_path: Path, manifest_data: dict | None) -> dict:
     monkeypatch.setattr(core_config, "WORKSPACE_DIR", tmp_path)
     monkeypatch.setattr(core_needs_files, "WORKSPACE_DIR", tmp_path)
 
-    result_json, output_dir = _write_workspace(tmp_path, manifest_data)
+    result_json, output_dir = _write_workspace(
+        tmp_path,
+        manifest_data,
+        result_payload=result_payload,
+    )
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -443,6 +456,93 @@ def test_generate_report_no_manifest_omits_v2_fields(monkeypatch, tmp_path):
     assert "active_policy" not in fg
     assert "policy_counts" not in fg
     assert "confidence_distribution" not in fg
+    assert "execution_metrics" not in rd
+
+
+def test_generate_report_adds_execution_metrics_only_when_measured(monkeypatch, tmp_path):
+    payload = _make_result_payload()
+    payload["results"][0]["observability"] = {
+        "execution_metrics": {
+            "schema_version": "1.0",
+            "task_wall_time_ms": 100,
+            "time_to_valid_artifact_ms": 90,
+            "model_time_ms": 40,
+            "tool_time_ms": 20,
+            "verification_time_ms": 10,
+            "dependency_time_ms": 5,
+            "self_qa_time_ms": 8,
+            "orchestration_time_ms": 17,
+            "execution_attempt_count": 1,
+            "sandbox_attempt_count": 1,
+            "tool_call_count": 1,
+            "self_qa_call_count": 1,
+            "job_run_count": 1,
+            "validated_artifact_count": 1,
+        }
+    }
+    payload["results"][1]["status"] = "error"
+    payload["results"][1]["observability"] = {
+        "execution_metrics": {
+            "schema_version": "1.0",
+            "task_wall_time_ms": 300,
+            "time_to_valid_artifact_ms": None,
+            "model_time_ms": 100,
+            "tool_time_ms": 80,
+            "verification_time_ms": 20,
+            "dependency_time_ms": 7,
+            "self_qa_time_ms": 15,
+            "orchestration_time_ms": 78,
+            "execution_attempt_count": 2,
+            "sandbox_attempt_count": 3,
+            "tool_call_count": 3,
+            "self_qa_call_count": 2,
+            "job_run_count": 2,
+            "validated_artifact_count": 0,
+        }
+    }
+
+    rd = _run_step6(
+        monkeypatch,
+        tmp_path,
+        manifest_data=None,
+        result_payload=payload,
+    )
+
+    metrics = rd["execution_metrics"]
+    assert metrics["measured_tasks"] == 2
+    assert metrics["total_tasks"] == 2
+    assert metrics["coverage_pct"] == 100.0
+    assert metrics["avg_task_wall_time_ms"] == 200
+    assert metrics["p50_task_wall_time_ms"] == 200
+    assert metrics["p95_task_wall_time_ms"] == 290
+    assert metrics["max_task_wall_time_ms"] == 300
+    assert metrics["avg_successful_task_wall_time_ms"] == 100
+    assert metrics["avg_failed_task_wall_time_ms"] == 300
+    assert metrics["avg_time_to_valid_artifact_ms"] == 90
+    assert metrics["total_model_time_ms"] == 140
+    assert metrics["total_tool_time_ms"] == 100
+    assert metrics["total_verification_time_ms"] == 30
+    assert metrics["total_dependency_time_ms"] == 12
+    assert metrics["total_self_qa_time_ms"] == 23
+    assert metrics["total_orchestration_time_ms"] == 95
+    assert metrics["total_execution_attempts"] == 3
+    assert metrics["total_sandbox_attempts"] == 4
+    assert metrics["total_tool_calls"] == 4
+    assert metrics["total_self_qa_calls"] == 3
+    assert metrics["total_job_runs"] == 3
+    assert rd["task_results"][0]["observability"]["execution_metrics"]["task_wall_time_ms"] == 100
+
+
+def test_compute_execution_metrics_ignores_giant_json_integer():
+    payload = _make_result_payload()
+    payload["results"][0]["observability"] = {
+        "execution_metrics": {
+            "schema_version": "1.0",
+            "task_wall_time_ms": 10**400,
+        }
+    }
+
+    assert step6_report._compute_execution_metrics(payload) is None
 
 
 def test_generate_report_v2_vs_v1_preserves_v1_task_keys(monkeypatch, tmp_path):

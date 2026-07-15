@@ -1,73 +1,71 @@
 # Latest Task Result
 
 - Updated: 2026-07-15
-- Status: GitHub-hosted renderer preflight passed
+- Status: Implemented and validated; merge pending
 
 ## Task
 
-- Add a model-free GitHub-hosted LibreOffice preflight for the Track 2 grading
-  renderer.
-- Keep the preflight manual, read-only, secret-free, and isolated from HF,
-  Azure, batch inference, and paid model calls.
-- Share the renderer Python dependency declaration with the production grading
-  environment so both paths exercise the same package constraints.
+Add job-performance metrics for the next sandbox experiment while keeping
+existing experiment JSON and dashboard behavior unchanged when metrics are not
+available.
 
 ## Result
 
-- Preflight workflow PR #73 was squash-merged to `main` as `fa8bf4f1` and
-  model-free run
-  [29392707519](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29392707519)
-  was dispatched. LibreOffice/font installation and renderer Python dependency
-  installation succeeded; no Azure, HF, batch, or model step existed.
-- The first run failed before rendering because direct execution from
-  `batch-runner/scripts` could not import `core`. The uploaded failure artifact
-  preserved that evidence. The script now inserts its own batch-runner root and
-  bootstraps only the lightweight `core.tools` namespace, avoiding unrelated
-  dataset/pyarrow imports.
-- Import fix PR #74 was squash-merged as `f97cc170`. The model-free rerun
-  [29393149367](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29393149367)
-  then completed successfully on that exact `main` SHA. Every workflow step,
-  including seven-day evidence artifact upload, passed.
-- Added `.github/workflows/grading-renderer-preflight.yml`, dispatched manually
-  on `main` only with `contents: read`, no environment, no OIDC, and no secret
-  references. Checkout, Python setup, and artifact upload actions are pinned to
-  full commits.
-- The workflow installs LibreOffice Calc/Impress plus the exact font surface,
-  runs the existing synthetic XLSX/PPTX renderer probe, requires both process
-  success and JSON `ok=true`, and retains the compact evidence JSON for seven
-  days even when the probe fails.
-- Added `batch-runner/requirements-renderer.txt`; full batch dependencies now
-  include this shared file instead of declaring the four renderer packages in
-  separate sections.
-- Added a static workflow contract test covering trigger, permissions, action
-  allowlist, package surface, result handling, and the absence of credential,
-  model, grading, and Git-write paths.
+- Added explicit opt-in configuration through `execution.metrics.enabled` and
+  preserved it through config parsing, Step 1, executor construction, and the
+  prompt-architecture index. Only the literal boolean `true` enables metrics;
+  omitted, false, malformed, or string values do not emit metric keys, and
+  undeclared fields are discarded.
+- Sandbox attempts now measure model, tool, verification, and dependency time.
+  Step 2 aggregates those measurements across sandbox repair and Self-QA
+  regeneration, adds orchestration time, and preserves cumulative task lifetime
+  across resume rounds.
+- `time_to_valid_artifact_ms` is recorded only after a file is saved and the
+  sandbox reports `ok` or `repaired_ok` with at least one verified non-manifest
+  artifact. Text-only, manifest-only, and unsuccessful file tasks retain `null`.
+- Duration and count fields use finite 30-day/1,000,000 schema bounds, strict
+  integer counters, overflow-safe resume merging, and `allow_nan=False` JSON
+  serialization so persisted output remains standards-compliant. Giant JSON
+  integers are rejected before float conversion instead of raising overflow.
+- Wall-timeout checkpoints retain the original pending task object and relay
+  completion replaces it through the normal merge path, preserving prior phase
+  time, counts, job runs, and time-to-valid offsets without duplicate rows.
+- Step 3 strictly serializes the final result once before opening either output
+  file; invalid NaN/Infinity values cannot update one result while leaving the
+  other stale.
+- Step 6 emits an optional aggregate only when measured data exists: coverage,
+  average/P50/P95/max job time, successful and failed job averages,
+  time-to-valid-file, phase totals, and execution/tool/Self-QA/job-run counts.
+- The experiment detail page conditionally renders Job Performance metrics, a
+  sortable Job Time column, and per-task timing details. Legacy reports keep the
+  existing table, modal, and metric cards without placeholders for new fields.
+- Added sandbox documentation for enabling and interpreting the metrics. No
+  existing experiment config or result fixture was rewritten, and no paid model,
+  batch, grading, or canary run was dispatched.
 
 ## Verification
 
-- Batch-runner non-integration regression coverage: **1,081 passed**, 5
-  skipped, and 37 deselected. This combines the broad suite, seven
-  data-module suites, and the actual-parquet selector suite without overlap.
-- Workflow contract, renderer script, and read-deliverable focused coverage is
-  included in that total. After the import fix, its direct run completed with
-  **63 passed**.
-- Overlay-free direct execution now emits one valid JSON line and reaches the
-  expected local `RendererDependencyError` because this SSH host has no
-  LibreOffice; it no longer raises `ModuleNotFoundError` for `core` or
-  `pyarrow`.
-- Shared renderer requirements include and package set were verified, and all
-  four declarations parse successfully with the standard requirement parser.
-- `git diff --check` passed.
-- `extreme-reasoner` approved the no-secret/no-cost workflow design with the
-  shared dependency and action-pinning conditions implemented.
-- Hosted evidence reported `ok=true`, exact font family `Liberation Sans`,
-  LibreOffice `24.2.7.2 420(Build:2)`, and PyMuPDF `1.28.0`. The synthetic XLSX
-  first workbook page rendered to a 17,358-byte PNG; PPTX slide 1 rendered to
-  an 18,637-byte PNG.
-- Run head SHA matched `f97cc170c1d3f79d7cadde24ae14d12682d1eabe`.
+- Latest-main integrated real-dependency regression: 200 passed, 1 skipped, 0
+  failed under Python 3.11 with installed `pyarrow`, `datasets`,
+  `huggingface_hub`, and `psutil`; no global dependency stubs were used. This
+  includes the renderer preflight tests added through main commit `129d13f2`.
+- Dashboard aggregate tests: 21 passed, 0 failed.
+- Focused review-fix tests cover strict opt-in normalization, numeric bounds,
+  overflow fallback, manifest-only exclusion, restored QA test collection,
+  resume-timeout relay accumulation, and Step 3 strict dual-output writes.
+- Python compilation, editor diagnostics, and `git diff --check`: passed.
+- TypeScript compilation and production Vite build: passed.
+- Browser-verified a metrics-enabled fixture at desktop and 390px mobile widths:
+  aggregate panel, Job Time column, sorting surface, and task modal values render.
+- Browser-verified a legacy fixture: zero Job Performance panels, zero Job Time
+  columns, and the existing Latency column remains visible.
+- Existing generated report data remains unchanged unless an experiment opts in.
 
 ## Remaining Work
 
-- This preflight does not approve paid grading. The limited Azure vision canary
-  remains a separate owner-approved step after renderer success.
-- No HF/Azure request, batch run, or model call has been performed.
+- Enable `execution.metrics.enabled: true` in the next experiment YAML; existing
+  experiment definitions intentionally remain unchanged.
+- Run an owner-approved bounded canary to validate live timing distributions
+  before using them for model or agent comparisons.
+- The proposed free-form tool-calling/install loop is a separate execution-mode
+  change and still needs an allowlisted package broker, budgets, and an A/B run.

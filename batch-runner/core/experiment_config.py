@@ -98,6 +98,7 @@ class ExecutionConfig:
     tokens: Dict[str, int] = field(default_factory=lambda: dict(DEFAULT_TOKENS))
     timeout: Optional[int] = None  # subprocess timeout override (seconds)
     sandbox: Optional[Dict[str, Any]] = None  # sandbox-mode settings (execution.sandbox block)
+    metrics: Optional[Dict[str, Any]] = None  # opt-in job metrics (execution.metrics block)
 
 
 class ExperimentConfig:
@@ -235,6 +236,12 @@ class ExperimentConfig:
             tokens=execution_tokens,
             timeout=execution_data.get("timeout"),
             sandbox=execution_data.get("sandbox"),
+            metrics=(
+                {"enabled": True}
+                if isinstance(execution_data.get("metrics"), dict)
+                and execution_data["metrics"].get("enabled") is True
+                else None
+            ),
         )
 
         return cls(
@@ -341,6 +348,7 @@ class ExperimentConfig:
                 "tokens": dict(self.execution.tokens),
                 "timeout": self.execution.timeout,
                 "sandbox": self.execution.sandbox,
+                **({"metrics": self.execution.metrics} if self.execution.metrics is not None else {}),
             },
         }
 

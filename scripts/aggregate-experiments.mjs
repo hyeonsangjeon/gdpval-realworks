@@ -8,13 +8,20 @@
  */
 
 import { readdir, readFile, writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { parse as parseYaml } from 'yaml';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const EXPERIMENTS_DIR = join(ROOT, 'batch-runner', 'experiments');
 const PROMPTS_DIR = join(ROOT, 'batch-runner', 'prompts');
 const OUTPUT_DIR = join(ROOT, 'public', 'generated');
+
+export function normalizeExecutionMetrics(value) {
+  return value && typeof value === 'object' && value.enabled === true
+    ? { enabled: true }
+    : null;
+}
 
 async function main() {
   console.log('📦 Aggregating experiment prompt architectures...');
@@ -32,6 +39,7 @@ async function main() {
     const prompt = condition.prompt || {};
     const qa = condition.qa || {};
     const execution = expData.execution || {};
+    const metrics = normalizeExecutionMetrics(execution.metrics);
 
     experiments.push({
       exp_id: expData.experiment?.id || file.replace('.yaml', ''),
@@ -66,6 +74,7 @@ async function main() {
           resume_max_rounds: execution.resume_max_rounds ?? null,
           max_retries: execution.max_retries || 5,
           install_libreoffice: execution.install_libreoffice || false,
+          ...(metrics ? { metrics } : {}),
         },
       },
     });
@@ -79,4 +88,6 @@ async function main() {
   console.log(`   ✅ ${outputPath} (${experiments.length} experiments, ${(Buffer.byteLength(JSON.stringify(output, null, 2)) / 1024).toFixed(1)}KB)`);
 }
 
-main().catch(err => { console.error('❌ Aggregation failed:', err); process.exit(1); });
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch(err => { console.error('❌ Aggregation failed:', err); process.exit(1); });
+}

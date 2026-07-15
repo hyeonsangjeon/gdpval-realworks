@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, CheckCircle2, XCircle, RefreshCw,
-  X, Search, Sun, Moon, Code2, ChevronDown, ChevronRight,
+  X, Search, Sun, Moon, Code2, ChevronDown, ChevronRight, Timer,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -34,6 +34,16 @@ function qaColor(score: number | null) {
   return '#ef4444'
 }
 
+function formatDuration(ms: number | null | undefined) {
+  if (ms == null) return '—'
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+  const totalSeconds = Math.round(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}m ${seconds}s`
+}
+
 // Grade-derived scope wins over the meta-recorded scope when a grade row
 // exists for this experiment (match by exact experiment_id, never startsWith).
 function resolveScope(
@@ -48,7 +58,7 @@ function resolveScope(
   return 'self_assessed_pre_grading'
 }
 
-type SortKey = 'task_id' | 'sector' | 'occupation' | 'status' | 'qa_score' | 'latency_ms'
+type SortKey = 'task_id' | 'sector' | 'occupation' | 'status' | 'qa_score' | 'latency_ms' | 'task_wall_time_ms'
 type SortDir = 'asc' | 'desc'
 
 function ExperimentDetail() {
@@ -111,12 +121,16 @@ function ExperimentDetail() {
           ? a.qa_score ?? -1
           : sortKey === 'latency_ms'
             ? a.latency_ms
+            : sortKey === 'task_wall_time_ms'
+              ? a.observability?.execution_metrics?.task_wall_time_ms ?? -1
             : (a as any)[sortKey]
       const bv =
         sortKey === 'qa_score'
           ? b.qa_score ?? -1
           : sortKey === 'latency_ms'
             ? b.latency_ms
+            : sortKey === 'task_wall_time_ms'
+              ? b.observability?.execution_metrics?.task_wall_time_ms ?? -1
             : (b as any)[sortKey]
       if (av < bv) return sortDir === 'asc' ? -1 : 1
       if (av > bv) return sortDir === 'asc' ? 1 : -1
@@ -314,6 +328,62 @@ function ExperimentDetail() {
                   <div key={i}>
                     <div className="text-[10px] text-dash-text-muted uppercase mb-0.5">{m.label}</div>
                     <div className="text-dash-text font-mono font-semibold">{m.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {report.execution_metrics && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.09 }}
+            className="bg-dash-card border border-dash-border rounded-xl overflow-hidden mb-6"
+          >
+            <div className="px-4 py-3 border-b border-dash-border flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-dash-heading flex items-center gap-2">
+                <Timer className="h-4 w-4 text-emerald-500" />
+                Job Performance
+              </h3>
+              <span className="text-[10px] text-dash-text-muted font-mono">
+                {report.execution_metrics.measured_tasks}/{report.execution_metrics.total_tasks} measured
+              </span>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-5 gap-y-4 text-xs">
+                {[
+                  { label: 'Avg Job Time', value: formatDuration(report.execution_metrics.avg_task_wall_time_ms) },
+                  { label: 'P50 Job Time', value: formatDuration(report.execution_metrics.p50_task_wall_time_ms) },
+                  { label: 'P95 Job Time', value: formatDuration(report.execution_metrics.p95_task_wall_time_ms) },
+                  { label: 'Time to Valid File', value: formatDuration(report.execution_metrics.avg_time_to_valid_artifact_ms) },
+                  { label: 'Successful Job Avg', value: formatDuration(report.execution_metrics.avg_successful_task_wall_time_ms) },
+                  { label: 'Failed Job Avg', value: formatDuration(report.execution_metrics.avg_failed_task_wall_time_ms) },
+                ].map((metric) => (
+                  <div key={metric.label}>
+                    <div className="text-[10px] text-dash-text-muted uppercase mb-0.5">{metric.label}</div>
+                    <div className="text-dash-text font-mono font-semibold">{metric.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 pt-4 border-t border-dash-border-subtle grid grid-cols-2 md:grid-cols-5 gap-x-5 gap-y-3 text-xs">
+                {[
+                  { label: 'Model', value: formatDuration(report.execution_metrics.total_model_time_ms) },
+                  { label: 'Tools', value: formatDuration(report.execution_metrics.total_tool_time_ms) },
+                  { label: 'Verification', value: formatDuration(report.execution_metrics.total_verification_time_ms) },
+                  { label: 'Dependencies', value: formatDuration(report.execution_metrics.total_dependency_time_ms) },
+                  { label: 'Self-QA', value: formatDuration(report.execution_metrics.total_self_qa_time_ms) },
+                  { label: 'Orchestration', value: formatDuration(report.execution_metrics.total_orchestration_time_ms) },
+                  { label: 'Execution Attempts', value: report.execution_metrics.total_execution_attempts },
+                  { label: 'Sandbox Attempts', value: report.execution_metrics.total_sandbox_attempts },
+                  { label: 'Tool Calls', value: report.execution_metrics.total_tool_calls },
+                  { label: 'Self-QA Calls', value: report.execution_metrics.total_self_qa_calls },
+                  { label: 'Coverage', value: `${report.execution_metrics.coverage_pct.toFixed(1)}%` },
+                ].map((metric) => (
+                  <div key={metric.label} className="flex justify-between md:block gap-2">
+                    <span className="text-dash-text-muted">{metric.label}</span>
+                    <span className="text-dash-text font-mono md:block md:mt-0.5">{metric.value}</span>
                   </div>
                 ))}
               </div>
@@ -785,6 +855,11 @@ function ExperimentDetail() {
                   <th className="px-3 py-2 text-right cursor-pointer" onClick={() => handleSort('latency_ms')}>
                     Latency
                   </th>
+                  {report.execution_metrics && (
+                    <th className="px-3 py-2 text-right cursor-pointer" onClick={() => handleSort('task_wall_time_ms')}>
+                      Job Time
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -824,6 +899,11 @@ function ExperimentDetail() {
                     <td className="px-3 py-2 text-right font-mono text-dash-text-muted">
                       {task.latency_ms ? `${(task.latency_ms / 1000).toFixed(1)}s` : '—'}
                     </td>
+                    {report.execution_metrics && (
+                      <td className="px-3 py-2 text-right font-mono text-dash-text-muted">
+                        {formatDuration(task.observability?.execution_metrics?.task_wall_time_ms)}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -842,6 +922,7 @@ function ExperimentDetail() {
 
 function TaskDetailModal({ task, experimentId, onClose }: { task: TaskResult; experimentId?: string; onClose: () => void }) {
   const [showPrompt, setShowPrompt] = useState(false)
+  const executionMetrics = task.observability?.execution_metrics
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -868,6 +949,7 @@ function TaskDetailModal({ task, experimentId, onClose }: { task: TaskResult; ex
             )}
             <span className="text-sm font-semibold text-dash-heading font-mono break-all">{task.task_id}</span>
           </div>
+
           <button onClick={onClose} className="text-dash-text-muted hover:text-dash-heading p-1 rounded hover:bg-dash-card-hover">
             <X className="h-4 w-4" />
           </button>
@@ -893,6 +975,32 @@ function TaskDetailModal({ task, experimentId, onClose }: { task: TaskResult; ex
               <div className="text-dash-text font-mono">{task.latency_ms ? `${(task.latency_ms / 1000).toFixed(1)}s` : '—'}</div>
             </div>
           </div>
+
+          {executionMetrics && (
+            <div className="border border-dash-border rounded-lg p-3">
+              <div className="text-[10px] text-dash-text-muted uppercase mb-2 flex items-center gap-1.5">
+                <Timer className="h-3 w-3" /> Job Performance
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                {[
+                  { label: 'Job Time', value: formatDuration(executionMetrics.task_wall_time_ms) },
+                  { label: 'Time to Valid File', value: formatDuration(executionMetrics.time_to_valid_artifact_ms) },
+                  { label: 'Model', value: formatDuration(executionMetrics.model_time_ms) },
+                  { label: 'Tools', value: formatDuration(executionMetrics.tool_time_ms) },
+                  { label: 'Verification', value: formatDuration(executionMetrics.verification_time_ms) },
+                  { label: 'Self-QA', value: formatDuration(executionMetrics.self_qa_time_ms) },
+                  { label: 'Orchestration', value: formatDuration(executionMetrics.orchestration_time_ms) },
+                  { label: 'Execution Attempts', value: executionMetrics.execution_attempt_count },
+                  { label: 'Tool Calls', value: executionMetrics.tool_call_count },
+                ].map((metric) => (
+                  <div key={metric.label} className="flex justify-between gap-2 border-b border-dash-border-subtle py-1 last:border-0">
+                    <span className="text-dash-text-muted">{metric.label}</span>
+                    <span className="text-dash-text font-mono">{metric.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ★ Error Message (for error tasks) ★ */}
           {task.status === 'error' && task.error && (

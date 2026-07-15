@@ -154,6 +154,7 @@ def prepare_tasks(config_path: str) -> dict:
             "tokens": dict(config.execution.tokens),
             "timeout": config.execution.timeout,
             "sandbox": config.execution.sandbox,
+            **({"metrics": config.execution.metrics} if config.execution.metrics is not None else {}),
         },
         "total_tasks": len(task_list),
         "needs_files_count": sum(1 for t in task_list if t["needs_files"]),
