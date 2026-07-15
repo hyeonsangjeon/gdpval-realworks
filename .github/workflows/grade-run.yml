@@ -247,7 +247,7 @@ jobs:
 
       - name: Commit grade result
         id: commit_grade
-        if: always() && (steps.grade.outputs.rc == '0' || steps.grade.outputs.rc == '7') && inputs.dry_run == false
+        if: always() && steps.grade.conclusion == 'success' && (steps.grade.outputs.rc == '0' || steps.grade.outputs.rc == '7') && inputs.dry_run == false
         run: |
           GRADE_FILE="${{ steps.grade.outputs.grade_file }}"
           if [[ -z "$GRADE_FILE" || ! -f "$GRADE_FILE" ]]; then

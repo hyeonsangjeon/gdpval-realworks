@@ -1526,6 +1526,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
 
     script = commit["run"]
     assert commit["id"] == "commit_grade"
+    assert "steps.grade.conclusion == 'success'" in commit["if"]
     assert 'git add -- "$GRADE_FILE"' in script
     assert script.count("validate(instance=payload, schema=schema)") == 2
     assert "GRADE_BLOB_SHA=" in script

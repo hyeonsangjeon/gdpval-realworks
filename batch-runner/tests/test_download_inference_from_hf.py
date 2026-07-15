@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +10,25 @@ import pytest
 
 
 FULL_SHA = "a" * 40
+
+
+def test_direct_script_entrypoint_resolves_core_import():
+    batch_root = Path(__file__).resolve().parents[1]
+    script = batch_root / "scripts" / "download_inference_from_hf.py"
+
+    completed = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=batch_root,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "--revision" in completed.stdout
+    assert completed.stderr == ""
+    assert "No module named 'core'" not in completed.stdout
 
 
 def _load_module():
