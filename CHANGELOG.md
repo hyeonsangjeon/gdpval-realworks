@@ -111,7 +111,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   run
   [29437433192](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29437433192);
   the production route was verified at desktop and mobile sizes, including
-  dark mode and reduced motion.
+  dark mode and reduced motion. Follow-up PR #85 finalizes the deployment
+  evidence in the rolling task record.
 - **RealWorks Field Notes** — add lazy-loaded `/notes` and `/notes/:slug`
   routes with nine question-led experiment groups, a nine-event chronology,
   and five evidence-linked Korean columns spanning CI/runtime constraints,
