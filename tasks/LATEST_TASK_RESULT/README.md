@@ -4,52 +4,69 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-16
-- Status: Public task specifications cleansed and current tree verified
+- Status: Prompt-complexity Field Note published and production-verified
 
 ## Task
 
-- Audit the accidentally public `tasks/` tree for secrets, personal data,
-  provider-account relationships, organization-specific operating budgets,
-  local paths, and misleading internal artifact names.
-- Remove or generalize sensitive operational context without deleting
-  reproducible experiment costs and quality results.
-- Restore the intended default: personal task specifications remain local and
-  ignored unless deliberately force-added.
+- Write the missing Field Note for the question "Did a more complex prompt
+  outperform the baseline?" using the exp001-exp005 experiment record.
+- Compare completion rate and Self-QA without conflating whole-run coverage,
+  surviving-result self-assessment, execution modes, or runner changes.
+- Give first-time readers a plain definition of Elicit and headless-Elicit,
+  then connect the note to the question track, chronology, and relevant
+  experiment pages.
 
 ## Result
 
-- Removed the provider-account failover specification, including its account
-  layout, alternate secret naming convention, switching design, and exact
-  operating-budget assumptions. Its only cross-reference was removed.
-- Removed an unreferenced hidden environment-style sweep metadata file.
-- Generalized exact monthly operating budgets, account attribution, and
-  absolute monthly capacity projections across cost-planning reports,
-  recommendations, configuration comments, and changelog entries. Actual
-  per-run and sweep spend, latency, token, score, and relative-efficiency data
-  remain available for reproducibility.
-- Added a root ignore rule for `tasks/**`, with an explicit exception for this
-  canonical rolling result. Existing tracked research records remain readable;
-  new personal task specs require deliberate `git add -f` to become public.
-- Kept generic OIDC placeholders, billing-estimate caveats, and real-estate
-  uses of the word "tenant" because they reveal no account identity or
-  organization relationship.
+- Added `/notes/when-more-prompt-is-less` as the sixth RealWorks Field Note.
+  Its opening definition states that Elicit is not a separate model or service:
+  it is the GDPVal study's prompt strategy for making the model render, inspect,
+  and confidence-report its own deliverable in five steps. Headless-Elicit keeps
+  those five steps but changes STEP 2 from displaying PNGs to Pillow checks.
+- Restricted the quantitative comparison to the common subprocess surface:
+  exp003 completed 211/220 (95.9%) with 6.18 Self-QA, exp004 completed 200/220
+  (90.9%) with 5.87, and exp005 completed 199/220 (90.5%) with 6.16. The note
+  presents the divergence as lower coverage with a recovered average among
+  scored survivors, not as recovered end-to-end quality.
+- Excluded exp001 and exp002 from performance conclusions because their
+  canonical reports are unavailable. The article also identifies the
+  LibreOffice setting change in exp004 and resume-round change in exp005, so it
+  does not claim a causal prompt-only result.
+- Added a responsive prompt-complexity hero that shows the actual baseline,
+  five-step Elicit, and STEP 2 headless adaptation, plus a dual-axis
+  completion/Self-QA chart. The prompt-strategy question, first timeline event,
+  and exp003-exp005 Related Notes sections link to the article.
+- Squash-merged the reviewed change through PR #84 as `c9cb607`. Automatic
+  `Aggregate Tests & Deploy` run
+  [29437433192](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29437433192)
+  completed all 12 build and GitHub Pages deployment steps successfully.
+- Closed stale-base documentation PR #85 without merging after it displayed
+  unrelated privacy changes, then rebuilt this completion record from the
+  current `main` branch.
 
 ## Verification
 
-- Gitleaks v8.30.1 current-tree scan: **0 findings** across approximately
-  64.72 MB. GitHub secret-scanning open alerts: **0**.
-- Current-tree focused scans: **0** personal emails, credential values, Azure
-  GUID/resource endpoints, local absolute paths/hostnames, account-relation
-  patterns, or exact monthly operating-budget patterns.
-- `git check-ignore` confirms a new local task spec is ignored while
-  `tasks/LATEST_TASK_RESULT/README.md` remains explicitly tracked.
-- The edited grading YAML parses successfully and `git diff --check` passes.
+- `npm run build` passed after the article, hero, chart, and Elicit-definition
+  changes; TypeScript and Vite reported no errors.
+- `npm run test:aggregate` passed all 24 tests, including three new contracts
+  for the article links and metrics, source five-step design, mobile x-axis
+  labels, and reduced-motion series configuration.
+- VS Code diagnostics reported no errors in the four changed TypeScript files.
+- Production-preview checks passed at 1280x900 and 390x844 in light and dark
+  themes with no runtime errors or horizontal overflow. The page rendered one
+  hero, three completion bars, one Self-QA line, all three mobile x-axis labels,
+  and seven evidence links including the GDPVal Appendix A.3 source.
+- Reduced-motion emulation removed the animated SVG node and retained the
+  static scan line; after layout settled, the chart produced zero further path
+  mutations for one second. The question-track link and all exp003-exp005
+  Related Notes links resolved to the new article.
+- The deployed `/notes` index returned HTTP 200 and linked to the production
+  article. The public article rendered the Elicit definition, Appendix A.3
+  source, actual five-step hero, three bars, one line, and all three mobile
+  x-axis labels with no runtime errors or horizontal overflow. Public
+  reduced-motion verification again observed zero post-settle chart mutations.
 
 ## Remaining Work
 
-- Normal commits clean the current public tree but do not erase old commit
-  objects. Removed operational text and identifiers previously cleaned in June
-  remain recoverable from Git history.
-- A complete purge requires an explicitly approved history rewrite and force
-  push, coordinated with every clone and open branch. No destructive rewrite
-  was performed as part of this task.
+- A controlled prompt-only rerun and external grading would still be required
+  before making a causal quality claim about Elicit versus baseline.
