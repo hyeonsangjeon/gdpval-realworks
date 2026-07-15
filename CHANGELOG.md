@@ -26,7 +26,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   unexpectedly requests a function call, reject it without dispatching any
   read or perception tool and return a score-excluded error. Deterministic tests
   now prove two-call latency, TPM-guard, token/cache, and incomplete-usage
-  accounting across malformed-final recovery.
+  accounting across malformed-final recovery. Shipped through PR #88
+  (`2728ef7d`); the merge triggered no workflow or paid run.
 - **Tool-calling malformed-final recovery** — extend the bounded
   finalization-only retry from empty output to syntactically unparseable final
   JSON, as observed for two text criteria in canary run 29432455047. The retry
