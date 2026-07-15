@@ -107,7 +107,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   dedicated responsive hero and dual Recharts comparison visualize
   95.9/90.9/90.5% completion against 6.18/5.87/6.16 Self-QA, while the
   prompt-strategy question, first timeline event, and exp003-exp005 detail pages
-  link to the new note.
+  link to the new note. Shipped through PR #84 (`c9cb607`) and successful Pages
+  run
+  [29437433192](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29437433192);
+  the production route was verified at desktop and mobile sizes, including
+  dark mode and reduced motion.
 - **RealWorks Field Notes** — add lazy-loaded `/notes` and `/notes/:slug`
   routes with nine question-led experiment groups, a nine-event chronology,
   and five evidence-linked Korean columns spanning CI/runtime constraints,

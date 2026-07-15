@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-16
-- Status: Prompt-complexity Field Note implemented and locally verified
+- Status: Prompt-complexity Field Note published and production-verified
 
 ## Task
 
@@ -36,6 +36,10 @@ task. It must be refreshed before a task is reported complete.
   five-step Elicit, and STEP 2 headless adaptation, plus a dual-axis
   completion/Self-QA chart. The prompt-strategy question, first timeline event,
   and exp003-exp005 Related Notes sections link to the article.
+- Squash-merged the reviewed change through PR #84 as `c9cb607`. Automatic
+  `Aggregate Tests & Deploy` run
+  [29437433192](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29437433192)
+  completed all 12 build and GitHub Pages deployment steps successfully.
 
 ## Verification
 
@@ -53,9 +57,13 @@ task. It must be refreshed before a task is reported complete.
   static scan line; after layout settled, the chart produced zero further path
   mutations for one second. The question-track link and all exp003-exp005
   Related Notes links resolved to the new article.
+- The deployed `/notes` index returned HTTP 200 and linked to the production
+  article. The public article rendered the Elicit definition, Appendix A.3
+  source, actual five-step hero, three bars, one line, and all three mobile
+  x-axis labels with no runtime errors or horizontal overflow. Public
+  reduced-motion verification again observed zero post-settle chart mutations.
 
 ## Remaining Work
 
-- Review and publish the validated branch, then verify the GitHub Pages route.
 - A controlled prompt-only rerun and external grading would still be required
   before making a causal quality claim about Elicit versus baseline.
