@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { useReducedMotion } from 'framer-motion'
 import type { JournalComparisonChart, JournalChartSeries } from '../../data/journal'
 
 const tickStyle = { fill: 'hsl(var(--dash-text-secondary))', fontSize: 11 }
@@ -24,6 +25,7 @@ const tooltipStyle = {
 const formatTick = (series: JournalChartSeries) => (value: number) => `${value}${series.unit.trim()}`
 
 export default function NoteComparisonChart({ chart }: { chart: JournalComparisonChart }) {
+  const reduceMotion = useReducedMotion()
   const ariaLabel = `${chart.title}. ${chart.data.map((datum) => {
     const values = [`${chart.primary.label} ${datum.primary}${chart.primary.unit}`]
     if (chart.secondary && datum.secondary != null) values.push(`${chart.secondary.label} ${datum.secondary}${chart.secondary.unit}`)
@@ -33,7 +35,13 @@ export default function NoteComparisonChart({ chart }: { chart: JournalCompariso
   const commonAxis = (
     <>
       <CartesianGrid stroke="hsl(var(--dash-border))" strokeDasharray="3 5" vertical={false} />
-      <XAxis dataKey="label" tick={tickStyle} tickLine={false} axisLine={{ stroke: 'hsl(var(--dash-border))' }} />
+      <XAxis
+        dataKey="label"
+        interval={chart.kind === 'dual' ? 0 : undefined}
+        tick={tickStyle}
+        tickLine={false}
+        axisLine={{ stroke: 'hsl(var(--dash-border))' }}
+      />
       <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'hsl(var(--dash-card-hover))', opacity: 0.5 }} />
       <Legend
         wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }}
@@ -71,8 +79,8 @@ export default function NoteComparisonChart({ chart }: { chart: JournalCompariso
                 tickLine={false}
                 axisLine={false}
               />
-              <Bar yAxisId="primary" dataKey="primary" name={chart.primary.label} unit={chart.primary.unit} fill={chart.primary.color} radius={[4, 4, 0, 0]} maxBarSize={84} />
-              <Line yAxisId="secondary" dataKey="secondary" name={chart.secondary.label} unit={chart.secondary.unit} stroke={chart.secondary.color} strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 7 }} />
+              <Bar yAxisId="primary" dataKey="primary" name={chart.primary.label} unit={chart.primary.unit} fill={chart.primary.color} radius={[4, 4, 0, 0]} maxBarSize={84} isAnimationActive={!reduceMotion} />
+              <Line yAxisId="secondary" dataKey="secondary" name={chart.secondary.label} unit={chart.secondary.unit} stroke={chart.secondary.color} strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 7 }} isAnimationActive={!reduceMotion} />
             </ComposedChart>
           ) : (
             <BarChart data={chart.data} margin={{ top: 16, right: 8, left: -8, bottom: 4 }}>
@@ -92,6 +100,7 @@ export default function NoteComparisonChart({ chart }: { chart: JournalCompariso
                 fill={chart.primary.color}
                 radius={chart.kind === 'stacked' ? [0, 0, 0, 0] : [4, 4, 0, 0]}
                 maxBarSize={84}
+                isAnimationActive={!reduceMotion}
               />
               {chart.kind === 'stacked' && chart.secondary && (
                 <Bar
@@ -102,6 +111,7 @@ export default function NoteComparisonChart({ chart }: { chart: JournalCompariso
                   fill={chart.secondary.color}
                   radius={[4, 4, 0, 0]}
                   maxBarSize={84}
+                  isAnimationActive={!reduceMotion}
                 />
               )}
             </BarChart>

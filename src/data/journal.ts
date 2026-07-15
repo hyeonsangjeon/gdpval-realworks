@@ -30,7 +30,7 @@ export interface JournalEvidence {
 export type JournalHero =
   | {
       kind: 'visual'
-      variant: 'runtime' | 'integrity' | 'perception' | 'task-contrast' | 'sandbox'
+  variant: 'prompt-complexity' | 'runtime' | 'integrity' | 'perception' | 'task-contrast' | 'sandbox'
       alt: string
       caption: string
     }
@@ -107,6 +107,121 @@ const REPO = 'https://github.com/hyeonsangjeon/gdpval-realworks/blob/main'
 const HF_EXP026 = 'https://huggingface.co/datasets/HyeonSang/exp026_sandbox_skills_multimodal'
 
 export const journalArticles: JournalArticle[] = [
+  {
+    ...journalCatalog['when-more-prompt-is-less'],
+    dek: 'baseline 뒤 Elicit은 5단계 검증을 도입했고, headless-Elicit은 그중 화면 검사를 프로그램 검사로 바꿨다. 완료율과 Self-QA가 같은 답을 주는지 exp001–005의 설계와 결과를 분리해 읽었다.',
+    thesis: '이 기록에서 두 Elicit 실행은 baseline보다 적은 작업을 완료했지만, 끝까지 살아남은 결과의 자기평가는 서로 다른 방향으로 움직였다.',
+    publishedAt: '2026-07-16',
+    period: 'exp001 → exp005',
+    readingMinutes: 8,
+    metrics: [
+      { value: '95.9%', label: 'baseline 완료율' },
+      { value: '-5.5%p', label: 'baseline 대비 headless' },
+      { value: '6.18 ≈ 6.16', label: 'baseline ↔ headless Self-QA' },
+    ],
+    hero: {
+      kind: 'visual',
+      variant: 'prompt-complexity',
+      alt: 'exp003 baseline의 기본 계약과 exp004·005 Elicit의 5단계 검증 구조, 완료 작업 및 Self-QA를 비교하는 시각화',
+      caption: 'baseline 뒤 두 Elicit 실행은 같은 5단계를 사용하되 STEP 2의 검사 방식이 달랐다. 완료 작업은 211개에서 200개와 199개로 줄었지만, headless-Elicit의 Self-QA는 baseline과 거의 같았다.',
+    },
+    comparisonChart: {
+      kind: 'dual',
+      title: '완료율은 내려갔고 Self-QA는 돌아왔다',
+      description: 'subprocess로 실행한 exp003·004·005에서 완료율은 계속 낮아졌지만, Self-QA는 Elicit에서 하락한 뒤 headless-Elicit에서 baseline 수준으로 회복했다.',
+      primary: { label: 'Completion', unit: '%', color: '#2563eb', domain: [0, 100] },
+      secondary: { label: 'Self-QA', unit: '/10', color: '#059669', domain: [0, 10] },
+      data: [
+        { label: 'exp003 Baseline', primary: 95.9, secondary: 6.18 },
+        { label: 'exp004 Elicit', primary: 90.9, secondary: 5.87 },
+        { label: 'exp005 Headless', primary: 90.5, secondary: 6.16 },
+      ],
+      caveat: 'Self-QA는 외부 채점이 아니라 점수가 존재하는 결과의 자기평가다. exp004는 LibreOffice 설치 설정, exp005는 resume round도 함께 바뀌어 프롬프트 단독 효과로 읽을 수 없다.',
+    },
+    sections: [
+      {
+        heading: '질문: 검증을 더 많이 시키면 더 잘 끝낼까',
+        paragraphs: [
+          '이 글에서 Elicit은 별도 모델이나 서비스가 아니라, 모델에게 산출물 생성 뒤 5단계 렌더링·점검과 신뢰도 보고를 시키는 GDPVal 연구의 프롬프트 전략이다. headless-Elicit은 그중 화면으로 PNG를 보는 두 번째 단계를 Pillow 검사로 바꾼 버전이다.',
+          '첫 baseline은 비교적 짧았다. 실제 파일을 만들고, 참조 파일 구조를 살피고, 결과를 plain-text로 요약하라는 정도였다. Elicit은 여기에 PDF 변환, 폰트와 PNG 확인, 5단계 검사, 마지막 CONFIDENCE 보고를 더했다. headless-Elicit은 나머지 네 단계를 유지하고 이미지 확인 방식만 화면 없는 runner에 맞췄다.',
+          '가설은 자연스러웠다. 산출물을 더 꼼꼼히 확인하라고 하면 실행 성공과 결과의 자기평가가 함께 좋아질 것이라고 예상했다. 이 글은 그 두 신호가 실제로 같은 답을 줬는지 묻는다.',
+        ],
+      },
+      {
+        heading: '방법: 실행 모드를 섞지 않았다',
+        paragraphs: [
+          'exp001과 exp002는 code interpreter에서 baseline과 Elicit을 비교하도록 설계됐다. 하지만 현재 저장소와 공개 인덱스에는 이 canonical 두 실행의 report가 없다. 설정 차이는 읽을 수 있어도 성능 차이를 말할 수는 없다.',
+          '수치 비교는 같은 GPT-5.2-chat을 subprocess로 실행한 exp003, exp004, exp005로 한정했다. exp003은 baseline, exp004는 Elicit, exp005는 headless-Elicit이다. 다만 완전한 prompt-only A/B는 아니다. exp004에서는 LibreOffice 설치 설정이 함께 바뀌었고, exp005에서는 resume_max_rounds가 2에서 1로 줄었다.',
+        ],
+        callout: 'exp005 YAML의 생성일은 2026-02-28인데 report date는 2026-02-27이다. 저장소에는 이 불일치의 설명이 없어 날짜 순서를 성능 원인으로 사용하지 않았다.',
+      },
+      {
+        heading: '결과: 두 메트릭이 갈라졌다',
+        paragraphs: [
+          '완료율은 단순했다. baseline exp003은 211/220, 95.9%를 완료했다. 5단계를 도입한 Elicit exp004는 200/220, 90.9%, STEP 2를 바꾼 headless-Elicit exp005는 199/220, 90.5%였다. 관찰된 완료 수는 순서대로 211개, 200개, 199개였다.',
+          'Self-QA는 다른 모양이었다. 6.18에서 5.87로 내려갔다가 6.16으로 되돌아왔다. exp005는 baseline보다 12개를 덜 완료했지만, 점수가 남은 결과의 평균 자기평가는 baseline과 0.02점 차이였다. 완료율만 보면 악화였고 Self-QA만 보면 거의 회복이었다.',
+        ],
+      },
+      {
+        heading: '해석: 살아남은 결과의 평균은 전체 커버리지가 아니다',
+        paragraphs: [
+          'Self-QA 평균은 점수가 존재하는 결과를 중심으로 계산된다. 실행 단계에서 탈락해 산출물을 만들지 못한 작업은 높은 품질로 복구된 것이 아니라 평균 바깥으로 빠질 수 있다. 그래서 Self-QA가 비슷하다는 사실은 같은 수의 업무를 같은 품질로 끝냈다는 뜻이 아니다.',
+          'headless-Elicit이 보여준 것은 더 좁은 주장이다. 끝까지 도달한 결과의 자기평가는 baseline 수준으로 돌아왔지만, 전체 작업을 끝까지 통과시키는 능력은 돌아오지 않았다. 품질 게이트와 커버리지를 한 숫자로 합치면 이 차이가 사라진다.',
+        ],
+      },
+      {
+        heading: '실패: 검증 절차가 새로운 실패 표면이 됐다',
+        paragraphs: [
+          'exp004 report에는 `soffice`를 찾지 못한 실패가 7건 반복된다. 더 많은 문서 검사를 요구했지만 runner가 그 도구를 안정적으로 제공하지 못하면 검증 단계 자체가 실행 실패가 된다.',
+          'exp005에서는 `CONFIDENCE[...]`가 실행 코드로 새어 들어가 NameError를 만든 사례가 7건 반복된다. 결과를 설명하기 위한 출력 규약이 코드 경계와 섞인 것이다. 길어진 검증 프롬프트에는 모델이 지켜야 할 계약뿐 아니라 잘못 해석할 수 있는 표면도 함께 들어왔다.',
+        ],
+      },
+      {
+        heading: '결정: 검증을 버리지 않고 가볍게 만들기',
+        paragraphs: [
+          '후속 exp006은 검증 자체를 포기하지 않았다. 토큰 여유를 16k로 늘리고, 검사를 lightweight하게 줄였으며, CONFIDENCE를 코드 블록 밖에 두도록 경계를 명시했다. 더 많은 문장을 추가하는 대신 실패하기 쉬운 계약을 짧고 분명하게 다시 배치했다.',
+          '따라서 이 실험의 결론은 “짧은 프롬프트가 항상 낫다”가 아니다. 검증 지시는 실행 환경이 실제로 지원하고, 코드와 설명의 경계가 분명하며, 실패 시 무엇을 복구할지 알 수 있을 때만 도움이 된다. 복잡성은 품질을 공짜로 올리는 장식이 아니라 운영 비용을 가진 설계 변수였다.',
+        ],
+      },
+    ],
+    evidence: [
+      {
+        label: 'GDPVal 연구 Appendix A.3',
+        detail: 'Elicit Capabilities 프롬프트의 원문과 5단계 검사 설계',
+        href: 'https://arxiv.org/pdf/2510.04374#page=37',
+      },
+      {
+        label: 'exp001 baseline 설정',
+        detail: 'code interpreter baseline의 파일 생성·참조 검사 suffix',
+        href: `${REPO}/batch-runner/experiments/exp001_GPT52Chat_baseline.yaml`,
+      },
+      {
+        label: 'exp002 Elicit 설정',
+        detail: '추가된 5단계 검사와 CONFIDENCE 규약',
+        href: `${REPO}/batch-runner/experiments/exp002_GPT52Chat_elicit.yaml`,
+      },
+      {
+        label: 'exp003 baseline 리포트',
+        detail: '211/220 완료, Self-QA 6.18의 subprocess 기준선',
+        href: `${REPO}/batch-runner/results/exp003_GPT52Chat_baseline_runner_exec/report/report.md`,
+      },
+      {
+        label: 'exp004 Elicit 리포트',
+        detail: '200/220 완료와 반복된 soffice 실행 실패',
+        href: `${REPO}/batch-runner/results/exp004_GPT52Chat_elicit_runner_exec/report/report.md`,
+      },
+      {
+        label: 'exp005 headless-Elicit 리포트',
+        detail: '199/220 완료, Self-QA 6.16, CONFIDENCE NameError',
+        href: `${REPO}/batch-runner/results/exp005_GPT52Chat_elicit_v2_runner_exec/report/report.md`,
+      },
+      {
+        label: 'exp006 후속 설정',
+        detail: '16k, lightweight checks, 코드 블록 밖 CONFIDENCE로 이어진 결정',
+        href: `${REPO}/batch-runner/experiments/exp006_GPT52Chat_token16k_lite_elicit.yaml`,
+      },
+    ],
+  },
   {
     ...journalCatalog['360-minute-experiment'],
     dek: '장시간 CI 제한은 단순한 운영 불편이 아니었다. 어떤 작업이 결과에 남는지를 바꾸는 실험 조건이었다.',
@@ -554,6 +669,7 @@ export const experimentGroups: ExperimentGroup[] = [
     experiments: ['exp001', 'exp002', 'exp003', 'exp004', 'exp005'],
     finding: 'subprocess 비교에서는 baseline 완료율이 Elicit 계열보다 높았다.',
     caveat: 'code interpreter와 subprocess 결과를 하나의 직접 비교로 섞지 않는다.',
+    articleSlug: 'when-more-prompt-is-less',
     state: 'finding',
   },
   {
@@ -632,7 +748,7 @@ export const timelineEvents: TimelineEvent[] = [
     title: '관리형 실행에서 subprocess 실험으로 이동',
     description: 'baseline과 Elicit 전략을 직접 실행 가능한 runner에서 다시 비교하기 시작했다.',
     experiments: ['exp003', 'exp004'],
-    articleSlugs: ['why-build-a-sandbox'],
+    articleSlugs: ['when-more-prompt-is-less', 'why-build-a-sandbox'],
     kind: 'decision',
   },
   {

@@ -15,6 +15,12 @@ export const lensLabels: Record<JournalLens, string> = {
 }
 
 export const journalCatalog = {
+  'when-more-prompt-is-less': {
+    slug: 'when-more-prompt-is-less',
+    title: '프롬프트를 더 복잡하게 만들면 실제 업무를 더 잘할까',
+    lens: 'experiment',
+    relatedExperiments: ['exp003', 'exp004', 'exp005'],
+  },
   '360-minute-experiment': {
     slug: '360-minute-experiment',
     title: '220개의 실제 업무를 360분 안에 실행한다는 것',

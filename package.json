@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "aggregate": "node scripts/aggregate-tests.mjs && node scripts/aggregate-reports.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-experiments.mjs",
-    "test:aggregate": "node --test scripts/__tests__/aggregate-experiments.test.mjs scripts/__tests__/aggregate-grades.test.mjs scripts/__tests__/official-filter.test.mjs",
+    "test:aggregate": "node --test scripts/__tests__/aggregate-experiments.test.mjs scripts/__tests__/aggregate-grades.test.mjs scripts/__tests__/field-notes.test.mjs scripts/__tests__/official-filter.test.mjs",
     "test:official-filter": "node --test scripts/__tests__/official-filter.test.mjs",
     "predev": "node scripts/aggregate-tests.mjs && node scripts/aggregate-reports.mjs && node scripts/aggregate-grades.mjs && node scripts/aggregate-experiments.mjs",
     "dev": "vite",

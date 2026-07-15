@@ -5,6 +5,84 @@ const resolveAsset = (src: string) => (
   src.startsWith('http') ? src : `${import.meta.env.BASE_URL}${src.replace(/^\/+/, '')}`
 )
 
+function PromptComplexityVisual({ reduceMotion }: { reduceMotion: boolean | null }) {
+  const cards = [
+    {
+      x: 70,
+      title: 'exp003 · BASELINE',
+      mode: 'BASIC OUTPUT CONTRACT',
+      steps: ['CREATE FILE', 'INSPECT INPUT', 'TEXT SUMMARY'],
+      success: '211 / 220',
+      qa: 'Self-QA 6.18',
+      color: '#2563eb',
+    },
+    {
+      x: 450,
+      title: 'exp004 · ELICIT',
+      mode: 'FIVE MANDATORY STEPS',
+      steps: ['1 · RENDER TO PNG', '2 · DISPLAY PNG', '3 · PROGRAM CHECK', '4 · MATCH REQUEST', '5 · FINAL FILE CHECK'],
+      success: '200 / 220',
+      qa: 'Self-QA 5.87',
+      color: '#b45309',
+    },
+    {
+      x: 830,
+      title: 'exp005 · HEADLESS',
+      mode: 'SAME FIVE STEPS · NEW STEP 2',
+      steps: ['1 · RENDER TO PNG', '2 · PILLOW CHECK', '3 · PROGRAM CHECK', '4 · MATCH REQUEST', '5 · FINAL FILE CHECK'],
+      success: '199 / 220',
+      qa: 'Self-QA 6.16',
+      color: '#be123c',
+    },
+  ]
+
+  return (
+    <>
+      <text x="70" y="62" fill="hsl(var(--dash-text-secondary))" fontSize="18">BASELINE → FIVE-STEP ELICIT → HEADLESS ADAPTATION</text>
+      <text x="1130" y="62" fill="hsl(var(--dash-text-secondary))" fontSize="14" textAnchor="end">prompt structure from experiment YAML</text>
+      {cards.map((card) => (
+        <g key={card.title}>
+          <rect x={card.x} y="105" width="300" height="280" rx="8" fill="hsl(var(--dash-card))" stroke={card.color} strokeWidth="2" />
+          <text x={card.x + 24} y="145" fill="hsl(var(--dash-heading))" fontSize="18" fontWeight="700">{card.title}</text>
+          <text x={card.x + 24} y="174" fill="hsl(var(--dash-text-secondary))" fontSize="12">{card.mode}</text>
+          {card.steps.map((step, index) => (
+            <g key={step}>
+              <rect
+                x={card.x + 24}
+                y={190 + index * 23}
+                width="252"
+                height="18"
+                rx="3"
+                fill={card.color}
+                opacity={step.includes('PILLOW') || step.includes('DISPLAY') ? 0.26 : 0.1}
+              />
+              <text x={card.x + 32} y={203 + index * 23} fill="hsl(var(--dash-heading))" fontSize="11">{step}</text>
+            </g>
+          ))}
+          <text x={card.x + 24} y="330" fill="hsl(var(--dash-heading))" fontSize="28" fontWeight="700">{card.success}</text>
+          <text x={card.x + 24} y="360" fill="hsl(var(--dash-text-secondary))" fontSize="16">{card.qa}</text>
+        </g>
+      ))}
+      {reduceMotion ? (
+        <line x1="70" x2="1130" y1="260" y2="260" stroke="hsl(var(--dash-heading))" strokeWidth="2" opacity="0.35" />
+      ) : (
+        <motion.line
+          x1="70"
+          x2="1130"
+          y1="188"
+          y2="188"
+          stroke="hsl(var(--dash-heading))"
+          strokeWidth="2"
+          strokeDasharray="8 8"
+          initial={{ y: 0, opacity: 0.15 }}
+          animate={{ y: [0, 110], opacity: [0.15, 0.55, 0.15] }}
+          transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+        />
+      )}
+    </>
+  )
+}
+
 function RuntimeVisual({ reduceMotion }: { reduceMotion: boolean | null }) {
   const markers = [
     { x: 893, y: 176, value: '290', label: 'watchdog' },
@@ -181,6 +259,29 @@ function SandboxVisual({ reduceMotion }: { reduceMotion: boolean | null }) {
 }
 
 function MobileVisualSummary({ variant, alt }: { variant: Extract<JournalHero, { kind: 'visual' }>['variant']; alt: string }) {
+  if (variant === 'prompt-complexity') {
+    return (
+      <div role="img" aria-label={alt} className="md:hidden min-h-[220px] px-3 py-6 bg-dash-surface border-y border-dash-border">
+        <div className="font-mono text-[11px] text-dash-text-secondary mb-5">BASELINE → 5-STEP ELICIT → HEADLESS</div>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            ['Baseline', '기본 계약', '95.9%', 'QA 6.18', 'border-blue-700/70 bg-blue-500/10'],
+            ['Elicit', '5단계 검사', '90.9%', 'QA 5.87', 'border-amber-700/70 bg-amber-500/10'],
+            ['Headless', 'STEP 2 교체', '90.5%', 'QA 6.16', 'border-rose-700/70 bg-rose-500/10'],
+          ].map(([title, mode, completion, qa, style]) => (
+            <div key={title} className={`min-w-0 border px-2 py-4 text-center ${style}`}>
+              <div className="text-[11px] font-medium text-dash-text-secondary">{title}</div>
+              <div className="mt-1 text-[10px] leading-4 text-dash-text-secondary">{mode}</div>
+              <div className="mt-3 font-mono text-xl font-semibold text-dash-heading">{completion}</div>
+              <div className="mt-2 text-[11px] text-dash-text-secondary">{qa}</div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-5 text-center text-xs/[1.7] text-pretty break-keep text-dash-text-secondary">5단계 도입 뒤 완료율은 낮았고, STEP 2 교체 뒤 Self-QA는 baseline 수준으로 돌아왔다.</p>
+      </div>
+    )
+  }
+
   if (variant === 'runtime') {
     return (
       <div role="img" aria-label={alt} className="md:hidden min-h-[220px] px-4 py-6 bg-dash-surface border-y border-dash-border">
@@ -325,6 +426,7 @@ export default function NoteHeroVisual({ hero }: { hero: JournalHero }) {
       <MobileVisualSummary variant={hero.variant} alt={hero.alt} />
       <div className="hidden md:block overflow-hidden border-y border-dash-border bg-dash-surface">
         <svg viewBox="0 0 1200 460" role="img" aria-label={hero.alt} className="block w-full aspect-[12/5]">
+          {hero.variant === 'prompt-complexity' && <PromptComplexityVisual reduceMotion={reduceMotion} />}
           {hero.variant === 'runtime' && <RuntimeVisual reduceMotion={reduceMotion} />}
           {hero.variant === 'integrity' && <IntegrityVisual />}
           {hero.variant === 'perception' && <PerceptionVisual reduceMotion={reduceMotion} />}
