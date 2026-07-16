@@ -19,6 +19,7 @@ export interface JournalSection {
   paragraphs: string[]
   points?: string[]
   callout?: string
+  benchmarkNarrative?: 'prompt-complexity-results'
 }
 
 export interface JournalEvidence {
@@ -81,6 +82,7 @@ export interface JournalArticle {
   comparisonChart?: JournalComparisonChart
   sections: JournalSection[]
   evidence: JournalEvidence[]
+  benchmark?: { kind: 'prompt-complexity' }
   featured?: boolean
 }
 
@@ -114,16 +116,13 @@ export const journalArticles: JournalArticle[] = [
     publishedAt: '2026-07-16',
     period: 'exp001 → exp005',
     readingMinutes: 8,
-    metrics: [
-      { value: '95.9%', label: 'baseline 완료율' },
-      { value: '-5.5%p', label: 'baseline 대비 headless' },
-      { value: '6.18 ≈ 6.16', label: 'baseline ↔ headless Self-QA' },
-    ],
+    benchmark: { kind: 'prompt-complexity' },
+    metrics: [],
     hero: {
       kind: 'visual',
       variant: 'prompt-complexity',
       alt: 'exp003 baseline의 기본 계약과 exp004·005 Elicit의 5단계 검증 구조, 완료 작업 및 Self-QA를 비교하는 시각화',
-      caption: 'baseline 뒤 두 Elicit 실행은 같은 5단계를 사용하되 STEP 2의 검사 방식이 달랐다. 완료 작업은 211개에서 200개와 199개로 줄었지만, headless-Elicit의 Self-QA는 baseline과 거의 같았다.',
+      caption: '측정값은 benchmark report에서, 검증 구조는 각 experiment YAML에서 읽는다.',
     },
     comparisonChart: {
       kind: 'dual',
@@ -131,11 +130,7 @@ export const journalArticles: JournalArticle[] = [
       description: 'subprocess로 실행한 exp003·004·005에서 완료율은 계속 낮아졌지만, Self-QA는 Elicit에서 하락한 뒤 headless-Elicit에서 baseline 수준으로 회복했다.',
       primary: { label: 'Completion', unit: '%', color: '#2563eb', domain: [0, 100] },
       secondary: { label: 'Self-QA', unit: '/10', color: '#059669', domain: [0, 10] },
-      data: [
-        { label: 'exp003 Baseline', primary: 95.9, secondary: 6.18 },
-        { label: 'exp004 Elicit', primary: 90.9, secondary: 5.87 },
-        { label: 'exp005 Headless', primary: 90.5, secondary: 6.16 },
-      ],
+      data: [],
       caveat: 'Self-QA는 외부 채점이 아니라 점수가 존재하는 결과의 자기평가다. exp004는 LibreOffice 설치 설정, exp005는 resume round도 함께 바뀌어 프롬프트 단독 효과로 읽을 수 없다.',
     },
     sections: [
@@ -157,10 +152,8 @@ export const journalArticles: JournalArticle[] = [
       },
       {
         heading: '결과: 두 메트릭이 갈라졌다',
-        paragraphs: [
-          '완료율은 단순했다. baseline exp003은 211/220, 95.9%를 완료했다. 5단계를 도입한 Elicit exp004는 200/220, 90.9%, STEP 2를 바꾼 headless-Elicit exp005는 199/220, 90.5%였다. 관찰된 완료 수는 순서대로 211개, 200개, 199개였다.',
-          'Self-QA는 다른 모양이었다. 6.18에서 5.87로 내려갔다가 6.16으로 되돌아왔다. exp005는 baseline보다 12개를 덜 완료했지만, 점수가 남은 결과의 평균 자기평가는 baseline과 0.02점 차이였다. 완료율만 보면 악화였고 Self-QA만 보면 거의 회복이었다.',
-        ],
+        paragraphs: [],
+        benchmarkNarrative: 'prompt-complexity-results',
       },
       {
         heading: '해석: 살아남은 결과의 평균은 전체 커버리지가 아니다',
@@ -172,8 +165,8 @@ export const journalArticles: JournalArticle[] = [
       {
         heading: '실패: 검증 절차가 새로운 실패 표면이 됐다',
         paragraphs: [
-          'exp004 report에는 `soffice`를 찾지 못한 실패가 7건 반복된다. 더 많은 문서 검사를 요구했지만 runner가 그 도구를 안정적으로 제공하지 못하면 검증 단계 자체가 실행 실패가 된다.',
-          'exp005에서는 `CONFIDENCE[...]`가 실행 코드로 새어 들어가 NameError를 만든 사례가 7건 반복된다. 결과를 설명하기 위한 출력 규약이 코드 경계와 섞인 것이다. 길어진 검증 프롬프트에는 모델이 지켜야 할 계약뿐 아니라 잘못 해석할 수 있는 표면도 함께 들어왔다.',
+          'exp004 report에는 `soffice`를 찾지 못한 실패가 반복된다. 더 많은 문서 검사를 요구했지만 runner가 그 도구를 안정적으로 제공하지 못하면 검증 단계 자체가 실행 실패가 된다.',
+          'exp005에서는 `CONFIDENCE[...]`가 실행 코드로 새어 들어가 NameError를 만든 사례가 반복된다. 결과를 설명하기 위한 출력 규약이 코드 경계와 섞인 것이다. 길어진 검증 프롬프트에는 모델이 지켜야 할 계약뿐 아니라 잘못 해석할 수 있는 표면도 함께 들어왔다.',
         ],
       },
       {
@@ -202,17 +195,17 @@ export const journalArticles: JournalArticle[] = [
       },
       {
         label: 'exp003 baseline 리포트',
-        detail: '211/220 완료, Self-QA 6.18의 subprocess 기준선',
+        detail: 'subprocess baseline의 report와 결과 원문',
         href: `${REPO}/batch-runner/results/exp003_GPT52Chat_baseline_runner_exec/report/report.md`,
       },
       {
         label: 'exp004 Elicit 리포트',
-        detail: '200/220 완료와 반복된 soffice 실행 실패',
+        detail: 'Elicit report와 반복된 soffice 실행 실패 원문',
         href: `${REPO}/batch-runner/results/exp004_GPT52Chat_elicit_runner_exec/report/report.md`,
       },
       {
         label: 'exp005 headless-Elicit 리포트',
-        detail: '199/220 완료, Self-QA 6.16, CONFIDENCE NameError',
+        detail: 'headless-Elicit report와 CONFIDENCE NameError 원문',
         href: `${REPO}/batch-runner/results/exp005_GPT52Chat_elicit_v2_runner_exec/report/report.md`,
       },
       {

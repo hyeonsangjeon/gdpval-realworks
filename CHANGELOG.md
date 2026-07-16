@@ -12,6 +12,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Field Note benchmark data source** — replace duplicated completion and
+  Self-QA literals in the prompt-complexity article, SVG hero, metric strip,
+  result narrative, and comparison chart with an exact exp003-exp005 selector
+  over `generated/reports-index.json`. Experiment detail headers now apply the
+  same index `meta` and `summary` snapshot while retaining the lazy-loaded full
+  report for task-level evidence. The selector requires one unique row per ID,
+  the expected Baseline/Elicit/Elicit v2 conditions, subprocess mode, valid
+  finite ranges, and count/rate consistency; missing or invalid data renders an
+  explicit alert instead of stale fallback numbers. The article links directly
+  to the source JSON and all three experiment detail pages, including
+  accessible mobile card navigation.
 - **Public task-spec privacy cleanup** — remove a provider-account failover
   specification and unreferenced hidden sweep metadata, generalize
   organization-specific monthly budget and capacity statements, and keep
