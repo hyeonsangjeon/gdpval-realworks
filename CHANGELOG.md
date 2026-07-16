@@ -22,7 +22,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   finite ranges, and count/rate consistency; missing or invalid data renders an
   explicit alert instead of stale fallback numbers. The article links directly
   to the source JSON and all three experiment detail pages, including
-  accessible mobile card navigation.
+  accessible mobile card navigation. Shipped through PR #90 (`b9e224a`) and
+  successful Pages run
+  [29475359417](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29475359417);
+  the deployed JSON, article, and exp003 detail values were verified to match.
 - **Public task-spec privacy cleanup** — remove a provider-account failover
   specification and unreferenced hidden sweep metadata, generalize
   organization-specific monthly budget and capacity statements, and keep

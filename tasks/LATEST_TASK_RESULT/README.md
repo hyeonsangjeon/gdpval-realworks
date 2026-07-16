@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-16
-- Status: Field Note benchmark data source implemented and locally verified
+- Status: Field Note benchmark data source published and production-verified
 
 ## Task
 
@@ -37,6 +37,10 @@ task. It must be refreshed before a task is reported complete.
   non-finite/out-of-range rates and QA, and rates inconsistent with raw counts.
   Missing, invalid, or failed JSON loads show an alert and render no benchmark
   metrics, visual, chart, result paragraph, or numeric evidence fallback.
+- Squash-merged the reviewed change through PR #90 as `b9e224a`. Automatic
+  `Aggregate Tests & Deploy` run
+  [29475359417](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29475359417)
+  completed the build and GitHub Pages deployment successfully.
 
 ## Verification
 
@@ -59,8 +63,15 @@ task. It must be refreshed before a task is reported complete.
   false missing-row alert. After a successful benchmark load, leaving and
   returning with a failed request also exposed no stale numbers, hero, or
   chart; slug-keyed remounting and request abort cleanup reset the state.
+- On the deployed site, the public JSON rows for exp003-exp005 matched the
+  metric strip, SVG labels, chart data/ARIA, and result prose exactly. The
+  public exp003 detail page showed the same 211/220, 95.9%, 6.18/10, and
+  Baseline values.
+- Public 390px dark/reduced-motion verification exposed all three experiment
+  card links and chart labels with no horizontal overflow, no hero animation,
+  and zero post-settle chart mutations.
 
 ## Remaining Work
 
-- Review and publish the validated branch, then verify the public article and
-  detail links against the deployed generated JSON.
+- No implementation or deployment work remains for this Field Note data-source
+  change.
