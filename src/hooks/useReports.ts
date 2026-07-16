@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ReportData, ReportIndexEntry, ReportsIndex, ExperimentEntry, SectorMatrix } from '../types/report'
+import { applyReportIndexSnapshot } from '../lib/reportIndexSnapshot'
 
 export const HF_BASE = 'https://huggingface.co/datasets/HyeonSang'
 
@@ -8,7 +9,7 @@ export const HF_BASE = 'https://huggingface.co/datasets/HyeonSang'
  * Built at deploy time via aggregate-reports.mjs, which falls back to HuggingFace
  * when local report_data.json is absent.
  */
-export function useReports() {
+export function useReports(enabled = true) {
   const [reports, setReports] = useState<ReportIndexEntry[]>([])
   const [experiments, setExperiments] = useState<ExperimentEntry[]>([])
   const [sectorMatrix, setSectorMatrix] = useState<SectorMatrix>({})
@@ -17,7 +18,24 @@ export function useReports() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}generated/reports-index.json?t=${Date.now()}`)
+    if (!enabled) {
+      setReports([])
+      setExperiments([])
+      setSectorMatrix({})
+      setGenerated('')
+      setError(null)
+      setLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    setReports([])
+    setExperiments([])
+    setSectorMatrix({})
+    setGenerated('')
+    setLoading(true)
+    setError(null)
+    fetch(`${import.meta.env.BASE_URL}generated/reports-index.json?t=${Date.now()}`, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to fetch reports: ${res.status}`)
         return res.json() as Promise<ReportsIndex>
@@ -30,10 +48,13 @@ export function useReports() {
         setLoading(false)
       })
       .catch((err) => {
+        if (err.name === 'AbortError') return
         setError(err.message)
         setLoading(false)
       })
-  }, [])
+
+    return () => controller.abort()
+  }, [enabled])
 
   return { reports, experiments, sectorMatrix, generated, loading, error }
 }
@@ -68,15 +89,15 @@ export function useReport(shortId: string | undefined) {
         return res.json() as Promise<ReportData>
       })
       .then((data) => {
-        data.short_id = shortId
+        const reportWithIndexSnapshot = applyReportIndexSnapshot(data, entry, shortId)
         // Merge error messages from error_tasks into task_results
-        if (data.error_tasks?.length && data.task_results) {
-          const errorMap = new Map(data.error_tasks.map((et) => [et.task_id, et.error]))
-          for (const task of data.task_results) {
+        if (reportWithIndexSnapshot.error_tasks?.length && reportWithIndexSnapshot.task_results) {
+          const errorMap = new Map(reportWithIndexSnapshot.error_tasks.map((et) => [et.task_id, et.error]))
+          for (const task of reportWithIndexSnapshot.task_results) {
             if (errorMap.has(task.task_id)) task.error = errorMap.get(task.task_id)
           }
         }
-        setReport(data)
+        setReport(reportWithIndexSnapshot)
         setLoading(false)
       })
       .catch((err) => {

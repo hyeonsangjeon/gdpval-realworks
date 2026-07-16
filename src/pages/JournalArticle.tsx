@@ -13,10 +13,17 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTheme } from '../contexts/ThemeContext'
 import NoteComparisonChart from '../components/notes/NoteComparisonChart'
 import NoteHeroVisual from '../components/notes/NoteHeroVisual'
+import { useReports } from '../hooks/useReports'
+import {
+  selectPromptComplexityBenchmark,
+  type PromptComplexityBenchmarkRow,
+  type PromptComplexityBenchmarkSelection,
+} from '../lib/promptComplexityBenchmark'
 import {
   getJournalArticle,
   journalArticles,
   lensLabels,
+  type JournalArticle as JournalArticleData,
   type JournalLens,
 } from '../data/journal'
 import { getExperimentHref, isExternalExperimentHref } from '../data/journalLinks'
@@ -28,11 +35,103 @@ const lensStyles: Record<JournalLens, string> = {
   domain: 'text-rose-700 dark:text-rose-300 bg-rose-500/10 border-rose-500/20',
 }
 
+type ReadyPromptBenchmark = Extract<PromptComplexityBenchmarkSelection, { status: 'ready' }>
+
+const formatSigned = (value: number, suffix: string) => `${value > 0 ? '+' : ''}${value.toFixed(1)}${suffix}`
+
+function resolvePromptComplexityArticle(article: JournalArticleData, benchmark: ReadyPromptBenchmark) {
+  const baseline = benchmark.rows[0]
+  const headless = benchmark.rows[benchmark.rows.length - 1]
+  const completedDifference = baseline.successCount - headless.successCount
+  const qaDifference = Math.abs(baseline.avgQaScore - headless.avgQaScore)
+
+  return {
+    metrics: [
+      { value: `${baseline.successRatePct.toFixed(1)}%`, label: `${baseline.condition} 완료율` },
+      { value: formatSigned(benchmark.completionDeltaPctPoints, '%p'), label: `${baseline.shortId} 대비 ${headless.shortId}`, note: 'success_count / total_tasks 기준' },
+      { value: `${baseline.avgQaScore.toFixed(2)} ≈ ${headless.avgQaScore.toFixed(2)}`, label: `${baseline.shortId} ↔ ${headless.shortId} Self-QA` },
+    ],
+    hero: article.hero ? {
+      ...article.hero,
+      caption: `report summary 기준 완료 작업은 ${benchmark.rows.map((row) => `${row.shortId} ${row.successCount}/${row.totalTasks}`).join(', ')}였다. Self-QA는 ${benchmark.rows.map((row) => row.avgQaScore.toFixed(2)).join(' → ')}로 움직였다.`,
+    } : undefined,
+    chart: article.comparisonChart ? {
+      ...article.comparisonChart,
+      data: benchmark.rows.map((row) => ({
+        label: `${row.shortId} ${row.condition}`,
+        primary: row.successRatePct,
+        secondary: row.avgQaScore,
+      })),
+    } : undefined,
+    sections: article.sections.map((section) => section.benchmarkNarrative === 'prompt-complexity-results' ? {
+      ...section,
+      paragraphs: [
+        `완료율은 ${benchmark.rows.map((row) => `${row.condition} ${row.shortId} ${row.successCount}/${row.totalTasks}, ${row.successRatePct.toFixed(1)}%`).join(' · ')}였다. 관찰된 완료 수는 순서대로 ${benchmark.rows.map((row) => `${row.successCount}개`).join(', ')}였다.`,
+        `Self-QA는 ${benchmark.rows.map((row) => row.avgQaScore.toFixed(2)).join(' → ')}로 움직였다. ${headless.shortId}는 ${baseline.shortId}보다 ${completedDifference}개를 덜 완료했지만, 점수가 남은 결과의 평균 자기평가는 ${qaDifference.toFixed(2)}점 차이였다. 완료율만 보면 악화였고 Self-QA만 보면 거의 회복이었다.`,
+      ],
+    } : section),
+  }
+}
+
+function BenchmarkDataSource({ rows, generated }: { rows: PromptComplexityBenchmarkRow[]; generated: string }) {
+  return (
+    <aside className="mb-10 border-y border-dash-border py-4 text-[11px]/[1.7] text-dash-text-secondary" aria-label="Benchmark data source">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="font-mono text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">BENCHMARK DATA</span>
+        <a
+          href={`${import.meta.env.BASE_URL}generated/reports-index.json`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400"
+        >
+          reports-index.json <ExternalLink className="h-3 w-3" />
+        </a>
+        {rows.map((row) => (
+          <Link
+            key={row.shortId}
+            to={getExperimentHref(row.shortId)}
+            className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400"
+          >
+            {row.shortId} 상세 <ArrowRight className="h-3 w-3" />
+          </Link>
+        ))}
+      </div>
+      <div className="mt-2 text-dash-text-muted">
+        측정값: reports-index.json report summary · 상세 페이지 상단과 동일 snapshot · 프롬프트 구조: experiment YAML{generated ? ` · index generated ${generated}` : ''}
+      </div>
+    </aside>
+  )
+}
+
+function BenchmarkDataState({ message, error }: { message: string; error?: boolean }) {
+  return (
+    <div className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
+      <div className="border-y border-dash-border bg-dash-surface px-5 py-8 text-sm text-dash-text-secondary" role={error ? 'alert' : 'status'}>
+        {message}
+      </div>
+    </div>
+  )
+}
+
 export default function JournalArticle() {
   const { slug } = useParams()
+
+  return <JournalArticleContent key={slug ?? 'missing'} slug={slug} />
+}
+
+function JournalArticleContent({ slug }: { slug: string | undefined }) {
   const navigate = useNavigate()
   const { isDark, toggle: toggleTheme } = useTheme()
   const article = getJournalArticle(slug)
+  const usesPromptBenchmark = article?.benchmark?.kind === 'prompt-complexity'
+  const { reports, generated, loading: reportsLoading, error: reportsError } = useReports(usesPromptBenchmark)
+  const promptBenchmark = usesPromptBenchmark && !reportsLoading && !reportsError
+    ? selectPromptComplexityBenchmark(reports)
+    : null
+  const readyPromptBenchmark = promptBenchmark?.status === 'ready' ? promptBenchmark : null
+  const resolved = article && readyPromptBenchmark
+    ? resolvePromptComplexityArticle(article, readyPromptBenchmark)
+    : null
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -53,6 +152,10 @@ export default function JournalArticle() {
   const related = journalArticles
     .filter((item) => item.slug !== article.slug && item.relatedExperiments.some((id) => article.relatedExperiments.includes(id)))
     .slice(0, 2)
+  const displayedMetrics = resolved?.metrics ?? article.metrics
+  const displayedChart = resolved?.chart ?? article.comparisonChart
+  const displayedSections = (resolved?.sections ?? article.sections)
+    .filter((section) => !section.benchmarkNarrative || readyPromptBenchmark)
 
   return (
     <div lang="ko" className="min-h-screen bg-dash-page text-dash-text font-journal-sans">
@@ -98,9 +201,23 @@ export default function JournalArticle() {
           </div>
         </header>
 
-        {article.hero && <NoteHeroVisual hero={article.hero} />}
+        {article.hero && (!usesPromptBenchmark || readyPromptBenchmark) && (
+          <NoteHeroVisual
+            hero={resolved?.hero ?? article.hero}
+            promptBenchmark={readyPromptBenchmark?.rows}
+          />
+        )}
+        {usesPromptBenchmark && reportsLoading && <BenchmarkDataState message="benchmark report 데이터를 불러오는 중입니다." />}
+        {usesPromptBenchmark && reportsError && <BenchmarkDataState error message={`benchmark report를 불러오지 못했습니다: ${reportsError}`} />}
+        {usesPromptBenchmark && promptBenchmark?.status === 'missing' && (
+          <BenchmarkDataState error message={`benchmark report에서 ${promptBenchmark.missingIds.join(', ')} 행을 찾지 못했습니다.`} />
+        )}
+        {usesPromptBenchmark && promptBenchmark?.status === 'invalid' && (
+          <BenchmarkDataState error message={`benchmark report의 ${promptBenchmark.invalidIds.join(', ')} 행이 유효하지 않습니다.`} />
+        )}
 
         <div className="max-w-[760px] mx-auto px-4 md:px-6 py-12 md:py-16">
+          {readyPromptBenchmark && <BenchmarkDataSource rows={readyPromptBenchmark.rows} generated={generated} />}
           <div className="mb-14 md:mb-16">
             <div className="flex items-center gap-3 mb-4" aria-hidden="true">
               <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">THESIS</span>
@@ -111,20 +228,24 @@ export default function JournalArticle() {
             </blockquote>
           </div>
 
-          <div className="grid grid-cols-3 border-y border-dash-border mb-16 md:mb-20">
-            {article.metrics.map((metric) => (
-              <div key={metric.label} className="py-6 md:py-7 px-2 md:px-4 text-center border-r border-dash-border last:border-r-0">
-                <div className="font-mono text-xl md:text-[28px] font-semibold text-dash-heading mb-2">{metric.value}</div>
-                <div className="text-[10px] md:text-xs text-dash-text-muted leading-[1.5]">{metric.label}</div>
-                {metric.note && <div className="text-[9px] text-dash-text-faint mt-1.5">{metric.note}</div>}
-              </div>
-            ))}
-          </div>
+          {displayedMetrics.length > 0 && (
+            <div className="grid grid-cols-3 border-y border-dash-border mb-16 md:mb-20">
+              {displayedMetrics.map((metric) => (
+                <div key={metric.label} className="py-6 md:py-7 px-2 md:px-4 text-center border-r border-dash-border last:border-r-0">
+                  <div className="font-mono text-xl md:text-[28px] font-semibold text-dash-heading mb-2">{metric.value}</div>
+                  <div className="text-[10px] md:text-xs text-dash-text-muted leading-[1.5]">{metric.label}</div>
+                  {metric.note && <div className="text-[9px] text-dash-text-faint mt-1.5">{metric.note}</div>}
+                </div>
+              ))}
+            </div>
+          )}
 
-          {article.comparisonChart && <NoteComparisonChart chart={article.comparisonChart} />}
+          {displayedChart && (!usesPromptBenchmark || readyPromptBenchmark) && (
+            <NoteComparisonChart chart={displayedChart} />
+          )}
 
           <div className="space-y-16 md:space-y-20">
-            {article.sections.map((section, sectionIndex) => (
+            {displayedSections.map((section, sectionIndex) => (
               <section key={section.heading}>
                 <div className="mb-6 md:mb-8">
                   <div className="flex items-center gap-3 mb-3" aria-hidden="true">

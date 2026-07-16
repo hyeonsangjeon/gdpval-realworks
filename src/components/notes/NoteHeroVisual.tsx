@@ -1,40 +1,27 @@
 import { motion, useReducedMotion } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import type { JournalHero } from '../../data/journal'
+import { getExperimentHref } from '../../data/journalLinks'
+import type { PromptComplexityBenchmarkRow } from '../../lib/promptComplexityBenchmark'
 
 const resolveAsset = (src: string) => (
   src.startsWith('http') ? src : `${import.meta.env.BASE_URL}${src.replace(/^\/+/, '')}`
 )
 
-function PromptComplexityVisual({ reduceMotion }: { reduceMotion: boolean | null }) {
-  const cards = [
-    {
-      x: 70,
-      title: 'exp003 · BASELINE',
-      mode: 'BASIC OUTPUT CONTRACT',
-      steps: ['CREATE FILE', 'INSPECT INPUT', 'TEXT SUMMARY'],
-      success: '211 / 220',
-      qa: 'Self-QA 6.18',
-      color: '#2563eb',
-    },
-    {
-      x: 450,
-      title: 'exp004 · ELICIT',
-      mode: 'FIVE MANDATORY STEPS',
-      steps: ['1 · RENDER TO PNG', '2 · DISPLAY PNG', '3 · PROGRAM CHECK', '4 · MATCH REQUEST', '5 · FINAL FILE CHECK'],
-      success: '200 / 220',
-      qa: 'Self-QA 5.87',
-      color: '#b45309',
-    },
-    {
-      x: 830,
-      title: 'exp005 · HEADLESS',
-      mode: 'SAME FIVE STEPS · NEW STEP 2',
-      steps: ['1 · RENDER TO PNG', '2 · PILLOW CHECK', '3 · PROGRAM CHECK', '4 · MATCH REQUEST', '5 · FINAL FILE CHECK'],
-      success: '199 / 220',
-      qa: 'Self-QA 6.16',
-      color: '#be123c',
-    },
-  ]
+function PromptComplexityVisual({
+  reduceMotion,
+  benchmark,
+}: {
+  reduceMotion: boolean | null
+  benchmark: PromptComplexityBenchmarkRow[]
+}) {
+  const cards = benchmark.map((row, index) => ({
+    ...row,
+    x: 70 + index * 380,
+    title: `${row.shortId} · ${row.condition.toUpperCase()}`,
+    success: `${row.successCount} / ${row.totalTasks}`,
+    qa: `Self-QA ${row.avgQaScore.toFixed(2)}`,
+  }))
 
   return (
     <>
@@ -258,25 +245,41 @@ function SandboxVisual({ reduceMotion }: { reduceMotion: boolean | null }) {
   )
 }
 
-function MobileVisualSummary({ variant, alt }: { variant: Extract<JournalHero, { kind: 'visual' }>['variant']; alt: string }) {
+function MobileVisualSummary({
+  variant,
+  alt,
+  promptBenchmark,
+}: {
+  variant: Extract<JournalHero, { kind: 'visual' }>['variant']
+  alt: string
+  promptBenchmark?: PromptComplexityBenchmarkRow[]
+}) {
   if (variant === 'prompt-complexity') {
+    if (!promptBenchmark) return null
+    const styles = [
+      'border-blue-700/70 bg-blue-500/10',
+      'border-amber-700/70 bg-amber-500/10',
+      'border-rose-700/70 bg-rose-500/10',
+    ]
     return (
-      <div role="img" aria-label={alt} className="md:hidden min-h-[220px] px-3 py-6 bg-dash-surface border-y border-dash-border">
+      <div className="md:hidden min-h-[220px] px-3 py-6 bg-dash-surface border-y border-dash-border">
+        <span className="sr-only">{alt}</span>
         <div className="font-mono text-[11px] text-dash-text-secondary mb-5">BASELINE → 5-STEP ELICIT → HEADLESS</div>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            ['Baseline', '기본 계약', '95.9%', 'QA 6.18', 'border-blue-700/70 bg-blue-500/10'],
-            ['Elicit', '5단계 검사', '90.9%', 'QA 5.87', 'border-amber-700/70 bg-amber-500/10'],
-            ['Headless', 'STEP 2 교체', '90.5%', 'QA 6.16', 'border-rose-700/70 bg-rose-500/10'],
-          ].map(([title, mode, completion, qa, style]) => (
-            <div key={title} className={`min-w-0 border px-2 py-4 text-center ${style}`}>
-              <div className="text-[11px] font-medium text-dash-text-secondary">{title}</div>
-              <div className="mt-1 text-[10px] leading-4 text-dash-text-secondary">{mode}</div>
-              <div className="mt-3 font-mono text-xl font-semibold text-dash-heading">{completion}</div>
-              <div className="mt-2 text-[11px] text-dash-text-secondary">{qa}</div>
-            </div>
+        <nav className="grid grid-cols-3 gap-2" aria-label="프롬프트 전략별 실험 상세">
+          {promptBenchmark.map((row, index) => (
+            <Link
+              key={row.shortId}
+              to={getExperimentHref(row.shortId)}
+              className={`min-w-0 border px-2 py-4 text-center ${styles[index]}`}
+              aria-label={`${row.shortId} ${row.condition} 실험 상세 보기`}
+            >
+              <div className="text-[11px] font-medium text-dash-text-secondary">{row.condition}</div>
+              <div className="mt-1 text-[10px] leading-4 text-dash-text-secondary">{row.mobileMode}</div>
+              <div className="mt-3 font-mono text-xl font-semibold text-dash-heading">{row.successRatePct.toFixed(1)}%</div>
+              <div className="mt-2 text-[11px] text-dash-text-secondary">QA {row.avgQaScore.toFixed(2)}</div>
+            </Link>
           ))}
-        </div>
+        </nav>
         <p className="mt-5 text-center text-xs/[1.7] text-pretty break-keep text-dash-text-secondary">5단계 도입 뒤 완료율은 낮았고, STEP 2 교체 뒤 Self-QA는 baseline 수준으로 돌아왔다.</p>
       </div>
     )
@@ -396,7 +399,13 @@ function MobileVisualSummary({ variant, alt }: { variant: Extract<JournalHero, {
   )
 }
 
-export default function NoteHeroVisual({ hero }: { hero: JournalHero }) {
+export default function NoteHeroVisual({
+  hero,
+  promptBenchmark,
+}: {
+  hero: JournalHero
+  promptBenchmark?: PromptComplexityBenchmarkRow[]
+}) {
   const reduceMotion = useReducedMotion()
 
   if (hero.kind === 'video') {
@@ -423,10 +432,12 @@ export default function NoteHeroVisual({ hero }: { hero: JournalHero }) {
 
   return (
     <figure className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
-      <MobileVisualSummary variant={hero.variant} alt={hero.alt} />
+      <MobileVisualSummary variant={hero.variant} alt={hero.alt} promptBenchmark={promptBenchmark} />
       <div className="hidden md:block overflow-hidden border-y border-dash-border bg-dash-surface">
         <svg viewBox="0 0 1200 460" role="img" aria-label={hero.alt} className="block w-full aspect-[12/5]">
-          {hero.variant === 'prompt-complexity' && <PromptComplexityVisual reduceMotion={reduceMotion} />}
+          {hero.variant === 'prompt-complexity' && promptBenchmark && (
+            <PromptComplexityVisual reduceMotion={reduceMotion} benchmark={promptBenchmark} />
+          )}
           {hero.variant === 'runtime' && <RuntimeVisual reduceMotion={reduceMotion} />}
           {hero.variant === 'integrity' && <IntegrityVisual />}
           {hero.variant === 'perception' && <PerceptionVisual reduceMotion={reduceMotion} />}

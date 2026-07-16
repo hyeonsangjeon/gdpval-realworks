@@ -4,68 +4,63 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-16
-- Status: Canary accepted; finalization guardrails merged
+- Status: Field Note benchmark data source implemented and locally verified
 
 ## Task
 
-- Verify the post-PR83 one-task Azure Vision canary against the approved XLSX
-  scope without dispatching another paid run.
-- Bound finalization recovery to at most one retry even when configuration asks
-  for more.
-- Reject unexpected function calls during tool-free finalization and prove that
-  latency, TPM guards, tokens, cache usage, and incomplete usage remain exact.
+- Make `/notes/when-more-prompt-is-less` derive its metrics, SVG, chart, and
+  result prose from benchmark data instead of duplicated literals.
+- Use the same build-time report snapshot as `/experiments/exp003`, exp004, and
+  exp005, and provide direct links to both the JSON source and detail pages.
+- Fail closed when required experiment rows are missing, duplicated, malformed,
+  or no longer match the intended subprocess comparison contract.
 
 ## Result
 
-- Post-PR83 run
-  [29435264166](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29435264166)
-  completed successfully on `1b1efd47` for the single approved exp003 task
-  `83d10b06-26d1-4636-a32c-23f92c57f30b`, pinned inference revision
-  `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`, `default_v2_mini.yaml`, and
-  `Sample.xlsx`.
-- All 38 item verdicts were valid: 17 pass, 18 fail, and 3 partial, with no
-  `judge_error` and no task error. The task received 31.9/63 (50.63%). A fail
-  verdict is a valid quality judgment here; it is distinct from runtime or
-  parser failure.
-- The visual acceptance path used exactly one render and one perception call.
-  Visual item `a64588ed-db04-4b8b-b3b8-3674ddcf10d1` routed to `visual`, set
-  `perception_called=true`, and retained relative provenance `Sample.xlsx`
-  without an absolute/traversal path or persisted image payload.
-- Usage accounting was complete: 127 main calls plus one perception call;
-  2,833,647 main input, 43,646 main output, 913,152 cached, 1,182 perception
-  input, and 176 perception output tokens. Analysis estimated USD 0.75 raw and
-  USD 0.64 cache-discounted, below the per-run USD 1 gate.
-- Grade commit `a7c76fa` and analysis commit `e0ea080` landed on `main`. Relay,
-  next-chunk, mini-full, and hybrid/mini comparison dispatches were skipped.
-- `ToolCallingJudge.finalization_retries` is now clamped to at most one while
-  preserving zero as disabled. This prevents larger `judge_max_retries` values
-  from silently increasing the finalization cost ceiling.
-- A function call returned during finalization now becomes
-  `unexpected_tool_call_during_finalization` without dispatching a file-read,
-  audio, vision, or other tool. The result remains score-excluded and
-  fail-closed.
-- Deterministic coverage proves both upstream guard invocations, summed latency,
-  input/output/cache totals, and `usage_complete=false` propagation when retry
-  usage is missing. No paid workflow was dispatched for this guardrail work.
-- Guardrails PR [#88](https://github.com/hyeonsangjeon/gdpval-realworks/pull/88)
-  was squash-merged to `main` as `2728ef7d5fa7d24c24401cf303a27e5fcd933e24`.
-  The merge triggered no GitHub Actions workflow, including no paid grading,
-  batch, cost-sweep, sandbox, or canary run.
+- Added a strict selector over `reports-index.json` that returns exp003, exp004,
+  and exp005 in comparison order. It reads condition, execution mode, success
+  count, total tasks, completion rate, and average Self-QA from each report's
+  `meta` and `summary` fields.
+- Removed the article's duplicated benchmark values. The top metrics, desktop
+  SVG, mobile cards, chart, caption, and result paragraphs now resolve from the
+  selected rows; only YAML-backed presentation labels such as the five steps
+  and Pillow replacement remain editorial data.
+- Added a visible `BENCHMARK DATA` source strip linking to
+  `generated/reports-index.json` and `/experiments/exp003`, exp004, and exp005.
+  Mobile comparison cards are accessible links to the same detail routes.
+- Detail pages continue to lazy-load full Hugging Face reports for task-level
+  content, but their header `meta` and `summary` are replaced with the matching
+  report-index entry. The article and detail header therefore use one immutable
+  build snapshot instead of potentially drifting summaries.
+- The selector rejects missing and duplicate IDs, non-string or unexpected
+  conditions/modes, zero or non-integer totals, invalid success counts,
+  non-finite/out-of-range rates and QA, and rates inconsistent with raw counts.
+  Missing, invalid, or failed JSON loads show an alert and render no benchmark
+  metrics, visual, chart, result paragraph, or numeric evidence fallback.
 
 ## Verification
 
-- Focused clamp, tool-rejection, malformed recovery, accounting, and config
-  wiring tests: **6 passed** under the real Python 3.11 sandbox environment.
-- Affected tool-calling, wiring, selector, and Step 8 suite: **166 passed**.
-- Broader non-integration suite excluding only the unavailable local GDPVal
-  parquet fixture: **1,128 passed, 6 skipped, 37 deselected**. The omitted
-  selector module requires
-  `data/gdpval-local/data/train-00000-of-00001.parquet`.
-- Python compilation, static diagnostics, and `git diff --check` passed.
+- Focused Field Note and selector contracts: **8 passed**; full aggregate suite:
+  **29 passed**. `npm run build`, static diagnostics, and `git diff --check`
+  passed.
+- Production-preview comparison read the actual JSON response and matched all
+  three rows to the metric strip, SVG labels, chart data/ARIA, and generated
+  result prose. The exp003 detail route showed the same 211/220, 95.9%, and
+  6.18/10 values.
+- Desktop and 390px dark/reduced-motion checks found no horizontal overflow.
+  The mobile visual exposed three detail links and all three chart labels.
+- Injecting an invalid exp005 row and aborting the JSON request each produced an
+  explicit alert with zero benchmark numbers, visual, chart, metric strip, or
+  numeric evidence in the full DOM.
+- Injecting a stale zeroed summary into the lazy HF exp003 response still left
+  the detail header at the index snapshot values and hid the stale condition,
+  proving the article/detail source contract at runtime.
+- SPA transitions from a normal note into a failed benchmark load produced no
+  false missing-row alert. After a successful benchmark load, leaving and
+  returning with a failed request also exposed no stale numbers, hero, or
+  chart; slug-keyed remounting and request abort cleanup reset the state.
 
 ## Remaining Work
 
-- No additional canary is needed because run 29435264166 already passed every
-  approved acceptance gate.
-- Do not expand this one-task canary into a full grading run without separate
-  scope and cost approval.
+- Review and publish the validated branch, then verify the public article and
+  detail links against the deployed generated JSON.
