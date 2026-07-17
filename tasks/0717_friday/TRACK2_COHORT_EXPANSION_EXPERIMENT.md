@@ -118,7 +118,7 @@ Before each dispatch, record:
 
 - exact ordered task IDs from the pinned inference payload;
 - selected primary/support paths per task;
-- rubric item and deterministic-precheck counts;
+- rubric item and automatic-precheck counts, expected to remain zero;
 - planned text, formatting, mixed, and visual routes;
 - expected render and perception calls;
 - renderer fingerprint requirement;
@@ -176,7 +176,7 @@ Post-fix recomputation produced:
 | Stage A (3) | 153 | 9 | 142 | 6 | 5 | 0 | 0 | 5 |
 | Stage B (10) | 435 | 21 | 401 | 16 | 17 | 0 | 1 | 27 |
 
-Validation results:
+Validation results at that audio-only checkpoint:
 
 - perception-routing unit suite: 33 passed;
 - selector, mixed visual-child, visual-inventory, and tool-dispatch suite: 50
@@ -226,33 +226,49 @@ accepted experiment results.
 
 ## Safe-Precheck Correction
 
-- Remove the generic extension-only pattern from automatic classification.
-- Keep explicit basename/filename requirements deterministic, including bare
-   filenames such as `Aurisic_Financials_4-25-1.xlsx`.
-- Route exact worksheet-name requirements before generic workbook/name rules.
-- Let substantive criteria that merely mention reference filenames fall
-   through to the judge.
+- Disable automatic natural-language prechecks. Filename, extension, worksheet,
+   file/count, page, and word requirements all go to the judge so a partial
+   regex match cannot decide a compound or negated criterion.
+- Keep the dormant precheck entry point fail-safe: a stale pattern ID returns
+   no verdict and therefore cannot score an item.
 - Treat `chart-of-accounts` as accounting content, not a visual-chart keyword,
    unless another explicit visual keyword is present.
-- Mark active grading configs with `precheck_patterns_version: v2`.
-- Use `scripts/preflight_track2_cohort.py` to run the real selector and
-   precheck handlers before counting judge-bound routes and visual calls.
+- Mark active grading configs with `precheck_patterns_version: v2` as an
+   identity marker only; the field is not a runtime feature switch.
+- Use `scripts/preflight_track2_cohort.py` to run the real selector, routing,
+   and shared visual-preflight validator before counting judge-bound routes and
+   visual calls.
+- Require a clean worktree and exact expected planner, repository, source,
+   config, grader, rubric, and ordered-task identities. `GITHUB_SHA`, when set,
+   must equal the checked-out `HEAD`.
 
 Exact Stage A planner result after the correction:
 
 | Metric | Planned |
 |---|---:|
 | Rubric items | 153 |
-| Precheck candidates / resolved / fallback | 7 / 5 / 2 |
-| Judge-bound routes | 140 text / 4 formatting / 4 visual |
-| Planned main judgments | 148 |
+| Precheck candidates / resolved / fallback | 0 / 0 / 0 |
+| Judge-bound routes | 143 text / 6 formatting / 4 visual |
+| Planned main judgments | 153 |
 | Planned render / perception calls | 4 / 4 |
 | Planner errors | 0 |
 
 The machine-readable plan also records planner contract
 `track2-selection-ok-v1`, planner source hash
-`361365621bba7f1f429cebf925613c718881462215beea22df89352e0ce1b9cf`, exact
-repository commit, source/rubric/config identities, and task-level plans.
+`1a7cca75e685d5c2202f4753ae39255fac196dcd27d5581af80976ae60efb147`, clean
+implementation commit `acba15bcc56fdc311a7cecf5c847378f69352ede`, exact
+source/rubric/config identities, and task-level plans. The planner must run
+again on the merged `main` SHA before dispatch.
+
+Final correction validation:
+
+- no-precheck grader/planner focused suite: 65 passed;
+- shared visual-validator/planner parity suite: 19 passed, 37 deselected;
+- planner identity suite: 14 passed;
+- corrected split-selector regressions: 3 passed;
+- broad non-integration suite: 1,204 passed, 2 skipped, 37 deselected;
+- independent grading-engineer review found no remaining code correctness
+   blocker and independently reproduced the broad result.
 
 ## Stage Gates
 
@@ -317,27 +333,27 @@ audited, but they must not be committed as accepted grades.
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | pending safe-precheck merge |
-| Grader source hash | `dafd2b4ea8f63258b6ae58e4cc259184146705f71d79b095c2e27656eca257a7` |
+| Main SHA | clean pre-merge plan `acba15bcc56fdc311a7cecf5c847378f69352ede`; dispatch SHA pending merge |
+| Grader source hash | `9b8a9ae3288ec3e9c7608ea8af4ced3e77f2e27956da426da5b63d3b0acee01e` |
 | Config hash | `0a8e1f421ad46dc2` |
-| Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort3__cfg_0a8e1f421ad46dc2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_dafd2b4ea8f63258__v2.2.json` |
+| Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort3__cfg_0a8e1f421ad46dc2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_9b8a9ae3288ec3e9__v2.2.json` |
 | Ordered task IDs | verified first 3 pinned IDs |
-| Rubric items / prechecks | 153 / 7 candidates / 5 resolved / 2 fallback |
-| Route counts | 140 text / 4 formatting / 4 visual |
+| Rubric items / prechecks | 153 / 0 candidates / 0 resolved / 0 fallback |
+| Route counts | 143 text / 6 formatting / 4 visual |
 | Render / perception calls | 4 / 4 planned |
 | Run ID | attempt 1 `29559615083` rejected; rerun not dispatched |
 | Result | attempt 1 removed due invalid precheck decisions |
 | Raw / effective cost | attempt 1 USD 1.26 / USD 1.02 |
-| Decision | `RERUN_AFTER_SAFE_PRECHECK_MERGE` |
+| Decision | `RERUN_AFTER_MERGE_AND_CLEAN_MAIN_PREFLIGHT` |
 
 ## Stage B Log
 
 | Field | Planned / observed |
 |---|---|
 | Main SHA | pending Stage A rerun acceptance |
-| Grader source hash | `643d775b63e0ed4b09087ce1a2742da6ddfc73342e19a02146699286c3ef9baa` |
+| Grader source hash | `a6bb2692a3478ef43b99206ce7e0874386edac0618028d2278833a9956a11f3b` |
 | Config hash | `5c01123da349f80f` |
-| Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_5c01123da349f80f__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_643d775b63e0ed4b__v2.2.json` |
+| Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_5c01123da349f80f__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_a6bb2692a3478ef4__v2.2.json` |
 | Ordered task IDs | verified first 10 pinned IDs |
 | Rubric items / prechecks | pending exact planner on first-10 tree |
 | Route counts | pending exact planner |

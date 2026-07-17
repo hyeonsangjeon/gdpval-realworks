@@ -13,11 +13,11 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 - **Exact model-free Track 2 cohort planner** — add a direct-entry CLI that
-  executes deterministic selection and precheck handlers before counting
-  judge-bound text/formatting/visual routes and render-perception calls. It
-  emits ordered task IDs, resolved/fallback prechecks, immutable source/config/
-  rubric identities, per-item plans, and fail-closed errors without creating an
-  Azure client or making model calls.
+  executes the production selector, routing, and shared visual-preflight
+  validator before counting judge-bound routes and render-perception calls. It
+  requires a clean checkout and exact expected planner, repository, inference,
+  config, grader, rubric, and ordered-task identities, and emits item-level
+  plans without creating an Azure client or making model calls.
 - **Track 2 isolated cohort configs** — add Stage A three-task and Stage B
   ten-task validation configs whose parsed runtime semantics exactly match
   `default_v2_mini`; distinct config names, hashes, grader-source identities,
@@ -27,22 +27,22 @@ entries land under a fresh dated heading the day they merge to `main`.
   two-stage plan for expanding the accepted exp003 one-task canary to three and
   then ten tasks without overwriting the canary artifact. The plan fixes task
   IDs, inference/rubric identity, cost and wall-clock gates, provenance checks,
-  stop conditions, and a retrospective log. Model-free preflight found an XLSX
-  `Sound Technician` criterion incorrectly routed to audio by the keyword
-  `sound`; paid dispatch is blocked until file-compatible audio routing is
-  implemented and the planned 5/27 render-perception call counts are rechecked.
+  stop conditions, and a retrospective log. Preflight found and corrected an
+  XLSX `Sound Technician` false audio route, then rejected Stage A attempt 1
+  after audit exposed unsafe automatic precheck verdicts. A corrected rerun
+  remains blocked until merge and clean-main preflight.
 
 ### Fixed
-- **Safe extension and worksheet prechecks** — stop treating every mentioned
-  `.xlsx`, `.pdf`, media, or document filename as a deliverable-format
-  requirement. Reference/source consistency criteria now reach the judge;
-  exact worksheet-name checks run before generic workbook rules; quoted or bare
-  filename requirements remain deterministic. Active configs declare
-  `precheck_patterns_version: v2`. Stage A attempt 1 exposed seven invalid
-  extension-only verdicts, so its grade and analysis are removed pending a
-  corrected rerun. The same audit removed one false visual route where the
-  accounting phrase `chart-of-accounts` was interpreted as a visual chart;
-  the checked-in 220-task supported-vision inventory is now 466 calls.
+- **Fail-safe rubric classification** — disable all automatic natural-language
+  prechecks after Stage A attempt 1 exposed seven invalid extension-only
+  verdicts and further review found compound, negated, and partial-match risks
+  in filename, worksheet, and count rules. Every filename, extension,
+  worksheet, file/count, page, and word criterion now reaches the judge, while
+  stale precheck IDs cannot score an item. Active configs record
+  `precheck_patterns_version: v2` as identity metadata only. The rejected grade
+  and analysis are removed pending a corrected rerun. The same audit removed a
+  false visual route where `chart-of-accounts` was read as a visual chart; the
+  checked-in 220-task supported-vision inventory is now 466 calls.
 - **File-compatible audio routing** — retain criterion-level audio
   classification for inventory, but downgrade runtime routing to text when the
   selected targets contain no supported audio extension. This prevents an XLSX
@@ -50,7 +50,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   routing, and `read_deliverable` now share one WAV/MP3/FLAC/OGG/M4A/AAC set;
   extensionless targets remain conservatively audio while known unsupported
   suffixes downgrade to text. Recomputed cohort plans contain zero false audio
-  routes and preserve the preregistered 5/27 render-perception call counts.
+  routes; the final exact Stage A plan after all corrections requires 4 render
+  and 4 perception calls.
 - **Field Note benchmark data source** — replace duplicated completion and
   Self-QA literals in the prompt-complexity article, SVG hero, metric strip,
   result narrative, and comparison chart with an exact exp003-exp005 selector
