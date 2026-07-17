@@ -260,6 +260,7 @@ def test_split_children_routes_each_primary_and_aggregates(monkeypatch, tmp_path
     evidence_13 = "session 13 polished " + ("a" * 130)
     evidence_14 = "session 14 readable " + ("b" * 130)
     responses = ScriptedResponses([
+        _response(output=[_final(_payload("pass", 1.0, "two files provided"))]),
         _response(output=[_final(_payload("pass", 1.0, evidence_13))]),
         _response(output=[_final(_payload("partial", 0.5, evidence_14))]),
     ])
@@ -370,14 +371,14 @@ def test_split_children_routes_each_primary_and_aggregates(monkeypatch, tmp_path
     assert all(child["perception_called"] for child in style.child_grades)
     assert all(not child["score_excluded"] for child in style.child_grades)
     assert len(fake_vision.calls) == 2
-    assert len(responses.calls) == 2
+    assert len(responses.calls) == 3
     assert style.judge_call_count == 2
     assert style.perception_call_count == 2
     assert style.render_call_count == 2
-    assert grade.judge_call_count == 2
-    assert grade.judge_input_tokens == 160
-    assert grade.judge_output_tokens == 40
-    assert grade.judge_cached_tokens == 10
+    assert grade.judge_call_count == 3
+    assert grade.judge_input_tokens == 240
+    assert grade.judge_output_tokens == 60
+    assert grade.judge_cached_tokens == 15
     assert grade.perception_call_count == 2
     assert grade.perception_input_tokens == 22
     assert grade.perception_output_tokens == 8
@@ -402,7 +403,9 @@ def test_split_visual_renderer_failure_excludes_parent_before_child_main(
 ):
     from core.rubric_loader import RubricItem, TaskRubric
 
-    responses = ScriptedResponses([])
+    responses = ScriptedResponses([
+        _response(output=[_final(_payload("pass", 1.0, "two files provided"))]),
+    ])
     grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
 
     class FakeVision:
@@ -487,9 +490,9 @@ def test_split_visual_renderer_failure_excludes_parent_before_child_main(
     assert style.visual_provenance[0]["renderer_metadata"]["renderer"][
         "libreoffice_version"
     ] == "LibreOffice 24.2.7.2"
-    assert grade.judge_call_count == 0
+    assert grade.judge_call_count == 1
     assert grade.total_max == 1
-    assert responses.calls == []
+    assert len(responses.calls) == 1
 
 
 def test_split_visual_cap_is_preflighted_before_any_render_or_child_main(
@@ -497,7 +500,9 @@ def test_split_visual_cap_is_preflighted_before_any_render_or_child_main(
 ):
     from core.rubric_loader import RubricItem, TaskRubric
 
-    responses = ScriptedResponses([])
+    responses = ScriptedResponses([
+        _response(output=[_final(_payload("pass", 1.0, "two files provided"))]),
+    ])
     grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
 
     class CappedVision:
@@ -545,9 +550,9 @@ def test_split_visual_cap_is_preflighted_before_any_render_or_child_main(
     assert style.score_excluded is True
     assert style.render_call_count == 0
     assert style.perception_call_count == 0
-    assert grade.judge_call_count == 0
+    assert grade.judge_call_count == 1
     assert vision.calls == []
-    assert responses.calls == []
+    assert len(responses.calls) == 1
 
 
 def test_docx_overall_style_uses_formatting_tool_without_visual_prepass(

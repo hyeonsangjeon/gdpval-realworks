@@ -84,6 +84,26 @@ def test_default_v2_config_loads_and_validates():
 
 
 @pytest.mark.parametrize(
+    "filename",
+    [
+        "default_gpt5pro.yaml",
+        "default_v2.yaml",
+        "default_v2_mini.yaml",
+        "default_v2_tight.yaml",
+        "validation_v2_mini_cohort3.yaml",
+        "validation_v2_mini_cohort10.yaml",
+    ],
+)
+def test_active_configs_declare_safe_precheck_v2(filename: str):
+    path = Path("grading_configs") / filename
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    validate_grading_config(data)
+
+    assert data["grader"]["precheck_patterns_version"] == "v2"
+
+
+@pytest.mark.parametrize(
     ("filename", "config_name"),
     [
         ("validation_v2_mini_cohort3.yaml", "validation_v2_mini_cohort3"),

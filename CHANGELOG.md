@@ -12,6 +12,12 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Exact model-free Track 2 cohort planner** — add a direct-entry CLI that
+  executes the production selector, routing, and shared visual-preflight
+  validator before counting judge-bound routes and render-perception calls. It
+  requires a clean checkout and exact expected planner, repository, inference,
+  config, grader, rubric, and ordered-task identities, and emits item-level
+  plans without creating an Azure client or making model calls.
 - **Track 2 isolated cohort configs** — add Stage A three-task and Stage B
   ten-task validation configs whose parsed runtime semantics exactly match
   `default_v2_mini`; distinct config names, hashes, grader-source identities,
@@ -21,12 +27,22 @@ entries land under a fresh dated heading the day they merge to `main`.
   two-stage plan for expanding the accepted exp003 one-task canary to three and
   then ten tasks without overwriting the canary artifact. The plan fixes task
   IDs, inference/rubric identity, cost and wall-clock gates, provenance checks,
-  stop conditions, and a retrospective log. Model-free preflight found an XLSX
-  `Sound Technician` criterion incorrectly routed to audio by the keyword
-  `sound`; paid dispatch is blocked until file-compatible audio routing is
-  implemented and the planned 5/27 render-perception call counts are rechecked.
+  stop conditions, and a retrospective log. Preflight found and corrected an
+  XLSX `Sound Technician` false audio route, then rejected Stage A attempt 1
+  after audit exposed unsafe automatic precheck verdicts. A corrected rerun
+  remains blocked until merge and clean-main preflight.
 
 ### Fixed
+- **Fail-safe rubric classification** — disable all automatic natural-language
+  prechecks after Stage A attempt 1 exposed seven invalid extension-only
+  verdicts and further review found compound, negated, and partial-match risks
+  in filename, worksheet, and count rules. Every filename, extension,
+  worksheet, file/count, page, and word criterion now reaches the judge, while
+  stale precheck IDs cannot score an item. Active configs record
+  `precheck_patterns_version: v2` as identity metadata only. The rejected grade
+  and analysis are removed pending a corrected rerun. The same audit removed a
+  false visual route where `chart-of-accounts` was read as a visual chart; the
+  checked-in 220-task supported-vision inventory is now 466 calls.
 - **File-compatible audio routing** — retain criterion-level audio
   classification for inventory, but downgrade runtime routing to text when the
   selected targets contain no supported audio extension. This prevents an XLSX
@@ -34,7 +50,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   routing, and `read_deliverable` now share one WAV/MP3/FLAC/OGG/M4A/AAC set;
   extensionless targets remain conservatively audio while known unsupported
   suffixes downgrade to text. Recomputed cohort plans contain zero false audio
-  routes and preserve the preregistered 5/27 render-perception call counts.
+  routes; the final exact Stage A plan after all corrections requires 4 render
+  and 4 perception calls.
 - **Field Note benchmark data source** — replace duplicated completion and
   Self-QA literals in the prompt-complexity article, SVG hero, metric strip,
   result narrative, and comparison chart with an exact exp003-exp005 selector
@@ -145,7 +162,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   messages, generated filenames, arbitrary attempt fields, and heavy QA reports
   are excluded from checkpoints and self-reports.
 - **Grading Track 2 source and execution hardening** — canonicalize every inference task and deliverable path under the exact `deliverable_files/<task_id>/` tree, require an exact regular-file manifest match, and reject absolute/parent/other-task paths, duplicates, symlinks, and ancestor-symlink escapes before grader construction. Workflow string inputs now enter shell steps only through validated, quoted environment variables; resume chunks are limited to 0–10 and require the pinned inference revision. Main and vision judge envelopes reject missing, nonnumeric, nonfinite, inconsistent, or giant-integer score fields as usage-preserving score-excluded errors. Partial saves are atomic and reloaded/schema-checked; `rc=7` requires new durable progress, an exact staged grade diff, a successful strict rebase with unchanged grade SHA-256, current-schema validation, and a pushed commit before relay. The inference full SHA and full grader source hash remain fixed across chunks, including the actual fallback tool prompt bytes.
-- **Grading Track 2 harness-owned render + vision** — route Overall Style and visual criteria through a trusted pre-main-judge render/perception pass for PDF/XLSX/XLSM/PPTX/images, while DOC/DOCX-only Overall Style uses formatting inspection and mixed split targets preserve child routing. The main model cannot request render bytes or invoke vision directly; invalid vision envelopes, renderer errors, unsupported scopes, per-item file caps, and task-wide vision budget failures become score-excluded `judge_error` results before a normal verdict. Strict relative-path/SHA-256 renderer, coverage, and vision provenance is retained for parent and child audit records without base64 or absolute paths. The checked-in 220-task policy inventory requires 467 supported vision calls with a task maximum of 68, under the configured hard cap of 72. Rubrics now resolve to an immutable full Hugging Face commit and load only from a staged, atomically promoted per-SHA parquet snapshot whose manifest verifies repository identity, exact paths, SHA-256 hashes, and sizes. Active v2 outputs include config identity, full rubric SHA, and prompt version; cache hits require a schema-valid exact task set, while resume requires a schema-valid unique subset and matching experiment/rubric/prompt/config/renderer identity. New runs reject duplicate inference IDs and invalid `--tasks` selections before grader construction. The Ubuntu 24.04 grade workflow conditionally installs and preflights LibreOffice/fonts before Azure login, fails if the exact output artifact is missing, and the analyzer prices mixed child perception usage by its actual modality. HF inference inputs now resolve once to an immutable full dataset SHA, stamp canonical repository/revision metadata, and atomically replace revision-local deliverables. Active v2 filenames include the full inference SHA plus a 16-character grader-source route, while payload/cache/resume verify the full SHA-256 over the grading implementation surface. Chunk relays propagate the resolved inference SHA, and grade commits use strict rebase with pre/post grade-blob SHA-256 and current-tree schema validation before retrigger eligibility.
+- **Grading Track 2 harness-owned render + vision** — route Overall Style and visual criteria through a trusted pre-main-judge render/perception pass for PDF/XLSX/XLSM/PPTX/images, while DOC/DOCX-only Overall Style uses formatting inspection and mixed split targets preserve child routing. The main model cannot request render bytes or invoke vision directly; invalid vision envelopes, renderer errors, unsupported scopes, per-item file caps, and task-wide vision budget failures become score-excluded `judge_error` results before a normal verdict. Strict relative-path/SHA-256 renderer, coverage, and vision provenance is retained for parent and child audit records without base64 or absolute paths. The checked-in 220-task policy inventory requires 466 supported vision calls with a task maximum of 68, under the configured hard cap of 72. Rubrics now resolve to an immutable full Hugging Face commit and load only from a staged, atomically promoted per-SHA parquet snapshot whose manifest verifies repository identity, exact paths, SHA-256 hashes, and sizes. Active v2 outputs include config identity, full rubric SHA, and prompt version; cache hits require a schema-valid exact task set, while resume requires a schema-valid unique subset and matching experiment/rubric/prompt/config/renderer identity. New runs reject duplicate inference IDs and invalid `--tasks` selections before grader construction. The Ubuntu 24.04 grade workflow conditionally installs and preflights LibreOffice/fonts before Azure login, fails if the exact output artifact is missing, and the analyzer prices mixed child perception usage by its actual modality. HF inference inputs now resolve once to an immutable full dataset SHA, stamp canonical repository/revision metadata, and atomically replace revision-local deliverables. Active v2 filenames include the full inference SHA plus a 16-character grader-source route, while payload/cache/resume verify the full SHA-256 over the grading implementation surface. Chunk relays propagate the resolved inference SHA, and grade commits use strict rebase with pre/post grade-blob SHA-256 and current-tree schema validation before retrigger eligibility.
 - **`batch-runner/scripts/download_inference_from_hf.py`** — pass `HF_TOKEN` explicitly to `hf_hub_download()` (×2) and `snapshot_download()` via a new `_hf_token()` helper. The grade pipeline's "Download inference results from HF" step injects `HF_TOKEN` env, but `huggingface_hub` auto-pickup did not fire, so requests went out **anonymous** (CI log: `unauthenticated requests to HF Hub`). Under the sequential grade relay this tripped HTTP **429 Too Many Requests** on the inference parquet, breaking a chunk mid-run (e.g. 5.4 220 re-grade chunk-2 resume). Authenticated requests have a much higher rate limit → relay no longer 429s on repeated chunk downloads. No behavior change for single runs.
 
 ### Added

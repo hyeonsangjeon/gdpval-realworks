@@ -35,6 +35,7 @@ batch-runner/hf_repo/
 batch-runner/local_repo/
 batch-runner/scripts/*
 !batch-runner/scripts/preflight_grading_renderer.py
+!batch-runner/scripts/preflight_track2_cohort.py
 
 
 # Experiment report HTML (skews GitHub language stats)

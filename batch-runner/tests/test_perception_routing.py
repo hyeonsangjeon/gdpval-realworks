@@ -58,6 +58,25 @@ def test_visual_beats_formatting_when_both_present():
     assert d.preferred_op == "render_to_image"
 
 
+def test_chart_of_accounts_is_not_a_visual_chart():
+    decision = classify_criterion(
+        "Expense classification uses chart-of-accounts numbers consistent "
+        "with COA.xlsx."
+    )
+
+    assert decision.modality is Modality.TEXT
+    assert decision.preferred_op == "read_content"
+
+
+def test_chart_of_accounts_with_explicit_layout_stays_visual():
+    decision = classify_criterion(
+        "The chart of accounts layout is visually clear."
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.matched_keywords == ("layout",)
+
+
 @pytest.mark.parametrize(
     "text",
     [

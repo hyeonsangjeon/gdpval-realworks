@@ -98,11 +98,51 @@ def _make_grader(monkeypatch, tmp_path: Path, fake_client: _FakeClient | None = 
     return g
 
 
-def test_classify_file_exists_pattern():
-    item = RubricItem("r1", "The submitted file basename is 'Sample'", 2, None)
-    mode, pid = Grader._classify(item)
-    assert mode == "precheck"
-    assert pid == "file_exists_or_name"
+@pytest.mark.parametrize(
+    "criterion",
+    [
+        "Amounts match the source invoice in Reference.pdf.",
+        "Expense accounts are consistent with COA.xlsx.",
+        "Voiceover reads the lines written in Script.docx.",
+        "The submitted file basename is 'Sample'.",
+        "The file extension is .xlsx.",
+        "The deliverable must be .xlsx, not .xlsm.",
+        "The deliverable is a PDF document, not a DOCX.",
+        "The deliverable file name must be Report.xlsx.",
+        "The deliverable file name: Report.xlsx.",
+        "The filename is exactly `Report.xlsx`.",
+        "The submitted file named ‘Report.xlsx’ is present.",
+        "Includes data from the reference file named 'Reference.xlsx'.",
+        "The zip archive contains a top-level file named package.json.",
+        "The output should be reconciled to Reference.pdf.",
+        "Submit exactly 1 file named 'Report.xlsx'.",
+        "The workbook contains a worksheet named exactly 'Summary'.",
+        "The workbook must not contain a worksheet named 'Raw'.",
+        "A worksheet named 'Raw' contains accurate totals.",
+        "The first worksheet is named 'Sample'.",
+        "The deliverable is exactly 2 pages.",
+        "The document contains at least 500 words.",
+        "The archive contains exactly 3 files including package.json.",
+    ],
+)
+def test_all_natural_language_requirements_fall_back_to_judge(criterion):
+    item = RubricItem("r1", criterion, 2, None)
+
+    assert Grader._classify(item) == ("judge", None)
+
+
+@pytest.mark.parametrize(
+    "criterion",
+    [
+        "A single deliverable exists.",
+        "The document is present.",
+        "The workbook extension is acceptable.",
+    ],
+)
+def test_unparsed_generic_file_requirements_fall_back_to_judge(criterion):
+    item = RubricItem("r1", criterion, 2, None)
+
+    assert Grader._classify(item) == ("judge", None)
 
 
 def test_classify_falls_back_to_judge():
@@ -112,35 +152,13 @@ def test_classify_falls_back_to_judge():
     assert pid is None
 
 
-def test_precheck_file_extension_pass(monkeypatch, tmp_path):
+def test_stale_precheck_pattern_cannot_decide_verdict(monkeypatch, tmp_path):
     grader = _make_grader(monkeypatch, tmp_path)
-    f = tmp_path / "sample.xlsx"
-    f.write_bytes(b"x")
-    item = RubricItem("r1", "Deliverable must be .xlsx", 2, None)
-    verdict = grader._precheck_file_extension(item, [f])
-    assert verdict[0] == "pass"
+    item = RubricItem("r1", "Submit exactly 1 file.", 2, None)
+    submitted = tmp_path / "Report.xlsx"
+    submitted.write_bytes(b"xlsx")
 
-
-def test_precheck_file_extension_fail(monkeypatch, tmp_path):
-    grader = _make_grader(monkeypatch, tmp_path)
-    f = tmp_path / "sample.pdf"
-    f.write_bytes(b"x")
-    item = RubricItem("r1", "Deliverable must be .xlsx", 2, None)
-    verdict = grader._precheck_file_extension(item, [f])
-    assert verdict[0] == "fail"
-
-
-def test_precheck_worksheet_name_pass(monkeypatch, tmp_path):
-    grader = _make_grader(monkeypatch, tmp_path)
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Summary"
-    xlsx = tmp_path / "book.xlsx"
-    wb.save(xlsx)
-
-    item = RubricItem("r1", "worksheet named 'Summary' must be present", 2, None)
-    verdict = grader._precheck_worksheet_name(item, [xlsx])
-    assert verdict[0] == "pass"
+    assert grader._run_precheck("count_check", item, [submitted]) is None
 
 
 def test_judge_missing_evidence_marks_fail(monkeypatch, tmp_path):
