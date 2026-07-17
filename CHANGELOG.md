@@ -53,7 +53,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   whose DOCX/PDF/XLSX bundle was rejected solely because DOCX is not renderable;
   the corrected boundary renders PDF/XLSX, records the filtered DOCX, and keeps
   unsupported-only visual targets fail closed. Runtime and planner now validate
-  split children and item/task caps in the same pre-render order.
+  split children and item/task caps in the same pre-render order. Corrected
+  model-free run `29589077065` passed all first-10 gates with 435 items, 436
+  judgments, 26/26 render-perception calls, zero prechecks/audio/errors, and one
+  audited filtered DOCX path; paid Stage B remains pending final active-run and
+  current-main identity guards.
 - **Exact planner perception accounting** — bump the planner contract to v2,
   count audio separately from harness-owned visual calls, enforce visual/audio
   task caps, and fail closed whenever an audio route exists because the main
