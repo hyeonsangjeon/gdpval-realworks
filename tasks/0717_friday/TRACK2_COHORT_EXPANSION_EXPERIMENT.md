@@ -1,7 +1,7 @@
 # Track 2 Cohort Expansion Experiment
 
 - Date: 2026-07-17
-- Status: `STAGE_A_ACCEPTED_STAGE_B_PREFLIGHT_FIX_RERUN_PENDING`
+- Status: `STAGE_A_ACCEPTED_STAGE_B_PREFLIGHT_PASSED_DISPATCH_PENDING`
 - Owner: repository operator
 - Experiment family: rubric grading / harness-owned perception
 - Prior accepted run: GitHub Actions `29435264166`
@@ -383,18 +383,18 @@ audited, but they must not be committed as accepted grades.
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | attempt 1 `1294d11aa00ddd7d34a6d7cd804bab9ed534eca8`; corrected rerun SHA pending merge |
-| Grader source hash | attempt 1 `d2fe2661af800b09e203ac146eae226eb898a2ff1975c8233f122242531c6841`; corrected `ab8704b10f2e39a26bbb443b49c8c4e1a2697a6a31c74258d4af8ebc3ba8b551` |
+| Main SHA | attempt 1 `1294d11aa00ddd7d34a6d7cd804bab9ed534eca8`; corrected plan `51839d64ea854a0de1420beb7541b369f55bea6e` |
+| Grader source hash | `ab8704b10f2e39a26bbb443b49c8c4e1a2697a6a31c74258d4af8ebc3ba8b551` |
 | Config hash | `b11acba425087d85` |
 | Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_b11acba425087d85__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_ab8704b10f2e39a2__v2.2.json` |
 | Ordered task IDs | verified first 10 pinned IDs |
-| Rubric items / prechecks | 435 / 0; corrected rerun required |
+| Rubric items / prechecks | 435 / 0 |
 | Route counts | 402 text / 16 formatting / 16 visual / 1 mixed; 0 audio |
-| Render / perception calls | attempt 1 incomplete 8 / 8; corrected expected 26 / 26 |
-| Run ID | model-free preflight attempt 1 `29583415563`; paid run not dispatched |
-| Result | nine task-10 mixed-bundle visual errors; fix validated, rerun pending |
+| Render / perception calls | 26 / 26 planned; 0 audio |
+| Run ID | preflight attempt 1 `29583415563` failed; corrected preflight `29589077065` passed; paid run pending |
+| Result | exact first-10 plan, 436 main judgments, zero planner errors |
 | Raw / effective cost | not started |
-| Decision | `FIX_MERGE_THEN_MODEL_FREE_PREFLIGHT_RERUN_REQUIRED` |
+| Decision | `PASS_PAID_STAGE_B_DISPATCH_ALLOWED_AFTER_FINAL_MAIN_IDENTITY_AND_ACTIVE_RUN_GUARDS` |
 
 The local shell has no private dataset token, so a selective pinned download
 failed closed with HTTP 401 before any model/Azure call and left no partial
@@ -419,6 +419,34 @@ fail before any sibling render, task budget, or main call. Runtime and planner
 share this ordering. Artifact re-evaluation predicts 436 main judgments and
 26/26 render-perception calls with one filtered DOCX path and no errors. These
 remain planned values until a clean merged-main preflight rerun confirms them.
+
+### Stage B Corrected Preflight Result
+
+Run `29589077065` passed from clean `main` commit
+`51839d64ea854a0de1420beb7541b369f55bea6e` in 40 seconds. Its plan artifact
+SHA-256 is
+`db40b02e08f5c40a62f4b7dd85be12c69732da7b25c8c11f4224485953406b9d`.
+All pinned repository/planner/config/grader/inference/rubric identities and the
+exact first-ten task order matched. The plan contains 435 items, 436 main
+judgments, 402 text / 16 formatting / 16 visual / 1 mixed routes, 26 render and
+26 perception calls, zero prechecks, zero audio routes, and zero errors.
+
+The one filtered path is
+`Briefing_Note_FTE_Reductions_Administrative_Support_Services.docx`. It remains
+selected and visible to the main judge for nine organization-chart criteria;
+harness perception uses the sibling PDF organization chart and XLSX FTE report.
+All planned paths are relative and task-confined. Recursive artifact audit found
+no payload, data URL, absolute path, traversal, cross-task path, or secret
+marker. The Python 3.11.9 environment matched all 27 locked packages and did not
+contain Azure/OpenAI/datasets/pytest.
+
+Independent grading-engineer review passed every artifact gate. Stage A-based
+cost scaling estimates USD 3.77 raw / USD 3.07 effective and 71-83 minutes,
+below the Stage B USD 10 / 240-minute caps. These are planning estimates; actual
+cost, time, usage, provenance, judge errors, and 26/26 calls must be audited from
+the paid Stage B artifact. The result-record merge changes only repository
+documentation, so a final model-free run on that new `main` SHA must confirm the
+same plan before dispatch. An active grade workflow remains a stop.
 
 ## Retrospective Notes
 
