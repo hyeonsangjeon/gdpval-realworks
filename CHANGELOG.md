@@ -12,6 +12,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Model-free Track 2 preflight workflow** — add a main-only, read-only manual
+  workflow for private pinned cohorts. It validates compact JSON identities
+  before checkout, checks out the exact event SHA with credentials disabled,
+  pins Action commits and Python 3.11.9, installs a 27-package binary-only
+  SHA-256 lock, verifies source/planner/config/grader identities before exposing
+  `HF_TOKEN`, and uploads the exact plan plus environment. No Azure login,
+  model client, Step 8 grading, repository write, or child dispatch is present.
+- **Task-scoped inference download** — allow the HF downloader to require an
+  exact ordered source prefix and fetch only those task directories. This keeps
+  Stage B preflight limited to the pinned first ten tasks instead of downloading
+  the full private deliverable tree.
 - **Exact model-free Track 2 cohort planner** — add a direct-entry CLI that
   executes the production selector, routing, and shared visual-preflight
   validator before counting judge-bound routes and render-perception calls. It
@@ -36,6 +47,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   Stage B is now limited to exact first-10 model-free preflight before dispatch.
 
 ### Fixed
+- **Exact planner perception accounting** — bump the planner contract to v2,
+  count audio separately from harness-owned visual calls, enforce visual/audio
+  task caps, and fail closed whenever an audio route exists because the main
+  model chooses whether to invoke the audio tool. Lazy Azure/OpenAI imports and
+  lazy `core` package exports let model-free planning run without paid-runtime
+  clients or the unrelated dataset stack.
+- **One-verdict grading config contract** — remove unused `grades_per_task: 3`
+  metadata from active v2 configs and document the implemented behavior: one
+  final verdict per rubric item, with bounded tool and finalization calls. This
+  changes config identities but does not add repeat grading or paid calls.
 - **Fail-safe rubric classification** — disable all automatic natural-language
   prechecks after Stage A attempt 1 exposed seven invalid extension-only
   verdicts and further review found compound, negated, and partial-match risks

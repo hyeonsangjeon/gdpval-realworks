@@ -36,7 +36,7 @@ be reproduced and PR2 task 207 backfill scripts have a reference.
 | perception | none | gpt-5.4 vision / gpt-audio-1.5 (modality-routed) |
 | critical rule | `weight >= 4` | `\|max_score\| >= 4` (sign-aware, includes 94 penalty items) |
 | score math | clamp-hidden negatives | sign-aware, explicit non-positive total_max handling |
-| `grades_per_task` | 1 | 3 (bootstrap CI) |
+| rubric execution | one final verdict per rubric item | one final verdict per rubric item (plus bounded tool/finalization calls) |
 
 ## How to add a new config
 

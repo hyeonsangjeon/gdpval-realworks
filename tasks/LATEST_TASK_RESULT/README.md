@@ -4,54 +4,53 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-17
-- Status: Stage A corrected rerun accepted; Stage B preflight pending
+- Status: Stage A accepted; Stage B model-free preflight workflow validated
 
 ## Task
 
-- Run the corrected Stage A cohort once from merged `main`.
-- Audit the committed grade and analysis against every preregistered runtime,
-  identity, usage, provenance, cost, and wall-clock gate.
-- Permit Stage B preflight only if Stage A passes without qualification.
+- Prepare the exact first-10 Stage B model-free preflight after Stage A passed.
+- Preserve private pinned inference identity without exposing HF credentials or
+  introducing any Azure/model paid-call path.
+- Remove remaining planner/config claims that were not executable contracts.
 
 ## Result
 
-- Corrected run `29572067428` completed from
-  `main@fd6d5267fcc15afc144d8de93dc98b0e8b52ed2f` in 44m12s. Grade and
-  analysis commits are `9473d9021fc4583a68a4bc338c8aecf4aa5bffdd` and
-  `defe85a6bba87181e77f10c9503105104b12e316`.
-- All 153 rubric items reached the judge: 143 text, 6 formatting, and 4 visual,
-  with zero automatic prechecks. Verdicts were 43 pass, 99 fail, and 11
-  partial; judge errors and score-excluded items were zero.
-- Actual render/perception counts were exactly 4/4. Every visual item called
-  perception once and persisted one relative, task-confined provenance entry.
-- Item, task, and summary usage were complete and internally consistent.
-  Totals were 532 main API calls, 4,545,150 input tokens, 177,563 output
-  tokens, and 1,955,328 cached tokens.
-- Nine empty max-output finals were recovered by the bounded tool-free retry.
-  No runtime error, resume, auto-dispatch, API-key fallback, or unrelated grade
-  workflow occurred.
-- Full schema/identity/path audit found no payload, data URL, absolute path,
-  traversal, cross-task path, or secret marker. Artifact wall-clock was 24.9
-  minutes; raw/effective estimates were USD 1.32 / USD 1.08.
-- Stage A passed every preregistered gate. Independent grading-engineer review
-  confirmed the PASS. The `36.14%` score is descriptive, not a quality claim.
+- Local selective download correctly failed with HTTP 401 because the private
+  pinned inference repository requires `HF_TOKEN`, which is not exposed to the
+  local shell. No model or Azure call occurred and no partial data remained.
+- Added a manual `Preflight Track 2 Cohort` workflow with `contents: read`,
+  main-only dispatch, exact `GITHUB_SHA` checkout, pinned Action commits,
+  Python 3.11.9, and a 27-package binary-only hash lock. `HF_TOKEN` is visible
+  only to the pinned downloader step after source/planner/config/grader checks.
+- The downloader now requires an exact ordered source prefix and downloads only
+  those task directories. Stage B will therefore fetch exactly the first ten
+  tasks rather than the full private 220-task deliverable tree.
+- Planner contract v2 counts visual and audio perception separately, enforces
+  both task caps, and fails closed on every audio route because audio tool calls
+  are model-selected rather than model-free exact. Stage B must plan zero audio
+  routes before paid dispatch.
+- Removed dead `grades_per_task: 3` metadata from active v2 configs. The actual
+  contract is one final verdict per rubric item, plus bounded tool and
+  finalization calls; no new repeat grading or paid behavior was introduced.
+- Grader Azure/OpenAI imports and legacy `core` package exports are lazy, so the
+  planner runs in the minimal environment with Azure/OpenAI/datasets absent.
 
 ## Verification
 
-- Workflow `29572067428`: success, `rc=0`, no resume or child dispatch.
-- Grade schema, exact identity/task order, 153 item routes, all instrumentation,
-  4/4 visual calls, usage, and generated analysis: **PASS**.
-- Persisted provenance and recursive payload/path/secret scan: **PASS** with
-  four provenance entries and zero violations.
-- Cost/time gates: **PASS** at USD 1.08 effective and 24.9 artifact minutes.
-- Independent grading-engineer gate review: **PASS**, Stage B exact model-free
-  preflight allowed.
+- Workflow/input/lock contract tests: **7 passed**.
+- Selective downloader, workflow, planner, and routing suite: **55 passed**.
+- Final focused lazy-import/planner/workflow/config/grader suite: **129 passed**.
+- Broad non-integration suite: **1,219 passed, 2 skipped, 37 deselected**.
+- Real Python 3.11.9 minimal environment: hash-locked install succeeded;
+  downloader/planner direct entry and imports passed with Azure/OpenAI absent.
+- Independent grading-engineer review found no remaining code correctness or
+  security blocker after completion records are updated.
 
 ## Remaining Work
 
-- Assemble and validate the exact first-10 pinned deliverable tree.
-- Run the model-free Stage B planner on clean current `main` and record exact
-  route/render/perception counts and identities.
-- Dispatch Stage B once only if preflight returns no errors and no other grade
-  workflow is active; then audit every Stage B gate before considering a full
-  220-task run.
+- Merge the model-free preflight workflow and recompute all identities on the
+  resulting current `main`; old Stage B config/grader hashes are invalidated.
+- Dispatch the preflight workflow once from `main`, audit its exact first-10
+  plan artifact, and require zero errors, prechecks, and audio routes.
+- Dispatch paid Stage B only after that plan is recorded and no grade workflow
+  is active; then audit every Stage B gate before considering a full run.

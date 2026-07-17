@@ -15,9 +15,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Optional
 
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from openai import AzureOpenAI
-
 from core.deliverable_selector import (
     CriterionTargetPlan,
     DeliverableSelection,
@@ -35,6 +32,24 @@ from core.grader_routing import (
 from core.rubric_loader import RubricItem, TaskRubric
 
 logger = logging.getLogger(__name__)
+
+
+def DefaultAzureCredential(*args, **kwargs):
+    from azure.identity import DefaultAzureCredential as credential_type
+
+    return credential_type(*args, **kwargs)
+
+
+def get_bearer_token_provider(*args, **kwargs):
+    from azure.identity import get_bearer_token_provider as provider_factory
+
+    return provider_factory(*args, **kwargs)
+
+
+def AzureOpenAI(*args, **kwargs):
+    from openai import AzureOpenAI as client_type
+
+    return client_type(*args, **kwargs)
 
 
 def resolve_tool_prompt_path(config: dict) -> Path:

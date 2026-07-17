@@ -101,6 +101,7 @@ def test_active_configs_declare_safe_precheck_v2(filename: str):
     validate_grading_config(data)
 
     assert data["grader"]["precheck_patterns_version"] == "v2"
+    assert "grades_per_task" not in data["grader"]
 
 
 @pytest.mark.parametrize(
