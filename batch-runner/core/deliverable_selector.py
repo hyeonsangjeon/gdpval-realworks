@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from core.grader_routing import is_overall_style_criterion
+from core.media_types import GRADER_AUDIO_EXTENSIONS
 
 
 DOCUMENT_EXTENSIONS = {
@@ -26,8 +27,7 @@ DOCUMENT_EXTENSIONS = {
     ".ppt",
     ".pptx",
     ".zip",
-    ".wav",
-    ".mp3",
+    *GRADER_AUDIO_EXTENSIONS,
     ".mp4",
     ".mov",
     ".ipynb",
@@ -40,7 +40,7 @@ SPREADSHEET_EXTENSIONS = {".xls", ".xlsx", ".xlsm", ".csv"}
 WORD_EXTENSIONS = {".doc", ".docx"}
 PRESENTATION_EXTENSIONS = {".ppt", ".pptx"}
 VIDEO_EXTENSIONS = {".mp4", ".mov"}
-AUDIO_EXTENSIONS = {".wav", ".mp3"}
+AUDIO_EXTENSIONS = set(GRADER_AUDIO_EXTENSIONS)
 
 
 ITEM_TARGET_AUDIT_SCHEMA: dict[str, Any] = {
@@ -416,7 +416,7 @@ def _required_primary_extensions(text: str) -> set[str]:
         (r"(single|exactly one|final|primary|deliverable).*\.xlsx|single excel workbook|single workbook", SPREADSHEET_EXTENSIONS),
         (r"(single|exactly one|final|primary|deliverable).*\.pptx|single powerpoint|single presentation", PRESENTATION_EXTENSIONS),
         (r"(single|all content|deliverable).*\.zip|single \.zip|single zip", {".zip"}),
-        (r"(audio file|wav file|delivered audio|deliverable audio)", {".wav"}),
+        (r"(audio file|wav file|delivered audio|deliverable audio)", AUDIO_EXTENSIONS),
         (r"(final deliverable).*\.mp4|final .*mp4|mp4 video|final composited video|final video", VIDEO_EXTENSIONS),
         (r"python notebook|\.ipynb|notebook file", {".ipynb"}),
     ]

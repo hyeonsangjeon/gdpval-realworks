@@ -12,6 +12,11 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Track 2 isolated cohort configs** — add Stage A three-task and Stage B
+  ten-task validation configs whose parsed runtime semantics exactly match
+  `default_v2_mini`; distinct config names, hashes, grader-source identities,
+  and output paths prevent either stage from overwriting the accepted one-task
+  canary or each other.
 - **Track 2 cohort expansion preregistration** — add a dated, immutable
   two-stage plan for expanding the accepted exp003 one-task canary to three and
   then ten tasks without overwriting the canary artifact. The plan fixes task
@@ -22,6 +27,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   implemented and the planned 5/27 render-perception call counts are rechecked.
 
 ### Fixed
+- **File-compatible audio routing** — retain criterion-level audio
+  classification for inventory, but downgrade runtime routing to text when the
+  selected targets contain no supported audio extension. This prevents an XLSX
+  `Sound Technician` cost criterion from suggesting `probe_audio`. Selection,
+  routing, and `read_deliverable` now share one WAV/MP3/FLAC/OGG/M4A/AAC set;
+  extensionless targets remain conservatively audio while known unsupported
+  suffixes downgrade to text. Recomputed cohort plans contain zero false audio
+  routes and preserve the preregistered 5/27 render-perception call counts.
 - **Field Note benchmark data source** — replace duplicated completion and
   Self-QA literals in the prompt-complexity article, SVG hero, metric strip,
   result narrative, and comparison chart with an exact exp003-exp005 selector

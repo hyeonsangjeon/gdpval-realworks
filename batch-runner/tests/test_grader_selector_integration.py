@@ -9,6 +9,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from core.deliverable_selector import AUDIO_EXTENSIONS, select_deliverables
+from core.media_types import GRADER_AUDIO_EXTENSIONS
+
 
 def _final(text: str) -> dict:
     return {"type": "message", "content": [{"type": "output_text", "text": text}]}
@@ -93,6 +96,31 @@ def _payload(verdict: str, partial: float, evidence: str) -> str:
             "tool_calls_made": 0,
         }
     )
+
+
+@pytest.mark.parametrize("suffix", sorted(GRADER_AUDIO_EXTENSIONS))
+def test_selector_preserves_supported_audio_primary(suffix: str):
+    selection = select_deliverables(
+        task_id="audio-task",
+        deliverable_files=[f"final_mix{suffix}", "production_notes.txt"],
+        instruction="Submit a single audio file with supporting notes.",
+    )
+
+    assert AUDIO_EXTENSIONS == set(GRADER_AUDIO_EXTENSIONS)
+    assert selection.selection_status == "ok"
+    assert selection.task_class == "main_plus_support"
+    assert selection.primary_targets[0].paths == [f"final_mix{suffix}"]
+    assert selection.support_artifacts == ["production_notes.txt"]
+
+
+def test_selector_rejects_known_unsupported_audio_primary():
+    selection = select_deliverables(
+        task_id="audio-task",
+        deliverable_files=["final_mix.wma", "production_notes.txt"],
+        instruction="Submit a single audio file with supporting notes.",
+    )
+
+    assert selection.selection_status == "wrong_format_primary"
 
 
 def _grader(monkeypatch, fake_client):

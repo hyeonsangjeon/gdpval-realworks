@@ -23,6 +23,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Iterable
 
+from core.media_types import GRADER_AUDIO_EXTENSIONS
+
 
 class Modality(str, Enum):
     """Coarse classification of what a rubric criterion is actually
@@ -146,9 +148,10 @@ def resolve_runtime_routing(
     """Apply target-aware policy without changing criterion classification."""
     decision = classify_criterion(criterion_text)
     suffixes = {
-        Path(path).suffix.lower()
+        suffix
         for path in selected_paths
         if isinstance(path, str) and path
+        if (suffix := Path(path).suffix.lower())
     }
     if (
         is_overall_style_criterion(criterion_text)
@@ -158,6 +161,16 @@ def resolve_runtime_routing(
         return RoutingDecision(
             modality=Modality.FORMATTING,
             preferred_op="inspect_formatting",
+            matched_keywords=decision.matched_keywords,
+        )
+    if (
+        decision.modality is Modality.AUDIO
+        and suffixes
+        and suffixes.isdisjoint(GRADER_AUDIO_EXTENSIONS)
+    ):
+        return RoutingDecision(
+            modality=Modality.TEXT,
+            preferred_op="read_content",
             matched_keywords=decision.matched_keywords,
         )
     return decision

@@ -38,6 +38,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from core.media_types import GRADER_AUDIO_EXTENSIONS
+
 # ── Constants ─────────────────────────────────────────────────────────
 
 #: Full public Python API. The harness uses render_to_image internally;
@@ -206,8 +208,7 @@ _EXT_KIND = {
     ".json": "txt",
     ".png": "image", ".jpg": "image", ".jpeg": "image",
     ".gif": "image", ".bmp": "image", ".webp": "image",
-    ".wav": "audio", ".mp3": "audio", ".flac": "audio",
-    ".ogg": "audio", ".m4a": "audio", ".aac": "audio",
+    **{extension: "audio" for extension in GRADER_AUDIO_EXTENSIONS},
     ".mp4": "video", ".mov": "video", ".webm": "video",
     ".mkv": "video", ".avi": "video",
 }
