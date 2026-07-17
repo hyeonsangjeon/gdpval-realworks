@@ -12,6 +12,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Agentic Sandbox implementation and experiment preregistration plan** — define a
+  separate `agentic_sandbox` task-solving mode that lets the model choose among
+  bounded workspace inspection, Python, ffmpeg, artifact inspection, and
+  deterministic finalization tools while the harness retains no-network,
+  non-root, path, resource, usage, and cost controls. The dated plan fixes the
+  security invariants, hard budgets, optional metrics, non-paid Docker test
+  gates, an outcome-free selector contract for future disjoint five-task and
+  twenty-task cohorts, fixed paired endpoint denominators, a paid approval
+  boundary, evidence/cost/incident ledgers, and retrospective template. Exact
+  task IDs and immutable source identities must still be generated and
+  committed at the paid gate. Runtime package installation, model-visible
+  shell, Anthropic support, and all live model runs remain explicitly deferred.
 - **Model-free Track 2 preflight workflow** — add a main-only, read-only manual
   workflow for private pinned cohorts. It validates compact JSON identities
   before checkout, checks out the exact event SHA with credentials disabled,
