@@ -47,6 +47,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   Stage B is now limited to exact first-10 model-free preflight before dispatch.
 
 ### Fixed
+- **Long grade output atomic persistence** — bound `_save_json` temporary
+  basenames with a 16-hex SHA-256 identity instead of copying the full final
+  filename. Stage B run `29591036089` completed all ten paid tasks but the
+  legacy 242-byte basename plus temp decorations reached 256 bytes and failed
+  Linux `NAME_MAX=255` before any JSON, commit, analysis, resume, or artifact.
+  The final output name and same-directory atomic replace remain unchanged;
+  exact 242-byte round-trip, replace-failure cleanup, Step 8, and broad tests
+  pass. A second paid attempt remains approval-gated.
 - **Mixed-format visual bundle preflight** — filter harness rendering to stable
   supported paths while retaining all selected paths for main-judge evidence.
   Stage B preflight run `29583415563` exposed nine organization-chart criteria

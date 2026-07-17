@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -1640,7 +1641,25 @@ def test_atomic_save_failure_preserves_existing_file(monkeypatch, tmp_path):
         s8._save_json(output, {"new": True})
 
     assert output.read_text(encoding="utf-8") == '{"old":true}'
-    assert list(tmp_path.glob(".grade.json.*.tmp")) == []
+    assert list(tmp_path.glob(".grade-*.tmp")) == []
+
+
+def test_atomic_save_supports_stage_b_output_basename(tmp_path):
+    output = tmp_path / (
+        "exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__"
+        "validation_v2_mini_cohort10__cfg_b11acba425087d85__rubric_"
+        "11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_"
+        "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_"
+        "ab8704b10f2e39a2__v2.2.json"
+    )
+    payload = {"tasks": 10, "usage_complete": True}
+
+    assert len(os.fsencode(output.name)) == 242
+
+    s8._save_json(output, payload)
+
+    assert json.loads(output.read_text(encoding="utf-8")) == payload
+    assert list(tmp_path.glob(".grade-*.tmp")) == []
 
 
 def test_grade_workflow_rc7_requires_valid_committed_partial():

@@ -1,7 +1,7 @@
 # Track 2 Cohort Expansion Experiment
 
 - Date: 2026-07-17
-- Status: `STAGE_A_ACCEPTED_STAGE_B_PREFLIGHT_PASSED_DISPATCH_PENDING`
+- Status: `STAGE_A_ACCEPTED_STAGE_B_PAID_ATTEMPT_1_PERSISTENCE_FAILED`
 - Owner: repository operator
 - Experiment family: rubric grading / harness-owned perception
 - Prior accepted run: GitHub Actions `29435264166`
@@ -383,18 +383,18 @@ audited, but they must not be committed as accepted grades.
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | attempt 1 `1294d11aa00ddd7d34a6d7cd804bab9ed534eca8`; corrected plan `51839d64ea854a0de1420beb7541b369f55bea6e` |
-| Grader source hash | `ab8704b10f2e39a26bbb443b49c8c4e1a2697a6a31c74258d4af8ebc3ba8b551` |
+| Main SHA | paid attempt 1 `6bdcfcf9dd4d5feb8890e13d9f69baefc4162b38`; corrected rerun SHA pending merge |
+| Grader source hash | paid attempt 1 `ab8704b10f2e39a26bbb443b49c8c4e1a2697a6a31c74258d4af8ebc3ba8b551`; corrected `011ef05cf7f7a951b9bc2322888605549ee4fa9486c775f4154b89c83526d270` |
 | Config hash | `b11acba425087d85` |
-| Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_b11acba425087d85__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_ab8704b10f2e39a2__v2.2.json` |
+| Output path | corrected `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_b11acba425087d85__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_011ef05cf7f7a951__v2.2.json` |
 | Ordered task IDs | verified first 10 pinned IDs |
 | Rubric items / prechecks | 435 / 0 |
 | Route counts | 402 text / 16 formatting / 16 visual / 1 mixed; 0 audio |
 | Render / perception calls | 26 / 26 planned; 0 audio |
-| Run ID | preflight attempt 1 `29583415563` failed; corrected preflight `29589077065` passed; paid run pending |
-| Result | exact first-10 plan, 436 main judgments, zero planner errors |
-| Raw / effective cost | not started |
-| Decision | `PASS_PAID_STAGE_B_DISPATCH_ALLOWED_AFTER_FINAL_MAIN_IDENTITY_AND_ACTIVE_RUN_GUARDS` |
+| Run ID | preflight `29589077065` passed; paid attempt 1 `29591036089` rejected |
+| Result | 10/10 graded; atomic temp filename overflow before JSON persistence |
+| Raw / effective cost | no usage artifact; attempt 1 booked at conservative raw estimate USD 3.81 |
+| Decision | `ATOMIC_FIX_MERGE_PREFLIGHT_AND_OWNER_RERUN_APPROVAL_REQUIRED` |
 
 The local shell has no private dataset token, so a selective pinned download
 failed closed with HTTP 401 before any model/Azure call and left no partial
@@ -447,6 +447,30 @@ cost, time, usage, provenance, judge errors, and 26/26 calls must be audited fro
 the paid Stage B artifact. The result-record merge changes only repository
 documentation, so a final model-free run on that new `main` SHA must confirm the
 same plan before dispatch. An active grade workflow remains a stop.
+
+### Stage B Paid Attempt 1
+
+Run `29591036089` executed once from `main` commit
+`6bdcfcf9dd4d5feb8890e13d9f69baefc4162b38`. All ten task progress lines were
+printed over 1h25m58s and seven empty max-output finals recovered with the
+bounded tool-free retry. No runtime, task, or judge error appeared before
+persistence.
+
+At the task-10 partial-save boundary, `NamedTemporaryFile` failed with
+`OSError: [Errno 36] File name too long`. The final filename was 242 bytes and
+valid; the legacy hidden prefix plus random component and `.tmp` made the temp
+component 256 bytes, one over Linux `NAME_MAX`. Step 8 exited 1. No grade JSON,
+analysis, commit, durable resume, child dispatch, or artifact exists, so this
+attempt is rejected rather than quality-scored.
+
+The correction hashes the final basename into a bounded temp prefix while
+preserving same-directory atomic replace and the public output template. The
+actual failed-run usage cannot be recovered. For the Stage B cap, attempt 1 is
+conservatively counted at USD 3.81 raw, the higher preflight sensitivity
+estimate. A fresh rerun at the same ceiling would produce USD 7.62 cumulative
+estimated raw spend, below USD 10. Because the preregistration allowed one paid
+dispatch, a second attempt is a deviation and requires explicit owner approval
+after merge, clean-main preflight, and active-run checks.
 
 ## Retrospective Notes
 

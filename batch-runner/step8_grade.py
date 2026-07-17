@@ -661,12 +661,13 @@ def _read_schema() -> dict:
 def _save_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path: Path | None = None
+    temp_identity = hashlib.sha256(os.fsencode(path.name)).hexdigest()[:16]
     try:
         with tempfile.NamedTemporaryFile(
             mode="w",
             encoding="utf-8",
             dir=path.parent,
-            prefix=f".{path.name}.",
+            prefix=f".grade-{temp_identity}.",
             suffix=".tmp",
             delete=False,
         ) as handle:
