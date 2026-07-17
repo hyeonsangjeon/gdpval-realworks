@@ -1,7 +1,7 @@
 # Track 2 Cohort Expansion Experiment
 
 - Date: 2026-07-17
-- Status: `STAGE_A_FAILED_PRECHECK_FIX_VALIDATED_RERUN_PENDING`
+- Status: `STAGE_A_ACCEPTED_STAGE_B_PREFLIGHT_PENDING`
 - Owner: repository operator
 - Experiment family: rubric grading / harness-owned perception
 - Prior accepted run: GitHub Actions `29435264166`
@@ -270,6 +270,39 @@ Final correction validation:
 - independent grading-engineer review found no remaining code correctness
    blocker and independently reproduced the broad result.
 
+## Stage A Attempt 2 Result
+
+- Run: `29572067428`
+- Source `main`: `fd6d5267fcc15afc144d8de93dc98b0e8b52ed2f`
+- Workflow conclusion: success in 44m12s
+- Grade commit: `9473d9021fc4583a68a4bc338c8aecf4aa5bffdd`
+- Analysis commit: `defe85a6bba87181e77f10c9503105104b12e316`
+- Runtime: 3/3 tasks, 153/153 judge-bound items, 0 task errors, 0 judge
+   errors, 0 score-excluded items, and complete item/task/summary usage
+- Routes: 143 text, 6 formatting, 4 visual; 0 automatic prechecks
+- Calls: 532 main API calls, 4 perception calls, and 4 render calls
+- Tokens: 4,545,150 input, 177,563 output, and 1,955,328 cached
+- Cost estimate: USD 1.32 raw / USD 1.08 effective
+- Artifact wall-clock: 24.9 minutes
+- Finalization recovery: nine empty max-output responses recovered with the
+   bounded tool-free retry; no retry remained as a judge error
+- Persisted artifact: schema valid, exact task order and identities, four
+   task-confined relative provenance entries, and no image payload, data URL,
+   absolute path, traversal segment, cross-task path, or secret marker
+
+### Acceptance Decision
+
+**PASS. Stage B model-free preflight may proceed.** Actual routes and the 4/4
+render-perception counts exactly matched the clean merged-main plan. All Stage
+A runtime, usage, provenance, identity, cost, and wall-clock gates passed.
+There was no resume, child workflow, unrelated dispatch, or API-key fallback.
+Independent grading-engineer review confirmed each gate and found no blocker.
+
+The observed score (`36.14%`; 43 pass / 99 fail / 11 partial) is descriptive
+only and is not part of this runtime-reliability acceptance decision. Stage B
+paid dispatch remains prohibited until its first-10 exact preflight fixes the
+new merged `main` identity and returns no errors.
+
 ## Stage Gates
 
 ### Stage A Acceptance
@@ -333,24 +366,24 @@ audited, but they must not be committed as accepted grades.
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | clean pre-merge plan `acba15bcc56fdc311a7cecf5c847378f69352ede`; dispatch SHA pending merge |
+| Main SHA | `fd6d5267fcc15afc144d8de93dc98b0e8b52ed2f` |
 | Grader source hash | `9b8a9ae3288ec3e9c7608ea8af4ced3e77f2e27956da426da5b63d3b0acee01e` |
 | Config hash | `0a8e1f421ad46dc2` |
 | Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort3__cfg_0a8e1f421ad46dc2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_9b8a9ae3288ec3e9__v2.2.json` |
 | Ordered task IDs | verified first 3 pinned IDs |
 | Rubric items / prechecks | 153 / 0 candidates / 0 resolved / 0 fallback |
 | Route counts | 143 text / 6 formatting / 4 visual |
-| Render / perception calls | 4 / 4 planned |
-| Run ID | attempt 1 `29559615083` rejected; rerun not dispatched |
-| Result | attempt 1 removed due invalid precheck decisions |
-| Raw / effective cost | attempt 1 USD 1.26 / USD 1.02 |
-| Decision | `RERUN_AFTER_MERGE_AND_CLEAN_MAIN_PREFLIGHT` |
+| Render / perception calls | 4 / 4 planned and observed |
+| Run ID | attempt 1 `29559615083` rejected; attempt 2 `29572067428` accepted |
+| Result | 3/3 tasks, 0 errors, complete usage, exact provenance gates |
+| Raw / effective cost | USD 1.32 / USD 1.08 |
+| Decision | `PASS_STAGE_B_PREFLIGHT_ALLOWED` |
 
 ## Stage B Log
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | pending Stage A rerun acceptance |
+| Main SHA | pending exact first-10 preflight on current `main` |
 | Grader source hash | `a6bb2692a3478ef43b99206ce7e0874386edac0618028d2278833a9956a11f3b` |
 | Config hash | `5c01123da349f80f` |
 | Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_5c01123da349f80f__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_a6bb2692a3478ef4__v2.2.json` |
@@ -361,7 +394,7 @@ audited, but they must not be committed as accepted grades.
 | Run ID | not dispatched |
 | Result | not started |
 | Raw / effective cost | not started |
-| Decision | `HOLD_STAGE_A_RERUN_REQUIRED` |
+| Decision | `PREFLIGHT_REQUIRED_BEFORE_DISPATCH` |
 
 ## Retrospective Notes
 
