@@ -1,7 +1,7 @@
 # Track 2 Cohort Expansion Experiment
 
 - Date: 2026-07-17
-- Status: `STAGE_A_ACCEPTED_STAGE_B_PAID_ATTEMPT_1_PERSISTENCE_FAILED`
+- Status: `STAGE_B_ATOMIC_FIX_PREFLIGHT_PASSED_RERUN_APPROVAL_PENDING`
 - Owner: repository operator
 - Experiment family: rubric grading / harness-owned perception
 - Prior accepted run: GitHub Actions `29435264166`
@@ -383,7 +383,7 @@ audited, but they must not be committed as accepted grades.
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | paid attempt 1 `6bdcfcf9dd4d5feb8890e13d9f69baefc4162b38`; corrected rerun SHA pending merge |
+| Main SHA | paid attempt 1 `6bdcfcf9dd4d5feb8890e13d9f69baefc4162b38`; corrected preflight `3af01d423518d3a344b45cf1cb1a40bcba499d14` |
 | Grader source hash | paid attempt 1 `ab8704b10f2e39a26bbb443b49c8c4e1a2697a6a31c74258d4af8ebc3ba8b551`; corrected `011ef05cf7f7a951b9bc2322888605549ee4fa9486c775f4154b89c83526d270` |
 | Config hash | `b11acba425087d85` |
 | Output path | corrected `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_b11acba425087d85__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_011ef05cf7f7a951__v2.2.json` |
@@ -391,10 +391,10 @@ audited, but they must not be committed as accepted grades.
 | Rubric items / prechecks | 435 / 0 |
 | Route counts | 402 text / 16 formatting / 16 visual / 1 mixed; 0 audio |
 | Render / perception calls | 26 / 26 planned; 0 audio |
-| Run ID | preflight `29589077065` passed; paid attempt 1 `29591036089` rejected |
+| Run ID | paid attempt 1 `29591036089` rejected; post-fix preflight `29599249906` passed |
 | Result | 10/10 graded; atomic temp filename overflow before JSON persistence |
 | Raw / effective cost | no usage artifact; attempt 1 booked at conservative raw estimate USD 3.81 |
-| Decision | `ATOMIC_FIX_MERGE_PREFLIGHT_AND_OWNER_RERUN_APPROVAL_REQUIRED` |
+| Decision | `OWNER_DEVIATION_APPROVAL_REQUIRED_FOR_PAID_ATTEMPT_2` |
 
 The local shell has no private dataset token, so a selective pinned download
 failed closed with HTTP 401 before any model/Azure call and left no partial
@@ -471,6 +471,21 @@ estimate. A fresh rerun at the same ceiling would produce USD 7.62 cumulative
 estimated raw spend, below USD 10. Because the preregistration allowed one paid
 dispatch, a second attempt is a deviation and requires explicit owner approval
 after merge, clean-main preflight, and active-run checks.
+
+### Atomic-Fix Preflight Confirmation
+
+PR #99 merged the bounded temp-name fix as
+`3af01d423518d3a344b45cf1cb1a40bcba499d14`. Model-free run `29599249906`
+passed from that clean `main` in 42 seconds with corrected grader source hash
+`011ef05cf7f7a951b9bc2322888605549ee4fa9486c775f4154b89c83526d270`.
+Plan artifact SHA-256 is
+`76f514bff56c2d2b32ac2b21325f7092542d7538b6da39bd1cd038e87a402faa`.
+After normalizing repository/grader identity, its entire plan JSON is identical
+to the previously accepted first-ten plan: 435 items, 436 main judgments,
+402/16/16/1 routes, 26/26 render-perception, one filtered DOCX path, and zero
+prechecks/audio/errors. The locked environment is byte-identical. No paid run
+was started. Explicit owner approval remains the only dispatch authorization
+missing; active workflow state must still be checked immediately before use.
 
 ## Retrospective Notes
 
