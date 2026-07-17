@@ -236,6 +236,7 @@ def main() -> int:
             "planned_render_calls",
             "planned_audio_calls",
             "planned_perception_calls",
+            "unsupported_visual_paths",
             "errors",
         )
     }, ensure_ascii=False))

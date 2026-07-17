@@ -467,7 +467,7 @@ class ToolCallingJudge:
                     deliverable_dir=deliverable_dir,
                     file_names=file_names,
                 )
-            expected_paths = self._planned_visual_names(file_names)
+            expected_paths = self.planned_supported_visual_names(file_names)
             observed_paths = [entry.path for entry in prepass.entries]
             if prepass.judge_error is None and observed_paths != expected_paths:
                 prepass.judge_error = (
@@ -1229,7 +1229,7 @@ class ToolCallingJudge:
         cls, file_names: List[str]
     ) -> Tuple[List[str], Optional[str]]:
         """Apply the exact runtime target, cap, and format checks."""
-        planned_names = cls._planned_visual_names(file_names)
+        planned_names = cls.planned_supported_visual_names(file_names)
         if not planned_names:
             return [], "required_visual_render_target_unavailable"
         if len(planned_names) > _VISUAL_FILE_CAP:
@@ -1237,13 +1237,6 @@ class ToolCallingJudge:
                 "required_visual_file_cap_exceeded:"
                 f"planned={len(planned_names)},cap={_VISUAL_FILE_CAP}"
             )
-        for file_name in planned_names:
-            if Path(file_name).suffix.lower() not in _VISUAL_RENDER_SCOPES:
-                return planned_names, (
-                    "required_visual_render_unsupported_path:"
-                    f"{file_name}:supported extensions are "
-                    f"{sorted(_VISUAL_RENDER_SCOPES)}"
-                )
         return planned_names, None
 
     @staticmethod

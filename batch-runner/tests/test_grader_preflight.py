@@ -116,6 +116,7 @@ def test_summarize_cohort_preserves_order_and_sums_counts(tmp_path: Path):
     assert summary["ordered_task_ids"] == ["task-1", "task-2"]
     assert summary["rubric_items"] == 2
     assert summary["judge_routes"] == {"text": 2}
+    assert summary["unsupported_visual_paths"] == []
     assert summary["errors"] == []
 
 
@@ -154,7 +155,13 @@ def test_plan_enforces_visual_call_cap(tmp_path: Path):
         tmp_path,
     )
 
-    assert plan["planned_render_calls"] == 1
+    assert plan["planned_main_judgments"] == 0
+    assert plan["planned_render_calls"] == 0
+    assert plan["planned_perception_calls"] == 0
+    assert plan["items"][0]["outcome"] == "preflight_error"
+    assert plan["items"][0]["preflight_error"] == (
+        "task visual budget exceeded: planned=1, cap=0"
+    )
     assert plan["errors"] == [
         "task visual budget exceeded: planned=1, cap=0"
     ]
@@ -191,6 +198,46 @@ def test_plan_enforces_runtime_visual_file_cap(monkeypatch, tmp_path: Path):
     assert plan["errors"] == [
         "visual: required_visual_file_cap_exceeded:planned=4,cap=3"
     ]
+
+
+def test_plan_filters_unsupported_paths_from_visual_bundle(
+    monkeypatch, tmp_path: Path
+):
+    paths = ["Brief.docx", "Chart.pdf", "Report.xlsx"]
+    for path in paths:
+        (tmp_path / path).write_bytes(path.encode("utf-8"))
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="task-1",
+        task_class="main_bundle",
+        primary_targets=[SelectionTarget("bundle", paths, "mixed")],
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader_preflight.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="primary_bundle",
+            target_ids=["bundle"],
+            selected_paths=paths,
+        ),
+    )
+
+    plan = plan_task_runtime(
+        {},
+        _task([RubricItem("visual", "The org chart layout is readable.", 1, None)]),
+        tmp_path,
+    )
+
+    assert plan["judge_routes"] == {"visual": 1}
+    assert plan["planned_main_judgments"] == 1
+    assert plan["planned_render_calls"] == 2
+    assert plan["planned_perception_calls"] == 2
+    assert plan["items"][0]["planned_visual_paths"] == [
+        "Chart.pdf",
+        "Report.xlsx",
+    ]
+    assert plan["unsupported_visual_paths"] == ["Brief.docx"]
+    assert plan["errors"] == []
 
 
 def test_plan_counts_audio_routes_and_fails_closed_on_model_selected_calls(
@@ -300,3 +347,104 @@ def test_plan_split_children_enforces_parent_visual_file_cap(
     assert plan["errors"] == [
         "style: required_visual_file_cap_exceeded:planned=4,cap=3"
     ]
+
+
+def test_plan_split_children_fails_when_visual_child_has_no_render_target(
+    monkeypatch, tmp_path: Path
+):
+    paths = ["Notes.txt", "Chart.pdf"]
+    for path in paths:
+        (tmp_path / path).write_bytes(path.encode("utf-8"))
+    targets = [
+        SelectionTarget("notes", ["Notes.txt"], "txt"),
+        SelectionTarget("chart", ["Chart.pdf"], "pdf"),
+    ]
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="task-1",
+        task_class="separate_equivalent",
+        primary_targets=targets,
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader_preflight.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="split_children",
+            target_ids=["notes", "chart"],
+            selected_paths=paths,
+            aggregation_rule="blocking_min_else_mean",
+        ),
+    )
+
+    plan = plan_task_runtime(
+        {"judge": {"perception": {"visual": {"call_cap_per_task": 0}}}},
+        _task([RubricItem("style", "Overall Style", 1, None)]),
+        tmp_path,
+    )
+
+    assert plan["judge_routes"] == {"visual": 1}
+    assert plan["planned_main_judgments"] == 0
+    assert plan["planned_render_calls"] == 0
+    assert plan["planned_perception_calls"] == 0
+    assert plan["unsupported_visual_paths"] == ["Notes.txt"]
+    assert plan["items"][0]["outcome"] == "preflight_error"
+    assert plan["items"][0]["preflight_error"] == (
+        "notes: required_visual_render_target_unavailable"
+    )
+    assert plan["items"][0]["child_errors"] == [{
+        "target_id": "notes",
+        "error": "required_visual_render_target_unavailable",
+    }]
+    assert plan["errors"] == [
+        "style: notes: required_visual_render_target_unavailable"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("second_name", "visual_cap", "expected_error"),
+    [
+        (
+            "Notes.txt",
+            5,
+            "style: notes: required_visual_render_target_unavailable",
+        ),
+        (
+            "Chart.pdf",
+            0,
+            "task visual budget exceeded: planned=1, cap=0",
+        ),
+    ],
+)
+def test_plan_mixed_split_preflight_error_blocks_all_main_calls(
+    tmp_path: Path, second_name: str, visual_cap: int, expected_error: str
+):
+    (tmp_path / "Brief.docx").write_bytes(b"docx")
+    (tmp_path / second_name).write_bytes(b"secondary")
+    second_kind = "PDF" if second_name.endswith(".pdf") else "text file"
+    task = TaskRubric(
+        task_id="task-1",
+        sector="test",
+        occupation="test",
+        prompt=(
+            "Create two separate deliverables: a Word document and a "
+            f"{second_kind}."
+        ),
+        rubric_items=[RubricItem("style", "Overall Style", 1, None)],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+    config = {
+        "judge": {
+            "perception": {"visual": {"call_cap_per_task": visual_cap}}
+        }
+    }
+
+    plan = plan_task_runtime(config, task, tmp_path)
+
+    assert plan["judge_routes"] == {"mixed": 1}
+    assert plan["planned_main_judgments"] == 0
+    assert plan["planned_render_calls"] == 0
+    assert plan["planned_perception_calls"] == 0
+    assert plan["items"][0]["outcome"] == "preflight_error"
+    assert plan["errors"] == [expected_error]

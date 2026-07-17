@@ -215,6 +215,7 @@ class _RuntimeCriterionPlan:
     item_decision: RoutingDecision
     target_decisions: dict[str, RoutingDecision]
     visual_paths: tuple[str, ...]
+    visual_preflight_error: Optional[str]
     supported_visual_call_count: int
     requires_visual: bool
 
@@ -579,6 +580,35 @@ class Grader:
                 items.append(ig)
                 continue
 
+            if runtime_plan.visual_preflight_error:
+                if plan.target_scope == "split_children":
+                    ig, in_tok, out_tok, calls, latency, cached = self._judge_split_children(
+                        task,
+                        item,
+                        selection,
+                        deliverable_path,
+                        reference_file_names,
+                        plan,
+                        runtime_plan=runtime_plan,
+                        preflight_error=runtime_plan.visual_preflight_error,
+                    )
+                    judge_call_count += calls
+                    judge_total_latency_ms += latency
+                    judge_input_tokens += in_tok
+                    judge_output_tokens += out_tok
+                    judge_cached_tokens += cached
+                else:
+                    ig = self._selection_ungraded_item(
+                        item,
+                        runtime_plan.visual_preflight_error,
+                        selection,
+                        plan,
+                    )
+                    ig.routing_modality = Modality.VISUAL.value
+                    ig.tools_used = []
+                items.append(ig)
+                continue
+
             if visual_budget_error and runtime_plan.requires_visual:
                 if plan.target_scope == "split_children":
                     ig, in_tok, out_tok, calls, latency, cached = self._judge_split_children(
@@ -703,6 +733,8 @@ class Grader:
         )
         target_decisions: dict[str, RoutingDecision] = {}
         raw_visual_paths: list[str] = []
+        supported_visual_paths: list[str] = []
+        visual_preflight_error: str | None = None
         if plan.target_scope == "split_children":
             target_by_id = {
                 target.target_id: target for target in selection.primary_targets
@@ -715,21 +747,44 @@ class Grader:
                 target_decisions[target_id] = decision
                 if decision.modality is Modality.VISUAL:
                     raw_visual_paths.extend(target.paths)
+                    planned_names, child_error = (
+                        self._tool_judge.validate_planned_visual_names(
+                            target.paths
+                        )
+                    )
+                    supported_visual_paths.extend(planned_names)
+                    if child_error is not None and visual_preflight_error is None:
+                        visual_preflight_error = (
+                            f"{target_id}: {child_error}"
+                        )
         elif item_decision.modality is Modality.VISUAL:
             raw_visual_paths.extend(plan.selected_paths)
+            supported_visual_paths, visual_preflight_error = (
+                self._tool_judge.validate_planned_visual_names(
+                    plan.selected_paths
+                )
+            )
 
-        visual_paths = tuple(sorted(
-            dict.fromkeys(raw_visual_paths),
-            key=lambda path: (path.casefold(), path),
-        ))
-        supported_visual_call_count = len(
-            self._tool_judge.planned_supported_visual_names(raw_visual_paths)
+        if (
+            plan.target_scope == "split_children"
+            and supported_visual_paths
+            and visual_preflight_error is None
+        ):
+            supported_visual_paths, visual_preflight_error = (
+                self._tool_judge.validate_planned_visual_names(
+                    supported_visual_paths
+                )
+            )
+        visual_paths = tuple(supported_visual_paths)
+        supported_visual_call_count = (
+            len(visual_paths) if visual_preflight_error is None else 0
         )
         return _RuntimeCriterionPlan(
             target_plan=plan,
             item_decision=item_decision,
             target_decisions=target_decisions,
             visual_paths=visual_paths,
+            visual_preflight_error=visual_preflight_error,
             supported_visual_call_count=supported_visual_call_count,
             requires_visual=bool(raw_visual_paths),
         )
@@ -870,112 +925,119 @@ class Grader:
             )
             entry_paths = {entry.path for entry in visual_prepass.entries}
             all_children_covered = all(
-                set(target_by_id[target_id].paths).issubset(entry_paths)
+                bool(expected_paths)
+                and set(expected_paths).issubset(entry_paths)
                 for target_id in plan.target_ids
                 if target_id in target_by_id and target_id in visual_target_ids
+                for expected_paths in [
+                    self._tool_judge.planned_supported_visual_names(
+                        target_by_id[target_id].paths
+                    )
+                ]
             )
             if visual_prepass.judge_error is None and not all_children_covered:
                 visual_prepass.judge_error = (
                     "required_visual_prepass_incomplete_for_split_children"
                 )
-            if visual_prepass.judge_error is not None:
-                for target_id in plan.target_ids:
-                    target = target_by_id.get(target_id)
-                    if target is None:
-                        continue
-                    child_decision = runtime_plan.target_decisions[target_id]
-                    child_prepass = (
-                        visual_prepass.subset(list(target.paths))
-                        if child_decision.modality is Modality.VISUAL else None
-                    )
-                    child_grades.append({
-                        "target_id": target_id,
-                        "selected_paths": list(target.paths),
-                        "verdict": "judge_error",
-                        "awarded_score": 0.0,
-                        "evidence": visual_prepass.judge_error[:200],
-                        "judge_confidence": None,
-                        "routing_modality": child_decision.modality.value,
-                        "perception_called": (
-                            child_prepass is not None
-                            and child_prepass.perception_call_count > 0
-                        ),
-                        "tools_used": (
-                            list(child_prepass.tools_used)
-                            if child_prepass is not None else []
-                        ),
-                        "visual_provenance": (
-                            child_prepass.to_provenance()
-                            if child_prepass is not None else []
-                        ),
-                        "score_excluded": True,
-                        "judge_call_count": 0,
-                        "judge_input_tokens": 0,
-                        "judge_output_tokens": 0,
-                        "judge_cached_tokens": 0,
-                        "perception_call_count": (
-                            child_prepass.perception_call_count
-                            if child_prepass is not None else 0
-                        ),
-                        "perception_input_tokens": (
-                            child_prepass.perception_input_tokens
-                            if child_prepass is not None else 0
-                        ),
-                        "perception_output_tokens": (
-                            child_prepass.perception_output_tokens
-                            if child_prepass is not None else 0
-                        ),
-                        "perception_cached_tokens": (
-                            child_prepass.perception_cached_tokens
-                            if child_prepass is not None else 0
-                        ),
-                        "perception_total_latency_ms": round(
-                            child_prepass.perception_total_latency_ms, 2
-                        ) if child_prepass is not None else 0.0,
-                        "render_call_count": (
-                            child_prepass.render_call_count
-                            if child_prepass is not None else 0
-                        ),
-                        "render_total_latency_ms": round(
-                            child_prepass.render_total_latency_ms, 2
-                        ) if child_prepass is not None else 0.0,
-                        "usage_complete": (
-                            child_prepass.usage_complete
-                            if child_prepass is not None else True
-                        ),
-                    })
-                ig = ItemGrade(
-                    rubric_item_id=item.rubric_item_id,
-                    criterion=item.criterion,
-                    max_score=item.score,
-                    awarded_score=0.0,
-                    verdict="judge_error",
-                    decided_by="judge",
-                    required=item.required,
-                    evidence=visual_prepass.judge_error[:200],
-                    judge_confidence=None,
-                    judge_latency_ms=0.0,
-                    routing_modality=parent_routing_modality,
-                    perception_called=(visual_prepass.perception_call_count > 0),
-                    tools_used=list(visual_prepass.tools_used),
-                    visual_provenance=visual_prepass.to_provenance(),
-                    child_grades=child_grades,
-                    score_excluded=True,
-                    perception_call_count=visual_prepass.perception_call_count,
-                    perception_input_tokens=visual_prepass.perception_input_tokens,
-                    perception_output_tokens=visual_prepass.perception_output_tokens,
-                    perception_cached_tokens=visual_prepass.perception_cached_tokens,
-                    perception_total_latency_ms=round(
-                        visual_prepass.perception_total_latency_ms, 2
-                    ),
-                    render_call_count=visual_prepass.render_call_count,
-                    render_total_latency_ms=round(
-                        visual_prepass.render_total_latency_ms, 2
-                    ),
-                    usage_complete=visual_prepass.usage_complete,
+
+        if visual_prepass is not None and visual_prepass.judge_error is not None:
+            for target_id in plan.target_ids:
+                target = target_by_id.get(target_id)
+                if target is None:
+                    continue
+                child_decision = runtime_plan.target_decisions[target_id]
+                child_prepass = (
+                    visual_prepass.subset(list(target.paths))
+                    if child_decision.modality is Modality.VISUAL else None
                 )
-                self._attach_target_audit(ig, plan, selection)
-                return ig, 0, 0, 0, 0.0, 0
+                child_grades.append({
+                    "target_id": target_id,
+                    "selected_paths": list(target.paths),
+                    "verdict": "judge_error",
+                    "awarded_score": 0.0,
+                    "evidence": visual_prepass.judge_error[:200],
+                    "judge_confidence": None,
+                    "routing_modality": child_decision.modality.value,
+                    "perception_called": (
+                        child_prepass is not None
+                        and child_prepass.perception_call_count > 0
+                    ),
+                    "tools_used": (
+                        list(child_prepass.tools_used)
+                        if child_prepass is not None else []
+                    ),
+                    "visual_provenance": (
+                        child_prepass.to_provenance()
+                        if child_prepass is not None else []
+                    ),
+                    "score_excluded": True,
+                    "judge_call_count": 0,
+                    "judge_input_tokens": 0,
+                    "judge_output_tokens": 0,
+                    "judge_cached_tokens": 0,
+                    "perception_call_count": (
+                        child_prepass.perception_call_count
+                        if child_prepass is not None else 0
+                    ),
+                    "perception_input_tokens": (
+                        child_prepass.perception_input_tokens
+                        if child_prepass is not None else 0
+                    ),
+                    "perception_output_tokens": (
+                        child_prepass.perception_output_tokens
+                        if child_prepass is not None else 0
+                    ),
+                    "perception_cached_tokens": (
+                        child_prepass.perception_cached_tokens
+                        if child_prepass is not None else 0
+                    ),
+                    "perception_total_latency_ms": round(
+                        child_prepass.perception_total_latency_ms, 2
+                    ) if child_prepass is not None else 0.0,
+                    "render_call_count": (
+                        child_prepass.render_call_count
+                        if child_prepass is not None else 0
+                    ),
+                    "render_total_latency_ms": round(
+                        child_prepass.render_total_latency_ms, 2
+                    ) if child_prepass is not None else 0.0,
+                    "usage_complete": (
+                        child_prepass.usage_complete
+                        if child_prepass is not None else True
+                    ),
+                })
+            ig = ItemGrade(
+                rubric_item_id=item.rubric_item_id,
+                criterion=item.criterion,
+                max_score=item.score,
+                awarded_score=0.0,
+                verdict="judge_error",
+                decided_by="judge",
+                required=item.required,
+                evidence=visual_prepass.judge_error[:200],
+                judge_confidence=None,
+                judge_latency_ms=0.0,
+                routing_modality=parent_routing_modality,
+                perception_called=(visual_prepass.perception_call_count > 0),
+                tools_used=list(visual_prepass.tools_used),
+                visual_provenance=visual_prepass.to_provenance(),
+                child_grades=child_grades,
+                score_excluded=True,
+                perception_call_count=visual_prepass.perception_call_count,
+                perception_input_tokens=visual_prepass.perception_input_tokens,
+                perception_output_tokens=visual_prepass.perception_output_tokens,
+                perception_cached_tokens=visual_prepass.perception_cached_tokens,
+                perception_total_latency_ms=round(
+                    visual_prepass.perception_total_latency_ms, 2
+                ),
+                render_call_count=visual_prepass.render_call_count,
+                render_total_latency_ms=round(
+                    visual_prepass.render_total_latency_ms, 2
+                ),
+                usage_complete=visual_prepass.usage_complete,
+            )
+            self._attach_target_audit(ig, plan, selection)
+            return ig, 0, 0, 0, 0.0, 0
 
         for target_id in plan.target_ids:
             target = target_by_id.get(target_id)
