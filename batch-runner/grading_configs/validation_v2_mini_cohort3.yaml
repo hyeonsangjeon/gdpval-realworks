@@ -60,7 +60,7 @@ rubric:
   cache_dir: "data/gdpval-local"
 
 grader:
-  precheck_patterns_version: "v1"
+  precheck_patterns_version: "v2"
   evidence_max_chars: 200
   judge_max_retries: 1
   per_item_max_output_tokens: 2400

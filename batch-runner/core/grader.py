@@ -1,7 +1,7 @@
 """Rubric-based grading engine.
 
-Routes rubric items to deterministic prechecks where possible, otherwise to an
-Azure OpenAI Responses API judge. Evidence is mandatory for judge verdicts.
+Routes rubric items to an Azure OpenAI Responses API judge. Evidence is
+mandatory for judge verdicts.
 """
 
 from __future__ import annotations
@@ -15,8 +15,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Optional
 
-import openpyxl
-from PyPDF2 import PdfReader
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import AzureOpenAI
 
@@ -103,25 +101,6 @@ def _extract_finish_reason(response, max_output: int, output_tokens: int) -> str
     if max_output > 0 and output_tokens >= max_output:
         return "length"
     return ""
-
-PRECHECK_PATTERNS: list[tuple[str, str]] = [
-    (
-        r"\b(file|workbook|document|pdf|deliverable).*(named|basename|filename|extension|exists?|is a|is an|single|exactly one)\b",
-        "file_exists_or_name",
-    ),
-    (
-        r"\b(\.xlsx|\.xls|\.xlsm|\.pdf|\.docx?|\.pptx?|\.txt|\.csv|\.json|\.wav|\.mp3|\.mp4|\.png|\.jpg)\b",
-        "file_extension",
-    ),
-    (r"\bworksheet\b.*(named|exactly|contains|present)", "worksheet_name"),
-    (
-        r"\b(at least|exactly|no more than|fewer than)\s+\d+\b.*(rows?|columns?|pages?|sheets?|sections?|items?|files?)\b",
-        "count_check",
-    ),
-    (r"\bpage(s)?\b.*\b(at least|exactly)\s+\d+\b", "page_count"),
-    (r"\bword(s)?\b.*\b(at least|exactly|approximately)\s+\d+\b", "word_count"),
-]
-
 
 @dataclass
 class ItemGrade:
@@ -439,9 +418,6 @@ class Grader:
 
     @staticmethod
     def _classify(item: RubricItem) -> tuple[str, Optional[str]]:
-        for pattern, pid in PRECHECK_PATTERNS:
-            if re.search(pattern, item.criterion, re.I):
-                return "precheck", pid
         return "judge", None
 
     def grade_task(self, task: TaskRubric, deliverable_dir: str) -> TaskGrade:
@@ -1345,175 +1321,7 @@ class Grader:
         item: RubricItem,
         files: list[Path],
     ) -> Optional[tuple[Verdict, str]]:
-        if not pattern_id:
-            return None
-
-        handlers = {
-            "file_exists_or_name": self._precheck_file_exists_or_name,
-            "file_extension": self._precheck_file_extension,
-            "worksheet_name": self._precheck_worksheet_name,
-            "count_check": self._precheck_count_check,
-            "page_count": self._precheck_page_count,
-            "word_count": self._precheck_word_count,
-        }
-        handler = handlers.get(pattern_id)
-        if not handler:
-            return None
-
-        try:
-            return handler(item, files)
-        except Exception as exc:
-            logger.warning(
-                "Precheck failed for %s (%s): %s", item.rubric_item_id, pattern_id, exc
-            )
-            return None
-
-    def _precheck_file_exists_or_name(
-        self,
-        item: RubricItem,
-        files: list[Path],
-    ) -> Optional[tuple[Verdict, str]]:
-        criterion = item.criterion
-        named_match = re.search(
-            r"(?:basename|named|filename)\s*(?:is|=)?\s*['\"]([^'\"]+)['\"]",
-            criterion,
-            re.I,
-        )
-        if named_match:
-            expected = named_match.group(1).strip().lower()
-            for f in files:
-                if f.stem.lower() == expected or f.name.lower() == expected:
-                    return "pass", f"Filename observed: '{f.name}'"
-            return "fail", f"Expected basename '{expected}' not found"
-
-        if files:
-            return "pass", f"Deliverable files present ({len(files)})"
-        return "fail", "No deliverable files found"
-
-    def _precheck_file_extension(
-        self,
-        item: RubricItem,
-        files: list[Path],
-    ) -> Optional[tuple[Verdict, str]]:
-        exts = set(
-            re.findall(
-                r"\.(xlsx|xls|xlsm|pdf|docx?|pptx?|txt|csv|json|wav|mp3|mp4|png|jpg)",
-                item.criterion,
-                re.I,
-            )
-        )
-        if not exts:
-            return None
-        expected_exts = {f".{x.lower()}" for x in exts}
-        observed = {f.suffix.lower() for f in files}
-        if observed.intersection(expected_exts):
-            ext = sorted(observed.intersection(expected_exts))[0]
-            return "pass", f"Observed required extension: '{ext}'"
-        return "fail", f"Required extension not found: {sorted(expected_exts)}"
-
-    def _precheck_worksheet_name(
-        self,
-        item: RubricItem,
-        files: list[Path],
-    ) -> Optional[tuple[Verdict, str]]:
-        m = re.search(
-            r"worksheet\s+(?:named|name)\s*['\"]([^'\"]+)['\"]",
-            item.criterion,
-            re.I,
-        )
-        if not m:
-            return None
-        target = m.group(1).strip().lower()
-        xlsx_files = [f for f in files if f.suffix.lower() in {".xlsx", ".xlsm"}]
-        if not xlsx_files:
-            return "fail", "No Excel workbook found"
-
-        for xf in xlsx_files:
-            wb = openpyxl.load_workbook(str(xf), data_only=True)
-            names = {n.lower() for n in wb.sheetnames}
-            if target in names:
-                return "pass", f"Worksheet '{m.group(1)}' present in {xf.name}"
-        return "fail", f"Worksheet '{m.group(1)}' not found"
-
-    def _precheck_count_check(
-        self,
-        item: RubricItem,
-        files: list[Path],
-    ) -> Optional[tuple[Verdict, str]]:
-        m = re.search(
-            r"(exactly|at least|no more than|fewer than)\s+(\d+)\s+files?",
-            item.criterion,
-            re.I,
-        )
-        if not m:
-            return None
-        mode = m.group(1).lower()
-        expected = int(m.group(2))
-        observed = len(files)
-        ok = (
-            (mode == "exactly" and observed == expected)
-            or (mode == "at least" and observed >= expected)
-            or (mode == "no more than" and observed <= expected)
-            or (mode == "fewer than" and observed < expected)
-        )
-        if ok:
-            return "pass", f"File count {observed} satisfies '{mode} {expected}'"
-        return "fail", f"File count {observed} violates '{mode} {expected}'"
-
-    def _precheck_page_count(
-        self,
-        item: RubricItem,
-        files: list[Path],
-    ) -> Optional[tuple[Verdict, str]]:
-        m = re.search(r"page(?:s)?\b.*\b(at least|exactly)\s+(\d+)", item.criterion, re.I)
-        if not m:
-            return None
-        mode = m.group(1).lower()
-        expected = int(m.group(2))
-
-        pdfs = [f for f in files if f.suffix.lower() == ".pdf"]
-        if not pdfs:
-            return None
-
-        observed = len(PdfReader(str(pdfs[0])).pages)
-        ok = (mode == "exactly" and observed == expected) or (
-            mode == "at least" and observed >= expected
-        )
-        if ok:
-            return "pass", f"PDF page count {observed} satisfies '{mode} {expected}'"
-        return "fail", f"PDF page count {observed} violates '{mode} {expected}'"
-
-    def _precheck_word_count(
-        self,
-        item: RubricItem,
-        files: list[Path],
-    ) -> Optional[tuple[Verdict, str]]:
-        m = re.search(
-            r"word(?:s)?\b.*\b(at least|exactly|approximately)\s+(\d+)",
-            item.criterion,
-            re.I,
-        )
-        if not m:
-            return None
-        mode = m.group(1).lower()
-        expected = int(m.group(2))
-
-        txt_candidates = [f for f in files if f.suffix.lower() in {".txt", ".docx"}]
-        if not txt_candidates:
-            return None
-
-        text = read_reference_file(str(txt_candidates[0]))
-        words = len(re.findall(r"\S+", text))
-        if mode == "at least":
-            ok = words >= expected
-        elif mode == "exactly":
-            ok = words == expected
-        else:
-            ok = abs(words - expected) <= max(10, int(expected * 0.1))
-
-        if ok:
-            return "pass", f"Word count {words} satisfies '{mode} {expected}'"
-        return "fail", f"Word count {words} violates '{mode} {expected}'"
+        return None
 
     def _judge(
         self, task: TaskRubric, item: RubricItem, files: list[Path]

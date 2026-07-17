@@ -87,6 +87,10 @@ _OVERALL_STYLE_RE = re.compile(
     r"(?:style|styling|format(?:ted|ting)?|presentation|polish)\b",
     flags=re.IGNORECASE,
 )
+_NONVISUAL_CHART_RE = re.compile(
+    r"\bchart(?:\s*[-–—]\s*|\s+)of(?:\s*[-–—]\s*|\s+)accounts?\b",
+    flags=re.IGNORECASE,
+)
 
 
 def _hits(rx: re.Pattern[str], text: str) -> tuple[str, ...]:
@@ -114,7 +118,8 @@ def classify_criterion(criterion_text: str) -> RoutingDecision:
             matched_keywords=_hits(_FMT_RE, text),
         )
 
-    vis = _hits(_VIS_RE, text)
+    visual_text = _NONVISUAL_CHART_RE.sub("", text)
+    vis = _hits(_VIS_RE, visual_text)
     if vis:
         return RoutingDecision(
             modality=Modality.VISUAL,

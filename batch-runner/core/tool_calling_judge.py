@@ -1029,28 +1029,17 @@ class ToolCallingJudge:
             result.judge_error = "required_visual_perception_unconfigured"
             return result
 
-        planned_names = self._planned_visual_names(file_names)
-        if not planned_names:
-            result.judge_error = "required_visual_render_target_unavailable"
-            return result
-        if len(planned_names) > _VISUAL_FILE_CAP:
-            result.judge_error = (
-                "required_visual_file_cap_exceeded:"
-                f"planned={len(planned_names)},cap={_VISUAL_FILE_CAP}"
-            )
+        planned_names, planning_error = self.validate_planned_visual_names(
+            file_names
+        )
+        if planning_error is not None:
+            result.judge_error = planning_error
             return result
 
         planned: List[Tuple[str, Path, Dict[str, int]]] = []
         base = Path(deliverable_dir).resolve()
         for file_name in planned_names:
-            scope = _VISUAL_RENDER_SCOPES.get(Path(file_name).suffix.lower())
-            if scope is None:
-                result.judge_error = (
-                    "required_visual_render_unsupported_path:"
-                    f"{file_name}:supported extensions are "
-                    f"{sorted(_VISUAL_RENDER_SCOPES)}"
-                )
-                return result
+            scope = _VISUAL_RENDER_SCOPES[Path(file_name).suffix.lower()]
             source = (base / file_name).resolve()
             try:
                 source.relative_to(base)
@@ -1234,6 +1223,28 @@ class ToolCallingJudge:
             for name in cls._planned_visual_names(file_names)
             if Path(name).suffix.lower() in _VISUAL_RENDER_SCOPES
         ]
+
+    @classmethod
+    def validate_planned_visual_names(
+        cls, file_names: List[str]
+    ) -> Tuple[List[str], Optional[str]]:
+        """Apply the exact runtime target, cap, and format checks."""
+        planned_names = cls._planned_visual_names(file_names)
+        if not planned_names:
+            return [], "required_visual_render_target_unavailable"
+        if len(planned_names) > _VISUAL_FILE_CAP:
+            return planned_names, (
+                "required_visual_file_cap_exceeded:"
+                f"planned={len(planned_names)},cap={_VISUAL_FILE_CAP}"
+            )
+        for file_name in planned_names:
+            if Path(file_name).suffix.lower() not in _VISUAL_RENDER_SCOPES:
+                return planned_names, (
+                    "required_visual_render_unsupported_path:"
+                    f"{file_name}:supported extensions are "
+                    f"{sorted(_VISUAL_RENDER_SCOPES)}"
+                )
+        return planned_names, None
 
     @staticmethod
     def _sha256_file(path: Path) -> str:
