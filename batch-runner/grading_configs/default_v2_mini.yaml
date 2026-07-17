@@ -89,7 +89,6 @@ grader:
   save_raw_responses: false
   fail_on_missing_evidence: true
   task_prompt_truncate_chars: 500
-  grades_per_task: 3
 
 tpm_guard:
   max_concurrent: 1

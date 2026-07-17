@@ -94,7 +94,6 @@ grader:
   task_prompt_truncate_chars: 500
   # deliverable_extract_max_chars: REMOVED (legacy text-extract path)
   # batch_size: REMOVED  (v2 is single-item; tier batching retired)
-  grades_per_task: 3              # bootstrap CI per SPEC §7.5
 
 tpm_guard:
   max_concurrent: 1

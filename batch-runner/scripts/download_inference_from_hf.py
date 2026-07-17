@@ -3,7 +3,7 @@
 
 Downloads:
 - step2_inference_results.json
-- deliverable_files/**
+- exact task-scoped deliverable_files directories
 
 Usage:
   python scripts/download_inference_from_hf.py --experiment exp998_smoke_baseline_sample --output workspace/step2_inference_results.json
@@ -64,6 +64,15 @@ def parse_args() -> argparse.Namespace:
         "--revision",
         default="",
         help="HF dataset revision; blank resolves main once, full commit SHAs are used directly",
+    )
+    parser.add_argument(
+        "--expected-leading-task-id",
+        action="append",
+        default=[],
+        help=(
+            "Expected leading task ID in source order; repeat to download only "
+            "an exact leading cohort"
+        ),
     )
     return parser.parse_args()
 
@@ -142,6 +151,27 @@ def _canonicalize_inference_payload(payload: object, repo_id: str, revision: str
     return normalized
 
 
+def _select_expected_leading_tasks(
+    payload: dict, expected_task_ids: list[str]
+) -> dict:
+    if not expected_task_ids:
+        return payload
+    if len(expected_task_ids) != len(set(expected_task_ids)):
+        raise ValueError("expected leading task IDs must be unique")
+    results = payload["results"]
+    actual_task_ids = [
+        row["task_id"] for row in results[: len(expected_task_ids)]
+    ]
+    if actual_task_ids != expected_task_ids:
+        raise ValueError(
+            "expected leading task IDs do not match source order: "
+            f"expected={expected_task_ids}, actual={actual_task_ids}"
+        )
+    selected = dict(payload)
+    selected["results"] = results[: len(expected_task_ids)]
+    return selected
+
+
 def _atomic_write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -206,11 +236,14 @@ def _download_and_replace_deliverables(
     backup_created = False
 
     try:
+        allow_patterns = [
+            f"deliverable_files/{row['task_id']}/**" for row in results
+        ]
         snapshot_download(
             repo_id=repo_id,
             repo_type="dataset",
             local_dir=staging_root,
-            allow_patterns=["deliverable_files/**"],
+            allow_patterns=allow_patterns,
             revision=revision,
             token=_hf_token(),
         )
@@ -249,7 +282,11 @@ def main() -> int:
     _download_or_reconstruct_inference(args.experiment, repo_id, revision, out)
     payload = json.loads(out.read_text(encoding="utf-8"))
     canonical = _canonicalize_inference_payload(payload, repo_id, revision)
-    _download_and_replace_deliverables(repo_id, revision, canonical["results"])
+    selected = _select_expected_leading_tasks(
+        canonical, args.expected_leading_task_id
+    )
+    _atomic_write_json(out, selected)
+    _download_and_replace_deliverables(repo_id, revision, selected["results"])
 
     print(f"Downloaded inference from {repo_id} at {revision}")
     return 0

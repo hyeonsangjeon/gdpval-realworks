@@ -38,6 +38,7 @@ def plan_task_runtime(
     precheck_fallbacks = 0
     planned_main_judgments = 0
     planned_visual_calls = 0
+    planned_audio_calls = 0
     unsupported_visual_paths: list[str] = []
     item_plans: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -68,6 +69,7 @@ def plan_task_runtime(
         if target_plan.target_scope == "split_children":
             child_routes: list[str] = []
             raw_visual_paths: list[str] = []
+            raw_audio_routes = 0
             for target_id in target_plan.target_ids:
                 target = targets.get(target_id)
                 if target is None:
@@ -79,6 +81,8 @@ def plan_task_runtime(
                 child_routes.append(decision.modality.value)
                 if decision.modality is Modality.VISUAL:
                     raw_visual_paths.extend(target.paths)
+                elif decision.modality is Modality.AUDIO:
+                    raw_audio_routes += 1
             parent_route = (
                 child_routes[0]
                 if child_routes and len(set(child_routes)) == 1
@@ -110,6 +114,7 @@ def plan_task_runtime(
                     planned_visual_calls += len(visual_paths)
             if visual_error is None:
                 planned_main_judgments += len(child_routes)
+                planned_audio_calls += raw_audio_routes
             item_plan.update({
                 "outcome": (
                     "judge" if visual_error is None else "preflight_error"
@@ -117,6 +122,9 @@ def plan_task_runtime(
                 "routing_modality": parent_route,
                 "child_routes": child_routes,
                 "planned_visual_paths": visual_paths,
+                "planned_audio_calls": (
+                    raw_audio_routes if visual_error is None else 0
+                ),
             })
             item_plans.append(item_plan)
             continue
@@ -172,6 +180,8 @@ def plan_task_runtime(
                 planned_visual_calls += len(supported)
         if visual_error is None:
             planned_main_judgments += 1
+            if decision.modality is Modality.AUDIO:
+                planned_audio_calls += 1
         item_plan.update({
             "outcome": (
                 "judge" if visual_error is None else "preflight_error"
@@ -179,6 +189,9 @@ def plan_task_runtime(
             "routing_modality": decision.modality.value,
             "matched_keywords": list(decision.matched_keywords),
             "planned_visual_paths": supported,
+            "planned_audio_calls": (
+                1 if decision.modality is Modality.AUDIO else 0
+            ),
         })
         item_plans.append(item_plan)
 
@@ -186,6 +199,9 @@ def plan_task_runtime(
     visual_config = (
         (config.get("judge") or {}).get("perception") or {}
     ).get("visual") or {}
+    audio_config = (
+        (config.get("judge") or {}).get("perception") or {}
+    ).get("audio") or {}
     visual_cap = visual_config.get("call_cap_per_task")
     if (
         isinstance(visual_cap, int)
@@ -194,6 +210,19 @@ def plan_task_runtime(
         errors.append(
             "task visual budget exceeded: "
             f"planned={planned_visual_calls}, cap={visual_cap}"
+        )
+    audio_cap = audio_config.get("call_cap_per_task")
+    if isinstance(audio_cap, int) and planned_audio_calls > audio_cap:
+        errors.append(
+            "task audio budget exceeded: "
+            f"planned={planned_audio_calls}, cap={audio_cap}"
+        )
+    if planned_audio_calls:
+        if not audio_config.get("model"):
+            errors.append("audio routes require configured audio perception")
+        errors.append(
+            "audio perception calls are model-selected and cannot be exact: "
+            f"routes={planned_audio_calls}"
         )
 
     return {
@@ -206,8 +235,10 @@ def plan_task_runtime(
         "judge_routes": dict(sorted(routes.items())),
         "planned_main_judgments": planned_main_judgments,
         "planned_render_calls": planned_visual_calls,
-        "planned_perception_calls": planned_visual_calls,
+        "planned_audio_calls": planned_audio_calls,
+        "planned_perception_calls": planned_visual_calls + planned_audio_calls,
         "visual_call_cap": visual_cap,
+        "audio_call_cap": audio_cap,
         "unsupported_visual_paths": unsupported_visual_paths,
         "errors": errors,
         "items": item_plans,
@@ -238,6 +269,9 @@ def summarize_cohort(task_plans: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "planned_render_calls": sum(
             task["planned_render_calls"] for task in task_plans
+        ),
+        "planned_audio_calls": sum(
+            task["planned_audio_calls"] for task in task_plans
         ),
         "planned_perception_calls": sum(
             task["planned_perception_calls"] for task in task_plans

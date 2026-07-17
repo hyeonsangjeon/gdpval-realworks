@@ -193,6 +193,51 @@ def test_plan_enforces_runtime_visual_file_cap(monkeypatch, tmp_path: Path):
     ]
 
 
+def test_plan_counts_audio_routes_and_fails_closed_on_model_selected_calls(
+    monkeypatch, tmp_path: Path
+):
+    path = "clip.wav"
+    (tmp_path / path).write_bytes(b"wav")
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="task-1",
+        task_class="single_primary",
+        primary_targets=[SelectionTarget("clip", [path], "audio")],
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader_preflight.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="file_target",
+            target_ids=["clip"],
+            selected_paths=[path],
+        ),
+    )
+    config = {
+        "judge": {
+            "perception": {
+                "audio": {"model": "gpt-audio-1.5", "call_cap_per_task": 0}
+            }
+        }
+    }
+
+    plan = plan_task_runtime(
+        config,
+        _task([RubricItem("audio", "The audio narration is clear.", 1, None)]),
+        tmp_path,
+    )
+
+    assert plan["judge_routes"] == {"audio": 1}
+    assert plan["planned_audio_calls"] == 1
+    assert plan["planned_render_calls"] == 0
+    assert plan["planned_perception_calls"] == 1
+    assert plan["audio_call_cap"] == 0
+    assert plan["errors"] == [
+        "task audio budget exceeded: planned=1, cap=0",
+        "audio perception calls are model-selected and cannot be exact: routes=1",
+    ]
+
+
 def test_plan_split_children_matches_runtime_shape(tmp_path: Path):
     (tmp_path / "brief.docx").write_bytes(b"docx")
     (tmp_path / "appendix.pdf").write_bytes(b"pdf")

@@ -1,0 +1,8 @@
+# Minimal, model-free Track 2 cohort planner dependencies.
+# Keep exact top-level versions and compile with hashes for Python 3.11/Linux.
+huggingface-hub==1.23.0
+jsonschema==4.26.0
+numpy==2.2.6
+pandas==2.3.3
+pyarrow==25.0.0
+PyYAML==6.0.3

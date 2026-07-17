@@ -174,6 +174,48 @@ def test_downloaded_json_metadata_overrides_stale_values(monkeypatch, tmp_path):
     ]
 
 
+def test_expected_leading_tasks_preserve_exact_source_prefix():
+    module = _load_module()
+    payload = {
+        "results": [
+            {"task_id": "task-1", "deliverable_files": []},
+            {"task_id": "task-2", "deliverable_files": []},
+            {"task_id": "task-3", "deliverable_files": []},
+        ]
+    }
+
+    selected = module._select_expected_leading_tasks(
+        payload, ["task-1", "task-2"]
+    )
+
+    assert [row["task_id"] for row in selected["results"]] == [
+        "task-1",
+        "task-2",
+    ]
+    assert len(payload["results"]) == 3
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [
+        ["task-2"],
+        ["task-1", "task-3"],
+        ["task-1", "task-1"],
+    ],
+)
+def test_expected_leading_tasks_reject_order_drift_and_duplicates(expected):
+    module = _load_module()
+    payload = {
+        "results": [
+            {"task_id": "task-1", "deliverable_files": []},
+            {"task_id": "task-2", "deliverable_files": []},
+        ]
+    }
+
+    with pytest.raises(ValueError, match="expected leading task IDs"):
+        module._select_expected_leading_tasks(payload, expected)
+
+
 @pytest.mark.parametrize("payload", [[], {}, {"results": None}, {"results": {}}])
 def test_invalid_inference_json_fails_closed(monkeypatch, tmp_path, payload):
     module = _load_module()
@@ -221,7 +263,12 @@ def test_main_pins_all_downloads_and_removes_stale_deliverables(monkeypatch, tmp
     monkeypatch.setattr(
         module,
         "parse_args",
-        lambda: SimpleNamespace(experiment="exp", output="workspace/inference.json", revision=""),
+        lambda: SimpleNamespace(
+            experiment="exp",
+            output="workspace/inference.json",
+            revision="",
+            expected_leading_task_id=[],
+        ),
     )
     monkeypatch.setenv("HF_TOKEN", "secret-token")
 
@@ -237,6 +284,75 @@ def test_main_pins_all_downloads_and_removes_stale_deliverables(monkeypatch, tmp
     assert len(calls) == 3
     assert all(call[1]["revision"] == FULL_SHA for call in calls)
     assert all(call[1]["token"] == "secret-token" for call in calls)
+    assert calls[-1][1]["allow_patterns"] == [
+        "deliverable_files/task-1/**"
+    ]
+
+
+def test_main_filters_manifest_and_snapshot_to_expected_leading_tasks(
+    monkeypatch, tmp_path
+):
+    module = _load_module()
+    source_payload = {
+        "results": [
+            {
+                "task_id": task_id,
+                "deliverable_files": [
+                    f"deliverable_files/{task_id}/out.txt"
+                ],
+            }
+            for task_id in ("task-1", "task-2", "task-3")
+        ]
+    }
+    downloaded = tmp_path / "downloaded.json"
+    downloaded.write_text(json.dumps(source_payload), encoding="utf-8")
+    snapshot_calls = []
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(module, "resolve_repo_id", lambda experiment: "owner/repo")
+    monkeypatch.setattr(module, "resolve_immutable_revision", lambda *args: FULL_SHA)
+    monkeypatch.setattr(
+        module,
+        "hf_hub_download",
+        lambda **kwargs: str(downloaded),
+    )
+
+    def fake_snapshot_download(**kwargs):
+        snapshot_calls.append(kwargs)
+        root = Path(kwargs["local_dir"])
+        for task_id in ("task-1", "task-2"):
+            task_root = root / "deliverable_files" / task_id
+            task_root.mkdir(parents=True)
+            (task_root / "out.txt").write_text(task_id, encoding="utf-8")
+
+    monkeypatch.setattr(module, "snapshot_download", fake_snapshot_download)
+    monkeypatch.setattr(
+        module,
+        "parse_args",
+        lambda: SimpleNamespace(
+            experiment="exp",
+            output="workspace/inference.json",
+            revision=FULL_SHA,
+            expected_leading_task_id=["task-1", "task-2"],
+        ),
+    )
+
+    assert module.main() == 0
+
+    output = json.loads(
+        Path("workspace/inference.json").read_text(encoding="utf-8")
+    )
+    assert [row["task_id"] for row in output["results"]] == [
+        "task-1",
+        "task-2",
+    ]
+    assert snapshot_calls[0]["allow_patterns"] == [
+        "deliverable_files/task-1/**",
+        "deliverable_files/task-2/**",
+    ]
+    assert not Path(
+        "workspace/upload/deliverable_files/task-3"
+    ).exists()
 
 
 def test_deliverable_promotion_failure_restores_previous_destination(

@@ -383,10 +383,10 @@ audited, but they must not be committed as accepted grades.
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | pending exact first-10 preflight on current `main` |
-| Grader source hash | `a6bb2692a3478ef43b99206ce7e0874386edac0618028d2278833a9956a11f3b` |
-| Config hash | `5c01123da349f80f` |
-| Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_5c01123da349f80f__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_a6bb2692a3478ef4__v2.2.json` |
+| Main SHA | pending merge of model-free private-data preflight workflow |
+| Grader source hash | pending recomputation; prior hash invalidated by config/import corrections |
+| Config hash | pending recomputation after dead metadata removal |
+| Output path | pending recomputation from corrected config/grader identities |
 | Ordered task IDs | verified first 10 pinned IDs |
 | Rubric items / prechecks | pending exact planner on first-10 tree |
 | Route counts | pending exact planner |
@@ -394,7 +394,15 @@ audited, but they must not be committed as accepted grades.
 | Run ID | not dispatched |
 | Result | not started |
 | Raw / effective cost | not started |
-| Decision | `PREFLIGHT_REQUIRED_BEFORE_DISPATCH` |
+| Decision | `WORKFLOW_MERGE_THEN_PREFLIGHT_REQUIRED_BEFORE_DISPATCH` |
+
+The local shell has no private dataset token, so a selective pinned download
+failed closed with HTTP 401 before any model/Azure call and left no partial
+tree. Stage B preflight will use the repository `HF_TOKEN` only inside the
+main-only model-free workflow. That workflow downloads the exact first-ten
+source prefix, has no Azure or Step 8 path, and records a hash-locked environment
+and plan artifact. Any precheck, audio route, planner error, identity mismatch,
+or active grade workflow remains a paid-dispatch stop.
 
 ## Retrospective Notes
 

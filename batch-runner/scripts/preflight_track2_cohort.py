@@ -33,7 +33,7 @@ from step8_grade import (
 )
 
 
-PLANNER_CONTRACT = "track2-selection-ok-v1"
+PLANNER_CONTRACT = "track2-selection-ok-v2"
 
 
 def _planner_source_hash() -> str:
@@ -41,6 +41,8 @@ def _planner_source_hash() -> str:
     for path in (
         Path(__file__).resolve(),
         BATCH_RUNNER_ROOT / "core" / "grader_preflight.py",
+        BATCH_RUNNER_ROOT / "requirements-track2-preflight.in",
+        BATCH_RUNNER_ROOT / "requirements-track2-preflight.lock",
     ):
         relative = path.relative_to(BATCH_RUNNER_ROOT.parent).as_posix()
         content = path.read_bytes()
@@ -232,6 +234,7 @@ def main() -> int:
             "precheck_fallbacks",
             "judge_routes",
             "planned_render_calls",
+            "planned_audio_calls",
             "planned_perception_calls",
             "errors",
         )
