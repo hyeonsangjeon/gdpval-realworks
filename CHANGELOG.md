@@ -11,6 +11,16 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **Track 2 cohort expansion preregistration** — add a dated, immutable
+  two-stage plan for expanding the accepted exp003 one-task canary to three and
+  then ten tasks without overwriting the canary artifact. The plan fixes task
+  IDs, inference/rubric identity, cost and wall-clock gates, provenance checks,
+  stop conditions, and a retrospective log. Model-free preflight found an XLSX
+  `Sound Technician` criterion incorrectly routed to audio by the keyword
+  `sound`; paid dispatch is blocked until file-compatible audio routing is
+  implemented and the planned 5/27 render-perception call counts are rechecked.
+
 ### Fixed
 - **Field Note benchmark data source** — replace duplicated completion and
   Self-QA literals in the prompt-complexity article, SVG hero, metric strip,
