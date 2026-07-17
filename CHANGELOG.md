@@ -54,7 +54,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   Linux `NAME_MAX=255` before any JSON, commit, analysis, resume, or artifact.
   The final output name and same-directory atomic replace remain unchanged;
   exact 242-byte round-trip, replace-failure cleanup, Step 8, and broad tests
-  pass. A second paid attempt remains approval-gated.
+  pass. Post-fix model-free run `29599249906` reproduced the exact 435-item,
+  436-judgment, 26/26 plan with zero errors under the new grader identity. A
+  second paid attempt remains approval-gated.
 - **Mixed-format visual bundle preflight** — filter harness rendering to stable
   supported paths while retaining all selected paths for main-judge evidence.
   Stage B preflight run `29583415563` exposed nine organization-chart criteria
