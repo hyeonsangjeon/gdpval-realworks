@@ -3,60 +3,85 @@
 This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
-- Updated: 2026-07-17
-- Status: Atomic fix merged and preflight passed; paid rerun approval pending
+- Updated: 2026-07-18
+- Status: Agentic Sandbox plan approved; implementation pending plan merge
 
 ## Task
 
-- Run paid Stage B once from the fully recorded, preflighted `main` identity.
-- Diagnose the absence of a grade artifact after all ten tasks completed.
-- Fix persistence without changing cohort, rubric, prompt, or grading semantics.
+- Create a dated implementation and experiment plan for a full task-solving
+  agentic tool loop in the sandbox.
+- Preserve the current sandbox as the paired baseline and keep grading tool
+  behavior separate from task-solving behavior.
+- Define security, iteration, time, resource, usage, cost, experiment, and
+  retrospective gates before writing code or running a model.
 
 ## Result
 
-- Paid run `29591036089` graded all 10 tasks from
-  `main@6bdcfcf9dd4d5feb8890e13d9f69baefc4162b38` in 1h25m58s. Seven empty
-  max-output finals recovered and no runtime/task/judge error appeared.
-- At task 10 persistence failed before any JSON existed:
-  `OSError: [Errno 36] File name too long`. The 242-byte final basename was
-  valid, but the atomic temp format added two dots, an 8-byte random name, and
-  `.tmp`, producing 256 bytes against Linux `NAME_MAX=255`.
-- Step 8 exited 1. Grade/analysis commits, durable resume, child dispatch, and
-  uploaded grade artifact were all absent. The run is rejected and cannot be
-  resumed because no partial JSON exists.
-- `_save_json` now derives a bounded 16-hex SHA-256 temp identity while keeping
-  same-directory `fsync` and atomic replace. The corrected grader hash is
-  `011ef05cf7f7a951b9bc2322888605549ee4fa9486c775f4154b89c83526d270`.
-- Usage was not persisted, so attempt-1 spend is conservatively booked at the
-  higher preflight raw sensitivity estimate, USD 3.81. A same-envelope rerun
-  would put estimated cumulative raw Stage B spend at USD 7.62, below the USD
-  10 cap. This is an estimate, not billing evidence.
-- Atomic-save fix PR #99 merged as
-  `3af01d423518d3a344b45cf1cb1a40bcba499d14`. Corrected grader/output identity
-  is `011ef05cf7f7a951b9bc2322888605549ee4fa9486c775f4154b89c83526d270`
-  / `src_011ef05cf7f7a951`.
-- Post-fix model-free preflight `29599249906` passed. Its plan differs from the
-  prior accepted plan only in repository/grader identity: 435 items, 436 main
-  judgments, 402 text / 16 formatting / 16 visual / 1 mixed, 26/26
-  render-perception, and zero prechecks/audio/errors. Plan artifact SHA-256 is
-  `76f514bff56c2d2b32ac2b21325f7092542d7538b6da39bd1cd038e87a402faa`.
+- Added
+  `tasks/0717_friday/AGENTIC_SANDBOX_EXPERIMENT_PLAN.md` beside the existing
+  Track 2 cohort document without modifying that experiment record.
+- Fixed the proposed treatment as a separate `agentic_sandbox` execution mode.
+  The MVP supports Azure/OpenAI Responses function calls and preinstalled
+  capabilities only; runtime package installation, network, root, arbitrary
+  shell, Anthropic support, and capability-image selection are deferred.
+- Defined six model-visible tools: workspace inspection, environment inspection,
+  Python execution, ffmpeg execution, artifact inspection, and deterministic
+  finalization. Plain assistant text cannot complete a task.
+- Fixed the persistent workspace design: one disposable container per task,
+  `/inputs:ro`, quota-backed `/work` tmpfs, fixed nonzero UID, read-only rootfs,
+  dropped capabilities, no network/IPC, syscall-filtered generated Python, and
+  host-only source/control state and verified artifact snapshots.
+- Preregistered model/tool/finalization/repetition budgets and fail-closed path,
+  usage, verification, and security behavior.
+- Defined optional agentic observability that excludes raw prompts, code,
+  arguments, process output, image payloads, credentials, and absolute paths.
+- Defined non-paid scripted and real-image Docker validation, legacy report/UI
+  omission checks, broad regression, frontend build, and responsive fixture
+  verification. Actual API/model call count must remain zero during
+  implementation.
+- Fixed an outcome-free, seeded, stratified selector contract that emits
+  disjoint five-task canary and twenty-task diagnostic cohorts in one atomic
+  pre-outcome step. Exact task IDs and source identities are not yet frozen;
+  they must be generated, reviewed, and committed at a separate paid gate with
+  projected cost, hard caps, abort procedure, and explicit owner approval.
+- Added evidence, cost, and incident ledgers plus the structure for
+  `AGENTIC_SANDBOX_RETROSPECTIVE.md` so later experiment notes can distinguish
+  preregistered decisions from post-run interpretation.
+- Hardened the live boundary around separate credential and compute planes,
+  byte-identical baseline/treatment substrates, isolated artifact verification,
+  crash-safe shared budgets, signed single-use paid authorization, authenticated
+  anti-replay envelopes, and input-byte/provider-classification identities.
+- Preserved the concurrent Track 2 state from current `main`: its atomic-save
+  fix and model-free preflight passed, while a second paid Stage B attempt still
+  requires explicit owner deviation approval and remains out of scope here.
+
+## Concurrent Track 2 Guard
+
+- Rejected paid run `29591036089` has no resumable artifact; its unpersisted
+  usage remains conservatively booked at USD 3.81 raw.
+- Atomic-save fix PR #99 is merged and model-free preflight `29599249906`
+  passed against the corrected grader/output identity.
+- A fresh `resume=false` Stage B attempt remains prohibited until the owner
+  explicitly approves the deviation and cumulative USD 10 cap. This Agentic
+  plan does not grant or inherit that approval.
 
 ## Verification
 
-- Failure audit: 10/10 task progress lines, seven recovered finalization
-  retries, no runtime/judge errors before atomic save, `rc=1`, no artifact.
-- Exact overflow reproduction: 242-byte target, 256-byte legacy temp basename.
-- Atomic-save focused tests: **2 passed**; full Step 8 suite: **98 passed**.
-- Broad non-integration suite: **1,225 passed, 5 skipped, 37 deselected**.
-- Real 242-byte output probe: JSON round-trip **PASS**, temp residue zero.
-- Independent grading-engineer review found no code blocker; docs and explicit
-  owner deviation approval are required before any second paid attempt.
-- Post-fix preflight artifact and environment matched the prior accepted plan;
-  active grade/preflight runs were zero after completion.
+- Plan rebased for merge onto
+  `main@71902db3904a358e6f832caf8f39e807047f9bdf`.
+- `first-reviewer` and `extreme-reasoner` independently approved the final plan
+  with no mandatory blockers; both explicitly denied live model/API approval.
+- Focused documentation, security-gate, selection-formula, endpoint, and
+  Track 2 preservation checks passed with `git diff --check` clean.
+- Existing `tasks/0717_friday/TRACK2_COHORT_EXPANSION_EXPERIMENT.md` is
+  preserved.
+- No implementation code, workflow, model call, package installation, paid run,
+  or remote project mutation was performed while drafting the plan.
 
 ## Remaining Work
 
-- Obtain explicit owner approval for a second paid Stage B attempt and for
-  counting failed attempt 1 as USD 3.81 raw toward a cumulative USD 10 cap.
-- Only after approval and active-run guard, run a fresh `resume=false` attempt;
-  audit actual cumulative cost and every Stage B gate before any full run.
+- Merge the approved docs-only plan.
+- Create a fresh implementation branch from the plan merge SHA and implement
+  through the non-paid validation gate.
+- Stop before live model/API execution until the paid gate receives explicit
+  approval.
