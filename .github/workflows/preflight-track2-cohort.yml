@@ -337,6 +337,7 @@ jobs:
               "planned_render_calls",
               "planned_audio_calls",
               "planned_perception_calls",
+              "unsupported_visual_paths",
               "errors",
           )
           summary = {key: plan[key] for key in keys}

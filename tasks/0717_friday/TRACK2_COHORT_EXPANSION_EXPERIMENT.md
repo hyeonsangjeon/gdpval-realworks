@@ -1,7 +1,7 @@
 # Track 2 Cohort Expansion Experiment
 
 - Date: 2026-07-17
-- Status: `STAGE_A_ACCEPTED_STAGE_B_PREFLIGHT_PENDING`
+- Status: `STAGE_A_ACCEPTED_STAGE_B_PREFLIGHT_FIX_RERUN_PENDING`
 - Owner: repository operator
 - Experiment family: rubric grading / harness-owned perception
 - Prior accepted run: GitHub Actions `29435264166`
@@ -383,18 +383,18 @@ audited, but they must not be committed as accepted grades.
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | pending merge of model-free private-data preflight workflow |
-| Grader source hash | pending recomputation; prior hash invalidated by config/import corrections |
-| Config hash | pending recomputation after dead metadata removal |
-| Output path | pending recomputation from corrected config/grader identities |
+| Main SHA | attempt 1 `1294d11aa00ddd7d34a6d7cd804bab9ed534eca8`; corrected rerun SHA pending merge |
+| Grader source hash | attempt 1 `d2fe2661af800b09e203ac146eae226eb898a2ff1975c8233f122242531c6841`; corrected `ab8704b10f2e39a26bbb443b49c8c4e1a2697a6a31c74258d4af8ebc3ba8b551` |
+| Config hash | `b11acba425087d85` |
+| Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_b11acba425087d85__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_ab8704b10f2e39a2__v2.2.json` |
 | Ordered task IDs | verified first 10 pinned IDs |
-| Rubric items / prechecks | pending exact planner on first-10 tree |
-| Route counts | pending exact planner |
-| Render / perception calls | pending exact planner |
-| Run ID | not dispatched |
-| Result | not started |
+| Rubric items / prechecks | 435 / 0; corrected rerun required |
+| Route counts | 402 text / 16 formatting / 16 visual / 1 mixed; 0 audio |
+| Render / perception calls | attempt 1 incomplete 8 / 8; corrected expected 26 / 26 |
+| Run ID | model-free preflight attempt 1 `29583415563`; paid run not dispatched |
+| Result | nine task-10 mixed-bundle visual errors; fix validated, rerun pending |
 | Raw / effective cost | not started |
-| Decision | `WORKFLOW_MERGE_THEN_PREFLIGHT_REQUIRED_BEFORE_DISPATCH` |
+| Decision | `FIX_MERGE_THEN_MODEL_FREE_PREFLIGHT_RERUN_REQUIRED` |
 
 The local shell has no private dataset token, so a selective pinned download
 failed closed with HTTP 401 before any model/Azure call and left no partial
@@ -403,6 +403,22 @@ main-only model-free workflow. That workflow downloads the exact first-ten
 source prefix, has no Azure or Step 8 path, and records a hash-locked environment
 and plan artifact. Any precheck, audio route, planner error, identity mismatch,
 or active grade workflow remains a paid-dispatch stop.
+
+### Stage B Preflight Attempt 1
+
+Run `29583415563` completed the main-only input, checkout, hash-lock, identity,
+and exact first-ten private download gates without Azure or model calls. The
+planner emitted a 435-item plan with zero prechecks/audio and failed on nine
+task-10 organization-chart criteria. All nine selected the same DOCX/PDF/XLSX
+primary bundle; rejecting the supported PDF/XLSX because DOCX was also present
+was a renderer-boundary bug, not a cohort identity error.
+
+The correction filters harness visual prepass paths to supported formats while
+keeping DOCX visible to the main judge. Unsupported-only visual children still
+fail before any sibling render, task budget, or main call. Runtime and planner
+share this ordering. Artifact re-evaluation predicts 436 main judgments and
+26/26 render-perception calls with one filtered DOCX path and no errors. These
+remain planned values until a clean merged-main preflight rerun confirms them.
 
 ## Retrospective Notes
 

@@ -47,6 +47,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   Stage B is now limited to exact first-10 model-free preflight before dispatch.
 
 ### Fixed
+- **Mixed-format visual bundle preflight** — filter harness rendering to stable
+  supported paths while retaining all selected paths for main-judge evidence.
+  Stage B preflight run `29583415563` exposed nine organization-chart criteria
+  whose DOCX/PDF/XLSX bundle was rejected solely because DOCX is not renderable;
+  the corrected boundary renders PDF/XLSX, records the filtered DOCX, and keeps
+  unsupported-only visual targets fail closed. Runtime and planner now validate
+  split children and item/task caps in the same pre-render order.
 - **Exact planner perception accounting** — bump the planner contract to v2,
   count audio separately from harness-owned visual calls, enforce visual/audio
   task caps, and fail closed whenever an audio route exists because the main

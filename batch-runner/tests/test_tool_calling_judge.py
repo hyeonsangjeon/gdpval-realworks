@@ -1280,6 +1280,87 @@ def test_visual_preflight_processes_bounded_paths_in_stable_order(
     ) < prompt.index('"path": "z.png"')
 
 
+def test_visual_preflight_filters_unsupported_bundle_paths(
+    deliverable_dir, task_and_item, monkeypatch
+):
+    task, _ = task_and_item
+    visual_item = RubricItem(
+        rubric_item_id="r-bundle",
+        criterion="The organizational chart layout is readable",
+        score=4,
+        required=None,
+    )
+    (deliverable_dir / "Brief.docx").write_bytes(b"docx")
+    (deliverable_dir / "Chart.pdf").write_bytes(b"pdf")
+
+    PIL = pytest.importorskip("PIL")
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), color="blue").save(buf, format="PNG")
+    fake_b64 = base64.b64encode(buf.getvalue()).decode()
+    render_order = []
+
+    def fake_render(op, path, *, base_dir, scope=None):
+        render_order.append(path)
+        source_kind = Path(path).suffix.lower().lstrip(".")
+        data = {
+            "source_kind": source_kind,
+            "scope": scope or {},
+            "renderer": {
+                "converter": "libreoffice",
+                "rasterizer": "pymupdf",
+                "libreoffice_binary": "soffice",
+                "libreoffice_version": "LibreOffice 24.2.7.2",
+                "pymupdf_version": "1.28.0",
+            },
+            "byte_size": 64,
+            "base64": fake_b64,
+        }
+        if source_kind == "pdf":
+            data["source_page_count"] = 1
+        else:
+            data["source_sheet_count"] = 1
+            data["converted_page_count"] = 1
+        return {"ok": True, "data": data}
+
+    monkeypatch.setattr(
+        tool_calling_judge_module,
+        "read_deliverable",
+        fake_render,
+    )
+    final = _response(output=[_final(json.dumps({
+        "verdict": "pass",
+        "partial_score": 1.0,
+        "evidence": "the chart tiers are readable",
+        "confidence": 0.9,
+        "reasoning": "ok",
+    }))])
+    client = FakeClient(ScriptedResponses([final]))
+    vision = StubVision(remaining_calls=2)
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE,
+        vision_perception=vision,
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=visual_item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["Brief.docx", "Chart.pdf", "report.xlsx"],
+    )
+
+    assert result.verdict == "pass"
+    assert render_order == ["Chart.pdf", "report.xlsx"]
+    assert result.render_call_count == result.perception_call_count == 2
+    assert [entry["path"] for entry in result.visual_provenance] == [
+        "Chart.pdf",
+        "report.xlsx",
+    ]
+    assert "Brief.docx" in client.responses.calls[0]["input"][0]["content"]
+
+
 def test_visual_file_cap_fails_before_render_vision_or_main(
     deliverable_dir, task_and_item, monkeypatch
 ):

@@ -770,7 +770,7 @@ def test_split_preflight_failure_records_prior_perception_call(
     assert style.perception_called is True
 
 
-def test_explicit_visual_docx_remains_fail_closed_unsupported(
+def test_explicit_visual_docx_remains_fail_closed_without_render_target(
     monkeypatch, tmp_path
 ):
     from core.rubric_loader import RubricItem, TaskRubric
@@ -807,8 +807,132 @@ def test_explicit_visual_docx_remains_fail_closed_unsupported(
     assert item.routing_modality == "visual"
     assert item.verdict == "judge_error"
     assert item.score_excluded is True
-    assert "unsupported_path" in item.evidence
+    assert item.evidence == "required_visual_render_target_unavailable"
     assert item.render_call_count == 0
+    assert vision.calls == []
+    assert responses.calls == []
+
+
+def test_split_visual_child_validation_precedes_task_budget_and_render(
+    monkeypatch, tmp_path
+):
+    from core.rubric_loader import RubricItem, TaskRubric
+    import core.tool_calling_judge as tool_judge_mod
+
+    responses = ScriptedResponses([])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision(call_cap=0)
+    grader._tool_judge.vision_perception = vision
+    monkeypatch.setattr(
+        tool_judge_mod,
+        "read_deliverable",
+        lambda *args, **kwargs: pytest.fail("child validation must precede render"),
+    )
+    deliverable_dir = tmp_path / "task"
+    deliverable_dir.mkdir()
+    (deliverable_dir / "Notes.txt").write_bytes(b"text")
+    (deliverable_dir / "Chart.pdf").write_bytes(b"pdf")
+    task = TaskRubric(
+        task_id="t-split-unsupported",
+        sector="Information",
+        occupation="Analyst",
+        prompt="Create two separate deliverables: a text file and a PDF.",
+        rubric_items=[RubricItem("style", "Overall Style", 4, None)],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+
+    grade = grader.grade_task(task, str(deliverable_dir))
+    item = grade.items[0]
+
+    assert item.target_scope == "split_children"
+    assert item.routing_modality == "visual"
+    assert item.verdict == "judge_error"
+    assert item.score_excluded is True
+    assert item.evidence == (
+        "notes: required_visual_render_target_unavailable"
+    )
+    assert all(
+        child["evidence"].endswith(
+            "required_visual_render_target_unavailable"
+        )
+        for child in item.child_grades
+    )
+    assert item.judge_call_count == 0
+    assert item.render_call_count == 0
+    assert item.perception_call_count == 0
+    assert all(child["score_excluded"] for child in item.child_grades)
+    assert vision.calls == []
+    assert responses.calls == []
+
+
+@pytest.mark.parametrize(
+    ("second_name", "vision_cap", "expected_error"),
+    [
+        (
+            "Notes.txt",
+            5,
+            "notes: required_visual_render_target_unavailable",
+        ),
+        (
+            "Chart.pdf",
+            0,
+            "task_visual_budget_exceeded:required_calls=1,cap=0",
+        ),
+    ],
+)
+def test_mixed_split_preflight_error_blocks_formatting_child_main(
+    monkeypatch, tmp_path, second_name, vision_cap, expected_error
+):
+    from core.rubric_loader import RubricItem, TaskRubric
+    import core.tool_calling_judge as tool_judge_mod
+
+    responses = ScriptedResponses([])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision(call_cap=vision_cap)
+    grader._tool_judge.vision_perception = vision
+    monkeypatch.setattr(
+        tool_judge_mod,
+        "read_deliverable",
+        lambda *args, **kwargs: pytest.fail("preflight error must precede render"),
+    )
+    deliverable_dir = tmp_path / "task"
+    deliverable_dir.mkdir()
+    (deliverable_dir / "Brief.docx").write_bytes(b"docx")
+    (deliverable_dir / second_name).write_bytes(b"secondary")
+    second_kind = "PDF" if second_name.endswith(".pdf") else "text file"
+    task = TaskRubric(
+        task_id="t-mixed-preflight",
+        sector="Information",
+        occupation="Analyst",
+        prompt=(
+            "Create two separate deliverables: a Word document and a "
+            f"{second_kind}."
+        ),
+        rubric_items=[RubricItem("style", "Overall Style", 4, None)],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+
+    grade = grader.grade_task(task, str(deliverable_dir))
+    item = grade.items[0]
+
+    assert item.target_scope == "split_children"
+    assert item.routing_modality == "mixed"
+    assert item.verdict == "judge_error"
+    assert item.score_excluded is True
+    assert item.judge_call_count == 0
+    assert item.render_call_count == 0
+    assert item.perception_call_count == 0
+    assert {child["routing_modality"] for child in item.child_grades} == {
+        "formatting",
+        "visual",
+    }
+    assert all(
+        child["evidence"] == expected_error for child in item.child_grades
+    )
     assert vision.calls == []
     assert responses.calls == []
 

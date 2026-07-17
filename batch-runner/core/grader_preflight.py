@@ -59,6 +59,10 @@ def plan_task_runtime(
             "target_scope": target_plan.target_scope,
             "selected_paths": list(target_plan.selected_paths),
             "precheck_pattern_id": pattern_id,
+            "planned_main_judgments": 0,
+            "planned_render_calls": 0,
+            "planned_audio_calls": 0,
+            "planned_perception_calls": 0,
         }
 
         if target_plan.target_scope == "selection_error":
@@ -68,19 +72,42 @@ def plan_task_runtime(
 
         if target_plan.target_scope == "split_children":
             child_routes: list[str] = []
-            raw_visual_paths: list[str] = []
+            child_errors: list[dict[str, str]] = []
+            supported_visual_paths: list[str] = []
+            visual_error: str | None = None
             raw_audio_routes = 0
             for target_id in target_plan.target_ids:
                 target = targets.get(target_id)
                 if target is None:
-                    errors.append(
-                        f"{item.rubric_item_id}: missing target {target_id}"
-                    )
+                    child_error = {
+                        "target_id": target_id,
+                        "error": "missing target",
+                    }
+                    child_errors.append(child_error)
+                    if visual_error is None:
+                        visual_error = f"{target_id}: missing target"
                     continue
                 decision = resolve_runtime_routing(item.criterion, target.paths)
                 child_routes.append(decision.modality.value)
                 if decision.modality is Modality.VISUAL:
-                    raw_visual_paths.extend(target.paths)
+                    planned_names, child_visual_error = (
+                        ToolCallingJudge.validate_planned_visual_names(
+                            target.paths
+                        )
+                    )
+                    unsupported_visual_paths.extend(
+                        sorted(set(target.paths) - set(planned_names))
+                    )
+                    if child_visual_error is not None and visual_error is None:
+                        visual_error = (
+                            f"{target_id}: {child_visual_error}"
+                        )
+                    if child_visual_error is not None:
+                        child_errors.append({
+                            "target_id": target_id,
+                            "error": child_visual_error,
+                        })
+                    supported_visual_paths.extend(planned_names)
                 elif decision.modality is Modality.AUDIO:
                     raw_audio_routes += 1
             parent_route = (
@@ -90,40 +117,42 @@ def plan_task_runtime(
             )
             routes[parent_route] += 1
             visual_paths: list[str] = []
-            visual_error: str | None = None
-            if raw_visual_paths:
-                planned_names, visual_error = (
+            if supported_visual_paths and visual_error is None:
+                planned_names, parent_visual_error = (
                     ToolCallingJudge.validate_planned_visual_names(
-                        raw_visual_paths
+                        supported_visual_paths
                     )
                 )
-                if visual_error is not None:
-                    errors.append(f"{item.rubric_item_id}: {visual_error}")
-                    unsupported_visual_paths.extend(
-                        sorted(
-                            set(planned_names)
-                            - set(
-                                ToolCallingJudge.planned_supported_visual_names(
-                                    planned_names
-                                )
-                            )
-                        )
-                    )
+                if parent_visual_error is not None:
+                    visual_error = parent_visual_error
                 else:
                     visual_paths = planned_names
                     planned_visual_calls += len(visual_paths)
+            if visual_error is not None:
+                errors.append(f"{item.rubric_item_id}: {visual_error}")
             if visual_error is None:
-                planned_main_judgments += len(child_routes)
+                item_main_judgments = len(child_routes)
+                planned_main_judgments += item_main_judgments
                 planned_audio_calls += raw_audio_routes
+            else:
+                item_main_judgments = 0
             item_plan.update({
                 "outcome": (
                     "judge" if visual_error is None else "preflight_error"
                 ),
                 "routing_modality": parent_route,
                 "child_routes": child_routes,
+                "child_errors": child_errors,
+                "preflight_error": visual_error,
                 "planned_visual_paths": visual_paths,
+                "planned_main_judgments": item_main_judgments,
+                "planned_render_calls": len(visual_paths),
                 "planned_audio_calls": (
                     raw_audio_routes if visual_error is None else 0
+                ),
+                "planned_perception_calls": (
+                    len(visual_paths) + raw_audio_routes
+                    if visual_error is None else 0
                 ),
             })
             item_plans.append(item_plan)
@@ -166,31 +195,37 @@ def plan_task_runtime(
             if visual_error is not None:
                 errors.append(f"{item.rubric_item_id}: {visual_error}")
                 unsupported_visual_paths.extend(
-                    sorted(
-                        set(planned_names)
-                        - set(
-                            ToolCallingJudge.planned_supported_visual_names(
-                                planned_names
-                            )
-                        )
-                    )
+                    sorted(set(target_plan.selected_paths) - set(planned_names))
                 )
             else:
                 supported = planned_names
                 planned_visual_calls += len(supported)
+                unsupported_visual_paths.extend(
+                    sorted(set(target_plan.selected_paths) - set(supported))
+                )
         if visual_error is None:
-            planned_main_judgments += 1
+            item_main_judgments = 1
+            planned_main_judgments += item_main_judgments
             if decision.modality is Modality.AUDIO:
                 planned_audio_calls += 1
+        else:
+            item_main_judgments = 0
         item_plan.update({
             "outcome": (
                 "judge" if visual_error is None else "preflight_error"
             ),
             "routing_modality": decision.modality.value,
+            "preflight_error": visual_error,
             "matched_keywords": list(decision.matched_keywords),
             "planned_visual_paths": supported,
+            "planned_main_judgments": item_main_judgments,
+            "planned_render_calls": len(supported),
             "planned_audio_calls": (
                 1 if decision.modality is Modality.AUDIO else 0
+            ),
+            "planned_perception_calls": (
+                len(supported)
+                + (1 if decision.modality is Modality.AUDIO else 0)
             ),
         })
         item_plans.append(item_plan)
@@ -207,10 +242,27 @@ def plan_task_runtime(
         isinstance(visual_cap, int)
         and planned_visual_calls > visual_cap
     ):
-        errors.append(
+        budget_error = (
             "task visual budget exceeded: "
             f"planned={planned_visual_calls}, cap={visual_cap}"
         )
+        errors.append(budget_error)
+        for item_plan in item_plans:
+            if (
+                item_plan.get("outcome") == "judge"
+                and item_plan.get("planned_render_calls", 0) > 0
+            ):
+                planned_main_judgments -= item_plan["planned_main_judgments"]
+                planned_visual_calls -= item_plan["planned_render_calls"]
+                planned_audio_calls -= item_plan["planned_audio_calls"]
+                item_plan.update({
+                    "outcome": "preflight_error",
+                    "preflight_error": budget_error,
+                    "planned_main_judgments": 0,
+                    "planned_render_calls": 0,
+                    "planned_audio_calls": 0,
+                    "planned_perception_calls": 0,
+                })
     audio_cap = audio_config.get("call_cap_per_task")
     if isinstance(audio_cap, int) and planned_audio_calls > audio_cap:
         errors.append(
@@ -276,6 +328,11 @@ def summarize_cohort(task_plans: list[dict[str, Any]]) -> dict[str, Any]:
         "planned_perception_calls": sum(
             task["planned_perception_calls"] for task in task_plans
         ),
+        "unsupported_visual_paths": sorted({
+            path
+            for task in task_plans
+            for path in task["unsupported_visual_paths"]
+        }),
         "errors": [
             f"{task['task_id']}: {error}"
             for task in task_plans
