@@ -3,75 +3,56 @@
 This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
-- Updated: 2026-07-16
-- Status: Field Note benchmark data source published and production-verified
+- Updated: 2026-07-17
+- Status: Track 2 expansion planned; model-free preflight blocked paid run
 
 ## Task
 
-- Make `/notes/when-more-prompt-is-less` derive its metrics, SVG, chart, and
-  result prose from benchmark data instead of duplicated literals.
-- Use the same build-time report snapshot as `/experiments/exp003`, exp004, and
-  exp005, and provide direct links to both the JSON source and detail pages.
-- Fail closed when required experiment rows are missing, duplicated, malformed,
-  or no longer match the intended subprocess comparison contract.
+- Preregister the next Track 2 grading experiment before any paid dispatch.
+- Expand the accepted exp003 canary through a gated three-task cohort and then
+  a ten-task mixed-format cohort with immutable identities and isolated output
+  artifacts.
+- Preserve enough chronological, quantitative, and failure evidence for a
+  later experiment retrospective.
 
 ## Result
 
-- Added a strict selector over `reports-index.json` that returns exp003, exp004,
-  and exp005 in comparison order. It reads condition, execution mode, success
-  count, total tasks, completion rate, and average Self-QA from each report's
-  `meta` and `summary` fields.
-- Removed the article's duplicated benchmark values. The top metrics, desktop
-  SVG, mobile cards, chart, caption, and result paragraphs now resolve from the
-  selected rows; only YAML-backed presentation labels such as the five steps
-  and Pillow replacement remain editorial data.
-- Added a visible `BENCHMARK DATA` source strip linking to
-  `generated/reports-index.json` and `/experiments/exp003`, exp004, and exp005.
-  Mobile comparison cards are accessible links to the same detail routes.
-- Detail pages continue to lazy-load full Hugging Face reports for task-level
-  content, but their header `meta` and `summary` are replaced with the matching
-  report-index entry. The article and detail header therefore use one immutable
-  build snapshot instead of potentially drifting summaries.
-- The selector rejects missing and duplicate IDs, non-string or unexpected
-  conditions/modes, zero or non-integer totals, invalid success counts,
-  non-finite/out-of-range rates and QA, and rates inconsistent with raw counts.
-  Missing, invalid, or failed JSON loads show an alert and render no benchmark
-  metrics, visual, chart, result paragraph, or numeric evidence fallback.
-- Squash-merged the reviewed change through PR #90 as `b9e224a`. Automatic
-  `Aggregate Tests & Deploy` run
-  [29475359417](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29475359417)
-  completed the build and GitHub Pages deployment successfully.
+- Added
+  `tasks/0717_friday/TRACK2_COHORT_EXPANSION_EXPERIMENT.md` with fixed source,
+  rubric, judge, prompt, ordered task IDs, artifact-isolation requirements,
+  stage gates, stop conditions, execution sequence, and retrospective prompts.
+- Stage A covers the first three pinned tasks (153 rubric items); Stage B covers
+  the first ten (435 items) and adds PDF, DOCX, PNG, multiple-primary, and mixed
+  child-routing surfaces.
+- Current-code model-free routing calculated Stage A as 141 text, 6 formatting,
+  5 visual, and 1 audio route with 5 planned render/perception calls. Stage B
+  calculated 400 text, 16 formatting, 17 visual, 1 audio, and 1 mixed route
+  with 27 planned calls.
+- Preflight found that the Stage A XLSX criterion `Sound Technician` is routed
+  to audio solely by the keyword `sound`, despite having no audio file. This is
+  a file-incompatible false positive. The plan is marked
+  `PREFLIGHT_BLOCKED`; no paid workflow was dispatched.
+- The prerequisite fix is explicit: downgrade audio classifications to text
+  when selected paths contain no supported audio extension, while preserving
+  real WAV/MP3 and mixed-child audio routing.
 
 ## Verification
 
-- Focused Field Note and selector contracts: **8 passed**; full aggregate suite:
-  **29 passed**. `npm run build`, static diagnostics, and `git diff --check`
-  passed.
-- Production-preview comparison read the actual JSON response and matched all
-  three rows to the metric strip, SVG labels, chart data/ARIA, and generated
-  result prose. The exp003 detail route showed the same 211/220, 95.9%, and
-  6.18/10 values.
-- Desktop and 390px dark/reduced-motion checks found no horizontal overflow.
-  The mobile visual exposed three detail links and all three chart labels.
-- Injecting an invalid exp005 row and aborting the JSON request each produced an
-  explicit alert with zero benchmark numbers, visual, chart, metric strip, or
-  numeric evidence in the full DOM.
-- Injecting a stale zeroed summary into the lazy HF exp003 response still left
-  the detail header at the index snapshot values and hid the stale condition,
-  proving the article/detail source contract at runtime.
-- SPA transitions from a normal note into a failed benchmark load produced no
-  false missing-row alert. After a successful benchmark load, leaving and
-  returning with a failed request also exposed no stale numbers, hero, or
-  chart; slug-keyed remounting and request abort cleanup reset the state.
-- On the deployed site, the public JSON rows for exp003-exp005 matched the
-  metric strip, SVG labels, chart data/ARIA, and result prose exactly. The
-  public exp003 detail page showed the same 211/220, 95.9%, 6.18/10, and
-  Baseline values.
-- Public 390px dark/reduced-motion verification exposed all three experiment
-  card links and chart labels with no horizontal overflow, no hero animation,
-  and zero post-settle chart mutations.
+- All ten planned IDs exactly match the first ten rows of the local exp003
+  snapshot, and the first ID matches the accepted canary task.
+- The pinned inference SHA and full rubric SHA are present in the plan.
+- Route totals and planned visual-call counts were recomputed with current
+  routing code over the historical 220-task grade's selected paths.
+- The plan contains no provider-account relationship or organization operating
+  budget details, and `git diff --check` passes.
+- The file is ignored by default under the privacy policy and will be
+  deliberately force-added because the owner requested it as a public
+  retrospective source.
 
 ## Remaining Work
 
-- No implementation or deployment work remains for this Field Note data-source
-  change.
+- Merge the preregistration plan.
+- Implement and test file-compatible audio routing, then update the plan's
+  preflight route totals.
+- Add isolated Stage A/B grading configs, dispatch Stage A once, and advance to
+  Stage B only if every preregistered gate passes.
