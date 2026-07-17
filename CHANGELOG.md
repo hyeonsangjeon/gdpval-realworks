@@ -29,8 +29,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   IDs, inference/rubric identity, cost and wall-clock gates, provenance checks,
   stop conditions, and a retrospective log. Preflight found and corrected an
   XLSX `Sound Technician` false audio route, then rejected Stage A attempt 1
-  after audit exposed unsafe automatic precheck verdicts. A corrected rerun
-  remains blocked until merge and clean-main preflight.
+  after audit exposed unsafe automatic precheck verdicts. Corrected Stage A run
+  `29572067428` then passed all gates from merged `main`: 3/3 tasks, 153
+  judge-bound items, zero errors, complete usage, exact 4/4 render-perception,
+  confined provenance, USD 1.08 effective cost, and 24.9 artifact minutes.
+  Stage B is now limited to exact first-10 model-free preflight before dispatch.
 
 ### Fixed
 - **Fail-safe rubric classification** — disable all automatic natural-language
@@ -40,9 +43,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   worksheet, file/count, page, and word criterion now reaches the judge, while
   stale precheck IDs cannot score an item. Active configs record
   `precheck_patterns_version: v2` as identity metadata only. The rejected grade
-  and analysis are removed pending a corrected rerun. The same audit removed a
-  false visual route where `chart-of-accounts` was read as a visual chart; the
-  checked-in 220-task supported-vision inventory is now 466 calls.
+  and analysis were removed before the corrected rerun. The same audit removed
+  a false visual route where `chart-of-accounts` was read as a visual chart;
+  the checked-in 220-task supported-vision inventory is now 466 calls. The
+  corrected Stage A artifact contains zero precheck decisions and zero judge
+  errors across all 153 items.
 - **File-compatible audio routing** — retain criterion-level audio
   classification for inventory, but downgrade runtime routing to text when the
   selected targets contain no supported audio extension. This prevents an XLSX
