@@ -4,55 +4,54 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-17
-- Status: Track 2 expansion planned; model-free preflight blocked paid run
+- Status: Track 2 routing blocker fixed; isolated cohort configs ready
 
 ## Task
 
-- Preregister the next Track 2 grading experiment before any paid dispatch.
-- Expand the accepted exp003 canary through a gated three-task cohort and then
-  a ten-task mixed-format cohort with immutable identities and isolated output
-  artifacts.
-- Preserve enough chronological, quantitative, and failure evidence for a
-  later experiment retrospective.
+- Resolve the file-incompatible audio route discovered by the 2026-07-17
+  Track 2 cohort preflight.
+- Preserve supported audio selection and probing while eliminating false audio
+  escalation for known non-audio deliverables.
+- Add artifact-isolated Stage A/B configs that are otherwise semantically
+  identical to `default_v2_mini`.
 
 ## Result
 
-- Added
-  `tasks/0717_friday/TRACK2_COHORT_EXPANSION_EXPERIMENT.md` with fixed source,
-  rubric, judge, prompt, ordered task IDs, artifact-isolation requirements,
-  stage gates, stop conditions, execution sequence, and retrospective prompts.
-- Stage A covers the first three pinned tasks (153 rubric items); Stage B covers
-  the first ten (435 items) and adds PDF, DOCX, PNG, multiple-primary, and mixed
-  child-routing surfaces.
-- Current-code model-free routing calculated Stage A as 141 text, 6 formatting,
-  5 visual, and 1 audio route with 5 planned render/perception calls. Stage B
-  calculated 400 text, 16 formatting, 17 visual, 1 audio, and 1 mixed route
-  with 27 planned calls.
-- Preflight found that the Stage A XLSX criterion `Sound Technician` is routed
-  to audio solely by the keyword `sound`, despite having no audio file. This is
-  a file-incompatible false positive. The plan is marked
-  `PREFLIGHT_BLOCKED`; no paid workflow was dispatched.
-- The prerequisite fix is explicit: downgrade audio classifications to text
-  when selected paths contain no supported audio extension, while preserving
-  real WAV/MP3 and mixed-child audio routing.
+- `resolve_runtime_routing()` now checks selected target suffixes. Audio
+  keyword matches downgrade to text only when known selected paths are disjoint
+  from WAV, MP3, FLAC, OGG, M4A, and AAC.
+- The exact XLSX `Sound Technician` criterion now routes to text. Supported
+  audio files remain audio, extensionless paths remain conservatively audio,
+  and known unsupported suffixes route to text.
+- Selection, runtime routing, and `read_deliverable` share one supported audio
+  extension set. Selector tests prove all six types remain primary deliverables
+  rather than becoming `wrong_format_primary`.
+- Post-fix model-free preflight now reports Stage A as 142 text, 6 formatting,
+  and 5 visual routes; Stage B reports 401 text, 16 formatting, 17 visual, and
+  1 mixed route. False audio routes are zero and planned render/perception
+  calls remain 5 and 27.
+- Added `validation_v2_mini_cohort3.yaml` and
+  `validation_v2_mini_cohort10.yaml`. Parsed config parity proves that only
+  `config_name` and description differ from `default_v2_mini`.
+- Stage A config hash is `0f76ea22614bdc13` with grader source hash
+  `86a0061a58077438a9408dc3efc3c90173eaf2ccb232a0bfdf6a162018f1805e`.
+  Stage B config hash is `9760999170801c4c` with grader source hash
+  `2ff175c16298a23bb22952c84c5e2e1902829a69f74f4d104ac2016f29fd8745`.
+- The dated plan is updated to
+  `IMPLEMENTATION_VALIDATED_DISPATCH_PENDING`. No paid workflow was dispatched.
 
 ## Verification
 
-- All ten planned IDs exactly match the first ten rows of the local exp003
-  snapshot, and the first ID matches the accepted canary task.
-- The pinned inference SHA and full rubric SHA are present in the plan.
-- Route totals and planned visual-call counts were recomputed with current
-  routing code over the historical 220-task grade's selected paths.
-- The plan contains no provider-account relationship or organization operating
-  budget details, and `git diff --check` passes.
-- The file is ignored by default under the privacy policy and will be
-  deliberately force-added because the owner requested it as a public
-  retrospective source.
+- Shared routing, selector, read-tool, config, visual-inventory, and
+  tool-dispatch suite: **141 passed**.
+- Broad non-integration suite excluding the unavailable local GDPVal parquet
+  fixture: **1,151 passed, 2 skipped, 37 deselected**.
+- Cohort config parity and output-isolation tests: **2 passed**.
+- Current-worktree import paths were verified before tests; cohort route totals
+  were recomputed with the modified module; `git diff --check` passes.
 
 ## Remaining Work
 
-- Merge the preregistration plan.
-- Implement and test file-compatible audio routing, then update the plan's
-  preflight route totals.
-- Add isolated Stage A/B grading configs, dispatch Stage A once, and advance to
-  Stage B only if every preregistered gate passes.
+- Merge this implementation and record the resulting `main` SHA in the plan.
+- Dispatch Stage A once with `tasks_limit=3` and the pinned inference revision.
+- Advance to Stage B only if every Stage A gate passes.

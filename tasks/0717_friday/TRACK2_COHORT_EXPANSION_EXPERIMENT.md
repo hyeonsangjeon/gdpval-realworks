@@ -1,7 +1,7 @@
 # Track 2 Cohort Expansion Experiment
 
 - Date: 2026-07-17
-- Status: `PREFLIGHT_BLOCKED`
+- Status: `IMPLEMENTATION_VALIDATED_DISPATCH_PENDING`
 - Owner: repository operator
 - Experiment family: rubric grading / harness-owned perception
 - Prior accepted run: GitHub Actions `29435264166`
@@ -151,12 +151,42 @@ supported audio extension. The focused regression must prove:
 
 - `Sound Technician` + XLSX routes to text;
 - a real audio criterion + WAV/MP3 remains audio;
-- mixed child routing preserves real audio children;
+- all six grader-supported audio suffixes remain selectable and probeable;
+- extensionless targets remain conservatively audio, while a known unsupported
+   suffix downgrades to text;
 - route totals become 142 text / 6 formatting / 5 visual for Stage A and
    401 text / 16 formatting / 17 visual / 1 mixed for Stage B;
 - planned render/vision calls remain 5 and 27 respectively.
 
 No paid run may be dispatched while this blocker is open.
+
+### Blocker Resolution
+
+Runtime routing now downgrades an audio-keyword decision to text when selected
+paths have known suffixes but none is a supported audio type. WAV, MP3, FLAC,
+OGG, M4A, and AAC targets remain audio. Selection, routing, and
+`read_deliverable` now import one shared extension set. The exact
+`Sound Technician` XLSX case, every supported primary format, extensionless
+paths, and known unsupported suffixes are covered by deterministic tests.
+
+Post-fix recomputation produced:
+
+| Cohort | Items | Prechecks | Text | Formatting | Visual | Audio | Mixed | Planned render/vision calls |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Stage A (3) | 153 | 9 | 142 | 6 | 5 | 0 | 0 | 5 |
+| Stage B (10) | 435 | 21 | 401 | 16 | 17 | 0 | 1 | 27 |
+
+Validation results:
+
+- perception-routing unit suite: 33 passed;
+- selector, mixed visual-child, visual-inventory, and tool-dispatch suite: 50
+   passed before the shared audio-format follow-up;
+- shared routing/selector/read-tool/config affected suite: 141 passed;
+- broad non-integration suite: 1,151 passed, 2 skipped, 37 deselected;
+- cohort config baseline-parity and output-isolation tests: 2 passed.
+
+The blocker is closed. Paid dispatch remains pending until this implementation
+is merged and its `main` SHA is written below.
 
 ## Stage Gates
 
@@ -221,30 +251,30 @@ audited, but they must not be committed as accepted grades.
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | pending |
-| Grader source hash | pending |
-| Config hash | pending |
-| Output path | pending |
-| Ordered task IDs | pending preflight |
+| Main SHA | pending implementation merge |
+| Grader source hash | `86a0061a58077438a9408dc3efc3c90173eaf2ccb232a0bfdf6a162018f1805e` |
+| Config hash | `0f76ea22614bdc13` |
+| Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort3__cfg_0f76ea22614bdc13__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_86a0061a58077438__v2.2.json` |
+| Ordered task IDs | verified first 3 pinned IDs |
 | Rubric items / prechecks | 153 / 9 |
-| Route counts | blocked: 141 text / 6 formatting / 5 visual / 1 false audio |
+| Route counts | 142 text / 6 formatting / 5 visual |
 | Render / perception calls | 5 / 5 planned |
 | Run ID | not dispatched |
 | Result | not started |
 | Raw / effective cost | not started |
-| Decision | `HOLD_ROUTING_FIX_REQUIRED` |
+| Decision | `READY_AFTER_MERGE` |
 
 ## Stage B Log
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | pending |
-| Grader source hash | pending |
-| Config hash | pending |
-| Output path | pending |
-| Ordered task IDs | pending preflight |
+| Main SHA | pending implementation merge |
+| Grader source hash | `2ff175c16298a23bb22952c84c5e2e1902829a69f74f4d104ac2016f29fd8745` |
+| Config hash | `9760999170801c4c` |
+| Output path | `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_9760999170801c4c__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_2ff175c16298a23b__v2.2.json` |
+| Ordered task IDs | verified first 10 pinned IDs |
 | Rubric items / prechecks | 435 / 21 |
-| Route counts | blocked: 400 text / 16 formatting / 17 visual / 1 false audio / 1 mixed |
+| Route counts | 401 text / 16 formatting / 17 visual / 1 mixed |
 | Render / perception calls | 27 / 27 planned |
 | Run ID | not dispatched |
 | Result | not started |

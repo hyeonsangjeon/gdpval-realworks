@@ -101,6 +101,59 @@ def test_mixed_overall_style_target_remains_visual_at_parent_level():
     assert decision.modality is Modality.VISUAL
 
 
+def test_audio_keyword_with_xlsx_target_downgrades_to_text():
+    criterion = (
+        "Band and Crew includes Sound Technician fees attributed to the tour "
+        "manager."
+    )
+
+    assert classify_criterion(criterion).modality is Modality.AUDIO
+    decision = resolve_runtime_routing(criterion, ["tour_budget.xlsx"])
+
+    assert decision.modality is Modality.TEXT
+    assert decision.preferred_op == "read_content"
+    assert decision.matched_keywords == ("sound",)
+
+
+def test_audio_keyword_with_extensionless_target_stays_audio():
+    decision = resolve_runtime_routing(
+        "Audio mix avoids clipping", ["recording"]
+    )
+
+    assert decision.modality is Modality.AUDIO
+    assert decision.preferred_op == "probe_audio"
+
+
+def test_audio_keyword_with_known_unsupported_target_downgrades_to_text():
+    decision = resolve_runtime_routing(
+        "Audio mix avoids clipping", ["recording.wma"]
+    )
+
+    assert decision.modality is Modality.TEXT
+    assert decision.preferred_op == "read_content"
+
+
+@pytest.mark.parametrize("suffix", [".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"])
+def test_audio_keyword_with_supported_audio_target_remains_audio(suffix: str):
+    decision = resolve_runtime_routing(
+        "Audio mix avoids clipping and excessive noise",
+        [f"deliverable{suffix}"],
+    )
+
+    assert decision.modality is Modality.AUDIO
+    assert decision.preferred_op == "probe_audio"
+
+
+def test_runtime_audio_resolution_is_target_specific():
+    criterion = "The sound is clear and free from clipping"
+
+    audio_child = resolve_runtime_routing(criterion, ["mix.wav"])
+    text_child = resolve_runtime_routing(criterion, ["budget.xlsx"])
+
+    assert audio_child.modality is Modality.AUDIO
+    assert text_child.modality is Modality.TEXT
+
+
 def test_routing_decision_to_prompt_hint_keys():
     d = classify_criterion("audio mix")
     hint = d.to_prompt_hint()

@@ -1,0 +1,88 @@
+schema_version: "2.0"
+config_name: "validation_v2_mini_cohort3"
+description: |
+  Artifact-isolated Stage A clone of default_v2_mini for the preregistered
+  three-task Track 2 cohort. Runtime grading semantics must remain identical
+  to the baseline; only config identity and this description differ.
+
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.4-mini"
+  deployment: "gpt-5.4-mini"
+  api_version: "2025-04-01-preview"
+  endpoint_env: "AZURE_OPENAI_ENDPOINT"
+  timeout_sec: 600
+  reasoning:
+    effort: "medium"
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 2400
+
+  tools:
+    read_deliverable:
+      env: "exp011_subprocess"
+      ops:
+        - inspect_structure
+        - read_content
+        - inspect_formatting
+        - probe_audio
+        - probe_video
+      read_only: true
+      per_item_call_cap: 8
+      max_iterations: 10
+
+  perception:
+    visual:
+      model: "gpt-5.4"
+      vision: true
+      call_cap_per_task: 72
+    audio:
+      model: "gpt-audio-1.5"
+      endpoint_env: "AZURE_AUDIO_ENDPOINT"
+      call_cap_per_task: 3
+      trim_seconds: 30
+
+  critical:
+    rule: "abs_max_score_threshold"
+    threshold: 4
+    sign_aware: true
+
+  scoring:
+    sign_aware_pct: true
+    handle_nonpositive_total_max: "explicit"
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "main"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v1"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  task_prompt_truncate_chars: 500
+  grades_per_task: 3
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  tool_template: "prompts/grader_judge_v2.md"
+  version: "v2.2"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__judge_{judge_slug}__{config_name}__cfg_{config_hash}__rubric_{rubric_sha}__inference_{inference_sha}__src_{grader_source_hash_short}__{prompt_v}.json"

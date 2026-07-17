@@ -83,6 +83,51 @@ def test_default_v2_config_loads_and_validates():
     assert data["judge"]["critical"]["rule"] == "abs_max_score_threshold"
 
 
+@pytest.mark.parametrize(
+    ("filename", "config_name"),
+    [
+        ("validation_v2_mini_cohort3.yaml", "validation_v2_mini_cohort3"),
+        ("validation_v2_mini_cohort10.yaml", "validation_v2_mini_cohort10"),
+    ],
+)
+def test_cohort_configs_only_change_baseline_identity(
+    filename: str, config_name: str
+):
+    baseline_path = Path("grading_configs/default_v2_mini.yaml")
+    candidate_path = Path("grading_configs") / filename
+    baseline = yaml.safe_load(baseline_path.read_text(encoding="utf-8"))
+    candidate = yaml.safe_load(candidate_path.read_text(encoding="utf-8"))
+
+    validate_grading_config(candidate)
+    assert candidate["config_name"] == config_name
+    baseline_hash = hash_config(str(baseline_path))
+    candidate_hash = hash_config(str(candidate_path))
+    assert candidate_hash != baseline_hash
+
+    common = {
+        "experiment_id": "exp003_GPT52Chat_baseline_runner_exec",
+        "judge_slug": "gpt-5_4-mini",
+        "rubric_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "rubric_short_sha": "11e7900",
+        "prompt_version": "v2.2",
+        "inference_sha": INFERENCE_SHA,
+        "grader_source_hash": GRADER_SOURCE_HASH,
+    }
+    baseline_output = resolve_grade_output_path(
+        baseline, config_hash=baseline_hash, **common
+    )
+    candidate_output = resolve_grade_output_path(
+        candidate, config_hash=candidate_hash, **common
+    )
+    assert candidate_output != baseline_output
+    assert f"__{config_name}__cfg_{candidate_hash}__" in candidate_output.name
+
+    for key in ("config_name", "description"):
+        baseline.pop(key)
+        candidate.pop(key)
+    assert candidate == baseline
+
+
 def test_v2_tools_block_requires_ops_list(tmp_path):
     cfg = _valid_config(tmp_path)
     cfg["schema_version"] = "2.0"
