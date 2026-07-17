@@ -51,7 +51,7 @@ export default function NoteComparisonChart({ chart }: { chart: JournalCompariso
   )
 
   return (
-    <figure className="mb-16 md:mb-20 border-y border-dash-border py-7 md:py-9" aria-label={ariaLabel}>
+    <figure className="mb-16 md:mb-20 border-y border-dash-border py-7 md:py-9">
       <div className="mb-6">
         <div className="font-mono text-[10px] text-emerald-700 dark:text-emerald-400 mb-2">COMPARISON</div>
         <h2 className="font-journal-serif text-[22px] md:text-[26px] leading-[1.4] text-dash-heading mb-3">{chart.title}</h2>
@@ -118,7 +118,7 @@ export default function NoteComparisonChart({ chart }: { chart: JournalCompariso
           )}
         </ResponsiveContainer>
       </div>
-      <div className="sr-only">
+      <div className="sr-only" aria-hidden="true">
         {chart.data.map((datum) => (
           <p key={datum.label}>
             {datum.label}: {chart.primary.label} {datum.primary}{chart.primary.unit}

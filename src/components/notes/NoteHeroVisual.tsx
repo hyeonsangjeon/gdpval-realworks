@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import type { JournalHero } from '../../data/journal'
 import { getExperimentHref } from '../../data/journalLinks'
 import type { PromptComplexityBenchmarkRow } from '../../lib/promptComplexityBenchmark'
+import type { RuntimeNoteBenchmarkSelection } from '../../lib/runtimeNoteBenchmark'
 
 const resolveAsset = (src: string) => (
   src.startsWith('http') ? src : `${import.meta.env.BASE_URL}${src.replace(/^\/+/, '')}`
@@ -70,49 +71,64 @@ function PromptComplexityVisual({
   )
 }
 
-function RuntimeVisual({ reduceMotion }: { reduceMotion: boolean | null }) {
-  const markers = [
-    { x: 893, y: 176, value: '290', label: 'watchdog' },
-    { x: 1000, y: 326, value: '330', label: 'interrupted' },
-    { x: 1053, y: 176, value: '350', label: 'step ceiling' },
-    { x: 1080, y: 326, value: '360', label: 'job cap' },
-  ]
+type ReadyRuntimeBenchmark = Extract<RuntimeNoteBenchmarkSelection, { status: 'ready' }>
+
+function RuntimeVisual({
+  reduceMotion,
+  benchmark,
+}: {
+  reduceMotion: boolean | null
+  benchmark: ReadyRuntimeBenchmark
+}) {
+  const { currentPolicy, incident } = benchmark
+  const scaleX = (minutes: number) => 210 + (minutes / currentPolicy.job_timeout_minutes) * 870
+  const incidentStepX = scaleX(incident.policy.step_timeout_minutes)
+  const watchdogX = scaleX(currentPolicy.watchdog_minutes)
+  const currentStepX = scaleX(currentPolicy.step_timeout_minutes)
+  const jobX = scaleX(currentPolicy.job_timeout_minutes)
 
   return (
     <>
-      <g opacity="0.45">
-        {[120, 280, 440, 600, 760, 920, 1080].map((x) => (
-          <line key={x} x1={x} y1="90" x2={x} y2="390" stroke="hsl(var(--dash-border))" strokeWidth="1" />
-        ))}
-      </g>
-      <text x="120" y="72" fill="hsl(var(--dash-text-secondary))" fontSize="18">RUNNING WINDOW</text>
-      <line x1="120" y1="250" x2="1080" y2="250" stroke="hsl(var(--dash-border-active))" strokeWidth="4" />
-      <line x1="120" y1="250" x2="893" y2="250" stroke="#10b981" strokeWidth="8" />
-      <line x1="893" y1="250" x2="1053" y2="250" stroke="#f59e0b" strokeWidth="8" />
-      <line x1="1053" y1="250" x2="1080" y2="250" stroke="#f43f5e" strokeWidth="8" />
-      <text x="120" y="286" fill="hsl(var(--dash-text-secondary))" fontSize="16">0 min</text>
-      {markers.map((marker) => (
-        <g key={marker.value}>
-          <line x1={marker.x} y1="224" x2={marker.x} y2="276" stroke="hsl(var(--dash-heading))" strokeWidth="2" />
-          <circle cx={marker.x} cy="250" r="9" fill="hsl(var(--dash-page))" stroke="hsl(var(--dash-heading))" strokeWidth="3" />
-          <text x={marker.x} y={marker.y} fill="hsl(var(--dash-heading))" fontSize="28" textAnchor="middle" fontWeight="700">{marker.value}</text>
-          <text x={marker.x} y={marker.y + 25} fill="hsl(var(--dash-text-secondary))" fontSize="14" textAnchor="middle">{marker.label}</text>
+      <text x="90" y="64" fill="hsl(var(--dash-text-secondary))" fontSize="18">INCIDENT → POLICY CHANGE</text>
+      <text x="90" y="142" fill="hsl(var(--dash-heading))" fontSize="16" fontWeight="700">MAY 18 · INCIDENT</text>
+      <text x="90" y="166" fill="hsl(var(--dash-text-secondary))" fontSize="13">Resume Round watchdog absent</text>
+      <line x1="210" y1="205" x2={jobX} y2="205" stroke="hsl(var(--dash-border-active))" strokeWidth="4" />
+      <line x1="210" y1="205" x2={incidentStepX} y2="205" stroke="#e11d48" strokeWidth="8" />
+      <line x1={incidentStepX} y1="178" x2={incidentStepX} y2="232" stroke="#e11d48" strokeWidth="3" />
+      <circle cx={incidentStepX} cy="205" r="9" fill="hsl(var(--dash-page))" stroke="#e11d48" strokeWidth="3" />
+      <text x={incidentStepX} y="154" fill="hsl(var(--dash-heading))" fontSize="27" textAnchor="middle" fontWeight="700">~{incident.approx_minute}</text>
+      <text x={incidentStepX - 12} y="258" fill="hsl(var(--dash-text-secondary))" fontSize="14" textAnchor="end">{incident.event} · {incident.policy.step_timeout_minutes} step hard stop</text>
+      <text x={jobX + 10} y="258" fill="hsl(var(--dash-text-secondary))" fontSize="13" textAnchor="start">{incident.policy.job_timeout_minutes} job cap</text>
+
+      <text x="90" y="322" fill="hsl(var(--dash-heading))" fontSize="16" fontWeight="700">AFTER MAY 20 FIX · CONDITION A</text>
+      <text x="90" y="346" fill="hsl(var(--dash-text-secondary))" fontSize="13">Resume Round watchdog enabled · step widened</text>
+      <line x1="210" y1="382" x2={jobX} y2="382" stroke="hsl(var(--dash-border-active))" strokeWidth="4" />
+      <line x1="210" y1="382" x2={watchdogX} y2="382" stroke="#10b981" strokeWidth="8" />
+      <line x1={watchdogX} y1="382" x2={currentStepX} y2="382" stroke="#f59e0b" strokeWidth="8" />
+      <line x1={currentStepX} y1="382" x2={jobX} y2="382" stroke="#e11d48" strokeWidth="8" />
+      {[
+        { x: watchdogX, textX: watchdogX, value: currentPolicy.watchdog_minutes, label: 'watchdog', anchor: 'middle' as const },
+        { x: currentStepX, textX: currentStepX - 10, value: currentPolicy.step_timeout_minutes, label: 'step ceiling', anchor: 'end' as const },
+        { x: jobX, textX: jobX + 10, value: currentPolicy.job_timeout_minutes, label: 'job cap', anchor: 'start' as const },
+      ].map((marker) => (
+        <g key={marker.label}>
+          <circle cx={marker.x} cy="382" r="8" fill="hsl(var(--dash-page))" stroke="hsl(var(--dash-heading))" strokeWidth="3" />
+          <text x={marker.textX} y="367" fill="hsl(var(--dash-heading))" fontSize="20" textAnchor={marker.anchor} fontWeight="700">{marker.value}</text>
+          <text x={marker.textX} y="420" fill="hsl(var(--dash-text-secondary))" fontSize="13" textAnchor={marker.anchor}>{marker.label}</text>
         </g>
       ))}
       {reduceMotion ? (
-        <line x1="893" x2="893" y1="112" y2="388" stroke="#2563eb" strokeWidth="3" strokeDasharray="7 7" opacity="0.8" />
+        <circle cx={watchdogX} cy="382" r="13" fill="none" stroke="#2563eb" strokeWidth="2" opacity="0.7" />
       ) : (
-        <motion.line
-          x1="120"
-          x2="120"
-          y1="112"
-          y2="388"
+        <motion.circle
+          cx="210"
+          cy="382"
+          r="7"
           stroke="#2563eb"
-          strokeWidth="3"
-          strokeDasharray="7 7"
+          fill="#2563eb"
           initial={{ x: 0, opacity: 0.25 }}
-          animate={{ x: [0, 960], opacity: [0.2, 0.9, 0.2] }}
-          transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+          animate={{ x: [0, watchdogX - 210], opacity: [0.2, 0.9, 0.2] }}
+          transition={{ duration: 4.5, repeat: Infinity, ease: 'linear' }}
         />
       )}
     </>
@@ -249,10 +265,12 @@ function MobileVisualSummary({
   variant,
   alt,
   promptBenchmark,
+  runtimeBenchmark,
 }: {
   variant: Extract<JournalHero, { kind: 'visual' }>['variant']
   alt: string
   promptBenchmark?: PromptComplexityBenchmarkRow[]
+  runtimeBenchmark?: ReadyRuntimeBenchmark
 }) {
   if (variant === 'prompt-complexity') {
     if (!promptBenchmark) return null
@@ -286,22 +304,27 @@ function MobileVisualSummary({
   }
 
   if (variant === 'runtime') {
+    if (!runtimeBenchmark) return null
+    const { currentPolicy, incident } = runtimeBenchmark
     return (
       <div role="img" aria-label={alt} className="md:hidden min-h-[220px] px-4 py-6 bg-dash-surface border-y border-dash-border">
-        <div className="font-mono text-[11px] text-dash-text-secondary mb-8">RUNNING WINDOW</div>
-        <div className="relative">
-          <div className="absolute left-3 right-3 top-[25px] h-1 bg-gradient-to-r from-emerald-600 via-amber-600 to-rose-600" />
-          <div className="relative grid grid-cols-4 gap-2">
+        <div className="font-mono text-[11px] text-dash-text-secondary mb-5">INCIDENT → POLICY CHANGE</div>
+        <div className="border-l-2 border-rose-600 pl-4 py-2">
+          <div className="font-mono text-[10px] text-rose-700 dark:text-rose-400">MAY 18 · INCIDENT</div>
+          <div className="mt-2 flex items-baseline gap-2"><span className="font-mono text-2xl font-semibold text-dash-heading">~{incident.approx_minute}</span><span className="text-xs text-dash-text-secondary">{incident.event} · {incident.policy.step_timeout_minutes}분 hard stop</span></div>
+          <div className="mt-1 text-[11px] text-dash-text-muted">Resume Round watchdog 없음 · job cap {incident.policy.job_timeout_minutes}분</div>
+        </div>
+        <div className="mt-5 border-l-2 border-emerald-600 pl-4 py-2">
+          <div className="font-mono text-[10px] text-emerald-700 dark:text-emerald-400">AFTER MAY 20 FIX · CONDITION A</div>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             {[
-              ['290', 'watchdog'],
-              ['330', '중단'],
-              ['350', 'step 종료'],
-              ['360', 'job cap'],
-            ].map(([value, label], index) => (
-              <div key={value} className={`text-center ${index % 2 === 1 ? 'pt-14' : ''}`}>
+              [String(currentPolicy.watchdog_minutes), 'watchdog'],
+              [String(currentPolicy.step_timeout_minutes), 'step'],
+              [String(currentPolicy.job_timeout_minutes), 'job'],
+            ].map(([value, label]) => (
+              <div key={label}>
                 <div className="font-mono text-xl font-semibold text-dash-heading">{value}</div>
-                <div className="mt-3 mx-auto w-3 h-3 rounded-full bg-dash-page border-2 border-dash-heading" />
-                <div className="mt-2 text-[11px] text-dash-text-secondary">{label}</div>
+                <div className="mt-1 text-[11px] text-dash-text-secondary">{label}</div>
               </div>
             ))}
           </div>
@@ -402,9 +425,11 @@ function MobileVisualSummary({
 export default function NoteHeroVisual({
   hero,
   promptBenchmark,
+  runtimeBenchmark,
 }: {
   hero: JournalHero
   promptBenchmark?: PromptComplexityBenchmarkRow[]
+  runtimeBenchmark?: ReadyRuntimeBenchmark
 }) {
   const reduceMotion = useReducedMotion()
 
@@ -432,13 +457,13 @@ export default function NoteHeroVisual({
 
   return (
     <figure className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
-      <MobileVisualSummary variant={hero.variant} alt={hero.alt} promptBenchmark={promptBenchmark} />
+      <MobileVisualSummary variant={hero.variant} alt={hero.alt} promptBenchmark={promptBenchmark} runtimeBenchmark={runtimeBenchmark} />
       <div className="hidden md:block overflow-hidden border-y border-dash-border bg-dash-surface">
         <svg viewBox="0 0 1200 460" role="img" aria-label={hero.alt} className="block w-full aspect-[12/5]">
           {hero.variant === 'prompt-complexity' && promptBenchmark && (
             <PromptComplexityVisual reduceMotion={reduceMotion} benchmark={promptBenchmark} />
           )}
-          {hero.variant === 'runtime' && <RuntimeVisual reduceMotion={reduceMotion} />}
+          {hero.variant === 'runtime' && runtimeBenchmark && <RuntimeVisual reduceMotion={reduceMotion} benchmark={runtimeBenchmark} />}
           {hero.variant === 'integrity' && <IntegrityVisual />}
           {hero.variant === 'perception' && <PerceptionVisual reduceMotion={reduceMotion} />}
           {hero.variant === 'task-contrast' && <TaskContrastVisual />}

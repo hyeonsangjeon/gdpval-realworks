@@ -1,0 +1,22 @@
+incidents:
+  exp025_resume_sigkill:
+    experiment_id: exp025
+    condition: condition_a
+    action_run_id: "26018603400"
+    approx_minute: 330
+    event: SIGKILL
+    started_at: "2026-05-18T07:02:37Z"
+    completed_at: "2026-05-18T12:36:00Z"
+    workflow_commit: 36b0e5bed5e9be2622e505f68d3746eec1b6cc12
+    incident_policy:
+      scope: condition_a
+      step_timeout_minutes: 330
+      job_timeout_minutes: 360
+      resume_watchdog_enabled: false
+    source_record_commit: 6e0001503ad4f3760c007dc1981d3bdc53dd785d
+    fix:
+      commit: 62471a4a682b2f2439bba81a7eb24335a8f4931f
+      applied_at: "2026-05-20"
+      step_timeout_before_minutes: 330
+      step_timeout_after_minutes: 350
+      resume_watchdog_enabled: true

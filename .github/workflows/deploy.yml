@@ -10,8 +10,14 @@ on:
       - 'batch-runner/results/**'       # aggregate-reports → reports-index
       - 'src/**'                        # 소스 변경 시
       - 'scripts/**'                    # aggregate 스크립트 변경 시
+      - '.github/workflows/batch-run.yml' # runtime-note policy source
+      - 'data/notes/runtime-incidents.yaml' # runtime-note incident source
 
   workflow_dispatch:          # 수동 실행 가능
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -23,13 +29,15 @@ env:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -60,6 +68,18 @@ jobs:
           # prebuild에서도 aggregate가 실행되지만,
           # 위에서 이미 실행했으므로 2번 실행됨 (멱등이라 OK)
           NODE_ENV: production
+
+      - name: Verify aggregate contracts and pinned history
+        timeout-minutes: 3
+        run: npm run test:aggregate
+
+      - name: Install Chromium headless shell
+        timeout-minutes: 10
+        run: ./node_modules/.bin/playwright install --with-deps --only-shell chromium
+
+      - name: Verify runtime note in browser
+        timeout-minutes: 5
+        run: npm run test:runtime-browser:dist
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

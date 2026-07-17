@@ -14,11 +14,16 @@ import { useTheme } from '../contexts/ThemeContext'
 import NoteComparisonChart from '../components/notes/NoteComparisonChart'
 import NoteHeroVisual from '../components/notes/NoteHeroVisual'
 import { useReports } from '../hooks/useReports'
+import { useRuntimeNote } from '../hooks/useRuntimeNote'
 import {
   selectPromptComplexityBenchmark,
   type PromptComplexityBenchmarkRow,
   type PromptComplexityBenchmarkSelection,
 } from '../lib/promptComplexityBenchmark'
+import {
+  selectRuntimeNoteBenchmark,
+  type RuntimeNoteBenchmarkSelection,
+} from '../lib/runtimeNoteBenchmark'
 import {
   getJournalArticle,
   journalArticles,
@@ -36,6 +41,7 @@ const lensStyles: Record<JournalLens, string> = {
 }
 
 type ReadyPromptBenchmark = Extract<PromptComplexityBenchmarkSelection, { status: 'ready' }>
+type ReadyRuntimeBenchmark = Extract<RuntimeNoteBenchmarkSelection, { status: 'ready' }>
 
 const formatSigned = (value: number, suffix: string) => `${value > 0 ? '+' : ''}${value.toFixed(1)}${suffix}`
 
@@ -73,6 +79,66 @@ function resolvePromptComplexityArticle(article: JournalArticleData, benchmark: 
   }
 }
 
+function resolveRuntimeArticle(article: JournalArticleData, benchmark: ReadyRuntimeBenchmark) {
+  const firstRound = benchmark.exp026.recoveryRounds[0]
+  const secondRound = benchmark.exp026.recoveryRounds[1]
+  const policy = benchmark.currentPolicy
+  const incident = benchmark.incident
+
+  return {
+    metrics: [
+      { value: String(benchmark.exp026.totalTasks), label: '서로 다른 실제 업무', note: undefined },
+      { value: `${policy.job_timeout_minutes}분`, label: 'workflow job cap', note: undefined },
+      { value: `약 ${incident.approx_minute}분`, label: `${incident.policy.step_timeout_minutes}분 step hard stop`, note: undefined },
+    ],
+    hero: article.hero ? {
+      ...article.hero,
+      alt: `사건 당시 ${incident.policy.step_timeout_minutes}분 step hard timeout과 수정 후 ${policy.watchdog_minutes}분 watchdog, ${policy.step_timeout_minutes}분 step ceiling, ${policy.job_timeout_minutes}분 job cap 비교`,
+      caption: `사건 당시 ${incident.policy.step_timeout_minutes}분 step hard stop에서 ${incident.event}이 발생했다. 수정 후 condition_a 경로는 ${policy.watchdog_minutes}분 watchdog, ${policy.step_timeout_minutes}분 step ceiling, ${policy.job_timeout_minutes}분 job cap으로 분리됐다.`,
+    } : undefined,
+    chart: article.comparisonChart ? {
+      ...article.comparisonChart,
+      description: `첫 round는 ${firstRound.attempted}개 중 ${firstRound.recovered}개를 회복했고, 두 번째 round는 ${secondRound.attempted}개 중 ${secondRound.recovered}개를 회복했다.`,
+      data: benchmark.exp026.recoveryRounds.map((round) => ({
+        label: `Round ${round.round}`,
+        primary: round.recovered,
+        secondary: round.stillFailed,
+      })),
+    } : undefined,
+    sections: article.sections.map((section) => {
+      if (section.benchmarkNarrative === 'runtime-incident') {
+        return {
+          ...section,
+          paragraphs: [
+            `GDPVal의 ${benchmark.exp026.totalTasks}개 작업은 짧은 문서 작성부터 스프레드시트 계산, 프레젠테이션, 코드와 미디어 처리까지 섞여 있다. 한 작업의 평균 시간만 보고 전체 실행 시간을 예상하면 긴 꼬리 작업이 사라진다.`,
+            `${incident.experiment_id}의 resume round는 당시 ${incident.policy.step_timeout_minutes}분 step hard timeout에 닿아 약 ${incident.approx_minute}분 지점에서 ${incident.event}로 끝났다. job cap까지 남은 시간이 있었지만, 프로세스가 강제 종료되어 마지막 상태를 다음 실행으로 넘기지 못했다.`,
+          ],
+          callout: `여기서 ${policy.job_timeout_minutes}분은 GitHub Actions 전체에 보편적으로 적용되는 규칙이라는 뜻이 아니라, 이 기록의 workflow와 runner에서 작동한 job cap을 가리킨다.`,
+        }
+      }
+      if (section.benchmarkNarrative === 'runtime-policy') {
+        return {
+          ...section,
+          paragraphs: [
+            `중단 사건 뒤 Resume Round에도 watchdog이 들어갔고 step ceiling은 ${incident.fix.step_timeout_before_minutes}분에서 ${incident.fix.step_timeout_after_minutes}분으로 넓어졌다. 현재 workflow의 condition_a 경로에서 watchdog은 기본 ${policy.watchdog_minutes}분에 checkpoint를 남기고 종료하며, workflow step은 relay handoff를 위한 ${policy.relay_handoff_margin_minutes}분의 여유를 더해 ${policy.step_timeout_minutes}분에 닫힌다. exp008과 exp010은 이 수정 전에 실행됐으므로 현재 정책의 결과로 읽지 않는다.`,
+            '이 구조는 작업 실행과 workflow 수명을 분리했다. 한 번의 runner가 전체 실험을 소유하지 않고, 여러 runner가 동일한 실험 상태를 이어받을 수 있게 됐다.',
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'runtime-results') {
+        return {
+          ...section,
+          paragraphs: [
+            `relay는 장시간 실행을 이어갈 수 있게 했지만 모든 실패를 해결하지는 않았다. ${benchmark.exp026.shortId} report에서 첫 resume round는 시도한 ${firstRound.attempted}개 작업 중 ${firstRound.recovered}개를 회복했고 ${firstRound.stillFailed}개를 남겼다. 두 번째 round는 ${secondRound.attempted}개 중 ${secondRound.recovered}개를 회복하고 ${secondRound.stillFailed}개를 남겼다.`,
+            `최종 report는 ${benchmark.exp026.totalTasks}개 중 ${benchmark.exp026.successCount}개 success, ${benchmark.exp026.errorCount}개 명시적 실행 오류, ${benchmark.exp026.retriedCount}개 재시도를 기록한다. 복구 가능성은 높아졌지만 반복 시도가 남은 작업을 균일하게 해결하지는 못했다.`,
+          ],
+        }
+      }
+      return section
+    }),
+  }
+}
+
 function BenchmarkDataSource({ rows, generated }: { rows: PromptComplexityBenchmarkRow[]; generated: string }) {
   return (
     <aside className="mb-10 border-y border-dash-border py-4 text-[11px]/[1.7] text-dash-text-secondary" aria-label="Benchmark data source">
@@ -103,6 +169,48 @@ function BenchmarkDataSource({ rows, generated }: { rows: PromptComplexityBenchm
   )
 }
 
+function RuntimeDataSource({ benchmark }: { benchmark: ReadyRuntimeBenchmark }) {
+  const repo = 'https://github.com/hyeonsangjeon/gdpval-realworks'
+  return (
+    <aside className="mb-12 border-y border-dash-border py-5 text-[11px]/[1.75] text-dash-text-secondary" aria-label="Runtime evidence source">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="font-mono text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">RUNTIME EVIDENCE</span>
+        <a href={`${import.meta.env.BASE_URL}generated/runtime-note.json`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          runtime-note.json <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${import.meta.env.BASE_URL}generated/reports-index.json`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          reports-index.json <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/blob/main/${benchmark.sources.workflow}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          workflow YAML <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/actions/runs/${benchmark.incident.action_run_id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          incident run <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/blob/${benchmark.incident.workflow_commit}/${benchmark.sources.workflow}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          incident workflow <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/commit/${benchmark.incident.fix.commit}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          watchdog fix <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/blob/${benchmark.incident.source_record_commit}/CHANGELOG.md`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          incident record <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2">
+        {benchmark.rows.map((row) => (
+          <Link key={row.shortId} to={getExperimentHref(row.shortId)} className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400">
+            {row.shortId} · {row.executionMode} · {row.duration} <ArrowRight className="h-3 w-3" />
+          </Link>
+        ))}
+      </div>
+      <div className="mt-3 text-dash-text-muted">
+        290분 watchdog은 현재 workflow의 condition_a 경로 기준이다. duration은 실험 전체 경과시간이며, relay가 이어진 exp025·exp026에서는 한 job의 실행 시간과 같지 않다.
+      </div>
+    </aside>
+  )
+}
+
 function BenchmarkDataState({ message, error }: { message: string; error?: boolean }) {
   return (
     <div className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
@@ -124,13 +232,23 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
   const { isDark, toggle: toggleTheme } = useTheme()
   const article = getJournalArticle(slug)
   const usesPromptBenchmark = article?.benchmark?.kind === 'prompt-complexity'
-  const { reports, generated, loading: reportsLoading, error: reportsError } = useReports(usesPromptBenchmark)
+  const isReflective = article?.readingStyle === 'reflective'
+  const usesRuntimeBenchmark = article?.benchmark?.kind === 'runtime'
+  const usesReportBenchmark = usesPromptBenchmark || usesRuntimeBenchmark
+  const { reports, generated, loading: reportsLoading, error: reportsError } = useReports(usesReportBenchmark)
+  const { data: runtimeNote, loading: runtimeLoading, error: runtimeError } = useRuntimeNote(usesRuntimeBenchmark)
   const promptBenchmark = usesPromptBenchmark && !reportsLoading && !reportsError
     ? selectPromptComplexityBenchmark(reports)
     : null
   const readyPromptBenchmark = promptBenchmark?.status === 'ready' ? promptBenchmark : null
+  const runtimeBenchmark = usesRuntimeBenchmark && !reportsLoading && !reportsError && !runtimeLoading && !runtimeError
+    ? selectRuntimeNoteBenchmark(reports, runtimeNote)
+    : null
+  const readyRuntimeBenchmark = runtimeBenchmark?.status === 'ready' ? runtimeBenchmark : null
   const resolved = article && readyPromptBenchmark
     ? resolvePromptComplexityArticle(article, readyPromptBenchmark)
+    : article && readyRuntimeBenchmark
+      ? resolveRuntimeArticle(article, readyRuntimeBenchmark)
     : null
 
   useEffect(() => {
@@ -154,8 +272,11 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
     .slice(0, 2)
   const displayedMetrics = resolved?.metrics ?? article.metrics
   const displayedChart = resolved?.chart ?? article.comparisonChart
-  const displayedSections = (resolved?.sections ?? article.sections)
-    .filter((section) => !section.benchmarkNarrative || readyPromptBenchmark)
+  const benchmarkReady = readyPromptBenchmark || readyRuntimeBenchmark
+  const displayedSections = usesRuntimeBenchmark && !readyRuntimeBenchmark
+    ? []
+    : (resolved?.sections ?? article.sections)
+      .filter((section) => !section.benchmarkNarrative || benchmarkReady)
 
   return (
     <div lang="ko" className="min-h-screen bg-dash-page text-dash-text font-journal-sans">
@@ -201,10 +322,11 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
           </div>
         </header>
 
-        {article.hero && (!usesPromptBenchmark || readyPromptBenchmark) && (
+        {article.hero && (!usesReportBenchmark || benchmarkReady) && (
           <NoteHeroVisual
             hero={resolved?.hero ?? article.hero}
             promptBenchmark={readyPromptBenchmark?.rows}
+            runtimeBenchmark={readyRuntimeBenchmark ?? undefined}
           />
         )}
         {usesPromptBenchmark && reportsLoading && <BenchmarkDataState message="benchmark report 데이터를 불러오는 중입니다." />}
@@ -215,9 +337,19 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
         {usesPromptBenchmark && promptBenchmark?.status === 'invalid' && (
           <BenchmarkDataState error message={`benchmark report의 ${promptBenchmark.invalidIds.join(', ')} 행이 유효하지 않습니다.`} />
         )}
+        {usesRuntimeBenchmark && (reportsLoading || runtimeLoading) && <BenchmarkDataState message="runtime 근거 데이터를 불러오는 중입니다." />}
+        {usesRuntimeBenchmark && reportsError && <BenchmarkDataState error message={`runtime report를 불러오지 못했습니다: ${reportsError}`} />}
+        {usesRuntimeBenchmark && runtimeError && <BenchmarkDataState error message={`runtime policy를 불러오지 못했습니다: ${runtimeError}`} />}
+        {usesRuntimeBenchmark && runtimeBenchmark?.status === 'missing' && (
+          <BenchmarkDataState error message={`runtime report에서 ${runtimeBenchmark.missingIds.join(', ')} 행을 찾지 못했습니다.`} />
+        )}
+        {usesRuntimeBenchmark && runtimeBenchmark?.status === 'invalid' && (
+          <BenchmarkDataState error message={`runtime 근거의 ${runtimeBenchmark.invalidSources.join(', ')} 항목이 유효하지 않습니다.`} />
+        )}
 
         <div className="max-w-[760px] mx-auto px-4 md:px-6 py-12 md:py-16">
           {readyPromptBenchmark && <BenchmarkDataSource rows={readyPromptBenchmark.rows} generated={generated} />}
+          {readyRuntimeBenchmark && <RuntimeDataSource benchmark={readyRuntimeBenchmark} />}
           <div className="mb-14 md:mb-16">
             <div className="flex items-center gap-3 mb-4" aria-hidden="true">
               <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">THESIS</span>
@@ -240,29 +372,36 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
             </div>
           )}
 
-          {displayedChart && (!usesPromptBenchmark || readyPromptBenchmark) && (
+          {displayedChart && (!usesReportBenchmark || benchmarkReady) && (
             <NoteComparisonChart chart={displayedChart} />
           )}
 
-          <div className="space-y-16 md:space-y-20">
+          <div className={isReflective ? 'space-y-20 md:space-y-28' : 'space-y-16 md:space-y-20'}>
             {displayedSections.map((section, sectionIndex) => (
-              <section key={section.heading}>
-                <div className="mb-6 md:mb-8">
-                  <div className="flex items-center gap-3 mb-3" aria-hidden="true">
+              <section key={section.heading} className={isReflective ? 'scroll-mt-24' : undefined}>
+                <div className={isReflective ? 'mb-8 md:mb-10' : 'mb-6 md:mb-8'}>
+                  <div className={isReflective ? 'flex items-center gap-3 mb-4' : 'flex items-center gap-3 mb-3'} aria-hidden="true">
                     <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">
                       {String(sectionIndex + 1).padStart(2, '0')}
                     </span>
                     <span className="h-px w-8 bg-dash-border-active" />
+                    {section.label && (
+                      <span className="font-mono text-[10px] text-dash-text-muted">{section.label}</span>
+                    )}
                   </div>
-                  <h2 className="font-journal-serif text-[26px] md:text-[30px] leading-[1.35] tracking-normal text-balance break-keep text-dash-heading">
+                  <h2 className={isReflective
+                    ? 'max-w-[660px] font-journal-serif text-[28px] md:text-[34px] leading-[1.42] tracking-normal text-balance break-keep text-dash-heading'
+                    : 'font-journal-serif text-[26px] md:text-[30px] leading-[1.35] tracking-normal text-balance break-keep text-dash-heading'}>
                     {section.heading}
                   </h2>
                 </div>
-                <div className="space-y-5">
-                  {section.paragraphs.map((paragraph) => (
+                <div className={isReflective ? 'space-y-7 md:space-y-8' : 'space-y-5'}>
+                  {section.paragraphs.map((paragraph, paragraphIndex) => (
                     <p
                       key={paragraph}
-                      className="text-[15px]/[1.9] md:text-[16px]/[1.9] text-pretty break-keep text-dash-text"
+                      className={isReflective
+                        ? `max-w-[700px] text-[16px]/[2.05] md:text-[17px]/[2.05] text-pretty break-keep ${paragraphIndex === 0 ? 'text-dash-heading' : 'text-dash-text'}`
+                        : 'text-[15px]/[1.9] md:text-[16px]/[1.9] text-pretty break-keep text-dash-text'}
                     >
                       {paragraph}
                     </p>
@@ -279,7 +418,9 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
                   </ul>
                 )}
                 {section.callout && (
-                  <div className="mt-8 bg-dash-surface/60 border-y border-dash-border px-5 py-5 text-[13px] md:text-sm text-dash-text leading-7">
+                  <div className={isReflective
+                    ? 'mt-10 border-y border-dash-border px-1 md:px-6 py-6 font-journal-serif text-[15px]/[1.9] md:text-[16px]/[1.9] text-pretty break-keep text-dash-text-secondary'
+                    : 'mt-8 bg-dash-surface/60 border-y border-dash-border px-5 py-5 text-[13px] md:text-sm text-dash-text leading-7'}>
                     {section.callout}
                   </div>
                 )}

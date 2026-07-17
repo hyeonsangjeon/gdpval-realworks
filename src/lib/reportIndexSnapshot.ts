@@ -7,8 +7,8 @@ export function applyReportIndexSnapshot(
 ): ReportData {
   return {
     ...report,
+    ...entry,
     short_id: shortId,
-    meta: entry.meta,
-    summary: entry.summary,
+    task_results: report.task_results,
   }
 }

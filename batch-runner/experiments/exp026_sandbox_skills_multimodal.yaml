@@ -4,7 +4,7 @@
 #   hearing for audio) improve GDPVal deliverable quality vs. plain subprocess?
 # Base architecture: exp025 (GPT-5.4 high + gpt-audio-1.5 preprocessor)
 # New variables:
-#   - execution.mode: sandbox (container, graceful local fallback)
+#   - execution.mode: sandbox (required container, loud failure if unavailable)
 #   - skills/ injected into prompt + mounted in the sandbox
 #   - video_analyzer preprocessor (frame-by-frame vision)
 # Scope: All 220 tasks (9 sectors, 44 occupations)
@@ -18,8 +18,9 @@ experiment:
     famous Agent Skills (audio/video/document/image/data) mounted in the sandbox
     and documented in the prompt, and (3) multimodal perception — a gpt-audio-1.5
     audio preprocessor (hearing) plus a frame-by-frame video preprocessor
-    (vision). Sandbox uses Docker when available and gracefully falls back to the
-    hardened local subprocess otherwise. Full 220 tasks across 9 sectors.
+    (vision). Sandbox requires the preflighted Docker image and fails loudly if
+    container execution becomes unavailable; it does not fall back to local
+    subprocess execution. Full 220 tasks across 9 sectors.
   author: "Hyeonsang Jeon"
   created_at: "2026-05-18"
 
