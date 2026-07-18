@@ -15,6 +15,7 @@ import NoteComparisonChart from '../components/notes/NoteComparisonChart'
 import NoteHeroVisual from '../components/notes/NoteHeroVisual'
 import { useReports } from '../hooks/useReports'
 import { useRuntimeNote } from '../hooks/useRuntimeNote'
+import { useIntegrityNote } from '../hooks/useIntegrityNote'
 import {
   selectPromptComplexityBenchmark,
   type PromptComplexityBenchmarkRow,
@@ -24,6 +25,10 @@ import {
   selectRuntimeNoteBenchmark,
   type RuntimeNoteBenchmarkSelection,
 } from '../lib/runtimeNoteBenchmark'
+import {
+  selectIntegrityNoteBenchmark,
+  type IntegrityNoteSelection,
+} from '../lib/integrityNoteBenchmark'
 import {
   getJournalArticle,
   journalArticles,
@@ -42,6 +47,7 @@ const lensStyles: Record<JournalLens, string> = {
 
 type ReadyPromptBenchmark = Extract<PromptComplexityBenchmarkSelection, { status: 'ready' }>
 type ReadyRuntimeBenchmark = Extract<RuntimeNoteBenchmarkSelection, { status: 'ready' }>
+type ReadyIntegrityBenchmark = Extract<IntegrityNoteSelection, { status: 'ready' }>
 
 const formatSigned = (value: number, suffix: string) => `${value > 0 ? '+' : ''}${value.toFixed(1)}${suffix}`
 
@@ -139,6 +145,80 @@ function resolveRuntimeArticle(article: JournalArticleData, benchmark: ReadyRunt
   }
 }
 
+function resolveIntegrityArticle(article: JournalArticleData, benchmark: ReadyIntegrityBenchmark) {
+  const { before, after, observedGapPctPoints, successDifference } = benchmark
+  const missingIdentityLabels = benchmark.interpretation.missing_execution_identities.join(', ')
+
+  return {
+    metrics: [
+      { value: `${before.successRatePct.toFixed(1)}%`, label: `${before.shortId} 관측 완료율`, note: undefined },
+      { value: `${after.successRatePct.toFixed(1)}%`, label: `${after.shortId} 관측 완료율`, note: undefined },
+      { value: `${observedGapPctPoints.toFixed(1)}%p`, label: '관측 차이', note: '인과 효과 추정치 아님' },
+    ],
+    hero: article.hero ? {
+      ...article.hero,
+      alt: `${before.shortId} ${before.successRatePct.toFixed(1)}퍼센트와 ${after.shortId} ${after.successRatePct.toFixed(1)}퍼센트의 관측 차이 및 success 기록 규칙 변화`,
+      caption: `${before.shortId}는 ${before.successCount}/${before.totalTasks}, ${after.shortId}는 ${after.successCount}/${after.totalTasks} success를 기록했다. 관측 차이는 ${observedGapPctPoints.toFixed(1)}%p이며 수정의 인과 효과 추정치가 아니다.`,
+    } : undefined,
+    chart: article.comparisonChart ? {
+      ...article.comparisonChart,
+      description: `${before.shortId}와 ${after.shortId} report snapshot의 관측 완료율이다. 두 실행 사이에서 success와 retry의 기록 규칙도 바뀌었다.`,
+      data: benchmark.rows.map((row) => ({
+        label: `${row.shortId} · ${row.date}`,
+        primary: row.successRatePct,
+      })),
+    } : undefined,
+    sections: article.sections.map((section) => {
+      if (section.benchmarkNarrative === 'integrity-observation') {
+        return {
+          ...section,
+          paragraphs: [
+            `${before.shortId} report는 ${before.successCount}/${before.totalTasks}, ${before.successRatePct.toFixed(1)}% 완료율을 기록했다. 같은 checked-in condition과 execution 설정의 ${after.shortId} report는 ${after.successCount}/${after.totalTasks}, ${after.successRatePct.toFixed(1)}%였다. 두 snapshot의 관측 차이는 ${observedGapPctPoints.toFixed(1)}%p, success 수 차이는 ${successDifference}개다.`,
+            `함께 달라진 것은 숫자만이 아니다. ${benchmark.history.applied_at}의 PR #38 전후로 _AVAILABLE_FILES가 실제 실행 파일에 반영되는 방식과 determined QA failure가 기록되는 상태가 바뀌었다. 이 글은 관측값과 판정 규칙을 함께 보되, 하나를 다른 하나의 원인으로 단정하지 않는다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'integrity-available-files') {
+        return {
+          ...section,
+          paragraphs: [
+            '수정 전 subprocess runner는 reference 파일 목록을 `_AVAILABLE_FILES` 헤더로 조합했지만, 그보다 먼저 원본 `solution.py`를 디스크에 썼다. 메모리의 문자열은 바뀌어도 subprocess가 읽는 파일은 다시 저장되지 않았다.',
+            '수정 후에는 헤더가 붙은 코드를 실행 전에 다시 기록했다. 이 fix는 약속한 실행 환경과 실제 실행 파일을 일치시킨다. 다만 그 변화가 각 task의 성공률을 어느 방향으로 얼마나 움직였는지는 paired 결과 없이 배분할 수 없다.',
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'integrity-qa-failed') {
+        return {
+          ...section,
+          paragraphs: [
+            '수정 전에도 `qa_failed`는 재시도 가능한 상태 목록에 있었다. 그러나 Self-QA 점수가 기준 미달인 채 재시도를 소진했을 때 `best_result`의 상태를 바꾸지 않아 determined QA failure가 success로 남을 수 있었다.',
+            `수정 후에는 그 경우를 qa_failed로 기록해 resume 대상과 summary에 드러냈다. 단, QA API나 parse가 실패해 판정 자체가 undetermined인 경우는 의도적으로 success에 남는다. report summary만 보면 ${before.shortId}의 success·명시적 error 이외 잔여 상태는 ${before.residualCount}개, ${after.shortId}는 ${after.residualCount}개지만, 이 잔여 수를 모두 qa_failed라고 부르지는 않는다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'integrity-comparison') {
+        return {
+          ...section,
+          paragraphs: [
+            `두 experiment YAML의 data filter, condition_a, execution projection은 같다. 모델은 ${before.model}, mode는 ${before.executionMode}, task 수는 ${before.totalTasks}개다. 그래서 두 관측값을 같은 계열의 서로 다른 측정 세대로 놓을 수는 있다.`,
+            `그러나 ${missingIdentityLabels}가 report에 남아 있지 않다. 실행 날짜와 환경도 다르고 seed는 고정되지 않았다. 따라서 ${observedGapPctPoints.toFixed(1)}%p를 모델 회귀나 PR #38의 순수 효과라고 부르는 것은 증거 범위를 넘는다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'integrity-decision') {
+        return {
+          ...section,
+          paragraphs: [
+            '이후 비교에서는 모델·프롬프트·reasoning뿐 아니라 runner와 상태 판정 세대도 조건으로 기록한다. success의 정의가 바뀐 경계에는 pinned code와 적용일을 함께 남긴다.',
+            '과거 결과를 지우지 않는다. 대신 어떤 규칙 아래 생성됐는지를 표시하고, 재현에 필요한 실행 정체성이 없으면 인과 문장을 멈춘다. 낮은 수치를 좋다고 부르는 대신, 무엇을 측정했는지 더 정확히 말하는 쪽을 택한다.',
+          ],
+        }
+      }
+      return section
+    }),
+  }
+}
+
 function BenchmarkDataSource({ rows, generated }: { rows: PromptComplexityBenchmarkRow[]; generated: string }) {
   return (
     <aside className="mb-10 border-y border-dash-border py-4 text-[11px]/[1.7] text-dash-text-secondary" aria-label="Benchmark data source">
@@ -211,6 +291,46 @@ function RuntimeDataSource({ benchmark }: { benchmark: ReadyRuntimeBenchmark }) 
   )
 }
 
+function IntegrityDataSource({ benchmark }: { benchmark: ReadyIntegrityBenchmark }) {
+  const repo = 'https://github.com/hyeonsangjeon/gdpval-realworks'
+  const history = benchmark.history
+  return (
+    <aside className="mb-12 border-y border-dash-border py-5 text-[11px]/[1.75] text-dash-text-secondary" aria-label="Integrity evidence source">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="font-mono text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">INTEGRITY EVIDENCE</span>
+        <a href={`${import.meta.env.BASE_URL}generated/integrity-note.json`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          integrity-note.json <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${import.meta.env.BASE_URL}generated/reports-index.json`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          reports-index.json <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/blob/${history.parent_commit}/batch-runner/core/subprocess_runner.py`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          pre-fix runner <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/commit/${history.core_fix_commit}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          core fix <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/commit/${history.followup_commit}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          follow-up <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/commit/${history.merge_commit}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          PR #38 merge <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2">
+        {benchmark.rows.map((row) => (
+          <Link key={row.shortId} to={getExperimentHref(row.shortId)} className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400">
+            {row.shortId} · {row.successCount}/{row.totalTasks} · {row.successRatePct.toFixed(1)}% <ArrowRight className="h-3 w-3" />
+          </Link>
+        ))}
+      </div>
+      <div className="mt-3 text-dash-text-muted">
+        report는 배포 시점 snapshot이다. 실행 당시 Git SHA·입력 revision·Azure model revision·runner environment가 없어 관측 차이를 수정의 인과 효과로 배분하지 않는다.
+      </div>
+    </aside>
+  )
+}
+
 function BenchmarkDataState({ message, error }: { message: string; error?: boolean }) {
   return (
     <div className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
@@ -234,9 +354,11 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
   const usesPromptBenchmark = article?.benchmark?.kind === 'prompt-complexity'
   const isReflective = article?.readingStyle === 'reflective'
   const usesRuntimeBenchmark = article?.benchmark?.kind === 'runtime'
-  const usesReportBenchmark = usesPromptBenchmark || usesRuntimeBenchmark
+  const usesIntegrityBenchmark = article?.benchmark?.kind === 'integrity'
+  const usesReportBenchmark = usesPromptBenchmark || usesRuntimeBenchmark || usesIntegrityBenchmark
   const { reports, generated, loading: reportsLoading, error: reportsError } = useReports(usesReportBenchmark)
   const { data: runtimeNote, loading: runtimeLoading, error: runtimeError } = useRuntimeNote(usesRuntimeBenchmark)
+  const { data: integrityNote, loading: integrityLoading, error: integrityError } = useIntegrityNote(usesIntegrityBenchmark)
   const promptBenchmark = usesPromptBenchmark && !reportsLoading && !reportsError
     ? selectPromptComplexityBenchmark(reports)
     : null
@@ -245,11 +367,17 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
     ? selectRuntimeNoteBenchmark(reports, runtimeNote)
     : null
   const readyRuntimeBenchmark = runtimeBenchmark?.status === 'ready' ? runtimeBenchmark : null
+  const integrityBenchmark = usesIntegrityBenchmark && !reportsLoading && !reportsError && !integrityLoading && !integrityError
+    ? selectIntegrityNoteBenchmark(reports, integrityNote)
+    : null
+  const readyIntegrityBenchmark = integrityBenchmark?.status === 'ready' ? integrityBenchmark : null
   const resolved = article && readyPromptBenchmark
     ? resolvePromptComplexityArticle(article, readyPromptBenchmark)
     : article && readyRuntimeBenchmark
       ? resolveRuntimeArticle(article, readyRuntimeBenchmark)
-    : null
+      : article && readyIntegrityBenchmark
+        ? resolveIntegrityArticle(article, readyIntegrityBenchmark)
+        : null
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -272,8 +400,8 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
     .slice(0, 2)
   const displayedMetrics = resolved?.metrics ?? article.metrics
   const displayedChart = resolved?.chart ?? article.comparisonChart
-  const benchmarkReady = readyPromptBenchmark || readyRuntimeBenchmark
-  const displayedSections = usesRuntimeBenchmark && !readyRuntimeBenchmark
+  const benchmarkReady = readyPromptBenchmark || readyRuntimeBenchmark || readyIntegrityBenchmark
+  const displayedSections = (usesRuntimeBenchmark && !readyRuntimeBenchmark) || (usesIntegrityBenchmark && !readyIntegrityBenchmark)
     ? []
     : (resolved?.sections ?? article.sections)
       .filter((section) => !section.benchmarkNarrative || benchmarkReady)
@@ -327,6 +455,7 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
             hero={resolved?.hero ?? article.hero}
             promptBenchmark={readyPromptBenchmark?.rows}
             runtimeBenchmark={readyRuntimeBenchmark ?? undefined}
+            integrityBenchmark={readyIntegrityBenchmark ?? undefined}
           />
         )}
         {usesPromptBenchmark && reportsLoading && <BenchmarkDataState message="benchmark report 데이터를 불러오는 중입니다." />}
@@ -346,10 +475,20 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
         {usesRuntimeBenchmark && runtimeBenchmark?.status === 'invalid' && (
           <BenchmarkDataState error message={`runtime 근거의 ${runtimeBenchmark.invalidSources.join(', ')} 항목이 유효하지 않습니다.`} />
         )}
+        {usesIntegrityBenchmark && (reportsLoading || integrityLoading) && <BenchmarkDataState message="integrity 근거 데이터를 불러오는 중입니다." />}
+        {usesIntegrityBenchmark && reportsError && <BenchmarkDataState error message={`integrity report를 불러오지 못했습니다: ${reportsError}`} />}
+        {usesIntegrityBenchmark && integrityError && <BenchmarkDataState error message={`integrity history를 불러오지 못했습니다: ${integrityError}`} />}
+        {usesIntegrityBenchmark && integrityBenchmark?.status === 'missing' && (
+          <BenchmarkDataState error message={`integrity report에서 ${integrityBenchmark.missingIds.join(', ')} 행을 찾지 못했습니다.`} />
+        )}
+        {usesIntegrityBenchmark && integrityBenchmark?.status === 'invalid' && (
+          <BenchmarkDataState error message={`integrity 근거의 ${integrityBenchmark.invalidSources.join(', ')} 항목이 유효하지 않습니다.`} />
+        )}
 
         <div className="max-w-[760px] mx-auto px-4 md:px-6 py-12 md:py-16">
           {readyPromptBenchmark && <BenchmarkDataSource rows={readyPromptBenchmark.rows} generated={generated} />}
           {readyRuntimeBenchmark && <RuntimeDataSource benchmark={readyRuntimeBenchmark} />}
+          {readyIntegrityBenchmark && <IntegrityDataSource benchmark={readyIntegrityBenchmark} />}
           <div className="mb-14 md:mb-16">
             <div className="flex items-center gap-3 mb-4" aria-hidden="true">
               <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">THESIS</span>

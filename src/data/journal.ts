@@ -20,7 +20,7 @@ export interface JournalSection {
   paragraphs: string[]
   points?: string[]
   callout?: string
-  benchmarkNarrative?: 'prompt-complexity-results' | 'runtime-incident' | 'runtime-policy' | 'runtime-results'
+  benchmarkNarrative?: 'prompt-complexity-results' | 'runtime-incident' | 'runtime-policy' | 'runtime-results' | 'integrity-observation' | 'integrity-available-files' | 'integrity-qa-failed' | 'integrity-comparison' | 'integrity-decision'
 }
 
 export interface JournalEvidence {
@@ -83,7 +83,7 @@ export interface JournalArticle {
   comparisonChart?: JournalComparisonChart
   sections: JournalSection[]
   evidence: JournalEvidence[]
-  benchmark?: { kind: 'prompt-complexity' | 'runtime' }
+  benchmark?: { kind: 'prompt-complexity' | 'runtime' | 'integrity' }
   readingStyle?: 'reflective'
   featured?: boolean
 }
@@ -305,69 +305,59 @@ export const journalArticles: JournalArticle[] = [
   },
   {
     ...journalCatalog['honest-pipeline-lower-score'],
-    dek: 'silent corruption을 고친 뒤 성공률이 내려갔다. 모델이 나빠진 것이 아니라 측정이 더 정직해졌을 가능성을 추적했다.',
-    thesis: '파이프라인의 불변식을 고치면 지표가 악화될 수 있다. 그 하락은 회귀가 아니라 숨겨진 실패가 관측되기 시작했다는 신호일 수 있다.',
+    dek: '같은 checked-in 설정의 두 실행에서 완료율은 달랐고, 그 사이 success를 기록하는 규칙도 바뀌었다. 관측된 차이와 측정 정의의 변화를 인과로 섞지 않고 읽었다.',
+    thesis: '두 실행의 완료율 차이는 관측 사실이고, success 규칙의 변화도 코드로 확인된다. 그러나 하나를 다른 하나의 원인으로 배분할 실행 정체성은 남아 있지 않다.',
     publishedAt: '2026-07-15',
     period: 'exp013 → exp025',
     readingMinutes: 7,
-    metrics: [
-      { value: '95.9%', label: 'exp013 완료율' },
-      { value: '82.3%', label: 'exp025 완료율' },
-      { value: '66', label: 'exp025 재시도 작업' },
-    ],
+    readingStyle: 'reflective',
+    benchmark: { kind: 'integrity' },
+    metrics: [],
     hero: {
       kind: 'visual',
       variant: 'integrity',
-      alt: 'silent corruption 수정 전 exp013의 95.9퍼센트와 수정 후 exp025의 82.3퍼센트를 비교하는 시각화',
-      caption: '같은 모델의 숫자가 내려갔지만, 두 실행 사이에서 success가 뜻하는 바도 함께 바뀌었다.',
+      alt: 'exp013과 exp025의 관측 완료율과 success 기록 규칙 변화를 분리해 비교하는 시각화',
+      caption: '측정값은 report snapshot에서, 판정 규칙은 pinned git history에서 읽는다.',
     },
     comparisonChart: {
       kind: 'bar',
       title: '무결성 수정 전후의 실행 완료율',
-      description: 'exp013은 211/220, exp025는 181/220을 완료했다. 숫자의 하락보다 먼저 판정 규칙의 변화를 읽어야 한다.',
+      description: '두 report snapshot의 관측 완료율을 나란히 놓되, 차이를 수정의 효과로 해석하지 않는다.',
       primary: { label: 'Completion', unit: '%', color: '#b45309', domain: [0, 100] },
-      data: [
-        { label: 'exp013 · before', primary: 95.9 },
-        { label: 'exp025 · after', primary: 82.3 },
-      ],
+      data: [],
       caveat: '두 실행은 success 판정과 qa_failed 재시도 의미가 다르다. 순수한 모델 성능 전후 비교가 아니다.',
     },
     sections: [
       {
-        heading: '상황: 보기 좋은 숫자를 의심하게 된 이유',
-        paragraphs: [
-          'exp013의 GPT-5.4 high 실행은 211/220, 95.9% 완료율을 기록했다. 같은 모델과 high reasoning을 다시 실행한 exp025는 181/220, 82.3%였다. 표면적으로는 큰 모델 회귀처럼 보인다.',
-          '하지만 두 실행 사이에는 모델 설정보다 중요한 파이프라인 의미 변화가 있었다. silent corruption 수정으로 예전에는 성공으로 통과하던 상태가 실패 또는 재시도 대상으로 드러나기 시작했다.',
-        ],
+        label: '관측',
+        heading: '먼저, 숫자가 달라졌다',
+        paragraphs: [],
+        benchmarkNarrative: 'integrity-observation',
       },
       {
-        heading: '발견: 쓰였지만 실행되지 않은 파일 힌트',
-        paragraphs: [
-          'subprocess runner는 reference 파일 목록을 `_AVAILABLE_FILES`에 넣도록 코드를 조합했지만, 조합하기 전에 원본 코드를 디스크에 기록했다. 이후 메모리의 문자열만 바뀌고 실제 실행 파일은 다시 쓰이지 않았다.',
-          '로그에는 명시적인 오류가 없었다. 모델은 파일이 있다고 안내받았지만 실행 코드는 그 힌트를 보지 못했다. 시스템이 약속한 실행 환경과 실제 환경이 조용히 달랐다.',
-        ],
+        label: '불변식',
+        heading: '실행되지 않은 파일 힌트',
+        paragraphs: [],
+        benchmarkNarrative: 'integrity-available-files',
       },
       {
-        heading: '발견: 존재했지만 한 번도 기록되지 않은 qa_failed',
-        paragraphs: [
-          '코드에는 `qa_failed`를 출력하고 재시도하는 경로가 있었지만, Self-QA가 기준 미달인 채 재시도를 소진해도 결과는 success로 저장됐다. 읽는 쪽의 정책은 있었지만 쓰는 쪽의 불변식이 비어 있었다.',
-          '수정 후 진짜 QA 미달은 `qa_failed`로 기록되고 resume 대상이 됐다. 성공률은 낮아지고 실행 시간과 비용은 늘 수 있지만, 상태가 말하는 의미는 더 정확해졌다.',
-        ],
+        label: '판정',
+        heading: '기록되지 않은 qa_failed',
+        paragraphs: [],
+        benchmarkNarrative: 'integrity-qa-failed',
       },
       {
-        heading: '비교: 95.9%와 82.3%를 같은 자에 놓을 수 있는가',
-        paragraphs: [
-          '두 숫자는 모델과 reasoning 설정만의 차이가 아니다. success 판정 규칙과 재시도 정책이 달라졌다. 따라서 13.6%p 하락을 곧바로 모델 성능 저하라고 부르는 것은 잘못이다.',
-          '오히려 이 비교가 보여준 것은 측정 시스템의 엄격함 자체가 하나의 실험 변수라는 사실이다. 수정 전 결과는 폐기할 필요는 없지만, 같은 계열 안에서 별도 세대로 표시해야 한다.',
-        ],
-        callout: '과거 결과를 지우지 않는다. 대신 어떤 불변식 아래 생성됐는지 함께 기록한다.',
+        label: '비교',
+        heading: '같은 자, 다른 규칙',
+        paragraphs: [],
+        benchmarkNarrative: 'integrity-comparison',
+        callout: '관측된 차이는 사실이다. 그 차이의 원인을 하나의 수정에 배분할 증거는 없다.',
       },
       {
-        heading: '결정: 지표보다 의미를 먼저 버전 관리하기',
-        paragraphs: [
-          '이후 실험 비교에서는 모델, 프롬프트, reasoning뿐 아니라 runner와 상태 판정 버전도 비교 조건에 포함한다. success의 정의가 바뀐 경계에는 명시적인 주석을 남긴다.',
-          '낮아진 성공률을 다시 높이는 것이 목표지만, 예전처럼 실패를 성공으로 분류해서 높이는 길은 닫아야 한다. 정직한 82.3%가 모호한 95.9%보다 다음 개선점을 더 잘 보여준다.',
-        ],
+        label: '결정',
+        heading: '지표보다 의미를 버전 관리하기',
+        paragraphs: [],
+        benchmarkNarrative: 'integrity-decision',
       },
     ],
     evidence: [
@@ -378,12 +368,12 @@ export const journalArticles: JournalArticle[] = [
       },
       {
         label: 'exp013 리포트',
-        detail: '수정 전 GPT-5.4 high 실행 결과',
+        detail: 'PR #38 이전 GPT-5.4 high 실행 결과 원문',
         href: `${REPO}/batch-runner/results/exp013_GPT54_reasoning_high/report/report.md`,
       },
       {
         label: 'exp025 리포트',
-        detail: '수정 후 GPT-5.4 high 실행 결과',
+        detail: 'PR #38 이후 GPT-5.4 high 실행 결과 원문',
         href: `${REPO}/batch-runner/results/exp025_GPT54_high_postfix/report/report.md`,
       },
     ],
@@ -714,8 +704,8 @@ export const experimentGroups: ExperimentGroup[] = [
     id: 'integrity-boundary',
     question: '성공률 하락은 모델 회귀였나, 더 정직해진 파이프라인이었나?',
     experiments: ['exp013', 'exp025'],
-    finding: 'silent corruption 수정 뒤 완료율이 95.9%에서 82.3%로 낮아졌다.',
-    caveat: 'success 의미가 달라졌으므로 순수 모델 전후 비교가 아니다.',
+    finding: '두 실행의 관측 완료율과 success를 기록하는 규칙이 함께 달라졌다.',
+    caveat: '관측 차이는 사실이지만 수정의 순수 효과로 배분할 실행 정체성은 없다.',
     articleSlug: 'honest-pipeline-lower-score',
     state: 'caution',
   },
@@ -774,7 +764,7 @@ export const timelineEvents: TimelineEvent[] = [
   {
     date: '2026-05-20',
     title: '수정 후 GPT-5.4 high 기준선 실행',
-    description: '더 엄격한 상태 의미 아래 exp025가 181/220 완료와 66개 재시도를 기록했다.',
+    description: 'PR #38 이후의 상태 판정 세대에서 exp025 report snapshot을 남겼다.',
     experiments: ['exp025'],
     articleSlugs: ['honest-pipeline-lower-score'],
     kind: 'experiment',

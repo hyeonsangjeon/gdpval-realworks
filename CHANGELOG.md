@@ -12,6 +12,21 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Evidence-backed integrity Field Note** — rebuild
+  `honest-pipeline-lower-score` from exact exp013/exp025 report snapshots,
+  checked-in experiment config projections, and pinned PR #38 code history.
+  Metrics, SVG, chart, and numeric prose now derive from validated sources;
+  malformed, duplicated, stale, or contract-drifted evidence hides the entire
+  article sequence behind an alert. The note presents the observed `-13.6%p`
+  completion gap separately from the proven `_AVAILABLE_FILES` persistence and
+  `qa_failed` classification changes, explicitly refusing causal attribution
+  because execution Git, input revision, Azure model revision, and runner
+  identity are missing. Five reflective chapters use shorter headings, wider
+  spacing, 2.05 leading, and quieter callouts to create a deliberate
+  관측→불변식→판정→비교→결정 rhythm. The serialized Pages job now regenerates on
+  integrity-source changes and runs both runtime and integrity Chromium suites
+  before deploy. No model, batch, grading, HF upload, or paid workflow is
+  dispatched.
 - **Evidence-backed runtime Field Note** — rebuild the `360-minute-experiment`
   note around three explicit sources: exp008/010/025/026 report snapshots, the
   current condition-a workflow policy, and a pinned exp025 incident record.
