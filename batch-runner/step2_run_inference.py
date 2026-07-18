@@ -29,21 +29,31 @@ import json
 import os
 import psutil
 import re
+import stat
 import sys
 import time
+import yaml
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 
 from core.config import (
+    BATCH_OUTPUT_DIR,
     WORKSPACE_DIR,
     UPLOAD_DIR,
     DELIVERABLE_DIR,
     DEFAULT_LOCAL_PATH,
     DEFAULT_TOKENS,
 )
-from core.data_loader import GDPValTask
+from core.agentic_authorization import task_request_sha256
 from core.executor import TaskExecutor
+from core.agentic_experiments import (
+    AGENTIC_BASELINE_ID,
+    AGENTIC_EXPERIMENT_IDS,
+    agentic_condition_identity,
+    validate_agentic_budget_for_experiment,
+    validate_agentic_experiment_identity,
+)
 from core.execution_metrics import (
     add_counts,
     add_durations_ms,
@@ -51,9 +61,8 @@ from core.execution_metrics import (
     bounded_duration_ms,
 )
 from core.file_preview import generate_all_previews
-from core.llm_client import create_client, create_provider_client, complete
+from core.llm_client import create_provider_client, complete
 from core.needs_files import NeedsFilesManifest
-from core.prompt_builder import PromptBuilder, PromptConfig as BuilderPromptConfig
 from core.audio_analyzer import analyze_audio_files, filter_audio_files
 from core.video_analyzer import (
     analyze_video_files,
@@ -88,6 +97,22 @@ _METRIC_COUNT_FIELDS = (
     "self_qa_call_count",
     "job_run_count",
 )
+
+
+def _load_private_agentic_config(prepared: dict) -> dict:
+    config_path = Path(prepared.get("config_path", "")).resolve()
+    experiments_root = (Path(__file__).resolve().parent / "experiments").resolve()
+    try:
+        config_path.relative_to(experiments_root)
+    except ValueError as exc:
+        raise ValueError(
+            "hardened execution requires a checked-in experiments/*.yaml config"
+        ) from exc
+    raw_config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    raw_agentic = (raw_config.get("execution") or {}).get("agentic")
+    if not isinstance(raw_agentic, dict):
+        raise ValueError("execution.agentic must be present for hardened execution")
+    return raw_agentic
 
 
 # ── Preprocessor helper ───────────────────────────────────────────────────
@@ -264,6 +289,17 @@ def _build_execution_observability(
     )
     if execution_metrics:
         observability["execution_metrics"] = execution_metrics
+    agentic_metrics = _bounded_agentic_metrics((result or {}).get("agentic_metrics"))
+    if agentic_metrics:
+        observability["agentic_metrics"] = agentic_metrics
+    budget_metrics = _bounded_budget_metrics((result or {}).get("budget_metrics"))
+    if budget_metrics:
+        observability["budget_metrics"] = budget_metrics
+    substrate = _bounded_substrate_manifest(
+        (result or {}).get("substrate_manifest")
+    )
+    if substrate:
+        observability["substrate"] = substrate
     manifest = (result or {}).get("sandbox_manifest") or {}
     if manifest:
         attempts = []
@@ -311,6 +347,249 @@ def _build_execution_observability(
             "final_status": manifest.get("final_status"),
         }
     return observability
+
+
+def _bounded_agentic_metrics(raw: Optional[dict]) -> Optional[dict]:
+    """Allow only bounded aggregate tool-loop metrics into persisted output."""
+    if not isinstance(raw, dict):
+        return None
+    output = {
+        "schema_version": "1.0",
+        "ledger_cumulative": raw.get("ledger_cumulative") is True,
+        "model_api_calls": bounded_count(raw.get("model_api_calls")),
+        "model_iterations": bounded_count(raw.get("model_iterations")),
+        "tool_calls": bounded_count(raw.get("tool_calls")),
+        "tool_errors": bounded_count(raw.get("tool_errors")),
+        "model_time_ms": bounded_duration_ms(raw.get("model_time_ms")),
+        "tool_time_ms": bounded_duration_ms(raw.get("tool_time_ms")),
+        "task_wall_time_ms": bounded_duration_ms(raw.get("task_wall_time_ms")),
+        "time_to_valid_artifact_ms": bounded_duration_ms(
+            raw.get("time_to_valid_artifact_ms")
+        ),
+        "finalize_required_corrections": bounded_count(
+            raw.get("finalize_required_corrections")
+        ),
+        "finalize_attempts": bounded_count(raw.get("finalize_attempts")),
+        "capability_misses": bounded_count(raw.get("capability_misses")),
+        "recovered_after_tool_error": raw.get("recovered_after_tool_error") is True,
+        "input_tokens": bounded_count(raw.get("input_tokens")),
+        "output_tokens": bounded_count(raw.get("output_tokens")),
+        "cached_tokens": bounded_count(raw.get("cached_tokens")),
+        "usage_complete": raw.get("usage_complete") is True,
+        "terminal_error_category": (
+            str(raw.get("terminal_error_category"))[:80]
+            if raw.get("terminal_error_category")
+            else None
+        ),
+    }
+    calls_by_name = raw.get("tool_calls_by_name")
+    if isinstance(calls_by_name, dict):
+        output["tool_calls_by_name"] = {
+            name: bounded_count(calls_by_name.get(name))
+            for name in (
+                "inspect_workspace", "inspect_environment", "run_python",
+                "run_ffmpeg", "inspect_artifacts", "finalize",
+            )
+            if bounded_count(calls_by_name.get(name)) is not None
+        }
+    try:
+        cost = float(raw.get("conservative_cost_usd", 0))
+    except (TypeError, ValueError):
+        cost = -1
+    if 0 <= cost < float("inf"):
+        output["conservative_cost_usd"] = round(cost, 8)
+    bounded = {key: value for key, value in output.items() if value is not None}
+    bounded["terminal_error_category"] = output["terminal_error_category"]
+    return bounded
+
+
+def _bounded_budget_metrics(raw: Optional[dict]) -> Optional[dict]:
+    if not isinstance(raw, dict):
+        return None
+    output = {
+        "schema_version": "1.0",
+        "model_api_calls": bounded_count(raw.get("model_api_calls")),
+        "input_tokens": bounded_count(raw.get("input_tokens")),
+        "output_tokens": bounded_count(raw.get("output_tokens")),
+        "cached_tokens": bounded_count(raw.get("cached_tokens")),
+        "usage_complete": raw.get("usage_complete") is True,
+        "time_to_valid_artifact_ms": bounded_duration_ms(
+            raw.get("time_to_valid_artifact_ms")
+        ),
+    }
+    try:
+        cost = float(raw.get("conservative_cost_usd", 0))
+    except (TypeError, ValueError):
+        return None
+    if not 0 <= cost < float("inf"):
+        return None
+    output["conservative_cost_usd"] = round(cost, 8)
+    return {
+        key: value for key, value in output.items() if value is not None
+    }
+
+
+def _bounded_substrate_manifest(raw: Optional[dict]) -> Optional[dict]:
+    if not isinstance(raw, dict):
+        return None
+    hash_pattern = re.compile(r"^[0-9a-f]{64}$")
+    if hash_pattern.fullmatch(str(raw.get("sha256", ""))) is None:
+        return None
+    component_names = (
+        "python_launcher", "ffmpeg_mapper", "verifier", "outer_seccomp",
+        "capabilities", "core_tree",
+    )
+    raw_components = raw.get("component_sha256")
+    if not isinstance(raw_components, dict):
+        return None
+    components = {
+        name: value
+        for name in component_names
+        if isinstance((value := raw_components.get(name)), str)
+        and hash_pattern.fullmatch(value)
+    }
+    if set(components) != set(component_names):
+        return None
+    output = {
+        "schema_version": "1.0",
+        "sha256": raw["sha256"],
+        "task_image": str(raw.get("task_image", ""))[:300],
+        "task_image_id": str(raw.get("task_image_id", ""))[:100],
+        "verifier_image": str(raw.get("verifier_image", ""))[:300],
+        "verifier_image_id": str(raw.get("verifier_image_id", ""))[:100],
+        "component_sha256": components,
+        "sbom_sha256": str(raw.get("sbom_sha256", ""))[:64],
+        "uid": bounded_count(raw.get("uid")),
+        "gid": bounded_count(raw.get("gid")),
+        "network": raw.get("network"),
+        "ipc": raw.get("ipc"),
+        "pid_namespace": raw.get("pid_namespace"),
+        "read_only_rootfs": raw.get("read_only_rootfs") is True,
+        "cap_drop": ["ALL"] if raw.get("cap_drop") == ["ALL"] else [],
+        "no_new_privileges": raw.get("no_new_privileges") is True,
+        "selected_transfer_bytes": _bounded_resource_integer(
+            raw.get("selected_transfer_bytes"), 512 * 1024 * 1024
+        ),
+        "memory_bytes": _bounded_resource_integer(
+            raw.get("memory_bytes"), 16 * 1024 * 1024 * 1024
+        ),
+        "memory_swap_bytes": _bounded_resource_integer(
+            raw.get("memory_swap_bytes"), 16 * 1024 * 1024 * 1024
+        ),
+        "pids": bounded_count(raw.get("pids")),
+        "nofile": bounded_count(raw.get("nofile")),
+        "apparmor_profile": str(raw.get("apparmor_profile", ""))[:100],
+    }
+    cpus = raw.get("cpus")
+    if isinstance(cpus, (int, float)) and not isinstance(cpus, bool) and 0 < cpus <= 2:
+        output["cpus"] = float(cpus)
+    work = raw.get("work_tmpfs")
+    if isinstance(work, dict):
+        output["work_tmpfs"] = {
+            "size_bytes": _bounded_resource_integer(
+                work.get("size_bytes"), 2 * 1024 * 1024 * 1024
+            ),
+            "nr_inodes": bounded_count(work.get("nr_inodes")),
+            "nosuid": work.get("nosuid") is True,
+            "nodev": work.get("nodev") is True,
+            "noexec": work.get("noexec") is True,
+        }
+    return output
+
+
+def _bounded_resource_integer(value, maximum: int) -> Optional[int]:
+    if type(value) is not int or not 0 <= value <= maximum:
+        return None
+    return value
+
+
+def _merge_agentic_metrics(
+    previous: Optional[dict], current: Optional[dict]
+) -> Optional[dict]:
+    previous = _bounded_agentic_metrics(previous)
+    current = _bounded_agentic_metrics(current)
+    if not previous:
+        return current
+    if not current:
+        return previous
+    ledger_cumulative = current.get("ledger_cumulative") is True
+    merged = {
+        "schema_version": "1.0",
+        "ledger_cumulative": ledger_cumulative,
+    }
+    for key in ("model_api_calls", "input_tokens", "output_tokens"):
+        if ledger_cumulative:
+            merged[key] = max(
+                previous.get(key, 0) or 0,
+                current.get(key, 0) or 0,
+            )
+        else:
+            combined = add_counts(
+                previous.get(key, 0) or 0,
+                current.get(key, 0) or 0,
+            )
+            if combined is None:
+                return current
+            merged[key] = combined
+    for key in (
+        "model_iterations", "tool_calls", "tool_errors",
+        "finalize_required_corrections", "finalize_attempts",
+        "capability_misses", "cached_tokens",
+    ):
+        combined = add_counts(
+            previous.get(key, 0) or 0,
+            current.get(key, 0) or 0,
+        )
+        if combined is None:
+            return current
+        merged[key] = combined
+    for key in ("model_time_ms", "tool_time_ms", "task_wall_time_ms"):
+        combined = add_durations_ms(
+            previous.get(key, 0) or 0,
+            current.get(key, 0) or 0,
+        )
+        if combined is None:
+            return current
+        merged[key] = combined
+    merged["time_to_valid_artifact_ms"] = (
+        previous.get("time_to_valid_artifact_ms")
+        if previous.get("time_to_valid_artifact_ms") is not None
+        else current.get("time_to_valid_artifact_ms")
+    )
+    tool_names = (
+        "inspect_workspace", "inspect_environment", "run_python",
+        "run_ffmpeg", "inspect_artifacts", "finalize",
+    )
+    previous_calls = previous.get("tool_calls_by_name") or {}
+    current_calls = current.get("tool_calls_by_name") or {}
+    merged["tool_calls_by_name"] = {}
+    for name in tool_names:
+        combined = add_counts(
+            previous_calls.get(name, 0) or 0,
+            current_calls.get(name, 0) or 0,
+        )
+        if combined:
+            merged["tool_calls_by_name"][name] = combined
+    merged["usage_complete"] = (
+        previous.get("usage_complete") is True
+        and current.get("usage_complete") is True
+    )
+    merged["recovered_after_tool_error"] = (
+        previous.get("recovered_after_tool_error") is True
+        or current.get("recovered_after_tool_error") is True
+        or (
+            (previous.get("tool_errors", 0) or 0) > 0
+            and not current.get("terminal_error_category")
+        )
+    )
+    merged["terminal_error_category"] = current.get(
+        "terminal_error_category"
+    )
+    merged["conservative_cost_usd"] = max(
+        float(previous.get("conservative_cost_usd", 0) or 0),
+        float(current.get("conservative_cost_usd", 0) or 0),
+    )
+    return _bounded_agentic_metrics(merged) or current
 
 
 def _bounded_execution_metrics(raw: Optional[dict]) -> Optional[dict]:
@@ -711,11 +990,11 @@ def _run_self_qa(
         # Check finish_reason — detect truncated responses
         finish_reason = getattr(response.choices[0], "finish_reason", None)
         if finish_reason == "length":
-            print(f"  ⚠️  QA response truncated (finish_reason=length)")
+            print("  ⚠️  QA response truncated (finish_reason=length)")
 
         raw = (response.choices[0].message.content or "").strip()
         if not raw:
-            print(f"  ⚠️  QA returned empty response")
+            print("  ⚠️  QA returned empty response")
             return {
                 "passed": None, "score": None,
                 "issues": ["QA returned empty response"],
@@ -763,20 +1042,80 @@ def _save_files(files: List[dict], task_id: str) -> List[str]:
     """Save generated files to workspace/upload/deliverable_files/<task_id>/."""
     if not files:
         return []
+    if (
+        not isinstance(task_id, str)
+        or not task_id
+        or task_id in {".", ".."}
+        or task_id.startswith(".")
+        or "/" in task_id
+        or "\\" in task_id
+        or len(task_id.encode("utf-8")) > 240
+    ):
+        raise ValueError("deliverable task ID is invalid")
 
+    DELIVERABLE_DIR.mkdir(parents=True, exist_ok=True)
+    root_metadata = DELIVERABLE_DIR.lstat()
+    if not stat.S_ISDIR(root_metadata.st_mode):
+        raise ValueError("deliverable root is not a directory")
     output_dir = DELIVERABLE_DIR / task_id
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(mode=0o700, exist_ok=True)
+    output_metadata = output_dir.lstat()
+    if not stat.S_ISDIR(output_metadata.st_mode):
+        raise ValueError("deliverable task path is not a directory")
+
+    prepared = []
+    seen: set[str] = set()
+    for file_data in files:
+        if not isinstance(file_data, dict) or set(file_data) != {"filename", "content"}:
+            raise ValueError("deliverable file record is invalid")
+        filename = file_data["filename"]
+        if not isinstance(filename, str) or "\\" in filename:
+            raise ValueError("deliverable filename is invalid")
+        relative = Path(filename)
+        canonical = relative.as_posix()
+        if (
+            relative.is_absolute()
+            or not relative.parts
+            or canonical != filename
+            or ".." in relative.parts
+            or any(part.startswith(".") for part in relative.parts)
+            or len(relative.parts) > 16
+            or len(canonical.encode("utf-8")) > 240
+            or canonical in seen
+        ):
+            raise ValueError("deliverable filename is invalid or duplicated")
+        content = file_data["content"]
+        if isinstance(content, str):
+            encoded = content.encode("utf-8")
+        elif isinstance(content, bytes):
+            encoded = content
+        else:
+            raise ValueError("deliverable content must be bytes or text")
+        seen.add(canonical)
+        prepared.append((relative, encoded))
 
     saved_paths = []
-    for file_data in files:
-        filename = file_data["filename"]
-        content = file_data["content"]
-        filepath = output_dir / filename
-
-        if isinstance(content, bytes):
-            filepath.write_bytes(content)
-        else:
-            filepath.write_bytes(content.encode("utf-8"))
+    for relative, content in prepared:
+        parent = output_dir
+        for part in relative.parts[:-1]:
+            parent /= part
+            parent.mkdir(mode=0o700, exist_ok=True)
+            metadata = parent.lstat()
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise ValueError("deliverable parent is not a directory")
+        filepath = output_dir / relative
+        if filepath.exists() or filepath.is_symlink():
+            metadata = filepath.lstat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                raise ValueError("deliverable target is not a single-link file")
+        descriptor = os.open(
+            filepath,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+            | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
+            0o600,
+        )
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(content)
 
         try:
             rel_path = filepath.relative_to(UPLOAD_DIR)
@@ -785,6 +1124,125 @@ def _save_files(files: List[dict], task_id: str) -> List[str]:
             saved_paths.append(str(filepath))
 
     return saved_paths
+
+
+def _save_hardened_failure_evidence(
+    files: List[dict],
+    *,
+    experiment_id: str,
+    run_id: str,
+    condition_identity: str,
+    task_id: str,
+) -> dict:
+    import shutil
+    import tempfile
+
+    if not files or not all(
+        isinstance(value, str) and value
+        for value in (experiment_id, run_id, condition_identity, task_id)
+    ):
+        raise ValueError("failure evidence identity is invalid")
+    for value in (experiment_id, condition_identity):
+        if (
+            value in {".", ".."}
+            or value.startswith(".")
+            or "/" in value
+            or "\\" in value
+            or any(ord(character) < 32 for character in value)
+        ):
+            raise ValueError("failure evidence identity is not canonical")
+    run_component = hashlib.sha256(run_id.encode("utf-8")).hexdigest()
+    task_component = hashlib.sha256(task_id.encode("utf-8")).hexdigest()
+    parent = (
+        BATCH_OUTPUT_DIR
+        / "agentic-sandbox"
+        / experiment_id
+        / run_component
+        / condition_identity
+        / "failed-evidence"
+    )
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    destination = parent / task_component
+    if destination.exists() or destination.is_symlink():
+        raise ValueError("failure evidence already exists")
+    staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=parent))
+    records = []
+    try:
+        seen = set()
+        for file_data in files:
+            if (
+                not isinstance(file_data, dict)
+                or set(file_data) != {"filename", "content"}
+            ):
+                raise ValueError("failure evidence file record is invalid")
+            filename = file_data["filename"]
+            relative = Path(filename) if isinstance(filename, str) else Path()
+            if (
+                not isinstance(filename, str)
+                or "\\" in filename
+                or relative.is_absolute()
+                or not relative.parts
+                or relative.as_posix() != filename
+                or ".." in relative.parts
+                or any(part.startswith(".") for part in relative.parts)
+                or len(relative.parts) > 16
+                or len(filename.encode("utf-8")) > 240
+                or filename in seen
+            ):
+                raise ValueError("failure evidence filename is invalid")
+            content = file_data["content"]
+            if isinstance(content, str):
+                content = content.encode("utf-8")
+            if not isinstance(content, bytes):
+                raise ValueError("failure evidence content is invalid")
+            seen.add(filename)
+            target = staging / "artifacts" / relative
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            target.write_bytes(content)
+            target.chmod(0o600)
+            records.append({
+                "path": filename,
+                "size_bytes": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            })
+        records.sort(key=lambda item: item["path"].encode("utf-8"))
+        evidence_sha256 = hashlib.sha256(json.dumps(
+            records, sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        manifest = {
+            "schema_version": "agentic-failure-evidence-v1",
+            "experiment_id": experiment_id,
+            "run_id_sha256": run_component,
+            "condition_identity": condition_identity,
+            "task_id_sha256": task_component,
+            "artifact_count": len(records),
+            "artifacts": records,
+            "sha256": evidence_sha256,
+        }
+        metadata_dir = staging / ".evidence"
+        metadata_dir.mkdir(mode=0o700)
+        (metadata_dir / "manifest.json").write_text(
+            json.dumps(manifest, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        for record in records:
+            persisted = staging / "artifacts" / record["path"]
+            if (
+                persisted.stat().st_size != record["size_bytes"]
+                or hashlib.sha256(persisted.read_bytes()).hexdigest()
+                != record["sha256"]
+            ):
+                raise ValueError("failure evidence persistence hash mismatch")
+        os.replace(staging, destination)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return {
+        "schema_version": "agentic-failure-evidence-v1",
+        "artifact_count": len(records),
+        "sha256": evidence_sha256,
+        "root": destination.relative_to(BATCH_OUTPUT_DIR.parent).as_posix(),
+    }
 
 
 # ── Reflection prompt builder ─────────────────────────────────────────────
@@ -862,6 +1320,10 @@ def _execute_single_task(
     manifest: Optional[NeedsFilesManifest] = None,
     error_context: Optional[str] = None,
     verbose: bool = False,
+    run_id: Optional[str] = None,
+    condition_name: Optional[str] = None,
+    strict_inputs: bool = False,
+    experiment_id: Optional[str] = None,
 ) -> dict:
     """Execute a single task and return result dict."""
     task_id = task_info["task_id"]
@@ -922,16 +1384,35 @@ def _execute_single_task(
     # Resolve reference file paths to absolute + validate existence
     abs_ref_files = None
     ref_files = task_info.get("reference_files", [])
+    missing_ref_files = []
     if ref_files:
-        abs_ref_files = []
-        for ref_path in ref_files:
-            abs_path = DEFAULT_LOCAL_PATH / ref_path
-            if abs_path.exists():
-                abs_ref_files.append(str(abs_path))
-            else:
-                print(f"      ⚠️  Reference file not found: {abs_path}")
-        if not abs_ref_files:
-            abs_ref_files = None  # all missing → treat as no files
+        if strict_inputs:
+            abs_ref_files = list(ref_files)
+        else:
+            abs_ref_files = []
+            for ref_path in ref_files:
+                abs_path = DEFAULT_LOCAL_PATH / ref_path
+                if abs_path.exists():
+                    abs_ref_files.append(str(abs_path))
+                else:
+                    missing_ref_files.append(ref_path)
+                    print(f"      ⚠️  Reference file not found: {abs_path}")
+            if not abs_ref_files:
+                abs_ref_files = None  # all missing → treat as no files
+    if strict_inputs and missing_ref_files:
+        return {
+            "task_id": task_id,
+            "status": "error",
+            "error": "approved_reference_input_missing",
+            "content": None,
+            "deliverable_text": None,
+            "deliverable_files": [],
+            "model": model,
+            "usage": None,
+            "observability": _build_execution_observability(None, []),
+            "latency_ms": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
     # ── Preprocessor: enrich prompt with audio/video analysis (if configured) ──
     preprocessor_observations: list[dict] = []
@@ -943,7 +1424,7 @@ def _execute_single_task(
     )
     perception_text = None
     if preprocessor_prefix:
-        if execution_mode == "sandbox":
+        if execution_mode in {"sandbox", "agentic_sandbox"}:
             # Sandbox owns perception PLACEMENT via its `perception_analysis` spec
             # section (prompts/sandbox_occupation_codegen.yaml), so pass the block
             # through rather than prepending it here. This is byte-equivalent to the
@@ -995,6 +1476,9 @@ def _execute_single_task(
             experiment_prompt=experiment_prompt,
             verbose=verbose,
             perception_text=perception_text,
+            run_id=run_id,
+            condition_name=condition_name,
+            task_id=task_id,
         )
         latency_ms = (time.time() - start) * 1000
 
@@ -1043,6 +1527,32 @@ def _execute_single_task(
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         else:
+            failure_evidence = None
+            if strict_inputs and result.get("files"):
+                try:
+                    failure_evidence = _save_hardened_failure_evidence(
+                        result["files"],
+                        experiment_id=experiment_id or "",
+                        run_id=run_id or "",
+                        condition_identity=condition_name or "",
+                        task_id=task_id,
+                    )
+                except Exception as exc:
+                    return {
+                        "task_id": task_id,
+                        "status": "error",
+                        "error": f"failed_evidence_persistence_failed:{exc}",
+                        "content": result.get("text"),
+                        "deliverable_text": result.get("deliverable_text"),
+                        "deliverable_files": [],
+                        "model": model,
+                        "usage": None,
+                        "observability": _build_execution_observability(
+                            result, preprocessor_observations
+                        ),
+                        "latency_ms": round(latency_ms, 2),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
             return {
                 "task_id": task_id,
                 "status": "error",
@@ -1050,6 +1560,7 @@ def _execute_single_task(
                 "content": result.get("text"),
                 "deliverable_text": result.get("deliverable_text"),
                 "deliverable_files": [],
+                "failure_evidence": failure_evidence,
                 "model": model,
                 "usage": None,
                 "observability": _build_execution_observability(
@@ -1088,16 +1599,30 @@ def _save_progress(
     results: List[dict],
     started_at: str,
     path: Path,
+    *,
+    run_id: str,
+    condition_identity: str,
+    ordered_task_ids: List[str],
+    resume_round: int = 0,
 ) -> None:
     """Atomic incremental save."""
+    _validate_result_task_set(
+        results, ordered_task_ids, allow_missing=True
+    )
     success = sum(1 for r in results if r.get("status") == "success")
     error = sum(1 for r in results if r.get("status") == "error")
 
     data = {
+        "schema_version": "step2-progress-v2",
         "experiment_id": experiment_id,
         "condition": condition_name,
+        "condition_identity": condition_identity,
+        "run_id": run_id,
         "execution_mode": execution_mode,
+        "ordered_task_ids": ordered_task_ids,
+        "total_tasks": total_tasks,
         "started_at": started_at,
+        "resume_round": resume_round,
         "summary": {
             "total": total_tasks,
             "completed": len(results),
@@ -1118,6 +1643,75 @@ def _save_progress(
             allow_nan=False,
         )
     tmp_path.rename(path)
+
+
+def _load_and_validate_progress(
+    path: Path,
+    *,
+    experiment_id: str,
+    condition_name: str,
+    condition_identity: str,
+    run_id: str,
+    execution_mode: str,
+    ordered_task_ids: List[str],
+) -> dict:
+    with path.open("r", encoding="utf-8") as stream:
+        progress = json.load(stream)
+    if not isinstance(progress, dict):
+        raise ValueError("progress checkpoint must be an object")
+    expected_identity = {
+        "schema_version": "step2-progress-v2",
+        "experiment_id": experiment_id,
+        "condition": condition_name,
+        "condition_identity": condition_identity,
+        "run_id": run_id,
+        "execution_mode": execution_mode,
+        "ordered_task_ids": ordered_task_ids,
+        "total_tasks": len(ordered_task_ids),
+    }
+    if any(progress.get(key) != value for key, value in expected_identity.items()):
+        raise ValueError("progress checkpoint identity mismatch")
+    results = progress.get("results")
+    if not isinstance(results, list):
+        raise ValueError("progress checkpoint results must be a list")
+    _validate_result_task_set(results, ordered_task_ids, allow_missing=True)
+    indexed = {result["task_id"]: result for result in results}
+    timestamp = datetime.now(timezone.utc).isoformat()
+    progress["results"] = [
+        indexed.get(task_id, {
+            "task_id": task_id,
+            "status": "pending",
+            "error": "checkpoint_missing_task",
+            "timestamp": timestamp,
+        })
+        for task_id in ordered_task_ids
+    ]
+    return progress
+
+
+def _validate_result_task_set(
+    results: List[dict],
+    ordered_task_ids: List[str],
+    *,
+    allow_missing: bool,
+) -> None:
+    if (
+        not ordered_task_ids
+        or len(ordered_task_ids) != len(set(ordered_task_ids))
+        or any(not isinstance(task_id, str) or not task_id for task_id in ordered_task_ids)
+    ):
+        raise ValueError("ordered task identity is invalid")
+    result_ids = []
+    for result in results:
+        if not isinstance(result, dict) or not isinstance(result.get("task_id"), str):
+            raise ValueError("progress result task identity is invalid")
+        result_ids.append(result["task_id"])
+    if len(result_ids) != len(set(result_ids)):
+        raise ValueError("progress checkpoint contains duplicate task IDs")
+    if not set(result_ids) <= set(ordered_task_ids):
+        raise ValueError("progress checkpoint contains unexpected task IDs")
+    if not allow_missing and result_ids != ordered_task_ids:
+        raise ValueError("final result task IDs differ from ordered task set")
 
 
 # ── Progress helpers ───────────────────────────────────────────────────────
@@ -1147,6 +1741,19 @@ def _update_progress_result(progress: dict, new_result: dict) -> dict:
             merged_metrics = _merge_execution_metrics(previous_metrics, current_metrics)
             if merged_metrics:
                 new_result.setdefault("observability", {})["execution_metrics"] = merged_metrics
+            previous_agentic = (r.get("observability") or {}).get(
+                "agentic_metrics"
+            )
+            current_agentic = (new_result.get("observability") or {}).get(
+                "agentic_metrics"
+            )
+            merged_agentic = _merge_agentic_metrics(
+                previous_agentic, current_agentic
+            )
+            if merged_agentic:
+                new_result.setdefault("observability", {})[
+                    "agentic_metrics"
+                ] = merged_agentic
             updated.append(new_result)
             replaced = True
         else:
@@ -1196,14 +1803,24 @@ def run_inference(
         sys.exit(1)
 
     experiment_id = prepared["experiment_id"]
+    ordered_task_ids = [task["task_id"] for task in tasks]
+    if (
+        any(not isinstance(task_id, str) or not task_id for task_id in ordered_task_ids)
+        or len(ordered_task_ids) != len(set(ordered_task_ids))
+    ):
+        print("❌ prepared task set contains invalid or duplicate task IDs")
+        sys.exit(1)
     model = condition["model"]["deployment"]
     condition_name = condition["name"]
 
     # Resolve settings: CLI override > YAML execution block > defaults
     execution_cfg = prepared.get("execution", {})
     timeout = execution_cfg.get("timeout")  # None = config.py 기본값 사용
+    configured_execution_mode = execution_cfg.get(
+        "mode", prepared.get("execution_mode", "subprocess")
+    )
     if execution_mode is None:
-        execution_mode = execution_cfg.get("mode", prepared.get("execution_mode", "subprocess"))
+        execution_mode = configured_execution_mode
     if max_retries is None:
         max_retries = execution_cfg.get("max_retries", prepared.get("max_retries", 3))
     if resume_max_rounds is None:
@@ -1222,12 +1839,78 @@ def run_inference(
     }
     # Sandbox-mode settings (execution.sandbox block in the experiment YAML).
     sandbox_options = execution_cfg.get("sandbox", {}) or {}
+    agentic_options = execution_cfg.get("agentic", {}) or {}
+    hardened_requested = (
+        execution_mode == "agentic_sandbox"
+        or (
+            execution_mode == "sandbox"
+            and sandbox_options.get("hardened_substrate") is True
+        )
+    )
+    if experiment_id in AGENTIC_EXPERIMENT_IDS:
+        expected_mode = (
+            "sandbox" if experiment_id == AGENTIC_BASELINE_ID
+            else "agentic_sandbox"
+        )
+        expected_hardened = experiment_id == AGENTIC_BASELINE_ID
+        if (
+            configured_execution_mode != expected_mode
+            or execution_mode != expected_mode
+            or (
+                expected_hardened
+                and sandbox_options.get("hardened_substrate") is not True
+            )
+            or (
+                not expected_hardened
+                and sandbox_options.get("hardened_substrate") is True
+            )
+        ):
+            print("❌ reserved agentic experiment mode cannot be overridden")
+            sys.exit(1)
+    if hardened_requested:
+        try:
+            validate_agentic_experiment_identity(
+                experiment_id,
+                execution_mode,
+                hardened_baseline=(
+                    execution_mode == "sandbox"
+                    and sandbox_options.get("hardened_substrate") is True
+                ),
+            )
+            agentic_options = _load_private_agentic_config(prepared)
+            validate_agentic_budget_for_experiment(
+                experiment_id, agentic_options.get("budget")
+            )
+            if condition_key != "condition_a" or prepared.get("condition_b") is not None:
+                raise ValueError(
+                    "reserved hardened experiments require exactly condition_a"
+                )
+            prompt_config = condition.get("prompt") or {}
+            if prompt_config.get("prefix") or prompt_config.get("body"):
+                raise ValueError(
+                    "hardened paired execution does not support prompt prefix/body"
+                )
+        except Exception as exc:
+            print("❌ failed to reload hardened execution config")
+            print(f"   {exc}")
+            sys.exit(1)
+        if max_retries != 0 or resume_max_rounds != 0:
+            print(
+                "❌ hardened execution fixes max_retries=0 and "
+                "resume_max_rounds=0 until all task resource caps are durable"
+            )
+            sys.exit(1)
+    execution_condition = (
+        agentic_condition_identity(experiment_id)
+        if hardened_requested
+        else condition_key
+    )
     metrics_cfg_raw = execution_cfg.get("metrics")
     metrics_cfg = metrics_cfg_raw if isinstance(metrics_cfg_raw, dict) else {}
     metrics_enabled = metrics_cfg.get("enabled") is True
 
     print(f"\n{'='*60}")
-    print(f"🚀 Step 2: Run Inference")
+    print("🚀 Step 2: Run Inference")
     print(f"{'='*60}")
     print(f"   Experiment:         {experiment_id}")
     print(f"   Condition:          {condition_name}")
@@ -1284,10 +1967,74 @@ def run_inference(
               f"max_retries={qa_max_retries}, model={qa_model}, "
               f"max_tokens={qa_max_tokens})")
 
-    # 2. Create LLM client (provider-aware)
+    # 2. Create LLM client (provider-aware). Agentic mode defers construction
+    # until its compute preflight and signed approval gate pass.
     provider = condition.get("model", {}).get("provider", "azure")
+    validation_provider = "azure" if provider == "azure_openai" else provider
+    if (
+        (
+            execution_mode == "agentic_sandbox"
+            or (
+                execution_mode == "sandbox"
+                and sandbox_options.get("hardened_substrate") is True
+            )
+        )
+        and validation_provider not in {"azure", "openai"}
+    ):
+        print(
+            "❌ agentic_sandbox mode requires OpenAI/Azure OpenAI, "
+            f"got {provider}"
+        )
+        sys.exit(1)
 
-    if provider in ("azure", "azure_openai"):
+    client_factory = None
+    hardened_baseline = (
+        execution_mode == "sandbox"
+        and sandbox_options.get("hardened_substrate") is True
+    )
+
+    if execution_mode == "agentic_sandbox" or hardened_baseline:
+        if condition.get("qa", {}).get("enabled"):
+            print("❌ paired hardened modes disable Self-QA until it shares the signed budget ledger")
+            sys.exit(1)
+        if condition.get("preprocessors"):
+            print("❌ paired hardened modes disable preprocessors until they share the signed budget ledger")
+            sys.exit(1)
+
+        authorization_config = agentic_options.get("authorization") or {}
+        approved_api_version = authorization_config.get("api_version")
+        if provider in ("azure", "azure_openai"):
+            approved_endpoint = (
+                os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_ENDPOINT")
+            )
+            def client_factory():
+                if not approved_endpoint:
+                    raise RuntimeError("Missing AZURE_OPENAI_ENDPOINT")
+                return create_provider_client(
+                    "azure",
+                    endpoint=approved_endpoint,
+                    api_version=approved_api_version,
+                    max_retries=0,
+                )
+        elif provider == "openai":
+            approved_endpoint = "https://api.openai.com/v1"
+            def client_factory():
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise RuntimeError("Missing OPENAI_API_KEY")
+                return create_provider_client(
+                    "openai",
+                    endpoint=approved_endpoint,
+                    api_key=api_key,
+                    max_retries=0,
+                )
+        else:
+            print(f"❌ paired hardened modes do not support provider '{provider}'")
+            sys.exit(1)
+        client = None
+        print("   Client:             deferred until signed hardened preflight")
+
+    elif provider in ("azure", "azure_openai"):
         endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_ENDPOINT")
         if not endpoint:
             print("❌ Missing AZURE_OPENAI_ENDPOINT. Set AZURE_OPENAI_ENDPOINT env var.")
@@ -1301,7 +2048,7 @@ def run_inference(
             print("❌ Missing OpenAI credentials. Set OPENAI_API_KEY")
             sys.exit(1)
         client = create_provider_client("openai", api_key=api_key)
-        print(f"   Client:             OpenAI (native)")
+        print("   Client:             OpenAI (native)")
 
     elif provider == "anthropic":
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -1309,7 +2056,7 @@ def run_inference(
             print("❌ Missing Anthropic credentials. Set ANTHROPIC_API_KEY")
             sys.exit(1)
         client = create_provider_client("anthropic", api_key=api_key)
-        print(f"   Client:             Anthropic")
+        print("   Client:             Anthropic")
 
     else:
         print(f"❌ Unsupported provider: '{provider}'. Use: azure, openai, anthropic")
@@ -1317,16 +2064,63 @@ def run_inference(
 
     # 3. Initialize executor (no silent fallback — fail loudly)
     reasoning_effort = condition.get("model", {}).get("reasoning_effort")
+    agentic_task_requests = None
+    if hardened_requested:
+        prompt_cfg = condition["prompt"]
+        experiment_prompt = {
+            "system": prompt_cfg.get("system", "You are a helpful assistant."),
+            "prefix": prompt_cfg.get("prefix"),
+            "body": prompt_cfg.get("body"),
+            "suffix": prompt_cfg.get("suffix"),
+        }
+        agentic_task_requests = {
+            task["task_id"]: task_request_sha256(
+                task_prompt=task["instruction"],
+                occupation=task.get("occupation", "professional"),
+                experiment_prompt=experiment_prompt,
+            )
+            for task in tasks
+        }
+        aggregate_budget = agentic_options.get("budget")
+        run_identity = (
+            aggregate_budget.get("paired_run_id")
+            if isinstance(aggregate_budget, dict)
+            else None
+        )
+        if not isinstance(run_identity, str) or not run_identity:
+            print("❌ hardened execution requires budget.paired_run_id")
+            sys.exit(1)
+        workflow_audit = (
+            f"{os.getenv('GITHUB_RUN_ID', 'local')}:"
+            f"{os.getenv('GITHUB_RUN_ATTEMPT', '1')}"
+        )
+        print(f"   Paired run:         {run_identity}")
+        print(f"   Workflow audit:     {workflow_audit}")
+    else:
+        github_run = os.getenv("GITHUB_RUN_ID", "local")
+        github_attempt = os.getenv("GITHUB_RUN_ATTEMPT", "1")
+        run_identity = f"{experiment_id}:{github_run}:{github_attempt}"
     try:
         executor = TaskExecutor(
             mode=execution_mode, llm_client=client, tokens=tokens_cfg,
             timeout=timeout, reasoning_effort=reasoning_effort,
             sandbox_options=sandbox_options,
             metrics_options=metrics_cfg,
+            provider=provider,
+            client_factory=client_factory,
+            agentic_options=agentic_options,
+            agentic_endpoint=(approved_endpoint if hardened_requested else None),
+            agentic_ordered_task_ids=(
+                ordered_task_ids if hardened_requested else None
+            ),
+            agentic_task_request_sha256=agentic_task_requests,
+            run_id=run_identity,
+            condition_name=execution_condition,
+            model_name=model,
         )
     except Exception as e:
         print(f"❌ Executor init failed for mode '{execution_mode}': {e}")
-        print(f"   Fix the issue or change execution.mode in your YAML config.")
+        print("   Fix the issue or change execution.mode in your YAML config.")
         sys.exit(1)
 
     # 4. Load manifest
@@ -1339,9 +2133,26 @@ def run_inference(
 
     # 5. Build task lookup
     task_map = {t["task_id"]: t for t in tasks}
+    if len(task_map) != len(tasks):
+        raise AssertionError("prepared task map identity drift")
     total = len(tasks)
     progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
     started_at = datetime.now(timezone.utc).isoformat()
+
+    def _persist_progress(current: dict) -> None:
+        _save_progress(
+            experiment_id,
+            condition_name,
+            execution_mode,
+            total,
+            current["results"],
+            started_at,
+            progress_path,
+            run_id=run_identity,
+            condition_identity=execution_condition,
+            ordered_task_ids=ordered_task_ids,
+            resume_round=int(current.get("resume_round", 0) or 0),
+        )
 
     # ── Helper: execute one task with QA loop ──
 
@@ -1416,9 +2227,39 @@ def run_inference(
             nonlocal tool_call_count, validated_artifact_count
             nonlocal time_to_valid_artifact_ms
             execution_attempt_count += 1
+            task_observability = task_result.get("observability") or {}
             raw = _bounded_execution_metrics(
-                (task_result.get("observability") or {}).get("execution_metrics")
+                task_observability.get("execution_metrics")
             ) or {}
+            agentic = _bounded_agentic_metrics(
+                task_observability.get("agentic_metrics")
+            ) or {}
+            budget = _bounded_budget_metrics(
+                task_observability.get("budget_metrics")
+            ) or {}
+            if agentic and not raw:
+                raw = {
+                    "model_time_ms": agentic.get("model_time_ms", 0),
+                    "tool_time_ms": agentic.get("tool_time_ms", 0),
+                    "tool_call_count": agentic.get("tool_calls", 0),
+                    "time_to_valid_artifact_ms": agentic.get(
+                        "time_to_valid_artifact_ms"
+                    ),
+                    "validated_artifact_count": (
+                        1
+                        if (
+                            task_result.get("status") == "success"
+                            and task_result.get("deliverable_files")
+                            and agentic.get("terminal_error_category") is None
+                            and (agentic.get("finalize_attempts", 0) or 0) > 0
+                        )
+                        else 0
+                    ),
+                }
+            if budget.get("time_to_valid_artifact_ms") is not None:
+                raw["time_to_valid_artifact_ms"] = budget[
+                    "time_to_valid_artifact_ms"
+                ]
             sandbox_attempt_count += int(
                 raw.get("sandbox_attempt_count", raw.get("attempt_count", 0)) or 0
             )
@@ -1429,17 +2270,29 @@ def run_inference(
             )
             for key in phase_totals:
                 phase_totals[key] += float(raw.get(key, 0) or 0)
-            sandbox_observability = (task_result.get("observability") or {}).get("sandbox")
+            measured_valid_time = raw.get("time_to_valid_artifact_ms")
+            if (
+                time_to_valid_artifact_ms is None
+                and measured_valid_time is not None
+            ):
+                time_to_valid_artifact_ms = float(measured_valid_time)
+            sandbox_observability = task_observability.get("sandbox")
             sandbox_valid = (
                 isinstance(sandbox_observability, dict)
                 and sandbox_observability.get("final_status") in {"ok", "repaired_ok"}
+                and int(raw.get("validated_artifact_count", 0) or 0) > 0
+            )
+            agentic_valid = (
+                bool(agentic)
+                and agentic.get("terminal_error_category") is None
+                and (agentic.get("finalize_attempts", 0) or 0) > 0
                 and int(raw.get("validated_artifact_count", 0) or 0) > 0
             )
             if (
                 time_to_valid_artifact_ms is None
                 and task_result.get("status") == "success"
                 and task_result.get("deliverable_files")
-                and sandbox_valid
+                and (sandbox_valid or agentic_valid)
             ):
                 time_to_valid_artifact_ms = round(
                     (time.perf_counter() - job_started) * 1000,
@@ -1502,6 +2355,10 @@ def run_inference(
                     client, model, manifest,
                     error_context=last_qa_feedback,
                     verbose=verbose,
+                    run_id=run_identity,
+                    condition_name=execution_condition,
+                    strict_inputs=hardened_requested,
+                    experiment_id=experiment_id,
                 )
                 if metrics_enabled:
                     _record_execution_metrics(result)
@@ -1574,11 +2431,11 @@ def run_inference(
                             best_qa["passed"] = True
                         if best_result:
                             best_result["qa"] = best_qa
-                        print(f"\n      ⚠️  QA undetermined on final attempt — "
-                              f"saving as success (undetermined)",
+                        print("\n      ⚠️  QA undetermined on final attempt — "
+                            "saving as success (undetermined)",
                               end=" ", flush=True)
                         break
-                    print(f"\n      ⚠️  QA undetermined, "
+                    print("\n      ⚠️  QA undetermined, "
                           f"retrying ({qa_attempts}/{qa_max_retries})...",
                           end=" ", flush=True)
                     last_qa_feedback = None
@@ -1667,8 +2524,42 @@ def run_inference(
 
     progress = None
     if resume and progress_path.exists():
-        with open(progress_path, "r", encoding="utf-8") as f:
-            progress = json.load(f)
+        try:
+            progress = _load_and_validate_progress(
+                progress_path,
+                experiment_id=experiment_id,
+                condition_name=condition_name,
+                condition_identity=execution_condition,
+                run_id=run_identity,
+                execution_mode=execution_mode,
+                ordered_task_ids=ordered_task_ids,
+            )
+        except Exception as exc:
+            print(f"❌ progress checkpoint rejected: {exc}")
+            sys.exit(1)
+        if hardened_requested:
+            unsafe_resume = [
+                result.get("task_id")
+                for result in progress["results"]
+                if (
+                    result.get("status") in {"error", "qa_failed"}
+                    or (
+                        result.get("status") == "pending"
+                        and (
+                            result.get("error") not in {
+                                "wall_timeout", "checkpoint_missing_task"
+                            }
+                            or bool(result.get("observability"))
+                        )
+                    )
+                )
+            ]
+            if unsafe_resume:
+                print(
+                    "❌ hardened failed tasks cannot be resumed: "
+                    + ", ".join(str(task_id) for task_id in unsafe_resume)
+                )
+                sys.exit(1)
 
         # Relay duration fix: preserve original started_at from first run
         if "started_at" in progress:
@@ -1710,10 +2601,7 @@ def run_inference(
                             existing["status"] = "pending"
                             existing["error"] = "wall_timeout"
                             existing["timestamp"] = pending_timestamp
-                    _save_progress(
-                        experiment_id, condition_name, execution_mode,
-                        total, progress["results"], started_at, progress_path,
-                    )
+                    _persist_progress(progress)
                     print(f"   💾 Checkpoint saved to {progress_path}")
                     sys.exit(EXIT_CHECKPOINT)
 
@@ -1729,10 +2617,7 @@ def run_inference(
                 if (i + 1) % 20 == 0:
                     gc.collect()
 
-                _save_progress(
-                    experiment_id, condition_name, execution_mode,
-                    total, progress["results"], started_at, progress_path,
-                )
+                _persist_progress(progress)
 
             # After relay, set progress so we skip to resume rounds
             # (progress is now not None, so initial run block is skipped)
@@ -1741,9 +2626,13 @@ def run_inference(
         # === INITIAL RUN: 모든 태스크 실행 ===
         print(f"\n── Round 0: Initial Run ({total} tasks) ──")
         progress = {
+            "schema_version": "step2-progress-v2",
             "experiment_id": experiment_id,
             "condition": condition_name,
+            "condition_identity": execution_condition,
+            "run_id": run_identity,
             "execution_mode": execution_mode,
+            "ordered_task_ids": ordered_task_ids,
             "total_tasks": total,
             "started_at": started_at,
             "resume_round": 0,
@@ -1764,10 +2653,7 @@ def run_inference(
                         "error": "wall_timeout",
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
-                _save_progress(
-                    experiment_id, condition_name, execution_mode,
-                    total, progress["results"], started_at, progress_path,
-                )
+                _persist_progress(progress)
                 print(f"   💾 Checkpoint saved to {progress_path}")
                 sys.exit(EXIT_CHECKPOINT)
 
@@ -1785,10 +2671,7 @@ def run_inference(
                 gc.collect()
 
             # Incremental save
-            _save_progress(
-                experiment_id, condition_name, execution_mode,
-                total, progress["results"], started_at, progress_path,
-            )
+            _persist_progress(progress)
 
     # ══════════════════════════════════════════════════════════════════════
     # 7. Resume rounds: progress.json의 error 태스크를 자동 재실행
@@ -1798,7 +2681,7 @@ def run_inference(
         failed = _get_failed_task_ids(progress)
 
         if not failed:
-            print(f"\n✅ No failed tasks — skipping resume rounds")
+            print("\n✅ No failed tasks — skipping resume rounds")
             break
 
         print(f"\n── Resume Round {round_num}/{resume_max_rounds}: "
@@ -1824,10 +2707,7 @@ def run_inference(
                         r["error"] = "wall_timeout"
                         r["timestamp"] = datetime.now(timezone.utc).isoformat()
                 progress["resume_round"] = round_num
-                _save_progress(
-                    experiment_id, condition_name, execution_mode,
-                    total, progress["results"], started_at, progress_path,
-                )
+                _persist_progress(progress)
                 print(f"   💾 Checkpoint saved to {progress_path}")
                 sys.exit(EXIT_CHECKPOINT)
 
@@ -1854,10 +2734,7 @@ def run_inference(
                 gc.collect()
 
             # Incremental save
-            _save_progress(
-                experiment_id, condition_name, execution_mode,
-                total, progress["results"], started_at, progress_path,
-            )
+            _persist_progress(progress)
 
             if result["status"] == "success":
                 recovered += 1
@@ -1868,7 +2745,7 @@ def run_inference(
               f"{len(still_failed)} still failing")
 
         if not still_failed:
-            print(f"   🎉 All tasks recovered!")
+            print("   🎉 All tasks recovered!")
             break
 
     # ══════════════════════════════════════════════════════════════════════
@@ -1876,6 +2753,9 @@ def run_inference(
     # ══════════════════════════════════════════════════════════════════════
 
     results = progress.get("results", [])
+    _validate_result_task_set(
+        results, ordered_task_ids, allow_missing=False
+    )
     success = sum(1 for r in results if r["status"] == "success")
     errors = sum(1 for r in results if r["status"] == "error")
     qa_failed = sum(1 for r in results if r.get("status") == "qa_failed")
@@ -1885,7 +2765,10 @@ def run_inference(
         "experiment_name": prepared.get("experiment_name", ""),
         "source": prepared.get("source", ""),
         "condition": condition_name,
+        "condition_identity": execution_condition,
+        "run_id": run_identity,
         "execution_mode": execution_mode,
+        "ordered_task_ids": ordered_task_ids,
         "model": model,
         "started_at": started_at,
         "completed_at": datetime.now(timezone.utc).isoformat(),

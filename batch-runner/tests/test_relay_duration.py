@@ -1,12 +1,16 @@
 """Tests for relay duration fix: started_at preservation in progress.json."""
 
 import json
-import tempfile
-from pathlib import Path
-
-import pytest
 
 from step2_run_inference import _save_progress
+
+
+def _identity(total_tasks):
+    return {
+        "run_id": "relay-test-run",
+        "condition_identity": "condition_a",
+        "ordered_task_ids": [f"t{index}" for index in range(1, total_tasks + 1)],
+    }
 
 
 class TestSaveProgressStartedAt:
@@ -25,6 +29,7 @@ class TestSaveProgressStartedAt:
             results=[{"task_id": "t1", "status": "success"}],
             started_at=original_time,
             path=progress_path,
+            **_identity(220),
         )
 
         with open(progress_path) as f:
@@ -50,6 +55,7 @@ class TestSaveProgressStartedAt:
             ],
             started_at=original_time,
             path=progress_path,
+            **_identity(220),
         )
 
         # Simulate relay resume: new started_at would be set, then overridden
@@ -84,6 +90,7 @@ class TestSaveProgressStartedAt:
             results=results,
             started_at="2026-01-01T00:00:00",
             path=progress_path,
+            **_identity(10),
         )
 
         with open(progress_path) as f:
@@ -106,6 +113,7 @@ class TestSaveProgressStartedAt:
             results=[],
             started_at="2026-01-01T00:00:00",
             path=progress_path,
+            **_identity(1),
         )
 
         assert progress_path.exists()

@@ -15,11 +15,16 @@ Usage:
 """
 
 import yaml
+import re
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Literal
 
 from core.config import DEFAULT_TOKENS
+from core.agentic_experiments import (
+    validate_agentic_budget_for_experiment,
+    validate_agentic_experiment_identity,
+)
 
 
 @dataclass
@@ -90,7 +95,10 @@ class OutputConfig:
 @dataclass
 class ExecutionConfig:
     """Execution mode configuration (Phase 5-3)"""
-    mode: Literal["code_interpreter", "subprocess", "json_renderer", "sandbox"] = "subprocess"
+    mode: Literal[
+        "code_interpreter", "subprocess", "json_renderer", "sandbox",
+        "agentic_sandbox",
+    ] = "subprocess"
     score_type: Literal["tool_assisted", "portable"] = "tool_assisted"
     max_retries: int = 3           # Infrastructure retries within task execution
     resume_max_rounds: int = 3     # Auto-retry rounds for error tasks in progress.json
@@ -98,6 +106,7 @@ class ExecutionConfig:
     tokens: Dict[str, int] = field(default_factory=lambda: dict(DEFAULT_TOKENS))
     timeout: Optional[int] = None  # subprocess timeout override (seconds)
     sandbox: Optional[Dict[str, Any]] = None  # sandbox-mode settings (execution.sandbox block)
+    agentic: Optional[Dict[str, Any]] = None  # agentic-mode settings (execution.agentic block)
     metrics: Optional[Dict[str, Any]] = None  # opt-in job metrics (execution.metrics block)
 
 
@@ -236,6 +245,11 @@ class ExperimentConfig:
             tokens=execution_tokens,
             timeout=execution_data.get("timeout"),
             sandbox=execution_data.get("sandbox"),
+            agentic=(
+                dict(execution_data["agentic"])
+                if isinstance(execution_data.get("agentic"), dict)
+                else None
+            ),
             metrics=(
                 {"enabled": True}
                 if isinstance(execution_data.get("metrics"), dict)
@@ -348,6 +362,7 @@ class ExperimentConfig:
                 "tokens": dict(self.execution.tokens),
                 "timeout": self.execution.timeout,
                 "sandbox": self.execution.sandbox,
+                **({"agentic": self.execution.agentic} if self.execution.agentic is not None else {}),
                 **({"metrics": self.execution.metrics} if self.execution.metrics is not None else {}),
             },
         }
@@ -414,7 +429,10 @@ class ExperimentConfig:
                 errors.append(f"condition_b.model.provider must be one of {valid_providers}")
 
         # Validate execution mode (Phase 5-3)
-        valid_modes = ["code_interpreter", "subprocess", "sandbox", "json_renderer"]
+        valid_modes = [
+            "code_interpreter", "subprocess", "sandbox", "agentic_sandbox",
+            "json_renderer",
+        ]
         if self.execution.mode not in valid_modes:
             errors.append(f"execution.mode must be one of {valid_modes}")
 
@@ -436,6 +454,65 @@ class ExperimentConfig:
             if self.condition_b and self.condition_b.model.provider not in ["azure", "openai"]:
                 errors.append("code_interpreter mode requires azure or openai provider for condition_b")
 
+        if self.execution.mode == "agentic_sandbox":
+            if self.condition_a.model.provider not in ["azure", "openai"]:
+                errors.append("agentic_sandbox mode requires azure or openai provider for condition_a")
+            if self.condition_b and self.condition_b.model.provider not in ["azure", "openai"]:
+                errors.append("agentic_sandbox mode requires azure or openai provider for condition_b")
+
+        hardened = (
+            self.execution.mode == "agentic_sandbox"
+            or (
+                self.execution.mode == "sandbox"
+                and isinstance(self.execution.sandbox, dict)
+                and self.execution.sandbox.get("hardened_substrate") is True
+            )
+        )
+        if hardened:
+            if self.condition_b is not None:
+                errors.append(
+                    "reserved hardened experiments require exactly condition_a"
+                )
+            try:
+                validate_agentic_experiment_identity(
+                    self.experiment_id,
+                    self.execution.mode,
+                    (
+                        self.execution.mode == "sandbox"
+                        and isinstance(self.execution.sandbox, dict)
+                        and self.execution.sandbox.get("hardened_substrate") is True
+                    ),
+                )
+            except ValueError as exc:
+                errors.append(str(exc))
+            errors.extend(_validate_agentic_config(self.execution.agentic))
+            try:
+                validate_agentic_budget_for_experiment(
+                    self.experiment_id,
+                    (self.execution.agentic or {}).get("budget"),
+                )
+            except ValueError as exc:
+                errors.append(str(exc))
+            for label, condition in (
+                ("condition_a", self.condition_a),
+                ("condition_b", self.condition_b),
+            ):
+                if condition is None:
+                    continue
+                if condition.qa and condition.qa.enabled:
+                    errors.append(
+                        f"{label}.qa must be disabled for hardened execution"
+                    )
+                if condition.preprocessors:
+                    errors.append(
+                        f"{label}.preprocessors must be empty for hardened execution"
+                    )
+                if condition.prompt.prefix or condition.prompt.body:
+                    errors.append(
+                        f"{label}.prompt prefix/body are unsupported for "
+                        "hardened paired execution"
+                    )
+
         # Warning: portable score_type should use json_renderer
         if self.execution.score_type == "portable" and self.execution.mode != "json_renderer":
             # This is a warning, not an error - don't block execution
@@ -445,3 +522,58 @@ class ExperimentConfig:
 
     def __repr__(self) -> str:
         return f"ExperimentConfig(id='{self.experiment_id}', name='{self.name}')"
+
+
+def _validate_agentic_config(value: Any) -> List[str]:
+    if not isinstance(value, dict):
+        return ["execution.agentic is required for hardened execution"]
+    allowed = {
+        "compute_transport", "image", "verifier_image", "memory_gb", "cpus",
+        "limits", "budget", "pricing_table", "authorization",
+        "seccomp_profile", "apparmor_profile",
+    }
+    errors = []
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        errors.append(f"execution.agentic contains unknown fields: {unknown}")
+    if value.get("compute_transport") != "remote":
+        errors.append("execution.agentic.compute_transport must be remote")
+    digest_pattern = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
+    for field_name in ("image", "verifier_image"):
+        image = value.get(field_name)
+        if not isinstance(image, str) or digest_pattern.fullmatch(image) is None:
+            errors.append(
+                f"execution.agentic.{field_name} must be pinned by sha256 digest"
+            )
+    limits = value.get("limits")
+    if not isinstance(limits, dict):
+        errors.append("execution.agentic.limits is required")
+    else:
+        allowed_limits = {
+            "max_api_attempts", "max_model_iterations", "max_output_tokens",
+            "max_input_tokens", "max_cumulative_output_tokens",
+            "max_task_seconds", "max_cost_usd", "max_tool_calls",
+            "max_run_python", "max_run_ffmpeg", "max_inspect_artifacts",
+            "max_finalize", "max_identical_errors",
+        }
+        if set(limits) - allowed_limits:
+            errors.append("execution.agentic.limits contains unknown fields")
+    budget = value.get("budget")
+    if not isinstance(budget, dict) or set(budget) != {
+        "paired_run_id", "condition", "paired_run"
+    }:
+        errors.append("execution.agentic.budget fields are invalid")
+    pricing = value.get("pricing_table")
+    if (
+        not isinstance(pricing, dict)
+        or set(pricing) != {"sha256"}
+        or not isinstance(pricing.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", pricing["sha256"]) is None
+    ):
+        errors.append("execution.agentic.pricing_table must contain sha256")
+    authorization = value.get("authorization")
+    if not isinstance(authorization, dict) or set(authorization) != {
+        "api_version", "provider_classification", "endpoint_sha256"
+    }:
+        errors.append("execution.agentic.authorization fields are invalid")
+    return errors

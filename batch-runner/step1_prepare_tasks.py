@@ -16,13 +16,31 @@ Usage:
 import argparse
 import json
 import random
-import sys
-from pathlib import Path
 
 from core.config import WORKSPACE_DIR
 from core.data_loader import GDPValDataLoader
 from core.experiment_config import ExperimentConfig
 from core.needs_files import NeedsFilesManifest
+
+
+def _public_agentic_config(value):
+    """Keep public experiment metadata while dropping control-plane paths."""
+    if not isinstance(value, dict):
+        return None
+    output = {}
+    for key in ("compute_transport", "image", "verifier_image", "memory_gb", "cpus"):
+        if key in value:
+            output[key] = value[key]
+    if isinstance(value.get("limits"), dict):
+        output["limits"] = dict(value["limits"])
+    if isinstance(value.get("budget"), dict):
+        output["budget"] = dict(value["budget"])
+    pricing_table = value.get("pricing_table")
+    if isinstance(pricing_table, dict) and isinstance(
+        pricing_table.get("sha256"), str
+    ):
+        output["pricing_table"] = {"sha256": pricing_table["sha256"]}
+    return output or None
 
 
 def prepare_tasks(config_path: str) -> dict:
@@ -32,6 +50,9 @@ def prepare_tasks(config_path: str) -> dict:
 
     # 1. Load experiment config
     config = ExperimentConfig.from_yaml(config_path)
+    validation_errors = config.validate()
+    if validation_errors:
+        raise ValueError("Invalid experiment config: " + "; ".join(validation_errors))
     print(f"📋 Experiment: {config.experiment_id} — {config.name}")
     print(f"   Description: {config.description}")
 
@@ -154,6 +175,11 @@ def prepare_tasks(config_path: str) -> dict:
             "tokens": dict(config.execution.tokens),
             "timeout": config.execution.timeout,
             "sandbox": config.execution.sandbox,
+            **({
+                "agentic": public_agentic
+            } if (public_agentic := _public_agentic_config(
+                config.execution.agentic
+            )) is not None else {}),
             **({"metrics": config.execution.metrics} if config.execution.metrics is not None else {}),
         },
         "total_tasks": len(task_list),

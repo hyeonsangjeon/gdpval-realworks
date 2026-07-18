@@ -11,7 +11,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from types import SimpleNamespace
 
-from core.llm_client import create_client, complete
+from core.llm_client import create_client, create_provider_client, complete
 from core.config import (
     DEFAULT_ENDPOINT,
     DEFAULT_MODEL,
@@ -111,6 +111,27 @@ class TestCreateClient:
             assert call_kwargs["azure_endpoint"] == "https://grok-resource.azure.com/"
             assert "azure_ad_token_provider" in call_kwargs
             assert "api_key" not in call_kwargs
+
+    @patch("core.llm_client.AzureOpenAI")
+    def test_explicit_zero_transport_retries_reach_azure_sdk(self, mock_cls):
+        mock_identity = MagicMock()
+        mock_identity.DefaultAzureCredential.return_value = MagicMock()
+        mock_identity.get_bearer_token_provider.return_value = MagicMock()
+        with patch.dict(
+            "sys.modules", {"azure.identity": mock_identity, "azure": MagicMock()}
+        ):
+            create_provider_client(
+                "azure", endpoint="https://x.com/", max_retries=0
+            )
+
+        assert mock_cls.call_args.kwargs["max_retries"] == 0
+
+    def test_explicit_zero_transport_retries_reach_openai_sdk(self):
+        openai_module = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_module}):
+            create_provider_client("openai", api_key="test", max_retries=0)
+
+        assert openai_module.OpenAI.call_args.kwargs["max_retries"] == 0
 
     def test_no_credentials_raises(self):
         """DefaultAzureCredential 실패 시 항상 ValueError (OIDC only)"""

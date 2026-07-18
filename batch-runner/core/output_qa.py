@@ -154,7 +154,14 @@ def run_output_qa(
             primary = _is_primary(art, contract)
             if rr.errors:
                 msg = f"{art.name}: render error — {'; '.join(rr.errors)}"
-                report.warnings.append(msg)
+                if primary:
+                    report.blocking_errors.append(msg)
+                else:
+                    report.warnings.append(msg)
+            if primary and not rr.rendered_images:
+                report.blocking_errors.append(
+                    f"{art.name}: primary deliverable produced no rendered image."
+                )
             if rr.blank_pages:
                 report.warnings.append(
                     f"{art.name}: {len(rr.blank_pages)} blank page(s) detected "

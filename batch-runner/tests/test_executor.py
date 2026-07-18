@@ -1,9 +1,10 @@
 """Tests for core/executor.py"""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 
-from core.executor import TaskExecutor, ExecutionMode
+from core.agentic_authorization import provider_endpoint_sha256
+from core.executor import TaskExecutor
 
 
 def test_executor_initialization_code_interpreter():
@@ -236,6 +237,224 @@ def test_executor_sandbox_passes_options_and_tokens():
         assert kwargs["cpus"] == 3.0
         assert kwargs["max_skills"] == 4
         assert kwargs["metrics"] == {"enabled": True}
+
+
+# ── Agentic sandbox mode ──────────────────────────────────────────────────
+
+
+def test_executor_validate_mode_agentic_openai_only():
+    for provider in ("azure", "openai"):
+        valid, error = TaskExecutor.validate_mode("agentic_sandbox", provider)
+        assert valid is True
+        assert error is None
+
+    valid, error = TaskExecutor.validate_mode("agentic_sandbox", "anthropic")
+    assert valid is False
+    assert "agentic_sandbox mode requires OpenAI/Azure OpenAI" in error
+
+
+def test_executor_agentic_nonpaid_requires_explicit_fakes():
+    with pytest.raises(ValueError, match="explicit backend and authorization fakes"):
+        TaskExecutor(
+            mode="agentic_sandbox",
+            llm_client=Mock(),
+            provider="azure",
+            non_paid_test_mode=True,
+            agentic_options={"pricing": {}},
+        )
+
+
+def test_executor_agentic_forwards_scoped_identity():
+    fake_client = Mock()
+    backend_factory = Mock()
+    authorizer = Mock()
+    ledger = Mock()
+    with patch("core.executor.AgenticSandboxRunner") as runner_cls:
+        runner = Mock()
+        runner.run.return_value = {"success": True, "text": "ok", "files": []}
+        runner_cls.return_value = runner
+        runner_cls.DEFAULT_PROMPT = "agentic_sandbox_solver"
+
+        executor = TaskExecutor(
+            mode="agentic_sandbox",
+            llm_client=fake_client,
+            provider="azure",
+            non_paid_test_mode=True,
+            agentic_backend_factory=backend_factory,
+            agentic_authorize_request=authorizer,
+            agentic_budget_ledger=ledger,
+            agentic_options={
+                "limits": {"max_model_iterations": 3},
+                "pricing": {
+                    "input_per_million": "0",
+                    "output_per_million": "0",
+                },
+            },
+        )
+        result = executor.execute(
+            task_prompt="task",
+            model="deployment",
+            task_id="task-1",
+            run_id="run-1",
+            condition_name="treatment",
+        )
+
+        assert result["success"] is True
+        constructor = runner_cls.call_args.kwargs
+        assert constructor["backend_factory"] is backend_factory
+        assert constructor["authorize_request"] is authorizer
+        assert constructor["limits"] == {"max_model_iterations": 3}
+        run_kwargs = runner.run.call_args.kwargs
+        assert run_kwargs["task_id"] == "task-1"
+        assert run_kwargs["run_id"] == "run-1"
+        assert run_kwargs["condition_name"] == "treatment"
+
+
+def test_executor_hardened_sandbox_is_explicit_opt_in():
+    fake_client = Mock()
+    backend_factory = Mock()
+    authorizer = Mock()
+    ledger = Mock()
+    with patch("core.executor.HardenedSandboxRunner") as runner_cls:
+        runner = Mock()
+        runner.run.return_value = {"success": True, "text": "ok", "files": []}
+        runner_cls.return_value = runner
+
+        executor = TaskExecutor(
+            mode="sandbox",
+            llm_client=fake_client,
+            provider="azure",
+            non_paid_test_mode=True,
+            run_id="paired-run",
+            condition_name="baseline",
+            model_name="model",
+            sandbox_options={"hardened_substrate": True},
+            agentic_backend_factory=backend_factory,
+            agentic_authorize_request=authorizer,
+            agentic_budget_ledger=ledger,
+            agentic_options={
+                "limits": {"max_api_attempts": 2, "max_model_iterations": 2},
+                "pricing": {
+                    "input_per_million": "0",
+                    "output_per_million": "0",
+                },
+                "budget": {
+                    "paired_run_id": "paired-run",
+                    "condition": {
+                        "attempts": 40,
+                        "input_tokens": 1000000,
+                        "output_tokens": 100000,
+                        "cost_usd": "25",
+                    },
+                    "paired_run": {
+                        "attempts": 80,
+                        "input_tokens": 2000000,
+                        "output_tokens": 200000,
+                        "cost_usd": "50",
+                    },
+                },
+            },
+        )
+        result = executor.execute(
+            task_prompt="task",
+            model="model",
+            task_id="task-1",
+            run_id="paired-run",
+            condition_name="baseline",
+        )
+
+        assert result["success"] is True
+        assert executor.hardened_sandbox is True
+        assert runner_cls.call_args.kwargs["backend_factory"] is backend_factory
+        run_kwargs = runner.run.call_args.kwargs
+        assert run_kwargs["task_id"] == "task-1"
+        assert run_kwargs["run_id"] == "paired-run"
+        assert run_kwargs["condition_name"] == "baseline"
+
+
+def test_executor_production_agentic_refuses_local_compute_fallback(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv(
+        "AGENTIC_SIGNED_APPROVAL_PATH", str(tmp_path / "approval.json")
+    )
+    monkeypatch.setenv(
+        "AGENTIC_NONCE_LEDGER_PATH", str(tmp_path / "nonce.sqlite3")
+    )
+    monkeypatch.setenv(
+        "AGENTIC_BUDGET_LEDGER_PATH", str(tmp_path / "budget.sqlite3")
+    )
+    endpoint = "https://fixture.openai.azure.com"
+    task_ids = tuple(f"task-{index:02d}" for index in range(20))
+    monkeypatch.setattr(
+        "core.executor._load_live_approval_scope",
+        lambda **kwargs: {
+            "conditions": ("treatment",),
+            "task_ids": task_ids,
+            "input_merkle_roots": {
+                task_id: "a" * 64 for task_id in task_ids
+            },
+            "provider_classifications": {
+                task_id: "approved_public_gdpval" for task_id in task_ids
+            },
+            "task_request_sha256": {
+                task_id: "d" * 64 for task_id in task_ids
+            },
+            "selection_recomputation_sha256": "e" * 64,
+            "approval_scope_sha256": "b" * 64,
+            "official_scope_registry_sha256": "c" * 64,
+        },
+    )
+    with pytest.raises(ValueError, match="remote authenticated compute backend"):
+        TaskExecutor(
+            mode="agentic_sandbox",
+            provider="azure",
+            client_factory=Mock(),
+            run_id="run-1",
+            condition_name="treatment",
+            model_name="model",
+            agentic_endpoint=endpoint,
+            agentic_ordered_task_ids=list(task_ids),
+            agentic_task_request_sha256={
+                task_id: "d" * 64 for task_id in task_ids
+            },
+            agentic_runtime_identity={
+                "plan_sha": "b" * 40,
+                "implementation_sha": "c" * 40,
+                "workflow_sha": "d" * 64,
+                "workflow_inputs_sha256": "e" * 64,
+            },
+            agentic_options={
+                "image": "image@sha256:" + "a" * 64,
+                "limits": {},
+                "pricing": {
+                    "input_per_million": "1",
+                    "output_per_million": "2",
+                },
+                "budget": {
+                    "paired_run_id": "run-1",
+                    "condition": {
+                        "attempts": 40,
+                        "input_tokens": 1000000,
+                        "output_tokens": 100000,
+                        "cost_usd": "25",
+                    },
+                    "paired_run": {
+                        "attempts": 80,
+                        "input_tokens": 2000000,
+                        "output_tokens": 200000,
+                        "cost_usd": "50",
+                    },
+                },
+                "authorization": {
+                    "api_version": "version",
+                    "provider_classification": "approved_public_gdpval",
+                    "endpoint_sha256": provider_endpoint_sha256(
+                        "azure", endpoint
+                    ),
+                },
+            },
+        )
 
 
 def test_executor_sandbox_defaults_when_no_options():

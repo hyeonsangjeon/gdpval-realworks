@@ -46,16 +46,77 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
+  inspect-mode:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      uses_agentic: ${{ steps.mode.outputs.uses_agentic }}
+    steps:
+      - name: Checkout config only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Inspect execution mode without credentials
+        id: mode
+        env:
+          EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
+        run: |
+          ruby <<'RUBY'
+          require 'yaml'
+
+          name = ENV.fetch('EXPERIMENT_YAML')
+          abort('invalid experiment YAML name') unless name.match?(/\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/)
+          path = File.join('batch-runner', 'experiments', "#{name}.yaml")
+          abort("experiment YAML not found: #{path}") unless File.file?(path)
+          config = YAML.safe_load(
+            File.read(path), permitted_classes: [], permitted_symbols: [], aliases: false
+          ) || {}
+          abort('experiment YAML root must be a mapping') unless config.is_a?(Hash)
+          execution = config.fetch('execution', {}) || {}
+          abort('execution must be a mapping') unless execution.is_a?(Hash)
+          sandbox = execution.fetch('sandbox', {}) || {}
+          abort('execution.sandbox must be a mapping') unless sandbox.is_a?(Hash)
+          uses_agentic = execution['mode'] == 'agentic_sandbox' || sandbox['hardened_substrate'] == true
+          File.open(ENV.fetch('GITHUB_OUTPUT'), 'a') do |output|
+            output.puts("uses_agentic=#{uses_agentic}")
+          end
+          RUBY
+
+  reject-agentic:
+    needs: inspect-mode
+    if: needs.inspect-mode.outputs.uses_agentic == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Reject agentic mode in general workflow
+        run: |
+          echo "FATAL: agentic and hardened baseline modes require the dedicated"
+          echo "signed control/compute workflow. No credentialed job was started."
+          exit 1
+
   batch-run:
+    needs: inspect-mode
+    if: needs.inspect-mode.outputs.uses_agentic != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 360    # max 6 hours
+    env:
+      EXPERIMENT_YAML_INPUT: ${{ inputs.experiment_yaml }}
+      EXPERIMENT_NAME_INPUT: ${{ inputs.experiment_name }}
+      RELAY_RUN_INPUT: ${{ inputs.relay_run }}
+      WALL_TIMEOUT_INPUT: ${{ inputs.wall_timeout }}
+      DRY_RUN_INPUT: ${{ inputs.dry_run }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -95,7 +156,7 @@ jobs:
       # ── Validation: Check YAML file exists ──
       - name: Validate experiment YAML exists
         run: |
-          YAML_FILE="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
+          YAML_FILE="batch-runner/experiments/${EXPERIMENT_YAML_INPUT}.yaml"
           if [ ! -f "$YAML_FILE" ]; then
             echo "❌ Error: $YAML_FILE not found"
             exit 1
@@ -105,75 +166,94 @@ jobs:
       # ── Extract experiment_name from YAML if not provided ──
       - name: Extract experiment name from YAML
         run: |
-          YAML_PATH="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
-          if [ -z "${{ inputs.experiment_name }}" ]; then
-            EXPERIMENT_NAME=$(python3 -c "import yaml,sys; cfg=yaml.safe_load(open(sys.argv[1])); n=cfg.get('experiment',{}).get('name',''); (print(n) if n else sys.exit('ERROR: experiment.name not found'))" "$YAML_PATH")
-          else
-            EXPERIMENT_NAME="${{ inputs.experiment_name }}"
-          fi
-          echo "experiment_name=$EXPERIMENT_NAME" >> $GITHUB_ENV
-          echo "📝 Experiment: $EXPERIMENT_NAME"
+          python3 <<'PY'
+          import os
+          import pathlib
+          import yaml
+
+          path = pathlib.Path("batch-runner/experiments") / (
+              os.environ["EXPERIMENT_YAML_INPUT"] + ".yaml"
+          )
+          supplied = os.environ.get("EXPERIMENT_NAME_INPUT", "")
+          config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+          name = supplied or (config.get("experiment") or {}).get("name", "")
+          if (
+              not isinstance(name, str)
+              or not name.strip()
+              or len(name) > 200
+              or any(ord(character) < 32 for character in name)
+          ):
+              raise SystemExit("ERROR: experiment name is invalid")
+          name = name.strip()
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"experiment_name={name}\n")
+          print(f"Experiment: {name}")
+          PY
 
       # ── Conditional: LibreOffice + Noto Sans fonts ──
       - name: Read experiment config flags
         id: read_config
         run: |
-          YAML_FILE="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
-          INSTALL_LO=$(python3 -c "
+          python3 <<'PY'
+          import os
+          import pathlib
+          import re
           import yaml
-          with open('$YAML_FILE') as f:
-              cfg = yaml.safe_load(f)
-          print(cfg.get('execution', {}).get('install_libreoffice', False))
-          ")
-          WALL_TIMEOUT=$(python3 -c "
-          import yaml
-          with open('$YAML_FILE') as f:
-              cfg = yaml.safe_load(f)
-          print(cfg.get('execution', {}).get('wall_timeout', 0))
-          ")
-          RELAY_MAX_RUNS=$(python3 -c "
-          import yaml
-          with open('$YAML_FILE') as f:
-              cfg = yaml.safe_load(f)
-          print(cfg.get('execution', {}).get('relay_max_runs', 3))
-          ")
-          # Extract repo owner and data source for dynamic HF repo handling
-          REPO_SOURCE=$(python3 -c "
-          import yaml
-          with open('$YAML_FILE') as f:
-              cfg = yaml.safe_load(f)
-          source = cfg.get('data', {}).get('source', 'HyeonSang/${{ inputs.experiment_yaml }}')
-          print(source)
-          ")
-          REPO_OWNER=$(python3 -c "
-          source = '$REPO_SOURCE'
-          owner = source.split('/')[0] if '/' in source else 'HyeonSang'
-          print(owner)
-          ")
-          # ── Sandbox mode detection (safe defaults; never exit/raise) ──
-          # These gate the GHCR image pull. Baselines have no execution.mode:
-          # sandbox, so uses_sandbox stays 'false' and the pull step is skipped
-          # entirely (strict NO-OP for non-sandbox experiments).
-          USES_SANDBOX=$(python3 -c "
-          import yaml
-          with open('$YAML_FILE') as f:
-              cfg = yaml.safe_load(f)
-          mode = cfg.get('execution', {}).get('mode')
-          print('true' if mode == 'sandbox' else 'false')
-          ")
-          SANDBOX_IMAGE=$(python3 -c "
-          import yaml
-          with open('$YAML_FILE') as f:
-              cfg = yaml.safe_load(f)
-          image = cfg.get('execution', {}).get('sandbox', {}).get('image') or 'gdpval-sandbox:latest'
-          print(image)
-          ")
-          echo "install_libreoffice=$INSTALL_LO" >> $GITHUB_OUTPUT
-          echo "wall_timeout=$WALL_TIMEOUT" >> $GITHUB_OUTPUT
-          echo "relay_max_runs=$RELAY_MAX_RUNS" >> $GITHUB_OUTPUT
-          echo "repo_owner=$REPO_OWNER" >> $GITHUB_OUTPUT
-          echo "uses_sandbox=$USES_SANDBOX" >> $GITHUB_OUTPUT
-          echo "sandbox_image=$SANDBOX_IMAGE" >> $GITHUB_OUTPUT
+
+          path = pathlib.Path("batch-runner/experiments") / (
+            os.environ["EXPERIMENT_YAML_INPUT"] + ".yaml"
+          )
+          config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+          execution = config.get("execution") or {}
+          sandbox = execution.get("sandbox") or {}
+          if not isinstance(execution, dict) or not isinstance(sandbox, dict):
+            raise SystemExit("execution and execution.sandbox must be mappings")
+          source = (config.get("data") or {}).get(
+            "source", f"HyeonSang/{os.environ['EXPERIMENT_YAML_INPUT']}"
+          )
+          owner = source.split("/", 1)[0] if isinstance(source, str) else ""
+          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", owner):
+            raise SystemExit("data source owner is invalid")
+          image = sandbox.get("image") or "gdpval-sandbox:latest"
+          if not isinstance(image, str) or not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._/@:-]{0,299}", image
+          ):
+            raise SystemExit("sandbox image reference is invalid")
+          wall_timeout = execution.get("wall_timeout", 0)
+          relay_max_runs = execution.get("relay_max_runs", 3)
+          if type(wall_timeout) is not int or not 0 <= wall_timeout <= 350:
+            raise SystemExit("execution.wall_timeout is invalid")
+          if type(relay_max_runs) is not int or not 0 <= relay_max_runs <= 10:
+            raise SystemExit("execution.relay_max_runs is invalid")
+          mode = execution.get("mode")
+          hardened = sandbox.get("hardened_substrate") is True
+          values = {
+            "install_libreoffice": str(
+              execution.get("install_libreoffice") is True
+            ),
+            "wall_timeout": str(wall_timeout),
+            "relay_max_runs": str(relay_max_runs),
+            "repo_owner": owner,
+            "uses_sandbox": str(mode == "sandbox").lower(),
+            "sandbox_image": image,
+            "uses_agentic": str(
+              mode == 'agentic_sandbox' or hardened
+            ).lower(),
+          }
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            for key, value in values.items():
+              output.write(f"{key}={value}\n")
+          PY
+
+      - name: 'Block agentic modes in credentialed general workflow'
+        if: steps.read_config.outputs.uses_agentic == 'true'
+        run: |
+          echo "FATAL: agentic_sandbox and its hardened paired baseline are not"
+          echo "authorized in batch-run.yml. This workflow co-locates Docker,"
+          echo "Azure/HF credentials, relay, narrative, and upload permissions."
+          echo "Use the dedicated signed compute/control workflow only after the"
+          echo "paid gate is merged. No model client or cloud credential was used."
+          exit 1
 
       - name: Install LibreOffice & Noto Sans fonts
         if: steps.read_config.outputs.install_libreoffice == 'True'
@@ -215,14 +295,15 @@ jobs:
         if: inputs.relay_run > 0
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          REPO_OWNER: ${{ steps.read_config.outputs.repo_owner }}
         run: |
           cd batch-runner
-          echo "Relay run #${{ inputs.relay_run }}: Restoring checkpoint..."
+          echo "Relay run #${RELAY_RUN_INPUT}: Restoring checkpoint..."
           python3 -c "
           import shutil, os
           from huggingface_hub import hf_hub_download, snapshot_download
 
-          repo_id = '${{ steps.read_config.outputs.repo_owner }}/${{ inputs.experiment_yaml }}'
+          repo_id = os.environ['REPO_OWNER'] + '/' + os.environ['EXPERIMENT_YAML_INPUT']
           try:
               # Download progress.json
               progress_path = hf_hub_download(
@@ -258,13 +339,13 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd batch-runner
-          bash step0_bootstrap.sh experiments/${{ inputs.experiment_yaml }}.yaml
+          bash step0_bootstrap.sh "experiments/${EXPERIMENT_YAML_INPUT}.yaml"
 
       # ── Step 1: Prepare Tasks ──
       - name: 'Step 1: Prepare tasks'
         run: |
           cd batch-runner
-          bash step1_prepare_tasks.sh experiments/${{ inputs.experiment_yaml }}.yaml
+          bash step1_prepare_tasks.sh "experiments/${EXPERIMENT_YAML_INPUT}.yaml"
 
       # ── Sandbox: pull the prebuilt image from GHCR & verify (sandbox mode only) ──
       # Runs ONLY for execution.mode: sandbox experiments; baselines skip it
@@ -328,7 +409,7 @@ jobs:
 
       # ── Step 2a: Run Inference (condition_a) ──
       - name: 'Azure Login (OIDC)'
-        uses: azure/login@v2
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -346,7 +427,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           cd batch-runner
-          WALL_TIMEOUT="${{ inputs.wall_timeout }}"
+          WALL_TIMEOUT="$WALL_TIMEOUT_INPUT"
           if [ "$WALL_TIMEOUT" = "0" ] && [ "${{ steps.read_config.outputs.wall_timeout }}" -gt 0 ] 2>/dev/null; then
             WALL_TIMEOUT="${{ steps.read_config.outputs.wall_timeout }}"
           fi
@@ -387,6 +468,7 @@ jobs:
         if: steps.check_relay.outputs.needs_relay == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          REPO_OWNER: ${{ steps.read_config.outputs.repo_owner }}
         run: |
           cd batch-runner
           python3 -c "
@@ -394,7 +476,7 @@ jobs:
           from huggingface_hub import HfApi
 
           api = HfApi(token=os.environ['HF_TOKEN'])
-          repo_id = '${{ steps.read_config.outputs.repo_owner }}/${{ inputs.experiment_yaml }}'
+          repo_id = os.environ['REPO_OWNER'] + '/' + os.environ['EXPERIMENT_YAML_INPUT']
 
           # Upload progress.json
           api.upload_file(
@@ -430,7 +512,7 @@ jobs:
           # exact same immutable image.
           SANDBOX_IMAGE_DIGEST: ${{ steps.sandbox_pull.outputs.digest }}
         run: |
-          NEXT_RELAY=$(( ${{ inputs.relay_run }} + 1 ))
+          NEXT_RELAY=$(( RELAY_RUN_INPUT + 1 ))
           MAX_RELAYS="${{ steps.read_config.outputs.relay_max_runs }}"
 
           if [ $NEXT_RELAY -gt $MAX_RELAYS ]; then
@@ -440,10 +522,10 @@ jobs:
 
           echo "Triggering relay run #$NEXT_RELAY..."
           gh workflow run batch-run.yml \
-            -f experiment_yaml="${{ inputs.experiment_yaml }}" \
+            -f experiment_yaml="$EXPERIMENT_YAML_INPUT" \
             -f relay_run="$NEXT_RELAY" \
-            -f wall_timeout="${{ inputs.wall_timeout }}" \
-            -f dry_run="${{ inputs.dry_run }}" \
+            -f wall_timeout="$WALL_TIMEOUT_INPUT" \
+            -f dry_run="$DRY_RUN_INPUT" \
             -f sandbox_image_digest="$SANDBOX_IMAGE_DIGEST"
 
           echo "Relay run #$NEXT_RELAY triggered. This run will now exit."
@@ -453,7 +535,7 @@ jobs:
       - name: 'Check if condition_b exists'
         id: check_condition_b
         run: |
-          YAML_PATH="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
+          YAML_PATH="batch-runner/experiments/${EXPERIMENT_YAML_INPUT}.yaml"
           HAS_CONDITION_B=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${YAML_PATH}')); print('true' if 'condition_b' in cfg else 'false')")
           echo "has_condition_b=$HAS_CONDITION_B" >> $GITHUB_OUTPUT
           echo "Condition B exists: $HAS_CONDITION_B"
@@ -488,7 +570,7 @@ jobs:
       - name: 'Check if smoke test'
         id: check_smoke_test
         run: |
-          YAML_PATH="batch-runner/experiments/${{ inputs.experiment_yaml }}.yaml"
+          YAML_PATH="batch-runner/experiments/${EXPERIMENT_YAML_INPUT}.yaml"
           SAMPLE_SIZE=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${YAML_PATH}')); s=cfg.get('data',{}).get('filter',{}).get('sample_size',220); print(s if s is not None else 220)")
           IS_SMOKE_TEST=$([ "$SAMPLE_SIZE" -le 3 ] && echo "true" || echo "false")
           echo "sample_size=$SAMPLE_SIZE" >> $GITHUB_OUTPUT
@@ -525,7 +607,7 @@ jobs:
       # ── Create Pull Request (only if not dry_run and not relay) ──
       - name: Create Pull Request with results
         if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "experiment: ${{ env.experiment_name }}"
@@ -560,6 +642,7 @@ jobs:
         if: inputs.relay_run > 0 && steps.check_relay.outputs.needs_relay != 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          REPO_OWNER: ${{ steps.read_config.outputs.repo_owner }}
         continue-on-error: true
         run: |
           python3 -c "
@@ -567,7 +650,7 @@ jobs:
           from huggingface_hub import HfApi
 
           api = HfApi(token=os.environ['HF_TOKEN'])
-          repo_id = '${{ steps.read_config.outputs.repo_owner }}/${{ inputs.experiment_yaml }}'
+          repo_id = os.environ['REPO_OWNER'] + '/' + os.environ['EXPERIMENT_YAML_INPUT']
 
           try:
               # Delete progress checkpoint
@@ -594,15 +677,15 @@ jobs:
           echo "📊 Batch Experiment Complete"
           echo "════════════════════════════════════════"
           echo "Experiment: ${{ env.experiment_name }}"
-          echo "YAML Config: ${{ inputs.experiment_yaml }}"
-          echo "Dry Run: ${{ inputs.dry_run }}"
+          echo "YAML Config: $EXPERIMENT_YAML_INPUT"
+          echo "Dry Run: $DRY_RUN_INPUT"
           echo ""
           echo "Check artifacts for full pipeline output."
 
       # ── Upload artifacts ──
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: batch-results-${{ github.run_id }}
           path: |

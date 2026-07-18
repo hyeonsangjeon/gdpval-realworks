@@ -23,6 +23,44 @@ from core.experiment_config import (
 )
 
 
+def _valid_agentic_config():
+    return {
+        "compute_transport": "remote",
+        "image": "task@sha256:" + "a" * 64,
+        "verifier_image": "verifier@sha256:" + "b" * 64,
+        "memory_gb": 8,
+        "cpus": 2,
+        "limits": {
+            "max_api_attempts": 6,
+            "max_model_iterations": 6,
+            "max_tool_calls": 8,
+        },
+        "budget": {
+            "paired_run_id": "paired-run",
+            "condition": {
+                "attempts": 30,
+                "input_tokens": 1000000,
+                "output_tokens": 100000,
+                "cost_usd": "6.25",
+            },
+            "paired_run": {
+                "attempts": 30,
+                "input_tokens": 1500000,
+                "output_tokens": 163840,
+                "cost_usd": "6.25",
+            },
+        },
+        "pricing_table": {
+            "sha256": "c" * 64,
+        },
+        "authorization": {
+            "api_version": "2025-04-01-preview",
+            "provider_classification": "approved_public_gdpval",
+                "endpoint_sha256": "d" * 64,
+        },
+    }
+
+
 @pytest.fixture
 def sample_config_dict():
     """Create a sample configuration dictionary"""
@@ -218,6 +256,20 @@ class TestExperimentConfigFromDict:
         assert config.execution.metrics == {"enabled": True}
         assert config.to_dict()["execution"]["metrics"] == {"enabled": True}
 
+    def test_from_dict_agentic_config_is_opt_in(self, sample_config_dict):
+        config = ExperimentConfig.from_dict(sample_config_dict)
+        assert config.execution.agentic is None
+        assert "agentic" not in config.to_dict()["execution"]
+
+        sample_config_dict["execution"]["mode"] = "agentic_sandbox"
+        sample_config_dict["experiment"]["id"] = "exp028"
+        sample_config_dict["execution"]["agentic"] = _valid_agentic_config()
+
+        config = ExperimentConfig.from_dict(sample_config_dict)
+
+        assert config.execution.agentic == _valid_agentic_config()
+        assert config.to_dict()["execution"]["agentic"] == config.execution.agentic
+
     @pytest.mark.parametrize(
         "metrics",
         [{}, {"enabled": False}, {"enabled": "false"}, {"enabled": 1}, []],
@@ -296,6 +348,73 @@ class TestExperimentConfigValidation:
 
         assert len(errors) > 0
         assert any("provider" in e for e in errors)
+
+    def test_validate_agentic_sandbox_provider(self, sample_config_dict):
+        sample_config_dict["execution"]["mode"] = "agentic_sandbox"
+        sample_config_dict["experiment"]["id"] = "exp028"
+        sample_config_dict["execution"]["agentic"] = _valid_agentic_config()
+        del sample_config_dict["condition_b"]
+        assert ExperimentConfig.from_dict(sample_config_dict).validate() == []
+
+        sample_config_dict["condition_a"]["model"]["provider"] = "anthropic"
+        errors = ExperimentConfig.from_dict(sample_config_dict).validate()
+
+        assert errors == [
+            "agentic_sandbox mode requires azure or openai provider for condition_a"
+        ]
+
+    def test_validate_agentic_sandbox_rejects_unsafe_config(
+        self, sample_config_dict
+    ):
+        sample_config_dict["execution"]["mode"] = "agentic_sandbox"
+        sample_config_dict["experiment"]["id"] = "exp028"
+        config = _valid_agentic_config()
+        config["image"] = "latest"
+        config["unexpected"] = True
+        sample_config_dict["execution"]["agentic"] = config
+
+        errors = ExperimentConfig.from_dict(sample_config_dict).validate()
+
+        assert any("image must be pinned" in error for error in errors)
+        assert any("unknown fields" in error for error in errors)
+
+    def test_validate_hardened_sandbox_rejects_self_qa(
+        self, sample_config_dict
+    ):
+        sample_config_dict["execution"]["mode"] = "sandbox"
+        sample_config_dict["experiment"]["id"] = "exp029"
+        sample_config_dict["execution"]["sandbox"] = {
+            "hardened_substrate": True
+        }
+        sample_config_dict["execution"]["agentic"] = _valid_agentic_config()
+        sample_config_dict["condition_a"]["qa"] = {"enabled": True}
+
+        errors = ExperimentConfig.from_dict(sample_config_dict).validate()
+
+        assert any("condition_a.qa must be disabled" in error for error in errors)
+
+    def test_validate_hardened_rejects_prompt_prefix_and_body(
+        self, sample_config_dict
+    ):
+        sample_config_dict["execution"]["mode"] = "agentic_sandbox"
+        sample_config_dict["experiment"]["id"] = "exp028"
+        sample_config_dict["execution"]["agentic"] = _valid_agentic_config()
+        del sample_config_dict["condition_b"]
+        sample_config_dict["condition_a"]["prompt"]["prefix"] = "prefix"
+        sample_config_dict["condition_a"]["prompt"]["body"] = "body"
+
+        errors = ExperimentConfig.from_dict(sample_config_dict).validate()
+
+        assert any("prompt prefix/body" in error for error in errors)
+
+    def test_validate_agentic_ids_are_reserved(self, sample_config_dict):
+        sample_config_dict["execution"]["mode"] = "agentic_sandbox"
+        sample_config_dict["execution"]["agentic"] = _valid_agentic_config()
+        sample_config_dict["experiment"]["id"] = "exp031"
+
+        errors = ExperimentConfig.from_dict(sample_config_dict).validate()
+
+        assert any("must be exp028 or exp030" in error for error in errors)
 
     def test_validate_task_ids_rejects_duplicates_and_sampling(self, sample_config_dict):
         sample_config_dict["data"]["filter"]["task_ids"] = ["task-1", "task-1"]

@@ -48,7 +48,14 @@ class RenderResult:
 
 
 def _find_soffice() -> Optional[str]:
-    for name in ("soffice", "libreoffice"):
+    for fixed in (
+        "/usr/lib/libreoffice/program/soffice.bin",
+        "/opt/libreoffice/program/soffice.bin",
+    ):
+        path = Path(fixed)
+        if path.is_file() and path.stat().st_mode & 0o111:
+            return str(path)
+    for name in ("soffice.bin", "soffice", "libreoffice"):
         path = shutil.which(name)
         if path:
             return path
@@ -85,7 +92,7 @@ def _render_pdf(
     try:
         import fitz
     except Exception:
-        result.warnings.append("PyMuPDF unavailable; cannot render to PNG")
+        result.errors.append("PyMuPDF unavailable; cannot render to PNG")
         return
     try:
         doc = fitz.open(str(pdf_path))
@@ -107,45 +114,82 @@ def _render_pdf(
             if white >= blank_threshold:
                 result.blank_pages.append(i + 1)
         except Exception as e:
-            result.warnings.append(f"page {i + 1} render failed: {e}")
+            result.errors.append(f"page {i + 1} render failed: {e}")
     doc.close()
+    if result.page_count <= 0:
+        result.errors.append("PDF contains no renderable pages")
+    elif not result.rendered_images:
+        result.errors.append("PDF produced no rendered page images")
 
 
 def _convert_office_to_pdf(src: Path, out_dir: Path, result: RenderResult) -> Optional[Path]:
     soffice = _find_soffice()
     if not soffice:
-        result.warnings.append("LibreOffice unavailable; cannot render office document")
+        result.errors.append("LibreOffice unavailable; cannot render office document")
         return None
     try:
+        profile = out_dir.parent / ".config" / "libreoffice"
+        profile.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        command = [
+            soffice,
+            f"-env:UserInstallation={profile.as_uri()}",
+            "--headless",
+            "--norestore",
+            "--nodefault",
+            "--nofirststartwizard",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            str(out_dir),
+            str(src),
+        ]
         proc = subprocess.run(
-            [soffice, "--headless", "--convert-to", "pdf", "--outdir",
-             str(out_dir), str(src)],
-            capture_output=True, text=True, timeout=120,
+            command, capture_output=True, text=True, timeout=120,
         )
+        if proc.returncode == 81:
+            proc = subprocess.run(
+                command, capture_output=True, text=True, timeout=120,
+            )
         pdf_path = out_dir / (src.stem + ".pdf")
-        if pdf_path.exists():
+        if proc.returncode == 0 and pdf_path.is_file() and pdf_path.stat().st_size > 0:
             result.converted_via = "libreoffice"
             return pdf_path
-        result.warnings.append(
-            f"LibreOffice conversion produced no PDF: {proc.stderr[-200:]}"
+        result.errors.append(
+            "LibreOffice conversion produced no PDF "
+            f"(exit {proc.returncode}): {proc.stderr[-200:]}"
         )
     except Exception as e:
-        result.warnings.append(f"LibreOffice conversion failed: {e}")
+        result.errors.append(f"LibreOffice conversion failed: {e}")
     return None
 
 
-def _render_image(src: Path, out_dir: Path, stem: str, result: RenderResult) -> None:
+def _render_image(
+    src: Path,
+    out_dir: Path,
+    stem: str,
+    blank_threshold: float,
+    result: RenderResult,
+) -> None:
     try:
         from PIL import Image
         with Image.open(src) as im:
-            im = im.convert("RGB")
-            im.thumbnail((1600, 1600))
+            rgba = im.convert("RGBA")
+            rgba.thumbnail((1600, 1600))
+            background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+            background.alpha_composite(rgba)
+            rendered = background.convert("RGB")
             img_path = out_dir / f"{stem}_p1.png"
-            im.save(img_path)
+            rendered.save(img_path)
             result.rendered_images.append(str(img_path))
             result.page_count = 1
+            histogram = rendered.convert("L").histogram()
+            total = sum(histogram)
+            white = sum(histogram[250:]) / max(total, 1)
+            result.page_white_fractions.append(round(white, 5))
+            if white >= blank_threshold:
+                result.blank_pages.append(1)
     except Exception as e:
-        result.warnings.append(f"image snapshot failed: {e}")
+        result.errors.append(f"image snapshot failed: {e}")
 
 
 def render_artifact(
@@ -196,7 +240,9 @@ def render_artifact(
     if kind == "pdf":
         _render_pdf(artifact_path, out_dir, stem, max_pages, blank_threshold, dpi, result)
     elif kind == "image":
-        _render_image(artifact_path, out_dir, stem, result)
+        _render_image(
+            artifact_path, out_dir, stem, blank_threshold, result
+        )
     elif kind in _OFFICE_KINDS:
         pdf_path = _convert_office_to_pdf(artifact_path, out_dir, result)
         if pdf_path is not None:

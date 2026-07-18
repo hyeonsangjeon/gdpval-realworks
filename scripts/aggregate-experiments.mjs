@@ -23,6 +23,34 @@ export function normalizeExecutionMetrics(value) {
     : null;
 }
 
+export function normalizeAgenticConfig(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const limits = value.limits && typeof value.limits === 'object' && !Array.isArray(value.limits)
+    ? Object.fromEntries(Object.entries(value.limits).filter(([key, item]) => (
+        [
+          'max_api_attempts', 'max_model_iterations', 'max_output_tokens',
+          'max_input_tokens', 'max_cumulative_output_tokens', 'max_task_seconds',
+          'max_cost_usd', 'max_tool_calls', 'max_run_python', 'max_run_ffmpeg',
+          'max_inspect_artifacts', 'max_finalize', 'max_identical_errors',
+        ].includes(key) && (typeof item === 'number' || typeof item === 'string')
+      )))
+    : null;
+  const pricingTable = value.pricing_table && typeof value.pricing_table === 'object'
+    && !Array.isArray(value.pricing_table) && typeof value.pricing_table.sha256 === 'string'
+    ? { sha256: value.pricing_table.sha256 }
+    : null;
+  const normalized = {
+    ...(value.compute_transport === 'remote' ? { compute_transport: 'remote' } : {}),
+    ...(typeof value.image === 'string' ? { image: value.image } : {}),
+    ...(typeof value.verifier_image === 'string' ? { verifier_image: value.verifier_image } : {}),
+    ...(typeof value.memory_gb === 'number' ? { memory_gb: value.memory_gb } : {}),
+    ...(typeof value.cpus === 'number' ? { cpus: value.cpus } : {}),
+    ...(limits && Object.keys(limits).length ? { limits } : {}),
+    ...(pricingTable ? { pricing_table: pricingTable } : {}),
+  };
+  return Object.keys(normalized).length ? normalized : null;
+}
+
 async function main() {
   console.log('📦 Aggregating experiment prompt architectures...');
   const codegen = parseYaml(await readFile(join(PROMPTS_DIR, 'subprocess_occupation_codegen.yaml'), 'utf-8'));
@@ -40,6 +68,7 @@ async function main() {
     const qa = condition.qa || {};
     const execution = expData.execution || {};
     const metrics = normalizeExecutionMetrics(execution.metrics);
+    const agentic = normalizeAgenticConfig(execution.agentic);
 
     experiments.push({
       exp_id: expData.experiment?.id || file.replace('.yaml', ''),
@@ -75,6 +104,7 @@ async function main() {
           max_retries: execution.max_retries || 5,
           install_libreoffice: execution.install_libreoffice || false,
           ...(metrics ? { metrics } : {}),
+          ...(agentic ? { agentic } : {}),
         },
       },
     });

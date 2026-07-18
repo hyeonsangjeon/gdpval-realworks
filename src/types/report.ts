@@ -30,8 +30,115 @@ export interface TaskResult {
   has_deliverable_files?: boolean | null
   observability?: {
     execution_metrics?: TaskExecutionMetrics
+    agentic_metrics?: TaskAgenticMetrics
+    budget_metrics?: TaskBudgetMetrics
+    substrate?: TaskSubstrateManifest
     [key: string]: unknown
   }
+}
+
+export interface TaskSubstrateManifest {
+  schema_version: string
+  sha256: string
+  task_image: string
+  task_image_id: string
+  verifier_image: string
+  verifier_image_id: string
+  component_sha256: Record<string, string>
+  sbom_sha256: string
+  uid: number
+  gid: number
+  network: string
+  ipc: string
+  pid_namespace: string
+  read_only_rootfs: boolean
+  cap_drop: string[]
+  no_new_privileges: boolean
+  selected_transfer_bytes: number
+  memory_bytes: number
+  memory_swap_bytes: number
+  cpus: number
+  pids: number
+  nofile: number
+  apparmor_profile: string
+  work_tmpfs: {
+    size_bytes: number
+    nr_inodes: number
+    nosuid: boolean
+    nodev: boolean
+    noexec: boolean
+  }
+}
+
+export interface TaskBudgetMetrics {
+  schema_version: string
+  model_api_calls: number
+  input_tokens: number
+  output_tokens: number
+  cached_tokens: number
+  conservative_cost_usd: number
+  usage_complete: boolean
+  time_to_valid_artifact_ms?: number | null
+}
+
+export interface TaskAgenticMetrics {
+  schema_version: string
+  ledger_cumulative?: boolean
+  model_api_calls: number
+  model_iterations: number
+  tool_calls: number
+  tool_errors: number
+  tool_calls_by_name: Partial<Record<AgenticToolName, number>>
+  model_time_ms: number
+  tool_time_ms: number
+  task_wall_time_ms: number
+  time_to_valid_artifact_ms?: number | null
+  finalize_attempts: number
+  finalize_required_corrections: number
+  capability_misses: number
+  recovered_after_tool_error: boolean
+  input_tokens: number
+  output_tokens: number
+  cached_tokens: number
+  conservative_cost_usd: number
+  usage_complete: boolean
+  terminal_error_category: string | null
+}
+
+export type AgenticToolName =
+  | 'inspect_workspace'
+  | 'inspect_environment'
+  | 'run_python'
+  | 'run_ffmpeg'
+  | 'inspect_artifacts'
+  | 'finalize'
+
+export interface AgenticMetricsSummary {
+  schema_version: string
+  measured_tasks: number
+  total_tasks: number
+  coverage_pct: number
+  total_model_api_calls: number
+  total_model_iterations: number
+  total_tool_calls: number
+  total_tool_errors: number
+  tool_error_rate_pct: number
+  tasks_with_tool_errors: number
+  recovered_tasks: number
+  recovery_rate_pct: number
+  total_finalize_attempts: number
+  total_finalize_required_corrections: number
+  total_capability_misses: number
+  p50_tool_time_ms: number | null
+  p95_tool_time_ms: number | null
+  total_input_tokens: number
+  total_output_tokens: number
+  total_cached_tokens: number
+  usage_complete_tasks: number
+  usage_coverage_pct: number
+  conservative_cost_usd: number
+  tool_calls_by_name: Record<AgenticToolName, number>
+  terminal_error_categories: Record<string, number>
 }
 
 export interface TaskExecutionMetrics {
@@ -179,6 +286,7 @@ export interface ReportData {
   recovery_stats: RecoveryStats
   file_generation?: FileGeneration
   execution_metrics?: ExecutionMetricsSummary
+  agentic_metrics?: AgenticMetricsSummary
   /** task_id → Self-QA score (0–10). Enriched in scripts/aggregate-reports.mjs for Phase 1 calibration. */
   task_qa?: Record<string, number>
 }

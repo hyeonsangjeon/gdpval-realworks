@@ -9,7 +9,7 @@
 #
 # Build (from batch-runner/):   bash sandbox/build.sh
 # Pin Python to 3.11 to match the GitHub Actions runner.
-FROM python:3.11-slim-bookworm
+FROM python:3.11-slim-bookworm@sha256:28255a3ace7eb4c48bc1b57b90af29e1bc82b4fd6c60614a8e3dce61b87ff941
 
 LABEL org.opencontainers.image.title="gdpval-sandbox" \
       org.opencontainers.image.description="Skill-aware multimodal sandbox for GDPVal solving" \
@@ -57,11 +57,11 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Python dependencies ─────────────────────────────────────────────────────
-# Copy only requirements first to maximize Docker layer caching.
-COPY requirements.txt /tmp/requirements.txt
+# Copy the complete recursive requirements input before installation.
+COPY requirements.txt requirements-renderer.txt /tmp/
 RUN python -m pip install --upgrade pip setuptools wheel \
     && pip install -r /tmp/requirements.txt \
-    && rm -f /tmp/requirements.txt
+    && rm -f /tmp/requirements.txt /tmp/requirements-renderer.txt
 
 # ── Skills (baked-in fallback) ──────────────────────────────────────────────
 # The runner also bind-mounts skills/ into the work dir, but baking them here

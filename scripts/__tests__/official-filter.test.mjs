@@ -45,11 +45,24 @@ test('existing non-diagnostic subsets remain visible', () => {
   }), false)
 })
 
+test('all preregistered agentic experiment IDs are hidden by default', () => {
+  for (const id of ['exp028', 'exp029', 'exp030']) {
+    assert.equal(HIDDEN_DIAGNOSTIC_EXPERIMENT_IDS.has(id), true)
+    assert.equal(isHiddenDiagnosticExperimentId(id), true)
+    assert.equal(isHiddenOfficialExperiment({
+      short_id: id,
+      experiment_name: id,
+      total_tasks: id === 'exp028' ? 5 : 20,
+    }), true)
+  }
+})
+
 test('debug mode restores subsets and smoke reports', () => {
   const experiments = [
     { short_id: 'exp026', experiment_name: 'Official', total_tasks: 220, report_scope: 'self_assessed_pre_grading' },
     { short_id: 'exp027', experiment_name: 'Bridge 50', total_tasks: 50, report_scope: 'self_assessed_pre_grading' },
     { short_id: 'exp999', experiment_name: 'Smoke', total_tasks: 3, report_scope: 'self_assessed_pre_grading' },
+    { short_id: 'exp028', experiment_name: 'Agentic canary', total_tasks: 5, report_scope: 'self_assessed_pre_grading' },
   ]
 
   assert.deepEqual(
@@ -58,7 +71,7 @@ test('debug mode restores subsets and smoke reports', () => {
   )
   assert.deepEqual(
     filterDashboardExperiments(experiments, { debug: true }).map((experiment) => experiment.short_id),
-    ['exp026', 'exp027', 'exp999'],
+    ['exp026', 'exp027', 'exp999', 'exp028'],
   )
 })
 
