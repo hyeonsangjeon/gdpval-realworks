@@ -26,7 +26,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   관측→불변식→판정→비교→결정 rhythm. The serialized Pages job now regenerates on
   integrity-source changes and runs both runtime and integrity Chromium suites
   before deploy. No model, batch, grading, HF upload, or paid workflow is
-  dispatched.
+  dispatched. Shipped through PR #105 (`8a64f1bf`) and successful Pages run
+  [29649567174](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29649567174);
+  the deployed JSON, non-causal hero, report-derived chart, pinned source links,
+  and reflective typography were verified on desktop and mobile.
 - **Evidence-backed runtime Field Note** — rebuild the `360-minute-experiment`
   note around three explicit sources: exp008/010/025/026 report snapshots, the
   current condition-a workflow policy, and a pinned exp025 incident record.
