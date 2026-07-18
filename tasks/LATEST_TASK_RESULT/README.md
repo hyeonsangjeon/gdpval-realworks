@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-18
-- Status: Integrity Field Note grounded, restyled, and locally verified
+- Status: Integrity Field Note published and production-verified
 
 ## Task
 
@@ -44,6 +44,12 @@ task. It must be refreshed before a task is reported complete.
 - Extended Pages freshness to the integrity source and combined the existing
   runtime browser suite with integrity desktop/mobile/null/duplicate/invalid-
   list/stale-route verification before artifact upload. Batch remains manual.
+- Squash-merged the reviewed change through PR #105 as `8a64f1bf`. Automatic
+  `Aggregate Tests & Deploy` run
+  [29649567174](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29649567174)
+  completed build, all 51 aggregate and pinned-history contracts, Chromium
+  installation, both Field Note browser suites, artifact upload, and GitHub
+  Pages deployment successfully. No other workflow ran for that commit.
 
 ## Verification
 
@@ -64,8 +70,18 @@ task. It must be refreshed before a task is reported complete.
   typography, and browser coverage. `extreme-reasoner` approved the Pages gate
   after full-suite rerun and confirmed model/API, Azure, HF write, batch,
   grading, and paid-workflow impact is **zero**.
+- On the deployed site, `integrity-note.json` preserved the exact checked-in
+  config projection, PR #38 SHAs, disabled causal-attribution flag, and four
+  missing execution identities. The public report snapshot matched exp013
+  `211/220` (`95.9%`) and exp025 `181/220` (`82.3%`) across metrics, hero, chart,
+  and prose while labeling `-13.6%p` as an observed, non-causal gap.
+- Public desktop verification found both chart labels, five 34px chapter
+  headings, 34.85px body leading, and eight source links. Public 390px
+  dark/reduced-motion verification found 28px headings, 32.8px leading, both
+  experiment links, all five semantic labels, no horizontal overflow, and zero
+  post-settle chart mutations. The exp013 detail route showed the same
+  `211/220`, `95.9%`, and `6.07/10` snapshot.
 
 ## Remaining Work
 
-- Commit and publish the reviewed branch, then verify the GitHub-hosted combined
-  browser gate and public article against the deployed generated evidence.
+- No implementation or deployment work remains for this Integrity Field Note.
