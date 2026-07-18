@@ -12,6 +12,7 @@ on:
       - 'scripts/**'                    # aggregate 스크립트 변경 시
       - '.github/workflows/batch-run.yml' # runtime-note policy source
       - 'data/notes/runtime-incidents.yaml' # runtime-note incident source
+      - 'data/notes/integrity-incidents.yaml' # integrity-note measurement source
 
   workflow_dispatch:          # 수동 실행 가능
 
@@ -77,9 +78,9 @@ jobs:
         timeout-minutes: 10
         run: ./node_modules/.bin/playwright install --with-deps --only-shell chromium
 
-      - name: Verify runtime note in browser
-        timeout-minutes: 5
-        run: npm run test:runtime-browser:dist
+      - name: Verify Field Notes in browser
+        timeout-minutes: 8
+        run: npm run test:notes-browser:dist
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

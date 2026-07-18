@@ -4,6 +4,7 @@ import type { JournalHero } from '../../data/journal'
 import { getExperimentHref } from '../../data/journalLinks'
 import type { PromptComplexityBenchmarkRow } from '../../lib/promptComplexityBenchmark'
 import type { RuntimeNoteBenchmarkSelection } from '../../lib/runtimeNoteBenchmark'
+import type { IntegrityNoteSelection } from '../../lib/integrityNoteBenchmark'
 
 const resolveAsset = (src: string) => (
   src.startsWith('http') ? src : `${import.meta.env.BASE_URL}${src.replace(/^\/+/, '')}`
@@ -72,6 +73,7 @@ function PromptComplexityVisual({
 }
 
 type ReadyRuntimeBenchmark = Extract<RuntimeNoteBenchmarkSelection, { status: 'ready' }>
+type ReadyIntegrityBenchmark = Extract<IntegrityNoteSelection, { status: 'ready' }>
 
 function RuntimeVisual({
   reduceMotion,
@@ -135,22 +137,30 @@ function RuntimeVisual({
   )
 }
 
-function IntegrityVisual() {
+function IntegrityVisual({ benchmark }: { benchmark: ReadyIntegrityBenchmark }) {
+  const { before, after, observedGapPctPoints } = benchmark
   return (
     <>
-      <text x="120" y="72" fill="hsl(var(--dash-text-secondary))" fontSize="18">THE SAME MODEL, A DIFFERENT MEASUREMENT</text>
-      <rect x="180" y="126" width="260" height="238" rx="6" fill="hsl(var(--dash-card))" stroke="hsl(var(--dash-border))" />
-      <rect x="760" y="160" width="260" height="204" rx="6" fill="hsl(var(--dash-card))" stroke="hsl(var(--dash-border))" />
-      <rect x="180" y="126" width="260" height="238" rx="6" fill="#10b981" opacity="0.18" />
-      <rect x="760" y="160" width="260" height="204" rx="6" fill="#f59e0b" opacity="0.18" />
-      <text x="310" y="222" fill="hsl(var(--dash-heading))" fontSize="56" textAnchor="middle" fontWeight="700">95.9%</text>
-      <text x="310" y="262" fill="hsl(var(--dash-text-secondary))" fontSize="18" textAnchor="middle">exp013 · before</text>
-      <text x="890" y="238" fill="hsl(var(--dash-heading))" fontSize="56" textAnchor="middle" fontWeight="700">82.3%</text>
-      <text x="890" y="278" fill="hsl(var(--dash-text-secondary))" fontSize="18" textAnchor="middle">exp025 · after</text>
-      <path d="M480 242 H700" stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
-      <path d="M680 228 L704 242 L680 256" fill="none" stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
-      <text x="590" y="210" fill="hsl(var(--dash-heading))" fontSize="18" textAnchor="middle">success changed meaning</text>
-      <text x="590" y="304" fontSize="15" textAnchor="middle" className="fill-amber-700 dark:fill-amber-400">lower does not automatically mean worse</text>
+      <text x="90" y="62" fill="hsl(var(--dash-text-secondary))" fontSize="18">OBSERVED GAP · MEASUREMENT RULE CHANGED</text>
+      <rect x="100" y="112" width="330" height="260" rx="8" fill="hsl(var(--dash-card))" stroke="#059669" strokeWidth="2" />
+      <text x="126" y="150" fill="hsl(var(--dash-text-secondary))" fontSize="14">{before.shortId} · PRE-FIX SNAPSHOT</text>
+      <text x="265" y="230" fill="hsl(var(--dash-heading))" fontSize="58" textAnchor="middle" fontWeight="700">{before.successRatePct.toFixed(1)}%</text>
+      <text x="265" y="270" fill="hsl(var(--dash-heading))" fontSize="20" textAnchor="middle">{before.successCount} / {before.totalTasks} success</text>
+      <text x="265" y="314" fill="hsl(var(--dash-text-secondary))" fontSize="14" textAnchor="middle">determined QA fail could remain success</text>
+      <text x="265" y="340" fill="hsl(var(--dash-text-secondary))" fontSize="13" textAnchor="middle">report date · {before.date}</text>
+
+      <rect x="770" y="112" width="330" height="260" rx="8" fill="hsl(var(--dash-card))" stroke="#b45309" strokeWidth="2" />
+      <text x="796" y="150" fill="hsl(var(--dash-text-secondary))" fontSize="14">{after.shortId} · POST-FIX SNAPSHOT</text>
+      <text x="935" y="230" fill="hsl(var(--dash-heading))" fontSize="58" textAnchor="middle" fontWeight="700">{after.successRatePct.toFixed(1)}%</text>
+      <text x="935" y="270" fill="hsl(var(--dash-heading))" fontSize="20" textAnchor="middle">{after.successCount} / {after.totalTasks} success</text>
+      <text x="935" y="314" fill="hsl(var(--dash-text-secondary))" fontSize="14" textAnchor="middle">determined QA fail → qa_failed</text>
+      <text x="935" y="340" fill="hsl(var(--dash-text-secondary))" fontSize="13" textAnchor="middle">report date · {after.date}</text>
+
+      <path d="M458 235 H742" stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
+      <path d="M722 221 L746 235 L722 249" fill="none" stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
+      <text x="600" y="198" fill="hsl(var(--dash-heading))" fontSize="24" textAnchor="middle" fontWeight="700">{observedGapPctPoints.toFixed(1)}%p</text>
+      <text x="600" y="274" fill="hsl(var(--dash-text-secondary))" fontSize="15" textAnchor="middle">observed gap</text>
+      <text x="600" y="302" fontSize="14" textAnchor="middle" className="fill-amber-700 dark:fill-amber-400">not a causal estimate</text>
     </>
   )
 }
@@ -266,11 +276,13 @@ function MobileVisualSummary({
   alt,
   promptBenchmark,
   runtimeBenchmark,
+  integrityBenchmark,
 }: {
   variant: Extract<JournalHero, { kind: 'visual' }>['variant']
   alt: string
   promptBenchmark?: PromptComplexityBenchmarkRow[]
   runtimeBenchmark?: ReadyRuntimeBenchmark
+  integrityBenchmark?: ReadyIntegrityBenchmark
 }) {
   if (variant === 'prompt-complexity') {
     if (!promptBenchmark) return null
@@ -334,21 +346,27 @@ function MobileVisualSummary({
   }
 
   if (variant === 'integrity') {
+    if (!integrityBenchmark) return null
+    const { before, after, observedGapPctPoints } = integrityBenchmark
     return (
-      <div role="img" aria-label={alt} className="md:hidden min-h-[220px] px-4 py-6 bg-dash-surface border-y border-dash-border">
+      <div className="md:hidden min-h-[220px] px-4 py-6 bg-dash-surface border-y border-dash-border">
+        <span className="sr-only">{alt}</span>
         <div className="font-mono text-[11px] text-dash-text-secondary mb-5">SUCCESS CHANGED MEANING</div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <div className="border border-emerald-700/60 bg-emerald-500/10 p-4 text-center">
-            <div className="font-mono text-3xl font-semibold text-dash-heading">95.9%</div>
-            <div className="mt-2 text-xs text-dash-text-secondary">exp013 · before</div>
+        <nav className="grid grid-cols-[1fr_auto_1fr] items-center gap-3" aria-label="무결성 수정 전후 실험 상세">
+          <Link to={getExperimentHref(before.shortId)} className="border border-emerald-700/60 bg-emerald-500/10 p-4 text-center" aria-label={`${before.shortId} 실험 상세 보기`}>
+            <div className="font-mono text-3xl font-semibold text-dash-heading">{before.successRatePct.toFixed(1)}%</div>
+            <div className="mt-2 text-xs text-dash-text-secondary">{before.shortId} · {before.successCount}/{before.totalTasks}</div>
+          </Link>
+          <div className="text-center" aria-hidden="true">
+            <div className="font-mono text-sm font-semibold text-dash-heading">{observedGapPctPoints.toFixed(1)}%p</div>
+            <div className="mt-1 text-lg text-dash-text-muted">→</div>
           </div>
-          <div className="text-xl text-dash-text-muted" aria-hidden="true">→</div>
-          <div className="border border-amber-700/60 bg-amber-500/10 p-4 text-center">
-            <div className="font-mono text-3xl font-semibold text-dash-heading">82.3%</div>
-            <div className="mt-2 text-xs text-dash-text-secondary">exp025 · after</div>
-          </div>
-        </div>
-        <p className="mt-5 text-center text-xs/[1.7] text-dash-text-secondary">낮아진 숫자가 곧 나빠진 모델을 뜻하지는 않는다.</p>
+          <Link to={getExperimentHref(after.shortId)} className="border border-amber-700/60 bg-amber-500/10 p-4 text-center" aria-label={`${after.shortId} 실험 상세 보기`}>
+            <div className="font-mono text-3xl font-semibold text-dash-heading">{after.successRatePct.toFixed(1)}%</div>
+            <div className="mt-2 text-xs text-dash-text-secondary">{after.shortId} · {after.successCount}/{after.totalTasks}</div>
+          </Link>
+        </nav>
+        <p className="mt-5 text-center text-xs/[1.7] text-dash-text-secondary">관측 차이이며, 수정의 인과 효과 추정치가 아니다.</p>
       </div>
     )
   }
@@ -426,10 +444,12 @@ export default function NoteHeroVisual({
   hero,
   promptBenchmark,
   runtimeBenchmark,
+  integrityBenchmark,
 }: {
   hero: JournalHero
   promptBenchmark?: PromptComplexityBenchmarkRow[]
   runtimeBenchmark?: ReadyRuntimeBenchmark
+  integrityBenchmark?: ReadyIntegrityBenchmark
 }) {
   const reduceMotion = useReducedMotion()
 
@@ -457,14 +477,14 @@ export default function NoteHeroVisual({
 
   return (
     <figure className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
-      <MobileVisualSummary variant={hero.variant} alt={hero.alt} promptBenchmark={promptBenchmark} runtimeBenchmark={runtimeBenchmark} />
+      <MobileVisualSummary variant={hero.variant} alt={hero.alt} promptBenchmark={promptBenchmark} runtimeBenchmark={runtimeBenchmark} integrityBenchmark={integrityBenchmark} />
       <div className="hidden md:block overflow-hidden border-y border-dash-border bg-dash-surface">
         <svg viewBox="0 0 1200 460" role="img" aria-label={hero.alt} className="block w-full aspect-[12/5]">
           {hero.variant === 'prompt-complexity' && promptBenchmark && (
             <PromptComplexityVisual reduceMotion={reduceMotion} benchmark={promptBenchmark} />
           )}
           {hero.variant === 'runtime' && runtimeBenchmark && <RuntimeVisual reduceMotion={reduceMotion} benchmark={runtimeBenchmark} />}
-          {hero.variant === 'integrity' && <IntegrityVisual />}
+          {hero.variant === 'integrity' && integrityBenchmark && <IntegrityVisual benchmark={integrityBenchmark} />}
           {hero.variant === 'perception' && <PerceptionVisual reduceMotion={reduceMotion} />}
           {hero.variant === 'task-contrast' && <TaskContrastVisual />}
           {hero.variant === 'sandbox' && <SandboxVisual reduceMotion={reduceMotion} />}

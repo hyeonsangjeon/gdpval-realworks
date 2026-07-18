@@ -1,0 +1,46 @@
+comparison:
+  before:
+    short_id: exp013
+    experiment_id: exp013_GPT54_reasoning_high
+    report_date: "2026-03-27"
+  after:
+    short_id: exp025
+    experiment_id: exp025_GPT54_high_postfix
+    report_date: "2026-05-20"
+  expected_condition: GPT-5.4 reasoning=high + gpt-audio-1.5 preprocessor
+  expected_model: gpt-5.4
+  expected_mode: subprocess
+  expected_task_count: 220
+  expected_report_scope: self_assessed_pre_grading
+
+history:
+  parent_commit: 2b41c06fd0647c900520009f30cb26d3a5bd772e
+  core_fix_commit: 4e0e43d23fe2d829ec8e7469e1fc0ffd9aab75ff
+  followup_commit: 645758e0ebfdf5985748f31756de45f1b619ee1d
+  merge_commit: 4ba399f9f9528ab355b2c8fc6d703aa14b310414
+  applied_at: "2026-05-17"
+  fixes:
+    available_files:
+      path: batch-runner/core/subprocess_runner.py
+      before: header_changed_in_memory_after_script_write
+      after: header_persisted_before_subprocess_execution
+      causal_direction: unknown
+    qa_failed:
+      path: batch-runner/step2_run_inference.py
+      before: determined_qa_failure_could_remain_success
+      after: determined_qa_failure_recorded_as_qa_failed
+      undetermined_remains_success: true
+    anthropic_content:
+      applicable_to_comparison: false
+      reason: both_runs_use_azure
+
+interpretation:
+  causal_attribution: false
+  observed_claim: completion_rate_and_success_count_differ_between_two_runs
+  measurement_claim: success_and_retry_semantics_changed_between_runs
+  missing_execution_identities:
+    - execution_git_sha
+    - input_dataset_revision
+    - azure_model_revision
+    - runner_environment_identity
+  report_snapshot: deployment_time_snapshot_not_execution_time_revision

@@ -188,5 +188,5 @@ test('runtime source changes trigger serialized Pages deployment', async () => {
   assert.match(deploy, /fetch-depth: 0/)
   assert.match(deploy, /Verify aggregate contracts and pinned history[\s\S]*npm run test:aggregate/)
   assert.match(deploy, /playwright install --with-deps --only-shell chromium/)
-  assert.match(deploy, /npm run test:runtime-browser:dist/)
+  assert.match(deploy, /npm run test:notes-browser:dist/)
 })
