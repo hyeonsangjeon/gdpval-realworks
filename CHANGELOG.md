@@ -48,18 +48,25 @@ entries land under a fresh dated heading the day they merge to `main`.
   [29628757147](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29628757147);
   the deployed JSON, two-lane timeline, report-derived chart, source links, and
   reflective typography were verified on desktop and mobile.
-- **Agentic Sandbox implementation and experiment preregistration plan** — define a
-  separate `agentic_sandbox` task-solving mode that lets the model choose among
-  bounded workspace inspection, Python, ffmpeg, artifact inspection, and
-  deterministic finalization tools while the harness retains no-network,
-  non-root, path, resource, usage, and cost controls. The dated plan fixes the
-  security invariants, hard budgets, optional metrics, non-paid Docker test
-  gates, an outcome-free selector contract for future disjoint five-task and
-  twenty-task cohorts, fixed paired endpoint denominators, a paid approval
-  boundary, evidence/cost/incident ledgers, and retrospective template. Exact
-  task IDs and immutable source identities must still be generated and
-  committed at the paid gate. Runtime package installation, model-visible
-  shell, Anthropic support, and all live model runs remain explicitly deferred.
+- **Bounded Agentic Sandbox runtime and preregistered experiment** — implement
+  separate `agentic_sandbox` and common hardened-baseline paths with ordered
+  Responses tools, deterministic finalization, exact task/request/input and
+  selection identities, crash-safe SQLite budgets, Ed25519 single-use live
+  approval, fixed-denominator comparison endpoints, optional dashboard fields,
+  and legacy omission. Split credential and compute planes use mTLS plus
+  deadline-bound HMAC envelopes, bounded streaming JSON, exact sequence retry,
+  no-network/non-root Docker, quota-backed work volumes, an in-process generated-
+  code seccomp launcher, isolated rendering/verifier containers, component/SBOM
+  identity, and auditable terminal cleanup. Manual image and dedicated-runner
+  workflows require a protected exact `main` SHA; unfinished agentic publication
+  remains opt-in and fails closed until immutable dependency locks exist. Local
+  model-free validation passed 1,485 Python tests, 54 Node aggregate tests,
+  TypeScript/Vite build, two Chromium suites, image audit/SBOM equality, and WAV,
+  XLSX, DOCX, and PPTX Docker E2E. No model/API call, task selection, workflow
+  dispatch, image publication, HF upload, grading, or paid run occurred. Exact
+  5/20 cohorts, production locks/image identities, dedicated-host preflight, and
+  signed owner approval remain required at the paid gate; package installation,
+  model-visible shell, and Anthropic support remain deferred.
 - **Model-free Track 2 preflight workflow** — add a main-only, read-only manual
   workflow for private pinned cohorts. It validates compact JSON identities
   before checkout, checks out the exact event SHA with credentials disabled,

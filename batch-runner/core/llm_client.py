@@ -5,8 +5,6 @@ from openai import AzureOpenAI
 
 from core.config import (
     DEFAULT_ENDPOINT,
-    DEFAULT_MODEL,
-    DEFAULT_DEPLOYMENT,
     DEFAULT_API_VERSION,
     DEFAULT_TOKENS,
 )
@@ -200,9 +198,9 @@ def create_client(
     except Exception as e:
         # API Key fallback disabled — fail loud with OIDC debug guidance.
         print(f"   ⚠️  DefaultAzureCredential failed: {e}")
-        print(f"   ⚠️  API Key fallback disabled (Azure disableLocalAuth=true)")
-        print(f"   ⚠️  Local: run 'az login' then retry")
-        print(f"   ⚠️  CI: verify azure/login@v2 OIDC step succeeded")
+        print("   ⚠️  API Key fallback disabled (Azure disableLocalAuth=true)")
+        print("   ⚠️  Local: run 'az login' then retry")
+        print("   ⚠️  CI: verify azure/login@v2 OIDC step succeeded")
         raise ValueError(
             f"Azure authentication failed.\n"
             f"  - DefaultAzureCredential failed: {e}\n"

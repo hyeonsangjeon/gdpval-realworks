@@ -25,7 +25,7 @@ Fix 3: qa_failed dead invariant in step2_run_inference.py. When Self-QA
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

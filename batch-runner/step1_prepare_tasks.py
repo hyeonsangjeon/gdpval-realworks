@@ -16,8 +16,6 @@ Usage:
 import argparse
 import json
 import random
-import sys
-from pathlib import Path
 
 from core.config import WORKSPACE_DIR
 from core.data_loader import GDPValDataLoader

@@ -1,10 +1,6 @@
 """Tests for relay duration fix: started_at preservation in progress.json."""
 
 import json
-import tempfile
-from pathlib import Path
-
-import pytest
 
 from step2_run_inference import _save_progress
 

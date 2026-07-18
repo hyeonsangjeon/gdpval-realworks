@@ -1,8 +1,10 @@
 # Agentic Sandbox Experiment Plan
 
 - Date: 2026-07-17
-- Status: `PLAN_APPROVED_PENDING_MERGE`
+- Status: `NON_PAID_IMPLEMENTATION_COMPLETE_PAID_GATE_BLOCKED`
 - Plan base: `main@71902db3904a358e6f832caf8f39e807047f9bdf`
+- Implementation validation base: `main@ff02ef3a73d3de8de7d681a01ac6955be5911a57`
+- Validated implementation commits: `a26cab3`, `d6cebe6`
 - Experiment family: task-solving / sandbox execution
 - Comparison baseline: current `sandbox` execution mode
 - Proposed treatment: new `agentic_sandbox` execution mode
@@ -856,18 +858,27 @@ Promotion candidate:
 |---|---|---|---|---|
 | 2026-07-17 | Plan | `main@6bdcfcf9` | Initial plan drafted; no code or paid run | Revise after review |
 | 2026-07-18 | Plan | `main@71902db3` | Docs validation passed; `first-reviewer` and `extreme-reasoner` found no mandatory blocker | Approved for docs merge and non-paid implementation |
+| 2026-07-18 | Implementation | `a26cab3`, `d6cebe6` rebased on `main@ff02ef3a` | Added the bounded Responses state machine, common hardened baseline, split mTLS/HMAC compute plane, Ed25519 approval and SQLite budget gates, exact input/selection identity chain, isolated verifier, fixed-denominator endpoints, pipeline/report/UI wiring, protected model-free workflows, and fail-closed cleanup/deadline handling | Non-paid implementation complete |
+| 2026-07-18 | Review | local worktree at `d6cebe6` | Repeated independent `first-reviewer` passes closed transport deadline, parser amplification, sequence recovery, provider classification, snapshot cleanup, publication guard, and selection provenance findings; final verdict `APPROVE`, mandatory findings 0 | Proceed to release validation only |
+| 2026-07-18 | Model-free validation | local Python/Node/browser/Docker evidence | Python `1485 passed, 6 skipped, 44 deselected`; Node aggregate `54 passed`; Ruff clean on all 54 branch-changed Python files; mypy clean on 18 agentic files; TypeScript/Vite build and two Chromium note suites passed; all nine workflow YAML files parsed | Pass |
+| 2026-07-18 | Image validation | `gdpval-agentic-sandbox:local@sha256:a6d43c2929b0de1823c393d558bed373c3850ee06a15fd75c24f1fa93a14309b` | Runtime audit passed at UID:GID 65532 with 965 SBOM packages; generated and embedded SPDX documents matched; SBOM SHA-256 `d7ca2c2f4eab49d3777744a9a5b1beea69523cb7d6cbbe9638034c4fd2743132` | Pass for local model-free image only |
+| 2026-07-18 | Docker E2E | local nested daemon | WAV lifecycle plus XLSX, DOCX, and PPTX verifier/render/finalize tests passed 4/4 in 157.50 seconds; terminal container and volume cleanup passed | Pass for locally supported substrate |
+| 2026-07-18 | Live gate | none | No model/API call, workflow dispatch, image publication, HF upload, task selection, grading, or paid execution occurred | Stop at paid gate |
 
 ## Cost Ledger
 
 | UTC time | Run | Scope | Raw | Effective | Cumulative | Gate |
 |---|---|---|---:|---:|---:|---|
 | 2026-07-17 | none | Planning only | USD 0 | USD 0 | USD 0 | Pass |
+| 2026-07-18 | none | Non-paid implementation and local validation | USD 0 | USD 0 | USD 0 | Pass |
 
 ## Incident Log
 
 | UTC time | Phase | Category | Evidence | Containment | Follow-up |
 |---|---|---|---|---|---|
 | 2026-07-17 | Plan | None | No execution performed | N/A | Begin non-paid implementation after plan merge |
+| 2026-07-18 | Local containment | Host lacks seccomp TSYNC and the nested Docker daemon rejects custom seccomp profiles | Generated-code and outer-seccomp integration tests skipped explicitly; generated-code path remained fail closed | No live credential or model path was enabled | Require the dedicated production runner preflight before credential release |
+| 2026-07-18 | Legacy root test | Archived v1 `_sweep_template.yaml` is absent | Root `scripts/__tests__` produced 36 passes and the two already documented sweep-template failures | Kept outside the agentic change; authoritative `batch-runner` suite passed | Resolve under the existing legacy grading cleanup task |
 
 ## Retrospective Template
 
@@ -892,6 +903,12 @@ paths, hashes, and carefully selected non-sensitive artifact descriptions.
 
 ## Current Decision
 
-`PLAN_APPROVED_NON_PAID_ONLY` — merge this plan first. Then implement through
-non-paid validation. Stop before any live model/API run until the signed,
-single-use paid authorization gate is explicitly approved and consumed.
+`NON_PAID_IMPLEMENTATION_COMPLETE_PAID_GATE_BLOCKED` — the bounded runtime,
+security controls, pipeline integration, evidence contracts, and local
+model-free validation are complete. Do not publish the agentic image or run a
+live canary until immutable Python and Debian locks, the exact outcome-free
+5/20 selection manifest, production image/SBOM identities, dedicated-host
+containment preflight, official-scope exclusions, price table, owner public
+key, paid-gate record, and a fresh signed single-use approval envelope all
+exist and pass. No live model/API run is authorized by the implementation or
+this validation result.

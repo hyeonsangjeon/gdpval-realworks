@@ -32,9 +32,9 @@ from typing import Any
 _SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
-from core.config import NEEDS_FILES_POLICIES_KNOWN, WORKSPACE_DIR
-from core.execution_metrics import bounded_count, bounded_duration_ms
-from core.narrative_analyzer import (
+from core.config import NEEDS_FILES_POLICIES_KNOWN, WORKSPACE_DIR  # noqa: E402
+from core.execution_metrics import bounded_count, bounded_duration_ms  # noqa: E402
+from core.narrative_analyzer import (  # noqa: E402
     _build_grade_source,
     _build_grading_guard_clause,
     _build_grading_results_section,
@@ -678,8 +678,8 @@ def _build_markdown(rd: dict) -> str:
     lines += [
         f"# Experiment Report: {meta['experiment_name']}",
         "",
-        f"| Field | Value |",
-        f"|-------|-------|",
+        "| Field | Value |",
+        "|-------|-------|",
         f"| **Experiment ID** | `{experiment_id}` |",
         f"| **Condition** | {meta['condition_name']} |",
         f"| **Model** | {meta['model']} |",
@@ -689,7 +689,7 @@ def _build_markdown(rd: dict) -> str:
         f"| **Generated At** | {rd['generated_at']} |",
         f"| 🤗 HF Dataset | [{experiment_id}]({hf_base}) |",
         f"| 📊 Self-Report | [self_report.json]({hf_base}/blob/main/self_report.json) |",
-        f"| 📊 Grading | ⏳ Awaiting (`scores.json`) |",
+        "| 📊 Grading | ⏳ Awaiting (`scores.json`) |",
         "",
     ]
 
@@ -1307,7 +1307,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
                   f"{result.total_tokens['input']:,}+{result.total_tokens['output']:,} tokens)")
         except Exception as exc:
             print(f"   ⚠️ Pro narrative failed: {exc}")
-            print(f"   Falling back to standard narrative…")
+            print("   Falling back to standard narrative…")
             narrative = _generate_narrative(data, summary, sector_breakdown, grade=grade)
 
     # Build report_data.json
@@ -1377,7 +1377,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
         shutil.copy2(json_path, self_report_path)
         print(f"   ✓ Copied self_report.json → {self_report_path}")
 
-    print(f"\n✅ Step 6 complete:")
+    print("\n✅ Step 6 complete:")
     print(f"   {json_path}")
     print(f"   {md_path}")
     print(f"\n   Tasks: {summary['total_tasks']}  "
