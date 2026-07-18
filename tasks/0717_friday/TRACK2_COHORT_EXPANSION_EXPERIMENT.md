@@ -1,7 +1,7 @@
 # Track 2 Cohort Expansion Experiment
 
 - Date: 2026-07-17
-- Status: `STAGE_B_ATOMIC_FIX_PREFLIGHT_PASSED_RERUN_APPROVAL_PENDING`
+- Status: `STAGE_B_ACCEPTED_FULL_220_PLAN_REQUIRED`
 - Owner: repository operator
 - Experiment family: rubric grading / harness-owned perception
 - Prior accepted run: GitHub Actions `29435264166`
@@ -383,7 +383,7 @@ audited, but they must not be committed as accepted grades.
 
 | Field | Planned / observed |
 |---|---|
-| Main SHA | paid attempt 1 `6bdcfcf9dd4d5feb8890e13d9f69baefc4162b38`; corrected preflight `3af01d423518d3a344b45cf1cb1a40bcba499d14` |
+| Main SHA | accepted paid attempt `71902db3904a358e6f832caf8f39e807047f9bdf` |
 | Grader source hash | paid attempt 1 `ab8704b10f2e39a26bbb443b49c8c4e1a2697a6a31c74258d4af8ebc3ba8b551`; corrected `011ef05cf7f7a951b9bc2322888605549ee4fa9486c775f4154b89c83526d270` |
 | Config hash | `b11acba425087d85` |
 | Output path | corrected `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__validation_v2_mini_cohort10__cfg_b11acba425087d85__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_011ef05cf7f7a951__v2.2.json` |
@@ -391,10 +391,10 @@ audited, but they must not be committed as accepted grades.
 | Rubric items / prechecks | 435 / 0 |
 | Route counts | 402 text / 16 formatting / 16 visual / 1 mixed; 0 audio |
 | Render / perception calls | 26 / 26 planned; 0 audio |
-| Run ID | paid attempt 1 `29591036089` rejected; post-fix preflight `29599249906` passed |
-| Result | 10/10 graded; atomic temp filename overflow before JSON persistence |
-| Raw / effective cost | no usage artifact; attempt 1 booked at conservative raw estimate USD 3.81 |
-| Decision | `OWNER_DEVIATION_APPROVAL_REQUIRED_FOR_PAID_ATTEMPT_2` |
+| Run ID | attempt 1 `29591036089` rejected; accepted attempt 2 `29600523299` |
+| Result | 10/10 tasks, 0 task/judge errors, complete usage, exact 26/26 calls |
+| Raw / effective cost | attempt 2 USD 2.1494 / USD 1.7257; cumulative raw with attempt 1 booking USD 5.9594 |
+| Decision | `PASS_STAGE_B_ACCEPTED_FULL_220_PLAN_REQUIRED` |
 
 The local shell has no private dataset token, so a selective pinned download
 failed closed with HTTP 401 before any model/Azure call and left no partial
@@ -486,6 +486,61 @@ to the previously accepted first-ten plan: 435 items, 436 main judgments,
 prechecks/audio/errors. The locked environment is byte-identical. No paid run
 was started. Explicit owner approval remains the only dispatch authorization
 missing; active workflow state must still be checked immediately before use.
+
+### Stage B Paid Attempt 2 - Accepted
+
+The owner explicitly approved a fresh `resume=false` deviation and counting the
+failed attempt as USD 3.81 raw toward the cumulative USD 10 cap. Identity-only
+preflight `29600328618` then passed on
+`main@71902db3904a358e6f832caf8f39e807047f9bdf` with the same 435-item,
+436-judgment, and 26/26 plan.
+
+Paid run `29600523299` completed successfully in 1h32m23s. The run source SHA
+remained `71902db3904a358e6f832caf8f39e807047f9bdf`; unrelated docs-only commit
+`b6408bc5e393748475d28beb1ca472eff75bf547` landed before the bot pushed the
+grade, but changed no grading code or identity. Grade commit
+`8178b85b6df86e3337b33192552557ac7194630d` and analysis commit
+`b040e6c874fa6a4bdd7627a7f4614679e53ff172` each add exactly one file.
+
+Observed runtime and artifact facts:
+
+- exact first-ten order, 435 items, and 436 logical judgments;
+- 402 text / 16 formatting / 16 visual / 1 mixed routes;
+- 191 pass / 204 fail / 40 partial, with zero judge errors or exclusions;
+- zero prechecks and complete item/task/summary usage;
+- 1,333 main API calls, 26 perception calls, and 26 render calls;
+- 6,863,732 input, 375,850 output, and 3,389,440 cached tokens;
+- 15 bounded finalization retries all recovered to normal verdicts and evidence;
+- 26 unique item-level provenance paths, all relative, selected, and task
+   confined; the mixed child repeats its parent PDF provenance object but does
+   not add a call;
+- no payload, data URL, absolute path, traversal, cross-task path, or secret;
+- renderer LibreOffice 24.2.7.2 / PyMuPDF 1.28.0 and Azure OIDC only;
+- artifact wall-clock 73.4 minutes and workflow wall 92m23s;
+- attempt-2 raw/effective estimates USD 2.1494 / USD 1.7257;
+- cumulative raw including attempt-1 booking USD 5.9594, below USD 10.
+
+Grade JSON SHA-256 is
+`1ae415871d63e4968640014cb89732ac01a78f43b8484c49bfdd7b23eb8a9797`.
+The generated analysis is byte-identical to the committed Markdown. Independent
+grading-engineer review passed every Stage B acceptance gate. The 57.74% score
+is descriptive only and is not used to accept runtime reliability.
+
+### Full-220 Recommendation
+
+**Do not dispatch a full 220-task run immediately.** Stage B supports moving to
+a separate planning gate, not skipping it. Linear Stage B scaling is about USD
+47.29 raw / USD 37.97 effective and 26.9 artifact hours. A full run therefore
+requires workflow-managed chunks and durable resume, but this accepted ten-task
+run completed in one chunk and did not exercise that path. The cohort also had
+zero audio routes, so it provides no new audio-runtime evidence.
+
+Before full-220 dispatch, create a dated plan that pins the new main/config/
+grader/inference/rubric/task identities, validates chunk-save/rebase/resume with
+the long output path, inventories audio routes and deployment readiness, fixes
+per-chunk and cumulative cost/time caps, defines abort and artifact-audit
+procedures, and obtains explicit owner approval. No full paid run is authorized
+by this Stage B PASS alone.
 
 ## Retrospective Notes
 

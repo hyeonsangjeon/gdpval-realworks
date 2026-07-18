@@ -4,85 +4,67 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-18
-- Status: Runtime Field Note published and production-verified
+- Status: Track 2 Stage B accepted; full-220 planning required
 
 ## Task
 
-- Ground `220개의 실제 업무를 360분 안에 실행한다는 것` in structured report,
-  workflow, and incident evidence rather than duplicated numeric literals.
-- Separate the exp025 incident-time policy from the post-fix runtime policy so
-  the retrospective does not collapse two historical states onto one axis.
-- Refine the note's line spacing, heading rhythm, chapter transitions, and
-  callouts so readers can follow 사건→편향→대응→결과→결정 without losing the
-  evidence trail.
+- Run the owner-approved fresh Stage B retry after the first paid attempt failed
+  before persistence.
+- Audit the committed ten-task grade and analysis against every preregistered
+  identity, runtime, usage, perception, provenance, cost, and time gate.
+- Decide whether evidence supports proceeding toward a full 220-task run.
 
 ## Result
 
-- Added a structured exp025 incident record pinned to run `26018603400`, its
-  workflow SHA, the incident-time 330-minute step timeout, and the fix commit.
-  A generator parses the current workflow and emits
-  `public/generated/runtime-note.json` only when before/after policy and pinned
-  Resume Round watchdog history satisfy their invariants.
-- Added a strict runtime selector for the exact exp008, exp010, exp025, and
-  exp026 report identities. It requires condition-a scope, exact execution
-  modes, 220 tasks, self-assessed report scope, count/rate consistency, valid
-  timestamps, and internally consistent resume rounds. Invalid evidence hides
-  the full chapter sequence, metrics, hero, chart, and source strip behind an
-  explicit alert.
-- Replaced static `220/290/330/350/360`, exp026 summary, and round values with
-  selected evidence. The desktop and mobile hero now show two historical lanes:
-  incident-time `330 hard stop → SIGKILL`, then post-fix
-  `290 watchdog → 350 step → 360 job` for condition A.
-- Added direct links to generated runtime/report JSON, current and incident
-  workflow revisions, the fix commit, the failed Actions run, pinned incident
-  record, and four experiment details. Report duration is explicitly described
-  as experiment-wide elapsed time, not one job duration; exp008/010 are marked
-  as pre-fix comparison context.
-- Restyled only this article with five short chapter titles, small semantic
-  labels, wider vertical spacing, 2.05 body leading, and quieter serif callouts.
-  Other Field Notes retain their existing density.
-- Corrected exp026 prompt-architecture copy to match its actual Docker-always,
-  fail-loud sandbox policy instead of claiming a graceful local fallback.
-- Extended the Pages source paths and serialized Pages deployments. The build
-  now runs all aggregate contracts, pinned git-history checks, a production
-  build, and Chromium desktop/mobile/error-state verification before upload.
-  The batch workflow remains manual-only and is never dispatched here.
-- Squash-merged the reviewed change through PR #102 as `fe222493`. Automatic
-  `Aggregate Tests & Deploy` run
-  [29628757147](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29628757147)
-  completed build, all 42 aggregate contracts, pinned-history checks, Chromium
-  installation, browser verification, artifact upload, and GitHub Pages deploy
-  successfully. No other workflow ran for that commit.
+- Owner approval covered a fresh `resume=false` attempt and conservative
+  cumulative raw cap accounting. Final identity preflight `29600328618` passed
+  on `main@71902db3904a358e6f832caf8f39e807047f9bdf` before dispatch.
+- Paid run `29600523299` succeeded in 1h32m23s. Grade commit
+  `8178b85b6df86e3337b33192552557ac7194630d` and analysis commit
+  `b040e6c874fa6a4bdd7627a7f4614679e53ff172` each add exactly one artifact.
+- The exact ten-task order produced 435 items and 436 logical judgments:
+  402 text, 16 formatting, 16 visual, and 1 mixed. There were zero automatic
+  prechecks, task errors, judge errors, and score-excluded items.
+- Actual render/perception counts were exactly 26/26. All 26 unique item-level
+  provenance paths matched the plan and were selected, relative, task-confined
+  paths. Nine organization-chart criteria retained the DOCX briefing note for
+  main-judge evidence while perception used the sibling PDF and XLSX.
+- Item, task, and summary usage were complete. Totals were 1,333 main API calls,
+  26 perception calls, 6,863,732 input tokens, 375,850 output tokens, and
+  3,389,440 cached tokens.
+- Fifteen bounded finalization retries all recovered to normal verdicts with
+  non-empty evidence and complete usage. OIDC and renderer preflight passed;
+  no API-key fallback, resume, auto-retrigger, child dispatch, or comparison ran.
+- Artifact wall-clock was 73.4 minutes. Raw/effective estimates were
+  USD 2.1494 / USD 1.7257. Including the rejected attempt's conservative USD
+  3.81 booking, cumulative raw Stage B spend is USD 5.9594, below the USD 10 cap.
+- The observed score is 57.74% with 191 pass / 204 fail / 40 partial. It is a
+  descriptive cohort result, not a runtime gate or full-benchmark quality claim.
 
 ## Verification
 
-- The reviewed branch was based on `main@b040e6c8` and included removal of the
-  unused direct dependency `js-yaml` plus its lockfile-only `argparse` child.
-- Full Node contracts: **42 passed, 0 failed**. Production TypeScript/Vite build
-  and `git diff --check` passed; static diagnostics found no errors in the
-  seven affected TypeScript files.
-- Checked-in Playwright passed against the built distribution across desktop,
-  390px dark/reduced-motion, invalid policy, null JSON, malformed nested rounds,
-  and normal-note→runtime-note stale-state transitions. There was no horizontal
-  overflow, marker overlap, or post-settle chart mutation.
-- Workflow parsing confirmed exactly eight Pages source paths, one serialized
-  build-and-deploy job, production build followed by full aggregate contracts,
-  Chromium verification before artifact upload, and a manual-only batch
-  workflow.
-- `first-reviewer` approved the final historical, selector, typography, and
-  browser-test design. `extreme-reasoner` approved the Pages change after the
-  unused dependency removal and confirmed automatic model, Azure, HF upload,
-  batch, grading, and paid-run impact is **zero**.
-- On the deployed site, `runtime-note.json` preserved the May 18 incident
-  workflow (`330`-minute hard stop, watchdog absent) separately from the post-
-  fix condition-a policy (`290` watchdog, `350` step, `360` job). The public
-  exp026 snapshot matched `220/200/6/105` and resume rounds `78/78/0` and
-  `27/7/20` across metrics, prose, SVG, and chart.
-- Public desktop verification found 34px chapter headings and 34.85px body
-  leading; 390px dark/reduced-motion verification found 28px headings, 32.8px
-  leading, all five chapter labels, eleven evidence links, both chart labels,
-  no horizontal overflow, and zero post-settle chart mutations.
+- Grade schema, identity, exact task order, selector manifests, all 435 item
+  route/scope/path/call invariants, task/summary instrumentation, and checked-in
+  analysis byte identity: **PASS**.
+- Render/perception/provenance gate: **PASS**, 26/26 calls and 26 unique
+  item-level provenance entries. Recursive mixed-child provenance contains one
+  intentional duplicate object but no duplicate call.
+- Recursive payload/data-URL/absolute-path/traversal/cross-task/secret scan:
+  **PASS** with zero violations.
+- Cost/time gate: **PASS**, cumulative raw USD 5.9594 < USD 10 and artifact
+  73.4 min < 240 min.
+- Grade JSON SHA-256:
+  `1ae415871d63e4968640014cb89732ac01a78f43b8484c49bfdd7b23eb8a9797`.
+- Independent grading-engineer review passed every Stage B gate and found no
+  blocker. Active grade and preflight workflows were zero at final audit.
 
 ## Remaining Work
 
-- No implementation or deployment work remains for this Runtime Field Note.
+- Merge the Stage B acceptance record without rewriting the failed-attempt
+  chronology.
+- Do not immediately run full-220. Ten-task scaling estimates approximately
+  USD 47.29 raw / USD 37.97 effective and 26.9 artifact hours; the run requires
+  chunk/resume, which Stage B did not exercise, and this cohort had no audio route.
+- Create a separate dated full-220 plan with immutable identities, chunk/resume
+  persistence validation, refreshed cost/time caps, audio-path coverage, abort
+  procedure, and explicit owner approval before any full paid dispatch.

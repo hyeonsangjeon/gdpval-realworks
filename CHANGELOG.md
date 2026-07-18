@@ -74,7 +74,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   `29572067428` then passed all gates from merged `main`: 3/3 tasks, 153
   judge-bound items, zero errors, complete usage, exact 4/4 render-perception,
   confined provenance, USD 1.08 effective cost, and 24.9 artifact minutes.
-  Stage B is now limited to exact first-10 model-free preflight before dispatch.
+  Stage B retry `29600523299` later passed all runtime gates: 10/10 tasks,
+  435 items, zero errors, complete usage, exact 26/26 render-perception,
+  confined provenance, USD 2.15 raw / USD 1.73 effective, and 73.4 artifact
+  minutes. Full-220 now requires a separate chunk/resume and audio-aware plan.
 
 ### Fixed
 - **Long grade output atomic persistence** — bound `_save_json` temporary
@@ -86,7 +89,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   exact 242-byte round-trip, replace-failure cleanup, Step 8, and broad tests
   pass. Post-fix model-free run `29599249906` reproduced the exact 435-item,
   436-judgment, 26/26 plan with zero errors under the new grader identity. A
-  second paid attempt remains approval-gated.
+  second owner-approved paid attempt persisted successfully. The rejected
+  attempt remains conservatively booked at USD 3.81; cumulative raw Stage B
+  cost is USD 5.96, below the USD 10 cap.
 - **Mixed-format visual bundle preflight** — filter harness rendering to stable
   supported paths while retaining all selected paths for main-judge evidence.
   Stage B preflight run `29583415563` exposed nine organization-chart criteria
@@ -96,8 +101,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   split children and item/task caps in the same pre-render order. Corrected
   model-free run `29589077065` passed all first-10 gates with 435 items, 436
   judgments, 26/26 render-perception calls, zero prechecks/audio/errors, and one
-  audited filtered DOCX path; paid Stage B remains pending final active-run and
-  current-main identity guards.
+  audited filtered DOCX path. The accepted paid artifact matched every planned
+  route, selected path, and perception call.
 - **Exact planner perception accounting** — bump the planner contract to v2,
   count audio separately from harness-owned visual calls, enforce visual/audio
   task caps, and fail closed whenever an audio route exists because the main
