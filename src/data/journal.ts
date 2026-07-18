@@ -15,11 +15,12 @@ export interface JournalMetric {
 }
 
 export interface JournalSection {
+  label?: string
   heading: string
   paragraphs: string[]
   points?: string[]
   callout?: string
-  benchmarkNarrative?: 'prompt-complexity-results'
+  benchmarkNarrative?: 'prompt-complexity-results' | 'runtime-incident' | 'runtime-policy' | 'runtime-results'
 }
 
 export interface JournalEvidence {
@@ -82,7 +83,8 @@ export interface JournalArticle {
   comparisonChart?: JournalComparisonChart
   sections: JournalSection[]
   evidence: JournalEvidence[]
-  benchmark?: { kind: 'prompt-complexity' }
+  benchmark?: { kind: 'prompt-complexity' | 'runtime' }
+  readingStyle?: 'reflective'
   featured?: boolean
 }
 
@@ -222,41 +224,35 @@ export const journalArticles: JournalArticle[] = [
     publishedAt: '2026-07-15',
     period: '2026-03 — 2026-07',
     readingMinutes: 8,
+    readingStyle: 'reflective',
     featured: true,
-    metrics: [
-      { value: '220', label: '서로 다른 실제 업무' },
-      { value: '360분', label: '당시 workflow job cap' },
-      { value: '약 330분', label: 'exp025 중단 사건' },
-    ],
+    benchmark: { kind: 'runtime' },
+    metrics: [],
     hero: {
       kind: 'visual',
       variant: 'runtime',
-      alt: '290분 watchdog부터 360분 job cap까지 이어지는 실행 시간 경계',
-      caption: '한 번의 긴 실행이 아니라, 종료 전에 상태를 넘기는 여러 개의 시간 경계로 실험을 다시 설계했다.',
+      alt: 'watchdog, 중단 사건, step ceiling, job cap으로 이어지는 실행 시간 경계',
+      caption: '측정값은 workflow 정책, incident 기록, experiment report에서 읽는다.',
     },
     comparisonChart: {
       kind: 'stacked',
       title: 'exp026 resume round별 회복 결과',
-      description: '첫 relay는 시도한 78개 작업을 모두 회복했지만, 두 번째 relay에서는 27개 중 7개만 회복했다.',
+      description: '각 resume round의 attempted, recovered, still_failed를 report snapshot에서 비교한다.',
       primary: { label: 'Recovered', unit: ' tasks', color: '#059669' },
       secondary: { label: 'Still failed', unit: ' tasks', color: '#e11d48' },
-      data: [
-        { label: 'Round 1', primary: 78, secondary: 0 },
-        { label: 'Round 2', primary: 7, secondary: 20 },
-      ],
+      data: [],
       caveat: '각 막대의 합은 해당 round에서 다시 시도한 작업 수다. 외부 품질 점수가 아니라 실행 복구 결과다.',
     },
     sections: [
       {
-        heading: '상황: 같은 220개지만 같은 시간이 아니었다',
-        paragraphs: [
-          'GDPVal의 220개 작업은 짧은 문서 작성부터 스프레드시트 계산, 프레젠테이션, 코드와 미디어 처리까지 섞여 있다. 한 작업의 평균 시간만 보고 전체 실행 시간을 예상하면 긴 꼬리 작업이 사라진다.',
-          'exp025의 resume round는 약 330분 지점에서 SIGKILL로 끝났다. 당시 workflow에서 마주친 360분 job cap에 가까워지고 있었지만, 더 큰 문제는 마지막 상태가 안전하게 다음 실행으로 전달되지 않았다는 점이었다.',
-        ],
-        callout: '여기서 360분은 GitHub Actions 전체에 보편적으로 적용되는 규칙이라는 뜻이 아니라, 당시 사용한 workflow와 runner에서 실제로 작동한 job cap을 가리킨다.',
+        label: '사건',
+        heading: '같은 220개, 서로 다른 시간',
+        paragraphs: [],
+        benchmarkNarrative: 'runtime-incident',
       },
       {
-        heading: '과제: 빨리 끝난 작업만 남는 편향을 막기',
+        label: '편향',
+        heading: '빠른 작업만 남는 편향',
         paragraphs: [
           '중간에 종료된 실행을 처음부터 다시 시작하면 비용만 늘어나는 것이 아니다. 매번 앞쪽의 빠른 작업은 반복되고 뒤쪽의 느린 작업은 관측되지 않는다. 실행 순서가 표본 선택기가 되는 셈이다.',
           '필요한 것은 단순 재시도가 아니라, 완료된 작업을 정확히 식별하고 같은 입력으로 이어 실행해도 결과가 중복되거나 덮어써지지 않는 복구 계약이었다.',
@@ -269,21 +265,20 @@ export const journalArticles: JournalArticle[] = [
         ],
       },
       {
-        heading: '행동: checkpoint, watchdog, relay',
-        paragraphs: [
-          '중단 사건 이후 workflow에는 checkpoint relay가 들어갔다. inference 내부 watchdog은 기본 290분에 checkpoint를 남기고 종료하며, workflow step은 relay handoff를 위한 60분의 여유를 더해 350분에 닫힌다. 이 두 경계가 당시 360분 job cap 전에 상태를 다음 실행으로 넘긴다.',
-          '이 구조는 작업 실행과 workflow 수명을 분리했다. 한 번의 runner가 전체 실험을 소유하지 않고, 여러 runner가 동일한 실험 상태를 이어받을 수 있게 됐다.',
-        ],
+        label: '대응',
+        heading: 'Checkpoint, watchdog, relay',
+        paragraphs: [],
+        benchmarkNarrative: 'runtime-policy',
       },
       {
-        heading: '결과: 복구 가능성은 높아졌지만 새 경계가 나타났다',
-        paragraphs: [
-          'relay는 장시간 실행을 이어갈 수 있게 했지만 모든 실패를 해결하지는 않았다. exp026의 공개 self-report에서 첫 resume round는 시도한 78개 작업을 모두 회복했지만, 두 번째 round는 27개 중 7개만 회복하고 20개를 남겼다.',
-          '최종 self-report는 220개 중 200개 success, 6개 명시적 실행 오류, 105개 재시도를 기록한다. 복구 가능성은 높아졌지만 반복 시도가 남은 작업을 균일하게 해결하지는 못했다.',
-        ],
+        label: '결과',
+        heading: '복구가 만든 새로운 경계',
+        paragraphs: [],
+        benchmarkNarrative: 'runtime-results',
       },
       {
-        heading: '회고와 결정',
+        label: '결정',
+        heading: '시간 제한도 실험 조건이다',
         paragraphs: [
           '가장 큰 교훈은 CI 안정성을 벤치마크 바깥의 문제로 취급할 수 없다는 점이다. 특정 형식이나 도메인의 작업이 더 오래 걸린다면 시간 제한은 해당 도메인을 체계적으로 덜 관측하게 만든다.',
           '그래서 이후 기록에서는 실행 완료, 복구 완료, 파일 생성, Self-QA, 외부 채점을 서로 다른 층으로 분리한다. 하나의 success 비트가 이 모든 의미를 대신하지 않도록 하는 것이 다음 실험의 출발점이 됐다.',
@@ -293,7 +288,7 @@ export const journalArticles: JournalArticle[] = [
     evidence: [
       {
         label: 'Workflow 변경 기록',
-        detail: 'exp025 중단, 290분 watchdog, 350분 step ceiling과 relay 도입',
+        detail: 'exp025 중단 사건과 watchdog, step ceiling, relay 도입 기록',
         href: `${REPO}/CHANGELOG.md`,
       },
       {
@@ -303,7 +298,7 @@ export const journalArticles: JournalArticle[] = [
       },
       {
         label: 'exp025 리포트',
-        detail: '501분 실행, 181/220 완료, 66개 재시도',
+        detail: '중단 사건 전후 실행 결과와 resume round 원문',
         href: `${REPO}/batch-runner/results/exp025_GPT54_high_postfix/report/report.md`,
       },
     ],
@@ -769,7 +764,7 @@ export const timelineEvents: TimelineEvent[] = [
     kind: 'incident',
   },
   {
-    date: '2026-05-17',
+    date: '2026-05-18',
     title: '장시간 resume가 약 330분에 종료',
     description: '강제 종료 전에 checkpoint를 넘기기 위해 watchdog, step ceiling과 relay 구조를 도입했다.',
     experiments: ['exp025'],

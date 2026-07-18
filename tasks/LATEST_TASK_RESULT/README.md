@@ -4,84 +4,74 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-18
-- Status: Agentic Sandbox plan approved; implementation pending plan merge
+- Status: Runtime Field Note grounded, restyled, and locally verified
 
 ## Task
 
-- Create a dated implementation and experiment plan for a full task-solving
-  agentic tool loop in the sandbox.
-- Preserve the current sandbox as the paired baseline and keep grading tool
-  behavior separate from task-solving behavior.
-- Define security, iteration, time, resource, usage, cost, experiment, and
-  retrospective gates before writing code or running a model.
+- Ground `220개의 실제 업무를 360분 안에 실행한다는 것` in structured report,
+  workflow, and incident evidence rather than duplicated numeric literals.
+- Separate the exp025 incident-time policy from the post-fix runtime policy so
+  the retrospective does not collapse two historical states onto one axis.
+- Refine the note's line spacing, heading rhythm, chapter transitions, and
+  callouts so readers can follow 사건→편향→대응→결과→결정 without losing the
+  evidence trail.
 
 ## Result
 
-- Added
-  `tasks/0717_friday/AGENTIC_SANDBOX_EXPERIMENT_PLAN.md` beside the existing
-  Track 2 cohort document without modifying that experiment record.
-- Fixed the proposed treatment as a separate `agentic_sandbox` execution mode.
-  The MVP supports Azure/OpenAI Responses function calls and preinstalled
-  capabilities only; runtime package installation, network, root, arbitrary
-  shell, Anthropic support, and capability-image selection are deferred.
-- Defined six model-visible tools: workspace inspection, environment inspection,
-  Python execution, ffmpeg execution, artifact inspection, and deterministic
-  finalization. Plain assistant text cannot complete a task.
-- Fixed the persistent workspace design: one disposable container per task,
-  `/inputs:ro`, quota-backed `/work` tmpfs, fixed nonzero UID, read-only rootfs,
-  dropped capabilities, no network/IPC, syscall-filtered generated Python, and
-  host-only source/control state and verified artifact snapshots.
-- Preregistered model/tool/finalization/repetition budgets and fail-closed path,
-  usage, verification, and security behavior.
-- Defined optional agentic observability that excludes raw prompts, code,
-  arguments, process output, image payloads, credentials, and absolute paths.
-- Defined non-paid scripted and real-image Docker validation, legacy report/UI
-  omission checks, broad regression, frontend build, and responsive fixture
-  verification. Actual API/model call count must remain zero during
-  implementation.
-- Fixed an outcome-free, seeded, stratified selector contract that emits
-  disjoint five-task canary and twenty-task diagnostic cohorts in one atomic
-  pre-outcome step. Exact task IDs and source identities are not yet frozen;
-  they must be generated, reviewed, and committed at a separate paid gate with
-  projected cost, hard caps, abort procedure, and explicit owner approval.
-- Added evidence, cost, and incident ledgers plus the structure for
-  `AGENTIC_SANDBOX_RETROSPECTIVE.md` so later experiment notes can distinguish
-  preregistered decisions from post-run interpretation.
-- Hardened the live boundary around separate credential and compute planes,
-  byte-identical baseline/treatment substrates, isolated artifact verification,
-  crash-safe shared budgets, signed single-use paid authorization, authenticated
-  anti-replay envelopes, and input-byte/provider-classification identities.
-- Preserved the concurrent Track 2 state from current `main`: its atomic-save
-  fix and model-free preflight passed, while a second paid Stage B attempt still
-  requires explicit owner deviation approval and remains out of scope here.
-
-## Concurrent Track 2 Guard
-
-- Rejected paid run `29591036089` has no resumable artifact; its unpersisted
-  usage remains conservatively booked at USD 3.81 raw.
-- Atomic-save fix PR #99 is merged and model-free preflight `29599249906`
-  passed against the corrected grader/output identity.
-- A fresh `resume=false` Stage B attempt remains prohibited until the owner
-  explicitly approves the deviation and cumulative USD 10 cap. This Agentic
-  plan does not grant or inherit that approval.
+- Added a structured exp025 incident record pinned to run `26018603400`, its
+  workflow SHA, the incident-time 330-minute step timeout, and the fix commit.
+  A generator parses the current workflow and emits
+  `public/generated/runtime-note.json` only when before/after policy and pinned
+  Resume Round watchdog history satisfy their invariants.
+- Added a strict runtime selector for the exact exp008, exp010, exp025, and
+  exp026 report identities. It requires condition-a scope, exact execution
+  modes, 220 tasks, self-assessed report scope, count/rate consistency, valid
+  timestamps, and internally consistent resume rounds. Invalid evidence hides
+  the full chapter sequence, metrics, hero, chart, and source strip behind an
+  explicit alert.
+- Replaced static `220/290/330/350/360`, exp026 summary, and round values with
+  selected evidence. The desktop and mobile hero now show two historical lanes:
+  incident-time `330 hard stop → SIGKILL`, then post-fix
+  `290 watchdog → 350 step → 360 job` for condition A.
+- Added direct links to generated runtime/report JSON, current and incident
+  workflow revisions, the fix commit, the failed Actions run, pinned incident
+  record, and four experiment details. Report duration is explicitly described
+  as experiment-wide elapsed time, not one job duration; exp008/010 are marked
+  as pre-fix comparison context.
+- Restyled only this article with five short chapter titles, small semantic
+  labels, wider vertical spacing, 2.05 body leading, and quieter serif callouts.
+  Other Field Notes retain their existing density.
+- Corrected exp026 prompt-architecture copy to match its actual Docker-always,
+  fail-loud sandbox policy instead of claiming a graceful local fallback.
+- Extended the Pages source paths and serialized Pages deployments. The build
+  now runs all aggregate contracts, pinned git-history checks, a production
+  build, and Chromium desktop/mobile/error-state verification before upload.
+  The batch workflow remains manual-only and is never dispatched here.
 
 ## Verification
 
-- Plan rebased for merge onto
-  `main@71902db3904a358e6f832caf8f39e807047f9bdf`.
-- `first-reviewer` and `extreme-reasoner` independently approved the final plan
-  with no mandatory blockers; both explicitly denied live model/API approval.
-- Focused documentation, security-gate, selection-formula, endpoint, and
-  Track 2 preservation checks passed with `git diff --check` clean.
-- Existing `tasks/0717_friday/TRACK2_COHORT_EXPANSION_EXPERIMENT.md` is
-  preserved.
-- No implementation code, workflow, model call, package installation, paid run,
-  or remote project mutation was performed while drafting the plan.
+- Rebased feature commit `73f6771d` onto `main@b040e6c8`; the worktree is clean
+  at the committed feature boundary. The remaining four-file documentation and
+  dependency-cleanup diff contains this rolling record, the changelog entry,
+  and removal of unused direct dependency `js-yaml` plus its lockfile-only
+  `argparse` child.
+- Full Node contracts: **42 passed, 0 failed**. Production TypeScript/Vite build
+  and `git diff --check` passed; static diagnostics found no errors in the
+  seven affected TypeScript files.
+- Checked-in Playwright passed against the built distribution across desktop,
+  390px dark/reduced-motion, invalid policy, null JSON, malformed nested rounds,
+  and normal-note→runtime-note stale-state transitions. There was no horizontal
+  overflow, marker overlap, or post-settle chart mutation.
+- Workflow parsing confirmed exactly eight Pages source paths, one serialized
+  build-and-deploy job, production build followed by full aggregate contracts,
+  Chromium verification before artifact upload, and a manual-only batch
+  workflow.
+- `first-reviewer` approved the final historical, selector, typography, and
+  browser-test design. `extreme-reasoner` approved the Pages change after the
+  unused dependency removal and confirmed automatic model, Azure, HF upload,
+  batch, grading, and paid-run impact is **zero**.
 
 ## Remaining Work
 
-- Merge the approved docs-only plan.
-- Create a fresh implementation branch from the plan merge SHA and implement
-  through the non-paid validation gate.
-- Stop before live model/API execution until the paid gate receives explicit
-  approval.
+- Commit the dependency cleanup and completion records, publish the reviewed
+  branch, and verify the deployed article and Pages run.

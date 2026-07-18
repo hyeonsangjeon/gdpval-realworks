@@ -110,6 +110,9 @@ test('experiment detail summary uses the same report index snapshot as notes', a
   assert.equal(merged.short_id, 'exp003')
   assert.deepEqual(merged.meta, entry.meta)
   assert.deepEqual(merged.summary, entry.summary)
+  assert.deepEqual(merged.recovery_stats, entry.recovery_stats)
+  assert.deepEqual(merged.narrative, entry.narrative)
+  assert.deepEqual(merged.task_results, [])
   assert.match(hook, /applyReportIndexSnapshot\(data, entry, shortId\)/)
 })
 
@@ -159,7 +162,7 @@ test('journal article resolves visuals from reports and links to source details'
   ])
 
   assert.match(article, /selectPromptComplexityBenchmark\(reports\)/)
-  assert.match(article, /useReports\(usesPromptBenchmark\)/)
+  assert.match(article, /useReports\(usesReportBenchmark\)/)
   assert.match(article, /<JournalArticleContent key=\{slug \?\? 'missing'\} slug=\{slug\} \/>/)
   assert.match(article, /generated\/reports-index\.json/)
   assert.match(article, /getExperimentHref\(row\.shortId\)/)

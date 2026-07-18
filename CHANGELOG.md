@@ -12,6 +12,20 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Evidence-backed runtime Field Note** — rebuild the `360-minute-experiment`
+  note around three explicit sources: exp008/010/025/026 report snapshots, the
+  current condition-a workflow policy, and a pinned exp025 incident record.
+  The note now separates the incident-time 330-minute hard stop from the
+  post-fix 290-minute watchdog, 350-minute step ceiling, and 360-minute job
+  ceiling; derives metrics, timeline SVG, resume chart, and numeric prose from
+  validated data; and fails closed on missing, malformed, stale, or mismatched
+  evidence. Five shorter chapter headings, chapter labels, wider section
+  spacing, 2.05 body leading, and quieter serif callouts give the retrospective
+  a deliberate 사건→편향→대응→결과→결정 reading rhythm on desktop and mobile.
+  The Pages workflow now regenerates this evidence when either runtime source
+  changes and gates deployment on all aggregate contracts plus pinned-history
+  and Chromium desktop/mobile checks. No model, batch, grading, HF upload, or
+  paid workflow is dispatched by this change.
 - **Agentic Sandbox implementation and experiment preregistration plan** — define a
   separate `agentic_sandbox` task-solving mode that lets the model choose among
   bounded workspace inspection, Python, ffmpeg, artifact inspection, and
