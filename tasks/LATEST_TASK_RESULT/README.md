@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-18
-- Status: Runtime Field Note grounded, restyled, and locally verified
+- Status: Runtime Field Note published and production-verified
 
 ## Task
 
@@ -47,14 +47,17 @@ task. It must be refreshed before a task is reported complete.
   now runs all aggregate contracts, pinned git-history checks, a production
   build, and Chromium desktop/mobile/error-state verification before upload.
   The batch workflow remains manual-only and is never dispatched here.
+- Squash-merged the reviewed change through PR #102 as `fe222493`. Automatic
+  `Aggregate Tests & Deploy` run
+  [29628757147](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29628757147)
+  completed build, all 42 aggregate contracts, pinned-history checks, Chromium
+  installation, browser verification, artifact upload, and GitHub Pages deploy
+  successfully. No other workflow ran for that commit.
 
 ## Verification
 
-- Rebased feature commit `73f6771d` onto `main@b040e6c8`; the worktree is clean
-  at the committed feature boundary. The remaining four-file documentation and
-  dependency-cleanup diff contains this rolling record, the changelog entry,
-  and removal of unused direct dependency `js-yaml` plus its lockfile-only
-  `argparse` child.
+- The reviewed branch was based on `main@b040e6c8` and included removal of the
+  unused direct dependency `js-yaml` plus its lockfile-only `argparse` child.
 - Full Node contracts: **42 passed, 0 failed**. Production TypeScript/Vite build
   and `git diff --check` passed; static diagnostics found no errors in the
   seven affected TypeScript files.
@@ -70,8 +73,16 @@ task. It must be refreshed before a task is reported complete.
   browser-test design. `extreme-reasoner` approved the Pages change after the
   unused dependency removal and confirmed automatic model, Azure, HF upload,
   batch, grading, and paid-run impact is **zero**.
+- On the deployed site, `runtime-note.json` preserved the May 18 incident
+  workflow (`330`-minute hard stop, watchdog absent) separately from the post-
+  fix condition-a policy (`290` watchdog, `350` step, `360` job). The public
+  exp026 snapshot matched `220/200/6/105` and resume rounds `78/78/0` and
+  `27/7/20` across metrics, prose, SVG, and chart.
+- Public desktop verification found 34px chapter headings and 34.85px body
+  leading; 390px dark/reduced-motion verification found 28px headings, 32.8px
+  leading, all five chapter labels, eleven evidence links, both chart labels,
+  no horizontal overflow, and zero post-settle chart mutations.
 
 ## Remaining Work
 
-- Commit the dependency cleanup and completion records, publish the reviewed
-  branch, and verify the deployed article and Pages run.
+- No implementation or deployment work remains for this Runtime Field Note.
