@@ -25,7 +25,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   The Pages workflow now regenerates this evidence when either runtime source
   changes and gates deployment on all aggregate contracts plus pinned-history
   and Chromium desktop/mobile checks. No model, batch, grading, HF upload, or
-  paid workflow is dispatched by this change.
+  paid workflow is dispatched by this change. Shipped through PR #102
+  (`fe222493`) and successful Pages run
+  [29628757147](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29628757147);
+  the deployed JSON, two-lane timeline, report-derived chart, source links, and
+  reflective typography were verified on desktop and mobile.
 - **Agentic Sandbox implementation and experiment preregistration plan** — define a
   separate `agentic_sandbox` task-solving mode that lets the model choose among
   bounded workspace inspection, Python, ffmpeg, artifact inspection, and
