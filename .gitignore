@@ -36,6 +36,9 @@ batch-runner/local_repo/
 batch-runner/scripts/*
 !batch-runner/scripts/preflight_grading_renderer.py
 !batch-runner/scripts/preflight_track2_cohort.py
+!batch-runner/scripts/build_agentic_input_manifest.py
+!batch-runner/scripts/compare_agentic_conditions.py
+!batch-runner/scripts/select_agentic_tasks.py
 
 
 # Experiment report HTML (skews GitHub language stats)

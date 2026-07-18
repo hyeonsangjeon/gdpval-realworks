@@ -701,6 +701,75 @@ def test_update_progress_result_accumulates_metrics_across_resume_rounds():
     assert metrics["job_run_count"] == 2
 
 
+def test_update_progress_result_accumulates_agentic_metrics_without_double_cost():
+    from step2_run_inference import _update_progress_result
+
+    progress = {"results": [{
+        "task_id": "t1",
+        "status": "error",
+        "observability": {"agentic_metrics": {
+            "schema_version": "1.0",
+            "task_wall_time_ms": 100,
+            "model_time_ms": 40,
+            "tool_time_ms": 20,
+            "model_api_calls": 1,
+            "model_iterations": 1,
+            "tool_calls": 2,
+            "tool_errors": 1,
+            "tool_calls_by_name": {"run_python": 1, "inspect_artifacts": 1},
+            "finalize_attempts": 0,
+            "finalize_required_corrections": 0,
+            "capability_misses": 0,
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_tokens": 5,
+            "conservative_cost_usd": 0.4,
+            "usage_complete": True,
+            "terminal_error_category": "artifact_verification_failed",
+        }},
+    }]}
+    new_result = {
+        "task_id": "t1",
+        "status": "success",
+        "observability": {"agentic_metrics": {
+            "schema_version": "1.0",
+            "task_wall_time_ms": 70,
+            "model_time_ms": 30,
+            "tool_time_ms": 15,
+            "model_api_calls": 1,
+            "model_iterations": 1,
+            "tool_calls": 2,
+            "tool_errors": 0,
+            "tool_calls_by_name": {"inspect_artifacts": 1, "finalize": 1},
+            "finalize_attempts": 1,
+            "finalize_required_corrections": 0,
+            "capability_misses": 0,
+            "input_tokens": 80,
+            "output_tokens": 10,
+            "cached_tokens": 4,
+            "conservative_cost_usd": 0.55,
+            "usage_complete": False,
+            "terminal_error_category": None,
+        }},
+    }
+
+    merged = _update_progress_result(progress, new_result)
+    metrics = merged["results"][0]["observability"]["agentic_metrics"]
+
+    assert metrics["task_wall_time_ms"] == 170
+    assert metrics["model_api_calls"] == 2
+    assert metrics["tool_calls"] == 4
+    assert metrics["tool_calls_by_name"] == {
+        "run_python": 1,
+        "inspect_artifacts": 2,
+        "finalize": 1,
+    }
+    assert metrics["conservative_cost_usd"] == 0.55
+    assert metrics["usage_complete"] is False
+    assert metrics["recovered_after_tool_error"] is True
+    assert metrics["terminal_error_category"] is None
+
+
 def test_bounded_execution_metrics_rejects_invalid_time_to_valid_and_counts():
     from step2_run_inference import _bounded_execution_metrics
 
@@ -762,9 +831,14 @@ def test_resume_timeout_relay_preserves_cumulative_task_metrics(
     prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
 
     progress = {
+        "schema_version": "step2-progress-v2",
         "experiment_id": "exp_test",
         "condition": "test_condition",
+        "condition_identity": "condition_a",
+        "run_id": "exp_test:local:1",
         "execution_mode": "sandbox",
+        "ordered_task_ids": ["t1"],
+        "total_tasks": 1,
         "started_at": "2026-07-15T00:00:00+00:00",
         "resume_round": 0,
         "results": [{

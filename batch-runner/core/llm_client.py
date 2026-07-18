@@ -149,6 +149,7 @@ def create_client(
     endpoint: str | None = None,
     api_key: str | None = None,
     api_version: str | None = None,
+    max_retries: int | None = None,
 ) -> AzureOpenAI:
     """AzureOpenAI 클라이언트 생성 (DefaultAzureCredential 전용 / OIDC only)
 
@@ -182,11 +183,19 @@ def create_client(
             credential, "https://cognitiveservices.azure.com/.default"
         )
         print("   🔐 Auth: DefaultAzureCredential (Entra ID token)")
+        if max_retries is None:
+            return AzureOpenAI(
+                azure_endpoint=endpoint,
+                azure_ad_token_provider=token_provider,
+                api_version=api_version,
+                timeout=480,
+            )
         return AzureOpenAI(
             azure_endpoint=endpoint,
             azure_ad_token_provider=token_provider,
             api_version=api_version,
             timeout=480,
+            max_retries=max_retries,
         )
     except Exception as e:
         # API Key fallback disabled — fail loud with OIDC debug guidance.
@@ -207,6 +216,7 @@ def create_provider_client(
     endpoint: str | None = None,
     api_key: str | None = None,
     api_version: str | None = None,
+    max_retries: int | None = None,
 ):
     """Provider별 클라이언트 생성.
 
@@ -229,14 +239,22 @@ def create_provider_client(
             endpoint=endpoint,
             api_key=api_key,
             api_version=api_version,
+            max_retries=max_retries,
         )
 
     elif provider == "openai":
         from openai import OpenAI
+        if max_retries is None:
+            return OpenAI(
+                api_key=api_key or os.getenv("OPENAI_API_KEY"),
+                base_url=endpoint or None,
+                timeout=480,
+            )
         return OpenAI(
             api_key=api_key or os.getenv("OPENAI_API_KEY"),
             base_url=endpoint or None,
             timeout=480,
+            max_retries=max_retries,
         )
 
     elif provider == "anthropic":

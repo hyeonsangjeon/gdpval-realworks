@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "python": "3.11",
+  "uid": 65532,
+  "gid": 65532,
+  "network": false,
+  "runtime_install": false,
+  "shell": false,
+  "generated_python_exec": false,
+  "tools": {
+    "ffmpeg": true,
+    "ffprobe": true,
+    "libreoffice_binary": true,
+    "python_document_libraries": true,
+    "python_media_libraries": true,
+    "python_data_libraries": true
+  }
+}

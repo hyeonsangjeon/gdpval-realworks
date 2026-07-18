@@ -533,6 +533,118 @@ def test_generate_report_adds_execution_metrics_only_when_measured(monkeypatch, 
     assert rd["task_results"][0]["observability"]["execution_metrics"]["task_wall_time_ms"] == 100
 
 
+def test_generate_report_adds_agentic_metrics_only_when_measured(monkeypatch, tmp_path):
+    payload = _make_result_payload()
+    payload["results"][0]["observability"] = {
+        "agentic_metrics": {
+            "schema_version": "1.0",
+            "task_wall_time_ms": 100,
+            "model_api_calls": 3,
+            "model_iterations": 3,
+            "tool_calls": 4,
+            "tool_errors": 1,
+            "tool_calls_by_name": {
+                "inspect_workspace": 1,
+                "run_python": 1,
+                "inspect_artifacts": 1,
+                "finalize": 1,
+            },
+            "tool_time_ms": 20,
+            "finalize_attempts": 1,
+            "finalize_required_corrections": 0,
+            "capability_misses": 0,
+            "recovered_after_tool_error": True,
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_tokens": 10,
+            "usage_complete": True,
+            "conservative_cost_usd": 0.25,
+            "terminal_error_category": None,
+        }
+    }
+    payload["results"][1]["status"] = "error"
+    payload["results"][1]["observability"] = {
+        "agentic_metrics": {
+            "schema_version": "1.0",
+            "task_wall_time_ms": 300,
+            "model_api_calls": 2,
+            "model_iterations": 2,
+            "tool_calls": 2,
+            "tool_errors": 1,
+            "tool_calls_by_name": {
+                "inspect_environment": 1,
+                "run_ffmpeg": 1,
+            },
+            "tool_time_ms": 80,
+            "finalize_attempts": 0,
+            "finalize_required_corrections": 1,
+            "capability_misses": 1,
+            "recovered_after_tool_error": False,
+            "input_tokens": 200,
+            "output_tokens": 40,
+            "cached_tokens": 20,
+            "usage_complete": False,
+            "conservative_cost_usd": 0.5,
+            "terminal_error_category": "capability_missing",
+        }
+    }
+
+    rd = _run_step6(
+        monkeypatch,
+        tmp_path,
+        manifest_data=None,
+        result_payload=payload,
+    )
+
+    metrics = rd["agentic_metrics"]
+    assert metrics["measured_tasks"] == 2
+    assert metrics["coverage_pct"] == 100.0
+    assert metrics["total_model_api_calls"] == 5
+    assert metrics["total_model_iterations"] == 5
+    assert metrics["total_tool_calls"] == 6
+    assert metrics["total_tool_errors"] == 2
+    assert metrics["tool_error_rate_pct"] == 33.33
+    assert metrics["tasks_with_tool_errors"] == 2
+    assert metrics["recovered_tasks"] == 1
+    assert metrics["recovery_rate_pct"] == 50.0
+    assert metrics["total_finalize_attempts"] == 1
+    assert metrics["total_finalize_required_corrections"] == 1
+    assert metrics["total_capability_misses"] == 1
+    assert metrics["p50_tool_time_ms"] == 50
+    assert metrics["p95_tool_time_ms"] == 77
+    assert metrics["total_input_tokens"] == 300
+    assert metrics["total_output_tokens"] == 60
+    assert metrics["total_cached_tokens"] == 30
+    assert metrics["usage_complete_tasks"] == 1
+    assert metrics["usage_coverage_pct"] == 50.0
+    assert metrics["conservative_cost_usd"] == 0.75
+    assert metrics["tool_calls_by_name"] == {
+        "inspect_workspace": 1,
+        "inspect_environment": 1,
+        "run_python": 1,
+        "run_ffmpeg": 1,
+        "inspect_artifacts": 1,
+        "finalize": 1,
+    }
+    assert metrics["terminal_error_categories"] == {"capability_missing": 1}
+    assert rd["task_results"][0]["observability"]["agentic_metrics"][
+        "model_api_calls"
+    ] == 3
+
+
+def test_compute_agentic_metrics_omits_unmeasured_and_rejects_nonfinite():
+    payload = _make_result_payload()
+    assert step6_report._compute_agentic_metrics(payload) is None
+
+    payload["results"][0]["observability"] = {
+        "agentic_metrics": {
+            "task_wall_time_ms": float("nan"),
+            "conservative_cost_usd": float("inf"),
+        }
+    }
+    assert step6_report._compute_agentic_metrics(payload) is None
+
+
 def test_compute_execution_metrics_ignores_giant_json_integer():
     payload = _make_result_payload()
     payload["results"][0]["observability"] = {

@@ -21,12 +21,6 @@ name: Build Sandbox Image
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - batch-runner/requirements.txt
-      - batch-runner/sandbox/Dockerfile
-      - 'batch-runner/skills/**'
 
 concurrency:
   group: build-sandbox-image
@@ -43,20 +37,58 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Require immutable dependency locks before publication
+        run: |
+          python3 <<'PY'
+          import pathlib
+
+          requirements = [
+            pathlib.Path("batch-runner/requirements.txt"),
+            pathlib.Path("batch-runner/requirements-renderer.txt"),
+          ]
+          violations = []
+          for path in requirements:
+            logical = ""
+            for raw in path.read_text(encoding="utf-8").splitlines():
+              line = raw.split("#", 1)[0].strip()
+              if not line or line.startswith("-r "):
+                continue
+              logical = f"{logical} {line}".strip()
+              if line.endswith("\\"):
+                continue
+              if "==" not in logical or "--hash=sha256:" not in logical:
+                violations.append(f"{path}:{logical}")
+              logical = ""
+          apt_lock = pathlib.Path(
+            "batch-runner/sandbox/debian-packages.lock"
+          )
+          if not apt_lock.is_file():
+            violations.append(str(apt_lock))
+          if violations:
+            raise SystemExit(
+              "production image publication requires exact pip hashes and "
+              "a reviewed Debian package lock:\n" + "\n".join(violations[:20])
+            )
+          print("immutable-dependency-locks=pass")
+          PY
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push sandbox image
-        uses: docker/build-push-action@v6
+        id: base_build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         with:
           context: batch-runner
           file: batch-runner/sandbox/Dockerfile
@@ -70,3 +102,123 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-sandbox:buildcache
           cache-to: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-sandbox:buildcache,mode=max
+
+      - name: Build agentic sandbox audit candidate
+        id: agentic_candidate
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
+        with:
+          context: batch-runner
+          file: batch-runner/sandbox/agentic.Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          build-args: |
+            BASE_IMAGE=ghcr.io/hyeonsangjeon/gdpval-sandbox@${{ steps.base_build.outputs.digest }}
+          tags: gdpval-agentic-sandbox:audit-${{ github.run_id }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.base.name=ghcr.io/hyeonsangjeon/gdpval-sandbox@${{ steps.base_build.outputs.digest }}
+          cache-from: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox:buildcache
+
+      - name: Audit agentic sandbox candidate before publication
+        id: candidate_audit
+        env:
+          IMAGE: gdpval-agentic-sandbox:audit-${{ github.run_id }}
+          EXPECTED_BASE: ghcr.io/hyeonsangjeon/gdpval-sandbox@${{ steps.base_build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ACTUAL_BASE=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.name" }}' "$IMAGE")
+          test "$ACTUAL_BASE" = "$EXPECTED_BASE"
+          docker run --rm --entrypoint python "$IMAGE" \
+            -I -B /opt/gdpval/agentic_image_audit.py
+          docker run --rm --entrypoint cat "$IMAGE" \
+            /opt/gdpval/agentic-sbom.spdx.json > candidate-runtime-sbom.spdx.json
+          RUNTIME_SBOM_SHA256=$(sha256sum candidate-runtime-sbom.spdx.json | cut -d' ' -f1)
+          echo "sbom_sha256=$RUNTIME_SBOM_SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push audited agentic sandbox image
+        id: agentic_build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
+        with:
+          context: batch-runner
+          file: batch-runner/sandbox/agentic.Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            BASE_IMAGE=ghcr.io/hyeonsangjeon/gdpval-sandbox@${{ steps.base_build.outputs.digest }}
+          tags: ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.base.name=ghcr.io/hyeonsangjeon/gdpval-sandbox@${{ steps.base_build.outputs.digest }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox:buildcache
+          cache-to: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox:buildcache,mode=max
+
+      - name: Verify published agentic digest and attestations
+        id: published_audit
+        env:
+          IMAGE: ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox@${{ steps.agentic_build.outputs.digest }}
+          EXPECTED_BASE: ghcr.io/hyeonsangjeon/gdpval-sandbox@${{ steps.base_build.outputs.digest }}
+          EXPECTED_SBOM_SHA256: ${{ steps.candidate_audit.outputs.sbom_sha256 }}
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE"
+          ACTUAL_BASE=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.name" }}' "$IMAGE")
+          ACTUAL_REVISION=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE")
+          test "$ACTUAL_BASE" = "$EXPECTED_BASE"
+          test "$ACTUAL_REVISION" = "$GITHUB_SHA"
+          docker run --rm --entrypoint python "$IMAGE" \
+            -I -B /opt/gdpval/agentic_image_audit.py
+          docker run --rm --entrypoint cat "$IMAGE" \
+            /opt/gdpval/agentic-sbom.spdx.json > runtime-sbom.spdx.json
+          RUNTIME_SBOM_SHA256=$(sha256sum runtime-sbom.spdx.json | cut -d' ' -f1)
+          test "$RUNTIME_SBOM_SHA256" = "$EXPECTED_SBOM_SHA256"
+          docker buildx imagetools inspect "$IMAGE" \
+            --format '{{json .SBOM}}' > attached-sbom.json
+          test -s attached-sbom.json
+          python3 - <<'PY'
+          import json
+
+          runtime = json.load(open("runtime-sbom.spdx.json", encoding="utf-8"))
+          attached = json.load(open("attached-sbom.json", encoding="utf-8"))
+          assert runtime["spdxVersion"] == "SPDX-2.3"
+
+          def strings(value):
+            if isinstance(value, str):
+              yield value
+            elif isinstance(value, dict):
+              for item in value.values():
+                yield from strings(item)
+            elif isinstance(value, list):
+              for item in value:
+                yield from strings(item)
+
+          runtime_purls = {
+            reference["referenceLocator"]
+            for package in runtime["packages"]
+            for reference in package.get("externalRefs", [])
+            if reference.get("referenceType") == "purl"
+          }
+          attached_purls = {value for value in strings(attached) if value.startswith("pkg:")}
+          missing = sorted(runtime_purls - attached_purls)
+          assert not missing, missing[:20]
+          PY
+          ATTACHED_SBOM_SHA256=$(sha256sum attached-sbom.json | cut -d' ' -f1)
+          echo "sbom_sha256=$RUNTIME_SBOM_SHA256" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Agentic image supply-chain audit"
+            echo "- Image: \`$IMAGE\`"
+            echo "- Base: \`$EXPECTED_BASE\`"
+            echo "- Runtime SBOM SHA-256: \`$RUNTIME_SBOM_SHA256\`"
+            echo "- Attached SBOM evidence SHA-256: \`$ATTACHED_SBOM_SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Promote verified agentic digest to latest
+        env:
+          IMAGE: ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox@${{ steps.agentic_build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox:latest \
+            "$IMAGE"

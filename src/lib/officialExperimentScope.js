@@ -2,14 +2,21 @@
 export const OFFICIAL_TASK_COUNT = 220
 
 /** Curated diagnostic reports excluded from the default cross-run dashboard. */
-export const HIDDEN_DIAGNOSTIC_EXPERIMENT_IDS = new Set(['exp027'])
+export const HIDDEN_DIAGNOSTIC_EXPERIMENT_IDS = new Set([
+  'exp027',
+  'exp028', // Agentic Sandbox canary
+  'exp029', // Hardened current-sandbox baseline
+  'exp030', // Agentic Sandbox treatment
+])
 
 /** Match a short id or a derived full experiment/grade id. */
 export function isHiddenDiagnosticExperimentId(value) {
   if (!value) return false
-  return Array.from(HIDDEN_DIAGNOSTIC_EXPERIMENT_IDS).some((shortId) => (
-    value === shortId || value.startsWith(`${shortId}_`)
-  ))
+  return (
+    Array.from(HIDDEN_DIAGNOSTIC_EXPERIMENT_IDS).some((shortId) => (
+      value === shortId || value.startsWith(`${shortId}_`)
+    ))
+  )
 }
 
 /** Smoke/test identifier shared by report and grade display filters. */

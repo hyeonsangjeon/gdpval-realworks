@@ -203,6 +203,7 @@ function ExperimentDetail() {
               <span className="text-[10px] bg-dash-card-hover px-2 py-0.5 rounded text-dash-text-secondary" title={meta?.execution_mode}>
                 {meta?.execution_mode === 'code_interpreter' ? '☁️ CI' :
                  meta?.execution_mode === 'subprocess' ? '🖥️ Sub' :
+                 meta?.execution_mode === 'agentic_sandbox' ? 'Agent' :
                  meta?.execution_mode === 'json_renderer' ? '📄 JSON' :
                  meta?.execution_mode}
               </span>
@@ -272,6 +273,7 @@ function ExperimentDetail() {
               label: 'Exec Mode',
               value: meta?.execution_mode === 'code_interpreter' ? '☁️ CI'
                 : meta?.execution_mode === 'subprocess' ? '🖥️ Sub'
+                : meta?.execution_mode === 'agentic_sandbox' ? 'Agent'
                 : meta?.execution_mode === 'json_renderer' ? '📄 JSON'
                 : meta?.execution_mode ?? '—',
               color: '#6b7280',
@@ -428,6 +430,56 @@ function ExperimentDetail() {
                   <div key={metric.label} className="flex justify-between md:block gap-2">
                     <span className="text-dash-text-muted">{metric.label}</span>
                     <span className="text-dash-text font-mono md:block md:mt-0.5">{metric.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {report.agentic_metrics && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="bg-dash-card border border-dash-border rounded-xl overflow-hidden mb-6"
+          >
+            <div className="px-4 py-3 border-b border-dash-border flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-dash-heading flex items-center gap-2">
+                <Code2 className="h-4 w-4 text-emerald-500" />
+                Agentic Tool Loop
+              </h3>
+              <span className="text-[10px] text-dash-text-muted font-mono">
+                {report.agentic_metrics.measured_tasks}/{report.agentic_metrics.total_tasks} measured
+              </span>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-5 gap-y-4 text-xs">
+                {[
+                  { label: 'API Calls', value: report.agentic_metrics.total_model_api_calls },
+                  { label: 'Model Iterations', value: report.agentic_metrics.total_model_iterations },
+                  { label: 'Tool Calls', value: report.agentic_metrics.total_tool_calls },
+                  { label: 'Tool Error Rate', value: `${report.agentic_metrics.tool_error_rate_pct.toFixed(1)}%` },
+                  { label: 'Recovery Rate', value: `${report.agentic_metrics.recovery_rate_pct.toFixed(1)}%` },
+                  { label: 'Finalize Attempts', value: report.agentic_metrics.total_finalize_attempts },
+                  { label: 'P50 Tool Time', value: formatDuration(report.agentic_metrics.p50_tool_time_ms) },
+                  { label: 'P95 Tool Time', value: formatDuration(report.agentic_metrics.p95_tool_time_ms) },
+                  { label: 'Usage Coverage', value: `${report.agentic_metrics.usage_coverage_pct.toFixed(1)}%` },
+                  { label: 'Cached Tokens', value: report.agentic_metrics.total_cached_tokens.toLocaleString() },
+                  { label: 'Capability Misses', value: report.agentic_metrics.total_capability_misses },
+                  { label: 'Conservative Cost', value: `$${report.agentic_metrics.conservative_cost_usd.toFixed(4)}` },
+                ].map((metric) => (
+                  <div key={metric.label}>
+                    <div className="text-[10px] text-dash-text-muted uppercase mb-0.5">{metric.label}</div>
+                    <div className="text-dash-text font-mono font-semibold">{metric.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 pt-4 border-t border-dash-border-subtle grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-5 gap-y-3 text-xs">
+                {Object.entries(report.agentic_metrics.tool_calls_by_name).map(([name, count]) => (
+                  <div key={name} className="flex justify-between md:block gap-2">
+                    <span className="text-dash-text-muted">{name.split('_').join(' ')}</span>
+                    <span className="text-dash-text font-mono md:block md:mt-0.5">{count}</span>
                   </div>
                 ))}
               </div>
@@ -967,6 +1019,7 @@ function ExperimentDetail() {
 function TaskDetailModal({ task, experimentId, onClose }: { task: TaskResult; experimentId?: string; onClose: () => void }) {
   const [showPrompt, setShowPrompt] = useState(false)
   const executionMetrics = task.observability?.execution_metrics
+  const agenticMetrics = task.observability?.agentic_metrics
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -1040,6 +1093,35 @@ function TaskDetailModal({ task, experimentId, onClose }: { task: TaskResult; ex
                   <div key={metric.label} className="flex justify-between gap-2 border-b border-dash-border-subtle py-1 last:border-0">
                     <span className="text-dash-text-muted">{metric.label}</span>
                     <span className="text-dash-text font-mono">{metric.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {agenticMetrics && (
+            <div className="border border-dash-border rounded-lg p-3">
+              <div className="text-[10px] text-dash-text-muted uppercase mb-2 flex items-center gap-1.5">
+                <Code2 className="h-3 w-3" /> Agentic Tool Loop
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                {[
+                  { label: 'API Calls', value: agenticMetrics.model_api_calls },
+                  { label: 'Iterations', value: agenticMetrics.model_iterations },
+                  { label: 'Tool Calls', value: agenticMetrics.tool_calls },
+                  { label: 'Tool Errors', value: agenticMetrics.tool_errors },
+                  { label: 'Finalize Attempts', value: agenticMetrics.finalize_attempts },
+                  { label: 'Finalize Corrections', value: agenticMetrics.finalize_required_corrections },
+                  { label: 'Input Tokens', value: agenticMetrics.input_tokens.toLocaleString() },
+                  { label: 'Output Tokens', value: agenticMetrics.output_tokens.toLocaleString() },
+                  { label: 'Cached Tokens', value: agenticMetrics.cached_tokens.toLocaleString() },
+                  { label: 'Conservative Cost', value: `$${agenticMetrics.conservative_cost_usd.toFixed(4)}` },
+                  { label: 'Usage Complete', value: agenticMetrics.usage_complete ? 'Yes' : 'No' },
+                  { label: 'Terminal Category', value: agenticMetrics.terminal_error_category || 'none' },
+                ].map((metric) => (
+                  <div key={metric.label} className="flex justify-between gap-2 border-b border-dash-border-subtle py-1 last:border-0">
+                    <span className="text-dash-text-muted">{metric.label}</span>
+                    <span className="text-dash-text font-mono text-right break-all">{metric.value}</span>
                   </div>
                 ))}
               </div>

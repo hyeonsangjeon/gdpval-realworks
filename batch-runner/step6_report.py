@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 import sys
 from collections import defaultdict
@@ -242,6 +243,110 @@ def _compute_execution_metrics(data: dict) -> dict | None:
     }
 
 
+def _compute_agentic_metrics(data: dict) -> dict | None:
+    """Aggregate privacy-bounded agentic metrics; omit for legacy runs."""
+    results = data.get("results", [])
+    measured: list[tuple[dict, dict, float]] = []
+    for result in results:
+        raw = (result.get("observability") or {}).get("agentic_metrics")
+        if not isinstance(raw, dict):
+            continue
+        wall_time = _metric_number(raw.get("task_wall_time_ms"))
+        if wall_time is not None:
+            measured.append((result, raw, wall_time))
+    if not measured:
+        return None
+
+    def count(field: str) -> int:
+        return sum(
+            value
+            for _, raw, _ in measured
+            if (value := bounded_count(raw.get(field))) is not None
+        )
+
+    tool_times = [
+        value
+        for _, raw, _ in measured
+        if (value := _metric_number(raw.get("tool_time_ms"))) is not None
+    ]
+    total_tool_calls = count("tool_calls")
+    total_tool_errors = count("tool_errors")
+    tasks_with_tool_errors = sum(
+        1
+        for _, raw, _ in measured
+        if (bounded_count(raw.get("tool_errors")) or 0) > 0
+    )
+    recovered_tasks = sum(
+        1
+        for result, raw, _ in measured
+        if result.get("status") == "success"
+        and raw.get("recovered_after_tool_error") is True
+    )
+    tool_names = (
+        "inspect_workspace", "inspect_environment", "run_python",
+        "run_ffmpeg", "inspect_artifacts", "finalize",
+    )
+    calls_by_name = {name: 0 for name in tool_names}
+    terminal_categories: dict[str, int] = {}
+    conservative_cost = 0.0
+    for _, raw, _ in measured:
+        raw_calls = raw.get("tool_calls_by_name")
+        if isinstance(raw_calls, dict):
+            for name in tool_names:
+                calls_by_name[name] += bounded_count(raw_calls.get(name)) or 0
+        category = raw.get("terminal_error_category")
+        if isinstance(category, str) and category and len(category) <= 80:
+            terminal_categories[category] = terminal_categories.get(category, 0) + 1
+        value = raw.get("conservative_cost_usd")
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and 0 <= value <= 1_000_000
+        ):
+            conservative_cost += float(value)
+
+    usage_complete_tasks = sum(
+        1 for _, raw, _ in measured if raw.get("usage_complete") is True
+    )
+    return {
+        "schema_version": "1.0",
+        "measured_tasks": len(measured),
+        "total_tasks": len(results),
+        "coverage_pct": round(len(measured) / len(results) * 100, 1)
+        if results else 0.0,
+        "total_model_api_calls": count("model_api_calls"),
+        "total_model_iterations": count("model_iterations"),
+        "total_tool_calls": total_tool_calls,
+        "total_tool_errors": total_tool_errors,
+        "tool_error_rate_pct": round(
+            total_tool_errors / total_tool_calls * 100, 2
+        ) if total_tool_calls else 0.0,
+        "tasks_with_tool_errors": tasks_with_tool_errors,
+        "recovered_tasks": recovered_tasks,
+        "recovery_rate_pct": round(
+            recovered_tasks / tasks_with_tool_errors * 100, 2
+        ) if tasks_with_tool_errors else 0.0,
+        "total_finalize_attempts": count("finalize_attempts"),
+        "total_finalize_required_corrections": count(
+            "finalize_required_corrections"
+        ),
+        "total_capability_misses": count("capability_misses"),
+        "p50_tool_time_ms": _percentile(tool_times, 0.50),
+        "p95_tool_time_ms": _percentile(tool_times, 0.95),
+        "total_input_tokens": count("input_tokens"),
+        "total_output_tokens": count("output_tokens"),
+        "total_cached_tokens": count("cached_tokens"),
+        "usage_complete_tasks": usage_complete_tasks,
+        "usage_coverage_pct": round(
+            usage_complete_tasks / len(measured) * 100, 1
+        ),
+        "conservative_cost_usd": round(conservative_cost, 8),
+        "tool_calls_by_name": calls_by_name,
+        "terminal_error_categories": dict(sorted(terminal_categories.items())),
+    }
+
+
 def _compute_sector_breakdown(data: dict) -> list[dict]:
     buckets: dict[str, dict[str, Any]] = defaultdict(
         lambda: {"total": 0, "success": 0, "scores": [], "latencies": []}
@@ -419,7 +524,8 @@ Return ONLY valid JSON with these exact keys (no markdown code fences):
 def _build_report_data(data: dict, narrative: dict, summary: dict,
                        sector_breakdown: list[dict], task_results: list[dict],
                        error_tasks: list[dict],
-                       execution_metrics: dict | None = None) -> dict:
+                       execution_metrics: dict | None = None,
+                       agentic_metrics: dict | None = None) -> dict:
     meta_date = (data.get("started_at") or "")[:10]
     report = {
         "meta": {
@@ -450,6 +556,8 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
         report["narrative_error"] = narrative["_narrative_error"]
     if execution_metrics:
         report["execution_metrics"] = execution_metrics
+    if agentic_metrics:
+        report["agentic_metrics"] = agentic_metrics
     return report
 
 
@@ -600,6 +708,23 @@ def _build_markdown(rd: dict) -> str:
             f"| Avg time to valid artifact | {valid_time:,.0f}ms |" if valid_time is not None else "| Avg time to valid artifact | N/A |",
             f"| Tool calls | {execution_metrics['total_tool_calls']} |",
             f"| Execution attempts | {execution_metrics['total_execution_attempts']} |",
+            "",
+        ]
+
+    agentic_metrics = rd.get("agentic_metrics")
+    if agentic_metrics:
+        lines += [
+            "## Agentic Tool Loop",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
+            f"| Measured tasks | {agentic_metrics['measured_tasks']} / {agentic_metrics['total_tasks']} ({agentic_metrics['coverage_pct']}%) |",
+            f"| Model API calls / iterations | {agentic_metrics['total_model_api_calls']} / {agentic_metrics['total_model_iterations']} |",
+            f"| Tool calls / errors | {agentic_metrics['total_tool_calls']} / {agentic_metrics['total_tool_errors']} ({agentic_metrics['tool_error_rate_pct']}%) |",
+            f"| Recovered tasks | {agentic_metrics['recovered_tasks']} / {agentic_metrics['tasks_with_tool_errors']} ({agentic_metrics['recovery_rate_pct']}%) |",
+            f"| Finalize attempts | {agentic_metrics['total_finalize_attempts']} |",
+            f"| P50 / P95 tool time | {agentic_metrics['p50_tool_time_ms']:,.0f}ms / {agentic_metrics['p95_tool_time_ms']:,.0f}ms |",
+            f"| Conservative model cost | USD {agentic_metrics['conservative_cost_usd']:.4f} |",
             "",
         ]
 
@@ -1143,6 +1268,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
     # Compute metrics
     summary = _compute_summary(data)
     execution_metrics = _compute_execution_metrics(data)
+    agentic_metrics = _compute_agentic_metrics(data)
     sector_breakdown = _compute_sector_breakdown(data)
     manifest = _load_manifest_safe()
     task_results, error_tasks = _build_task_results(data, manifest=manifest)
@@ -1193,6 +1319,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
         task_results,
         error_tasks,
         execution_metrics=execution_metrics,
+        agentic_metrics=agentic_metrics,
     )
 
     # Inject file generation stats from step5_validate.py

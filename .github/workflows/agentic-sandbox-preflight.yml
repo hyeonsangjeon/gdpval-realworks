@@ -1,0 +1,86 @@
+name: Agentic Sandbox Model-Free Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      production_image:
+        description: Exact preloaded task/verifier image (repository@sha256:digest)
+        required: true
+        type: string
+      sbom_sha256:
+        description: Exact reviewed SPDX SBOM SHA-256
+        required: true
+        type: string
+      apparmor_profile:
+        description: Enforcing dedicated-runner AppArmor profile
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentic-sandbox-model-free-preflight
+  cancel-in-progress: false
+
+jobs:
+  model-free-preflight:
+    runs-on: [self-hosted, linux, x64, agentic-sandbox]
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact implementation
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Verify no model or publication credentials
+        run: |
+          set -euo pipefail
+          for name in AZURE_OPENAI_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY HF_TOKEN; do
+            if [ -n "${!name:-}" ]; then
+              echo "FATAL: credential environment is present: $name"
+              exit 1
+            fi
+          done
+          test "$(docker ps -q | wc -l)" -eq 0
+          test "$(awk 'END {print NR}' /proc/swaps)" -eq 1
+
+      - name: Verify preloaded model-free test environment
+        run: |
+          python3.11 - <<'PY'
+          import sys
+
+          assert sys.version_info[:2] == (3, 11), sys.version
+          import cryptography
+          import jsonschema
+          import pytest
+          import yaml
+
+          print("preloaded-model-free-environment=pass")
+          PY
+
+      - name: Verify image is already present
+        env:
+          IMAGE: ${{ inputs.production_image }}
+        run: |
+          set -euo pipefail
+          echo "$IMAGE" | grep -Eq '^.+@sha256:[0-9a-f]{64}$'
+          docker image inspect "$IMAGE" >/dev/null
+
+      - name: Run production containment preflight
+        env:
+          AGENTIC_PRODUCTION_PREFLIGHT: '1'
+          AGENTIC_PRODUCTION_IMAGE: ${{ inputs.production_image }}
+          AGENTIC_PRODUCTION_SBOM_SHA256: ${{ inputs.sbom_sha256 }}
+          AGENTIC_PRODUCTION_APPARMOR_PROFILE: ${{ inputs.apparmor_profile }}
+        run: |
+          cd batch-runner
+          python3.11 -m pytest \
+            tests/test_agentic_sandbox_security.py::test_agentic_production_runner_preflight \
+            -m integration -q
+
+      - name: Assert terminal cleanup
+        if: always()
+        run: |
+          test -z "$(docker ps -aq --filter name=gdpval-agentic-)"
+          test -z "$(docker volume ls -q --filter name=gdpval-agentic-)"
