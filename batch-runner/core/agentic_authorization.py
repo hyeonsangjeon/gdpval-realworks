@@ -25,6 +25,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 REQUIRED_FIELDS = {
     "schema_version", "plan_sha", "implementation_sha", "run_id",
     "conditions", "task_ids", "input_merkle_roots", "provider_classifications",
+    "task_request_sha256", "selection_recomputation_sha256",
     "provider", "model", "api_version", "endpoint_sha256", "workflow_sha",
     "workflow_inputs_sha256",
     "substrate_manifest_sha256", "price_table_sha256", "caps", "issued_at",
@@ -54,6 +55,8 @@ class ApprovalExpectation:
     task_ids: tuple[str, ...]
     input_merkle_roots: Mapping[str, str]
     provider_classifications: Mapping[str, str]
+    task_request_sha256: Mapping[str, str]
+    selection_recomputation_sha256: str
     approval_scope_sha256: str
     official_scope_registry_sha256: str
 
@@ -91,7 +94,8 @@ def load_approval_scope(
     document = json.loads(candidate.read_text(encoding="utf-8"))
     required = {
         "schema_version", "conditions", "ordered_task_ids",
-        "input_merkle_roots", "provider_classifications", "sha256",
+        "input_merkle_roots", "provider_classifications",
+        "task_request_sha256", "selection_recomputation_sha256", "sha256",
     }
     if not isinstance(document, dict) or set(document) != required:
         raise ValueError("approval scope fields are invalid")
@@ -105,6 +109,8 @@ def load_approval_scope(
     task_ids = document["ordered_task_ids"]
     roots = document["input_merkle_roots"]
     classifications = document["provider_classifications"]
+    request_digests = document["task_request_sha256"]
+    selection_hash = document["selection_recomputation_sha256"]
     if (
         not isinstance(conditions, list)
         or not conditions
@@ -128,6 +134,15 @@ def load_approval_scope(
             not isinstance(value, str) or not value
             for value in classifications.values()
         )
+        or not isinstance(request_digests, dict)
+        or set(request_digests) != set(task_ids)
+        or any(
+            not isinstance(value, str)
+            or re.fullmatch(r"[0-9a-f]{64}", value) is None
+            for value in request_digests.values()
+        )
+        or not isinstance(selection_hash, str)
+        or re.fullmatch(r"[0-9a-f]{64}", selection_hash) is None
     ):
         raise ValueError("approval scope identities are invalid")
     registry = root / "src" / "lib" / "officialExperimentScope.js"
@@ -138,6 +153,8 @@ def load_approval_scope(
         "task_ids": tuple(task_ids),
         "input_merkle_roots": dict(roots),
         "provider_classifications": dict(classifications),
+        "task_request_sha256": dict(request_digests),
+        "selection_recomputation_sha256": selection_hash,
         "approval_scope_sha256": digest,
         "official_scope_registry_sha256": hashlib.sha256(
             registry.read_bytes()
@@ -287,6 +304,8 @@ class SignedApprovalGate:
         task_ids = envelope.get("task_ids")
         roots = envelope.get("input_merkle_roots")
         classifications = envelope.get("provider_classifications")
+        request_digests = envelope.get("task_request_sha256")
+        selection_hash = envelope.get("selection_recomputation_sha256")
         if (
             not isinstance(conditions, list)
             or not conditions
@@ -320,6 +339,21 @@ class SignedApprovalGate:
             )
         ):
             raise AuthorizationError("approval_classifications_invalid")
+        if (
+            not isinstance(request_digests, dict)
+            or set(request_digests) != set(task_ids)
+            or any(
+                not isinstance(value, str)
+                or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                for value in request_digests.values()
+            )
+        ):
+            raise AuthorizationError("approval_task_requests_invalid")
+        if (
+            not isinstance(selection_hash, str)
+            or re.fullmatch(r"[0-9a-f]{64}", selection_hash) is None
+        ):
+            raise AuthorizationError("approval_selection_identity_invalid")
         nonce = envelope.get("nonce")
         if (
             not isinstance(nonce, str)
@@ -375,6 +409,15 @@ class SignedApprovalGate:
             expected.provider_classifications
         ):
             raise AuthorizationError("approval_classification_set_mismatch")
+        if envelope.get("task_request_sha256") != dict(
+            expected.task_request_sha256
+        ):
+            raise AuthorizationError("approval_task_request_set_mismatch")
+        if (
+            envelope.get("selection_recomputation_sha256")
+            != expected.selection_recomputation_sha256
+        ):
+            raise AuthorizationError("approval_selection_identity_mismatch")
         if envelope.get("approval_scope_sha256") != expected.approval_scope_sha256:
             raise AuthorizationError("approval_scope_identity_mismatch")
         if (
@@ -391,6 +434,15 @@ class SignedApprovalGate:
             raise AuthorizationError("runtime_input_identity_mismatch")
         if runtime_context.get("provider_classification") != provider_classification:
             raise AuthorizationError("runtime_classification_mismatch")
+        if runtime_context.get("task_request_sha256") != expected.task_request_sha256[
+            task_id
+        ]:
+            raise AuthorizationError("runtime_task_request_mismatch")
+        if (
+            runtime_context.get("selection_recomputation_sha256")
+            != expected.selection_recomputation_sha256
+        ):
+            raise AuthorizationError("runtime_selection_identity_mismatch")
         runtime_scalars = {
             "run_id": expected.run_id,
             "condition": expected.condition,
@@ -440,6 +492,38 @@ def canonical_json(value: Mapping[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
+def task_request_sha256(
+    *,
+    task_prompt: str,
+    occupation: str,
+    experiment_prompt: Optional[Mapping[str, Any]],
+    perception_text: Optional[str] = None,
+) -> str:
+    if not isinstance(task_prompt, str) or not isinstance(occupation, str):
+        raise ValueError("task request text fields are invalid")
+    prompt = dict(experiment_prompt or {})
+    if set(prompt) - {"system", "prefix", "body", "suffix"}:
+        raise ValueError("task request prompt fields are invalid")
+    if any(
+        value is not None and not isinstance(value, str)
+        for value in prompt.values()
+    ):
+        raise ValueError("task request prompt values are invalid")
+    if perception_text is not None and not isinstance(perception_text, str):
+        raise ValueError("task request perception text is invalid")
+    payload = {
+        "schema_version": "agentic-task-request-v1",
+        "task_prompt": task_prompt,
+        "occupation": occupation,
+        "experiment_prompt": {
+            key: prompt.get(key)
+            for key in ("system", "prefix", "body", "suffix")
+        },
+        "perception_text": perception_text,
+    }
+    return hashlib.sha256(canonical_json(payload)).hexdigest()
+
+
 def provider_endpoint_sha256(provider: str, endpoint: Optional[str]) -> str:
     normalized_provider = "azure" if provider == "azure_openai" else provider
     if normalized_provider == "openai" and not endpoint:
@@ -466,7 +550,20 @@ def provider_endpoint_sha256(provider: str, endpoint: Optional[str]) -> str:
     origin = f"https://{host}"
     if port not in (None, 443):
         origin += f":{port}"
-    return hashlib.sha256(origin.encode("ascii")).hexdigest()
+    path = parsed.path or "/"
+    if (
+        "\\" in path
+        or "%" in path
+        or "//" in path
+        or any(segment in {".", ".."} for segment in path.split("/"))
+    ):
+        raise ValueError("provider endpoint path is ambiguous")
+    canonical_path = "/" if path == "/" else path.rstrip("/")
+    try:
+        canonical = (origin + canonical_path).encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise ValueError("provider endpoint path must be ASCII") from exc
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def _timestamp(value: object) -> datetime:

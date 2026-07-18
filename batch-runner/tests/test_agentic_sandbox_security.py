@@ -67,11 +67,20 @@ def test_outer_seccomp_is_default_deny_allowlist():
     }
 
     assert profile["defaultAction"] == "SCMP_ACT_ERRNO"
+    assert "seccomp" in allowed
     for denied in (
         "bpf", "mount", "setns", "unshare", "ptrace", "keyctl",
         "io_uring_setup", "userfaultfd", "process_vm_readv",
     ):
         assert denied not in allowed
+
+
+def test_inner_filter_denies_seccomp_and_queued_signals():
+    from core.agentic_python_launcher import DENIED_SYSCALLS
+
+    assert {"seccomp", "rt_sigqueueinfo", "rt_tgsigqueueinfo"} <= set(
+        DENIED_SYSCALLS
+    )
 
 
 @pytest.mark.parametrize(
@@ -139,6 +148,116 @@ def test_verifier_image_components_are_hashed_from_actual_image_id(tmp_path):
     assert "sha256:" + "f" * 64 in verifier_command
     assert verifier_command[verifier_command.index("--network") + 1] == "none"
     assert "--read-only" in verifier_command
+
+
+def test_verifier_component_probe_timeout_remains_registered_until_cleanup(
+    tmp_path
+):
+    backend = _backend(tmp_path)
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        if command[1:3] == ["image", "inspect"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps([{"Id": "sha256:" + "f" * 64}]).encode(),
+                stderr=b"",
+            )
+        if command[1] == "run":
+            raise subprocess.TimeoutExpired(command, 1)
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    backend._run = run
+    try:
+        with pytest.raises(subprocess.TimeoutExpired):
+            backend._verify_verifier_image_components()
+    finally:
+        backend.close()
+
+    run_command = next(command for command in commands if command[1] == "run")
+    probe_name = run_command[run_command.index("--name") + 1]
+    assert ["docker", "rm", "-f", probe_name] in commands
+    assert probe_name not in backend._may_exist_containers
+
+
+def test_startup_passes_one_deadline_to_every_stage(tmp_path, monkeypatch):
+    backend = _backend(tmp_path)
+    deadlines = []
+
+    def stage(name):
+        def call(deadline):
+            deadlines.append((name, deadline))
+            if name == "verifier":
+                backend.verifier_image_id = "sha256:" + "f" * 64
+                backend._verified_component_hashes = backend._component_hashes()
+            if name == "volume":
+                backend.work_volume_created = True
+                backend._may_exist_volumes.add(backend.work_volume_name)
+        return call
+
+    monkeypatch.setattr(backend, "_verify_host_runtime", stage("host"))
+    monkeypatch.setattr(
+        backend, "_verify_verifier_image_components", stage("verifier")
+    )
+    monkeypatch.setattr(backend, "_stage_inputs", stage("inputs"))
+    monkeypatch.setattr(backend, "_create_work_volume", stage("volume"))
+    monkeypatch.setattr(backend, "_verify_runtime", stage("runtime"))
+    monkeypatch.setattr(backend, "_assert_pid1_only", stage("pid"))
+    monkeypatch.setattr(
+        backend,
+        "_run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, stdout=b"container-id\n", stderr=b""
+        ),
+    )
+    try:
+        result = backend.start(5)
+        assert result["ok"] is True, result
+    finally:
+        backend._may_exist_containers.clear()
+        backend._may_exist_volumes.clear()
+        backend.container_started = False
+        backend.work_volume_created = False
+        backend.close()
+
+    assert [name for name, _ in deadlines] == [
+        "host", "verifier", "inputs", "volume", "runtime", "pid"
+    ]
+    first = deadlines[0][1]
+    assert all(deadline == first for _, deadline in deadlines)
+
+
+def test_startup_exhausted_deadline_stops_before_next_stage(
+    tmp_path, monkeypatch
+):
+    backend = _backend(tmp_path)
+    current = [100.0]
+    calls = []
+    monkeypatch.setattr(
+        "core.agentic_compute.time.monotonic", lambda: current[0]
+    )
+
+    def verify_host(deadline):
+        calls.append("host")
+        current[0] = deadline + 0.01
+
+    def verify_components(deadline):
+        calls.append("verifier")
+
+    monkeypatch.setattr(backend, "_verify_host_runtime", verify_host)
+    monkeypatch.setattr(
+        backend, "_verify_verifier_image_components", verify_components
+    )
+
+    try:
+        result = backend.start(0.01)
+    finally:
+        backend.close()
+
+    assert result["ok"] is False
+    assert result["error_type"] == "container_preflight_failed"
+    assert calls == ["host"]
 
 
 def test_verifier_image_component_mismatch_fails_closed(tmp_path):
@@ -479,6 +598,207 @@ def test_tool_output_is_bounded_before_host_memory_capture():
     assert result.returncode != 0
 
 
+def test_inspection_preserves_oversized_snapshot_for_smaller_finalize_subset(
+    tmp_path, monkeypatch
+):
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_bytes(b"123")
+    second.write_bytes(b"456")
+    artifacts = [
+        {
+            "path": path.name,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+        for path in (first, second)
+    ]
+    verification = {"ok": True, "data": {"artifacts": artifacts}}
+    backend = _backend(tmp_path)
+    backend.container_started = True
+    monkeypatch.setattr("core.agentic_compute.MAX_TRANSFER_TOTAL", 4)
+    backend._snapshot = lambda **kwargs: (tmp_path, verification)
+    backend._strict_snapshot_files = (
+        lambda snapshot, deadline=None: [first, second]
+    )
+    backend._verification_matches_snapshot = lambda *args, **kwargs: True
+    try:
+        inspected = backend.inspect_artifacts()
+        assert inspected["ok"] is True
+        assert backend.latest_snapshot == tmp_path
+        assert backend.best_result() is None
+        selected = {"ok": True, "data": {"artifacts": [artifacts[0]]}}
+        result = backend._snapshot_result(
+            tmp_path, selected, success=True, summary="selected"
+        )
+        assert result["files"] == [
+            {"filename": "first.txt", "content": b"123"}
+        ]
+    finally:
+        backend.container_started = False
+        backend.close()
+
+
+@pytest.mark.parametrize("failure", ["helper", "unpause"])
+def test_snapshot_cleanup_failure_poisons_and_removes_task_container(
+    tmp_path, failure
+):
+    backend = _backend(tmp_path)
+    backend.container_started = True
+    backend._may_exist_containers.add("snapshot-helper")
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        if (
+            failure == "helper"
+            and command[1:3] == ["rm", "-f"]
+            and command[-1] == "snapshot-helper"
+        ):
+            return subprocess.CompletedProcess(command, 1, b"", b"busy")
+        if failure == "helper" and command[1] == "inspect":
+            return subprocess.CompletedProcess(command, 0, b"{}", b"")
+        if failure == "unpause" and command[1] == "unpause":
+            return subprocess.CompletedProcess(command, 1, b"", b"failed")
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    backend._run = run
+    with pytest.raises(RuntimeError, match="failed"):
+        backend._cleanup_snapshot_resources("snapshot-helper")
+
+    assert backend.poisoned is True
+    assert backend.container_started is False
+    assert ["docker", "rm", "-f", backend.container_name] in commands
+
+
+def test_ambiguous_pause_timeout_unpauses_or_removes_task_container(tmp_path):
+    backend = _backend(tmp_path)
+    backend.container_started = True
+    backend._may_exist_containers.add(backend.container_name)
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        if command[1] == "pause":
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        if command[1] == "exec":
+            return subprocess.CompletedProcess(command, 0, b"ok\n", b"")
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    backend._run = run
+    try:
+        with pytest.raises(subprocess.TimeoutExpired):
+            backend._snapshot()
+
+        assert ["docker", "unpause", backend.container_name] in commands
+        assert backend.container_started is True
+    finally:
+        backend.close()
+
+
+def test_snapshot_rehash_stops_at_absolute_deadline(tmp_path, monkeypatch):
+    artifact = tmp_path / "large.bin"
+    artifact.write_bytes(b"x" * (2 * 1024 * 1024))
+    verification = {
+        "ok": True,
+        "data": {
+            "artifacts": [{
+                "path": artifact.name,
+                "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+            }]
+        },
+    }
+    times = iter([100.0, 100.0, 102.0])
+    monkeypatch.setattr(
+        "core.agentic_compute.time.monotonic", lambda: next(times)
+    )
+    backend = _backend(tmp_path)
+    try:
+        with pytest.raises(TimeoutError, match="wall time exhausted"):
+            backend._verification_matches_snapshot(
+                verification, tmp_path, deadline=101.0
+            )
+    finally:
+        backend.close()
+
+
+@pytest.mark.parametrize("resource", ["container", "volume"])
+def test_cleanup_verification_requires_explicit_docker_not_found(
+    tmp_path, resource
+):
+    backend = _backend(tmp_path)
+    if resource == "container":
+        backend.container_started = True
+    else:
+        backend.work_volume_created = True
+
+    def run(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command, 1, stdout=b"", stderr=b"daemon unavailable"
+        )
+
+    backend._run = run
+    method = (
+        backend._remove_container
+        if resource == "container"
+        else backend._remove_work_volume
+    )
+
+    with pytest.raises(RuntimeError, match="could not be verified"):
+        method()
+
+    assert backend.poisoned is True
+    if resource == "container":
+        backend.container_started = False
+    else:
+        backend.work_volume_created = False
+    backend.close()
+
+
+def test_host_root_cleanup_failure_is_not_ignored(tmp_path, monkeypatch):
+    backend = _backend(tmp_path)
+    original = __import__("shutil").rmtree
+
+    def fail_target(path, *args, **kwargs):
+        if Path(path) == backend.root:
+            raise PermissionError("read-only host root")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr("core.agentic_compute.shutil.rmtree", fail_target)
+
+    with pytest.raises(PermissionError, match="read-only host root"):
+        backend.close()
+
+    original(backend.root)
+
+
+def test_close_removes_may_exist_resources_without_creation_flags(tmp_path):
+    backend = _backend(tmp_path)
+    helper = f"{backend.container_name}-snapshot-lost"
+    verifier = f"{backend.container_name}-verify-lost"
+    backend._may_exist_containers.update({
+        backend.container_name, helper, verifier,
+    })
+    backend._may_exist_volumes.add(backend.work_volume_name)
+    backend.container_started = False
+    backend.work_volume_created = False
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    backend._run = run
+    backend.close()
+
+    for name in (backend.container_name, helper, verifier):
+        assert ["docker", "rm", "-f", name] in commands
+    assert [
+        "docker", "volume", "rm", "-f", backend.work_volume_name
+    ] in commands
+    assert backend._may_exist_containers == set()
+    assert backend._may_exist_volumes == set()
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="libseccomp launcher is Linux-only")
 def test_generated_python_launcher_denies_exec_and_network():
     source = b"""
@@ -621,6 +941,98 @@ def test_agentic_docker_backend_end_to_end(tmp_path):
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("extension", ["xlsx", "docx", "pptx"])
+def test_agentic_verifier_renders_primary_office_artifacts(
+    tmp_path, extension
+):
+    image = os.environ.get(
+        "AGENTIC_TEST_IMAGE", "gdpval-agentic-sandbox:local"
+    )
+    if subprocess.run(
+        ["docker", "image", "inspect", image],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).returncode != 0:
+        pytest.skip(f"agentic test image is unavailable: {image}")
+    artifact = tmp_path / f"report.{extension}"
+    if extension == "xlsx":
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        workbook.active["A1"] = "Professional report"
+        workbook.active["A2"] = 42
+        workbook.save(artifact)
+    elif extension == "docx":
+        from docx import Document
+
+        document = Document()
+        document.add_heading("Professional report", 0)
+        document.add_paragraph("Verified document content.")
+        document.save(artifact)
+    else:
+        from pptx import Presentation
+
+        presentation = Presentation()
+        slide = presentation.slides.add_slide(presentation.slide_layouts[0])
+        slide.shapes.title.text = "Professional report"
+        presentation.save(artifact)
+
+    backend = AgenticDockerBackend(
+        task_prompt=(
+            f"Create a professional {extension.upper()} report named "
+            f"report.{extension}"
+        ),
+        reference_files=[],
+        occupation="Analyst",
+        image=image,
+        seccomp_profile=str(SECCOMP),
+        allow_unpinned_image=True,
+        require_rootless_or_userns=False,
+        require_approved_input_manifest=False,
+        require_supply_chain_identity=False,
+        require_dedicated_host=False,
+        enforce_cpu_limit=False,
+        enforce_pid_limit=False,
+        enforce_outer_seccomp=False,
+        enforce_procfs_policy=False,
+        local_root_parent=os.environ.get("AGENTIC_TEST_LOCAL_ROOT_PARENT"),
+        docker_root_parent=os.environ.get("AGENTIC_TEST_DOCKER_ROOT_PARENT"),
+    )
+    try:
+        startup = backend.start()
+        assert startup["ok"] is True, startup
+        copied = subprocess.run(
+            [
+                "docker",
+                "cp",
+                str(artifact),
+                f"{backend.container_name}:/work/report.{extension}",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        assert copied.returncode == 0, copied.stderr.decode(
+            "utf-8", errors="replace"
+        )
+        inspection = backend.inspect_artifacts(180)
+        assert inspection["ok"] is True, inspection
+        assert len(inspection["data"]["artifacts"]) == 1
+        assert inspection["data"]["artifacts"][0]["path"] == (
+            f"report.{extension}"
+        )
+        assert inspection["data"]["artifacts"][0]["openable"] is True
+        finalized = backend.finalize(
+            [f"report.{extension}"], "Rendered primary artifact", 180
+        )
+        assert finalized["ok"] is True, finalized
+        assert backend.best_result()["success"] is True
+    finally:
+        backend.close()
+
+
+@pytest.mark.integration
 def test_agentic_docker_generated_python_denies_exec_and_network(tmp_path):
     image = os.environ.get(
         "AGENTIC_TEST_IMAGE", "gdpval-agentic-sandbox:local"
@@ -673,6 +1085,83 @@ Path('report.txt').write_text('blocked')
             pytest.skip(
                 "local kernel lacks seccomp TSYNC; generated Python stayed fail-closed"
             )
+        assert result["ok"] is True, result
+    finally:
+        backend.close()
+
+
+@pytest.mark.integration
+def test_outer_seccomp_allows_inner_filter_and_blocks_raw_signal_syscalls(
+    tmp_path
+):
+    image = os.environ.get(
+        "AGENTIC_TEST_IMAGE", "gdpval-agentic-sandbox:local"
+    )
+    profile_probe = subprocess.run(
+        [
+            "docker", "run", "--rm", "--network", "none", "--ipc", "none",
+            "--read-only", "--cap-drop", "ALL", "--user", "65532:65532",
+            "--security-opt", "no-new-privileges",
+            "--security-opt", f"seccomp={SECCOMP}",
+            "--entrypoint", "python", image, "-I", "-B", "-c",
+            "print('outer-seccomp-ready')",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if b"seccomp profiles are not supported" in profile_probe.stderr:
+        pytest.skip("local Docker daemon does not support custom seccomp profiles")
+    assert profile_probe.returncode == 0, profile_probe.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    backend = AgenticDockerBackend(
+        task_prompt="Create report.txt",
+        reference_files=[],
+        occupation="Analyst",
+        image=image,
+        seccomp_profile=str(SECCOMP),
+        allow_unpinned_image=True,
+        require_rootless_or_userns=False,
+        require_approved_input_manifest=False,
+        require_supply_chain_identity=False,
+        require_dedicated_host=False,
+        enforce_cpu_limit=False,
+        enforce_pid_limit=False,
+        enforce_outer_seccomp=True,
+        enforce_procfs_policy=False,
+        local_root_parent=os.environ.get("AGENTIC_TEST_LOCAL_ROOT_PARENT"),
+        docker_root_parent=os.environ.get("AGENTIC_TEST_DOCKER_ROOT_PARENT"),
+    )
+    try:
+        startup = backend.start()
+        assert startup["ok"] is True, startup
+        result = backend.run_python(
+            """
+import ctypes
+import errno
+from pathlib import Path
+
+libc = ctypes.CDLL(None, use_errno=True)
+blocked = 0
+for number, arguments in (
+    (317, (0, 0, 0)),
+    (129, (1, 0, 0)),
+    (297, (1, 1, 0, 0)),
+):
+    ctypes.set_errno(0)
+    returned = libc.syscall(number, *arguments)
+    if returned == -1 and ctypes.get_errno() == errno.EPERM:
+        blocked += 1
+assert blocked == 3, blocked
+Path('report.txt').write_text('blocked')
+""",
+            30,
+        )
+        if "seccomp TSYNC unavailable" in result.get("data", {}).get(
+            "stderr_tail", ""
+        ):
+            pytest.skip("local nested kernel lacks seccomp TSYNC")
         assert result["ok"] is True, result
     finally:
         backend.close()

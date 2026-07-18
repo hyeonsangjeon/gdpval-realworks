@@ -25,6 +25,7 @@ concurrency:
 
 jobs:
   model-free-preflight:
+    if: github.ref == 'refs/heads/main' && github.ref_protected == true
     runs-on: [self-hosted, linux, x64, agentic-sandbox]
     timeout-minutes: 45
     steps:
@@ -32,6 +33,14 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify protected main checkout
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Verify no model or publication credentials
         run: |
@@ -77,6 +86,7 @@ jobs:
           cd batch-runner
           python3.11 -m pytest \
             tests/test_agentic_sandbox_security.py::test_agentic_production_runner_preflight \
+            tests/test_agentic_sandbox_security.py::test_outer_seccomp_allows_inner_filter_and_blocks_raw_signal_syscalls \
             -m integration -q
 
       - name: Assert terminal cleanup

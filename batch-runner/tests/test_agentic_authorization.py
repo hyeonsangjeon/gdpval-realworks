@@ -21,6 +21,7 @@ from core.agentic_authorization import (
     canonical_json,
     load_approval_scope,
     provider_endpoint_sha256,
+    task_request_sha256,
 )
 
 
@@ -42,6 +43,8 @@ def _expectation():
         provider_classifications={
             "task-1": "approved_public_gdpval",
         },
+        task_request_sha256={"task-1": "6" * 64},
+        selection_recomputation_sha256="5" * 64,
         approval_scope_sha256="7" * 64,
         official_scope_registry_sha256="8" * 64,
     )
@@ -58,6 +61,10 @@ def _envelope(now):
         "task_ids": list(expected.task_ids),
         "input_merkle_roots": dict(expected.input_merkle_roots),
         "provider_classifications": dict(expected.provider_classifications),
+        "task_request_sha256": dict(expected.task_request_sha256),
+        "selection_recomputation_sha256": (
+            expected.selection_recomputation_sha256
+        ),
         "provider": expected.provider,
         "model": expected.model,
         "api_version": expected.api_version,
@@ -114,6 +121,10 @@ def _context():
         "input_merkle_root": expected.input_merkle_roots["task-1"],
         "provider_classification": expected.provider_classifications["task-1"],
         "task_id": "task-1",
+        "task_request_sha256": expected.task_request_sha256["task-1"],
+        "selection_recomputation_sha256": (
+            expected.selection_recomputation_sha256
+        ),
         "run_id": expected.run_id,
         "condition": expected.condition,
         "model": expected.model,
@@ -169,6 +180,18 @@ def test_runtime_caps_must_exactly_match_signed_caps(tmp_path):
     context["caps"] = {"cost_usd": "6.26", "api_attempts": 30}
 
     with pytest.raises(AuthorizationError, match="approval_caps_invalid"):
+        gate.authorize_request(
+            '["run-1","treatment","task-1"]', "a" * 64, context
+        )
+
+
+def test_runtime_selection_identity_must_match_signed_scope(tmp_path):
+    now = datetime.now(timezone.utc)
+    gate, _ = _gate(tmp_path, _envelope(now), now)
+    context = _context()
+    context["selection_recomputation_sha256"] = "0" * 64
+
+    with pytest.raises(AuthorizationError, match="selection_identity_mismatch"):
         gate.authorize_request(
             '["run-1","treatment","task-1"]', "a" * 64, context
         )
@@ -260,19 +283,24 @@ def test_approval_structure_and_lifetime_are_strict(
 
 def test_provider_endpoint_hash_normalizes_https_origin_and_rejects_unsafe():
     expected = provider_endpoint_sha256(
-        "azure", "https://Example.OpenAI.Azure.com/path/"
+        "azure", "https://Example.OpenAI.Azure.com/approved/"
     )
 
     assert expected == provider_endpoint_sha256(
-        "azure_openai", "https://example.openai.azure.com/other"
+        "azure_openai", "https://example.openai.azure.com/approved"
     )
     assert expected != provider_endpoint_sha256(
         "azure", "https://other.openai.azure.com"
+    )
+    assert expected != provider_endpoint_sha256(
+        "azure", "https://example.openai.azure.com/other-route"
     )
     with pytest.raises(ValueError, match="HTTPS origin"):
         provider_endpoint_sha256("azure", "http://example.test")
     with pytest.raises(ValueError, match="HTTPS origin"):
         provider_endpoint_sha256("openai", "https://user@example.test")
+    with pytest.raises(ValueError, match="path is ambiguous"):
+        provider_endpoint_sha256("azure", "https://example.test/a/../b")
 
 
 @pytest.mark.parametrize(
@@ -290,6 +318,16 @@ def test_provider_endpoint_hash_normalizes_https_origin_and_rejects_unsafe():
             "classification_set_mismatch",
         ),
         ("official_scope_registry_sha256", "0" * 64, "registry_mismatch"),
+        (
+            "task_request_sha256",
+            {"task-1": "0" * 64},
+            "task_request_set_mismatch",
+        ),
+        (
+            "selection_recomputation_sha256",
+            "0" * 64,
+            "selection_identity_mismatch",
+        ),
     ],
 )
 def test_signed_phase_scope_must_exactly_match_preregistered_scope(
@@ -303,6 +341,7 @@ def test_signed_phase_scope_must_exactly_match_preregistered_scope(
         envelope["provider_classifications"][
             "task-2"
         ] = "approved_public_gdpval"
+        envelope["task_request_sha256"]["task-2"] = "e" * 64
     gate, _ = _gate(tmp_path, envelope, now)
 
     with pytest.raises(AuthorizationError, match=match):
@@ -325,6 +364,8 @@ def test_load_approval_scope_requires_tracked_exact_manifest(tmp_path):
         "provider_classifications": {
             "task-1": "approved_public_gdpval",
         },
+        "task_request_sha256": {"task-1": "6" * 64},
+        "selection_recomputation_sha256": "5" * 64,
     }
     body["sha256"] = hashlib.sha256(canonical_json(body)).hexdigest()
     scope_path.write_text(json.dumps(body), encoding="utf-8")
@@ -338,7 +379,36 @@ def test_load_approval_scope_requires_tracked_exact_manifest(tmp_path):
 
     assert scope["conditions"] == ("treatment",)
     assert scope["task_ids"] == ("task-1",)
+    assert scope["selection_recomputation_sha256"] == "5" * 64
     assert scope["approval_scope_sha256"] == body["sha256"]
     assert scope["official_scope_registry_sha256"] == hashlib.sha256(
         registry.read_bytes()
     ).hexdigest()
+
+
+def test_task_request_digest_binds_instruction_occupation_and_prompt():
+    base = task_request_sha256(
+        task_prompt="Create report.xlsx",
+        occupation="Analyst",
+        experiment_prompt={
+            "system": "system", "prefix": None, "body": None,
+            "suffix": "Use concise labels.",
+        },
+    )
+
+    assert base != task_request_sha256(
+        task_prompt="Create report.xlsx with hidden content",
+        occupation="Analyst",
+        experiment_prompt={
+            "system": "system", "prefix": None, "body": None,
+            "suffix": "Use concise labels.",
+        },
+    )
+    assert base != task_request_sha256(
+        task_prompt="Create report.xlsx",
+        occupation="Auditor",
+        experiment_prompt={
+            "system": "system", "prefix": None, "body": None,
+            "suffix": "Use concise labels.",
+        },
+    )

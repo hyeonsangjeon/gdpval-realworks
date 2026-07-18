@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 from decimal import Decimal
@@ -12,6 +13,7 @@ from typing import Any, Callable, Mapping, Optional
 
 import yaml
 
+from core.agentic_authorization import task_request_sha256
 from core.agentic_budget import (
     AgenticBudgetLedger,
     BudgetCaps,
@@ -126,8 +128,12 @@ class AgenticPricing:
 
     def worst_case(self, input_tokens: int, output_tokens: int) -> Decimal:
         million = Decimal(1000000)
+        conservative_input_price = max(
+            self.input_per_million,
+            self.cached_input_per_million,
+        )
         return (
-            Decimal(input_tokens) * self.input_per_million
+            Decimal(input_tokens) * conservative_input_price
             + Decimal(output_tokens) * self.output_per_million
         ) / million
 
@@ -270,18 +276,27 @@ class AgenticSandboxRunner:
         })
         error_counts: dict[str, int] = {}
         terminal_error = "unknown_error"
+        outcome: Optional[dict] = None
+
+        def finish(result: Mapping[str, Any]) -> dict:
+            nonlocal outcome
+            outcome = dict(result)
+            return outcome
+
         try:
             startup = dict(backend.start(self.limits.max_task_seconds))
             if startup.get("ok") is not True:
                 terminal_error = str(startup.get("error_type") or "compute_start_failed")
-                return self._failure(backend, metrics, terminal_error, started)
+                return finish(self._failure(
+                    backend, metrics, terminal_error, started
+                ))
             substrate_manifest = (startup.get("data") or {}).get(
                 "substrate_manifest"
             )
             if not isinstance(substrate_manifest, dict):
-                return self._failure(
+                return finish(self._failure(
                     backend, metrics, "substrate_manifest_missing", started
-                )
+                ))
 
             messages: list[dict] = [{
                 "role": "user",
@@ -346,6 +361,9 @@ class AgenticSandboxRunner:
                             "input_merkle_root": (startup.get("data") or {}).get(
                                 "input_merkle_root"
                             ),
+                            "selection_recomputation_sha256": (
+                                startup.get("data") or {}
+                            ).get("selection_recomputation_sha256"),
                             "provider_classification": (startup.get("data") or {}).get(
                                 "provider_classification"
                             ),
@@ -360,6 +378,12 @@ class AgenticSandboxRunner:
                             "run_id": run_id,
                             "condition": condition_name,
                             "task_id": task_id,
+                            "task_request_sha256": task_request_sha256(
+                                task_prompt=task_prompt,
+                                occupation=occupation,
+                                experiment_prompt=experiment_prompt,
+                                perception_text=perception_text,
+                            ),
                             "caps": self._authorization_caps(),
                             "price_table_sha256": self.pricing.price_table_sha256,
                             "substrate_manifest_sha256": substrate_manifest.get(
@@ -380,6 +404,13 @@ class AgenticSandboxRunner:
                     terminal_error = "authorization_or_reservation_failed"
                     break
 
+                remaining_before_api = self.limits.max_task_seconds - (
+                    time.monotonic() - started
+                )
+                if remaining_before_api < 1.0:
+                    terminal_error = "task_wall_time_exhausted"
+                    break
+                request_payload["timeout"] = min(480.0, remaining_before_api)
                 metrics["model_api_calls"] += 1
                 request_started = time.monotonic()
                 if first_model_dispatch is None:
@@ -477,14 +508,22 @@ class AgenticSandboxRunner:
                             category = str(
                                 dispatch.result.get("error_type") or "unknown_tool_error"
                             )
-                            error_counts[category] = error_counts.get(category, 0) + 1
+                            fingerprint = _error_fingerprint(
+                                name, dispatch.result
+                            )
+                            error_counts[fingerprint] = (
+                                error_counts.get(fingerprint, 0) + 1
+                            )
                             if category == "capability_missing":
                                 metrics["capability_misses"] += 1
-                            if error_counts[category] > self.limits.max_identical_errors:
+                            if (
+                                error_counts[fingerprint]
+                                >= self.limits.max_identical_errors
+                            ):
                                 terminal_error = "repeated_error_limit"
-                                return self._failure(
+                                return finish(self._failure(
                                     backend, metrics, terminal_error, started
-                                )
+                                ))
                             if category in {
                                 "compute_backend_error",
                                 "invalid_compute_result",
@@ -493,15 +532,17 @@ class AgenticSandboxRunner:
                                 "task_wall_time_exhausted",
                             }:
                                 terminal_error = category
-                                return self._failure(
+                                return finish(self._failure(
                                     backend, metrics, terminal_error, started
-                                )
+                                ))
                         messages.append(_function_output(call, dispatch.result))
                         if dispatch.finalized:
                             result = dict(dispatch.terminal_result or {})
                             if result.get("success") is not True:
                                 terminal_error = "invalid_finalize_result"
-                                return self._failure(backend, metrics, terminal_error, started)
+                                return finish(self._failure(
+                                    backend, metrics, terminal_error, started
+                                ))
                             metrics["terminal_error_category"] = None
                             metrics["recovered_after_tool_error"] = (
                                 metrics["tool_errors"] > 0
@@ -509,7 +550,7 @@ class AgenticSandboxRunner:
                             metrics["task_wall_time_ms"] = _elapsed_ms(started)
                             result["agentic_metrics"] = metrics
                             result["substrate_manifest"] = substrate_manifest
-                            return result
+                            return finish(result)
                     continue
 
                 messages.extend(_serialize_output_item(item) for item in output_items)
@@ -529,14 +570,43 @@ class AgenticSandboxRunner:
 
             else:
                 terminal_error = "model_iteration_cap"
-            return self._failure(backend, metrics, terminal_error, started)
+            return finish(self._failure(
+                backend, metrics, terminal_error, started
+            ))
         except Exception:
-            return self._failure(backend, metrics, "runner_internal_error", started)
+            return finish(self._failure(
+                backend, metrics, "runner_internal_error", started
+            ))
         finally:
             try:
                 backend.close()
             except Exception:
-                pass
+                if outcome is None:
+                    outcome = self._failure(
+                        backend, metrics, "compute_cleanup_failed", started
+                    )
+                prior_error = outcome.get("error")
+                candidate = None
+                if not outcome.get("files"):
+                    try:
+                        candidate = backend.best_result()
+                    except Exception:
+                        candidate = None
+                if (
+                    isinstance(candidate, Mapping)
+                    and candidate.get("files")
+                    and not outcome.get("files")
+                ):
+                    outcome["files"] = list(candidate["files"])
+                    outcome["text"] = outcome.get("text") or candidate.get(
+                        "text", ""
+                    )
+                outcome["success"] = False
+                outcome["prior_error"] = prior_error
+                outcome["error"] = "compute_cleanup_failed"
+                metrics["terminal_error_category"] = "compute_cleanup_failed"
+                metrics["task_wall_time_ms"] = _elapsed_ms(started)
+                outcome["agentic_metrics"] = metrics
 
     @staticmethod
     def _validate_client(client: Any) -> None:
@@ -740,6 +810,41 @@ def _valid_count(value: Any) -> bool:
         and not isinstance(value, bool)
         and value >= 0
     )
+
+
+def _error_fingerprint(tool_name: str, result: Mapping[str, Any]) -> str:
+    category = str(result.get("error_type") or "unknown_tool_error")[:80]
+
+    def normalize(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {
+                str(key)[:80]: normalize(item)
+                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+                if str(key) not in {"raw_arguments", "source", "content"}
+            }
+        if isinstance(value, list):
+            return [normalize(item) for item in value[:20]]
+        if isinstance(value, str):
+            text = value.lower()[:2048]
+            text = re.sub(
+                r"(?:[a-z]:)?(?:/[a-z0-9._-]+)+", "<path>", text
+            )
+            text = re.sub(r"\b[0-9a-f]{16,}\b", "<hex>", text)
+            text = re.sub(r"\b\d+(?:\.\d+)?\b", "<number>", text)
+            return " ".join(text.split())
+        if value is None or isinstance(value, (bool, int, float)):
+            return value
+        return type(value).__name__
+
+    diagnostic = normalize(result.get("data") or {})
+    return hashlib.sha256(
+        json.dumps(
+            [tool_name, category, diagnostic],
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _elapsed_ms(started: float) -> float:

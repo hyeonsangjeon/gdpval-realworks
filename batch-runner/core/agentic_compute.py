@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import signal
 import stat
@@ -23,6 +24,7 @@ MAX_INPUT_SINGLE = 512 * 1024 * 1024
 MAX_WORK_FILES = 64
 MAX_WORK_TOTAL = 512 * 1024 * 1024
 MAX_WORK_SINGLE = 256 * 1024 * 1024
+MAX_TRANSFER_TOTAL = 256 * 1024 * 1024
 MAX_DEPTH = 16
 MAX_PATH_BYTES = 240
 OUTPUT_LIMIT = 32768
@@ -57,6 +59,7 @@ class AgenticDockerBackend:
         approved_input_manifest: Optional[Mapping[str, Mapping[str, Any]]] = None,
         require_approved_input_manifest: bool = True,
         expected_input_merkle_root: Optional[str] = None,
+        selection_recomputation_sha256: Optional[str] = None,
         sbom_sha256: Optional[str] = None,
         require_supply_chain_identity: bool = True,
         require_dedicated_host: bool = True,
@@ -102,6 +105,16 @@ class AgenticDockerBackend:
         )
         self.require_approved_input_manifest = require_approved_input_manifest
         self.expected_input_merkle_root = expected_input_merkle_root
+        if (
+            selection_recomputation_sha256 is not None
+            and re.fullmatch(
+                r"[0-9a-f]{64}", selection_recomputation_sha256
+            ) is None
+        ):
+            raise ValueError("selection recomputation identity is invalid")
+        self.selection_recomputation_sha256 = (
+            selection_recomputation_sha256
+        )
         if require_supply_chain_identity and (
             not isinstance(sbom_sha256, str)
             or len(sbom_sha256) != 64
@@ -131,6 +144,8 @@ class AgenticDockerBackend:
         self.work_volume_name = f"{self.container_name}-work"
         self.container_started = False
         self.work_volume_created = False
+        self._may_exist_containers: set[str] = set()
+        self._may_exist_volumes: set[str] = set()
         self.poisoned = False
         self.input_records: list[dict] = []
         self.input_hashes: set[str] = set()
@@ -138,25 +153,27 @@ class AgenticDockerBackend:
         self.latest_snapshot: Optional[Path] = None
         self.latest_verification: Optional[dict] = None
         self._best_result: Optional[dict] = None
+        self._verified_component_hashes: Optional[dict[str, str]] = None
         self.image_id = ""
         self.verifier_image_id = ""
 
     def start(self, timeout_seconds: float = 1200.0) -> Mapping[str, Any]:
         deadline = _operation_deadline(timeout_seconds)
         try:
-            self._verify_host_runtime()
+            self._verify_host_runtime(deadline)
             _remaining_timeout(deadline, 1200.0)
-            self._verify_verifier_image_components()
+            self._verify_verifier_image_components(deadline)
             _remaining_timeout(deadline, 1200.0)
-            self._stage_inputs()
+            self._stage_inputs(deadline)
             _remaining_timeout(deadline, 1200.0)
             if (
                 self.expected_input_merkle_root is not None
                 and self.input_merkle_root != self.expected_input_merkle_root
             ):
                 return _error("approved_input_merkle_mismatch")
-            self._create_work_volume()
+            self._create_work_volume(deadline)
             command = self._task_container_command()
+            self._may_exist_containers.add(self.container_name)
             result = self._run(
                 command, timeout=_remaining_timeout(deadline, 120.0)
             )
@@ -166,8 +183,8 @@ class AgenticDockerBackend:
             if not container_id:
                 return _error("container_start_failed")
             self.container_started = True
-            self._verify_runtime()
-            self._assert_pid1_only()
+            self._verify_runtime(deadline)
+            self._assert_pid1_only(deadline)
             _remaining_timeout(deadline, 1200.0)
             return {
                 "ok": True,
@@ -178,6 +195,9 @@ class AgenticDockerBackend:
                     ],
                     "input_count": len(self.input_records),
                     "input_merkle_root": self.input_merkle_root,
+                    "selection_recomputation_sha256": (
+                        self.selection_recomputation_sha256
+                    ),
                     "provider_classification": self.provider_classification,
                     "substrate_manifest": self.substrate_manifest(),
                 },
@@ -193,10 +213,11 @@ class AgenticDockerBackend:
         if not self._ready():
             return _error("compute_unavailable")
         try:
+            deadline = _operation_deadline(timeout_seconds)
             snapshot, _ = self._snapshot(
-                deadline=_operation_deadline(timeout_seconds)
+                deadline=deadline
             )
-            files = self._strict_snapshot_files(snapshot)
+            files = self._strict_snapshot_files(snapshot, deadline)
             return {
                 "ok": True,
                 "data": {
@@ -275,7 +296,11 @@ class AgenticDockerBackend:
             "task_image_id": self.image_id,
             "verifier_image": self.verifier_image,
             "verifier_image_id": self.verifier_image_id,
-            "component_sha256": self._component_hashes(),
+            "component_sha256": (
+                dict(self._verified_component_hashes)
+                if self._verified_component_hashes is not None
+                else self._component_hashes()
+            ),
             "sbom_sha256": self.sbom_sha256,
             "uid": 65532,
             "gid": 65532,
@@ -292,6 +317,7 @@ class AgenticDockerBackend:
                 "nodev": True,
                 "noexec": True,
             },
+            "selected_transfer_bytes": MAX_TRANSFER_TOTAL,
             "memory_bytes": self.memory_gb * 1024 * 1024 * 1024,
             "memory_swap_bytes": self.memory_gb * 1024 * 1024 * 1024,
             "cpus": self.cpus,
@@ -410,22 +436,21 @@ class AgenticDockerBackend:
         if not self._ready():
             return _error("compute_unavailable")
         try:
+            deadline = _operation_deadline(timeout_seconds)
             snapshot, verification = self._snapshot(
                 verify=True,
-                deadline=_operation_deadline(timeout_seconds),
+                deadline=deadline,
             )
-            self._strict_snapshot_files(snapshot)
+            self._strict_snapshot_files(snapshot, deadline)
             assert verification is not None
             if verification.get("ok") is True:
                 if not self._verification_matches_snapshot(
-                    verification, snapshot
+                    verification, snapshot, deadline=deadline
                 ):
                     return _error("snapshot_hash_mismatch")
                 self.latest_snapshot = snapshot
                 self.latest_verification = verification
-                self._best_result = self._snapshot_result(
-                    snapshot, verification, success=False, summary=""
-                )
+                self._best_result = None
             return verification
         except Exception:
             return _error("artifact_inspection_failed")
@@ -470,6 +495,7 @@ class AgenticDockerBackend:
                     selected_verification,
                     snapshot,
                     selected_deliverables=normalized,
+                    deadline=deadline,
                 )
             ):
                 return _error("selected_deliverable_verification_failed")
@@ -480,13 +506,30 @@ class AgenticDockerBackend:
                 selected_verification,
                 success=True,
                 summary=summary,
+                deadline=deadline,
             )
         except ValueError:
             return _error("snapshot_hash_mismatch")
         return {"ok": True, "data": {"artifact_count": len(normalized)}}
 
-    def best_result(self) -> Mapping[str, Any] | None:
-        return self._best_result
+    def best_result(
+        self, timeout_seconds: float = 1200.0
+    ) -> Mapping[str, Any] | None:
+        deadline = _operation_deadline(timeout_seconds)
+        if self._best_result is not None:
+            return self._best_result
+        if self.latest_snapshot is None or self.latest_verification is None:
+            return None
+        try:
+            return self._snapshot_result(
+                self.latest_snapshot,
+                self.latest_verification,
+                success=False,
+                summary="",
+                deadline=deadline,
+            )
+        except ValueError:
+            return None
 
     @staticmethod
     def _snapshot_result(
@@ -495,9 +538,11 @@ class AgenticDockerBackend:
         *,
         success: bool,
         summary: str,
+        deadline: Optional[float] = None,
     ) -> dict:
         data = verification.get("data") or {}
         files = []
+        total_bytes = 0
         for item in data.get("artifacts", []):
             if not isinstance(item, Mapping):
                 raise ValueError("invalid artifact verification")
@@ -506,8 +551,24 @@ class AgenticDockerBackend:
             if not isinstance(relative, str) or not isinstance(expected_hash, str):
                 raise ValueError("invalid artifact verification")
             path = snapshot / relative
-            content = path.read_bytes()
-            if hashlib.sha256(content).hexdigest() != expected_hash:
+            if deadline is not None:
+                _remaining_timeout(deadline, 1200.0)
+            total_bytes += path.stat().st_size
+            if total_bytes > MAX_TRANSFER_TOTAL:
+                raise ValueError("selected artifact transfer limit exceeded")
+            content_parts = []
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                while True:
+                    if deadline is not None:
+                        _remaining_timeout(deadline, 1200.0)
+                    chunk = stream.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                    content_parts.append(chunk)
+            content = b"".join(content_parts)
+            if digest.hexdigest() != expected_hash:
                 raise ValueError("snapshot hash mismatch")
             files.append({"filename": relative, "content": content})
         if not files:
@@ -520,8 +581,21 @@ class AgenticDockerBackend:
         }
 
     def close(self) -> None:
-        self._remove_container()
-        self._remove_work_volume()
+        failures = []
+        for name in sorted(self._may_exist_containers):
+            try:
+                self._remove_named_container(name)
+            except Exception as exc:
+                failures.append(str(exc))
+        for name in sorted(self._may_exist_volumes):
+            try:
+                self._remove_named_volume(name)
+            except Exception as exc:
+                failures.append(str(exc))
+        self.container_started = self.container_name in self._may_exist_containers
+        self.work_volume_created = self.work_volume_name in self._may_exist_volumes
+        if failures:
+            raise RuntimeError("; ".join(failures))
         for directory in [
             self.inputs_dir,
             *(
@@ -533,9 +607,12 @@ class AgenticDockerBackend:
                 os.chmod(directory, 0o700, follow_symlinks=False)
             except OSError:
                 pass
-        shutil.rmtree(self.root, ignore_errors=True)
+        if self.root.exists():
+            shutil.rmtree(self.root)
+        if self.root.exists():
+            raise RuntimeError("compute host root cleanup failed")
 
-    def _stage_inputs(self) -> None:
+    def _stage_inputs(self, deadline: Optional[float] = None) -> None:
         if self.require_approved_input_manifest and self.approved_input_manifest is None:
             raise ValueError("approved input manifest is required")
         if len(self.reference_files) > MAX_INPUT_FILES:
@@ -544,8 +621,12 @@ class AgenticDockerBackend:
         relative_paths: set[str] = set()
         records: list[dict] = []
         for raw_reference in self.reference_files:
+            if deadline is not None:
+                _remaining_timeout(deadline, 1200.0)
+            source_root_value = None
             if isinstance(raw_reference, Mapping):
                 source_value = raw_reference.get("source_path")
+                source_root_value = raw_reference.get("source_root")
                 relative_value = raw_reference.get("relative_path")
                 if not isinstance(source_value, str) or not isinstance(
                     relative_value, str
@@ -574,7 +655,16 @@ class AgenticDockerBackend:
                 raise ValueError("input_name_violation")
             relative_paths.add(relative_path)
             try:
-                descriptor = _open_regular_nofollow(source)
+                if source_root_value is not None:
+                    if not isinstance(source_root_value, str):
+                        raise OSError("input source root is invalid")
+                    source_root = Path(source_root_value)
+                    descriptor = _open_regular_beneath_nofollow(
+                        source_root, source
+                    )
+                    source = source_root / source
+                else:
+                    descriptor = _open_regular_nofollow(source)
             except OSError as exc:
                 raise ValueError("input_type_or_link_violation") from exc
             try:
@@ -589,13 +679,15 @@ class AgenticDockerBackend:
                 copied = 0
                 with os.fdopen(os.dup(descriptor), "rb") as input_stream, destination.open("xb") as output:
                     for chunk in iter(lambda: input_stream.read(65536), b""):
+                        if deadline is not None:
+                            _remaining_timeout(deadline, 1200.0)
                         copied += len(chunk)
                         if copied > MAX_INPUT_SINGLE:
                             raise ValueError("input_file_size_limit")
                         digest.update(chunk)
                         output.write(chunk)
                 after = os.fstat(descriptor)
-                source_digest = _sha256_descriptor(descriptor)
+                source_digest = _sha256_descriptor(descriptor, deadline)
                 if _source_identity(after) != _source_identity(metadata):
                     raise ValueError("input_source_race")
                 if source_digest != digest.hexdigest() or copied != metadata.st_size:
@@ -606,7 +698,7 @@ class AgenticDockerBackend:
             total += copied
             if total > MAX_INPUT_TOTAL:
                 raise ValueError("input_total_size_limit")
-            staged_digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+            staged_digest = _sha256_file(destination, deadline)
             if staged_digest != digest.hexdigest():
                 raise ValueError("staged input hash mismatch")
             staged = destination.lstat()
@@ -707,9 +799,11 @@ class AgenticDockerBackend:
         command.append(self.image)
         return command
 
-    def _verify_runtime(self) -> None:
+    def _verify_runtime(self, deadline: Optional[float] = None) -> None:
+        deadline = deadline or _operation_deadline(1200.0)
         inspected = self._run(
-            [self.docker, "inspect", self.container_name], timeout=30
+            [self.docker, "inspect", self.container_name],
+            timeout=_remaining_timeout(deadline, 30.0),
         )
         documents = json.loads(inspected.stdout.decode("utf-8"))
         if len(documents) != 1:
@@ -784,7 +878,7 @@ class AgenticDockerBackend:
             raise RuntimeError("work volume mount missing")
         volume_result = self._run(
             [self.docker, "volume", "inspect", self.work_volume_name],
-            timeout=30,
+            timeout=_remaining_timeout(deadline, 30.0),
             check=True,
         )
         volume_documents = json.loads(volume_result.stdout.decode("utf-8"))
@@ -809,10 +903,11 @@ class AgenticDockerBackend:
         ]
         if len(readonly_inputs) != 1:
             raise RuntimeError("read-only inputs mount missing")
-        self._verify_runtime_components()
-        self._verify_fds()
+        self._verify_runtime_components(deadline)
+        self._verify_fds(deadline)
 
-    def _verify_host_runtime(self) -> None:
+    def _verify_host_runtime(self, deadline: Optional[float] = None) -> None:
+        deadline = deadline or _operation_deadline(1200.0)
         if self.require_dedicated_host:
             swaps = Path("/proc/swaps")
             if swaps.is_file() and len(swaps.read_text(encoding="utf-8").splitlines()) > 1:
@@ -828,13 +923,15 @@ class AgenticDockerBackend:
             if exposed:
                 raise RuntimeError("compute runner contains credential environment")
             running = self._run(
-                [self.docker, "ps", "--quiet"], timeout=30, check=True
+                [self.docker, "ps", "--quiet"],
+                timeout=_remaining_timeout(deadline, 30.0),
+                check=True,
             )
             if running.stdout.strip():
                 raise RuntimeError("compute runner has another running workload")
         result = self._run(
             [self.docker, "info", "--format", "{{json .SecurityOptions}}"],
-            timeout=30,
+            timeout=_remaining_timeout(deadline, 30.0),
             check=True,
         )
         try:
@@ -849,7 +946,8 @@ class AgenticDockerBackend:
         ):
             raise RuntimeError("rootless Docker or user namespaces are required")
 
-    def _verify_fds(self) -> None:
+    def _verify_fds(self, deadline: Optional[float] = None) -> None:
+        deadline = deadline or _operation_deadline(1200.0)
         script = (
             "import json,os;"
             "scan=lambda root:{str(i):os.readlink(root+'/'+str(i)) "
@@ -861,7 +959,7 @@ class AgenticDockerBackend:
         result = self._run([
             self.docker, "exec", "-i", "--user", "65532:65532",
             self.container_name, "python", "-I", "-B", "-c", script,
-        ], timeout=30)
+        ], timeout=_remaining_timeout(deadline, 30.0))
         identity = json.loads(result.stdout.decode("utf-8"))
         if identity.get("uid") != 65532 or identity.get("gid") != 65532:
             raise RuntimeError("runtime UID/GID mismatch")
@@ -876,16 +974,22 @@ class AgenticDockerBackend:
             if any("socket:" in target for target in fds.values()):
                 raise RuntimeError(f"inherited socket: {process}")
 
-    def _verify_runtime_components(self) -> None:
+    def _verify_runtime_components(
+        self, deadline: Optional[float] = None
+    ) -> None:
+        deadline = deadline or _operation_deadline(1200.0)
         script = _runtime_component_hash_script()
         result = self._run([
             self.docker, "exec", "-i", "--user", "65532:65532",
             self.container_name, "python", "-I", "-B", "-c", script,
-        ], timeout=30)
+        ], timeout=_remaining_timeout(deadline, 30.0))
         if result.returncode != 0:
             raise RuntimeError("runtime component hashing failed")
         observed = json.loads(result.stdout.decode("utf-8"))
-        expected = self.substrate_manifest()["component_sha256"]
+        expected = (
+            self._verified_component_hashes
+            or self._component_hashes(deadline)
+        )
         for name in (
             "python_launcher", "verifier", "capabilities", "core_tree"
         ):
@@ -897,10 +1001,13 @@ class AgenticDockerBackend:
         ):
             raise RuntimeError("runtime SBOM identity mismatch")
 
-    def _verify_verifier_image_components(self) -> None:
+    def _verify_verifier_image_components(
+        self, deadline: Optional[float] = None
+    ) -> None:
+        deadline = deadline or _operation_deadline(1200.0)
         inspected = self._run(
             [self.docker, "image", "inspect", self.verifier_image],
-            timeout=30,
+            timeout=_remaining_timeout(deadline, 30.0),
             check=True,
         )
         documents = json.loads(inspected.stdout.decode("utf-8"))
@@ -910,8 +1017,11 @@ class AgenticDockerBackend:
         if not self.verifier_image_id:
             raise RuntimeError("verifier image identity missing")
         script = _runtime_component_hash_script()
+        probe_name = f"{self.container_name}-component-{uuid.uuid4().hex[:8]}"
+        self._may_exist_containers.add(probe_name)
         command = [
-            self.docker, "run", "--rm", "--network", "none", "--ipc", "none",
+            self.docker, "run", "--name", probe_name,
+            "--network", "none", "--ipc", "none",
             "--read-only", "--cap-drop", "ALL", "--user", "65532:65532",
             "--security-opt", "no-new-privileges",
             "--security-opt", f"apparmor={self.apparmor_profile}",
@@ -925,14 +1035,20 @@ class AgenticDockerBackend:
         if self.enforce_cpu_limit:
             command += ["--cpus", "1"]
         command += [self.verifier_image_id, "-I", "-B", "-c", script]
-        result = self._run(command, timeout=60)
+        try:
+            result = self._run(
+                command, timeout=_remaining_timeout(deadline, 60.0)
+            )
+        finally:
+            self._remove_named_container(probe_name)
         if result.returncode != 0 or len(result.stdout) > OUTPUT_LIMIT:
             raise RuntimeError("verifier component hashing failed")
         try:
             observed = json.loads(result.stdout.decode("utf-8"))
         except Exception as exc:
             raise RuntimeError("verifier component hashing failed") from exc
-        expected = self._component_hashes()
+        expected = self._component_hashes(deadline)
+        self._verified_component_hashes = dict(expected)
         for name in ("verifier", "capabilities", "core_tree"):
             if observed.get(name) != expected.get(name):
                 raise RuntimeError(
@@ -944,7 +1060,9 @@ class AgenticDockerBackend:
         ):
             raise RuntimeError("verifier image SBOM identity mismatch")
 
-    def _component_hashes(self) -> dict[str, str]:
+    def _component_hashes(
+        self, deadline: Optional[float] = None
+    ) -> dict[str, str]:
         core_dir = Path(__file__).resolve().parent
         sandbox_dir = core_dir.parent / "sandbox"
         components = {
@@ -954,8 +1072,11 @@ class AgenticDockerBackend:
             "outer_seccomp": self.seccomp_profile,
             "capabilities": sandbox_dir / "agentic-capabilities.json",
         }
-        hashes = {name: _sha256_file(path) for name, path in components.items()}
-        hashes["core_tree"] = _sha256_python_tree(core_dir)
+        hashes = {
+            name: _sha256_file(path, deadline)
+            for name, path in components.items()
+        }
+        hashes["core_tree"] = _sha256_python_tree(core_dir, deadline)
         return hashes
 
     def _snapshot(
@@ -967,20 +1088,24 @@ class AgenticDockerBackend:
     ) -> tuple[Path, Optional[dict]]:
         deadline = deadline or _operation_deadline(1200.0)
         self._assert_pid1_only(deadline)
-        self._run(
-            [self.docker, "pause", self.container_name],
-            timeout=_remaining_timeout(deadline, 30.0),
-            check=True,
-        )
         destination = self.snapshots_dir / f"snapshot-{uuid.uuid4().hex}"
-        destination.mkdir(mode=0o700)
         helper_name = f"{self.container_name}-snapshot-{uuid.uuid4().hex[:8]}"
         verification = None
+        pause_may_have_applied = False
         try:
+            pause_timeout = _remaining_timeout(deadline, 30.0)
+            pause_may_have_applied = True
+            self._run(
+                [self.docker, "pause", self.container_name],
+                timeout=pause_timeout,
+                check=True,
+            )
+            destination.mkdir(mode=0o700)
             if verify:
                 verification = self._verify_work_volume(
                     selected_deliverables, deadline
                 )
+            self._may_exist_containers.add(helper_name)
             helper_command = [
                 self.docker, "run", "--detach", "--rm", "--name", helper_name,
                 "--network", "none", "--ipc", "none", "--read-only",
@@ -1015,16 +1140,43 @@ class AgenticDockerBackend:
                 check=True,
             )
         finally:
-            self._run([self.docker, "rm", "-f", helper_name], timeout=30)
-            self._run([self.docker, "unpause", self.container_name], timeout=30)
-        self._strict_snapshot_files(destination)
+            if pause_may_have_applied:
+                self._cleanup_snapshot_resources(helper_name)
+        self._strict_snapshot_files(destination, deadline)
         return destination, verification
 
-    def _strict_snapshot_files(self, snapshot: Path) -> list[Path]:
+    def _cleanup_snapshot_resources(self, helper_name: str) -> None:
+        failures = []
+        if helper_name in self._may_exist_containers:
+            try:
+                self._remove_named_container(helper_name)
+            except Exception as exc:
+                failures.append(str(exc))
+        try:
+            unpaused = self._run(
+                [self.docker, "unpause", self.container_name], timeout=30
+            )
+            if unpaused.returncode != 0:
+                failures.append("task container unpause failed")
+        except Exception:
+            failures.append("task container unpause failed")
+        if failures:
+            self.poisoned = True
+            try:
+                self._remove_container()
+            except Exception:
+                pass
+            raise RuntimeError("; ".join(failures))
+
+    def _strict_snapshot_files(
+        self, snapshot: Path, deadline: Optional[float] = None
+    ) -> list[Path]:
         files: list[Path] = []
         total_logical = 0
         total_allocated = 0
         for path in sorted(snapshot.rglob("*")):
+            if deadline is not None:
+                _remaining_timeout(deadline, 1200.0)
             relative = path.relative_to(snapshot)
             if len(relative.parts) > MAX_DEPTH or len(relative.as_posix().encode("utf-8")) > MAX_PATH_BYTES:
                 raise ValueError("workspace_path_limit")
@@ -1056,8 +1208,11 @@ class AgenticDockerBackend:
         if selected_deliverables is not None:
             request["selected_deliverables"] = list(selected_deliverables)
         payload = json.dumps(request, separators=(",", ":")).encode("utf-8")
+        verifier_name = f"{self.container_name}-verify-{uuid.uuid4().hex[:8]}"
+        self._may_exist_containers.add(verifier_name)
         command = [
-            self.docker, "run", "--rm", "-i", "--network", "none", "--ipc", "none",
+            self.docker, "run", "--name", verifier_name, "-i",
+            "--network", "none", "--ipc", "none",
             "--read-only", "--cap-drop", "ALL",
             "--memory", "2g", "--memory-swap", "2g",
             "--ulimit", "nofile=128:128", "--user", "65532:65532",
@@ -1073,6 +1228,7 @@ class AgenticDockerBackend:
                 "readonly,volume-nocopy"
             ),
             "--tmpfs", "/verify-work:rw,nosuid,nodev,noexec,size=134217728,nr_inodes=512,uid=65532,gid=65532,mode=700",
+            "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=67108864,nr_inodes=256,uid=65532,gid=65532,mode=700",
         ]
         if self.enforce_pid_limit:
             command += ["--pids-limit", "64"]
@@ -1089,11 +1245,18 @@ class AgenticDockerBackend:
             ),
         ]
         deadline = deadline or _operation_deadline(1200.0)
-        result = self._run(
-            command,
-            input_data=payload,
-            timeout=_remaining_timeout(deadline, 180.0),
-        )
+        try:
+            result = self._run(
+                command,
+                input_data=payload,
+                timeout=_remaining_timeout(deadline, 180.0),
+            )
+        finally:
+            try:
+                self._remove_named_container(verifier_name)
+            except Exception as exc:
+                self.poisoned = True
+                raise RuntimeError("verifier container cleanup failed") from exc
         if result.returncode != 0 or len(result.stdout) > OUTPUT_LIMIT:
             return _error("verifier_container_failed")
         try:
@@ -1109,6 +1272,7 @@ class AgenticDockerBackend:
         verification: Mapping[str, Any],
         snapshot: Path,
         selected_deliverables: Optional[list[str]] = None,
+        deadline: Optional[float] = None,
     ) -> bool:
         data = verification.get("data")
         artifacts = data.get("artifacts") if isinstance(data, Mapping) else None
@@ -1127,17 +1291,13 @@ class AgenticDockerBackend:
             if selected_deliverables is not None
             else None
         )
-        for path in self._strict_snapshot_files(snapshot):
+        for path in self._strict_snapshot_files(snapshot, deadline):
             relative = path.relative_to(snapshot)
             if _is_internal(relative):
                 continue
             if selected is not None and relative.as_posix() not in selected:
                 continue
-            digest = hashlib.sha256()
-            with path.open("rb") as stream:
-                for chunk in iter(lambda: stream.read(65536), b""):
-                    digest.update(chunk)
-            actual[relative.as_posix()] = digest.hexdigest()
+            actual[relative.as_posix()] = _sha256_file(path, deadline)
         return (
             expected == actual
             and bool(actual)
@@ -1227,12 +1387,17 @@ class AgenticDockerBackend:
         return self.container_started and not self.poisoned
 
     def _remove_container(self) -> None:
-        if not self.container_started:
+        if (
+            not self.container_started
+            and self.container_name not in self._may_exist_containers
+        ):
             return
-        self._run([self.docker, "rm", "-f", self.container_name], timeout=30)
+        self._remove_named_container(self.container_name)
         self.container_started = False
 
-    def _create_work_volume(self) -> None:
+    def _create_work_volume(self, deadline: Optional[float] = None) -> None:
+        deadline = deadline or _operation_deadline(1200.0)
+        self._may_exist_volumes.add(self.work_volume_name)
         result = self._run([
             self.docker, "volume", "create", "--driver", "local",
             "--opt", "type=tmpfs", "--opt", "device=tmpfs",
@@ -1241,7 +1406,7 @@ class AgenticDockerBackend:
                 "nosuid,nodev,noexec"
             ),
             self.work_volume_name,
-        ], timeout=30)
+        ], timeout=_remaining_timeout(deadline, 30.0))
         if result.returncode != 0:
             raise RuntimeError("work volume creation failed")
         created_name = result.stdout.decode("utf-8", errors="replace").strip()
@@ -1250,13 +1415,49 @@ class AgenticDockerBackend:
         self.work_volume_created = True
 
     def _remove_work_volume(self) -> None:
-        if not self.work_volume_created:
+        if (
+            not self.work_volume_created
+            and self.work_volume_name not in self._may_exist_volumes
+        ):
             return
-        self._run(
-            [self.docker, "volume", "rm", "-f", self.work_volume_name],
-            timeout=30,
-        )
+        self._remove_named_volume(self.work_volume_name)
         self.work_volume_created = False
+
+    def _remove_named_container(self, name: str) -> None:
+        result = self._run(
+            [self.docker, "rm", "-f", name], timeout=30
+        )
+        if result.returncode != 0:
+            inspected = self._run(
+                [self.docker, "inspect", name], timeout=30
+            )
+            if inspected.returncode == 0:
+                self.poisoned = True
+                raise RuntimeError(f"container cleanup failed: {name}")
+            if not _docker_not_found(inspected.stderr, "container"):
+                self.poisoned = True
+                raise RuntimeError(
+                    f"container cleanup could not be verified: {name}"
+                )
+        self._may_exist_containers.discard(name)
+
+    def _remove_named_volume(self, name: str) -> None:
+        result = self._run(
+            [self.docker, "volume", "rm", "-f", name], timeout=30
+        )
+        if result.returncode != 0:
+            inspected = self._run(
+                [self.docker, "volume", "inspect", name], timeout=30
+            )
+            if inspected.returncode == 0:
+                self.poisoned = True
+                raise RuntimeError(f"volume cleanup failed: {name}")
+            if not _docker_not_found(inspected.stderr, "volume"):
+                self.poisoned = True
+                raise RuntimeError(
+                    f"volume cleanup could not be verified: {name}"
+                )
+        self._may_exist_volumes.discard(name)
 
     @staticmethod
     def _run(
@@ -1349,6 +1550,96 @@ def _open_regular_nofollow(path: Path) -> int:
         os.close(directory)
 
 
+def _open_regular_beneath_nofollow(root: Path, relative: Path) -> int:
+    if (
+        relative.is_absolute()
+        or not relative.parts
+        or ".." in relative.parts
+        or any(part in {"", "."} for part in relative.parts)
+    ):
+        raise OSError("input source path is invalid")
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    directory = os.open(
+        root.absolute(), directory_flags | nofollow | cloexec
+    )
+    expected_mount = _descriptor_mount_id(directory)
+    try:
+        for part in relative.parts[:-1]:
+            child = os.open(
+                part,
+                directory_flags | nofollow | cloexec,
+                dir_fd=directory,
+            )
+            if _descriptor_mount_id(child) != expected_mount:
+                os.close(child)
+                raise OSError("input source crosses a mount boundary")
+            os.close(directory)
+            directory = child
+        descriptor = os.open(
+            relative.parts[-1],
+            os.O_RDONLY | nofollow | cloexec | nonblock,
+            dir_fd=directory,
+        )
+        if _descriptor_mount_id(descriptor) != expected_mount:
+            os.close(descriptor)
+            raise OSError("input source crosses a mount boundary")
+        return descriptor
+    finally:
+        os.close(directory)
+
+
+def _descriptor_mount_id(descriptor: int) -> int:
+    path = Path(f"/proc/self/fdinfo/{descriptor}")
+    try:
+        lines = path.read_text(encoding="ascii").splitlines()
+    except OSError as exc:
+        raise OSError("input mount identity is unavailable") from exc
+    for line in lines:
+        if line.startswith("mnt_id:"):
+            try:
+                return int(line.split(":", 1)[1].strip())
+            except ValueError as exc:
+                raise OSError("input mount identity is invalid") from exc
+    try:
+        target_value = os.readlink(f"/proc/self/fd/{descriptor}")
+        if target_value.endswith(" (deleted)"):
+            raise OSError("input descriptor target was deleted")
+        target = Path(target_value)
+        if not target.is_absolute():
+            raise OSError("input descriptor target is not absolute")
+        mount_lines = Path("/proc/self/mountinfo").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    except OSError as exc:
+        raise OSError("input mount identity is unavailable") from exc
+    matches = []
+    for line in mount_lines:
+        fields = line.split()
+        if len(fields) < 6:
+            continue
+        try:
+            mount_id = int(fields[0])
+        except ValueError:
+            continue
+        mount_value = re.sub(
+            r"\\([0-7]{3})",
+            lambda match: chr(int(match.group(1), 8)),
+            fields[4],
+        )
+        mountpoint = Path(mount_value)
+        try:
+            target.relative_to(mountpoint)
+        except ValueError:
+            continue
+        matches.append((len(mountpoint.parts), mount_id))
+    if not matches:
+        raise OSError("input mount identity is unavailable")
+    return max(matches)[1]
+
+
 def _operation_deadline(timeout_seconds: float) -> float:
     if (
         isinstance(timeout_seconds, bool)
@@ -1372,10 +1663,14 @@ def _source_identity(metadata: os.stat_result) -> tuple[int, ...]:
     )
 
 
-def _sha256_descriptor(descriptor: int) -> str:
+def _sha256_descriptor(
+    descriptor: int, deadline: Optional[float] = None
+) -> str:
     digest = hashlib.sha256()
     os.lseek(descriptor, 0, os.SEEK_SET)
     while True:
+        if deadline is not None:
+            _remaining_timeout(deadline, 1200.0)
         chunk = os.read(descriptor, 65536)
         if not chunk:
             break
@@ -1476,17 +1771,34 @@ def _error(error_type: str) -> dict:
     return {"ok": False, "error_type": error_type, "retryable": False}
 
 
-def _sha256_file(path: Path) -> str:
+def _sha256_file(
+    path: Path, deadline: Optional[float] = None
+) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(65536), b""):
+            if deadline is not None:
+                _remaining_timeout(deadline, 1200.0)
             digest.update(chunk)
     return digest.hexdigest()
 
 
-def _sha256_python_tree(root: Path) -> str:
+def _docker_not_found(stderr: bytes, resource: str) -> bool:
+    text = stderr.decode("utf-8", errors="replace").lower()
+    markers = {
+        "container": ("no such object", "no such container"),
+        "volume": ("no such volume",),
+    }
+    return any(marker in text for marker in markers[resource])
+
+
+def _sha256_python_tree(
+    root: Path, deadline: Optional[float] = None
+) -> str:
     digest = hashlib.sha256(b"gdpval-core-tree-v1\0")
     for path in sorted(root.rglob("*.py"), key=lambda item: item.as_posix()):
+        if deadline is not None:
+            _remaining_timeout(deadline, 1200.0)
         relative = path.relative_to(root).as_posix().encode("utf-8")
         content = path.read_bytes()
         digest.update(len(relative).to_bytes(8, "big"))

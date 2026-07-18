@@ -8,6 +8,10 @@ import json
 import os
 import ssl
 import math
+import sys
+import time
+import ijson
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping, cast
 from urllib.parse import urlsplit
@@ -21,6 +25,10 @@ from core.agentic_channel import (
 
 MAX_COMMAND_BYTES = 256 * 1024
 MAX_RESULT_BYTES = 384 * 1024 * 1024
+MAX_JSON_DEPTH = 32
+MAX_JSON_NODES = 200_000
+MAX_JSON_STRING_BYTES = 512 * 1024
+MAX_JSON_MATERIALIZED_BYTES = 384 * 1024 * 1024
 
 
 class MutualTLSComputeTransport:
@@ -70,7 +78,13 @@ class MutualTLSComputeTransport:
             connection_factory or http.client.HTTPSConnection
         )
 
-    def exchange(self, envelope: Mapping[str, Any]) -> Mapping[str, Any]:
+    def exchange(
+        self,
+        envelope: Mapping[str, Any],
+        *,
+        timeout_seconds: float | None = None,
+        monotonic_deadline: float | None = None,
+    ) -> Mapping[str, Any]:
         body = json.dumps(
             dict(envelope),
             sort_keys=True,
@@ -92,13 +106,42 @@ class MutualTLSComputeTransport:
             or not 0 < float(operation_timeout) <= 1200
         ):
             raise ValueError("compute operation timeout is invalid")
+        attempt_timeout = min(
+            self.timeout_seconds,
+            float(operation_timeout),
+            (
+                float(timeout_seconds)
+                if timeout_seconds is not None
+                else float(operation_timeout)
+            ),
+        )
+        if not math.isfinite(attempt_timeout) or attempt_timeout <= 0:
+            raise ValueError("compute transport timeout is invalid")
+        now = time.monotonic()
+        relative_deadline = now + attempt_timeout
+        if monotonic_deadline is not None:
+            if (
+                isinstance(monotonic_deadline, bool)
+                or not isinstance(monotonic_deadline, (int, float))
+                or not math.isfinite(float(monotonic_deadline))
+                or float(monotonic_deadline) <= now
+            ):
+                raise TimeoutError("compute transport deadline exhausted")
+            deadline = min(relative_deadline, float(monotonic_deadline))
+        else:
+            deadline = relative_deadline
         connection = self.connection_factory(
             self.host,
             self.port,
-            timeout=min(self.timeout_seconds, float(operation_timeout)),
+            timeout=attempt_timeout,
             context=self.context,
         )
         try:
+            _set_deadline_timeout(connection, deadline)
+            connect = getattr(connection, "connect", None)
+            if callable(connect):
+                connect()
+            _set_deadline_timeout(connection, deadline)
             connection.request(
                 "POST",
                 self.path,
@@ -109,9 +152,15 @@ class MutualTLSComputeTransport:
                     "Connection": "close",
                 },
             )
+            _set_deadline_timeout(connection, deadline)
             response = connection.getresponse()
             if response.status != 200:
-                response.read(min(self.max_result_bytes, 4096))
+                _read_bounded_response(
+                    connection,
+                    response,
+                    min(self.max_result_bytes, 4096),
+                    deadline,
+                )
                 raise RuntimeError("compute transport rejected request")
             content_length = response.getheader("Content-Length")
             if content_length is None:
@@ -122,15 +171,236 @@ class MutualTLSComputeTransport:
                 raise RuntimeError("compute response length is invalid") from exc
             if length < 0 or length > self.max_result_bytes:
                 raise RuntimeError("compute response exceeds byte cap")
-            payload = response.read(length + 1)
-            if len(payload) != length:
+            reader = _DeadlineResponseReader(
+                connection, response, length, deadline
+            )
+            try:
+                decoded = _json_load_before_deadline(reader, deadline)
+            except RuntimeError as exc:
+                if reader.bytes_read != length:
+                    raise RuntimeError(
+                        "compute response length mismatch"
+                    ) from exc
+                raise
+            if reader.bytes_read != length:
                 raise RuntimeError("compute response length mismatch")
-            decoded = json.loads(payload)
             if not isinstance(decoded, dict):
                 raise RuntimeError("compute response is not an object")
             return decoded
         finally:
             connection.close()
+
+
+def _remaining_attempt(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("compute transport deadline exhausted")
+    return max(0.001, remaining)
+
+
+def _set_deadline_timeout(connection: Any, deadline: float) -> None:
+    remaining = _remaining_attempt(deadline)
+    if hasattr(connection, "timeout"):
+        connection.timeout = remaining
+    sock = getattr(connection, "sock", None)
+    if sock is not None:
+        sock.settimeout(remaining)
+
+
+def _read_bounded_response(
+    connection: Any,
+    response: Any,
+    maximum: int,
+    deadline: float,
+) -> bytes:
+    chunks = []
+    total = 0
+    while total < maximum:
+        _set_deadline_timeout(connection, deadline)
+        chunk = response.read(min(64 * 1024, maximum - total))
+        _remaining_attempt(deadline)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    return b"".join(chunks)
+
+
+class _DeadlineResponseReader:
+    def __init__(
+        self,
+        connection: Any,
+        response: Any,
+        expected_bytes: int,
+        deadline: float,
+    ):
+        self.connection = connection
+        self.response = response
+        self.expected_bytes = expected_bytes
+        self.deadline = deadline
+        self.bytes_read = 0
+
+    def read(self, size: int = -1) -> bytes:
+        _set_deadline_timeout(self.connection, self.deadline)
+        if size == 0 or self.bytes_read >= self.expected_bytes:
+            return b""
+        bounded = 64 * 1024 if size < 0 else min(size, 64 * 1024)
+        bounded = min(bounded, self.expected_bytes - self.bytes_read)
+        chunk = self.response.read(bounded)
+        _remaining_attempt(self.deadline)
+        if len(chunk) > bounded:
+            raise RuntimeError("compute response exceeded declared length")
+        self.bytes_read += len(chunk)
+        return chunk
+
+
+class _DeadlineBytesReader:
+    def __init__(self, payload: bytes, deadline: float):
+        self.payload = memoryview(payload)
+        self.deadline = deadline
+        self.offset = 0
+
+    def read(self, size: int = -1) -> bytes:
+        _remaining_attempt(self.deadline)
+        if size == 0:
+            return b""
+        bounded = 64 * 1024 if size < 0 else min(size, 64 * 1024)
+        end = min(len(self.payload), self.offset + bounded)
+        chunk = self.payload[self.offset:end].tobytes()
+        self.offset = end
+        _remaining_attempt(self.deadline)
+        return chunk
+
+
+def _json_loads_before_deadline(payload: bytes, deadline: float) -> Any:
+    reader = _DeadlineBytesReader(payload, deadline)
+    return _json_load_before_deadline(reader, deadline)
+
+
+def _json_load_before_deadline(reader: Any, deadline: float) -> Any:
+    stack: list[dict[str, Any]] = []
+    root: Any = None
+    root_set = False
+    nodes = 0
+    materialized_bytes = 0
+
+    def charge(value: Any) -> None:
+        nonlocal materialized_bytes
+        materialized_bytes += sys.getsizeof(value)
+        if materialized_bytes > MAX_JSON_MATERIALIZED_BYTES:
+            raise RuntimeError("compute response materialized byte cap exceeded")
+
+    def count_node() -> None:
+        nonlocal nodes
+        nodes += 1
+        if nodes > MAX_JSON_NODES:
+            raise RuntimeError("compute response node cap exceeded")
+
+    def validate_string(value: Any) -> str:
+        if not isinstance(value, str):
+            raise RuntimeError("compute response string is invalid")
+        if (
+            len(value) > MAX_JSON_STRING_BYTES
+            or len(value.encode("utf-8")) > MAX_JSON_STRING_BYTES
+        ):
+            raise RuntimeError("compute response string cap exceeded")
+        return value
+
+    def attach(value: Any) -> None:
+        nonlocal root, root_set, materialized_bytes
+        if not stack:
+            if root_set:
+                raise RuntimeError("compute response contains multiple values")
+            root = value
+            root_set = True
+            return
+        frame = stack[-1]
+        container = frame["container"]
+        before = sys.getsizeof(container)
+        if isinstance(container, list):
+            container.append(value)
+        else:
+            key = frame.get("key")
+            if not isinstance(key, str):
+                raise RuntimeError("compute response map key is missing")
+            if key in container:
+                raise RuntimeError("compute response contains duplicate keys")
+            container[key] = value
+            frame["key"] = None
+        materialized_bytes += max(0, sys.getsizeof(container) - before)
+        if materialized_bytes > MAX_JSON_MATERIALIZED_BYTES:
+            raise RuntimeError("compute response materialized byte cap exceeded")
+
+    try:
+        for event, raw_value in ijson.basic_parse(
+            reader, use_float=False
+        ):
+            _remaining_attempt(deadline)
+            if event in {"start_map", "start_array"}:
+                if len(stack) + 1 > MAX_JSON_DEPTH:
+                    raise RuntimeError("compute response depth cap exceeded")
+                value: Any = {} if event == "start_map" else []
+                count_node()
+                charge(value)
+                attach(value)
+                stack.append({"container": value, "key": None})
+            elif event == "map_key":
+                if not stack or not isinstance(stack[-1]["container"], dict):
+                    raise RuntimeError("compute response map key is misplaced")
+                key = validate_string(raw_value)
+                count_node()
+                charge(key)
+                if stack[-1].get("key") is not None:
+                    raise RuntimeError("compute response map value is missing")
+                stack[-1]["key"] = key
+            elif event in {"end_map", "end_array"}:
+                if not stack:
+                    raise RuntimeError("compute response container is unbalanced")
+                frame = stack.pop()
+                container = frame["container"]
+                if (
+                    event == "end_map" and not isinstance(container, dict)
+                ) or (
+                    event == "end_array" and not isinstance(container, list)
+                ):
+                    raise RuntimeError("compute response container is unbalanced")
+                if isinstance(container, dict) and frame.get("key") is not None:
+                    raise RuntimeError("compute response map value is missing")
+            else:
+                if event == "string":
+                    value = validate_string(raw_value)
+                elif event in {"number", "integer", "double"}:
+                    if isinstance(raw_value, Decimal):
+                        value = float(raw_value)
+                        if not math.isfinite(value):
+                            raise RuntimeError(
+                                "compute response number is not finite"
+                            )
+                    elif type(raw_value) is int:
+                        value = raw_value
+                    else:
+                        raise RuntimeError("compute response number is invalid")
+                elif event == "boolean":
+                    if type(raw_value) is not bool:
+                        raise RuntimeError("compute response boolean is invalid")
+                    value = raw_value
+                elif event == "null":
+                    value = None
+                else:
+                    raise RuntimeError("compute response event is invalid")
+                count_node()
+                charge(value)
+                attach(value)
+    except TimeoutError:
+        raise
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError("compute response JSON is invalid") from exc
+    if stack or not root_set:
+        raise RuntimeError("compute response JSON is incomplete")
+    _remaining_attempt(deadline)
+    return root
 
 
 class RemoteBackendFactory:

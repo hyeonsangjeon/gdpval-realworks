@@ -158,7 +158,11 @@ def test_manifest_records_selector_hash_and_recomputation_identity(tmp_path):
     selection = select_agentic_tasks(records, rubrics, dataset_sha="d" * 40)
     repository = _clean_repository(tmp_path)
     selector = repository / "selector.py"
+    dataset = repository / "dataset.json"
+    rubric = repository / "rubric.json"
     selector.write_text("print('selector')\n", encoding="utf-8")
+    dataset.write_text("[]\n", encoding="utf-8")
+    rubric.write_text("{}\n", encoding="utf-8")
     commit = _commit(repository)
 
     manifest = build_selection_manifest(
@@ -167,6 +171,8 @@ def test_manifest_records_selector_hash_and_recomputation_identity(tmp_path):
         dataset_sha="d" * 40,
         rubric_repo="owner/rubric",
         rubric_sha="e" * 40,
+        dataset_path=dataset,
+        rubric_path=rubric,
         selector_path=selector,
         repository_root=repository,
         source_commit=commit,
@@ -174,6 +180,11 @@ def test_manifest_records_selector_hash_and_recomputation_identity(tmp_path):
 
     assert len(manifest["selector"]["sha256"]) == 64
     assert manifest["selector"]["path"] == "selector.py"
+    assert manifest["dataset"]["source_path"] == "dataset.json"
+    assert manifest["dataset"]["sha256"] == __import__("hashlib").sha256(
+        dataset.read_bytes()
+    ).hexdigest()
+    assert manifest["rubric"]["source_path"] == "rubric.json"
     assert len(manifest["recomputation_sha256"]) == 64
     assert manifest["selected_before_outcomes"] is True
 
@@ -185,7 +196,11 @@ def test_manifest_rejects_mutable_rubric_revision_and_invalid_repository(
     selection = select_agentic_tasks(records, rubrics, dataset_sha="d" * 40)
     repository = _clean_repository(tmp_path)
     selector = repository / "selector.py"
+    dataset = repository / "dataset.json"
+    rubric = repository / "rubric.json"
     selector.write_text("print('selector')\n", encoding="utf-8")
+    dataset.write_text("[]\n", encoding="utf-8")
+    rubric.write_text("{}\n", encoding="utf-8")
     commit = _commit(repository)
 
     with pytest.raises(ValueError, match="rubric revision"):
@@ -195,6 +210,8 @@ def test_manifest_rejects_mutable_rubric_revision_and_invalid_repository(
             dataset_sha="d" * 40,
             rubric_repo="owner/rubric",
             rubric_sha="main",
+            dataset_path=dataset,
+            rubric_path=rubric,
             selector_path=selector,
             repository_root=repository,
             source_commit=commit,
@@ -206,6 +223,8 @@ def test_manifest_rejects_mutable_rubric_revision_and_invalid_repository(
             dataset_sha="d" * 40,
             rubric_repo="owner/rubric",
             rubric_sha="e" * 40,
+            dataset_path=dataset,
+            rubric_path=rubric,
             selector_path=selector,
             repository_root=repository,
             source_commit=commit,

@@ -54,6 +54,7 @@ export interface TaskSubstrateManifest {
   read_only_rootfs: boolean
   cap_drop: string[]
   no_new_privileges: boolean
+  selected_transfer_bytes: number
   memory_bytes: number
   memory_swap_bytes: number
   cpus: number

@@ -21,6 +21,12 @@ name: Build Sandbox Image
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_agentic:
+        description: Publish agentic image after immutable locks are reviewed
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: build-sandbox-image
@@ -34,14 +40,24 @@ permissions:
 
 jobs:
   build-sandbox-image:
+    if: github.ref == 'refs/heads/main' && github.ref_protected == true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify protected main checkout
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Require immutable dependency locks before publication
+        if: ${{ inputs.publish_agentic == true }}
         run: |
           python3 <<'PY'
           import pathlib
@@ -68,6 +84,42 @@ jobs:
           )
           if not apt_lock.is_file():
             violations.append(str(apt_lock))
+          else:
+            packages = [
+              line.strip()
+              for line in apt_lock.read_text(encoding="utf-8").splitlines()
+              if line.strip() and not line.lstrip().startswith("#")
+            ]
+            if len(packages) < 100:
+              violations.append(
+                "debian-packages.lock must contain the full installed inventory"
+              )
+            names = []
+            for package in packages:
+              if (
+                "=" not in package
+                or any(character.isspace() for character in package)
+              ):
+                violations.append(
+                  f"invalid Debian package lock entry: {package}"
+                )
+                continue
+              names.append(package.split("=", 1)[0])
+            if len(names) != len(set(names)):
+              violations.append("debian-packages.lock contains duplicate packages")
+          dockerfiles = [
+            pathlib.Path("batch-runner/sandbox/Dockerfile"),
+            pathlib.Path("batch-runner/sandbox/agentic.Dockerfile"),
+          ]
+          docker_text = "\n".join(
+            path.read_text(encoding="utf-8") for path in dockerfiles
+          )
+          if "GDPVAL_LOCKED_DEBIAN_PACKAGES" not in docker_text:
+            violations.append(
+              "Dockerfiles do not consume GDPVAL_LOCKED_DEBIAN_PACKAGES"
+            )
+          if "pip install --upgrade" in docker_text:
+            violations.append("Dockerfiles contain an unpinned pip bootstrap")
           if violations:
             raise SystemExit(
               "production image publication requires exact pip hashes and "
@@ -104,6 +156,7 @@ jobs:
           cache-to: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-sandbox:buildcache,mode=max
 
       - name: Build agentic sandbox audit candidate
+        if: ${{ inputs.publish_agentic == true }}
         id: agentic_candidate
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         with:
@@ -121,6 +174,7 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox:buildcache
 
       - name: Audit agentic sandbox candidate before publication
+        if: ${{ inputs.publish_agentic == true }}
         id: candidate_audit
         env:
           IMAGE: gdpval-agentic-sandbox:audit-${{ github.run_id }}
@@ -137,6 +191,7 @@ jobs:
           echo "sbom_sha256=$RUNTIME_SBOM_SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Build and push audited agentic sandbox image
+        if: ${{ inputs.publish_agentic == true }}
         id: agentic_build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         with:
@@ -156,6 +211,7 @@ jobs:
           cache-to: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox:buildcache,mode=max
 
       - name: Verify published agentic digest and attestations
+        if: ${{ inputs.publish_agentic == true }}
         id: published_audit
         env:
           IMAGE: ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox@${{ steps.agentic_build.outputs.digest }}
@@ -215,6 +271,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Promote verified agentic digest to latest
+        if: ${{ inputs.publish_agentic == true }}
         env:
           IMAGE: ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox@${{ steps.agentic_build.outputs.digest }}
         run: |

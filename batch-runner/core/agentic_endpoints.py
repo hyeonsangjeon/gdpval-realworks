@@ -66,8 +66,14 @@ def compute_paired_endpoints(
         _normalize_grade_document(treatment_grades, expected, "treatment"),
         treatment_complete,
     )
-    baseline_times = [_time_to_valid(baseline[task_id]) for task_id in expected]
-    treatment_times = [_time_to_valid(treatment[task_id]) for task_id in expected]
+    baseline_times = [
+        _time_to_valid(baseline[task_id], treatment=False)
+        for task_id in expected
+    ]
+    treatment_times = [
+        _time_to_valid(treatment[task_id], treatment=True)
+        for task_id in expected
+    ]
     baseline_p95 = _nearest_rank_p95(baseline_times)
     treatment_p95 = _nearest_rank_p95(treatment_times)
     baseline_cost_by_task = _ledger_costs(
@@ -226,13 +232,17 @@ def _completed(result: Mapping[str, Any], *, treatment: bool) -> int:
         metrics = observability.get("agentic_metrics")
         return int(
             isinstance(metrics, Mapping)
+            and metrics.get("usage_complete") is True
             and metrics.get("terminal_error_category") is None
             and (metrics.get("finalize_attempts") or 0) > 0
         )
     sandbox = observability.get("sandbox")
+    budget = observability.get("budget_metrics")
     return int(
         isinstance(sandbox, Mapping)
         and sandbox.get("final_status") in {"ok", "repaired_ok"}
+        and isinstance(budget, Mapping)
+        and budget.get("usage_complete") is True
     )
 
 
@@ -327,9 +337,31 @@ def _grade_item_state(
     return "scored"
 
 
-def _time_to_valid(result: Mapping[str, Any]) -> float:
-    metrics = (result.get("observability") or {}).get("execution_metrics") or {}
-    value = metrics.get("time_to_valid_artifact_ms")
+def _time_to_valid(
+    result: Mapping[str, Any], *, treatment: bool
+) -> float:
+    observability = result.get("observability") or {}
+    generic = (observability.get("execution_metrics") or {}).get(
+        "time_to_valid_artifact_ms"
+    )
+    specialized_block = (
+        observability.get("agentic_metrics")
+        if treatment else observability.get("budget_metrics")
+    ) or {}
+    specialized = specialized_block.get("time_to_valid_artifact_ms")
+    generic_value = _valid_time(generic)
+    specialized_value = _valid_time(specialized)
+    if (
+        generic_value is not None
+        and specialized_value is not None
+        and generic_value != specialized_value
+    ):
+        raise ValueError("first-valid timing metrics disagree")
+    value = specialized_value if specialized_value is not None else generic_value
+    return WALL_CAP_MS if value is None else value
+
+
+def _valid_time(value: Any) -> float | None:
     if (
         isinstance(value, (int, float))
         and not isinstance(value, bool)
@@ -337,7 +369,7 @@ def _time_to_valid(result: Mapping[str, Any]) -> float:
         and 0 <= value <= WALL_CAP_MS
     ):
         return float(value)
-    return WALL_CAP_MS
+    return None
 
 
 def _nearest_rank_p95(values: list[float]) -> float:

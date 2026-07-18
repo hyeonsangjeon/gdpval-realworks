@@ -115,15 +115,11 @@ def verify(payload: dict) -> dict:
         task_text=task_prompt,
     )
     uncertain = any(report.openable is None for report in verification.artifacts)
-    render_errors = any(
-        report.get("errors") for report in output_qa.render_reports
-    )
     ok = (
         contract_report.ok
         and verification.ok
         and output_qa.ok
         and not uncertain
-        and not render_errors
     )
     return {
         "ok": ok,
@@ -146,7 +142,6 @@ def verify(payload: dict) -> dict:
                 + len(verification.blocking_errors)
                 + len(output_qa.blocking_errors)
                 + int(uncertain)
-                + int(render_errors)
             ),
             "warning_count": (
                 len(contract_report.warnings)

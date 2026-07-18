@@ -95,6 +95,10 @@ def test_agentic_image_build_is_sha_bound_and_attested():
     steps = _steps(BUILD_WORKFLOW)
     workflow = yaml.safe_load(BUILD_WORKFLOW.read_text(encoding="utf-8"))
     assert set(workflow[True]) == {"workflow_dispatch"}
+    job = workflow["jobs"]["build-sandbox-image"]
+    assert job["if"] == (
+        "github.ref == 'refs/heads/main' && github.ref_protected == true"
+    )
     assert all(
         not str(step.get("uses", "")).endswith(("@v3", "@v4", "@v6"))
         for step in steps
@@ -116,6 +120,13 @@ def test_agentic_image_build_is_sha_bound_and_attested():
         step for step in steps
         if step.get("name") == "Require immutable dependency locks before publication"
     )
+    checkout = next(
+        step for step in steps if step.get("name") == "Checkout"
+    )
+    main_guard = next(
+        step for step in steps
+        if step.get("name") == "Verify protected main checkout"
+    )
 
     assert "agentic.Dockerfile" in config["file"]
     assert (
@@ -123,9 +134,18 @@ def test_agentic_image_build_is_sha_bound_and_attested():
         in config["build-args"]
     )
     assert base["id"] == "base_build"
+    assert "if" not in base
+    assert checkout["with"]["ref"] == "${{ github.sha }}"
+    assert "refs/heads/main" in main_guard["run"]
+    assert "GITHUB_REF_PROTECTED" in main_guard["run"]
+    assert "git rev-parse HEAD" in main_guard["run"]
     assert steps.index(lock_gate) < steps.index(base)
+    assert lock_gate["if"] == "${{ inputs.publish_agentic == true }}"
     assert "--hash=sha256:" in lock_gate["run"]
     assert "debian-packages.lock" in lock_gate["run"]
+    assert "len(packages) < 100" in lock_gate["run"]
+    assert "GDPVAL_LOCKED_DEBIAN_PACKAGES" in lock_gate["run"]
+    assert "pip install --upgrade" in lock_gate["run"]
     dockerfile = (
         ROOT / "batch-runner" / "sandbox" / "Dockerfile"
     ).read_text(encoding="utf-8")
@@ -147,6 +167,10 @@ def test_agentic_image_build_is_sha_bound_and_attested():
         step for step in steps
         if step.get("name") == "Promote verified agentic digest to latest"
     )
+    assert all(
+        step["if"] == "${{ inputs.publish_agentic == true }}"
+        for step in (candidate, candidate_audit, agentic, published_audit, promote)
+    )
     assert candidate["with"]["load"] is True
     assert candidate["with"]["push"] is False
     assert "agentic_image_audit.py" in candidate_audit["run"]
@@ -166,6 +190,9 @@ def test_agentic_preflight_is_dedicated_and_model_free():
     text = PREFLIGHT_WORKFLOW.read_text(encoding="utf-8")
 
     assert job["runs-on"] == ["self-hosted", "linux", "x64", "agentic-sandbox"]
+    assert job["if"] == (
+        "github.ref == 'refs/heads/main' && github.ref_protected == true"
+    )
     assert document["permissions"] == {"contents": "read"}
     assert "azure/login" not in text
     assert "HF_TOKEN: ${{" not in text
@@ -174,7 +201,19 @@ def test_agentic_preflight_is_dedicated_and_model_free():
     assert "setup-python" not in text
     assert "preloaded-model-free-environment=pass" in text
     assert "test_agentic_production_runner_preflight" in text
+    assert (
+        "test_outer_seccomp_allows_inner_filter_and_blocks_raw_signal_syscalls"
+        in text
+    )
     checkout = next(
         step for step in job["steps"] if step.get("name") == "Checkout exact implementation"
     )
     assert checkout["with"]["persist-credentials"] is False
+    assert checkout["with"]["ref"] == "${{ github.sha }}"
+    main_guard = next(
+        step for step in job["steps"]
+        if step.get("name") == "Verify protected main checkout"
+    )
+    assert "refs/heads/main" in main_guard["run"]
+    assert "GITHUB_REF_PROTECTED" in main_guard["run"]
+    assert "git rev-parse HEAD" in main_guard["run"]

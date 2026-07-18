@@ -40,7 +40,12 @@ ExecutionMode = Literal[
 
 
 def _load_live_approval_scope(
-    *, repository_root: Path, condition_name: str, classification: str
+    *,
+    repository_root: Path,
+    condition_name: str,
+    classification: str,
+    ordered_task_ids: Optional[list[str]],
+    task_request_digests: Optional[Mapping[str, str]],
 ) -> dict:
     scope_path = os.getenv("AGENTIC_APPROVAL_SCOPE_PATH")
     if not scope_path:
@@ -54,6 +59,12 @@ def _load_live_approval_scope(
     expected_count = 5 if condition_name == "canary" else 20
     if len(scope["task_ids"]) != expected_count:
         raise ValueError("approval scope task count differs from preregistration")
+    if ordered_task_ids is None or tuple(ordered_task_ids) != scope["task_ids"]:
+        raise ValueError("prepared ordered task IDs differ from approval scope")
+    if task_request_digests is None or dict(task_request_digests) != scope[
+        "task_request_sha256"
+    ]:
+        raise ValueError("prepared task requests differ from approval scope")
     if set(scope["provider_classifications"].values()) != {classification}:
         raise ValueError("approval scope provider classifications differ")
     return scope
@@ -87,6 +98,8 @@ class TaskExecutor:
         agentic_runtime_identity: Optional[Mapping[str, str]] = None,
         agentic_price_table_path: Optional[str] = None,
         agentic_endpoint: Optional[str] = None,
+        agentic_ordered_task_ids: Optional[list[str]] = None,
+        agentic_task_request_sha256: Optional[Mapping[str, str]] = None,
         non_paid_test_mode: bool = False,
     ):
         """
@@ -207,6 +220,8 @@ class TaskExecutor:
                         repository_root=repository_root,
                         condition_name=condition_name or "",
                         classification=authorization["provider_classification"],
+                        ordered_task_ids=agentic_ordered_task_ids,
+                        task_request_digests=agentic_task_request_sha256,
                     )
                     signed_envelope_path = os.getenv(
                         "AGENTIC_SIGNED_APPROVAL_PATH"
@@ -248,6 +263,12 @@ class TaskExecutor:
                             ],
                             provider_classifications=approval_scope[
                                 "provider_classifications"
+                            ],
+                            task_request_sha256=approval_scope[
+                                "task_request_sha256"
+                            ],
+                            selection_recomputation_sha256=approval_scope[
+                                "selection_recomputation_sha256"
                             ],
                             approval_scope_sha256=approval_scope[
                                 "approval_scope_sha256"
@@ -433,6 +454,8 @@ class TaskExecutor:
                     repository_root=repository_root,
                     condition_name=condition_name or "",
                     classification=authorization["provider_classification"],
+                    ordered_task_ids=agentic_ordered_task_ids,
+                    task_request_digests=agentic_task_request_sha256,
                 )
                 signed_envelope_path = os.getenv("AGENTIC_SIGNED_APPROVAL_PATH")
                 nonce_ledger_path = os.getenv("AGENTIC_NONCE_LEDGER_PATH")
@@ -466,6 +489,12 @@ class TaskExecutor:
                         input_merkle_roots=approval_scope["input_merkle_roots"],
                         provider_classifications=approval_scope[
                             "provider_classifications"
+                        ],
+                        task_request_sha256=approval_scope[
+                            "task_request_sha256"
+                        ],
+                        selection_recomputation_sha256=approval_scope[
+                            "selection_recomputation_sha256"
                         ],
                         approval_scope_sha256=approval_scope[
                             "approval_scope_sha256"

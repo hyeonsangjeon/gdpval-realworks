@@ -51,6 +51,8 @@ def main() -> None:
         dataset_sha=args.dataset_sha,
         rubric_repo=args.rubric_repo,
         rubric_sha=args.rubric_sha,
+        dataset_path=dataset_path,
+        rubric_path=rubric_path,
         selector_path=selector_path,
         repository_root=root,
         source_commit=source_commit,

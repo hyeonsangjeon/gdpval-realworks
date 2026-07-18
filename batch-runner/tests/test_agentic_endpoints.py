@@ -1,5 +1,6 @@
 """Tests for fixed-denominator paired Agentic Sandbox endpoints."""
 
+import hashlib
 import json
 import os
 import subprocess
@@ -69,6 +70,7 @@ def _fixture():
             "observability": {
                 "substrate": {"sha256": "a" * 64},
                 "agentic_metrics": {
+                    "usage_complete": True,
                     "terminal_error_category": (
                         "finalize_not_called" if index == 19 else None
                     ),
@@ -82,6 +84,9 @@ def _fixture():
                 },
             },
         })
+        baseline[-1]["observability"]["budget_metrics"][
+            "usage_complete"
+        ] = True
     return task_ids, baseline, treatment, maxima, grades
 
 
@@ -177,6 +182,75 @@ def test_missing_grade_items_remain_in_fixed_item_denominator(tmp_path):
     assert quality["expected_item_denominator"] == 40
     assert quality["item_state_counts"]["missing"] == 2
     assert quality["task_macro"] == 90.0
+
+
+def test_incomplete_usage_forces_completion_to_zero(tmp_path):
+    task_ids, baseline, treatment, maxima, grades = _fixture()
+    ledger, baseline_scopes, treatment_scopes = _ledger_inputs(tmp_path, task_ids)
+    baseline[0]["observability"]["budget_metrics"]["usage_complete"] = False
+    treatment[1]["observability"]["agentic_metrics"]["usage_complete"] = False
+
+    result = compute_paired_endpoints(
+        expected_task_ids=task_ids,
+        baseline_results=baseline,
+        treatment_results=treatment,
+        rubric_maxima=maxima,
+        baseline_grades=grades,
+        treatment_grades=grades,
+        budget_ledger=ledger,
+        paired_run_id="paired-run",
+        baseline_task_scopes=baseline_scopes,
+        treatment_task_scopes=treatment_scopes,
+    )
+
+    assert result["completion"]["baseline_by_task"][task_ids[0]] == 0
+    assert result["completion"]["treatment_by_task"][task_ids[1]] == 0
+
+
+def test_condition_specific_first_valid_timing_is_authoritative(tmp_path):
+    task_ids, baseline, treatment, maxima, grades = _fixture()
+    ledger, baseline_scopes, treatment_scopes = _ledger_inputs(tmp_path, task_ids)
+    baseline[0]["observability"]["execution_metrics"] = {}
+    baseline[0]["observability"]["budget_metrics"][
+        "time_to_valid_artifact_ms"
+    ] = 321
+    treatment[0]["observability"]["execution_metrics"] = {}
+    treatment[0]["observability"]["agentic_metrics"][
+        "time_to_valid_artifact_ms"
+    ] = 654
+
+    result = compute_paired_endpoints(
+        expected_task_ids=task_ids,
+        baseline_results=baseline,
+        treatment_results=treatment,
+        rubric_maxima=maxima,
+        baseline_grades=grades,
+        treatment_grades=grades,
+        budget_ledger=ledger,
+        paired_run_id="paired-run",
+        baseline_task_scopes=baseline_scopes,
+        treatment_task_scopes=treatment_scopes,
+    )
+
+    assert result["timing"]["baseline_values_ms"][0] == 321
+    assert result["timing"]["treatment_values_ms"][0] == 654
+
+    treatment[0]["observability"]["execution_metrics"] = {
+        "time_to_valid_artifact_ms": 999,
+    }
+    with pytest.raises(ValueError, match="timing metrics disagree"):
+        compute_paired_endpoints(
+            expected_task_ids=task_ids,
+            baseline_results=baseline,
+            treatment_results=treatment,
+            rubric_maxima=maxima,
+            baseline_grades=grades,
+            treatment_grades=grades,
+            budget_ledger=ledger,
+            paired_run_id="paired-run",
+            baseline_task_scopes=baseline_scopes,
+            treatment_task_scopes=treatment_scopes,
+        )
 
 
 def test_endpoint_rejects_intersection_or_duplicate_denominators(tmp_path):
@@ -376,25 +450,86 @@ def test_quality_joins_item_ids_and_handles_penalty_and_grade_errors(tmp_path):
 def test_compare_cli_reads_authoritative_ledger_and_scope_manifest(tmp_path):
     task_ids, baseline, treatment, maxima, grades = _fixture()
     ledger, baseline_scopes, treatment_scopes = _ledger_inputs(tmp_path, task_ids)
+    dataset_revision = "a" * 40
+    rubric_commit = "b" * 40
+    baseline_revision = "c" * 40
+    treatment_revision = "d" * 40
+    grader_source_hash = "e" * 64
+
+    def inference(experiment_id, condition, mode, results):
+        return {
+            "experiment_id": experiment_id,
+            "condition_identity": condition,
+            "execution_mode": mode,
+            "run_id": "paired-run",
+            "ordered_task_ids": task_ids,
+            "results": results,
+        }
+
+    def grade(experiment_id, revision):
+        return {
+            **json.loads(json.dumps(grades)),
+            "experiment_id": experiment_id,
+            "source_inference_experiment_id": experiment_id,
+            "source_inference_revision": revision,
+            "grader_source_hash": grader_source_hash,
+            "rubric": {"commit_sha": rubric_commit},
+            "judge": {"config_hash": "track2-config"},
+            "prompt": {"version": "track2-prompt-v1"},
+        }
+
     inputs = {
-        "task-manifest": {"diagnostic_task_ids": task_ids},
-        "baseline-results": {"results": baseline},
-        "treatment-results": {"results": treatment},
-        "rubric-maxima": maxima,
-        "baseline-grades": grades,
-        "treatment-grades": grades,
-        "scope-manifest": {
-            "schema_version": "agentic-budget-scope-manifest-v1",
-            "paired_run_id": "paired-run",
-            "baseline_task_scopes": baseline_scopes,
-            "treatment_task_scopes": treatment_scopes,
+        "task-manifest": {
+            "diagnostic_task_ids": task_ids,
+            "dataset": {"revision": dataset_revision},
+            "rubric": {"revision": rubric_commit},
         },
+        "baseline-results": inference(
+            "exp029", "baseline", "sandbox", baseline
+        ),
+        "treatment-results": inference(
+            "exp030", "treatment", "agentic_sandbox",
+            treatment,
+        ),
+        "rubric-maxima": {
+            "schema_version": "agentic-rubric-maxima-v1",
+            "rubric_commit": rubric_commit,
+            "tasks": maxima,
+        },
+        "baseline-grades": grade("exp029", baseline_revision),
+        "treatment-grades": grade("exp030", treatment_revision),
     }
     arguments = []
+    artifact_hashes = {}
     for name, value in inputs.items():
         path = tmp_path / f"{name}.json"
-        path.write_text(json.dumps(value), encoding="utf-8")
+        content = json.dumps(value)
+        path.write_text(content, encoding="utf-8")
+        artifact_hashes[name.replace("-", "_")] = hashlib.sha256(
+            content.encode("utf-8")
+        ).hexdigest()
         arguments.extend([f"--{name}", str(path)])
+    scope = {
+        "schema_version": "agentic-budget-scope-manifest-v2",
+        "paired_run_id": "paired-run",
+        "ordered_task_ids": task_ids,
+        "dataset_revision": dataset_revision,
+        "rubric_commit": rubric_commit,
+        "baseline_inference_revision": baseline_revision,
+        "treatment_inference_revision": treatment_revision,
+        "judge_config_hash": "track2-config",
+        "prompt_version": "track2-prompt-v1",
+        "grader_source_hash": grader_source_hash,
+        "baseline_task_scopes": baseline_scopes,
+        "treatment_task_scopes": treatment_scopes,
+        "artifact_sha256": artifact_hashes,
+    }
+    scope["sha256"] = hashlib.sha256(json.dumps(
+        scope, sort_keys=True, separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")).hexdigest()
+    scope_path = tmp_path / "scope-manifest.json"
+    scope_path.write_text(json.dumps(scope), encoding="utf-8")
+    arguments.extend(["--scope-manifest", str(scope_path)])
     output = tmp_path / "endpoints.json"
     script = Path(__file__).resolve().parents[1] / "scripts" / (
         "compare_agentic_conditions.py"
@@ -422,3 +557,30 @@ def test_compare_cli_reads_authoritative_ledger_and_scope_manifest(tmp_path):
     endpoints = json.loads(output.read_text(encoding="utf-8"))
     assert endpoints["cost"]["baseline_mean_usd"] == 0.1
     assert endpoints["cost"]["treatment_mean_usd"] == 0.2
+    assert endpoints["provenance"]["artifact_sha256"] == artifact_hashes
+    assert endpoints["provenance"]["rubric_commit"] == rubric_commit
+
+    swapped = json.loads(
+        (tmp_path / "baseline-grades.json").read_text(encoding="utf-8")
+    )
+    swapped["experiment_id"] = "exp030"
+    (tmp_path / "baseline-grades.json").write_text(
+        json.dumps(swapped), encoding="utf-8"
+    )
+    rejected = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            *arguments,
+            "--budget-ledger",
+            ledger.path,
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
+    assert rejected.returncode != 0
+    assert "artifact byte identity mismatch" in rejected.stderr

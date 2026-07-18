@@ -1,10 +1,10 @@
 """Tests for core/executor.py"""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 
 from core.agentic_authorization import provider_endpoint_sha256
-from core.executor import TaskExecutor, ExecutionMode
+from core.executor import TaskExecutor
 
 
 def test_executor_initialization_code_interpreter():
@@ -397,6 +397,10 @@ def test_executor_production_agentic_refuses_local_compute_fallback(
             "provider_classifications": {
                 task_id: "approved_public_gdpval" for task_id in task_ids
             },
+            "task_request_sha256": {
+                task_id: "d" * 64 for task_id in task_ids
+            },
+            "selection_recomputation_sha256": "e" * 64,
             "approval_scope_sha256": "b" * 64,
             "official_scope_registry_sha256": "c" * 64,
         },
@@ -410,6 +414,10 @@ def test_executor_production_agentic_refuses_local_compute_fallback(
             condition_name="treatment",
             model_name="model",
             agentic_endpoint=endpoint,
+            agentic_ordered_task_ids=list(task_ids),
+            agentic_task_request_sha256={
+                task_id: "d" * 64 for task_id in task_ids
+            },
             agentic_runtime_identity={
                 "plan_sha": "b" * 40,
                 "implementation_sha": "c" * 40,

@@ -122,12 +122,14 @@ class FakeBackend:
         self.closed = True
 
 
-def _runner(tmp_path, responses, **limit_overrides):
+def _runner(
+    tmp_path, responses, backend_class=FakeBackend, **limit_overrides
+):
     scripted = ScriptedResponses(responses)
     backends = []
 
     def backend_factory(**kwargs):
-        backend = FakeBackend(**kwargs)
+        backend = backend_class(**kwargs)
         backends.append(backend)
         return backend
 
@@ -239,6 +241,40 @@ def test_repeated_identical_tool_error_stops_loop(tmp_path):
     assert result["error"] == "duplicate_tool_request"
 
 
+def test_normalized_identical_errors_stop_after_second_dispatch(tmp_path):
+    class ErrorBackend(FakeBackend):
+        def run_python(self, source, timeout_seconds):
+            self.calls.append("run_python")
+            suffix = "123 at /tmp/first" if len(self.calls) == 1 else "999 at /tmp/second"
+            return {
+                "ok": False,
+                "error_type": "python_execution_failed",
+                "retryable": True,
+                "data": {"stderr_tail": f"ValueError item {suffix}"},
+            }
+
+    runner, scripted, backends = _runner(
+        tmp_path,
+        [
+            _response(_call("c1", "run_python", {
+                "source": "raise ValueError('first')", "timeout_seconds": 5,
+            })),
+            _response(_call("c2", "run_python", {
+                "source": "raise ValueError('second')", "timeout_seconds": 5,
+            })),
+        ],
+        backend_class=ErrorBackend,
+    )
+
+    result = runner.run("Create a report", "model", task_id="task-1")
+
+    assert result["error"] == "repeated_error_limit"
+    assert result["agentic_metrics"]["tool_calls"] == 2
+    assert result["agentic_metrics"]["model_api_calls"] == 2
+    assert backends[0].calls == ["run_python", "run_python"]
+    assert len(scripted.calls) == 2
+
+
 def test_invalid_tool_batch_executes_nothing(tmp_path):
     runner, _, backends = _runner(tmp_path, [
         _response(
@@ -348,3 +384,51 @@ def test_later_model_failure_preserves_best_verified_files(tmp_path):
     ]
     assert result["agentic_metrics"]["usage_complete"] is False
     assert result["agentic_metrics"]["time_to_valid_artifact_ms"] is not None
+
+
+def test_success_is_not_returned_when_compute_cleanup_fails(tmp_path):
+    class CleanupFailureBackend(FakeBackend):
+        def close(self):
+            raise RuntimeError("remote close failed")
+
+    runner, _, _ = _runner(
+        tmp_path,
+        [_response(_call("c1", "finalize", {
+            "deliverables": ["report.txt"], "summary": "complete",
+        }))],
+        backend_class=CleanupFailureBackend,
+    )
+
+    result = runner.run("Create a report", "model", task_id="task-1")
+
+    assert result["success"] is False
+    assert result["error"] == "compute_cleanup_failed"
+    assert result["prior_error"] is None
+    assert result["files"] == [
+        {"filename": "report.txt", "content": b"ok"}
+    ]
+
+
+def test_model_failure_and_cleanup_failure_preserve_sealed_evidence(tmp_path):
+    class CleanupFailureBackend(FakeBackend):
+        def close(self):
+            raise RuntimeError("remote close failed")
+
+    runner, _, _ = _runner(
+        tmp_path,
+        [
+            _response(_call("c1", "inspect_artifacts", {})),
+            RuntimeError("upstream failed"),
+        ],
+        backend_class=CleanupFailureBackend,
+    )
+
+    result = runner.run("Create a report", "model", task_id="task-1")
+
+    assert result["success"] is False
+    assert result["error"] == "compute_cleanup_failed"
+    assert result["prior_error"] == "model_api_error"
+    assert result["files"] == [
+        {"filename": "report.txt", "content": b"verified"}
+    ]
+    assert result["agentic_metrics"]["usage_complete"] is False

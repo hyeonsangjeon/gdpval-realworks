@@ -507,6 +507,11 @@ class ExperimentConfig:
                     errors.append(
                         f"{label}.preprocessors must be empty for hardened execution"
                     )
+                if condition.prompt.prefix or condition.prompt.body:
+                    errors.append(
+                        f"{label}.prompt prefix/body are unsupported for "
+                        "hardened paired execution"
+                    )
 
         # Warning: portable score_type should use json_renderer
         if self.execution.score_type == "portable" and self.execution.mode != "json_renderer":

@@ -11,6 +11,7 @@ psutil>=5.9.0
 azure-identity>=1.15.0
 jsonschema>=4.21.0
 cryptography>=42.0.0
+ijson>=3.3.0
 
 # Reference file readers
 pdfplumber>=0.10.0

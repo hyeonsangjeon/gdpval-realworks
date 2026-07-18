@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -247,6 +248,63 @@ def test_step2_rejects_second_condition_for_reserved_experiment(
         step2.run_inference(
             condition_key="condition_a", resume=False, resume_max_rounds=0
         )
+
+
+def test_reserved_agentic_experiment_rejects_mode_downgrade_before_client(
+    tmp_path, monkeypatch
+):
+    _patch_step2_workspace(tmp_path, monkeypatch, _prepared())
+    provider_factory = MagicMock()
+    monkeypatch.setattr(step2, "create_provider_client", provider_factory)
+
+    with pytest.raises(SystemExit):
+        step2.run_inference(
+            execution_mode="subprocess",
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=0,
+        )
+
+    provider_factory.assert_not_called()
+
+
+def test_hardened_execution_rejects_task_resume_rounds_before_client(
+    tmp_path, monkeypatch
+):
+    _patch_step2_workspace(tmp_path, monkeypatch, _prepared())
+    provider_factory = MagicMock()
+    monkeypatch.setattr(step2, "create_provider_client", provider_factory)
+
+    with pytest.raises(SystemExit):
+        step2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            max_retries=0,
+            resume_max_rounds=1,
+        )
+
+    provider_factory.assert_not_called()
+
+
+@pytest.mark.parametrize("field", ["prefix", "body"])
+def test_hardened_execution_rejects_unpaired_prompt_override_before_client(
+    tmp_path, monkeypatch, field
+):
+    prepared = _prepared()
+    prepared["condition_a"]["prompt"][field] = "unpaired override"
+    _patch_step2_workspace(tmp_path, monkeypatch, prepared)
+    provider_factory = MagicMock()
+    monkeypatch.setattr(step2, "create_provider_client", provider_factory)
+
+    with pytest.raises(SystemExit):
+        step2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            max_retries=0,
+            resume_max_rounds=0,
+        )
+
+    provider_factory.assert_not_called()
 
 
 @pytest.mark.parametrize("blocked_field", ["qa", "preprocessors"])
@@ -516,6 +574,106 @@ def test_progress_task_set_rejects_duplicate_extra_and_final_reordering():
         )
 
 
+def test_failed_hardened_snapshot_is_saved_as_non_deliverable_evidence(
+    tmp_path, monkeypatch
+):
+    evidence_root = tmp_path / "batch-output"
+    monkeypatch.setattr(step2, "BATCH_OUTPUT_DIR", evidence_root)
+    executor = MagicMock()
+    executor.execute.return_value = {
+        "success": False,
+        "error": "model_api_error",
+        "text": "",
+        "deliverable_text": "",
+        "files": [{"filename": "report.txt", "content": b"verified"}],
+        "agentic_metrics": {
+            "schema_version": "1.0",
+            "ledger_cumulative": True,
+            "model_api_calls": 2,
+            "model_iterations": 2,
+            "tool_calls": 1,
+            "tool_errors": 0,
+            "tool_calls_by_name": {"inspect_artifacts": 1},
+            "model_time_ms": 1,
+            "tool_time_ms": 1,
+            "task_wall_time_ms": 2,
+            "finalize_required_corrections": 0,
+            "finalize_attempts": 0,
+            "capability_misses": 0,
+            "recovered_after_tool_error": False,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "cached_tokens": 0,
+            "conservative_cost_usd": "0.1",
+            "usage_complete": False,
+            "terminal_error_category": "model_api_error",
+        },
+    }
+    task = {
+        "task_id": "task-1",
+        "instruction": "Create report.txt",
+        "occupation": "Analyst",
+        "reference_files": [],
+        "needs_files": True,
+    }
+    condition = {
+        "prompt": {
+            "system": "system", "prefix": None, "body": None, "suffix": None,
+        },
+        "preprocessors": [],
+    }
+
+    result = step2._execute_single_task(
+        task,
+        condition,
+        executor,
+        "agentic_sandbox",
+        None,
+        "model",
+        strict_inputs=True,
+        experiment_id="exp030",
+        run_id="paired-run",
+        condition_name="treatment",
+    )
+
+    assert result["status"] == "error"
+    assert result["deliverable_files"] == []
+    assert result["failure_evidence"]["artifact_count"] == 1
+    evidence_dir = evidence_root.parent / result["failure_evidence"]["root"]
+    assert (evidence_dir / "artifacts" / "report.txt").read_bytes() == b"verified"
+    manifest = json.loads(
+        (evidence_dir / ".evidence" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["sha256"] == result["failure_evidence"]["sha256"]
+
+
+def test_failure_evidence_metadata_cannot_overwrite_same_named_artifact(
+    tmp_path, monkeypatch
+):
+    evidence_root = tmp_path / "batch-output"
+    monkeypatch.setattr(step2, "BATCH_OUTPUT_DIR", evidence_root)
+
+    result = step2._save_hardened_failure_evidence(
+        [{"filename": "evidence-manifest.json", "content": b"user artifact"}],
+        experiment_id="exp030",
+        run_id="paired-run-collision",
+        condition_identity="treatment",
+        task_id="task-collision",
+    )
+
+    evidence_dir = evidence_root.parent / result["root"]
+    artifact = evidence_dir / "artifacts" / "evidence-manifest.json"
+    metadata = evidence_dir / ".evidence" / "manifest.json"
+    assert artifact.read_bytes() == b"user artifact"
+    document = json.loads(metadata.read_text(encoding="utf-8"))
+    assert document["artifacts"][0]["sha256"] == hashlib.sha256(
+        b"user artifact"
+    ).hexdigest()
+    assert hashlib.sha256(artifact.read_bytes()).hexdigest() == document[
+        "artifacts"
+    ][0]["sha256"]
+
+
 def test_baseline_budget_observability_uses_strict_allowlist():
     secret = "/private/ledger.sqlite3"
     observed = step2._build_execution_observability({
@@ -569,6 +727,7 @@ def test_substrate_observability_keeps_hashes_and_drops_paths():
         "read_only_rootfs": True,
         "cap_drop": ["ALL"],
         "no_new_privileges": True,
+        "selected_transfer_bytes": 256 * 1024 * 1024,
         "memory_bytes": 8 * 1024 * 1024 * 1024,
         "memory_swap_bytes": 8 * 1024 * 1024 * 1024,
         "cpus": 2,

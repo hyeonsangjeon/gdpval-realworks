@@ -6,6 +6,7 @@ import json
 import pytest
 
 from core.agentic_pricing import load_pinned_model_pricing
+from core.agentic_sandbox_runner import AgenticPricing
 
 
 def _table(tmp_path):
@@ -59,3 +60,16 @@ def test_rejects_hash_drift_and_unknown_model(tmp_path):
             provider="openai",
             model="deployment",
         )
+
+
+def test_worst_case_uses_higher_cached_input_price():
+    pricing = AgenticPricing.from_options({
+        "input_per_million": "1",
+        "cached_input_per_million": "3",
+        "output_per_million": "10",
+    })
+
+    reserved = pricing.worst_case(1_000_000, 100_000)
+    all_cached_actual = pricing.actual(1_000_000, 100_000, 1_000_000)
+
+    assert reserved == all_cached_actual == 4

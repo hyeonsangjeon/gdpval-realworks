@@ -8,6 +8,7 @@ import time
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Optional
 
+from core.agentic_authorization import task_request_sha256
 from core.agentic_budget import AgenticBudgetLedger, BudgetCaps
 from core.agentic_sandbox_runner import (
     AgenticAggregateBudget,
@@ -83,6 +84,7 @@ class HardenedSandboxRunner(SandboxRunner):
         self._backend: Optional[AgenticComputeBackend] = None
         self._startup: Optional[dict] = None
         self._task_id = ""
+        self._task_request_sha256 = ""
         self._request_index = 0
         self._run_started = 0.0
         self._first_model_dispatch: Optional[float] = None
@@ -129,6 +131,12 @@ class HardenedSandboxRunner(SandboxRunner):
         )
         self._backend = backend
         self._task_id = task_id
+        self._task_request_sha256 = task_request_sha256(
+            task_prompt=task_prompt,
+            occupation=occupation,
+            experiment_prompt=experiment_prompt,
+            perception_text=perception_text,
+        )
         self._request_index = 0
         self._run_started = time.monotonic()
         self._first_model_dispatch = None
@@ -144,17 +152,26 @@ class HardenedSandboxRunner(SandboxRunner):
             "conservative_cost_usd": str(existing_usage.cost_usd),
         })
         self._provider_client = None
+        outcome: Optional[dict] = None
+
+        def finish(result: Mapping[str, Any]) -> dict:
+            nonlocal outcome
+            outcome = dict(result)
+            return outcome
+
         try:
             startup = dict(backend.start(self.agentic_limits.max_task_seconds))
             if startup.get("ok") is not True:
-                return self._terminal_failure(
+                return finish(self._terminal_failure(
                     str(startup.get("error_type") or "compute_start_failed")
-                )
+                ))
             data = startup.get("data")
             if not isinstance(data, dict) or not isinstance(
                 data.get("substrate_manifest"), dict
             ):
-                return self._terminal_failure("substrate_manifest_missing")
+                return finish(self._terminal_failure(
+                    "substrate_manifest_missing"
+                ))
             self._startup = startup
             result = super().run(
                 task_prompt=task_prompt,
@@ -166,12 +183,43 @@ class HardenedSandboxRunner(SandboxRunner):
             )
             result["substrate_manifest"] = data["substrate_manifest"]
             result["budget_metrics"] = dict(self._budget_metrics)
-            return result
+            return finish(result)
+        except Exception:
+            failure = self._terminal_failure("runner_internal_error")
+            self._budget_metrics["usage_complete"] = False
+            failure["budget_metrics"] = dict(self._budget_metrics)
+            return finish(failure)
         finally:
-            backend.close()
+            try:
+                backend.close()
+            except Exception:
+                if outcome is None:
+                    outcome = self._terminal_failure("compute_cleanup_failed")
+                prior_error = outcome.get("error")
+                candidate = None
+                if not outcome.get("files"):
+                    try:
+                        candidate = backend.best_result()
+                    except Exception:
+                        candidate = None
+                if (
+                    isinstance(candidate, Mapping)
+                    and candidate.get("files")
+                    and not outcome.get("files")
+                ):
+                    outcome["files"] = list(candidate["files"])
+                    outcome["text"] = outcome.get("text") or candidate.get(
+                        "text", ""
+                    )
+                outcome["success"] = False
+                outcome["prior_error"] = prior_error
+                outcome["error"] = "compute_cleanup_failed"
+                self._budget_metrics["usage_complete"] = False
+                outcome["budget_metrics"] = dict(self._budget_metrics)
             self._backend = None
             self._startup = None
             self._task_id = ""
+            self._task_request_sha256 = ""
 
     def _execute(self, code, reference_files, manifest):
         backend = self._backend
@@ -246,6 +294,21 @@ class HardenedSandboxRunner(SandboxRunner):
                 inspection.get("error_type") or "artifact_verification_failed"
             )
             return "docker", result
+        candidate = backend.best_result()
+
+        def preserve_candidate(failure: dict) -> dict:
+            if (
+                isinstance(candidate, Mapping)
+                and candidate.get("files")
+            ):
+                failure["files"] = list(candidate["files"])
+                failure["text"] = failure.get("text") or candidate.get(
+                    "text", ""
+                )
+                failure["deliverable_text"] = candidate.get(
+                    "deliverable_text", ""
+                )
+            return failure
         if (
             self._first_model_dispatch is not None
             and self._budget_metrics["time_to_valid_artifact_ms"] is None
@@ -262,19 +325,25 @@ class HardenedSandboxRunner(SandboxRunner):
             time.monotonic() - self._run_started
         )
         if remaining <= 0:
-            return "docker", self._execution_failure(
+            return "docker", preserve_candidate(self._execution_failure(
                 "baseline_task_wall_time_exhausted"
-            )
-        finalized = dict(backend.finalize(
-            deliverables, "Hardened sandbox deliverables", remaining
-        ))
+            ))
+        try:
+            finalized = dict(backend.finalize(
+                deliverables, "Hardened sandbox deliverables", remaining
+            ))
+        except Exception:
+            finalized = {
+                "ok": False,
+                "error_type": "artifact_finalization_failed",
+            }
         terminal = backend.best_result()
         if finalized.get("ok") is not True or terminal is None:
             result["error_category"] = "artifact_finalization_failed"
             result["error"] = str(
                 finalized.get("error_type") or "artifact_finalization_failed"
             )
-            return "docker", result
+            return "docker", preserve_candidate(result)
         result.update(dict(terminal))
         result["preflight"] = {
             "ok": True,
@@ -403,6 +472,9 @@ class HardenedSandboxRunner(SandboxRunner):
             {
                 "runtime_preflight_passed": True,
                 "input_merkle_root": startup_data.get("input_merkle_root"),
+                "selection_recomputation_sha256": startup_data.get(
+                    "selection_recomputation_sha256"
+                ),
                 "provider_classification": startup_data.get(
                     "provider_classification"
                 ),
@@ -420,6 +492,7 @@ class HardenedSandboxRunner(SandboxRunner):
                 "run_id": self.run_id,
                 "condition": self.condition_name,
                 "task_id": self._task_id,
+                "task_request_sha256": self._task_request_sha256,
                 "caps": self._authorization_caps(),
                 "price_table_sha256": self.agentic_pricing.price_table_sha256,
                 "official_scope_excluded": True,
@@ -434,11 +507,11 @@ class HardenedSandboxRunner(SandboxRunner):
         remaining = self.agentic_limits.max_task_seconds - (
             time.monotonic() - self._run_started
         )
-        if remaining <= 0:
+        if remaining < 1.0:
             raise RuntimeError("baseline_task_wall_time_exhausted")
         request_kwargs = dict(kwargs)
         request_kwargs["max_completion_tokens"] = output_tokens
-        request_kwargs["timeout"] = max(1.0, min(480.0, remaining))
+        request_kwargs["timeout"] = min(480.0, remaining)
         if self._first_model_dispatch is None:
             self._first_model_dispatch = time.monotonic()
         try:
@@ -465,13 +538,17 @@ class HardenedSandboxRunner(SandboxRunner):
         actual_cost = self.agentic_pricing.actual(
             input_count, output_count, cached_count
         )
-        reconciled = self.budget_ledger.reconcile_many(
-            scopes=scopes,
-            request_id=request_id,
-            actual_input_tokens=input_count,
-            actual_output_tokens=output_count,
-            actual_cost_usd=actual_cost,
-        )
+        try:
+            reconciled = self.budget_ledger.reconcile_many(
+                scopes=scopes,
+                request_id=request_id,
+                actual_input_tokens=input_count,
+                actual_output_tokens=output_count,
+                actual_cost_usd=actual_cost,
+            )
+        except Exception:
+            self._budget_metrics["usage_complete"] = False
+            raise
         self._budget_metrics["input_tokens"] += input_count
         self._budget_metrics["output_tokens"] += output_count
         self._budget_metrics["cached_tokens"] += cached_count

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from core.agentic_tools import AgenticToolDispatcher, responses_tool_definitions
 
 
@@ -164,3 +166,45 @@ def test_run_python_timeout_is_clamped_to_remaining_task_time():
 
     assert result.result["ok"] is True
     assert backend.calls == [("run_python", "print('ok')", 2.5)]
+
+
+def test_same_inspection_is_allowed_after_workspace_mutation():
+    backend = FakeBackend()
+    dispatcher = AgenticToolDispatcher(backend)
+
+    first = dispatcher.dispatch("inspect_workspace", {})
+    duplicate = dispatcher.dispatch("inspect_workspace", {})
+    mutated = dispatcher.dispatch("run_python", {
+        "source": "print('changed')", "timeout_seconds": 5,
+    })
+    second = dispatcher.dispatch("inspect_workspace", {})
+
+    assert first.result["ok"] is True
+    assert duplicate.result["error_type"] == "duplicate_tool_request"
+    assert mutated.result["ok"] is True
+    assert second.result["ok"] is True
+    assert backend.calls == [
+        "inspect_workspace",
+        ("run_python", "print('changed')", 5.0),
+        "inspect_workspace",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("run_python", {"source": "가" * 50_000, "timeout_seconds": 5}),
+        ("finalize", {"deliverables": ["report.txt"], "summary": "😀" * 600}),
+        ("inspect_artifacts", {"unexpected": "x"}),
+    ],
+)
+def test_tool_arguments_enforce_utf8_byte_limits(name, arguments):
+    backend = FakeBackend()
+    dispatcher = AgenticToolDispatcher(backend)
+
+    result = dispatcher.dispatch(name, arguments)
+
+    assert result.result["ok"] is False
+    assert result.result["error_type"] in {
+        "argument_byte_limit_exceeded", "invalid_arguments",
+    }

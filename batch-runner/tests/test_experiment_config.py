@@ -393,6 +393,20 @@ class TestExperimentConfigValidation:
 
         assert any("condition_a.qa must be disabled" in error for error in errors)
 
+    def test_validate_hardened_rejects_prompt_prefix_and_body(
+        self, sample_config_dict
+    ):
+        sample_config_dict["execution"]["mode"] = "agentic_sandbox"
+        sample_config_dict["experiment"]["id"] = "exp028"
+        sample_config_dict["execution"]["agentic"] = _valid_agentic_config()
+        del sample_config_dict["condition_b"]
+        sample_config_dict["condition_a"]["prompt"]["prefix"] = "prefix"
+        sample_config_dict["condition_a"]["prompt"]["body"] = "body"
+
+        errors = ExperimentConfig.from_dict(sample_config_dict).validate()
+
+        assert any("prompt prefix/body" in error for error in errors)
+
     def test_validate_agentic_ids_are_reserved(self, sample_config_dict):
         sample_config_dict["execution"]["mode"] = "agentic_sandbox"
         sample_config_dict["execution"]["agentic"] = _valid_agentic_config()

@@ -60,6 +60,7 @@ class FakeBackend:
             "ok": True,
             "data": {
                 "input_merkle_root": "c" * 64,
+                "selection_recomputation_sha256": "e" * 64,
                 "provider_classification": "approved_public_gdpval",
                 "substrate_manifest": SUBSTRATE,
             },
@@ -190,6 +191,7 @@ def test_hardened_baseline_runs_once_on_verified_first_attempt(tmp_path):
     assert len(provider.chat.completions.calls) == 1
     assert provider.chat.completions.calls[0]["max_completion_tokens"] == 8192
     assert len(authorization) == 1
+    assert authorization[0][2]["selection_recomputation_sha256"] == "e" * 64
     timing = result["budget_metrics"].pop("time_to_valid_artifact_ms")
     assert timing is not None and timing >= 0
     assert result["budget_metrics"] == {
@@ -230,3 +232,89 @@ def test_hardened_baseline_regenerates_complete_solution_once(tmp_path):
     assert backends[0].calls.count("reset_work") == 2
     assert len([call for call in backends[0].calls if isinstance(call, tuple) and call[0] == "run_python"]) == 2
     assert runner.budget_ledger.usage('["paired_run","paired-run"]').attempts == 2
+
+
+def test_hardened_reconciliation_failure_marks_usage_incomplete(tmp_path):
+    runner, _, _, _ = _runner(
+        tmp_path,
+        [_response("open('report.txt', 'w').write('report')")],
+        [_inspection(True)],
+    )
+
+    def fail_reconciliation(**kwargs):
+        raise ValueError("reservation mismatch")
+
+    runner.budget_ledger.reconcile_many = fail_reconciliation
+    result = runner.run(
+        "Create report.txt",
+        "model",
+        run_id="paired-run",
+        condition_name="baseline",
+        task_id="task-1",
+    )
+
+    assert result["success"] is False
+    assert result["budget_metrics"]["usage_complete"] is False
+
+
+def test_hardened_finalize_failure_preserves_verified_candidate(tmp_path):
+    runner, _, _, _ = _runner(tmp_path, [], [])
+
+    class CandidateBackend(FakeBackend):
+        def inspect_artifacts(self, timeout_seconds=1200.0):
+            self.calls.append("inspect_artifacts")
+            self._best = {
+                "success": False,
+                "text": "candidate",
+                "deliverable_text": "candidate",
+                "files": [{"filename": "report.txt", "content": b"candidate"}],
+            }
+            return _inspection(True)
+
+        def finalize(self, deliverables, summary, timeout_seconds=1200.0):
+            self.calls.append(("finalize", list(deliverables)))
+            return {
+                "ok": False,
+                "error_type": "selected_deliverable_verification_failed",
+            }
+
+    backend = CandidateBackend([])
+    runner._backend = backend
+    runner._run_started = __import__("time").monotonic()
+    runner._first_model_dispatch = runner._run_started
+
+    _, result = runner._execute(
+        "open('report.txt','w').write('report')", [], {}
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "selected_deliverable_verification_failed"
+    assert result["files"] == [
+        {"filename": "report.txt", "content": b"candidate"}
+    ]
+
+
+def test_hardened_start_and_close_failure_returns_structured_metrics(tmp_path):
+    runner, _, _, _ = _runner(tmp_path, [], [])
+
+    class StartCloseFailureBackend(FakeBackend):
+        def start(self, timeout_seconds=1200.0):
+            raise RuntimeError("startup exploded")
+
+        def close(self):
+            raise RuntimeError("cleanup exploded")
+
+    runner.backend_factory = lambda **kwargs: StartCloseFailureBackend([])
+
+    result = runner.run(
+        "Create report.txt",
+        "model",
+        run_id="paired-run",
+        condition_name="baseline",
+        task_id="task-1",
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "compute_cleanup_failed"
+    assert result["prior_error"] == "runner_internal_error"
+    assert result["budget_metrics"]["usage_complete"] is False

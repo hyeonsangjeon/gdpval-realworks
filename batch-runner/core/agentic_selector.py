@@ -179,6 +179,8 @@ def build_selection_manifest(
     dataset_sha: str,
     rubric_repo: str,
     rubric_sha: str,
+    dataset_path: str | Path,
+    rubric_path: str | Path,
     selector_path: str | Path,
     repository_root: str | Path,
     source_commit: str,
@@ -199,6 +201,12 @@ def build_selection_manifest(
         ) is None:
             raise ValueError(f"{label} revision must be a full commit SHA")
     root = Path(repository_root).resolve()
+    dataset_source = resolve_outcome_free_file(
+        root, dataset_path, "dataset JSON"
+    )
+    rubric_source = resolve_outcome_free_file(
+        root, rubric_path, "rubric JSON"
+    )
     selector = resolve_outcome_free_file(root, selector_path, "selector source")
     actual_commit = _git_output(root, "rev-parse", "HEAD")
     if source_commit != actual_commit:
@@ -206,8 +214,18 @@ def build_selection_manifest(
     selector_relative = selector.relative_to(root).as_posix()
     manifest = dict(selection)
     manifest.update({
-        "dataset": {"repository": dataset_repo, "revision": dataset_sha},
-        "rubric": {"repository": rubric_repo, "revision": rubric_sha},
+        "dataset": {
+            "repository": dataset_repo,
+            "revision": dataset_sha,
+            "source_path": dataset_source.relative_to(root).as_posix(),
+            "sha256": _sha256_file(dataset_source),
+        },
+        "rubric": {
+            "repository": rubric_repo,
+            "revision": rubric_sha,
+            "source_path": rubric_source.relative_to(root).as_posix(),
+            "sha256": _sha256_file(rubric_source),
+        },
         "selector": {
             "path": selector_relative,
             "source_commit": source_commit,

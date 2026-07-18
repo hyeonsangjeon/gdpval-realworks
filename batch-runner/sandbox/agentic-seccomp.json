@@ -38,6 +38,7 @@
         "renameat", "renameat2", "restart_syscall", "rmdir", "rseq",
         "rt_sigaction", "rt_sigpending", "rt_sigprocmask", "rt_sigqueueinfo",
         "rt_sigreturn", "rt_sigsuspend", "rt_sigtimedwait", "sched_getaffinity",
+        "seccomp",
         "sched_getattr", "sched_getparam", "sched_getscheduler", "sched_yield",
         "select", "semctl", "semget", "semop", "semtimedop", "sendfile",
         "sendmmsg", "sendmsg", "sendto", "set_robust_list", "set_tid_address",

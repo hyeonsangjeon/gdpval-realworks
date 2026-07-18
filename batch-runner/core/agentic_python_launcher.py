@@ -23,10 +23,12 @@ DENIED_SYSCALLS = (
     "mount", "umount2", "pivot_root", "chroot", "setns", "unshare",
     "ptrace", "process_vm_readv", "process_vm_writev",
     "kill", "tkill", "tgkill", "pidfd_send_signal",
+    "rt_sigqueueinfo", "rt_tgsigqueueinfo",
     "add_key", "request_key", "keyctl", "bpf", "perf_event_open",
     "userfaultfd", "io_uring_setup", "io_uring_enter", "io_uring_register",
     "kexec_load", "finit_module", "init_module", "delete_module",
     "open_by_handle_at", "name_to_handle_at",
+    "seccomp",
 )
 
 

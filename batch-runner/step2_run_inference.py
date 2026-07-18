@@ -38,15 +38,18 @@ from pathlib import Path
 from typing import Optional, List
 
 from core.config import (
+    BATCH_OUTPUT_DIR,
     WORKSPACE_DIR,
     UPLOAD_DIR,
     DELIVERABLE_DIR,
     DEFAULT_LOCAL_PATH,
     DEFAULT_TOKENS,
 )
-from core.data_loader import GDPValTask
+from core.agentic_authorization import task_request_sha256
 from core.executor import TaskExecutor
 from core.agentic_experiments import (
+    AGENTIC_BASELINE_ID,
+    AGENTIC_EXPERIMENT_IDS,
     agentic_condition_identity,
     validate_agentic_budget_for_experiment,
     validate_agentic_experiment_identity,
@@ -58,9 +61,8 @@ from core.execution_metrics import (
     bounded_duration_ms,
 )
 from core.file_preview import generate_all_previews
-from core.llm_client import create_client, create_provider_client, complete
+from core.llm_client import create_provider_client, complete
 from core.needs_files import NeedsFilesManifest
-from core.prompt_builder import PromptBuilder, PromptConfig as BuilderPromptConfig
 from core.audio_analyzer import analyze_audio_files, filter_audio_files
 from core.video_analyzer import (
     analyze_video_files,
@@ -465,6 +467,9 @@ def _bounded_substrate_manifest(raw: Optional[dict]) -> Optional[dict]:
         "read_only_rootfs": raw.get("read_only_rootfs") is True,
         "cap_drop": ["ALL"] if raw.get("cap_drop") == ["ALL"] else [],
         "no_new_privileges": raw.get("no_new_privileges") is True,
+        "selected_transfer_bytes": _bounded_resource_integer(
+            raw.get("selected_transfer_bytes"), 512 * 1024 * 1024
+        ),
         "memory_bytes": _bounded_resource_integer(
             raw.get("memory_bytes"), 16 * 1024 * 1024 * 1024
         ),
@@ -985,11 +990,11 @@ def _run_self_qa(
         # Check finish_reason — detect truncated responses
         finish_reason = getattr(response.choices[0], "finish_reason", None)
         if finish_reason == "length":
-            print(f"  ⚠️  QA response truncated (finish_reason=length)")
+            print("  ⚠️  QA response truncated (finish_reason=length)")
 
         raw = (response.choices[0].message.content or "").strip()
         if not raw:
-            print(f"  ⚠️  QA returned empty response")
+            print("  ⚠️  QA returned empty response")
             return {
                 "passed": None, "score": None,
                 "issues": ["QA returned empty response"],
@@ -1121,6 +1126,125 @@ def _save_files(files: List[dict], task_id: str) -> List[str]:
     return saved_paths
 
 
+def _save_hardened_failure_evidence(
+    files: List[dict],
+    *,
+    experiment_id: str,
+    run_id: str,
+    condition_identity: str,
+    task_id: str,
+) -> dict:
+    import shutil
+    import tempfile
+
+    if not files or not all(
+        isinstance(value, str) and value
+        for value in (experiment_id, run_id, condition_identity, task_id)
+    ):
+        raise ValueError("failure evidence identity is invalid")
+    for value in (experiment_id, condition_identity):
+        if (
+            value in {".", ".."}
+            or value.startswith(".")
+            or "/" in value
+            or "\\" in value
+            or any(ord(character) < 32 for character in value)
+        ):
+            raise ValueError("failure evidence identity is not canonical")
+    run_component = hashlib.sha256(run_id.encode("utf-8")).hexdigest()
+    task_component = hashlib.sha256(task_id.encode("utf-8")).hexdigest()
+    parent = (
+        BATCH_OUTPUT_DIR
+        / "agentic-sandbox"
+        / experiment_id
+        / run_component
+        / condition_identity
+        / "failed-evidence"
+    )
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    destination = parent / task_component
+    if destination.exists() or destination.is_symlink():
+        raise ValueError("failure evidence already exists")
+    staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=parent))
+    records = []
+    try:
+        seen = set()
+        for file_data in files:
+            if (
+                not isinstance(file_data, dict)
+                or set(file_data) != {"filename", "content"}
+            ):
+                raise ValueError("failure evidence file record is invalid")
+            filename = file_data["filename"]
+            relative = Path(filename) if isinstance(filename, str) else Path()
+            if (
+                not isinstance(filename, str)
+                or "\\" in filename
+                or relative.is_absolute()
+                or not relative.parts
+                or relative.as_posix() != filename
+                or ".." in relative.parts
+                or any(part.startswith(".") for part in relative.parts)
+                or len(relative.parts) > 16
+                or len(filename.encode("utf-8")) > 240
+                or filename in seen
+            ):
+                raise ValueError("failure evidence filename is invalid")
+            content = file_data["content"]
+            if isinstance(content, str):
+                content = content.encode("utf-8")
+            if not isinstance(content, bytes):
+                raise ValueError("failure evidence content is invalid")
+            seen.add(filename)
+            target = staging / "artifacts" / relative
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            target.write_bytes(content)
+            target.chmod(0o600)
+            records.append({
+                "path": filename,
+                "size_bytes": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            })
+        records.sort(key=lambda item: item["path"].encode("utf-8"))
+        evidence_sha256 = hashlib.sha256(json.dumps(
+            records, sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        manifest = {
+            "schema_version": "agentic-failure-evidence-v1",
+            "experiment_id": experiment_id,
+            "run_id_sha256": run_component,
+            "condition_identity": condition_identity,
+            "task_id_sha256": task_component,
+            "artifact_count": len(records),
+            "artifacts": records,
+            "sha256": evidence_sha256,
+        }
+        metadata_dir = staging / ".evidence"
+        metadata_dir.mkdir(mode=0o700)
+        (metadata_dir / "manifest.json").write_text(
+            json.dumps(manifest, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        for record in records:
+            persisted = staging / "artifacts" / record["path"]
+            if (
+                persisted.stat().st_size != record["size_bytes"]
+                or hashlib.sha256(persisted.read_bytes()).hexdigest()
+                != record["sha256"]
+            ):
+                raise ValueError("failure evidence persistence hash mismatch")
+        os.replace(staging, destination)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return {
+        "schema_version": "agentic-failure-evidence-v1",
+        "artifact_count": len(records),
+        "sha256": evidence_sha256,
+        "root": destination.relative_to(BATCH_OUTPUT_DIR.parent).as_posix(),
+    }
+
+
 # ── Reflection prompt builder ─────────────────────────────────────────────
 
 
@@ -1199,6 +1323,7 @@ def _execute_single_task(
     run_id: Optional[str] = None,
     condition_name: Optional[str] = None,
     strict_inputs: bool = False,
+    experiment_id: Optional[str] = None,
 ) -> dict:
     """Execute a single task and return result dict."""
     task_id = task_info["task_id"]
@@ -1402,6 +1527,32 @@ def _execute_single_task(
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         else:
+            failure_evidence = None
+            if strict_inputs and result.get("files"):
+                try:
+                    failure_evidence = _save_hardened_failure_evidence(
+                        result["files"],
+                        experiment_id=experiment_id or "",
+                        run_id=run_id or "",
+                        condition_identity=condition_name or "",
+                        task_id=task_id,
+                    )
+                except Exception as exc:
+                    return {
+                        "task_id": task_id,
+                        "status": "error",
+                        "error": f"failed_evidence_persistence_failed:{exc}",
+                        "content": result.get("text"),
+                        "deliverable_text": result.get("deliverable_text"),
+                        "deliverable_files": [],
+                        "model": model,
+                        "usage": None,
+                        "observability": _build_execution_observability(
+                            result, preprocessor_observations
+                        ),
+                        "latency_ms": round(latency_ms, 2),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
             return {
                 "task_id": task_id,
                 "status": "error",
@@ -1409,6 +1560,7 @@ def _execute_single_task(
                 "content": result.get("text"),
                 "deliverable_text": result.get("deliverable_text"),
                 "deliverable_files": [],
+                "failure_evidence": failure_evidence,
                 "model": model,
                 "usage": None,
                 "observability": _build_execution_observability(
@@ -1651,14 +1803,24 @@ def run_inference(
         sys.exit(1)
 
     experiment_id = prepared["experiment_id"]
+    ordered_task_ids = [task["task_id"] for task in tasks]
+    if (
+        any(not isinstance(task_id, str) or not task_id for task_id in ordered_task_ids)
+        or len(ordered_task_ids) != len(set(ordered_task_ids))
+    ):
+        print("❌ prepared task set contains invalid or duplicate task IDs")
+        sys.exit(1)
     model = condition["model"]["deployment"]
     condition_name = condition["name"]
 
     # Resolve settings: CLI override > YAML execution block > defaults
     execution_cfg = prepared.get("execution", {})
     timeout = execution_cfg.get("timeout")  # None = config.py 기본값 사용
+    configured_execution_mode = execution_cfg.get(
+        "mode", prepared.get("execution_mode", "subprocess")
+    )
     if execution_mode is None:
-        execution_mode = execution_cfg.get("mode", prepared.get("execution_mode", "subprocess"))
+        execution_mode = configured_execution_mode
     if max_retries is None:
         max_retries = execution_cfg.get("max_retries", prepared.get("max_retries", 3))
     if resume_max_rounds is None:
@@ -1685,6 +1847,26 @@ def run_inference(
             and sandbox_options.get("hardened_substrate") is True
         )
     )
+    if experiment_id in AGENTIC_EXPERIMENT_IDS:
+        expected_mode = (
+            "sandbox" if experiment_id == AGENTIC_BASELINE_ID
+            else "agentic_sandbox"
+        )
+        expected_hardened = experiment_id == AGENTIC_BASELINE_ID
+        if (
+            configured_execution_mode != expected_mode
+            or execution_mode != expected_mode
+            or (
+                expected_hardened
+                and sandbox_options.get("hardened_substrate") is not True
+            )
+            or (
+                not expected_hardened
+                and sandbox_options.get("hardened_substrate") is True
+            )
+        ):
+            print("❌ reserved agentic experiment mode cannot be overridden")
+            sys.exit(1)
     if hardened_requested:
         try:
             validate_agentic_experiment_identity(
@@ -1703,9 +1885,20 @@ def run_inference(
                 raise ValueError(
                     "reserved hardened experiments require exactly condition_a"
                 )
+            prompt_config = condition.get("prompt") or {}
+            if prompt_config.get("prefix") or prompt_config.get("body"):
+                raise ValueError(
+                    "hardened paired execution does not support prompt prefix/body"
+                )
         except Exception as exc:
             print("❌ failed to reload hardened execution config")
             print(f"   {exc}")
+            sys.exit(1)
+        if max_retries != 0 or resume_max_rounds != 0:
+            print(
+                "❌ hardened execution fixes max_retries=0 and "
+                "resume_max_rounds=0 until all task resource caps are durable"
+            )
             sys.exit(1)
     execution_condition = (
         agentic_condition_identity(experiment_id)
@@ -1717,7 +1910,7 @@ def run_inference(
     metrics_enabled = metrics_cfg.get("enabled") is True
 
     print(f"\n{'='*60}")
-    print(f"🚀 Step 2: Run Inference")
+    print("🚀 Step 2: Run Inference")
     print(f"{'='*60}")
     print(f"   Experiment:         {experiment_id}")
     print(f"   Condition:          {condition_name}")
@@ -1855,7 +2048,7 @@ def run_inference(
             print("❌ Missing OpenAI credentials. Set OPENAI_API_KEY")
             sys.exit(1)
         client = create_provider_client("openai", api_key=api_key)
-        print(f"   Client:             OpenAI (native)")
+        print("   Client:             OpenAI (native)")
 
     elif provider == "anthropic":
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -1863,7 +2056,7 @@ def run_inference(
             print("❌ Missing Anthropic credentials. Set ANTHROPIC_API_KEY")
             sys.exit(1)
         client = create_provider_client("anthropic", api_key=api_key)
-        print(f"   Client:             Anthropic")
+        print("   Client:             Anthropic")
 
     else:
         print(f"❌ Unsupported provider: '{provider}'. Use: azure, openai, anthropic")
@@ -1871,7 +2064,23 @@ def run_inference(
 
     # 3. Initialize executor (no silent fallback — fail loudly)
     reasoning_effort = condition.get("model", {}).get("reasoning_effort")
+    agentic_task_requests = None
     if hardened_requested:
+        prompt_cfg = condition["prompt"]
+        experiment_prompt = {
+            "system": prompt_cfg.get("system", "You are a helpful assistant."),
+            "prefix": prompt_cfg.get("prefix"),
+            "body": prompt_cfg.get("body"),
+            "suffix": prompt_cfg.get("suffix"),
+        }
+        agentic_task_requests = {
+            task["task_id"]: task_request_sha256(
+                task_prompt=task["instruction"],
+                occupation=task.get("occupation", "professional"),
+                experiment_prompt=experiment_prompt,
+            )
+            for task in tasks
+        }
         aggregate_budget = agentic_options.get("budget")
         run_identity = (
             aggregate_budget.get("paired_run_id")
@@ -1901,13 +2110,17 @@ def run_inference(
             client_factory=client_factory,
             agentic_options=agentic_options,
             agentic_endpoint=(approved_endpoint if hardened_requested else None),
+            agentic_ordered_task_ids=(
+                ordered_task_ids if hardened_requested else None
+            ),
+            agentic_task_request_sha256=agentic_task_requests,
             run_id=run_identity,
             condition_name=execution_condition,
             model_name=model,
         )
     except Exception as e:
         print(f"❌ Executor init failed for mode '{execution_mode}': {e}")
-        print(f"   Fix the issue or change execution.mode in your YAML config.")
+        print("   Fix the issue or change execution.mode in your YAML config.")
         sys.exit(1)
 
     # 4. Load manifest
@@ -1920,10 +2133,8 @@ def run_inference(
 
     # 5. Build task lookup
     task_map = {t["task_id"]: t for t in tasks}
-    ordered_task_ids = [t["task_id"] for t in tasks]
     if len(task_map) != len(tasks):
-        print("❌ prepared task set contains duplicate task IDs")
-        sys.exit(1)
+        raise AssertionError("prepared task map identity drift")
     total = len(tasks)
     progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
     started_at = datetime.now(timezone.utc).isoformat()
@@ -2147,6 +2358,7 @@ def run_inference(
                     run_id=run_identity,
                     condition_name=execution_condition,
                     strict_inputs=hardened_requested,
+                    experiment_id=experiment_id,
                 )
                 if metrics_enabled:
                     _record_execution_metrics(result)
@@ -2219,11 +2431,11 @@ def run_inference(
                             best_qa["passed"] = True
                         if best_result:
                             best_result["qa"] = best_qa
-                        print(f"\n      ⚠️  QA undetermined on final attempt — "
-                              f"saving as success (undetermined)",
+                        print("\n      ⚠️  QA undetermined on final attempt — "
+                            "saving as success (undetermined)",
                               end=" ", flush=True)
                         break
-                    print(f"\n      ⚠️  QA undetermined, "
+                    print("\n      ⚠️  QA undetermined, "
                           f"retrying ({qa_attempts}/{qa_max_retries})...",
                           end=" ", flush=True)
                     last_qa_feedback = None
@@ -2325,6 +2537,29 @@ def run_inference(
         except Exception as exc:
             print(f"❌ progress checkpoint rejected: {exc}")
             sys.exit(1)
+        if hardened_requested:
+            unsafe_resume = [
+                result.get("task_id")
+                for result in progress["results"]
+                if (
+                    result.get("status") in {"error", "qa_failed"}
+                    or (
+                        result.get("status") == "pending"
+                        and (
+                            result.get("error") not in {
+                                "wall_timeout", "checkpoint_missing_task"
+                            }
+                            or bool(result.get("observability"))
+                        )
+                    )
+                )
+            ]
+            if unsafe_resume:
+                print(
+                    "❌ hardened failed tasks cannot be resumed: "
+                    + ", ".join(str(task_id) for task_id in unsafe_resume)
+                )
+                sys.exit(1)
 
         # Relay duration fix: preserve original started_at from first run
         if "started_at" in progress:
@@ -2446,7 +2681,7 @@ def run_inference(
         failed = _get_failed_task_ids(progress)
 
         if not failed:
-            print(f"\n✅ No failed tasks — skipping resume rounds")
+            print("\n✅ No failed tasks — skipping resume rounds")
             break
 
         print(f"\n── Resume Round {round_num}/{resume_max_rounds}: "
@@ -2510,7 +2745,7 @@ def run_inference(
               f"{len(still_failed)} still failing")
 
         if not still_failed:
-            print(f"   🎉 All tasks recovered!")
+            print("   🎉 All tasks recovered!")
             break
 
     # ══════════════════════════════════════════════════════════════════════

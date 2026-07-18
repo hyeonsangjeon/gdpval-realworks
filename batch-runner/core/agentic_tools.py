@@ -175,7 +175,9 @@ class AgenticComputeBackend(Protocol):
         self, deliverables: list[str], summary: str,
         timeout_seconds: float = 1200.0,
     ) -> Mapping[str, Any]: ...
-    def best_result(self) -> Mapping[str, Any] | None: ...
+    def best_result(
+        self, timeout_seconds: float = 1200.0
+    ) -> Mapping[str, Any] | None: ...
     def close(self) -> None: ...
 
 
@@ -211,6 +213,7 @@ class AgenticToolDispatcher:
     total_calls: int = 0
     calls_by_name: Dict[str, int] = field(default_factory=dict)
     seen_requests: set[str] = field(default_factory=set)
+    mutation_epoch: int = 0
 
     def dispatch(self, name: str, raw_arguments: Any) -> ToolDispatch:
         prepared, error = self.prepare_batch([(name, raw_arguments)])
@@ -230,6 +233,7 @@ class AgenticToolDispatcher:
             return [], "tool_budget_exhausted"
 
         prospective = dict(self.calls_by_name)
+        prospective_epoch = self.mutation_epoch
         prepared: list[PreparedToolCall] = []
         batch_fingerprints: set[str] = set()
         for name, raw_arguments in calls:
@@ -256,10 +260,22 @@ class AgenticToolDispatcher:
             )
             if errors:
                 return [], "invalid_arguments"
+            if not _within_utf8_limits(name, arguments):
+                return [], "argument_byte_limit_exceeded"
 
             fingerprint = hashlib.sha256(
                 json.dumps(
-                    [name, arguments], sort_keys=True, separators=(",", ":")
+                    [
+                        name,
+                        arguments,
+                        (
+                            prospective_epoch
+                            if name in {"inspect_workspace", "inspect_artifacts"}
+                            else None
+                        ),
+                    ],
+                    sort_keys=True,
+                    separators=(",", ":"),
                 ).encode("utf-8")
             ).hexdigest()
             if (
@@ -269,10 +285,13 @@ class AgenticToolDispatcher:
                 return [], "duplicate_tool_request"
             batch_fingerprints.add(fingerprint)
             prepared.append(PreparedToolCall(name, dict(arguments), fingerprint))
+            if name in {"run_python", "run_ffmpeg"}:
+                prospective_epoch += 1
 
         self.total_calls += len(prepared)
         self.calls_by_name = prospective
         self.seen_requests.update(batch_fingerprints)
+        self.mutation_epoch = prospective_epoch
         return prepared, None
 
     def dispatch_prepared(
@@ -330,6 +349,36 @@ class AgenticToolDispatcher:
 
 def _error(error_type: str, *, retryable: bool) -> dict:
     return {"ok": False, "error_type": error_type, "retryable": retryable}
+
+
+def _within_utf8_limits(name: str, arguments: Mapping[str, Any]) -> bool:
+    try:
+        encoded = json.dumps(
+            dict(arguments),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        return False
+    if len(encoded) > 131072:
+        return False
+    if name == "run_python" and len(arguments["source"].encode("utf-8")) > 131072:
+        return False
+    if name == "finalize" and len(arguments["summary"].encode("utf-8")) > 2048:
+        return False
+    path_values = []
+    for field_name in ("input", "output"):
+        value = arguments.get(field_name)
+        if isinstance(value, str):
+            path_values.append(value)
+    deliverables = arguments.get("deliverables")
+    if isinstance(deliverables, list):
+        path_values.extend(
+            value for value in deliverables if isinstance(value, str)
+        )
+    return all(len(value.encode("utf-8")) <= 240 for value in path_values)
 
 
 def _bounded_envelope(payload: Mapping[str, Any], limit: int) -> dict:
