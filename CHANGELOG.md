@@ -29,7 +29,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   perception Chromium suites before upload. All 65 aggregate contracts, the
   production build, and all three browser suites pass; the browser gate takes
   41.71 seconds locally and dispatches no model, grading, batch, HF upload, or
-  paid workflow.
+  paid workflow. Shipped through PR #112 (`0f9761d7`) and successful Pages run
+  [29678863958](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29678863958);
+  public checks verified the generated non-causal contract, report-derived
+  `25/25 → 24/25 → 23/25` Information sequence, responsive SVG/chart, 34 inline
+  citations, 12 detailed evidence targets, pinned source ranges, back-reference
+  navigation, reflective typography, and zero horizontal overflow on mobile and
+  desktop.
 - **Inline citations for the integrity Field Note** — connect the thesis and
   each evidence-bearing paragraph in `honest-pipeline-lower-score` to ten
   numbered source notes. Citations jump to detailed report, config, pinned
