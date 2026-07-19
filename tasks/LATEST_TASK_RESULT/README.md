@@ -42,8 +42,8 @@ task. It must be refreshed before a task is reported complete.
   0 skipped, 0 warnings** in 6.59 seconds.
 - Static diagnostics for the changed Python test: **0 errors**.
 - Cleanup verification: all 26 target local refs are absent; linked worktrees
-  decreased from 45 to 26; the preserved dirty worktree still reports exactly
-  five modified files. `git diff --check` passed.
+  removed cleanly for all 19 attached targets; the preserved dirty worktree
+  still reports exactly five modified files. `git diff --check` passed.
 
 ## Remaining Work
 
