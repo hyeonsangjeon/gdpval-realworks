@@ -50,9 +50,14 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 - **Local merged-branch consolidation** — a post-merge local audit removed
-  seven clean linked worktree paths and twenty sandbox, agentic, prompt, and
-  note branch refs backed by merged PRs. Dirty or merge-uncertain work, remote
-  refs, stashes, and primary-worktree files were preserved without force-removal.
+  eight pre-existing linked worktree paths and 23 pre-existing sandbox,
+  agentic, prompt, and note branch refs backed by merged PRs. The dirty
+  `hyeonsangjeon-sandbox-preflight-final-status`, closed-unmerged
+  `docs/prompt-note-deploy-result`, and no-PR
+  `hyeonsangjeon-agentic-job-metrics-run-correction` refs were preserved. No
+  remote ref, stash, or primary-worktree file was removed; the attempted local
+  `main` ff-only update stopped without changing files when concurrent local
+  work appeared.
 - **Evidence-backed runtime Field Note** — rebuild the `360-minute-experiment`
   note around three explicit sources: exp008/010/025/026 report snapshots, the
   current condition-a workflow policy, and a pinned exp025 incident record.

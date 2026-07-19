@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-19
-- Status: Integrity Field Note inline citations published and production-verified
+- Status: Inline citations production-verified; merged local branches consolidated
 
 ## Task
 
@@ -77,11 +77,16 @@ task. It must be refreshed before a task is reported complete.
 
 ## Concurrent Local Cleanup
 
-- A separate post-merge audit removed seven clean linked worktree paths and
-  twenty local branch refs backed by merged PRs.
-- The dirty `sandbox-next` worktree retained its five modified and four
-  untracked paths. The closed-but-unmerged prompt deploy branch and unassociated
-  agentic run-correction branch remain local because their merge evidence was
-  insufficient for safe deletion.
+- A separate post-merge audit removed eight pre-existing linked worktree paths
+  and 23 pre-existing local branch refs backed by merged PRs. This count excludes
+  the ephemeral documentation branch used only to record the final audit.
+- The dirty `hyeonsangjeon-sandbox-preflight-final-status` worktree retained its
+  six modified and four untracked paths. The closed-but-unmerged
+  `docs/prompt-note-deploy-result` and no-PR
+  `hyeonsangjeon-agentic-job-metrics-run-correction` refs remain local because
+  their merge evidence was insufficient for safe deletion.
 - No dirty worktree, uncertain branch, remote ref, stash, or primary-worktree
   file was removed.
+- Local `main` remains intentionally behind `origin/main`: an ff-only update was
+  attempted and stopped without changing files when concurrent indexed,
+  worktree, and untracked changes were detected.
