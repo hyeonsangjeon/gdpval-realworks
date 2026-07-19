@@ -12,6 +12,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Inline citations for the integrity Field Note** — connect the thesis and
+  each evidence-bearing paragraph in `honest-pipeline-lower-score` to ten
+  numbered source notes. Citations jump to detailed report, config, pinned
+  pre/post-fix code, PR #38, and causal-boundary entries; every evidence entry
+  shows its immutable commit and line range where available, and links back to
+  each citing paragraph. A shared validator rejects duplicate, unknown, unused,
+  malformed, or misaligned citation/evidence contracts before rendering. The
+  citation trail remains inside the existing 2.05 reading rhythm, uses 9px
+  superscripts and 24px return targets on mobile, and introduces no horizontal
+  overflow. Existing Field Notes remain compatible and continue to show numbered
+  evidence rows, with each row title acting as its explicit source link. All 56
+  aggregate contracts, production build, and runtime/integrity Chromium suites
+  pass; no model, batch, grading, upload, or paid workflow was dispatched.
 - **Evidence-backed integrity Field Note** — rebuild
   `honest-pipeline-lower-score` from exact exp013/exp025 report snapshots,
   checked-in experiment config projections, and pinned PR #38 code history.

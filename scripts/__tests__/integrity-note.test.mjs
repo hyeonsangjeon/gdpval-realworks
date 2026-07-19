@@ -152,3 +152,119 @@ test('integrity source changes trigger the combined Field Notes browser gate', a
   assert.match(deploy, /- 'data\/notes\/integrity-incidents\.yaml'/)
   assert.match(deploy, /Verify Field Notes in browser[\s\S]*npm run test:notes-browser:dist/)
 })
+
+test('integrity article maps inline citations to unique detailed evidence IDs', async () => {
+  const [journal, page] = await Promise.all([
+    readRepoFile('src/data/journal.ts'),
+    readRepoFile('src/pages/JournalArticle.tsx'),
+  ])
+  const start = journal.indexOf("...journalCatalog['honest-pipeline-lower-score']")
+  const end = journal.indexOf("...journalCatalog['from-audio-to-multimodal-sandbox']")
+  const article = journal.slice(start, end)
+  const evidenceStart = article.indexOf('\n    evidence: [')
+  const citationSource = article.slice(0, evidenceStart)
+  const evidenceSource = article.slice(evidenceStart)
+  const evidenceIds = [...evidenceSource.matchAll(/\bid: '([^']+)'/g)].map((match) => match[1])
+  const expectedIds = [
+    'exp013-report',
+    'exp025-report',
+    'available-files-before',
+    'available-files-after',
+    'qa-failed-before',
+    'qa-failed-after',
+    'exp013-config',
+    'exp025-config',
+    'pr38-merge',
+    'measurement-contract',
+  ]
+  const citationIds = [...citationSource.matchAll(new RegExp(`'(${expectedIds.join('|')})'`, 'g'))]
+    .map((match) => match[1])
+
+  assert.equal(evidenceIds.length, 10)
+  assert.equal(new Set(evidenceIds).size, evidenceIds.length)
+  assert.deepEqual([...evidenceIds].sort(), [...expectedIds].sort())
+  assert.equal(citationIds.length, 20)
+  assert.deepEqual([...new Set(citationIds)].sort(), [...expectedIds].sort())
+  assert.equal((citationSource.match(/paragraphCitations:/g) ?? []).length, 5)
+  assert.equal((citationSource.match(/calloutCitations:/g) ?? []).length, 1)
+  assert.match(journal, /const INTEGRITY_SOURCE_SHA = '4371ed67b1ae4bfff5392f0d29fab7a52e1effd0'/)
+  assert.match(article, /subprocess_runner\.py@2b41c06 · L244-L272/)
+  assert.match(article, /step2_run_inference\.py@4e0e43d · L1147-L1166/)
+  assert.match(article, /exp013_GPT54_reasoning_high\.yaml@\$\{INTEGRITY_SOURCE_SHA\.slice\(0, 7\)\} · L33-L214/)
+  assert.match(article, /exp025_GPT54_high_postfix\.yaml@\$\{INTEGRITY_SOURCE_SHA\.slice\(0, 7\)\} · L36-L217/)
+  assert.match(article, /\$\{INTEGRITY_SOURCE\}\/batch-runner\/experiments\/exp013_GPT54_reasoning_high\.yaml#L33-L214/)
+  assert.match(article, /\$\{INTEGRITY_SOURCE\}\/batch-runner\/experiments\/exp025_GPT54_high_postfix\.yaml#L36-L217/)
+  assert.match(page, /data-citation-id=\{evidenceId\}/)
+  assert.match(page, /data-evidence-id=\{sourceId\}/)
+  assert.match(page, /className="inline-block scroll-mt-24"/)
+  assert.match(page, /본문 \{String\(backrefIndex \+ 1\)\.padStart\(2, '0'\)\}/)
+})
+
+test('journal citation validator rejects malformed reference contracts', async () => {
+  const { validateJournalCitations } = await importTypeScriptModule('src/lib/journalCitations.ts')
+  const article = {
+    slug: 'fixture',
+    thesisCitations: ['source-a'],
+    evidence: [
+      { id: 'source-a', label: 'A', detail: 'A', href: '/a' },
+      { id: 'source-b', label: 'B', detail: 'B', href: '/b' },
+    ],
+  }
+  const sections = [{
+    heading: 'Section',
+    paragraphs: ['First'],
+    paragraphCitations: [['source-b']],
+  }]
+
+  assert.equal(validateJournalCitations(article, sections), null)
+  assert.match(
+    validateJournalCitations(
+      { ...article, evidence: [...article.evidence, article.evidence[0]] },
+      sections,
+    ),
+    /duplicate rendered evidence ID/,
+  )
+  assert.match(
+    validateJournalCitations(
+      { ...article, evidence: [{ ...article.evidence[0], id: 'Bad ID' }, article.evidence[1]] },
+      sections,
+    ),
+    /invalid evidence ID/,
+  )
+  assert.match(
+    validateJournalCitations(
+      {
+        ...article,
+        evidence: [
+          { label: 'Fallback', detail: 'Fallback', href: '/fallback' },
+          { ...article.evidence[0], id: 'source-1' },
+        ],
+      },
+      sections,
+    ),
+    /duplicate rendered evidence ID/,
+  )
+  assert.match(
+    validateJournalCitations(article, [{ ...sections[0], paragraphCitations: [['missing']] }]),
+    /unknown citation/,
+  )
+  assert.match(
+    validateJournalCitations(article, [{ ...sections[0], paragraphCitations: [['source-b', 'source-b']] }]),
+    /duplicate citation/,
+  )
+  assert.match(
+    validateJournalCitations(article, [{ ...sections[0], paragraphCitations: [] }]),
+    /paragraph citation slots differ/,
+  )
+  assert.match(
+    validateJournalCitations(article, [{ ...sections[0], calloutCitations: ['source-b'] }]),
+    /callout citations lack a callout/,
+  )
+  assert.match(
+    validateJournalCitations(
+      { ...article, thesisCitations: undefined },
+      sections,
+    ),
+    /unused citation evidence source-a/,
+  )
+})
