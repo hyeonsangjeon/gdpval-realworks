@@ -105,6 +105,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   minutes. Full-220 now requires a separate chunk/resume and audio-aware plan.
 
 ### Fixed
+- **Shared grading finalization retry budget regression coverage** — add a
+  model-free test proving that an empty final response followed by malformed
+  JSON consumes the same single bounded retry budget, stops after two API
+  calls, preserves accumulated token/cache accounting, and leaves a later
+  scripted response unused. A local grading/Track 2 branch audit found no
+  missing runtime implementation: prior fixes were already merged or safely
+  superseded. The cleanup removed 26 stale local refs and 19 clean worktrees
+  while preserving the five-file dirty `fix/grading-final-json-recovery`
+  worktree for separate review. No remote branch, model/API call, grading run,
+  workflow dispatch, HF upload, or paid execution was changed or triggered.
 - **Long grade output atomic persistence** — bound `_save_json` temporary
   basenames with a 16-hex SHA-256 identity instead of copying the full final
   filename. Stage B run `29591036089` completed all ten paid tasks but the
