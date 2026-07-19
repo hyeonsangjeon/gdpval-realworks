@@ -4,8 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-19
-- Status: Perception Field Note implementation and local validation complete;
-  merge and Pages deployment pending
+- Status: Perception Field Note production-verified and deployed
 
 ## Task
 
@@ -44,6 +43,10 @@ task. It must be refreshed before a task is reported complete.
   Pages source filters now cover the interpretation YAML, Skills registry,
   package wiring, and deploy workflow; all three Field Note browser suites run
   before artifact upload.
+- Squash-merged the independently reviewed implementation through PR #112 as
+  `0f9761d7`. The only workflow for that merge SHA was the free serialized
+  `Aggregate Tests & Deploy` Pages run; no model, batch, grading, or Hugging Face
+  workflow ran.
 
 ## Verification
 
@@ -64,11 +67,25 @@ task. It must be refreshed before a task is reported complete.
   Information sector rows. Every failure hides all numeric article content and
   exposes an alert.
 - First review found and the implementation fixed order-dependent duplicate
-  Information row selection and an underspecified exp026 confound citation.
+  Information row selection, underspecified exp026 confound/failure citations,
+  and source fragments that did not include their complete provenance. Final
+  code and workflow reviews both approved the corrected diff.
+- Pages run
+  [29678863958](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29678863958)
+  completed successfully for exact merge SHA `0f9761d7`. Build, all 65 aggregate
+  contracts, all three browser suites, artifact upload, and deployment passed;
+  the complete workflow took 1 minute 51 seconds.
+- The public generated JSON returned HTTP 200 with exp011/012/026 path counts
+  `0 → 1 → 2`, `causal_attribution: false`, and unknown invocation count. The
+  public article rendered `25/25 → 24/25 → 23/25`, 34 citations, 12 evidence
+  targets, and nine source-strip links with no alert or horizontal overflow.
+- Public mobile checks verified all three experiment links, chart labels, and a
+  unique exp012 citation/back-reference target. Desktop rendered a 1032×430 SVG,
+  34px chapter heading, and 34.85px body leading. Report sources expose
+  `L1-L75`, `L1-L72`, and `L1-L75`; exp011 and exp026 config links expose the
+  reviewed `L1-L180` and `L50-L270` ranges, and the failure paragraph cites both
+  the exp026 observation row and MoviePy failure record.
 
 ## Remaining Work
 
-- Re-review the corrected diff, merge it through a pull request, verify the
-  automatic Pages workflow, and confirm the public mobile and desktop article.
-- Refresh this rolling record with the merged commit, workflow run, and public
-  verification evidence after deployment.
+- No implementation or deployment work remains for the perception Field Note.
