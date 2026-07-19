@@ -12,6 +12,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Evidence-backed perception Field Note** — rebuild
+  `from-audio-to-multimodal-sandbox` around exact exp011/exp012/exp026 report
+  snapshots, checked-in package/audio/video/sandbox configuration, and three
+  pinned architecture commits. A generated `perception-note.json` contract and
+  strict selector now derive the article metrics, three-stage SVG, dual-axis
+  chart, six reflective chapters, and inline citations from validated evidence;
+  missing, duplicate, malformed, or drifted report/source data hides the full
+  numeric article behind an alert. The note preserves the exp012 17-task/YAML-
+  date/report-date metadata conflict, treats configured paths separately from
+  unknown analyzer invocation counts, and refuses causal attribution because
+  scope, model, reasoning, runner, Skills, and execution identities differ.
+  Twelve detailed evidence entries link report rows, immutable config/code line
+  ranges, and pinned history. Pages now regenerates on every direct source,
+  package, workflow, or Skills-registry change and runs runtime, integrity, and
+  perception Chromium suites before upload. All 65 aggregate contracts, the
+  production build, and all three browser suites pass; the browser gate takes
+  41.71 seconds locally and dispatches no model, grading, batch, HF upload, or
+  paid workflow.
 - **Inline citations for the integrity Field Note** — connect the thesis and
   each evidence-bearing paragraph in `honest-pipeline-lower-score` to ten
   numbered source notes. Citations jump to detailed report, config, pinned

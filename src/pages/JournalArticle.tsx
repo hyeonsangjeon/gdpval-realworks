@@ -16,6 +16,7 @@ import NoteHeroVisual from '../components/notes/NoteHeroVisual'
 import { useReports } from '../hooks/useReports'
 import { useRuntimeNote } from '../hooks/useRuntimeNote'
 import { useIntegrityNote } from '../hooks/useIntegrityNote'
+import { usePerceptionNote } from '../hooks/usePerceptionNote'
 import {
   selectPromptComplexityBenchmark,
   type PromptComplexityBenchmarkRow,
@@ -29,6 +30,10 @@ import {
   selectIntegrityNoteBenchmark,
   type IntegrityNoteSelection,
 } from '../lib/integrityNoteBenchmark'
+import {
+  selectPerceptionBenchmark,
+  type PerceptionSelection,
+} from '../lib/perceptionNoteBenchmark'
 import {
   getJournalArticle,
   journalArticles,
@@ -50,6 +55,7 @@ const lensStyles: Record<JournalLens, string> = {
 type ReadyPromptBenchmark = Extract<PromptComplexityBenchmarkSelection, { status: 'ready' }>
 type ReadyRuntimeBenchmark = Extract<RuntimeNoteBenchmarkSelection, { status: 'ready' }>
 type ReadyIntegrityBenchmark = Extract<IntegrityNoteSelection, { status: 'ready' }>
+type ReadyPerceptionBenchmark = Extract<PerceptionSelection, { status: 'ready' }>
 
 const formatSigned = (value: number, suffix: string) => `${value > 0 ? '+' : ''}${value.toFixed(1)}${suffix}`
 const citationAnchorId = (prefix: string, evidenceId: string) => `citation-${prefix}-${evidenceId}`
@@ -260,6 +266,97 @@ function resolveIntegrityArticle(article: JournalArticleData, benchmark: ReadyIn
   }
 }
 
+function resolvePerceptionArticle(article: JournalArticleData, benchmark: ReadyPerceptionBenchmark) {
+  const { exp011, exp012, exp026, architecture, interpretation } = benchmark
+  const exp012Audio = architecture.exp012.preprocessors[0]
+  const exp026Video = architecture.exp026.preprocessors[1]
+  const formatLatency = (milliseconds: number) => `${(milliseconds / 1000).toFixed(1)}초`
+  const pathSequence = benchmark.rows.map((row) => row.perceptionPaths.length).join(' → ')
+  const successSequence = benchmark.rows.map((row) => row.information.success).join(' → ')
+
+  return {
+    metrics: [
+      { value: `${successSequence} / ${exp011.information.total}`, label: 'Information success', note: '세 report sector row' },
+      { value: pathSequence, label: 'configured perception paths', note: '호출 횟수 아님' },
+      { value: formatLatency(exp026.information.avgLatencyMs), label: `${exp026.shortId} Information 평균 지연`, note: 'report snapshot' },
+    ],
+    hero: article.hero ? {
+      ...article.hero,
+      alt: `${exp011.shortId} perception path ${exp011.perceptionPaths.length}개, ${exp012.shortId} ${exp012.perceptionPaths.join(' ')} path, ${exp026.shortId} ${exp026.perceptionPaths.join('와 ')} path 및 sandbox 구성 비교`,
+      caption: `구성된 perception path는 ${pathSequence}개로 늘었다. 같은 세 report의 Information success는 ${successSequence}/${exp011.information.total}였으며, 두 흐름 사이의 인과 관계를 뜻하지 않는다.`,
+    } : undefined,
+    chart: article.comparisonChart ? {
+      ...article.comparisonChart,
+      title: `Information ${exp011.information.total}개 작업의 관측 결과`,
+      description: benchmark.rows.map((row) => `${row.shortId} ${row.information.success}/${row.information.total} · Self-QA ${row.information.avgQaScore.toFixed(2)}`).join(' / '),
+      data: benchmark.rows.map((row) => ({
+        label: `${row.shortId} · ${row.perceptionPaths.length ? row.perceptionPaths.join('+') : 'packages'}`,
+        primary: row.information.successRatePct,
+        secondary: row.information.avgQaScore,
+      })),
+    } : undefined,
+    sections: article.sections.map((section) => {
+      if (section.benchmarkNarrative === 'perception-baseline') {
+        return {
+          ...section,
+          paragraphs: [
+            `${exp011.shortId}은 ${exp011.mode} 환경에 domain package 안내를 더했지만 perception preprocessor는 구성하지 않았다. reference file을 읽을 도구와 그 내용을 별도 모델이 듣거나 보는 경로는 같은 기능이 아니었다.`,
+            `그 report의 Information row는 ${exp011.information.success}/${exp011.information.total} success와 Self-QA ${exp011.information.avgQaScore.toFixed(2)}를 기록한다. 이 수치는 실행 결과이지, 개별 media task에서 무엇을 지각했는지를 기록한 측정값은 아니다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'perception-audio') {
+        return {
+          ...section,
+          paragraphs: [
+            `${exp012.shortId}는 ${exp012Audio.deployment} audio analyzer를 ${exp012Audio.trigger}일 때 실행하고 task instruction을 함께 넘긴 뒤 결과를 ${exp012Audio.inject_as}로 주입하도록 구성했다. source에는 analyzer의 실제 task별 호출 횟수가 없으므로, 확인할 수 있는 것은 이 조건부 경로의 존재까지다.`,
+            `${exp012.date} report는 Information ${exp012.information.success}/${exp012.information.total}, Self-QA ${exp012.information.avgQaScore.toFixed(2)}를 기록한다. 하지만 checked-in YAML header는 ${architecture.exp012.header_declared_audio_heavy_tasks}개 audio-heavy task를 말하고 created_at은 ${architecture.exp012.config_created_at}이다. 어느 쪽을 실행 identity로 보정하지 않고 provenance 충돌로 남긴다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'perception-sandbox') {
+        return {
+          ...section,
+          paragraphs: [
+            `${exp026.shortId}는 ${exp026.perceptionPaths.join('와 ')} analyzer를 함께 구성했다. video path는 영상마다 ${exp026Video.frames_per_video}개 frame, 전체 최대 ${exp026Video.max_total_frames}개를 보며, task당 최대 ${architecture.exp026.max_skills}개의 Skills를 고르는 ${exp026.mode} 경로와 결합됐다. perception뿐 아니라 model·reasoning·runner·Skills가 함께 바뀐 하나의 architecture bundle이다.`,
+            `이 실행은 use_docker=${architecture.exp026.use_docker}를 요구한다. image나 daemon이 없으면 backend_unavailable로 실패하고 local subprocess로 물러서지 않는다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'perception-results') {
+        return {
+          ...section,
+          heading: `${benchmark.rows.map((row) => `${row.information.success}/${row.information.total}`).join(' · ')}가 말하는 것`,
+          paragraphs: [
+            `Information ${exp011.information.total}개 row의 success는 ${exp011.shortId} ${exp011.information.success}, ${exp012.shortId} ${exp012.information.success}, ${exp026.shortId} ${exp026.information.success}였다. 완료율은 ${benchmark.rows.map((row) => `${row.information.successRatePct.toFixed(1)}%`).join(' → ')}, Self-QA는 ${benchmark.rows.map((row) => row.information.avgQaScore.toFixed(2)).join(' → ')}였다.`,
+            `평균 지연도 ${benchmark.rows.map((row) => `${row.shortId} ${formatLatency(row.information.avgLatencyMs)}`).join(', ')}로 같지 않았다. ${exp012.shortId}는 Information-only 실행이고 나머지는 full benchmark의 sector slice이며 모델과 runner도 달라, 이 순서를 perception의 효과 크기로 해석할 수 없다.`,
+          ],
+          callout: `같은 ${exp011.information.total}개 sector row라는 사실만으로 paired experiment가 되지는 않는다. ${exp012.shortId}는 Information-only 실행이고 ${exp011.shortId}·${exp026.shortId}은 full benchmark의 sector slice다.`,
+        }
+      }
+      if (section.benchmarkNarrative === 'perception-failure') {
+        return {
+          ...section,
+          paragraphs: [
+            `${exp026.shortId}의 Information 평균 지연은 ${formatLatency(exp026.information.avgLatencyMs)}였고 ${exp026.information.success}/${exp026.information.total}개가 success였다. 같은 report는 한 Information task의 MoviePy type mismatch를 media-runtime fragility 사례로 기록한다.`,
+            `audio와 video path가 구성됐다는 사실은 media toolchain이나 산출물 format이 검증됐다는 뜻이 아니다. 더구나 report는 self-assessed pre-grading이며 외부 품질은 아직 이 evidence contract의 관측 범위 밖이다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'perception-decision') {
+        return {
+          ...section,
+          paragraphs: [
+            `다음 contract는 configured path 수와 실제 invocation을 분리한다. task별 trigger 판정, analyzer 호출·성공·실패, 주입된 artifact와 downstream 사용 여부를 남겨야 ${interpretation.invocation_count_known ? '이미 알려진 호출' : '현재 unknown인 호출'}을 측정값으로 바꿀 수 있다.`,
+            `또한 perception, media runtime, deliverable format, external grade를 각각 기록한다. ${interpretation.missing_execution_identities.join(', ')}가 없는 지금은 architecture history를 재현할 수 있어도 관측 차이를 그 변경의 인과 효과로 배분하지 않는다.`,
+          ],
+        }
+      }
+      return section
+    }),
+  }
+}
+
 function BenchmarkDataSource({ rows, generated }: { rows: PromptComplexityBenchmarkRow[]; generated: string }) {
   return (
     <aside className="mb-10 border-y border-dash-border py-4 text-[11px]/[1.7] text-dash-text-secondary" aria-label="Benchmark data source">
@@ -372,6 +469,45 @@ function IntegrityDataSource({ benchmark }: { benchmark: ReadyIntegrityBenchmark
   )
 }
 
+function PerceptionDataSource({ benchmark }: { benchmark: ReadyPerceptionBenchmark }) {
+  const repo = 'https://github.com/hyeonsangjeon/gdpval-realworks'
+  return (
+    <aside className="mb-12 border-y border-dash-border py-5 text-[11px]/[1.75] text-dash-text-secondary" aria-label="Perception evidence source">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="font-mono text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">PERCEPTION EVIDENCE</span>
+        <a href={`${import.meta.env.BASE_URL}generated/perception-note.json`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          perception-note.json <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${import.meta.env.BASE_URL}generated/reports-index.json`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          reports-index.json <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/blob/main/${benchmark.sources.perception}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          interpretation contract <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/commit/${benchmark.history.audio_preprocessor_commit}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          audio history <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/commit/${benchmark.history.sandbox_multimodal_commit}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          sandbox history <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/commit/${benchmark.history.docker_always_commit}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          Docker-required history <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2">
+        {benchmark.rows.map((row) => (
+          <Link key={row.shortId} to={getExperimentHref(row.shortId)} className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400">
+            {row.shortId} · {row.information.success}/{row.information.total} · QA {row.information.avgQaScore.toFixed(2)} <ArrowRight className="h-3 w-3" />
+          </Link>
+        ))}
+      </div>
+      <div className="mt-3 text-dash-text-muted">
+        report는 배포 시점의 self-assessed pre-grading snapshot이다. configured path는 analyzer 호출 횟수가 아니며, 세 실행의 차이는 perception 단독 인과 효과가 아니다.
+      </div>
+    </aside>
+  )
+}
+
 function BenchmarkDataState({ message, error }: { message: string; error?: boolean }) {
   return (
     <div className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
@@ -396,10 +532,12 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
   const isReflective = article?.readingStyle === 'reflective'
   const usesRuntimeBenchmark = article?.benchmark?.kind === 'runtime'
   const usesIntegrityBenchmark = article?.benchmark?.kind === 'integrity'
-  const usesReportBenchmark = usesPromptBenchmark || usesRuntimeBenchmark || usesIntegrityBenchmark
+  const usesPerceptionBenchmark = article?.benchmark?.kind === 'perception'
+  const usesReportBenchmark = usesPromptBenchmark || usesRuntimeBenchmark || usesIntegrityBenchmark || usesPerceptionBenchmark
   const { reports, generated, loading: reportsLoading, error: reportsError } = useReports(usesReportBenchmark)
   const { data: runtimeNote, loading: runtimeLoading, error: runtimeError } = useRuntimeNote(usesRuntimeBenchmark)
   const { data: integrityNote, loading: integrityLoading, error: integrityError } = useIntegrityNote(usesIntegrityBenchmark)
+  const { data: perceptionNote, loading: perceptionLoading, error: perceptionError } = usePerceptionNote(usesPerceptionBenchmark)
   const promptBenchmark = usesPromptBenchmark && !reportsLoading && !reportsError
     ? selectPromptComplexityBenchmark(reports)
     : null
@@ -412,13 +550,19 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
     ? selectIntegrityNoteBenchmark(reports, integrityNote)
     : null
   const readyIntegrityBenchmark = integrityBenchmark?.status === 'ready' ? integrityBenchmark : null
+  const perceptionBenchmark = usesPerceptionBenchmark && !reportsLoading && !reportsError && !perceptionLoading && !perceptionError
+    ? selectPerceptionBenchmark(reports, perceptionNote)
+    : null
+  const readyPerceptionBenchmark = perceptionBenchmark?.status === 'ready' ? perceptionBenchmark : null
   const resolved = article && readyPromptBenchmark
     ? resolvePromptComplexityArticle(article, readyPromptBenchmark)
     : article && readyRuntimeBenchmark
       ? resolveRuntimeArticle(article, readyRuntimeBenchmark)
       : article && readyIntegrityBenchmark
         ? resolveIntegrityArticle(article, readyIntegrityBenchmark)
-        : null
+        : article && readyPerceptionBenchmark
+          ? resolvePerceptionArticle(article, readyPerceptionBenchmark)
+          : null
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -441,8 +585,8 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
     .slice(0, 2)
   const displayedMetrics = resolved?.metrics ?? article.metrics
   const displayedChart = resolved?.chart ?? article.comparisonChart
-  const benchmarkReady = readyPromptBenchmark || readyRuntimeBenchmark || readyIntegrityBenchmark
-  const displayedSections = (usesRuntimeBenchmark && !readyRuntimeBenchmark) || (usesIntegrityBenchmark && !readyIntegrityBenchmark)
+  const benchmarkReady = readyPromptBenchmark || readyRuntimeBenchmark || readyIntegrityBenchmark || readyPerceptionBenchmark
+  const displayedSections = (usesRuntimeBenchmark && !readyRuntimeBenchmark) || (usesIntegrityBenchmark && !readyIntegrityBenchmark) || (usesPerceptionBenchmark && !readyPerceptionBenchmark)
     ? []
     : (resolved?.sections ?? article.sections)
       .filter((section) => !section.benchmarkNarrative || benchmarkReady)
@@ -538,6 +682,7 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
             promptBenchmark={readyPromptBenchmark?.rows}
             runtimeBenchmark={readyRuntimeBenchmark ?? undefined}
             integrityBenchmark={readyIntegrityBenchmark ?? undefined}
+            perceptionBenchmark={readyPerceptionBenchmark ?? undefined}
           />
         )}
         {usesPromptBenchmark && reportsLoading && <BenchmarkDataState message="benchmark report 데이터를 불러오는 중입니다." />}
@@ -566,11 +711,21 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
         {usesIntegrityBenchmark && integrityBenchmark?.status === 'invalid' && (
           <BenchmarkDataState error message={`integrity 근거의 ${integrityBenchmark.invalidSources.join(', ')} 항목이 유효하지 않습니다.`} />
         )}
+        {usesPerceptionBenchmark && (reportsLoading || perceptionLoading) && <BenchmarkDataState message="perception 근거 데이터를 불러오는 중입니다." />}
+        {usesPerceptionBenchmark && reportsError && <BenchmarkDataState error message={`perception report를 불러오지 못했습니다: ${reportsError}`} />}
+        {usesPerceptionBenchmark && perceptionError && <BenchmarkDataState error message={`perception history를 불러오지 못했습니다: ${perceptionError}`} />}
+        {usesPerceptionBenchmark && perceptionBenchmark?.status === 'missing' && (
+          <BenchmarkDataState error message={`perception report에서 ${perceptionBenchmark.missingIds.join(', ')} 행을 찾지 못했습니다.`} />
+        )}
+        {usesPerceptionBenchmark && perceptionBenchmark?.status === 'invalid' && (
+          <BenchmarkDataState error message={`perception 근거의 ${perceptionBenchmark.invalidSources.join(', ')} 항목이 유효하지 않습니다.`} />
+        )}
 
         {citationsReady && <div className="max-w-[760px] mx-auto px-4 md:px-6 py-12 md:py-16">
           {readyPromptBenchmark && <BenchmarkDataSource rows={readyPromptBenchmark.rows} generated={generated} />}
           {readyRuntimeBenchmark && <RuntimeDataSource benchmark={readyRuntimeBenchmark} />}
           {readyIntegrityBenchmark && <IntegrityDataSource benchmark={readyIntegrityBenchmark} />}
+          {readyPerceptionBenchmark && <PerceptionDataSource benchmark={readyPerceptionBenchmark} />}
           <div className="mb-14 md:mb-16">
             <div className="flex items-center gap-3 mb-4" aria-hidden="true">
               <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">THESIS</span>

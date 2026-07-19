@@ -4,89 +4,71 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-19
-- Status: Inline citations production-verified; merged local branches consolidated
+- Status: Perception Field Note implementation and local validation complete;
+  merge and Pages deployment pending
 
 ## Task
 
-- Add inline footnotes and detailed hyperlinks to
-  `/notes/honest-pipeline-lower-score` so each substantive claim maps directly
-  to its report, config, pinned code history, or interpretation contract.
-- Preserve the reflective typography and mobile layout while supporting
-  citation-to-evidence navigation and evidence-to-body return links.
-- Keep the existing non-causal integrity interpretation and generated data
-  contracts unchanged.
+- Rebuild `/notes/from-audio-to-multimodal-sandbox` as an evidence-backed
+  retrospective spanning exp011 packages, exp012 conditional audio analysis,
+  and exp026 audio/video/Skills sandbox execution.
+- Derive every observation shown in metrics, hero, chart, and numeric prose from
+  exact report/config/history sources while refusing unsupported causal claims.
+- Preserve the exp012 metadata conflict and distinguish configured perception
+  paths from unrecorded analyzer invocation counts and external quality.
+- Add detailed inline citations, fail-closed data handling, responsive visuals,
+  and a Pages browser gate for the new evidence contract.
 
 ## Result
 
-- Added generic citation IDs to journal evidence and paragraph-, callout-, and
-  thesis-level citation declarations. The integrity article uses twenty inline
-  citation occurrences mapped to ten unique evidence entries.
-- Added a shared fail-closed validator that rejects duplicate rendered IDs,
-  malformed IDs, unknown or repeated references, unused citation evidence,
-  paragraph-slot drift, and callout references without a callout before the
-  article body can render.
-- Replaced its three broad report links with detailed sources for exp013 and
-  exp025 snapshots, `_AVAILABLE_FILES` before/after code, `qa_failed`
-  before/after code, both checked-in experiment configs, the PR #38 merge, and
-  the exact measurement/causal-boundary contract.
-- Pinned code and config hyperlinks include immutable Git commits and exact
-  line ranges. Report citations link to the public experiment details that use
-  the same deployment-time report snapshot as the article.
-- Converted the evidence list from one large external link per row into a
-  detailed source row with its external hyperlink, source path, and one or more
-  body return links. Evidence targeted by a citation receives a subtle anchor
-  highlight without becoming a nested card.
-- Other articles remain compatible: evidence IDs and citations are optional,
-  and uncited entries keep numbered evidence rows with explicit title links.
-- Squash-merged the reviewed change through PR #109 as `4647a6ce`. Automatic
-  `Aggregate Tests & Deploy` run
-  [29673420824](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29673420824)
-  completed build, all 56 aggregate contracts, Chromium installation, both
-  Field Note browser suites, artifact upload, and GitHub Pages deployment
-  successfully. No other workflow ran for that commit.
+- Added `data/notes/perception-pipeline.yaml` and a strict build-time generator
+  that projects exact exp011/exp012/exp026 identities, filters, preprocessors,
+  frame limits, Docker policy, Skills registry, pinned history, missing execution
+  identities, and non-causal interpretation into `perception-note.json`.
+- Added a selector that joins the generated source to the deployment-time report
+  index and accepts exactly one valid Information sector row per experiment.
+  Missing, duplicate, malformed, stale, or contract-drifted data cannot render
+  the numeric article, hero, chart, chapters, citations, or evidence list.
+- Reworked the article into six reflective chapters. Report-derived Information
+  success, Self-QA, latency, and path counts drive three metrics, a responsive
+  three-stage SVG/mobile navigation, and a dual-axis chart.
+- Preserved the exp012 header claim of 17 audio-heavy tasks, YAML created date of
+  2026-03-09, report date of 2026-03-08, and report total of 25 as a provenance
+  conflict rather than silently reconciling them.
+- Explicitly records analyzer invocation count and external quality as unknown.
+  The article treats exp026 as a combined model, reasoning, runner, Skills,
+  audio, and video architecture change rather than a perception effect estimate.
+- Added 12 detailed evidence entries with inline citations and return links to
+  report rows, immutable config/code ranges, and pinned commits.
+- Wired the generator and nine focused tests into aggregate/prebuild commands.
+  Pages source filters now cover the interpretation YAML, Skills registry,
+  package wiring, and deploy workflow; all three Field Note browser suites run
+  before artifact upload.
 
 ## Verification
 
-- Full Node aggregate contracts: **56 passed, 0 failed**. Production
-  TypeScript/Vite build, static diagnostics, and `git diff --check` passed.
-- Combined runtime and integrity Playwright suites passed against the same
-  production build. Browser coverage verifies exactly twenty unique citation
-  anchors and ten unique evidence targets, every accessible forward link, all
-  single-target hashes, representative multi-backref return navigation, and a
-  minimum 24px mobile return target.
-- Desktop rendered twenty citation occurrences and ten detailed evidence rows
-  while preserving 34.85px body leading. Mobile kept 9px superscripts inside
-  32.8px leading, a 348px evidence width, eight backrefs on the shared causal
-  contract, and no horizontal overflow.
-- Pinned source details were verified at `subprocess_runner.py@2b41c06`
-  lines 244-272, `subprocess_runner.py@4e0e43d` lines 244-276, and the matching
-  `qa_failed` and config ranges. The article's data and causal conclusions were
-  not changed.
-- On the deployed page, twenty citation occurrences mapped to ten detailed
-  evidence targets. The exp013 footnote navigated to its report detail and the
-  return link settled below the 61px sticky header at 92.9px on mobile and
-  96.25px on desktop.
-- Public config links resolve to full SHA `4371ed67...` and include the complete
-  `data.filter`, `condition_a`, and `execution` ranges: exp013 lines 33-214 and
-  exp025 lines 36-217. The shared causal contract exposes eight body return
-  links; public checks found no page errors or horizontal overflow.
+- Full aggregate contracts: **65 passed, 0 failed**.
+- Perception-focused source, selector, history, article, citation, and workflow
+  contracts: **9 passed, 0 failed**.
+- TypeScript/Vite production build and `git diff --check` passed. The only build
+  advisory is the pre-existing Vite chunk-size warning for the 913.53 kB main
+  JavaScript asset.
+- Runtime, integrity, and perception Playwright suites all passed against the
+  production build in **41.71 seconds**, below the Pages step's eight-minute cap.
+- Perception browser coverage verifies mobile and desktop values, responsive
+  SVG/chart layout, reduced motion, 12 evidence targets, 34 inline citations,
+  citation return navigation, pinned source URLs, reflective typography, and no
+  horizontal overflow.
+- Browser failure fixtures cover delayed source loading, malformed/null/missing
+  source, source fetch failure, missing/duplicate/malformed report, and duplicate
+  Information sector rows. Every failure hides all numeric article content and
+  exposes an alert.
+- First review found and the implementation fixed order-dependent duplicate
+  Information row selection and an underspecified exp026 confound citation.
 
 ## Remaining Work
 
-- No implementation or deployment work remains for the inline citation change.
-
-## Concurrent Local Cleanup
-
-- A separate post-merge audit removed eight pre-existing linked worktree paths
-  and 23 pre-existing local branch refs backed by merged PRs. This count excludes
-  the ephemeral documentation branch used only to record the final audit.
-- The dirty `hyeonsangjeon-sandbox-preflight-final-status` worktree retained its
-  six modified and four untracked paths. The closed-but-unmerged
-  `docs/prompt-note-deploy-result` and no-PR
-  `hyeonsangjeon-agentic-job-metrics-run-correction` refs remain local because
-  their merge evidence was insufficient for safe deletion.
-- No dirty worktree, uncertain branch, remote ref, stash, or primary-worktree
-  file was removed.
-- Local `main` remains intentionally behind `origin/main`: an ff-only update was
-  attempted and stopped without changing files when concurrent indexed,
-  worktree, and untracked changes were detected.
+- Re-review the corrected diff, merge it through a pull request, verify the
+  automatic Pages workflow, and confirm the public mobile and desktop article.
+- Refresh this rolling record with the merged commit, workflow run, and public
+  verification evidence after deployment.

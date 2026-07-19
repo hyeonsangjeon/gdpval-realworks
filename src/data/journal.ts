@@ -22,7 +22,7 @@ export interface JournalSection {
   points?: string[]
   callout?: string
   calloutCitations?: string[]
-  benchmarkNarrative?: 'prompt-complexity-results' | 'runtime-incident' | 'runtime-policy' | 'runtime-results' | 'integrity-observation' | 'integrity-available-files' | 'integrity-qa-failed' | 'integrity-comparison' | 'integrity-decision'
+  benchmarkNarrative?: 'prompt-complexity-results' | 'runtime-incident' | 'runtime-policy' | 'runtime-results' | 'integrity-observation' | 'integrity-available-files' | 'integrity-qa-failed' | 'integrity-comparison' | 'integrity-decision' | 'perception-baseline' | 'perception-audio' | 'perception-sandbox' | 'perception-results' | 'perception-failure' | 'perception-decision'
 }
 
 export interface JournalEvidence {
@@ -88,7 +88,7 @@ export interface JournalArticle {
   comparisonChart?: JournalComparisonChart
   sections: JournalSection[]
   evidence: JournalEvidence[]
-  benchmark?: { kind: 'prompt-complexity' | 'runtime' | 'integrity' }
+  benchmark?: { kind: 'prompt-complexity' | 'runtime' | 'integrity' | 'perception' }
   readingStyle?: 'reflective'
   featured?: boolean
 }
@@ -120,6 +120,11 @@ const INTEGRITY_PARENT = '2b41c06fd0647c900520009f30cb26d3a5bd772e'
 const INTEGRITY_FIX = '4e0e43d23fe2d829ec8e7469e1fc0ffd9aab75ff'
 const INTEGRITY_FOLLOWUP = '645758e0ebfdf5985748f31756de45f1b619ee1d'
 const INTEGRITY_MERGE = '4ba399f9f9528ab355b2c8fc6d703aa14b310414'
+const PERCEPTION_SOURCE_SHA = '11f042e51c2bf517aeffd9c49deb08b2cf9477cc'
+const PERCEPTION_SOURCE = `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${PERCEPTION_SOURCE_SHA}`
+const AUDIO_PREPROCESSOR_COMMIT = 'dfc29e43598a3feda54ae5127912b7b0ec3299bd'
+const SANDBOX_MULTIMODAL_COMMIT = 'eaa2789081ba7b81901ba977006f9bfd6534a0c1'
+const DOCKER_ALWAYS_COMMIT = '6ac8a830a325eb95aec5fb89f38a5e9312ea1b2a'
 
 export const journalArticles: JournalArticle[] = [
   {
@@ -468,85 +473,178 @@ export const journalArticles: JournalArticle[] = [
   },
   {
     ...journalCatalog['from-audio-to-multimodal-sandbox'],
-    dek: '파일 경로를 알려주는 것과 내용을 지각하게 하는 것은 달랐다. 오디오 전처리에서 멀티모달 sandbox까지 이어진 실험을 돌아본다.',
-    thesis: '멀티모달 업무의 병목은 프롬프트만이 아니라 입력을 모델이 추론 가능한 표현으로 바꾸는 perception pipeline에 있었다.',
+    dek: '파일 경로를 넘기는 일과 내용을 지각하게 만드는 일은 달랐다. packages, 조건부 audio analyzer, audio·video·Skills sandbox로 이어진 세 실행을 그 차이에서 다시 읽는다.',
+    thesis: '세 실행에서 확인된 것은 perception 경로의 확장이다. 그것이 결과 품질을 개선했다는 인과 효과는 아직 확인되지 않았다.',
+    thesisCitations: ['exp011-config', 'exp012-config', 'exp026-config', 'perception-contract'],
     publishedAt: '2026-07-15',
     period: 'exp011 → exp012 → exp026',
-    readingMinutes: 7,
-    metrics: [
-      { value: '24/25', label: 'exp012 Information 완료' },
-      { value: '2개', label: 'exp026 perception 경로', note: 'audio + video' },
-      { value: '6.0', label: 'exp026 Information Self-QA' },
-    ],
+    readingMinutes: 9,
+    benchmark: { kind: 'perception' },
+    readingStyle: 'reflective',
+    metrics: [],
     hero: {
       kind: 'visual',
       variant: 'perception',
-      alt: '오디오 파형과 비디오 프레임이 sandbox의 도메인 skills로 들어가는 perception pipeline',
-      caption: '파일 경로를 건네는 데서 멈추지 않고, 오디오와 비디오를 모델이 추론할 수 있는 표현으로 바꾸는 경로를 만들었다.',
+      alt: 'exp011 packages, exp012 조건부 audio analyzer, exp026 audio와 video 및 Skills sandbox로 확장된 구성 경로',
+      caption: '세 report의 관측값과 checked-in 구성을 함께 보되, 경로의 확장을 품질 개선의 원인으로 읽지는 않는다.',
     },
     comparisonChart: {
-      kind: 'bar',
-      title: 'Information 25개 작업의 실행 완료',
-      description: 'audio 중심 exp012는 24개, audio와 video를 함께 다룬 exp026은 23개를 완료했다.',
+      kind: 'dual',
+      title: 'Information sector의 관측 결과',
+      description: '세 report snapshot의 완료율과 Self-QA를 나란히 놓는다.',
       primary: { label: 'Completion', unit: '%', color: '#2563eb', domain: [0, 100] },
-      data: [
-        { label: 'exp012 · audio', primary: 96.0 },
-        { label: 'exp026 · audio + video', primary: 92.0 },
-      ],
-      caveat: '두 실행은 모델과 runner 구성이 다르다. 이 차트는 동일한 25개 섹터 범위의 운영 결과이며 perception의 단독 효과가 아니다.',
+      secondary: { label: 'Self-QA', unit: '/10', color: '#b45309', domain: [0, 10] },
+      data: [],
+      caveat: '동일 task의 paired causal comparison이 아니다. 세 실행은 범위, 모델, reasoning, runner, Skills와 perception 구성이 함께 다르다.',
     },
     sections: [
       {
-        heading: '상황: 파일은 있었지만 모델은 듣지 못했다',
+        label: '경계',
+        heading: '경로는 감각이 아니다',
+        benchmarkNarrative: 'perception-baseline',
         paragraphs: [
-          'subprocess 환경은 reference 파일을 복사할 수 있었지만, 오디오의 의미를 자동으로 제공하지는 않았다. 모델이 코드를 생성해 파형이나 메타데이터를 읽을 수 있어도 사람처럼 내용을 듣고 업무 판단에 사용하는 것은 별개의 문제였다.',
-          'exp011은 도메인 패키지와 실행 환경 안내를 보강했다. 그 다음 exp012는 Information 작업에 task-aware audio preprocessing을 붙여, 원본 오디오를 텍스트 맥락으로 바꾸는 경로를 시험했다.',
+          'reference file에 접근하고 media package를 설치하는 것은 내용을 들었다는 뜻이 아니다.',
+          '첫 실행은 파일을 다룰 환경을 넓혔지만 perception preprocessor는 구성하지 않았다.',
         ],
+        paragraphCitations: [['exp011-config'], ['exp011-report', 'perception-contract']],
       },
       {
-        heading: '행동: 실행 도구보다 먼저 감각 입력을 정규화하기',
+        label: '청각',
+        heading: '조건부 hearing',
+        benchmarkNarrative: 'perception-audio',
         paragraphs: [
-          '오디오 전처리의 목적은 모델에게 또 하나의 도구를 주는 것이 아니었다. 파일마다 다른 codec과 길이를 처리하고, 실제 발화나 소리를 추론 가능한 컨텍스트로 바꾸는 것이었다.',
-          'exp012는 Information 25개 중 24개를 완료했다. 다만 설정 주석의 대상 수와 실제 리포트 집계 범위가 다르기 때문에, 이 결과를 full benchmark의 직접 개선폭으로 읽어서는 안 된다.',
+          '다음 실행은 audio reference가 있는 task에만 별도 analyzer를 호출하고 분석을 prompt 앞에 주입하도록 구성했다.',
+          '그러나 구성 주석, YAML 날짜와 report snapshot은 서로 완전히 맞지 않는다.',
         ],
+        paragraphCitations: [['exp012-config', 'audio-history'], ['exp012-report', 'exp012-config', 'perception-contract']],
       },
       {
-        heading: '확장: exp026의 hearing과 vision',
+        label: '확장',
+        heading: 'hearing + vision + Skills',
+        benchmarkNarrative: 'perception-sandbox',
         paragraphs: [
-          'exp026에서는 audio preprocessor에 video frame preprocessing을 더했다. 동시에 Agent Skills를 sandbox에 마운트하고, 모델이 어떤 작업 지침과 도구를 사용할 수 있는지 프롬프트에 명시했다.',
-          '이 변화는 perception, planning, execution을 하나의 경로로 연결하려는 시도였다. 그러나 Information 부문은 평균 지연 144.1초로 가장 느렸고 Self-QA는 6.0에 머물렀다. 입력을 볼 수 있게 됐다는 사실만으로 결과 품질이 자동으로 높아지지는 않았다.',
+          '세 번째 실행은 조건부 audio와 video analysis, task-aware Skills, sandbox execution을 한 경로에 묶었다.',
+          'Docker가 없을 때 local subprocess로 물러서지 않도록 실행 경계도 함께 바뀌었다.',
         ],
+        paragraphCitations: [['exp026-config', 'sandbox-history'], ['exp026-runner', 'docker-history']],
       },
       {
-        heading: '의외였던 점: 지각 이후에 더 많은 실패가 보였다',
+        label: '관측',
+        heading: '세 report가 말하는 것',
+        benchmarkNarrative: 'perception-results',
         paragraphs: [
-          '입력 접근 문제가 해결되자 다음 병목은 media runtime과 산출물 규격으로 이동했다. exp026의 Information 오류에는 MoviePy type mismatch가 포함됐고, 여러 작업은 파일을 만들었어도 요구한 포맷과 패키징을 정확히 맞추지 못했다.',
-          '멀티모달 지원은 한 번의 기능 추가가 아니라 병목을 다음 층으로 이동시키는 과정이었다. 듣기와 보기, 도구 실행, 업무 판단, 산출물 검증을 따로 측정해야 하는 이유다.',
+          '세 report에서 Information sector의 완료 수와 Self-QA는 서로 다른 방향으로 움직였다.',
+          '이 차이는 perception의 단독 효과가 아니라 서로 다른 실행 묶음의 관측값이다.',
         ],
+        paragraphCitations: [['exp011-report', 'exp012-report', 'exp026-report'], ['exp011-report', 'exp012-report', 'exp026-report', 'perception-contract']],
+        callout: '같은 sector row라는 사실만으로 paired experiment가 되지는 않는다. Information-only 실행과 full benchmark의 sector slice는 관측 범위가 다르다.',
+        calloutCitations: ['perception-contract'],
       },
       {
-        heading: '결정: 도메인별 perception contract',
+        label: '병목',
+        heading: '관측된 runtime과 format 실패',
+        benchmarkNarrative: 'perception-failure',
         paragraphs: [
-          '앞으로는 media task라는 하나의 분류 대신, 음성 전사 정확성, 시간축 이해, 프레임 선택, 편집 도구 호환성처럼 실패 가능한 계약을 분해한다.',
-          '외부 채점이 끝나기 전까지 exp026을 품질 개선으로 단정하지 않는다. 현재 말할 수 있는 것은 오디오와 비디오를 실제 실행 경로 안으로 가져왔고, 그 결과 다음 실패 지점이 더 구체적으로 보이기 시작했다는 것이다.',
+          '입력 경로가 넓어진 실행에서도 media runtime은 독립적으로 실패했다.',
+          '지각, 실행, 산출물 규격, 외부 품질을 하나의 success로 압축하면 다음 병목을 구분할 수 없다.',
         ],
+        paragraphCitations: [['exp026-report', 'exp026-failure'], ['exp026-report', 'exp026-config', 'perception-contract']],
+      },
+      {
+        label: '결정',
+        heading: '다음 perception contract',
+        benchmarkNarrative: 'perception-decision',
+        paragraphs: [
+          '다음 실행부터 perception의 구성 여부와 실제 호출·결과를 분리해 기록한다.',
+          '외부 품질과 실행 identity가 없는 동안 architecture change와 quality claim 사이의 문장을 멈춘다.',
+        ],
+        paragraphCitations: [['perception-contract'], ['audio-history', 'sandbox-history', 'docker-history', 'perception-contract']],
       },
     ],
     evidence: [
       {
-        label: 'exp011 설정',
-        detail: '도메인 패키지와 환경 인지 실험',
-        href: `${REPO}/batch-runner/experiments/exp011_GPT52Chat_domain_packages.yaml`,
+        id: 'exp011-report',
+        label: 'exp011 report · Information 관측값',
+        detail: 'full benchmark 실행 summary와 Information sector row. 외부 grading은 대기 상태다.',
+        source: `report.md@${PERCEPTION_SOURCE_SHA.slice(0, 7)} · L1-L75`,
+        href: `${PERCEPTION_SOURCE}/batch-runner/results/exp011_GPT52Chat_domain_packages/report/report.md#L1-L75`,
       },
       {
-        label: 'exp012 리포트',
-        detail: 'Information subset의 audio preprocessing 결과',
-        href: `${REPO}/batch-runner/results/exp012_GPT52Chat_audio_multiagent/report/report.md`,
+        id: 'exp012-report',
+        label: 'exp012 report · Information-only 관측값',
+        detail: 'Information-only summary와 sector row. YAML metadata와 다른 report date를 포함하며 외부 grading은 대기 상태다.',
+        source: `report.md@${PERCEPTION_SOURCE_SHA.slice(0, 7)} · L1-L72`,
+        href: `${PERCEPTION_SOURCE}/batch-runner/results/exp012_GPT52Chat_audio_multiagent/report/report.md#L1-L72`,
       },
       {
-        label: 'exp026 공개 데이터',
-        detail: 'sandbox, skills, audio/video perception 결과',
-        href: HF_EXP026,
+        id: 'exp026-report',
+        label: 'exp026 report · Information 관측값',
+        detail: 'full benchmark sandbox 실행 summary와 Information sector row. 수치는 self-assessed pre-grading snapshot이다.',
+        source: `report.md@${PERCEPTION_SOURCE_SHA.slice(0, 7)} · L1-L75`,
+        href: `${PERCEPTION_SOURCE}/batch-runner/results/exp026_sandbox_skills_multimodal/report/report.md#L1-L75`,
+      },
+      {
+        id: 'exp011-config',
+        label: 'exp011 package notice',
+        detail: 'subprocess에 domain package 목록과 환경 제약을 알렸지만 perception preprocessor는 구성하지 않은 출발점.',
+        source: `exp011_GPT52Chat_domain_packages.yaml@${PERCEPTION_SOURCE_SHA.slice(0, 7)} · L1-L180`,
+        href: `${PERCEPTION_SOURCE}/batch-runner/experiments/exp011_GPT52Chat_domain_packages.yaml#L1-L180`,
+      },
+      {
+        id: 'exp012-config',
+        label: 'exp012 조건부 audio analyzer 설정',
+        detail: 'has_audio_files trigger, gpt-audio-1.5, prompt_prefix 주입 설정과 header·created_at metadata를 함께 확인한다.',
+        source: `exp012_GPT52Chat_audio_multiagent.yaml@${PERCEPTION_SOURCE_SHA.slice(0, 7)} · L1-L18, L147-L165`,
+        href: `${PERCEPTION_SOURCE}/batch-runner/experiments/exp012_GPT52Chat_audio_multiagent.yaml#L1-L165`,
+      },
+      {
+        id: 'exp026-config',
+        label: 'exp026 perception + Skills 설정',
+        detail: 'GPT-5.4 low, 조건부 audio/video analyzer, frame budget, Skills 안내, Docker-required sandbox가 함께 들어간 구성.',
+        source: `exp026_sandbox_skills_multimodal.yaml@${PERCEPTION_SOURCE_SHA.slice(0, 7)} · L50-L270`,
+        href: `${PERCEPTION_SOURCE}/batch-runner/experiments/exp026_sandbox_skills_multimodal.yaml#L50-L270`,
+      },
+      {
+        id: 'exp026-runner',
+        label: 'sandbox Docker fail-loud 경계',
+        detail: 'use_docker=always에서 image 또는 daemon이 없으면 backend_unavailable로 종료하고 local 실행으로 fallback하지 않는다.',
+        source: `sandbox_runner.py@${PERCEPTION_SOURCE_SHA.slice(0, 7)} · L1034-L1053`,
+        href: `${PERCEPTION_SOURCE}/batch-runner/core/sandbox_runner.py#L1034-L1053`,
+      },
+      {
+        id: 'exp026-failure',
+        label: 'exp026 Information media-runtime 실패',
+        detail: 'report가 MoviePy type mismatch를 Information sector의 media-runtime fragility 사례로 기록한다.',
+        source: `report.md@${PERCEPTION_SOURCE_SHA.slice(0, 7)} · L1548`,
+        href: `${PERCEPTION_SOURCE}/batch-runner/results/exp026_sandbox_skills_multimodal/report/report.md#L1548`,
+      },
+      {
+        id: 'audio-history',
+        label: 'audio preprocessor framework 도입',
+        detail: 'audio analyzer와 preprocessor config·dispatch 경로를 도입한 pinned history.',
+        source: `${AUDIO_PREPROCESSOR_COMMIT.slice(0, 7)} · 2026-03-09`,
+        href: `https://github.com/hyeonsangjeon/gdpval-realworks/commit/${AUDIO_PREPROCESSOR_COMMIT}`,
+      },
+      {
+        id: 'sandbox-history',
+        label: 'multimodal Skills sandbox 도입',
+        detail: 'containerized sandbox, task-aware Skills, video perception 경로를 함께 도입한 pinned history.',
+        source: `${SANDBOX_MULTIMODAL_COMMIT.slice(0, 7)} · 2026-07-07`,
+        href: `https://github.com/hyeonsangjeon/gdpval-realworks/commit/${SANDBOX_MULTIMODAL_COMMIT}`,
+      },
+      {
+        id: 'docker-history',
+        label: 'exp026 Docker-required 전환',
+        detail: 'exp026 use_docker를 always로 고정해 silent local fallback을 닫은 pinned history.',
+        source: `${DOCKER_ALWAYS_COMMIT.slice(0, 7)} · 2026-07-09`,
+        href: `https://github.com/hyeonsangjeon/gdpval-realworks/commit/${DOCKER_ALWAYS_COMMIT}`,
+      },
+      {
+        id: 'perception-contract',
+        label: 'perception 측정·해석 계약',
+        detail: '구성 경로와 report 관측을 분리하고 analyzer 호출 수·외부 품질을 unknown으로, causal_attribution을 false로 고정한다.',
+        source: 'data/notes/perception-pipeline.yaml · generated evidence contract',
+        href: `${REPO}/data/notes/perception-pipeline.yaml`,
       },
     ],
   },

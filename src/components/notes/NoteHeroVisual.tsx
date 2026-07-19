@@ -5,6 +5,7 @@ import { getExperimentHref } from '../../data/journalLinks'
 import type { PromptComplexityBenchmarkRow } from '../../lib/promptComplexityBenchmark'
 import type { RuntimeNoteBenchmarkSelection } from '../../lib/runtimeNoteBenchmark'
 import type { IntegrityNoteSelection } from '../../lib/integrityNoteBenchmark'
+import type { PerceptionSelection } from '../../lib/perceptionNoteBenchmark'
 
 const resolveAsset = (src: string) => (
   src.startsWith('http') ? src : `${import.meta.env.BASE_URL}${src.replace(/^\/+/, '')}`
@@ -74,6 +75,7 @@ function PromptComplexityVisual({
 
 type ReadyRuntimeBenchmark = Extract<RuntimeNoteBenchmarkSelection, { status: 'ready' }>
 type ReadyIntegrityBenchmark = Extract<IntegrityNoteSelection, { status: 'ready' }>
+type ReadyPerceptionBenchmark = Extract<PerceptionSelection, { status: 'ready' }>
 
 function RuntimeVisual({
   reduceMotion,
@@ -165,46 +167,51 @@ function IntegrityVisual({ benchmark }: { benchmark: ReadyIntegrityBenchmark }) 
   )
 }
 
-function PerceptionVisual({ reduceMotion }: { reduceMotion: boolean | null }) {
-  const bars = [34, 62, 88, 48, 106, 72, 42, 92, 58, 80, 38]
+function PerceptionVisual({
+  reduceMotion,
+  benchmark,
+}: {
+  reduceMotion: boolean | null
+  benchmark: ReadyPerceptionBenchmark
+}) {
+  const stages = [
+    { row: benchmark.exp011, x: 55, title: 'PACKAGES', detail: 'package notice · subprocess', color: '#059669' },
+    { row: benchmark.exp012, x: 450, title: 'CONDITIONAL AUDIO', detail: benchmark.architecture.exp012.preprocessors[0].trigger, color: '#2563eb' },
+    { row: benchmark.exp026, x: 845, title: 'AUDIO + VIDEO', detail: `sandbox · max ${benchmark.architecture.exp026.max_skills} skills`, color: '#b45309' },
+  ]
   return (
     <>
-      <text x="120" y="72" fill="hsl(var(--dash-text-secondary))" fontSize="18">FROM FILE ACCESS TO PERCEPTION</text>
-      <text x="185" y="140" fill="hsl(var(--dash-heading))" fontSize="22">HEARING</text>
-      {bars.map((height, index) => (
-        <motion.rect
-          key={index}
-          x={110 + index * 23}
-          y={250 - height / 2}
-          width="10"
-          height={height}
-          rx="5"
-          fill="#3b82f6"
-          opacity="0.85"
-          animate={reduceMotion ? undefined : { scaleY: [0.5, 1, 0.65] }}
-          transition={reduceMotion ? undefined : { duration: 1.4 + index * 0.05, repeat: Infinity, repeatType: 'mirror' }}
-          style={{ transformOrigin: `${115 + index * 23}px 250px` }}
-        />
+      <text x="55" y="58" fill="hsl(var(--dash-text-secondary))" fontSize="18">CONFIGURED PATHS · OBSERVED INFORMATION ROW</text>
+      <text x="1145" y="58" fill="hsl(var(--dash-text-secondary))" fontSize="13" textAnchor="end">architecture change ≠ causal effect</text>
+      {stages.map((stage) => (
+        <g key={stage.row.shortId}>
+          <rect x={stage.x} y="100" width="300" height="286" rx="8" fill="hsl(var(--dash-card))" stroke={stage.color} strokeWidth="2" />
+          <text x={stage.x + 24} y="140" fill="hsl(var(--dash-text-secondary))" fontSize="14">{stage.row.shortId} · {stage.row.date}</text>
+          <text x={stage.x + 24} y="180" fill="hsl(var(--dash-heading))" fontSize="19" fontWeight="700">{stage.title}</text>
+          <text x={stage.x + 24} y="208" fill="hsl(var(--dash-text-secondary))" fontSize="13">{stage.detail}</text>
+          <text x={stage.x + 24} y="260" fill="hsl(var(--dash-heading))" fontSize="44" fontWeight="700">{stage.row.information.success} / {stage.row.information.total}</text>
+          <text x={stage.x + 24} y="292" fill="hsl(var(--dash-text-secondary))" fontSize="14">Information success</text>
+          <line x1={stage.x + 24} x2={stage.x + 276} y1="316" y2="316" stroke="hsl(var(--dash-border))" />
+          <text x={stage.x + 24} y="348" fill="hsl(var(--dash-heading))" fontSize="17">Self-QA {stage.row.information.avgQaScore.toFixed(2)}</text>
+          <text x={stage.x + 276} y="348" fill="hsl(var(--dash-text-secondary))" fontSize="14" textAnchor="end">{stage.row.perceptionPaths.length} path{stage.row.perceptionPaths.length === 1 ? '' : 's'}</text>
+        </g>
       ))}
-      <path d="M405 250 H535" stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
-      <path d="M515 236 L539 250 L515 264" fill="none" stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
-      <g>
-        <rect x="560" y="146" width="170" height="104" rx="5" fill="hsl(var(--dash-card))" stroke="#f59e0b" strokeWidth="2" />
-        <rect x="585" y="270" width="170" height="104" rx="5" fill="hsl(var(--dash-card))" stroke="#f59e0b" strokeWidth="2" />
-        <circle cx="610" cy="178" r="12" fill="#f59e0b" opacity="0.65" />
-        <path d="M578 232 L622 190 L658 220 L688 182 L716 232 Z" fill="#f59e0b" opacity="0.24" />
-        <circle cx="635" cy="300" r="12" fill="#f59e0b" opacity="0.65" />
-        <path d="M603 356 L647 314 L683 344 L713 306 L741 356 Z" fill="#f59e0b" opacity="0.24" />
-        <text x="657" y="132" fill="hsl(var(--dash-heading))" fontSize="22" textAnchor="middle">VISION</text>
-      </g>
-      <path d="M790 250 H892" stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
-      <path d="M872 236 L896 250 L872 264" fill="none" stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
-      <rect x="920" y="130" width="190" height="244" rx="8" fill="hsl(var(--dash-card))" stroke="#10b981" strokeWidth="3" />
-      <text x="1015" y="174" fill="hsl(var(--dash-heading))" fontSize="22" textAnchor="middle">SANDBOX</text>
-      {['audio', 'video', 'docs', 'data'].map((label, index) => (
-        <g key={label}>
-          <rect x={946 + (index % 2) * 82} y={204 + Math.floor(index / 2) * 72} width="64" height="48" rx="4" fill="#10b981" opacity="0.14" />
-          <text x={978 + (index % 2) * 82} y={234 + Math.floor(index / 2) * 72} fill="hsl(var(--dash-text))" fontSize="14" textAnchor="middle">{label}</text>
+      {[355, 750].map((startX) => (
+        <g key={startX}>
+          <path d={`M${startX + 12} 242 H${startX + 78}`} stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
+          <path d={`M${startX + 60} 230 L${startX + 80} 242 L${startX + 60} 254`} fill="none" stroke="hsl(var(--dash-border-active))" strokeWidth="3" />
+          {reduceMotion ? (
+            <circle cx={startX + 32} cy="242" r="5" fill="#2563eb" />
+          ) : (
+            <motion.circle
+              cx={startX + 18}
+              cy="242"
+              r="5"
+              fill="#2563eb"
+              animate={{ x: [0, 42], opacity: [0.25, 1, 0.25] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          )}
         </g>
       ))}
     </>
@@ -277,12 +284,14 @@ function MobileVisualSummary({
   promptBenchmark,
   runtimeBenchmark,
   integrityBenchmark,
+  perceptionBenchmark,
 }: {
   variant: Extract<JournalHero, { kind: 'visual' }>['variant']
   alt: string
   promptBenchmark?: PromptComplexityBenchmarkRow[]
   runtimeBenchmark?: ReadyRuntimeBenchmark
   integrityBenchmark?: ReadyIntegrityBenchmark
+  perceptionBenchmark?: ReadyPerceptionBenchmark
 }) {
   if (variant === 'prompt-complexity') {
     if (!promptBenchmark) return null
@@ -372,27 +381,23 @@ function MobileVisualSummary({
   }
 
   if (variant === 'perception') {
+    if (!perceptionBenchmark) return null
+    const stageLabels = ['packages', 'audio*', 'audio+video']
     return (
-      <div role="img" aria-label={alt} className="md:hidden min-h-[220px] px-4 py-6 bg-dash-surface border-y border-dash-border">
-        <div className="font-mono text-[11px] text-dash-text-secondary mb-5">FROM FILE ACCESS TO PERCEPTION</div>
-        <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2">
-          {[
-            ['HEARING', '오디오'],
-            ['VISION', '프레임'],
-            ['SANDBOX', 'skills'],
-          ].map(([title, detail], index) => (
-            <div key={title} className="contents">
-              {index > 0 && <span className="text-dash-text-muted" aria-hidden="true">→</span>}
-              <div className="min-w-0 border border-dash-border bg-dash-card px-2 py-5 text-center">
-                <div className="font-mono text-xs font-semibold text-dash-heading">{title}</div>
-                <div className="mt-2 text-[11px] text-dash-text-secondary">{detail}</div>
-              </div>
-            </div>
+      <div className="md:hidden min-h-[220px] px-3 py-6 bg-dash-surface border-y border-dash-border">
+        <span className="sr-only">{alt}</span>
+        <div className="font-mono text-[11px] text-dash-text-secondary mb-5">CONFIGURED PATHS · OBSERVED ROW</div>
+        <nav className="grid grid-cols-3 gap-2" aria-label="perception 단계별 실험 상세">
+          {perceptionBenchmark.rows.map((row, index) => (
+            <Link key={row.shortId} to={getExperimentHref(row.shortId)} className="min-w-0 border border-dash-border bg-dash-card px-2 py-4 text-center" aria-label={`${row.shortId} 실험 상세 보기`}>
+              <div className="font-mono text-xs font-semibold text-dash-heading">{row.shortId}</div>
+              <div className="mt-1 min-h-8 text-[10px]/4 text-dash-text-secondary break-words">{stageLabels[index]}</div>
+              <div className="mt-3 font-mono text-xl font-semibold text-dash-heading">{row.information.success}/{row.information.total}</div>
+              <div className="mt-2 text-[10px]/4 text-dash-text-secondary">QA {row.information.avgQaScore.toFixed(2)} · {row.perceptionPaths.length} path</div>
+            </Link>
           ))}
-        </div>
-        <div className="mt-5 flex justify-center gap-2 text-[11px] text-dash-text-secondary">
-          <span>audio</span><span>·</span><span>video</span><span>·</span><span>docs</span><span>·</span><span>data</span>
-        </div>
+        </nav>
+        <p className="mt-5 text-center text-xs/[1.7] text-dash-text-secondary">configured path 수와 Information success는 인과 관계가 아니다.</p>
       </div>
     )
   }
@@ -445,11 +450,13 @@ export default function NoteHeroVisual({
   promptBenchmark,
   runtimeBenchmark,
   integrityBenchmark,
+  perceptionBenchmark,
 }: {
   hero: JournalHero
   promptBenchmark?: PromptComplexityBenchmarkRow[]
   runtimeBenchmark?: ReadyRuntimeBenchmark
   integrityBenchmark?: ReadyIntegrityBenchmark
+  perceptionBenchmark?: ReadyPerceptionBenchmark
 }) {
   const reduceMotion = useReducedMotion()
 
@@ -477,7 +484,7 @@ export default function NoteHeroVisual({
 
   return (
     <figure className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
-      <MobileVisualSummary variant={hero.variant} alt={hero.alt} promptBenchmark={promptBenchmark} runtimeBenchmark={runtimeBenchmark} integrityBenchmark={integrityBenchmark} />
+      <MobileVisualSummary variant={hero.variant} alt={hero.alt} promptBenchmark={promptBenchmark} runtimeBenchmark={runtimeBenchmark} integrityBenchmark={integrityBenchmark} perceptionBenchmark={perceptionBenchmark} />
       <div className="hidden md:block overflow-hidden border-y border-dash-border bg-dash-surface">
         <svg viewBox="0 0 1200 460" role="img" aria-label={hero.alt} className="block w-full aspect-[12/5]">
           {hero.variant === 'prompt-complexity' && promptBenchmark && (
@@ -485,7 +492,7 @@ export default function NoteHeroVisual({
           )}
           {hero.variant === 'runtime' && runtimeBenchmark && <RuntimeVisual reduceMotion={reduceMotion} benchmark={runtimeBenchmark} />}
           {hero.variant === 'integrity' && integrityBenchmark && <IntegrityVisual benchmark={integrityBenchmark} />}
-          {hero.variant === 'perception' && <PerceptionVisual reduceMotion={reduceMotion} />}
+          {hero.variant === 'perception' && perceptionBenchmark && <PerceptionVisual reduceMotion={reduceMotion} benchmark={perceptionBenchmark} />}
           {hero.variant === 'task-contrast' && <TaskContrastVisual />}
           {hero.variant === 'sandbox' && <SandboxVisual reduceMotion={reduceMotion} />}
         </svg>
