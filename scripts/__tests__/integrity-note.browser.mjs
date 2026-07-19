@@ -16,6 +16,20 @@ const chapterTitles = [
 ]
 
 const clone = (value) => structuredClone(value)
+const CONFIG_SOURCE_SHA = '4371ed67b1ae4bfff5392f0d29fab7a52e1effd0'
+
+async function waitForCitationVisible(page, citationId) {
+  await page.waitForFunction((id) => {
+    const citation = document.getElementById(id)
+    const header = document.querySelector('header')
+    if (!citation || !header) return false
+    const citationBox = citation.getBoundingClientRect()
+    const headerBox = header.getBoundingClientRect()
+    const visibleHeight = Math.min(citationBox.bottom, window.innerHeight)
+      - Math.max(citationBox.top, headerBox.bottom)
+    return visibleHeight > 0
+  }, citationId)
+}
 
 async function assertIntegrityHidden(page) {
   for (const title of chapterTitles) {
@@ -58,7 +72,9 @@ async function main() {
     assert.equal(await source.locator('a').count(), 8)
     const citations = page.locator('[data-citation-id]')
     assert.equal(await citations.count(), 20)
-    const citationDomIds = await citations.evaluateAll((nodes) => nodes.map((node) => node.id))
+    const citationTargets = page.locator('[id^="citation-"]')
+    assert.equal(await citationTargets.count(), 20)
+    const citationDomIds = await citationTargets.evaluateAll((nodes) => nodes.map((node) => node.id))
     assert.equal(new Set(citationDomIds).size, citationDomIds.length)
     const citationHrefs = await citations.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href')))
     for (const href of citationHrefs) {
@@ -76,6 +92,8 @@ async function main() {
     assert.match(await exp013Evidence.innerText(), /reports-index\.json → \/experiments\/exp013/)
     const exp013Backref = exp013Evidence.getByRole('link', { name: /본문 1로 돌아가기/ })
     assert.equal(await exp013Backref.getAttribute('href'), '#citation-thesis-exp013-report')
+    await exp013Backref.click()
+    await waitForCitationVisible(page, 'citation-thesis-exp013-report')
     const evidence = page.locator('[data-evidence-id]')
     assert.equal(await evidence.count(), 10)
     const evidenceDomIds = await evidence.evaluateAll((nodes) => nodes.map((node) => node.id))
@@ -96,6 +114,14 @@ async function main() {
     assert.match(
       await page.locator('[data-evidence-id="available-files-before"]').innerText(),
       /subprocess_runner\.py@2b41c06 · L244-L272/,
+    )
+    assert.equal(
+      await page.locator('[data-evidence-id="exp013-config"] a').first().getAttribute('href'),
+      `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${CONFIG_SOURCE_SHA}/batch-runner/experiments/exp013_GPT54_reasoning_high.yaml#L33-L214`,
+    )
+    assert.equal(
+      await page.locator('[data-evidence-id="exp025-config"] a').first().getAttribute('href'),
+      `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${CONFIG_SOURCE_SHA}/batch-runner/experiments/exp025_GPT54_high_postfix.yaml#L36-L217`,
     )
     assert.deepEqual(
       await page.getByRole('navigation', { name: '무결성 수정 전후 실험 상세' }).getByRole('link').allTextContents(),
@@ -129,6 +155,12 @@ async function main() {
     assert.equal(await firstSection.locator('h2').evaluate((node) => getComputedStyle(node).fontSize), '34px')
     assert.equal(await firstSection.locator('p').first().evaluate((node) => getComputedStyle(node).lineHeight), '34.85px')
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth), false)
+    const desktopCitation = page.locator('[data-citation-id="available-files-before"]').first()
+    await desktopCitation.click()
+    const availableEvidence = page.locator('[data-evidence-id="available-files-before"]')
+    await availableEvidence.waitFor()
+    await availableEvidence.getByRole('link', { name: /본문 1로 돌아가기/ }).click()
+    await waitForCitationVisible(page, 'citation-section-2-paragraph-1-available-files-before')
 
     const invalidSource = clone(integrityNote)
     invalidSource.interpretation.causal_attribution = true

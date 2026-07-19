@@ -71,17 +71,21 @@ function InlineCitations({
         const evidence = evidenceLookup.get(evidenceId)
         if (!evidence) return null
         return (
-          <a
+          <span
             key={evidenceId}
             id={citationAnchorId(prefix, evidenceId)}
-            href={`#${evidenceAnchorId(evidenceId)}`}
-            data-citation-id={evidenceId}
-            aria-label={`근거 ${evidence.index + 1}: ${evidence.source.label}`}
-            title={evidence.source.label}
-            className="text-emerald-700 dark:text-emerald-400 underline decoration-emerald-500/40 underline-offset-2 hover:text-emerald-600 dark:hover:text-emerald-300"
+            className="inline-block scroll-mt-24"
           >
-            [{evidence.index + 1}]
-          </a>
+            <a
+              href={`#${evidenceAnchorId(evidenceId)}`}
+              data-citation-id={evidenceId}
+              aria-label={`근거 ${evidence.index + 1}: ${evidence.source.label}`}
+              title={evidence.source.label}
+              className="text-emerald-700 dark:text-emerald-400 underline decoration-emerald-500/40 underline-offset-2 hover:text-emerald-600 dark:hover:text-emerald-300"
+            >
+              [{evidence.index + 1}]
+            </a>
+          </span>
         )
       })}
     </sup>
