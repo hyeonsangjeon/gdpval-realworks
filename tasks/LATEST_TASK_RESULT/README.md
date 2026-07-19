@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-19
-- Status: Integrity Field Note inline citations implemented and locally verified
+- Status: Integrity Field Note inline citations published and production-verified
 
 ## Task
 
@@ -38,6 +38,12 @@ task. It must be refreshed before a task is reported complete.
   highlight without becoming a nested card.
 - Other articles remain compatible: evidence IDs and citations are optional,
   and uncited entries keep numbered evidence rows with explicit title links.
+- Squash-merged the reviewed change through PR #109 as `4647a6ce`. Automatic
+  `Aggregate Tests & Deploy` run
+  [29673420824](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29673420824)
+  completed build, all 56 aggregate contracts, Chromium installation, both
+  Field Note browser suites, artifact upload, and GitHub Pages deployment
+  successfully. No other workflow ran for that commit.
 
 ## Verification
 
@@ -56,8 +62,26 @@ task. It must be refreshed before a task is reported complete.
   lines 244-272, `subprocess_runner.py@4e0e43d` lines 244-276, and the matching
   `qa_failed` and config ranges. The article's data and causal conclusions were
   not changed.
+- On the deployed page, twenty citation occurrences mapped to ten detailed
+  evidence targets. The exp013 footnote navigated to its report detail and the
+  return link settled below the 61px sticky header at 92.9px on mobile and
+  96.25px on desktop.
+- Public config links resolve to full SHA `4371ed67...` and include the complete
+  `data.filter`, `condition_a`, and `execution` ranges: exp013 lines 33-214 and
+  exp025 lines 36-217. The shared causal contract exposes eight body return
+  links; public checks found no page errors or horizontal overflow.
 
 ## Remaining Work
 
-- Merge and publish the reviewed citation branch, then verify all citation and
-  back-reference navigation on the deployed page.
+- No implementation or deployment work remains for the inline citation change.
+
+## Concurrent Local Cleanup
+
+- A separate post-merge audit removed seven clean linked worktree paths and
+  twenty local branch refs backed by merged PRs.
+- The dirty `sandbox-next` worktree retained its five modified and four
+  untracked paths. The closed-but-unmerged prompt deploy branch and unassociated
+  agentic run-correction branch remain local because their merge evidence was
+  insufficient for safe deletion.
+- No dirty worktree, uncertain branch, remote ref, stash, or primary-worktree
+  file was removed.

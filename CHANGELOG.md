@@ -25,6 +25,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   evidence rows, with each row title acting as its explicit source link. All 56
   aggregate contracts, production build, and runtime/integrity Chromium suites
   pass; no model, batch, grading, upload, or paid workflow was dispatched.
+  Shipped through PR #109 (`4647a6ce`) and successful Pages run
+  [29673420824](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29673420824);
+  public mobile and desktop checks verified all forward citations, detailed
+  pinned sources, back-references, sticky-header offsets, and overflow bounds.
 - **Evidence-backed integrity Field Note** — rebuild
   `honest-pipeline-lower-score` from exact exp013/exp025 report snapshots,
   checked-in experiment config projections, and pinned PR #38 code history.
@@ -43,6 +47,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   [29649567174](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29649567174);
   the deployed JSON, non-causal hero, report-derived chart, pinned source links,
   and reflective typography were verified on desktop and mobile.
+
+### Changed
+- **Local merged-branch consolidation** — a post-merge local audit removed
+  seven clean linked worktree paths and twenty sandbox, agentic, prompt, and
+  note branch refs backed by merged PRs. Dirty or merge-uncertain work, remote
+  refs, stashes, and primary-worktree files were preserved without force-removal.
 - **Evidence-backed runtime Field Note** — rebuild the `360-minute-experiment`
   note around three explicit sources: exp008/010/025/026 report snapshots, the
   current condition-a workflow policy, and a pinned exp025 incident record.
