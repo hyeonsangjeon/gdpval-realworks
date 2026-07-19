@@ -25,6 +25,8 @@ async function assertIntegrityHidden(page) {
   assert.equal(await page.getByRole('heading', { name: '무결성 수정 전후의 실행 완료율' }).count(), 0)
   assert.equal(await page.getByRole('complementary', { name: 'Integrity evidence source' }).count(), 0)
   assert.equal(await page.getByRole('navigation', { name: '무결성 수정 전후 실험 상세' }).count(), 0)
+  assert.equal(await page.locator('[data-citation-id]').count(), 0)
+  assert.equal(await page.locator('[data-evidence-id]').count(), 0)
 }
 
 async function main() {
@@ -41,10 +43,60 @@ async function main() {
   const page = await context.newPage()
 
   try {
+    let releaseIntegrity
+    await page.route('**/generated/integrity-note.json*', async (route) => {
+      await new Promise((resolve) => { releaseIntegrity = resolve })
+      await route.fulfill({ json: integrityNote })
+    })
     await page.goto(`${base}/notes/honest-pipeline-lower-score`)
+    await page.getByRole('status').waitFor()
+    await assertIntegrityHidden(page)
+    releaseIntegrity()
     const source = page.getByRole('complementary', { name: 'Integrity evidence source' })
     await source.waitFor()
+    await page.unroute('**/generated/integrity-note.json*')
     assert.equal(await source.locator('a').count(), 8)
+    const citations = page.locator('[data-citation-id]')
+    assert.equal(await citations.count(), 20)
+    const citationDomIds = await citations.evaluateAll((nodes) => nodes.map((node) => node.id))
+    assert.equal(new Set(citationDomIds).size, citationDomIds.length)
+    const citationHrefs = await citations.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href')))
+    for (const href of citationHrefs) {
+      assert.ok(href?.startsWith('#evidence-'))
+      assert.equal(await page.locator(href).count(), 1)
+    }
+    const citationLabels = await citations.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))
+    assert.equal(citationLabels.every((label) => Boolean(label?.match(/^근거 \d+:/))), true)
+    const firstReportCitation = page.locator('[data-citation-id="exp013-report"]').first()
+    assert.equal(await firstReportCitation.getAttribute('href'), '#evidence-exp013-report')
+    await firstReportCitation.click()
+    assert.match(page.url(), /#evidence-exp013-report$/)
+    const exp013Evidence = page.locator('[data-evidence-id="exp013-report"]')
+    await exp013Evidence.waitFor()
+    assert.match(await exp013Evidence.innerText(), /reports-index\.json → \/experiments\/exp013/)
+    const exp013Backref = exp013Evidence.getByRole('link', { name: /본문 1로 돌아가기/ })
+    assert.equal(await exp013Backref.getAttribute('href'), '#citation-thesis-exp013-report')
+    const evidence = page.locator('[data-evidence-id]')
+    assert.equal(await evidence.count(), 10)
+    const evidenceDomIds = await evidence.evaluateAll((nodes) => nodes.map((node) => node.id))
+    assert.equal(new Set(evidenceDomIds).size, evidenceDomIds.length)
+    for (const evidenceId of await evidence.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-evidence-id')))) {
+      const forward = page.locator(`[data-citation-id="${evidenceId}"]`).first()
+      await forward.click()
+      assert.match(page.url(), new RegExp(`#evidence-${evidenceId}$`))
+    }
+    const exp013Backrefs = exp013Evidence.locator('a[href^="#citation-"]')
+    assert.equal(await exp013Backrefs.count(), 2)
+    const returnHref = await exp013Backrefs.nth(1).getAttribute('href')
+    await exp013Backrefs.nth(1).click()
+    assert.match(page.url(), new RegExp(`${returnHref}$`))
+    assert.equal(await page.locator(returnHref).count(), 1)
+    const backrefBox = await exp013Backrefs.first().boundingBox()
+    assert.ok(backrefBox && backrefBox.height >= 24)
+    assert.match(
+      await page.locator('[data-evidence-id="available-files-before"]').innerText(),
+      /subprocess_runner\.py@2b41c06 · L244-L272/,
+    )
     assert.deepEqual(
       await page.getByRole('navigation', { name: '무결성 수정 전후 실험 상세' }).getByRole('link').allTextContents(),
       ['95.9%exp013 · 211/220', '82.3%exp025 · 181/220'],

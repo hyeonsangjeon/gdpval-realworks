@@ -18,14 +18,18 @@ export interface JournalSection {
   label?: string
   heading: string
   paragraphs: string[]
+  paragraphCitations?: string[][]
   points?: string[]
   callout?: string
+  calloutCitations?: string[]
   benchmarkNarrative?: 'prompt-complexity-results' | 'runtime-incident' | 'runtime-policy' | 'runtime-results' | 'integrity-observation' | 'integrity-available-files' | 'integrity-qa-failed' | 'integrity-comparison' | 'integrity-decision'
 }
 
 export interface JournalEvidence {
+  id?: string
   label: string
   detail: string
+  source?: string
   href: string
 }
 
@@ -73,6 +77,7 @@ export interface JournalArticle {
   title: string
   dek: string
   thesis: string
+  thesisCitations?: string[]
   lens: JournalLens
   publishedAt: string
   period: string
@@ -109,6 +114,12 @@ export interface TimelineEvent {
 
 const REPO = 'https://github.com/hyeonsangjeon/gdpval-realworks/blob/main'
 const HF_EXP026 = 'https://huggingface.co/datasets/HyeonSang/exp026_sandbox_skills_multimodal'
+const INTEGRITY_SOURCE_SHA = '4371ed67b1ae4bfff5392f0d29fab7a52e1effd0'
+const INTEGRITY_SOURCE = `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${INTEGRITY_SOURCE_SHA}`
+const INTEGRITY_PARENT = '2b41c06fd0647c900520009f30cb26d3a5bd772e'
+const INTEGRITY_FIX = '4e0e43d23fe2d829ec8e7469e1fc0ffd9aab75ff'
+const INTEGRITY_FOLLOWUP = '645758e0ebfdf5985748f31756de45f1b619ee1d'
+const INTEGRITY_MERGE = '4ba399f9f9528ab355b2c8fc6d703aa14b310414'
 
 export const journalArticles: JournalArticle[] = [
   {
@@ -307,6 +318,7 @@ export const journalArticles: JournalArticle[] = [
     ...journalCatalog['honest-pipeline-lower-score'],
     dek: '같은 checked-in 설정의 두 실행에서 완료율은 달랐고, 그 사이 success를 기록하는 규칙도 바뀌었다. 관측된 차이와 측정 정의의 변화를 인과로 섞지 않고 읽었다.',
     thesis: '두 실행의 완료율 차이는 관측 사실이고, success 규칙의 변화도 코드로 확인된다. 그러나 하나를 다른 하나의 원인으로 배분할 실행 정체성은 남아 있지 않다.',
+    thesisCitations: ['exp013-report', 'exp025-report', 'measurement-contract'],
     publishedAt: '2026-07-15',
     period: 'exp013 → exp025',
     readingMinutes: 7,
@@ -332,49 +344,125 @@ export const journalArticles: JournalArticle[] = [
         label: '관측',
         heading: '먼저, 숫자가 달라졌다',
         paragraphs: [],
+        paragraphCitations: [
+          ['exp013-report', 'exp025-report'],
+          ['pr38-merge', 'measurement-contract'],
+        ],
         benchmarkNarrative: 'integrity-observation',
       },
       {
         label: '불변식',
         heading: '실행되지 않은 파일 힌트',
         paragraphs: [],
+        paragraphCitations: [
+          ['available-files-before'],
+          ['available-files-after', 'measurement-contract'],
+        ],
         benchmarkNarrative: 'integrity-available-files',
       },
       {
         label: '판정',
         heading: '기록되지 않은 qa_failed',
         paragraphs: [],
+        paragraphCitations: [
+          ['qa-failed-before'],
+          ['qa-failed-after', 'measurement-contract'],
+        ],
         benchmarkNarrative: 'integrity-qa-failed',
       },
       {
         label: '비교',
         heading: '같은 자, 다른 규칙',
         paragraphs: [],
+        paragraphCitations: [
+          ['exp013-config', 'exp025-config'],
+          ['measurement-contract'],
+        ],
         benchmarkNarrative: 'integrity-comparison',
         callout: '관측된 차이는 사실이다. 그 차이의 원인을 하나의 수정에 배분할 증거는 없다.',
+        calloutCitations: ['measurement-contract'],
       },
       {
         label: '결정',
         heading: '지표보다 의미를 버전 관리하기',
         paragraphs: [],
+        paragraphCitations: [
+          ['pr38-merge', 'measurement-contract'],
+          ['measurement-contract'],
+        ],
         benchmarkNarrative: 'integrity-decision',
       },
     ],
     evidence: [
       {
-        label: 'Silent corruption 명세',
-        detail: '_AVAILABLE_FILES dead-write와 qa_failed dead invariant',
-        href: `${REPO}/tasks/TASK_SILENT_CORRUPTION_FIXES.md`,
+        id: 'exp013-report',
+        label: 'exp013 report snapshot과 상세',
+        detail: 'PR #38 이전 실행의 summary와 task-level 상세. 본문은 배포 시점 reports-index snapshot의 완료율·success·error·Self-QA를 사용한다.',
+        source: 'reports-index.json → /experiments/exp013',
+        href: 'https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp013',
       },
       {
-        label: 'exp013 리포트',
-        detail: 'PR #38 이전 GPT-5.4 high 실행 결과 원문',
-        href: `${REPO}/batch-runner/results/exp013_GPT54_reasoning_high/report/report.md`,
+        id: 'exp025-report',
+        label: 'exp025 report snapshot과 상세',
+        detail: 'PR #38 이후 실행의 summary와 task-level 상세. exp013과 같은 checked-in condition이지만 실행 시점 정체성은 완전히 고정되지 않았다.',
+        source: 'reports-index.json → /experiments/exp025',
+        href: 'https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp025',
       },
       {
-        label: 'exp025 리포트',
-        detail: 'PR #38 이후 GPT-5.4 high 실행 결과 원문',
-        href: `${REPO}/batch-runner/results/exp025_GPT54_high_postfix/report/report.md`,
+        id: 'available-files-before',
+        label: '_AVAILABLE_FILES 수정 전 실행 경로',
+        detail: '원본 solution.py를 먼저 기록한 뒤 메모리의 code 문자열에만 파일 힌트를 붙였다. 이후 write가 없어 subprocess가 변경 전 파일을 실행했다.',
+        source: 'subprocess_runner.py@2b41c06 · L244-L272',
+        href: `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${INTEGRITY_PARENT}/batch-runner/core/subprocess_runner.py#L244-L272`,
+      },
+      {
+        id: 'available-files-after',
+        label: '_AVAILABLE_FILES 수정 후 실행 경로',
+        detail: '헤더를 붙인 code를 subprocess 실행 전에 code_path에 다시 기록해 약속한 실행 환경과 실제 파일을 일치시켰다.',
+        source: 'subprocess_runner.py@4e0e43d · L244-L276',
+        href: `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${INTEGRITY_FIX}/batch-runner/core/subprocess_runner.py#L244-L276`,
+      },
+      {
+        id: 'qa-failed-before',
+        label: 'qa_failed 수정 전 판정 경로',
+        detail: 'Self-QA 재시도를 소진한 determined failure가 best_result의 status를 바꾸지 않은 채 루프를 빠져나갈 수 있었다.',
+        source: 'step2_run_inference.py@2b41c06 · L1146-L1158',
+        href: `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${INTEGRITY_PARENT}/batch-runner/step2_run_inference.py#L1146-L1158`,
+      },
+      {
+        id: 'qa-failed-after',
+        label: 'qa_failed 수정 후 판정 경로',
+        detail: 'determined QA failure에 qa_failed status를 기록해 retry·resume·summary 경로가 실제로 작동하도록 했다.',
+        source: 'step2_run_inference.py@4e0e43d · L1147-L1166',
+        href: `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${INTEGRITY_FIX}/batch-runner/step2_run_inference.py#L1147-L1166`,
+      },
+      {
+        id: 'exp013-config',
+        label: 'exp013 checked-in 비교 설정',
+        detail: 'Azure GPT-5.4 high, QA 기준, subprocess timeout·token·resume·relay 설정을 검증한 비교 전 실행 설정.',
+        source: `exp013_GPT54_reasoning_high.yaml@${INTEGRITY_SOURCE_SHA.slice(0, 7)} · L43-L214`,
+        href: `${INTEGRITY_SOURCE}/batch-runner/experiments/exp013_GPT54_reasoning_high.yaml#L43-L214`,
+      },
+      {
+        id: 'exp025-config',
+        label: 'exp025 checked-in 비교 설정',
+        detail: 'exp013과 data.filter, condition_a, execution projection이 동일한지 generator가 직접 비교하는 수정 후 실행 설정.',
+        source: `exp025_GPT54_high_postfix.yaml@${INTEGRITY_SOURCE_SHA.slice(0, 7)} · L46-L217`,
+        href: `${INTEGRITY_SOURCE}/batch-runner/experiments/exp025_GPT54_high_postfix.yaml#L46-L217`,
+      },
+      {
+        id: 'pr38-merge',
+        label: 'PR #38 변경 묶음과 후속 정리',
+        detail: 'core fix, review follow-up, merge 경계를 함께 확인한다. Anthropic content parsing fix는 두 Azure 실행 비교에는 적용되지 않는다.',
+        source: `merge ${INTEGRITY_MERGE.slice(0, 7)} · follow-up ${INTEGRITY_FOLLOWUP.slice(0, 7)}`,
+        href: `https://github.com/hyeonsangjeon/gdpval-realworks/commit/${INTEGRITY_MERGE}`,
+      },
+      {
+        id: 'measurement-contract',
+        label: '측정 해석 계약과 인과 제한',
+        detail: '관측 차이와 판정 의미 변화를 함께 기록하되, 누락된 실행 Git·입력 revision·Azure model revision·runner identity 때문에 causal_attribution은 false로 고정한다.',
+        source: `integrity-incidents.yaml@${INTEGRITY_SOURCE_SHA.slice(0, 7)} · L1-L46`,
+        href: `${INTEGRITY_SOURCE}/data/notes/integrity-incidents.yaml#L1-L46`,
       },
     ],
   },

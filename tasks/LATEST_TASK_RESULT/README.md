@@ -4,52 +4,60 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-19
-- Status: Local grading branches consolidated; shared retry budget covered
+- Status: Integrity Field Note inline citations implemented and locally verified
 
 ## Task
 
-- Audit local grading, Track 2, judge, perception, and preflight branches against
-  current `origin/main` before carrying any old implementation forward.
-- Integrate only behavior or regression coverage that is genuinely absent from
-  `main`, without replaying stale rolling documentation or older grader code.
-- Remove confirmed clean local worktrees and refs while preserving dirty work,
-  remote branches, the original workspace, and all paid/model execution gates.
+- Add inline footnotes and detailed hyperlinks to
+  `/notes/honest-pipeline-lower-score` so each substantive claim maps directly
+  to its report, config, pinned code history, or interpretation contract.
+- Preserve the reflective typography and mobile layout while supporting
+  citation-to-evidence navigation and evidence-to-body return links.
+- Keep the existing non-causal integrity interpretation and generated data
+  contracts unchanged.
 
 ## Result
 
-- Compared local candidate tips, changed paths, `main` ancestry, squash PR
-  history, and current behavior. No grading runtime implementation remained to
-  merge; replaying the old branches would regress newer Track 2 code or replace
-  the rolling result with stale records.
-- The dirty `fix/grading-final-json-recovery` worktree contained one useful
-  test absent from `main`: empty final text followed by malformed final JSON
-  must share one finalization retry budget.
-- Ported that single test to current `main`. It proves the judge stops after two
-  calls, returns `final_json_parse_failed`, accumulates 300 input / 2,440 output
-  / 57 cached tokens, and leaves a third valid scripted response unused.
-- Removed 19 clean linked worktrees and their 26 confirmed stale local branch
-  refs. No force-removal was used. The excluded dirty worktree remains attached
-  with the same five modified paths.
-- Left all remote branches, the original workspace, current agentic work, and
-  workflow state untouched. No model/API call, grading run, HF upload, paid
-  execution, or workflow dispatch occurred.
+- Added generic citation IDs to journal evidence and paragraph-, callout-, and
+  thesis-level citation declarations. The integrity article uses twenty inline
+  citation occurrences mapped to ten unique evidence entries.
+- Added a shared fail-closed validator that rejects duplicate rendered IDs,
+  malformed IDs, unknown or repeated references, unused citation evidence,
+  paragraph-slot drift, and callout references without a callout before the
+  article body can render.
+- Replaced its three broad report links with detailed sources for exp013 and
+  exp025 snapshots, `_AVAILABLE_FILES` before/after code, `qa_failed`
+  before/after code, both checked-in experiment configs, the PR #38 merge, and
+  the exact measurement/causal-boundary contract.
+- Pinned code and config hyperlinks include immutable Git commits and exact
+  line ranges. Report citations link to the public experiment details that use
+  the same deployment-time report snapshot as the article.
+- Converted the evidence list from one large external link per row into a
+  detailed source row with its external hyperlink, source path, and one or more
+  body return links. Evidence targeted by a citation receives a subtle anchor
+  highlight without becoming a nested card.
+- Other articles remain compatible: evidence IDs and citations are optional,
+  and uncited entries keep numbered evidence rows with explicit title links.
 
 ## Verification
 
-- New single regression: **1 passed** in 2.19 seconds.
-- Focused model-free grading suite covering tool-calling finalization, grader
-  dispatch, perception wiring, and Step 8 persistence: **155 passed, 0 failed,
-  0 skipped, 0 warnings** in 6.59 seconds.
-- Static diagnostics for the changed Python test: **0 errors**.
-- Cleanup verification: all 26 target local refs are absent; linked worktrees
-  removed cleanly for all 19 attached targets; the preserved dirty worktree
-  still reports exactly five modified files. `git diff --check` passed.
+- Full Node aggregate contracts: **56 passed, 0 failed**. Production
+  TypeScript/Vite build, static diagnostics, and `git diff --check` passed.
+- Combined runtime and integrity Playwright suites passed against the same
+  production build. Browser coverage verifies exactly twenty unique citation
+  anchors and ten unique evidence targets, every accessible forward link, all
+  single-target hashes, representative multi-backref return navigation, and a
+  minimum 24px mobile return target.
+- Desktop rendered twenty citation occurrences and ten detailed evidence rows
+  while preserving 34.85px body leading. Mobile kept 9px superscripts inside
+  32.8px leading, a 348px evidence width, eight backrefs on the shared causal
+  contract, and no horizontal overflow.
+- Pinned source details were verified at `subprocess_runner.py@2b41c06`
+  lines 244-272, `subprocess_runner.py@4e0e43d` lines 244-276, and the matching
+  `qa_failed` and config ranges. The article's data and causal conclusions were
+  not changed.
 
 ## Remaining Work
 
-- Review or explicitly discard the five-file dirty
-  `fix/grading-final-json-recovery` worktree separately. Its runtime and rolling
-  documentation hunks are superseded; it was intentionally not modified or
-  deleted during this cleanup.
-- The six stale non-`main` GitHub branches remain unchanged. Their remote
-  deletion can be handled independently from this local-only cleanup.
+- Merge and publish the reviewed citation branch, then verify all citation and
+  back-reference navigation on the deployed page.

@@ -34,9 +34,11 @@ import {
   journalArticles,
   lensLabels,
   type JournalArticle as JournalArticleData,
+  type JournalEvidence,
   type JournalLens,
 } from '../data/journal'
 import { getExperimentHref, isExternalExperimentHref } from '../data/journalLinks'
+import { validateJournalCitations } from '../lib/journalCitations'
 
 const lensStyles: Record<JournalLens, string> = {
   experiment: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/20',
@@ -50,6 +52,41 @@ type ReadyRuntimeBenchmark = Extract<RuntimeNoteBenchmarkSelection, { status: 'r
 type ReadyIntegrityBenchmark = Extract<IntegrityNoteSelection, { status: 'ready' }>
 
 const formatSigned = (value: number, suffix: string) => `${value > 0 ? '+' : ''}${value.toFixed(1)}${suffix}`
+const citationAnchorId = (prefix: string, evidenceId: string) => `citation-${prefix}-${evidenceId}`
+const evidenceAnchorId = (evidenceId: string) => `evidence-${evidenceId}`
+
+function InlineCitations({
+  evidenceIds,
+  prefix,
+  evidenceLookup,
+}: {
+  evidenceIds?: string[]
+  prefix: string
+  evidenceLookup: Map<string, { source: JournalEvidence; index: number }>
+}) {
+  if (!evidenceIds?.length) return null
+  return (
+    <sup className="ml-1 inline-flex gap-0.5 align-super font-mono text-[9px] leading-none">
+      {evidenceIds.map((evidenceId) => {
+        const evidence = evidenceLookup.get(evidenceId)
+        if (!evidence) return null
+        return (
+          <a
+            key={evidenceId}
+            id={citationAnchorId(prefix, evidenceId)}
+            href={`#${evidenceAnchorId(evidenceId)}`}
+            data-citation-id={evidenceId}
+            aria-label={`근거 ${evidence.index + 1}: ${evidence.source.label}`}
+            title={evidence.source.label}
+            className="text-emerald-700 dark:text-emerald-400 underline decoration-emerald-500/40 underline-offset-2 hover:text-emerald-600 dark:hover:text-emerald-300"
+          >
+            [{evidence.index + 1}]
+          </a>
+        )
+      })}
+    </sup>
+  )
+}
 
 function resolvePromptComplexityArticle(article: JournalArticleData, benchmark: ReadyPromptBenchmark) {
   const baseline = benchmark.rows[0]
@@ -405,6 +442,47 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
     ? []
     : (resolved?.sections ?? article.sections)
       .filter((section) => !section.benchmarkNarrative || benchmarkReady)
+  const hasCitationContract = Boolean(
+    article.thesisCitations?.length
+    || article.evidence.some((source) => source.id)
+    || article.sections.some((section) => (
+      section.paragraphCitations?.length || section.calloutCitations?.length
+    )),
+  )
+  const citationsReady = !hasCitationContract || !usesReportBenchmark || Boolean(benchmarkReady)
+  const citationError = citationsReady
+    ? validateJournalCitations(article, displayedSections)
+    : null
+  if (citationError) {
+    return (
+      <div lang="ko" className="min-h-screen bg-dash-page text-dash-text font-journal-sans">
+        <BenchmarkDataState error message={`본문 인용 계약이 유효하지 않습니다: ${citationError}`} />
+      </div>
+    )
+  }
+  const evidenceLookup = citationsReady
+    ? new Map(
+      article.evidence.flatMap((source, index) => source.id ? [[source.id, { source, index }] as const] : []),
+    )
+    : new Map<string, { source: JournalEvidence; index: number }>()
+  const citationBackrefs = new Map<string, string[]>()
+  const registerBackrefs = (evidenceIds: string[] | undefined, prefix: string) => {
+    for (const evidenceId of evidenceIds ?? []) {
+      if (!evidenceLookup.has(evidenceId)) continue
+      const refs = citationBackrefs.get(evidenceId) ?? []
+      refs.push(citationAnchorId(prefix, evidenceId))
+      citationBackrefs.set(evidenceId, refs)
+    }
+  }
+  if (citationsReady) {
+    registerBackrefs(article.thesisCitations, 'thesis')
+    displayedSections.forEach((section, sectionIndex) => {
+      section.paragraphCitations?.forEach((evidenceIds, paragraphIndex) => {
+        registerBackrefs(evidenceIds, `section-${sectionIndex + 1}-paragraph-${paragraphIndex + 1}`)
+      })
+      registerBackrefs(section.calloutCitations, `section-${sectionIndex + 1}-callout`)
+    })
+  }
 
   return (
     <div lang="ko" className="min-h-screen bg-dash-page text-dash-text font-journal-sans">
@@ -485,7 +563,7 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
           <BenchmarkDataState error message={`integrity 근거의 ${integrityBenchmark.invalidSources.join(', ')} 항목이 유효하지 않습니다.`} />
         )}
 
-        <div className="max-w-[760px] mx-auto px-4 md:px-6 py-12 md:py-16">
+        {citationsReady && <div className="max-w-[760px] mx-auto px-4 md:px-6 py-12 md:py-16">
           {readyPromptBenchmark && <BenchmarkDataSource rows={readyPromptBenchmark.rows} generated={generated} />}
           {readyRuntimeBenchmark && <RuntimeDataSource benchmark={readyRuntimeBenchmark} />}
           {readyIntegrityBenchmark && <IntegrityDataSource benchmark={readyIntegrityBenchmark} />}
@@ -496,6 +574,7 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
             </div>
             <blockquote className="border-l-2 border-emerald-500 pl-4 md:pl-7 py-1 font-journal-serif text-[19px] md:text-[25px] leading-[1.75] md:leading-[1.65] tracking-normal text-pretty break-keep text-dash-heading">
               {article.thesis}
+              <InlineCitations evidenceIds={article.thesisCitations} prefix="thesis" evidenceLookup={evidenceLookup} />
             </blockquote>
           </div>
 
@@ -543,6 +622,11 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
                         : 'text-[15px]/[1.9] md:text-[16px]/[1.9] text-pretty break-keep text-dash-text'}
                     >
                       {paragraph}
+                      <InlineCitations
+                        evidenceIds={section.paragraphCitations?.[paragraphIndex]}
+                        prefix={`section-${sectionIndex + 1}-paragraph-${paragraphIndex + 1}`}
+                        evidenceLookup={evidenceLookup}
+                      />
                     </p>
                   ))}
                 </div>
@@ -561,6 +645,11 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
                     ? 'mt-10 border-y border-dash-border px-1 md:px-6 py-6 font-journal-serif text-[15px]/[1.9] md:text-[16px]/[1.9] text-pretty break-keep text-dash-text-secondary'
                     : 'mt-8 bg-dash-surface/60 border-y border-dash-border px-5 py-5 text-[13px] md:text-sm text-dash-text leading-7'}>
                     {section.callout}
+                    <InlineCitations
+                      evidenceIds={section.calloutCitations}
+                      prefix={`section-${sectionIndex + 1}-callout`}
+                      evidenceLookup={evidenceLookup}
+                    />
                   </div>
                 )}
               </section>
@@ -595,22 +684,46 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
               <span className="h-px flex-1 bg-dash-border" aria-hidden="true" />
             </div>
             <div className="border-t border-dash-border">
-              {article.evidence.map((source, sourceIndex) => (
-                <a
-                  key={source.href}
-                  href={source.href}
-                  target={source.href.startsWith('http') ? '_blank' : undefined}
-                  rel={source.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                  className="group grid grid-cols-[28px_1fr_auto] gap-3 md:gap-4 py-5 border-b border-dash-border hover:bg-dash-card/40 transition-colors"
+              {article.evidence.map((source, sourceIndex) => {
+                const sourceId = source.id ?? `source-${sourceIndex + 1}`
+                const backrefs = citationBackrefs.get(sourceId) ?? []
+                return (
+                <div
+                  key={source.id ?? source.href}
+                  id={evidenceAnchorId(sourceId)}
+                  data-evidence-id={sourceId}
+                  className="scroll-mt-24 grid grid-cols-[28px_1fr] gap-3 md:gap-4 py-5 border-b border-dash-border target:bg-emerald-500/5 transition-colors"
                 >
                   <span className="font-mono text-[10px] font-semibold text-dash-text-secondary pt-0.5">{String(sourceIndex + 1).padStart(2, '0')}</span>
                   <div>
-                    <div className="text-[13px] font-medium text-dash-heading mb-1.5">{source.label}</div>
+                    <a
+                      href={source.href}
+                      target={source.href.startsWith('http') ? '_blank' : undefined}
+                      rel={source.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                      className="group/source grid grid-cols-[1fr_auto] gap-3 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                    >
+                      <span className="text-[13px] font-medium text-dash-heading group-hover/source:text-emerald-600 dark:group-hover/source:text-emerald-400">{source.label}</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-dash-text-faint group-hover/source:text-emerald-500 flex-shrink-0 mt-0.5" />
+                    </a>
                     <div className="text-xs text-dash-text-secondary leading-[1.7]">{source.detail}</div>
+                    {source.source && <div className="mt-2 font-mono text-[10px]/[1.6] text-dash-text-faint break-all">{source.source}</div>}
+                    {backrefs.length > 0 && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2" aria-label={`${source.label} 본문 복귀 링크`}>
+                        {backrefs.map((backref, backrefIndex) => (
+                          <a
+                            key={backref}
+                            href={`#${backref}`}
+                            aria-label={`${source.label}을 인용한 본문 ${backrefIndex + 1}로 돌아가기`}
+                            className="inline-flex min-h-6 items-center gap-1 px-1 py-1 font-mono text-[9px] text-dash-text-muted hover:text-emerald-600 dark:hover:text-emerald-400"
+                          >
+                            <ArrowLeft className="w-2.5 h-2.5" /> 본문 {String(backrefIndex + 1).padStart(2, '0')}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-dash-text-faint group-hover:text-emerald-500 flex-shrink-0 mt-1" />
-                </a>
-              ))}
+                </div>
+              )})}
             </div>
           </section>
 
@@ -631,7 +744,7 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
               </div>
             </section>
           )}
-        </div>
+        </div>}
       </article>
     </div>
   )
