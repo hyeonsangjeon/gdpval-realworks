@@ -1,0 +1,49 @@
+comparison:
+  exp011:
+    experiment_id: exp011_GPT52Chat_domain_packages
+    report_date: "2026-03-05"
+    expected_mode: subprocess
+    expected_scope: full_220
+    perception_paths: []
+  exp012:
+    experiment_id: exp012_GPT52Chat_audio_multiagent
+    report_date: "2026-03-08"
+    expected_mode: subprocess
+    expected_scope: information_25
+    perception_paths:
+      - audio
+  exp026:
+    experiment_id: exp026_sandbox_skills_multimodal
+    report_date: "2026-07-10"
+    expected_mode: sandbox
+    expected_scope: full_220
+    perception_paths:
+      - audio
+      - video
+
+history:
+  audio_preprocessor_commit: dfc29e43598a3feda54ae5127912b7b0ec3299bd
+  sandbox_multimodal_commit: eaa2789081ba7b81901ba977006f9bfd6534a0c1
+  docker_always_commit: 6ac8a830a325eb95aec5fb89f38a5e9312ea1b2a
+  audio_applied_at: "2026-03-09"
+  sandbox_applied_at: "2026-07-07"
+  docker_always_applied_at: "2026-07-09"
+
+interpretation:
+  causal_attribution: false
+  observed_claim: information_sector_success_and_self_qa_differ_across_three_runs
+  architecture_claim: configured_path_expanded_from_packages_to_audio_to_audio_video_skills_sandbox
+  invocation_count_known: false
+  external_quality_known: false
+  missing_execution_identities:
+    - execution_git_sha
+    - input_dataset_revision
+    - azure_model_revision
+    - runner_environment_identity
+  caveats:
+    - exp011_is_full_benchmark_while_exp012_is_information_only
+    - exp012_audio_analyzer_is_triggered_only_for_tasks_with_audio_files
+    - exp012_yaml_comment_says_17_audio_heavy_tasks_but_report_has_25_information_tasks
+    - exp012_yaml_created_at_differs_from_report_date
+    - exp026_changes_model_reasoning_runner_skills_audio_and_video_together
+    - report_snapshot_is_resolved_at_deployment_not_execution

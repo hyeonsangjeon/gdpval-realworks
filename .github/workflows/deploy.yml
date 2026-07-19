@@ -8,11 +8,16 @@ on:
       - 'data/grades/**'                # aggregate-grades → grades-index
       - 'batch-runner/experiments/**'   # aggregate-experiments → experiments-index
       - 'batch-runner/results/**'       # aggregate-reports → reports-index
+      - 'batch-runner/skills/**'        # perception-note skill registry source
       - 'src/**'                        # 소스 변경 시
       - 'scripts/**'                    # aggregate 스크립트 변경 시
+      - 'package.json'                  # aggregate/browser command wiring
+      - 'package-lock.json'             # aggregate/browser dependency graph
+      - '.github/workflows/deploy.yml'  # Pages gate 자체 변경 시
       - '.github/workflows/batch-run.yml' # runtime-note policy source
       - 'data/notes/runtime-incidents.yaml' # runtime-note incident source
       - 'data/notes/integrity-incidents.yaml' # integrity-note measurement source
+      - 'data/notes/perception-pipeline.yaml' # perception-note architecture source
 
   workflow_dispatch:          # 수동 실행 가능
 
