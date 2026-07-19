@@ -413,6 +413,57 @@ def test_malformed_final_retry_budget_exhaustion_stays_fail_closed(
     assert len(client.responses.calls) == 2
 
 
+def test_empty_then_malformed_final_shares_one_retry_budget(
+    deliverable_dir, task_and_item
+):
+    task, item = task_and_item
+    empty = _response(
+        output=[{"type": "reasoning", "id": "r1", "summary": []}],
+        in_tok=100,
+        out_tok=2400,
+        cached_tok=7,
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+    )
+    malformed = _response(
+        output=[_final("not-json")],
+        in_tok=200,
+        out_tok=40,
+        cached_tok=50,
+    )
+    unused_valid = _response(output=[_final(json.dumps({
+        "verdict": "pass",
+        "partial_score": 1.0,
+        "evidence": "unused",
+        "confidence": 0.9,
+        "reasoning": "unused",
+    }))])
+    scripted = ScriptedResponses([empty, malformed, unused_valid])
+    judge = ToolCallingJudge(
+        client=FakeClient(scripted),
+        model="gpt-5.4-mini",
+        prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=1,
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "judge_error"
+    assert result.judge_error == "final_json_parse_failed"
+    assert result.main_api_call_count == 2
+    assert result.iterations == 2
+    assert result.input_tokens == 300
+    assert result.output_tokens == 2440
+    assert result.cached_tokens == 57
+    assert len(scripted.calls) == 2
+    assert len(scripted.script) == 1
+
+
 def test_finalization_retry_setting_is_clamped_to_one(
     deliverable_dir, task_and_item
 ):
