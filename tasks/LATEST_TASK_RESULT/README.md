@@ -4,8 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-20
-- Status: Success Field Note column revision locally verified; review, merge,
-  and Pages deployment pending
+- Status: Success Field Note column revision production-verified and deployed
 
 ## Task
 
@@ -35,6 +34,7 @@ task. It must be refreshed before a task is reported complete.
   integrity, requirement fidelity, and expert quality in one status.
 - Preserved the generated source, selector, hero/chart values, 30 citations,
   ten evidence targets, pinned URLs, and every fail-closed state.
+- Squash-merged the reviewed column revision through PR #118 as `f3648f72`.
 
 ## Verification
 
@@ -54,10 +54,18 @@ task. It must be refreshed before a task is reported complete.
 - Static and browser negative assertions reject the previous `실행 완료율` and
   `실행 경로를 완료` interpretation in the metric, hypothesis, and root-cause
   sections. Briefing fidelity remains explicitly unverified.
+- Pages run
+  [29757449226](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29757449226)
+  completed successfully for exact merge SHA `f3648f72`. Build, all 77 aggregate
+  contracts, all four browser suites, artifact upload, and Pages deployment
+  passed in 2 minutes 15 seconds. It was the only workflow for the merge SHA.
+- Public mobile rendered the revised 상황→태스크→액션→결과→가설 검증→근본 원인
+  chapters, three validation questions, three discoveries, rejected hypothesis,
+  report-success metric, 30 citations, and ten evidence targets with no alert or
+  horizontal overflow.
+- Public desktop rendered a 1032×430 SVG with no overlapping labels, 34px
+  chapter headings, 34.85px body leading, no alert, and no horizontal overflow.
 
 ## Remaining Work
 
-- Obtain final editorial review, merge the column revision, verify the automatic
-  Pages deployment, and confirm the public mobile and desktop article.
-- Refresh this rolling record with the revision PR, merge SHA, workflow run, and
-  public verification evidence after deployment.
+- No implementation or deployment work remains for the success column revision.

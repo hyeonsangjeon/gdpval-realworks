@@ -24,7 +24,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   fidelity and external quality unverified, and retains all 30 citations and ten
   evidence targets. All 77 aggregate contracts, the production build, and the
   runtime, integrity, perception, and success browser suites pass; the four
-  browser suites complete in 48.201 seconds with no mobile overflow.
+  browser suites complete in 48.201 seconds with no mobile overflow. Shipped
+  through PR #118 (`f3648f72`) and successful Pages run
+  [29757449226](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29757449226);
+  public mobile and desktop checks verified all six revised chapters, the three
+  validation questions and discoveries, the rejected hypothesis, report-success
+  semantics, unverified briefing fidelity, 30 citations, ten evidence targets,
+  and zero overflow or SVG label overlap.
 
 ### Fixed
 - **Archived v1 cost-sweep template resolution** — point the historical
