@@ -45,7 +45,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   validation and runs all four Field Note browser suites before Pages upload.
   All 77 aggregate contracts, production build, and four browser suites pass in
   47.996 seconds; no model, grading, batch, HF write, manual workflow, or paid
-  execution was dispatched.
+  execution was dispatched. Shipped through PR #116 (`85e21b30`) and successful
+  Pages run
+  [29746868595](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29746868595);
+  public checks verified the generated 200/220 execution snapshot, 35/500
+  workbook coverage, 32/32 briefing parity, external-quality `unknown`, the
+  four-layer responsive hero, 30 inline citations, ten pinned evidence targets,
+  contract/artifact back-references, reflective typography, and zero horizontal
+  overflow on mobile and desktop.
 - **Evidence-backed perception Field Note** — rebuild
   `from-audio-to-multimodal-sandbox` around exact exp011/exp012/exp026 report
   snapshots, checked-in package/audio/video/sandbox configuration, and three
