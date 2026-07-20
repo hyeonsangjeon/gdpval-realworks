@@ -26,6 +26,26 @@ entries land under a fresh dated heading the day they merge to `main`.
   `Aggregate Tests & Deploy` run `29731574595` executed, and it succeeded.
 
 ### Added
+- **Evidence-backed success Field Note** — rebuild
+  `what-does-success-mean` as a retrospective that separates the team's initial
+  handoff-ready expectation from exp026's observed execution, artifact integrity,
+  requirement fidelity, and still-unknown external quality. A generated
+  `success-note.json` contract joins the exact exp026 report summary and task QA
+  map to a pinned Hugging Face revision, byte hashes, two task instructions,
+  manifests, and directly inspected XLSX/PPTX/PDF structure. The article now
+  derives its metrics, four-layer responsive SVG, Self-QA chart, six reflective
+  chapters, and 30 inline citations from strict evidence; missing, duplicate,
+  malformed, newly graded, or drifted data hides the complete evidence-bearing
+  article behind an alert. Workbook coverage is measured at 35/500 while the
+  selected file still opens; the briefing's PPTX/PDF parity is measured at
+  32/32, but citation depth, financial accuracy, and external quality remain
+  explicitly unverified. A shared schema-aware grade identity helper prevents
+  dummy, legacy, filename, or source-pointer grades from being misattributed.
+  CI streams six pinned HF files through timeout and byte caps before SHA-256
+  validation and runs all four Field Note browser suites before Pages upload.
+  All 77 aggregate contracts, production build, and four browser suites pass in
+  47.996 seconds; no model, grading, batch, HF write, manual workflow, or paid
+  execution was dispatched.
 - **Evidence-backed perception Field Note** — rebuild
   `from-audio-to-multimodal-sandbox` around exact exp011/exp012/exp026 report
   snapshots, checked-in package/audio/video/sandbox configuration, and three

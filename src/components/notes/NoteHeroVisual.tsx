@@ -6,6 +6,7 @@ import type { PromptComplexityBenchmarkRow } from '../../lib/promptComplexityBen
 import type { RuntimeNoteBenchmarkSelection } from '../../lib/runtimeNoteBenchmark'
 import type { IntegrityNoteSelection } from '../../lib/integrityNoteBenchmark'
 import type { PerceptionSelection } from '../../lib/perceptionNoteBenchmark'
+import type { SuccessBenchmarkSelection } from '../../lib/successNoteBenchmark'
 
 const resolveAsset = (src: string) => (
   src.startsWith('http') ? src : `${import.meta.env.BASE_URL}${src.replace(/^\/+/, '')}`
@@ -76,6 +77,7 @@ function PromptComplexityVisual({
 type ReadyRuntimeBenchmark = Extract<RuntimeNoteBenchmarkSelection, { status: 'ready' }>
 type ReadyIntegrityBenchmark = Extract<IntegrityNoteSelection, { status: 'ready' }>
 type ReadyPerceptionBenchmark = Extract<PerceptionSelection, { status: 'ready' }>
+type ReadySuccessBenchmark = Extract<SuccessBenchmarkSelection, { status: 'ready' }>
 
 function RuntimeVisual({
   reduceMotion,
@@ -218,20 +220,51 @@ function PerceptionVisual({
   )
 }
 
-function TaskContrastVisual() {
+function TaskContrastVisual({ benchmark }: { benchmark: ReadySuccessBenchmark }) {
+  const { workbook, briefing } = benchmark
+  const cards = [
+    {
+      x: 70,
+      title: 'S&P 500 WORKBOOK',
+      color: '#e11d48',
+      rows: [
+        ['TASK STATUS', workbook.observed.status],
+        ['INTEGRITY', `${workbook.inspection.sheet_count} sheets · open`],
+        ['FIDELITY', `${workbook.inspection.company_rows} / ${workbook.request.expected_company_count} companies`],
+        ['SELF-QA', `${workbook.observed.self_qa_score} / 10`],
+      ],
+    },
+    {
+      x: 660,
+      title: 'LATAM FINTECH BRIEFING',
+      color: '#059669',
+      rows: [
+        ['TASK STATUS', briefing.observed.status],
+        ['INTEGRITY', `${briefing.inspection.slide_count} slides · ${briefing.inspection.page_count} pages`],
+        ['FIDELITY', 'structure observed'],
+        ['SELF-QA', `${briefing.observed.self_qa_score} / 10`],
+      ],
+    },
+  ]
   return (
     <>
-      <text x="120" y="72" fill="hsl(var(--dash-text-secondary))" fontSize="18">SAME OCCUPATION, DIFFERENT EVIDENCE BURDEN</text>
-      <rect x="110" y="116" width="440" height="250" rx="8" fill="hsl(var(--dash-card))" stroke="#f43f5e" strokeWidth="2" />
-      <rect x="650" y="116" width="440" height="250" rx="8" fill="hsl(var(--dash-card))" stroke="#10b981" strokeWidth="2" />
-      <text x="145" y="158" fill="hsl(var(--dash-text-secondary))" fontSize="16">S&amp;P 500 WORKBOOK</text>
-      <text x="685" y="158" fill="hsl(var(--dash-text-secondary))" fontSize="16">LATAM FINTECH BRIEFING</text>
-      <text x="145" y="246" fontSize="64" fontWeight="700" className="fill-rose-700 dark:fill-rose-400">2/10</text>
-      <text x="685" y="246" fontSize="64" fontWeight="700" className="fill-emerald-700 dark:fill-emerald-400">9/10</text>
-      <text x="145" y="292" fill="hsl(var(--dash-heading))" fontSize="24">35 / 500 companies</text>
-      <text x="685" y="292" fill="hsl(var(--dash-heading))" fontSize="24">PPTX + PDF delivered</text>
-      <text x="145" y="328" fill="hsl(var(--dash-text-secondary))" fontSize="15">placeholder market data</text>
-      <text x="685" y="328" fill="hsl(var(--dash-text-secondary))" fontSize="15">external grade still pending</text>
+      <text x="70" y="54" fill="hsl(var(--dash-text-secondary))" fontSize="18">ONE STATUS CANNOT CARRY FOUR QUESTIONS</text>
+      <text x="1130" y="54" fill="hsl(var(--dash-text-secondary))" fontSize="13" textAnchor="end">same occupation · different evidence burden</text>
+      {cards.map((card) => (
+        <g key={card.title}>
+          <rect x={card.x} y="86" width="470" height="300" rx="8" fill="hsl(var(--dash-card))" stroke={card.color} strokeWidth="2" />
+          <text x={card.x + 24} y="126" fill="hsl(var(--dash-heading))" fontSize="19" fontWeight="700">{card.title}</text>
+          {card.rows.map(([label, value], index) => (
+            <g key={label}>
+              <text x={card.x + 24} y={174 + index * 48} fill="hsl(var(--dash-text-secondary))" fontSize="12">{label}</text>
+              <text x={card.x + 174} y={174 + index * 48} fill="hsl(var(--dash-heading))" fontSize={index === 2 ? 18 : 20} fontWeight={index === 3 ? 700 : 500}>{value}</text>
+              {index < card.rows.length - 1 && <line x1={card.x + 24} x2={card.x + 446} y1={190 + index * 48} y2={190 + index * 48} stroke="hsl(var(--dash-border))" />}
+            </g>
+          ))}
+        </g>
+      ))}
+      <rect x="420" y="406" width="360" height="34" rx="4" fill="#b45309" opacity="0.12" />
+      <text x="600" y="428" fill="hsl(var(--dash-heading))" fontSize="14" textAnchor="middle">EXTERNAL QUALITY · UNKNOWN</text>
     </>
   )
 }
@@ -285,6 +318,7 @@ function MobileVisualSummary({
   runtimeBenchmark,
   integrityBenchmark,
   perceptionBenchmark,
+  successBenchmark,
 }: {
   variant: Extract<JournalHero, { kind: 'visual' }>['variant']
   alt: string
@@ -292,6 +326,7 @@ function MobileVisualSummary({
   runtimeBenchmark?: ReadyRuntimeBenchmark
   integrityBenchmark?: ReadyIntegrityBenchmark
   perceptionBenchmark?: ReadyPerceptionBenchmark
+  successBenchmark?: ReadySuccessBenchmark
 }) {
   if (variant === 'prompt-complexity') {
     if (!promptBenchmark) return null
@@ -403,22 +438,24 @@ function MobileVisualSummary({
   }
 
   if (variant === 'task-contrast') {
+    if (!successBenchmark) return null
+    const { workbook, briefing } = successBenchmark
     return (
       <div role="img" aria-label={alt} className="md:hidden min-h-[220px] px-4 py-6 bg-dash-surface border-y border-dash-border">
-        <div className="font-mono text-[11px] text-dash-text-secondary mb-5">SAME OCCUPATION · DIFFERENT BURDEN</div>
+        <div className="font-mono text-[11px] text-dash-text-secondary mb-5">FOUR LAYERS · TWO TASKS</div>
         <div className="grid grid-cols-2 gap-3">
           <div className="border border-rose-700/70 bg-rose-500/10 p-4">
             <div className="text-xs text-dash-text-secondary">S&amp;P 500 workbook</div>
-            <div className="mt-3 font-mono text-3xl font-semibold text-rose-600 dark:text-rose-400">2/10</div>
-            <div className="mt-2 text-xs text-dash-text-secondary">35 / 500 companies</div>
+            <div className="mt-3 font-mono text-lg font-semibold text-rose-600 dark:text-rose-400">{workbook.observed.status}</div>
+            <div className="mt-3 text-[11px]/[1.7] text-dash-text-secondary">open · {workbook.inspection.sheet_count} sheets<br />{workbook.inspection.company_rows}/{workbook.request.expected_company_count} companies<br />Self-QA {workbook.observed.self_qa_score}/10</div>
           </div>
           <div className="border border-emerald-700/70 bg-emerald-500/10 p-4">
             <div className="text-xs text-dash-text-secondary">LatAm briefing</div>
-            <div className="mt-3 font-mono text-3xl font-semibold text-emerald-700 dark:text-emerald-400">9/10</div>
-            <div className="mt-2 text-xs text-dash-text-secondary">PPTX + PDF</div>
+            <div className="mt-3 font-mono text-lg font-semibold text-emerald-700 dark:text-emerald-400">{briefing.observed.status}</div>
+            <div className="mt-3 text-[11px]/[1.7] text-dash-text-secondary">PPTX {briefing.inspection.slide_count} · PDF {briefing.inspection.page_count}<br />structure observed<br />Self-QA {briefing.observed.self_qa_score}/10</div>
           </div>
         </div>
-        <p className="mt-5 text-center text-xs/[1.7] text-dash-text-secondary">외부 등급은 두 작업 모두 아직 대기 중이다.</p>
+        <p className="mt-5 text-center text-xs/[1.7] text-dash-text-secondary">external quality · unknown</p>
       </div>
     )
   }
@@ -451,12 +488,14 @@ export default function NoteHeroVisual({
   runtimeBenchmark,
   integrityBenchmark,
   perceptionBenchmark,
+  successBenchmark,
 }: {
   hero: JournalHero
   promptBenchmark?: PromptComplexityBenchmarkRow[]
   runtimeBenchmark?: ReadyRuntimeBenchmark
   integrityBenchmark?: ReadyIntegrityBenchmark
   perceptionBenchmark?: ReadyPerceptionBenchmark
+  successBenchmark?: ReadySuccessBenchmark
 }) {
   const reduceMotion = useReducedMotion()
 
@@ -484,7 +523,7 @@ export default function NoteHeroVisual({
 
   return (
     <figure className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
-      <MobileVisualSummary variant={hero.variant} alt={hero.alt} promptBenchmark={promptBenchmark} runtimeBenchmark={runtimeBenchmark} integrityBenchmark={integrityBenchmark} perceptionBenchmark={perceptionBenchmark} />
+      <MobileVisualSummary variant={hero.variant} alt={hero.alt} promptBenchmark={promptBenchmark} runtimeBenchmark={runtimeBenchmark} integrityBenchmark={integrityBenchmark} perceptionBenchmark={perceptionBenchmark} successBenchmark={successBenchmark} />
       <div className="hidden md:block overflow-hidden border-y border-dash-border bg-dash-surface">
         <svg viewBox="0 0 1200 460" role="img" aria-label={hero.alt} className="block w-full aspect-[12/5]">
           {hero.variant === 'prompt-complexity' && promptBenchmark && (
@@ -493,7 +532,7 @@ export default function NoteHeroVisual({
           {hero.variant === 'runtime' && runtimeBenchmark && <RuntimeVisual reduceMotion={reduceMotion} benchmark={runtimeBenchmark} />}
           {hero.variant === 'integrity' && integrityBenchmark && <IntegrityVisual benchmark={integrityBenchmark} />}
           {hero.variant === 'perception' && perceptionBenchmark && <PerceptionVisual reduceMotion={reduceMotion} benchmark={perceptionBenchmark} />}
-          {hero.variant === 'task-contrast' && <TaskContrastVisual />}
+          {hero.variant === 'task-contrast' && successBenchmark && <TaskContrastVisual benchmark={successBenchmark} />}
           {hero.variant === 'sandbox' && <SandboxVisual reduceMotion={reduceMotion} />}
         </svg>
       </div>

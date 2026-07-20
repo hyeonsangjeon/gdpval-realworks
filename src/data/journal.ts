@@ -1,5 +1,4 @@
 import {
-  getExperimentHref,
   journalCatalog,
   lensLabels,
   type JournalLens,
@@ -22,7 +21,7 @@ export interface JournalSection {
   points?: string[]
   callout?: string
   calloutCitations?: string[]
-  benchmarkNarrative?: 'prompt-complexity-results' | 'runtime-incident' | 'runtime-policy' | 'runtime-results' | 'integrity-observation' | 'integrity-available-files' | 'integrity-qa-failed' | 'integrity-comparison' | 'integrity-decision' | 'perception-baseline' | 'perception-audio' | 'perception-sandbox' | 'perception-results' | 'perception-failure' | 'perception-decision'
+  benchmarkNarrative?: 'prompt-complexity-results' | 'runtime-incident' | 'runtime-policy' | 'runtime-results' | 'integrity-observation' | 'integrity-available-files' | 'integrity-qa-failed' | 'integrity-comparison' | 'integrity-decision' | 'perception-baseline' | 'perception-audio' | 'perception-sandbox' | 'perception-results' | 'perception-failure' | 'perception-decision' | 'success-expectation' | 'success-status' | 'success-workbook' | 'success-briefing' | 'success-interpretation' | 'success-decision'
 }
 
 export interface JournalEvidence {
@@ -88,7 +87,7 @@ export interface JournalArticle {
   comparisonChart?: JournalComparisonChart
   sections: JournalSection[]
   evidence: JournalEvidence[]
-  benchmark?: { kind: 'prompt-complexity' | 'runtime' | 'integrity' | 'perception' }
+  benchmark?: { kind: 'prompt-complexity' | 'runtime' | 'integrity' | 'perception' | 'success' }
   readingStyle?: 'reflective'
   featured?: boolean
 }
@@ -125,6 +124,12 @@ const PERCEPTION_SOURCE = `https://github.com/hyeonsangjeon/gdpval-realworks/blo
 const AUDIO_PREPROCESSOR_COMMIT = 'dfc29e43598a3feda54ae5127912b7b0ec3299bd'
 const SANDBOX_MULTIMODAL_COMMIT = 'eaa2789081ba7b81901ba977006f9bfd6534a0c1'
 const DOCKER_ALWAYS_COMMIT = '6ac8a830a325eb95aec5fb89f38a5e9312ea1b2a'
+const SUCCESS_SOURCE_SHA = '865b3e43093ddcb6942f628eb81544e5de16e15c'
+const SUCCESS_SOURCE = `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${SUCCESS_SOURCE_SHA}`
+const SUCCESS_CONTRACT_SHA = '99601b80b293364de29ce1d437712e6d648ac648'
+const SUCCESS_CONTRACT_SOURCE = `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${SUCCESS_CONTRACT_SHA}`
+const SUCCESS_HF_REVISION = '47aed3c0b13eaa90eb02803bec9d5c75e559f416'
+const SUCCESS_HF = `https://huggingface.co/datasets/HyeonSang/exp026_sandbox_skills_multimodal`
 
 export const journalArticles: JournalArticle[] = [
   {
@@ -650,69 +655,91 @@ export const journalArticles: JournalArticle[] = [
   },
   {
     ...journalCatalog['what-does-success-mean'],
-    dek: '같은 금융 분석 직군에서 생성된 두 작업을 비교해 파일 생성, Self-QA, 외부 품질 사이의 간격을 살펴본다.',
-    thesis: '파일이 열리고 status가 success여도 핵심 데이터와 의사결정 가치가 빠졌다면 실제 업무는 끝나지 않았다.',
+    dek: '처음에는 success 한 줄이 handoff-ready 업무에 가까울 것이라 기대했다. 같은 금융 분석 직군의 두 산출물을 직접 열어보니 실행, 파일, 요구 충실도, 전문가 품질은 서로 다른 질문이었다.',
+    thesis: '높은 완료율이 증명한 것은 실행 경로의 완료다. 실제 업무 성공을 말하려면 열리는 파일, 충족된 요구, 외부 품질을 따로 증명해야 한다.',
+    thesisCitations: ['exp026-summary', 'success-contract'],
     publishedAt: '2026-07-15',
     period: 'exp026 task review',
-    readingMinutes: 9,
-    metrics: [
-      { value: '90.9%', label: '실행 완료율' },
-      { value: '105', label: '재시도 작업' },
-      { value: '6.24', label: '평균 Self-QA' },
-    ],
+    readingMinutes: 11,
+    benchmark: { kind: 'success' },
+    readingStyle: 'reflective',
+    metrics: [],
     hero: {
       kind: 'visual',
       variant: 'task-contrast',
-      alt: '같은 금융 분석 직군에서 Self-QA 2점인 S&P 500 workbook과 9점인 LatAm fintech briefing 비교',
-      caption: '같은 직군 안에서도 최신 데이터의 완전성을 요구하는 작업과 서사를 구조화하는 작업은 전혀 다른 증거 부담을 가졌다.',
+      alt: '같은 금융 분석 직군의 workbook과 briefing을 execution, integrity, fidelity, external quality 네 층으로 비교',
+      caption: '같은 직군과 같은 sandbox에서도 성공의 층은 다르게 갈렸다. Self-QA는 그 차이를 발견하는 신호이지 외부 품질 판정이 아니다.',
     },
     comparisonChart: {
       kind: 'bar',
-      title: '같은 직군, 두 작업의 Self-QA',
-      description: 'S&P 500 workbook은 2/10, LatAm fintech briefing은 9/10이었다. 파일 수보다 요구 충실도의 차이가 컸다.',
-      primary: { label: 'Self-QA', unit: '/10', color: '#059669', domain: [0, 10] },
-      data: [
-        { label: 'S&P 500 workbook', primary: 2 },
-        { label: 'LatAm briefing', primary: 9 },
-      ],
-      caveat: 'Self-QA는 모델 자체의 진단 신호다. 두 작업 모두 외부 등급은 아직 대기 중이다.',
+      title: '같은 직군, 서로 다른 내부 진단',
+      description: '두 task의 Self-QA를 비교한다.',
+      primary: { label: 'Self-QA', unit: '/10', color: '#b45309', domain: [0, 10] },
+      data: [],
+      caveat: 'Self-QA는 실행 중 모델이 남긴 내부 진단이다. exp026 외부 grade는 현재 공개·checked-in 근거에 없다.',
     },
     sections: [
       {
-        heading: '하나의 success에 네 가지 질문이 들어 있었다',
+        label: '기대',
+        heading: 'success를 handoff-ready로 읽었다',
+        benchmarkNarrative: 'success-expectation',
         paragraphs: [
-          'exp026은 220개 중 200개를 완료했다. 하지만 105개 작업이 적어도 한 번 재시도됐고 평균 Self-QA는 6.24였다. 실행 복구에는 강했지만 결과의 일관성은 별도의 문제라는 신호다.',
-          '실제 업무 성공은 하나의 상태가 아니다. 실행 완료, 요청 파일의 존재, 요구사항 충족, 전문가에게 줄 수 있는 가치를 따로 살펴야 한다.',
+          '높은 완료율을 보며 실제 업무 대부분이 끝났다고 기대했다.',
+          '하지만 success 한 줄에는 서로 다른 네 질문이 접혀 있었다.',
         ],
+        paragraphCitations: [['exp026-summary'], ['success-contract']],
       },
       {
-        heading: '사례 A: 500개 기업을 요구했지만 35개만 담긴 workbook',
+        label: '기록',
+        heading: '한 줄 status가 가린 것',
+        benchmarkNarrative: 'success-status',
         paragraphs: [
-          'task 8079e27d는 2025년 4월 11일 기준으로 공개 웹 데이터를 활용해 S&P 500 전체 기업과 하위 산업의 LTM/NTM P/E, 배당수익률, EPS, 시가총액, 지수 비중을 정리한 sortable Excel을 요구했다.',
-          '실행은 Excel과 manifest 두 파일을 만들었다. 그러나 Self-QA는 2/10이었다. workbook에는 500개가 아닌 35개 기업만 있었고, sector와 sub-sector 분류가 잘못됐으며, 공개 시장 데이터 대신 placeholder/local data가 사용됐다.',
+          '두 task는 같은 직군이었지만 최종 상태와 내부 진단이 달랐다.',
+          'aggregate의 file-generation 한 줄은 실제 task artifact와도 맞지 않았다.',
         ],
-        callout: '파일 생성은 성공했다. 하지만 이 파일로 고평가·저평가 기업을 판단한다는 원래 업무 목적은 달성되지 않았다.',
+        paragraphCitations: [['workbook-row', 'briefing-row'], ['exp026-summary', 'success-contract']],
       },
       {
-        heading: '사례 B: 30장 내외의 LatAm fintech briefing',
+        label: '사례 A',
+        heading: '열리는 workbook, 비어 있는 범위',
+        benchmarkNarrative: 'success-workbook',
         paragraphs: [
-          '같은 Financial and Investment Analysts 직군의 task 9e8607e7은 Latin America macro, technology and venture market, fintech landscape를 다루는 약 30장짜리 고객 미팅용 deck과 PDF를 요구했다.',
-          '실행은 PPTX, PDF, manifest 세 파일을 만들었고 Self-QA는 9/10이었다. 자체 검토는 source citation과 국가 우선순위 프레임을 보강하면 좋겠다고 남겼다. 형식과 범위에는 높은 자신감을 보였지만 외부 등급은 아직 대기 중이다.',
+          '요청은 특정 시점의 전체 지수와 공개 시장 데이터를 요구했다.',
+          'artifact는 열렸지만 요구 범위와 출처 증거는 다른 상태였다.',
         ],
+        paragraphCitations: [['workbook-prompt', 'workbook-artifact'], ['workbook-row', 'workbook-qa', 'workbook-artifact', 'success-contract']],
+        callout: '파일의 존재와 parser 통과는 integrity의 증거다. 의사결정에 필요한 데이터가 완전하다는 증거는 아니다.',
+        calloutCitations: ['workbook-artifact', 'success-contract'],
       },
       {
-        heading: '차이는 모델 능력보다 과업의 검증 가능성에 있었다',
+        label: '사례 B',
+        heading: '열리는 briefing, 아직 남은 물음',
+        benchmarkNarrative: 'success-briefing',
         paragraphs: [
-          '두 작업 모두 금융 분석이지만 첫 작업은 특정 시점의 500개 기업 데이터, 정확한 분류, 계산 가능한 지표를 요구했다. 누락과 placeholder가 즉시 업무 실패로 이어진다.',
-          '두 번째 작업은 넓은 시장을 구조화해 설명하는 advisory deliverable이다. 모델이 구성과 표현에서 강점을 보이기 쉽지만, 출처와 우선순위 판단의 깊이는 별도 검수가 필요하다. 같은 직군이라는 라벨만으로 난이도나 신뢰성을 설명할 수 없다.',
+          '두 형식의 파일은 열렸고 길이도 서로 맞았다.',
+          '그러나 높은 Self-QA가 외부 품질과 출처 검증을 대신하지는 않는다.',
         ],
+        paragraphCitations: [['briefing-prompt', 'briefing-artifacts'], ['briefing-row', 'briefing-artifacts', 'grade-inventory', 'success-contract']],
       },
       {
-        heading: '결정: 네 층의 성공을 따로 공개하기',
+        label: '해석',
+        heading: '두 Self-QA는 품질 순위가 아니다',
+        benchmarkNarrative: 'success-interpretation',
         paragraphs: [
-          '이후 작업 해부에서는 execution status, deliverable integrity, requirement fidelity, external quality를 분리한다. Self-QA는 유용한 진단 신호지만 외부 평가를 대신하지 않는다.',
-          '90.9%는 “sandbox가 200개 작업의 실행 경로를 완료했다”는 강한 증거다. 그러나 “200개 업무가 전문가에게 바로 전달 가능한 품질이었다”는 주장으로 확장해서는 안 된다.',
+          '같은 직군이라는 라벨도 두 산출물의 증거 부담을 같게 만들지 않았다.',
+          'Self-QA는 무엇을 더 볼지 알려줬지만 품질 판결을 끝내지 못했다.',
         ],
+        paragraphCitations: [['workbook-qa', 'briefing-row', 'success-contract'], ['grade-inventory', 'success-contract']],
+      },
+      {
+        label: '결정',
+        heading: 'success를 네 층으로 공개하기',
+        benchmarkNarrative: 'success-decision',
+        paragraphs: [
+          '이후에는 하나의 success 대신 네 층의 증거를 따로 공개한다.',
+          'aggregate 완료율은 실행 지표로 남기고 handoff-ready 비율로 확장하지 않는다.',
+        ],
+        paragraphCitations: [['success-contract'], ['exp026-summary', 'success-contract']],
         points: [
           'Execution: 프로세스가 끝났는가',
           'Integrity: 요청한 파일이 존재하고 열리는가',
@@ -723,19 +750,74 @@ export const journalArticles: JournalArticle[] = [
     ],
     evidence: [
       {
-        label: '낮은 Self-QA 사례',
-        detail: 'S&P 500 valuation workbook, task 8079e27d',
-        href: `${HF_EXP026}/tree/main/deliverable_files/8079e27d-b6f3-4f75-a9b5-db27903c798d`,
+        id: 'exp026-summary',
+        label: 'exp026 self-assessed 실행 summary',
+        detail: 'pre-grading scope, 전체 task, success, retry와 Self-QA 집계. file-generation aggregate의 0/0/0도 같은 범위에 남아 있다.',
+        source: `report.md@${SUCCESS_SOURCE_SHA.slice(0, 7)} · L1-L56`,
+        href: `${SUCCESS_SOURCE}/batch-runner/results/exp026_sandbox_skills_multimodal/report/report.md#L1-L56`,
       },
       {
-        label: '높은 Self-QA 사례',
-        detail: 'LatAm fintech briefing, task 9e8607e7',
-        href: `${HF_EXP026}/tree/main/deliverable_files/9e8607e7-a38a-491f-ace1-e5ea7dc477cb`,
+        id: 'workbook-row',
+        label: 'workbook task report row',
+        detail: 'qa_failed, retried 여부, 선택 파일 수, Self-QA와 latency를 기록한 task row.',
+        source: `report.md@${SUCCESS_SOURCE_SHA.slice(0, 7)} · L221`,
+        href: `${SUCCESS_SOURCE}/batch-runner/results/exp026_sandbox_skills_multimodal/report/report.md#L221`,
       },
       {
-        label: 'exp026 상세',
-        detail: '실행 지표, task prompt, Self-QA와 산출물',
-        href: getExperimentHref('exp026'),
+        id: 'workbook-qa',
+        label: 'workbook Self-QA issues',
+        detail: '회사 수, sector 분류와 public web data 문제를 기록한 내부 QA 진단.',
+        source: `report.md@${SUCCESS_SOURCE_SHA.slice(0, 7)} · L1073-L1077`,
+        href: `${SUCCESS_SOURCE}/batch-runner/results/exp026_sandbox_skills_multimodal/report/report.md#L1073-L1077`,
+      },
+      {
+        id: 'workbook-prompt',
+        label: 'workbook 원문 task와 pinned self-report',
+        detail: '전체 S&P 500, 기준일, public web data와 sortable workbook 요구를 포함한 task instruction.',
+        source: `self_report.json@${SUCCESS_HF_REVISION.slice(0, 7)} · task_results[135] · L5883-L5921 · sha256 ec93ad9a…`,
+        href: `${SUCCESS_HF}/blob/${SUCCESS_HF_REVISION}/self_report.json`,
+      },
+      {
+        id: 'workbook-artifact',
+        label: '선택된 S&P 500 workbook',
+        detail: '직접 parser 검사에 사용한 immutable XLSX. artifact SHA-256과 구조 측정값은 success contract에 고정했다.',
+        source: `sp500_pe_deep_dive.xlsx@${SUCCESS_HF_REVISION.slice(0, 7)} · sha256 fb26bf7b…`,
+        href: `${SUCCESS_HF}/blob/${SUCCESS_HF_REVISION}/deliverable_files/8079e27d-b6f3-4f75-a9b5-db27903c798d/sp500_pe_deep_dive.xlsx`,
+      },
+      {
+        id: 'briefing-row',
+        label: 'briefing task report row',
+        detail: 'success, retried 여부, 선택 파일 수, Self-QA와 latency를 기록한 task row.',
+        source: `report.md@${SUCCESS_SOURCE_SHA.slice(0, 7)} · L223`,
+        href: `${SUCCESS_SOURCE}/batch-runner/results/exp026_sandbox_skills_multimodal/report/report.md#L223`,
+      },
+      {
+        id: 'briefing-prompt',
+        label: 'briefing 원문 task와 pinned self-report',
+        detail: '약 30장, Latin America macro·technology·venture·fintech 구성과 PPTX/PDF 요구를 포함한 instruction.',
+        source: `self_report.json@${SUCCESS_HF_REVISION.slice(0, 7)} · task_results[137] · L5963-L5999 · sha256 ec93ad9a…`,
+        href: `${SUCCESS_HF}/blob/${SUCCESS_HF_REVISION}/self_report.json`,
+      },
+      {
+        id: 'briefing-artifacts',
+        label: '선택된 LatAm briefing 산출물',
+        detail: '직접 구조 검사한 pinned PPTX, PDF와 support manifest. 두 primary artifact의 hash를 contract에 고정했다.',
+        source: `deliverable_files/9e8607e7…@${SUCCESS_HF_REVISION.slice(0, 7)}`,
+        href: `${SUCCESS_HF}/tree/${SUCCESS_HF_REVISION}/deliverable_files/9e8607e7-a38a-491f-ace1-e5ea7dc477cb`,
+      },
+      {
+        id: 'grade-inventory',
+        label: 'checked-in grade identity inventory',
+        detail: 'dummy, exp003, exp998 grade를 exp026에 대입하지 않는다. non-dummy exp026 identity가 생기면 generator가 실패한다.',
+        source: `data/grades@${SUCCESS_SOURCE_SHA.slice(0, 7)} · exp026 match 0`,
+        href: `https://github.com/hyeonsangjeon/gdpval-realworks/tree/${SUCCESS_SOURCE_SHA}/data/grades`,
+      },
+      {
+        id: 'success-contract',
+        label: 'success 네 층과 artifact 측정 계약',
+        detail: 'pinned revision·hash, 직접 구조 검사, report 관측과 external quality unknown을 분리한 generated evidence source.',
+        source: `success-layers.yaml@${SUCCESS_CONTRACT_SHA.slice(0, 7)} · L1-L123`,
+        href: `${SUCCESS_CONTRACT_SOURCE}/data/notes/success-layers.yaml#L1-L123`,
       },
     ],
   },

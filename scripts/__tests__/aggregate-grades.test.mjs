@@ -11,6 +11,56 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { processGradesFile } from '../aggregate-grades.mjs';
+import { gradeIdentityFromRaw } from '../grade-identity.mjs';
+
+test('gradeIdentityFromRaw supports top-level, legacy meta, filename fallback, source pointer, and dummy', () => {
+  assert.deepEqual(gradeIdentityFromRaw('ignored.json', {
+    experiment_id: 'exp-top',
+    source_inference_experiment_id: 'exp-source',
+  }), {
+    is_dummy: false,
+    experiment_id: 'exp-top',
+    source_inference_experiment_id: 'exp-source',
+  });
+  assert.deepEqual(gradeIdentityFromRaw('ignored.json', {
+    _meta: { experiment_id: 'exp-legacy', source_inference_experiment_id: 'exp-legacy-source' },
+  }), {
+    is_dummy: false,
+    experiment_id: 'exp-legacy',
+    source_inference_experiment_id: 'exp-legacy-source',
+  });
+  assert.deepEqual(gradeIdentityFromRaw('exp-file__judge__rubric__v1.json', {}), {
+    is_dummy: false,
+    experiment_id: 'exp-file',
+    source_inference_experiment_id: null,
+  });
+  assert.deepEqual(gradeIdentityFromRaw('exp-dummy.json', { _meta: { is_dummy: true, experiment_id: 'exp-dummy' } }), {
+    is_dummy: true,
+    experiment_id: 'exp-dummy',
+    source_inference_experiment_id: null,
+  });
+  assert.deepEqual(gradeIdentityFromRaw('v1.json', { schema_version: '1.0', experiment_id: 'exp-v1', _meta: { is_dummy: true } }), {
+    is_dummy: false,
+    experiment_id: 'exp-v1',
+    source_inference_experiment_id: null,
+  });
+});
+
+test('processGradesFile treats v1 as real even when contradictory legacy dummy metadata is present', () => {
+  const raw = {
+    schema_version: '1.0',
+    experiment_id: 'exp-v1-real',
+    _meta: { is_dummy: true },
+    inference_model: 'gpt-5.2-chat',
+    judge: { model: 'gpt-5.4' },
+    summary: { total_tasks: 0, graded_tasks: 0, error_tasks: 0, openai_compat: {}, wow: {} },
+    tasks: [],
+  };
+  const out = processGradesFile('exp-v1-real__judge__rubric__v1.json', raw);
+  assert.equal(out.is_dummy, false);
+  assert.equal(out.grade_status, 'graded_v1');
+  assert.equal(out.experiment_id, 'exp-v1-real');
+});
 
 // ── Fixture A — minimal v1 grade with empty `inference_model` ───────────────
 test('processGradesFile: v1 with empty inference_model does not fall back to judge.model', () => {
