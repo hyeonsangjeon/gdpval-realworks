@@ -369,18 +369,18 @@ function resolveSuccessArticle(article: JournalArticleData, benchmark: ReadySucc
 
   return {
     metrics: [
-      { value: `${report.successCount}/${report.totalTasks}`, label: 'report status success', note: `${report.successRatePct.toFixed(1)}% · handoff-ready 아님` },
-      { value: `${workbook.inspection.company_rows}/${workbook.request.expected_company_count}`, label: 'workbook company coverage', note: `${workbookCoveragePct.toFixed(1)}% · artifact parse` },
-      { value: interpretation.external_grade_available ? '있음' : 'unknown', label: 'exp026 external quality', note: 'Self-QA와 분리' },
+      { value: `${report.successCount}/${report.totalTasks}`, label: 'report success 상태', note: `${report.successRatePct.toFixed(1)}% · success 규칙 통과율` },
+      { value: `${workbook.inspection.company_rows}/${workbook.request.expected_company_count}`, label: '워크북에 담긴 회사', note: `${workbookCoveragePct.toFixed(1)}% · 파일 직접 확인` },
+      { value: interpretation.external_grade_available ? '있음' : '미확인', label: 'exp026 외부 품질 평가', note: '모델의 자체 점검과 분리' },
     ],
     hero: article.hero ? {
       ...article.hero,
       alt: `같은 금융 분석 직군의 workbook은 ${workbook.observed.status}, Self-QA ${workbook.observed.self_qa_score}, ${workbook.inspection.company_rows}/${workbook.request.expected_company_count} companies이고 briefing은 ${briefing.observed.status}, Self-QA ${briefing.observed.self_qa_score}, PPTX ${briefing.inspection.slide_count}장과 PDF ${briefing.inspection.page_count}쪽이며 외부 quality는 unknown인 비교`,
-      caption: `workbook은 parser를 통과했지만 ${workbook.inspection.company_rows}/${workbook.request.expected_company_count}개 회사만 담겼다. briefing은 ${briefing.inspection.slide_count}장 PPTX와 ${briefing.inspection.page_count}쪽 PDF가 열렸지만, 두 task 모두 외부 quality는 아직 unknown이다.`,
+      caption: `워크북은 열렸지만 ${workbook.inspection.company_rows}/${workbook.request.expected_company_count}개 회사만 담겼다. 브리핑은 ${briefing.inspection.slide_count}장 PPTX와 ${briefing.inspection.page_count}쪽 PDF가 열렸지만, 두 태스크 모두 외부 품질은 아직 확인되지 않았다.`,
     } : undefined,
     chart: article.comparisonChart ? {
       ...article.comparisonChart,
-      description: `workbook ${workbook.observed.self_qa_score}/10, briefing ${briefing.observed.self_qa_score}/10. 두 값은 실행 중 내부 진단이며 external grade가 아니다.`,
+      description: `워크북 ${workbook.observed.self_qa_score}/10, 브리핑 ${briefing.observed.self_qa_score}/10. 두 값은 모델이 실행 중 남긴 자체 점검이며 외부 평가가 아니다.`,
       data: [
         { label: 'S&P 500 workbook', primary: workbook.observed.self_qa_score },
         { label: 'LatAm briefing', primary: briefing.observed.self_qa_score },
@@ -391,8 +391,8 @@ function resolveSuccessArticle(article: JournalArticleData, benchmark: ReadySucc
         return {
           ...section,
           paragraphs: [
-            `${report.shortId} report에서 ${report.successCount}/${report.totalTasks}, ${report.successRatePct.toFixed(1)}%가 success였다. 처음에는 이 숫자를 “대부분의 업무가 전달 가능한 상태에 도달했다”에 가깝게 읽고 싶었다.`,
-            `그러나 ${report.retriedCount}개가 적어도 한 번 재시도됐고 평균 Self-QA는 ${report.avgQaScore.toFixed(2)}였다. report 자체도 self-assessed pre-grading이라고 선을 긋는다. execution, integrity, fidelity, quality를 한 status에 접으면 그 경계가 사라진다.`,
+            `${report.shortId}에서 ${report.totalTasks}개 태스크 중 ${report.successCount}개, ${report.successRatePct.toFixed(1)}%가 success로 기록됐다. 처음에는 이 숫자를 보고 “대부분의 일이 사람에게 넘길 수 있는 상태까지 갔다”고 생각했다.`,
+            `그런데 ${report.retriedCount}개는 적어도 한 번 다시 실행됐고, 모델이 스스로 매긴 평균 점수는 ${report.avgQaScore.toFixed(2)}/10이었다. 완료율은 높았지만 결과에 대한 자신감은 고르지 않았다. 그래서 success가 정확히 무엇을 뜻하는지 다시 확인하기로 했다.`,
           ],
         }
       }
@@ -400,8 +400,8 @@ function resolveSuccessArticle(article: JournalArticleData, benchmark: ReadySucc
         return {
           ...section,
           paragraphs: [
-            `같은 ${workbook.occupation} 직군에서 workbook task는 ${workbook.observed.status}·Self-QA ${workbook.observed.self_qa_score}/10, briefing task는 ${briefing.observed.status}·Self-QA ${briefing.observed.self_qa_score}/10으로 기록됐다. 둘 다 retried=true였지만 공개 자료는 정확한 시도 횟수를 남기지 않는다.`,
-            `task row에는 각각 ${workbook.observed.files_count}개와 ${briefing.observed.files_count}개의 선택 파일이 기록됐는데 report의 File Generation aggregate는 0/0/0이다. 그래서 이 글은 aggregate file-generation 값을 무결성 근거로 사용하지 않고 pinned manifest와 artifact를 직접 본다.`,
+            `220개를 모두 다시 읽는 대신 조건을 줄였다. 같은 금융·투자 분석가 직군, 같은 실행 환경에서 나온 두 태스크를 골랐다. 워크북 작업은 실행을 마쳤지만 자체 점검을 통과하지 못해 ${workbook.observed.status}로 남았고 점수는 ${workbook.observed.self_qa_score}/10이었다. 브리핑은 ${briefing.observed.status}로 기록됐고 ${briefing.observed.self_qa_score}/10이었다.`,
+            `확인할 질문도 세 가지로 줄였다. 실행이 끝났는가, 파일이 실제로 열리는가, 요청한 핵심 분석이 들어 있는가였다. 전문가 품질은 외부 평가가 없었기 때문에 억지로 결론 내리지 않고 미확인으로 남겼다.`,
           ],
         }
       }
@@ -409,29 +409,32 @@ function resolveSuccessArticle(article: JournalArticleData, benchmark: ReadySucc
         return {
           ...section,
           paragraphs: [
-            `workbook task는 ${workbook.request.as_of_date} 기준 전체 ${workbook.request.expected_company_count}개 S&P 500 기업을 public web data로 채운 sortable Excel을 요구했다. 요구사항의 핵심은 파일 확장자가 아니라 회사 범위, 분류, 시점과 출처였다.`,
-            `선택된 XLSX는 parser로 열렸고 ${workbook.inspection.sheet_count}개 sheet, auto-filter ${workbook.inspection.auto_filter}, freeze pane ${workbook.inspection.freeze_panes}를 가졌다. 그러나 Company Detail은 ${workbook.inspection.company_rows}행·${workbook.inspection.unique_tickers}개 ticker뿐이었고 formula는 ${workbook.inspection.formula_count}개였다. report의 Self-QA도 잘못된 sector 분류와 placeholder/local data를 지적했다. integrity는 관측됐지만 fidelity는 충족되지 않았다.`,
+            `워크북 태스크에서 꼭 해야 할 분석은 분명했다. ${workbook.request.as_of_date} 기준 S&P 500 전체 ${workbook.request.expected_company_count}개 기업을 공개 데이터로 채우고, 업종 분류와 지표를 비교할 수 있게 만드는 일이었다. 그래서 회사 수, 출처, 파일 사용 가능성만 먼저 보기로 했다.`,
+            `선택된 엑셀은 정상적으로 열렸고 ${workbook.inspection.sheet_count}개 시트, 필터와 고정 행도 있었다. 하지만 실제 회사는 ${workbook.inspection.company_rows}개였고 고유 종목도 ${workbook.inspection.unique_tickers}개뿐이었다. 수식은 하나도 없었으며, 자체 점검도 잘못된 업종 분류와 임시 데이터를 지적했다. 파일은 만들어졌지만 핵심 분석은 끝나지 않은 상태였다.`,
           ],
-          callout: `HF directory에는 ${workbook.artifact_set.directory_file_count}개 파일이 있지만 최종 선택 primary는 ${workbook.artifact_set.selected_primary_count}개, support manifest는 ${workbook.artifact_set.support_file_count}개다. 디렉터리 파일 수를 사용자 deliverable 수로 부르지 않는다.`,
+          callout: `중요한 분석은 파일 개수를 세는 일이 아니었다. 요청한 ${workbook.request.expected_company_count}개 기업이 실제로 들어 있는지 확인하는 일이었다.`,
         }
       }
       if (section.benchmarkNarrative === 'success-briefing') {
         return {
           ...section,
-          heading: `${briefing.inspection.slide_count}장 briefing, 아직 남은 물음`,
           paragraphs: [
-            `briefing task는 Latin America macro, technology·venture market, fintech landscape를 약 ${briefing.request.approximate_slide_count}장으로 구성하고 PPTX와 PDF를 함께 요구했다. pinned artifact에는 ${briefing.artifact_set.selected_primary_count}개의 primary와 ${briefing.artifact_set.support_file_count}개의 manifest가 선택됐다.`,
-            `PPTX는 ${briefing.inspection.slide_count}장, PDF는 ${briefing.inspection.page_count}쪽으로 열렸고 blank page는 ${briefing.inspection.blank_pages}개였다. 구조와 대략적 길이는 관측됐지만 source citation과 country prioritization은 이 검사로 검증되지 않았다. Self-QA ${briefing.observed.self_qa_score}/10은 유용한 자신감 신호지만 외부 전문가 판정은 아니다.`,
+            `같은 방법을 브리핑에도 적용했다. 요청은 라틴아메리카의 거시 환경, 기술·벤처 시장, 핀테크 지형을 약 ${briefing.request.approximate_slide_count}장으로 정리하고 PPTX와 PDF를 함께 만드는 것이었다.`,
+            `결과물은 PPTX ${briefing.inspection.slide_count}장과 PDF ${briefing.inspection.page_count}쪽으로 열렸고 빈 페이지도 없었다. 기본 형식과 길이는 확인됐다. 다만 출처가 충분한지, 어느 국가를 먼저 볼지에 대한 판단이 타당한지는 이 검사로 확인할 수 없었다. 따라서 브리핑의 요구 충실도 전체는 미확인으로 남겼다. 자체 점검 ${briefing.observed.self_qa_score}/10을 좋은 신호로 볼 수는 있어도 품질 판정으로 쓸 수는 없었다.`,
           ],
         }
       }
       if (section.benchmarkNarrative === 'success-interpretation') {
         return {
           ...section,
-          heading: `${workbook.observed.self_qa_score}점과 ${briefing.observed.self_qa_score}점은 품질 순위가 아니다`,
           paragraphs: [
-            `workbook은 완전성·시점·분류를 셀 단위로 대조할 수 있는 task였다. briefing은 ${briefing.inspection.slide_count}장의 구조를 확인할 수 있어도 출처의 정확성과 고객 의사결정 가치는 별도 리뷰가 필요했다. 같은 직군이라는 라벨은 증거 부담을 같게 만들지 않았다.`,
-            `${workbook.observed.self_qa_score}점과 ${briefing.observed.self_qa_score}점은 어디를 더 조사할지 알려줬다. 하지만 checked-in grade identity inventory에는 exp026 external grade가 없고, artifact 구조 검사도 금융 정확성을 판정하지 않았다. 따라서 두 점수를 전문가 품질 순위로 확장하지 않는다.`,
+            `발견은 세 가지였다. 첫째, report의 success는 success 규칙을 통과했다는 상태였다. 둘째, 파일이 열린다는 사실은 내용이 완전하다는 뜻이 아니었다. 셋째, 높은 자체 점검 점수도 외부 품질 평가를 대신하지 못했다.`,
+            `따라서 “success면 사람에게 바로 넘길 수 있다”는 처음의 가설은 지지되지 않았다. 그렇다고 200개 결과가 모두 나빴다는 뜻도 아니다. 우리가 확인한 것은 ${report.successRatePct.toFixed(1)}%라는 숫자 하나만으로 전달 가능성을 말할 수 없다는 점이었다.`,
+          ],
+          points: [
+            `상태 신호: report의 success는 success 규칙을 통과했음을 보여줬다.`,
+            `내용 검증: 열린 워크북에도 ${workbook.request.expected_company_count - workbook.inspection.company_rows}개 회사가 빠져 있었다.`,
+            `품질 판단: 자체 점검 ${workbook.observed.self_qa_score}/10과 ${briefing.observed.self_qa_score}/10은 외부 평가가 아니었다.`,
           ],
         }
       }
@@ -439,8 +442,8 @@ function resolveSuccessArticle(article: JournalArticleData, benchmark: ReadySucc
         return {
           ...section,
           paragraphs: [
-            `앞으로 task 결과에는 ${benchmark.layers.map((layer) => layer.id).join(', ')} 네 층을 따로 기록한다. status와 retry는 execution, parser와 hash는 integrity, scope·data·format 대조는 fidelity, 외부 rubric 평가는 quality의 증거가 된다.`,
-            `${report.successRatePct.toFixed(1)}%는 ${report.successCount}개 실행 결과가 report의 success 규칙을 통과했다는 사실로 남긴다. 외부 grade identity와 artifact-level fidelity 검사가 연결되기 전에는 이를 handoff-ready 비율이라고 부르지 않는다.`,
+            `근본 원인은 모델 하나가 아니었다. 실행 완료, 파일 확인, 요구사항 충족, 전문가 품질이라는 네 질문을 success 한 줄에 넣어 기록한 방식에도 문제가 있었다.`,
+            `그래서 이후에는 네 단계를 따로 본다. ${report.successRatePct.toFixed(1)}%는 report의 success 상태 비율로 남기고, 프로세스가 끝났는지, 파일이 열리는지, 핵심 요구가 들어 있는지, 전문가가 믿고 쓸 수 있는지는 각각 별도의 증거로 확인한다.`,
           ],
         }
       }

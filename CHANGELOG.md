@@ -11,6 +11,21 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+- **Success Field Note retrospective voice** — revise
+  `what-does-success-mean` without changing its evidence contract, metrics,
+  source links, or fail-closed behavior. The six chapters now follow a
+  plain-language 상황→태스크→액션→결과→가설 검증→근본 원인 sequence: reduce
+  220 outcomes to two comparable tasks, reduce validation to three answerable
+  questions, name the workbook's required analysis, summarize three discoveries,
+  test the original handoff-ready hypothesis, and trace the root cause to four
+  questions compressed into one status. The copy distinguishes the `200/220`
+  report success-rule pass rate from process completion, leaves briefing
+  fidelity and external quality unverified, and retains all 30 citations and ten
+  evidence targets. All 77 aggregate contracts, the production build, and the
+  runtime, integrity, perception, and success browser suites pass; the four
+  browser suites complete in 48.201 seconds with no mobile overflow.
+
 ### Fixed
 - **Archived v1 cost-sweep template resolution** — point the historical
   `grading_cost_sweep.py` renderer at the tracked

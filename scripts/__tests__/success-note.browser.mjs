@@ -8,12 +8,12 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url))
 const successPath = new URL('../../public/generated/success-note.json', import.meta.url)
 const reportsPath = new URL('../../public/generated/reports-index.json', import.meta.url)
 const chapterTitles = [
-  'success를 handoff-ready로 읽었다',
-  '한 줄 status가 가린 것',
-  '열리는 workbook, 비어 있는 범위',
-  '32장 briefing, 아직 남은 물음',
-  '2점과 9점은 품질 순위가 아니다',
-  'success를 네 층으로 공개하기',
+  '90.9%를 보고 일이 끝났다고 생각했다',
+  '220개 대신 두 태스크로 범위를 줄였다',
+  '파일을 열고 꼭 필요한 분석부터 셌다',
+  '파일은 열렸지만 확인 가능한 범위가 달랐다',
+  '세 가지 발견이 처음의 가설을 바꿨다',
+  '문제는 네 질문을 한 줄에 넣은 데 있었다',
 ]
 
 const clone = (value) => structuredClone(value)
@@ -67,10 +67,25 @@ async function main() {
     for (const title of chapterTitles) {
       assert.equal(await page.getByRole('heading', { name: title, exact: true }).count(), 1)
     }
+    const taskSection = page.getByRole('heading', { name: chapterTitles[1], exact: true }).locator('xpath=ancestor::section')
+    assert.match(await taskSection.innerText(), /확인할 질문도 세 가지로 줄였다[\s\S]*실행이 끝났는가[\s\S]*파일이 실제로 열리는가[\s\S]*요청한 핵심 분석이 들어 있는가/)
+    const hypothesisSection = page.getByRole('heading', { name: chapterTitles[4], exact: true }).locator('xpath=ancestor::section')
+    const hypothesisText = await hypothesisSection.innerText()
+    assert.match(hypothesisText, /발견은 세 가지였다[\s\S]*success 규칙을 통과했다는 상태[\s\S]*둘째[\s\S]*셋째[\s\S]*처음의 가설은 지지되지 않았다/)
+    assert.doesNotMatch(hypothesisText, /프로세스가 끝났다는 신호|실행이 끝났음을 보여줬다|실행 완료율|실행 경로를 완료/)
+    assert.equal(await hypothesisSection.locator('li').count(), 3)
+    const rootSection = page.getByRole('heading', { name: chapterTitles[5], exact: true }).locator('xpath=ancestor::section')
+    const rootText = await rootSection.innerText()
+    assert.match(rootText, /근본 원인은 모델 하나가 아니었다[\s\S]*네 질문을 success 한 줄에 넣어 기록한 방식[\s\S]*report의 success 상태 비율/)
+    assert.doesNotMatch(rootText, /실행 완료율|실행 경로를 완료/)
+    const resultSection = page.getByRole('heading', { name: chapterTitles[3], exact: true }).locator('xpath=ancestor::section')
+    assert.match(await resultSection.innerText(), /기본 형식과 길이는 확인됐다[\s\S]*요구 충실도 전체는 미확인/)
     const mobileHero = page.getByRole('img', { name: /workbook은 qa_failed/ })
     assert.match(await mobileHero.innerText(), /qa_failed[\s\S]*35\/500 companies[\s\S]*Self-QA 2\/10[\s\S]*success[\s\S]*PPTX 32 · PDF 32[\s\S]*Self-QA 9\/10[\s\S]*external quality · unknown/)
     const metrics = page.locator('.grid.grid-cols-3.border-y')
-    assert.match(await metrics.innerText(), /200\/220[\s\S]*90\.9%[\s\S]*35\/500[\s\S]*7\.0%[\s\S]*unknown/)
+    const metricsText = await metrics.innerText()
+    assert.match(metricsText, /200\/220[\s\S]*report success 상태[\s\S]*90\.9% · success 규칙 통과율[\s\S]*35\/500[\s\S]*7\.0%[\s\S]*미확인/)
+    assert.doesNotMatch(metricsText, /실행 완료율|실행 경로를 완료/)
     const chart = page.getByRole('heading', { name: '같은 직군, 서로 다른 내부 진단' }).locator('xpath=ancestor::figure')
     assert.deepEqual(await chart.locator('.recharts-xAxis .recharts-cartesian-axis-tick-value').allTextContents(), ['S&P 500 workbook', 'LatAm briefing'])
     assert.equal(await page.locator('[data-citation-id]').count(), 30)
