@@ -20,7 +20,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   top-level template. The two known root-test failures are resolved: the full
   cost-sweep module passes 13/13 and `scripts/__tests__` passes 39/39. Active v2
   grading, workflows, models, prices, and budgets are unchanged; no sweep,
-  model/API call, grading run, upload, or paid workflow was executed.
+  Step 8, model/API call, grading run, HF upload, manual workflow, or paid
+  execution occurred. Shipped through PR #114
+  (`16305fd7c0661fdcb07bd298bfd4a9ccf4ffb381`); only the automatic free
+  `Aggregate Tests & Deploy` run `29731574595` executed, and it succeeded.
 
 ### Added
 - **Evidence-backed perception Field Note** — rebuild
