@@ -2,7 +2,7 @@
 """Autonomous grading cost-optimization sweep dispatcher (Track 2).
 
 Renders each variant in a sweep plan YAML on top of
-`batch-runner/grading_configs/_sweep_template.yaml`, invokes
+`batch-runner/grading_configs/_archive_v1/_sweep_template.yaml`, invokes
 `batch-runner/step8_grade.py` per variant, extracts metrics from the
 resulting grade JSON, and selects a Pareto-frontier winner subject to
 the plan's acceptance thresholds.
@@ -25,12 +25,11 @@ import json
 import logging
 import math
 import os
-import re
 import shutil
 import subprocess
 import sys
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -45,7 +44,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BATCH_RUNNER = REPO_ROOT / "batch-runner"
 DEFAULT_PLAN = REPO_ROOT / "tasks" / "0523_saturday" / "grading_cost_sweep_plan.yaml"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "tasks" / "0523_saturday" / "cost_opt_results"
-SWEEP_TEMPLATE = BATCH_RUNNER / "grading_configs" / "_sweep_template.yaml"
+SWEEP_TEMPLATE = (
+    BATCH_RUNNER
+    / "grading_configs"
+    / "_archive_v1"
+    / "_sweep_template.yaml"
+)
 BASELINE_CONFIG = BATCH_RUNNER / "grading_configs" / "default_gpt5pro.yaml"
 STEP8 = BATCH_RUNNER / "step8_grade.py"
 BATCH_RUNNER_ENV = BATCH_RUNNER / ".env"
@@ -872,9 +876,9 @@ def write_results_md(
         lines.append("_None — `winner_config.yaml` not emitted._")
     else:
         lines.append(
-            f"See `winner_config.yaml`. Promote to "
-            f"`batch-runner/grading_configs/recommended_<date>.yaml` after a "
-            f"manual full-run validation against baseline."
+            "See `winner_config.yaml`. Promote to "
+            "`batch-runner/grading_configs/recommended_<date>.yaml` after a "
+            "manual full-run validation against baseline."
         )
     lines.append("")
 

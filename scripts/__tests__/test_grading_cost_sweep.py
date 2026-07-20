@@ -7,8 +7,6 @@ grade.json shaped like the real schema v1.0 output.
 
 from __future__ import annotations
 
-import json
-import shutil
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -148,12 +146,34 @@ def test_estimate_cost_calibration(plan):
 # 5. render_temp_config enforces reproducibility guards
 # ---------------------------------------------------------------------
 
+def test_default_sweep_template_is_the_tracked_v1_archive():
+    expected = (
+        REPO_ROOT
+        / "batch-runner"
+        / "grading_configs"
+        / "_archive_v1"
+        / "_sweep_template.yaml"
+    )
+
+    assert sweep.SWEEP_TEMPLATE == expected
+    assert expected.is_file()
+    assert not (expected.parent.parent / "_sweep_template.yaml").exists()
+    assert yaml.safe_load(expected.read_text(encoding="utf-8"))[
+        "schema_version"
+    ] == "1.0"
+
+
 def test_render_temp_config_enforces_seed_temp(plan, tmp_path):
     variant = plan.phase_a[2]  # A1_pro_medium
     # Try to inject hostile overrides.
     variant.raw["judge"]["generation"] = {"temperature": 0.7, "seed": 999}
     cfg_path = sweep.render_temp_config(variant, tmp_path)
     rendered = yaml.safe_load(cfg_path.read_text())
+    expected_variant_dir = (tmp_path / "runs" / variant.name).resolve()
+
+    assert cfg_path.resolve() == expected_variant_dir / "config.yaml"
+    assert rendered["config_name"] == f"sweep__{variant.name}"
+    assert Path(rendered["output"]["directory"]) == expected_variant_dir
     assert rendered["judge"]["generation"]["temperature"] == 0
     assert rendered["judge"]["generation"]["seed"] == 42
 

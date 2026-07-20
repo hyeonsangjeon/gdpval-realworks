@@ -11,6 +11,17 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+- **Archived v1 cost-sweep template resolution** — point the historical
+  `grading_cost_sweep.py` renderer at the tracked
+  `grading_configs/_archive_v1/_sweep_template.yaml` after task 207 moved the
+  v1 reproduction assets out of the active config directory. A regression test
+  freezes the archive path, schema v1 identity, and absence of a duplicate
+  top-level template. The two known root-test failures are resolved: the full
+  cost-sweep module passes 13/13 and `scripts/__tests__` passes 39/39. Active v2
+  grading, workflows, models, prices, and budgets are unchanged; no sweep,
+  model/API call, grading run, upload, or paid workflow was executed.
+
 ### Added
 - **Evidence-backed perception Field Note** — rebuild
   `from-audio-to-multimodal-sandbox` around exact exp011/exp012/exp026 report
