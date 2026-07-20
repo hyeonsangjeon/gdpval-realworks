@@ -131,6 +131,9 @@ test('success article maps every reflective claim to pinned detailed evidence', 
   assert.match(article, /self_report\.json@\$\{SUCCESS_HF_REVISION\.slice\(0, 7\)\} · task_results\[137\] · L5963-L5999 · sha256 ec93ad9a…/)
   assert.match(article, /sp500_pe_deep_dive\.xlsx@\$\{SUCCESS_HF_REVISION\.slice\(0, 7\)\} · sha256 fb26bf7b…/)
   assert.match(article, /tree\/\$\{SUCCESS_SOURCE_SHA\}\/data\/grades/)
+  assert.match(journal, /const SUCCESS_CONTRACT_SHA = '99601b80b293364de29ce1d437712e6d648ac648'/)
+  assert.match(article, /success-layers\.yaml@\$\{SUCCESS_CONTRACT_SHA\.slice\(0, 7\)\} · L1-L123/)
+  assert.match(article, /\$\{SUCCESS_CONTRACT_SOURCE\}\/data\/notes\/success-layers\.yaml#L1-L123/)
 })
 
 test('success source and browser suite are wired into the Pages gate', async () => {

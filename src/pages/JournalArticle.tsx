@@ -401,7 +401,7 @@ function resolveSuccessArticle(article: JournalArticleData, benchmark: ReadySucc
           ...section,
           paragraphs: [
             `같은 ${workbook.occupation} 직군에서 workbook task는 ${workbook.observed.status}·Self-QA ${workbook.observed.self_qa_score}/10, briefing task는 ${briefing.observed.status}·Self-QA ${briefing.observed.self_qa_score}/10으로 기록됐다. 둘 다 retried=true였지만 공개 자료는 정확한 시도 횟수를 남기지 않는다.`,
-            `task row에는 각각 ${workbook.observed.files_count}개와 ${briefing.observed.files_count}의 선택 파일이 기록됐는데 report의 File Generation aggregate는 0/0/0이다. 그래서 이 글은 aggregate file-generation 값을 무결성 근거로 사용하지 않고 pinned manifest와 artifact를 직접 본다.`,
+            `task row에는 각각 ${workbook.observed.files_count}개와 ${briefing.observed.files_count}개의 선택 파일이 기록됐는데 report의 File Generation aggregate는 0/0/0이다. 그래서 이 글은 aggregate file-generation 값을 무결성 근거로 사용하지 않고 pinned manifest와 artifact를 직접 본다.`,
           ],
         }
       }

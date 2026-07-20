@@ -71,8 +71,7 @@ task. It must be refreshed before a task is reported complete.
 
 ## Remaining Work
 
-- Pin the success contract citation to the first implementation commit, obtain
-  final code and workflow approval, merge through a pull request, and verify the
-  automatic Pages deployment and public mobile/desktop article.
+- Obtain final code and workflow approval, merge through a pull request, and
+  verify the automatic Pages deployment and public mobile/desktop article.
 - Refresh this rolling record with the merged commit, workflow run, and public
   verification evidence after deployment.

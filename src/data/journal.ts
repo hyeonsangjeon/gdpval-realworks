@@ -126,6 +126,8 @@ const SANDBOX_MULTIMODAL_COMMIT = 'eaa2789081ba7b81901ba977006f9bfd6534a0c1'
 const DOCKER_ALWAYS_COMMIT = '6ac8a830a325eb95aec5fb89f38a5e9312ea1b2a'
 const SUCCESS_SOURCE_SHA = '865b3e43093ddcb6942f628eb81544e5de16e15c'
 const SUCCESS_SOURCE = `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${SUCCESS_SOURCE_SHA}`
+const SUCCESS_CONTRACT_SHA = '99601b80b293364de29ce1d437712e6d648ac648'
+const SUCCESS_CONTRACT_SOURCE = `https://github.com/hyeonsangjeon/gdpval-realworks/blob/${SUCCESS_CONTRACT_SHA}`
 const SUCCESS_HF_REVISION = '47aed3c0b13eaa90eb02803bec9d5c75e559f416'
 const SUCCESS_HF = `https://huggingface.co/datasets/HyeonSang/exp026_sandbox_skills_multimodal`
 
@@ -814,8 +816,8 @@ export const journalArticles: JournalArticle[] = [
         id: 'success-contract',
         label: 'success 네 층과 artifact 측정 계약',
         detail: 'pinned revision·hash, 직접 구조 검사, report 관측과 external quality unknown을 분리한 generated evidence source.',
-        source: 'data/notes/success-layers.yaml · generated evidence contract',
-        href: `${REPO}/data/notes/success-layers.yaml`,
+        source: `success-layers.yaml@${SUCCESS_CONTRACT_SHA.slice(0, 7)} · L1-L123`,
+        href: `${SUCCESS_CONTRACT_SOURCE}/data/notes/success-layers.yaml#L1-L123`,
       },
     ],
   },
