@@ -1,7 +1,7 @@
 # BOLT: Restore the Archived v1 Sweep Template Contract
 
 - Date: 2026-07-20
-- Status: `APPROVED`
+- Status: `SHIPPED`
 - Base: `main@eaacc6769406399759c84539d84fdda9da67abb5`
 - Branch: `bolt/archived-sweep-template`
 - Execution boundary: model-free only
@@ -71,7 +71,9 @@ Allowed implementation files:
   and isolated per-variant output directories.
 - Active v2 config defaults and workflows are unchanged.
 - `git diff --check` passes.
-- No model/API, grading, upload, workflow dispatch, or remote mutation occurs.
+- No sweep, Step 8, model/API, grading, HF upload, manual workflow dispatch, or
+  paid execution occurs. After merge, only the repository's automatic free
+  `Aggregate Tests & Deploy` Pages gate may run.
 
 ## Evidence
 
@@ -83,9 +85,11 @@ Allowed implementation files:
 | Root scripts suite | `39 passed`, 0 failed/skipped/warnings |
 | Static checks | Ruff clean and `py_compile` passed for both touched Python files |
 | Independent review | `grading-engineer` approved with 0 mandatory findings |
+| Merge | PR #114, squash commit `16305fd7c0661fdcb07bd298bfd4a9ccf4ffb381` |
+| Post-merge gate | `Aggregate Tests & Deploy` run `29731574595` succeeded |
 
 ## Decision
 
-`APPROVED` — the historical v1 renderer consumes only the tracked archive;
-output isolation is regression-locked, and active v2 grading plus every
-paid/runtime path remain unchanged.
+`SHIPPED` — PR #114 merged the model-free path-contract repair and the standard
+free deploy gate passed. The historical v1 renderer consumes only the tracked
+archive; active v2 grading plus every paid/runtime path remain unchanged.

@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-20
-- Status: COMPLETE — archived v1 sweep-template contract restored
+- Status: SHIPPED — archived v1 sweep-template contract restored
 
 ## Task
 
@@ -28,6 +28,9 @@ task. It must be refreshed before a task is reported complete.
   winner banner generation, and per-variant output isolation.
 - Marked the original PR3 deviation resolved while retaining its incident and
   cause. Removed only pre-existing lint noise in the two touched Python files.
+- Squash-merged the reviewed BOLT through PR #114 as
+  `16305fd7c0661fdcb07bd298bfd4a9ccf4ffb381`. The automatic free
+  `Aggregate Tests & Deploy` run `29731574595` completed successfully.
 
 ## Verification
 
@@ -41,8 +44,10 @@ task. It must be refreshed before a task is reported complete.
 - `git diff --check` passed. `grading-engineer` approved the final path,
   output-isolation, archived-only, and documentation contracts with zero
   mandatory findings.
-- No sweep, Step 8, model/API call, grading run, upload, workflow dispatch, or
-  paid execution occurred.
+- The post-merge workflow completed successfully and no paid/model/grading/HF
+  workflow ran for the merge commit.
+- No sweep, Step 8, model/API call, grading run, HF upload, or paid execution
+  occurred. Only the standard free push-triggered deploy gate ran.
 
 ## Remaining Work
 
