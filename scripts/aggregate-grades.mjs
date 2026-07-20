@@ -12,6 +12,7 @@
 
 import { readdir, readFile, writeFile, mkdir, access } from 'fs/promises';
 import { join, extname, basename } from 'path';
+import { gradeIdentityFromRaw } from './grade-identity.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const GRADES_DIR = join(ROOT, 'data', 'grades');
@@ -27,14 +28,6 @@ async function dirExists(path) {
  * different scores. Always 0 for single-judge runs (Phase A). Populated
  * by Phase B multi-judge aggregator.
  */
-
-// Best-effort experiment_id extraction from a 4-tuple filename:
-//   <exp>__<judge>__<rubric_sha>__<v>.json  →  <exp>
-// Falls back to the bare filename when no `__` separator is present.
-function experimentIdFromFilename(filename) {
-  const idx = filename.indexOf('__');
-  return idx > 0 ? filename.slice(0, idx) : filename;
-}
 
 // ── Calibration helpers ────────────────────────────────────────────────────
 // Build summary-level calibration stats from a list of legacy-shaped task rows
@@ -95,8 +88,9 @@ function processLegacyGradesFile(filePath, raw, taskQaByExperiment = new Map()) 
   const meta = raw._meta || {};
   const rawTasks = raw.tasks || raw; // support both { _meta, tasks } and bare array
 
-  const is_dummy = !!meta.is_dummy;
-  const experiment_id = meta.experiment_id || experimentIdFromFilename(filename);
+  const identity = gradeIdentityFromRaw(filePath, raw);
+  const is_dummy = identity.is_dummy;
+  const experiment_id = identity.experiment_id;
   const qaFor = makeQaResolver(experiment_id, is_dummy, taskQaByExperiment);
 
   // Decorate each task with qa_score (null when no match) so the GradeDetail
@@ -180,14 +174,12 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
   // v1 path: prefer human-readable label/title from raw, fall back through
   // experiment_id, finally filename. Aggregator caller may add a `label`
   // field to grade JSON in future spec versions; this is forward-compatible.
-  const label = raw.label || raw.title || raw.experiment_id || filename;
-  const experiment_id = raw.experiment_id || experimentIdFromFilename(filename);
+  const identity = gradeIdentityFromRaw(filePath, raw);
+  const label = raw.label || raw.title || identity.experiment_id || filename;
+  const experiment_id = identity.experiment_id;
   // Phase 2: explicit pointer to the inference run that produced these
   // deliverables. Null/empty ⇒ fall back to experiment_id (Phase 1 behavior).
-  const source_experiment_id = typeof raw.source_inference_experiment_id === 'string'
-    && raw.source_inference_experiment_id.trim()
-      ? raw.source_inference_experiment_id
-      : null;
+  const source_experiment_id = identity.source_inference_experiment_id;
 
   // Strict per-experiment Self-QA resolver. v1 grades are never dummies.
   const qaFor = makeQaResolver(experiment_id, false, taskQaByExperiment, source_experiment_id);

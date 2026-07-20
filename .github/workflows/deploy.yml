@@ -18,6 +18,7 @@ on:
       - 'data/notes/runtime-incidents.yaml' # runtime-note incident source
       - 'data/notes/integrity-incidents.yaml' # integrity-note measurement source
       - 'data/notes/perception-pipeline.yaml' # perception-note architecture source
+      - 'data/notes/success-layers.yaml' # success-note artifact and interpretation source
 
   workflow_dispatch:          # 수동 실행 가능
 

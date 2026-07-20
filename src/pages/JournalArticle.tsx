@@ -17,6 +17,7 @@ import { useReports } from '../hooks/useReports'
 import { useRuntimeNote } from '../hooks/useRuntimeNote'
 import { useIntegrityNote } from '../hooks/useIntegrityNote'
 import { usePerceptionNote } from '../hooks/usePerceptionNote'
+import { useSuccessNote } from '../hooks/useSuccessNote'
 import {
   selectPromptComplexityBenchmark,
   type PromptComplexityBenchmarkRow,
@@ -34,6 +35,10 @@ import {
   selectPerceptionBenchmark,
   type PerceptionSelection,
 } from '../lib/perceptionNoteBenchmark'
+import {
+  selectSuccessNoteBenchmark,
+  type SuccessBenchmarkSelection,
+} from '../lib/successNoteBenchmark'
 import {
   getJournalArticle,
   journalArticles,
@@ -56,6 +61,7 @@ type ReadyPromptBenchmark = Extract<PromptComplexityBenchmarkSelection, { status
 type ReadyRuntimeBenchmark = Extract<RuntimeNoteBenchmarkSelection, { status: 'ready' }>
 type ReadyIntegrityBenchmark = Extract<IntegrityNoteSelection, { status: 'ready' }>
 type ReadyPerceptionBenchmark = Extract<PerceptionSelection, { status: 'ready' }>
+type ReadySuccessBenchmark = Extract<SuccessBenchmarkSelection, { status: 'ready' }>
 
 const formatSigned = (value: number, suffix: string) => `${value > 0 ? '+' : ''}${value.toFixed(1)}${suffix}`
 const citationAnchorId = (prefix: string, evidenceId: string) => `citation-${prefix}-${evidenceId}`
@@ -357,6 +363,92 @@ function resolvePerceptionArticle(article: JournalArticleData, benchmark: ReadyP
   }
 }
 
+function resolveSuccessArticle(article: JournalArticleData, benchmark: ReadySuccessBenchmark) {
+  const { report, workbook, briefing, interpretation } = benchmark
+  const workbookCoveragePct = (workbook.inspection.company_rows / workbook.request.expected_company_count) * 100
+
+  return {
+    metrics: [
+      { value: `${report.successCount}/${report.totalTasks}`, label: 'report status success', note: `${report.successRatePct.toFixed(1)}% · handoff-ready 아님` },
+      { value: `${workbook.inspection.company_rows}/${workbook.request.expected_company_count}`, label: 'workbook company coverage', note: `${workbookCoveragePct.toFixed(1)}% · artifact parse` },
+      { value: interpretation.external_grade_available ? '있음' : 'unknown', label: 'exp026 external quality', note: 'Self-QA와 분리' },
+    ],
+    hero: article.hero ? {
+      ...article.hero,
+      alt: `같은 금융 분석 직군의 workbook은 ${workbook.observed.status}, Self-QA ${workbook.observed.self_qa_score}, ${workbook.inspection.company_rows}/${workbook.request.expected_company_count} companies이고 briefing은 ${briefing.observed.status}, Self-QA ${briefing.observed.self_qa_score}, PPTX ${briefing.inspection.slide_count}장과 PDF ${briefing.inspection.page_count}쪽이며 외부 quality는 unknown인 비교`,
+      caption: `workbook은 parser를 통과했지만 ${workbook.inspection.company_rows}/${workbook.request.expected_company_count}개 회사만 담겼다. briefing은 ${briefing.inspection.slide_count}장 PPTX와 ${briefing.inspection.page_count}쪽 PDF가 열렸지만, 두 task 모두 외부 quality는 아직 unknown이다.`,
+    } : undefined,
+    chart: article.comparisonChart ? {
+      ...article.comparisonChart,
+      description: `workbook ${workbook.observed.self_qa_score}/10, briefing ${briefing.observed.self_qa_score}/10. 두 값은 실행 중 내부 진단이며 external grade가 아니다.`,
+      data: [
+        { label: 'S&P 500 workbook', primary: workbook.observed.self_qa_score },
+        { label: 'LatAm briefing', primary: briefing.observed.self_qa_score },
+      ],
+    } : undefined,
+    sections: article.sections.map((section) => {
+      if (section.benchmarkNarrative === 'success-expectation') {
+        return {
+          ...section,
+          paragraphs: [
+            `${report.shortId} report에서 ${report.successCount}/${report.totalTasks}, ${report.successRatePct.toFixed(1)}%가 success였다. 처음에는 이 숫자를 “대부분의 업무가 전달 가능한 상태에 도달했다”에 가깝게 읽고 싶었다.`,
+            `그러나 ${report.retriedCount}개가 적어도 한 번 재시도됐고 평균 Self-QA는 ${report.avgQaScore.toFixed(2)}였다. report 자체도 self-assessed pre-grading이라고 선을 긋는다. execution, integrity, fidelity, quality를 한 status에 접으면 그 경계가 사라진다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'success-status') {
+        return {
+          ...section,
+          paragraphs: [
+            `같은 ${workbook.occupation} 직군에서 workbook task는 ${workbook.observed.status}·Self-QA ${workbook.observed.self_qa_score}/10, briefing task는 ${briefing.observed.status}·Self-QA ${briefing.observed.self_qa_score}/10으로 기록됐다. 둘 다 retried=true였지만 공개 자료는 정확한 시도 횟수를 남기지 않는다.`,
+            `task row에는 각각 ${workbook.observed.files_count}개와 ${briefing.observed.files_count}의 선택 파일이 기록됐는데 report의 File Generation aggregate는 0/0/0이다. 그래서 이 글은 aggregate file-generation 값을 무결성 근거로 사용하지 않고 pinned manifest와 artifact를 직접 본다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'success-workbook') {
+        return {
+          ...section,
+          paragraphs: [
+            `workbook task는 ${workbook.request.as_of_date} 기준 전체 ${workbook.request.expected_company_count}개 S&P 500 기업을 public web data로 채운 sortable Excel을 요구했다. 요구사항의 핵심은 파일 확장자가 아니라 회사 범위, 분류, 시점과 출처였다.`,
+            `선택된 XLSX는 parser로 열렸고 ${workbook.inspection.sheet_count}개 sheet, auto-filter ${workbook.inspection.auto_filter}, freeze pane ${workbook.inspection.freeze_panes}를 가졌다. 그러나 Company Detail은 ${workbook.inspection.company_rows}행·${workbook.inspection.unique_tickers}개 ticker뿐이었고 formula는 ${workbook.inspection.formula_count}개였다. report의 Self-QA도 잘못된 sector 분류와 placeholder/local data를 지적했다. integrity는 관측됐지만 fidelity는 충족되지 않았다.`,
+          ],
+          callout: `HF directory에는 ${workbook.artifact_set.directory_file_count}개 파일이 있지만 최종 선택 primary는 ${workbook.artifact_set.selected_primary_count}개, support manifest는 ${workbook.artifact_set.support_file_count}개다. 디렉터리 파일 수를 사용자 deliverable 수로 부르지 않는다.`,
+        }
+      }
+      if (section.benchmarkNarrative === 'success-briefing') {
+        return {
+          ...section,
+          heading: `${briefing.inspection.slide_count}장 briefing, 아직 남은 물음`,
+          paragraphs: [
+            `briefing task는 Latin America macro, technology·venture market, fintech landscape를 약 ${briefing.request.approximate_slide_count}장으로 구성하고 PPTX와 PDF를 함께 요구했다. pinned artifact에는 ${briefing.artifact_set.selected_primary_count}개의 primary와 ${briefing.artifact_set.support_file_count}개의 manifest가 선택됐다.`,
+            `PPTX는 ${briefing.inspection.slide_count}장, PDF는 ${briefing.inspection.page_count}쪽으로 열렸고 blank page는 ${briefing.inspection.blank_pages}개였다. 구조와 대략적 길이는 관측됐지만 source citation과 country prioritization은 이 검사로 검증되지 않았다. Self-QA ${briefing.observed.self_qa_score}/10은 유용한 자신감 신호지만 외부 전문가 판정은 아니다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'success-interpretation') {
+        return {
+          ...section,
+          heading: `${workbook.observed.self_qa_score}점과 ${briefing.observed.self_qa_score}점은 품질 순위가 아니다`,
+          paragraphs: [
+            `workbook은 완전성·시점·분류를 셀 단위로 대조할 수 있는 task였다. briefing은 ${briefing.inspection.slide_count}장의 구조를 확인할 수 있어도 출처의 정확성과 고객 의사결정 가치는 별도 리뷰가 필요했다. 같은 직군이라는 라벨은 증거 부담을 같게 만들지 않았다.`,
+            `${workbook.observed.self_qa_score}점과 ${briefing.observed.self_qa_score}점은 어디를 더 조사할지 알려줬다. 하지만 checked-in grade identity inventory에는 exp026 external grade가 없고, artifact 구조 검사도 금융 정확성을 판정하지 않았다. 따라서 두 점수를 전문가 품질 순위로 확장하지 않는다.`,
+          ],
+        }
+      }
+      if (section.benchmarkNarrative === 'success-decision') {
+        return {
+          ...section,
+          paragraphs: [
+            `앞으로 task 결과에는 ${benchmark.layers.map((layer) => layer.id).join(', ')} 네 층을 따로 기록한다. status와 retry는 execution, parser와 hash는 integrity, scope·data·format 대조는 fidelity, 외부 rubric 평가는 quality의 증거가 된다.`,
+            `${report.successRatePct.toFixed(1)}%는 ${report.successCount}개 실행 결과가 report의 success 규칙을 통과했다는 사실로 남긴다. 외부 grade identity와 artifact-level fidelity 검사가 연결되기 전에는 이를 handoff-ready 비율이라고 부르지 않는다.`,
+          ],
+        }
+      }
+      return section
+    }),
+  }
+}
+
 function BenchmarkDataSource({ rows, generated }: { rows: PromptComplexityBenchmarkRow[]; generated: string }) {
   return (
     <aside className="mb-10 border-y border-dash-border py-4 text-[11px]/[1.7] text-dash-text-secondary" aria-label="Benchmark data source">
@@ -508,6 +600,42 @@ function PerceptionDataSource({ benchmark }: { benchmark: ReadyPerceptionBenchma
   )
 }
 
+function SuccessDataSource({ benchmark }: { benchmark: ReadySuccessBenchmark }) {
+  const repo = 'https://github.com/hyeonsangjeon/gdpval-realworks'
+  const hf = `https://huggingface.co/datasets/${benchmark.huggingface.repository}`
+  return (
+    <aside className="mb-12 border-y border-dash-border py-5 text-[11px]/[1.75] text-dash-text-secondary" aria-label="Success evidence source">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="font-mono text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">SUCCESS EVIDENCE</span>
+        <a href={`${import.meta.env.BASE_URL}generated/success-note.json`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          success-note.json <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${import.meta.env.BASE_URL}generated/reports-index.json`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          reports-index.json <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${hf}/blob/${benchmark.huggingface.revision}/self_report.json`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          pinned self-report <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${hf}/tree/${benchmark.huggingface.revision}/deliverable_files/${benchmark.workbook.task_id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          workbook artifacts <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${hf}/tree/${benchmark.huggingface.revision}/deliverable_files/${benchmark.briefing.task_id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          briefing artifacts <ExternalLink className="h-3 w-3" />
+        </a>
+        <a href={`${repo}/tree/main/${benchmark.sources.grades}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
+          grade inventory <ExternalLink className="h-3 w-3" />
+        </a>
+        <Link to={getExperimentHref('exp026')} className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400">
+          exp026 상세 <ArrowRight className="h-3 w-3" />
+        </Link>
+      </div>
+      <div className="mt-3 text-dash-text-muted">
+        report는 self-assessed pre-grading이다. artifact는 HF revision {benchmark.huggingface.revision.slice(0, 7)}와 SHA-256으로 고정했으며, 구조 검사는 외부 금융 품질 평가를 대신하지 않는다.
+      </div>
+    </aside>
+  )
+}
+
 function BenchmarkDataState({ message, error }: { message: string; error?: boolean }) {
   return (
     <div className="max-w-[1080px] mx-auto px-4 md:px-6 py-8 md:py-10">
@@ -533,11 +661,13 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
   const usesRuntimeBenchmark = article?.benchmark?.kind === 'runtime'
   const usesIntegrityBenchmark = article?.benchmark?.kind === 'integrity'
   const usesPerceptionBenchmark = article?.benchmark?.kind === 'perception'
-  const usesReportBenchmark = usesPromptBenchmark || usesRuntimeBenchmark || usesIntegrityBenchmark || usesPerceptionBenchmark
+  const usesSuccessBenchmark = article?.benchmark?.kind === 'success'
+  const usesReportBenchmark = usesPromptBenchmark || usesRuntimeBenchmark || usesIntegrityBenchmark || usesPerceptionBenchmark || usesSuccessBenchmark
   const { reports, generated, loading: reportsLoading, error: reportsError } = useReports(usesReportBenchmark)
   const { data: runtimeNote, loading: runtimeLoading, error: runtimeError } = useRuntimeNote(usesRuntimeBenchmark)
   const { data: integrityNote, loading: integrityLoading, error: integrityError } = useIntegrityNote(usesIntegrityBenchmark)
   const { data: perceptionNote, loading: perceptionLoading, error: perceptionError } = usePerceptionNote(usesPerceptionBenchmark)
+  const { data: successNote, loading: successLoading, error: successError } = useSuccessNote(usesSuccessBenchmark)
   const promptBenchmark = usesPromptBenchmark && !reportsLoading && !reportsError
     ? selectPromptComplexityBenchmark(reports)
     : null
@@ -554,6 +684,10 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
     ? selectPerceptionBenchmark(reports, perceptionNote)
     : null
   const readyPerceptionBenchmark = perceptionBenchmark?.status === 'ready' ? perceptionBenchmark : null
+  const successBenchmark = usesSuccessBenchmark && !reportsLoading && !reportsError && !successLoading && !successError
+    ? selectSuccessNoteBenchmark(reports, successNote)
+    : null
+  const readySuccessBenchmark = successBenchmark?.status === 'ready' ? successBenchmark : null
   const resolved = article && readyPromptBenchmark
     ? resolvePromptComplexityArticle(article, readyPromptBenchmark)
     : article && readyRuntimeBenchmark
@@ -562,7 +696,9 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
         ? resolveIntegrityArticle(article, readyIntegrityBenchmark)
         : article && readyPerceptionBenchmark
           ? resolvePerceptionArticle(article, readyPerceptionBenchmark)
-          : null
+          : article && readySuccessBenchmark
+            ? resolveSuccessArticle(article, readySuccessBenchmark)
+            : null
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -585,8 +721,8 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
     .slice(0, 2)
   const displayedMetrics = resolved?.metrics ?? article.metrics
   const displayedChart = resolved?.chart ?? article.comparisonChart
-  const benchmarkReady = readyPromptBenchmark || readyRuntimeBenchmark || readyIntegrityBenchmark || readyPerceptionBenchmark
-  const displayedSections = (usesRuntimeBenchmark && !readyRuntimeBenchmark) || (usesIntegrityBenchmark && !readyIntegrityBenchmark) || (usesPerceptionBenchmark && !readyPerceptionBenchmark)
+  const benchmarkReady = readyPromptBenchmark || readyRuntimeBenchmark || readyIntegrityBenchmark || readyPerceptionBenchmark || readySuccessBenchmark
+  const displayedSections = (usesRuntimeBenchmark && !readyRuntimeBenchmark) || (usesIntegrityBenchmark && !readyIntegrityBenchmark) || (usesPerceptionBenchmark && !readyPerceptionBenchmark) || (usesSuccessBenchmark && !readySuccessBenchmark)
     ? []
     : (resolved?.sections ?? article.sections)
       .filter((section) => !section.benchmarkNarrative || benchmarkReady)
@@ -683,6 +819,7 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
             runtimeBenchmark={readyRuntimeBenchmark ?? undefined}
             integrityBenchmark={readyIntegrityBenchmark ?? undefined}
             perceptionBenchmark={readyPerceptionBenchmark ?? undefined}
+            successBenchmark={readySuccessBenchmark ?? undefined}
           />
         )}
         {usesPromptBenchmark && reportsLoading && <BenchmarkDataState message="benchmark report 데이터를 불러오는 중입니다." />}
@@ -720,12 +857,22 @@ function JournalArticleContent({ slug }: { slug: string | undefined }) {
         {usesPerceptionBenchmark && perceptionBenchmark?.status === 'invalid' && (
           <BenchmarkDataState error message={`perception 근거의 ${perceptionBenchmark.invalidSources.join(', ')} 항목이 유효하지 않습니다.`} />
         )}
+        {usesSuccessBenchmark && (reportsLoading || successLoading) && <BenchmarkDataState message="success 근거 데이터를 불러오는 중입니다." />}
+        {usesSuccessBenchmark && reportsError && <BenchmarkDataState error message={`success report를 불러오지 못했습니다: ${reportsError}`} />}
+        {usesSuccessBenchmark && successError && <BenchmarkDataState error message={`success artifact contract를 불러오지 못했습니다: ${successError}`} />}
+        {usesSuccessBenchmark && successBenchmark?.status === 'missing' && (
+          <BenchmarkDataState error message={`success report에서 ${successBenchmark.missingIds.join(', ')} 행을 찾지 못했습니다.`} />
+        )}
+        {usesSuccessBenchmark && successBenchmark?.status === 'invalid' && (
+          <BenchmarkDataState error message={`success 근거의 ${successBenchmark.invalidSources.join(', ')} 항목이 유효하지 않습니다.`} />
+        )}
 
         {citationsReady && <div className="max-w-[760px] mx-auto px-4 md:px-6 py-12 md:py-16">
           {readyPromptBenchmark && <BenchmarkDataSource rows={readyPromptBenchmark.rows} generated={generated} />}
           {readyRuntimeBenchmark && <RuntimeDataSource benchmark={readyRuntimeBenchmark} />}
           {readyIntegrityBenchmark && <IntegrityDataSource benchmark={readyIntegrityBenchmark} />}
           {readyPerceptionBenchmark && <PerceptionDataSource benchmark={readyPerceptionBenchmark} />}
+          {readySuccessBenchmark && <SuccessDataSource benchmark={readySuccessBenchmark} />}
           <div className="mb-14 md:mb-16">
             <div className="flex items-center gap-3 mb-4" aria-hidden="true">
               <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">THESIS</span>
