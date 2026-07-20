@@ -4,8 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-20
-- Status: Success Field Note implementation and local validation complete;
-  final review, merge, and Pages deployment pending
+- Status: Success Field Note production-verified and deployed
 
 ## Task
 
@@ -46,6 +45,9 @@ task. It must be refreshed before a task is reported complete.
   caps, exact byte lengths, and streaming SHA-256. No artifact is executed.
 - Wired the generator, focused tests, and fourth browser suite into prebuild,
   aggregate tests, and the serialized Pages gate before artifact upload.
+- Squash-merged the independently reviewed implementation through PR #116 as
+  `85e21b30`. The immutable success contract remains available at first feature
+  commit `99601b80`, the exact source linked by the article.
 
 ## Verification
 
@@ -68,10 +70,28 @@ task. It must be refreshed before a task is reported complete.
 - Manual mobile and desktop inspection found no text overflow or SVG overlap.
   The mobile cards were 152px wide with equal content/client widths; the desktop
   SVG was 1032×430 with zero overlapping text boxes.
+- Code and workflow reviews approved the final exact-status parser,
+  schema-aware grade identity, bounded pinned-HF verification, non-causal
+  interpretation, fail-closed rendering, and deployment gates.
+- Pages run
+  [29746868595](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29746868595)
+  completed successfully for exact merge SHA `85e21b30`. Build, all 77 aggregate
+  contracts, all four browser suites, artifact upload, and Pages deployment
+  passed; the full workflow took 2 minutes 10 seconds. It was the only workflow
+  for the merge SHA.
+- The public generated JSON returned HTTP 200 with exp026 `200/220`, workbook
+  `qa_failed` and `35/500`, briefing `success` and `32/32`, pinned HF revision
+  `47aed3c0`, external grade `false`, and checked-in grade matches `0`.
+- Public mobile rendered the expected two task cards, three source-derived
+  metrics, six reflective chapters, 30 citations, ten evidence targets, and
+  seven source-strip links without alerts or overflow. Citation-to-evidence and
+  evidence-to-body navigation resolved to one unique target.
+- Public desktop rendered a 1032×430 SVG with no overlapping labels, 34px
+  chapter headings, 34.85px body leading, no alerts, and no horizontal overflow.
+  The contract link resolves to `success-layers.yaml@99601b8` lines 1-123 and
+  the workbook link resolves to the pinned, hashed XLSX at HF revision
+  `47aed3c0`.
 
 ## Remaining Work
 
-- Obtain final code and workflow approval, merge through a pull request, and
-  verify the automatic Pages deployment and public mobile/desktop article.
-- Refresh this rolling record with the merged commit, workflow run, and public
-  verification evidence after deployment.
+- No implementation or deployment work remains for the success Field Note.
