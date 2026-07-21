@@ -1,11 +1,12 @@
-# Sweep Orchestration Status (실시간)
+# Sweep Orchestration Status (Archived)
 
-> 이 문서는 사용자가 외출에서 돌아왔을 때 **한눈에 진행 상황을 파악**하기 위한 단일 진입점이다.
-> orchestrator가 자동 갱신한다. 가장 아래로 스크롤하면 가장 최신 상태가 보인다.
+> **Archived 2026-07-22.** 이 sweep은 완료됐고 workflow source는 같은
+> 디렉터리의 `grade-cost-sweep.workflow.yml`로 이동했다. 아래 명령은 2026-05-24
+> 운영 기록이며 현재 workflow를 실행하거나 재활성화하는 안내가 아니다.
 
 ---
 
-## 빠른 명령
+## Historical Inspection Commands
 
 - **현재 진행 중인 sweep run 확인**
   ```bash
@@ -24,7 +25,7 @@
   cat tasks/0523_saturday/cost_opt_results/2026-05-24-grade-cost-sweep/RESULTS.md
   ```
 
-## Phase 운영 결정 트리
+## Historical Phase Decision Tree
 
 | Phase A 결과 | 다음 액션 |
 |---|---|
@@ -33,7 +34,7 @@
 | 일부만 성공 | 부분 결과 + 사용자 검토 요청 |
 | cost cap 초과 | abort, 비용 분석 보고 |
 
-## 트리거 명령 참고 (다음 phase로 진행 시)
+## Historical Trigger Commands (Do Not Run)
 
 ```bash
 # Phase B trigger (Phase A 완료 후, resume 모드)
@@ -59,7 +60,7 @@ gh workflow run grade-cost-sweep.yml \
   -f max_cost_usd=80
 ```
 
-## 비용/한도
+## Historical Cost and Limits
 
 - **Per-phase 누적 cost cap**: $80 (전체)
 - **GH Actions timeout**: 350분 (6시간 -10분 안전 마진)
@@ -87,4 +88,4 @@ gh workflow run grade-cost-sweep.yml \
 
 ---
 
-_마지막 갱신: 2026-05-24 06:08 UTC. orchestrator가 phase 결과 들어올 때마다 위 표 갱신._
+_운영 기록 마지막 갱신: 2026-05-24 06:08 UTC. Archived: 2026-07-22._

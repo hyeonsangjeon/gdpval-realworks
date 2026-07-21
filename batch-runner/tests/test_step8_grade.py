@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import subprocess
 
 import pytest
 import yaml
@@ -1668,14 +1669,53 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         encoding="utf-8"
     )
     parsed = yaml.safe_load(workflow)
+    assert list(parsed["jobs"]) == ["grade"]
+    assert parsed["permissions"] == {
+        "contents": "write",
+        "id-token": "write",
+        "actions": "write",
+    }
+
     steps = parsed["jobs"]["grade"]["steps"]
     by_name = {step.get("name"): step for step in steps if step.get("name")}
+    validate_inputs = by_name["Validate workflow context and inputs"]
+    checkout = by_name["Checkout exact main revision"]
+    verify_checkout = by_name["Verify checked out main and input files"]
     download = by_name["Download inference results from HF"]
     commit = by_name["Commit grade result"]
     retrigger = by_name["Auto-retrigger next chunk (time budget hit)"]
+    setup_python = by_name["Setup Python"]
+    azure_login = by_name["Azure Login (OIDC)"]
+    upload = by_name["Upload grade artifact"]
 
     assert "inference_revision:" in workflow
     assert 'default: ""' in workflow
+    assert checkout["uses"] == (
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+    )
+    assert checkout["with"] == {
+        "ref": "main",
+        "persist-credentials": True,
+    }
+    assert setup_python["uses"] == (
+        "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065"
+    )
+    assert azure_login["uses"] == (
+        "azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5"
+    )
+    assert upload["uses"] == (
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+    )
+    assert "GITHUB_WORKFLOW_SHA" in validate_inputs["run"]
+    assert "refs/heads/main" in validate_inputs["run"]
+    assert "GRADE_TASKS_LIMIT" in validate_inputs["run"]
+    assert "git rev-parse HEAD" in verify_checkout["run"]
+    assert "refs/remotes/origin/main" in verify_checkout["run"]
+    assert "required input must be a regular non-symlink file" in verify_checkout["run"]
+    assert all(
+        "${{ inputs." not in step.get("run", "")
+        for step in steps
+    )
     assert download["id"] == "inference"
     assert '--revision "$GRADE_INFERENCE_REVISION"' in download["run"]
     assert 'payload.get("source_revision")' in download["run"]
@@ -1701,15 +1741,127 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
 
     assert "steps.commit_grade.outputs.committed == 'true'" in retrigger["if"]
     assert '-f inference_revision="$RESOLVED_INFERENCE_REVISION"' in retrigger["run"]
+    assert '-f tasks_limit="$GRADE_TASKS_LIMIT"' in retrigger["run"]
 
-    assert workflow.index("- name: Validate workflow inputs") < workflow.index(
-        "- uses: actions/checkout@v4"
+    assert workflow.index("- name: Validate workflow context and inputs") < workflow.index(
+        "- name: Checkout exact main revision"
     )
     assert "resume_chunk must be between 0 and 10" in workflow
     assert "resume requires the pinned inference_revision" in workflow
+    assert "force and resume are mutually exclusive" in workflow
     assert '-f experiment_yaml="$GRADE_EXPERIMENT_YAML"' in retrigger["run"]
     assert '-f grading_config="$GRADE_CONFIG"' in retrigger["run"]
     assert '--revision "${{ inputs.inference_revision }}"' not in workflow
+
+
+def _run_grade_workflow_input_preflight(**overrides):
+    workflow = yaml.safe_load(
+        Path("../.github/workflows/grade-run.yml").read_text(encoding="utf-8")
+    )
+    validate_step = next(
+        step
+        for step in workflow["jobs"]["grade"]["steps"]
+        if step.get("name") == "Validate workflow context and inputs"
+    )
+    sha = "a" * 40
+    env = {
+        **os.environ,
+        "GITHUB_REPOSITORY": "owner/repository",
+        "GITHUB_EVENT_NAME": "workflow_dispatch",
+        "GITHUB_REF": "refs/heads/main",
+        "GITHUB_REF_NAME": "main",
+        "GITHUB_WORKFLOW_REF": (
+            "owner/repository/.github/workflows/grade-run.yml@refs/heads/main"
+        ),
+        "GITHUB_SHA": sha,
+        "GITHUB_WORKFLOW_SHA": sha,
+        "GRADE_EXPERIMENT_YAML": "exp998_smoke_baseline_sample",
+        "GRADE_CONFIG": "default_gpt5pro.yaml",
+        "GRADE_INFERENCE_REVISION": "",
+        "GRADE_FORCE": "false",
+        "GRADE_TASKS_LIMIT": "0",
+        "GRADE_DRY_RUN": "false",
+        "GRADE_RESUME": "false",
+        "GRADE_RESUME_CHUNK": "0",
+        **overrides,
+    }
+    return subprocess.run(
+        ["bash", "-c", validate_step["run"]],
+        check=False,
+        capture_output=True,
+        env=env,
+        text=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        {
+            "GRADE_INFERENCE_REVISION": "b" * 40,
+            "GRADE_RESUME": "true",
+            "GRADE_RESUME_CHUNK": "1",
+        },
+    ],
+)
+def test_grade_workflow_input_preflight_accepts_valid_dispatch(overrides):
+    result = _run_grade_workflow_input_preflight(**overrides)
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("overrides", "error"),
+    [
+        ({"GITHUB_REF": "refs/heads/feature"}, "dispatched from main"),
+        ({"GITHUB_WORKFLOW_SHA": "b" * 40}, "workflow and event SHA"),
+        ({"GRADE_EXPERIMENT_YAML": "../escape"}, "experiment_yaml"),
+        ({"GRADE_EXPERIMENT_YAML": "exp.yaml"}, "experiment_yaml"),
+        ({"GRADE_CONFIG": "../config.yaml"}, "grading_config"),
+        ({"GRADE_INFERENCE_REVISION": "A" * 40}, "inference_revision"),
+        ({"GRADE_FORCE": "yes"}, "GRADE_FORCE"),
+        ({"GRADE_TASKS_LIMIT": "01"}, "tasks_limit"),
+        ({"GRADE_TASKS_LIMIT": "221"}, "tasks_limit"),
+        ({"GRADE_RESUME_CHUNK": "11"}, "resume_chunk"),
+        (
+            {
+                "GRADE_FORCE": "true",
+                "GRADE_RESUME": "true",
+                "GRADE_INFERENCE_REVISION": "b" * 40,
+            },
+            "mutually exclusive",
+        ),
+        ({"GRADE_RESUME": "true"}, "resume requires"),
+        ({"GRADE_RESUME_CHUNK": "1"}, "resume_chunk must be 0"),
+    ],
+)
+def test_grade_workflow_input_preflight_rejects_invalid_dispatch(overrides, error):
+    result = _run_grade_workflow_input_preflight(**overrides)
+
+    assert result.returncode != 0
+    assert error in result.stdout
+
+
+def test_completed_cost_sweep_workflow_is_archived():
+    active_path = Path("../.github/workflows/grade-cost-sweep.yml")
+    archive_dir = Path(
+        "../tasks/0523_saturday/cost_opt_results/2026-05-24-grade-cost-sweep"
+    )
+    archive_path = archive_dir / "grade-cost-sweep.workflow.yml"
+    status_path = archive_dir / "STATUS.md"
+
+    assert not active_path.exists()
+    assert archive_path.is_file()
+    archived = yaml.safe_load(archive_path.read_text(encoding="utf-8"))
+    assert archived["name"] == "Run Grading Cost Optimization Sweep"
+    status = status_path.read_text(encoding="utf-8")
+    assert status.startswith("# Sweep Orchestration Status (Archived)\n")
+    assert "Archived 2026-07-22" in status
+    assert "## Historical Inspection Commands" in status
+    assert "## Historical Phase Decision Tree" in status
+    assert "Historical Trigger Commands (Do Not Run)" in status
+    assert "## Historical Cost and Limits" in status
 
 
 def test_time_budget_zero_disables_guard(monkeypatch, tmp_path):
