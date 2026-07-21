@@ -1,7 +1,7 @@
 # BOLT: Hermetic Deliverable Selector Contract Corpus
 
 - Date: 2026-07-22
-- Status: `APPROVED`
+- Status: `SHIPPED`
 - Base: `main@23e9cdea5bdd26205a2c1211415b3d8b5c3c1a42`
 - Branch: `bolt/hermetic-deliverable-selector`
 - Execution boundary: model-free, offline, no secrets
@@ -87,7 +87,9 @@ deliverables, grades, model output, personal data, or secrets.
 - Test module contains no pandas/PyArrow import or parquet read.
 - Root scripts and relevant grading tests remain green.
 - `git diff --check`, Ruff, compile, and diagnostics pass.
-- No model/API, grading, upload, manual workflow, or paid execution occurs.
+- No model/API, grading, Step 8, HF upload, manual workflow, network fetch, or
+  paid execution occurs. After merge, only the repository's automatic free
+  validate and Pages deploy jobs may run.
 
 ## Evidence
 
@@ -102,9 +104,11 @@ deliverables, grades, model output, personal data, or secrets.
 | Static checks | Ruff, `py_compile`, diagnostics, and `git diff --check` passed |
 | Broad model-free regression | Collection blocked by missing local `datasets` and `ijson`; no code failure claimed |
 | Independent review | `grading-engineer` approved with 0 mandatory findings |
+| Merge | PR #124, squash commit `a82776113d617b3fa4bd12c480f36b51cd7b16a3` |
+| Post-merge gate | `Aggregate Tests & Deploy` run `29862415519` succeeded |
 
 ## Decision
 
-`APPROVED` — selector contracts are hermetic and source-bound; production
-selector/grader behavior is unchanged. Merge the model-free BOLT without
-running grading, model/API, upload, or paid paths.
+`SHIPPED` — PR #124 merged the model-free corpus and the automatic free validate
+plus Pages deploy jobs succeeded. Selector contracts are hermetic and source-
+bound; production selector/grader behavior and every paid path remain unchanged.

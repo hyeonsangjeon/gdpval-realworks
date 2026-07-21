@@ -24,7 +24,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   selector/verifier suite passes 15/15, root scripts pass 44/44, and adjacent
   grading tests pass 90 with 2 environment skips. Production selector and
   grader code are unchanged; no grading, Step 8, model/API, HF upload, manual
-  workflow, or paid execution occurred.
+  workflow, network fetch, or paid execution occurred. Shipped through PR #124
+  (`a82776113d617b3fa4bd12c480f36b51cd7b16a3`); automatic free
+  `Aggregate Tests & Deploy` run
+  [29862415519](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29862415519)
+  completed validation and Pages deployment successfully.
 
 ### Changed
 - **Execution-first repository onboarding and publish gates** — reorganize both

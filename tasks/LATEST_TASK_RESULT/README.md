@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-22
-- Status: APPROVED — deliverable-selector contracts are hermetic and source-bound
+- Status: SHIPPED — deliverable-selector contracts are hermetic and source-bound
 
 ## Task
 
@@ -34,6 +34,8 @@ task. It must be refreshed before a task is reported complete.
   identity chain without printing source content.
 - Committed the rebased implementation as
   `f63638c5889b4bfeea0e18c6e6e78ad4bade5caa`.
+- Squash-merged the reviewed BOLT through PR #124 as
+  `a82776113d617b3fa4bd12c480f36b51cd7b16a3`.
 
 ## Verification
 
@@ -49,10 +51,15 @@ task. It must be refreshed before a task is reported complete.
   hashes.
 - Ruff, `py_compile`, diagnostics, and `git diff --check` passed.
 - `grading-engineer` approved with zero mandatory findings.
+- Automatic `Aggregate Tests & Deploy` run
+  [29862415519](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29862415519)
+  completed in 1 minute 59 seconds: validate passed in 1 minute 45 seconds and
+  the Pages deploy job passed in 8 seconds.
 - The full batch-runner suite was attempted but not claimed as passing: system
   Python lacks `datasets` for six unrelated modules and `ijson` for four.
 - No grading, Step 8, model/API call, HF upload, manual workflow, network fetch,
-  or paid execution occurred.
+  or paid execution occurred. Only the automatic free validate and Pages deploy
+  jobs ran after merge.
 
 ## Remaining Work
 
