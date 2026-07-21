@@ -1,336 +1,266 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/GDPVal-Real%20Work%20Benchmark-blueviolet?style=for-the-badge" alt="GDPVal RealWorks" />
+  <img src="https://img.shields.io/badge/GDPVal-Real%20Work%20Benchmark-177f78?style=for-the-badge" alt="GDPVal RealWorks" />
 </p>
 
 <h1 align="center">GDPVal RealWorks</h1>
 
 <p align="center">
-  <strong>LLM을 학문적 시험이 아닌, 실제 전문가 업무로 벤치마크하세요.</strong><br/>
-  <em>YAML 기반 실험 파이프라인 + 라이브 대시보드로 <a href="https://arxiv.org/abs/2510.04374">GDPVal</a> Gold Subset (220개 태스크)을 평가합니다.</em>
+  <strong>장난감 프롬프트가 아니라 실제 전문가 업무로 LLM을 벤치마크합니다.</strong><br/>
+  <em><a href="https://arxiv.org/abs/2510.04374">GDPVal</a> Gold Subset의 9개 산업, 44개 직종, 220개 태스크를 위한 재현 가능한 실험 파이프라인과 근거 대시보드입니다.</em>
 </p>
 
 <p align="center">
   <a href="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml">
-    <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml/badge.svg" alt="Deploy" />
+    <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml/badge.svg" alt="대시보드 검증 및 배포" />
   </a>
   <a href="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml">
-    <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml/badge.svg" alt="Batch Run" />
+    <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml/badge.svg" alt="배치 실험" />
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
+    <img src="https://img.shields.io/badge/license-MIT-2f6b58.svg" alt="MIT 라이선스" />
   </a>
 </p>
 
 <p align="center">
-  <a href="https://hyeonsangjeon.github.io/gdpval-realworks/">🌐 라이브 대시보드</a> · 
-  <a href="README.md">🇺🇸 English</a> · 
-  <a href="batch-runner/README.md">📖 Batch Runner 문서</a> · 
-  <a href="https://arxiv.org/abs/2510.04374">📄 논문</a>
+  <a href="https://hyeonsangjeon.github.io/gdpval-realworks/"><strong>라이브 대시보드</strong></a> |
+  <a href="docs/first-experiment_KR.md"><strong>첫 실험</strong></a> |
+  <a href="batch-runner/sandbox/README.md"><strong>샌드박스와 보안</strong></a> |
+  <a href="README.md">English</a> |
+  <a href="https://arxiv.org/abs/2510.04374">논문</a>
 </p>
 
 ---
 
-> 📊 **[라이브 대시보드 → https://hyeonsangjeon.github.io/gdpval-realworks/](https://hyeonsangjeon.github.io/gdpval-realworks/)**
->
-> Leaderboard · Trends · Execution Errors · Grading Analysis — 실험 결과를 한눈에 확인하세요.
+## 여기서 시작하세요
 
----
+- **근거 보기:** [라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)를
+  엽니다. 브라우저만 있으면 됩니다.
+- **로컬 미리보기:** `npm ci && npm run dev`를 실행합니다. Git과 Node.js 20+가
+  필요하지만 클라우드 인증 정보는 필요 없습니다.
+- **실제 태스크 3개 실행:** [초보자 가이드](docs/first-experiment_KR.md)를
+  따라갑니다. fork, Azure OIDC, Hugging Face(HF) 쓰기 토큰, 실제 API 예산이
+  필요합니다.
 
-## 문제 인식
-
-대부분의 LLM 벤치마크는 **학술적 추론** — 수학, 코드 퍼즐, 퀴즈를 테스트합니다.  
-그런 건 모델이 실제로 **내 업무를 해낼 수 있는지** 알려주지 않습니다.
-
-**GDPVal** (GDP-level Validation)은 다릅니다: 9개 산업, 44개 직종에 걸친 **220개 실무 태스크** — Excel 보고서, 법률 문서, 영업 프레젠테이션 등 사람들이 실제로 돈 받고 하는 일들.
-
-이 레포는 전체 루프를 자동화합니다: **설정 → 실행 → 수집 → 시각화** — YAML 하나로 구동, GitHub Actions에서 실행, 결과는 라이브 대시보드에.
-
-> 🎯 YAML 하나. 버튼 한 번. 실험 전체 라이프사이클.
-
-<p align="center">
-  <img src="docs/images/dashboard-leaderboard.png" alt="리더보드 — 실험 랭킹, KPI 카드, 섹터 히트맵" width="720" />
-</p>
-<p align="center"><em>라이브 대시보드 — 리더보드, 성공률, QA 점수 비교</em></p>
-
-<p align="center">
-  <img src="docs/images/dashboard-experiment-tasks.png" alt="태스크 상세 — 실제 전문가 태스크, 참조 파일, 산출물" width="480" />
-</p>
-<p align="center"><em>태스크 상세 — 실무 태스크 설명, 참조 파일, 생성된 산출물</em></p>
-
----
-
-## 동작 원리
-
-<table>
-<tr>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBBWyJTdGVwIDA6IOu2gO2KuOyKpO2KuOueqTxicj5IRiDroIjtj6wgKyDsiqTrg4Xsg7ciXSAtLT4gQlsiU3RlcCAxOiDtg5zsiqTtgawg7KSA67mEPGJyPu2VhO2EsCArIOuhnOuTnCJd" alt="준비" width="350" /></td>
-<td align="center" style="font-size:2em;">→</td>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBDWyJTdGVwIDI6IOy2lOuhoDxicj5MTE0gKyBTZWxmLVFBIl0gLS0-IERbIlN0ZXAgMzog7Y-s66e37YyFPGJyPkpTT04gKyBNYXJrZG93biJd" alt="실행" width="350" /></td>
-</tr>
-<tr>
-<td></td>
-<td align="center" style="font-size:2em;">↓</td>
-<td></td>
-</tr>
-<tr>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBFWyJTdGVwIDQ6IFBhcnF1ZXQ8YnI-7KCc7LacIOuNsOydtO2EsCDrs5HtlakiXSAtLT4gRlsiU3RlcCA1OiDqsoDspp08YnI-66y06rKw7ISxIOqygOyCrCJd" alt="산출물" width="350" /></td>
-<td align="center" style="font-size:2em;">→</td>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBHWyJTdGVwIDY6IOumrO2PrO2KuDxicj5IVE1MICsgSlNPTiJdIC0tPiBIWyJTdGVwIDc6IOyXheuhnOuTnDxicj5IRiArIFBSIOyDneyEsSJd" alt="리포트 & 업로드" width="350" /></td>
-</tr>
-</table>
-
-
----
-
-## ⚡ 빠른 시작
-
-### 1. Fork & Clone
+로컬 대시보드는 클라우드 인증 정보가 필요 없고 LLM을 호출하지 않습니다.
 
 ```bash
 git clone https://github.com/hyeonsangjeon/gdpval-realworks.git
 cd gdpval-realworks
+npm ci
+npm run dev
 ```
 
-### 2. GitHub 저장소 설정
+> **클라우드 실행 경계:** `dry_run: true`여도 모델 호출과 Self-QA를
+> 실행하고, 설정한 Hugging Face 데이터셋을 만들거나 수정할 수 있습니다.
+> Step 5 검증, 최종 결과 게시, 결과 PR을 건너뜁니다. "무료"나 "원격 쓰기
+> 없음"을 뜻하지 않습니다. 이 3-task smoke는 sample size 때문에도 Step 5를
+> 생략합니다.
 
-#### 🔑 Secrets 등록
+**[한국어 첫 실행 가이드](docs/first-experiment_KR.md)** |
+**[English first-run guide](docs/first-experiment.md)** |
+**[Batch Runner 문서](batch-runner/README_KR.md)**
 
-**Settings → Secrets and variables → Actions → New repository secret** 에서 필요한 시크릿을 추가하세요:
+---
 
-| Secret 이름 | 값 | 필수? |
+## 왜 RealWorks인가
+
+많은 벤치마크는 텍스트 답변에서 끝납니다. GDPVal은 모델에게 실제 업무와
+닮은 스프레드시트, 보고서, 프레젠테이션, 미디어 등 검토 가능한 파일을
+만들게 합니다. Gold Subset은 **9개 산업, 44개 직종, 220개 태스크**를
+포함합니다.
+
+이 저장소는 해당 태스크를 반복 가능한 루프로 만듭니다.
+**설정 -> 실행 -> 근거 보존 -> 채점 -> 비교**. YAML이 실험 변수를
+정의하고, GitHub Actions가 실행 기록을 남기며, 대시보드는 결과, 실패,
+산출물, 연구 기록을 함께 검토할 수 있게 합니다.
+
+다음 네 가지 신호는 의도적으로 분리합니다.
+
+| 신호 | 증명하는 것 | 증명하지 못하는 것 |
 |---|---|---|
-| `AZURE_OPENAI_API_KEY` | Azure OpenAI API 키 | ✅ Azure 사용 시 |
-| `AZURE_OPENAI_ENDPOINT` | `https://your-resource.openai.azure.com/` | ✅ Azure 사용 시 |
-| `OPENAI_API_KEY` | OpenAI API 키 | OpenAI 사용 시 |
-| `ANTHROPIC_API_KEY` | Anthropic API 키 | Anthropic 사용 시 |
-| `HF_TOKEN` | HuggingFace write 토큰 ([여기서 발급](https://huggingface.co/settings/tokens)) | ✅ 업로드용 |
+| 실행 완료 | 파이프라인이 태스크의 종료 상태에 도달함 | 파일이 정확함 |
+| 산출물 무결성 | 예상 파일이 있고 결정적 검사를 통과함 | 모든 요구사항을 충족함 |
+| Self-QA | 생성 모델이 자신의 출력을 수락하거나 재시도함 | 독립적인 품질 |
+| 외부 채점 | 별도 루브릭 평가가 기록됨 | 모든 사람의 보편적 동의 |
 
-> 💡 전부 다 등록할 필요 없습니다 — 실제로 쓸 provider 것만 먼저 넣으면 됩니다.  
-> Azure 사용자: `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT` + `HF_TOKEN` 이 세 개가 우선입니다.
-
-#### 📄 GitHub Pages
-
-**Settings → Pages → Source** → **"GitHub Actions"** 으로 변경 (기본값 "Deploy from a branch" 말고)
-
-#### 🔓 Workflow 권한
-
-**Settings → Actions → General → Workflow permissions:**
-
-- ✅ **"Read and write permissions"** 선택
-- ✅ **"Allow GitHub Actions to create and approve pull requests"** 체크
-- 저장
-
-#### 🧹 자동 정리 (권장)
-
-**Settings → General** → ✅ **"Automatically delete head branches"** 체크
-
-> PR 머지 후 실험 브랜치가 자동으로 삭제됩니다. 깔끔!
+<p align="center">
+  <a href="https://hyeonsangjeon.github.io/gdpval-realworks/">
+    <img src="docs/images/dashboard-leaderboard.png" alt="실험 순위, KPI 카드, 섹터 히트맵이 표시된 GDPVal RealWorks 대시보드" width="840" />
+  </a>
+</p>
+<p align="center"><em>실험 비교, 실패 분석, 외부 채점, Field Notes를 연결한 실행 근거.</em></p>
 
 ---
 
-### 3. 첫 번째 실험 실행
+## 시스템 맵
 
-1. **Actions** 탭 → **"Run GDPVal Batch Experiment"** 선택
-2. **"Run workflow"** 클릭
-3. 입력:
-   - `experiment_yaml`: `exp998_smoke_baseline_sample` (스모크 테스트, 3개 태스크)
-   - `dry_run`: ✅ 체크 (처음엔 업로드 건너뛰기)
-4. **Run workflow** 클릭 🚀
+<p align="center">
+  <picture>
+    <source media="(max-width: 960px)" srcset="docs/images/readme-system-map-mobile-ko.svg" />
+    <img src="docs/images/readme-system-map-ko.svg" alt="실험 YAML에서 실행, 산출물, 채점, 집계, 대시보드로 이어지는 GDPVal RealWorks 시스템 맵" />
+  </picture>
+</p>
 
-```
-✅ Step 0: Bootstrap        → HF 레포 준비 완료
-✅ Step 1: Prepare tasks    → 3개 태스크 필터링 완료
-✅ Step 2: Run inference    → 각 태스크에 LLM 호출 완료
-✅ Step 3: Format results   → JSON + Markdown 생성 완료
-✅ Step 4: Fill parquet     → 제출용 Parquet 준비 완료
-⏭️ Step 5: Validate        → 스킵 (스모크 테스트)
-⏭️ Step 6: Upload          → 스킵 (dry run)
-```
-
-> 🎉 통과하면 `dry_run` 체크 해제하고 본격 실험을 돌리세요!
+Step 0-7은 실험 실행과 게시를 담당합니다. 외부 채점은 별도 파이프라인이며,
+대시보드는 두 결과를 집계하되 같은 측정값으로 취급하지 않습니다.
 
 ---
 
-## 📝 나만의 실험 만들기
+## 운영 통제
 
-`batch-runner/experiments/`에 YAML 파일을 만드세요:
+<p align="center">
+  <picture>
+    <source media="(max-width: 960px)" srcset="docs/images/readme-trust-boundaries-mobile-ko.svg" />
+    <img src="docs/images/readme-trust-boundaries-ko.svg" alt="경로별 인증, 입력, 실행, 게시, agentic preflight 통제" />
+  </picture>
+</p>
 
-```yaml
-experiment:
-  id: "exp001_GPT52Chat_baseline"
-  name: "GPT-5.2 Chat Baseline (전체 220 태스크)"
-  description: "code_interpreter + Self-QA를 사용한 풀 베이스라인 실행."
+아래 내용은 포괄적인 보안 보장이 아니라 코드로 확인할 수 있는 경로별
+통제입니다.
 
-data:
-  source: "HyeonSang/exp001_GPT52Chat_baseline"
-  filter:
-    sector: null          # null = 전체 섹터
-    sample_size: null     # null = 전체 220개
-
-condition_a:
-  name: "Baseline"
-  model:
-    provider: "azure"
-    deployment: "gpt-5.2-chat"
-    temperature: 0.0
-    seed: 42
-  prompt:
-    system: "You are a helpful assistant that completes professional tasks."
-    suffix: "Generate actual files, not descriptions."
-  qa:
-    enabled: true
-    min_score: 6
-    max_retries: 3
-
-# condition_b:            ← A/B 비교용 (선택 사항)
-
-execution:
-  mode: "code_interpreter"
-  max_retries: 5
-  resume_max_rounds: 3
-```
-
-**Actions → Run workflow**에서 `experiment_yaml: exp001_GPT52Chat_baseline`으로 실행하면 됩니다.
-
----
-
-## 🧠 실행 모드
-
-| 모드 | 동작 방식 | 적합한 용도 |
+| 경계 | 현재 강제되는 내용 | 근거 |
 |---|---|---|
-| **`code_interpreter`** | LLM이 Azure/OpenAI **보안 샌드박스** 안에서 코드를 작성하고 실행. 파일이 클라우드에서 생성됨. | ✅ 프로덕션 — 안전하고 강력 |
-| **`subprocess`** | LLM이 코드 생성 → 로컬 격리 임시 디렉토리에서 실행. | OpenAI 외 모델 (Anthropic 등) |
-| **`sandbox`** | 작업별 의존성 탐색, 문서·이미지·데이터·오디오·비디오 Agent Skills, audio/video perception을 격리 실행 경로에 결합. | 멀티모달·재현 가능한 실무 태스크 |
-| **`json_renderer`** | LLM이 JSON 스펙 출력 → **고정 렌더러**가 파일 생성. 모든 모델에 동일한 렌더러 사용. | 모델 간 공정한 A/B 비교 |
+| Azure identity | 배치의 Azure 경로는 GitHub OIDC를 사용하고 `AZURE_OPENAI_API_KEY`를 주입하지 않음 | [`batch-run.yml`](.github/workflows/batch-run.yml), [`llm_client.py`](batch-runner/core/llm_client.py) |
+| 설정 입력 | 인증 정보 없는 job이 실험 이름을 검사하고 YAML을 안전하게 파싱한 뒤 credential job을 시작하며, 일반 배치 경로는 agentic mode를 거부함 | [`batch-run.yml`](.github/workflows/batch-run.yml) |
+| Container sandbox | sandbox 실행은 relay 전체에 immutable image digest를 유지하며, Docker 실행은 network를 끄고 resource limit을 적용함 | [`batch-run.yml`](.github/workflows/batch-run.yml), [`sandbox_runner.py`](batch-runner/core/sandbox_runner.py) |
+| Agentic image supply chain | 수동 protected-main 게시에 immutable dependency lock, digest-pinned base, runtime audit, SBOM 근거를 요구함 | [`build-sandbox-image.yml`](.github/workflows/build-sandbox-image.yml) |
+| Agentic containment preflight | 수동 model-free job이 model/HF credential 부재, 정확한 preloaded image와 AppArmor 입력, containment test, 종료 후 정리를 검사함 | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
+| Dashboard publication | PR에서 aggregate, build, data/browser contract를 실행하고 push/manual deploy job만 Pages/OIDC 권한을 받음 | [`deploy.yml`](.github/workflows/deploy.yml) |
 
-> 🐳 `sandbox`는 `subprocess`에서 드러난 실행 환경의 한계를 분리·관찰하기 위한 후속 실행 모드입니다. 공개 결과는 [exp026 상세](https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp026)에서 확인할 수 있습니다.
-
----
-
-## 🔬 Self-QA: 내장 품질 리플렉션 게이트
-
-모든 태스크 출력물은 작업하고 있는 LLM이 스스로 검수한 후 수락됩니다:
-Self-QA는 각 산출물을 루브릭 기반 자기평가로 0~10점 척도에서 점수화합니다. 점수가 설정 임계값(기본 6점) 미만이면 리플렉션 루프로 들어가 재시도합니다.
-
-<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IExSCiAgICB0YXNrWyLtg5zsiqTtgawiXSAtLT4gZ2VuWyJMTE0g7Lac66ClIOyDneyEsSJdIC0tPiBxYVsiU2VsZi1RQSDqsoDsiJgiXSAtLT4gZ2F0ZXsi7KCQ7IiYID49IDY_In0KICAgIGdhdGUgLS0-fOyYiHwgYWNjZXB0WyLsiJjrnb0iXQogICAgZ2F0ZSAtLT587JWE64uI7JikfCByZXRyeVsi7J6s7Iuc64-EICjstZzrjIAgM-2ajCkiXQo=" alt="Self-QA 흐름" />
-
-
-검수 항목: 모든 요구사항 충족? 파일이 실제로 생성됐나? 결과물이 전문적인가?
+기본 3-task smoke는 provider-hosted `code_interpreter`를 사용합니다. Docker
+sandbox와 agentic 통제는 각각 이름이 붙은 경로에만 적용됩니다. 일반 배치
+워크플로는 cloud credential을 사용하기 전에 agentic 실행을 거부하며,
+체크인된 agentic 워크플로는 유료 실행이 아니라 model-free preflight입니다.
 
 ---
 
-## 🏗️ 아키텍처
+## 첫 클라우드 실험
 
-<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICByb290WyJnZHB2YWwtcmVhbHdvcmtzLyJdCgogICAgd2ZbIi5naXRodWIvd29ya2Zsb3dzLzxici8-YmF0Y2gtcnVuLnltbCwgZGVwbG95LnltbCJdCiAgICBiclsiYmF0Y2gtcnVubmVyLzxici8-c3RlcCDsiqTtgazrpr3tirgsIGNvcmUsIGV4cGVyaW1lbnRzLCBwcm9tcHRzLCB0ZXN0cyJdCiAgICBzcmNbInNyYy88YnIvPnBhZ2VzLCBjb21wb25lbnRzIl0KICAgIGRhdGFbImRhdGEvPGJyLz50ZXN0cywgZ3JhZGVzIl0KICAgIHNjcmlwdHNbInNjcmlwdHMvPGJyLz5hZ2dyZWdhdGUtdGVzdHMubWpzLCBhZ2dyZWdhdGUtZ3JhZGVzLm1qcyJdCgogICAgcm9vdCAtLT4gd2YKICAgIHJvb3QgLS0-IGJyCiAgICByb290IC0tPiBzcmMKICAgIHJvb3QgLS0-IGRhdGEKICAgIHJvb3QgLS0-IHNjcmlwdHMK" alt="프로젝트 구조" />
+체크인된
+[`exp998_smoke_baseline_sample.yaml`](batch-runner/experiments/exp998_smoke_baseline_sample.yaml)을
+사용하되, 먼저 `data.source`를 내 Hugging Face namespace의 새 dataset으로
+바꾸세요.
 
+**Actions > Run GDPVal Batch Experiment**에서 다음 값을 사용합니다.
 
----
-
-## 🔄 GitHub Actions 워크플로우
-
-### `batch-run.yml` — 실험 실행
-
-| 항목 | 설명 |
+| 입력 | 첫 실행 값 |
 |---|---|
-| **트리거** | Actions 탭에서 수동 실행 (`workflow_dispatch`) |
-| **입력** | 실험 YAML 파일명 + dry_run 옵션 |
-| **파이프라인** | Step 0 → Step 6 (부트스트랩 → 업로드) |
-| **스마트 스킵** | 스모크 테스트는 검증 스킵; dry_run은 업로드 + PR 스킵 |
-| **자동 PR** | 실험 요약이 담긴 Pull Request 자동 생성 |
-| **아티팩트** | 전체 workspace 30일간 보관 |
-| **타임아웃** | 최대 5시간 |
+| `experiment_yaml` | `exp998_smoke_baseline_sample` |
+| `dry_run` | `true` |
+| `relay_run` | `0` |
+| `wall_timeout` | `290` |
+| `sandbox_image_digest` | 빈 값 |
 
-### `deploy.yml` — 대시보드 배포
+예상 동작은 다음과 같습니다.
 
-| 항목 | 설명 |
+1. Step 0이 일회성 Hugging Face dataset을 생성, 재생성 또는 재사용합니다.
+2. Step 1이 태스크 3개를 결정적으로 선택합니다.
+3. Step 2가 `gpt-5.2-chat`을 호출하고 파일을 만든 뒤 같은 모델의 Self-QA를 재시도할 수 있습니다.
+4. Step 3-4가 포맷된 결과와 3-row Parquet artifact를 만듭니다.
+5. dry run이면서 3-task sample이므로 Step 5를 건너뜁니다.
+6. Step 6의 기본 report 경로는 `gpt-5.4-pro`를 순차적으로 최대 2회 호출하고,
+  오류 시 `gpt-5.2-chat` fallback을 1회 시도합니다. 완료된 호출은 과금될
+  수 있습니다. Narrative 실패 자체는 막지 않지만, 게시 전에 model-free
+  report fallback과 identity 검증을 반드시 통과해야 합니다.
+7. `dry_run: true`이므로 Step 7과 결과 PR을 건너뜁니다.
+
+인증된 batch job이 마지막 `always()` 단계에 도달하면
+`batch-results-<run_id>` artifact 업로드와 30일 보관을 시도합니다. OIDC,
+필수 secret, 비용 경계, artifact, 자주 발생하는 오류는
+**[한국어 전체 가이드](docs/first-experiment_KR.md)**에서 설명합니다.
+
+---
+
+## 실행 모드
+
+| 모드 | 실행 경계 | 적합한 용도 |
+|---|---|---|
+| `code_interpreter` | Provider-hosted code tool과 파일 회수 | 현재 Azure smoke 경로 |
+| `subprocess` | 생성된 Python을 host 임시 디렉터리에서 실행 | 레거시/로컬 호환. 먼저 신뢰 경계를 검토해야 함 |
+| `sandbox` | 가능하면 Docker를 사용하고 network 차단, resource cap, skill, verification, render QA 적용. `auto`는 로컬 fallback 가능 | 재현 가능한 문서·멀티모달 작업 |
+| `json_renderer` | 모델은 spec을 내고 결정적 renderer가 파일 생성 | renderer가 통제된 A/B 비교 |
+
+Docker fallback을 허용하지 않으려면 `execution.sandbox.use_docker`를
+`always`로 설정합니다. 실행 모드를 바꾸기 전에
+**[sandbox 운영 가이드](batch-runner/sandbox/README.md)**를 읽으세요.
+
+### Self-QA는 외부 채점이 아닙니다
+
+Self-QA는 산출물을 만든 같은 모델에게 결과를 검사하게 하고 설정한
+threshold 아래에서 재시도합니다. inference-time reflection gate입니다.
+독립 루브릭 채점은 별도 파이프라인에서 기록하고 별도 신호로 표시합니다.
+
+---
+
+## 대시보드
+
+**[라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)**는
+저장소에서 생성한 데이터를 읽는 정적 React 애플리케이션입니다.
+
+| 화면 | 확인할 수 있는 것 |
 |---|---|
-| **트리거** | `main` 푸시 시 자동 실행 또는 수동 |
-| **빌드** | 테스트/채점 데이터 집계 → React 빌드 → GitHub Pages |
-| **범위** | `data/`, `src/`, `scripts/` 변경 시에만 실행 |
+| Leaderboard와 trends | 실험별 완료율, latency, 외부 채점 비교 |
+| Sector heatmap | 9개 산업의 성능 차이 |
+| Experiment detail | 220개 태스크 상태, 파일, prompt, retry, error |
+| Grading analysis | 근거가 연결된 rubric 결과와 judge metadata |
+| RealWorks Field Notes | 근거의 한계를 명시한 시간순 엔지니어링 의사결정 |
+
+구현 상세는 [`src/README_KR.md`](src/README_KR.md)에 있습니다.
 
 ---
 
-## 🖥️ 대시보드
+## 개발과 검증
 
-> **[→ 라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)**
+대시보드 검증에는 Node.js 20 이상이 필요합니다.
 
-인터랙티브 실험 분석 — 리더보드, 섹터 히트맵, 에러 분석, 프롬프트 아키텍처 뷰어, 근거가 연결된 RealWorks 독립 기록.
+```bash
+npm ci
+npm run aggregate
+npm run test:aggregate
+npm run build
+```
 
-| 기능 | 설명 |
-|------|------|
-| **리더보드** | 실험 랭킹 — 전략, 성공률, QA 점수 |
-| **섹터 히트맵** | 9개 섹터 × N개 실험 성공률 매트릭스 |
-| **트렌드** | 실험 간 성공률 / QA / 지연시간 추이 차트 |
-| **실행 에러** | 예외 유형 분포 차트, 복구 퍼널, AI 기반 실패 인사이트 내러티브 |
-| **프롬프트 뷰어** | LLM에 전달된 프롬프트 구조 확인 — system, user, QA, config |
-| **채점 분석** | 외부 평가 점수 (OpenAI Evals) |
-| **실험 상세** | 220개 태스크 드릴다운 — 섹터, 상태 필터, 검색 |
-| **RealWorks Field Notes** | 반응형 히어로 장면, 근거·주의가 포함된 비교 차트, 실패·의사결정의 독립 기록 |
-
-React 18 + TypeScript + Vite + Tailwind + Recharts + Framer Motion으로 구축.  
-`main` 브랜치 푸시 시 GitHub Pages에 자동 배포됩니다.
-
-📖 **[대시보드 문서 →](src/README_KR.md)** · 🇺🇸 **[English →](src/README.md)**
-
----
-
-## 🧪 테스트
+백엔드 unit test는 model credential 없이 실행할 수 있습니다.
 
 ```bash
 cd batch-runner
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# 유닛 테스트만 (API 키 불필요)
 pytest
-
-# 통합 테스트 (실제 인증 정보 필요)
-pytest -m integration
-
-# 커버리지 포함
-pytest --cov=core --cov-report=html
 ```
 
-### 🖥️ 로컬 실행 (단계별)
+Integration test, inference, grading, upload, workflow dispatch는 cloud
+credential을 사용하거나 비용을 발생시킬 수 있습니다. 의도한 경우에만
+실행하세요.
 
-```bash
-cd batch-runner
-export HF_TOKEN="hf_xxx"
-export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com"
-export AZURE_OPENAI_API_KEY="xxx"
+## 저장소 구조
 
-./step0_bootstrap.sh experiments/exp998_smoke_baseline_sample.yaml
-./step1_prepare_tasks.sh experiments/exp998_smoke_baseline_sample.yaml
-./step2_run_inference.sh condition_a
-./step3_format_results.sh
-./step4_fill_parquet.sh
-./step5_validate.sh
-./step6_report.sh
-./step7_upload_hf.sh --test
-```
-
-> 💡 로컬에서도 실행 가능하지만, 220개 전체 태스크는 **GitHub Actions**를 추천합니다.  
-> 배치 워크플로우가 TPM (분당 토큰 수) 쿼터가 허용하는 만큼 병렬 처리합니다 — 클라우드에 맡기고 커피 한 잔 하세요. ☕
+| 경로 | 역할 |
+|---|---|
+| [`batch-runner/`](batch-runner/README_KR.md) | 실험 설정, 실행 파이프라인, 채점, prompt, test |
+| [`batch-runner/sandbox/`](batch-runner/sandbox/README.md) | Container image, 실행 통제, skill, verification, render QA |
+| [`src/`](src/README_KR.md) | React dashboard page, component, hook, data presentation |
+| [`scripts/`](scripts/) | 결정적 집계와 분석 도구 |
+| [`data/`](data/) | 체크인된 실험 요약과 외부 채점 기록 |
+| [`.github/workflows/`](.github/workflows/) | Batch, grading, sandbox, validation, Pages 자동화 |
 
 ---
 
-## 📚 참고 자료
+## 참고 자료
 
-- **GDPVal 논문**: [arXiv:2510.04374](https://arxiv.org/abs/2510.04374)
-- **GDPVal 데이터셋**: [openai/gdpval](https://huggingface.co/datasets/openai/gdpval)
-- **GDPVal 채점**: [evals.openai.com](https://evals.openai.com/)
-- **Azure OpenAI Responses API**: [공식 문서](https://learn.microsoft.com/azure/ai-services/openai/)
+- [GDPVal 논문](https://arxiv.org/abs/2510.04374)
+- [GDPVal 데이터셋](https://huggingface.co/datasets/openai/gdpval)
+- [OpenAI Evals](https://evals.openai.com/)
+- [Azure OpenAI 문서](https://learn.microsoft.com/azure/ai-services/openai/)
 
----
+## 저자
 
-## 👤 저자
+**전현상 (Hyeonsang Jeon)**<br/>
+Sr. Solution Engineer, Global Black Belt - AI Apps | Microsoft Asia, Korea<br/>
+[GitHub](https://github.com/hyeonsangjeon) |
+[라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)
 
-**전현상 (Hyeonsang Jeon)**  
-Sr. Solution Engineer · Global Black Belt — AI Apps | Microsoft Asia, Korea  
-[![GitHub](https://img.shields.io/badge/GitHub-hyeonsangjeon-181717?logo=github)](https://github.com/hyeonsangjeon)
-[![Dashboard](https://img.shields.io/badge/라이브%20대시보드-GDPVal-blueviolet?logo=react)](https://hyeonsangjeon.github.io/gdpval-realworks/)
+## 라이선스
 
----
-
-## 📄 라이선스
-
-MIT — 자세한 내용은 [LICENSE](LICENSE) 파일을 참고하세요.
+MIT. 자세한 내용은 [`LICENSE`](LICENSE)를 참고하세요.

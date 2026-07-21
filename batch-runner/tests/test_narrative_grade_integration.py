@@ -1,8 +1,8 @@
 """Tests for grade-aware narrative integration."""
 
 import json
-import os
-from pathlib import Path
+
+import pytest
 
 from core.narrative_analyzer import NarrativeAnalyzer
 import step6_report
@@ -11,6 +11,9 @@ import step6_report
 def _minimal_grade(model: str = "gpt-5.4-pro", avg: float = 67.4) -> dict:
     return {
         "schema_version": "1.0",
+        "source_inference_experiment_id": "exp_test",
+        "source_inference_repo_id": "student/exp_test",
+        "source_inference_revision": "c" * 40,
         "judge": {
             "model": model,
             "reasoning_effort": "high",
@@ -23,13 +26,17 @@ def _minimal_grade(model: str = "gpt-5.4-pro", avg: float = 67.4) -> dict:
         "prompt": {"version": "v1"},
         "graded_at": "2026-05-20T12:34:56Z",
         "summary": {
-            "total_tasks": 5,
+            "total_tasks": 2,
+            "graded_tasks": 2,
+            "error_tasks": 0,
             "openai_compat": {
                 "avg_score_pct": avg,
                 "ci_pct": 4.2,
                 "perfect_count": 1,
                 "zero_count": 1,
-                "total_tasks": 5,
+                "partial_count": 0,
+                "inconsistent_count": 0,
+                "total_tasks": 2,
             },
             "wow": {
                 "critical_item_pass_rate": 0.71,
@@ -66,7 +73,12 @@ def _minimal_grade(model: str = "gpt-5.4-pro", avg: float = 67.4) -> dict:
                     },
                 },
             },
+            "cost": {},
         },
+        "tasks": [
+            {"task_id": "task-1"},
+            {"task_id": "task-2"},
+        ],
     }
 
 
@@ -191,37 +203,76 @@ def test_overview_does_not_claim_human_evaluation():
     assert "human-graded" not in all_prompts
 
 
-def test_load_grade_skips_dummy_files(tmp_path, monkeypatch):
-    exp_id = "exp_test"
-    dummy = _minimal_grade(model="dummy-model")
-    dummy["_meta"] = {"is_dummy": True}
-    real = _minimal_grade(model="real-model")
-
-    (tmp_path / f"{exp_id}__a__sha__v1.json").write_text(json.dumps(dummy))
-    (tmp_path / f"{exp_id}__b__sha__v1.json").write_text(json.dumps(real))
-    monkeypatch.setattr(step6_report, "GRADE_DIR", tmp_path)
-
-    loaded = step6_report._load_grade_for_experiment(exp_id)
-    assert loaded == real
+def _result_identity() -> dict:
+    return {
+        "experiment_id": "exp_test",
+        "source_repo_id": "student/exp_test",
+        "source_revision": "c" * 40,
+        "results": [
+            {"task_id": "task-1"},
+            {"task_id": "task-2"},
+        ],
+    }
 
 
-def test_load_grade_returns_none_when_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr(step6_report, "GRADE_DIR", tmp_path)
+def test_step6_report_is_always_pre_grading():
+    narrative = {
+        "overview": "Execution evidence is available.",
+        "grading_referenced": False,
+        "grade_source": None,
+    }
+    report = step6_report._build_report_data(
+        _result_identity(),
+        narrative,
+        {
+            "total_tasks": 2,
+            "success_count": 2,
+            "success_rate_pct": 100.0,
+            "error_count": 0,
+            "retried_count": 0,
+            "avg_qa_score": 0,
+            "min_qa_score": 0,
+            "max_qa_score": 0,
+            "avg_latency_ms": 0,
+            "max_latency_ms": 0,
+            "total_latency_ms": 0,
+        },
+        [],
+        [],
+        [],
+    )
 
-    assert step6_report._load_grade_for_experiment("exp_missing") is None
+    assert report["meta"]["report_scope"] == "self_assessed_pre_grading"
+    markdown = step6_report._build_markdown(report)
+    assert "Self-Assessed, Pre-Grading" in markdown
+    assert "Awaiting external grading" in markdown
+    assert "Self-QA + Automated LLM-Judge" not in markdown
 
 
-def test_load_grade_picks_most_recent(tmp_path, monkeypatch):
-    exp_id = "exp_test"
-    older = _minimal_grade(model="older-model", avg=50.0)
-    newer = _minimal_grade(model="newer-model", avg=80.0)
-    older_path = tmp_path / f"{exp_id}__older__sha__v1.json"
-    newer_path = tmp_path / f"{exp_id}__newer__sha__v1.json"
-    older_path.write_text(json.dumps(older))
-    newer_path.write_text(json.dumps(newer))
-    os.utime(older_path, (1000, 1000))
-    os.utime(newer_path, (2000, 2000))
-    monkeypatch.setattr(step6_report, "GRADE_DIR", tmp_path)
+def test_step6_cli_does_not_offer_grade_json(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        ["step6_report.py", "--grade-json", "grade.json"],
+    )
+    with pytest.raises(SystemExit) as error:
+        step6_report.main()
+    assert error.value.code == 2
 
-    loaded = step6_report._load_grade_for_experiment(exp_id)
-    assert loaded == newer
+
+@pytest.mark.parametrize(
+    "experiment_id",
+    [None, "", "../outside", "nested/path", "foo..bar", "foo.", "foo.lock"],
+)
+def test_report_data_rejects_unsafe_experiment_identity(experiment_id):
+    result = _result_identity()
+    result["experiment_id"] = experiment_id
+
+    with pytest.raises(ValueError, match="experiment identifier"):
+        step6_report._build_report_data(
+            result,
+            {"grading_referenced": False},
+            {},
+            [],
+            [],
+            [],
+        )

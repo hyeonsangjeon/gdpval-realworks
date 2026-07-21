@@ -63,6 +63,7 @@ from core.execution_metrics import (
 from core.file_preview import generate_all_previews
 from core.llm_client import create_provider_client, complete
 from core.needs_files import NeedsFilesManifest
+from core.prepared_fingerprint import validate_prepared_fingerprint
 from core.audio_analyzer import analyze_audio_files, filter_audio_files
 from core.video_analyzer import (
     analyze_video_files,
@@ -1591,6 +1592,24 @@ def _execute_single_task(
 # ── Incremental save ──────────────────────────────────────────────────────
 
 
+def _resolve_run_identity(experiment_id: str) -> str:
+    lineage = os.getenv("GDPVAL_RELAY_LINEAGE_ID", "").strip()
+    if lineage:
+        return lineage
+    github_run = os.getenv("GITHUB_RUN_ID", "local")
+    github_attempt = os.getenv("GITHUB_RUN_ATTEMPT", "1")
+    return f"{experiment_id}:{github_run}:{github_attempt}"
+
+
+def _condition_workspace_paths(condition_key: str) -> tuple[Path, Path]:
+    if condition_key not in {"condition_a", "condition_b"}:
+        raise ValueError("condition key is invalid")
+    return (
+        WORKSPACE_DIR / f"step2_inference_progress_{condition_key}.json",
+        WORKSPACE_DIR / f"step2_inference_results_{condition_key}.json",
+    )
+
+
 def _save_progress(
     experiment_id: str,
     condition_name: str,
@@ -1603,6 +1622,7 @@ def _save_progress(
     run_id: str,
     condition_identity: str,
     ordered_task_ids: List[str],
+    prepared_fingerprint: str = "",
     resume_round: int = 0,
 ) -> None:
     """Atomic incremental save."""
@@ -1620,6 +1640,7 @@ def _save_progress(
         "run_id": run_id,
         "execution_mode": execution_mode,
         "ordered_task_ids": ordered_task_ids,
+        "prepared_fingerprint": prepared_fingerprint,
         "total_tasks": total_tasks,
         "started_at": started_at,
         "resume_round": resume_round,
@@ -1654,6 +1675,7 @@ def _load_and_validate_progress(
     run_id: str,
     execution_mode: str,
     ordered_task_ids: List[str],
+    prepared_fingerprint: str = "",
 ) -> dict:
     with path.open("r", encoding="utf-8") as stream:
         progress = json.load(stream)
@@ -1667,6 +1689,7 @@ def _load_and_validate_progress(
         "run_id": run_id,
         "execution_mode": execution_mode,
         "ordered_task_ids": ordered_task_ids,
+        "prepared_fingerprint": prepared_fingerprint,
         "total_tasks": len(ordered_task_ids),
     }
     if any(progress.get(key) != value for key, value in expected_identity.items()):
@@ -1803,6 +1826,11 @@ def run_inference(
         sys.exit(1)
 
     experiment_id = prepared["experiment_id"]
+    try:
+        prepared_fingerprint = validate_prepared_fingerprint(prepared)
+    except ValueError as exc:
+        print(f"❌ {exc}")
+        sys.exit(1)
     ordered_task_ids = [task["task_id"] for task in tasks]
     if (
         any(not isinstance(task_id, str) or not task_id for task_id in ordered_task_ids)
@@ -2097,9 +2125,7 @@ def run_inference(
         print(f"   Paired run:         {run_identity}")
         print(f"   Workflow audit:     {workflow_audit}")
     else:
-        github_run = os.getenv("GITHUB_RUN_ID", "local")
-        github_attempt = os.getenv("GITHUB_RUN_ATTEMPT", "1")
-        run_identity = f"{experiment_id}:{github_run}:{github_attempt}"
+        run_identity = _resolve_run_identity(experiment_id)
     try:
         executor = TaskExecutor(
             mode=execution_mode, llm_client=client, tokens=tokens_cfg,
@@ -2136,7 +2162,10 @@ def run_inference(
     if len(task_map) != len(tasks):
         raise AssertionError("prepared task map identity drift")
     total = len(tasks)
-    progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
+    progress_path, output_path = _condition_workspace_paths(condition_key)
+    legacy_progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
+    if condition_key == "condition_a" and not progress_path.exists() and legacy_progress_path.exists():
+        progress_path.write_bytes(legacy_progress_path.read_bytes())
     started_at = datetime.now(timezone.utc).isoformat()
 
     def _persist_progress(current: dict) -> None:
@@ -2151,8 +2180,11 @@ def run_inference(
             run_id=run_identity,
             condition_identity=execution_condition,
             ordered_task_ids=ordered_task_ids,
+            prepared_fingerprint=prepared_fingerprint,
             resume_round=int(current.get("resume_round", 0) or 0),
         )
+        if condition_key == "condition_a":
+            legacy_progress_path.write_bytes(progress_path.read_bytes())
 
     # ── Helper: execute one task with QA loop ──
 
@@ -2533,6 +2565,7 @@ def run_inference(
                 run_id=run_identity,
                 execution_mode=execution_mode,
                 ordered_task_ids=ordered_task_ids,
+                prepared_fingerprint=prepared_fingerprint,
             )
         except Exception as exc:
             print(f"❌ progress checkpoint rejected: {exc}")
@@ -2633,6 +2666,7 @@ def run_inference(
             "run_id": run_identity,
             "execution_mode": execution_mode,
             "ordered_task_ids": ordered_task_ids,
+            "prepared_fingerprint": prepared_fingerprint,
             "total_tasks": total,
             "started_at": started_at,
             "resume_round": 0,
@@ -2769,6 +2803,7 @@ def run_inference(
         "run_id": run_identity,
         "execution_mode": execution_mode,
         "ordered_task_ids": ordered_task_ids,
+        "prepared_fingerprint": prepared_fingerprint,
         "model": model,
         "started_at": started_at,
         "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -2782,7 +2817,6 @@ def run_inference(
         "results": results,
     }
 
-    output_path = WORKSPACE_DIR / "step2_inference_results.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(
             final_output,
@@ -2792,6 +2826,9 @@ def run_inference(
             default=str,
             allow_nan=False,
         )
+    if condition_key == "condition_a":
+        legacy_output_path = WORKSPACE_DIR / "step2_inference_results.json"
+        legacy_output_path.write_bytes(output_path.read_bytes())
 
     print(f"\n{'='*60}")
     print(f"✅ Step 2 complete: {output_path}")

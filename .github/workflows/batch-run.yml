@@ -14,7 +14,7 @@ on:
         required: false
         type: string
       dry_run:
-        description: 'Dry run (skip HF upload and PR creation)'
+        description: 'Dry run (skip Step 5 validation, final HF upload, and PR creation)'
         required: false
         type: boolean
         default: false
@@ -23,6 +23,11 @@ on:
         required: false
         type: number
         default: 0
+      relay_lineage_id:
+        description: 'Stable lineage ID forwarded across relay legs; leave empty on leg 0'
+        required: false
+        type: string
+        default: ''
       wall_timeout:
         description: 'Wall-clock timeout in minutes for Step 2 (0=no limit, 270 recommended for code_interpreter)'
         required: false
@@ -67,7 +72,9 @@ jobs:
           require 'yaml'
 
           name = ENV.fetch('EXPERIMENT_YAML')
-          abort('invalid experiment YAML name') unless name.match?(/\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/)
+          valid_name = name.match?(/\A[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\z/) &&
+            !name.include?('..') && !name.end_with?('.', '.lock')
+          abort('invalid experiment YAML name') unless valid_name
           path = File.join('batch-runner', 'experiments', "#{name}.yaml")
           abort("experiment YAML not found: #{path}") unless File.file?(path)
           config = YAML.safe_load(
@@ -106,6 +113,7 @@ jobs:
       EXPERIMENT_YAML_INPUT: ${{ inputs.experiment_yaml }}
       EXPERIMENT_NAME_INPUT: ${{ inputs.experiment_name }}
       RELAY_RUN_INPUT: ${{ inputs.relay_run }}
+      RELAY_LINEAGE_ID_INPUT: ${{ inputs.relay_lineage_id }}
       WALL_TIMEOUT_INPUT: ${{ inputs.wall_timeout }}
       DRY_RUN_INPUT: ${{ inputs.dry_run }}
 
@@ -162,6 +170,24 @@ jobs:
             exit 1
           fi
           echo "✅ Found: $YAML_FILE"
+
+      - name: Validate full experiment config
+        run: |
+          cd batch-runner
+          python3 <<'PY'
+          import os
+
+          from core.experiment_config import ExperimentConfig
+
+          path = f"experiments/{os.environ['EXPERIMENT_YAML_INPUT']}.yaml"
+          config = ExperimentConfig.from_yaml(path)
+          errors = config.validate()
+          if errors:
+              raise SystemExit("Invalid experiment config: " + "; ".join(errors))
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"EXPERIMENT_ID={config.experiment_id}\n")
+          print(f"Full experiment config valid: {config.experiment_id}")
+          PY
 
       # ── Extract experiment_name from YAML if not provided ──
       - name: Extract experiment name from YAML
@@ -421,6 +447,7 @@ jobs:
         # cover checkpoint save + HF upload + relay re-trigger handoff.
         timeout-minutes: 350    # = wall_timeout(290) + 60min margin for relay handoff
         env:
+          GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # Removed AZURE_OPENAI_API_KEY — openai SDK auto-detects env key and overrides azure_ad_token_provider. OIDC only via DefaultAzureCredential / azure/login@v2.
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
@@ -521,9 +548,14 @@ jobs:
           fi
 
           echo "Triggering relay run #$NEXT_RELAY..."
+          LINEAGE_ID="$RELAY_LINEAGE_ID_INPUT"
+          if [[ -z "$LINEAGE_ID" ]]; then
+            LINEAGE_ID="${EXPERIMENT_ID}:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
+          fi
           gh workflow run batch-run.yml \
             -f experiment_yaml="$EXPERIMENT_YAML_INPUT" \
             -f relay_run="$NEXT_RELAY" \
+            -f relay_lineage_id="$LINEAGE_ID" \
             -f wall_timeout="$WALL_TIMEOUT_INPUT" \
             -f dry_run="$DRY_RUN_INPUT" \
             -f sandbox_image_digest="$SANDBOX_IMAGE_DIGEST"
@@ -544,6 +576,7 @@ jobs:
         timeout-minutes: 350    # mirrors Step 2a — wall_timeout(290) + 60min relay margin
         if: steps.check_condition_b.outputs.has_condition_b == 'true' && steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
         env:
+          GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # Removed AZURE_OPENAI_API_KEY — openai SDK auto-detects env key and overrides azure_ad_token_provider. OIDC only via DefaultAzureCredential / azure/login@v2.
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
@@ -586,27 +619,64 @@ jobs:
 
       # ── Step 6: Generate Experiment Report ──
       - name: 'Step 6: Generate experiment report'
+        id: step6
         if: steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
         env:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           # Removed AZURE_OPENAI_API_KEY — openai SDK auto-detects env key and overrides azure_ad_token_provider. OIDC only via DefaultAzureCredential / azure/login@v2.
         run: |
           cd batch-runner
-          bash step6_report.sh
-        continue-on-error: true   # report failure must not block Step 7 upload
+          if [[ "$DRY_RUN_INPUT" == "true" ]]; then
+            bash step6_report.sh --dry-run
+          else
+            bash step6_report.sh
+          fi
+        continue-on-error: true
 
-      # ── Step 7: Upload to HuggingFace (only if not dry_run and not relay) ──
-      - name: 'Step 7: Upload to HuggingFace'
-        if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
+      - name: Ensure model-free experiment report
+        if: steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          STEP6_OUTCOME: ${{ steps.step6.outcome }}
         run: |
+          set -euo pipefail
           cd batch-runner
-          bash step7_upload_hf.sh --test
+          REPORT="results/${EXPERIMENT_ID}/report/report.md"
+          SELF_REPORT="workspace/upload/self_report.json"
+          if [[ -e "$REPORT" && ( -L "$REPORT" || ! -f "$REPORT" ) ]]; then
+            echo "FATAL: report target is not a regular file"
+            exit 1
+          fi
+          if [[ "$STEP6_OUTCOME" != "success" || ! -s "$REPORT" || ! -s "$SELF_REPORT" ]]; then
+            echo "Narrative report unavailable; generating model-free fallback."
+            if [[ "$DRY_RUN_INPUT" == "true" ]]; then
+              bash step6_report.sh --no-narrative --dry-run
+            else
+              bash step6_report.sh --no-narrative
+            fi
+          fi
+          [[ -f "$REPORT" && ! -L "$REPORT" && -s "$REPORT" ]]
+          REPORT_REAL=$(realpath "$REPORT")
+          RESULTS_REAL=$(realpath results)
+          [[ "$REPORT_REAL" == "$RESULTS_REAL"/* ]]
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          experiment_id = os.environ["EXPERIMENT_ID"]
+          result = json.loads(Path("workspace/result.json").read_text(encoding="utf-8"))
+          self_report_path = Path("workspace/upload/self_report.json")
+          self_report = json.loads(self_report_path.read_text(encoding="utf-8"))
+          if result.get("experiment_id") != experiment_id:
+              raise SystemExit("workspace result experiment identity mismatch")
+          if (self_report.get("meta") or {}).get("experiment_id") != experiment_id:
+              raise SystemExit("self-report experiment identity mismatch")
+          PY
 
       # ── Create Pull Request (only if not dry_run and not relay) ──
       - name: Create Pull Request with results
-        if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
+        id: cpr
+        if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
         uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -629,13 +699,92 @@ jobs:
             - ✅ Step 3: Format results
             - ✅ Step 4: Fill parquet
             - ✅ Step 5: Validate dataset — ${{ steps.check_smoke_test.outputs.is_smoke_test == 'true' && 'Skipped (smoke test)' || 'Run' }}
-            - ✅ Step 6: Generate experiment report
-            - ✅ Step 7: Upload to HuggingFace
+            - Step 6: Generate experiment report — ${{ steps.step6.outcome == 'success' && 'Narrative report' || 'Model-free fallback report' }}
+            - Step 7: Hugging Face upload — Runs only after this PR contract is verified
 
-            Results uploaded to HuggingFace dataset repository.
-            Review and merge to finalize the experiment.
+            This PR records the report before the workflow performs the remote
+            Hugging Face upload and dispatches exact-SHA dashboard validation.
           branch: experiment/${{ inputs.experiment_yaml }}
           labels: experiment,automated
+          add-paths: batch-runner/results/${{ env.EXPERIMENT_ID }}/report/report.md
+
+      - name: Verify result PR outputs and contract
+        if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+          PR_BRANCH: ${{ steps.cpr.outputs.pull-request-branch }}
+          PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
+          EXPECTED_EXPERIMENT_ID: ${{ env.EXPERIMENT_ID }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          [[ "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PR_BRANCH" == "experiment/${EXPERIMENT_YAML_INPUT}" ]]
+          git check-ref-format --branch "$PR_BRANCH" >/dev/null
+          PR_JSON=$(gh pr view "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json state,baseRefName,headRefName,headRefOid,isCrossRepository,files)
+          export PR_JSON PR_BRANCH PR_HEAD_SHA
+          python3 - <<'PY'
+          import json
+          import os
+
+          pull_request = json.loads(os.environ["PR_JSON"])
+          paths = [entry["path"] for entry in pull_request["files"]]
+          expected_path = (
+              "batch-runner/results/"
+              + os.environ["EXPECTED_EXPERIMENT_ID"]
+              + "/report/report.md"
+            )
+          checks = {
+              "state": pull_request["state"] == "OPEN",
+              "base": pull_request["baseRefName"] == "main",
+              "branch": pull_request["headRefName"] == os.environ["PR_BRANCH"],
+              "sha": pull_request["headRefOid"] == os.environ["PR_HEAD_SHA"],
+              "same_repo": pull_request["isCrossRepository"] is False,
+              "files": paths == [expected_path],
+          }
+          failed = [name for name, passed in checks.items() if not passed]
+          if failed:
+              raise SystemExit(f"result PR validation contract failed: {failed}")
+          PY
+
+      # ── Step 7: Upload only after the result PR contract is proven ──
+      - name: 'Step 7: Upload to HuggingFace'
+        if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd batch-runner
+          bash step7_upload_hf.sh --test
+
+      - name: Recheck result PR head after upload
+        if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+          PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
+        run: |
+          set -euo pipefail
+          CURRENT_HEAD=$(gh pr view "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json headRefOid --jq .headRefOid)
+          [[ "$CURRENT_HEAD" == "$PR_HEAD_SHA" ]]
+
+      - name: Dispatch exact result PR validation
+        if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BRANCH: ${{ steps.cpr.outputs.pull-request-branch }}
+          PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
+        run: |
+          set -euo pipefail
+          gh workflow run deploy.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$PR_BRANCH" \
+            --raw-field deploy_pages=false \
+            --raw-field expected_sha="$PR_HEAD_SHA"
 
       # ── Cleanup relay checkpoint on HF (only after successful completion) ──
       - name: 'Cleanup relay checkpoint'

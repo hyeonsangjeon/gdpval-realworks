@@ -319,10 +319,12 @@ class TestFix3RetrieableStatuses:
 
 def _build_step1_prepared(tmp_path: Path, task_id: str = "t1") -> Path:
     """Write a minimal step1_tasks_prepared.json for run_inference."""
+    from core.prepared_fingerprint import prepared_fingerprint
+
     prepared = {
         "experiment_id": "exp_test",
         "experiment_name": "qa_failed_regression",
-        "source": "test",
+        "source": "test/qa-failed-regression",
         "execution": {
             "mode": "subprocess",
             "max_retries": 1,
@@ -350,6 +352,7 @@ def _build_step1_prepared(tmp_path: Path, task_id: str = "t1") -> Path:
             },
         },
     }
+    prepared["prepared_fingerprint"] = prepared_fingerprint(prepared)
     prepared_path = tmp_path / "step1_tasks_prepared.json"
     prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
     return prepared_path
@@ -481,6 +484,8 @@ class TestFix3RunTaskWithQA:
         prepared_path = workspace / "step1_tasks_prepared.json"
         prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
         prepared["execution"]["metrics"] = {"enabled": True}
+        from core.prepared_fingerprint import prepared_fingerprint
+        prepared["prepared_fingerprint"] = prepared_fingerprint(prepared)
         prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
 
         def execute_with_metrics(*args, **kwargs):
@@ -563,6 +568,8 @@ class TestFix3RunTaskWithQA:
         prepared_path = workspace / "step1_tasks_prepared.json"
         prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
         prepared["execution"]["metrics"] = {"enabled": True}
+        from core.prepared_fingerprint import prepared_fingerprint
+        prepared["prepared_fingerprint"] = prepared_fingerprint(prepared)
         prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
 
         observability = {
@@ -828,6 +835,8 @@ def test_resume_timeout_relay_preserves_cumulative_task_metrics(
     prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
     prepared["execution"]["mode"] = "sandbox"
     prepared["execution"]["metrics"] = {"enabled": True}
+    from core.prepared_fingerprint import prepared_fingerprint
+    prepared["prepared_fingerprint"] = prepared_fingerprint(prepared)
     prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
 
     progress = {
@@ -838,6 +847,7 @@ def test_resume_timeout_relay_preserves_cumulative_task_metrics(
         "run_id": "exp_test:local:1",
         "execution_mode": "sandbox",
         "ordered_task_ids": ["t1"],
+        "prepared_fingerprint": prepared["prepared_fingerprint"],
         "total_tasks": 1,
         "started_at": "2026-07-15T00:00:00+00:00",
         "resume_round": 0,

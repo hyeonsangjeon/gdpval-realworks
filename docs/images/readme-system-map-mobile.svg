@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="358" height="696" viewBox="0 0 720 1400" role="img" aria-labelledby="smm-title smm-desc">
+  <title id="smm-title">GDPVal RealWorks vertical system map</title>
+  <desc id="smm-desc">A narrow-screen system map from YAML configuration through execution, separate run and grading evidence, aggregation, and the dashboard.</desc>
+  <defs>
+    <marker id="smm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#274f55"/>
+    </marker>
+  </defs>
+  <style>
+    .bg { fill: #f3f5f1; }
+    .stage { fill: #fffefa; stroke: #214c4a; stroke-width: 3; }
+    .output { fill: #f7e9c9; stroke: #7a4f00; stroke-width: 2; }
+    .ink { fill: #17343d; }
+    .muted { fill: #53666b; }
+    .teal { fill: #0f6762; }
+    .amber { fill: #7a4f00; }
+    .coral { fill: #9f3b2e; }
+    .white { fill: #fffefa; }
+    .flow { fill: none; stroke: #274f55; stroke-width: 4; marker-end: url(#smm-arrow); }
+    .kicker { font: 700 27px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .title { font: 700 44px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .heading { font: 700 33px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .body { font: 500 28px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .mono { font: 600 27px 'IBM Plex Mono', 'SFMono-Regular', monospace; }
+  </style>
+  <rect class="bg" width="720" height="1400"/>
+  <text x="44" y="58" class="kicker teal">SYSTEM MAP</text>
+  <text x="44" y="112" class="title ink">One YAML enters.</text>
+  <text x="44" y="166" class="title ink">Several signals leave.</text>
+  <text x="44" y="210" class="body muted">Completion, integrity, Self-QA, and</text>
+  <text x="44" y="248" class="body muted">external grading remain separate.</text>
+
+  <text x="44" y="298" class="kicker muted">PIPELINE</text>
+  <rect x="64" y="322" width="592" height="82" rx="9" class="stage"/>
+  <rect x="64" y="322" width="10" height="82" rx="5" class="teal"/>
+  <text x="96" y="358" class="mono teal">CONFIGURE</text>
+  <text x="308" y="358" class="heading ink">YAML + scope</text>
+  <text x="308" y="386" class="body muted">model / tasks / mode</text>
+  <path d="M 360 404 V 418" class="flow"/>
+
+  <rect x="64" y="426" width="592" height="82" rx="9" class="stage"/>
+  <rect x="64" y="426" width="10" height="82" rx="5" class="teal"/>
+  <text x="96" y="462" class="mono teal">STEPS 0-1</text>
+  <text x="308" y="462" class="heading ink">Prepare</text>
+  <text x="308" y="490" class="body muted">clone + select</text>
+  <path d="M 360 508 V 522" class="flow"/>
+
+  <rect x="64" y="530" width="592" height="122" rx="9" class="stage"/>
+  <rect x="64" y="530" width="10" height="122" rx="5" class="coral"/>
+  <text x="96" y="566" class="mono coral">STEP 2</text>
+  <text x="308" y="566" class="heading ink">Execute</text>
+  <text x="308" y="594" class="body muted">model + files</text>
+  <text x="96" y="634" class="body coral">4 backends + same-model Self-QA retry</text>
+  <path d="M 360 652 V 666" class="flow"/>
+
+  <rect x="64" y="674" width="592" height="82" rx="9" class="stage"/>
+  <rect x="64" y="674" width="10" height="82" rx="5" class="amber"/>
+  <text x="96" y="710" class="mono amber">STEPS 3-4</text>
+  <text x="308" y="710" class="heading ink">Package</text>
+  <text x="308" y="738" class="body muted">JSON + Parquet</text>
+  <path d="M 360 756 V 770" class="flow"/>
+
+  <rect x="64" y="778" width="592" height="82" rx="9" class="stage"/>
+  <rect x="64" y="778" width="10" height="82" rx="5" class="amber"/>
+  <text x="96" y="814" class="mono amber">STEPS 5-6</text>
+  <text x="308" y="814" class="heading ink">Gate + report</text>
+  <text x="308" y="842" class="body muted">checks + report</text>
+  <path d="M 360 860 V 874" class="flow"/>
+
+  <rect x="64" y="882" width="592" height="82" rx="9" class="stage"/>
+  <rect x="64" y="882" width="10" height="82" rx="5" class="teal"/>
+  <text x="96" y="918" class="mono teal">STEP 7</text>
+  <text x="308" y="918" class="heading ink">Publish</text>
+  <text x="308" y="946" class="body muted">Hugging Face + result PR</text>
+
+  <text x="44" y="1018" class="kicker muted">EVIDENCE MERGE</text>
+  <rect x="64" y="1042" width="592" height="64" rx="9" class="output"/>
+  <text x="88" y="1084" class="body ink">Run artifacts + manifests</text>
+  <text x="346" y="1146" class="title amber">+</text>
+  <rect x="64" y="1162" width="592" height="64" rx="9" class="output"/>
+  <text x="88" y="1204" class="body ink">External grading / separate pipeline</text>
+  <path d="M 360 1226 V 1240" class="flow"/>
+  <rect x="64" y="1248" width="592" height="64" rx="9" class="output"/>
+  <text x="88" y="1290" class="body ink">Generated JSON / merged evidence</text>
+  <path d="M 360 1312 V 1326" class="flow"/>
+  <rect x="64" y="1334" width="592" height="48" rx="9" fill="#17343d"/>
+  <text x="88" y="1362" class="body white">GitHub Pages / live dashboard</text>
+</svg>

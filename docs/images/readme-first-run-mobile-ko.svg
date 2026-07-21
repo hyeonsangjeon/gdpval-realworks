@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="358" height="542" viewBox="0 0 720 1090" role="img" aria-labelledby="frmk-title frmk-desc">
+  <title id="frmk-title">GDPVal RealWorks 모바일 첫 실행 경로</title>
+  <desc id="frmk-desc">무료 로컬 대시보드와 실제 API 비용이 발생하는 3개 태스크 클라우드 실험을 세로로 비교합니다.</desc>
+  <style>
+    .bg { fill: #f5f3ed; }.panel { fill: #fffefa; stroke: #18343b; stroke-width: 3; }.ink { fill: #18343b; }.muted { fill: #52656a; }
+    .teal { fill: #0f6762; }.amber { fill: #7a4f00; }.coral { fill: #9f3b2e; }
+    .kicker { font: 700 27px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }.title { font: 700 44px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .heading { font: 700 34px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }.body { font: 500 28px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .mono { font: 600 27px 'IBM Plex Mono', 'Noto Sans KR', monospace; }.number { font: 700 26px 'IBM Plex Mono', monospace; fill: #fffefa; }
+  </style>
+  <rect class="bg" width="720" height="1090"/>
+  <text x="44" y="58" class="kicker teal">첫 실행 선택</text>
+  <text x="44" y="112" class="title ink">로컬에서 확인하고,</text><text x="44" y="162" class="title ink">비용은 의도적으로 사용하세요.</text>
+  <rect x="44" y="202" width="632" height="318" rx="10" class="panel"/><rect x="44" y="202" width="632" height="10" rx="5" class="teal"/>
+  <text x="72" y="258" class="kicker teal">무료 / 약 5분</text><text x="72" y="306" class="heading ink">로컬 대시보드 열기</text>
+  <text x="72" y="347" class="body muted">클라우드 계정과 model call이 없습니다.</text>
+  <circle cx="98" cy="393" r="27" class="teal"/><text x="82" y="402" class="number">01</text><text x="144" y="388" class="body ink">저장소 clone</text><text x="144" y="426" class="mono muted">clone repo; cd gdpval-realworks</text>
+  <circle cx="98" cy="482" r="27" class="teal"/><text x="82" y="491" class="number">02</text><text x="144" y="465" class="body ink">Vite 개발 서버 시작</text><text x="144" y="505" class="mono muted">npm ci &amp;&amp; npm run dev</text>
+  <rect x="44" y="548" width="632" height="380" rx="10" class="panel"/><rect x="44" y="548" width="632" height="10" rx="5" class="amber"/>
+  <text x="72" y="604" class="kicker amber">클라우드 / 실제 API 사용</text><text x="72" y="652" class="heading ink">3개 태스크 smoke 실행</text>
+  <text x="72" y="693" class="body muted">GitHub fork + Azure OIDC + HF token</text>
+  <rect x="72" y="722" width="576" height="54" rx="8" fill="#e3efeb"/><text x="92" y="758" class="mono teal">01  Fork + 공개 HF dataset</text>
+  <rect x="72" y="790" width="576" height="54" rx="8" fill="#e3efeb"/><text x="92" y="826" class="mono teal">02  OIDC + secret 설정</text>
+  <rect x="72" y="858" width="576" height="54" rx="8" fill="#e3efeb"/><text x="92" y="894" class="mono teal">03-04  실행 + artifact 확인</text>
+  <rect x="44" y="958" width="632" height="104" rx="10" fill="#f8ded7" stroke="#9f3b2e" stroke-width="3"/>
+  <circle cx="76" cy="998" r="11" class="coral"/><text x="100" y="1006" class="body ink">dry_run도 model API와 HF를 사용합니다.</text><text x="100" y="1044" class="body ink">Step 5, 최종 게시, 결과 PR은 생략합니다.</text>
+</svg>

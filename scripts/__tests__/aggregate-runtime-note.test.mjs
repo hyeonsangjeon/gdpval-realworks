@@ -3,11 +3,58 @@ import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import test from 'node:test'
+import { parse } from 'yaml'
 
 import { buildRuntimeNoteData, extractWorkflowPolicy } from '../aggregate-runtime-note.mjs'
 
 const readRepoFile = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8')
 const execFileAsync = promisify(execFile)
+
+const compilePythonHeredocs = async (script) => {
+  const lines = script.split('\n')
+  let count = 0
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/^python3(?:\s+-)?\s+<<'PY'$/.test(lines[index].trim())) continue
+    const body = []
+    index += 1
+    while (index < lines.length && lines[index].trim() !== 'PY') {
+      body.push(lines[index])
+      index += 1
+    }
+    assert.ok(index < lines.length, 'Python heredoc terminator is missing')
+    const indents = body
+      .filter((line) => line.trim())
+      .map((line) => line.length - line.trimStart().length)
+    const indent = indents.length ? Math.min(...indents) : 0
+    const source = body.map((line) => line.slice(indent)).join('\n')
+    await execFileAsync('python3', ['-c', `compile(${JSON.stringify(source)}, '<workflow>', 'exec')`])
+    count += 1
+  }
+  return count
+}
+
+const compileRubyHeredocs = async (script) => {
+  const lines = script.split('\n')
+  let count = 0
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index].trim() !== "ruby <<'RUBY'") continue
+    const body = []
+    index += 1
+    while (index < lines.length && lines[index].trim() !== 'RUBY') {
+      body.push(lines[index])
+      index += 1
+    }
+    assert.ok(index < lines.length, 'Ruby heredoc terminator is missing')
+    const indents = body
+      .filter((line) => line.trim())
+      .map((line) => line.length - line.trimStart().length)
+    const indent = indents.length ? Math.min(...indents) : 0
+    const source = body.map((line) => line.slice(indent)).join('\n')
+    await execFileAsync('ruby', ['-c', '-e', source])
+    count += 1
+  }
+  return count
+}
 
 test('runtime note data is derived from workflow and incident sources', async () => {
   const [workflow, incidents] = await Promise.all([
@@ -178,15 +225,99 @@ test('runtime note data rejects impossible and reversed incident timestamps', as
   )
 })
 
-test('runtime source changes trigger serialized Pages deployment', async () => {
-  const deploy = await readRepoFile('.github/workflows/deploy.yml')
+test('runtime source changes trigger isolated PR validation and serialized Pages deployment', async () => {
+  const [deployText, batchText, step2Text] = await Promise.all([
+    readRepoFile('.github/workflows/deploy.yml'),
+    readRepoFile('.github/workflows/batch-run.yml'),
+    readRepoFile('batch-runner/step2_run_inference.py'),
+  ])
+  const deploy = parse(deployText)
+  const batch = parse(batchText)
+  const validateJob = deploy.jobs.validate
+  const deployJob = deploy.jobs.deploy
+  const uploadStep = validateJob.steps.find((step) => step.name === 'Upload Pages artifact')
+  const createPullRequestStep = batch.jobs['batch-run'].steps.find(
+    (step) => step.name === 'Create Pull Request with results',
+  )
+  const dispatchStep = batch.jobs['batch-run'].steps.find(
+    (step) => step.name === 'Dispatch exact result PR validation',
+  )
+  const reportStep = batch.jobs['batch-run'].steps.find(
+    (step) => step.name === 'Step 6: Generate experiment report',
+  )
+  const fallbackStep = batch.jobs['batch-run'].steps.find(
+    (step) => step.name === 'Ensure model-free experiment report',
+  )
+  const verifyPrStep = batch.jobs['batch-run'].steps.find(
+    (step) => step.name === 'Verify result PR outputs and contract',
+  )
+  const uploadHfStep = batch.jobs['batch-run'].steps.find(
+    (step) => step.name === 'Step 7: Upload to HuggingFace',
+  )
+  const batchSteps = batch.jobs['batch-run'].steps
+  const validateConfigStep = batch.jobs['batch-run'].steps.find(
+    (step) => step.name === 'Validate full experiment config',
+  )
+  const inspectModeStep = batch.jobs['inspect-mode'].steps.find(
+    (step) => step.name === 'Inspect execution mode without credentials',
+  )
 
-  assert.match(deploy, /- '\.github\/workflows\/batch-run\.yml'/)
-  assert.match(deploy, /- 'data\/notes\/runtime-incidents\.yaml'/)
-  assert.match(deploy, /concurrency:\s+group: pages\s+cancel-in-progress: false/)
-  assert.match(deploy, /runs-on: ubuntu-24\.04/)
-  assert.match(deploy, /fetch-depth: 0/)
-  assert.match(deploy, /Verify aggregate contracts and pinned history[\s\S]*npm run test:aggregate/)
-  assert.match(deploy, /playwright install --with-deps --only-shell chromium/)
-  assert.match(deploy, /npm run test:notes-browser:dist/)
+  assert.deepEqual(deploy.permissions, { contents: 'read' })
+  assert.deepEqual(deploy.on.pull_request.branches, ['main'])
+  assert.ok(deploy.on.push.paths.includes('.github/workflows/batch-run.yml'))
+  assert.ok(deploy.on.push.paths.includes('data/notes/runtime-incidents.yaml'))
+  assert.ok(deploy.on.push.paths.includes('vite.config.ts'))
+  assert.ok(deploy.on.pull_request.paths.includes('vite.config.ts'))
+  assert.equal(deploy.on.workflow_dispatch.inputs.deploy_pages.default, true)
+  assert.equal(validateJob['runs-on'], 'ubuntu-24.04')
+  assert.equal(validateJob.permissions, undefined)
+  assert.equal(validateJob.environment, undefined)
+  assert.equal(validateJob.steps.find((step) => step.name === 'Checkout').with['fetch-depth'], 0)
+  assert.ok(validateJob.steps.some((step) => step.run === 'npm run test:aggregate'))
+  assert.ok(validateJob.steps.some((step) => step.run?.includes('playwright install --with-deps --only-shell chromium')))
+  assert.ok(validateJob.steps.some((step) => step.run === 'npm run test:notes-browser:dist'))
+  assert.match(uploadStep.if, /refs\/heads\/main/)
+  assert.match(uploadStep.if, /github\.ref_protected == true/)
+  assert.deepEqual(deployJob.permissions, { pages: 'write', 'id-token': 'write' })
+  assert.equal(deployJob.environment.name, 'github-pages')
+  assert.match(deployJob.if, /refs\/heads\/main/)
+  assert.match(deployJob.if, /inputs\.deploy_pages == true/)
+  assert.equal(createPullRequestStep.id, 'cpr')
+  assert.equal(reportStep.id, 'step6')
+  assert.match(
+    createPullRequestStep.with.body,
+    /steps\.step6\.outcome == 'success'/,
+  )
+  assert.match(createPullRequestStep.with.body, /Model-free fallback report/)
+  assert.equal(
+    createPullRequestStep.with['add-paths'],
+    'batch-runner/results/${{ env.EXPERIMENT_ID }}/report/report.md',
+  )
+  assert.match(fallbackStep.if, /needs_relay == 'false'/)
+  assert.match(fallbackStep.run, /step6_report\.sh --no-narrative/)
+  assert.match(fallbackStep.run, /self-report experiment identity mismatch/)
+  assert.equal(await compilePythonHeredocs(validateConfigStep.run), 1)
+  assert.equal(await compilePythonHeredocs(fallbackStep.run), 1)
+  assert.equal(await compilePythonHeredocs(verifyPrStep.run), 1)
+  assert.equal(await compileRubyHeredocs(inspectModeStep.run), 1)
+  assert.match(verifyPrStep.run, /\$PR_NUMBER.*\^\[1-9\]/s)
+  assert.match(verifyPrStep.run, /isCrossRepository,files/)
+  assert.match(verifyPrStep.run, /paths == \[expected_path\]/)
+  assert.match(dispatchStep.run, /--raw-field deploy_pages=false/)
+  assert.match(dispatchStep.run, /--raw-field expected_sha="\$PR_HEAD_SHA"/)
+  assert.ok(batchSteps.indexOf(fallbackStep) < batchSteps.indexOf(createPullRequestStep))
+  assert.ok(batchSteps.indexOf(createPullRequestStep) < batchSteps.indexOf(verifyPrStep))
+  assert.ok(batchSteps.indexOf(verifyPrStep) < batchSteps.indexOf(uploadHfStep))
+  assert.ok(batchSteps.indexOf(uploadHfStep) < batchSteps.indexOf(dispatchStep))
+  assert.ok(batchText.indexOf('Validate full experiment config') < batchText.indexOf("Step 0: Bootstrap submission repo"))
+  assert.match(batchText, /ExperimentConfig\.from_yaml/)
+  assert.match(batchText, /config\.validate\(\)/)
+  assert.match(batchText, /relay_lineage_id:/)
+  assert.match(batchText, /GDPVAL_RELAY_LINEAGE_ID/)
+  assert.match(batchText, /LINEAGE_ID="\$\{EXPERIMENT_ID\}:\$\{GITHUB_RUN_ID\}:\$\{GITHUB_RUN_ATTEMPT\}"/)
+  assert.match(batchText, /-f relay_lineage_id="\$LINEAGE_ID"/)
+  assert.match(step2Text, /step2_inference_progress_\{condition_key\}/)
+  assert.match(step2Text, /step2_inference_results_\{condition_key\}/)
+  assert.match(batchText, /EXPERIMENT_ID=\{config\.experiment_id\}/)
+  assert.match(batchText, /step6_report\.sh --dry-run/)
 })

@@ -1,340 +1,266 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/GDPVal-Real%20Work%20Benchmark-blueviolet?style=for-the-badge" alt="GDPVal RealWorks" />
+  <img src="https://img.shields.io/badge/GDPVal-Real%20Work%20Benchmark-177f78?style=for-the-badge" alt="GDPVal RealWorks" />
 </p>
 
 <h1 align="center">GDPVal RealWorks</h1>
 
 <p align="center">
-  <strong>Benchmark LLMs on real expert work — not academic toy problems.</strong><br/>
-  <em>A YAML-driven experiment pipeline + live dashboard for the <a href="https://arxiv.org/abs/2510.04374">GDPVal</a> Gold Subset (220 tasks).</em>
+  <strong>Benchmark LLMs on real expert work, not toy prompts.</strong><br/>
+  <em>A reproducible experiment pipeline and evidence dashboard for the <a href="https://arxiv.org/abs/2510.04374">GDPVal</a> Gold Subset: 220 tasks across 9 sectors and 44 occupations.</em>
 </p>
 
 <p align="center">
   <a href="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml">
-    <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml/badge.svg" alt="Deploy" />
+    <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml/badge.svg" alt="Dashboard checks and deploy" />
   </a>
   <a href="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml">
-    <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml/badge.svg" alt="Batch Run" />
+    <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml/badge.svg" alt="Batch experiment" />
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
+    <img src="https://img.shields.io/badge/license-MIT-2f6b58.svg" alt="MIT License" />
   </a>
 </p>
 
 <p align="center">
-  <a href="https://hyeonsangjeon.github.io/gdpval-realworks/">🌐 Live Dashboard</a> · 
-  <a href="README_KR.md">🇰🇷 한국어</a> · 
-  <a href="batch-runner/README.md">📖 Batch Runner Docs</a> · 
-  <a href="https://arxiv.org/abs/2510.04374">📄 Paper</a>
+  <a href="https://hyeonsangjeon.github.io/gdpval-realworks/"><strong>Live Dashboard</strong></a> |
+  <a href="docs/first-experiment.md"><strong>First Experiment</strong></a> |
+  <a href="batch-runner/sandbox/README.md"><strong>Sandbox &amp; Security</strong></a> |
+  <a href="README_KR.md">한국어</a> |
+  <a href="https://arxiv.org/abs/2510.04374">Paper</a>
 </p>
 
 ---
 
-> 📊 **[Live Dashboard → https://hyeonsangjeon.github.io/gdpval-realworks/](https://hyeonsangjeon.github.io/gdpval-realworks/)**
->
-> Leaderboard · Trends · Execution Errors · Grading Analysis — all in one place.
+## Start here
 
----
+- **See the evidence:** [open the live dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/).
+  A browser is enough.
+- **Preview locally:** run `npm ci && npm run dev`. You need Git and Node.js 20+,
+  but no cloud credentials.
+- **Run three real tasks:** follow the [beginner guide](docs/first-experiment.md).
+  You need a fork, Azure OIDC, a Hugging Face (HF) write token, and a real API
+  budget.
 
-## The Problem
-
-Most LLM benchmarks test **academic reasoning** — math, code puzzles, trivia.  
-None of that tells you whether a model can actually **do your job**.
-
-**GDPVal** (GDP-level Validation) is different: **220 real-world expert tasks** across 9 industry sectors and 44 occupations — Excel reports, legal docs, sales decks, the stuff people actually get paid for.
-
-This repo automates the entire loop: **configure → run → collect → visualize** — driven by a single YAML file, executed on GitHub Actions, results on a live dashboard.
-
-> 🎯 One YAML file. One button click. Full experiment lifecycle.
-
-<p align="center">
-  <img src="docs/images/dashboard-leaderboard.png" alt="Leaderboard — experiment rankings, KPI cards, sector heatmap" width="720" />
-</p>
-<p align="center"><em>Live Dashboard — leaderboard, success rates, QA scores across experiments</em></p>
-
-<p align="center">
-  <img src="docs/images/dashboard-experiment-tasks.png" alt="Task Detail — real professional task with reference files and deliverables" width="480" />
-</p>
-<p align="center"><em>Task Detail — real-world task description, reference files, and generated deliverables</em></p>
-
----
-
-## How It Works
-
-<table>
-<tr>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBBWyJTdGVwIDA6IEJvb3RzdHJhcDxicj5IRiByZXBvICsgc25hcHNob3QiXSAtLT4gQlsiU3RlcCAxOiBQcmVwYXJlPGJyPkZpbHRlciArIGxvYWQgdGFza3MiXQ==" alt="Preparation" width="350" /></td>
-<td align="center" style="font-size:2em;">→</td>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBDWyJTdGVwIDI6IEluZmVyZW5jZTxicj5MTE0gKyBTZWxmLVFBIl0gLS0-IERbIlN0ZXAgMzogRm9ybWF0PGJyPkpTT04gKyBNYXJrZG93biJd" alt="Execution" width="350" /></td>
-</tr>
-<tr>
-<td></td>
-<td align="center" style="font-size:2em;">↓</td>
-<td></td>
-</tr>
-<tr>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBFWyJTdGVwIDQ6IFBhcnF1ZXQ8YnI-TWVyZ2Ugc3VibWlzc2lvbiJdIC0tPiBGWyJTdGVwIDU6IFZhbGlkYXRlPGJyPkludGVncml0eSBjaGVjayJd" alt="Delivery" width="350" /></td>
-<td align="center" style="font-size:2em;">→</td>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBHWyJTdGVwIDY6IFJlcG9ydDxicj5IVE1MICsgSlNPTiJdIC0tPiBIWyJTdGVwIDc6IFVwbG9hZDxicj5IRiArIEF1dG8gUFIiXQ==" alt="Report & Upload" width="350" /></td>
-</tr>
-</table>
-
-
----
-
-## ⚡ Quick Start
-
-### 1. Fork & Clone
+The local dashboard path does not need cloud credentials and does not call an
+LLM:
 
 ```bash
 git clone https://github.com/hyeonsangjeon/gdpval-realworks.git
 cd gdpval-realworks
+npm ci
+npm run dev
 ```
 
-### 2. Configure GitHub Repository Settings
+> **Cloud-run boundary:** `dry_run: true` still calls the model, runs Self-QA,
+> and can create or update the configured Hugging Face dataset. It skips Step 5
+> validation, final result publication, and the result PR; it does not mean
+> "free" or "no writes." This three-task smoke also skips Step 5 because of its
+> sample size.
 
-#### 🔑 Secrets
+**[English first-run guide](docs/first-experiment.md)** |
+**[한국어 첫 실행 가이드](docs/first-experiment_KR.md)** |
+**[Batch Runner reference](batch-runner/README.md)**
 
-Go to **Settings → Secrets and variables → Actions → New repository secret** and add the secrets you need:
+---
 
-| Secret Name | Value | Required? |
+## Why RealWorks
+
+Many benchmarks stop at text answers. GDPVal asks models to complete work that
+looks like the job: spreadsheets, reports, presentations, media, and other
+reviewable files. The Gold Subset covers **220 tasks across 9 industry sectors
+and 44 occupations**.
+
+This repository turns those tasks into a repeatable loop:
+**configure -> execute -> preserve evidence -> grade -> compare**. A YAML file
+defines the intervention; GitHub Actions records the run; the dashboard keeps
+results, failures, artifacts, and research notes inspectable.
+
+It deliberately keeps four signals separate:
+
+| Signal | What it proves | What it does not prove |
 |---|---|---|
-| `AZURE_OPENAI_API_KEY` | Azure OpenAI API key | ✅ If using Azure |
-| `AZURE_OPENAI_ENDPOINT` | `https://your-resource.openai.azure.com/` | ✅ If using Azure |
-| `OPENAI_API_KEY` | OpenAI API key | If using OpenAI |
-| `ANTHROPIC_API_KEY` | Anthropic API key | If using Anthropic |
-| `HF_TOKEN` | HuggingFace write token ([get one here](https://huggingface.co/settings/tokens)) | ✅ For upload |
+| Execution completion | The pipeline reached a terminal task state | The file is correct |
+| Artifact integrity | Expected files exist and pass deterministic checks | The work satisfies every requirement |
+| Self-QA | The generating model accepted or retried its own output | Independent quality |
+| External grading | A separate rubric-based evaluation was recorded | Universal human agreement |
 
-> 💡 You don't need all of them — just the provider you'll actually use.  
-> For Azure users: `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT` + `HF_TOKEN` is the minimum.
-
-#### 📄 GitHub Pages
-
-**Settings → Pages → Source** must be set to **"GitHub Actions"** (not "Deploy from a branch").
-The `deploy.yml` workflow uploads the build artifact via `actions/deploy-pages` — no `gh-pages` branch is used.
-
-#### 🔓 Workflow Permissions
-
-**Settings → Actions → General → Workflow permissions:**
-
-- ✅ Select **"Read and write permissions"**
-- ✅ Check **"Allow GitHub Actions to create and approve pull requests"**
-- Save
-
-#### 🧹 Auto-cleanup (recommended)
-
-**Settings → General** → ✅ Check **"Automatically delete head branches"**
-
-> This cleans up experiment branches automatically after PR merge.
+<p align="center">
+  <a href="https://hyeonsangjeon.github.io/gdpval-realworks/">
+    <img src="docs/images/dashboard-leaderboard.png" alt="GDPVal RealWorks dashboard with experiment rankings, KPI cards, and a sector heatmap" width="840" />
+  </a>
+</p>
+<p align="center"><em>Live evidence: experiment comparisons, failure analysis, external grades, and field notes.</em></p>
 
 ---
 
-### 3. Run Your First Experiment
+## System map
 
-1. Go to **Actions** tab → **"Run GDPVal Batch Experiment"**
-2. Click **"Run workflow"**
-3. Fill in:
-   - `experiment_yaml`: `exp998_smoke_baseline_sample` (smoke test, 3 tasks)
-   - `dry_run`: ✅ checked (first time — skip upload)
-4. Click **Run workflow** 🚀
+<p align="center">
+  <picture>
+    <source media="(max-width: 960px)" srcset="docs/images/readme-system-map-mobile.svg" />
+    <img src="docs/images/readme-system-map.svg" alt="GDPVal RealWorks system map from experiment YAML through execution, artifacts, grading, aggregation, and dashboard" />
+  </picture>
+</p>
 
-```
-✅ Step 0: Bootstrap        → HF repo ready
-✅ Step 1: Prepare tasks    → 3 tasks filtered
-✅ Step 2: Run inference    → LLM called for each task
-✅ Step 3: Format results   → JSON + Markdown generated
-✅ Step 4: Fill parquet     → Submission parquet ready
-⏭️ Step 5: Validate        → Skipped (smoke test)
-⏭️ Step 6: Upload          → Skipped (dry run)
-```
-
-> 🎉 If this passes, uncheck `dry_run` and run a full experiment!
+Steps 0-7 own experiment execution and publication. External grading is a
+separate pipeline, and the dashboard aggregates both without treating them as
+the same measurement.
 
 ---
 
-## 📝 Write Your Own Experiment
+## Operational controls
 
-Create a YAML file in `batch-runner/experiments/`:
+<p align="center">
+  <picture>
+    <source media="(max-width: 960px)" srcset="docs/images/readme-trust-boundaries-mobile.svg" />
+    <img src="docs/images/readme-trust-boundaries.svg" alt="Path-specific identity, input, runtime, publication, and agentic preflight controls" />
+  </picture>
+</p>
 
-```yaml
-experiment:
-  id: "exp001_GPT52Chat_baseline"
-  name: "GPT-5.2 Chat Baseline (Full 220 tasks)"
-  description: "Full baseline run with code_interpreter and Self-QA."
+These are code-backed, path-specific controls, not a blanket security claim:
 
-data:
-  source: "HyeonSang/exp001_GPT52Chat_baseline"
-  filter:
-    sector: null          # null = all sectors
-    sample_size: null     # null = all 220 tasks
-
-condition_a:
-  name: "Baseline"
-  model:
-    provider: "azure"
-    deployment: "gpt-5.2-chat"
-    temperature: 0.0
-    seed: 42
-  prompt:
-    system: "You are a helpful assistant that completes professional tasks."
-    suffix: "Generate actual files, not descriptions."
-  qa:
-    enabled: true
-    min_score: 6
-    max_retries: 3
-
-# condition_b:            ← Add for A/B comparison (optional)
-
-execution:
-  mode: "code_interpreter"
-  max_retries: 5
-  resume_max_rounds: 3
-```
-
-Then trigger it from **Actions → Run workflow** with `experiment_yaml: exp001_GPT52Chat_baseline`.
-
----
-
-## 🧠 Execution Modes
-
-| Mode | How It Works | Best For |
+| Boundary | Enforced today | Evidence |
 |---|---|---|
-| **`code_interpreter`** | LLM writes + runs code inside Azure/OpenAI's **secure sandbox**. Files generated in the cloud. | ✅ Production — safe, powerful |
-| **`subprocess`** | LLM generates code → executed locally in an isolated temp directory. | Non-OpenAI models (Anthropic, etc.) |
-| **`sandbox`** | 🐳 Container evolution of `subprocess`: per-task **dependency discovery** + famous **Agent Skills** (audio/video/document/image/data) + **multimodal perception** (vision for video, hearing for audio). Runs in an isolated Docker container (`--network none`, resource caps) with a hardened **local fallback** when Docker is unavailable. | Multimodal tasks; reproducible, skill-aware execution |
-| **`json_renderer`** | LLM outputs a JSON spec → a **fixed renderer** creates files. Same renderer for all models. | Fair A/B comparison across models |
+| Azure identity | The batch Azure path uses GitHub OIDC and does not inject `AZURE_OPENAI_API_KEY` | [`batch-run.yml`](.github/workflows/batch-run.yml), [`llm_client.py`](batch-runner/core/llm_client.py) |
+| Configuration input | A no-credential job validates the experiment name and safely parses YAML before the credentialed job; agentic modes are rejected from the general batch path | [`batch-run.yml`](.github/workflows/batch-run.yml) |
+| Container sandbox | Sandbox runs resolve an immutable image digest across relay jobs; Docker execution disables networking and applies resource limits | [`batch-run.yml`](.github/workflows/batch-run.yml), [`sandbox_runner.py`](batch-runner/core/sandbox_runner.py) |
+| Agentic image supply chain | Manual protected-main publication requires immutable dependency locks, a digest-pinned base, runtime audit, and SBOM evidence | [`build-sandbox-image.yml`](.github/workflows/build-sandbox-image.yml) |
+| Agentic containment preflight | A manual model-free job rejects model/HF credentials, requires an exact preloaded image and AppArmor input, runs containment tests, and asserts cleanup | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
+| Dashboard publication | Pull requests aggregate, build, and run data/browser contracts; only push/manual deploy jobs receive Pages/OIDC permissions | [`deploy.yml`](.github/workflows/deploy.yml) |
 
-> 🐳 `sandbox` mode realizes the **container-based** evolution of `subprocess`.
-> Build the image with `bash batch-runner/sandbox/build.sh`, then set
-> `execution.mode: sandbox` (see `batch-runner/sandbox/README.md` and
-> `experiments/exp026_sandbox_skills_multimodal.yaml`).
-
----
-
-## 🔬 Self-QA: Built-in Quality Reflection Gate
-
-Before acceptance, the same LLM working on the task inspects its own output:
-Self-QA scores each output on a 0-10 scale using rubric-based self-evaluation. If the score is below the configured threshold (default: 6), it enters a reflection loop and retries.
-
-<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IExSCiAgICB0YXNrWyJUYXNrIl0gLS0-IGdlblsiTExNIEdlbmVyYXRlcyBPdXRwdXQiXSAtLT4gcWFbIlNlbGYtUUEgSW5zcGVjdHMiXSAtLT4gZ2F0ZXsiU2NvcmUgPj0gNj8ifQogICAgZ2F0ZSAtLT58WWVzfCBhY2NlcHRbIkFjY2VwdCJdCiAgICBnYXRlIC0tPnxOb3wgcmV0cnlbIlJldHJ5ICh1cCB0byAzeCkiXQo=" alt="Self-QA Flow" />
-
-
-Self-QA checks: Are all requirements met? Are files actually produced? Is the output professional?
+The default three-task smoke config uses provider-hosted `code_interpreter`.
+Docker sandbox and agentic controls apply only to their named paths. The general
+batch workflow currently rejects agentic execution before cloud credentials are
+used; the checked-in agentic workflow is a model-free preflight, not a paid run.
 
 ---
 
-## 🏗️ Architecture
+## First cloud experiment
 
-<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICByb290WyJnZHB2YWwtcmVhbHdvcmtzLyJdCgogICAgd2ZbIi5naXRodWIvd29ya2Zsb3dzLzxici8-YmF0Y2gtcnVuLnltbCwgZGVwbG95LnltbCJdCiAgICBiclsiYmF0Y2gtcnVubmVyLzxici8-c3RlcCBzY3JpcHRzLCBjb3JlLCBleHBlcmltZW50cywgcHJvbXB0cywgdGVzdHMiXQogICAgc3JjWyJzcmMvPGJyLz5wYWdlcywgY29tcG9uZW50cyJdCiAgICBkYXRhWyJkYXRhLzxici8-dGVzdHMsIGdyYWRlcyJdCiAgICBzY3JpcHRzWyJzY3JpcHRzLzxici8-YWdncmVnYXRlLXRlc3RzLm1qcywgYWdncmVnYXRlLWdyYWRlcy5tanMiXQoKICAgIHJvb3QgLS0-IHdmCiAgICByb290IC0tPiBicgogICAgcm9vdCAtLT4gc3JjCiAgICByb290IC0tPiBkYXRhCiAgICByb290IC0tPiBzY3JpcHRzCg==" alt="Architecture" />
+Use the checked-in
+[`exp998_smoke_baseline_sample.yaml`](batch-runner/experiments/exp998_smoke_baseline_sample.yaml)
+only after changing `data.source` to a new dataset in your own Hugging Face
+namespace.
 
+From **Actions > Run GDPVal Batch Experiment**, use:
 
----
-
-## 🔄 GitHub Actions Workflows
-
-### `batch-run.yml` — Run Experiments
-
-| Feature | Detail |
+| Input | First-run value |
 |---|---|
-| **Trigger** | Manual (`workflow_dispatch`) from Actions tab |
-| **Input** | Experiment YAML filename + optional dry_run flag |
-| **Pipeline** | Step 0 → Step 7 (bootstrap → upload) |
-| **Smart skips** | Smoke tests skip validation; dry_run skips upload + PR |
-| **Auto PR** | Creates a Pull Request with experiment summary |
-| **Artifacts** | Full workspace uploaded for 30 days |
-| **Timeout** | 5 hours max |
+| `experiment_yaml` | `exp998_smoke_baseline_sample` |
+| `dry_run` | `true` |
+| `relay_run` | `0` |
+| `wall_timeout` | `290` |
+| `sandbox_image_digest` | leave empty |
 
-### `deploy.yml` — Deploy Dashboard
+Expected behavior:
 
-| Feature | Detail |
+1. Step 0 creates, recreates, or reuses the disposable Hugging Face dataset.
+2. Step 1 selects three tasks deterministically.
+3. Step 2 calls `gpt-5.2-chat`, creates files, and can retry same-model Self-QA.
+4. Steps 3-4 write formatted results and a three-row Parquet artifact.
+5. Step 5 is skipped because this is both a dry run and a three-task sample.
+6. Step 6's primary report path makes up to two sequential `gpt-5.4-pro` calls;
+  on error, it attempts one `gpt-5.2-chat` fallback call. Completed calls can
+  be billed. Narrative failure is non-blocking only because a mandatory
+  model-free report fallback and identity check run before publication.
+7. Step 7 and the result PR are skipped by `dry_run: true`.
+
+If the credentialed batch job reaches its final `always()` step, it attempts to
+upload `batch-results-<run_id>` for inspection and retain it for 30 days. The
+**[complete beginner guide](docs/first-experiment.md)** covers OIDC, required
+secrets, cost boundaries, artifacts, and common failures.
+
+---
+
+## Execution modes
+
+| Mode | Execution boundary | Use it for |
+|---|---|---|
+| `code_interpreter` | Provider-hosted code tools and file retrieval | The current Azure smoke path |
+| `subprocess` | Generated Python runs in a host temporary directory | Legacy/local compatibility; review the trust boundary first |
+| `sandbox` | Docker when available, with no network, resource caps, skills, verification, and render QA; `auto` can fall back locally | Reproducible document and multimodal work |
+| `json_renderer` | The model emits a spec and a deterministic renderer creates files | Renderer-controlled A/B comparisons |
+
+To require Docker rather than permit fallback, set `execution.sandbox.use_docker`
+to `always`. See the **[sandbox operator guide](batch-runner/sandbox/README.md)**
+before changing execution modes.
+
+### Self-QA is not external grading
+
+Self-QA asks the same model to inspect its own result and retry below a configured
+threshold. It is an inference-time reflection gate. Independent rubric grading
+is recorded by a separate pipeline and displayed as a separate signal.
+
+---
+
+## Dashboard
+
+The **[live dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/)** is a
+static React application backed by generated repository data.
+
+| View | What you can inspect |
 |---|---|
-| **Trigger** | Push to `main` (auto, scoped to `data/`, `src/`, `scripts/`) or manual `workflow_dispatch` |
-| **Build** | Aggregate test/grade data → React build → `actions/deploy-pages` artifact upload |
-| **Source** | GitHub Pages **Source: GitHub Actions** (no `gh-pages` branch) |
+| Leaderboard and trends | Experiment-level completion, latency, and external grade comparisons |
+| Sector heatmap | Performance variation across 9 sectors |
+| Experiment detail | All 220 task states, files, prompts, retries, and errors |
+| Grading analysis | Evidence-linked rubric results and judge metadata |
+| RealWorks Field Notes | Chronological engineering decisions with explicit evidence caveats |
+
+Dashboard implementation details are in [`src/README.md`](src/README.md).
 
 ---
 
-## 🖥️ Dashboard
+## Develop and verify
 
-> **[→ Live Dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/)**
+Dashboard checks require Node.js 20 or newer:
 
-Interactive experiment analytics — leaderboard, sector heatmaps, error analysis, prompt architecture viewer, and evidence-linked RealWorks field notes.
+```bash
+npm ci
+npm run aggregate
+npm run test:aggregate
+npm run build
+```
 
-| Feature | Description |
-|---------|-------------|
-| **Leaderboard** | Ranked experiments with strategy, success rate, QA scores |
-| **Sector Heatmap** | 9 sectors × N experiments success rate matrix |
-| **Trends** | Success rate / QA / latency trend lines across experiments |
-| **Execution Errors** | Exception type distribution chart, recovery funnel, AI failure insights narrative |
-| **Prompt Viewer** | See exactly what prompt was sent to the LLM — system, user, QA, config |
-| **Grading** | External evaluation scores (OpenAI Evals) |
-| **Experiment Detail** | Drill into 220 tasks — filter by sector, status, search |
-| **RealWorks Field Notes** | Independent reviews with responsive hero scenes, evidence-caveated comparison charts, and a chronological decision record |
-
-Built with React 18 + TypeScript + Vite + Tailwind + Recharts + Framer Motion.  
-Deployed automatically to GitHub Pages on every push to `main`.
-
-📖 **[Dashboard Documentation →](src/README.md)** · 🇰🇷 **[한국어 →](src/README_KR.md)**
-
----
-
-## 🧪 Testing
+Backend unit tests do not require model credentials:
 
 ```bash
 cd batch-runner
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# Unit tests only (no API keys needed)
 pytest
-
-# Integration tests (requires real credentials)
-pytest -m integration
-
-# With coverage
-pytest --cov=core --cov-report=html
 ```
 
-### 🖥️ Run Locally (step by step)
+Integration tests, inference, grading, uploads, and workflow dispatches can use
+cloud credentials or incur cost; run them only when that is your intent.
 
-```bash
-cd batch-runner
-export HF_TOKEN="hf_xxx"
-export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com"
-export AZURE_OPENAI_API_KEY="xxx"
+## Repository map
 
-./step0_bootstrap.sh experiments/exp998_smoke_baseline_sample.yaml
-./step1_prepare_tasks.sh experiments/exp998_smoke_baseline_sample.yaml
-./step2_run_inference.sh condition_a
-./step3_format_results.sh
-./step4_fill_parquet.sh
-./step5_validate.sh
-./step6_report.sh
-./step7_upload_hf.sh --test
-```
-
-> 💡 Local execution works, but for full 220-task runs we recommend **GitHub Actions**.  
-> The batch workflow parallelizes as fast as your TPM (Tokens Per Minute) quota allows — let the cloud do the heavy lifting while you grab a coffee. ☕
+| Path | Responsibility |
+|---|---|
+| [`batch-runner/`](batch-runner/README.md) | Experiment configs, execution pipeline, grading, prompts, and tests |
+| [`batch-runner/sandbox/`](batch-runner/sandbox/README.md) | Container image, execution controls, skills, verification, and render QA |
+| [`src/`](src/README.md) | React dashboard pages, components, hooks, and data presentation |
+| [`scripts/`](scripts/) | Deterministic aggregation and analysis tools |
+| [`data/`](data/) | Checked-in experiment summaries and external grade records |
+| [`.github/workflows/`](.github/workflows/) | Batch, grading, sandbox, validation, and Pages automation |
 
 ---
 
-## 📚 References
+## References
 
-- **GDPVal Paper**: [arXiv:2510.04374](https://arxiv.org/abs/2510.04374)
-- **GDPVal Dataset**: [openai/gdpval](https://huggingface.co/datasets/openai/gdpval)
-- **GDPVal Grading**: [evals.openai.com](https://evals.openai.com/)
-- **Azure OpenAI Responses API**: [Documentation](https://learn.microsoft.com/azure/ai-services/openai/)
+- [GDPVal paper](https://arxiv.org/abs/2510.04374)
+- [GDPVal dataset](https://huggingface.co/datasets/openai/gdpval)
+- [OpenAI Evals](https://evals.openai.com/)
+- [Azure OpenAI documentation](https://learn.microsoft.com/azure/ai-services/openai/)
 
----
+## Author
 
-## 👤 Author
+**Hyeonsang Jeon**<br/>
+Sr. Solution Engineer, Global Black Belt - AI Apps | Microsoft Asia, Korea<br/>
+[GitHub](https://github.com/hyeonsangjeon) |
+[Live Dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/)
 
-**Hyeonsang Jeon**  
-Sr. Solution Engineer · Global Black Belt — AI Apps | Microsoft Asia, Korea  
-[![GitHub](https://img.shields.io/badge/GitHub-hyeonsangjeon-181717?logo=github)](https://github.com/hyeonsangjeon)
-[![Dashboard](https://img.shields.io/badge/Live%20Dashboard-GDPVal-blueviolet?logo=react)](https://hyeonsangjeon.github.io/gdpval-realworks/)
+## License
 
----
-
-## 📄 License
-
-MIT — See [LICENSE](LICENSE) for details.
+MIT. See [`LICENSE`](LICENSE).

@@ -13,6 +13,11 @@ on:
       - 'scripts/**'                    # aggregate 스크립트 변경 시
       - 'package.json'                  # aggregate/browser command wiring
       - 'package-lock.json'             # aggregate/browser dependency graph
+      - 'index.html'                    # Vite entry point
+      - 'vite.config.ts'                # Vite build and base-path config
+      - 'tsconfig*.json'                # TypeScript build config
+      - 'tailwind.config.js'            # dashboard styles config
+      - 'postcss.config.js'             # CSS build config
       - '.github/workflows/deploy.yml'  # Pages gate 자체 변경 시
       - '.github/workflows/batch-run.yml' # runtime-note policy source
       - 'data/notes/runtime-incidents.yaml' # runtime-note incident source
@@ -20,34 +25,106 @@ on:
       - 'data/notes/perception-pipeline.yaml' # perception-note architecture source
       - 'data/notes/success-layers.yaml' # success-note artifact and interpretation source
 
-  workflow_dispatch:          # 수동 실행 가능
+  pull_request:
+    branches: [main]
+    paths:
+      - 'data/tests/**'
+      - 'data/grades/**'
+      - 'batch-runner/experiments/**'
+      - 'batch-runner/results/**'
+      - 'batch-runner/skills/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'index.html'
+      - 'vite.config.ts'
+      - 'tsconfig*.json'
+      - 'tailwind.config.js'
+      - 'postcss.config.js'
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/batch-run.yml'
+      - 'data/notes/runtime-incidents.yaml'
+      - 'data/notes/integrity-incidents.yaml'
+      - 'data/notes/perception-pipeline.yaml'
+      - 'data/notes/success-layers.yaml'
+      - 'README.md'
+      - 'README_KR.md'
+      - 'docs/**'
+
+  workflow_dispatch:
+    inputs:
+      deploy_pages:
+        description: Deploy the validated artifact (protected main only)
+        required: true
+        type: boolean
+        default: true
+      expected_sha:
+        description: Exact result-PR SHA for validation-only dispatches
+        required: false
+        type: string
+        default: ''
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: >-
+    ${{ github.event_name == 'pull_request'
+        && format('pages-pr-{0}', github.event.pull_request.number)
+        || (github.event_name == 'workflow_dispatch'
+            && inputs.deploy_pages == false
+            && format('pages-validate-{0}', github.ref)
+            || 'pages') }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request'
+        || (github.event_name == 'workflow_dispatch'
+            && inputs.deploy_pages == false) }}
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
-  build-and-deploy:
+  validate:
     runs-on: ubuntu-24.04
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 45
     steps:
+      - name: Verify non-PR event contract
+        if: github.event_name != 'pull_request'
+        env:
+          DEPLOY_PAGES: ${{ inputs.deploy_pages }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/main" ]]
+            [[ "$GITHUB_REF_PROTECTED" == "true" ]]
+          elif [[ "$DEPLOY_PAGES" == "true" ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/main" ]]
+            [[ "$GITHUB_REF_PROTECTED" == "true" ]]
+            [[ -z "$EXPECTED_SHA" ]]
+          else
+            [[ "$GITHUB_REF" == refs/heads/experiment/* ]]
+            [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]]
+            [[ "$WORKFLOW_SHA" == "$EXPECTED_SHA" ]]
+          fi
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact checkout
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
@@ -89,10 +166,32 @@ jobs:
         run: npm run test:notes-browser:dist
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        if: >-
+          github.ref == 'refs/heads/main'
+          && github.ref_protected == true
+          && (github.event_name == 'push'
+              || (github.event_name == 'workflow_dispatch'
+                  && inputs.deploy_pages == true))
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: ./dist
 
+  deploy:
+    needs: validate
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.ref_protected == true
+      && (github.event_name == 'push'
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.deploy_pages == true))
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

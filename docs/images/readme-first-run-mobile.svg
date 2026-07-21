@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="358" height="542" viewBox="0 0 720 1090" role="img" aria-labelledby="frm-title frm-desc">
+  <title id="frm-title">Two ways to start GDPVal RealWorks on a narrow screen</title>
+  <desc id="frm-desc">A vertical guide to the free local dashboard and the credentialed three-task cloud experiment, including the dry-run cost warning.</desc>
+  <style>
+    .bg { fill: #f5f3ed; }
+    .panel { fill: #fffefa; stroke: #18343b; stroke-width: 3; }
+    .ink { fill: #18343b; }
+    .muted { fill: #52656a; }
+    .teal { fill: #0f6762; }
+    .amber { fill: #7a4f00; }
+    .coral { fill: #9f3b2e; }
+    .kicker { font: 700 27px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .title { font: 700 44px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .heading { font: 700 34px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .body { font: 500 28px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .mono { font: 600 27px 'IBM Plex Mono', 'SFMono-Regular', monospace; }
+    .number { font: 700 26px 'IBM Plex Mono', 'SFMono-Regular', monospace; fill: #fffefa; }
+  </style>
+  <rect class="bg" width="720" height="1090"/>
+  <text x="44" y="58" class="kicker teal">CHOOSE YOUR FIRST RUN</text>
+  <text x="44" y="112" class="title ink">Inspect locally.</text>
+  <text x="44" y="162" class="title ink">Spend deliberately.</text>
+
+  <rect x="44" y="202" width="632" height="318" rx="10" class="panel"/>
+  <rect x="44" y="202" width="632" height="10" rx="5" class="teal"/>
+  <text x="72" y="258" class="kicker teal">FREE / ABOUT 5 MINUTES</text>
+  <text x="72" y="306" class="heading ink">Open the dashboard locally</text>
+  <text x="72" y="347" class="body muted">No cloud account, API key, or model call.</text>
+  <circle cx="98" cy="405" r="27" class="teal"/>
+  <text x="82" y="414" class="number">01</text>
+  <text x="144" y="400" class="body ink">Clone the repository</text>
+  <text x="144" y="438" class="mono muted">clone repo; cd gdpval-realworks</text>
+  <circle cx="98" cy="482" r="27" class="teal"/>
+  <text x="82" y="491" class="number">02</text>
+  <text x="144" y="477" class="body ink">Install and start Vite</text>
+  <text x="144" y="505" class="mono muted">npm ci &amp;&amp; npm run dev</text>
+
+  <rect x="44" y="548" width="632" height="380" rx="10" class="panel"/>
+  <rect x="44" y="548" width="632" height="10" rx="5" class="amber"/>
+  <text x="72" y="604" class="kicker amber">CLOUD / REAL API USAGE</text>
+  <text x="72" y="652" class="heading ink">Run the three-task smoke test</text>
+  <text x="72" y="693" class="body muted">GitHub fork + Azure OIDC + HF token</text>
+  <rect x="72" y="722" width="576" height="54" rx="8" fill="#e3efeb"/>
+  <text x="92" y="758" class="mono teal">01  Fork + public HF dataset</text>
+  <rect x="72" y="790" width="576" height="54" rx="8" fill="#e3efeb"/>
+  <text x="92" y="826" class="mono teal">02  Configure OIDC + secrets</text>
+  <rect x="72" y="858" width="576" height="54" rx="8" fill="#e3efeb"/>
+  <text x="92" y="894" class="mono teal">03-04  Run + inspect artifact</text>
+
+  <rect x="44" y="958" width="632" height="104" rx="10" fill="#f8ded7" stroke="#9f3b2e" stroke-width="3"/>
+  <circle cx="76" cy="998" r="11" class="coral"/>
+  <text x="100" y="1006" class="body ink">dry_run uses model APIs and HF bootstrap.</text>
+  <text x="100" y="1044" class="body ink">Skip Step 5 + final publish + result PR.</text>
+</svg>

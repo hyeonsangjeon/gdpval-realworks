@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 1200 700" role="img" aria-labelledby="sm-title sm-desc">
+  <title id="sm-title">GDPVal RealWorks system map</title>
+  <desc id="sm-desc">The path from experiment YAML and GDPVal tasks through preparation, execution, packaging, validation, reporting, publication, independent grading, aggregation, and the dashboard.</desc>
+  <defs>
+    <marker id="sm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#274f55"/>
+    </marker>
+  </defs>
+  <style>
+    .sm-bg { fill: #f3f5f1; }
+    .sm-ink { fill: #17343d; }
+    .sm-muted { fill: #53666b; }
+    .sm-teal { fill: #0f6762; }
+    .sm-amber { fill: #7a4f00; }
+    .sm-coral { fill: #9f3b2e; }
+    .sm-white { fill: #fffefa; }
+    .sm-stage { fill: #fffefa; stroke: #214c4a; stroke-width: 2; }
+    .sm-backend { fill: #e3efeb; stroke: #6f928d; stroke-width: 1.5; }
+    .sm-output { fill: #f7e9c9; stroke: #7a4f00; stroke-width: 1.5; }
+    .sm-arrow { fill: none; stroke: #274f55; stroke-width: 3; marker-end: url(#sm-arrow); }
+    .sm-kicker { font: 700 17px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .sm-title { font: 700 34px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .sm-heading { font: 700 20px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .sm-body { font: 500 16px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .sm-small { font: 600 16px 'IBM Plex Mono', 'SFMono-Regular', monospace; }
+  </style>
+
+  <rect class="sm-bg" width="1200" height="700"/>
+  <text x="60" y="55" class="sm-kicker sm-teal">SYSTEM MAP</text>
+  <text x="60" y="99" class="sm-title sm-ink">One YAML enters. Several kinds of evidence leave.</text>
+  <text x="60" y="130" class="sm-body sm-muted">Inference completion, file integrity, Self-QA, and external grading remain separate signals.</text>
+
+  <text x="60" y="181" class="sm-kicker sm-muted">PIPELINE</text>
+  <rect x="60" y="205" width="160" height="112" rx="8" class="sm-stage"/>
+  <rect x="60" y="205" width="160" height="7" rx="3" class="sm-teal"/>
+  <text x="80" y="245" class="sm-small sm-teal">CONFIGURE</text>
+  <text x="80" y="274" class="sm-heading sm-ink">YAML scope</text>
+  <text x="80" y="299" class="sm-body sm-muted">model / tasks</text>
+
+  <path d="M 225 261 H 237" class="sm-arrow"/>
+  <rect x="244" y="205" width="160" height="112" rx="8" class="sm-stage"/>
+  <rect x="244" y="205" width="160" height="7" rx="3" class="sm-teal"/>
+  <text x="264" y="245" class="sm-small sm-teal">STEPS 0-1</text>
+  <text x="264" y="274" class="sm-heading sm-ink">Prepare</text>
+  <text x="264" y="299" class="sm-body sm-muted">clone + select</text>
+
+  <path d="M 409 261 H 421" class="sm-arrow"/>
+  <rect x="428" y="205" width="160" height="112" rx="8" class="sm-stage"/>
+  <rect x="428" y="205" width="160" height="7" rx="3" class="sm-coral"/>
+  <text x="448" y="245" class="sm-small sm-coral">STEP 2</text>
+  <text x="448" y="274" class="sm-heading sm-ink">Execute</text>
+  <text x="448" y="299" class="sm-body sm-muted">model + files</text>
+
+  <path d="M 593 261 H 605" class="sm-arrow"/>
+  <rect x="612" y="205" width="160" height="112" rx="8" class="sm-stage"/>
+  <rect x="612" y="205" width="160" height="7" rx="3" class="sm-amber"/>
+  <text x="632" y="245" class="sm-small sm-amber">STEPS 3-4</text>
+  <text x="632" y="274" class="sm-heading sm-ink">Package</text>
+  <text x="632" y="299" class="sm-body sm-muted">JSON + Parquet</text>
+
+  <path d="M 777 261 H 789" class="sm-arrow"/>
+  <rect x="796" y="205" width="160" height="112" rx="8" class="sm-stage"/>
+  <rect x="796" y="205" width="160" height="7" rx="3" class="sm-amber"/>
+  <text x="816" y="245" class="sm-small sm-amber">STEPS 5-6</text>
+  <text x="816" y="274" class="sm-heading sm-ink">Gate + report</text>
+  <text x="816" y="299" class="sm-body sm-muted">checks + report</text>
+
+  <path d="M 961 261 H 973" class="sm-arrow"/>
+  <rect x="980" y="205" width="160" height="112" rx="8" class="sm-stage"/>
+  <rect x="980" y="205" width="160" height="7" rx="3" class="sm-teal"/>
+  <text x="1000" y="245" class="sm-small sm-teal">STEP 7</text>
+  <text x="1000" y="274" class="sm-heading sm-ink">Publish</text>
+  <text x="1000" y="299" class="sm-body sm-muted">HF + result PR</text>
+
+  <path d="M 508 322 V 354" class="sm-arrow"/>
+  <text x="60" y="383" class="sm-kicker sm-muted">STEP 2 EXECUTION BACKENDS</text>
+  <rect x="60" y="405" width="245" height="76" rx="8" class="sm-backend"/>
+  <text x="82" y="436" class="sm-heading sm-ink">Code interpreter</text>
+  <text x="82" y="462" class="sm-body sm-muted">provider tools + files</text>
+  <rect x="325" y="405" width="245" height="76" rx="8" class="sm-backend"/>
+  <text x="347" y="436" class="sm-heading sm-ink">Subprocess</text>
+  <text x="347" y="462" class="sm-body sm-muted">host temp-directory execution</text>
+  <rect x="590" y="405" width="285" height="76" rx="8" class="sm-backend"/>
+  <text x="612" y="436" class="sm-heading sm-ink">Container sandbox</text>
+  <text x="612" y="462" class="sm-body sm-muted">offline + resource caps + QA</text>
+  <rect x="895" y="405" width="245" height="76" rx="8" class="sm-backend"/>
+  <text x="917" y="436" class="sm-heading sm-ink">JSON renderer</text>
+  <text x="917" y="462" class="sm-body sm-muted">spec + deterministic output</text>
+
+  <rect x="428" y="335" width="160" height="48" rx="8" fill="#f8ded7" stroke="#9f3b2e"/>
+  <text x="446" y="365" class="sm-small sm-ink">SELF-QA RETRY</text>
+  <text x="606" y="365" class="sm-body sm-muted">same model; external grading remains separate</text>
+
+  <text x="60" y="535" class="sm-kicker sm-muted">EVIDENCE AND PRODUCT</text>
+  <rect x="60" y="559" width="260" height="82" rx="8" class="sm-output"/>
+  <text x="82" y="590" class="sm-small sm-amber">RUN ARTIFACTS</text>
+  <text x="82" y="620" class="sm-heading sm-ink">Files + manifests</text>
+  <text x="340" y="613" class="sm-title sm-amber">+</text>
+  <rect x="374" y="559" width="260" height="82" rx="8" class="sm-output"/>
+  <text x="396" y="590" class="sm-small sm-amber">SEPARATE PIPELINE</text>
+  <text x="396" y="620" class="sm-heading sm-ink">External grading</text>
+  <path d="M 639 600 H 681" class="sm-arrow"/>
+  <rect x="688" y="559" width="210" height="82" rx="8" class="sm-output"/>
+  <text x="710" y="590" class="sm-small sm-amber">MERGE EVIDENCE</text>
+  <text x="710" y="620" class="sm-heading sm-ink">Generated JSON</text>
+  <path d="M 903 600 H 945" class="sm-arrow"/>
+  <rect x="952" y="559" width="188" height="82" rx="8" fill="#17343d"/>
+  <text x="974" y="590" class="sm-small" fill="#87d0c4">GITHUB PAGES</text>
+  <text x="974" y="620" class="sm-heading sm-white">Live dashboard</text>
+</svg>

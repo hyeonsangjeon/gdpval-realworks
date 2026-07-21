@@ -136,6 +136,7 @@ def _make_result_payload() -> dict:
     return {
         "experiment_id": "exp_test",
         "experiment_name": "v2-fields-test",
+        "source_repo_id": "student/v2-fields-test",
         "condition_name": "default",
         "model": "test-model",
         "execution_mode": "test",
@@ -358,6 +359,7 @@ def _run_step6(
     tmp_path: Path,
     manifest_data: dict | None,
     result_payload: dict | None = None,
+    dry_run: bool = False,
 ) -> dict:
     """Run ``generate_report`` against an isolated workspace and return the
     parsed ``report_data.json`` dict."""
@@ -381,9 +383,109 @@ def _run_step6(
             result_json_path=result_json,
             output_dir=output_dir,
             no_narrative=True,
+            dry_run=dry_run,
         )
 
     return json.loads((output_dir / "report_data.json").read_text(encoding="utf-8"))
+
+
+def test_dry_run_report_marks_hf_target_as_unpublished(monkeypatch, tmp_path):
+    rd = _run_step6(
+        monkeypatch,
+        tmp_path,
+        _make_v1_manifest_data(),
+        dry_run=True,
+    )
+    markdown = step6_report._build_markdown(rd)
+
+    assert rd["meta"]["source_repo_id"] == "student/v2-fields-test"
+    assert rd["meta"]["publication_plan"] == "dry_run_no_step7"
+    assert "HF Target (bootstrap)" in markdown
+    assert "student/v2-fields-test" in markdown
+    assert "Self-Report" in markdown
+    assert "not published" in markdown
+    assert "/blob/main/self_report.json" not in markdown
+
+
+def test_default_output_dir_uses_selected_result_json_not_stale_workspace(
+    monkeypatch, tmp_path
+):
+    selected = tmp_path / "selected.json"
+    selected.write_text(
+        json.dumps({"experiment_id": "selected_exp"}),
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "step2_inference_results.json").write_text(
+        json.dumps({"experiment_id": "../stale"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(step6_report, "WORKSPACE_DIR", workspace)
+    monkeypatch.setattr(step6_report, "_SCRIPT_DIR", tmp_path)
+
+    output = step6_report._resolve_output_dir(None, selected)
+
+    assert output == tmp_path / "results" / "selected_exp" / "report"
+
+
+@pytest.mark.parametrize("experiment_id", ["../outside", "nested/path", ""])
+def test_default_output_dir_rejects_unsafe_selected_result_id(
+    monkeypatch, tmp_path, experiment_id
+):
+    selected = tmp_path / "selected.json"
+    selected.write_text(
+        json.dumps({"experiment_id": experiment_id}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(step6_report, "_SCRIPT_DIR", tmp_path)
+
+    with pytest.raises(ValueError, match="experiment identifier"):
+        step6_report._resolve_output_dir(None, selected)
+
+
+def test_external_result_does_not_mix_workspace_auxiliary_data(
+    monkeypatch, tmp_path
+):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "validate_stats.json").write_text(
+        json.dumps({"needs_files_total": 999}), encoding="utf-8"
+    )
+    (workspace / "step2_inference_results.json").write_text(
+        json.dumps({
+            "experiment_id": "other",
+            "results": [{"task_id": "other", "status": "error"}],
+        }),
+        encoding="utf-8",
+    )
+    (workspace / "step0_needs_files_manifest.json").write_text(
+        json.dumps(_make_v2_manifest_data()), encoding="utf-8"
+    )
+    monkeypatch.setattr(step6_report, "WORKSPACE_DIR", workspace)
+    external_dir = tmp_path / "external"
+    external_dir.mkdir()
+    result_json = external_dir / "result.json"
+    result_json.write_text(
+        json.dumps(_make_result_payload()), encoding="utf-8"
+    )
+    output_dir = external_dir / "report"
+
+    step6_report.generate_report(
+        result_json_path=result_json,
+        output_dir=output_dir,
+        no_narrative=True,
+    )
+    report = json.loads(
+        (output_dir / "report_data.json").read_text(encoding="utf-8")
+    )
+
+    assert report["file_generation"]["needs_files_total"] is None
+    assert report["recovery_stats"]["resume_rounds"]["rounds_used"] == 0
+    assert all(
+        "prompt_classification" not in task
+        for task in report["task_results"]
+    )
 
 
 def test_generate_report_v2_manifest_includes_v2_fields(monkeypatch, tmp_path):

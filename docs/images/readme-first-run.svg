@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="512" viewBox="0 0 1200 640" role="img" aria-labelledby="fr-title fr-desc">
+  <title id="fr-title">Two ways to start GDPVal RealWorks</title>
+  <desc id="fr-desc">A free local dashboard path and a credentialed three-task cloud experiment path with a warning that dry run still uses paid APIs.</desc>
+  <defs>
+    <marker id="fr-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#214c4a"/>
+    </marker>
+  </defs>
+  <style>
+    .fr-bg { fill: #f5f3ed; }
+    .fr-panel { fill: #fffefa; stroke: #18343b; stroke-width: 2; }
+    .fr-ink { fill: #18343b; }
+    .fr-muted { fill: #52656a; }
+    .fr-teal { fill: #0f6762; }
+    .fr-amber { fill: #7a4f00; }
+    .fr-coral { fill: #9f3b2e; }
+    .fr-line { fill: none; stroke: #214c4a; stroke-width: 3; marker-end: url(#fr-arrow); }
+    .fr-divider { stroke: #c8d1cc; stroke-width: 2; }
+    .fr-kicker { font: 700 17px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .fr-title { font: 700 35px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .fr-heading { font: 700 24px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .fr-body { font: 500 18px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .fr-small { font: 600 16px 'IBM Plex Mono', 'SFMono-Regular', monospace; }
+    .fr-number { font: 700 18px 'IBM Plex Mono', 'SFMono-Regular', monospace; fill: #fffefa; }
+  </style>
+
+  <rect class="fr-bg" width="1200" height="640"/>
+  <text x="60" y="56" class="fr-kicker fr-teal">CHOOSE YOUR FIRST RUN</text>
+  <text x="60" y="101" class="fr-title fr-ink">Inspect locally. Spend deliberately.</text>
+  <text x="60" y="132" class="fr-body fr-muted">The dashboard and the cloud experiment have different trust and cost boundaries.</text>
+
+  <rect x="60" y="168" width="500" height="350" rx="8" class="fr-panel"/>
+  <rect x="60" y="168" width="500" height="8" rx="4" class="fr-teal"/>
+  <text x="92" y="218" class="fr-kicker fr-teal">FREE / ABOUT 5 MINUTES</text>
+  <text x="92" y="253" class="fr-heading fr-ink">Open the dashboard locally</text>
+  <text x="92" y="282" class="fr-body fr-muted">No cloud account. No API key. No model call.</text>
+
+  <circle cx="112" cy="337" r="20" class="fr-teal"/>
+  <text x="102" y="344" class="fr-number">01</text>
+  <text x="150" y="332" class="fr-body fr-ink">Clone the repository</text>
+  <text x="150" y="358" class="fr-small fr-muted">git clone ... &amp;&amp; cd gdpval-realworks</text>
+
+  <line x1="112" y1="362" x2="112" y2="390" class="fr-divider"/>
+  <circle cx="112" cy="416" r="20" class="fr-teal"/>
+  <text x="102" y="423" class="fr-number">02</text>
+  <text x="150" y="411" class="fr-body fr-ink">Install and start Vite</text>
+  <text x="150" y="437" class="fr-small fr-muted">npm ci &amp;&amp; npm run dev</text>
+
+  <rect x="92" y="469" width="436" height="32" rx="6" fill="#dcece8"/>
+  <text x="112" y="491" class="fr-small fr-ink">Open the URL printed by Vite</text>
+
+  <rect x="620" y="168" width="520" height="350" rx="8" class="fr-panel"/>
+  <rect x="620" y="168" width="520" height="8" rx="4" class="fr-amber"/>
+  <text x="652" y="218" class="fr-kicker fr-amber">CLOUD / REAL API USAGE</text>
+  <text x="652" y="253" class="fr-heading fr-ink">Run the three-task smoke test</text>
+  <text x="652" y="282" class="fr-body fr-muted">GitHub fork + Azure OIDC + Hugging Face token</text>
+
+  <rect x="652" y="313" width="186" height="70" rx="6" fill="#eef1ed" stroke="#9caaa7"/>
+  <text x="671" y="341" class="fr-small fr-teal">01 / PUBLIC TARGET</text>
+  <text x="671" y="367" class="fr-body fr-ink">Fork + HF dataset</text>
+  <path d="M 844 348 H 886" class="fr-line"/>
+  <rect x="892" y="313" width="216" height="70" rx="6" fill="#eef1ed" stroke="#9caaa7"/>
+  <text x="911" y="341" class="fr-small fr-teal">02 / IDENTITY</text>
+  <text x="911" y="367" class="fr-body fr-ink">OIDC + repo secrets</text>
+
+  <rect x="652" y="414" width="186" height="70" rx="6" fill="#eef1ed" stroke="#9caaa7"/>
+  <text x="671" y="442" class="fr-small fr-teal">03 / EXECUTE</text>
+  <text x="671" y="468" class="fr-body fr-ink">Actions smoke run</text>
+  <path d="M 844 449 H 886" class="fr-line"/>
+  <rect x="892" y="414" width="216" height="70" rx="6" fill="#eef1ed" stroke="#9caaa7"/>
+  <text x="911" y="442" class="fr-small fr-teal">04 / INSPECT</text>
+  <text x="911" y="468" class="fr-body fr-ink">Download artifact</text>
+
+  <rect x="60" y="550" width="1080" height="54" rx="8" fill="#f8ded7" stroke="#d75b45" stroke-width="2"/>
+  <circle cx="90" cy="577" r="10" class="fr-coral"/>
+  <text x="114" y="584" class="fr-body fr-ink">dry_run skips Step 5 validation, final publication, and the PR; model cost and HF bootstrap still run.</text>
+</svg>

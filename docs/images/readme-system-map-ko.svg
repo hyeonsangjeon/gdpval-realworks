@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 1200 700" role="img" aria-labelledby="smk-title smk-desc">
+  <title id="smk-title">GDPVal RealWorks 시스템 맵</title>
+  <desc id="smk-desc">실험 YAML이 준비, 실행, 패키징, 검증, 게시를 거쳐 실행 근거 및 별도 외부 채점과 함께 대시보드로 집계되는 흐름입니다.</desc>
+  <defs>
+    <marker id="smk-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#274f55"/>
+    </marker>
+  </defs>
+  <style>
+    .bg { fill: #f3f5f1; }
+    .ink { fill: #17343d; }
+    .muted { fill: #53666b; }
+    .teal { fill: #0f6762; }
+    .amber { fill: #7a4f00; }
+    .coral { fill: #9f3b2e; }
+    .white { fill: #fffefa; }
+    .stage { fill: #fffefa; stroke: #214c4a; stroke-width: 2; }
+    .backend { fill: #e3efeb; stroke: #6f928d; stroke-width: 1.5; }
+    .output { fill: #f7e9c9; stroke: #7a4f00; stroke-width: 1.5; }
+    .arrow { fill: none; stroke: #274f55; stroke-width: 3; marker-end: url(#smk-arrow); }
+    .kicker { font: 700 17px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .title { font: 700 34px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .heading { font: 700 20px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .body { font: 500 16px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .small { font: 600 16px 'IBM Plex Mono', 'Noto Sans KR', monospace; }
+  </style>
+  <rect class="bg" width="1200" height="700"/>
+  <text x="60" y="55" class="kicker teal">시스템 맵</text>
+  <text x="60" y="99" class="title ink">YAML 하나가 들어가고, 여러 근거 신호가 나옵니다.</text>
+  <text x="60" y="130" class="body muted">실행 완료, 파일 무결성, Self-QA, 외부 채점은 서로 다른 신호입니다.</text>
+  <text x="60" y="181" class="kicker muted">실험 파이프라인</text>
+
+  <rect x="60" y="205" width="160" height="112" rx="8" class="stage"/><rect x="60" y="205" width="160" height="7" rx="3" class="teal"/>
+  <text x="80" y="245" class="small teal">설정</text><text x="80" y="274" class="heading ink">YAML + 범위</text><text x="80" y="299" class="body muted">모델 / 태스크</text>
+  <path d="M 225 261 H 237" class="arrow"/>
+  <rect x="244" y="205" width="160" height="112" rx="8" class="stage"/><rect x="244" y="205" width="160" height="7" rx="3" class="teal"/>
+  <text x="264" y="245" class="small teal">STEP 0-1</text><text x="264" y="274" class="heading ink">준비</text><text x="264" y="299" class="body muted">복제 + 선택</text>
+  <path d="M 409 261 H 421" class="arrow"/>
+  <rect x="428" y="205" width="160" height="112" rx="8" class="stage"/><rect x="428" y="205" width="160" height="7" rx="3" class="coral"/>
+  <text x="448" y="245" class="small coral">STEP 2</text><text x="448" y="274" class="heading ink">실행</text><text x="448" y="299" class="body muted">모델 + 파일</text>
+  <path d="M 593 261 H 605" class="arrow"/>
+  <rect x="612" y="205" width="160" height="112" rx="8" class="stage"/><rect x="612" y="205" width="160" height="7" rx="3" class="amber"/>
+  <text x="632" y="245" class="small amber">STEP 3-4</text><text x="632" y="274" class="heading ink">패키징</text><text x="632" y="299" class="body muted">JSON + Parquet</text>
+  <path d="M 777 261 H 789" class="arrow"/>
+  <rect x="796" y="205" width="160" height="112" rx="8" class="stage"/><rect x="796" y="205" width="160" height="7" rx="3" class="amber"/>
+  <text x="816" y="245" class="small amber">STEP 5-6</text><text x="816" y="274" class="heading ink">검증 + 리포트</text><text x="816" y="299" class="body muted">검사 + narrative</text>
+  <path d="M 961 261 H 973" class="arrow"/>
+  <rect x="980" y="205" width="160" height="112" rx="8" class="stage"/><rect x="980" y="205" width="160" height="7" rx="3" class="teal"/>
+  <text x="1000" y="245" class="small teal">STEP 7</text><text x="1000" y="274" class="heading ink">게시</text><text x="1000" y="299" class="body muted">HF + 결과 PR</text>
+
+  <path d="M 508 322 V 354" class="arrow"/>
+  <text x="60" y="383" class="kicker muted">STEP 2 실행 백엔드</text>
+  <rect x="60" y="405" width="245" height="76" rx="8" class="backend"/>
+  <text x="82" y="436" class="heading ink">Code Interpreter</text><text x="82" y="462" class="body muted">provider 도구 + 파일</text>
+  <rect x="325" y="405" width="245" height="76" rx="8" class="backend"/>
+  <text x="347" y="436" class="heading ink">Subprocess</text><text x="347" y="462" class="body muted">host 임시 디렉터리</text>
+  <rect x="590" y="405" width="285" height="76" rx="8" class="backend"/>
+  <text x="612" y="436" class="heading ink">Container sandbox</text><text x="612" y="462" class="body muted">offline + 자원 제한 + QA</text>
+  <rect x="895" y="405" width="245" height="76" rx="8" class="backend"/>
+  <text x="917" y="436" class="heading ink">JSON renderer</text><text x="917" y="462" class="body muted">spec + 결정적 출력</text>
+  <rect x="428" y="335" width="160" height="48" rx="8" fill="#f8ded7" stroke="#9f3b2e"/>
+  <text x="446" y="365" class="small ink">SELF-QA 재시도</text><text x="606" y="365" class="body muted">같은 모델; 외부 채점은 별도</text>
+
+  <text x="60" y="535" class="kicker muted">근거와 대시보드</text>
+  <rect x="60" y="559" width="260" height="82" rx="8" class="output"/>
+  <text x="82" y="590" class="small amber">실행 근거</text><text x="82" y="620" class="heading ink">파일 + manifest</text>
+  <text x="340" y="613" class="title amber">+</text>
+  <rect x="374" y="559" width="260" height="82" rx="8" class="output"/>
+  <text x="396" y="590" class="small amber">별도 파이프라인</text><text x="396" y="620" class="heading ink">외부 채점</text>
+  <path d="M 639 600 H 681" class="arrow"/>
+  <rect x="688" y="559" width="210" height="82" rx="8" class="output"/>
+  <text x="710" y="590" class="small amber">근거 집계</text><text x="710" y="620" class="heading ink">Generated JSON</text>
+  <path d="M 903 600 H 945" class="arrow"/>
+  <rect x="952" y="559" width="188" height="82" rx="8" fill="#17343d"/>
+  <text x="974" y="590" class="small" fill="#87d0c4">GITHUB PAGES</text><text x="974" y="620" class="heading white">라이브 대시보드</text>
+</svg>

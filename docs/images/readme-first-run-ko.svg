@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="512" viewBox="0 0 1200 640" role="img" aria-labelledby="frk-title frk-desc">
+  <title id="frk-title">GDPVal RealWorks 첫 실행 경로</title>
+  <desc id="frk-desc">무료 로컬 대시보드 경로와 실제 API 비용이 발생하는 3개 태스크 클라우드 실험 경로를 비교합니다.</desc>
+  <defs>
+    <marker id="frk-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#214c4a"/>
+    </marker>
+  </defs>
+  <style>
+    .bg { fill: #f5f3ed; }
+    .panel { fill: #fffefa; stroke: #18343b; stroke-width: 2; }
+    .ink { fill: #18343b; }
+    .muted { fill: #52656a; }
+    .teal { fill: #0f6762; }
+    .amber { fill: #7a4f00; }
+    .coral { fill: #9f3b2e; }
+    .line { fill: none; stroke: #214c4a; stroke-width: 3; marker-end: url(#frk-arrow); }
+    .divider { stroke: #c8d1cc; stroke-width: 2; }
+    .kicker { font: 700 17px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .title { font: 700 35px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .heading { font: 700 24px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .body { font: 500 18px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .small { font: 600 16px 'IBM Plex Mono', 'Noto Sans KR', monospace; }
+    .number { font: 700 18px 'IBM Plex Mono', monospace; fill: #fffefa; }
+  </style>
+  <rect class="bg" width="1200" height="640"/>
+  <text x="60" y="56" class="kicker teal">첫 실행 선택</text>
+  <text x="60" y="101" class="title ink">로컬에서 확인하고, 비용은 의도적으로 사용하세요.</text>
+  <text x="60" y="132" class="body muted">대시보드와 클라우드 실험은 인증과 비용 경계가 다릅니다.</text>
+
+  <rect x="60" y="168" width="500" height="350" rx="8" class="panel"/>
+  <rect x="60" y="168" width="500" height="8" rx="4" class="teal"/>
+  <text x="92" y="218" class="kicker teal">무료 / 약 5분</text>
+  <text x="92" y="253" class="heading ink">로컬 대시보드 열기</text>
+  <text x="92" y="282" class="body muted">클라우드 계정, API key, model call이 필요 없습니다.</text>
+  <circle cx="112" cy="337" r="20" class="teal"/>
+  <text x="102" y="344" class="number">01</text>
+  <text x="150" y="332" class="body ink">저장소 clone</text>
+  <text x="150" y="358" class="small muted">git clone ... &amp;&amp; cd gdpval-realworks</text>
+  <line x1="112" y1="362" x2="112" y2="390" class="divider"/>
+  <circle cx="112" cy="416" r="20" class="teal"/>
+  <text x="102" y="423" class="number">02</text>
+  <text x="150" y="411" class="body ink">Vite 개발 서버 시작</text>
+  <text x="150" y="437" class="small muted">npm ci &amp;&amp; npm run dev</text>
+  <rect x="92" y="469" width="436" height="32" rx="6" fill="#dcece8"/>
+  <text x="112" y="491" class="small ink">Vite가 출력한 URL 열기</text>
+
+  <rect x="620" y="168" width="520" height="350" rx="8" class="panel"/>
+  <rect x="620" y="168" width="520" height="8" rx="4" class="amber"/>
+  <text x="652" y="218" class="kicker amber">클라우드 / 실제 API 사용</text>
+  <text x="652" y="253" class="heading ink">3개 태스크 smoke 실행</text>
+  <text x="652" y="282" class="body muted">GitHub fork + Azure OIDC + Hugging Face token</text>
+  <rect x="652" y="313" width="186" height="70" rx="6" fill="#eef1ed" stroke="#9caaa7"/>
+  <text x="671" y="341" class="small teal">01 / 공개 대상</text>
+  <text x="671" y="367" class="body ink">Fork + HF dataset</text>
+  <path d="M 844 348 H 886" class="line"/>
+  <rect x="892" y="313" width="216" height="70" rx="6" fill="#eef1ed" stroke="#9caaa7"/>
+  <text x="911" y="341" class="small teal">02 / 인증</text>
+  <text x="911" y="367" class="body ink">OIDC + repo secrets</text>
+  <rect x="652" y="414" width="186" height="70" rx="6" fill="#eef1ed" stroke="#9caaa7"/>
+  <text x="671" y="442" class="small teal">03 / 실행</text>
+  <text x="671" y="468" class="body ink">Actions smoke run</text>
+  <path d="M 844 449 H 886" class="line"/>
+  <rect x="892" y="414" width="216" height="70" rx="6" fill="#eef1ed" stroke="#9caaa7"/>
+  <text x="911" y="442" class="small teal">04 / 확인</text>
+  <text x="911" y="468" class="body ink">Artifact 다운로드</text>
+
+  <rect x="60" y="550" width="1080" height="54" rx="8" fill="#f8ded7" stroke="#9f3b2e" stroke-width="2"/>
+  <circle cx="90" cy="577" r="10" class="coral"/>
+  <text x="114" y="584" class="body ink">dry_run도 model과 HF를 사용합니다. Step 5 검증, 최종 게시, 결과 PR을 건너뜁니다.</text>
+</svg>

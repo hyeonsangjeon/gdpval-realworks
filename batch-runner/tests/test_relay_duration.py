@@ -2,7 +2,13 @@
 
 import json
 
-from step2_run_inference import _save_progress
+import pytest
+
+from step2_run_inference import (
+    _load_and_validate_progress,
+    _resolve_run_identity,
+    _save_progress,
+)
 
 
 def _identity(total_tasks):
@@ -10,6 +16,7 @@ def _identity(total_tasks):
         "run_id": "relay-test-run",
         "condition_identity": "condition_a",
         "ordered_task_ids": [f"t{index}" for index in range(1, total_tasks + 1)],
+        "prepared_fingerprint": "a" * 64,
     }
 
 
@@ -118,3 +125,57 @@ class TestSaveProgressStartedAt:
 
         assert progress_path.exists()
         assert not progress_path.with_suffix(".json.tmp").exists()
+
+    def test_progress_rejects_prepared_fingerprint_mismatch(self, tmp_path):
+        progress_path = tmp_path / "progress.json"
+        _save_progress(
+            experiment_id="exp_test",
+            condition_name="cond",
+            execution_mode="subprocess",
+            total_tasks=1,
+            results=[],
+            started_at="2026-01-01T00:00:00",
+            path=progress_path,
+            **_identity(1),
+        )
+
+        with pytest.raises(ValueError, match="identity mismatch"):
+            _load_and_validate_progress(
+                progress_path,
+                experiment_id="exp_test",
+                condition_name="cond",
+                condition_identity="condition_a",
+                run_id="relay-test-run",
+                execution_mode="subprocess",
+                ordered_task_ids=["t1"],
+                prepared_fingerprint="b" * 64,
+            )
+
+
+def test_relay_lineage_is_stable_across_github_run_ids(monkeypatch):
+    monkeypatch.setenv("GDPVAL_RELAY_LINEAGE_ID", "exp_test:100:1")
+    monkeypatch.setenv("GITHUB_RUN_ID", "200")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "3")
+
+    assert _resolve_run_identity("exp_test") == "exp_test:100:1"
+
+
+def test_initial_run_identity_uses_current_github_run(monkeypatch):
+    monkeypatch.delenv("GDPVAL_RELAY_LINEAGE_ID", raising=False)
+    monkeypatch.setenv("GITHUB_RUN_ID", "200")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "3")
+
+    assert _resolve_run_identity("exp_test") == "exp_test:200:3"
+
+
+def test_condition_workspace_paths_are_isolated(monkeypatch, tmp_path):
+    import step2_run_inference as step2
+
+    monkeypatch.setattr(step2, "WORKSPACE_DIR", tmp_path)
+    a_progress, a_result = step2._condition_workspace_paths("condition_a")
+    b_progress, b_result = step2._condition_workspace_paths("condition_b")
+
+    assert a_progress != b_progress
+    assert a_result != b_result
+    assert a_progress.name == "step2_inference_progress_condition_a.json"
+    assert b_progress.name == "step2_inference_progress_condition_b.json"

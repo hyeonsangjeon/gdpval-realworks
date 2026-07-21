@@ -21,6 +21,7 @@ from core.config import WORKSPACE_DIR
 from core.data_loader import GDPValDataLoader
 from core.experiment_config import ExperimentConfig
 from core.needs_files import NeedsFilesManifest
+from core.prepared_fingerprint import prepared_fingerprint
 
 
 def _public_agentic_config(value):
@@ -189,6 +190,7 @@ def prepare_tasks(config_path: str) -> dict:
         "condition_b": _condition_dict(config.condition_b) if config.condition_b else None,
         "tasks": task_list,
     }
+    output["prepared_fingerprint"] = prepared_fingerprint(output)
 
     # 7. Save
     output_path = WORKSPACE_DIR / "step1_tasks_prepared.json"

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="358" height="612" viewBox="0 0 720 1230" role="img" aria-labelledby="tbm-title tbm-desc">
+  <title id="tbm-title">GDPVal RealWorks vertical operational controls</title>
+  <desc id="tbm-desc">Four stacked cards describe identity, input, runtime, and publication controls, followed by the manual protected-main agentic control.</desc>
+  <style>
+    .bg { fill: #f6f3ec; }
+    .card { fill: #fffefa; stroke: #264b52; stroke-width: 3; }
+    .ink { fill: #17343d; }
+    .muted { fill: #586a6e; }
+    .teal { fill: #0f6762; }
+    .amber { fill: #7a4f00; }
+    .coral { fill: #9f3b2e; }
+    .blue { fill: #315c73; }
+    .kicker { font: 700 27px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .title { font: 700 44px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .heading { font: 700 34px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .body { font: 600 27px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .mono { font: 600 26px 'IBM Plex Mono', 'SFMono-Regular', monospace; }
+  </style>
+  <rect class="bg" width="720" height="1230"/>
+  <text x="44" y="58" class="kicker teal">OPERATIONAL CONTROLS</text>
+  <text x="44" y="112" class="title ink">Controls belong to a path.</text>
+  <text x="44" y="154" class="body muted">Each execution path enforces different limits.</text>
+
+  <rect x="44" y="190" width="632" height="190" rx="10" class="card"/>
+  <rect x="44" y="190" width="12" height="190" rx="6" class="teal"/>
+  <text x="82" y="232" class="kicker teal">01 / IDENTITY</text>
+  <text x="82" y="274" class="heading ink">Short-lived Azure access</text>
+  <text x="82" y="314" class="body teal">+ GitHub OIDC; no Azure API key</text>
+  <text x="82" y="348" class="mono muted">batch-run.yml / llm_client.py</text>
+
+  <rect x="44" y="400" width="632" height="190" rx="10" class="card"/>
+  <rect x="44" y="400" width="12" height="190" rx="6" class="blue"/>
+  <text x="82" y="442" class="kicker blue">02 / INPUT</text>
+  <text x="82" y="484" class="heading ink">Parse before credentials</text>
+  <text x="82" y="524" class="body blue">+ safe YAML; agentic mode rejected</text>
+  <text x="82" y="558" class="mono muted">inspect-mode / no cloud credentials</text>
+
+  <rect x="44" y="610" width="632" height="190" rx="10" class="card"/>
+  <rect x="44" y="610" width="12" height="190" rx="6" class="coral"/>
+  <text x="82" y="652" class="kicker coral">03 / RUNTIME</text>
+  <text x="82" y="694" class="heading ink">Contain generated code</text>
+  <text x="82" y="734" class="body coral">+ pinned digest; offline + resource caps</text>
+  <text x="82" y="768" class="mono muted">sandbox mode / sandbox_runner.py</text>
+
+  <rect x="44" y="820" width="632" height="190" rx="10" class="card"/>
+  <rect x="44" y="820" width="12" height="190" rx="6" class="amber"/>
+  <text x="82" y="862" class="kicker amber">04 / PUBLISH</text>
+  <text x="82" y="904" class="heading ink">Gate Pages deployment</text>
+  <text x="82" y="944" class="body amber">+ PR build + data + browser tests</text>
+  <text x="82" y="978" class="mono muted">deploy.yml / Pages + OIDC only</text>
+
+  <rect x="44" y="1040" width="632" height="150" rx="10" fill="#17343d"/>
+  <rect x="44" y="1040" width="12" height="150" rx="6" class="coral"/>
+  <text x="82" y="1082" class="kicker" fill="#87d0c4">MANUAL AGENTIC CONTROL</text>
+  <text x="82" y="1122" class="body" fill="#fffefa">Protected main + dependency locks</text>
+  <text x="82" y="1158" class="body" fill="#fffefa">Digest, SBOM audit, model-free preflight</text>
+</svg>

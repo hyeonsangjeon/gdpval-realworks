@@ -13,13 +13,14 @@ import step1_prepare_tasks as step1
 import step2_run_inference as step2
 from core.agentic_experiments import agentic_condition_identity
 from core.experiment_config import ExperimentConfig
+from core.prepared_fingerprint import prepared_fingerprint
 
 
 def _config() -> ExperimentConfig:
     return ExperimentConfig.from_dict({
         "experiment": {"id": "exp028", "name": "Agentic fixture"},
         "data": {
-            "source": "fixture",
+            "source": "fixture/agentic",
             "filter": {"task_ids": ["task-1"]},
         },
         "condition_a": {
@@ -59,10 +60,10 @@ def _config() -> ExperimentConfig:
 
 
 def _prepared(agentic: dict | None = None) -> dict:
-    return {
+    payload = {
         "experiment_id": "exp028",
         "experiment_name": "Agentic fixture",
-        "source": "fixture",
+        "source": "fixture/agentic",
         "execution": {
             "mode": "agentic_sandbox",
             "max_retries": 0,
@@ -100,6 +101,8 @@ def _prepared(agentic: dict | None = None) -> dict:
             "prompt": {"system": "system"},
         },
     }
+    payload["prepared_fingerprint"] = prepared_fingerprint(payload)
+    return payload
 
 
 def _patch_step2_workspace(tmp_path, monkeypatch, prepared):
@@ -519,6 +522,7 @@ def test_progress_checkpoint_requires_exact_identity_and_recovers_missing_tasks(
         "run_id": "paired-run",
         "execution_mode": "agentic_sandbox",
         "ordered_task_ids": ["task-1", "task-2"],
+        "prepared_fingerprint": "a" * 64,
         "total_tasks": 2,
         "started_at": "2026-07-17T00:00:00+00:00",
         "resume_round": 0,
@@ -534,6 +538,7 @@ def test_progress_checkpoint_requires_exact_identity_and_recovers_missing_tasks(
         run_id="paired-run",
         execution_mode="agentic_sandbox",
         ordered_task_ids=["task-1", "task-2"],
+        prepared_fingerprint="a" * 64,
     )
 
     assert [result["task_id"] for result in loaded["results"]] == [
@@ -551,6 +556,7 @@ def test_progress_checkpoint_requires_exact_identity_and_recovers_missing_tasks(
             run_id="other-run",
             execution_mode="agentic_sandbox",
             ordered_task_ids=["task-1", "task-2"],
+            prepared_fingerprint="a" * 64,
         )
 
 

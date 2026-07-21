@@ -3,69 +3,107 @@
 This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
-- Updated: 2026-07-20
-- Status: Success Field Note column revision production-verified and deployed
+- Updated: 2026-07-21
+- Status: Implementation complete and locally verified; remote canary pending
 
 ## Task
 
-- Revise the deployed `/notes/what-does-success-mean` article into a calmer,
-  easier retrospective column without changing its evidence contract.
-- Explain the experiment as 상황→태스크→액션→결과→가설 검증→근본 원인.
-- Make the reduced validation points, required analysis, three discoveries,
-  tested hypothesis, and root cause explicit in plain Korean.
-- Preserve the distinction between report success, process completion,
-  requirement fidelity, Self-QA, and external quality.
+- Polish the English and Korean root READMEs end to end around immediate
+  execution and trust decisions for a graduate-student beginner.
+- Replace remote architecture/workflow renders with readable localized SVGs for
+  desktop, tablet, and mobile.
+- Re-audit every onboarding claim against the actual batch, sandbox, report,
+  Pages, and automated result-PR paths.
+- Add pre-merge validation without exposing Pages/OIDC privileges to PR code.
 
 ## Result
 
-- Reframed the opening as the team's initial reading of `200/220`, followed by
-  the retry and Self-QA signals that prompted a closer check.
-- Reduced the review from 220 outcomes to two tasks in the same occupation and
-  reduced validation to three answerable questions: did it finish, did the file
-  open, and did it contain the required analysis. External quality remains
-  explicitly unverified.
-- Explained the workbook's required analysis before presenting the measured
-  five sheets, 35/500 companies, zero formulas, and QA issues.
-- Presented briefing structure as confirmed at 32 slides/pages while leaving
-  citation depth, country prioritization, and overall fidelity unverified.
-- Summarized three discoveries and explicitly rejected the original hypothesis
-  that report success alone means handoff-ready work.
-- Traced the root cause beyond the model to recording process completion, file
-  integrity, requirement fidelity, and expert quality in one status.
-- Preserved the generated source, selector, hero/chart values, 30 citations,
-  ten evidence targets, pinned URLs, and every fail-closed state.
-- Squash-merged the reviewed column revision through PR #118 as `f3648f72`.
+- Replaced the mobile-hostile first-viewport table with three concise choices:
+  live evidence, a credential-free local preview, and a real three-task smoke
+  run. The long first-run visual moved into the detailed guide.
+- Added English and Korean first-run guides that define smoke test, Self-QA,
+  relay, and OIDC; enumerate five secrets; explain provider cost; and document
+  public HF creation, destructive recreation/upload, artifacts, failure modes,
+  and cleanup.
+- Added twelve local SVGs: English/Korean desktop/mobile versions of the first
+  run, complete system map, and path-specific operational controls. The system
+  map includes all four execution backends and keeps run artifacts separate from
+  external grading before evidence aggregation.
+- Root READMEs use 960px `<picture>` breakpoints and intrinsic image dimensions.
+  The diagrams use no external image assets, gradients, animation, or remote
+  Mermaid renderer.
+- Split Pages validation from deployment. PRs run aggregation, production build,
+  77 data contracts, and four browser contracts with only `contents: read`.
+  Pages/OIDC permissions exist only in the protected-main deploy job.
+- Covered automated result PRs suppressed by the default `GITHUB_TOKEN`: the
+  batch workflow creates and proves a one-file report PR, performs HF upload only
+  after that contract passes, rechecks the PR head, then dispatches read-only
+  validation for the exact SHA.
+- Added a model-free Step 6 fallback and self-report identity postcondition. A
+  missing/partial report can no longer silently skip the PR or publish a stale
+  `self_report.json`.
+- Kept Step 6 strictly pre-grading. Self-QA and execution observations are never
+  presented as an external grade; grading remains a separate pipeline.
+- Added a canonical Step 1 payload fingerprint. Step 2 recalculates and stores
+  it in checkpoints/final output; Step 3 recalculates it and rejects stale or
+  mixed experiment, source, task-order, result-set, model, prompt, or execution
+  inputs.
+- Added a relay-stable lineage ID passed across GitHub workflow legs and
+  condition-specific progress/result files, preventing new run IDs or condition
+  B from rejecting/overwriting condition A checkpoints.
+- Added path/branch-safe experiment IDs and canonical `owner/repository` source
+  validation before Step 0, including Hugging Face length and punctuation rules.
+- Synced old agentic and silent-corruption fixtures to the stronger identity
+  contract without weakening production validation.
 
 ## Verification
 
-- Success source, selector, pinned artifact, article, citation, and wiring
-  contracts: **10 passed, 0 failed**.
-- TypeScript and the production Vite build passed. The only build advisory is
-  the existing main chunk-size warning.
-- The success Playwright suite passed against the production build, including
-  the new six chapter titles, three validation questions, three discoveries,
-  rejected hypothesis, root-cause wording, 30 citations, ten evidence targets,
-  reduced motion, and fail-closed states.
-- Final full regression: **77 aggregate tests passed**, and runtime, integrity,
-  perception, and success browser suites all passed in **48.201 seconds**.
-- `git diff --check` passed after the final copy and regression-test updates.
-- Manual mobile inspection found 348px paragraph content/scroll widths, no
-  alerts, no horizontal overflow, and unchanged citation/evidence counts.
-- Static and browser negative assertions reject the previous `실행 완료율` and
-  `실행 경로를 완료` interpretation in the metric, hypothesis, and root-cause
-  sections. Briefing fidelity remains explicitly unverified.
-- Pages run
-  [29757449226](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29757449226)
-  completed successfully for exact merge SHA `f3648f72`. Build, all 77 aggregate
-  contracts, all four browser suites, artifact upload, and Pages deployment
-  passed in 2 minutes 15 seconds. It was the only workflow for the merge SHA.
-- Public mobile rendered the revised 상황→태스크→액션→결과→가설 검증→근본 원인
-  chapters, three validation questions, three discoveries, rejected hypothesis,
-  report-success metric, 30 citations, and ten evidence targets with no alert or
-  horizontal overflow.
-- Public desktop rendered a 1032×430 SVG with no overlapping labels, 34px
-  chapter headings, 34.85px body leading, no alert, and no horizontal overflow.
+- Latest-base audit: implementation was reapplied cleanly to
+  `origin/main@d83846f`; the two intervening success-note commits and their
+  completion history were preserved before updating this rolling record.
+- Documentation contract: **56 local links passed** across both READMEs and both
+  beginner guides; no `mermaid.ink` dependency remains.
+- SVG contract: **12/12 valid XML**, unique accessible IDs, intrinsic dimensions,
+  no external image nodes, and primary text contrast of at least **6.04:1**.
+- Browser geometry: localized mobile assets are selected through 960px and
+  desktop assets from 961px; nearest-card right/bottom spacing and canvas
+  overflow checks pass at mobile, tablet, and desktop widths.
+- `ui-designer` returned final **APPROVE** with no must-fix, major, or minor
+  finding after Chromium glyph-overlap and card-spacing corrections.
+- Backend focused regression: **151 passed, 0 failed** across fingerprint, relay,
+  Step 3, Step 6, config, agentic, and silent-corruption modules.
+- Backend broad regression: **1,529 passed, 6 skipped, 44 integration tests
+  deselected, 0 failed**. `test_deliverable_selector.py` was the only excluded
+  module because the local GDPVal parquet fixture is absent.
+- Python static checks: Ruff clean and `py_compile` passed for all six touched
+  implementation modules and changed tests.
+- Workflow contracts: **7 passed, 0 failed**; both workflow YAML files parse,
+  embedded Python heredocs compile from their parsed step scripts, action SHAs
+  are pinned, and VS Code diagnostics report no errors.
+- Frontend data contracts: **77 passed, 0 failed**. Aggregation found 1 test
+  experiment, 23 reports, 16 grades, 28 prompt architectures, and 4,439 task QA
+  lookups in the local snapshot.
+- TypeScript and Vite production build passed. Runtime, integrity, perception,
+  and success browser suites all passed against the production build.
+- `git diff --check` passed. No model call, grading, batch run, HF write,
+  workflow dispatch, Pages deployment, commit, push, or paid action occurred.
+- The independent backend reviewer resolved multiple issues during iteration,
+  but its final approval request failed repeatedly at the review service's
+  network boundary. Completion therefore relies on the broad/focused automated
+  suites, executable heredoc syntax checks, Ruff, `py_compile`, YAML parsing,
+  and direct final diff review rather than claiming an unavailable final signoff.
 
 ## Remaining Work
 
-- No implementation or deployment work remains for the success column revision.
+- Commit and push through a pull request; this task did not change remote state.
+- On the next naturally occurring automated result PR, verify that the PR
+  contract passes before HF upload, `validate` attaches to the exact final head
+  SHA, and the validation-only run creates no Pages deployment. Do not run a paid
+  experiment solely for this canary.
+- After the canary, require `validate` in the repository ruleset and keep the
+  `github-pages` environment restricted to protected `main`.
+- The broad backend suite still needs the local GDPVal parquet fixture to collect
+  `test_deliverable_selector.py`; all other model-free tests passed.
+- Existing frontend advisories remain outside this task: the main bundle is
+  above Vite's 500 kB warning threshold, local Browserslist data is stale, and
+  VS Code reports the existing TypeScript `baseUrl` deprecation in `tsconfig.json`.
