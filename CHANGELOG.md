@@ -43,6 +43,21 @@ entries land under a fresh dated heading the day they merge to `main`.
   and zero overflow or SVG label overlap.
 
 ### Fixed
+- **Grading workflow trust-boundary hardening** — archive the completed May 24
+  cost sweep outside `.github/workflows` so it cannot be dispatched again,
+  while preserving its exact workflow source beside the historical results and
+  marking the former live status/trigger guide as archived.
+  The active grade workflow remains one job with its existing three pushes,
+  chunk-resume contract, and two follow-up dispatch paths, but now accepts only
+  an exact `main` workflow/event SHA, verifies the checked-out branch, upstream,
+  remote SHA, publication credential, experiment, and grading config before
+  Azure/HF access, and passes all eight dispatch inputs to shell through
+  validated environment variables. External actions are pinned to reviewed
+  40-character commits and the unused `pull-requests: write` permission is
+  removed. This is a fail-closed operational guard, not a protected privilege
+  boundary; repository rulesets and a protected grading environment remain a
+  separate follow-up. No workflow, model/API call, grading run, HF write, or
+  paid execution was dispatched by this change.
 - **Pages main deployment gate** — remove the invalid assumption that the
   repository's unprotected `main` branch reports `github.ref_protected=true`.
   Push/manual deployment remains restricted to `refs/heads/main`, while

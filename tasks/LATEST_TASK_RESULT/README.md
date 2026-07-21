@@ -3,123 +3,73 @@
 This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
-- Updated: 2026-07-21
-- Status: Complete; PR #120 and Pages recovery PR #121 merged and deployed
+- Updated: 2026-07-22
+- Status: Grading workflow trust hardening complete; live canary deferred
 
 ## Task
 
-- Polish the English and Korean root READMEs end to end around immediate
-  execution and trust decisions for a graduate-student beginner.
-- Replace remote architecture/workflow renders with readable localized SVGs for
-  desktop, tablet, and mobile.
-- Re-audit every onboarding claim against the actual batch, sandbox, report,
-  Pages, and automated result-PR paths.
-- Add pre-merge validation without exposing Pages/OIDC privileges to PR code.
+- Disable the obsolete grading cost-sweep workflow without deleting its
+  historical source or results.
+- Harden the active grading workflow without changing its single-job runtime,
+  chunk resume, publication, analysis, or follow-up dispatch behavior.
+- Pin external actions, remove unused permissions, validate exact-main
+  execution, and prevent workflow-dispatch inputs from being interpolated
+  directly into shell scripts.
 
 ## Result
 
-- Replaced the mobile-hostile first-viewport table with three concise choices:
-  live evidence, a credential-free local preview, and a real three-task smoke
-  run. The long first-run visual moved into the detailed guide.
-- Added English and Korean first-run guides that define smoke test, Self-QA,
-  relay, and OIDC; enumerate five secrets; explain provider cost; and document
-  public HF creation, destructive recreation/upload, artifacts, failure modes,
-  and cleanup.
-- Added twelve local SVGs: English/Korean desktop/mobile versions of the first
-  run, complete system map, and path-specific operational controls. The system
-  map includes all four execution backends and keeps run artifacts separate from
-  external grading before evidence aggregation.
-- Root READMEs use 960px `<picture>` breakpoints and intrinsic image dimensions.
-  The diagrams use no external image assets, gradients, animation, or remote
-  Mermaid renderer.
-- Split Pages validation from deployment. PRs run aggregation, production build,
-  77 data contracts, and four browser contracts with only `contents: read`.
-  Pages/OIDC permissions exist only in the main-only deploy job.
-- Covered automated result PRs suppressed by the default `GITHUB_TOKEN`: the
-  batch workflow creates and proves a one-file report PR, performs HF upload only
-  after that contract passes, rechecks the PR head, then dispatches read-only
-  validation for the exact SHA.
-- Added a model-free Step 6 fallback and self-report identity postcondition. A
-  missing/partial report can no longer silently skip the PR or publish a stale
-  `self_report.json`.
-- Kept Step 6 strictly pre-grading. Self-QA and execution observations are never
-  presented as an external grade; grading remains a separate pipeline.
-- Added a canonical Step 1 payload fingerprint. Step 2 recalculates and stores
-  it in checkpoints/final output; Step 3 recalculates it and rejects stale or
-  mixed experiment, source, task-order, result-set, model, prompt, or execution
-  inputs.
-- Added a relay-stable lineage ID passed across GitHub workflow legs and
-  condition-specific progress/result files, preventing new run IDs or condition
-  B from rejecting/overwriting condition A checkpoints.
-- Added path/branch-safe experiment IDs and canonical `owner/repository` source
-  validation before Step 0, including Hugging Face length and punctuation rules.
-- Synced old agentic and silent-corruption fixtures to the stronger identity
-  contract without weakening production validation.
+- Moved `grade-cost-sweep.yml` unchanged from the active workflow directory to
+  its May 24 result archive. The historical workflow blob and documentation
+  remain available, but GitHub can no longer dispatch the obsolete USD 80-cap
+  sweep. Its former live status and trigger commands are explicitly marked as
+  archived historical records.
+- Kept `grade-run.yml` as one job with `contents: write`, `id-token: write`, and
+  `actions: write`; removed only unused `pull-requests: write`.
+- Pinned checkout, setup-python, Azure login, and artifact upload to reviewed
+  full commit SHAs. Checkout explicitly creates local `main`, tracks
+  `origin/main`, and preserves the credential used by the existing result
+  publication steps.
+- Added pre-checkout validation for workflow-dispatch identity, exact main ref,
+  workflow SHA/event SHA equality, safe experiment/config basenames, lowercase
+  inference identity, booleans, task limit, resume chunk, and force/resume
+  consistency.
+- Added post-checkout validation for HEAD, local branch, upstream, remote main,
+  credential configuration, and regular non-symlink experiment/config files
+  before dependency installation, Azure login, or HF access.
+- Routed all eight dispatch inputs used by shell through validated job
+  environment variables. No `run:` block interpolates `${{ inputs.* }}`.
+- Preserved the rc=7 partial-save/rebase/hash/schema contract, three `git push`
+  sites, two self/follow-up dispatches, analysis generation, and artifact path.
+- No workflow dispatch, Azure login, HF access/write, model/API call, grading
+  run, or paid execution occurred.
 
 ## Verification
 
-- Latest-base audit: implementation was reapplied cleanly to
-  `origin/main@d83846f`; the two intervening success-note commits and their
-  completion history were preserved before updating this rolling record.
-- Documentation contract: **56 local links passed** across both READMEs and both
-  beginner guides; no `mermaid.ink` dependency remains.
-- SVG contract: **12/12 valid XML**, unique accessible IDs, intrinsic dimensions,
-  no external image nodes, and primary text contrast of at least **6.04:1**.
-- Browser geometry: localized mobile assets are selected through 960px and
-  desktop assets from 961px; nearest-card right/bottom spacing and canvas
-  overflow checks pass at mobile, tablet, and desktop widths.
-- `ui-designer` returned final **APPROVE** with no must-fix, major, or minor
-  finding after Chromium glyph-overlap and card-spacing corrections.
-- Backend focused regression: **151 passed, 0 failed** across fingerprint, relay,
-  Step 3, Step 6, config, agentic, and silent-corruption modules.
-- Backend broad regression: **1,529 passed, 6 skipped, 44 integration tests
-  deselected, 0 failed**. `test_deliverable_selector.py` was the only excluded
-  module because the local GDPVal parquet fixture is absent.
-- Python static checks: Ruff clean and `py_compile` passed for all six touched
-  implementation modules and changed tests.
-- Workflow contracts: **7 passed, 0 failed**; both workflow YAML files parse,
-  embedded Python heredocs compile from their parsed step scripts, action SHAs
-  are pinned, and VS Code diagnostics report no errors.
-- Frontend data contracts: **77 passed, 0 failed**. Aggregation found 1 test
-  experiment, 23 reports, 16 grades, 28 prompt architectures, and 4,439 task QA
-  lookups in the local snapshot.
-- TypeScript and Vite production build passed. Runtime, integrity, perception,
-  and success browser suites all passed against the production build.
-- `git diff --check` passed. No model call, grading, batch run, HF write,
-  manual workflow dispatch, or paid action occurred during implementation.
-- PR #120 squash-merged as `9892a4c7566a0c5ba24f876459d5932ee7284357`.
-  Its PR `validate` run `29836476672` passed and correctly skipped deployment.
-- The automatic post-merge Pages run `29836869345` failed before checkout
-  because `deploy.yml` incorrectly required `github.ref_protected=true` even
-  though this repository has no main branch protection rule. The follow-up
-  recovery keeps deployment main-only and validation-only dispatch exact-SHA.
-- Recovery PR #121 passed read-only PR run `29843523709`, which correctly
-  skipped deployment, and squash-merged as
-  `138e89a8e3a56e86a836656e2572669786cbc0cf`. Automatic main run
-  `29843751719` then passed validation, Pages artifact upload, and deployment.
-  GitHub reports the live site at
-  <https://hyeonsangjeon.github.io/gdpval-realworks/>.
-- The Pages recovery received final `first-reviewer` approval after its shell
-  contract test was strengthened to reject both lowercase and uppercase
-  `ref_protected` checks. Two mandatory high-risk workflow review requests
-  reached the external review service but both ended at its network boundary;
-  no second-review verdict was available.
-- The independent backend reviewer resolved multiple issues during iteration,
-  but its final approval request failed repeatedly at the review service's
-  network boundary. Completion therefore relies on the broad/focused automated
-  suites, executable heredoc syntax checks, Ruff, `py_compile`, YAML parsing,
-  and direct final diff review rather than claiming an unavailable final signoff.
+- Base identity: exact `origin/main@d3fe7f793e202555f6f4df55922282e217494fc6`;
+  active grading and sweep runs were zero before implementation.
+- Focused workflow/input/archive matrix: **17 passed**. The Bash preflight was
+  executed against valid initial/resume inputs and thirteen invalid context,
+  traversal, identity, boolean, range, and resume combinations.
+- Full Step 8 suite: **114 passed, 0 failed** in 5.02 seconds.
+- Workflow invariants: one job, four 40-character action pins, three pushes,
+  two `grade-run.yml` dispatches, no input expression in any shell script, and
+  unchanged rc=7/schema/hash guards.
+- All active workflow YAML and the archived sweep parse successfully. Official
+  actionlint v1.7.7 was downloaded outside the repository, matched its published
+  SHA-256 checksum, and reported zero diagnostics for `grade-run.yml`.
+- Static diagnostics reported zero errors in the workflow and changed Python
+  test. `git diff --check` passed.
+- `extreme-reasoner` returned `SAFE_WITH_CONDITIONS`; all in-scope conditions
+  were implemented. It explicitly classified this same-job check as an
+  operational guard rather than a protected security boundary.
 
 ## Remaining Work
 
-- On the next naturally occurring automated result PR, verify that the PR
-  contract passes before HF upload, `validate` attaches to the exact final head
-  SHA, and the validation-only run creates no Pages deployment. Do not run a paid
-  experiment solely for this canary.
-- After the canary, require `validate` in the repository ruleset and keep the
-  `github-pages` environment restricted to protected `main`.
-- The broad backend suite still needs the local GDPVal parquet fixture to collect
-  `test_deliverable_selector.py`; all other model-free tests passed.
-- Existing frontend advisories remain outside this task: the main bundle is
-  above Vite's 500 kB warning threshold, local Browserslist data is stale, and
-  VS Code reports the existing TypeScript `baseUrl` deprecation in `tsconfig.json`.
+- Add a repository ruleset for `main` and a protected grading environment before
+  treating exact-main validation as a security boundary.
+- Design any future read-only/privileged job split separately. It must transfer
+  the grade file, resolved inference revision, rc, hashes, and publication state
+  without breaking chunk resume, three pushes, or two follow-up dispatches.
+- Use a later operator-approved model-free `dry_run` to verify GitHub-hosted
+  checkout/upstream/credential behavior. Do not run a paid grading canary solely
+  for this hardening change.
