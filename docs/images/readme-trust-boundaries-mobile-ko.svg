@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="358" height="612" viewBox="0 0 720 1230" role="img" aria-labelledby="tbmk-title tbmk-desc">
+  <title id="tbmk-title">GDPVal RealWorks 모바일 운영 통제</title>
+  <desc id="tbmk-desc">인증, 입력, 실행, 게시의 네 통제와 protected main에서만 수행하는 수동 agentic 통제를 세로 카드로 설명합니다.</desc>
+  <style>
+    .bg { fill: #f6f3ec; }.card { fill: #fffefa; stroke: #264b52; stroke-width: 3; }.ink { fill: #17343d; }.muted { fill: #586a6e; }
+    .teal { fill: #0f6762; }.amber { fill: #7a4f00; }.coral { fill: #9f3b2e; }.blue { fill: #315c73; }
+    .kicker { font: 700 27px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }.title { font: 700 44px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .heading { font: 700 34px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }.body { font: 600 27px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .mono { font: 600 26px 'IBM Plex Mono', 'Noto Sans KR', monospace; }
+  </style>
+  <rect class="bg" width="720" height="1230"/>
+  <text x="44" y="58" class="kicker teal">운영 통제</text><text x="44" y="112" class="title ink">통제는 경로별로 적용됩니다.</text><text x="44" y="154" class="body muted">각 실행 경로는 서로 다른 제한을 강제합니다.</text>
+  <rect x="44" y="190" width="632" height="190" rx="10" class="card"/><rect x="44" y="190" width="12" height="190" rx="6" class="teal"/>
+  <text x="82" y="232" class="kicker teal">01 / 인증</text><text x="82" y="274" class="heading ink">단기 Azure 인증</text><text x="82" y="314" class="body teal">+ GitHub OIDC; Azure API key 없음</text><text x="82" y="348" class="mono muted">batch-run.yml / llm_client.py</text>
+  <rect x="44" y="400" width="632" height="190" rx="10" class="card"/><rect x="44" y="400" width="12" height="190" rx="6" class="blue"/>
+  <text x="82" y="442" class="kicker blue">02 / 입력</text><text x="82" y="484" class="heading ink">권한 전에 파싱</text><text x="82" y="524" class="body blue">+ 안전한 YAML; agentic mode 거부</text><text x="82" y="558" class="mono muted">inspect-mode / cloud credential 없음</text>
+  <rect x="44" y="610" width="632" height="190" rx="10" class="card"/><rect x="44" y="610" width="12" height="190" rx="6" class="coral"/>
+  <text x="82" y="652" class="kicker coral">03 / 실행</text><text x="82" y="694" class="heading ink">생성 코드 격리</text><text x="82" y="734" class="body coral">+ digest 고정; offline + 자원 제한</text><text x="82" y="768" class="mono muted">sandbox mode / sandbox_runner.py</text>
+  <rect x="44" y="820" width="632" height="190" rx="10" class="card"/><rect x="44" y="820" width="12" height="190" rx="6" class="amber"/>
+  <text x="82" y="862" class="kicker amber">04 / 게시</text><text x="82" y="904" class="heading ink">Pages 배포 차단선</text><text x="82" y="944" class="body amber">+ PR build + data + browser test</text><text x="82" y="978" class="mono muted">deploy.yml / Pages + OIDC 권한만</text>
+  <rect x="44" y="1040" width="632" height="150" rx="10" fill="#17343d"/><rect x="44" y="1040" width="12" height="150" rx="6" class="coral"/>
+  <text x="82" y="1082" class="kicker" fill="#87d0c4">수동 AGENTIC 통제</text><text x="82" y="1122" class="body" fill="#fffefa">Protected main + dependency lock</text><text x="82" y="1158" class="body" fill="#fffefa">Digest, SBOM audit, model-free preflight</text>
+</svg>

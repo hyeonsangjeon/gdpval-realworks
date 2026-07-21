@@ -57,6 +57,9 @@ tasks/0601_monday/smoke_regrade_outputs/
 tasks/**
 !tasks/LATEST_TASK_RESULT/
 !tasks/LATEST_TASK_RESULT/README.md
+!tasks/0720_monday/
+tasks/0720_monday/*
+!tasks/0720_monday/BOLT_README_EXECUTION_TRUST.md
 
 *.parquet
 .huggingface/

@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="544" viewBox="0 0 1200 680" role="img" aria-labelledby="tb-title tb-desc">
+  <title id="tb-title">Operational controls in GDPVal RealWorks</title>
+  <desc id="tb-desc">Four path-specific controls cover identity, configuration input, runtime containment, and publication, with a separate manual protected-main control for the agentic image and model-free preflight.</desc>
+  <style>
+    .tb-bg { fill: #f6f3ec; }
+    .tb-card { fill: #fffefa; stroke: #264b52; stroke-width: 2; }
+    .tb-ink { fill: #17343d; }
+    .tb-muted { fill: #586a6e; }
+    .tb-teal { fill: #0f6762; }
+    .tb-amber { fill: #7a4f00; }
+    .tb-coral { fill: #9f3b2e; }
+    .tb-blue { fill: #315c73; }
+    .tb-kicker { font: 700 17px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .tb-title { font: 700 34px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .tb-heading { font: 700 22px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .tb-body { font: 500 17px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .tb-small { font: 600 15px 'IBM Plex Mono', 'SFMono-Regular', monospace; }
+    .tb-check { font: 700 19px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+  </style>
+
+  <rect class="tb-bg" width="1200" height="680"/>
+  <text x="60" y="55" class="tb-kicker tb-teal">OPERATIONAL CONTROLS</text>
+  <text x="60" y="99" class="tb-title tb-ink">Controls are attached to a path, not a slogan.</text>
+  <text x="60" y="130" class="tb-body tb-muted">Baseline, container sandbox, agentic preflight, and Pages each enforce different controls.</text>
+
+  <rect x="60" y="174" width="255" height="310" rx="8" class="tb-card"/>
+  <rect x="60" y="174" width="255" height="8" rx="4" class="tb-teal"/>
+  <text x="84" y="220" class="tb-kicker tb-teal">01 / IDENTITY</text>
+  <text x="84" y="254" class="tb-heading tb-ink">Short-lived access</text>
+  <text x="84" y="292" class="tb-check tb-teal">+ Azure OIDC login</text>
+  <text x="84" y="325" class="tb-check tb-teal">+ no Azure API key</text>
+  <text x="84" y="358" class="tb-check tb-teal">+ pinned actions</text>
+  <line x1="84" y1="386" x2="291" y2="386" stroke="#cbd2cd"/>
+  <text x="84" y="418" class="tb-small tb-muted">batch-run.yml</text>
+  <text x="84" y="445" class="tb-small tb-muted">core/llm_client.py</text>
+
+  <rect x="335" y="174" width="255" height="310" rx="8" class="tb-card"/>
+  <rect x="335" y="174" width="255" height="8" rx="4" class="tb-blue"/>
+  <text x="359" y="220" class="tb-kicker tb-blue">02 / INPUT</text>
+  <text x="359" y="254" class="tb-heading tb-ink">Parse before access</text>
+  <text x="359" y="292" class="tb-check tb-blue">+ safe YAML load</text>
+  <text x="359" y="325" class="tb-check tb-blue">+ restricted characters</text>
+  <text x="359" y="358" class="tb-check tb-blue">+ agentic mode rejected</text>
+  <line x1="359" y1="386" x2="566" y2="386" stroke="#cbd2cd"/>
+  <text x="359" y="418" class="tb-small tb-muted">inspect-mode job</text>
+  <text x="359" y="445" class="tb-small tb-muted">no cloud credentials</text>
+
+  <rect x="610" y="174" width="255" height="310" rx="8" class="tb-card"/>
+  <rect x="610" y="174" width="255" height="8" rx="4" class="tb-coral"/>
+  <text x="634" y="220" class="tb-kicker tb-coral">03 / RUNTIME</text>
+  <text x="634" y="254" class="tb-heading tb-ink">Contain code</text>
+  <text x="634" y="292" class="tb-check tb-coral">+ pinned image digest</text>
+  <text x="634" y="325" class="tb-check tb-coral">+ network disabled</text>
+  <text x="634" y="358" class="tb-check tb-coral">+ memory / PID caps</text>
+  <line x1="634" y1="386" x2="841" y2="386" stroke="#cbd2cd"/>
+  <text x="634" y="418" class="tb-small tb-muted">sandbox mode only</text>
+  <text x="634" y="445" class="tb-small tb-muted">sandbox_runner.py</text>
+
+  <rect x="885" y="174" width="255" height="310" rx="8" class="tb-card"/>
+  <rect x="885" y="174" width="255" height="8" rx="4" class="tb-amber"/>
+  <text x="909" y="220" class="tb-kicker tb-amber">04 / PUBLISH</text>
+  <text x="909" y="254" class="tb-heading tb-ink">Gate Pages deploy</text>
+  <text x="909" y="292" class="tb-check tb-amber">+ PR build + data tests</text>
+  <text x="909" y="325" class="tb-check tb-amber">+ browser contracts</text>
+  <text x="909" y="358" class="tb-check tb-amber">+ Pages / OIDC only</text>
+  <line x1="909" y1="386" x2="1116" y2="386" stroke="#cbd2cd"/>
+  <text x="909" y="418" class="tb-small tb-muted">deploy.yml</text>
+  <text x="909" y="445" class="tb-small tb-muted">PR cannot deploy</text>
+
+  <rect x="60" y="522" width="1080" height="114" rx="8" fill="#17343d"/>
+  <rect x="60" y="522" width="12" height="114" rx="6" class="tb-coral"/>
+  <text x="96" y="558" class="tb-kicker" fill="#87d0c4">MANUAL AGENTIC CONTROL / PROTECTED MAIN ONLY</text>
+  <text x="96" y="591" class="tb-body" fill="#fffefa">Exact dependency locks + digest-pinned base + runtime and attached SBOM audit</text>
+  <text x="96" y="619" class="tb-body" fill="#fffefa">Model-free preflight rejects model/HF credentials, checks AppArmor inputs, and asserts cleanup.</text>
+  <text x="855" y="558" class="tb-small" fill="#efbd58">build-sandbox-image.yml</text>
+  <text x="855" y="591" class="tb-small" fill="#efbd58">agentic-sandbox-</text>
+  <text x="855" y="617" class="tb-small" fill="#efbd58">preflight.yml</text>
+</svg>

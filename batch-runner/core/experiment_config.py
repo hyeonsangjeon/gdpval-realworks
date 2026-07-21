@@ -21,6 +21,10 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Literal
 
 from core.config import DEFAULT_TOKENS
+from core.repository_identity import (
+    validate_experiment_id,
+    validate_hf_dataset_repo_id,
+)
 from core.agentic_experiments import (
     validate_agentic_budget_for_experiment,
     validate_agentic_experiment_identity,
@@ -409,8 +413,17 @@ class ExperimentConfig:
         # Check required fields
         if not self.experiment_id:
             errors.append("experiment.id is required")
+        else:
+            try:
+                validate_experiment_id(self.experiment_id)
+            except ValueError as exc:
+                errors.append(str(exc))
         if not self.name:
             errors.append("experiment.name is required")
+        try:
+            validate_hf_dataset_repo_id(self.data_filter.source)
+        except ValueError as exc:
+            errors.append(str(exc))
 
         # Check conditions
         if not self.condition_a.name:

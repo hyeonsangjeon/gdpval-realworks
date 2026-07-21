@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="544" viewBox="0 0 1200 680" role="img" aria-labelledby="tbk-title tbk-desc">
+  <title id="tbk-title">GDPVal RealWorks 운영 통제</title>
+  <desc id="tbk-desc">인증, 입력, 실행, 게시의 경로별 통제와 protected main에서만 수행하는 수동 agentic 통제를 설명합니다.</desc>
+  <style>
+    .bg { fill: #f6f3ec; }.card { fill: #fffefa; stroke: #264b52; stroke-width: 2; }.ink { fill: #17343d; }.muted { fill: #586a6e; }
+    .teal { fill: #0f6762; }.amber { fill: #7a4f00; }.coral { fill: #9f3b2e; }.blue { fill: #315c73; }
+    .kicker { font: 700 17px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }.title { font: 700 34px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .heading { font: 700 22px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }.body { font: 500 17px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .small { font: 600 15px 'IBM Plex Mono', 'Noto Sans KR', monospace; }.check { font: 700 19px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+  </style>
+  <rect class="bg" width="1200" height="680"/>
+  <text x="60" y="55" class="kicker teal">운영 통제</text>
+  <text x="60" y="99" class="title ink">통제는 경로별로 적용됩니다.</text>
+  <text x="60" y="130" class="body muted">Baseline, container sandbox, agentic preflight, Pages는 서로 다른 제한을 강제합니다.</text>
+
+  <rect x="60" y="174" width="255" height="310" rx="8" class="card"/><rect x="60" y="174" width="255" height="8" rx="4" class="teal"/>
+  <text x="84" y="220" class="kicker teal">01 / 인증</text><text x="84" y="254" class="heading ink">단기 Azure 인증</text>
+  <text x="84" y="292" class="check teal">+ Azure OIDC 로그인</text><text x="84" y="325" class="check teal">+ Azure API key 없음</text><text x="84" y="358" class="check teal">+ Action SHA 고정</text>
+  <line x1="84" y1="386" x2="291" y2="386" stroke="#cbd2cd"/><text x="84" y="418" class="small muted">batch-run.yml</text><text x="84" y="445" class="small muted">core/llm_client.py</text>
+
+  <rect x="335" y="174" width="255" height="310" rx="8" class="card"/><rect x="335" y="174" width="255" height="8" rx="4" class="blue"/>
+  <text x="359" y="220" class="kicker blue">02 / 입력</text><text x="359" y="254" class="heading ink">권한 전에 파싱</text>
+  <text x="359" y="292" class="check blue">+ 안전한 YAML 파싱</text><text x="359" y="325" class="check blue">+ 허용 문자 제한</text><text x="359" y="358" class="check blue">+ agentic mode 거부</text>
+  <line x1="359" y1="386" x2="566" y2="386" stroke="#cbd2cd"/><text x="359" y="418" class="small muted">inspect-mode job</text><text x="359" y="445" class="small muted">cloud credential 없음</text>
+
+  <rect x="610" y="174" width="255" height="310" rx="8" class="card"/><rect x="610" y="174" width="255" height="8" rx="4" class="coral"/>
+  <text x="634" y="220" class="kicker coral">03 / 실행</text><text x="634" y="254" class="heading ink">생성 코드 격리</text>
+  <text x="634" y="292" class="check coral">+ image digest 고정</text><text x="634" y="325" class="check coral">+ network 차단</text><text x="634" y="358" class="check coral">+ memory / PID 제한</text>
+  <line x1="634" y1="386" x2="841" y2="386" stroke="#cbd2cd"/><text x="634" y="418" class="small muted">sandbox mode only</text><text x="634" y="445" class="small muted">sandbox_runner.py</text>
+
+  <rect x="885" y="174" width="255" height="310" rx="8" class="card"/><rect x="885" y="174" width="255" height="8" rx="4" class="amber"/>
+  <text x="909" y="220" class="kicker amber">04 / 게시</text><text x="909" y="254" class="heading ink">Pages 배포 차단선</text>
+  <text x="909" y="292" class="check amber">+ PR build + data test</text><text x="909" y="325" class="check amber">+ browser contract</text><text x="909" y="358" class="check amber">+ Pages / OIDC 권한만</text>
+  <line x1="909" y1="386" x2="1116" y2="386" stroke="#cbd2cd"/><text x="909" y="418" class="small muted">deploy.yml</text><text x="909" y="445" class="small muted">PR은 배포 불가</text>
+
+  <rect x="60" y="522" width="1080" height="114" rx="8" fill="#17343d"/><rect x="60" y="522" width="12" height="114" rx="6" class="coral"/>
+  <text x="96" y="558" class="kicker" fill="#87d0c4">수동 AGENTIC 통제 / PROTECTED MAIN ONLY</text>
+  <text x="96" y="591" class="body" fill="#fffefa">정확한 dependency lock + digest 고정 base + runtime 및 attached SBOM audit</text>
+  <text x="96" y="619" class="body" fill="#fffefa">Model-free preflight가 model/HF credential 부재, AppArmor 입력, 종료 후 정리를 검사합니다.</text>
+  <text x="855" y="558" class="small" fill="#efbd58">build-sandbox-image.yml</text><text x="855" y="591" class="small" fill="#efbd58">agentic-sandbox-</text><text x="855" y="617" class="small" fill="#efbd58">preflight.yml</text>
+</svg>

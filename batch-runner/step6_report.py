@@ -5,14 +5,16 @@ Reads workspace/result.json and generates two output files under workspace/repor
   - report_data.json : structured JSON for dashboard rendering
   - report.md        : human-readable Markdown report
 
-Narrative sections (overview, quality_analysis, failure_patterns, recommendations) are
-generated via a single LLM call using the same model as the experiment.
+Narrative sections use the two-call GPT-5.4 Pro analyzer with a one-call
+experiment-model fallback. Step 6 always emits a pre-grading report; external
+grading remains a separate pipeline.
 
 Usage:
     python step6_report.py                          # default: workspace/result.json
     python step6_report.py --result-json path/to/result.json
     python step6_report.py --output-dir path/to/report/
     python step6_report.py --no-narrative           # skip LLM call
+    python step6_report.py --dry-run                 # mark report unpublished
 """
 
 from __future__ import annotations
@@ -39,13 +41,16 @@ from core.narrative_analyzer import (  # noqa: E402
     _build_grading_guard_clause,
     _build_grading_results_section,
 )
+from core.repository_identity import (  # noqa: E402
+    validate_experiment_id,
+    validate_hf_dataset_repo_id,
+)
 
 
 # ── Defaults ──────────────────────────────────────────────────────────────
 
 DEFAULT_RESULT_JSON = WORKSPACE_DIR / "result.json"
 DEFAULT_OUTPUT_DIR = WORKSPACE_DIR / "report"
-GRADE_DIR = _SCRIPT_DIR.parent / "data" / "grades"
 
 
 # ── V2 manifest helpers ───────────────────────────────────────────────────
@@ -102,24 +107,26 @@ def _find_result_json(default_path: Path) -> Path:
     sys.exit(1)
 
 
-def _load_grade_for_experiment(exp_id: str) -> dict | None:
-    """Load the most recent schema v1.0 grade JSON for an experiment."""
-    candidates = sorted(
-        GRADE_DIR.glob(f"{exp_id}__*.json"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    for path in candidates:
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                grade = json.load(f)
-        except Exception:
-            continue
-        if grade.get("_meta", {}).get("is_dummy") is True:
-            continue
-        if grade.get("schema_version") == "1.0":
-            return grade
-    return None
+def _validated_source_repo_id(data: dict) -> str | None:
+    """Return a safe HF repository ID, preserving old reports with no source."""
+    source = data.get("source_repo_id")
+    if source in (None, ""):
+        return None
+    try:
+        return validate_hf_dataset_repo_id(source)
+    except ValueError as exc:
+        raise ValueError(
+            "Result JSON contains an invalid source repository"
+        ) from exc
+
+
+def _validated_experiment_id(data: dict) -> str:
+    try:
+        return validate_experiment_id(data.get("experiment_id"))
+    except ValueError as exc:
+        raise ValueError(
+            "Result JSON contains an invalid experiment identifier"
+        ) from exc
 
 
 def _compute_summary(data: dict) -> dict:
@@ -454,6 +461,17 @@ def _generate_narrative(
         retried_count = summary["retried_count"]
         grading_guard = _build_grading_guard_clause(grade)
         grading_results_section = _build_grading_results_section(grade)
+        overview_instruction = (
+            "Describe execution outcomes as Self-QA signals, then separately "
+            "summarize the provided automated LLM-judge grade. Never present "
+            "either source as human expert review."
+            if grade is not None
+            else
+            "These are self-assessed scores from the LLM during execution, "
+            "not external grading results. Use language such as "
+            "'self-assessed confidence', 'task completion rate', and "
+            "'LLM-evaluated quality'."
+        )
 
         prompt_content = f"""You are a technical evaluator reviewing an LLM experiment run.
 
@@ -484,7 +502,7 @@ IMPORTANT CONSTRAINTS:
 
 Return ONLY valid JSON with these exact keys (no markdown code fences):
 {{
-  "overview": "2-3 paragraphs describing: what experiment was run, the task execution outcomes based on Self-QA confidence scores, and key highlights. IMPORTANT: These are self-assessed scores from the LLM during execution, NOT external grading results. Frame accordingly — use language like 'self-assessed confidence', 'task completion rate', 'LLM-evaluated quality' rather than 'performance score' or 'grading result'.",
+    "overview": "2-3 paragraphs describing what experiment was run, task execution outcomes, and key highlights. IMPORTANT: {overview_instruction}",
   "quality_analysis": "2-3 paragraphs: QA score patterns, notable issues, occupation/sector observations",
   "failure_patterns": "Analysis of errors and retries. Empty string if no failures.",
   "recommendations": "2-3 actionable suggestions for improving the next experiment run"
@@ -525,18 +543,28 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
                        sector_breakdown: list[dict], task_results: list[dict],
                        error_tasks: list[dict],
                        execution_metrics: dict | None = None,
-                       agentic_metrics: dict | None = None) -> dict:
+                       agentic_metrics: dict | None = None,
+                       dry_run: bool = False) -> dict:
     meta_date = (data.get("started_at") or "")[:10]
+    grading_referenced = bool(narrative.get("grading_referenced", False))
     report = {
         "meta": {
-            "experiment_id": data.get("experiment_id", ""),
+            "experiment_id": _validated_experiment_id(data),
             "experiment_name": data.get("experiment_name", ""),
             "condition_name": data.get("condition_name", ""),
             "model": data.get("model", ""),
             "execution_mode": data.get("execution_mode", ""),
             "date": meta_date,
             "duration": data.get("duration", ""),
-            "report_scope": "self_assessed_pre_grading",
+            "source_repo_id": _validated_source_repo_id(data),
+            "publication_plan": (
+                "dry_run_no_step7" if dry_run else "step7_upload_requested"
+            ),
+            "report_scope": (
+                "graded"
+                if grading_referenced
+                else "self_assessed_pre_grading"
+            ),
         },
         "summary": summary,
         "sector_breakdown": sector_breakdown,
@@ -547,7 +575,7 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
             "quality_analysis": narrative.get("quality_analysis", ""),
             "failure_patterns": narrative.get("failure_patterns", ""),
             "recommendations": narrative.get("recommendations", ""),
-            "grading_referenced": bool(narrative.get("grading_referenced", False)),
+            "grading_referenced": grading_referenced,
             "grade_source": narrative.get("grade_source"),
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -672,9 +700,7 @@ def _build_markdown(rd: dict) -> str:
     lines: list[str] = []
 
     # 1. Header
-    hf_user = "HyeonSang"
     experiment_id = meta['experiment_id']
-    hf_base = f"https://huggingface.co/datasets/{hf_user}/{experiment_id}"
     lines += [
         f"# Experiment Report: {meta['experiment_name']}",
         "",
@@ -687,11 +713,33 @@ def _build_markdown(rd: dict) -> str:
         f"| **Date** | {meta['date']} |",
         f"| **Duration** | {meta['duration']} |",
         f"| **Generated At** | {rd['generated_at']} |",
-        f"| 🤗 HF Dataset | [{experiment_id}]({hf_base}) |",
-        f"| 📊 Self-Report | [self_report.json]({hf_base}/blob/main/self_report.json) |",
-        "| 📊 Grading | ⏳ Awaiting (`scores.json`) |",
-        "",
     ]
+    source_repo_id = meta.get("source_repo_id")
+    if source_repo_id:
+        hf_base = f"https://huggingface.co/datasets/{source_repo_id}"
+        if meta.get("publication_plan") == "dry_run_no_step7":
+            lines.append(
+                f"| 🤗 HF Target (bootstrap) | [{source_repo_id}]({hf_base}) |"
+            )
+            lines.append("| 📊 Self-Report | Local artifact only (dry run; not published) |")
+        else:
+            lines.append(f"| 🤗 HF Target | [{source_repo_id}]({hf_base}) |")
+            lines.append(
+                "| 📊 Self-Report | Prepared locally; Step 7 upload requested "
+                "but not verified by this report |"
+            )
+    else:
+        lines.append("| 🤗 HF Target | Not recorded in this legacy result |")
+    if narrative.get("grading_referenced"):
+        grade_source = narrative.get("grade_source") or {}
+        lines.append(
+            "| 📊 Grading | Automated LLM-judge: "
+            f"{grade_source.get('model', 'unknown')} / rubric "
+            f"{grade_source.get('rubric_sha', 'unknown')} |"
+        )
+    else:
+        lines.append("| 📊 Grading | ⏳ Awaiting external grading |")
+    lines.append("")
 
     execution_metrics = rd.get("execution_metrics")
     if execution_metrics:
@@ -730,12 +778,24 @@ def _build_markdown(rd: dict) -> str:
 
     # 2. Execution Summary
     if narrative.get("overview"):
+        if narrative.get("grading_referenced"):
+            summary_heading = "## Execution Summary *(Self-QA + Automated LLM-Judge)*"
+            summary_note = (
+                "> **Evidence boundary:** Task execution and retry observations use "
+                "same-model Self-QA. External quality signals come from the separately "
+                "provided automated LLM-judge grade; neither is human expert review."
+            )
+        else:
+            summary_heading = "## Execution Summary *(Self-Assessed, Pre-Grading)*"
+            summary_note = (
+                "> **Note:** This summary is based on the LLM's self-assessed "
+                "confidence scores (Self-QA) during task execution — not on external "
+                "grading results. Actual grading scores are not yet available."
+            )
         lines += [
-            "## Execution Summary *(Self-Assessed, Pre-Grading)*",
+            summary_heading,
             "",
-            "> **Note:** This summary is based on the LLM's self-assessed confidence scores (Self-QA)"
-            " during task execution — not on external grading results."
-            " Actual grading scores from evaluators are not yet available at this stage.",
+            summary_note,
             "",
             narrative["overview"],
             "",
@@ -1033,6 +1093,18 @@ def _build_html(rd: dict) -> str:
             <div class='narrative'><p>{nl2br(narrative['recommendations'])}</p></div>
         </section>"""
 
+    if narrative.get("grading_referenced"):
+        execution_summary_label = "Execution Summary (Self-QA + Automated LLM-Judge)"
+        execution_summary_note = (
+            "Execution signals use same-model Self-QA; external quality uses the "
+            "separately provided automated LLM-judge grade. Neither is human review."
+        )
+    else:
+        execution_summary_label = "Execution Summary (Self-Assessed)"
+        execution_summary_note = (
+            "Based on LLM Self-QA confidence scores; external grading is not yet available."
+        )
+
     qa_issues_section = ""
     if qa_issues_html:
         qa_issues_section = f"""
@@ -1148,8 +1220,8 @@ def _build_html(rd: dict) -> str:
 
   <!-- Execution Summary -->
   {f'''<section>
-    <h2>Execution Summary (Self-Assessed)</h2>
-    <p class="narrative" style="color:#888;font-size:0.85rem;margin-bottom:12px;">Based on LLM self-QA confidence scores · External grading scores not yet available</p>
+    <h2>{execution_summary_label}</h2>
+    <p class="narrative" style="color:#888;font-size:0.85rem;margin-bottom:12px;">{execution_summary_note}</p>
     <div class="narrative"><p>{nl2br(narrative['overview'])}</p></div>
   </section>''' if narrative.get('overview') else ''}
 
@@ -1207,13 +1279,15 @@ if (typeof window !== 'undefined') {{ window.report_data = report_data; }}
 # ── Output path resolution ────────────────────────────────────────────────
 
 
-def _resolve_output_dir(explicit_output_dir: Path = None) -> Path:
+def _resolve_output_dir(
+    explicit_output_dir: Path = None,
+    result_json_path: Path = DEFAULT_RESULT_JSON,
+) -> Path:
     """Resolve the report output directory.
 
     Priority:
       1. CLI --output-dir argument (explicit override)
-      2. results/<experiment_id>/report/  (experiment-scoped, preferred)
-      3. workspace/report/  (fallback)
+    2. results/<experiment_id>/report/ from the selected result JSON
 
     Creates the directory if it does not exist.
     """
@@ -1222,27 +1296,15 @@ def _resolve_output_dir(explicit_output_dir: Path = None) -> Path:
         out.mkdir(parents=True, exist_ok=True)
         return out
 
-    # Try to read experiment_id from workspace JSON files
-    experiment_id = None
-    for json_path in [
-        WORKSPACE_DIR / "step2_inference_results.json",
-        WORKSPACE_DIR / "step1_tasks_prepared.json",
-    ]:
-        if json_path.exists():
-            try:
-                data = json.loads(json_path.read_text())
-                experiment_id = data.get("experiment_id", "").strip()
-                if experiment_id:
-                    break
-            except Exception:
-                pass
-
-    if experiment_id:
-        # batch-runner/results/<experiment_id>/report/
-        out = _SCRIPT_DIR / "results" / experiment_id / "report"
-    else:
-        # fallback
-        out = WORKSPACE_DIR / "report"
+    result_path = _find_result_json(Path(result_json_path))
+    try:
+        data = json.loads(result_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Result JSON is malformed: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Result JSON root must be an object")
+    experiment_id = _validated_experiment_id(data)
+    out = _SCRIPT_DIR / "results" / experiment_id / "report"
 
     out.mkdir(parents=True, exist_ok=True)
     return out
@@ -1251,7 +1313,12 @@ def _resolve_output_dir(explicit_output_dir: Path = None) -> Path:
 # ── Main ──────────────────────────────────────────────────────────────────
 
 
-def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool = False) -> None:
+def generate_report(
+    result_json_path: Path,
+    output_dir: Path,
+    no_narrative: bool = False,
+    dry_run: bool = False,
+) -> None:
     print("============================================================")
     print("📝 Step 6: Generate Experiment Report")
     print("============================================================")
@@ -1262,6 +1329,9 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
 
     with open(result_path, "r", encoding="utf-8") as f:
         data = json.load(f)
+    workspace_owned = result_path.resolve() == (
+        WORKSPACE_DIR / "result.json"
+    ).resolve()
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1270,7 +1340,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
     execution_metrics = _compute_execution_metrics(data)
     agentic_metrics = _compute_agentic_metrics(data)
     sector_breakdown = _compute_sector_breakdown(data)
-    manifest = _load_manifest_safe()
+    manifest = _load_manifest_safe() if workspace_owned else None
     task_results, error_tasks = _build_task_results(data, manifest=manifest)
 
     # Generate narrative
@@ -1285,14 +1355,13 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
         }
         print("   Skipping narrative (--no-narrative)")
     else:
-        grade = _load_grade_for_experiment(data.get("experiment_id", ""))
         # Try GPT-5.4 Pro (Responses API) first, fallback to standard
         try:
             from core.narrative_analyzer import create_narrative_analyzer
             print("   Generating narrative via GPT-5.4 Pro (Responses API)…")
             analyzer = create_narrative_analyzer()
             result = analyzer.analyze(
-                data, summary, sector_breakdown, task_results, error_tasks, grade=grade
+                data, summary, sector_breakdown, task_results, error_tasks, grade=None
             )
             narrative = {
                 "overview": result.overview,
@@ -1308,7 +1377,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
         except Exception as exc:
             print(f"   ⚠️ Pro narrative failed: {exc}")
             print("   Falling back to standard narrative…")
-            narrative = _generate_narrative(data, summary, sector_breakdown, grade=grade)
+            narrative = _generate_narrative(data, summary, sector_breakdown, grade=None)
 
     # Build report_data.json
     rd = _build_report_data(
@@ -1320,12 +1389,13 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
         error_tasks,
         execution_metrics=execution_metrics,
         agentic_metrics=agentic_metrics,
+        dry_run=dry_run,
     )
 
     # Inject file generation stats from step5_validate.py
     validate_stats_path = WORKSPACE_DIR / "validate_stats.json"
     file_generation = None
-    if validate_stats_path.exists():
+    if workspace_owned and validate_stats_path.exists():
         with open(validate_stats_path, "r", encoding="utf-8") as f:
             file_generation = json.load(f)
     rd["file_generation"] = file_generation or {
@@ -1343,7 +1413,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
 
     # Inject recovery stats — read from step2_inference_results.json (has reflection_history)
     inference_results_path = WORKSPACE_DIR / "step2_inference_results.json"
-    if inference_results_path.exists():
+    if workspace_owned and inference_results_path.exists():
         with open(inference_results_path, "r", encoding="utf-8") as f:
             inference_data = json.load(f)
         results_for_recovery = inference_data.get("results", [])
@@ -1372,7 +1442,7 @@ def generate_report(result_json_path: Path, output_dir: Path, no_narrative: bool
 
     # Copy report_data.json → workspace/upload/self_report.json (for step7 HF upload)
     upload_dir = WORKSPACE_DIR / "upload"
-    if upload_dir.exists():
+    if workspace_owned and upload_dir.exists():
         self_report_path = upload_dir / "self_report.json"
         shutil.copy2(json_path, self_report_path)
         print(f"   ✓ Copied self_report.json → {self_report_path}")
@@ -1408,14 +1478,20 @@ def main():
         action="store_true",
         help="Skip LLM narrative generation (metrics only)",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Mark HF self-report publication as skipped",
+    )
     args = parser.parse_args()
 
-    output_dir = _resolve_output_dir(args.output_dir)
+    output_dir = _resolve_output_dir(args.output_dir, args.result_json)
 
     generate_report(
         result_json_path=args.result_json,
         output_dir=output_dir,
         no_narrative=args.no_narrative,
+        dry_run=args.dry_run,
     )
 
 

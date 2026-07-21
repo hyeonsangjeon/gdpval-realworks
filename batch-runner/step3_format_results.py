@@ -20,6 +20,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from core.config import WORKSPACE_DIR, BATCH_RUNNER_ROOT
+from core.prepared_fingerprint import validate_prepared_fingerprint
+from core.repository_identity import (
+    validate_experiment_id,
+    validate_hf_dataset_repo_id,
+)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -105,6 +110,84 @@ def _write_json_outputs(data: dict, *paths: Path) -> None:
         path.write_text(serialized, encoding="utf-8")
 
 
+def _source_repo_id(prepared: dict) -> str:
+    """Return the validated Hugging Face target carried by Step 1."""
+    try:
+        return validate_hf_dataset_repo_id(prepared.get("source"))
+    except ValueError as exc:
+        raise ValueError("Prepared tasks contain an invalid source repository") from exc
+
+
+def _ordered_task_ids(payload: dict, key: str, label: str) -> list[str]:
+    values = payload.get(key)
+    if (
+        not isinstance(values, list)
+        or not values
+        or not all(
+            isinstance(task_id, str)
+            and task_id.strip() == task_id
+            and task_id
+            for task_id in values
+        )
+        or len(values) != len(set(values))
+    ):
+        raise ValueError(f"{label} task order is invalid")
+    return values
+
+
+def _result_task_ids(payload: dict, label: str) -> list[str]:
+    results = payload.get("results") if label == "inference" else payload.get("tasks")
+    if not isinstance(results, list):
+        raise ValueError(f"{label} result task set is missing")
+    values = [item.get("task_id") for item in results if isinstance(item, dict)]
+    if len(values) != len(results):
+        raise ValueError(f"{label} result task set is invalid")
+    return _ordered_task_ids({"ids": values}, "ids", f"{label} result")
+
+
+def _validate_input_identity(prepared: dict, inference: dict) -> None:
+    """Reject stale/mixed Step 1 and Step 2 workspace inputs."""
+    prepared_experiment = prepared.get("experiment_id")
+    inference_experiment = inference.get("experiment_id")
+    try:
+        validate_experiment_id(prepared_experiment)
+        validate_experiment_id(inference_experiment)
+    except ValueError as exc:
+        raise ValueError("Prepared and inference experiment identity mismatch") from exc
+    if prepared_experiment != inference_experiment:
+        raise ValueError("Prepared and inference experiment identity mismatch")
+
+    prepared_source = _source_repo_id(prepared)
+    inference_source = inference.get("source")
+    if (
+        validate_hf_dataset_repo_id(inference_source) != prepared_source
+    ):
+        raise ValueError("Prepared and inference source repository mismatch")
+
+    task_scope = prepared.get("task_scope")
+    if not isinstance(task_scope, dict):
+        raise ValueError("Prepared task order is missing")
+    prepared_order = _ordered_task_ids(
+        task_scope, "task_ids", "prepared"
+    )
+    inference_order = _ordered_task_ids(
+        inference, "ordered_task_ids", "inference"
+    )
+    if prepared_order != inference_order:
+        raise ValueError("Prepared and inference task order mismatch")
+    prepared_fingerprint = validate_prepared_fingerprint(prepared)
+    inference_fingerprint = inference.get("prepared_fingerprint")
+    if (
+        not isinstance(inference_fingerprint, str)
+        or prepared_fingerprint != inference_fingerprint
+    ):
+        raise ValueError("Prepared and inference fingerprint mismatch")
+    if _result_task_ids(prepared, "prepared") != prepared_order:
+        raise ValueError("Prepared result task set does not match task order")
+    if _result_task_ids(inference, "inference") != inference_order:
+        raise ValueError("Inference result task set does not match task order")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 
@@ -127,6 +210,8 @@ def format_results():
 
     with open(prepared_path, "r", encoding="utf-8") as f:
         prepared = json.load(f)
+
+    _validate_input_identity(prepared, inference)
 
     experiment_id = inference["experiment_id"]
     condition_name = inference["condition"]
@@ -196,6 +281,8 @@ def format_results():
     final_json = {
         "experiment_id": experiment_id,
         "experiment_name": prepared.get("experiment_name", ""),
+        "source_repo_id": _source_repo_id(prepared),
+        "prepared_fingerprint": prepared["prepared_fingerprint"],
         "condition_name": condition_name,
         "execution_mode": inference.get("execution_mode", ""),
         "model": inference.get("model", ""),
@@ -345,7 +432,7 @@ def format_results():
     md_path = results_dir / f"{experiment_id}.md"
     md_path.write_text("\n".join(md_lines), encoding="utf-8")
 
-    print(f"\n✅ Step 3 complete:")
+    print("\n✅ Step 3 complete:")
     print(f"   JSON: {json_path}")
     print(f"   MD:   {md_path}")
     print(f"   Duration: {duration}")

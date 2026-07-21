@@ -340,6 +340,55 @@ class TestExperimentConfigValidation:
         assert len(errors) > 0
         assert any("experiment.id" in e for e in errors)
 
+    @pytest.mark.parametrize(
+        "experiment_id",
+        [
+            "../outside",
+            "nested/path",
+            " space",
+            "exp id",
+            "foo..bar",
+            "foo.",
+            "foo.lock",
+            "a" * 101,
+        ],
+    )
+    def test_validate_rejects_unsafe_experiment_id(
+        self, sample_config_dict, experiment_id
+    ):
+        sample_config_dict["experiment"]["id"] = experiment_id
+        config = ExperimentConfig.from_dict(sample_config_dict)
+
+        assert "experiment.id must be a safe identifier" in config.validate()
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "owner",
+            "owner/repo/extra",
+            "../repo",
+            "owner/space repo",
+            "owner/foo..bar",
+            "owner/foo--bar",
+            "owner/.repo",
+            "owner/repo-",
+            "owner/repo.git",
+            "o" * 48 + "/" + "r" * 48,
+            "",
+        ],
+    )
+    def test_validate_rejects_invalid_data_source(self, sample_config_dict, source):
+        sample_config_dict["data"]["source"] = source
+        config = ExperimentConfig.from_dict(sample_config_dict)
+
+        assert "data.source must be a valid owner/repository ID" in config.validate()
+
+    def test_validate_accepts_public_openai_source(self, sample_config_dict):
+        sample_config_dict["data"]["source"] = "openai/gdpval"
+        config = ExperimentConfig.from_dict(sample_config_dict)
+
+        assert "data.source must be a valid owner/repository ID" not in config.validate()
+
     def test_validate_invalid_provider(self, sample_config_dict):
         """Test validation with invalid model provider"""
         sample_config_dict["condition_a"]["model"]["provider"] = "invalid"

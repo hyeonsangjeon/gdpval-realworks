@@ -12,6 +12,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **Execution-first repository onboarding and publish gates** — reorganize both
+  root READMEs around live evidence, a credential-free local preview, and an
+  honest three-task cloud path. English/Korean beginner guides now explain
+  OpenID Connect, disposable public Hugging Face targets, destructive bootstrap
+  and upload boundaries, Self-QA vs external grading, report fallback cost,
+  artifacts, troubleshooting, and cleanup. Pages automation separates a
+  read-only PR validation job from protected-main deployment; automated result
+  PRs are proven before HF upload, rechecked after upload, and dispatched for
+  exact-head-SHA validation without Pages/OIDC privileges.
 - **Success Field Note retrospective voice** — revise
   `what-does-success-mean` without changing its evidence contract, metrics,
   source links, or fail-closed behavior. The six chapters now follow a
@@ -33,6 +42,20 @@ entries land under a fresh dated heading the day they merge to `main`.
   and zero overflow or SVG label overlap.
 
 ### Fixed
+- **Inference/report identity and fallback integrity** — hash the complete
+  canonical Step 1 prepared payload, persist that fingerprint through relay
+  checkpoints and final inference, and reject stale or mixed Step 1/2 inputs in
+  Step 3. Experiment IDs and HF targets are path/branch-safe before Step 0.
+  Step 6 is now strictly pre-grading, derives HF links from the run's source,
+  isolates explicit external result files from current workspace manifests and
+  recovery stats, distinguishes dry-run publication, and falls back to a
+  model-free report when narrative generation fails. Result PR output and its
+  one-file contract are mandatory before destructive HF publication, preventing
+  silent no-PR success or stale `self_report.json` upload.
+  Relay legs now carry a stable lineage ID across GitHub run IDs, while
+  condition A/B use isolated progress and result files. Canonical HF repository
+  validation rejects unsupported length and punctuation before credentialed
+  bootstrap.
 - **Archived v1 cost-sweep template resolution** — point the historical
   `grading_cost_sweep.py` renderer at the tracked
   `grading_configs/_archive_v1/_sweep_template.yaml` after task 207 moved the
@@ -47,6 +70,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   `Aggregate Tests & Deploy` run `29731574595` executed, and it succeeded.
 
 ### Added
+- **Localized responsive README diagrams** — add twelve repository-owned SVGs:
+  English and Korean desktop/mobile versions of the first-run decision, system
+  map, and operational controls. Static SVG replaces remote Mermaid rendering;
+  each asset has intrinsic dimensions, accessible title/description, at least
+  6.04:1 primary text contrast, and a 960px responsive breakpoint. Browser
+  geometry checks cover nearest-card spacing and overflow across mobile,
+  tablet, and desktop widths.
 - **Evidence-backed success Field Note** — rebuild
   `what-does-success-mean` as a retrospective that separates the team's initial
   handoff-ready expectation from exp026's observed execution, artifact integrity,
