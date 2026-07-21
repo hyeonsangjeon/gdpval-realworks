@@ -55,7 +55,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_pages:
-        description: Deploy the validated artifact (protected main only)
+        description: Deploy the validated artifact (main only)
         required: true
         type: boolean
         default: true
@@ -99,10 +99,8 @@ jobs:
           set -euo pipefail
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             [[ "$GITHUB_REF" == "refs/heads/main" ]]
-            [[ "$GITHUB_REF_PROTECTED" == "true" ]]
           elif [[ "$DEPLOY_PAGES" == "true" ]]; then
             [[ "$GITHUB_REF" == "refs/heads/main" ]]
-            [[ "$GITHUB_REF_PROTECTED" == "true" ]]
             [[ -z "$EXPECTED_SHA" ]]
           else
             [[ "$GITHUB_REF" == refs/heads/experiment/* ]]
@@ -168,7 +166,6 @@ jobs:
       - name: Upload Pages artifact
         if: >-
           github.ref == 'refs/heads/main'
-          && github.ref_protected == true
           && (github.event_name == 'push'
               || (github.event_name == 'workflow_dispatch'
                   && inputs.deploy_pages == true))
@@ -180,7 +177,6 @@ jobs:
     needs: validate
     if: >-
       github.ref == 'refs/heads/main'
-      && github.ref_protected == true
       && (github.event_name == 'push'
           || (github.event_name == 'workflow_dispatch'
               && inputs.deploy_pages == true))

@@ -156,7 +156,7 @@ Allowed implementation files:
 - Every operational guarantee links to an enforcing file or workflow that exists.
 - Pull requests execute aggregate, aggregate tests, browser contracts, and
   production build; automated result PRs receive the same read-only validation
-  through an exact-SHA dispatch. Pages upload/deploy remain protected-main only.
+  through an exact-SHA dispatch. Pages upload/deploy remain main-only.
 - Both READMEs have no broken local links or missing images.
 - All SVGs are valid XML, have unique IDs, and render nonblank at desktop and
   mobile widths without clipped text.

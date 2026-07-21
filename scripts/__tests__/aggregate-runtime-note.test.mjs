@@ -235,6 +235,9 @@ test('runtime source changes trigger isolated PR validation and serialized Pages
   const batch = parse(batchText)
   const validateJob = deploy.jobs.validate
   const deployJob = deploy.jobs.deploy
+  const eventContractStep = validateJob.steps.find(
+    (step) => step.name === 'Verify non-PR event contract',
+  )
   const uploadStep = validateJob.steps.find((step) => step.name === 'Upload Pages artifact')
   const createPullRequestStep = batch.jobs['batch-run'].steps.find(
     (step) => step.name === 'Create Pull Request with results',
@@ -276,12 +279,19 @@ test('runtime source changes trigger isolated PR validation and serialized Pages
   assert.ok(validateJob.steps.some((step) => step.run === 'npm run test:aggregate'))
   assert.ok(validateJob.steps.some((step) => step.run?.includes('playwright install --with-deps --only-shell chromium')))
   assert.ok(validateJob.steps.some((step) => step.run === 'npm run test:notes-browser:dist'))
+  assert.doesNotMatch(eventContractStep.run, /ref_protected/i)
+  assert.match(eventContractStep.run, /GITHUB_EVENT_NAME.*push[\s\S]*?GITHUB_REF.*refs\/heads\/main/)
+  assert.match(eventContractStep.run, /DEPLOY_PAGES.*true[\s\S]*?GITHUB_REF.*refs\/heads\/main[\s\S]*?-z.*EXPECTED_SHA/)
+  assert.match(eventContractStep.run, /GITHUB_REF.*refs\/heads\/experiment\/\*/)
+  assert.match(eventContractStep.run, /GITHUB_SHA.*EXPECTED_SHA/)
+  assert.match(eventContractStep.run, /WORKFLOW_SHA.*EXPECTED_SHA/)
   assert.match(uploadStep.if, /refs\/heads\/main/)
-  assert.match(uploadStep.if, /github\.ref_protected == true/)
+  assert.doesNotMatch(uploadStep.if, /ref_protected/)
   assert.deepEqual(deployJob.permissions, { pages: 'write', 'id-token': 'write' })
   assert.equal(deployJob.environment.name, 'github-pages')
   assert.match(deployJob.if, /refs\/heads\/main/)
   assert.match(deployJob.if, /inputs\.deploy_pages == true/)
+  assert.doesNotMatch(deployJob.if, /ref_protected/)
   assert.equal(createPullRequestStep.id, 'cpr')
   assert.equal(reportStep.id, 'step6')
   assert.match(

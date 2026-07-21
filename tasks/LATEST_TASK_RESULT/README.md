@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-21
-- Status: Implementation complete and locally verified; remote canary pending
+- Status: PR #120 merged; Pages gate recovery pending
 
 ## Task
 
@@ -34,7 +34,7 @@ task. It must be refreshed before a task is reported complete.
   Mermaid renderer.
 - Split Pages validation from deployment. PRs run aggregation, production build,
   77 data contracts, and four browser contracts with only `contents: read`.
-  Pages/OIDC permissions exist only in the protected-main deploy job.
+  Pages/OIDC permissions exist only in the main-only deploy job.
 - Covered automated result PRs suppressed by the default `GITHUB_TOKEN`: the
   batch workflow creates and proves a one-file report PR, performs HF upload only
   after that contract passes, rechecks the PR head, then dispatches read-only
@@ -86,7 +86,18 @@ task. It must be refreshed before a task is reported complete.
 - TypeScript and Vite production build passed. Runtime, integrity, perception,
   and success browser suites all passed against the production build.
 - `git diff --check` passed. No model call, grading, batch run, HF write,
-  workflow dispatch, Pages deployment, commit, push, or paid action occurred.
+  manual workflow dispatch, or paid action occurred during implementation.
+- PR #120 squash-merged as `9892a4c7566a0c5ba24f876459d5932ee7284357`.
+  Its PR `validate` run `29836476672` passed and correctly skipped deployment.
+- The automatic post-merge Pages run `29836869345` failed before checkout
+  because `deploy.yml` incorrectly required `github.ref_protected=true` even
+  though this repository has no main branch protection rule. The follow-up
+  recovery keeps deployment main-only and validation-only dispatch exact-SHA.
+- The Pages recovery received final `first-reviewer` approval after its shell
+  contract test was strengthened to reject both lowercase and uppercase
+  `ref_protected` checks. Two mandatory high-risk workflow review requests
+  reached the external review service but both ended at its network boundary;
+  no second-review verdict was available.
 - The independent backend reviewer resolved multiple issues during iteration,
   but its final approval request failed repeatedly at the review service's
   network boundary. Completion therefore relies on the broad/focused automated
@@ -95,7 +106,8 @@ task. It must be refreshed before a task is reported complete.
 
 ## Remaining Work
 
-- Commit and push through a pull request; this task did not change remote state.
+- Merge the Pages gate recovery and confirm a successful automatic post-merge
+  build/deploy run for the recovery SHA.
 - On the next naturally occurring automated result PR, verify that the PR
   contract passes before HF upload, `validate` attaches to the exact final head
   SHA, and the validation-only run creates no Pages deployment. Do not run a paid

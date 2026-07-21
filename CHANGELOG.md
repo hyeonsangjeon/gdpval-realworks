@@ -18,7 +18,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   OpenID Connect, disposable public Hugging Face targets, destructive bootstrap
   and upload boundaries, Self-QA vs external grading, report fallback cost,
   artifacts, troubleshooting, and cleanup. Pages automation separates a
-  read-only PR validation job from protected-main deployment; automated result
+  read-only PR validation job from main-only deployment; automated result
   PRs are proven before HF upload, rechecked after upload, and dispatched for
   exact-head-SHA validation without Pages/OIDC privileges.
 - **Success Field Note retrospective voice** — revise
@@ -42,6 +42,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   and zero overflow or SVG label overlap.
 
 ### Fixed
+- **Pages main deployment gate** — remove the invalid assumption that the
+  repository's unprotected `main` branch reports `github.ref_protected=true`.
+  Push/manual deployment remains restricted to `refs/heads/main`, while
+  validation-only result-PR dispatches still require their exact branch,
+  `github.sha`, `github.workflow_sha`, and expected SHA. This repairs failed
+  post-merge run `29836869345` without granting Pages/OIDC permissions to PR
+  validation jobs.
 - **Inference/report identity and fallback integrity** — hash the complete
   canonical Step 1 prepared payload, persist that fingerprint through relay
   checkpoints and final inference, and reject stale or mixed Step 1/2 inputs in
