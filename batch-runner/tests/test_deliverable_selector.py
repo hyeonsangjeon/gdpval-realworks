@@ -1,24 +1,39 @@
 """Unit tests for the standalone deliverable selector.
 
-No Azure calls, no grading, no rendering. The task fixtures use the actual
-GDPVal ``rubric_json`` rows from the local parquet; only file lists and owner
-expected targets are fixture data.
+No Azure calls, grading, rendering, pandas, parquet, or network access. The
+checked-in contract fixture contains only synthetic selector signals and exact
+public task/source identities; file lists and owner expected targets remain in
+this test module.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
+import sys
 from typing import Any
 
-import pandas as pd
 import pytest
 
-from core.deliverable_selector import (
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.verify_deliverable_selector_fixture import (  # noqa: E402
+    canonical_json,
+    load_and_validate_fixture,
+)
+
+from core.deliverable_selector import (  # noqa: E402
     ITEM_TARGET_AUDIT_SCHEMA,
     DeliverableSelection,
     plan_targets_for_criterion,
     select_deliverables,
+)
+
+
+FIXTURE_PATH = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "deliverable_selector_contract_v1.json"
 )
 
 
@@ -31,23 +46,11 @@ def _ref_url(name: str) -> str:
     return f"https://huggingface.co/datasets/openai/gdpval/resolve/main/reference_files/hash/{encoded}"
 
 
-def _load_actual_task_data() -> dict[str, dict[str, Any]]:
-    repo_root = Path(__file__).resolve().parents[2]
-    parquet = repo_root / "data/gdpval-local/data/train-00000-of-00001.parquet"
-    df = pd.read_parquet(parquet)
-    data: dict[str, dict[str, Any]] = {}
-    for row in df.to_dict("records"):
-        rubric = row["rubric_json"]
-        if isinstance(rubric, str):
-            rubric = json.loads(rubric)
-        data[row["task_id"][:8]] = {
-            "prompt": row["prompt"],
-            "rubric_items": rubric,
-        }
-    return data
+def _load_task_data() -> dict[str, dict[str, Any]]:
+    return load_and_validate_fixture(FIXTURE_PATH)["tasks"]
 
 
-ACTUAL_TASK_DATA = _load_actual_task_data()
+CONTRACT_TASK_DATA = _load_task_data()
 
 
 def _selected_names(selection: DeliverableSelection) -> set[str]:
@@ -59,7 +62,7 @@ def _selected_names(selection: DeliverableSelection) -> set[str]:
 
 
 def _actual_criterion(task_id: str, contains: str) -> str:
-    for item in ACTUAL_TASK_DATA[task_id]["rubric_items"]:
+    for item in CONTRACT_TASK_DATA[task_id]["rubric_items"]:
         criterion = item["criterion"]
         if contains in criterion:
             return criterion
@@ -67,12 +70,12 @@ def _actual_criterion(task_id: str, contains: str) -> str:
 
 
 def _select(fixture: dict[str, Any]) -> DeliverableSelection:
-    task = ACTUAL_TASK_DATA[fixture["task_id"]]
+    task = CONTRACT_TASK_DATA[fixture["task_id"]]
     return select_deliverables(
         task_id=fixture["task_id"],
         deliverable_files=fixture["deliverable_files"],
         reference_file_urls=fixture.get("reference_file_urls", []),
-        instruction=task["prompt"],
+        instruction=task["instruction"],
         rubric_items=task["rubric_items"],
         deliverable_summary=fixture.get("deliverable_summary", ""),
     )
@@ -270,6 +273,28 @@ def test_gold_20_selector_targets_match_owner_targets():
     assert matches == 20
 
 
+def test_hermetic_contract_fixture_is_exact_minimal_and_source_bound():
+    document = load_and_validate_fixture(FIXTURE_PATH)
+    fixture_ids = {
+        fixture["task_id"]
+        for fixture in [*GOLD_FIXTURES, *WRONG_FORMAT_FIXTURES]
+    } | {"a73fbc98"}
+
+    assert set(document["tasks"]) == fixture_ids
+    assert len(canonical_json(document)) < 8 * 1024
+    assert document["source"] == {
+        "repository": "openai/gdpval",
+        "revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "parquet_path": "data/train-00000-of-00001.parquet",
+        "parquet_sha256": (
+            "f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202"
+        ),
+        "row_count": 220,
+        "projection_policy": "synthetic-minimal-selector-signals-v1",
+        "source_content_included": False,
+    }
+
+
 def test_bug2_four_cases_are_corrected_to_generated_primary():
     bug2 = {
         "7d7fc9a7": {"Aurisic_Prepaid_Amortization_Schedule_Through_Apr2025.xlsx"},
@@ -339,7 +364,7 @@ WRONG_FORMAT_FIXTURES = [
 ]
 
 
-def test_wrong_format_primary_fires_for_ambiguous_seven_with_actual_rubrics():
+def test_wrong_format_primary_fires_for_seven_contract_signals():
     for fixture in WRONG_FORMAT_FIXTURES:
         selection = _select(fixture)
         assert selection.selection_status == "wrong_format_primary", fixture["task_id"]
@@ -405,8 +430,8 @@ def test_criterion_routing_manifest_file_specific_and_bundle_cases():
             _path("a73fbc98", "Spring_Bazaar_2025_Table_Assignment_Summary.pdf"),
             _path("a73fbc98", "Spring_Bazaar_2025_Vendor_Assignments.xlsx"),
         ],
-        instruction=ACTUAL_TASK_DATA["a73fbc98"]["prompt"],
-        rubric_items=ACTUAL_TASK_DATA["a73fbc98"]["rubric_items"],
+        instruction=CONTRACT_TASK_DATA["a73fbc98"]["instruction"],
+        rubric_items=CONTRACT_TASK_DATA["a73fbc98"]["rubric_items"],
     )
     bundle = plan_targets_for_criterion(
         bazaar,

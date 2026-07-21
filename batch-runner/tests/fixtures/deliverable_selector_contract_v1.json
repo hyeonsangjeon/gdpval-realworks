@@ -1,0 +1,197 @@
+{
+  "schema_version": "deliverable-selector-contract-v1",
+  "source": {
+    "repository": "openai/gdpval",
+    "revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+    "parquet_path": "data/train-00000-of-00001.parquet",
+    "parquet_sha256": "f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202",
+    "row_count": 220,
+    "projection_policy": "synthetic-minimal-selector-signals-v1",
+    "source_content_included": false
+  },
+  "tasks": {
+    "0419f1c3": {
+      "task_id": "0419f1c3-d669-45d0-81cd-f4d5923b06a5",
+      "source_selector_input_sha256": "94278d12d26cd4c00f48e0cf6997653d7cd8009b680c6020b262645612a69a2f",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "1b1ade2d": {
+      "task_id": "1b1ade2d-f9f6-4a04-baa5-aa15012b53be",
+      "source_selector_input_sha256": "a5a54ea80991df4c9e75ac34a3bbcc7d67cde501d5f6bba4495696297830ca6f",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "27e8912c": {
+      "task_id": "27e8912c-8bd5-44ba-ad87-64066ea05264",
+      "source_selector_input_sha256": "97e89ecdf79156ea84515f1da7e5aef6718ccb1d8a3e0db8df15d56b3595f80e",
+      "instruction": "Provide two separate deliverable files: one Word document and one PDF.",
+      "rubric_items": []
+    },
+    "403b9234": {
+      "task_id": "403b9234-6299-4b5f-a106-70c1bc11ec4c",
+      "source_selector_input_sha256": "4f707455dc47b3d2c8ebc44ecd9acd7a2f1ab1faeafbe08055504c6c1846295f",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "43dc9778": {
+      "task_id": "43dc9778-450b-4b46-b77e-b6d82b202035",
+      "source_selector_input_sha256": "a446752ad5e8339cd7dc1e8031b6cd00a8b77f447f4cf750718921d15efc4055",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "575f8679": {
+      "task_id": "575f8679-b4c1-47a2-8e96-d570d4ed9269",
+      "source_selector_input_sha256": "8f533c2b6213fd83f51c40bd158ea24056bb81f3d917d60be998965cc3dfdf86",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "6dcae3f5": {
+      "task_id": "6dcae3f5-bf1c-48e0-8b4b-23e6486a934c",
+      "source_selector_input_sha256": "29df5c0d563c30d8705f2a3b3e54c012d6d1a788e5cefb61d87cc6f20e2ac45f",
+      "instruction": "Provide one Excel workbook and one Word document as separate files.",
+      "rubric_items": []
+    },
+    "75401f7c": {
+      "task_id": "75401f7c-396d-406d-b08e-938874ad1045",
+      "source_selector_input_sha256": "3a79dc0d64f217066cd41743d97c4cd28bc6f05d5b5f2db25b5bea9cf2fbef77",
+      "instruction": "Deliver a final MP4 video.",
+      "rubric_items": []
+    },
+    "7b08cd4d": {
+      "task_id": "7b08cd4d-df60-41ae-9102-8aaa49306ba2",
+      "source_selector_input_sha256": "3472dc3b04dd728ab23476ef8559e618d8760e51740b8be9abf5769ed69e4147",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "7bbfcfe9": {
+      "task_id": "7bbfcfe9-132d-4194-82bb-d6f29d001b01",
+      "source_selector_input_sha256": "5168f0de84f0f1c4ae2e8bca0c563c000e85bf800e37c85811d3f30c480657ce",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "7d7fc9a7": {
+      "task_id": "7d7fc9a7-21a7-4b83-906f-416dea5ad04f",
+      "source_selector_input_sha256": "02127e94f9b414ec78afb8aa9b4fb8877c7f6b90e012cf3a12f9730380193fff",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "83d10b06": {
+      "task_id": "83d10b06-26d1-4636-a32c-23f92c57f30b",
+      "source_selector_input_sha256": "c35d48fdc625c3b050c5a9fc95e840c40d23c9cb3e3756e98754fc6300c8afce",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "85d95ce5": {
+      "task_id": "85d95ce5-b20c-41e2-834e-e788ce9622b6",
+      "source_selector_input_sha256": "43d18c6fd47e226b3a18b7527ede8267bc0b23c581804128b01de5dcf082ba9b",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "93b336f3": {
+      "task_id": "93b336f3-61f3-4287-86d2-87445e1e0f90",
+      "source_selector_input_sha256": "88563e9535be4900e8a29033f4a632f8d7fc442133aa4bd4d8e780d8c32c7c63",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "99ac6944": {
+      "task_id": "99ac6944-4ec6-4848-959c-a460ac705c6f",
+      "source_selector_input_sha256": "753f3b874c22db7f920465f07cc018f6c1d844cd09a9f6063c4a23d03335beec",
+      "instruction": "The final deliverable consists of a single PDF report with supporting images and workbook.",
+      "rubric_items": []
+    },
+    "9a0d8d36": {
+      "task_id": "9a0d8d36-6233-4c76-9107-0d1f783c7340",
+      "source_selector_input_sha256": "188dc40b53e7eb1be43b372e2bfa4a6315200bcf8b26d24b4b2c08ccdc1325bc",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "a73fbc98": {
+      "task_id": "a73fbc98-90d4-4134-a54f-2b1d0c838791",
+      "source_selector_input_sha256": "0229df0089b80f058907a558dabf3ac299a20d108df6c10ac3a9397793ec05dc",
+      "instruction": "Provide one PDF and one spreadsheet as separate files.",
+      "rubric_items": [
+        {
+          "criterion": "Every assigned table ID in the spreadsheet also appears with the same ID labeled on the corresponding updated layout PDF",
+          "score": 1
+        }
+      ]
+    },
+    "a74ead3b": {
+      "task_id": "a74ead3b-f67d-4b1c-9116-f6bb81b29d4f",
+      "source_selector_input_sha256": "4c263094165e68c53e68888fefd3a9cb28e9724d6fbb824ffcb9325b4a80caad",
+      "instruction": "Provide two distinct .pptx files and a supporting image.",
+      "rubric_items": [
+        {
+          "criterion": "Provides two distinct .pptx files: one presentation for Session 13 and one for Session 14.",
+          "score": 1
+        },
+        {
+          "criterion": "Session 14 deck includes a title slide indicating it is Session 14 (wording may vary).",
+          "score": 1
+        }
+      ]
+    },
+    "a941b6d8": {
+      "task_id": "a941b6d8-4289-4500-b45a-f8e4fc94a724",
+      "source_selector_input_sha256": "5640131530fbc09edc457c0899d207faf6fec28d756b722b7f52faa39158c1c2",
+      "instruction": "Deliver a final MP4 video.",
+      "rubric_items": []
+    },
+    "a95a5829": {
+      "task_id": "a95a5829-34bb-40f3-993b-558aed6dcdef",
+      "source_selector_input_sha256": "19990fbc58e4566c295f782616cd6af876e50df9778776aeb2312fbc9476f8e8",
+      "instruction": "Deliver a final .pdf file.",
+      "rubric_items": []
+    },
+    "bbe0a93b": {
+      "task_id": "bbe0a93b-ebf0-40b0-98dc-8d9243099034",
+      "source_selector_input_sha256": "d2ebb2d80c9bccc817676873e31e153eadab412c3ce5aeda7ef6cd6aaa3639a3",
+      "instruction": "Provide three separate PDF files.",
+      "rubric_items": []
+    },
+    "c7d83f01": {
+      "task_id": "c7d83f01-2874-4876-b7fd-52582ec99e1a",
+      "source_selector_input_sha256": "99f7114dc7722d07355e87beacfc10f7e557f3623b4f9de7405bfbbcb1c18559",
+      "instruction": "Deliver a Python notebook (.ipynb).",
+      "rubric_items": []
+    },
+    "c94452e4": {
+      "task_id": "c94452e4-39cd-4846-b73a-ab75933d1ad7",
+      "source_selector_input_sha256": "9196b0ad496304d2a717f41bdcb369769ed5b347ea4b4516b17805ed2493fd7b",
+      "instruction": "Deliver a final MP4 video.",
+      "rubric_items": []
+    },
+    "e222075d": {
+      "task_id": "e222075d-5d62-4757-ae3c-e34b0846583b",
+      "source_selector_input_sha256": "a085378b0654a34b794e0582e777ec1f98119d51f46c5ede6ea18117201aa01f",
+      "instruction": "Deliver a final MP4 video and a final PDF.",
+      "rubric_items": []
+    },
+    "ec591973": {
+      "task_id": "ec591973-04d5-48c0-981c-1ab2fcec2dc1",
+      "source_selector_input_sha256": "805e31f277c5f700dc1c101e879df2e6c5d76953466f36a134e17d5c2bebb5ae",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "ee09d943": {
+      "task_id": "ee09d943-5a11-430a-b7a2-971b4e9b01b5",
+      "source_selector_input_sha256": "bebc9fd0c3813e84d98da221606922dcb431cef9190bf2057b3109626a3d424a",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "f9a1c16c": {
+      "task_id": "f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb",
+      "source_selector_input_sha256": "868a2916d35655a12230375ec610b39dd415d76e5969188617a6367e63c104fa",
+      "instruction": "",
+      "rubric_items": []
+    },
+    "ff85ee58": {
+      "task_id": "ff85ee58-bc9f-4aa2-806d-87edeabb1b81",
+      "source_selector_input_sha256": "902801061c5dda506da89de0add83b5a8db842e03a06137dd2ff1f6980e6cc89",
+      "instruction": "Deliver a final audio file.",
+      "rubric_items": []
+    }
+  },
+  "sha256": "1c2343be4fc85b7df9a4f778ad8daec466abc4a96e53d441312eadf5c4d71c6e"
+}
