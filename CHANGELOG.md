@@ -11,6 +11,21 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+- **Hermetic deliverable-selector contract tests** — replace import-time pandas
+  and ignored local-parquet loading with a checked-in 28-task synthetic signal
+  corpus. The 6,889-byte canonical fixture is self-hashed and binds exact public
+  `openai/gdpval@11e7900...` task identities to the source parquet SHA-256,
+  220-row count, and per-task prompt/ordered-rubric hashes without storing full
+  prompts, rubrics, references, deliverables, grades, or model output. A
+  stdlib-only verifier validates the fixture offline; optional delayed pandas
+  verification checks the known local public snapshot. Clean checkouts now
+  collect all selector tests without pandas, PyArrow, parquet, or network. The
+  selector/verifier suite passes 15/15, root scripts pass 44/44, and adjacent
+  grading tests pass 90 with 2 environment skips. Production selector and
+  grader code are unchanged; no grading, Step 8, model/API, HF upload, manual
+  workflow, or paid execution occurred.
+
 ### Changed
 - **Execution-first repository onboarding and publish gates** — reorganize both
   root READMEs around live evidence, a credential-free local preview, and an
