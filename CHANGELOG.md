@@ -20,7 +20,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   artifacts, troubleshooting, and cleanup. Pages automation separates a
   read-only PR validation job from main-only deployment; automated result
   PRs are proven before HF upload, rechecked after upload, and dispatched for
-  exact-head-SHA validation without Pages/OIDC privileges.
+  exact-head-SHA validation without Pages/OIDC privileges. Shipped through PR
+  #120 (`9892a4c7566a0c5ba24f876459d5932ee7284357`).
 - **Success Field Note retrospective voice** — revise
   `what-does-success-mean` without changing its evidence contract, metrics,
   source links, or fail-closed behavior. The six chapters now follow a
@@ -48,7 +49,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   validation-only result-PR dispatches still require their exact branch,
   `github.sha`, `github.workflow_sha`, and expected SHA. This repairs failed
   post-merge run `29836869345` without granting Pages/OIDC permissions to PR
-  validation jobs.
+  validation jobs. Shipped through PR #121
+  (`138e89a8e3a56e86a836656e2572669786cbc0cf`); PR validation run
+  [29843523709](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29843523709)
+  passed without deployment, and automatic main run
+  [29843751719](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29843751719)
+  completed validation, artifact upload, and Pages deployment successfully.
 - **Inference/report identity and fallback integrity** — hash the complete
   canonical Step 1 prepared payload, persist that fingerprint through relay
   checkpoints and final inference, and reject stale or mixed Step 1/2 inputs in

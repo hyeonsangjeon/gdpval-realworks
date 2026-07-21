@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-21
-- Status: PR #120 merged; Pages gate recovery pending
+- Status: Complete; PR #120 and Pages recovery PR #121 merged and deployed
 
 ## Task
 
@@ -93,6 +93,12 @@ task. It must be refreshed before a task is reported complete.
   because `deploy.yml` incorrectly required `github.ref_protected=true` even
   though this repository has no main branch protection rule. The follow-up
   recovery keeps deployment main-only and validation-only dispatch exact-SHA.
+- Recovery PR #121 passed read-only PR run `29843523709`, which correctly
+  skipped deployment, and squash-merged as
+  `138e89a8e3a56e86a836656e2572669786cbc0cf`. Automatic main run
+  `29843751719` then passed validation, Pages artifact upload, and deployment.
+  GitHub reports the live site at
+  <https://hyeonsangjeon.github.io/gdpval-realworks/>.
 - The Pages recovery received final `first-reviewer` approval after its shell
   contract test was strengthened to reject both lowercase and uppercase
   `ref_protected` checks. Two mandatory high-risk workflow review requests
@@ -106,8 +112,6 @@ task. It must be refreshed before a task is reported complete.
 
 ## Remaining Work
 
-- Merge the Pages gate recovery and confirm a successful automatic post-merge
-  build/deploy run for the recovery SHA.
 - On the next naturally occurring automated result PR, verify that the PR
   contract passes before HF upload, `validate` attaches to the exact final head
   SHA, and the validation-only run creates no Pages deployment. Do not run a paid
