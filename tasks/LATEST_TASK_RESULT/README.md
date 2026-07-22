@@ -121,11 +121,12 @@ task. It must be refreshed before a task is reported complete.
 - Documentation structure: **157 links**, **100 file/anchor targets**, **12
   fork-relative Actions routes**, and four system-map SVGs validated with no
   broken target, unbalanced fence, or `mermaid.ink` dependency.
-- actionlint 1.7.7 reported no diagnostics for the changed `batch-run.yml`; its
-  eight-test executable onboarding contract passed and all six external actions
-  remain pinned to 40-character SHAs. All eight active workflows parsed as
-  YAML. Ruff and `py_compile` passed for **43 changed Python files**; the
-  production TypeScript/Vite build and `git diff --check` also passed.
+- The changed `batch-run.yml` parsed as YAML and its eight-test executable
+  onboarding contract passed; all six external actions remain pinned to
+  40-character SHAs. All eight active workflows parsed as YAML. System
+  `actionlint` was unavailable, so no unverified downloaded binary was used.
+  Ruff and `py_compile` passed for **43 changed Python files**; the production
+  TypeScript/Vite build and `git diff --check` also passed.
   `huggingface-hub==1.24.0` pins the verified write-auth, immutable-revision,
   and CAS API surface.
 - No workflow dispatch, Azure login, model/API call, batch/grading run, HF write,
