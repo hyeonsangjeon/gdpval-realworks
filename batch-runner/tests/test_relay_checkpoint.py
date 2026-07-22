@@ -73,6 +73,7 @@ class FakeApi:
         self.oid = oid
         self.files_by_revision = {}
         self.commit_parents = {}
+        self.commit_metadata = {}
         self.current_files = set()
         self.marker = None
         self.fail_upload_folder = False
@@ -117,7 +118,12 @@ class FakeApi:
         commits = []
         revision = kwargs["revision"]
         while revision is not None:
-            commits.append(SimpleNamespace(commit_id=revision))
+            title, message = self.commit_metadata.get(revision, ("", ""))
+            commits.append(SimpleNamespace(
+                commit_id=revision,
+                title=title,
+                message=message,
+            ))
             revision = self.commit_parents.get(revision)
         return commits
 
@@ -212,6 +218,10 @@ class StatefulApi(FakeApi):
                 self.current_files.discard(operation.path_in_repo)
         oid = self._oid()
         self.commit_parents[oid] = parent
+        self.commit_metadata[oid] = (
+            kwargs["commit_message"],
+            kwargs.get("commit_description", ""),
+        )
         self.files_by_revision[oid] = sorted(self.current_files)
         return SimpleNamespace(oid=oid)
 
@@ -966,6 +976,12 @@ def test_upload_marker_binds_payload_revision_and_cleanup_generation(tmp_path, m
     assert download_calls[0]["revision"] == api.head
     cleanup = next(call for call in api.calls if call[0] == "create_commit")
     assert cleanup[1]["parent_commit"] == api.head
+    assert cleanup[1]["commit_message"] == (
+        f"Clean relay checkpoint {marker['generation'][:12]}"
+    )
+    assert cleanup[1]["commit_description"] == (
+        f"relay-cleanup-generation: {marker['generation']}"
+    )
     operations = cleanup[1]["operations"]
     assert [operation.path_in_repo for operation in operations] == [
         relay._lineage_root(SOURCE_SHA, LINEAGE_ID),
@@ -1142,6 +1158,40 @@ def test_cleanup_retry_after_commit_response_loss_is_idempotent(tmp_path, monkey
         - repo_info_calls
         == 2
     )
+
+
+def test_cleanup_response_loss_rejects_full_generation_marker_drift(
+    tmp_path, monkeypatch
+):
+    api = _uploaded_stateful_checkpoint(tmp_path, monkeypatch, ResponseLossApi())
+    generation = json.loads(api.marker)["generation"]
+    api.lose_commit_response = True
+    original_create_commit = api.create_commit
+
+    def commit_with_tampered_description(**kwargs):
+        try:
+            return original_create_commit(**kwargs)
+        except RuntimeError:
+            title, _description = api.commit_metadata[api.head]
+            api.commit_metadata[api.head] = (
+                title,
+                f"relay-cleanup-generation: {'f' * 64}",
+            )
+            raise
+
+    api.create_commit = commit_with_tampered_description
+
+    with pytest.raises(ValueError, match="cleanup commit identity mismatch"):
+        relay.cleanup_checkpoint(
+            "owner/repository",
+            token="token",
+            source_sha=SOURCE_SHA,
+            lineage_id=LINEAGE_ID,
+            expected_generation=generation,
+            api=api,
+        )
+
+    assert [name for name, _kwargs in api.calls].count("create_commit") == 1
 
 
 def test_cleanup_response_loss_rejects_newer_lineage(tmp_path, monkeypatch):
