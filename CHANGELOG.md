@@ -114,7 +114,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   and the full 64-character generation marker in its description; response-loss
   reconciliation and publication finality verify both SDK fields and the direct
   parent before accepting cleanup. No workflow, Azure/model call, grading, HF
-  write, or paid execution was dispatched.
+  write, or paid execution was dispatched. Shipped through PR #131
+  (`576e6f4f4a72998f0311d74006373bcea40a3cf6`). Its code and test paths are
+  outside the Pages workflow's pull-request and push filters, so GitHub created
+  no automatic run for the PR head or merge SHA. No manual workflow dispatch,
+  Hugging Face write, Azure/model call, grading run, or paid execution was used
+  to compensate for the path-filtered check.
 - **Hermetic deliverable-selector contract tests** — replace import-time pandas
   and ignored local-parquet loading with a checked-in 28-task synthetic signal
   corpus. The 6,889-byte canonical fixture is self-hashed and binds exact public
