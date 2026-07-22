@@ -4,66 +4,55 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-22
-- Status: SHIPPED — deliverable-selector contracts are hermetic and source-bound
+- Status: GitHub About metadata updated and publicly verified
 
 ## Task
 
-- Make `test_deliverable_selector.py` collect and run in a clean checkout
-  without the ignored local GDPVal parquet, pandas, PyArrow, or network access.
-- Preserve the existing 20 owner-gold selections, seven wrong-format guards,
-  and criterion-routing contracts with a compact synthetic signal corpus.
-- Bind the fixture to exact public source identities and hashes without copying
-  full prompts, rubrics, reference bytes, deliverables, grades, or model output.
+- Remove the first-screen contradiction between the GitHub About description
+  (`220 tasks across 11 industries`) and the repository's tracked GDPVal Gold
+  Subset (`220 tasks across 9 sectors and 44 occupations`).
+- State the repository's value in one clear sentence for a new visitor deciding
+  whether to open, use, or star it.
+- Keep the live dashboard homepage and replace the 20-topic mixed vendor and
+  framework list with a smaller, high-signal discovery set.
 
 ## Result
 
-- Added `tasks/0722_wednesday/BOLT_HERMETIC_DELIVERABLE_SELECTOR.md` with the
-  reproduction, data-minimization contract, bounded scope, gates, and evidence.
-- Added a schema-checked 28-task fixture containing exact task identities,
-  allowlisted synthetic selector signals, and only the three criterion strings
-  already required by routing assertions.
-- Bound the corpus to `openai/gdpval` revision
-  `11e7900cdcac61bc4daf59e65feb238acda98fbf`, parquet SHA-256
-  `f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202`,
-  220 rows, and 28 per-task prompt/ordered-rubric hashes.
-- Replaced import-time pandas/parquet loading in selector tests with strict
-  fixture loading. No production selector, grader, routing, or workflow code
-  changed.
-- Added a stdlib-only offline verifier plus an optional local-source mode that
-  delays pandas import until explicitly requested and checks the full source
-  identity chain without printing source content.
-- Committed the rebased implementation as
-  `f63638c5889b4bfeea0e18c6e6e78ad4bade5caa`.
-- Squash-merged the reviewed BOLT through PR #124 as
-  `a82776113d617b3fa4bd12c480f36b51cd7b16a3`.
+- Changed the public About description from:
+  `Benchmark LLMs on real professional tasks, not academic puzzles. YAML-driven
+  experiment pipeline + live React dashboard for GDPVal Gold Subset (220 tasks
+  across 11 industries).`
+- The new description is:
+  `Open-source benchmark for evaluating LLMs on 220 real professional tasks
+  across 9 sectors and 44 occupations. Reproducible experiments, artifact
+  validation, grading, and a live evidence dashboard.`
+- Preserved the homepage at
+  `https://hyeonsangjeon.github.io/gdpval-realworks/`.
+- Replaced 20 mixed topics with these 12 exact topics:
+  `artifact-validation`, `azure-openai`, `benchmark-automation`, `dashboard`,
+  `gdpval`, `github-actions`, `huggingface`, `llm-benchmark`, `llm-evaluation`,
+  `mlops`, `professional-tasks`, and `real-world-tasks`.
+- Did not change repository visibility, features, files, workflows, or Pages
+  configuration. The repository remains public.
 
 ## Verification
 
-- Clean-checkout reproduction before the fix: selector test collection failed
-  with `FileNotFoundError` for the ignored local parquet.
-- Hermetic selector and verifier contracts: **15 passed, 0 failed**.
-- Root `scripts/__tests__`: **44 passed, 0 failed**.
-- Adjacent selector/grader/routing/artifact suite: **90 passed, 2 skipped,
-  0 failed**.
-- Offline verifier: 28 tasks, valid self-hash, 6,889 canonical bytes.
-- Optional source verification passed against the known local public snapshot:
-  exact revision, parquet SHA, 220 rows, full task set, and all per-task source
-  hashes.
-- Ruff, `py_compile`, diagnostics, and `git diff --check` passed.
-- `grading-engineer` approved with zero mandatory findings.
-- Automatic `Aggregate Tests & Deploy` run
-  [29862415519](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29862415519)
-  completed in 1 minute 59 seconds: validate passed in 1 minute 45 seconds and
-  the Pages deploy job passed in 8 seconds.
-- The full batch-runner suite was attempted but not claimed as passing: system
-  Python lacks `datasets` for six unrelated modules and `ijson` for four.
-- No grading, Step 8, model/API call, HF upload, manual workflow, network fetch,
-  or paid execution occurred. Only the automatic free validate and Pages deploy
-  jobs ran after merge.
+- `gh repo view` and the GitHub repository API returned the exact description,
+  homepage, 12-topic set, and public visibility after the update.
+- The anonymous public repository page displayed the same About description,
+  dashboard URL, and all 12 topics.
+- The public README independently states the tracked scope as 220 tasks across
+  9 industry sectors and 44 occupations.
+- Recent Actions history showed no new run from this metadata-only update; the
+  latest listed run remained the pre-existing 2026-07-21 Pages deployment.
+- Original description, homepage, and 20-topic set were captured before the
+  update, providing an exact rollback value.
+- No workflow dispatch, model/API call, grading, batch run, HF write, Pages
+  deployment, or paid execution occurred.
 
 ## Remaining Work
 
-- No implementation work remains for the hermetic selector corpus BOLT.
-- Restore the repository's complete Python dependency environment before using
-  the broad batch-runner suite as a release gate; do not weaken imports or
-  production dependency contracts to accommodate this machine.
+- No GitHub About metadata work remains.
+- Broader README and first-run execution-contract alignment is a separate,
+  independently reviewed task and is not claimed as shipped by this metadata
+  update.

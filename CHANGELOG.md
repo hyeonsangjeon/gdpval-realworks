@@ -11,6 +11,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+- **GitHub repository About metadata** — replace the contradictory
+  `220 tasks across 11 industries` description with a concise public value
+  proposition for the tracked Gold Subset: 220 real professional tasks across
+  9 sectors and 44 occupations, reproducible experiments, artifact validation,
+  grading, and a live evidence dashboard. Keep the deployed dashboard homepage
+  unchanged and reduce 20 mixed vendor/framework topics to 12 high-signal
+  discovery topics centered on LLM evaluation, real-world professional tasks,
+  artifact validation, benchmark automation, and the operating stack. The
+  public GitHub page and repository API show the exact new description,
+  homepage, and topic set; the metadata-only update created no commit or
+  workflow run.
+
 ### Fixed
 - **Hermetic deliverable-selector contract tests** — replace import-time pandas
   and ignored local-parquet loading with a checked-in 28-task synthetic signal
