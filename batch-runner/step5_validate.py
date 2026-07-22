@@ -34,7 +34,8 @@ import json
 import sys
 from pathlib import Path
 
-from core.config import WORKSPACE_DIR, UPLOAD_DIR, DELIVERABLE_DIR, DEFAULT_LOCAL_PATH
+from core.config import WORKSPACE_DIR, UPLOAD_DIR, DELIVERABLE_DIR
+from fill_parquet import _build_deliverable_uris
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -150,19 +151,17 @@ def _build_dummy_urls(task_id: str, submission_repo_id: str | None) -> dict:
     rel_path = f"deliverable_files/{task_id}/{DUMMY_FILENAME}"
 
     if submission_repo_id:
-        url = (
-            f"https://huggingface.co/datasets/{submission_repo_id}"
-            f"/resolve/main/{rel_path}"
+        urls, hf_uris = _build_deliverable_uris(
+            [rel_path], submission_repo_id
         )
-        hf_uri = f"hf://datasets/{submission_repo_id}/{rel_path}"
     else:
-        url = ""
-        hf_uri = ""
+        urls = [""]
+        hf_uris = [""]
 
     return {
         "deliverable_files": [rel_path],
-        "deliverable_file_urls": [url],
-        "deliverable_file_hf_uris": [hf_uri],
+        "deliverable_file_urls": urls,
+        "deliverable_file_hf_uris": hf_uris,
     }
 
 
@@ -192,10 +191,9 @@ def validate(data_dir: str = None) -> bool:
 
     data_path = Path(data_dir) if data_dir else UPLOAD_DIR
     parquet_dir = data_path / "data"
-    deliverable_dir = DELIVERABLE_DIR
 
     print(f"\n{'='*60}")
-    print(f"🔍 Step 5: Validate Dataset (upload staging)")
+    print("🔍 Step 5: Validate Dataset (upload staging)")
     print(f"{'='*60}")
     print(f"   Upload dir: {data_path}")
 

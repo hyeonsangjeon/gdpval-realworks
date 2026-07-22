@@ -2,8 +2,7 @@
 
 import platform
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from pathlib import Path
+from unittest.mock import Mock, patch
 
 from core.config import DEFAULT_TOKENS
 from core.subprocess_runner import (
@@ -337,6 +336,57 @@ with open("output.txt", "w") as f:
     assert result["success"] is True
     output_file = next(f for f in result["files"] if f["filename"] == "output.txt")
     assert b"Processed: Reference content" in output_file["content"]
+
+
+def test_reference_copy_failure_is_fatal_before_subprocess(
+    subprocess_runner, tmp_path, monkeypatch
+):
+    ref_file = tmp_path / "reference.txt"
+    ref_file.write_text("Reference content", encoding="utf-8")
+    monkeypatch.setattr(
+        "core.reference_integrity.shutil.copyfileobj",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("copy failed")),
+    )
+    started = []
+    monkeypatch.setattr(
+        "core.subprocess_runner.subprocess.run",
+        lambda *_args, **_kwargs: started.append(True),
+    )
+
+    result = subprocess_runner._execute_safely(
+        "print('should not run')",
+        reference_files=[str(ref_file)],
+    )
+
+    assert result["success"] is False
+    assert "copy failed" in result["error"]
+    assert started == []
+
+
+def test_reference_staging_failure_is_fatal_before_codegen(
+    subprocess_runner, tmp_path, monkeypatch
+):
+    reference = tmp_path / "reference.txt"
+    reference.write_text("reference", encoding="utf-8")
+    model_calls = []
+    monkeypatch.setattr(
+        "core.reference_integrity.shutil.copyfileobj",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("copy failed")),
+    )
+    monkeypatch.setattr(
+        "core.subprocess_runner.complete",
+        lambda **_kwargs: model_calls.append(True),
+    )
+
+    result = subprocess_runner.run(
+        task_prompt="Create a report",
+        model="model",
+        reference_files=[str(reference)],
+    )
+
+    assert result["success"] is False
+    assert "copy failed" in result["error"]
+    assert model_calls == []
 
 
 # ── Memory limit / OOM detection tests ───────────────────────────────────

@@ -9,14 +9,13 @@ Also generates ``step0_needs_files_manifest.json`` from the SOURCE dataset --
 a task-level map that records which tasks require file output.
 
 Lifecycle:
-    1. Create SUBMISSION_REPO_ID, reuse a 409 target with data, reject partials
-    2. Prepare the pinned openai/gdpval revision in a temporary directory
-    3. Generate step0_needs_files_manifest.json (BEFORE stripping)
-    4. Strip deliverable columns + remove deliverable_files/
-    5. Upload cleaned content to SUBMISSION_REPO_ID
-    6. Stage the submission repo's exact HEAD
-    7. Verify target semantics and reference bytes against pinned source identities
-    8. Install the verified target snapshot, then validate it again
+    1. Authenticate and create SUBMISSION_REPO_ID with exist_ok=False
+    2. On 409, reuse a target with data/ or reject a partial target without deletion
+    3. For a new target, download the pinned openai/gdpval revision -> temp dir
+    4. Generate and persist the canonical needs-files manifest before stripping
+    5. Strip deliverable columns + remove deliverable_files/
+    6. Upload cleaned content and the canonical manifest to SUBMISSION_REPO_ID
+    7. Download the target's exact current HEAD to a fresh snapshot and validate
 
 Usage:
     from core.repo_bootstrapper import RepoBootstrapper
@@ -27,7 +26,6 @@ Usage:
 
 import hashlib
 import json
-import math
 import os
 import re
 import shutil
@@ -60,11 +58,17 @@ from core.config import (
 )
 from core.needs_files import resolve_needs_files
 from core.prompt_classifier import classify_prompt
+from core.inference_manifest import canonical_deliverable_path
 from core.reference_integrity import (
     ReferenceIntegrityError,
     reference_manifest_record,
     validate_reference_record,
     validate_reference_relative_path,
+)
+from core.source_identity import (
+    SOURCE_PROJECTION_FIELDS,
+    ordered_source_projection_sha256,
+    source_task_projection_sha256,
 )
 
 # -- Columns that belong to the submitter (must be cleared) ----------------
@@ -79,18 +83,17 @@ _SUBMITTER_COLUMNS_LIST = [
 _CRITICAL_COLUMNS = {
     "rubric_json", "rubric_pretty",
     "task_id", "prompt", "sector", "occupation", "reference_files",
+    "reference_file_urls", "reference_file_hf_uris",
 }
 MANIFEST_FILENAME = "step0_needs_files_manifest.json"
+CANONICAL_PARQUET_FILENAME = "train-00000-of-00001.parquet"
 SOURCE_REVISION = "11e7900cdcac61bc4daf59e65feb238acda98fbf"
 CANONICAL_ORDERED_TASK_IDS_SHA256 = (
     "df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c"
 )
-CANONICAL_MANIFEST_SHA256_BY_POLICY = {
-    "deliverable_only": "b8e17c8afa5d3cc8a1575ea728e2c86fef5eeb58cdb48cebd36e53fb88581546",
-    "explicit_boost": "bc59a99036f5910ba31409bb971e45e4ee7e1e31d27545532d5c7435eded9146",
-    "union": "c258914ff86a648da075ee6f485cad39d99c7b22b51e23f3a2d6f47e4bf37af9",
-    "intersection": "d20667783f3ef5939ff90b54c170eb0974172be7d8d88ab41e0ebca9c124c714",
-}
+CANONICAL_SOURCE_PROJECTION_SHA256 = (
+    "ed8f68a4af63a1094d9bbe0fe0e83398941634a9994b4b2124dc6d0d6fbc5d4a"
+)
 CANONICAL_SOURCE_COLUMNS = (
     "task_id",
     "sector",
@@ -105,20 +108,19 @@ CANONICAL_SOURCE_COLUMNS = (
     "rubric_pretty",
     "rubric_json",
 )
-CANONICAL_SOURCE_INPUT_COLUMNS = (
-    "task_id",
-    "sector",
-    "occupation",
-    "prompt",
-    "reference_files",
-    "reference_file_urls",
-    "reference_file_hf_uris",
-    "rubric_pretty",
-    "rubric_json",
-)
-CANONICAL_SOURCE_INPUT_SHA256 = (
-    "95f14ade3efbdac030226a67fbbc174ebeaae4a958f1982cab93ee057658faf5"
-)
+CANONICAL_TARGET_COLUMNS = (*CANONICAL_SOURCE_COLUMNS, "deliverable_text")
+CANONICAL_MANIFEST_SHA256_BY_POLICY = {
+    "deliverable_only": (
+        "463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512"
+    ),
+    "explicit_boost": (
+        "3e8b5974fa151573e4fc33b12f6dbcd62aa82aeb6a5f0593f7eabd1d80e0e1b6"
+    ),
+    "union": "c118a6b138faf56e6325ee17d075215e0759a979637ba22eef0046c7e99c77ee",
+    "intersection": (
+        "ddb5324bf1902c04fbd37358ef1527b3ab017004799b66b31bcdd0fe7728567e"
+    ),
+}
 
 _MANIFEST_TOP_LEVEL_KEYS = {
     "_description",
@@ -127,6 +129,7 @@ _MANIFEST_TOP_LEVEL_KEYS = {
     "_source_revision",
     "_total_tasks",
     "_ordered_task_ids_sha256",
+    "_source_projection_sha256",
     "reference_files",
     "tasks",
     "_summary",
@@ -138,6 +141,7 @@ _MANIFEST_TASK_KEYS = {
     "has_deliverable_files",
     "prompt_classification",
     "policy_results",
+    "source_projection_sha256",
 }
 _PROMPT_CLASSIFICATION_KEYS = {
     "requires_file",
@@ -164,79 +168,21 @@ def _compact_json_sha256(value) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _normalize_source_input_value(value):
-    """Normalize one source value into a deterministic JSON-safe value."""
-    converted_with_tolist = False
-    converted_value = None
-    if hasattr(value, "tolist"):
-        try:
-            converted_value = value.tolist()
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise TypeError(
-                f"Unable to convert {type(value).__name__} with tolist()"
-            ) from exc
-        if converted_value is value:
-            raise TypeError(f"tolist() returned itself for {type(value).__name__}")
-        converted_with_tolist = True
-        if isinstance(converted_value, (list, tuple)):
-            return _normalize_source_input_value(converted_value)
-
-    if hasattr(value, "item"):
-        try:
-            scalar_value = value.item()
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise TypeError(
-                f"Unable to convert {type(value).__name__} with item()"
-            ) from exc
-        if scalar_value is value:
-            raise TypeError(f"item() returned itself for {type(value).__name__}")
-        return _normalize_source_input_value(scalar_value)
-
-    if converted_with_tolist:
-        return _normalize_source_input_value(converted_value)
-
-    if value is None or isinstance(value, (str, bool, int)):
-        return value
-    if isinstance(value, float):
-        if math.isnan(value):
-            return None
-        if not math.isfinite(value):
-            raise ValueError("Source input projection contains a nonfinite float")
-        return value
-    if isinstance(value, (list, tuple)):
-        return [_normalize_source_input_value(item) for item in value]
-    if isinstance(value, dict):
-        if not all(isinstance(key, str) for key in value):
-            raise TypeError("Source input projection dict keys must be strings")
-        return {
-            key: _normalize_source_input_value(item)
-            for key, item in value.items()
-        }
-    raise TypeError(
-        "Unsupported source input projection value type: "
-        f"{type(value).__name__}"
-    )
+def _column_value(dataframe, field: str, index: int):
+    column = dataframe[field]
+    return column.iloc[index] if hasattr(column, "iloc") else column[index]
 
 
-def _source_input_projection_sha256(dataframe) -> str:
-    """Hash the canonical source-input projection of a dataframe."""
-    projection = []
-    input_dataframe = dataframe.loc[:, list(CANONICAL_SOURCE_INPUT_COLUMNS)]
-    for values in input_dataframe.itertuples(index=False, name=None):
-        projection.append(
-            {
-                column: _normalize_source_input_value(value)
-                for column, value in zip(CANONICAL_SOURCE_INPUT_COLUMNS, values)
-            }
-        )
-    encoded = json.dumps(
-        projection,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+def source_projection_hashes(dataframe) -> List[str]:
+    """Hash the ordered source semantics consumed by preparation/evaluation."""
+    task_count = len(dataframe["task_id"])
+    return [
+        source_task_projection_sha256(**{
+            field: _column_value(dataframe, field, index)
+            for field in SOURCE_PROJECTION_FIELDS
+        })
+        for index in range(task_count)
+    ]
 
 
 def _canonical_manifest_digest_error(raw_manifest: bytes) -> Optional[str]:
@@ -272,7 +218,9 @@ def _reject_symlink_components(path: Path) -> None:
         except FileNotFoundError:
             break
         except OSError as exc:
-            raise RuntimeError(f"Unable to inspect path component {current}: {exc}") from exc
+            raise RuntimeError(
+                f"Unable to inspect path component {current}: {exc}"
+            ) from exc
 
         if stat.S_ISLNK(metadata.st_mode):
             raise RuntimeError(f"Path component is a symlink: {current}")
@@ -299,7 +247,9 @@ def _validate_regular_tree(root: Path) -> None:
     try:
         root_metadata = root.lstat()
     except OSError as exc:
-        raise RuntimeError(f"Unable to inspect snapshot staging tree {root}: {exc}") from exc
+        raise RuntimeError(
+            f"Unable to inspect snapshot staging tree {root}: {exc}"
+        ) from exc
     if not stat.S_ISDIR(root_metadata.st_mode):
         raise RuntimeError(f"Snapshot staging root is not a directory: {root}")
 
@@ -326,175 +276,6 @@ def _validate_regular_tree(root: Path) -> None:
             raise RuntimeError(
                 f"Unable to inspect snapshot staging directory {directory}: {exc}"
             ) from exc
-
-
-def _streaming_sha256(path: Path) -> str:
-    """Hash one stable regular file without following symlinks."""
-    candidate = Path(path)
-    try:
-        metadata = candidate.lstat()
-    except OSError as exc:
-        raise RuntimeError(f"Unable to inspect input file {candidate}: {exc}") from exc
-    if stat.S_ISLNK(metadata.st_mode):
-        raise RuntimeError(f"Input file is a symlink: {candidate}")
-    if not stat.S_ISREG(metadata.st_mode):
-        raise RuntimeError(f"Input path is not a regular file: {candidate}")
-
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(candidate, flags)
-    except OSError as exc:
-        raise RuntimeError(f"Unable to open input file {candidate}: {exc}") from exc
-
-    try:
-        before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode):
-            raise RuntimeError(f"Input path is not a regular file: {candidate}")
-        digest = hashlib.sha256()
-        bytes_read = 0
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            digest.update(chunk)
-            bytes_read += len(chunk)
-        after = os.fstat(descriptor)
-        if (
-            before.st_dev,
-            before.st_ino,
-            before.st_size,
-            before.st_mtime_ns,
-        ) != (
-            after.st_dev,
-            after.st_ino,
-            after.st_size,
-            after.st_mtime_ns,
-        ) or bytes_read != after.st_size:
-            raise RuntimeError(f"Input file changed while being read: {candidate}")
-        return digest.hexdigest()
-    finally:
-        os.close(descriptor)
-
-
-def _input_file_records(root: Path) -> List[dict[str, object]]:
-    """Return identities for the exact runtime input surface of a snapshot."""
-    snapshot_root = Path(root)
-    _reject_symlink_components(snapshot_root)
-    try:
-        root_metadata = snapshot_root.lstat()
-    except OSError as exc:
-        raise RuntimeError(f"Unable to inspect input snapshot {snapshot_root}: {exc}") from exc
-    if not stat.S_ISDIR(root_metadata.st_mode):
-        raise RuntimeError(f"Input snapshot root is not a directory: {snapshot_root}")
-
-    records: List[dict[str, object]] = []
-
-    def add_file(path: Path, relative_path: str) -> None:
-        try:
-            before = path.lstat()
-        except OSError as exc:
-            raise RuntimeError(f"Unable to inspect input file {path}: {exc}") from exc
-        if stat.S_ISLNK(before.st_mode):
-            raise RuntimeError(f"Input file is a symlink: {path}")
-        if not stat.S_ISREG(before.st_mode):
-            raise RuntimeError(f"Input path is not a regular file: {path}")
-        sha256 = _streaming_sha256(path)
-        try:
-            after = path.lstat()
-        except OSError as exc:
-            raise RuntimeError(f"Unable to re-inspect input file {path}: {exc}") from exc
-        if (
-            before.st_dev,
-            before.st_ino,
-            before.st_size,
-            before.st_mtime_ns,
-        ) != (
-            after.st_dev,
-            after.st_ino,
-            after.st_size,
-            after.st_mtime_ns,
-        ):
-            raise RuntimeError(f"Input file changed while being hashed: {path}")
-        records.append(
-            {"path": relative_path, "sha256": sha256, "size": after.st_size}
-        )
-
-    for top_level_name in ("data", "reference_files"):
-        top_level_path = snapshot_root / top_level_name
-        try:
-            top_level_metadata = top_level_path.lstat()
-        except FileNotFoundError as exc:
-            raise RuntimeError(
-                f"Input snapshot directory is missing: {top_level_path}"
-            ) from exc
-        except OSError as exc:
-            raise RuntimeError(
-                f"Unable to inspect input snapshot directory {top_level_path}: {exc}"
-            ) from exc
-        if stat.S_ISLNK(top_level_metadata.st_mode):
-            raise RuntimeError(f"Input snapshot directory is a symlink: {top_level_path}")
-        if not stat.S_ISDIR(top_level_metadata.st_mode):
-            raise RuntimeError(
-                f"Input snapshot path is not a directory: {top_level_path}"
-            )
-
-        pending = [(top_level_path, (top_level_name,))]
-        while pending:
-            directory, relative_parts = pending.pop()
-            try:
-                with os.scandir(directory) as entries:
-                    directory_entries = list(entries)
-            except OSError as exc:
-                raise RuntimeError(
-                    f"Unable to scan input snapshot directory {directory}: {exc}"
-                ) from exc
-
-            for entry in directory_entries:
-                entry_path = Path(entry.path)
-                try:
-                    entry_metadata = entry_path.lstat()
-                except OSError as exc:
-                    raise RuntimeError(
-                        f"Unable to inspect input snapshot path {entry_path}: {exc}"
-                    ) from exc
-                if stat.S_ISLNK(entry_metadata.st_mode):
-                    raise RuntimeError(f"Input snapshot path is a symlink: {entry_path}")
-                entry_relative_parts = (*relative_parts, entry.name)
-                if stat.S_ISDIR(entry_metadata.st_mode):
-                    pending.append((entry_path, entry_relative_parts))
-                elif stat.S_ISREG(entry_metadata.st_mode):
-                    add_file(
-                        entry_path,
-                        PurePosixPath(*entry_relative_parts).as_posix(),
-                    )
-                else:
-                    raise RuntimeError(
-                        f"Input snapshot path is a special file: {entry_path}"
-                    )
-
-    manifest_path = snapshot_root / MANIFEST_FILENAME
-    add_file(manifest_path, MANIFEST_FILENAME)
-    records.sort(key=lambda record: str(record["path"]))
-    return records
-
-
-def _nonempty_submitter_list_value(value) -> bool:
-    if value is None:
-        return False
-    if isinstance(value, (str, bytes, bytearray)):
-        return bool(value)
-    if hasattr(value, "tolist"):
-        try:
-            value = value.tolist()
-        except (TypeError, ValueError):
-            return True
-    if isinstance(value, (list, tuple)):
-        return bool(value)
-    try:
-        missing = pd.isna(value)
-        return not bool(missing)
-    except (TypeError, ValueError):
-        return True
 
 
 def _physical_reference_paths(snapshot_root: Path) -> List[str]:
@@ -624,9 +405,9 @@ def validate_needs_files_manifest(
         errors.append("Manifest _description must be a nonempty string")
 
     schema_version = manifest.get("_schema_version")
-    if type(schema_version) is not int or schema_version != 3:
+    if type(schema_version) is not int or schema_version != 4:
         errors.append(
-            f"Manifest _schema_version must be 3, got {schema_version!r}"
+            f"Manifest _schema_version must be 4, got {schema_version!r}"
         )
 
     if manifest.get("_source") != source_repo:
@@ -663,6 +444,30 @@ def validate_needs_files_manifest(
             "Manifest _ordered_task_ids_sha256 must be "
             f"{CANONICAL_ORDERED_TASK_IDS_SHA256}, got "
             f"{manifest_ordered_digest!r}"
+        )
+
+    try:
+        task_projection_hashes = source_projection_hashes(dataframe)
+        computed_source_projection = ordered_source_projection_sha256(
+            task_projection_hashes
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        errors.append(f"Unable to compute source task projection: {exc}")
+        task_projection_hashes = []
+        computed_source_projection = None
+    if computed_source_projection != CANONICAL_SOURCE_PROJECTION_SHA256:
+        errors.append(
+            "Snapshot source projection digest must be canonical "
+            f"{CANONICAL_SOURCE_PROJECTION_SHA256}, got "
+            f"{computed_source_projection!r}"
+        )
+    if manifest.get("_source_projection_sha256") != (
+        CANONICAL_SOURCE_PROJECTION_SHA256
+    ):
+        errors.append(
+            "Manifest _source_projection_sha256 must be "
+            f"{CANONICAL_SOURCE_PROJECTION_SHA256}, got "
+            f"{manifest.get('_source_projection_sha256')!r}"
         )
 
     reference_manifest = manifest.get("reference_files")
@@ -779,6 +584,17 @@ def validate_needs_files_manifest(
             errors.append(
                 f"Manifest task {task_id!r} keys must exactly match "
                 f"{sorted(_MANIFEST_TASK_KEYS)}"
+            )
+
+        task_index = task_ids.index(task_id) if task_id in expected_task_ids else None
+        expected_projection = (
+            task_projection_hashes[task_index]
+            if task_index is not None and task_index < len(task_projection_hashes)
+            else None
+        )
+        if entry.get("source_projection_sha256") != expected_projection:
+            errors.append(
+                f"Manifest task {task_id!r} source projection differs from snapshot"
             )
 
         needs_files = entry.get("needs_files")
@@ -1062,18 +878,59 @@ def validate_reference_snapshot(dataframe, local_path: Path) -> List[str]:
     return errors
 
 
+def validate_cleared_submitter_state(dataframe, local_path: Path) -> List[str]:
+    """Reject stale text, file manifests, URLs, URIs, and physical outputs."""
+    errors: List[str] = []
+    for column in _SUBMITTER_COLUMNS_TEXT:
+        if column not in dataframe.columns:
+            errors.append(f"Missing cleared submitter column: {column}")
+            continue
+        invalid = sum(
+            not isinstance(value, str) or value != ""
+            for value in dataframe[column]
+        )
+        if invalid:
+            errors.append(
+                f"{column} must be exact empty strings in all rows; "
+                f"invalid={invalid}"
+            )
+    for column in _SUBMITTER_COLUMNS_LIST:
+        if column not in dataframe.columns:
+            errors.append(f"Missing cleared submitter column: {column}")
+            continue
+        invalid = sum(
+            value is None
+            or isinstance(value, (str, bytes))
+            or not hasattr(value, "__len__")
+            or len(value) != 0
+            for value in dataframe[column]
+        )
+        if invalid:
+            errors.append(
+                f"{column} must be empty list-like values in all rows; "
+                f"invalid={invalid}"
+            )
+
+    deliverable_dir = Path(local_path) / "deliverable_files"
+    if deliverable_dir.exists() or deliverable_dir.is_symlink():
+        if deliverable_dir.is_symlink() or not deliverable_dir.is_dir():
+            errors.append("deliverable_files/ must not be a symlink or file")
+        elif any(deliverable_dir.rglob("*")):
+            errors.append("deliverable_files/ contains stale submitter output")
+    return errors
+
+
 class RepoBootstrapper:
     """Bootstrap a submission HF dataset repo from a pinned openai/gdpval.
 
     Steps:
-        0. Abort if repo already has content
-        1. Download the required pinned openai/gdpval inputs to temp dir
-        2. Generate step0_needs_files_manifest.json (from ORIGINAL data)
-        3. Strip deliverable columns + remove deliverable_files/
-        4. Upload to submission repo (clean)
-        5. Stage the exact current submission HEAD
-        6. Verify target semantics and pinned source identities before installation
-        7. Install to a fresh local_path and validate again
+        0. Create the target, reuse a 409 target with data, or reject partial data
+        1. Download the pinned openai/gdpval revision to a temporary directory
+        2. Generate and persist the canonical manifest from the original data
+        3. Strip deliverable columns and remove deliverable_files/
+        4. Upload the clean snapshot plus its canonical manifest
+        5. Download the target's exact current HEAD into a fresh local snapshot
+        6. Validate the snapshot and manifest
     """
 
     SOURCE_REPO = DATASET_ID  # "openai/gdpval"
@@ -1119,7 +976,7 @@ class RepoBootstrapper:
         # 2. Download submission repo to local
         self._download_snapshot(force=force)
 
-        # 3. Import the source-derived manifest persisted in the target.
+        # 3. Restore the source-derived manifest persisted in the snapshot
         self._restore_manifest_from_snapshot()
 
         # 4. Validate
@@ -1184,7 +1041,6 @@ class RepoBootstrapper:
 
         print(f"   Repo created: {self.submission_repo_id}")
 
-        # 1. Download + strip + upload (with retry)
         max_retries = 3
         try:
             for attempt in range(1, max_retries + 1):
@@ -1204,7 +1060,7 @@ class RepoBootstrapper:
                             token=self.token,
                             ignore_patterns=[".git*", ".cache*"],
                         )
-                    break  # success
+                    break
                 except Exception as e:
                     if attempt == max_retries:
                         raise RuntimeError(
@@ -1237,25 +1093,19 @@ class RepoBootstrapper:
         parquets = sorted(data_dir.glob("train-*.parquet"))
         for pq_path in parquets:
             df = pd.read_parquet(pq_path)
-            changed = False
 
             for col in _SUBMITTER_COLUMNS_TEXT:
-                if col in df.columns:
-                    df[col] = ""
-                    changed = True
+                df[col] = ""
 
             for col in _SUBMITTER_COLUMNS_LIST:
-                if col in df.columns:
-                    df[col] = [[] for _ in range(len(df))]
-                    changed = True
+                df[col] = [[] for _ in range(len(df))]
 
-            if changed:
-                df.to_parquet(pq_path, index=False)
+            df.to_parquet(pq_path, index=False)
 
         print(f"   Stripped deliverable columns from {len(parquets)} parquet file(s)")
 
     def _prepare_pinned_source_snapshot(self, root: Path) -> Path:
-        """Download and prepare required files from the pinned source revision."""
+        """Download only canonical source inputs, then prepare a validated target."""
         if not PANDAS_AVAILABLE:
             raise RuntimeError("pandas is required to prepare the pinned source")
 
@@ -1273,15 +1123,23 @@ class RepoBootstrapper:
 
         data_dir = source_root / "data"
         parquets = sorted(data_dir.glob("train-*.parquet"))
-        if not parquets:
-            raise RuntimeError(f"No train-*.parquet files found in {data_dir}")
-        try:
-            dataframe = pd.concat(
-                [pd.read_parquet(path) for path in parquets],
-                ignore_index=True,
+        if [path.name for path in parquets] != [CANONICAL_PARQUET_FILENAME]:
+            raise RuntimeError(
+                "Pinned source must contain exactly the canonical parquet shard "
+                f"{CANONICAL_PARQUET_FILENAME!r}, got "
+                f"{[path.name for path in parquets]!r}"
             )
+        try:
+            dataframe = pd.read_parquet(parquets[0])
         except (ImportError, OSError, TypeError, ValueError) as exc:
             raise RuntimeError(f"Unable to read pinned source parquet: {exc}") from exc
+
+        if tuple(dataframe.columns) != CANONICAL_SOURCE_COLUMNS:
+            raise ValueError(
+                "Pinned source columns must exactly match the canonical schema: "
+                f"expected {CANONICAL_SOURCE_COLUMNS!r}, "
+                f"got {tuple(dataframe.columns)!r}"
+            )
 
         declared_reference_paths, declaration_errors = _declared_reference_paths(
             dataframe
@@ -1291,16 +1149,21 @@ class RepoBootstrapper:
                 "Pinned source reference declarations are invalid:\n      "
                 + "\n      ".join(declaration_errors)
             )
-        if declared_reference_paths:
-            snapshot_download(
-                repo_id=self.SOURCE_REPO,
-                repo_type="dataset",
-                revision=SOURCE_REVISION,
-                local_dir=source_root,
-                token=self.token,
-                allow_patterns=declared_reference_paths,
-            )
+        snapshot_download(
+            repo_id=self.SOURCE_REPO,
+            repo_type="dataset",
+            revision=SOURCE_REVISION,
+            local_dir=source_root,
+            token=self.token,
+            allow_patterns=declared_reference_paths,
+        )
         _validate_regular_tree(source_root)
+
+        physical_reference_paths = _physical_reference_paths(source_root)
+        if physical_reference_paths != sorted(declared_reference_paths):
+            raise ValueError(
+                "Pinned source physical references differ from declarations"
+            )
 
         manifest_path = self._generate_manifest_from_dir(
             source_root,
@@ -1331,6 +1194,15 @@ class RepoBootstrapper:
             print("   Removed deliverable_files/ from upload")
 
         _validate_regular_tree(source_root)
+        validation_errors = self._snapshot_validation_errors(
+            source_root,
+            manifest_path,
+        )
+        if validation_errors:
+            raise ValueError(
+                "Prepared source snapshot validation failed:\n      "
+                + "\n      ".join(validation_errors)
+            )
         return manifest_path
 
     # -- Generate step0_needs_files_manifest.json ---------------------------
@@ -1341,7 +1213,7 @@ class RepoBootstrapper:
         *,
         output_path: Optional[Path] = None,
     ) -> Path:
-        """Generate step0_needs_files_manifest.json (V3 schema) from SOURCE parquet.
+        """Generate step0_needs_files_manifest.json (V4 schema) from SOURCE parquet.
 
         Combines two signals per task:
 
@@ -1395,11 +1267,12 @@ class RepoBootstrapper:
                 "prompt signal (heuristic from prompt_classifier). "
                 "needs_files is resolved by the active policy."
             ),
-            "_schema_version": 3,
+            "_schema_version": 4,
             "_source": self.SOURCE_REPO,
             "_source_revision": SOURCE_REVISION,
             "_total_tasks": len(df),
             "_ordered_task_ids_sha256": ordered_task_ids_digest,
+            "_source_projection_sha256": "",
             "reference_files": {},
             "tasks": {},
         }
@@ -1413,6 +1286,17 @@ class RepoBootstrapper:
                 + "\n      ".join(reference_errors)
             )
         manifest["reference_files"] = reference_manifest
+        task_projection_hashes = source_projection_hashes(df)
+        source_projection_digest = ordered_source_projection_sha256(
+            task_projection_hashes
+        )
+        if source_projection_digest != CANONICAL_SOURCE_PROJECTION_SHA256:
+            raise ValueError(
+                "Source task projection does not match canonical digest "
+                f"{CANONICAL_SOURCE_PROJECTION_SHA256}: "
+                f"{source_projection_digest}"
+            )
+        manifest["_source_projection_sha256"] = source_projection_digest
 
         policy_counts = {p: 0 for p in NEEDS_FILES_POLICIES_KNOWN}
         confidence_distribution = {
@@ -1422,7 +1306,7 @@ class RepoBootstrapper:
             "text_only": 0,
         }
 
-        for _, row in df.iterrows():
+        for row_index, (_, row) in enumerate(df.iterrows()):
             task_id = row["task_id"]
             files = row.get("deliverable_files", [])
             if files is None:
@@ -1459,6 +1343,7 @@ class RepoBootstrapper:
                     "confidence": classification.confidence,
                 },
                 "policy_results": policy_results,
+                "source_projection_sha256": task_projection_hashes[row_index],
             }
 
             for p, v in policy_results.items():
@@ -1514,11 +1399,11 @@ class RepoBootstrapper:
                 f"Unable to open manifest destination {destination}: {exc}"
             ) from exc
         try:
-            with os.fdopen(descriptor, "wb") as temporary_file:
+            with os.fdopen(descriptor, "wb") as destination_file:
                 descriptor = -1
-                temporary_file.write(encoded_manifest)
-                temporary_file.flush()
-                os.fsync(temporary_file.fileno())
+                destination_file.write(encoded_manifest)
+                destination_file.flush()
+                os.fsync(destination_file.fileno())
         finally:
             if descriptor >= 0:
                 os.close(descriptor)
@@ -1548,24 +1433,43 @@ class RepoBootstrapper:
     # -- Download snapshot -------------------------------------------------
 
     def _restore_manifest_from_snapshot(self) -> None:
+        """Atomically restore the canonical manifest persisted in the snapshot."""
         source = self.local_path / MANIFEST_FILENAME
         _reject_symlink_components(source)
         try:
             metadata = source.lstat()
-        except FileNotFoundError as exc:
+        except (FileNotFoundError, NotADirectoryError) as exc:
             raise RuntimeError(
-                "Target dataset has no canonical needs-files manifest; use a "
-                "new disposable target instead of regenerating from stripped data"
+                "Downloaded snapshot has no canonical needs-files manifest. "
+                "Use a new disposable target instead of regenerating from "
+                "stripped data."
             ) from exc
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-            raise RuntimeError("Target needs-files manifest is not a regular file")
-        content = source.read_bytes()
-        if digest_error := _canonical_manifest_digest_error(content):
+        except OSError as exc:
+            raise RuntimeError(
+                f"Unable to inspect canonical needs-files manifest: {exc}"
+            ) from exc
+
+        if stat.S_ISLNK(metadata.st_mode):
+            raise RuntimeError(
+                "Canonical needs-files manifest in snapshot must not be a symlink"
+            )
+        if not stat.S_ISREG(metadata.st_mode):
+            raise RuntimeError(
+                "Canonical needs-files manifest in snapshot must be a regular file"
+            )
+
+        try:
+            manifest_bytes = source.read_bytes()
+        except OSError as exc:
+            raise RuntimeError(
+                f"Unable to read canonical needs-files manifest: {exc}"
+            ) from exc
+        if digest_error := _canonical_manifest_digest_error(manifest_bytes):
             raise RuntimeError(digest_error)
+
         destination = Path(self.manifest_path)
         parent = destination.parent
         _ensure_secure_directory(parent)
-
         try:
             destination_metadata = destination.lstat()
         except FileNotFoundError:
@@ -1591,10 +1495,14 @@ class RepoBootstrapper:
         try:
             with os.fdopen(descriptor, "wb") as temporary_file:
                 descriptor = -1
-                temporary_file.write(content)
+                temporary_file.write(manifest_bytes)
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
             os.replace(temporary, destination)
+        except OSError as exc:
+            raise RuntimeError(
+                f"Unable to restore canonical needs-files manifest: {exc}"
+            ) from exc
         finally:
             if descriptor >= 0:
                 os.close(descriptor)
@@ -1604,8 +1512,8 @@ class RepoBootstrapper:
                 pass
 
     def _download_snapshot(self, force: bool = False) -> None:
-        """Install exact HEAD after validating pinned source identities."""
-        del force  # Retained for API compatibility; every call refreshes the snapshot.
+        """Always download the target's exact current HEAD into fresh staging."""
+        del force  # Retained for API compatibility; every call refreshes.
 
         repo_info = self.api.repo_info(
             repo_id=self.submission_repo_id,
@@ -1633,8 +1541,8 @@ class RepoBootstrapper:
             prefix=".gdpval-target-",
             dir=parent,
         ) as temporary_root:
-            target_staging = Path(temporary_root) / "target"
-            target_staging.mkdir()
+            staging = Path(temporary_root) / "snapshot"
+            staging.mkdir()
 
             max_retries = 5
             for attempt in range(1, max_retries + 1):
@@ -1646,13 +1554,14 @@ class RepoBootstrapper:
                         repo_id=self.submission_repo_id,
                         repo_type="dataset",
                         revision=head,
-                        local_dir=target_staging,
+                        local_dir=staging,
                         token=self.token,
                         allow_patterns=[
                             ".gitattributes",
                             "README.md",
                             "data/**",
                             "reference_files/**",
+                            "deliverable_files/**",
                             MANIFEST_FILENAME,
                         ],
                     )
@@ -1671,15 +1580,13 @@ class RepoBootstrapper:
                     )
                     time.sleep(wait)
 
-            target_manifest = target_staging / MANIFEST_FILENAME
-
-            _validate_regular_tree(target_staging)
-
+            staged_manifest = staging / MANIFEST_FILENAME
+            _validate_regular_tree(staging)
             validation_errors = [
                 f"target: {error}"
                 for error in self._snapshot_validation_errors(
-                    target_staging,
-                    target_manifest,
+                    staging,
+                    staged_manifest,
                 )
             ]
             if validation_errors:
@@ -1718,7 +1625,7 @@ class RepoBootstrapper:
                     os.replace(self.local_path, backup_path)
 
                 try:
-                    os.replace(target_staging, self.local_path)
+                    os.replace(staging, self.local_path)
                 except Exception as replacement_error:
                     if backup_path is not None:
                         try:
@@ -1804,14 +1711,15 @@ class RepoBootstrapper:
                     else:
                         parquets.append(parquet_path)
 
-                if not parquet_entries:
-                    errors.append("No train-*.parquet files found in data/")
-                elif PANDAS_AVAILABLE and parquets:
+                parquet_names = [path.name for path in parquets]
+                if parquet_names != [CANONICAL_PARQUET_FILENAME]:
+                    errors.append(
+                        "Snapshot must contain exactly the canonical parquet shard "
+                        f"{CANONICAL_PARQUET_FILENAME!r}, got {parquet_names!r}"
+                    )
+                elif PANDAS_AVAILABLE:
                     try:
-                        dataframe = pd.concat(
-                            [pd.read_parquet(path) for path in parquets],
-                            ignore_index=True,
-                        )
+                        dataframe = pd.read_parquet(parquets[0])
                     except (ImportError, OSError, TypeError, ValueError) as exc:
                         errors.append(f"Unable to read snapshot parquet: {exc}")
 
@@ -1820,31 +1728,17 @@ class RepoBootstrapper:
                 errors.append(
                     f"Row count: expected {EXPECTED_TASK_COUNT}, got {len(dataframe)}"
                 )
-            columns_exact = tuple(dataframe.columns) == CANONICAL_SOURCE_COLUMNS
-            if not columns_exact:
+            if tuple(dataframe.columns) != CANONICAL_TARGET_COLUMNS:
                 errors.append(
-                    "Snapshot columns must exactly match canonical source columns: "
-                    f"expected {CANONICAL_SOURCE_COLUMNS!r}, "
+                    "Snapshot columns must exactly match canonical target columns: "
+                    f"expected {CANONICAL_TARGET_COLUMNS!r}, "
                     f"got {tuple(dataframe.columns)!r}"
                 )
-            else:
-                try:
-                    projection_sha256 = _source_input_projection_sha256(dataframe)
-                except Exception as exc:
-                    errors.append(
-                        f"Unable to normalize source input projection: {exc}"
-                    )
-                else:
-                    if projection_sha256 != CANONICAL_SOURCE_INPUT_SHA256:
-                        errors.append(
-                            "source input projection differs from pinned source: "
-                            f"expected {CANONICAL_SOURCE_INPUT_SHA256}, "
-                            f"got {projection_sha256}"
-                        )
+
             missing_columns = _CRITICAL_COLUMNS - set(dataframe.columns)
             if missing_columns:
                 errors.append(f"Missing critical columns: {missing_columns}")
-            elif PANDAS_AVAILABLE:
+            else:
                 errors.extend(validate_reference_snapshot(dataframe, root))
                 errors.extend(
                     validate_needs_files_manifest(
@@ -1854,30 +1748,7 @@ class RepoBootstrapper:
                         snapshot_root=root,
                     )
                 )
-
-            for column in _SUBMITTER_COLUMNS_TEXT:
-                if column not in dataframe.columns:
-                    continue
-                non_empty = sum(
-                    isinstance(value, str) and bool(value)
-                    for value in dataframe[column]
-                )
-                if non_empty:
-                    errors.append(
-                        f"{column} should be empty but {non_empty} rows have content"
-                    )
-
-            for column in _SUBMITTER_COLUMNS_LIST:
-                if column not in dataframe.columns:
-                    continue
-                non_empty = sum(
-                    _nonempty_submitter_list_value(value)
-                    for value in dataframe[column]
-                )
-                if non_empty:
-                    errors.append(
-                        f"{column} should be empty but {non_empty} rows have content"
-                    )
+            errors.extend(validate_cleared_submitter_state(dataframe, root))
 
         reference_dir = root / "reference_files"
         try:
@@ -1914,6 +1785,110 @@ class RepoBootstrapper:
 # -- Standalone pre-upload validation --------------------------------------
 
 
+def _list_cell(value, *, column: str, task_id: str) -> tuple[List[str], List[str]]:
+    errors: List[str] = []
+    if hasattr(value, "tolist"):
+        value = value.tolist()
+    if value is None:
+        return [], errors
+    if isinstance(value, (str, bytes)):
+        return [], [f"task {task_id}: {column} must be a list"]
+    try:
+        items = list(value)
+    except TypeError:
+        return [], [f"task {task_id}: {column} must be a list"]
+    if any(not isinstance(item, str) or not item for item in items):
+        errors.append(f"task {task_id}: {column} contains an invalid path")
+    return items, errors
+
+
+def validate_deliverable_tree(
+    dataframe,
+    root: Path,
+    *,
+    submission_repo_id: Optional[str] = None,
+) -> List[str]:
+    """Require parquet file declarations to exactly match local upload bytes."""
+    errors: List[str] = []
+    required_columns = (
+        "task_id",
+        "deliverable_files",
+        "deliverable_file_urls",
+        "deliverable_file_hf_uris",
+    )
+    missing = [column for column in required_columns if column not in dataframe]
+    if missing:
+        return [f"Missing deliverable manifest columns: {missing}"]
+
+    declared: set[PurePosixPath] = set()
+    for _, row in dataframe.iterrows():
+        task_id = row["task_id"]
+        files, file_errors = _list_cell(
+            row["deliverable_files"],
+            column="deliverable_files",
+            task_id=task_id,
+        )
+        urls, url_errors = _list_cell(
+            row["deliverable_file_urls"],
+            column="deliverable_file_urls",
+            task_id=task_id,
+        )
+        uris, uri_errors = _list_cell(
+            row["deliverable_file_hf_uris"],
+            column="deliverable_file_hf_uris",
+            task_id=task_id,
+        )
+        errors.extend(file_errors + url_errors + uri_errors)
+        if len(files) != len(urls) or len(files) != len(uris):
+            errors.append(
+                f"task {task_id}: deliverable file/URL/URI counts differ"
+            )
+        for value in files:
+            try:
+                canonical = canonical_deliverable_path(task_id, value)
+            except ValueError as exc:
+                errors.append(f"task {task_id}: {exc}")
+                continue
+            path = PurePosixPath(canonical)
+            if path in declared:
+                errors.append(f"Duplicate deliverable path: {value}")
+                continue
+            declared.add(path)
+        if submission_repo_id and files:
+            from fill_parquet import _build_deliverable_uris
+
+            expected_urls, expected_uris = _build_deliverable_uris(
+                files, submission_repo_id
+            )
+            if urls != expected_urls or uris != expected_uris:
+                errors.append(
+                    f"task {task_id}: deliverable URL/URI identity mismatch"
+                )
+
+    actual: set[PurePosixPath] = set()
+    deliverable_root = Path(root) / "deliverable_files"
+    if deliverable_root.exists() or deliverable_root.is_symlink():
+        if deliverable_root.is_symlink() or not deliverable_root.is_dir():
+            errors.append("deliverable_files root is not a regular directory")
+            return errors
+        for candidate in deliverable_root.rglob("*"):
+            relative = PurePosixPath(candidate.relative_to(root).as_posix())
+            if candidate.is_symlink():
+                errors.append(f"deliverable path is a symlink: {relative}")
+            elif candidate.is_file():
+                actual.add(relative)
+            elif not candidate.is_dir():
+                errors.append(f"deliverable path is not regular: {relative}")
+
+    if actual != declared:
+        errors.append(
+            "deliverable tree differs from parquet manifest: "
+            f"missing={sorted(map(str, declared - actual))}, "
+            f"extra={sorted(map(str, actual - declared))}"
+        )
+    return errors
+
+
 def validate_pre_upload(
     local_path: Optional[str] = None,
     submission_repo_id: Optional[str] = None,
@@ -1947,7 +1922,17 @@ def validate_pre_upload(
         errors.append("No train-*.parquet found")
         return errors
 
-    df = pd.read_parquet(parquets[0])
+    parquet_names = [path.name for path in parquets]
+    if parquet_names != [CANONICAL_PARQUET_FILENAME]:
+        errors.append(
+            "Upload parquet shard set must be exactly "
+            f"[{CANONICAL_PARQUET_FILENAME!r}], got {parquet_names!r}"
+        )
+
+    df = pd.concat(
+        [pd.read_parquet(path) for path in parquets],
+        ignore_index=True,
+    )
 
     # 1. Row count
     if len(df) != expected:
@@ -1961,7 +1946,7 @@ def validate_pre_upload(
 
     # 3. Manifest-based deliverable_files check
     #    compact_mode: only validate tasks present in parquet (others intentionally excluded)
-    manifest_path = WORKSPACE_DIR / "step0_needs_files_manifest.json"
+    manifest_path = WORKSPACE_DIR / MANIFEST_FILENAME
     if manifest_path.exists() and "deliverable_files" in df.columns:
         with open(manifest_path, "r") as f:
             manifest = json.load(f)
@@ -1987,6 +1972,14 @@ def validate_pre_upload(
                 )
     elif not manifest_path.exists():
         errors.append("needs_files_manifest.json not found -- cannot validate files")
+
+    errors.extend(
+        validate_deliverable_tree(
+            df,
+            root,
+            submission_repo_id=submission_repo_id,
+        )
+    )
 
     # 4. task_id unique count
     if "task_id" in df.columns:

@@ -66,6 +66,7 @@ from core.needs_files import NeedsFilesManifest
 from core.reference_integrity import (
     ReferenceIntegrityError,
     resolve_verified_reference_paths,
+    stage_verified_references,
 )
 from core.prepared_fingerprint import validate_prepared_fingerprint
 from core.audio_analyzer import analyze_audio_files, filter_audio_files
@@ -1414,28 +1415,33 @@ def _execute_single_task(
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
 
-    # ── Preprocessor: enrich prompt with audio/video analysis (if configured) ──
     preprocessor_observations: list[dict] = []
-    preprocessor_prefix = _run_preprocessors(
-        condition,
-        abs_ref_files,
-        instruction,
-        observations=preprocessor_observations,
-    )
-    perception_text = None
-    if preprocessor_prefix:
-        if execution_mode in {"sandbox", "agentic_sandbox"}:
-            # Sandbox owns perception PLACEMENT via its `perception_analysis` spec
-            # section (prompts/sandbox_occupation_codegen.yaml), so pass the block
-            # through rather than prepending it here. This is byte-equivalent to the
-            # prepend (perception is the outermost prefix before the task either way)
-            # while making the section spec-controllable.
-            perception_text = preprocessor_prefix
-        else:
-            instruction = preprocessor_prefix + "\n\n" + instruction
-        print(f"      🎵 Preprocessor injected {len(preprocessor_prefix)} chars into prompt")
-
+    reference_stage = None
+    reference_stage_entered = False
     try:
+        if abs_ref_files and not strict_inputs:
+            reference_stage = stage_verified_references(abs_ref_files)
+            abs_ref_files = reference_stage.__enter__()
+            reference_stage_entered = True
+
+        # Enrich the prompt only from private, content-verified task copies.
+        preprocessor_prefix = _run_preprocessors(
+            condition,
+            abs_ref_files,
+            instruction,
+            observations=preprocessor_observations,
+        )
+        perception_text = None
+        if preprocessor_prefix:
+            if execution_mode in {"sandbox", "agentic_sandbox"}:
+                perception_text = preprocessor_prefix
+            else:
+                instruction = preprocessor_prefix + "\n\n" + instruction
+            print(
+                "      🎵 Preprocessor injected "
+                f"{len(preprocessor_prefix)} chars into prompt"
+            )
+
         start = time.time()
 
         if execution_mode == "legacy":
@@ -1570,6 +1576,22 @@ def _execute_single_task(
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
+    except ReferenceIntegrityError as exc:
+        return {
+            "task_id": task_id,
+            "status": "error",
+            "error": f"reference_input_integrity_failed: {exc}",
+            "content": None,
+            "deliverable_text": None,
+            "deliverable_files": [],
+            "model": model,
+            "usage": None,
+            "observability": _build_execution_observability(
+                None, preprocessor_observations
+            ),
+            "latency_ms": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     except Exception as e:
         return {
             "task_id": task_id,
@@ -1586,6 +1608,9 @@ def _execute_single_task(
             "latency_ms": None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+    finally:
+        if reference_stage_entered:
+            reference_stage.__exit__(None, None, None)
 
 
 # ── Incremental save ──────────────────────────────────────────────────────
@@ -1888,6 +1913,38 @@ def run_inference(
         or len(ordered_task_ids) != len(set(ordered_task_ids))
     ):
         print("❌ prepared task set contains invalid or duplicate task IDs")
+        sys.exit(1)
+
+    try:
+        manifest = NeedsFilesManifest.load()
+        manifest.require_schema(4)
+        for task in tasks:
+            task_id = task["task_id"]
+            if task_id not in manifest:
+                raise ValueError(
+                    f"prepared task is absent from canonical manifest: {task_id}"
+                )
+            reference_files = task.get("reference_files", [])
+            expected_records = manifest.reference_records(
+                task_id, reference_files
+            )
+            if task.get("reference_file_records") != expected_records:
+                raise ValueError(
+                    f"prepared reference identity differs from manifest: {task_id}"
+                )
+            expected_needs_files = manifest.needs_files(task_id)
+            if task.get("needs_files") is not expected_needs_files:
+                raise ValueError(
+                    f"prepared needs_files differs from manifest: {task_id}"
+                )
+            if task.get("source_projection_sha256") != (
+                manifest.source_projection_sha256(task_id)
+            ):
+                raise ValueError(
+                    f"prepared source projection differs from manifest: {task_id}"
+                )
+    except (FileNotFoundError, ValueError, TypeError, KeyError) as exc:
+        print(f"❌ canonical Step 0 manifest validation failed: {exc}")
         sys.exit(1)
     model = condition["model"]["deployment"]
     condition_name = condition["name"]
@@ -2200,13 +2257,7 @@ def run_inference(
         print("   Fix the issue or change execution.mode in your YAML config.")
         sys.exit(1)
 
-    # 4. Load manifest
-    manifest = None
-    try:
-        manifest = NeedsFilesManifest.load()
-        print(f"   Manifest:           {manifest}")
-    except FileNotFoundError:
-        print("   ⚠️  Manifest not found — skipping file checks")
+    print(f"   Manifest:           {manifest}")
 
     # 5. Build task lookup
     task_map = {t["task_id"]: t for t in tasks}

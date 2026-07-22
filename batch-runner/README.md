@@ -99,21 +99,24 @@ first-run contract and is not guaranteed here.
   `bash step0_bootstrap.sh experiments/exp998_smoke_baseline_sample.yaml`
 - Duplicates `openai/gdpval` to the configured public HF dataset if it does not exist
 - Downloads local snapshot to `data/gdpval-local/`
-- Pins `openai/gdpval` to one full revision. Before stripping deliverables, it
-  persists a schema-3 `step0_needs_files_manifest.json` containing the exact
-  ordered task identity, policy signals, and every declared reference file's
-  path, SHA-256, and byte size.
-- Downloads the target's exact HEAD into fresh staging on every run. Before
-  replacing the local snapshot, it verifies the canonical model-input
-  projection (prompt, rubric, sector, occupation, and reference declarations),
-  manifest bytes, and the complete declared reference tree against the pinned
-  source contract.
-- Validates: 220 rows, rubric columns present, and exact regular reference files
+- Pins one full `openai/gdpval` revision and downloads only its base data plus
+  parquet-declared references into fresh staging. Before upload it verifies the
+  exact source columns, ordered task prompt/taxonomy/rubric/reference assignment
+  projection, complete physical reference tree, and every reference SHA-256/size.
+- Persists the source-derived schema-v4 `step0_needs_files_manifest.json` before
+  stripping deliverables, then validates its exact task IDs, active policy,
+  signal fields, summary, source projection, and ordered reference records.
+- Validates: 220 rows, rubric columns present, and exact regular reference files.
+  Step 2 and each upload/copy boundary recheck those bytes before any model or
+  generated-code execution
 - Reuses an existing target only when it already contains a `data/` path;
   otherwise it aborts without automatic deletion. A reused target must also
   contain the canonical manifest; Step 0 never regenerates it from stripped
-  data. Use a new disposable target or remove the inspected partial/legacy
-  repository explicitly.
+  data. Every run downloads the target's exact full-SHA HEAD into fresh staging
+  and validates the canonical target columns, projection, manifest, reference
+  tree, and empty submitter state before replacing the previous local snapshot.
+  Use a new disposable target or remove the inspected partial/legacy repository
+  explicitly.
 
 ### Step 1: Prepare Tasks (`step1_prepare_tasks.py`)
 
@@ -433,7 +436,7 @@ Run 1 (you trigger):
 Run 2 (auto-triggered):
   → Restores only the marker's immutable payload revision and exact file set
   → Validates lineage, the complete ordered task set, prepared fingerprint,
-    and every referenced deliverable before Azure login
+    sandbox image digest, and every referenced deliverable before Azure login
   → Continues unfinished tasks → completes
   → Steps 3–7 run normally → PR created
 ```
@@ -448,10 +451,21 @@ silently rerunning every task.
 
 After Step 0, a non-mutating HF authorization check proves that the exact
 `data.source` is writable before task preparation, Azure login, or model spend.
-Step 0 also checks every parquet-declared reference path as a unique regular,
-non-symlink file with the pinned SHA-256 and size before inference. A target
-whose input projection, declared reference set, or reference bytes drifted is
-rejected before replacing the previous local snapshot.
+Step 0 first authenticates the pinned source projection and complete declared
+reference tree, then proves the reusable target's exact HEAD before local
+installation. It records every parquet-declared reference as a unique regular,
+non-symlink path with SHA-256 and byte size. Step 2 and each executor recheck the
+same identity immediately before upload or copy; any missing, changed, or
+uncopyable input aborts before a model/container/subprocess starts.
+Code Interpreter deletes provider-side input file IDs after each task on a
+best-effort basis. A failed deletion may remain subject to the provider's file
+retention policy, so the disposable target must not contain sensitive material.
+
+Before Step 7 performs remote cleanup, publication requires exactly the
+canonical GDPVal parquet shard, task-owned `deliverable_files/<task_id>/...`
+paths, canonical `@main` URLs/URIs, and byte-for-byte equality between every
+parquet-declared output and the local upload tree. Failed tasks cannot inherit
+submitter text or file metadata from a reused target.
 
 Checkpoint generations live under a source/lineage-scoped `_checkpoint/` path.
 Successful cleanup removes that lineage from the dataset's current tree with an

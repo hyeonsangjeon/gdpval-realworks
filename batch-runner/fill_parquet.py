@@ -165,6 +165,24 @@ def fill_parquet(
     missing_ids = set(result_map.keys()) - parquet_ids
     stats["missing"] = len(missing_ids)
 
+    for column in (
+        "deliverable_files",
+        "deliverable_file_urls",
+        "deliverable_file_hf_uris",
+    ):
+        if column not in df.columns:
+            df[column] = [[] for _ in range(len(df))]
+
+    if overwrite_existing:
+        # Production rebuilds selected success/error rows from this run only.
+        # The legacy False mode retains its documented fill-empty-only behavior.
+        selected_indices = df.index[df["task_id"].isin(result_map)]
+        for index in selected_indices:
+            df.at[index, "deliverable_text"] = ""
+            df.at[index, "deliverable_files"] = []
+            df.at[index, "deliverable_file_urls"] = []
+            df.at[index, "deliverable_file_hf_uris"] = []
+
     # Merge
     for idx, row in df.iterrows():
         task_id = row["task_id"]

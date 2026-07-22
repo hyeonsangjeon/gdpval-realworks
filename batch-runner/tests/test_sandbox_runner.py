@@ -303,14 +303,16 @@ def test_run_no_code_returns_failure():
     assert result["sandbox_manifest"]["attempts"][0]["response"]["sha256"]
 
 
-def test_run_selects_skills_for_video_task():
+def test_run_selects_skills_for_video_task(tmp_path):
     code_block = "```python\nprint('ok')\n```"
     runner = SandboxRunner(llm_client=object(), use_docker="never")
+    reference = tmp_path / "clip.mp4"
+    reference.write_bytes(b"video")
     with _patch_complete(code_block):
         result = runner.run(
             task_prompt="Make a storyboard from the clip",
             model="fake-model",
-            reference_files=["/tmp/does_not_exist_clip.mp4"],
+            reference_files=[str(reference)],
         )
     assert result["success"] is True
     assert "video" in result["metadata"]["skills"]
@@ -827,16 +829,22 @@ def _xlsx_bytes():
     return buf.getvalue()
 
 
-def test_manifest_import_probe_reflects_resolved_deps():
+def test_manifest_import_probe_reflects_resolved_deps(tmp_path):
     _xlsx = _xlsx_bytes()
     runner = _runner_no_render()
     code = _fake_response("```python\nprint('x')\n```")
     task = "Create an Excel xlsx workbook from data.xlsx"
+    reference = tmp_path / "data.xlsx"
+    reference.write_bytes(b"xlsx")
     with patch.object(sr, "complete", lambda **k: (code, {})), \
          patch.object(runner, "_execute",
                       return_value=("local", {"success": True, "text": "",
                                               "files": [{"filename": "report.xlsx", "content": _xlsx}]})):
-        result = runner.run(task_prompt=task, model="m", reference_files=["data.xlsx"])
+        result = runner.run(
+            task_prompt=task,
+            model="m",
+            reference_files=[str(reference)],
+        )
     probe = result["sandbox_manifest"]["dependency_import_probe"]
     union = set(probe["available"]) | set(probe["missing"]) | set(probe["not_checked"])
     # Regression guard: the probe must reflect the resolved deps, not be empty.
@@ -844,6 +852,61 @@ def test_manifest_import_probe_reflects_resolved_deps():
     # openpyxl is predicted from the .xlsx reference and installed in the test env.
     assert "openpyxl" in probe["available"]
     assert probe["env"] == "host"  # local execution probes the host interpreter
+
+
+def test_docker_reference_copy_failure_is_fatal_before_container(
+    tmp_path, monkeypatch
+):
+    runner = _runner_no_render()
+    ref_file = tmp_path / "data.xlsx"
+    ref_file.write_bytes(b"xlsx")
+    monkeypatch.setattr(
+        "core.reference_integrity.shutil.copyfileobj",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("copy failed")),
+    )
+    started = []
+    monkeypatch.setattr(
+        sr.subprocess,
+        "run",
+        lambda *_args, **_kwargs: started.append(True),
+    )
+
+    result = runner._execute_docker(
+        "print('should not run')",
+        [str(ref_file)],
+    )
+
+    assert result["success"] is False
+    assert "copy failed" in result["error"]
+    assert started == []
+
+
+def test_reference_staging_failure_is_fatal_before_sandbox_codegen(
+    tmp_path, monkeypatch
+):
+    runner = _runner_no_render()
+    reference = tmp_path / "data.xlsx"
+    reference.write_bytes(b"xlsx")
+    model_calls = []
+    monkeypatch.setattr(
+        "core.reference_integrity.shutil.copyfileobj",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("copy failed")),
+    )
+    monkeypatch.setattr(
+        sr,
+        "complete",
+        lambda **_kwargs: model_calls.append(True),
+    )
+
+    result = runner.run(
+        task_prompt="Create a workbook",
+        model="model",
+        reference_files=[str(reference)],
+    )
+
+    assert result["success"] is False
+    assert "copy failed" in result["error"]
+    assert model_calls == []
 
 
 # ── tail redaction (regression: local crash leaked the temp path) ─────────

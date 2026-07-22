@@ -27,6 +27,7 @@ from openai import AzureOpenAI
 from core.config import DEFAULT_TOKENS
 from core.prompt_loader import load_prompt, render_prompt
 from core.file_preview import build_file_structure_info
+from core.reference_integrity import open_verified_reference
 
 
 class CodeInterpreterRunner:
@@ -168,6 +169,8 @@ class CodeInterpreterRunner:
                 "files": [],
                 "error": str(e),
             }
+        finally:
+            self._delete_uploaded_reference_files()
 
     # ── private ────────────────────────────────────────────────────────
 
@@ -178,14 +181,23 @@ class CodeInterpreterRunner:
 
         file_ids = []
         for path in reference_files:
-            try:
-                with open(path, "rb") as f:
-                    uploaded = self.client.files.create(file=f, purpose="assistants")
-                    file_ids.append(uploaded.id)
-                    self._uploaded_file_ids.add(uploaded.id)
-            except Exception as e:
-                print(f"      ⚠️  Upload failed ({path}): {e}")
+            with open_verified_reference(path) as (reference_file, _verified):
+                uploaded = self.client.files.create(
+                    file=reference_file,
+                    purpose="assistants",
+                )
+            file_ids.append(uploaded.id)
+            self._uploaded_file_ids.add(uploaded.id)
         return file_ids
+
+    def _delete_uploaded_reference_files(self) -> None:
+        """Best-effort removal of provider-side input files after one task."""
+        for file_id in sorted(self._uploaded_file_ids):
+            try:
+                self.client.files.delete(file_id)
+            except Exception as exc:
+                print(f"      ⚠️  Input file cleanup failed ({file_id}): {exc}")
+        self._uploaded_file_ids.clear()
 
     def _download_file(self, file_id: str, container_id: str = None) -> Optional[bytes]:
         """Download file content with container API → files API fallback."""
@@ -220,7 +232,7 @@ class CodeInterpreterRunner:
         output_files = []
         if not hasattr(response, "output") or not response.output:
             if verbose:
-                print(f"      [DEBUG] response.output is empty or missing")
+                print("      [DEBUG] response.output is empty or missing")
             return output_files
 
         seen_file_ids: set = set()
@@ -295,7 +307,7 @@ class CodeInterpreterRunner:
         # ── Strategy 3: Container scan fallback (always try if no files collected) ──
         if not output_files:
             if verbose:
-                print(f"      [DEBUG] No files from strategies 1/2. Trying container scan.")
+                print("      [DEBUG] No files from strategies 1/2. Trying container scan.")
                 print(f"      [DEBUG] seen_containers: {seen_containers}")
             for container_id in seen_containers:
                 try:

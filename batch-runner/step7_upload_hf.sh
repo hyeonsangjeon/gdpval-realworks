@@ -33,7 +33,7 @@ if [ -n "$FORCE_TEST" ]; then
     EXPECTED_ROWS=$(python3 -c "
 import pandas as pd, glob
 parquets = sorted(glob.glob('${UPLOAD_DIR}/data/train-*.parquet'))
-print(len(pd.read_parquet(parquets[0])) if parquets else 220)
+print(sum(len(pd.read_parquet(path)) for path in parquets) if parquets else 220)
 " 2>/dev/null || echo 220)
     TEST_MODE_SOURCE="--test (rows=${EXPECTED_ROWS})"
 fi
@@ -89,7 +89,11 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) or ".")
 from core.repo_bootstrapper import validate_pre_upload
 expected = int(os.environ.get("EXPECTED_ROWS", "220"))
-errors = validate_pre_upload(local_path=os.environ["UPLOAD_DIR"], expected_rows=expected)
+errors = validate_pre_upload(
+    local_path=os.environ["UPLOAD_DIR"],
+    submission_repo_id=os.environ["REPO_ID"],
+    expected_rows=expected,
+)
 if errors:
     print("❌ Pre-upload validation FAILED:")
     for e in errors:

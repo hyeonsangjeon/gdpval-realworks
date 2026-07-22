@@ -22,6 +22,7 @@ from core.data_loader import GDPValDataLoader
 from core.experiment_config import ExperimentConfig
 from core.needs_files import NeedsFilesManifest
 from core.prepared_fingerprint import prepared_fingerprint
+from core.source_identity import source_task_projection_sha256
 
 
 def _public_agentic_config(value):
@@ -99,16 +100,28 @@ def prepare_tasks(config_path: str) -> dict:
         print(f"🎲 Sampled {flt.sample_size} tasks")
 
     # 4. Load needs_files manifest
-    manifest = None
-    try:
-        manifest = NeedsFilesManifest.load()
-        print(f"📋 Manifest loaded: {manifest}")
-    except FileNotFoundError:
-        print("⚠️  step0_needs_files_manifest.json not found — skipping file checks")
+    manifest = NeedsFilesManifest.load()
+    manifest.require_schema(4)
+    print(f"📋 Manifest loaded: {manifest}")
 
     # 5. Build task list with metadata
     task_list = []
     for t in tasks:
+        task_projection = source_task_projection_sha256(
+            task_id=t.task_id,
+            sector=t.sector,
+            occupation=t.occupation,
+            prompt=t.prompt,
+            rubric_pretty=t.rubric_pretty,
+            rubric_json=t.rubric_json,
+            reference_files=t.reference_files,
+            reference_file_urls=t.reference_file_urls,
+            reference_file_hf_uris=t.reference_file_hf_uris,
+        )
+        if task_projection != manifest.source_projection_sha256(t.task_id):
+            raise ValueError(
+                f"task source projection differs from canonical manifest: {t.task_id}"
+            )
         entry = {
             "task_id": t.task_id,
             "sector": t.sector,
@@ -117,11 +130,10 @@ def prepare_tasks(config_path: str) -> dict:
             "reference_files": t.reference_files,
             "reference_file_records": (
                 manifest.reference_records(t.task_id, t.reference_files)
-                if manifest
-                else []
             ),
             "reference_file_urls": t.reference_file_urls,
-            "needs_files": manifest.needs_files(t.task_id) if manifest else False,
+            "needs_files": manifest.needs_files(t.task_id),
+            "source_projection_sha256": task_projection,
         }
         task_list.append(entry)
 

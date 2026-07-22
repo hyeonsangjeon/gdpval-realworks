@@ -56,6 +56,10 @@ from core.execution_metrics import (
 from core.llm_client import complete
 from core.output_qa import run_output_qa
 from core.prompt_loader import load_prompt, render_prompt
+from core.reference_integrity import (
+    copy_verified_reference,
+    stage_verified_references,
+)
 from core.prompt_sections import (
     DEFAULT_SECTIONS,
     SectionContext,
@@ -387,8 +391,11 @@ class SandboxRunner:
         so step2 passes it through here instead of prepending it to the task.
         """
         run_started = time.perf_counter()
+        reference_stage = stage_verified_references(reference_files or [])
+        reference_stage_entered = False
         try:
-            ref_files = reference_files or []
+            ref_files = reference_stage.__enter__()
+            reference_stage_entered = True
 
             # Perception context (skills) + deterministic deliverable contract.
             skills = self.registry.select(ref_files, task_prompt, max_skills=self.max_skills)
@@ -447,6 +454,9 @@ class SandboxRunner:
                 "files": [],
                 "error": f"Sandbox code generation failed: {str(e)}",
             }
+        finally:
+            if reference_stage_entered:
+                reference_stage.__exit__(None, None, None)
 
     # ── single attempt ────────────────────────────────────────────────────
     def _run_attempt(
@@ -1064,12 +1074,8 @@ class SandboxRunner:
                 # Copy reference files into the bind-mounted workdir.
                 copied_files: List[str] = []
                 for src_path in reference_files or []:
-                    if os.path.exists(src_path):
-                        try:
-                            shutil.copy(src_path, tmpdir)
-                            copied_files.append(os.path.basename(src_path))
-                        except Exception as e:
-                            print(f"Warning: failed to copy reference file {src_path}: {e}")
+                    copied = copy_verified_reference(src_path, tmpdir)
+                    copied_files.append(Path(str(copied)).name)
 
                 # Mount the skills package.
                 skills_mounted = False

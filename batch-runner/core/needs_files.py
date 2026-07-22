@@ -9,11 +9,13 @@ Manifest schema versions
 ------------------------
 * **v1**: each task entry has ``needs_files``, ``original_file_count``,
   ``original_files``.  ``_summary`` has ``needs_files`` + ``text_only``.
-* **v2** (current): adds ``has_deliverable_files`` (dual-signal),
+* **v2**: adds ``has_deliverable_files`` (dual-signal),
   ``prompt_classification`` (heuristic from ``prompt_classifier``), and
   ``policy_results`` per known policy.  ``_summary`` adds ``active_policy``,
   ``policy_counts``, and ``confidence_distribution``.
 * **v3**: adds a top-level content-addressed ``reference_files`` map.
+* **v4** (current): binds each task's prompt, rubric, taxonomy, and ordered
+    reference path/URL/URI projection to the pinned source revision.
 
 The loader is defensive: any v2 keys missing from a v1 manifest fall back to
 sensible defaults so old workspaces keep working without regeneration.
@@ -27,6 +29,7 @@ Usage:
     manifest.needs_files("task_042")               # → True / False
     manifest.original_file_count("task_042")       # → 3
     manifest.original_files("task_042")            # → ["file1.xlsx", ...]
+    manifest.reference_records("task_042", paths) # → ordered path/hash/size
     manifest.has_deliverable_files("task_042")     # → True (V2; v1 falls back)
     manifest.prompt_classification("task_042")     # → {...} or None
     manifest.policy_result("task_042", "union")    # → True / False
@@ -198,6 +201,27 @@ class NeedsFilesManifest:
             records.append({"path": path, **identity})
         return records
 
+    def source_projection_sha256(self, task_id: str) -> str:
+        entry = self._tasks.get(task_id)
+        value = entry.get("source_projection_sha256") if entry else None
+        if (
+            not isinstance(value, str)
+            or len(value) != 64
+            or any(character not in "0123456789abcdef" for character in value)
+        ):
+            raise ValueError(
+                f"source projection identity missing for task {task_id!r}"
+            )
+        return value
+
+    def require_schema(self, version: int) -> None:
+        """Require the canonical manifest schema used by the active pipeline."""
+        if self.schema_version != version:
+            raise ValueError(
+                f"needs-files manifest schema must be {version}, "
+                f"got {self.schema_version!r}"
+            )
+
     # ── V2 queries (defensive for v1 manifests) ──────────────────────
 
     def has_deliverable_files(self, task_id: str) -> bool:
@@ -272,6 +296,10 @@ class NeedsFilesManifest:
     @property
     def total_tasks(self) -> int:
         return self._data.get("_total_tasks", len(self._tasks))
+
+    @property
+    def schema_version(self) -> Optional[int]:
+        return self._data.get("_schema_version")
 
     def __len__(self) -> int:
         return len(self._tasks)

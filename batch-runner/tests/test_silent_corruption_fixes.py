@@ -337,6 +337,9 @@ def _build_step1_prepared(tmp_path: Path, task_id: str = "t1") -> Path:
                 "occupation": "test_occupation",
                 "instruction": "Do a thing.",
                 "reference_files": [],
+                "reference_file_records": [],
+                "needs_files": False,
+                "source_projection_sha256": "a" * 64,
             }
         ],
         "condition_a": {
@@ -381,11 +384,18 @@ def patched_run_inference(tmp_path, monkeypatch):
         s2, "create_provider_client", MagicMock(return_value=MagicMock())
     )
     monkeypatch.setattr(s2, "TaskExecutor", MagicMock(return_value=MagicMock()))
-    # Manifest is optional; FileNotFoundError path is fine.
+    manifest = s2.NeedsFilesManifest({
+        "_schema_version": 4,
+        "reference_files": {},
+        "tasks": {"t1": {
+            "needs_files": False,
+            "source_projection_sha256": "a" * 64,
+        }},
+    })
     monkeypatch.setattr(
         s2.NeedsFilesManifest,
         "load",
-        classmethod(lambda cls: (_ for _ in ()).throw(FileNotFoundError())),
+        classmethod(lambda cls: manifest),
     )
 
     return s2, workspace

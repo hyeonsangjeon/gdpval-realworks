@@ -97,19 +97,23 @@ bash step6_report.sh --no-narrative --dry-run
   `bash step0_bootstrap.sh experiments/exp998_smoke_baseline_sample.yaml`
 - 설정한 public HF dataset이 없으면 `openai/gdpval`을 duplicate
 - `data/gdpval-local/`에 로컬 스냅샷 다운로드
-- `openai/gdpval`의 full revision 하나를 고정함. deliverable을 비우기 전에
-  ordered task identity, policy signal, 선언된 모든 reference의 path,
-  SHA-256, byte size를 담은 schema-3 `step0_needs_files_manifest.json`을
-  target에 보존
-- 매 실행마다 target의 exact HEAD를 새 staging에 받고, local snapshot을
-  교체하기 전에 canonical model-input projection(prompt, rubric, sector,
-  occupation, reference 선언), manifest bytes, 전체 declared reference tree를
-  pinned source 계약과 검증
-- 검증: 220행, rubric 컬럼 존재, 선언된 reference가 모두 regular file인지 확인
+- `openai/gdpval`의 full revision 하나를 고정하고 base data와 parquet가 선언한
+  reference만 fresh staging에 다운로드. 업로드 전에 exact source column,
+  ordered task prompt/taxonomy/rubric/reference assignment projection, 전체
+  physical reference tree, 모든 reference SHA-256/size를 검증
+- deliverable을 비우기 전에 source-derived schema-v4
+  `step0_needs_files_manifest.json`을 target에 보존하고 exact task ID, active
+  policy, signal field, summary, source projection, ordered reference record를 검증
+- 검증: 220행, rubric 컬럼 존재, 선언된 reference가 모두 regular file인지 확인.
+  Step 2와 각 upload/copy 경계에서도 model 또는 generated code 실행 전에 같은
+  byte identity를 다시 검증
 - 기존 대상에 `data/` 경로가 있을 때만 재사용하며, 없으면 dataset repository를
   자동 삭제하지 않고 중단함. 재사용 대상에도 canonical manifest가 있어야 하며
-  stripped data에서 이를 재생성하지 않음. 새 일회성 target을 쓰거나 확인한
-  partial/legacy repository를 명시적으로 제거해야 함
+  stripped data에서 이를 재생성하지 않음. 매 실행마다 target의 exact full-SHA
+  HEAD를 fresh staging에 받고 canonical target column, projection, manifest,
+  reference tree, empty submitter state를 검증한 뒤에만 이전 local snapshot을
+  교체함. 새 일회성 target을 쓰거나 확인한 partial/legacy repository를
+  명시적으로 제거해야 함
 
 ### Step 1: 태스크 준비 (`step1_prepare_tasks.py`)
 
@@ -359,7 +363,7 @@ Run 1 (직접 트리거):
 Run 2 (자동 트리거):
   → marker의 immutable payload revision과 exact file set만 복원
   → Azure login 전에 lineage, complete ordered task set, prepared fingerprint,
-    참조 deliverable 전체를 검증
+    sandbox image digest, 참조 deliverable 전체를 검증
   → 미완료 태스크 이어서 실행 → 완료
   → Step 3~7 정상 진행 → PR 생성
 ```
@@ -375,10 +379,19 @@ checkpoint가 없거나 잘못됐거나 불완전하면 전체 태스크를 조�
 Step 0 뒤에는 비변경 HF authorization check로 exact `data.source`의 write
 권한을 증명합니다. 이 검사는 task 준비, Azure login, model spend보다 먼저
 실행됩니다.
-Step 0은 parquet가 선언한 모든 reference path가 unique regular non-symlink
-file이며 pinned SHA-256/size와 일치하는지도 inference 전에 검사합니다.
-input projection, declared reference set, reference bytes가 달라진 target은
-이전 local snapshot을 교체하기 전에 거부합니다.
+Step 0은 pinned source projection과 전체 declared reference tree를 먼저 인증하고
+재사용 target의 exact HEAD를 local 설치 전에 증명합니다. parquet가 선언한 모든
+reference를 unique regular non-symlink path와 SHA-256/byte size로 기록하며,
+Step 2와 각 executor는 upload/copy 직전에 같은 identity를 재검증합니다.
+누락·변경·copy 실패가 있으면 model/container/subprocess 시작 전에 중단합니다.
+Code Interpreter는 각 task 종료 뒤 provider-side input file ID를 best-effort로
+삭제합니다. 삭제 실패 시 provider의 file retention 정책에 따라 남을 수 있으므로
+일회성 target에 민감 자료를 넣으면 안 됩니다.
+
+Step 7이 원격 cleanup을 하기 전 canonical GDPVal parquet shard 하나,
+task 소유 `deliverable_files/<task_id>/...` path, canonical `@main` URL/URI,
+parquet가 선언한 모든 output과 local upload tree의 exact 일치를 요구합니다.
+실패 task는 재사용 target의 이전 submitter text/file metadata를 승계하지 않습니다.
 
 Checkpoint generation은 source/lineage별 `_checkpoint/` 경로에 있습니다.
 성공한 cleanup은 exact-HEAD CAS commit으로 현재 dataset tree에서 그 lineage를

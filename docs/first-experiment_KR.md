@@ -96,10 +96,14 @@ dataset**으로 만듭니다. 기존 대상에 `data/`로 시작하는 경로가
 partial repository를 명시적으로 제거하세요. `data/` 경로가 있으면 기존
 snapshot을 재사용합니다. 이 snapshot에는 source-derived
 `step0_needs_files_manifest.json`도 있어야 합니다. task/policy identity가
-없거나 어긋나면 중단하며 stripped data에서 manifest를 재생성하지 않습니다.
-Step 0은 target의 exact HEAD를 staging하고, canonical model-input projection과
-선언된 모든 reference path/SHA-256/size가 pinned `openai/gdpval` revision과
-일치할 때만 local snapshot을 설치합니다.
+없거나 prompt/taxonomy/rubric/reference assignment, reference
+path/SHA-256/size까지 어긋나면 중단하며 stripped data에서 manifest를 재생성하지
+않습니다. 재사용 target의 submitter text/file/URL/URI column과 physical
+deliverable tree도 비어 있어야 합니다. 새 target은 pinned public-source
+revision 하나에서 base data와 parquet가 선언한 reference만 받아 만듭니다.
+재사용 target은 exact full-SHA HEAD를 fresh staging에 받고 canonical column,
+projection, manifest, 전체 reference tree, empty submitter state를 통과한 뒤에만
+이전 local snapshot을 교체합니다.
 
 나중에 non-dry Step 7을 실행하면 새 결과를 올리기 전에 원격 `data/**`와
 `deliverable_files/**`를 삭제합니다. 보존해야 할 dataset을 가리키면 안 됩니다.
@@ -180,11 +184,19 @@ fingerprint, 참조 deliverable을 복원·검증할 수 없으면 Azure login �
 continuation이 실패합니다.
 Step 0 뒤에는 비변경 authorization check로 그 exact dataset의 write 권한을
 model spend 전에 요구합니다. 각 relay marker는 immutable HF revision 하나와
-exact SHA-256/size file manifest를 가리킵니다.
-Step 0은 parquet가 선언한 모든 reference가 unique regular file인지도 검사합니다.
+exact sandbox image digest, SHA-256/size file manifest를 가리킵니다.
+Step 0은 pinned source projection을 인증하고 declared reference set만 받으며,
+재사용 target의 exact HEAD를 local 설치 전에 검증합니다. Step 2와 각 executor는
+모든 reference를 upload/copy 직전에 재검증하고, 누락·변경·copy 실패는 model
+또는 generated code 실행 전에 중단합니다.
 Cleanup은 현재 tree의 lineage만 제거하며 과거 HF revision은 지우지 않습니다.
 실패한 작업은 orphan generation을 남길 수 있으므로 이 public 일회성 target에
 민감 자료를 사용하지 마세요.
+
+non-dry Step 7은 원격 output을 삭제하기 전에 canonical parquet shard 하나,
+task 소유 output path, canonical repository URL/URI, parquet 선언과 local
+deliverable tree의 exact 일치를 요구합니다. 실패 task는 이전 run의 output
+metadata를 남길 수 없습니다.
 
 스모크 설정은 provider-hosted `code_interpreter`를 사용합니다. 저장소의
 Docker sandbox나 agentic preflight를 실행하는 테스트가 아닙니다.
@@ -197,7 +209,7 @@ Docker sandbox나 agentic preflight를 실행하는 테스트가 아닙니다.
 |---|---|
 | Inspect mode | cloud credential 없이 입력 파일명, 안전한 YAML 구조, 일반 workflow 허용 mode를 사전 검사 |
 | 전체 config 검증 | Hugging Face bootstrap 전에 전체 experiment config를 load하고 validate |
-| Step 0 | 새 target을 공개 생성하거나 기존 target의 exact HEAD를 staging. canonical model input, schema-3 manifest, reference bytes가 pinned source와 일치해야 local 설치 |
+| Step 0 | 새 target을 공개 생성하거나 `data/`와 canonical source-derived manifest가 있는 대상을 재사용. partial/legacy/inconsistent target은 자동 삭제 없이 중단 |
 | Step 1 | seed에 따라 태스크 3개 선택 |
 | Step 2 | 모델 호출, 산출물 생성, 같은 모델의 Self-QA 실행 |
 | Steps 3-4 | JSON/Markdown 결과와 3-row Parquet 생성 |

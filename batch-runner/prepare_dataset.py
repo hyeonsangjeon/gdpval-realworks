@@ -47,6 +47,8 @@ class GDPValTask:
     reference_file_hf_uris: List[str]
     deliverable_text: str
     deliverable_files: List[str]
+    rubric_pretty: str = ""
+    rubric_json: str = ""
 
 
 class GDPValDataset:
@@ -87,7 +89,7 @@ class GDPValDataset:
             print(f"✓ Snapshot already exists at: {self.local_path}")
             return self.local_path
 
-        print(f"📥 Downloading GDPVal dataset from HuggingFace...")
+        print("📥 Downloading GDPVal dataset from HuggingFace...")
         print(f"   Dataset: {self.DATASET_ID}")
 
         # Create parent directory
@@ -95,11 +97,11 @@ class GDPValDataset:
 
         # Remove old snapshot if force=True
         if force and self.local_path.exists():
-            print(f"   Removing old snapshot...")
+            print("   Removing old snapshot...")
             shutil.rmtree(self.local_path)
 
         # Step 1: Download full repository snapshot (parquet + reference_files/)
-        print(f"   Step 1/2: Downloading full repository (including reference_files)...")
+        print("   Step 1/2: Downloading full repository (including reference_files)...")
         snapshot_download(
             repo_id=self.DATASET_ID,
             repo_type="dataset",
@@ -107,7 +109,7 @@ class GDPValDataset:
         )
 
         # Step 2: Add deliverable columns and save Arrow + Parquet
-        print(f"   Step 2/2: Adding deliverable columns (Arrow + Parquet)...")
+        print("   Step 2/2: Adding deliverable columns (Arrow + Parquet)...")
         dataset = load_dataset(self.DATASET_ID)
         dataset = self._add_deliverable_columns(dataset)
         dataset.save_to_disk(str(self.local_path))
@@ -223,6 +225,8 @@ class GDPValDataset:
             reference_file_hf_uris=_to_list(row.get('reference_file_hf_uris', [])),
             deliverable_text=_to_str(row.get('deliverable_text', '')),
             deliverable_files=_to_list(row.get('deliverable_files', [])),
+            rubric_pretty=_to_str(row.get('rubric_pretty', '')),
+            rubric_json=_to_str(row.get('rubric_json', '')),
         )
 
     @staticmethod

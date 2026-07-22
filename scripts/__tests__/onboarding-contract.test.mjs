@@ -399,11 +399,11 @@ test('local quick starts and bootstrap warnings follow their owning code', async
   assert.match(bootstrapText, /private=self\.private/)
   assert.match(bootstrapText, /MANIFEST_FILENAME = "step0_needs_files_manifest\.json"/)
   assert.match(bootstrapText, /SOURCE_REVISION = "[0-9a-f]{40}"/)
-  assert.match(bootstrapText, /CANONICAL_SOURCE_INPUT_SHA256 = \(/)
-  assert.match(bootstrapText, /def _source_input_projection_sha256\(/)
-  assert.match(bootstrapText, /source input projection differs from pinned source/)
+  assert.match(bootstrapText, /CANONICAL_SOURCE_PROJECTION_SHA256 = \(/)
+  assert.match(bootstrapText, /CANONICAL_TARGET_COLUMNS = /)
+  assert.match(bootstrapText, /def source_projection_hashes\(/)
   assert.match(bootstrapText, /def validate_needs_files_manifest\(/)
-  assert.match(bootstrapText, /"_schema_version": 3/)
+  assert.match(bootstrapText, /"_schema_version": 4/)
   assert.match(bootstrapText, /def build_reference_manifest\(/)
   assert.match(bootstrapText, /Manifest reference_files must exactly match declared paths in order/)
   assert.match(bootstrapText, /def _prepare_pinned_source_snapshot\(/)
@@ -417,6 +417,42 @@ test('local quick starts and bootstrap warnings follow their owning code', async
     assert.match(runner, /aborts without automatic deletion|자동 삭제하지 않고 중단/)
     assert.match(runner, /disposable target|일회성 (?:대상|target)/)
   }
+})
+
+test('reference inputs remain content-bound through model execution', async () => {
+  const [bootstrapper, needsFiles, step1, step2, integrity, codeInterpreter, subprocessRunner, sandboxRunner] = await Promise.all([
+    readRepoFile('batch-runner/core/repo_bootstrapper.py'),
+    readRepoFile('batch-runner/core/needs_files.py'),
+    readRepoFile('batch-runner/step1_prepare_tasks.py'),
+    readRepoFile('batch-runner/step2_run_inference.py'),
+    readRepoFile('batch-runner/core/reference_integrity.py'),
+    readRepoFile('batch-runner/core/code_interpreter.py'),
+    readRepoFile('batch-runner/core/subprocess_runner.py'),
+    readRepoFile('batch-runner/core/sandbox_runner.py'),
+  ])
+
+  assert.match(bootstrapper, /"_schema_version": 4/)
+  assert.match(bootstrapper, /CANONICAL_SOURCE_PROJECTION_SHA256/)
+  assert.match(bootstrapper, /"_source_projection_sha256":/)
+  assert.match(bootstrapper, /"reference_files": \{\}/)
+  assert.match(bootstrapper, /build_reference_manifest\(/)
+  assert.match(bootstrapper, /snapshot_root=root/)
+  assert.match(needsFiles, /def reference_records\(/)
+  assert.match(needsFiles, /def source_projection_sha256\(/)
+  assert.match(step1, /"reference_file_records":/)
+  assert.match(step1, /source_task_projection_sha256\(/)
+  assert.match(step2, /resolve_verified_reference_paths\(/)
+  assert.match(step2, /reference_input_integrity_failed/)
+  assert.match(integrity, /class VerifiedReferencePath\(str\)/)
+  assert.match(integrity, /def open_verified_reference\(/)
+  assert.match(integrity, /getattr\(os, "O_NOFOLLOW", 0\)/)
+  assert.match(integrity, /shutil\.copyfileobj\(source_stream, destination_stream\)/)
+  assert.match(codeInterpreter, /with open_verified_reference\(path\)/)
+  assert.match(subprocessRunner, /copy_verified_reference\(src_path, tmpdir\)/)
+  assert.match(sandboxRunner, /copy_verified_reference\(src_path, tmpdir\)/)
+  assert.doesNotMatch(codeInterpreter, /Upload failed.*continue/)
+  assert.doesNotMatch(subprocessRunner, /Failed to copy reference file/)
+  assert.doesNotMatch(sandboxRunner, /failed to copy reference file/)
 })
 
 test('relay transport uses exact data.source and fails before cloud work', async () => {
