@@ -102,8 +102,12 @@ class FakeApi:
         history = self.commit_history.get(kwargs["revision"])
         if history is not None:
             return [
-                SimpleNamespace(commit_id=commit_id, message=message)
-                for commit_id, message in history
+                SimpleNamespace(
+                    commit_id=commit_id,
+                    title=title,
+                    message=message,
+                )
+                for commit_id, title, message in history
             ]
         message = self.marker_override or self.marker
         return [
@@ -304,7 +308,8 @@ def _add_cleanup_commit(
     *,
     head: str = "c" * 40,
     parent: str | None = None,
-    message: str | None = None,
+    title: str | None = None,
+    description: str | None = None,
     first_commit: str | None = None,
 ) -> str:
     api.head = head
@@ -312,9 +317,18 @@ def _add_cleanup_commit(
     api.commit_history[head] = [
         (
             first_commit or head,
-            message or f"Clean relay checkpoint {generation[:12]}",
+            (
+                title
+                if title is not None
+                else f"Clean relay checkpoint {generation[:12]}"
+            ),
+            (
+                description
+                if description is not None
+                else f"relay-cleanup-generation: {generation}"
+            ),
         ),
-        (parent or api.candidate, "publication"),
+        (parent or api.candidate, "publication", ""),
     ]
     return head
 
@@ -534,20 +548,39 @@ def test_publication_finality_rejects_malformed_cleanup_generation(
 
 
 @pytest.mark.parametrize(
-    "message",
+    ("title", "description"),
     [
-        f"Clean relay checkpoint {'2' * 12}",
-        f"prefix Clean relay checkpoint {'1' * 12}",
-        f"Clean relay checkpoint {'1' * 12} suffix",
+        (
+            f"Clean relay checkpoint {'2' * 12}",
+            f"relay-cleanup-generation: {'1' * 64}",
+        ),
+        (
+            f"prefix Clean relay checkpoint {'1' * 12}",
+            f"relay-cleanup-generation: {'1' * 64}",
+        ),
+        (
+            f"Clean relay checkpoint {'1' * 12}",
+            f"relay-cleanup-generation: {'2' * 64}",
+        ),
+        (
+            f"Clean relay checkpoint {'1' * 12}",
+            "",
+        ),
     ],
 )
-def test_publication_finality_rejects_cleanup_message_or_generation_mismatch(
+def test_publication_finality_rejects_cleanup_metadata_or_generation_mismatch(
     tmp_path,
-    message,
+    title,
+    description,
 ):
     generation = "1" * 64
     api, root, receipt_path, _publication = _published_state(tmp_path)
-    _add_cleanup_commit(api, generation, message=message)
+    _add_cleanup_commit(
+        api,
+        generation,
+        title=title,
+        description=description,
+    )
 
     with pytest.raises(RuntimeError, match="finality is unverified"):
         verify_publication_finality(
@@ -569,7 +602,7 @@ def test_publication_finality_rejects_unrelated_child_or_grandchild(
     generation = "1" * 64
     api, root, receipt_path, _publication = _published_state(tmp_path)
     if relationship == "unrelated-child":
-        _add_cleanup_commit(api, generation, message="Unrelated commit")
+        _add_cleanup_commit(api, generation, title="Unrelated commit")
     else:
         _add_cleanup_commit(api, generation, parent="d" * 40)
 

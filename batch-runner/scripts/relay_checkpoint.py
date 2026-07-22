@@ -34,6 +34,8 @@ SANDBOX_IMAGE_PATTERN = re.compile(
     r"ghcr\.io/hyeonsangjeon/gdpval-sandbox@sha256:[0-9a-f]{64}"
 )
 RESULT_STATUSES = frozenset({"success", "error", "qa_failed", "pending"})
+CLEANUP_COMMIT_TITLE_PREFIX = "Clean relay checkpoint "
+CLEANUP_GENERATION_MARKER_PREFIX = "relay-cleanup-generation: "
 
 
 def _validate_sandbox_image_digest(value: str) -> str:
@@ -59,6 +61,40 @@ def _marker_path(source_sha: str, lineage_id: str) -> str:
 
 def _generation_root(source_sha: str, lineage_id: str, generation: str) -> str:
     return f"{_lineage_root(source_sha, lineage_id)}/generations/{generation}"
+
+
+def _cleanup_commit_title(generation: str) -> str:
+    return f"{CLEANUP_COMMIT_TITLE_PREFIX}{generation[:12]}"
+
+
+def _cleanup_commit_description(generation: str) -> str:
+    return f"{CLEANUP_GENERATION_MARKER_PREFIX}{generation}"
+
+
+def _verify_cleanup_commit(
+    client: HfApi,
+    *,
+    repo_id: str,
+    token: str,
+    revision: str,
+    parent: str,
+    generation: str,
+) -> None:
+    commits = list(client.list_repo_commits(
+        repo_id=repo_id,
+        repo_type="dataset",
+        revision=revision,
+        token=token,
+    ))
+    if (
+        len(commits) < 2
+        or getattr(commits[0], "commit_id", None) != revision
+        or getattr(commits[1], "commit_id", None) != parent
+        or getattr(commits[0], "title", None) != _cleanup_commit_title(generation)
+        or getattr(commits[0], "message", None)
+        != _cleanup_commit_description(generation)
+    ):
+        raise ValueError("relay checkpoint cleanup commit identity mismatch")
 
 
 def _load_progress(path: Path) -> dict:
@@ -829,7 +865,8 @@ def cleanup_checkpoint(
                     is_folder=True,
                 ),
             ],
-            commit_message=f"Clean relay checkpoint {marker['generation'][:12]}",
+            commit_message=_cleanup_commit_title(marker["generation"]),
+            commit_description=_cleanup_commit_description(marker["generation"]),
             repo_type="dataset",
             token=token,
             parent_commit=head,
@@ -845,6 +882,14 @@ def cleanup_checkpoint(
             head=confirmed_head,
         )
         if remaining_marker_path is None:
+            _verify_cleanup_commit(
+                client,
+                repo_id=repo_id,
+                token=token,
+                revision=confirmed_head,
+                parent=head,
+                generation=expected_generation,
+            )
             print(f"Relay checkpoint cleaned from {repo_id}")
             return
         remaining_marker = _marker(remaining_marker_path.read_bytes())

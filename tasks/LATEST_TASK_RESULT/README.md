@@ -4,7 +4,8 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-22
-- Status: Shipped via PR #129
+- Status: PR #129 shipped; cleanup commit identity follow-up locally verified,
+  PR pending
 
 ## Task
 
@@ -15,6 +16,8 @@ task. It must be refreshed before a task is reported complete.
 - Fail closed before Azure/model spend when dispatch identity, relay source,
   checkpoint/image identity, canonical task/reference semantics, write
   authorization, or publication output identity cannot be proven.
+- Bind relay cleanup finality to the actual Hugging Face SDK commit model:
+  `title` for `commit_message` and `message` for `commit_description`.
 
 ## Result
 
@@ -82,6 +85,12 @@ task. It must be refreshed before a task is reported complete.
   requires the exact restored checkpoint generation, and a private local
   receipt binds the publication plan so post-cleanup verification accepts only
   the exact cleanup child with an unchanged managed tree.
+- The follow-up cleanup commit writes a short generation label to the Hub commit
+  title and the full 64-character generation marker to its description.
+  Response-loss reconciliation and publication finality require that exact
+  `GitCommitInfo.title`, `GitCommitInfo.message`, and direct parent, preventing a
+  valid cleanup from failing due to SDK field confusion and preventing an
+  unrelated child commit from being accepted.
 - Added model-free checkpoint identity validation after Step 1 and before Azure
   login/model-client construction. Missing progress, lineage/fingerprint drift,
   or incomplete deliverables abort the continuation instead of rerunning tasks.
@@ -91,8 +100,8 @@ task. It must be refreshed before a task is reported complete.
 
 ## Verification
 
-- Rebased base: `origin/main@723826c9f8a1c3b6c9b10d8d3ad0082d5810e07a`.
-- Full backend non-integration suite: **1,851 passed, 6 skipped, 44 deselected,
+- Follow-up base: `origin/main@8e473361a12c348ee6fb4d4da6bbfb1d8a2b157f`.
+- Full backend non-integration suite: **1,852 passed, 6 skipped, 44 deselected,
   0 failed**.
 - Focused manifest/reference, relay, publication, output, bootstrap, inference,
   corruption, observability, and agentic trust matrix: **361 passed**.
@@ -105,7 +114,8 @@ task. It must be refreshed before a task is reported complete.
   manifest pre-client gates, Step 0 stale-state rejection, Step 4 current-run
   rebuilding, and Step 7 exact publication. The final Step 0 safety matrix is
   **65 passed**, relay checkpoint/status matrix is **82 passed**, and HF
-  publication/finality matrix is **85 passed**. These include source-first
+  publication/finality matrix is **86 passed**. The final relay plus publication
+  follow-up matrix is **168 passed**. These include source-first
   mutation ordering, post-create drift rejection, canonical target columns,
   exact-generation cleanup, realistic HF cache symlinks, and non-relay
   file-verification call bounds.
@@ -147,6 +157,8 @@ task. It must be refreshed before a task is reported complete.
 
 ## Remaining Work
 
-- No repository implementation work remains for this task. Repository branch
-  protection remains a separate administrative control; the exact-main
-  preflight does not replace a protected `main` ruleset.
+- Create, review, and merge the cleanup commit identity follow-up PR, then
+  confirm its free automatic PR validation and post-merge Pages run. Do not
+  dispatch a paid batch smoke for this metadata-contract correction.
+- Repository branch protection remains a separate administrative control; the
+  exact-main preflight does not replace a protected `main` ruleset.

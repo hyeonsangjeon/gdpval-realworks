@@ -61,6 +61,8 @@ _PUBLICATION_RECEIPT_FIELDS = frozenset({
     "publication_generation",
     "ordered_task_ids",
 })
+_CLEANUP_COMMIT_TITLE_PREFIX = "Clean relay checkpoint "
+_CLEANUP_GENERATION_MARKER_PREFIX = "relay-cleanup-generation: "
 
 
 @dataclass(frozen=True)
@@ -1351,15 +1353,22 @@ def verify_publication_finality(
                     revision=final_head,
                     token=token,
                 ))
-                cleanup_message = (
-                    f"Clean relay checkpoint {expected_generation[:12]}"
+                cleanup_title = (
+                    f"{_CLEANUP_COMMIT_TITLE_PREFIX}"
+                    f"{expected_generation[:12]}"
+                )
+                cleanup_description = (
+                    f"{_CLEANUP_GENERATION_MARKER_PREFIX}"
+                    f"{expected_generation}"
                 )
                 if (
                     len(commits) < 2
                     or getattr(commits[0], "commit_id", None) != final_head
                     or getattr(commits[1], "commit_id", None)
                     != receipt.publication_revision
-                    or getattr(commits[0], "message", None) != cleanup_message
+                    or getattr(commits[0], "title", None) != cleanup_title
+                    or getattr(commits[0], "message", None)
+                    != cleanup_description
                 ):
                     raise ValueError(
                         "relay cleanup commit lineage or generation mismatch"
