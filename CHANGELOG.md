@@ -109,8 +109,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   cleanup requires the exact restored generation. Step 0 records the validated
   target HEAD; one `create_commit` requires that HEAD as `parent_commit`, then
   verifies direct ancestry, plan marker, complete remote tree/hash, self-report
-  identity, and final HEAD, including response-loss reconciliation. No workflow,
-  Azure/model call, grading, HF write, or paid execution was dispatched.
+  identity, and final HEAD, including response-loss reconciliation. Relay
+  cleanup commits now store the short generation label in the Hub commit title
+  and the full 64-character generation marker in its description; response-loss
+  reconciliation and publication finality verify both SDK fields and the direct
+  parent before accepting cleanup. No workflow, Azure/model call, grading, HF
+  write, or paid execution was dispatched.
 - **Hermetic deliverable-selector contract tests** — replace import-time pandas
   and ignored local-parquet loading with a checked-in 28-task synthetic signal
   corpus. The 6,889-byte canonical fixture is self-hashed and binds exact public
