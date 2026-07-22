@@ -1,7 +1,7 @@
 # BOLT: Turn the README into an Execution and Trust Entry Point
 
 - Date: 2026-07-21
-- Status: `COMPLETE`
+- Status: `SHIPPED`
 - Base: `origin/main@77d76bc8fd7567ef140bd113c252fcf02e0aae68`
 - Execution boundary: documentation, fail-closed runtime controls, and free
   validation; no paid model run or remote dataset write
@@ -222,10 +222,27 @@ No workflow dispatch, Azure/model call, Hugging Face write, paid batch run,
 grading run, deployment, or publication was used as validation.
 | Independent review | UI review approved after glyph/card-boundary fixes; backend review findings drove fingerprint, pre-grading, and publication gates, while final backend signoff requests failed at the review service network boundary |
 
+## Shipment
+
+- Merged PR #127 as
+  `30906084dbee384f1c324a8b794cba5aef28170b` on 2026-07-22.
+- Automatic pull-request run
+  [29889565405](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29889565405)
+  completed in 1 minute 43 seconds: `validate` succeeded and `deploy` was
+  skipped.
+- Automatic `main` push run
+  [29889682507](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29889682507)
+  completed in 2 minutes 19 seconds: both `validate` and the GitHub Pages
+  `deploy` job succeeded.
+- Neither run used `workflow_dispatch`, grading, Step 8, an Azure/model API,
+  Hugging Face upload, or paid execution.
+
 ## Decision
 
-`LOCALLY_VERIFIED` — implementation, all free local acceptance checks, and final
-independent review pass. No commit, push, workflow dispatch, Pages deployment,
-HF write, model call, or paid action occurred. A natural future result PR must
-still confirm that the PR-before-HF chain and validation-only dispatch attach
-`validate` to the exact head SHA without creating a Pages deployment.
+`SHIPPED` — implementation, all free local acceptance checks, and independent
+review passed before PR #127 merged. GitHub then ran the expected free PR
+validation and automatic `main` validation/Pages deployment. No manual workflow
+dispatch, grading, Step 8, Azure/model call, Hugging Face write, or paid action
+occurred. A natural future result PR must still confirm that the PR-before-HF
+chain and validation-only dispatch attach `validate` to the exact head SHA
+without creating a Pages deployment.

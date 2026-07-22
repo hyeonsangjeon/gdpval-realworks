@@ -31,7 +31,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   inputs/defaults, Step 6/7 destinations, and external-grading separation.
   Replace remote onboarding diagrams with repository-owned responsive SVGs and
   add a seven-test contract suite that parses the docs, workflow, and owning
-  bootstrap/auth/report/upload code.
+  bootstrap/auth/report/upload code. Shipped through PR #127
+  (`30906084dbee384f1c324a8b794cba5aef28170b`): automatic free PR run
+  [29889565405](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29889565405)
+  passed validation with deployment skipped, and automatic `main` run
+  [29889682507](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29889682507)
+  passed validation and GitHub Pages deployment. Neither run used manual
+  dispatch, grading, Step 8, an Azure/model API, Hugging Face upload, or paid
+  execution.
 
 ### Fixed
 - **Batch relay provenance and recovery integrity** — require exact `main` and

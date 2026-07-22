@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-22
-- Status: Complete and independently approved
+- Status: Shipped via PR #127
 
 ## Task
 
@@ -81,6 +81,22 @@ task. It must be refreshed before a task is reported complete.
 - No workflow dispatch, Azure login, model/API call, batch/grading run, Hugging
   Face write, checkpoint mutation, deployment, publication, or paid execution
   occurred.
+
+## Shipment
+
+- PR #127 merged as
+  `30906084dbee384f1c324a8b794cba5aef28170b` on 2026-07-22.
+- Automatic pull-request run
+  [29889565405](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29889565405)
+  completed in 1 minute 43 seconds with `validate` successful and `deploy`
+  skipped.
+- Automatic `main` push run
+  [29889682507](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29889682507)
+  completed in 2 minutes 19 seconds with both `validate` and the GitHub Pages
+  `deploy` job successful.
+- These were automatic free repository checks. No `workflow_dispatch`, grading,
+  Step 8, Azure/model API, Hugging Face upload, or paid execution ran for either
+  run.
 
 ## Remaining Work
 
