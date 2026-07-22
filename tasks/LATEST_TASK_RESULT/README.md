@@ -103,9 +103,12 @@ task. It must be refreshed before a task is reported complete.
 - Focused trust matrices passed for relay generation/marker/CAS, schema v4
   source semantics, private reference staging, provider/local/Docker failures,
   manifest pre-client gates, Step 0 stale-state rejection, Step 4 current-run
-  rebuilding, and Step 7 exact publication. The merged Step 0 safety matrix is
-  **58 passed**, including pinned-source allowlists, exact-HEAD pre-install
-  validation, canonical target columns, and previous-snapshot preservation.
+  rebuilding, and Step 7 exact publication. The final Step 0 safety matrix is
+  **65 passed**, relay checkpoint/status matrix is **82 passed**, and HF
+  publication/finality matrix is **85 passed**. These include source-first
+  mutation ordering, post-create drift rejection, canonical target columns,
+  exact-generation cleanup, realistic HF cache symlinks, and non-relay
+  file-verification call bounds.
 - Exact public source verification downloaded **1,670,067,990 bytes** at pinned
   revision `11e7900...`: parquet SHA-256 `f8422fab...`, 220 tasks, 301 physical
   references, 261 declared references, and 220 unique task projections. Four
@@ -118,10 +121,11 @@ task. It must be refreshed before a task is reported complete.
 - Documentation structure: **157 links**, **100 file/anchor targets**, **12
   fork-relative Actions routes**, and four system-map SVGs validated with no
   broken target, unbalanced fence, or `mermaid.ink` dependency.
-- actionlint 1.7.7 reported no diagnostics for the changed `batch-run.yml`; all
-  six external actions remain pinned to 40-character SHAs. All eight active
-  workflows parsed as YAML. Ruff and `py_compile` passed for **43 changed Python
-  files**; static diagnostics and `git diff --check` also passed.
+- actionlint 1.7.7 reported no diagnostics for the changed `batch-run.yml`; its
+  eight-test executable onboarding contract passed and all six external actions
+  remain pinned to 40-character SHAs. All eight active workflows parsed as
+  YAML. Ruff and `py_compile` passed for **43 changed Python files**; the
+  production TypeScript/Vite build and `git diff --check` also passed.
   `huggingface-hub==1.24.0` pins the verified write-auth, immutable-revision,
   and CAS API surface.
 - No workflow dispatch, Azure login, model/API call, batch/grading run, HF write,
