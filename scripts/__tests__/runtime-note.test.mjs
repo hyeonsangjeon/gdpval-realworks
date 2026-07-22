@@ -58,7 +58,7 @@ test('runtime note selector joins report recovery with workflow policy', async (
     watchdog_minutes: 290,
     step_timeout_minutes: 350,
     job_timeout_minutes: 360,
-    relay_handoff_margin_minutes: 60,
+    step_timeout_headroom_minutes: 60,
   })
   assert.equal(selection.incident.approx_minute, 330)
   assert.equal(selection.incident.policy.step_timeout_minutes, 330)

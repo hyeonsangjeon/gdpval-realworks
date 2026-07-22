@@ -31,7 +31,7 @@ export interface RuntimeNoteData {
     watchdog_minutes: number
     step_timeout_minutes: number
     job_timeout_minutes: number
-    relay_handoff_margin_minutes: number
+    step_timeout_headroom_minutes: number
   }
   incident: {
     experiment_id: string
@@ -197,12 +197,12 @@ function parseRuntimeNote(value: unknown): RuntimeNoteData | null {
   const watchdogMinutes = currentPolicy.watchdog_minutes
   const stepTimeoutMinutes = currentPolicy.step_timeout_minutes
   const jobTimeoutMinutes = currentPolicy.job_timeout_minutes
-  const handoffMarginMinutes = currentPolicy.relay_handoff_margin_minutes
+  const stepTimeoutHeadroomMinutes = currentPolicy.step_timeout_headroom_minutes
 
   if (currentPolicy.scope !== 'condition_a') return null
-  if (!isPositiveInteger(watchdogMinutes) || !isPositiveInteger(stepTimeoutMinutes) || !isPositiveInteger(jobTimeoutMinutes) || !isPositiveInteger(handoffMarginMinutes)) return null
+  if (!isPositiveInteger(watchdogMinutes) || !isPositiveInteger(stepTimeoutMinutes) || !isPositiveInteger(jobTimeoutMinutes) || !isPositiveInteger(stepTimeoutHeadroomMinutes)) return null
   if (!(watchdogMinutes < stepTimeoutMinutes && stepTimeoutMinutes < jobTimeoutMinutes)) return null
-  if (handoffMarginMinutes !== stepTimeoutMinutes - watchdogMinutes) return null
+  if (stepTimeoutHeadroomMinutes !== stepTimeoutMinutes - watchdogMinutes) return null
   if (incident.experiment_id !== 'exp025' || incident.condition !== 'condition_a' || incident.action_run_id !== '26018603400' || incident.event !== 'SIGKILL' || incident.approx_minute !== 330) return null
   const startedAt = parseUtcSecond(incident.started_at)
   const completedAt = parseUtcSecond(incident.completed_at)

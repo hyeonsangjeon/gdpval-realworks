@@ -5,7 +5,7 @@
 
 # Core dependencies
 datasets>=2.18.0
-huggingface-hub>=0.20.0
+huggingface-hub==1.24.0
 openai>=1.12.0
 psutil>=5.9.0
 azure-identity>=1.15.0

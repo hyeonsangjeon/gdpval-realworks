@@ -179,7 +179,7 @@ function resolveRuntimeArticle(article: JournalArticleData, benchmark: ReadyRunt
         return {
           ...section,
           paragraphs: [
-            `중단 사건 뒤 Resume Round에도 watchdog이 들어갔고 step ceiling은 ${incident.fix.step_timeout_before_minutes}분에서 ${incident.fix.step_timeout_after_minutes}분으로 넓어졌다. 현재 workflow의 condition_a 경로에서 watchdog은 기본 ${policy.watchdog_minutes}분에 checkpoint를 남기고 종료하며, workflow step은 relay handoff를 위한 ${policy.relay_handoff_margin_minutes}분의 여유를 더해 ${policy.step_timeout_minutes}분에 닫힌다. exp008과 exp010은 이 수정 전에 실행됐으므로 현재 정책의 결과로 읽지 않는다.`,
+            `중단 사건 뒤 Resume Round에도 watchdog이 들어갔고 step ceiling은 ${incident.fix.step_timeout_before_minutes}분에서 ${incident.fix.step_timeout_after_minutes}분으로 넓어졌다. 현재 workflow의 condition_a 경로에서 watchdog은 기본 ${policy.watchdog_minutes}분이며, step timeout까지 명목상 ${policy.step_timeout_headroom_minutes}분의 간격이 있다. 그러나 watchdog은 태스크 사이에서만 확인되고 job cap은 setup부터 계산되므로, 이 간격이 checkpoint upload나 relay dispatch 시간을 보장하지는 않는다. exp008과 exp010은 이 수정 전에 실행됐으므로 현재 정책의 결과로 읽지 않는다.`,
             '이 구조는 작업 실행과 workflow 수명을 분리했다. 한 번의 runner가 전체 실험을 소유하지 않고, 여러 runner가 동일한 실험 상태를 이어받을 수 있게 됐다.',
           ],
         }

@@ -1,9 +1,10 @@
 # BOLT: Turn the README into an Execution and Trust Entry Point
 
 - Date: 2026-07-21
-- Status: `LOCALLY_VERIFIED`
-- Base: `main@d83846f`
-- Execution boundary: documentation, static assets, and free validation only
+- Status: `COMPLETE`
+- Base: `origin/main@77d76bc8fd7567ef140bd113c252fcf02e0aae68`
+- Execution boundary: documentation, fail-closed runtime controls, and free
+  validation; no paid model run or remote dataset write
 
 ## Outcome
 
@@ -58,12 +59,18 @@ Allowed implementation files:
 - `docs/images/readme-trust-boundaries-ko.svg`
 - `docs/images/readme-trust-boundaries-mobile-ko.svg`
 - `batch-runner/core/prepared_fingerprint.py`
+- `batch-runner/core/needs_files.py`
+- `batch-runner/core/reference_integrity.py`
+- `batch-runner/core/repo_bootstrapper.py`
 - `batch-runner/core/experiment_config.py`
+- `batch-runner/scripts/relay_checkpoint.py`
+- `batch-runner/requirements.txt`
 - `batch-runner/step1_prepare_tasks.py`
 - `batch-runner/step2_run_inference.py`
 - `batch-runner/step3_format_results.py`
 - `batch-runner/step6_report.py`
 - focused pipeline test modules
+- `scripts/__tests__/onboarding-contract.test.mjs`
 - `.github/workflows/batch-run.yml`
 - `.github/workflows/deploy.yml`
 - `scripts/__tests__/aggregate-runtime-note.test.mjs`
@@ -138,8 +145,9 @@ Allowed implementation files:
 ## Non-Goals
 
 - Do not change inference model calls, grading scores, prompts, or dataset contents.
-- Do not dispatch Actions, call model/provider APIs, upload to Hugging Face,
-  deploy Pages, commit, push, or merge.
+- Do not dispatch Actions, call model/provider APIs, upload to Hugging Face, or
+  deploy Pages solely to validate this change. Repository commit, pull request,
+  and merge are the delivery path requested for the completed work.
 - Do not turn the README into an exhaustive operator manual; detailed setup
   belongs in the linked beginner guide and batch-runner documentation.
 - Do not modify or remove unrelated generated and untracked files in the stale
@@ -178,6 +186,40 @@ Allowed implementation files:
 | Backend focused tests | 151 passed after relay lineage, A/B checkpoint, and HF ID fixes; Ruff and `py_compile` clean |
 | Backend broad tests | 1,529 passed, 6 skipped, 44 integration tests deselected; only the missing local-parquet selector module excluded |
 | Responsive README render | 390-960px selects localized mobile SVGs; 961px+ selects desktop SVGs; zero horizontal overflow |
+
+## Execution-Trust Follow-up
+
+The documentation audit exposed runtime contracts that could not truthfully be
+documented without implementation changes. The completed follow-up therefore:
+
+- binds every workflow and relay leg to trusted `main`, the initial source SHA,
+  the exact configured dataset ID, and a complete ordered checkpoint task set;
+- creates Step 0 targets atomically with `whoami` plus
+  `create_repo(exist_ok=False)`, treating only HTTP 409 as an existing target
+  and never deleting partial or legacy repositories automatically;
+- pins the public source revision and validates the target's exact HEAD in fresh
+  staging before local installation. A canonical schema-3 manifest binds the
+  ordered tasks, policy signals, model-input projection, and every declared
+  reference path, SHA-256, and byte size;
+- verifies relay payload bytes at their immutable Hugging Face revision before
+  advancing the marker, and confirms cleanup success in the same invocation if
+  the CAS response is lost; and
+- rejects missing, malformed, reordered, or identity-drifted checkpoints before
+  Azure login or model-client construction.
+
+Final local evidence on the rebased implementation:
+
+- backend non-integration suite: **1,638 passed, 6 skipped, 44 deselected**;
+- focused Step 0 plus relay suite: **83 passed**;
+- frontend aggregate contracts: **84 passed**;
+- onboarding contracts: **7 passed**;
+- production aggregate/build and all four browser note suites passed;
+- `actionlint` 1.7.12, Ruff, `py_compile`, and `git diff --check` passed; and
+- six onboarding documents resolved **157 links**, **100 local targets**, **12
+  fork-relative Actions routes**, and four SVGs with zero errors.
+
+No workflow dispatch, Azure/model call, Hugging Face write, paid batch run,
+grading run, deployment, or publication was used as validation.
 | Independent review | UI review approved after glyph/card-boundary fixes; backend review findings drove fingerprint, pre-grading, and publication gates, while final backend signoff requests failed at the review service network boundary |
 
 ## Decision

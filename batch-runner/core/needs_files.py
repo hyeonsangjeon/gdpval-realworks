@@ -13,6 +13,7 @@ Manifest schema versions
   ``prompt_classification`` (heuristic from ``prompt_classifier``), and
   ``policy_results`` per known policy.  ``_summary`` adds ``active_policy``,
   ``policy_counts``, and ``confidence_distribution``.
+* **v3**: adds a top-level content-addressed ``reference_files`` map.
 
 The loader is defensive: any v2 keys missing from a v1 manifest fall back to
 sensible defaults so old workspaces keep working without regeneration.
@@ -107,6 +108,7 @@ class NeedsFilesManifest:
     def __init__(self, data: dict):
         self._data = data
         self._tasks: Dict[str, dict] = data.get("tasks", {})
+        self._reference_files: Dict[str, dict] = data.get("reference_files", {})
         self._check_policy_snapshot()
 
     # ── Constructors ──────────────────────────────────────────────────
@@ -183,6 +185,18 @@ class NeedsFilesManifest:
         if entry is None:
             return []
         return entry.get("original_files", [])
+
+    def reference_records(self, task_id: str, paths: List[str]) -> List[dict]:
+        """Return ordered SHA-256/size records for one task's references."""
+        records = []
+        for path in paths:
+            identity = self._reference_files.get(path)
+            if not isinstance(identity, dict):
+                raise ValueError(
+                    f"reference identity missing for task {task_id!r}: {path}"
+                )
+            records.append({"path": path, **identity})
+        return records
 
     # ── V2 queries (defensive for v1 manifests) ──────────────────────
 

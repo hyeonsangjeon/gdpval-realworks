@@ -93,9 +93,15 @@ data:
 Keep the repository name equal to the YAML stem. Use a new, disposable dataset.
 Step 0 creates new targets as **public** datasets. It considers an existing
 target bootstrapped only when at least one path starts with `data/`; otherwise
-it deletes the entire dataset repository, including unrelated README or metadata
-files, and recreates it. If a `data/` path already exists, Step 0 reuses that
-snapshot rather than replacing it.
+it fails closed without deleting anything. Use a new disposable target, or
+remove the partial repository explicitly after inspection. If a `data/` path
+already exists, Step 0 reuses that snapshot rather than replacing it. The
+snapshot must also contain the source-derived `step0_needs_files_manifest.json`;
+missing or inconsistent task/policy identity aborts, and Step 0 never
+regenerates this manifest from stripped data. Step 0 stages the target's exact
+HEAD and rejects it before local installation unless its canonical model-input
+projection and every declared reference path/SHA-256/size match the pinned
+`openai/gdpval` revision.
 
 A later non-dry Step 7 deletes remote `data/**` and `deliverable_files/**` before
 uploading the new result. Do not point this config at a dataset you need to keep.
@@ -119,13 +125,15 @@ OIDC token. A straightforward portal setup is:
    `repo:YOUR_GITHUB_OWNER/gdpval-realworks:ref:refs/heads/main`.
 6. On the Azure OpenAI resource, open **Access control (IAM)** and assign the
    app's service principal the **Cognitive Services OpenAI User** role.
-7. Record the Azure subscription ID and the endpoint shown under the Azure
-   OpenAI resource's keys and endpoint page.
+7. Record the Azure subscription ID and the Azure OpenAI **resource endpoint**
+   consumed by this repository's `AzureOpenAI(azure_endpoint=...)` client. If
+   you copy it from Foundry, use the Azure OpenAI resource endpoint, not a
+   Foundry project URL or an `/openai/v1/` base URL.
 
 Microsoft's reference setup is
 [Use OpenID Connect with GitHub Actions](https://learn.microsoft.com/azure/developer/github/connect-from-azure-openid-connect).
-If your fork or default branch has a different name, the federated credential
-must match it exactly.
+This workflow requires the branch name `main`; configure the federated
+credential for that exact branch.
 
 ### 4. Create the Hugging Face token
 
@@ -144,7 +152,7 @@ repository secret** and add:
 | `AZURE_CLIENT_ID` | Entra application client ID |
 | `AZURE_TENANT_ID` | Entra directory tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
-| `AZURE_OPENAI_ENDPOINT` | `https://YOUR_RESOURCE.openai.azure.com/` |
+| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI resource endpoint for `AzureOpenAI(azure_endpoint=...)`; not a Foundry project URL |
 | `HF_TOKEN` | Dedicated Hugging Face write token |
 
 Do not add `AZURE_OPENAI_API_KEY` for this path. `GITHUB_TOKEN` is supplied by
@@ -161,9 +169,24 @@ this.
 2. Select **Run GDPVal Batch Experiment**.
 3. Choose **Run workflow** on branch `main`.
 4. Enter `exp998_smoke_baseline_sample` for `experiment_yaml`.
-5. Leave `experiment_name` empty, `relay_run` at `0`, `wall_timeout` at `290`,
-   and `sandbox_image_digest` empty.
+5. Leave `experiment_name`, `relay_lineage_id`, `source_sha`, and
+   `sandbox_image_digest` empty; keep `relay_run` at `0` and `wall_timeout` at
+   `290`.
 6. Set `dry_run` to `true`, acknowledge the cost warning above, and run it.
+
+The workflow rejects any dispatch ref other than exact `main` before checkout
+or cloud access and pins that commit through relay legs. Do not overlap runs
+that share one `data.source`; GitHub concurrency is not a durable queue.
+Relay checkpoints use that exact `data.source`. A continuation fails before
+Azure login if progress, identity, fingerprint, or referenced deliverables
+cannot be restored and validated.
+After Step 0, a non-mutating authorization check also requires write access to
+that exact dataset before task preparation or model spend. Each relay marker
+points to one immutable HF revision and an exact SHA-256/size file manifest.
+Step 0 also proves every parquet-declared reference is a unique regular file.
+Cleanup removes the lineage from the current tree, not from prior HF revisions;
+failed operations can leave orphan generations. Never use sensitive material in
+this disposable public target.
 
 The smoke config uses provider-hosted `code_interpreter`; it does not exercise
 the repository's Docker sandbox or agentic preflight.
@@ -176,7 +199,7 @@ The expected path is:
 |---|---|
 | Inspect mode | Checks the input filename, safe YAML shape, and whether the mode belongs in the general workflow; no cloud credentials are available |
 | Full config validation | Loads and validates the complete experiment config before any Hugging Face bootstrap |
-| Step 0 | Publicly creates, destructively recreates, or reuses your disposable Hugging Face dataset, then downloads its snapshot |
+| Step 0 | Publicly creates a new target or stages an existing target's exact HEAD; canonical model inputs, schema-3 manifest, and reference bytes must match the pinned source before local installation |
 | Step 1 | Deterministically selects three tasks |
 | Step 2 | Calls the model, creates deliverables, and runs same-model Self-QA |
 | Steps 3-4 | Writes JSON/Markdown results and a three-row Parquet file |
@@ -206,7 +229,7 @@ correct.
 
 | Symptom | Check |
 |---|---|
-| Workflow is missing | Workflows must be enabled and the YAML must be on the fork's default branch |
+| Workflow is missing | Workflows must be enabled and the YAML must be on the fork's `main` branch |
 | `AADSTS700213` or no matching federated identity | Owner, repository, branch, and federated subject must match the fork exactly |
 | Azure login succeeds but inference returns 403 | Confirm the OpenAI role assignment, endpoint, and deployment access |
 | Deployment not found | The smoke config expects an Azure deployment named `gpt-5.2-chat` |
@@ -215,6 +238,7 @@ correct.
 | Step 6 is yellow but the job continues | The workflow must generate and identity-check a model-free fallback report before any PR or HF publication |
 | No result pull request appears | Expected when `dry_run` is true |
 | Step 5 is skipped | Expected for samples of three tasks or fewer |
+| Relay restore fails | Do not restart blindly; inspect the exact `data.source` checkpoint and lineage. Continuations fail closed rather than rerunning all tasks |
 
 ## After the smoke test
 

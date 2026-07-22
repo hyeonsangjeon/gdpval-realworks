@@ -13,7 +13,7 @@
   <a href="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml">
     <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml/badge.svg" alt="대시보드 검증 및 배포" />
   </a>
-  <a href="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml">
+  <a href="../../actions/workflows/batch-run.yml">
     <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml/badge.svg" alt="배치 실험" />
   </a>
   <a href="LICENSE">
@@ -33,12 +33,20 @@
 
 ## 여기서 시작하세요
 
+**[라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)** |
+**[3-task 샘플 config](batch-runner/experiments/exp998_smoke_baseline_sample.yaml)** |
+**[Batch workflow 실행](../../actions/workflows/batch-run.yml)** |
+**[결과와 아티팩트](docs/first-experiment_KR.md#7-성공-상태-확인)**
+
 - **근거 보기:** [라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)를
   엽니다. 브라우저만 있으면 됩니다.
 - **로컬 미리보기:** `npm ci && npm run dev`를 실행합니다. Git과 Node.js 20+가
   필요하지만 클라우드 인증 정보는 필요 없습니다.
-- **실제 태스크 3개 실행:** [초보자 가이드](docs/first-experiment_KR.md)를
-  따라갑니다. fork, Azure OIDC, Hugging Face(HF) 쓰기 토큰, 실제 API 예산이
+- **실제 태스크 3개 실행:**
+  [샘플 config](batch-runner/experiments/exp998_smoke_baseline_sample.yaml)를
+  확인한 뒤 [초보자 가이드](docs/first-experiment_KR.md)에 따라
+  내 fork의 [Batch workflow](../../actions/workflows/batch-run.yml)를
+  실행합니다. fork, Azure OIDC, Hugging Face(HF) 쓰기 토큰, 실제 API 예산이
   필요합니다.
 
 로컬 대시보드는 클라우드 인증 정보가 필요 없고 LLM을 호출하지 않습니다.
@@ -146,14 +154,18 @@ sandbox와 agentic 통제는 각각 이름이 붙은 경로에만 적용됩니�
 | 입력 | 첫 실행 값 |
 |---|---|
 | `experiment_yaml` | `exp998_smoke_baseline_sample` |
+| `experiment_name` | 빈 값 |
 | `dry_run` | `true` |
 | `relay_run` | `0` |
+| `relay_lineage_id` | 빈 값 |
+| `source_sha` | 빈 값 |
 | `wall_timeout` | `290` |
 | `sandbox_image_digest` | 빈 값 |
 
 예상 동작은 다음과 같습니다.
 
-1. Step 0이 일회성 Hugging Face dataset을 생성, 재생성 또는 재사용합니다.
+1. Step 0이 일회성 Hugging Face dataset을 만들거나 `data/`가 있는 대상을
+  재사용합니다. 기존 partial target은 자동 삭제 없이 중단합니다.
 2. Step 1이 태스크 3개를 결정적으로 선택합니다.
 3. Step 2가 `gpt-5.2-chat`을 호출하고 파일을 만든 뒤 같은 모델의 Self-QA를 재시도할 수 있습니다.
 4. Step 3-4가 포맷된 결과와 3-row Parquet artifact를 만듭니다.

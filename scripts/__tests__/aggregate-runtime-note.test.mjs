@@ -68,7 +68,7 @@ test('runtime note data is derived from workflow and incident sources', async ()
     watchdog_minutes: 290,
     step_timeout_minutes: 350,
     job_timeout_minutes: 360,
-    relay_handoff_margin_minutes: 60,
+    step_timeout_headroom_minutes: 60,
   })
   assert.deepEqual(data.incident, {
     experiment_id: 'exp025',
@@ -169,14 +169,14 @@ test('pinned incident and fix commits preserve the before-after workflow history
     watchdog_minutes: 290,
     step_timeout_minutes: 330,
     job_timeout_minutes: 360,
-    relay_handoff_margin_minutes: 40,
+    step_timeout_headroom_minutes: 40,
   })
   assert.deepEqual(extractWorkflowPolicy(fixedWorkflow), {
     scope: 'condition_a',
     watchdog_minutes: 290,
     step_timeout_minutes: 350,
     job_timeout_minutes: 360,
-    relay_handoff_margin_minutes: 60,
+    step_timeout_headroom_minutes: 60,
   })
 })
 

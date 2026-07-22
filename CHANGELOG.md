@@ -23,8 +23,47 @@ entries land under a fresh dated heading the day they merge to `main`.
   public GitHub page and repository API show the exact new description,
   homepage, and topic set; the metadata-only update created no commit or
   workflow run.
+- **First-run execution contract** — expose fork-safe links to the live
+  dashboard, tracked three-task config, Batch workflow, and result/artifact
+  guide in both root READMEs. Rebuild the English/Korean Batch Runner quick
+  starts around the executable wrappers, five OIDC/HF secrets, Azure OpenAI
+  resource-endpoint contract, destructive HF boundaries, all eight workflow
+  inputs/defaults, Step 6/7 destinations, and external-grading separation.
+  Replace remote onboarding diagrams with repository-owned responsive SVGs and
+  add a seven-test contract suite that parses the docs, workflow, and owning
+  bootstrap/auth/report/upload code.
 
 ### Fixed
+- **Batch relay provenance and recovery integrity** — require exact `main` and
+  equal workflow/event SHAs before checkout, bound canonical timeout/relay
+  inputs, pin every continuation to the initial `source_sha`, and keep relay
+  dispatch on `main`. Checkpoints now restore, upload, and clean up against the
+  validated full `data.source` rather than a reconstructed YAML-stem repo.
+  Continuations fail before Azure login/model construction when progress,
+  lineage, prepared fingerprint, or referenced deliverables are missing or
+  invalid. The 290-to-350 gap is now reported as nominal step-timeout headroom,
+  not guaranteed relay handoff time; overlapping runs sharing one HF target are
+  explicitly unsupported because GitHub concurrency is not a durable queue.
+  Checkpoint payloads live under content-addressed generations; `current.json`
+  advances only after one immutable HF revision has the exact file tree and
+  matching SHA-256/size manifest. Restore and cleanup require the same source
+  SHA and lineage; cleanup deletes the whole current-tree lineage in one
+  exact-HEAD CAS commit. Step 0 propagates lookup/auth/network errors, never
+  auto-deletes an existing partial repo, and validates every parquet-declared
+  reference as a unique regular non-symlink file. A non-mutating write-access
+  preflight rejects read-only targets before task preparation, Azure login, or
+  model spend. Path cleanup does not erase prior HF revisions and failed
+  operations may leave forensic orphan generations. The required SDK is pinned
+  to the verified `1.24.0` contract. Step 0 now authenticates first and creates
+  targets with `exist_ok=False`, treating only HTTP 409 as reuse and never
+  deleting partial or legacy targets. New targets derive from the pinned public
+  source revision; reused targets are downloaded at an exact HEAD into fresh
+  staging and accepted only when a schema-3 manifest, canonical model-input
+  projection, ordered task identity, and every declared reference path,
+  SHA-256, and byte size match the pinned contract. Relay uploads download and
+  verify the immutable payload revision before advancing `current.json`, require
+  a complete ordered result set, and confirm a successful cleanup in the same
+  invocation when the CAS response is lost.
 - **Hermetic deliverable-selector contract tests** — replace import-time pandas
   and ignored local-parquet loading with a checked-in 28-task synthetic signal
   corpus. The 6,889-byte canonical fixture is self-hashed and binds exact public

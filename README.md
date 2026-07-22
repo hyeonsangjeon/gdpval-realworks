@@ -13,7 +13,7 @@
   <a href="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml">
     <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/deploy.yml/badge.svg" alt="Dashboard checks and deploy" />
   </a>
-  <a href="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml">
+  <a href="../../actions/workflows/batch-run.yml">
     <img src="https://github.com/hyeonsangjeon/gdpval-realworks/actions/workflows/batch-run.yml/badge.svg" alt="Batch experiment" />
   </a>
   <a href="LICENSE">
@@ -33,13 +33,20 @@
 
 ## Start here
 
+**[Live dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/)** |
+**[Three-task sample config](batch-runner/experiments/exp998_smoke_baseline_sample.yaml)** |
+**[Run Batch workflow](../../actions/workflows/batch-run.yml)** |
+**[Results and artifacts](docs/first-experiment.md#7-know-what-success-looks-like)**
+
 - **See the evidence:** [open the live dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/).
   A browser is enough.
 - **Preview locally:** run `npm ci && npm run dev`. You need Git and Node.js 20+,
   but no cloud credentials.
-- **Run three real tasks:** follow the [beginner guide](docs/first-experiment.md).
-  You need a fork, Azure OIDC, a Hugging Face (HF) write token, and a real API
-  budget.
+- **Run three real tasks:** inspect the
+  [sample config](batch-runner/experiments/exp998_smoke_baseline_sample.yaml),
+  then follow the [beginner guide](docs/first-experiment.md) to launch the
+  [Batch workflow](../../actions/workflows/batch-run.yml) in your fork.
+  You need a fork, Azure OIDC, a Hugging Face (HF) write token, and a real API budget.
 
 The local dashboard path does not need cloud credentials and does not call an
 LLM:
@@ -147,14 +154,18 @@ From **Actions > Run GDPVal Batch Experiment**, use:
 | Input | First-run value |
 |---|---|
 | `experiment_yaml` | `exp998_smoke_baseline_sample` |
+| `experiment_name` | leave empty |
 | `dry_run` | `true` |
 | `relay_run` | `0` |
+| `relay_lineage_id` | leave empty |
+| `source_sha` | leave empty |
 | `wall_timeout` | `290` |
 | `sandbox_image_digest` | leave empty |
 
 Expected behavior:
 
-1. Step 0 creates, recreates, or reuses the disposable Hugging Face dataset.
+1. Step 0 creates a disposable Hugging Face dataset or reuses one with `data/`;
+  an existing partial target aborts without automatic deletion.
 2. Step 1 selects three tasks deterministically.
 3. Step 2 calls `gpt-5.2-chat`, creates files, and can retry same-model Self-QA.
 4. Steps 3-4 write formatted results and a three-row Parquet artifact.

@@ -63,6 +63,10 @@ from core.execution_metrics import (
 from core.file_preview import generate_all_previews
 from core.llm_client import create_provider_client, complete
 from core.needs_files import NeedsFilesManifest
+from core.reference_integrity import (
+    ReferenceIntegrityError,
+    resolve_verified_reference_paths,
+)
 from core.prepared_fingerprint import validate_prepared_fingerprint
 from core.audio_analyzer import analyze_audio_files, filter_audio_files
 from core.video_analyzer import (
@@ -1385,35 +1389,30 @@ def _execute_single_task(
     # Resolve reference file paths to absolute + validate existence
     abs_ref_files = None
     ref_files = task_info.get("reference_files", [])
-    missing_ref_files = []
     if ref_files:
         if strict_inputs:
             abs_ref_files = list(ref_files)
         else:
-            abs_ref_files = []
-            for ref_path in ref_files:
-                abs_path = DEFAULT_LOCAL_PATH / ref_path
-                if abs_path.exists():
-                    abs_ref_files.append(str(abs_path))
-                else:
-                    missing_ref_files.append(ref_path)
-                    print(f"      ⚠️  Reference file not found: {abs_path}")
-            if not abs_ref_files:
-                abs_ref_files = None  # all missing → treat as no files
-    if strict_inputs and missing_ref_files:
-        return {
-            "task_id": task_id,
-            "status": "error",
-            "error": "approved_reference_input_missing",
-            "content": None,
-            "deliverable_text": None,
-            "deliverable_files": [],
-            "model": model,
-            "usage": None,
-            "observability": _build_execution_observability(None, []),
-            "latency_ms": None,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
+            try:
+                abs_ref_files = resolve_verified_reference_paths(
+                    DEFAULT_LOCAL_PATH,
+                    ref_files,
+                    task_info.get("reference_file_records", []),
+                )
+            except ReferenceIntegrityError as exc:
+                return {
+                    "task_id": task_id,
+                    "status": "error",
+                    "error": f"reference_input_integrity_failed: {exc}",
+                    "content": None,
+                    "deliverable_text": None,
+                    "deliverable_files": [],
+                    "model": model,
+                    "usage": None,
+                    "observability": _build_execution_observability(None, []),
+                    "latency_ms": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
 
     # ── Preprocessor: enrich prompt with audio/video analysis (if configured) ──
     preprocessor_observations: list[dict] = []
@@ -1676,6 +1675,7 @@ def _load_and_validate_progress(
     execution_mode: str,
     ordered_task_ids: List[str],
     prepared_fingerprint: str = "",
+    allow_missing_results: bool = True,
 ) -> dict:
     with path.open("r", encoding="utf-8") as stream:
         progress = json.load(stream)
@@ -1697,7 +1697,9 @@ def _load_and_validate_progress(
     results = progress.get("results")
     if not isinstance(results, list):
         raise ValueError("progress checkpoint results must be a list")
-    _validate_result_task_set(results, ordered_task_ids, allow_missing=True)
+    _validate_result_task_set(
+        results, ordered_task_ids, allow_missing=allow_missing_results
+    )
     indexed = {result["task_id"]: result for result in results}
     timestamp = datetime.now(timezone.utc).isoformat()
     progress["results"] = [
@@ -1735,6 +1737,55 @@ def _validate_result_task_set(
         raise ValueError("progress checkpoint contains unexpected task IDs")
     if not allow_missing and result_ids != ordered_task_ids:
         raise ValueError("final result task IDs differ from ordered task set")
+
+
+def validate_restored_checkpoint(condition_key: str = "condition_a") -> dict:
+    """Validate a restored relay checkpoint without constructing a model client."""
+    prepared_path = WORKSPACE_DIR / "step1_tasks_prepared.json"
+    with prepared_path.open("r", encoding="utf-8") as stream:
+        prepared = json.load(stream)
+    tasks = prepared.get("tasks")
+    condition = prepared.get(condition_key)
+    if not isinstance(tasks, list) or not isinstance(condition, dict):
+        raise ValueError("prepared relay inputs are malformed")
+    execution = prepared.get("execution") or {}
+    sandbox = execution.get("sandbox") or {}
+    execution_mode = execution.get(
+        "mode", prepared.get("execution_mode", "subprocess")
+    )
+    if execution_mode == "agentic_sandbox" or (
+        execution_mode == "sandbox" and sandbox.get("hardened_substrate") is True
+    ):
+        raise ValueError("general relay validation does not accept hardened modes")
+    experiment_id = prepared.get("experiment_id")
+    condition_name = condition.get("name")
+    if not isinstance(experiment_id, str) or not isinstance(condition_name, str):
+        raise ValueError("prepared relay identity is malformed")
+    ordered_task_ids = [task.get("task_id") for task in tasks]
+    prepared_fingerprint = validate_prepared_fingerprint(prepared)
+    progress_path, _ = _condition_workspace_paths(condition_key)
+    legacy_progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
+    if (
+        condition_key == "condition_a"
+        and not progress_path.exists()
+        and legacy_progress_path.exists()
+    ):
+        progress_path.write_bytes(legacy_progress_path.read_bytes())
+    if not progress_path.is_file():
+        raise FileNotFoundError("restored relay progress checkpoint is missing")
+    progress = _load_and_validate_progress(
+        progress_path,
+        experiment_id=experiment_id,
+        condition_name=condition_name,
+        condition_identity=condition_key,
+        run_id=_resolve_run_identity(experiment_id),
+        execution_mode=execution_mode,
+        ordered_task_ids=ordered_task_ids,
+        prepared_fingerprint=prepared_fingerprint,
+        allow_missing_results=False,
+    )
+    print(f"Relay checkpoint identity valid: {experiment_id}/{condition_key}")
+    return progress
 
 
 # ── Progress helpers ───────────────────────────────────────────────────────
@@ -2875,7 +2926,16 @@ def main():
         help="Wall-clock timeout in minutes. When reached, save checkpoint and "
              "exit with code 42 for relay retrigger. (default: None = no timeout)",
     )
+    parser.add_argument(
+        "--validate-checkpoint-only",
+        action="store_true",
+        help="Validate restored relay progress without constructing a model client",
+    )
     args = parser.parse_args()
+
+    if args.validate_checkpoint_only:
+        validate_restored_checkpoint(args.condition)
+        return
 
     run_inference(
         execution_mode=args.mode,
