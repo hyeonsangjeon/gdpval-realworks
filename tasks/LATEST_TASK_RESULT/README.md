@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-22
-- Status: Rebased implementation and local release gates complete; PR/merge pending
+- Status: Shipped via PR #129
 
 ## Task
 
@@ -121,22 +121,32 @@ task. It must be refreshed before a task is reported complete.
 - Documentation structure: **157 links**, **100 file/anchor targets**, **12
   fork-relative Actions routes**, and four system-map SVGs validated with no
   broken target, unbalanced fence, or `mermaid.ink` dependency.
-- The changed `batch-run.yml` parsed as YAML and its eight-test executable
-  onboarding contract passed; all six external actions remain pinned to
-  40-character SHAs. All eight active workflows parsed as YAML. System
-  `actionlint` was unavailable, so no unverified downloaded binary was used.
-  Ruff and `py_compile` passed for **43 changed Python files**; the production
-  TypeScript/Vite build and `git diff --check` also passed.
+- actionlint 1.7.7 reported no diagnostics for the changed `batch-run.yml`; its
+  eight-test executable onboarding contract passed and all six external actions
+  remain pinned to 40-character SHAs. All eight active workflows parsed as
+  YAML. Ruff and `py_compile` passed for **43 changed Python files**; the
+  production TypeScript/Vite build and `git diff --check` also passed.
   `huggingface-hub==1.24.0` pins the verified write-auth, immutable-revision,
   and CAS API surface.
 - No workflow dispatch, Azure login, model/API call, batch/grading run, HF write,
   network checkpoint write, or paid execution occurred. Public source bytes
   were downloaded read-only to verify canonical identities.
 
+## Shipment
+
+- PR #129 squash-merged as
+  `2d4026056b6e27f5111a94d1089573f6b4938a58` on 2026-07-22.
+- Automatic pull-request run
+  [29919172383](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29919172383)
+  completed with `validate` successful and `deploy` skipped.
+- Automatic `main` push run
+  [29919336511](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29919336511)
+  completed with both `validate` and GitHub Pages `deploy` successful.
+- These were free automatic repository checks. No `workflow_dispatch`, grading,
+  Step 8, Azure/model API, Hugging Face write, or paid execution ran.
+
 ## Remaining Work
 
-- Create, review, and merge the pull request, then confirm the free PR validation
-  and post-merge Pages run. Do not dispatch a paid batch smoke solely for this
-  documentation and fail-closed relay change.
-- Repository branch protection remains a separate administrative control; the
-  exact-main preflight does not replace a protected `main` ruleset.
+- No repository implementation work remains for this task. Repository branch
+  protection remains a separate administrative control; the exact-main
+  preflight does not replace a protected `main` ruleset.
