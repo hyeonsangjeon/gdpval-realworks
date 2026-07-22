@@ -4,8 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-22
-- Status: PR #129 shipped; cleanup commit identity follow-up locally verified,
-  PR pending
+- Status: PR #129 and cleanup commit identity follow-up PR #131 shipped
 
 ## Task
 
@@ -131,10 +130,11 @@ task. It must be refreshed before a task is reported complete.
 - Documentation structure: **157 links**, **100 file/anchor targets**, **12
   fork-relative Actions routes**, and four system-map SVGs validated with no
   broken target, unbalanced fence, or `mermaid.ink` dependency.
-- actionlint 1.7.7 reported no diagnostics for the changed `batch-run.yml`; its
-  eight-test executable onboarding contract passed and all six external actions
-  remain pinned to 40-character SHAs. All eight active workflows parsed as
-  YAML. Ruff and `py_compile` passed for **43 changed Python files**; the
+- The changed `batch-run.yml` parsed as YAML and its eight-test executable
+  onboarding contract passed; all six external actions remain pinned to
+  40-character SHAs. All eight active workflows parsed as YAML. System
+  `actionlint` was unavailable locally, so no unverified downloaded binary was
+  used. Ruff and `py_compile` passed for **43 changed Python files**; the
   production TypeScript/Vite build and `git diff --check` also passed.
   `huggingface-hub==1.24.0` pins the verified write-auth, immutable-revision,
   and CAS API surface.
@@ -154,11 +154,16 @@ task. It must be refreshed before a task is reported complete.
   completed with both `validate` and GitHub Pages `deploy` successful.
 - These were free automatic repository checks. No `workflow_dispatch`, grading,
   Step 8, Azure/model API, Hugging Face write, or paid execution ran.
+- Follow-up PR #131 squash-merged as
+  `576e6f4f4a72998f0311d74006373bcea40a3cf6` on 2026-07-22. Its changed paths
+  are outside the Pages workflow's PR/push filters, so GitHub attached no
+  automatic run or check to either the PR head or merge SHA. No manual workflow
+  dispatch was used; the exact PR head was covered by the local full suite and
+  two independent reviews before merge.
 
 ## Remaining Work
 
-- Create, review, and merge the cleanup commit identity follow-up PR, then
-  confirm its free automatic PR validation and post-merge Pages run. Do not
-  dispatch a paid batch smoke for this metadata-contract correction.
+- No repository implementation work remains for this task. The cleanup commit
+  identity follow-up required no paid batch smoke or manual workflow dispatch.
 - Repository branch protection remains a separate administrative control; the
   exact-main preflight does not replace a protected `main` ruleset.
