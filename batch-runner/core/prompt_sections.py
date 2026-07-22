@@ -40,6 +40,7 @@ class SectionContext:
     reflection: Optional[str]
     registry: object            # SkillsRegistry
     perception_text: Optional[str] = None   # P3; None in P0-P2
+    host_reference_access: bool = True
 
 
 def _available_files_line(ref_files: List[str]) -> str:
@@ -54,13 +55,21 @@ def _available_files_line(ref_files: List[str]) -> str:
 # Keep these thin: adapt an existing module, do not add fragment logic here.
 SECTION_PROVIDERS: Dict[str, Callable[[SectionContext], Optional[str]]] = {
     "reflection": lambda c: c.reflection or None,
-    "file_structure": lambda c: build_file_structure_info(c.ref_files or []) or None,
+    "file_structure": lambda c: (
+        build_file_structure_info(c.ref_files or []) or None
+        if c.host_reference_access
+        else None
+    ),
     "skills_manual": lambda c: c.registry.render_manual(c.skills) or None,
     "deps_hint": lambda c: c.manifest.to_prompt_hint() or None,
     "contract": lambda c: (c.contract.to_prompt_section() if c.contract is not None else None),
     "perception_analysis": lambda c: c.perception_text or None,   # P3
     "task": lambda c: c.task_prompt or None,
-    "previews": lambda c: (generate_all_previews(c.ref_files) or None) if c.ref_files else None,
+    "previews": lambda c: (
+        (generate_all_previews(c.ref_files) or None)
+        if c.ref_files and c.host_reference_access
+        else None
+    ),
     "available_files": lambda c: _available_files_line(c.ref_files) if c.ref_files else None,
 }
 

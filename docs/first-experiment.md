@@ -97,14 +97,23 @@ it fails closed without deleting anything. Use a new disposable target, or
 remove the partial repository explicitly after inspection. If a `data/` path
 already exists, Step 0 reuses that snapshot rather than replacing it. The
 snapshot must also contain the source-derived `step0_needs_files_manifest.json`;
-missing or inconsistent task/policy identity aborts, and Step 0 never
-regenerates this manifest from stripped data. Step 0 stages the target's exact
-HEAD and rejects it before local installation unless its canonical model-input
-projection and every declared reference path/SHA-256/size match the pinned
-`openai/gdpval` revision.
+missing or inconsistent task/policy, prompt/taxonomy/rubric/reference
+assignment, reference path/SHA-256/size identity aborts, and Step 0 never
+regenerates this manifest from stripped data. Reused targets must also have
+empty submitter text/file/URL/URI columns and no stale physical deliverables.
+New targets are built from one pinned public-source revision by downloading
+only base data and parquet-declared references. The complete source snapshot,
+manifest, references, stripped submitter state, and frozen payload digest are
+validated before target creation; create and upload are attempted once, and an
+uncertain upload is preserved for inspection rather than retried or deleted.
+Reused targets are downloaded
+at an exact full-SHA HEAD into fresh staging; their canonical columns,
+projection, manifest, complete reference tree, and empty submitter state must
+pass before the previous local snapshot is replaced.
 
-A later non-dry Step 7 deletes remote `data/**` and `deliverable_files/**` before
-uploading the new result. Do not point this config at a dataset you need to keep.
+A later non-dry Step 7 CAS-replaces remote `data/**`, `deliverable_files/**`,
+and `self_report.json` before uploading the new result. Do not point this config
+at a dataset you need to keep.
 
 Commit the edit to your fork's default `main` branch. Never put a token, key, or
 password in this YAML.
@@ -182,11 +191,31 @@ Azure login if progress, identity, fingerprint, or referenced deliverables
 cannot be restored and validated.
 After Step 0, a non-mutating authorization check also requires write access to
 that exact dataset before task preparation or model spend. Each relay marker
-points to one immutable HF revision and an exact SHA-256/size file manifest.
-Step 0 also proves every parquet-declared reference is a unique regular file.
+points to one immutable HF revision, sandbox image digest, and exact
+SHA-256/size file manifest. Step 0 authenticates the pinned source projection,
+downloads only the declared reference set, and validates the reusable target's
+exact HEAD before local installation. Step 2 and each executor recheck every
+reference immediately before upload/copy, failing before model or generated-code
+execution.
 Cleanup removes the lineage from the current tree, not from prior HF revisions;
 failed operations can leave orphan generations. Never use sensitive material in
 this disposable public target.
+
+Before the non-dry Step 7 deletes remote outputs, it requires the one canonical
+parquet shard, task-owned output paths, canonical repository URLs/URIs, and an
+exact match between parquet declarations and the local deliverable tree. A
+failed task cannot retain output metadata from an earlier run. Step 4 and Step 7
+recheck each source row against manifest v4 after model execution. Publication
+also requires a non-dry local `self_report.json` whose repository, prepared
+fingerprint, Step 2 result fingerprint, ordered task IDs, and result task set
+match the current run-specific publication generation and workspace. Its
+per-task summary and deliverable files must equal the validated Step 2 result.
+A new
+Step 1 invalidates finalized outputs from an earlier run; relay legs retain the
+initial generation. Parquet submitter text/files/URLs/URIs must equal that same
+Step 2 result. If a local dry-run report was generated, rerun
+`bash step6_report.sh --no-narrative` before Step 7. The Step 0 validated HF HEAD
+is the CAS parent, so a concurrent target change fails without overwriting it.
 
 The smoke config uses provider-hosted `code_interpreter`; it does not exercise
 the repository's Docker sandbox or agentic preflight.
@@ -199,7 +228,7 @@ The expected path is:
 |---|---|
 | Inspect mode | Checks the input filename, safe YAML shape, and whether the mode belongs in the general workflow; no cloud credentials are available |
 | Full config validation | Loads and validates the complete experiment config before any Hugging Face bootstrap |
-| Step 0 | Publicly creates a new target or stages an existing target's exact HEAD; canonical model inputs, schema-3 manifest, and reference bytes must match the pinned source before local installation |
+| Step 0 | Publicly creates a new target or reuses one with `data/` plus the canonical source-derived manifest; partial, legacy, or inconsistent targets abort without automatic deletion |
 | Step 1 | Deterministically selects three tasks |
 | Step 2 | Calls the model, creates deliverables, and runs same-model Self-QA |
 | Steps 3-4 | Writes JSON/Markdown results and a three-row Parquet file |

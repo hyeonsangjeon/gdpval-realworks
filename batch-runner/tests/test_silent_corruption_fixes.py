@@ -323,6 +323,7 @@ def _build_step1_prepared(tmp_path: Path, task_id: str = "t1") -> Path:
 
     prepared = {
         "experiment_id": "exp_test",
+        "publication_generation": "exp_test:local:test",
         "experiment_name": "qa_failed_regression",
         "source": "test/qa-failed-regression",
         "execution": {
@@ -337,6 +338,9 @@ def _build_step1_prepared(tmp_path: Path, task_id: str = "t1") -> Path:
                 "occupation": "test_occupation",
                 "instruction": "Do a thing.",
                 "reference_files": [],
+                "reference_file_records": [],
+                "needs_files": False,
+                "source_projection_sha256": "a" * 64,
             }
         ],
         "condition_a": {
@@ -372,8 +376,6 @@ def patched_run_inference(tmp_path, monkeypatch):
 
     monkeypatch.setattr(s2, "WORKSPACE_DIR", workspace, raising=True)
     monkeypatch.setattr(s2, "UPLOAD_DIR", upload, raising=True)
-    monkeypatch.setattr(s2, "DELIVERABLE_DIR", deliverables, raising=True)
-
     _build_step1_prepared(workspace)
 
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.test/")
@@ -381,11 +383,18 @@ def patched_run_inference(tmp_path, monkeypatch):
         s2, "create_provider_client", MagicMock(return_value=MagicMock())
     )
     monkeypatch.setattr(s2, "TaskExecutor", MagicMock(return_value=MagicMock()))
-    # Manifest is optional; FileNotFoundError path is fine.
+    manifest = s2.NeedsFilesManifest({
+        "_schema_version": 4,
+        "reference_files": {},
+        "tasks": {"t1": {
+            "needs_files": False,
+            "source_projection_sha256": "a" * 64,
+        }},
+    })
     monkeypatch.setattr(
         s2.NeedsFilesManifest,
         "load",
-        classmethod(lambda cls: (_ for _ in ()).throw(FileNotFoundError())),
+        classmethod(lambda cls: manifest),
     )
 
     return s2, workspace
@@ -394,6 +403,87 @@ def patched_run_inference(tmp_path, monkeypatch):
 def _read_progress(workspace: Path) -> dict:
     progress_path = workspace / "step2_inference_progress.json"
     return json.loads(progress_path.read_text(encoding="utf-8"))
+
+
+def _write_mock_deliverables(upload_root: Path, files: list[str]) -> None:
+    for relative in files:
+        output = Path(upload_root) / relative
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(relative.encode("utf-8"))
+
+
+def test_malformed_resume_checkpoint_fails_before_provider_client(
+    patched_run_inference, monkeypatch, capsys
+):
+    s2, workspace = patched_run_inference
+    (workspace / "step2_inference_progress.json").write_text(
+        json.dumps({"results": "not-a-list"}),
+        encoding="utf-8",
+    )
+    s2.create_provider_client.reset_mock()
+    s2.TaskExecutor.reset_mock()
+
+    with pytest.raises(SystemExit):
+        s2.run_inference(condition_key="condition_a", resume=True)
+
+    assert "progress checkpoint rejected" in capsys.readouterr().out
+    s2.create_provider_client.assert_not_called()
+    s2.TaskExecutor.assert_not_called()
+
+
+@pytest.mark.parametrize("same_filename", [True, False])
+def test_condition_b_never_overwrites_condition_a_deliverables(
+    patched_run_inference, monkeypatch, same_filename
+):
+    from core.prepared_fingerprint import prepared_fingerprint
+
+    s2, workspace = patched_run_inference
+    prepared_path = workspace / "step1_tasks_prepared.json"
+    prepared = json.loads(prepared_path.read_text(encoding="utf-8"))
+    prepared["condition_a"]["qa"] = {"enabled": False}
+    prepared["condition_b"] = {
+        "name": "test_condition_b",
+        "model": {"provider": "azure", "deployment": "gpt-test"},
+        "prompt": {"system": "you are helpful"},
+        "qa": {"enabled": False},
+    }
+    prepared["prepared_fingerprint"] = prepared_fingerprint(prepared)
+    prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
+
+    def execute(*args, **kwargs):
+        condition = kwargs["condition_name"]
+        upload_root = Path(kwargs["upload_root"])
+        filename = "report.pdf" if same_filename or condition == "condition_a" else "other.pdf"
+        relative = f"deliverable_files/t1/{filename}"
+        output = upload_root / relative
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(condition.encode("utf-8"))
+        return {
+            "task_id": "t1",
+            "status": "success",
+            "deliverable_text": condition,
+            "deliverable_files": [relative],
+            "latency_ms": 10,
+        }
+
+    monkeypatch.setattr(s2, "_execute_single_task", execute)
+
+    s2.run_inference(condition_key="condition_a", resume=False)
+    a_result = json.loads(
+        (workspace / "step2_inference_results.json").read_text(encoding="utf-8")
+    )
+    a_file = workspace / "upload/deliverable_files/t1/report.pdf"
+    assert a_file.read_bytes() == b"condition_a"
+
+    s2.run_inference(condition_key="condition_b", resume=False)
+
+    b_name = "report.pdf" if same_filename else "other.pdf"
+    b_file = workspace / f"upload_condition_b/deliverable_files/t1/{b_name}"
+    assert b_file.read_bytes() == b"condition_b"
+    assert a_file.read_bytes() == b"condition_a"
+    assert json.loads(
+        (workspace / "step2_inference_results.json").read_text(encoding="utf-8")
+    ) == a_result
 
 
 class TestFix3RunTaskWithQA:
@@ -445,6 +535,278 @@ class TestFix3RunTaskWithQA:
             f"qa={results[0].get('qa')}"
         )
 
+    def test_resume_invocation_replaces_prior_task_tree(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+        task_dir.mkdir()
+        (task_dir / "stale.pdf").write_bytes(b"stale")
+        attempts = []
+
+        def execute(*args, **kwargs):
+            attempts.append(kwargs.get("error_context"))
+            task_dir.mkdir(parents=True, exist_ok=True)
+            if len(attempts) == 1:
+                assert not (task_dir / "stale.pdf").exists()
+                (task_dir / "old.pdf").write_bytes(b"old")
+                return {
+                    "task_id": "t1",
+                    "status": "error",
+                    "error": "first attempt failed",
+                    "deliverable_text": "",
+                    "deliverable_files": ["deliverable_files/t1/old.pdf"],
+                    "latency_ms": 10,
+                }
+            assert not (task_dir / "old.pdf").exists()
+            (task_dir / "new.pdf").write_bytes(b"new")
+            return {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "recovered",
+                "deliverable_files": ["deliverable_files/t1/new.pdf"],
+                "latency_ms": 10,
+            }
+
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(
+            s2,
+            "_run_self_qa",
+            lambda *args, **kwargs: {
+                "passed": True,
+                "score": 9,
+                "issues": [],
+                "suggestion": "",
+                "undetermined": False,
+                "llm_passed": True,
+            },
+        )
+
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=1,
+        )
+
+        progress = _read_progress(workspace)
+        assert attempts == [None, "first attempt failed"]
+        assert progress["results"][0]["status"] == "success"
+        assert progress["results"][0]["deliverable_files"] == [
+            "deliverable_files/t1/new.pdf"
+        ]
+        assert sorted(path.name for path in task_dir.iterdir()) == ["new.pdf"]
+
+    @pytest.mark.parametrize("second_status", ["success", "error"])
+    def test_qa_retry_restores_byte_exact_best_task_tree(
+        self, patched_run_inference, monkeypatch, second_status
+    ):
+        s2, workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+        sibling = s2.UPLOAD_DIR / "deliverable_files" / "t2"
+        sibling.mkdir()
+        (sibling / "keep.txt").write_bytes(b"keep")
+        attempts = 0
+
+        def execute(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            task_dir.mkdir(parents=True, exist_ok=True)
+            if attempts == 1:
+                (task_dir / "best.pdf").write_bytes(b"best-bytes")
+                return {
+                    "task_id": "t1",
+                    "status": "success",
+                    "deliverable_text": "best",
+                    "deliverable_files": ["deliverable_files/t1/best.pdf"],
+                    "latency_ms": 10,
+                }
+            assert list(task_dir.iterdir()) == []
+            (task_dir / "worse.pdf").write_bytes(b"worse-bytes")
+            return {
+                "task_id": "t1",
+                "status": second_status,
+                "error": "retry failed" if second_status == "error" else None,
+                "deliverable_text": "worse",
+                "deliverable_files": ["deliverable_files/t1/worse.pdf"],
+                "latency_ms": 10,
+            }
+
+        qa_results = iter([
+            {
+                "passed": False,
+                "score": 5,
+                "issues": ["retry"],
+                "suggestion": "improve",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+            {
+                "passed": False,
+                "score": 3,
+                "issues": ["worse"],
+                "suggestion": "restore",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+        ])
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(s2, "_run_self_qa", lambda *a, **k: next(qa_results))
+
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=0,
+        )
+
+        result = _read_progress(workspace)["results"][0]
+        assert result["deliverable_files"] == ["deliverable_files/t1/best.pdf"]
+        assert sorted(path.name for path in task_dir.iterdir()) == ["best.pdf"]
+        assert (task_dir / "best.pdf").read_bytes() == b"best-bytes"
+        assert (sibling / "keep.txt").read_bytes() == b"keep"
+
+    def test_qa_backup_rejects_cross_task_best_manifest(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, _workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+
+        def execute(*args, **kwargs):
+            task_dir.mkdir(parents=True, exist_ok=True)
+            (task_dir / "best.pdf").write_bytes(b"best")
+            return {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "best",
+                "deliverable_files": ["deliverable_files/t2/best.pdf"],
+                "latency_ms": 10,
+            }
+
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(
+            s2,
+            "_run_self_qa",
+            lambda *a, **k: {
+                "passed": False,
+                "score": 5,
+                "issues": ["retry"],
+                "suggestion": "improve",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+        )
+
+        with pytest.raises(ValueError, match="deliverable path must stay under"):
+            s2.run_inference(
+                condition_key="condition_a",
+                resume=False,
+                resume_max_rounds=1,
+            )
+
+    def test_qa_retry_restores_empty_best_task_tree(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+        attempts = 0
+
+        def execute(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            task_dir.mkdir(parents=True, exist_ok=True)
+            if attempts == 1:
+                return {
+                    "task_id": "t1",
+                    "status": "success",
+                    "deliverable_text": "text-only best",
+                    "deliverable_files": [],
+                    "latency_ms": 10,
+                }
+            (task_dir / "worse.pdf").write_bytes(b"worse")
+            return {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "worse",
+                "deliverable_files": ["deliverable_files/t1/worse.pdf"],
+                "latency_ms": 10,
+            }
+
+        qa_results = iter([
+            {
+                "passed": False,
+                "score": 5,
+                "issues": ["retry"],
+                "suggestion": "improve",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+            {
+                "passed": False,
+                "score": 3,
+                "issues": ["worse"],
+                "suggestion": "restore",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+        ])
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(s2, "_run_self_qa", lambda *a, **k: next(qa_results))
+
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=0,
+        )
+
+        result = _read_progress(workspace)["results"][0]
+        assert result["deliverable_files"] == []
+        assert list(task_dir.iterdir()) == []
+
+    def test_qa_backup_cleanup_failure_is_visible(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, _workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+
+        def execute(*args, **kwargs):
+            task_dir.mkdir(parents=True, exist_ok=True)
+            (task_dir / "best.pdf").write_bytes(b"best")
+            return {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "best",
+                "deliverable_files": ["deliverable_files/t1/best.pdf"],
+                "latency_ms": 10,
+            }
+
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(
+            s2,
+            "_run_self_qa",
+            lambda *a, **k: {
+                "passed": False,
+                "score": 5,
+                "issues": ["retry"],
+                "suggestion": "improve",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+        )
+        real_rmtree = __import__("shutil").rmtree
+
+        def fail_backup_cleanup(path, *args, **kwargs):
+            if Path(path).name.startswith("qa_best_t1_"):
+                raise OSError("backup cleanup failed")
+            return real_rmtree(path, *args, **kwargs)
+
+        monkeypatch.setattr("shutil.rmtree", fail_backup_cleanup)
+
+        with pytest.raises(OSError, match="backup cleanup failed"):
+            s2.run_inference(
+                condition_key="condition_a",
+                resume=False,
+                resume_max_rounds=0,
+            )
+
     def test_qa_passes_keeps_status_success(
         self, patched_run_inference, monkeypatch
     ):
@@ -489,11 +851,13 @@ class TestFix3RunTaskWithQA:
         prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
 
         def execute_with_metrics(*args, **kwargs):
+            files = ["deliverable_files/t1/out.pdf"]
+            _write_mock_deliverables(kwargs["upload_root"], files)
             return {
                 "task_id": "t1",
                 "status": "success",
                 "deliverable_text": "hello",
-                "deliverable_files": ["deliverable_files/t1/out.pdf"],
+                "deliverable_files": files,
                 "latency_ms": 10,
                 "observability": {
                     "sandbox": {"final_status": "ok"},
@@ -582,18 +946,18 @@ class TestFix3RunTaskWithQA:
         if sandbox is not None:
             observability["sandbox"] = sandbox
 
-        monkeypatch.setattr(
-            s2,
-            "_execute_single_task",
-            lambda *a, **k: {
+        def execute_with_files(*args, **kwargs):
+            _write_mock_deliverables(kwargs["upload_root"], files)
+            return {
                 "task_id": "t1",
                 "status": "success",
                 "deliverable_text": "hello",
                 "deliverable_files": files,
                 "latency_ms": 10,
                 "observability": observability,
-            },
-        )
+            }
+
+        monkeypatch.setattr(s2, "_execute_single_task", execute_with_files)
         monkeypatch.setattr(
             s2,
             "_run_self_qa",
@@ -900,14 +1264,14 @@ def test_resume_timeout_relay_preserves_cumulative_task_metrics(
     monkeypatch.setattr(s2.time, "time", lambda: 0)
     perf_values = iter([0, 0.060, 0.061, 0.066, 0.070])
     monkeypatch.setattr(s2.time, "perf_counter", lambda: next(perf_values))
-    monkeypatch.setattr(
-        s2,
-        "_execute_single_task",
-        lambda *a, **k: {
+    def execute_recovered(*args, **kwargs):
+        files = ["deliverable_files/t1/out.pdf"]
+        _write_mock_deliverables(kwargs["upload_root"], files)
+        return {
             "task_id": "t1",
             "status": "success",
             "deliverable_text": "recovered",
-            "deliverable_files": ["deliverable_files/t1/out.pdf"],
+            "deliverable_files": files,
             "latency_ms": 10,
             "observability": {
                 "sandbox": {"final_status": "ok"},
@@ -923,8 +1287,9 @@ def test_resume_timeout_relay_preserves_cumulative_task_metrics(
                     "validated_artifact_count": 1,
                 },
             },
-        },
-    )
+        }
+
+    monkeypatch.setattr(s2, "_execute_single_task", execute_recovered)
     monkeypatch.setattr(
         s2,
         "_run_self_qa",

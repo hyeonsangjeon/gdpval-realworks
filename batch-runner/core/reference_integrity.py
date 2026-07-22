@@ -6,8 +6,10 @@ import hashlib
 import os
 import shutil
 import stat
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Mapping
+from typing import BinaryIO, Iterable, Iterator, Mapping
 
 
 class ReferenceIntegrityError(ValueError):
@@ -67,6 +69,10 @@ def _reject_symlink_components(path: Path) -> None:
         current /= component
         try:
             metadata = current.lstat()
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            raise ReferenceIntegrityError(
+                f"Missing reference file: {path}"
+            ) from exc
         except OSError as exc:
             raise ReferenceIntegrityError(
                 f"unable to inspect reference path {path}: {exc}"
@@ -81,8 +87,17 @@ def _reject_symlink_components(path: Path) -> None:
             )
 
 
-def reference_file_identity(path: os.PathLike[str] | str) -> tuple[str, int]:
-    """Read one regular non-symlink file and return SHA-256 plus byte size."""
+@contextmanager
+def open_verified_reference(
+    path: os.PathLike[str] | str,
+    *,
+    expected_sha256: str | None = None,
+    expected_size: int | None = None,
+) -> Iterator[tuple[BinaryIO, VerifiedReferencePath]]:
+    """Open, hash, and hold one approved reference through its consumer."""
+    if isinstance(path, VerifiedReferencePath):
+        expected_sha256 = path.sha256 if expected_sha256 is None else expected_sha256
+        expected_size = path.size if expected_size is None else expected_size
     candidate = Path(path)
     _reject_symlink_components(candidate)
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
@@ -92,6 +107,7 @@ def reference_file_identity(path: os.PathLike[str] | str) -> tuple[str, int]:
         raise ReferenceIntegrityError(
             f"unable to open reference file {candidate}: {exc}"
         ) from exc
+    stream: BinaryIO | None = None
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
@@ -121,9 +137,50 @@ def reference_file_identity(path: os.PathLike[str] | str) -> tuple[str, int]:
             raise ReferenceIntegrityError(
                 f"reference file changed while being read: {candidate}"
             )
-        return digest.hexdigest(), size
+        actual_sha256 = digest.hexdigest()
+        if expected_sha256 is not None and actual_sha256 != expected_sha256:
+            raise ReferenceIntegrityError(
+                f"reference file hash mismatch: {candidate}"
+            )
+        if expected_size is not None and size != expected_size:
+            raise ReferenceIntegrityError(
+                f"reference file size mismatch: {candidate}"
+            )
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        stream = os.fdopen(descriptor, "rb", closefd=True)
+        descriptor = -1
+        verified = VerifiedReferencePath(
+            str(candidate),
+            sha256=actual_sha256,
+            size=size,
+        )
+        yield stream, verified
+        after_consume = os.fstat(stream.fileno())
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+        ) != (
+            after_consume.st_dev,
+            after_consume.st_ino,
+            after_consume.st_size,
+            after_consume.st_mtime_ns,
+        ):
+            raise ReferenceIntegrityError(
+                f"reference file changed while being consumed: {candidate}"
+            )
     finally:
-        os.close(descriptor)
+        if stream is not None:
+            stream.close()
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def reference_file_identity(path: os.PathLike[str] | str) -> tuple[str, int]:
+    """Read one regular non-symlink file and return SHA-256 plus byte size."""
+    with open_verified_reference(path) as (_stream, verified):
+        return verified.sha256, verified.size
 
 
 def verify_reference_path(
@@ -132,19 +189,12 @@ def verify_reference_path(
     expected_sha256: str | None = None,
     expected_size: int | None = None,
 ) -> VerifiedReferencePath:
-    if isinstance(path, VerifiedReferencePath):
-        expected_sha256 = path.sha256 if expected_sha256 is None else expected_sha256
-        expected_size = path.size if expected_size is None else expected_size
-    actual_sha256, actual_size = reference_file_identity(path)
-    if expected_sha256 is not None and actual_sha256 != expected_sha256:
-        raise ReferenceIntegrityError(f"reference file hash mismatch: {path}")
-    if expected_size is not None and actual_size != expected_size:
-        raise ReferenceIntegrityError(f"reference file size mismatch: {path}")
-    return VerifiedReferencePath(
-        str(path),
-        sha256=actual_sha256,
-        size=actual_size,
-    )
+    with open_verified_reference(
+        path,
+        expected_sha256=expected_sha256,
+        expected_size=expected_size,
+    ) as (_stream, verified):
+        return verified
 
 
 def reference_manifest_record(
@@ -190,22 +240,49 @@ def resolve_verified_reference_paths(
 def copy_verified_reference(
     source: os.PathLike[str] | str,
     destination_directory: os.PathLike[str] | str,
-) -> Path:
-    verified = verify_reference_path(source)
-    destination = Path(destination_directory) / Path(str(verified)).name
+) -> VerifiedReferencePath:
+    destination = Path(destination_directory) / Path(str(source)).name
     if destination.exists() or destination.is_symlink():
         raise ReferenceIntegrityError(
             f"duplicate reference destination: {destination.name}"
         )
     try:
-        shutil.copy2(verified, destination)
-    except OSError as exc:
+        with open_verified_reference(source) as (source_stream, verified):
+            with destination.open("xb") as destination_stream:
+                shutil.copyfileobj(source_stream, destination_stream)
+                destination_stream.flush()
+                os.fsync(destination_stream.fileno())
+            copied = verify_reference_path(
+                destination,
+                expected_sha256=verified.sha256,
+                expected_size=verified.size,
+            )
+            destination.chmod(0o400)
+    except (OSError, ReferenceIntegrityError) as exc:
+        destination.unlink(missing_ok=True)
+        if isinstance(exc, ReferenceIntegrityError):
+            raise
         raise ReferenceIntegrityError(
-            f"unable to copy reference file {verified}: {exc}"
+            f"unable to copy reference file {source}: {exc}"
         ) from exc
-    verify_reference_path(
-        destination,
-        expected_sha256=verified.sha256,
-        expected_size=verified.size,
-    )
-    return destination
+    return copied
+
+
+@contextmanager
+def stage_verified_references(
+    sources: Iterable[os.PathLike[str] | str],
+) -> Iterator[list[VerifiedReferencePath]]:
+    """Yield private approved copies for previews, preprocessors, and executors."""
+    source_list = list(sources)
+    basenames = [Path(str(source)).name for source in source_list]
+    duplicates = sorted({name for name in basenames if basenames.count(name) > 1})
+    if duplicates:
+        raise ReferenceIntegrityError(
+            f"reference basenames collide in task staging: {duplicates}"
+        )
+    with tempfile.TemporaryDirectory(prefix="gdpval-reference-") as temporary:
+        staged = [
+            copy_verified_reference(source, temporary)
+            for source in source_list
+        ]
+        yield staged

@@ -30,8 +30,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   resource-endpoint contract, destructive HF boundaries, all eight workflow
   inputs/defaults, Step 6/7 destinations, and external-grading separation.
   Replace remote onboarding diagrams with repository-owned responsive SVGs and
-  add a seven-test contract suite that parses the docs, workflow, and owning
-  bootstrap/auth/report/upload code. Shipped through PR #127
+  add an eight-test contract suite that parses the docs, workflow,
+  and owning bootstrap/auth/report/upload code. Shipped through PR #127
   (`30906084dbee384f1c324a8b794cba5aef28170b`): automatic free PR run
   [29889565405](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29889565405)
   passed validation with deployment skipped, and automatic `main` run
@@ -61,16 +61,56 @@ entries land under a fresh dated heading the day they merge to `main`.
   preflight rejects read-only targets before task preparation, Azure login, or
   model spend. Path cleanup does not erase prior HF revisions and failed
   operations may leave forensic orphan generations. The required SDK is pinned
-  to the verified `1.24.0` contract. Step 0 now authenticates first and creates
+  to the verified `1.24.0` contract. Step 0 authenticates first and creates
   targets with `exist_ok=False`, treating only HTTP 409 as reuse and never
   deleting partial or legacy targets. New targets derive from the pinned public
   source revision; reused targets are downloaded at an exact HEAD into fresh
-  staging and accepted only when a schema-3 manifest, canonical model-input
-  projection, ordered task identity, and every declared reference path,
-  SHA-256, and byte size match the pinned contract. Relay uploads download and
-  verify the immutable payload revision before advancing `current.json`, require
-  a complete ordered result set, and confirm a successful cleanup in the same
-  invocation when the CAS response is lost.
+  staging and accepted only when the schema-v4 manifest, canonical target
+  columns and source projection, ordered task identity, complete physical
+  reference tree, and every declared reference SHA-256/size match. Relay
+  uploads download and verify the immutable payload revision before advancing
+  `current.json`, require a complete ordered result set, and confirm successful
+  cleanup in the same invocation when the CAS response is lost. Relay progress
+  now accepts only canonical task IDs and known terminal/pending statuses, and
+  every declared deliverable path must remain under its owning task directory.
+- **Canonical batch input and publication integrity** — upgrade the source
+  manifest to schema v4, binding all 220 ordered task IDs to prompt, taxonomy,
+  rubric, ordered reference path/URL/URI semantics plus 261 declared reference
+  SHA-256/size records from pinned `openai/gdpval@11e7900...`. Step 1 requires
+  and rechecks that projection before writing prepared tasks; Step 2 rechecks
+  prepared identity before provider-client construction. References move into
+  read-only private per-task staging before preview, preprocessing, codegen, or
+  execution, with same-file-descriptor hashing/copying, basename-collision and
+  partial-copy rejection, and fatal provider upload/local/Docker copy errors.
+  Code Interpreter input IDs are deleted best-effort after normal or failed
+  tasks, and provider uploads preserve each verified reference basename. The
+  common sandbox keeps private local staging while the hardened remote backend
+  preserves opaque reference IDs instead of treating them as host paths. Each
+  task output tree is removed with symlink-aware semantics before the first run
+  and every QA retry so resumed execution cannot inherit stale deliverables.
+  Condition A retains the publication/relay upload root while condition B uses
+  an isolated tree, preventing a second condition from deleting or replacing
+  the bytes selected for publication. Step 2 binds each declared deliverable to
+  same-descriptor SHA-256/size records and a canonical result fingerprint.
+  Step 0 creates and clears every submitter column, rejects stale scalar,
+  list, URL/URI, and physical deliverable state on reused targets, and never
+  auto-deletes partial repositories. Step 4 rebuilds production selected rows
+  from current results only and revalidates the full source projection and
+  reference bytes after model execution. Step 7 rechecks each published source
+  row, the one canonical parquet shard, row-to-task deliverable paths, canonical
+  URLs/URIs, exact local file tree and bytes, and a required non-dry
+  `self_report.json`. A run-specific publication generation is created by Step
+  1, preserved across relay legs, and checked before provider construction;
+  Step 3 and publication share one production-shaped projection of prepared
+  metadata and raw Step 2 QA/results. Parquet submitter fields and self-report
+  task status/content/files must exactly match that result. Step 5 records
+  file-required failures without creating dummy files or mutating the parquet.
+  Relay dispatch requires both process exit code 42 and pending tasks, and
+  cleanup requires the exact restored generation. Step 0 records the validated
+  target HEAD; one `create_commit` requires that HEAD as `parent_commit`, then
+  verifies direct ancestry, plan marker, complete remote tree/hash, self-report
+  identity, and final HEAD, including response-loss reconciliation. No workflow,
+  Azure/model call, grading, HF write, or paid execution was dispatched.
 - **Hermetic deliverable-selector contract tests** — replace import-time pandas
   and ignored local-parquet loading with a checked-in 28-task synthetic signal
   corpus. The 6,889-byte canonical fixture is self-hashed and binds exact public

@@ -596,6 +596,25 @@ def _fake_task(task_id: str, occupation: str):
         prompt="Prepare a short financial summary document.",
         reference_files=[],
         reference_file_urls=[],
+        reference_file_hf_uris=[],
+        rubric_pretty="rubric pretty",
+        rubric_json="{}",
+    )
+
+
+def _fake_source_projection(task):
+    from core.source_identity import source_task_projection_sha256
+
+    return source_task_projection_sha256(
+        task_id=task.task_id,
+        sector=task.sector,
+        occupation=task.occupation,
+        prompt=task.prompt,
+        rubric_pretty=task.rubric_pretty,
+        rubric_json=task.rubric_json,
+        reference_files=task.reference_files,
+        reference_file_urls=task.reference_file_urls,
+        reference_file_hf_uris=task.reference_file_hf_uris,
     )
 
 
@@ -689,7 +708,21 @@ class TestExecutionSandboxPropagation:
         class _FakeManifest:
             @staticmethod
             def load():
-                raise FileNotFoundError
+                return _FakeManifest()
+
+            def require_schema(self, version):
+                assert version == 4
+
+            def reference_records(self, _task_id, reference_files):
+                assert reference_files == []
+                return []
+
+            def needs_files(self, _task_id):
+                return False
+
+            def source_projection_sha256(self, task_id):
+                task = next(task for task in fake_tasks if task.task_id == task_id)
+                return _fake_source_projection(task)
 
         monkeypatch.setattr(step1, "GDPValDataLoader", _FakeLoader)
         monkeypatch.setattr(step1, "NeedsFilesManifest", _FakeManifest)
@@ -774,7 +807,21 @@ class TestExplicitTaskIdFilter:
         class _FakeManifest:
             @staticmethod
             def load():
-                raise FileNotFoundError
+                return _FakeManifest()
+
+            def require_schema(self, version):
+                assert version == 4
+
+            def reference_records(self, _task_id, reference_files):
+                assert reference_files == []
+                return []
+
+            def needs_files(self, _task_id):
+                return False
+
+            def source_projection_sha256(self, task_id):
+                task = next(task for task in fake_tasks if task.task_id == task_id)
+                return _fake_source_projection(task)
 
         monkeypatch.setattr(step1, "GDPValDataLoader", _FakeLoader)
         monkeypatch.setattr(step1, "NeedsFilesManifest", _FakeManifest)

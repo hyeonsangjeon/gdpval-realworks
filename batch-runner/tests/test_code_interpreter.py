@@ -4,7 +4,6 @@ Note: These are primarily mock tests since actual Code Interpreter
 requires Azure OpenAI Responses API access.
 """
 
-import pytest
 from unittest.mock import Mock, MagicMock, patch
 
 from core.code_interpreter import CodeInterpreterRunner
@@ -159,7 +158,13 @@ def test_run_with_reference_files(mock_azure_openai, tmp_path):
     # Mock file upload
     mock_uploaded_file = Mock()
     mock_uploaded_file.id = "uploaded_file_123"
-    mock_client.files.create.return_value = mock_uploaded_file
+    uploaded_payloads = []
+
+    def upload(*, file, purpose):
+        uploaded_payloads.append((file[0], file[1].read(), purpose))
+        return mock_uploaded_file
+
+    mock_client.files.create.side_effect = upload
 
     # Mock response (with responses API)
     mock_response = Mock()
@@ -181,9 +186,42 @@ def test_run_with_reference_files(mock_azure_openai, tmp_path):
 
     # Verify file upload was called
     mock_client.files.create.assert_called_once()
+    assert uploaded_payloads == [
+        ("reference.pdf", b"PDF content", "assistants"),
+    ]
     assert result["success"] is True
-    # Verify uploaded file IDs are tracked
-    assert "uploaded_file_123" in runner._uploaded_file_ids
+    mock_client.files.delete.assert_called_once_with("uploaded_file_123")
+    assert runner._uploaded_file_ids == set()
+
+
+@patch("core.code_interpreter.AzureOpenAI")
+def test_reference_upload_failure_aborts_before_response(
+    mock_azure_openai, tmp_path
+):
+    mock_client = MagicMock()
+    mock_azure_openai.return_value = mock_client
+    first = tmp_path / "first.pdf"
+    second = tmp_path / "second.pdf"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    uploaded = Mock(id="uploaded-first")
+    mock_client.files.create.side_effect = [uploaded, RuntimeError("upload failed")]
+    runner = CodeInterpreterRunner(
+        api_key="test_key",
+        endpoint="https://test.openai.azure.com",
+    )
+
+    result = runner.run(
+        task_prompt="Process both files",
+        model="gpt-4",
+        reference_files=[str(first), str(second)],
+    )
+
+    assert result["success"] is False
+    assert "upload failed" in result["error"]
+    mock_client.responses.create.assert_not_called()
+    mock_client.files.delete.assert_called_once_with("uploaded-first")
+    assert runner._uploaded_file_ids == set()
 
 
 @patch("core.code_interpreter.AzureOpenAI")

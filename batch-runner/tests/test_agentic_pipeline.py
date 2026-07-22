@@ -14,6 +14,20 @@ import step2_run_inference as step2
 from core.agentic_experiments import agentic_condition_identity
 from core.experiment_config import ExperimentConfig
 from core.prepared_fingerprint import prepared_fingerprint
+from core.source_identity import source_task_projection_sha256
+
+
+SOURCE_HASH = source_task_projection_sha256(
+    task_id="task-1",
+    sector="test",
+    occupation="Analyst",
+    prompt="Create a report",
+    rubric_pretty="rubric pretty",
+    rubric_json="{}",
+    reference_files=[],
+    reference_file_urls=[],
+    reference_file_hf_uris=[],
+)
 
 
 def _config() -> ExperimentConfig:
@@ -62,6 +76,7 @@ def _config() -> ExperimentConfig:
 def _prepared(agentic: dict | None = None) -> dict:
     payload = {
         "experiment_id": "exp028",
+        "publication_generation": "exp028:100:1",
         "experiment_name": "Agentic fixture",
         "source": "fixture/agentic",
         "execution": {
@@ -93,7 +108,9 @@ def _prepared(agentic: dict | None = None) -> dict:
             "occupation": "Analyst",
             "instruction": "Create a report",
             "reference_files": [],
+            "reference_file_records": [],
             "needs_files": False,
+            "source_projection_sha256": SOURCE_HASH,
         }],
         "condition_a": {
             "name": "Treatment",
@@ -103,6 +120,17 @@ def _prepared(agentic: dict | None = None) -> dict:
     }
     payload["prepared_fingerprint"] = prepared_fingerprint(payload)
     return payload
+
+
+def _canonical_manifest():
+    return step2.NeedsFilesManifest({
+        "_schema_version": 4,
+        "reference_files": {},
+        "tasks": {"task-1": {
+            "needs_files": False,
+            "source_projection_sha256": SOURCE_HASH,
+        }},
+    })
 
 
 def _patch_step2_workspace(tmp_path, monkeypatch, prepared):
@@ -115,7 +143,6 @@ def _patch_step2_workspace(tmp_path, monkeypatch, prepared):
     )
     monkeypatch.setattr(step2, "WORKSPACE_DIR", workspace)
     monkeypatch.setattr(step2, "UPLOAD_DIR", upload)
-    monkeypatch.setattr(step2, "DELIVERABLE_DIR", deliverables)
     monkeypatch.setattr(
         step2,
         "_load_private_agentic_config",
@@ -124,7 +151,7 @@ def _patch_step2_workspace(tmp_path, monkeypatch, prepared):
     monkeypatch.setattr(
         step2.NeedsFilesManifest,
         "load",
-        classmethod(lambda cls: (_ for _ in ()).throw(FileNotFoundError())),
+        classmethod(lambda cls: _canonical_manifest()),
     )
     return workspace
 
@@ -138,6 +165,9 @@ def test_step1_preserves_agentic_config_only_when_present(tmp_path, monkeypatch)
         prompt="Create a report",
         reference_files=[],
         reference_file_urls=[],
+        reference_file_hf_uris=[],
+        rubric_pretty="rubric pretty",
+        rubric_json="{}",
     )
     monkeypatch.setattr(step1, "WORKSPACE_DIR", tmp_path)
     monkeypatch.setattr(step1.ExperimentConfig, "from_yaml", lambda path: config)
@@ -149,7 +179,7 @@ def test_step1_preserves_agentic_config_only_when_present(tmp_path, monkeypatch)
     monkeypatch.setattr(
         step1.NeedsFilesManifest,
         "load",
-        classmethod(lambda cls: (_ for _ in ()).throw(FileNotFoundError())),
+        classmethod(lambda cls: _canonical_manifest()),
     )
 
     result = step1.prepare_tasks("fixture.yaml")
@@ -176,6 +206,7 @@ def test_step1_redacts_agentic_control_plane_paths(tmp_path, monkeypatch):
     task = SimpleNamespace(
         task_id="task-1", sector="test", occupation="Analyst",
         prompt="Create a report", reference_files=[], reference_file_urls=[],
+        reference_file_hf_uris=[], rubric_pretty="rubric pretty", rubric_json="{}",
     )
     monkeypatch.setattr(step1, "WORKSPACE_DIR", tmp_path)
     monkeypatch.setattr(step1.ExperimentConfig, "from_yaml", lambda path: config)
@@ -185,7 +216,7 @@ def test_step1_redacts_agentic_control_plane_paths(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         step1.NeedsFilesManifest, "load",
-        classmethod(lambda cls: (_ for _ in ()).throw(FileNotFoundError())),
+        classmethod(lambda cls: _canonical_manifest()),
     )
 
     result = step1.prepare_tasks("fixture.yaml")
@@ -449,11 +480,44 @@ def test_hardened_task_passes_relative_reference_ids_without_host_reads(
     ]
 
 
+def test_reference_mutation_is_rejected_before_executor(tmp_path, monkeypatch):
+    relative = "reference_files/task-1/source.xlsx"
+    reference = tmp_path / relative
+    reference.parent.mkdir(parents=True)
+    reference.write_bytes(b"approved")
+    task = {
+        "task_id": "task-1",
+        "instruction": "Create a report",
+        "occupation": "Analyst",
+        "reference_files": [relative],
+        "reference_file_records": [{
+            "path": relative,
+            "sha256": hashlib.sha256(b"approved").hexdigest(),
+            "size": len(b"approved"),
+        }],
+    }
+    reference.write_bytes(b"mutated")
+    executor = MagicMock()
+    monkeypatch.setattr(step2, "DEFAULT_LOCAL_PATH", tmp_path)
+
+    result = step2._execute_single_task(
+        task,
+        {"prompt": {"system": "system"}, "preprocessors": []},
+        executor,
+        "code_interpreter",
+        None,
+        "model",
+    )
+
+    assert result["status"] == "error"
+    assert result["error"].startswith("reference_input_integrity_failed:")
+    executor.execute.assert_not_called()
+
+
 def test_save_files_accepts_nested_canonical_deliverable(tmp_path, monkeypatch):
     upload = tmp_path / "upload"
     deliverables = upload / "deliverable_files"
     monkeypatch.setattr(step2, "UPLOAD_DIR", upload)
-    monkeypatch.setattr(step2, "DELIVERABLE_DIR", deliverables)
 
     saved = step2._save_files(
         [{"filename": "reports/final.pdf", "content": b"pdf"}],
@@ -465,22 +529,21 @@ def test_save_files_accepts_nested_canonical_deliverable(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("task_id", "filename"),
+    ("task_id", "filename", "message"),
     [
-        ("../other-task", "report.txt"),
-        ("task-1", "../escape.txt"),
-        ("task-1", "/tmp/escape.txt"),
-        ("task-1", ".hidden.txt"),
+        ("../other-task", "report.txt", "task_id"),
+        ("task-1", "../escape.txt", "deliverable"),
+        ("task-1", "/tmp/escape.txt", "deliverable"),
+        ("task-1", ".hidden.txt", "deliverable"),
     ],
 )
 def test_save_files_rejects_task_and_filename_traversal(
-    tmp_path, monkeypatch, task_id, filename
+    tmp_path, monkeypatch, task_id, filename, message
 ):
     upload = tmp_path / "upload"
     monkeypatch.setattr(step2, "UPLOAD_DIR", upload)
-    monkeypatch.setattr(step2, "DELIVERABLE_DIR", upload / "deliverable_files")
 
-    with pytest.raises(ValueError, match="deliverable"):
+    with pytest.raises(ValueError, match=message):
         step2._save_files([{"filename": filename, "content": b"x"}], task_id)
 
 
@@ -493,7 +556,6 @@ def test_save_files_rejects_symlink_parent_and_duplicate_name(tmp_path, monkeypa
     outside.mkdir()
     (task_dir / "reports").symlink_to(outside, target_is_directory=True)
     monkeypatch.setattr(step2, "UPLOAD_DIR", upload)
-    monkeypatch.setattr(step2, "DELIVERABLE_DIR", deliverables)
 
     with pytest.raises(ValueError, match="parent"):
         step2._save_files(

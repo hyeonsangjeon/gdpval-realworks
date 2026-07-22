@@ -164,8 +164,9 @@ sandbox와 agentic 통제는 각각 이름이 붙은 경로에만 적용됩니�
 
 예상 동작은 다음과 같습니다.
 
-1. Step 0이 일회성 Hugging Face dataset을 만들거나 `data/`가 있는 대상을
-  재사용합니다. 기존 partial target은 자동 삭제 없이 중단합니다.
+1. Step 0은 유효한 target을 재사용하거나 pinned source 전체를 로컬에서 검증한
+  뒤 일회성 Hugging Face dataset을 한 번 생성·업로드합니다. 기존 partial 또는
+  결과가 불명확한 target은 재시도나 자동 삭제 없이 중단합니다.
 2. Step 1이 태스크 3개를 결정적으로 선택합니다.
 3. Step 2가 `gpt-5.2-chat`을 호출하고 파일을 만든 뒤 같은 모델의 Self-QA를 재시도할 수 있습니다.
 4. Step 3-4가 포맷된 결과와 3-row Parquet artifact를 만듭니다.

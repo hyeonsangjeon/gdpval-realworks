@@ -34,9 +34,10 @@ import json
 import sys
 from pathlib import Path
 from typing import Optional, List
-from urllib.parse import quote
 
 import pandas as pd
+
+from core.inference_manifest import canonical_deliverable_uris
 
 
 def _build_deliverable_uris(
@@ -53,16 +54,7 @@ def _build_deliverable_uris(
         (urls_list, hf_uris_list)
         Spaces and special chars in filenames are URL-encoded (e.g. ' ' → '%20').
     """
-    base_url = (
-        f"https://huggingface.co/datasets/{submission_repo_id}"
-        f"/resolve/main"
-    )
-    hf_prefix = f"hf://datasets/{submission_repo_id}@main"
-
-    # quote(fp, safe='/') encodes spaces → %20 while preserving path separators
-    urls = [f"{base_url}/{quote(fp, safe='/')}" for fp in file_list]
-    uris = [f"{hf_prefix}/{quote(fp, safe='/')}" for fp in file_list]
-    return urls, uris
+    return canonical_deliverable_uris(file_list, submission_repo_id)
 
 
 def fill_parquet(
@@ -74,6 +66,8 @@ def fill_parquet(
     submission_repo_id: Optional[str] = None,
     compact: bool = True,
     selected_task_ids: Optional[List[str]] = None,
+    source_manifest_path: Optional[str] = None,
+    source_root: Optional[str] = None,
 ) -> dict:
     """Merge experiment JSON results into parquet deliverable columns.
 
@@ -104,6 +98,21 @@ def fill_parquet(
     # Load parquet (read-only source: gdpval-local)
     df = pd.read_parquet(parquet_path)
     print(f"📄 Parquet: {parquet_path} ({len(df)} rows)")
+
+    if source_manifest_path:
+        from core.repo_bootstrapper import validate_source_projection_rows
+
+        source_errors = validate_source_projection_rows(
+            df,
+            Path(source_manifest_path),
+            snapshot_root=Path(source_root) if source_root else None,
+            require_complete=True,
+        )
+        if source_errors:
+            raise ValueError(
+                "Source parquet integrity validation failed:\n  - "
+                + "\n  - ".join(source_errors)
+            )
 
     # Snapshot reference columns from source parquet (never overwrite)
     _REF_COLS = ["reference_files", "reference_file_urls", "reference_file_hf_uris"]
@@ -164,6 +173,24 @@ def fill_parquet(
     parquet_ids = set(df["task_id"])
     missing_ids = set(result_map.keys()) - parquet_ids
     stats["missing"] = len(missing_ids)
+
+    for column in (
+        "deliverable_files",
+        "deliverable_file_urls",
+        "deliverable_file_hf_uris",
+    ):
+        if column not in df.columns:
+            df[column] = [[] for _ in range(len(df))]
+
+    if overwrite_existing:
+        # Production rebuilds selected success/error rows from this run only.
+        # The legacy False mode retains its documented fill-empty-only behavior.
+        selected_indices = df.index[df["task_id"].isin(result_map)]
+        for index in selected_indices:
+            df.at[index, "deliverable_text"] = ""
+            df.at[index, "deliverable_files"] = []
+            df.at[index, "deliverable_file_urls"] = []
+            df.at[index, "deliverable_file_hf_uris"] = []
 
     # Merge
     for idx, row in df.iterrows():
@@ -248,18 +275,26 @@ def fill_parquet(
     for col, val_by_id in ref_snapshot.items():
         df[col] = df["task_id"].map(val_by_id)
 
-    # Enforce final column order:
-    #   (original columns) with deliverable_text inserted after
-    #   reference_file_hf_uris and before deliverable_files
-    cols = [c for c in df.columns if c != "deliverable_text"]
-    if "reference_file_hf_uris" in cols:
-        insert_pos = cols.index("reference_file_hf_uris") + 1
-    elif "deliverable_files" in cols:
-        insert_pos = cols.index("deliverable_files")
+    if source_manifest_path:
+        from core.repo_bootstrapper import CANONICAL_TARGET_COLUMNS
+
+        if set(df.columns) != set(CANONICAL_TARGET_COLUMNS):
+            missing = sorted(set(CANONICAL_TARGET_COLUMNS) - set(df.columns))
+            extra = sorted(set(df.columns) - set(CANONICAL_TARGET_COLUMNS))
+            raise ValueError(
+                f"output columns differ from canonical target schema: "
+                f"missing={missing}, extra={extra}"
+            )
+        df = df[list(CANONICAL_TARGET_COLUMNS)]
     else:
-        insert_pos = len(cols)
-    cols.insert(insert_pos, "deliverable_text")
-    df = df[cols]
+        cols = [column for column in df.columns if column != "deliverable_text"]
+        insert_pos = (
+            cols.index("reference_file_hf_uris") + 1
+            if "reference_file_hf_uris" in cols
+            else len(cols)
+        )
+        cols.insert(insert_pos, "deliverable_text")
+        df = df[cols]
     print(f"📋 Column order: {list(df.columns)}")
 
     if dry_run:

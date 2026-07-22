@@ -168,6 +168,29 @@ def test_initial_run_identity_uses_current_github_run(monkeypatch):
     assert _resolve_run_identity("exp_test") == "exp_test:200:3"
 
 
+def test_publication_generation_is_stable_across_relay_legs(monkeypatch):
+    from core.publication_generation import resolve_publication_generation
+
+    monkeypatch.setenv("GDPVAL_RELAY_LINEAGE_ID", "exp_test:100:1")
+    monkeypatch.setenv("GITHUB_RUN_ID", "200")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "3")
+
+    assert resolve_publication_generation("exp_test") == "exp_test:100:1"
+
+
+def test_local_publication_generation_changes_per_preparation(monkeypatch):
+    from core.publication_generation import resolve_publication_generation
+
+    monkeypatch.delenv("GDPVAL_RELAY_LINEAGE_ID", raising=False)
+    monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
+
+    first = resolve_publication_generation("exp_test")
+    second = resolve_publication_generation("exp_test")
+
+    assert first != second
+    assert first.startswith("exp_test:local:")
+
+
 def test_condition_workspace_paths_are_isolated(monkeypatch, tmp_path):
     import step2_run_inference as step2
 

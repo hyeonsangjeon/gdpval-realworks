@@ -10,6 +10,10 @@ from huggingface_hub.utils import hf_raise_for_status
 import core.repo_bootstrapper as bootstrapper
 from core.needs_files import NeedsFilesManifest
 from core.prepared_fingerprint import prepared_fingerprint
+from core.source_identity import (
+    ordered_source_projection_sha256,
+    source_task_projection_sha256,
+)
 
 
 def _hf_error(status, code=None):
@@ -39,7 +43,17 @@ class Frame:
 
 
 class TaskFrame:
-    columns = ["task_id", "reference_files"]
+    columns = [
+        "task_id",
+        "sector",
+        "occupation",
+        "prompt",
+        "rubric_pretty",
+        "rubric_json",
+        "reference_files",
+        "reference_file_urls",
+        "reference_file_hf_uris",
+    ]
 
     def __init__(self, task_ids):
         self.task_ids = task_ids
@@ -47,14 +61,39 @@ class TaskFrame:
     def __getitem__(self, key):
         if key == "task_id":
             return self.task_ids
-        assert key == "reference_files"
-        return [[] for _task_id in self.task_ids]
+        if key in {
+            "reference_files",
+            "reference_file_urls",
+            "reference_file_hf_uris",
+        }:
+            return [[] for _task_id in self.task_ids]
+        values = {
+            "sector": "sector",
+            "occupation": "occupation",
+            "prompt": "prompt",
+            "rubric_pretty": "rubric pretty",
+            "rubric_json": "{}",
+        }
+        return [values[key] for _task_id in self.task_ids]
 
 
 def _canonical_manifest(total=220, needs_count=185):
     tasks = {}
+    source_hashes = []
     for index in range(total):
         task_id = f"task-{index:03d}"
+        source_hash = source_task_projection_sha256(
+            task_id=task_id,
+            sector="sector",
+            occupation="occupation",
+            prompt="prompt",
+            rubric_pretty="rubric pretty",
+            rubric_json="{}",
+            reference_files=[],
+            reference_file_urls=[],
+            reference_file_hf_uris=[],
+        )
+        source_hashes.append(source_hash)
         needs_files = index < needs_count
         original_files = [f"deliverable_files/{task_id}/result.txt"] if needs_files else []
         tasks[task_id] = {
@@ -72,15 +111,19 @@ def _canonical_manifest(total=220, needs_count=185):
                 policy: needs_files
                 for policy in bootstrapper.NEEDS_FILES_POLICIES_KNOWN
             },
+            "source_projection_sha256": source_hash,
         }
     task_ids = list(tasks)
     return {
         "_description": "test manifest",
-        "_schema_version": 3,
+        "_schema_version": 4,
         "_source": bootstrapper.DATASET_ID,
         "_source_revision": bootstrapper.SOURCE_REVISION,
         "_total_tasks": total,
         "_ordered_task_ids_sha256": bootstrapper._compact_json_sha256(task_ids),
+        "_source_projection_sha256": ordered_source_projection_sha256(
+            source_hashes
+        ),
         "reference_files": {},
         "tasks": tasks,
         "_summary": {
@@ -113,6 +156,11 @@ def _anchor_test_manifest(monkeypatch, manifest, encoded=None):
     )
     monkeypatch.setattr(
         bootstrapper,
+        "CANONICAL_SOURCE_PROJECTION_SHA256",
+        manifest["_source_projection_sha256"],
+    )
+    monkeypatch.setattr(
+        bootstrapper,
         "CANONICAL_MANIFEST_SHA256_BY_POLICY",
         {
             "deliverable_only": hashlib.sha256(encoded).hexdigest(),
@@ -142,21 +190,14 @@ def _install_fake_snapshot_contract(
     _anchor_manifest_bytes(monkeypatch, source_manifest)
     downloads = []
 
-    def write_tree(root, data, manifest, *, omit_manifest=False):
-        (root / "data").mkdir()
-        (root / "data/train-00000-of-00001.parquet").write_bytes(data)
-        (root / "reference_files").mkdir()
-        if not omit_manifest:
-            (root / bootstrapper.MANIFEST_FILENAME).write_bytes(manifest)
-
     def download(**kwargs):
         downloads.append(kwargs)
-        write_tree(
-            Path(kwargs["local_dir"]),
-            target_data,
-            target_manifest,
-            omit_manifest=omit_target_manifest,
-        )
+        root = Path(kwargs["local_dir"])
+        (root / "data").mkdir()
+        (root / "data/train-00000-of-00001.parquet").write_bytes(target_data)
+        (root / "reference_files").mkdir()
+        if not omit_target_manifest:
+            (root / bootstrapper.MANIFEST_FILENAME).write_bytes(target_manifest)
 
     def validation_errors(root, manifest_path):
         try:
@@ -168,7 +209,7 @@ def _install_fake_snapshot_contract(
             return [digest_error]
         data = Path(root) / "data/train-00000-of-00001.parquet"
         if data.read_bytes() != source_data:
-            return ["source input projection differs from pinned source"]
+            return ["source projection differs from pinned source"]
         return []
 
     monkeypatch.setattr(bootstrapper, "snapshot_download", download)
@@ -181,9 +222,12 @@ class FakeApi:
         self.whoami_error = None
         self.create_error = None
         self.list_error = None
+        self.list_responses = []
         self.files = []
         self.calls = []
         self.uploaded_manifest = None
+        self.uploaded_digest = None
+        self.upload_error = None
         self.head = "d" * 40
         self.repo_info_error = None
 
@@ -201,6 +245,11 @@ class FakeApi:
 
     def list_repo_files(self, **kwargs):
         self.calls.append(("list_repo_files", kwargs))
+        if self.list_responses:
+            response = self.list_responses.pop(0)
+            if isinstance(response, Exception):
+                raise response
+            return response
         if self.list_error is not None:
             raise self.list_error
         return self.files
@@ -210,9 +259,14 @@ class FakeApi:
 
     def upload_folder(self, **kwargs):
         self.calls.append(("upload_folder", kwargs))
+        if self.upload_error is not None:
+            raise self.upload_error
         self.uploaded_manifest = (
             Path(kwargs["folder_path"]) / bootstrapper.MANIFEST_FILENAME
         ).read_bytes()
+        self.uploaded_digest = bootstrapper.RepoBootstrapper._snapshot_payload_sha256(
+            Path(kwargs["folder_path"])
+        )
         return object()
 
     def repo_info(self, **kwargs):
@@ -231,19 +285,42 @@ def _bootstrapper(api):
     return instance
 
 
+def _install_prepared_source(instance, monkeypatch, *, content=b"approved"):
+    prepared = []
+
+    def prepare(root):
+        source_root = Path(root)
+        data = source_root / "data"
+        data.mkdir()
+        (data / bootstrapper.CANONICAL_PARQUET_FILENAME).write_bytes(content)
+        manifest = source_root / bootstrapper.MANIFEST_FILENAME
+        manifest.write_bytes(b"manifest")
+        (source_root / ".gitattributes").write_text("*.parquet filter=lfs\n")
+        prepared.append(
+            bootstrapper.RepoBootstrapper._snapshot_payload_sha256(source_root)
+        )
+        return manifest
+
+    monkeypatch.setattr(instance, "_prepare_pinned_source_snapshot", prepare)
+    return prepared
+
+
 def test_valid_identity_and_missing_repo_create_then_bootstrap(monkeypatch):
     api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
     instance = _bootstrapper(api)
-    duplicated = []
-    monkeypatch.setattr(instance, "_duplicate_stripped", lambda: duplicated.append(True))
+    prepared = _install_prepared_source(instance, monkeypatch)
 
     instance._ensure_remote_repo()
 
-    assert [name for name, _kwargs in api.calls] == ["whoami", "create_repo"]
-    create = api.calls[1][1]
+    assert [name for name, _kwargs in api.calls] == [
+        "whoami", "list_repo_files", "create_repo", "upload_folder"
+    ]
+    create = api.calls[2][1]
     assert create["exist_ok"] is False
     assert create["private"] is False
-    assert duplicated == [True]
+    assert prepared == [api.uploaded_digest]
+    assert not any(name == "delete_repo" for name, _kwargs in api.calls)
 
 
 @pytest.mark.parametrize(
@@ -279,13 +356,20 @@ def test_identity_errors_are_fatal_before_create(error):
 )
 def test_create_errors_other_than_conflict_are_fatal_without_followup(error):
     api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
     api.create_error = error
     instance = _bootstrapper(api)
+    instance._prepare_pinned_source_snapshot = lambda root: (
+        Path(root, "data").mkdir(),
+        Path(root, "data", bootstrapper.CANONICAL_PARQUET_FILENAME).write_bytes(b"data"),
+    )[-1]
 
     with pytest.raises(type(error)) as captured:
         instance._ensure_remote_repo()
     assert captured.value is error
-    assert [name for name, _kwargs in api.calls] == ["whoami", "create_repo"]
+    assert [name for name, _kwargs in api.calls] == [
+        "whoami", "list_repo_files", "create_repo"
+    ]
 
 
 def test_existing_empty_repo_is_never_deleted():
@@ -297,25 +381,24 @@ def test_existing_empty_repo_is_never_deleted():
         instance._ensure_remote_repo()
 
     assert [name for name, _kwargs in api.calls] == [
-        "whoami", "create_repo", "list_repo_files"
+        "whoami", "list_repo_files"
     ]
 
 
 def test_existing_data_repo_is_reused(monkeypatch):
     api = FakeApi()
-    api.create_error = _hf_error(409)
     api.files = ["README.md", "data/train-00000-of-00001.parquet"]
     instance = _bootstrapper(api)
     monkeypatch.setattr(
         instance,
-        "_duplicate_stripped",
+        "_prepare_pinned_source_snapshot",
         lambda: pytest.fail("existing data repo must not be recreated"),
     )
 
     instance._ensure_remote_repo()
 
     assert [name for name, _kwargs in api.calls] == [
-        "whoami", "create_repo", "list_repo_files"
+        "whoami", "list_repo_files"
     ]
 
 
@@ -325,13 +408,13 @@ def test_existing_data_repo_is_reused(monkeypatch):
 )
 def test_inaccessible_existing_repo_does_not_fall_through_to_content(error):
     api = FakeApi()
-    api.create_error = error
+    api.list_error = error
     instance = _bootstrapper(api)
 
     with pytest.raises(type(error)) as captured:
         instance._ensure_remote_repo()
     assert captured.value is error
-    assert [name for name, _kwargs in api.calls] == ["whoami", "create_repo"]
+    assert [name for name, _kwargs in api.calls] == ["whoami", "list_repo_files"]
 
 
 @pytest.mark.parametrize(
@@ -340,7 +423,6 @@ def test_inaccessible_existing_repo_does_not_fall_through_to_content(error):
 )
 def test_existing_repo_content_lookup_errors_are_fatal(error):
     api = FakeApi()
-    api.create_error = _hf_error(409)
     api.list_error = error
     instance = _bootstrapper(api)
 
@@ -348,27 +430,194 @@ def test_existing_repo_content_lookup_errors_are_fatal(error):
         instance._ensure_remote_repo()
     assert captured.value is error
     assert [name for name, _kwargs in api.calls] == [
-        "whoami", "create_repo", "list_repo_files"
+        "whoami", "list_repo_files"
     ]
 
 
 def test_new_target_upload_persists_source_manifest(tmp_path, monkeypatch):
     api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
     instance = _bootstrapper(api)
     instance.manifest_path = tmp_path / "workspace" / bootstrapper.MANIFEST_FILENAME
     canonical = _canonical_manifest()
     encoded = json.dumps(canonical, sort_keys=True).encode()
 
-    def prepare_source(root):
-        destination = Path(root) / bootstrapper.MANIFEST_FILENAME
-        destination.write_bytes(encoded)
-        return destination
+    def prepare(source_dir):
+        manifest_path = Path(source_dir) / bootstrapper.MANIFEST_FILENAME
+        manifest_path.write_bytes(encoded)
+        return manifest_path
 
-    monkeypatch.setattr(instance, "_prepare_pinned_source_snapshot", prepare_source)
+    monkeypatch.setattr(instance, "_prepare_pinned_source_snapshot", prepare)
 
-    instance._duplicate_stripped()
+    instance._ensure_remote_repo()
 
     assert api.uploaded_manifest == encoded
+
+
+def test_source_prepare_failure_never_creates_or_uploads(monkeypatch):
+    api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
+    instance = _bootstrapper(api)
+    monkeypatch.setattr(
+        instance,
+        "_prepare_pinned_source_snapshot",
+        lambda _root: (_ for _ in ()).throw(ValueError("source invalid")),
+    )
+
+    with pytest.raises(ValueError, match="source invalid"):
+        instance._ensure_remote_repo()
+
+    assert [name for name, _kwargs in api.calls] == [
+        "whoami", "list_repo_files"
+    ]
+
+
+def test_upload_failure_is_not_retried_or_deleted(monkeypatch):
+    api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
+    api.upload_error = TimeoutError("upload outcome unknown")
+    instance = _bootstrapper(api)
+    prepared = _install_prepared_source(instance, monkeypatch)
+
+    with pytest.raises(RuntimeError, match="incomplete or unverified"):
+        instance._ensure_remote_repo()
+
+    assert len(prepared) == 1
+    assert [name for name, _kwargs in api.calls].count("create_repo") == 1
+    assert [name for name, _kwargs in api.calls].count("upload_folder") == 1
+    assert [name for name, _kwargs in api.calls].count("delete_repo") == 0
+
+
+def test_post_create_payload_drift_never_uploads_retries_or_deletes(monkeypatch):
+    api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
+    instance = _bootstrapper(api)
+    _install_prepared_source(instance, monkeypatch)
+    digests = iter(("a" * 64, "b" * 64))
+    monkeypatch.setattr(instance, "_snapshot_payload_sha256", lambda _root: next(digests))
+
+    with pytest.raises(RuntimeError, match="changed after validation"):
+        instance._ensure_remote_repo()
+
+    assert [name for name, _kwargs in api.calls].count("create_repo") == 1
+    assert [name for name, _kwargs in api.calls].count("upload_folder") == 0
+    assert [name for name, _kwargs in api.calls].count("delete_repo") == 0
+
+
+@pytest.mark.parametrize(
+    ("race_response", "message"),
+    [
+        (["data/train-00000-of-00001.parquet"], None),
+        ([], "concurrently created without a data"),
+        (_hf_error(404, "RepoNotFound"), "could not be reconciled"),
+    ],
+)
+def test_create_conflict_is_reclassified_read_only(
+    monkeypatch, race_response, message
+):
+    api = FakeApi()
+    api.list_responses = [_hf_error(404, "RepoNotFound"), race_response]
+    api.create_error = _hf_error(409)
+    instance = _bootstrapper(api)
+    prepared = _install_prepared_source(instance, monkeypatch)
+
+    if message is None:
+        instance._ensure_remote_repo()
+    else:
+        with pytest.raises(RuntimeError, match=message):
+            instance._ensure_remote_repo()
+
+    assert len(prepared) == 1
+    assert [name for name, _kwargs in api.calls].count("create_repo") == 1
+    assert [name for name, _kwargs in api.calls].count("upload_folder") == 0
+    assert [name for name, _kwargs in api.calls].count("delete_repo") == 0
+
+
+def test_prepare_pinned_source_downloads_only_data_then_declared_references(
+    tmp_path, monkeypatch
+):
+    import pandas as pd
+
+    instance = _bootstrapper(FakeApi())
+    root = tmp_path / "source"
+    root.mkdir()
+    reference = "reference_files/task/file.txt"
+    dataframe = pd.DataFrame({
+        "task_id": ["task"],
+        "sector": ["sector"],
+        "occupation": ["occupation"],
+        "prompt": ["prompt"],
+        "reference_files": [[reference]],
+        "reference_file_urls": [["https://example.invalid/reference"]],
+        "reference_file_hf_uris": [["hf://datasets/example/reference"]],
+        "deliverable_files": [[]],
+        "deliverable_file_urls": [[]],
+        "deliverable_file_hf_uris": [[]],
+        "rubric_pretty": ["rubric"],
+        "rubric_json": ["{}"],
+    })
+    calls = []
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        destination = Path(kwargs["local_dir"])
+        if len(calls) == 1:
+            (destination / "data").mkdir()
+            (
+                destination / "data" / bootstrapper.CANONICAL_PARQUET_FILENAME
+            ).write_bytes(b"parquet")
+        else:
+            path = destination / reference
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b"reference")
+
+    def generate(_root, *, output_path=None):
+        destination = Path(output_path)
+        destination.write_bytes(b"manifest")
+        return destination
+
+    monkeypatch.setattr(bootstrapper, "snapshot_download", download)
+    monkeypatch.setattr(bootstrapper.pd, "read_parquet", lambda _path: dataframe)
+    monkeypatch.setattr(instance, "_generate_manifest_from_dir", generate)
+    monkeypatch.setattr(instance, "_strip_deliverables_in_dir", lambda _root: None)
+    monkeypatch.setattr(instance, "_snapshot_validation_errors", lambda *_args: [])
+
+    assert instance._prepare_pinned_source_snapshot(root) == (
+        root / bootstrapper.MANIFEST_FILENAME
+    )
+    assert len(calls) == 2
+    assert calls[0]["repo_id"] == bootstrapper.DATASET_ID
+    assert calls[0]["revision"] == bootstrapper.SOURCE_REVISION
+    assert calls[0]["allow_patterns"] == [
+        ".gitattributes",
+        "README.md",
+        "data/**",
+    ]
+    assert calls[1]["repo_id"] == bootstrapper.DATASET_ID
+    assert calls[1]["revision"] == bootstrapper.SOURCE_REVISION
+    assert calls[1]["allow_patterns"] == [reference]
+
+
+def test_strip_adds_and_clears_every_submitter_column(tmp_path):
+    import pandas as pd
+
+    data = tmp_path / "data"
+    data.mkdir()
+    parquet = data / "train-000.parquet"
+    pd.DataFrame({
+        "task_id": ["task-1"],
+        "deliverable_files": [["deliverable_files/task-1/stale.pdf"]],
+        "deliverable_file_urls": [["https://example.invalid/stale.pdf"]],
+    }).to_parquet(parquet, index=False)
+    instance = _bootstrapper(FakeApi())
+
+    instance._strip_deliverables_in_dir(str(tmp_path))
+
+    row = pd.read_parquet(parquet).iloc[0]
+    assert row["deliverable_text"] == ""
+    assert list(row["deliverable_files"]) == []
+    assert list(row["deliverable_file_urls"]) == []
+    assert list(row["deliverable_file_hf_uris"]) == []
 
 
 def test_source_revision_matches_tracked_selector_fixture():
@@ -389,90 +638,11 @@ def test_source_revision_matches_tracked_selector_fixture():
         "df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c"
     )
     assert bootstrapper.CANONICAL_MANIFEST_SHA256_BY_POLICY["deliverable_only"] == (
-        "b8e17c8afa5d3cc8a1575ea728e2c86fef5eeb58cdb48cebd36e53fb88581546"
+        "463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512"
     )
-    assert bootstrapper.CANONICAL_MANIFEST_SHA256_BY_POLICY == {
-        "deliverable_only": "b8e17c8afa5d3cc8a1575ea728e2c86fef5eeb58cdb48cebd36e53fb88581546",
-        "explicit_boost": "bc59a99036f5910ba31409bb971e45e4ee7e1e31d27545532d5c7435eded9146",
-        "union": "c258914ff86a648da075ee6f485cad39d99c7b22b51e23f3a2d6f47e4bf37af9",
-        "intersection": "d20667783f3ef5939ff90b54c170eb0974172be7d8d88ab41e0ebca9c124c714",
-    }
-    assert bootstrapper.CANONICAL_SOURCE_INPUT_SHA256 == (
-        "95f14ade3efbdac030226a67fbbc174ebeaae4a958f1982cab93ee057658faf5"
+    assert bootstrapper.CANONICAL_SOURCE_PROJECTION_SHA256 == (
+        "ed8f68a4af63a1094d9bbe0fe0e83398941634a9994b4b2124dc6d0d6fbc5d4a"
     )
-
-
-def test_source_input_projection_binds_model_inputs_and_task_order():
-    first = {
-        "task_id": "task-1",
-        "sector": "sector",
-        "occupation": "occupation",
-        "prompt": "prompt",
-        "reference_files": ["reference_files/task/file.txt"],
-        "reference_file_urls": [],
-        "reference_file_hf_uris": [],
-        "rubric_pretty": "rubric",
-        "rubric_json": "{}",
-    }
-    second = {**first, "task_id": "task-2", "prompt": "second"}
-    dataframe = bootstrapper.pd.DataFrame([first, second])
-    approved = bootstrapper._source_input_projection_sha256(dataframe)
-
-    for field, replacement in [
-        ("prompt", "tampered"),
-        ("rubric_json", '{"tampered":true}'),
-        ("sector", "other"),
-        ("reference_files", []),
-    ]:
-        changed = dataframe.copy(deep=True)
-        changed.at[0, field] = replacement
-        assert bootstrapper._source_input_projection_sha256(changed) != approved
-
-    reordered = dataframe.iloc[::-1].reset_index(drop=True)
-    assert bootstrapper._source_input_projection_sha256(reordered) != approved
-
-
-def test_prepare_pinned_source_downloads_only_data_then_declared_references(
-    tmp_path, monkeypatch
-):
-    instance = _bootstrapper(FakeApi())
-    root = tmp_path / "source"
-    root.mkdir()
-    reference = "reference_files/task/file.txt"
-    dataframe = bootstrapper.pd.DataFrame({"reference_files": [[reference]]})
-    calls = []
-
-    def download(**kwargs):
-        calls.append(kwargs)
-        destination = Path(kwargs["local_dir"])
-        if len(calls) == 1:
-            (destination / "data").mkdir()
-            (destination / "data/train-00000-of-00001.parquet").write_bytes(b"parquet")
-        else:
-            path = destination / reference
-            path.parent.mkdir(parents=True)
-            path.write_bytes(b"reference")
-
-    def generate(_root, *, output_path=None):
-        destination = Path(output_path)
-        destination.write_bytes(b"manifest")
-        return destination
-
-    monkeypatch.setattr(bootstrapper, "snapshot_download", download)
-    monkeypatch.setattr(bootstrapper.pd, "read_parquet", lambda _path: dataframe)
-    monkeypatch.setattr(instance, "_generate_manifest_from_dir", generate)
-    monkeypatch.setattr(instance, "_strip_deliverables_in_dir", lambda _root: None)
-
-    assert instance._prepare_pinned_source_snapshot(root) == (
-        root / bootstrapper.MANIFEST_FILENAME
-    )
-    assert len(calls) == 2
-    assert calls[0]["repo_id"] == bootstrapper.DATASET_ID
-    assert calls[0]["revision"] == bootstrapper.SOURCE_REVISION
-    assert calls[0]["allow_patterns"] == [".gitattributes", "README.md", "data/**"]
-    assert calls[1]["repo_id"] == bootstrapper.DATASET_ID
-    assert calls[1]["revision"] == bootstrapper.SOURCE_REVISION
-    assert calls[1]["allow_patterns"] == [reference]
 
 
 def test_fresh_and_relay_legs_restore_same_185_35_manifest_and_fingerprint(
@@ -609,6 +779,132 @@ def test_manifest_validation_rejects_internally_consistent_signal_rewrite(
     assert any("canonical digest" in error for error in errors)
 
 
+def test_manifest_validation_rejects_prompt_mutation(
+    tmp_path, monkeypatch
+):
+    canonical = _canonical_manifest(total=2, needs_count=1)
+    encoded = _anchor_test_manifest(monkeypatch, canonical)
+    path = tmp_path / bootstrapper.MANIFEST_FILENAME
+    path.write_bytes(encoded)
+
+    class MutatedFrame(TaskFrame):
+        def __getitem__(self, key):
+            values = super().__getitem__(key)
+            if key == "prompt":
+                values[0] = "mutated prompt"
+            return values
+
+    errors = bootstrapper.validate_needs_files_manifest(
+        MutatedFrame(list(canonical["tasks"])),
+        path,
+    )
+
+    assert any("source projection" in error for error in errors)
+
+
+def test_reused_snapshot_rejects_all_stale_submitter_state(tmp_path):
+    import pandas as pd
+
+    frame = pd.DataFrame({
+        "deliverable_text": ["stale"],
+        "deliverable_files": [["deliverable_files/task/out.pdf"]],
+        "deliverable_file_urls": [["https://example.invalid/out.pdf"]],
+        "deliverable_file_hf_uris": [["hf://invalid/out.pdf"]],
+    })
+    physical = tmp_path / "deliverable_files/task/out.pdf"
+    physical.parent.mkdir(parents=True)
+    physical.write_bytes(b"stale")
+
+    errors = bootstrapper.validate_cleared_submitter_state(frame, tmp_path)
+
+    assert any("deliverable_text must be exact empty strings" in error for error in errors)
+    assert any("deliverable_files must be empty list-like" in error for error in errors)
+    assert any("deliverable_file_urls must be empty list-like" in error for error in errors)
+    assert any("deliverable_file_hf_uris must be empty list-like" in error for error in errors)
+    assert any("stale submitter output" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    [None, float("nan"), "scalar", b"bytes", 7, ["stale"], ("stale",)],
+)
+def test_reused_snapshot_rejects_nonempty_or_wrong_list_cell(
+    tmp_path, invalid_value
+):
+    import pandas as pd
+
+    frame = pd.DataFrame({
+        "deliverable_text": [""],
+        "deliverable_files": [invalid_value],
+        "deliverable_file_urls": [[]],
+        "deliverable_file_hf_uris": [[]],
+    })
+
+    errors = bootstrapper.validate_cleared_submitter_state(frame, tmp_path)
+
+    assert any("deliverable_files must be empty list-like" in error for error in errors)
+
+
+def test_reused_snapshot_accepts_empty_numpy_submitter_arrays(tmp_path):
+    import numpy as np
+    import pandas as pd
+
+    frame = pd.DataFrame({
+        "deliverable_text": [""],
+        "deliverable_files": [np.array([], dtype=object)],
+        "deliverable_file_urls": [np.array([], dtype=object)],
+        "deliverable_file_hf_uris": [np.array([], dtype=object)],
+    })
+
+    assert bootstrapper.validate_cleared_submitter_state(frame, tmp_path) == []
+
+
+def test_snapshot_validation_requires_exact_v4_target_schema(tmp_path, monkeypatch):
+    import pandas as pd
+
+    row_count = bootstrapper.EXPECTED_TASK_COUNT
+    dataframe = pd.DataFrame({
+        "task_id": [f"task-{index}" for index in range(row_count)],
+        "sector": ["sector"] * row_count,
+        "occupation": ["occupation"] * row_count,
+        "prompt": ["prompt"] * row_count,
+        "reference_files": [[] for _ in range(row_count)],
+        "reference_file_urls": [[] for _ in range(row_count)],
+        "reference_file_hf_uris": [[] for _ in range(row_count)],
+        "deliverable_files": [[] for _ in range(row_count)],
+        "deliverable_file_urls": [[] for _ in range(row_count)],
+        "deliverable_file_hf_uris": [[] for _ in range(row_count)],
+        "rubric_pretty": ["rubric"] * row_count,
+        "rubric_json": ["{}"] * row_count,
+        "deliverable_text": [""] * row_count,
+    })
+    root = tmp_path / "snapshot"
+    data_dir = root / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / bootstrapper.CANONICAL_PARQUET_FILENAME).write_bytes(b"parquet")
+    (root / "reference_files").mkdir()
+    instance = _bootstrapper(FakeApi())
+    monkeypatch.setattr(bootstrapper.pd, "read_parquet", lambda _path: dataframe)
+    monkeypatch.setattr(
+        bootstrapper, "validate_reference_snapshot", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        bootstrapper, "validate_needs_files_manifest", lambda *_args, **_kwargs: []
+    )
+
+    assert instance._snapshot_validation_errors(
+        root,
+        root / bootstrapper.MANIFEST_FILENAME,
+    ) == []
+
+    dataframe["unexpected"] = "value"
+    errors = instance._snapshot_validation_errors(
+        root,
+        root / bootstrapper.MANIFEST_FILENAME,
+    )
+    assert any("canonical target columns" in error for error in errors)
+
+
 def test_download_snapshot_refreshes_stale_local_from_exact_head(tmp_path, monkeypatch):
     api = FakeApi()
     instance = _bootstrapper(api)
@@ -626,6 +922,11 @@ def test_download_snapshot_refreshes_stale_local_from_exact_head(tmp_path, monke
 
     assert not (instance.local_path / "stale.txt").exists()
     assert (instance.local_path / "data/train-00000-of-00001.parquet").read_bytes() == b"new"
+    identity_path = instance.local_path / bootstrapper.TARGET_HEAD_FILENAME
+    assert bootstrapper.load_target_head_identity(
+        identity_path,
+        "owner/disposable",
+    ) == api.head
     assert downloaded[0]["repo_id"] == "owner/disposable"
     assert downloaded[0]["revision"] == api.head
     assert downloaded[0]["allow_patterns"] == [
@@ -633,6 +934,7 @@ def test_download_snapshot_refreshes_stale_local_from_exact_head(tmp_path, monke
         "README.md",
         "data/**",
         "reference_files/**",
+        "deliverable_files/**",
         bootstrapper.MANIFEST_FILENAME,
     ]
     assert api.calls == [
@@ -645,6 +947,24 @@ def test_download_snapshot_refreshes_stale_local_from_exact_head(tmp_path, monke
             },
         )
     ]
+
+
+def test_target_head_identity_rejects_repo_or_sha_drift(tmp_path):
+    identity_path = tmp_path / bootstrapper.TARGET_HEAD_FILENAME
+    identity_path.write_text(json.dumps({
+        "schema_version": "step0-target-head-v1",
+        "repo_id": "owner/repository",
+        "head": "a" * 40,
+    }), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="repository identity mismatch"):
+        bootstrapper.load_target_head_identity(identity_path, "other/repository")
+
+    payload = json.loads(identity_path.read_text(encoding="utf-8"))
+    payload["head"] = "main"
+    identity_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="HEAD is invalid"):
+        bootstrapper.load_target_head_identity(identity_path, "owner/repository")
 
 
 def test_download_snapshot_missing_manifest_preserves_previous_local(
@@ -684,7 +1004,6 @@ def test_download_snapshot_rejects_symlink_tree_without_replacing_local(
         (root / bootstrapper.MANIFEST_FILENAME).write_bytes(b"manifest")
         (root / "linked").symlink_to(previous)
 
-    _install_fake_snapshot_contract(instance, monkeypatch)
     monkeypatch.setattr(bootstrapper, "snapshot_download", download)
 
     with pytest.raises(RuntimeError, match="contains a symlink"):
@@ -729,9 +1048,7 @@ def test_download_snapshot_byte_mismatch_preserves_previous_local(
         source_data=b"approved",
     )
 
-    with pytest.raises(
-        ValueError, match="source input projection differs from pinned source"
-    ):
+    with pytest.raises(ValueError, match="source projection differs"):
         instance._download_snapshot()
 
     assert previous.read_text(encoding="utf-8") == "previous"
@@ -792,7 +1109,7 @@ def test_reference_manifest_records_and_rejects_byte_mutation(tmp_path):
 @pytest.mark.parametrize(
     ("references", "message"),
     [
-        ([['reference_files/task/missing.txt']], "unable to inspect reference path"),
+        ([["reference_files/task/missing.txt"]], "Missing reference file"),
         ([["../escape.txt"]], "unsafe path"),
         ([["/absolute.txt"]], "unsafe path"),
         ([["reference_files/task/../escape.txt"]], "unsafe path"),

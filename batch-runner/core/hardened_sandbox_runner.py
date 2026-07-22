@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from contextlib import nullcontext
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Optional
 
@@ -355,6 +356,12 @@ class HardenedSandboxRunner(SandboxRunner):
         }
         result["_hardened_verification"] = inspection
         return "docker", result
+
+    def _stage_reference_files(self, reference_files):
+        return nullcontext(list(reference_files))
+
+    def _host_reference_access(self) -> bool:
+        return False
 
     def _analyze_output(
         self,

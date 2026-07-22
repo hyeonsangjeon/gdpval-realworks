@@ -2,13 +2,13 @@
 # Step 7: Upload dataset to HuggingFace Hub (openai/gdpval 구조와 동일)
 #
 # Usage:
-#   HF_TOKEN=hf_xxx ./step7_upload_hf.sh            # 완전 자동 (220행 full 검증)
+#   HF_TOKEN=hf_xxx ./step7_upload_hf.sh            # prepared scope 검증 후 게시
 #   HF_TOKEN=hf_xxx ./step7_upload_hf.sh [repo_id]  # repo override
-#   HF_TOKEN=hf_xxx ./step7_upload_hf.sh --test      # smoke test (parquet 실제 행 수로 검증)
+#   HF_TOKEN=hf_xxx ./step7_upload_hf.sh --test      # smoke/subset prepared scope 게시
 #
-# 업로드 대상: README.md, data/train-*.parquet, deliverable_files/**
+# 업로드 대상: README.md, data/train-*.parquet, deliverable_files/**, self_report.json
 # 제외 대상: .cache/, train/, dataset_dict.json 등 캐시 아티팩트
-# reference_files/** 는 duplicate 된 베이스를 그대로 유지 (삭제/업로드 안 함)
+# Step 0 validated HEAD를 CAS parent로 사용하며 reference_files/**는 그대로 유지
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -24,18 +24,10 @@ for arg in "$@"; do
     esac
 done
 
-# ── expected row count 결정 ──────────────────────────────────────────────
-EXPECTED_ROWS=220
 TEST_MODE_SOURCE=""
 
 if [ -n "$FORCE_TEST" ]; then
-    # --test: parquet의 실제 행 수를 읽어 검증 (smoke test용)
-    EXPECTED_ROWS=$(python3 -c "
-import pandas as pd, glob
-parquets = sorted(glob.glob('${UPLOAD_DIR}/data/train-*.parquet'))
-print(len(pd.read_parquet(parquets[0])) if parquets else 220)
-" 2>/dev/null || echo 220)
-    TEST_MODE_SOURCE="--test (rows=${EXPECTED_ROWS})"
+  TEST_MODE_SOURCE="--test (validated prepared scope)"
 fi
 
 # repo_id 결정: 인자 > workspace/step2_inference_results.json의 "source" > 기본값
@@ -82,84 +74,91 @@ echo ""
 
 # ── Pre-upload validation ──────────────────────────────────────────────
 echo "🔍 Pre-upload validation..."
-export REPO_ID UPLOAD_DIR EXPECTED_ROWS
+export REPO_ID UPLOAD_DIR
 
 python3 - <<'VALIDATE_EOF'
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) or ".")
+from pathlib import Path
+from core.hf_publication import (
+  clear_publication_receipt,
+  load_publication_identity,
+)
 from core.repo_bootstrapper import validate_pre_upload
-expected = int(os.environ.get("EXPECTED_ROWS", "220"))
-errors = validate_pre_upload(local_path=os.environ["UPLOAD_DIR"], expected_rows=expected)
+clear_publication_receipt()
+identity = load_publication_identity(
+  Path("workspace/step1_tasks_prepared.json"),
+  Path("workspace/step2_inference_results.json"),
+)
+if identity.repo_id != os.environ["REPO_ID"]:
+  raise SystemExit("publication repository differs from prepared identity")
+errors = validate_pre_upload(
+    local_path=os.environ["UPLOAD_DIR"],
+    submission_repo_id=os.environ["REPO_ID"],
+  expected_rows=len(identity.ordered_task_ids),
+  expected_task_ids=list(identity.ordered_task_ids),
+  expected_submitter_rows=identity.submitter_rows(),
+)
 if errors:
     print("❌ Pre-upload validation FAILED:")
     for e in errors:
         print(f"   • {e}")
     sys.exit(1)
-print(f"✓ Pre-upload validation passed  (rows={expected})")
+print(f"✓ Pre-upload validation passed  (rows={len(identity.ordered_task_ids)})")
 VALIDATE_EOF
 
 # ── Upload ─────────────────────────────────────────────────────────────
 python3 - <<'PYEOF'
 import os
 from pathlib import Path
-from huggingface_hub import HfApi, create_repo
+
+from core.config import DEFAULT_LOCAL_PATH
+from core.hf_publication import (
+  DELETE_PATTERNS,
+  IGNORE_PATTERNS,
+  INCLUDE_PATTERNS,
+  load_publication_identity,
+  publish_dataset_with_receipt,
+)
+from core.repo_bootstrapper import (
+  TARGET_HEAD_FILENAME,
+  load_target_head_identity,
+)
 
 repo_id = os.environ["REPO_ID"]
 data_dir = Path(os.environ["UPLOAD_DIR"])
 token = os.environ["HF_TOKEN"]
-
-api = HfApi(token=token)
-
-# Create repo if not exists
-try:
-    create_repo(repo_id, repo_type="dataset", exist_ok=True, token=token)
-    print(f"✓ Repository ready: {repo_id}")
-except Exception as e:
-    print(f"⚠️  Repo creation: {e}")
-
-# Upload only what matches openai/gdpval structure
-# reference_files/** is intentionally EXCLUDED — it comes from the
-# duplicated openai/gdpval base and should never be re-uploaded.
-INCLUDE = [
-    "README.md",
-    "data/train-*.parquet",
-    "deliverable_files/**",
-    "self_report.json",
-]
-
-IGNORE = [
-    ".cache/**",
-    "train/**",
-    "dataset_dict.json",
-    "*.arrow",
-    "*.lock",
-    "__pycache__/**",
-    "state.json",
-    "dataset_info.json",
-]
-
-# delete_patterns: wipe data/** and deliverable_files/** from remote FIRST
-# so stale files from previous runs don't persist.
-DELETE = [
-    "data/**",
-    "deliverable_files/**",
-]
+identity = load_publication_identity(
+  Path("workspace/step1_tasks_prepared.json"),
+  Path("workspace/step2_inference_results.json"),
+)
+if identity.repo_id != repo_id:
+  raise SystemExit("publication repository differs from prepared identity")
+expected_head = os.environ.get("EXPECTED_TARGET_HEAD", "")
+if not expected_head:
+  expected_head = load_target_head_identity(
+    DEFAULT_LOCAL_PATH / TARGET_HEAD_FILENAME,
+    repo_id,
+  )
 
 print(f"\n📤 Uploading files (with remote cleanup)...")
-print(f"   Include: {INCLUDE}")
-print(f"   Delete (remote): {DELETE}")
-print(f"   Ignore:  {IGNORE}")
+print(f"   Parent:  {expected_head}")
+print(f"   Include: {INCLUDE_PATTERNS}")
+print(f"   Delete (remote): {DELETE_PATTERNS}")
+print(f"   Ignore:  {IGNORE_PATTERNS}")
 
-api.upload_folder(
-    folder_path=str(data_dir),
-    repo_id=repo_id,
-    repo_type="dataset",
-    allow_patterns=INCLUDE,
-    ignore_patterns=IGNORE,
-    delete_patterns=DELETE,
-    commit_message="Update dataset with experiment results",
+publication = publish_dataset_with_receipt(
+  repo_id,
+  data_dir,
+  token=token,
+  expected_head=expected_head,
+  identity=identity,
 )
 
 print(f"\n✅ Upload complete!")
+print(f"   Verified revision: {publication.oid}")
+print(f"   Publication plan: {publication.plan_sha256}")
+if publication.reconciled:
+  print("   Commit response was reconciled against the verified remote state.")
 print(f"   https://huggingface.co/datasets/{repo_id}/tree/main")
 PYEOF

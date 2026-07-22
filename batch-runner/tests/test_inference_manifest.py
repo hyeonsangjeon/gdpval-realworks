@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import hashlib
+import os
 
 import pytest
 
 from core.inference_manifest import (
+    bind_deliverable_file_records,
     canonical_deliverable_path,
     canonicalize_inference_payload,
+    ensure_task_deliverable_dir,
+    reset_task_deliverable_dir,
     validate_local_deliverables,
 )
 
@@ -66,6 +70,31 @@ def test_local_tree_accepts_exact_regular_manifest_files(tmp_path):
     assert validate_local_deliverables(rows, tmp_path) == rows
 
 
+def test_final_result_binds_declared_deliverable_bytes(tmp_path):
+    content = b"current-result-bytes"
+    deliverable = tmp_path / "deliverable_files/task-1/out.txt"
+    deliverable.parent.mkdir(parents=True)
+    deliverable.write_bytes(content)
+
+    bound = bind_deliverable_file_records([_row()], tmp_path)
+
+    assert bound[0]["deliverable_file_records"] == [{
+        "path": "deliverable_files/task-1/out.txt",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "size": len(content),
+    }]
+
+
+def test_final_result_rejects_hardlinked_deliverable(tmp_path):
+    deliverable = tmp_path / "deliverable_files/task-1/out.txt"
+    deliverable.parent.mkdir(parents=True)
+    deliverable.write_bytes(b"shared")
+    os.link(deliverable, tmp_path / "second-link.txt")
+
+    with pytest.raises(ValueError, match="single-link regular file"):
+        bind_deliverable_file_records([_row()], tmp_path)
+
+
 @pytest.mark.parametrize("mutation", ["missing", "extra", "file_symlink", "dir_symlink"])
 def test_local_tree_fails_closed_on_mismatch_or_symlink(tmp_path, mutation):
     task_root = tmp_path / "deliverable_files/task-1"
@@ -106,3 +135,54 @@ def test_upload_root_ancestor_symlink_is_rejected(tmp_path):
 
     with pytest.raises(ValueError, match="symlink component"):
         validate_local_deliverables([_row()], linked_workspace / "upload")
+
+
+def test_reset_task_deliverable_dir_replaces_only_owned_task(tmp_path):
+    upload_root = tmp_path / "upload"
+    target = ensure_task_deliverable_dir(upload_root, "task-1")
+    (target / "stale.txt").write_text("stale", encoding="utf-8")
+    sibling = ensure_task_deliverable_dir(upload_root, "task-2")
+    sentinel = sibling / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    reset = reset_task_deliverable_dir(upload_root, "task-1")
+
+    assert reset == target
+    assert list(reset.iterdir()) == []
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize("kind", ["task_symlink", "task_file", "root_symlink"])
+def test_reset_task_deliverable_dir_rejects_non_regular_boundaries(tmp_path, kind):
+    upload_root = tmp_path / "upload"
+    deliverable_root = upload_root / "deliverable_files"
+    deliverable_root.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    if kind == "root_symlink":
+        deliverable_root.rmdir()
+        deliverable_root.symlink_to(outside, target_is_directory=True)
+    elif kind == "task_symlink":
+        (deliverable_root / "task-1").symlink_to(outside, target_is_directory=True)
+    else:
+        (deliverable_root / "task-1").write_text(
+            "not a directory", encoding="utf-8"
+        )
+
+    with pytest.raises(ValueError, match="not a regular directory"):
+        reset_task_deliverable_dir(upload_root, "task-1")
+
+
+def test_reset_task_deliverable_dir_propagates_delete_failure(tmp_path, monkeypatch):
+    import core.inference_manifest as manifest
+
+    upload_root = tmp_path / "upload"
+    ensure_task_deliverable_dir(upload_root, "task-1")
+
+    def fail_delete(_path):
+        raise OSError("delete failed")
+
+    monkeypatch.setattr(manifest.shutil, "rmtree", fail_delete)
+
+    with pytest.raises(OSError, match="delete failed"):
+        reset_task_deliverable_dir(upload_root, "task-1")

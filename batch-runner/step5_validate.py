@@ -7,7 +7,7 @@ Checks that the local snapshot is ready for HuggingFace upload:
   3. deliverable_files is list type
   4. deliverable_files paths exist locally
   5. deliverable_text fill rate
-  6. needs_files tasks with no files  <- WARNING + creates dummy + updates parquet in-place
+    6. needs_files tasks with no files  <- WARNING + failure stats, no output mutation
   7. No duplicate task_ids
   8. deliverable_files local existence check
 
@@ -19,10 +19,7 @@ Input:
 Output:
   - Pass/fail with detailed report
   - workspace/validate_stats.json
-      file generation statistics (needs_files_total, succeeded, failed, dummy count)
-  - workspace/upload/deliverable_files/<task_id>/failed_to_generate.txt
-      dummy placeholder for each task that needed files but produced none
-  - workspace/upload/data/train-*.parquet  (updated in-place if dummies created)
+      file generation statistics (needs_files_total, succeeded, failed)
 
 Usage:
     python step5_validate.py
@@ -34,7 +31,7 @@ import json
 import sys
 from pathlib import Path
 
-from core.config import WORKSPACE_DIR, UPLOAD_DIR, DELIVERABLE_DIR, DEFAULT_LOCAL_PATH
+from core.config import WORKSPACE_DIR, UPLOAD_DIR
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -55,9 +52,6 @@ def _to_list(val) -> list:
     if hasattr(val, '__iter__') and not isinstance(val, str):
         return list(val)
     return []
-
-
-DUMMY_FILENAME = "failed_to_generate.txt"
 
 
 def _load_expected_task_scope() -> dict:
@@ -104,68 +98,6 @@ def _task_scope_errors(actual_task_ids: list[str], scope: dict) -> list[str]:
     return errors
 
 
-def _create_dummy_file(task_id: str, error_summary: str = "") -> Path:
-    """Create a placeholder file for a task that failed to produce deliverables.
-
-    The placeholder signals to the grader that the task ran but the LLM
-    failed to generate the required file, rather than the pipeline crashing.
-
-    File location:
-        workspace/upload/deliverable_files/<task_id>/failed_to_generate.txt
-
-    Idempotent: if the file already exists, returns its path without overwriting.
-
-    Returns:
-        Path to the dummy file (created or pre-existing)
-    """
-    dummy_dir = DELIVERABLE_DIR / task_id
-    dummy_dir.mkdir(parents=True, exist_ok=True)
-    dummy_path = dummy_dir / DUMMY_FILENAME
-
-    if dummy_path.exists():
-        return dummy_path  # idempotent — skip if already created
-
-    content_lines = [
-        "This task failed to produce a deliverable file during inference.",
-        "",
-        f"task_id: {task_id}",
-    ]
-    if error_summary:
-        content_lines.append(f"reason: {error_summary}")
-
-    dummy_path.write_text("\n".join(content_lines), encoding="utf-8")
-    return dummy_path
-
-
-def _build_dummy_urls(task_id: str, submission_repo_id: str | None) -> dict:
-    """Build all three deliverable column values for a dummy file.
-
-    Returns:
-        {
-            "deliverable_files":         ["deliverable_files/<task_id>/failed_to_generate.txt"],
-            "deliverable_file_urls":     ["https://huggingface.co/datasets/<repo>/resolve/main/..."],
-            "deliverable_file_hf_uris":  ["hf://datasets/<repo>/deliverable_files/<task_id>/..."],
-        }
-    """
-    rel_path = f"deliverable_files/{task_id}/{DUMMY_FILENAME}"
-
-    if submission_repo_id:
-        url = (
-            f"https://huggingface.co/datasets/{submission_repo_id}"
-            f"/resolve/main/{rel_path}"
-        )
-        hf_uri = f"hf://datasets/{submission_repo_id}/{rel_path}"
-    else:
-        url = ""
-        hf_uri = ""
-
-    return {
-        "deliverable_files": [rel_path],
-        "deliverable_file_urls": [url],
-        "deliverable_file_hf_uris": [hf_uri],
-    }
-
-
 def _load_submission_repo_id() -> str | None:
     """Read submission repo ID from step2_inference_results.json 'source' field.
 
@@ -192,10 +124,9 @@ def validate(data_dir: str = None) -> bool:
 
     data_path = Path(data_dir) if data_dir else UPLOAD_DIR
     parquet_dir = data_path / "data"
-    deliverable_dir = DELIVERABLE_DIR
 
     print(f"\n{'='*60}")
-    print(f"🔍 Step 5: Validate Dataset (upload staging)")
+    print("🔍 Step 5: Validate Dataset (upload staging)")
     print(f"{'='*60}")
     print(f"   Upload dir: {data_path}")
 
@@ -291,7 +222,7 @@ def validate(data_dir: str = None) -> bool:
                 f"deliverable_files: {files_filled}/{len(df)} have files ({pct}%)"
             )
 
-    # ── 6. needs_files manifest cross-check + dummy creation + parquet update ──
+    # ── 6. needs_files manifest cross-check + failure statistics ──
     # Stats dict — written to validate_stats.json at the end
     file_gen_stats = {
         "needs_files_total": 0,
@@ -302,8 +233,6 @@ def validate(data_dir: str = None) -> bool:
     }
 
     manifest_path = WORKSPACE_DIR / "step0_needs_files_manifest.json"
-    parquet_updated = False  # track if parquet needs resaving
-
     if manifest_path.exists():
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
@@ -355,46 +284,6 @@ def validate(data_dir: str = None) -> bool:
         file_gen_stats["files_failed"] = len(needs_files_missing)
 
         if needs_files_missing:
-            dummy_created = 0
-            dummy_skipped = 0  # already existed from a previous run
-
-            # Read submission_repo_id once — needed for URL/HF URI columns
-            submission_repo_id = _load_submission_repo_id()
-            if not submission_repo_id:
-                print("   ⚠️  submission_repo_id not found — "
-                      "deliverable_file_urls / hf_uris will be empty strings")
-
-            for task_id in needs_files_missing:
-                _create_dummy_file(task_id)
-                dummy_cols = _build_dummy_urls(task_id, submission_repo_id)
-                rel_path = dummy_cols["deliverable_files"][0]
-
-                # Check if this task_id row already has the dummy recorded
-                current_files = _to_list(df.loc[df["task_id"] == task_id, "deliverable_files"].iloc[0])
-                if rel_path not in current_files:
-                    idx = df.index[df["task_id"] == task_id][0]
-                    # Update all three deliverable columns
-                    df.at[idx, "deliverable_files"]        = dummy_cols["deliverable_files"]
-                    df.at[idx, "deliverable_file_urls"]    = dummy_cols["deliverable_file_urls"]
-                    df.at[idx, "deliverable_file_hf_uris"] = dummy_cols["deliverable_file_hf_uris"]
-                    parquet_updated = True
-                    dummy_created += 1
-                    file_gen_stats["dummy_task_ids"].append(task_id)
-                    print(f"   📄 Dummy created: {rel_path}")
-                else:
-                    dummy_skipped += 1
-
-            file_gen_stats["dummy_files_created"] = dummy_created
-
-            # Rewrite parquet in-place only when new dummies were added
-            if parquet_updated:
-                import pyarrow as pa
-                import pyarrow.parquet as pq
-                updated_table = pa.Table.from_pandas(df, preserve_index=False)
-                pq.write_table(updated_table, parquet_files[0])
-                print(f"   💾 Parquet updated: {parquet_files[0].name} "
-                      f"({dummy_created} rows, 3 columns updated)")
-
             sample = needs_files_missing[:5]
             suffix = (
                 f"... (+{len(needs_files_missing) - 5} more)"
@@ -402,10 +291,8 @@ def validate(data_dir: str = None) -> bool:
             )
             msg = (
                 f"{len(needs_files_missing)} file-required tasks had no files — "
-                f"{dummy_created} dummy placeholders created"
+                "preserved as failed rows with empty deliverable fields"
             )
-            if dummy_skipped:
-                msg += f", {dummy_skipped} already existed (skipped)"
             msg += f": {sample}{suffix}"
             warnings.append(msg)
         else:

@@ -184,7 +184,9 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
   assert.equal(step2a.env.CONFIG_WALL_TIMEOUT, '${{ steps.read_config.outputs.wall_timeout }}')
   assert.match(step2a.run, /WALL_TIMEOUT="\$WALL_TIMEOUT_INPUT"/)
   assert.match(step2a.run, /"\$WALL_TIMEOUT" == "0"[\s\S]*WALL_TIMEOUT="\$CONFIG_WALL_TIMEOUT"/)
-  assert.match(step2a.run, /if \[ "\$WALL_TIMEOUT" -gt 0 \]/)
+  assert.match(step2a.run, /WALL_TIMEOUT_INPUT is not a decimal integer/)
+  assert.match(step2a.run, /if \[\[ "\$WALL_TIMEOUT" != "0" \]\]/)
+  assert.doesNotMatch(step2a.run, /"\$WALL_TIMEOUT" -(?:gt|ge|lt|le)/)
   const dispatchStep = workflow.jobs['inspect-mode'].steps.find(
     (step) => step.name === 'Verify dispatch contract',
   )
@@ -389,21 +391,21 @@ test('local quick starts and bootstrap warnings follow their owning code', async
   assert.match(step0Text, /YAML_CONFIG="\$\{1:\?Usage: \.\/step0_bootstrap\.sh <yaml_config_path>\}"/)
   assert.match(step0Text, /cfg\.get\('data', \{\}\)\.get\('source', ''\)/)
   assert.match(bootstrapText, /private: bool = False/)
-  assert.match(bootstrapText, /return any\(f\.startswith\("data\/"\) for f in files\)/)
+  assert.match(bootstrapText, /return "data" if any\(path\.startswith\("data\/"\) for path in files\) else "partial"/)
   assert.match(bootstrapText, /self\.api\.whoami\(token=self\.token\)/)
   assert.match(bootstrapText, /exist_ok=False/)
   assert.match(bootstrapText, /except HfHubHTTPError as exc:/)
-  assert.match(bootstrapText, /status_code != 409/)
+  assert.match(bootstrapText, /getattr\(response, "status_code", None\) != 409/)
   assert.match(bootstrapText, /refusing "\s*"automatic repository deletion/)
   assert.doesNotMatch(bootstrapText, /self\.api\.delete_repo\(/)
   assert.match(bootstrapText, /private=self\.private/)
   assert.match(bootstrapText, /MANIFEST_FILENAME = "step0_needs_files_manifest\.json"/)
   assert.match(bootstrapText, /SOURCE_REVISION = "[0-9a-f]{40}"/)
-  assert.match(bootstrapText, /CANONICAL_SOURCE_INPUT_SHA256 = \(/)
-  assert.match(bootstrapText, /def _source_input_projection_sha256\(/)
-  assert.match(bootstrapText, /source input projection differs from pinned source/)
+  assert.match(bootstrapText, /CANONICAL_SOURCE_PROJECTION_SHA256 = \(/)
+  assert.match(bootstrapText, /CANONICAL_TARGET_COLUMNS = /)
+  assert.match(bootstrapText, /def source_projection_hashes\(/)
   assert.match(bootstrapText, /def validate_needs_files_manifest\(/)
-  assert.match(bootstrapText, /"_schema_version": 3/)
+  assert.match(bootstrapText, /"_schema_version": 4/)
   assert.match(bootstrapText, /def build_reference_manifest\(/)
   assert.match(bootstrapText, /Manifest reference_files must exactly match declared paths in order/)
   assert.match(bootstrapText, /def _prepare_pinned_source_snapshot\(/)
@@ -412,11 +414,55 @@ test('local quick starts and bootstrap warnings follow their owning code', async
   assert.match(bootstrapText, /def _restore_manifest_from_snapshot\(self\)/)
   assert.match(bootstrapText, /no canonical needs-files manifest/)
   assert.doesNotMatch(bootstrapText, /Manifest not found, regenerating from snapshot/)
+  const classifyIndex = bootstrapText.indexOf('state = self._classify_target_read_only()')
+  const prepareIndex = bootstrapText.indexOf('self._prepare_pinned_source_snapshot(source_root)')
+  const createIndex = bootstrapText.indexOf('self.api.create_repo(')
+  const uploadIndex = bootstrapText.indexOf('self.api.upload_folder(')
+  assert.ok(classifyIndex >= 0)
+  assert.ok(classifyIndex < prepareIndex)
+  assert.ok(prepareIndex < createIndex)
+  assert.ok(createIndex < uploadIndex)
   for (const runner of [runnerEnglish, runnerKorean]) {
     assert.match(runner, /public HF dataset|public HF dataset|public Hugging Face|public\s+HF|public\s+dataset/i)
     assert.match(runner, /aborts without automatic deletion|자동 삭제하지 않고 중단/)
     assert.match(runner, /disposable target|일회성 (?:대상|target)/)
   }
+})
+
+test('reference inputs remain content-bound through model execution', async () => {
+  const [bootstrapper, needsFiles, step1, step2, integrity, codeInterpreter, subprocessRunner, sandboxRunner] = await Promise.all([
+    readRepoFile('batch-runner/core/repo_bootstrapper.py'),
+    readRepoFile('batch-runner/core/needs_files.py'),
+    readRepoFile('batch-runner/step1_prepare_tasks.py'),
+    readRepoFile('batch-runner/step2_run_inference.py'),
+    readRepoFile('batch-runner/core/reference_integrity.py'),
+    readRepoFile('batch-runner/core/code_interpreter.py'),
+    readRepoFile('batch-runner/core/subprocess_runner.py'),
+    readRepoFile('batch-runner/core/sandbox_runner.py'),
+  ])
+
+  assert.match(bootstrapper, /"_schema_version": 4/)
+  assert.match(bootstrapper, /CANONICAL_SOURCE_PROJECTION_SHA256/)
+  assert.match(bootstrapper, /"_source_projection_sha256":/)
+  assert.match(bootstrapper, /"reference_files": \{\}/)
+  assert.match(bootstrapper, /build_reference_manifest\(/)
+  assert.match(bootstrapper, /snapshot_root=root/)
+  assert.match(needsFiles, /def reference_records\(/)
+  assert.match(needsFiles, /def source_projection_sha256\(/)
+  assert.match(step1, /"reference_file_records":/)
+  assert.match(step1, /source_task_projection_sha256\(/)
+  assert.match(step2, /resolve_verified_reference_paths\(/)
+  assert.match(step2, /reference_input_integrity_failed/)
+  assert.match(integrity, /class VerifiedReferencePath\(str\)/)
+  assert.match(integrity, /def open_verified_reference\(/)
+  assert.match(integrity, /getattr\(os, "O_NOFOLLOW", 0\)/)
+  assert.match(integrity, /shutil\.copyfileobj\(source_stream, destination_stream\)/)
+  assert.match(codeInterpreter, /with open_verified_reference\(path\)/)
+  assert.match(subprocessRunner, /copy_verified_reference\(src_path, tmpdir\)/)
+  assert.match(sandboxRunner, /copy_verified_reference\(src_path, tmpdir\)/)
+  assert.doesNotMatch(codeInterpreter, /Upload failed.*continue/)
+  assert.doesNotMatch(subprocessRunner, /Failed to copy reference file/)
+  assert.doesNotMatch(sandboxRunner, /failed to copy reference file/)
 })
 
 test('relay transport uses exact data.source and fails before cloud work', async () => {
@@ -439,6 +485,8 @@ test('relay transport uses exact data.source and fails before cloud work', async
   const step1 = findStep(workflow, 'Step 1: Prepare tasks')
   const identity = findStep(workflow, 'Validate restored checkpoint identity')
   const login = findStep(workflow, 'Azure Login (OIDC)')
+  const inference = findStep(workflow, 'Step 2a: Run inference (condition_a)')
+  const relayStatus = findStep(workflow, 'Check relay status')
   const upload = findStep(workflow, 'Checkpoint: Upload to HuggingFace')
   const cleanup = findStep(workflow, 'Cleanup relay checkpoint')
   assert.ok(steps.indexOf(restore) < steps.indexOf(step0))
@@ -454,6 +502,13 @@ test('relay transport uses exact data.source and fails before cloud work', async
   assert.equal(identity['continue-on-error'], undefined)
   assert.equal(cleanup['continue-on-error'], undefined)
   assert.match(identity.run, /--validate-checkpoint-only/)
+  assert.equal(inference['continue-on-error'], true)
+  assert.match(inference.run, /echo "exit_code=\$STEP2_EXIT_CODE" >> "\$GITHUB_OUTPUT"/)
+  assert.equal(relayStatus.env.STEP2_EXIT_CODE, '${{ steps.step2a.outputs.exit_code }}')
+  assert.match(relayStatus.run, /relay_checkpoint\.py status/)
+  assert.match(relayStatus.run, /--exit-code "\$STEP2_EXIT_CODE"/)
+  assert.match(relayStatus.run, /--github-output "\$GITHUB_OUTPUT"/)
+  assert.doesNotMatch(relayStatus.run, /\$PENDING| -(?:gt|ge|lt|le) |python3 -c/)
 
   for (const [step, operation] of [
     [restore, 'restore'],
@@ -474,7 +529,14 @@ test('relay transport uses exact data.source and fails before cloud work', async
   assert.match(upload.run, /--sandbox-image-digest "\$SANDBOX_IMAGE_DIGEST"/)
   assert.match(cleanup.run, /--source-sha "\$SOURCE_SHA_INPUT"/)
   assert.match(cleanup.run, /--lineage-id "\$RELAY_LINEAGE_ID_INPUT"/)
+  assert.match(cleanup.run, /--expected-generation "\$EXPECTED_GENERATION"/)
   assert.match(cleanup.run, /--sandbox-image-digest "\$SANDBOX_IMAGE_DIGEST_INPUT"/)
+  assert.equal(cleanup.env.EXPECTED_GENERATION, '${{ steps.restore_checkpoint.outputs.generation }}')
+  assert.match(cleanup.if, /success\(\)/)
+  assert.match(cleanup.if, /inputs\.dry_run != true/)
+  assert.match(cleanup.if, /inputs\.relay_run > 0/)
+  assert.match(cleanup.if, /steps\.check_relay\.outputs\.needs_relay == 'false'/)
+  assert.match(cleanup.if, /steps\.step2a\.outcome == 'success'/)
 
   assert.match(relayText, /repo_id = validate_hf_dataset_repo_id\(repo_id\)/)
   assert.match(relayText, /CHECKPOINT_SCHEMA = "relay-checkpoint-v2"/)
@@ -506,12 +568,15 @@ test('relay transport uses exact data.source and fails before cloud work', async
 })
 
 test('report, publication, and artifact destinations follow Step 6 and Step 7', async () => {
-  const [runnerEnglish, runnerKorean, step6Text, narrativeText, step7Text, batchText] = await Promise.all([
+  const [runnerEnglish, runnerKorean, step6Text, narrativeText, step7Text, publicationText, fillText, bootstrapText, batchText] = await Promise.all([
     readRepoFile('batch-runner/README.md'),
     readRepoFile('batch-runner/README_KR.md'),
     readRepoFile('batch-runner/step6_report.py'),
     readRepoFile('batch-runner/core/narrative_analyzer.py'),
     readRepoFile('batch-runner/step7_upload_hf.sh'),
+    readRepoFile('batch-runner/core/hf_publication.py'),
+    readRepoFile('batch-runner/fill_parquet.py'),
+    readRepoFile('batch-runner/core/repo_bootstrapper.py'),
     readRepoFile('.github/workflows/batch-run.yml'),
   ])
   const workflow = parse(batchText)
@@ -520,23 +585,74 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
   assert.match(step6Text, /output_dir \/ "report\.md"/)
   assert.match(step6Text, /report\.html generation disabled/)
   assert.match(step6Text, /upload_dir \/ "self_report\.json"/)
+  assert.match(step6Text, /"prepared_fingerprint": fingerprint/)
+  assert.match(step6Text, /"result_fingerprint": result_fingerprint/)
+  assert.match(step6Text, /"publication_generation": publication_generation/)
+  assert.match(step6Text, /"ordered_task_ids": list\(ordered_task_ids\)/)
   assert.match(narrativeText, /Call 1: Sector-level analysis/)
   assert.match(narrativeText, /Call 2: Deep analysis/)
   assert.match(narrativeText, /DEFAULT_MODEL = "gpt-5\.4-pro"/)
 
   assert.deepEqual(
-    extractPythonStringList(step7Text, 'INCLUDE'),
+    extractPythonStringList(publicationText, 'INCLUDE_PATTERNS'),
     ['README.md', 'data/train-*.parquet', 'deliverable_files/**', 'self_report.json'],
   )
-  assert.deepEqual(extractPythonStringList(step7Text, 'DELETE'), ['data/**', 'deliverable_files/**'])
+  assert.deepEqual(
+    extractPythonStringList(publicationText, 'DELETE_PATTERNS'),
+    ['data/**', 'deliverable_files/**', 'self_report.json'],
+  )
+  assert.match(fillText, /validate_source_projection_rows\(/)
+  assert.match(bootstrapText, /errors\.extend\(validate_source_projection_rows\(df, manifest_path\)\)/)
+  assert.match(bootstrapText, /TARGET_HEAD_FILENAME = "step0_target_head\.json"/)
+  assert.match(step7Text, /publish_dataset_with_receipt\(/)
+  assert.match(step7Text, /clear_publication_receipt\(\)/)
+  assert.match(step7Text, /load_publication_identity\(/)
+  assert.match(step7Text, /expected_task_ids=list\(identity\.ordered_task_ids\)/)
+  assert.match(step7Text, /expected_submitter_rows=identity\.submitter_rows\(\)/)
+  assert.doesNotMatch(step7Text, /sum\(len\(pd\.read_parquet/)
+  assert.match(publicationText, /client\.create_commit\(/)
+  assert.match(publicationText, /parent_commit=expected_head/)
+  assert.doesNotMatch(publicationText, /client\.upload_folder\(/)
+  assert.match(publicationText, /self_report\.json is required for publication/)
+  assert.match(publicationText, /publication_plan.*step7_upload_requested/)
+  assert.match(publicationText, /prepared fingerprint mismatch/)
+  assert.match(publicationText, /result fingerprint mismatch/)
+  assert.match(publicationText, /result task set mismatch/)
 
   const createPr = findStep(workflow, 'Create Pull Request with results')
   const verifyPr = findStep(workflow, 'Verify result PR outputs and contract')
   const uploadHf = findStep(workflow, 'Step 7: Upload to HuggingFace')
+  const cleanup = findStep(workflow, 'Cleanup relay checkpoint')
+  const finality = findStep(workflow, 'Verify publication finality')
+  const recheckPr = findStep(workflow, 'Recheck result PR head after upload')
+  const dispatch = findStep(workflow, 'Dispatch exact result PR validation')
+  const step0 = findStep(workflow, 'Step 0: Bootstrap submission repo')
+  const step1 = findStep(workflow, 'Step 1: Prepare tasks')
   const steps = workflow.jobs['batch-run'].steps
   assert.equal(createPr.with['add-paths'], 'batch-runner/results/${{ env.EXPERIMENT_ID }}/report/report.md')
   assert.ok(steps.indexOf(createPr) < steps.indexOf(verifyPr))
   assert.ok(steps.indexOf(verifyPr) < steps.indexOf(uploadHf))
+  assert.ok(steps.indexOf(uploadHf) < steps.indexOf(cleanup))
+  assert.ok(steps.indexOf(cleanup) < steps.indexOf(finality))
+  assert.ok(steps.indexOf(finality) < steps.indexOf(recheckPr))
+  assert.ok(steps.indexOf(recheckPr) < steps.indexOf(dispatch))
+  assert.match(step0.run, /output\.write\(f"target_head=\{head\}\\n"\)/)
+  assert.equal(step1.env.GDPVAL_RELAY_LINEAGE_ID, '${{ inputs.relay_lineage_id }}')
+  assert.equal(uploadHf.env.EXPECTED_TARGET_HEAD, '${{ steps.step0.outputs.target_head }}')
+  assert.equal(finality.env.SOURCE_REPO, '${{ steps.read_config.outputs.source_repo }}')
+  assert.equal(
+    finality.env.EXPECTED_GENERATION,
+    "${{ inputs.relay_run > 0 && steps.restore_checkpoint.outputs.generation || '' }}",
+  )
+  assert.match(finality.run, /load_publication_identity\(/)
+  assert.match(finality.run, /verify_publication_finality\(/)
+  assert.doesNotMatch(finality.run, /create_commit|upload_file|upload_folder/)
+  for (const step of [finality, recheckPr, dispatch]) {
+    assert.match(step.if, /success\(\)/)
+    assert.match(step.if, /inputs\.dry_run != true/)
+    assert.match(step.if, /steps\.check_relay\.outputs\.needs_relay == 'false'/)
+    assert.match(step.if, /steps\.step2a\.outcome == 'success'/)
+  }
   const artifact = findStep(workflow, 'Upload artifacts')
   assert.match(artifact.with.path, /batch-runner\/workspace\//)
   assert.match(artifact.with.path, /batch-runner\/results\//)
@@ -548,6 +664,7 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
     assert.doesNotMatch(runner, /workspace\/report\//)
     assert.doesNotMatch(runner, /- \*\*`report\.html`\*\*/)
     assert.doesNotMatch(runner, /results\/<experiment_id>\/report\/[^\n]*HuggingFace/)
+    assert.match(runner, /step6_report\.sh --no-narrative/)
   }
 })
 

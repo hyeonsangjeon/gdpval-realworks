@@ -27,6 +27,10 @@ from core.llm_client import complete
 from core.prompt_loader import load_prompt, render_prompt
 from core.file_preview import generate_all_previews, build_file_structure_info
 from core.execution_errors import classify_execution_error
+from core.reference_integrity import (
+    copy_verified_reference,
+    stage_verified_references,
+)
 
 
 # ── Reusable, runner-agnostic helpers (shared with SandboxRunner) ────────────
@@ -259,7 +263,11 @@ class SubprocessRunner:
                 - files (list): List of generated files [{filename, content}]
                 - error (str, optional): Error message if failed
         """
+        reference_stage = stage_verified_references(reference_files or [])
+        reference_stage_entered = False
         try:
+            reference_files = reference_stage.__enter__()
+            reference_stage_entered = True
             # Reference 파일 구조 자동 주입 (컬럼명 하드코딩 에러 방지)
             file_structure_info = build_file_structure_info(reference_files or [])
             if file_structure_info:
@@ -327,6 +335,9 @@ class SubprocessRunner:
                 "files": [],
                 "error": f"Code generation failed: {str(e)}"
             }
+        finally:
+            if reference_stage_entered:
+                reference_stage.__exit__(None, None, None)
 
     def _extract_description(self, text: str) -> str:
         """Extract non-code descriptive text from LLM response.
@@ -393,13 +404,8 @@ class SubprocessRunner:
                 copied_files = []
                 if reference_files:
                     for src_path in reference_files:
-                        if os.path.exists(src_path):
-                            try:
-                                filename = os.path.basename(src_path)
-                                shutil.copy(src_path, tmpdir)
-                                copied_files.append(filename)
-                            except Exception as e:
-                                print(f"Warning: Failed to copy reference file {src_path}: {e}")
+                        copied = copy_verified_reference(src_path, tmpdir)
+                        copied_files.append(Path(str(copied)).name)
 
                 # Mount the skills package so generated code can import it
                 # (`from skills import audio, video, ...`). Copied into the

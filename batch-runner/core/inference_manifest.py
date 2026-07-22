@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
+import shutil
+import stat
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import quote
 
 
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -50,6 +54,19 @@ def canonical_deliverable_path(task_id: str, value: Any) -> str:
     return value
 
 
+def canonical_deliverable_uris(
+    file_list: list[str],
+    submission_repo_id: str,
+) -> tuple[list[str], list[str]]:
+    base_url = (
+        f"https://huggingface.co/datasets/{submission_repo_id}/resolve/main"
+    )
+    hf_prefix = f"hf://datasets/{submission_repo_id}@main"
+    urls = [f"{base_url}/{quote(path, safe='/')}" for path in file_list]
+    uris = [f"{hf_prefix}/{quote(path, safe='/')}" for path in file_list]
+    return urls, uris
+
+
 def canonicalize_inference_results(results: Any) -> list[dict]:
     if not isinstance(results, list):
         raise ValueError("inference results must be an array")
@@ -92,6 +109,48 @@ def canonicalize_inference_payload(payload: Any) -> dict:
 
 def task_deliverable_dir(upload_root: Path, task_id: str) -> Path:
     return upload_root / "deliverable_files" / canonical_task_id(task_id)
+
+
+def _regular_directory(path: Path, label: str) -> Path:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        path.mkdir(mode=0o700)
+        metadata = path.lstat()
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise ValueError(f"{label} is not a regular directory")
+    return path
+
+
+def _deliverable_root(upload_root: Path) -> Path:
+    root = Path(os.path.abspath(upload_root))
+    _assert_no_symlink_ancestors(root)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _regular_directory(root, "upload root")
+    return _regular_directory(root / "deliverable_files", "deliverable root")
+
+
+def ensure_task_deliverable_dir(upload_root: Path, task_id: str) -> Path:
+    """Return one canonical, regular task directory, creating it if absent."""
+    deliverable_root = _deliverable_root(upload_root)
+    task_root = task_deliverable_dir(deliverable_root.parent, task_id)
+    return _regular_directory(task_root, "deliverable task path")
+
+
+def reset_task_deliverable_dir(upload_root: Path, task_id: str) -> Path:
+    """Replace only the canonical task-owned directory with an empty directory."""
+    deliverable_root = _deliverable_root(upload_root)
+    task_root = task_deliverable_dir(deliverable_root.parent, task_id)
+    try:
+        metadata = task_root.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError("deliverable task path is not a regular directory")
+        shutil.rmtree(task_root)
+    task_root.mkdir(mode=0o700)
+    return _regular_directory(task_root, "deliverable task path")
 
 
 def _assert_no_symlink_components(path: Path, stop: Path) -> None:
@@ -165,3 +224,45 @@ def validate_local_deliverables(results: Any, upload_root: Path) -> list[dict]:
                 f"missing={missing}, extra={extra}"
             )
     return normalized
+
+
+def bind_deliverable_file_records(
+    results: Any,
+    upload_root: Path,
+) -> list[dict]:
+    """Bind every declared deliverable to bytes in its condition-owned tree."""
+    normalized = validate_local_deliverables(results, upload_root)
+    root = Path(os.path.abspath(upload_root))
+    bound = []
+    for row in normalized:
+        records = []
+        for relative in row["deliverable_files"]:
+            path = root.joinpath(*PurePosixPath(relative).parts)
+            descriptor = os.open(
+                path,
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0),
+            )
+            try:
+                metadata = os.fstat(descriptor)
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                    raise ValueError(
+                        f"deliverable file is not a single-link regular file: {relative}"
+                    )
+                digest = hashlib.sha256()
+                size = 0
+                while chunk := os.read(descriptor, 1024 * 1024):
+                    digest.update(chunk)
+                    size += len(chunk)
+            finally:
+                os.close(descriptor)
+            records.append({
+                "path": relative,
+                "sha256": digest.hexdigest(),
+                "size": size,
+            })
+        bound_row = dict(row)
+        bound_row["deliverable_file_records"] = records
+        bound.append(bound_row)
+    return bound

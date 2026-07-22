@@ -41,7 +41,6 @@ from core.config import (
     BATCH_OUTPUT_DIR,
     WORKSPACE_DIR,
     UPLOAD_DIR,
-    DELIVERABLE_DIR,
     DEFAULT_LOCAL_PATH,
     DEFAULT_TOKENS,
 )
@@ -61,13 +60,24 @@ from core.execution_metrics import (
     bounded_duration_ms,
 )
 from core.file_preview import generate_all_previews
+from core.inference_manifest import (
+    bind_deliverable_file_records,
+    canonical_deliverable_path,
+    canonical_task_id,
+    ensure_task_deliverable_dir,
+    reset_task_deliverable_dir,
+    validate_local_deliverables,
+)
 from core.llm_client import create_provider_client, complete
 from core.needs_files import NeedsFilesManifest
 from core.reference_integrity import (
     ReferenceIntegrityError,
     resolve_verified_reference_paths,
+    stage_verified_references,
 )
 from core.prepared_fingerprint import validate_prepared_fingerprint
+from core.result_fingerprint import inference_result_fingerprint
+from core.publication_generation import validate_publication_generation
 from core.audio_analyzer import analyze_audio_files, filter_audio_files
 from core.video_analyzer import (
     analyze_video_files,
@@ -82,6 +92,14 @@ RETRIABLE_STATUSES = {"error", "qa_failed", "pending"}
 
 # Exit code convention
 EXIT_CHECKPOINT = 42  # checkpoint saved, relay retrigger needed
+
+
+def _condition_upload_root(condition_key: str) -> Path:
+    if condition_key == "condition_a":
+        return Path(UPLOAD_DIR)
+    if condition_key == "condition_b":
+        return Path(WORKSPACE_DIR) / "upload_condition_b"
+    raise ValueError("condition key is invalid")
 
 # Cache of models that don't support temperature=0 (learned at runtime, reused in session)
 _MODELS_NO_TEMPERATURE: set = set()
@@ -894,6 +912,7 @@ def _run_self_qa(
     deliverable_files: list,
     client,
     qa_max_tokens: int = DEFAULT_TOKENS["qa_check"],
+    upload_root: Optional[Path] = None,
 ) -> dict:
     """
     LLM acts as QA inspector and evaluates the output.
@@ -916,13 +935,14 @@ def _run_self_qa(
         return {"passed": True, "score": 10, "issues": [], "suggestion": "", "undetermined": False}
 
     # Build QA prompt from template
+    upload_root = Path(upload_root) if upload_root is not None else Path(UPLOAD_DIR)
     # Generate actual file previews from deliverable_files paths
     file_preview_text = ""
     if deliverable_files:
         try:
             abs_paths = []
             for fp in deliverable_files:
-                abs_path = UPLOAD_DIR / fp
+                abs_path = upload_root / fp
                 if abs_path.exists():
                     abs_paths.append(str(abs_path))
             if abs_paths:
@@ -1043,30 +1063,17 @@ def _run_self_qa(
 # ── File saving (matches main.py _save_files) ─────────────────────────────
 
 
-def _save_files(files: List[dict], task_id: str) -> List[str]:
+def _save_files(
+    files: List[dict],
+    task_id: str,
+    upload_root: Optional[Path] = None,
+) -> List[str]:
     """Save generated files to workspace/upload/deliverable_files/<task_id>/."""
+    task_id = canonical_task_id(task_id)
+    upload_root = Path(upload_root) if upload_root is not None else Path(UPLOAD_DIR)
     if not files:
         return []
-    if (
-        not isinstance(task_id, str)
-        or not task_id
-        or task_id in {".", ".."}
-        or task_id.startswith(".")
-        or "/" in task_id
-        or "\\" in task_id
-        or len(task_id.encode("utf-8")) > 240
-    ):
-        raise ValueError("deliverable task ID is invalid")
-
-    DELIVERABLE_DIR.mkdir(parents=True, exist_ok=True)
-    root_metadata = DELIVERABLE_DIR.lstat()
-    if not stat.S_ISDIR(root_metadata.st_mode):
-        raise ValueError("deliverable root is not a directory")
-    output_dir = DELIVERABLE_DIR / task_id
-    output_dir.mkdir(mode=0o700, exist_ok=True)
-    output_metadata = output_dir.lstat()
-    if not stat.S_ISDIR(output_metadata.st_mode):
-        raise ValueError("deliverable task path is not a directory")
+    output_dir = ensure_task_deliverable_dir(upload_root, task_id)
 
     prepared = []
     seen: set[str] = set()
@@ -1122,11 +1129,8 @@ def _save_files(files: List[dict], task_id: str) -> List[str]:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(content)
 
-        try:
-            rel_path = filepath.relative_to(UPLOAD_DIR)
-            saved_paths.append(str(rel_path))
-        except ValueError:
-            saved_paths.append(str(filepath))
+        rel_path = filepath.relative_to(upload_root).as_posix()
+        saved_paths.append(canonical_deliverable_path(task_id, rel_path))
 
     return saved_paths
 
@@ -1329,6 +1333,7 @@ def _execute_single_task(
     condition_name: Optional[str] = None,
     strict_inputs: bool = False,
     experiment_id: Optional[str] = None,
+    upload_root: Optional[Path] = None,
 ) -> dict:
     """Execute a single task and return result dict."""
     task_id = task_info["task_id"]
@@ -1414,28 +1419,33 @@ def _execute_single_task(
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
 
-    # ── Preprocessor: enrich prompt with audio/video analysis (if configured) ──
     preprocessor_observations: list[dict] = []
-    preprocessor_prefix = _run_preprocessors(
-        condition,
-        abs_ref_files,
-        instruction,
-        observations=preprocessor_observations,
-    )
-    perception_text = None
-    if preprocessor_prefix:
-        if execution_mode in {"sandbox", "agentic_sandbox"}:
-            # Sandbox owns perception PLACEMENT via its `perception_analysis` spec
-            # section (prompts/sandbox_occupation_codegen.yaml), so pass the block
-            # through rather than prepending it here. This is byte-equivalent to the
-            # prepend (perception is the outermost prefix before the task either way)
-            # while making the section spec-controllable.
-            perception_text = preprocessor_prefix
-        else:
-            instruction = preprocessor_prefix + "\n\n" + instruction
-        print(f"      🎵 Preprocessor injected {len(preprocessor_prefix)} chars into prompt")
-
+    reference_stage = None
+    reference_stage_entered = False
     try:
+        if abs_ref_files and not strict_inputs:
+            reference_stage = stage_verified_references(abs_ref_files)
+            abs_ref_files = reference_stage.__enter__()
+            reference_stage_entered = True
+
+        # Enrich the prompt only from private, content-verified task copies.
+        preprocessor_prefix = _run_preprocessors(
+            condition,
+            abs_ref_files,
+            instruction,
+            observations=preprocessor_observations,
+        )
+        perception_text = None
+        if preprocessor_prefix:
+            if execution_mode in {"sandbox", "agentic_sandbox"}:
+                perception_text = preprocessor_prefix
+            else:
+                instruction = preprocessor_prefix + "\n\n" + instruction
+            print(
+                "      🎵 Preprocessor injected "
+                f"{len(preprocessor_prefix)} chars into prompt"
+            )
+
         start = time.time()
 
         if execution_mode == "legacy":
@@ -1487,7 +1497,7 @@ def _execute_single_task(
                 result.get("deliverable_text", "") or result.get("text", "")
             )
             deliverable_files = _save_files(
-                result.get("files", []), task_id
+                result.get("files", []), task_id, upload_root=upload_root
             )
 
             # needs_files gate
@@ -1570,6 +1580,22 @@ def _execute_single_task(
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
+    except ReferenceIntegrityError as exc:
+        return {
+            "task_id": task_id,
+            "status": "error",
+            "error": f"reference_input_integrity_failed: {exc}",
+            "content": None,
+            "deliverable_text": None,
+            "deliverable_files": [],
+            "model": model,
+            "usage": None,
+            "observability": _build_execution_observability(
+                None, preprocessor_observations
+            ),
+            "latency_ms": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     except Exception as e:
         return {
             "task_id": task_id,
@@ -1586,6 +1612,9 @@ def _execute_single_task(
             "latency_ms": None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+    finally:
+        if reference_stage_entered:
+            reference_stage.__exit__(None, None, None)
 
 
 # ── Incremental save ──────────────────────────────────────────────────────
@@ -1763,6 +1792,7 @@ def validate_restored_checkpoint(condition_key: str = "condition_a") -> dict:
         raise ValueError("prepared relay identity is malformed")
     ordered_task_ids = [task.get("task_id") for task in tasks]
     prepared_fingerprint = validate_prepared_fingerprint(prepared)
+    validate_publication_generation(prepared.get("publication_generation"))
     progress_path, _ = _condition_workspace_paths(condition_key)
     legacy_progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
     if (
@@ -1879,6 +1909,9 @@ def run_inference(
     experiment_id = prepared["experiment_id"]
     try:
         prepared_fingerprint = validate_prepared_fingerprint(prepared)
+        publication_generation = validate_publication_generation(
+            prepared.get("publication_generation")
+        )
     except ValueError as exc:
         print(f"❌ {exc}")
         sys.exit(1)
@@ -1888,6 +1921,43 @@ def run_inference(
         or len(ordered_task_ids) != len(set(ordered_task_ids))
     ):
         print("❌ prepared task set contains invalid or duplicate task IDs")
+        sys.exit(1)
+
+    try:
+        manifest = NeedsFilesManifest.load()
+        manifest.require_schema(4)
+        for task in tasks:
+            task_id = task["task_id"]
+            if task_id not in manifest:
+                raise ValueError(
+                    f"prepared task is absent from canonical manifest: {task_id}"
+                )
+            reference_files = task.get("reference_files", [])
+            expected_records = manifest.reference_records(
+                task_id, reference_files
+            )
+            if task.get("reference_file_records") != expected_records:
+                raise ValueError(
+                    f"prepared reference identity differs from manifest: {task_id}"
+                )
+            expected_needs_files = manifest.needs_files(task_id)
+            if task.get("needs_files") is not expected_needs_files:
+                raise ValueError(
+                    f"prepared needs_files differs from manifest: {task_id}"
+                )
+            if task.get("source_projection_sha256") != (
+                manifest.source_projection_sha256(task_id)
+            ):
+                raise ValueError(
+                    f"prepared source projection differs from manifest: {task_id}"
+                )
+            resolve_verified_reference_paths(
+                Path(DEFAULT_LOCAL_PATH),
+                reference_files,
+                expected_records,
+            )
+    except (FileNotFoundError, ValueError, TypeError, KeyError) as exc:
+        print(f"❌ canonical Step 0 manifest validation failed: {exc}")
         sys.exit(1)
     model = condition["model"]["deployment"]
     condition_name = condition["name"]
@@ -2046,6 +2116,67 @@ def run_inference(
               f"max_retries={qa_max_retries}, model={qa_model}, "
               f"max_tokens={qa_max_tokens})")
 
+    if hardened_requested:
+        aggregate_budget = agentic_options.get("budget")
+        run_identity = (
+            aggregate_budget.get("paired_run_id")
+            if isinstance(aggregate_budget, dict)
+            else None
+        )
+        if not isinstance(run_identity, str) or not run_identity:
+            print("❌ hardened execution requires budget.paired_run_id")
+            sys.exit(1)
+    else:
+        run_identity = _resolve_run_identity(experiment_id)
+
+    progress_path, output_path = _condition_workspace_paths(condition_key)
+    legacy_progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
+    if (
+        condition_key == "condition_a"
+        and not progress_path.exists()
+        and legacy_progress_path.exists()
+    ):
+        progress_path.write_bytes(legacy_progress_path.read_bytes())
+    prevalidated_progress = None
+    if resume and progress_path.exists():
+        try:
+            prevalidated_progress = _load_and_validate_progress(
+                progress_path,
+                experiment_id=experiment_id,
+                condition_name=condition_name,
+                condition_identity=execution_condition,
+                run_id=run_identity,
+                execution_mode=execution_mode,
+                ordered_task_ids=ordered_task_ids,
+                prepared_fingerprint=prepared_fingerprint,
+            )
+        except Exception as exc:
+            print(f"❌ progress checkpoint rejected: {exc}")
+            sys.exit(1)
+        if hardened_requested:
+            unsafe_resume = [
+                result.get("task_id")
+                for result in prevalidated_progress["results"]
+                if (
+                    result.get("status") in {"error", "qa_failed"}
+                    or (
+                        result.get("status") == "pending"
+                        and (
+                            result.get("error") not in {
+                                "wall_timeout", "checkpoint_missing_task"
+                            }
+                            or bool(result.get("observability"))
+                        )
+                    )
+                )
+            ]
+            if unsafe_resume:
+                print(
+                    "❌ hardened failed tasks cannot be resumed: "
+                    + ", ".join(str(task_id) for task_id in unsafe_resume)
+                )
+                sys.exit(1)
+
     # 2. Create LLM client (provider-aware). Agentic mode defers construction
     # until its compute preflight and signed approval gate pass.
     provider = condition.get("model", {}).get("provider", "azure")
@@ -2160,23 +2291,12 @@ def run_inference(
             )
             for task in tasks
         }
-        aggregate_budget = agentic_options.get("budget")
-        run_identity = (
-            aggregate_budget.get("paired_run_id")
-            if isinstance(aggregate_budget, dict)
-            else None
-        )
-        if not isinstance(run_identity, str) or not run_identity:
-            print("❌ hardened execution requires budget.paired_run_id")
-            sys.exit(1)
         workflow_audit = (
             f"{os.getenv('GITHUB_RUN_ID', 'local')}:"
             f"{os.getenv('GITHUB_RUN_ATTEMPT', '1')}"
         )
         print(f"   Paired run:         {run_identity}")
         print(f"   Workflow audit:     {workflow_audit}")
-    else:
-        run_identity = _resolve_run_identity(experiment_id)
     try:
         executor = TaskExecutor(
             mode=execution_mode, llm_client=client, tokens=tokens_cfg,
@@ -2200,23 +2320,14 @@ def run_inference(
         print("   Fix the issue or change execution.mode in your YAML config.")
         sys.exit(1)
 
-    # 4. Load manifest
-    manifest = None
-    try:
-        manifest = NeedsFilesManifest.load()
-        print(f"   Manifest:           {manifest}")
-    except FileNotFoundError:
-        print("   ⚠️  Manifest not found — skipping file checks")
+    print(f"   Manifest:           {manifest}")
 
     # 5. Build task lookup
     task_map = {t["task_id"]: t for t in tasks}
     if len(task_map) != len(tasks):
         raise AssertionError("prepared task map identity drift")
     total = len(tasks)
-    progress_path, output_path = _condition_workspace_paths(condition_key)
-    legacy_progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
-    if condition_key == "condition_a" and not progress_path.exists() and legacy_progress_path.exists():
-        progress_path.write_bytes(legacy_progress_path.read_bytes())
+    condition_upload_root = _condition_upload_root(condition_key)
     started_at = datetime.now(timezone.utc).isoformat()
 
     def _persist_progress(current: dict) -> None:
@@ -2284,26 +2395,40 @@ def run_inference(
         def _backup_best_files():
             """현재 upload의 deliverable_files를 백업."""
             nonlocal backup_dir
-            task_dir = DELIVERABLE_DIR / task_id
-            if task_dir.exists() and any(task_dir.iterdir()):
-                backup_dir = tempfile.mkdtemp(prefix=f"qa_best_{task_id}_")
-                shutil.copytree(task_dir, Path(backup_dir) / "files", dirs_exist_ok=True)
+            if best_result is None:
+                return
+            task_dir = ensure_task_deliverable_dir(condition_upload_root, task_id)
+            validate_local_deliverables([best_result], condition_upload_root)
+            backup_dir = Path(tempfile.mkdtemp(prefix=f"qa_best_{task_id}_"))
+            backup_task_dir = reset_task_deliverable_dir(backup_dir, task_id)
+            shutil.copytree(task_dir, backup_task_dir, dirs_exist_ok=True)
+            validate_local_deliverables([best_result], backup_dir)
 
         def _restore_best_files():
             """백업에서 best 파일을 upload로 복원."""
             nonlocal backup_dir
-            if backup_dir:
-                task_dir = DELIVERABLE_DIR / task_id
-                if task_dir.exists():
-                    shutil.rmtree(task_dir, ignore_errors=True)
-                shutil.copytree(Path(backup_dir) / "files", task_dir)
+            if backup_dir is None or best_result is None:
+                raise ValueError("best deliverable backup is missing")
+            validate_local_deliverables([best_result], backup_dir)
+            task_dir = reset_task_deliverable_dir(condition_upload_root, task_id)
+            backup_task_dir = ensure_task_deliverable_dir(backup_dir, task_id)
+            shutil.copytree(backup_task_dir, task_dir, dirs_exist_ok=True)
+            validate_local_deliverables([best_result], condition_upload_root)
 
         def _cleanup_backup():
             """백업 임시 디렉토리 삭제."""
             nonlocal backup_dir
-            if backup_dir:
-                shutil.rmtree(backup_dir, ignore_errors=True)
+            if backup_dir is not None:
+                metadata = backup_dir.lstat()
+                if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(
+                    metadata.st_mode
+                ):
+                    raise ValueError("best deliverable backup is not a directory")
+                shutil.rmtree(backup_dir)
                 backup_dir = None
+
+        def _clear_task_files():
+            reset_task_deliverable_dir(condition_upload_root, task_id)
 
         def _record_execution_metrics(task_result: dict) -> None:
             nonlocal execution_attempt_count, sandbox_attempt_count
@@ -2416,6 +2541,7 @@ def run_inference(
                 ] = bounded_metrics
             return task_result
 
+        _clear_task_files()
         try:
             while True:
                 if qa_attempts > 0:
@@ -2429,9 +2555,7 @@ def run_inference(
 
                     # task_dir 비우기 — 이전 파일이 남아 있으면 LLM이 다른 이름으로
                     # 파일을 생성했을 때 구/신 파일이 공존하게 됨
-                    task_dir = DELIVERABLE_DIR / task_id
-                    if task_dir.exists():
-                        shutil.rmtree(task_dir, ignore_errors=True)
+                    _clear_task_files()
 
                 result = _execute_single_task(
                     task, condition, executor, execution_mode,
@@ -2442,6 +2566,7 @@ def run_inference(
                     condition_name=execution_condition,
                     strict_inputs=hardened_requested,
                     experiment_id=experiment_id,
+                    upload_root=condition_upload_root,
                 )
                 if metrics_enabled:
                     _record_execution_metrics(result)
@@ -2468,6 +2593,7 @@ def run_inference(
                     result.get("deliverable_files", []),
                     client,
                     qa_max_tokens=qa_max_tokens,
+                    upload_root=condition_upload_root,
                 )
                 if metrics_enabled:
                     self_qa_call_count += 1
@@ -2605,45 +2731,8 @@ def run_inference(
     # 6. Initial run OR load existing progress
     # ══════════════════════════════════════════════════════════════════════
 
-    progress = None
-    if resume and progress_path.exists():
-        try:
-            progress = _load_and_validate_progress(
-                progress_path,
-                experiment_id=experiment_id,
-                condition_name=condition_name,
-                condition_identity=execution_condition,
-                run_id=run_identity,
-                execution_mode=execution_mode,
-                ordered_task_ids=ordered_task_ids,
-                prepared_fingerprint=prepared_fingerprint,
-            )
-        except Exception as exc:
-            print(f"❌ progress checkpoint rejected: {exc}")
-            sys.exit(1)
-        if hardened_requested:
-            unsafe_resume = [
-                result.get("task_id")
-                for result in progress["results"]
-                if (
-                    result.get("status") in {"error", "qa_failed"}
-                    or (
-                        result.get("status") == "pending"
-                        and (
-                            result.get("error") not in {
-                                "wall_timeout", "checkpoint_missing_task"
-                            }
-                            or bool(result.get("observability"))
-                        )
-                    )
-                )
-            ]
-            if unsafe_resume:
-                print(
-                    "❌ hardened failed tasks cannot be resumed: "
-                    + ", ".join(str(task_id) for task_id in unsafe_resume)
-                )
-                sys.exit(1)
+    progress = prevalidated_progress
+    if progress is not None:
 
         # Relay duration fix: preserve original started_at from first run
         if "started_at" in progress:
@@ -2841,12 +2930,14 @@ def run_inference(
     _validate_result_task_set(
         results, ordered_task_ids, allow_missing=False
     )
+    results = bind_deliverable_file_records(results, condition_upload_root)
     success = sum(1 for r in results if r["status"] == "success")
     errors = sum(1 for r in results if r["status"] == "error")
     qa_failed = sum(1 for r in results if r.get("status") == "qa_failed")
 
     final_output = {
         "experiment_id": experiment_id,
+        "publication_generation": publication_generation,
         "experiment_name": prepared.get("experiment_name", ""),
         "source": prepared.get("source", ""),
         "condition": condition_name,
@@ -2867,6 +2958,7 @@ def run_inference(
         },
         "results": results,
     }
+    final_output["result_fingerprint"] = inference_result_fingerprint(final_output)
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(

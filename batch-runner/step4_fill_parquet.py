@@ -28,6 +28,7 @@ _PREPARED_JSON = _SCRIPT_DIR / "workspace" / "step1_tasks_prepared.json"
 _INFERENCE_JSON = _SCRIPT_DIR / "workspace" / "step2_inference_results.json"
 _DEFAULT_PARQUET = _SCRIPT_DIR.parent / "data" / "gdpval-local" / "data" / "train-00000-of-00001.parquet"
 _DEFAULT_OUTPUT = _SCRIPT_DIR / "workspace" / "upload" / "data" / "train-00000-of-00001.parquet"
+_SOURCE_MANIFEST = _SCRIPT_DIR / "workspace" / "step0_needs_files_manifest.json"
 
 
 def _detect_compact(mode_override: str) -> tuple[bool, str]:
@@ -139,6 +140,8 @@ def main() -> int:
         submission_repo_id=submission_repo,
         compact=compact,
         selected_task_ids=selected_task_ids,
+        source_manifest_path=str(_SOURCE_MANIFEST),
+        source_root=str(_DEFAULT_PARQUET.parent.parent),
     )
 
     if stats["filled_text"] == 0 and stats["filled_files"] == 0:

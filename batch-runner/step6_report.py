@@ -36,6 +36,9 @@ sys.path.insert(0, str(_SCRIPT_DIR))
 
 from core.config import NEEDS_FILES_POLICIES_KNOWN, WORKSPACE_DIR  # noqa: E402
 from core.execution_metrics import bounded_count, bounded_duration_ms  # noqa: E402
+from core.prepared_fingerprint import FINGERPRINT_RE  # noqa: E402
+from core.result_fingerprint import RESULT_FINGERPRINT_RE  # noqa: E402
+from core.publication_generation import validate_publication_generation  # noqa: E402
 from core.narrative_analyzer import (  # noqa: E402
     _build_grade_source,
     _build_grading_guard_clause,
@@ -127,6 +130,57 @@ def _validated_experiment_id(data: dict) -> str:
         raise ValueError(
             "Result JSON contains an invalid experiment identifier"
         ) from exc
+
+
+def _validated_report_provenance(data: dict) -> dict:
+    """Preserve current pipeline identity while allowing legacy reports."""
+    fingerprint = data.get("prepared_fingerprint")
+    result_fingerprint = data.get("result_fingerprint")
+    publication_generation = data.get("publication_generation")
+    ordered_task_ids = data.get("ordered_task_ids")
+    if (
+        fingerprint is None
+        and result_fingerprint is None
+        and publication_generation is None
+        and ordered_task_ids is None
+    ):
+        return {}
+    publication_generation = validate_publication_generation(
+        publication_generation
+    )
+    if (
+        not isinstance(fingerprint, str)
+        or FINGERPRINT_RE.fullmatch(fingerprint) is None
+    ):
+        raise ValueError("Result JSON contains an invalid prepared fingerprint")
+    if (
+        not isinstance(result_fingerprint, str)
+        or RESULT_FINGERPRINT_RE.fullmatch(result_fingerprint) is None
+    ):
+        raise ValueError("Result JSON contains an invalid result fingerprint")
+    if (
+        not isinstance(ordered_task_ids, list)
+        or not ordered_task_ids
+        or any(
+            not isinstance(task_id, str) or not task_id
+            for task_id in ordered_task_ids
+        )
+        or len(ordered_task_ids) != len(set(ordered_task_ids))
+    ):
+        raise ValueError("Result JSON contains an invalid ordered task identity")
+    results = data.get("results")
+    result_task_ids = [
+        result.get("task_id") if isinstance(result, dict) else None
+        for result in results
+    ] if isinstance(results, list) else None
+    if result_task_ids != ordered_task_ids:
+        raise ValueError("Result JSON task set differs from ordered task identity")
+    return {
+        "publication_generation": publication_generation,
+        "prepared_fingerprint": fingerprint,
+        "result_fingerprint": result_fingerprint,
+        "ordered_task_ids": list(ordered_task_ids),
+    }
 
 
 def _compute_summary(data: dict) -> dict:
@@ -547,8 +601,7 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
                        dry_run: bool = False) -> dict:
     meta_date = (data.get("started_at") or "")[:10]
     grading_referenced = bool(narrative.get("grading_referenced", False))
-    report = {
-        "meta": {
+    report_meta = {
             "experiment_id": _validated_experiment_id(data),
             "experiment_name": data.get("experiment_name", ""),
             "condition_name": data.get("condition_name", ""),
@@ -565,7 +618,10 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
                 if grading_referenced
                 else "self_assessed_pre_grading"
             ),
-        },
+        }
+    report_meta.update(_validated_report_provenance(data))
+    report = {
+        "meta": report_meta,
         "summary": summary,
         "sector_breakdown": sector_breakdown,
         "task_results": task_results,
@@ -834,7 +890,7 @@ def _build_markdown(rd: dict) -> str:
             "|--------|-------|",
             f"| Tasks requiring files | {total_fg} |",
             f"| Successfully generated | {succeeded} ({pct}%) |",
-            f"| Failed → dummy created | {failed} |",
+            f"| Failed (empty outputs preserved) | {failed} |",
             "",
         ]
 
