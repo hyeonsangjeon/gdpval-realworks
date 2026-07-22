@@ -103,18 +103,34 @@ entries land under a fresh dated heading the day they merge to `main`.
   1, preserved across relay legs, and checked before provider construction;
   Step 3 and publication share one production-shaped projection of prepared
   metadata and raw Step 2 QA/results. Parquet submitter fields and self-report
-  task status/content/files must exactly match that result. Step 5 records
+  task status, QA/error projection, summary, content, and files must exactly
+  match that result. Every selected reference byte is rechecked before provider
+  construction. Publication holds verified source bytes in private anonymous
+  streams so the SDK cannot reopen changed local paths. Step 5 records
   file-required failures without creating dummy files or mutating the parquet.
-  Relay dispatch requires both process exit code 42 and pending tasks, and
-  cleanup requires the exact restored generation. Step 0 records the validated
-  target HEAD; one `create_commit` requires that HEAD as `parent_commit`, then
-  verifies direct ancestry, plan marker, complete remote tree/hash, self-report
-  identity, and final HEAD, including response-loss reconciliation. Relay
-  cleanup commits now store the short generation label in the Hub commit title
-  and the full 64-character generation marker in its description; response-loss
+  Relay marker writes reconcile ambiguous responses without retry; restore
+  records the exact generation and cleanup refuses a newer generation. Relay
+  dispatch requires both process exit code 42 and pending tasks. Step 0 records
+  the validated target HEAD; one `create_commit` requires that HEAD as
+  `parent_commit`, then verifies direct ancestry, plan marker, complete remote
+  tree/hash, self-report identity, and final HEAD. A private receipt binds that
+  plan, and post-cleanup finality accepts only the exact cleanup child with an
+  unchanged managed tree. Non-relay finality reuses the already verified
+  publication revision instead of downloading managed files twice. Core paths
+  shipped through PR #129
+  (`2d4026056b6e27f5111a94d1089573f6b4938a58`): automatic pull-request run
+  [29919172383](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29919172383)
+  passed validation with deployment skipped, and automatic `main` run
+  [29919336511](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29919336511)
+  passed validation and GitHub Pages deployment. Relay cleanup commits now
+  store the short generation label in the Hub commit title and the full
+  64-character generation marker in its description; response-loss
   reconciliation and publication finality verify both SDK fields and the direct
-  parent before accepting cleanup. No workflow, Azure/model call, grading, HF
-  write, or paid execution was dispatched. Shipped through PR #131
+  parent before accepting cleanup. Final credential-free evidence is **1,853
+  passed, 6 skipped, and 44 integration tests deselected** across the backend;
+  the relay checkpoint matrix passes **83/83**, HF publication/finality passes
+  **86/86**, and their combined focused matrix passes **169/169**. The cleanup
+  identity follow-up shipped through PR #131
   (`576e6f4f4a72998f0311d74006373bcea40a3cf6`). Its code and test paths are
   outside the Pages workflow's pull-request and push filters, so GitHub created
   no automatic run for the PR head or merge SHA. No manual workflow dispatch,

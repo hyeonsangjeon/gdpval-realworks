@@ -100,7 +100,7 @@ task. It must be refreshed before a task is reported complete.
 ## Verification
 
 - Follow-up base: `origin/main@8e473361a12c348ee6fb4d4da6bbfb1d8a2b157f`.
-- Full backend non-integration suite: **1,852 passed, 6 skipped, 44 deselected,
+- Full backend non-integration suite: **1,853 passed, 6 skipped, 44 deselected,
   0 failed**.
 - Focused manifest/reference, relay, publication, output, bootstrap, inference,
   corruption, observability, and agentic trust matrix: **361 passed**.
@@ -112,9 +112,9 @@ task. It must be refreshed before a task is reported complete.
   source semantics, private reference staging, provider/local/Docker failures,
   manifest pre-client gates, Step 0 stale-state rejection, Step 4 current-run
   rebuilding, and Step 7 exact publication. The final Step 0 safety matrix is
-  **65 passed**, relay checkpoint/status matrix is **82 passed**, and HF
+  **65 passed**, relay checkpoint/status matrix is **83 passed**, and HF
   publication/finality matrix is **86 passed**. The final relay plus publication
-  follow-up matrix is **168 passed**. These include source-first
+  follow-up matrix is **169 passed**. These include source-first
   mutation ordering, post-create drift rejection, canonical target columns,
   exact-generation cleanup, realistic HF cache symlinks, and non-relay
   file-verification call bounds.
