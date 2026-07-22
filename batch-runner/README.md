@@ -2,83 +2,118 @@
 
 A Python pipeline that runs LLM experiments on the [OpenAI GDPVal](https://huggingface.co/datasets/openai/gdpval) Gold Subset (220 tasks) and uploads results to HuggingFace.
 
+## Start here
+
+- **See published evidence:** [open the live dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/).
+- **Inspect the smallest real run:** open
+  [`exp998_smoke_baseline_sample.yaml`](experiments/exp998_smoke_baseline_sample.yaml).
+- **Launch the supported cloud path:** use
+  [Run GDPVal Batch Experiment](../../../actions/workflows/batch-run.yml)
+  with `experiment_yaml=exp998_smoke_baseline_sample`.
+- **Find the outputs:** read
+  [Results and artifacts](../docs/first-experiment.md#7-know-what-success-looks-like).
+
+For a first run, follow the [beginner guide](../docs/first-experiment.md). It is
+the canonical setup path for Azure OIDC, a disposable Hugging Face target, cost
+boundaries, and the three-task smoke test.
+
 ## Architecture
 
-<table>
-<tr>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBBWyJTdGVwIDA6IEJvb3RzdHJhcDxicj5IRiByZXBvICsgc25hcHNob3QiXSAtLT4gQlsiU3RlcCAxOiBQcmVwYXJlPGJyPkZpbHRlciArIGxvYWQgdGFza3MiXQ==" alt="Preparation" width="350" /></td>
-<td align="center" style="font-size:2em;">→</td>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBDWyJTdGVwIDI6IEluZmVyZW5jZTxicj5MTE0gKyBTZWxmLVFBIl0gLS0-IERbIlN0ZXAgMzogRm9ybWF0PGJyPkpTT04gKyBNYXJrZG93biJd" alt="Execution" width="350" /></td>
-</tr>
-<tr>
-<td></td>
-<td align="center" style="font-size:2em;">↓</td>
-<td></td>
-</tr>
-<tr>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBFWyJTdGVwIDQ6IFBhcnF1ZXQ8YnI-TWVyZ2Ugc3VibWlzc2lvbiJdIC0tPiBGWyJTdGVwIDU6IFZhbGlkYXRlPGJyPkludGVncml0eSBjaGVjayJd" alt="Delivery" width="350" /></td>
-<td align="center" style="font-size:2em;">→</td>
-<td align="center"><img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBHWyJTdGVwIDY6IFJlcG9ydDxicj5IVE1MICsgSlNPTiJdIC0tPiBIWyJTdGVwIDc6IFVwbG9hZDxicj5IRiArIEF1dG8gUFIiXQ==" alt="Report & Upload" width="350" /></td>
-</tr>
-</table>
-
+<picture>
+  <source media="(max-width: 960px)" srcset="../docs/images/readme-system-map-mobile.svg" />
+  <img src="../docs/images/readme-system-map.svg" alt="GDPVal RealWorks pipeline from experiment YAML through execution, artifacts, external grading, and dashboard evidence" />
+</picture>
 
 ## Quick Start
 
+### Recommended: GitHub Actions
+
+1. Fork this repository and edit only `data.source` in the
+   [three-task sample config](experiments/exp998_smoke_baseline_sample.yaml) to
+   point to a new disposable dataset in your Hugging Face namespace.
+2. Configure the five repository secrets listed in the
+   [beginner guide](../docs/first-experiment.md#5-add-repository-secrets).
+3. Open the
+  [Batch workflow](../../../actions/workflows/batch-run.yml) in your fork on
+  `main`, enter `exp998_smoke_baseline_sample`, and leave the internal relay
+   fields at their defaults.
+4. Start with `dry_run: true` only after reading the boundary below.
+
+> `dry_run: true` still performs Step 0, calls the model, runs Self-QA, and may
+> write relay checkpoints. It skips Step 5, final Step 7 publication, and the
+> result pull request. It is not a free or no-write simulation.
+
+### Local step-by-step debugging
+
+This path requires Python 3.11, Azure CLI login, a real model budget, and a
+disposable Hugging Face target already configured in the sample YAML. It still
+calls the model and writes to Hugging Face in Step 0.
+
 ```bash
 cd batch-runner
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+az login
 
-# Set environment variables (choose provider)
-export HF_TOKEN="hf_xxx"
-export AZURE_OPENAI_ENDPOINT="https://xxx.openai.azure.com"
-export AZURE_OPENAI_API_KEY="xxx"
+export HF_TOKEN="<dedicated-hf-write-token>"
+export AZURE_OPENAI_ENDPOINT="<azure-openai-resource-endpoint>"
+CONFIG="experiments/exp998_smoke_baseline_sample.yaml"
 
-# Step 0: Bootstrap (duplicate openai/gdpval + local snapshot)
-./step0_bootstrap.sh HyeonSang/my-experiment-repo
+bash step0_bootstrap.sh "$CONFIG"
+bash step1_prepare_tasks.sh "$CONFIG"
+bash step2_run_inference.sh condition_a
+bash step3_format_results.sh
+bash step4_fill_parquet.sh
 
-# Step 1: Prepare tasks from experiment YAML
-./step1_prepare_tasks.sh experiments/exp999_smoke_baseline_sample.yaml
-
-# Step 2: Run inference
-./step2_run_inference.sh condition_a
-
-# Step 3: Format results
-./step3_format_results.sh
-
-# Step 4: Fill parquet
-./step4_fill_parquet.sh results/exp999_smoke_baseline_sample.json HyeonSang/my-experiment-repo
-
-# Step 5: Validate
-./step5_validate.sh
-
-# Step 6: Generate experiment report
-./step6_report.sh
-
-# Step 7: Upload to HuggingFace
-./step7_upload_hf.sh HyeonSang/my-experiment-repo
+# The 3-task smoke skips Step 5. Generate a model-free, unpublished report.
+bash step6_report.sh --no-narrative --dry-run
 ```
 
-## Environment Variables
+Do not run Step 7 just to test setup. If you intentionally want to publish the
+three-row smoke result, `bash step7_upload_hf.sh --test` deletes remote
+`data/**` and `deliverable_files/**` in the configured target before upload.
+
+## Authentication and environment variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `HF_TOKEN` | Yes | HuggingFace write token (for Step 0 and Step 6) |
-| `AZURE_OPENAI_ENDPOINT` | Azure | Azure OpenAI endpoint URL |
-| `AZURE_OPENAI_API_KEY` | Azure | Azure OpenAI API key |
+| `HF_TOKEN` | Cloud publication | Dedicated Hugging Face write token used by bootstrap, relay persistence, and Step 7 |
+| `AZURE_OPENAI_ENDPOINT` | Azure | Azure OpenAI resource endpoint for `AzureOpenAI(azure_endpoint=...)`; not a Foundry project URL or `/openai/v1/` base URL |
+| `AZURE_CLIENT_ID` | GitHub Actions + Azure | Entra application client ID for OIDC |
+| `AZURE_TENANT_ID` | GitHub Actions + Azure | Entra directory tenant ID for OIDC |
+| `AZURE_SUBSCRIPTION_ID` | GitHub Actions + Azure | Azure subscription ID for `azure/login` |
 | `OPENAI_API_KEY` | OpenAI | Native OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic | Anthropic API key |
+
+The supported GitHub Actions path never injects `AZURE_OPENAI_API_KEY`; it uses
+`azure/login` and OIDC. The local example uses `az login` through
+`DefaultAzureCredential`. API-key-only direct runner behavior is outside this
+first-run contract and is not guaranteed here.
 
 ## Pipeline Steps
 
 ### Step 0: Bootstrap (`step0_bootstrap.sh`)
 
-<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IExSCiAgICBzcmNbIm9wZW5haS9nZHB2YWwiXSAtLT58ZHVwbGljYXRlfCBoZlsiU1VCTUlTU0lPTl9SRVBPX0lEIChIRikiXQogICAgaGYgLS0-fHNuYXBzaG90X2Rvd25sb2FkfCBzbmFwWyJkYXRhL2dkcHZhbC1sb2NhbC8iXQogICAgc25hcCAtLT4gcGFycXVldFsiZGF0YS90cmFpbi0qLnBhcnF1ZXQiXQogICAgc25hcCAtLT4gcmVmc1sicmVmZXJlbmNlX2ZpbGVzLyoqIl0KICAgIHNuYXAgLS0-IG91dFsiZGVsaXZlcmFibGVfZmlsZXMvIChlbXB0eSkiXQo=" alt="Diagram" />
-
-
-- Duplicates `openai/gdpval` to your HF repo if it doesn't exist
+- Accepts an experiment YAML path and reads the target from `data.source`:
+  `bash step0_bootstrap.sh experiments/exp998_smoke_baseline_sample.yaml`
+- Duplicates `openai/gdpval` to the configured public HF dataset if it does not exist
 - Downloads local snapshot to `data/gdpval-local/`
-- Validates: 220 rows, rubric columns present, reference_files/ exist
+- Pins `openai/gdpval` to one full revision. Before stripping deliverables, it
+  persists a schema-3 `step0_needs_files_manifest.json` containing the exact
+  ordered task identity, policy signals, and every declared reference file's
+  path, SHA-256, and byte size.
+- Downloads the target's exact HEAD into fresh staging on every run. Before
+  replacing the local snapshot, it verifies the canonical model-input
+  projection (prompt, rubric, sector, occupation, and reference declarations),
+  manifest bytes, and the complete declared reference tree against the pinned
+  source contract.
+- Validates: 220 rows, rubric columns present, and exact regular reference files
+- Reuses an existing target only when it already contains a `data/` path;
+  otherwise it aborts without automatic deletion. A reused target must also
+  contain the canonical manifest; Step 0 never regenerates it from stripped
+  data. Use a new disposable target or remove the inspected partial/legacy
+  repository explicitly.
 
 ### Step 1: Prepare Tasks (`step1_prepare_tasks.py`)
 
@@ -86,7 +121,11 @@ Reads experiment YAML config → loads dataset → applies filters (sector, samp
 
 ### Step 2: Run Inference (`step2_run_inference.py`)
 
-Reads prepared tasks → calls LLM for each task → saves results incrementally to `workspace/step2_inference_progress.json`. Supports multi-round resume: re-runs `error`/`qa_failed` tasks automatically.
+Reads prepared tasks → calls the LLM for each task → saves condition-specific
+checkpoints such as `workspace/step2_inference_progress_condition_a.json` and
+final results such as `workspace/step2_inference_results_condition_a.json`.
+Condition A also writes legacy aliases for compatibility. Multi-round resume
+re-runs `error`/`qa_failed` tasks automatically.
 
 ### Step 3: Format Results (`step3_format_results.py`)
 
@@ -102,60 +141,63 @@ Pre-upload integrity checks: 220 rows, required columns, deliverable file paths,
 
 ### Step 6: Generate Report (`step6_report.py`)
 
-Reads `workspace/result.json` and generates three output files under `workspace/report/`:
+Reads `workspace/result.json`, validates its experiment identity, and writes a
+strictly pre-grading report under `results/<experiment_id>/report/`:
 
-- **`report_data.json`** — structured JSON for dashboard rendering (metrics + LLM narrative)
-- **`report.md`** — human-readable Markdown report with executive summary, sector breakdown, QA issues, and recommendations
-- **`report.html`** — standalone HTML report (no external dependencies) that opens directly in a browser
+- **`report_data.json`** — structured self-report data
+- **`report.md`** — human-readable execution summary
 
-Narrative sections (overview, quality analysis, failure patterns, recommendations) are
-generated via a single LLM call using the same model as the experiment.
-Grading scores are not yet available at this stage — the report focuses on task completion,
-Self-QA scores, latency patterns, and deliverable quality.
+For the workspace-owned result, `report_data.json` is also copied to
+`workspace/upload/self_report.json` for Step 7. HTML generation is disabled.
+External grading remains a separate pipeline.
 
-If the LLM call fails, metric sections are still generated; narrative fields are left empty.
+The default narrative path attempts two `gpt-5.4-pro` calls and then a one-call
+experiment-model fallback. The GitHub workflow enforces a model-free
+`--no-narrative` fallback and identity check before any publication.
 
 ### Step 7: Upload to HuggingFace (`step7_upload_hf.sh`)
 
-Uses `delete_patterns` to wipe `data/**` and `deliverable_files/**` on HF before uploading. `reference_files/**` is excluded (keeps duplicated base intact).
+Deletes remote `data/**` and `deliverable_files/**`, then uploads only
+`README.md`, `data/train-*.parquet`, `deliverable_files/**`, and
+`self_report.json`. `reference_files/**` remains from the duplicated base. The
+Markdown report is committed through the result pull request, not uploaded as a
+report directory to Hugging Face.
 
 ## Experiment YAML Configuration
 
-Configs live in `experiments/`. Example:
+Configs live in `experiments/`. Use the checked-in
+[`exp998_smoke_baseline_sample.yaml`](experiments/exp998_smoke_baseline_sample.yaml)
+for the first three-task run. Before launching it, change only the owner in
+`data.source` and keep the repository name equal to the YAML stem:
 
 ```yaml
 experiment:
-  id: "exp999_smoke_baseline_sample"
-  name: "Smoke Baseline Run (Sample)"
+  id: "exp998_smoke_baseline_sample"
 
 data:
-  source: "HyeonSang/my-experiment-repo"
+  source: "YOUR_HF_USERNAME/exp998_smoke_baseline_sample"
   filter:
-    sector: null          # null = all 220 tasks
-    sample_size: 3        # null = all; int = random sample (seed=42)
+    sector: null
+    occupation: null
+    sample_size: 3
 
 condition_a:
-  name: "Baseline"
   model:
-    provider: "azure"         # azure | openai | anthropic
+    provider: "azure"
     deployment: "gpt-5.2-chat"
-    temperature: 0.0
-    seed: 42
-  prompt:
-    system: "You are a helpful assistant."
-    suffix: null
   qa:
     enabled: true
-    min_score: 6
     max_retries: 3
+    min_score: 6
 
 execution:
-  mode: "code_interpreter"    # code_interpreter | subprocess | sandbox | json_renderer
+  mode: "code_interpreter"
   max_retries: 5
   resume_max_rounds: 3
 ```
 
-`condition_b` is optional — omit for a single-condition run.
+The real sample file contains the complete prompt and Self-QA contract.
+`condition_b` is optional; omit it for a single-condition run.
 
 ## Execution Modes
 
@@ -164,7 +206,7 @@ execution:
 The primary execution mode, powered by the **Azure OpenAI Responses API with built-in Code Interpreter**.
 
 - The model autonomously writes and executes Python code inside a **secure, sandboxed container** managed by Azure OpenAI
-- File generation (Excel, PDF, Word, PowerPoint, images) happens entirely within the sandbox — **no local code execution, no dependency management, no security risk**
+- File generation (Excel, PDF, Word, PowerPoint, images) happens in the provider-managed sandbox, reducing host-code execution and local dependency risk; normal cloud, prompt, data, and output-review risks still apply
 - The Responses API streams tool calls (`code_interpreter`) in real-time, and generated files are retrieved via the Files API
 - Supports iterative code execution: the model can inspect outputs, fix errors, and retry — all within a single API call
 - Available on **Azure OpenAI** and **OpenAI** endpoints
@@ -276,7 +318,7 @@ execution:
 
 | Provider | SDK | Env Variable |
 |----------|-----|--------------|
-| `azure` / `azure_openai` | `AzureOpenAI` | `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_API_KEY` |
+| `azure` / `azure_openai` | `AzureOpenAI` | `AZURE_OPENAI_ENDPOINT` + `DefaultAzureCredential` (`az login` locally, OIDC in CI) |
 | `openai` | `OpenAI` | `OPENAI_API_KEY` |
 | `anthropic` | `AnthropicClient` wrapper | `ANTHROPIC_API_KEY` |
 
@@ -284,14 +326,30 @@ All providers return a normalized response shape (`response.choices[0].message.c
 
 ## Project Structure
 
-<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICByb290WyJiYXRjaC1ydW5uZXIvIl0KICAgIHN0ZXBzWyJzdGVwMC1zdGVwNyBzY3JpcHRzIl0KICAgIGNvcmVbImNvcmUvPGJyLz5jb25maWcsIGxsbV9jbGllbnQsIGV4ZWN1dG9yLCBmb3JtYXR0ZXJzLCB1cGxvYWRlcnMiXQogICAgZXhwZXJpbWVudHNbImV4cGVyaW1lbnRzLzxici8-WUFNTCBleHBlcmltZW50IGNvbmZpZ3MiXQogICAgcHJvbXB0c1sicHJvbXB0cy88YnIvPnByb21wdCB0ZW1wbGF0ZXMiXQogICAgdGVzdHNbInRlc3RzLzxici8-dW5pdCArIGludGVncmF0aW9uIHRlc3RzIl0KICAgIHdvcmtzcGFjZVsid29ya3NwYWNlLzxici8-c3RlcDEvc3RlcDIgaW50ZXJtZWRpYXRlIEpTT04gYXJ0aWZhY3RzIl0KICAgIHJlc3VsdHNbInJlc3VsdHMve2V4cGVyaW1lbnRfaWR9L3JlcG9ydC88YnIvPnJlcG9ydF9kYXRhLmpzb24sIHJlcG9ydC5tZCwgcmVwb3J0Lmh0bWwiXQoKICAgIHJvb3QgLS0-IHN0ZXBzCiAgICByb290IC0tPiBjb3JlCiAgICByb290IC0tPiBleHBlcmltZW50cwogICAgcm9vdCAtLT4gcHJvbXB0cwogICAgcm9vdCAtLT4gdGVzdHMKICAgIHJvb3QgLS0-IHdvcmtzcGFjZQogICAgcm9vdCAtLT4gcmVzdWx0cwo=" alt="Pipeline Flow" />
+```text
+batch-runner/
+├── step0_bootstrap.sh ... step7_upload_hf.sh
+├── core/                         # config, clients, executors, validation
+├── experiments/                  # versioned YAML experiment configs
+├── prompts/                      # prompt templates
+├── workspace/                    # checkpoints and upload staging
+├── results/<experiment_id>/      # formatted outputs and report/
+└── tests/                        # model-free unit and contract tests
+```
 
 
 ## Data Flow
 
 Each step reads from `workspace/` (JSON files), not from prior Python objects. Steps are independently restartable.
 
-<img src="https://mermaid.ink/img/Zmxvd2NoYXJ0IFRCCiAgICBjZmdbIllBTUwgY29uZmlnIl0gLS0-IHMxWyJTdGVwIDEgLT4gd29ya3NwYWNlL3N0ZXAxX3Rhc2tzX3ByZXBhcmVkLmpzb24iXQogICAgczEgLS0-IHMycFsiU3RlcCAyIHByb2dyZXNzIC0-IHdvcmtzcGFjZS9zdGVwMl9pbmZlcmVuY2VfcHJvZ3Jlc3MuanNvbiJdCiAgICBzMnAgLS0-IHMyZlsiU3RlcCAyIGZpbmFsIC0-IHdvcmtzcGFjZS9zdGVwMl9pbmZlcmVuY2VfcmVzdWx0cy5qc29uIl0KICAgIHMyZiAtLT4gczNbIlN0ZXAgMyAtPiByZXN1bHRzL3tleHBfaWR9L3tqc29uLG1kfSJdCiAgICBzMyAtLT4gczRbIlN0ZXAgNCAtPiB3b3Jrc3BhY2UvdXBsb2FkL2RhdGEvdHJhaW4tKi5wYXJxdWV0Il0KICAgIHM0IC0tPiBzNVsiU3RlcCA1IC0-IHZhbGlkYXRpb24gKHBhc3MvZmFpbCkiXQogICAgczUgLS0-IHM2WyJTdGVwIDYgLT4gcmVzdWx0cy97ZXhwZXJpbWVudF9pZH0vcmVwb3J0LyJdCiAgICBzNiAtLT4gczdbIlN0ZXAgNyAtPiBIdWdnaW5nRmFjZSBIdWIiXQo=" alt="Data Flow" />
+```text
+experiment YAML
+  -> workspace/step1_tasks_prepared.json
+  -> workspace/step2_inference_{progress,results}_<condition>.json
+  -> workspace/result.json + results/<experiment_id>/
+  -> workspace/upload/{data,deliverable_files,self_report.json}
+  -> result PR (report.md) + Hugging Face allowlist + Actions artifact
+```
 
 
 ## Testing
@@ -319,58 +377,105 @@ Default: `-m "not integration"` — integration tests are skipped by default.
 
 - **o-series models** (`gpt-5.x`, `o3`, `o4`) do not support the `temperature` parameter. Passing `temperature=0` causes a 400 error.
 - **`needs_files` gate**: Tasks where the rubric expects file deliverables will fail if no files are produced, triggering a retry.
-- **Resume behavior**: Step 2 saves progress after each task. Re-running the same condition resumes from `workspace/step2_inference_progress.json`, only re-executing `error`/`qa_failed` tasks.
-- **HF upload**: Step 7 uses `delete_patterns` to wipe `data/**` and `deliverable_files/**` before uploading. `reference_files/**` is excluded. `results/<experiment_id>/report/` is included in the upload so the dashboard can read `report_data.json` directly from HuggingFace.
+- **Resume behavior**: Step 2 saves each condition separately and only re-executes `error`/`qa_failed` tasks from that condition's checkpoint.
+- **HF upload**: Step 7 deletes remote `data/**` and `deliverable_files/**`, then uploads only the explicit allowlist documented above. `reference_files/**` is preserved.
 - **`code_interpreter` mode** is the recommended execution mode, leveraging Azure OpenAI's Responses API with built-in Code Interpreter for secure, sandboxed file generation. Anthropic and other non-OpenAI providers must use `subprocess` or `json_renderer`.
 - **Reflection loop**: When Self-QA score is below `min_score`, the retry prompt includes a structured critique (`[REFLECTION]` block) with the previous attempt's summary, itemized issues, and improvement suggestions. This follows the [Reflection agentic pattern](https://www.promptingguide.ai/techniques/reflexion). Each reflection attempt is tracked as `reflection_attempts` in the result object.
 
 ## GitHub Actions
 
-The pipeline runs via GitHub Actions (`workflow_dispatch`). Go to **Actions → Run GDPVal Batch Experiment → Run workflow**.
+The pipeline runs via
+[Run GDPVal Batch Experiment](../../../actions/workflows/batch-run.yml)
+(`workflow_dispatch`). Launch it from the trusted `main` workflow definition.
+The preflight rejects any non-`main` ref or mismatched workflow/event SHA before
+checkout and cloud access.
 
 ### Workflow Parameters
 
 | Parameter | What it does | Default | When to change |
 |-----------|-------------|---------|----------------|
-| **Experiment YAML filename** | Which experiment to run (without `.yaml`) | *(required)* | Always fill this |
-| **Experiment name** | Display name for PR title. Leave empty = auto-extract from YAML | *(empty)* | Usually leave empty |
-| **Dry run** | Skip HF upload + PR creation (test mode) | `false` | ✅ Check on first test run |
-| **Relay run number** | **🚫 Don't touch.** Internal counter for relay continuation. Auto-incremented by the pipeline. | `0` | **Never** — auto-managed |
-| **Wall-clock timeout** | Minutes before Step 2 saves a checkpoint and triggers a relay continuation. `0` = no limit. | `0` | Set to `270` for `code_interpreter` experiments |
+| `experiment_yaml` | Config filename without `.yaml` | *(required)* | Set to a tracked config stem |
+| `experiment_name` | Optional display name; empty means read it from YAML | *(empty)* | Usually leave empty |
+| `dry_run` | Skip Step 5, final Step 7 publication, and result PR; model/HF setup still run | `false` | Use for the first smoke only after reading the cost/write warning |
+| `relay_run` | Internal relay leg counter | `0` | Leave unchanged on a manual run |
+| `relay_lineage_id` | Stable identity forwarded across relay legs | *(empty)* | Internal; leave empty on leg 0 |
+| `source_sha` | Initial `main` commit required by every relay leg | *(empty)* | Internal; leave empty on leg 0 |
+| `wall_timeout` | `condition_a` Step 2 checkpoint watchdog, `0..290` minutes; `0` delegates to `execution.wall_timeout` in YAML and disables only when both are `0` | `290` | Keep the default unless debugging relay behavior |
+| `sandbox_image_digest` | Immutable sandbox image forwarded across relay legs | *(empty)* | Internal; the workflow resolves it when needed |
 
-### Example: subprocess experiment (exp008)
-
-```
-Experiment YAML filename:  exp008_GPT52Chat_resume2_elicit_v2
-Dry run:                   ☐
-Relay run number:          0   ← don't touch
-Wall-clock timeout:        0   ← not needed (finishes in ~3h)
-```
-
-### Example: code_interpreter experiment (exp010)
+### Three-task smoke input
 
 ```
-Experiment YAML filename:  exp010_GPT52Chat_resume2_elicit_v2
-Dry run:                   ☐
-Relay run number:          0   ← don't touch
-Wall-clock timeout:        270 ← required (4.5h, prevents 6h job timeout)
+experiment_yaml:       exp998_smoke_baseline_sample
+experiment_name:       <empty>
+dry_run:               true
+relay_run:             0
+relay_lineage_id:      <empty>
+source_sha:            <empty>
+wall_timeout:          290
+sandbox_image_digest:  <empty>
 ```
 
 ### How Relay Runs Work
 
-`code_interpreter` experiments can take 6+ hours — exceeding the GitHub Actions 6-hour job limit. The relay mechanism handles this automatically:
+Long experiments can approach the GitHub Actions job limit. Step 2 checks its
+watchdog between tasks; when it observes the deadline, it saves a checkpoint
+and forwards a stable lineage into the next relay leg:
 
 ```
 Run 1 (you trigger):
-  → Runs tasks 1–150 → hits 4.5h wall timeout
-  → Saves checkpoint to HuggingFace
+  → Runs tasks → reaches the configured wall timeout
+  → Uploads one content-addressed generation to the exact `data.source`
+  → Advances `current.json` only after the generation revision and every
+    progress/deliverable SHA-256 + size are verified
   → Auto-triggers Run 2 (relay_run=1)
 
 Run 2 (auto-triggered):
-  → Restores checkpoint from HuggingFace
-  → Runs tasks 151–220 → completes
+  → Restores only the marker's immutable payload revision and exact file set
+  → Validates lineage, the complete ordered task set, prepared fingerprint,
+    and every referenced deliverable before Azure login
+  → Continues unfinished tasks → completes
   → Steps 3–7 run normally → PR created
 ```
 
-- **Max 3 relay runs** (safety limit). If the experiment still isn't done after 3 relays, it stops and requires manual intervention.
-- `subprocess` experiments (~3h) don't need relay — leave `wall_timeout=0`.
+This is best-effort rather than reserved handoff time: one long in-flight task
+or earlier setup can consume the remaining step/job lifetime.
+
+The experiment config bounds relay attempts. The workflow pins the initial
+`main` commit in `source_sha`; a relay fails before checkout if `main` changed.
+Missing, malformed, or incomplete checkpoints fail the continuation instead of
+silently rerunning every task.
+
+After Step 0, a non-mutating HF authorization check proves that the exact
+`data.source` is writable before task preparation, Azure login, or model spend.
+Step 0 also checks every parquet-declared reference path as a unique regular,
+non-symlink file with the pinned SHA-256 and size before inference. A target
+whose input projection, declared reference set, or reference bytes drifted is
+rejected before replacing the previous local snapshot.
+
+Checkpoint generations live under a source/lineage-scoped `_checkpoint/` path.
+Successful cleanup removes that lineage from the dataset's current tree with an
+exact-HEAD CAS commit. Failed uploads or cleanup can leave orphan generations,
+and path deletion does not erase prior Hugging Face revisions or stored history.
+Use only a disposable public target with non-sensitive inputs and outputs; inspect
+or delete the dataset explicitly if historical retention is unacceptable.
+Do not manually populate `relay_run`, `relay_lineage_id`, `source_sha`, or
+`sandbox_image_digest`.
+
+GitHub concurrency is not used as a durable queue. Do not dispatch overlapping
+runs that share one `data.source`; checkpoints and destructive publication use
+that same Hugging Face target.
+
+## Results and publication
+
+- Step 2 checkpoints and final inference JSON live in `workspace/`.
+- Step 3 writes formatted outputs under `results/<experiment_id>/`.
+- Step 6 writes `report_data.json` and `report.md` under
+  `results/<experiment_id>/report/`, then stages `self_report.json` for HF.
+- A non-dry workflow proves a one-file result PR containing `report.md` before
+  Step 7 modifies Hugging Face.
+- The workflow uploads `batch-runner/workspace/` and `batch-runner/results/` for
+  30 days. After download, the archive root exposes `workspace/` and `results/`.
+
+External rubric grading is a separate workflow and is not implied by Self-QA or
+the Step 6 pre-grading report.

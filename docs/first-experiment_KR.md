@@ -92,8 +92,14 @@ data:
 데이터셋 저장소 이름은 YAML 파일 stem과 같게 유지하세요. 새로 만든 일회성
 테스트 dataset을 사용해야 합니다. Step 0은 새 대상을 기본적으로 **public
 dataset**으로 만듭니다. 기존 대상에 `data/`로 시작하는 경로가 하나도 없으면
-README나 metadata 같은 다른 파일이 있어도 dataset repository 전체를 삭제한
-뒤 다시 만듭니다. `data/` 경로가 있으면 기존 snapshot을 재사용합니다.
+아무것도 삭제하지 않고 fail-closed합니다. 확인 후 새 일회성 target을 쓰거나
+partial repository를 명시적으로 제거하세요. `data/` 경로가 있으면 기존
+snapshot을 재사용합니다. 이 snapshot에는 source-derived
+`step0_needs_files_manifest.json`도 있어야 합니다. task/policy identity가
+없거나 어긋나면 중단하며 stripped data에서 manifest를 재생성하지 않습니다.
+Step 0은 target의 exact HEAD를 staging하고, canonical model-input projection과
+선언된 모든 reference path/SHA-256/size가 pinned `openai/gdpval` revision과
+일치할 때만 local snapshot을 설치합니다.
 
 나중에 non-dry Step 7을 실행하면 새 결과를 올리기 전에 원격 `data/**`와
 `deliverable_files/**`를 삭제합니다. 보존해야 할 dataset을 가리키면 안 됩니다.
@@ -118,12 +124,15 @@ README나 metadata 같은 다른 파일이 있어도 dataset repository 전체�
    합니다.
 6. Azure OpenAI 리소스의 **Access control (IAM)**에서 이 앱의 service
    principal에 **Cognitive Services OpenAI User** 역할을 부여합니다.
-7. Azure 구독 ID와 Azure OpenAI 리소스의 endpoint를 기록합니다.
+7. Azure 구독 ID와 이 저장소의 `AzureOpenAI(azure_endpoint=...)` client가
+   사용하는 Azure OpenAI **resource endpoint**를 기록합니다. Foundry에서
+   복사한다면 Foundry project URL이나 `/openai/v1/` base URL이 아니라 Azure
+   OpenAI resource endpoint를 사용합니다.
 
 Microsoft 공식 절차는
 [GitHub Actions에서 OpenID Connect 사용](https://learn.microsoft.com/azure/developer/github/connect-from-azure-openid-connect)을
-참고하세요. fork나 기본 브랜치 이름이 다르면 federated credential도 정확히
-같아야 합니다.
+참고하세요. 이 workflow는 `main` 브랜치 이름을 요구하며 federated
+credential도 그 exact branch에 맞춰야 합니다.
 
 ### 4. Hugging Face 토큰 만들기
 
@@ -142,7 +151,7 @@ secret**에서 다음을 추가합니다.
 | `AZURE_CLIENT_ID` | Entra 앱의 client ID |
 | `AZURE_TENANT_ID` | Entra directory tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
-| `AZURE_OPENAI_ENDPOINT` | `https://YOUR_RESOURCE.openai.azure.com/` |
+| `AZURE_OPENAI_ENDPOINT` | `AzureOpenAI(azure_endpoint=...)`용 Azure OpenAI resource endpoint. Foundry project URL은 아님 |
 | `HF_TOKEN` | Hugging Face 전용 write token |
 
 이 경로에는 `AZURE_OPENAI_API_KEY`를 추가하지 마세요. `GITHUB_TOKEN`은
@@ -158,9 +167,24 @@ permissions**에서 **Read and write permissions**와 Actions의 PR 생성을
 2. **Run GDPVal Batch Experiment**를 선택합니다.
 3. `main` 브랜치에서 **Run workflow**를 누릅니다.
 4. `experiment_yaml`에 `exp998_smoke_baseline_sample`을 입력합니다.
-5. `experiment_name`은 비워 두고, `relay_run`은 `0`, `wall_timeout`은
-   `290`, `sandbox_image_digest`는 빈 값으로 둡니다.
+5. `experiment_name`, `relay_lineage_id`, `source_sha`,
+   `sandbox_image_digest`는 비워 두고, `relay_run`은 `0`, `wall_timeout`은
+   `290`으로 둡니다.
 6. 위 비용 경고를 확인한 뒤 `dry_run`을 `true`로 설정하고 실행합니다.
+
+workflow는 checkout이나 cloud 접근 전에 exact `main`이 아닌 dispatch ref를
+거부하고 그 commit을 relay 전체에 고정합니다. GitHub concurrency는 durable
+queue가 아니므로 같은 `data.source`를 공유하는 실행을 겹치지 마세요.
+Relay checkpoint는 그 exact `data.source`를 사용합니다. progress, identity,
+fingerprint, 참조 deliverable을 복원·검증할 수 없으면 Azure login 전에
+continuation이 실패합니다.
+Step 0 뒤에는 비변경 authorization check로 그 exact dataset의 write 권한을
+model spend 전에 요구합니다. 각 relay marker는 immutable HF revision 하나와
+exact SHA-256/size file manifest를 가리킵니다.
+Step 0은 parquet가 선언한 모든 reference가 unique regular file인지도 검사합니다.
+Cleanup은 현재 tree의 lineage만 제거하며 과거 HF revision은 지우지 않습니다.
+실패한 작업은 orphan generation을 남길 수 있으므로 이 public 일회성 target에
+민감 자료를 사용하지 마세요.
 
 스모크 설정은 provider-hosted `code_interpreter`를 사용합니다. 저장소의
 Docker sandbox나 agentic preflight를 실행하는 테스트가 아닙니다.
@@ -173,7 +197,7 @@ Docker sandbox나 agentic preflight를 실행하는 테스트가 아닙니다.
 |---|---|
 | Inspect mode | cloud credential 없이 입력 파일명, 안전한 YAML 구조, 일반 workflow 허용 mode를 사전 검사 |
 | 전체 config 검증 | Hugging Face bootstrap 전에 전체 experiment config를 load하고 validate |
-| Step 0 | 일회성 Hugging Face dataset을 공개 생성, 파괴적 재생성 또는 재사용한 뒤 snapshot 다운로드 |
+| Step 0 | 새 target을 공개 생성하거나 기존 target의 exact HEAD를 staging. canonical model input, schema-3 manifest, reference bytes가 pinned source와 일치해야 local 설치 |
 | Step 1 | seed에 따라 태스크 3개 선택 |
 | Step 2 | 모델 호출, 산출물 생성, 같은 모델의 Self-QA 실행 |
 | Steps 3-4 | JSON/Markdown 결과와 3-row Parquet 생성 |
@@ -202,7 +226,7 @@ Self-QA는 산출물을 만든 같은 모델의 재시도 신호입니다. 독�
 
 | 증상 | 확인할 것 |
 |---|---|
-| workflow가 보이지 않음 | Actions가 활성화됐고 YAML이 fork 기본 브랜치에 있는지 확인 |
+| workflow가 보이지 않음 | Actions가 활성화됐고 YAML이 fork의 `main` 브랜치에 있는지 확인 |
 | `AADSTS700213` 또는 federated identity 불일치 | owner, repository, branch, federated subject가 fork와 정확히 같은지 확인 |
 | Azure login은 성공하지만 inference가 403 | OpenAI 역할, endpoint, deployment 접근 권한 확인 |
 | deployment를 찾지 못함 | 스모크 설정은 `gpt-5.2-chat` 이름을 기대함 |
@@ -211,6 +235,7 @@ Self-QA는 산출물을 만든 같은 모델의 재시도 신호입니다. 독�
 | Step 6이 경고인데 job은 계속됨 | PR/HF 게시 전에 model-free fallback report 생성과 identity 검증을 반드시 통과해야 함 |
 | 결과 PR이 없음 | `dry_run: true`에서는 정상 |
 | Step 5가 생략됨 | 3개 이하 샘플에서는 정상 |
+| Relay 복원 실패 | 무작정 재시작하지 말고 exact `data.source` checkpoint와 lineage 확인. 전체 태스크 재실행 대신 continuation이 fail-closed |
 
 ## 스모크 다음 단계
 

@@ -75,7 +75,7 @@ export function extractWorkflowPolicy(workflowSource) {
     watchdog_minutes: watchdogMinutes,
     step_timeout_minutes: step2aMinutes,
     job_timeout_minutes: jobMinutes,
-    relay_handoff_margin_minutes: step2aMinutes - watchdogMinutes,
+    step_timeout_headroom_minutes: step2aMinutes - watchdogMinutes,
   }
 }
 

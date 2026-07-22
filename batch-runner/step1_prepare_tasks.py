@@ -115,6 +115,11 @@ def prepare_tasks(config_path: str) -> dict:
             "occupation": t.occupation,
             "instruction": t.prompt,
             "reference_files": t.reference_files,
+            "reference_file_records": (
+                manifest.reference_records(t.task_id, t.reference_files)
+                if manifest
+                else []
+            ),
             "reference_file_urls": t.reference_file_urls,
             "needs_files": manifest.needs_files(t.task_id) if manifest else False,
         }

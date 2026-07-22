@@ -28,8 +28,13 @@ on:
         required: false
         type: string
         default: ''
+      source_sha:
+        description: 'Initial main commit forwarded across relay legs; internal only, leave empty on leg 0'
+        required: false
+        type: string
+        default: ''
       wall_timeout:
-        description: 'Wall-clock timeout in minutes for Step 2 (0=no limit, 270 recommended for code_interpreter)'
+        description: 'condition_a Step 2 watchdog minutes, 0..290 (0=use execution.wall_timeout from YAML; disabled only when both are 0)'
         required: false
         type: number
         default: 290
@@ -58,10 +63,49 @@ jobs:
     outputs:
       uses_agentic: ${{ steps.mode.outputs.uses_agentic }}
     steps:
+      - name: Verify dispatch contract
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WALL_TIMEOUT: ${{ inputs.wall_timeout }}
+          RELAY_RUN: ${{ inputs.relay_run }}
+          RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SANDBOX_IMAGE_DIGEST: ${{ inputs.sandbox_image_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_NAME" == "workflow_dispatch" ]]
+          [[ "$EVENT_REF" == "refs/heads/main" ]]
+          [[ "$EVENT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$WORKFLOW_SHA" == "$EVENT_SHA" ]]
+          [[ "$WALL_TIMEOUT" =~ ^(0|[1-9][0-9]{0,2})$ ]]
+          (( 10#$WALL_TIMEOUT <= 290 ))
+          [[ "$RELAY_RUN" =~ ^(0|[1-9][0-9]?)$ ]]
+          (( 10#$RELAY_RUN <= 10 ))
+          if (( 10#$RELAY_RUN == 0 )); then
+            [[ -z "$SOURCE_SHA" ]]
+            [[ -z "$RELAY_LINEAGE_ID" ]]
+            [[ -z "$SANDBOX_IMAGE_DIGEST" ]]
+          else
+            [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$SOURCE_SHA" == "$EVENT_SHA" ]]
+            [[ "$RELAY_LINEAGE_ID" =~ ^[A-Za-z0-9._:-]{1,256}$ ]]
+            if [[ -n "$SANDBOX_IMAGE_DIGEST" ]]; then
+              [[ "$SANDBOX_IMAGE_DIGEST" =~ ^ghcr\.io/hyeonsangjeon/gdpval-sandbox@sha256:[0-9a-f]{64}$ ]]
+            fi
+          fi
+
       - name: Checkout config only
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+
+      - name: Verify exact config checkout
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
 
       - name: Inspect execution mode without credentials
         id: mode
@@ -114,14 +158,21 @@ jobs:
       EXPERIMENT_NAME_INPUT: ${{ inputs.experiment_name }}
       RELAY_RUN_INPUT: ${{ inputs.relay_run }}
       RELAY_LINEAGE_ID_INPUT: ${{ inputs.relay_lineage_id }}
+      SOURCE_SHA_INPUT: ${{ inputs.source_sha }}
       WALL_TIMEOUT_INPUT: ${{ inputs.wall_timeout }}
       DRY_RUN_INPUT: ${{ inputs.dry_run }}
+      SANDBOX_IMAGE_DIGEST_INPUT: ${{ inputs.sandbox_image_digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+
+      - name: Verify exact checkout
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
 
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -224,7 +275,11 @@ jobs:
           import os
           import pathlib
           import re
+          import sys
           import yaml
+
+          sys.path.insert(0, "batch-runner")
+          from core.repository_identity import validate_hf_dataset_repo_id
 
           path = pathlib.Path("batch-runner/experiments") / (
             os.environ["EXPERIMENT_YAML_INPUT"] + ".yaml"
@@ -234,12 +289,9 @@ jobs:
           sandbox = execution.get("sandbox") or {}
           if not isinstance(execution, dict) or not isinstance(sandbox, dict):
             raise SystemExit("execution and execution.sandbox must be mappings")
-          source = (config.get("data") or {}).get(
-            "source", f"HyeonSang/{os.environ['EXPERIMENT_YAML_INPUT']}"
+          source_repo = validate_hf_dataset_repo_id(
+            (config.get("data") or {}).get("source")
           )
-          owner = source.split("/", 1)[0] if isinstance(source, str) else ""
-          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", owner):
-            raise SystemExit("data source owner is invalid")
           image = sandbox.get("image") or "gdpval-sandbox:latest"
           if not isinstance(image, str) or not re.fullmatch(
             r"[A-Za-z0-9][A-Za-z0-9._/@:-]{0,299}", image
@@ -247,7 +299,7 @@ jobs:
             raise SystemExit("sandbox image reference is invalid")
           wall_timeout = execution.get("wall_timeout", 0)
           relay_max_runs = execution.get("relay_max_runs", 3)
-          if type(wall_timeout) is not int or not 0 <= wall_timeout <= 350:
+          if type(wall_timeout) is not int or not 0 <= wall_timeout <= 290:
             raise SystemExit("execution.wall_timeout is invalid")
           if type(relay_max_runs) is not int or not 0 <= relay_max_runs <= 10:
             raise SystemExit("execution.relay_max_runs is invalid")
@@ -259,7 +311,7 @@ jobs:
             ),
             "wall_timeout": str(wall_timeout),
             "relay_max_runs": str(relay_max_runs),
-            "repo_owner": owner,
+            "source_repo": source_repo,
             "uses_sandbox": str(mode == "sandbox").lower(),
             "sandbox_image": image,
             "uses_agentic": str(
@@ -321,43 +373,16 @@ jobs:
         if: inputs.relay_run > 0
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          REPO_OWNER: ${{ steps.read_config.outputs.repo_owner }}
+          SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
         run: |
+          set -euo pipefail
           cd batch-runner
           echo "Relay run #${RELAY_RUN_INPUT}: Restoring checkpoint..."
-          python3 -c "
-          import shutil, os
-          from huggingface_hub import hf_hub_download, snapshot_download
-
-          repo_id = os.environ['REPO_OWNER'] + '/' + os.environ['EXPERIMENT_YAML_INPUT']
-          try:
-              # Download progress.json
-              progress_path = hf_hub_download(
-                  repo_id=repo_id, repo_type='dataset',
-                  filename='_checkpoint/progress.json'
-              )
-              os.makedirs('workspace', exist_ok=True)
-              shutil.copy(progress_path, 'workspace/step2_inference_progress.json')
-              print(f'Progress restored from {repo_id}')
-
-              # Download deliverable files
-              try:
-                  snapshot = snapshot_download(
-                      repo_id=repo_id, repo_type='dataset',
-                      allow_patterns='_checkpoint/deliverable_files/**'
-                  )
-                  src = os.path.join(snapshot, '_checkpoint', 'deliverable_files')
-                  dst = 'workspace/upload/deliverable_files'
-                  if os.path.exists(src):
-                      shutil.copytree(src, dst, dirs_exist_ok=True)
-                      print('Deliverable files restored')
-              except:
-                  print('No deliverable files in checkpoint (expected for early relay)')
-
-          except Exception as e:
-              print(f'Checkpoint restore failed: {e}')
-              print('Continuing without checkpoint (will run all tasks)')
-          "
+          python3 scripts/relay_checkpoint.py restore \
+            --repo-id "$SOURCE_REPO" \
+            --source-sha "$SOURCE_SHA_INPUT" \
+            --lineage-id "$RELAY_LINEAGE_ID_INPUT" \
+            --sandbox-image-digest "$SANDBOX_IMAGE_DIGEST_INPUT"
 
       # ── Step 0: Bootstrap ──
       - name: 'Step 0: Bootstrap submission repo'
@@ -367,11 +392,31 @@ jobs:
           cd batch-runner
           bash step0_bootstrap.sh "experiments/${EXPERIMENT_YAML_INPUT}.yaml"
 
+      - name: 'Verify result dataset write access'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/relay_checkpoint.py verify-write --repo-id "$SOURCE_REPO"
+
       # ── Step 1: Prepare Tasks ──
       - name: 'Step 1: Prepare tasks'
         run: |
           cd batch-runner
           bash step1_prepare_tasks.sh "experiments/${EXPERIMENT_YAML_INPUT}.yaml"
+
+      - name: 'Validate restored checkpoint identity'
+        if: inputs.relay_run > 0
+        env:
+          GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 step2_run_inference.py \
+            --condition condition_a \
+            --validate-checkpoint-only
 
       # ── Sandbox: pull the prebuilt image from GHCR & verify (sandbox mode only) ──
       # Runs ONLY for execution.mode: sandbox experiments; baselines skip it
@@ -384,7 +429,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
-          INPUT_DIGEST: ${{ inputs.sandbox_image_digest }}
           RETAG_TARGET: ${{ steps.read_config.outputs.sandbox_image }}
         run: |
           set -euo pipefail
@@ -396,8 +440,8 @@ jobs:
           # Resolve to an IMMUTABLE digest so every relay leg pulls the exact
           # same image. Pinning the digest across legs prevents mid-run :latest
           # drift (a rebuild between legs) from corrupting a single experiment.
-          if [ -n "$INPUT_DIGEST" ]; then
-            RESOLVED_DIGEST="$INPUT_DIGEST"
+          if [ -n "$SANDBOX_IMAGE_DIGEST_INPUT" ]; then
+            RESOLVED_DIGEST="$SANDBOX_IMAGE_DIGEST_INPUT"
             echo "📌 Using pinned digest forwarded from a previous relay leg: $RESOLVED_DIGEST"
           else
             echo "🔎 Resolving ${IMAGE_REPO}:latest to an immutable digest..."
@@ -443,11 +487,13 @@ jobs:
 
       - name: 'Step 2a: Run inference (condition_a)'
         id: step2a
-        # Must exceed wall_timeout (default 290min) by enough margin to
-        # cover checkpoint save + HF upload + relay re-trigger handoff.
-        timeout-minutes: 350    # = wall_timeout(290) + 60min margin for relay handoff
+        # Nominally 60min above the 290min watchdog. This is not guaranteed
+        # handoff time: the watchdog is checked only between tasks, and the
+        # job timeout also includes setup, bootstrap, checkpoint, and dispatch.
+        timeout-minutes: 350
         env:
           GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
+          CONFIG_WALL_TIMEOUT: ${{ steps.read_config.outputs.wall_timeout }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # Removed AZURE_OPENAI_API_KEY — openai SDK auto-detects env key and overrides azure_ad_token_provider. OIDC only via DefaultAzureCredential / azure/login@v2.
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
@@ -455,8 +501,8 @@ jobs:
         run: |
           cd batch-runner
           WALL_TIMEOUT="$WALL_TIMEOUT_INPUT"
-          if [ "$WALL_TIMEOUT" = "0" ] && [ "${{ steps.read_config.outputs.wall_timeout }}" -gt 0 ] 2>/dev/null; then
-            WALL_TIMEOUT="${{ steps.read_config.outputs.wall_timeout }}"
+          if [[ "$WALL_TIMEOUT" == "0" ]] && [[ "$CONFIG_WALL_TIMEOUT" =~ ^[0-9]+$ ]] && (( 10#$CONFIG_WALL_TIMEOUT > 0 )); then
+            WALL_TIMEOUT="$CONFIG_WALL_TIMEOUT"
           fi
           if [ "$WALL_TIMEOUT" -gt 0 ] 2>/dev/null; then
             bash step2_run_inference.sh condition_a --wall-timeout "$WALL_TIMEOUT"
@@ -478,9 +524,9 @@ jobs:
           except:
               print(0)
           ")
-          echo "pending_count=$PENDING" >> $GITHUB_OUTPUT
+          echo "pending_count=$PENDING" >> "$GITHUB_OUTPUT"
           NEEDS_RELAY=$( [ "$PENDING" -gt 0 ] && echo true || echo false )
-          echo "needs_relay=$NEEDS_RELAY" >> $GITHUB_OUTPUT
+          echo "needs_relay=$NEEDS_RELAY" >> "$GITHUB_OUTPUT"
           echo "Step 2a: pending=$PENDING, needs_relay=$NEEDS_RELAY"
 
       # ── Verify Step 2a success (fail if step failed AND not relay) ──
@@ -495,39 +541,19 @@ jobs:
         if: steps.check_relay.outputs.needs_relay == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          REPO_OWNER: ${{ steps.read_config.outputs.repo_owner }}
+          SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
+          SANDBOX_IMAGE_DIGEST: ${{ steps.sandbox_pull.outputs.digest }}
         run: |
+          set -euo pipefail
           cd batch-runner
-          python3 -c "
-          import os
-          from huggingface_hub import HfApi
-
-          api = HfApi(token=os.environ['HF_TOKEN'])
-          repo_id = os.environ['REPO_OWNER'] + '/' + os.environ['EXPERIMENT_YAML_INPUT']
-
-          # Upload progress.json
-          api.upload_file(
-              path_or_fileobj='workspace/step2_inference_progress.json',
-              path_in_repo='_checkpoint/progress.json',
-              repo_id=repo_id, repo_type='dataset'
-          )
-          print('Progress checkpoint uploaded')
-
-          # Upload completed deliverable files
-          try:
-              deliverable_dir = 'workspace/upload/deliverable_files'
-              if os.path.exists(deliverable_dir):
-                  api.upload_folder(
-                      folder_path=deliverable_dir,
-                      path_in_repo='_checkpoint/deliverable_files',
-                      repo_id=repo_id, repo_type='dataset'
-                  )
-                  print('Deliverable files checkpoint uploaded')
-          except Exception as e:
-              print(f'Deliverable files upload skipped: {str(e)}')
-
-          print('Checkpoint uploaded to HuggingFace')
-          "
+          SOURCE_SHA="$SOURCE_SHA_INPUT"
+          if [[ -z "$SOURCE_SHA" ]]; then
+            SOURCE_SHA="$GITHUB_SHA"
+          fi
+          python3 scripts/relay_checkpoint.py upload \
+            --repo-id "$SOURCE_REPO" \
+            --source-sha "$SOURCE_SHA" \
+            --sandbox-image-digest "$SANDBOX_IMAGE_DIGEST"
 
       # ── Self-retrigger: Start relay run ──
       - name: 'Retrigger relay run'
@@ -542,7 +568,7 @@ jobs:
           NEXT_RELAY=$(( RELAY_RUN_INPUT + 1 ))
           MAX_RELAYS="${{ steps.read_config.outputs.relay_max_runs }}"
 
-          if [ $NEXT_RELAY -gt $MAX_RELAYS ]; then
+          if [ "$NEXT_RELAY" -gt "$MAX_RELAYS" ]; then
             echo "Max relay runs reached ($MAX_RELAYS). Manual intervention needed."
             exit 1
           fi
@@ -552,10 +578,16 @@ jobs:
           if [[ -z "$LINEAGE_ID" ]]; then
             LINEAGE_ID="${EXPERIMENT_ID}:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
           fi
-          gh workflow run batch-run.yml \
+          SOURCE_SHA="$SOURCE_SHA_INPUT"
+          if [[ -z "$SOURCE_SHA" ]]; then
+            SOURCE_SHA="$GITHUB_SHA"
+          fi
+          gh workflow run batch-run.yml --ref main \
             -f experiment_yaml="$EXPERIMENT_YAML_INPUT" \
+            -f experiment_name="$experiment_name" \
             -f relay_run="$NEXT_RELAY" \
             -f relay_lineage_id="$LINEAGE_ID" \
+            -f source_sha="$SOURCE_SHA" \
             -f wall_timeout="$WALL_TIMEOUT_INPUT" \
             -f dry_run="$DRY_RUN_INPUT" \
             -f sandbox_image_digest="$SANDBOX_IMAGE_DIGEST"
@@ -569,11 +601,11 @@ jobs:
         run: |
           YAML_PATH="batch-runner/experiments/${EXPERIMENT_YAML_INPUT}.yaml"
           HAS_CONDITION_B=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${YAML_PATH}')); print('true' if 'condition_b' in cfg else 'false')")
-          echo "has_condition_b=$HAS_CONDITION_B" >> $GITHUB_OUTPUT
+          echo "has_condition_b=$HAS_CONDITION_B" >> "$GITHUB_OUTPUT"
           echo "Condition B exists: $HAS_CONDITION_B"
 
       - name: 'Step 2b: Run inference (condition_b)'
-        timeout-minutes: 350    # mirrors Step 2a — wall_timeout(290) + 60min relay margin
+        timeout-minutes: 350    # mirrors Step 2a hard ceiling; no watchdog is forwarded
         if: steps.check_condition_b.outputs.has_condition_b == 'true' && steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
         env:
           GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
@@ -606,8 +638,8 @@ jobs:
           YAML_PATH="batch-runner/experiments/${EXPERIMENT_YAML_INPUT}.yaml"
           SAMPLE_SIZE=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${YAML_PATH}')); s=cfg.get('data',{}).get('filter',{}).get('sample_size',220); print(s if s is not None else 220)")
           IS_SMOKE_TEST=$([ "$SAMPLE_SIZE" -le 3 ] && echo "true" || echo "false")
-          echo "sample_size=$SAMPLE_SIZE" >> $GITHUB_OUTPUT
-          echo "is_smoke_test=$IS_SMOKE_TEST" >> $GITHUB_OUTPUT
+          echo "sample_size=$SAMPLE_SIZE" >> "$GITHUB_OUTPUT"
+          echo "is_smoke_test=$IS_SMOKE_TEST" >> "$GITHUB_OUTPUT"
           echo "Sample size: $SAMPLE_SIZE (smoke test: $IS_SMOKE_TEST)"
 
       # ── Step 5: Validate (skip for smoke tests or dry_run or relay) ──
@@ -791,32 +823,15 @@ jobs:
         if: inputs.relay_run > 0 && steps.check_relay.outputs.needs_relay != 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          REPO_OWNER: ${{ steps.read_config.outputs.repo_owner }}
-        continue-on-error: true
+          SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
         run: |
-          python3 -c "
-          import os
-          from huggingface_hub import HfApi
-
-          api = HfApi(token=os.environ['HF_TOKEN'])
-          repo_id = os.environ['REPO_OWNER'] + '/' + os.environ['EXPERIMENT_YAML_INPUT']
-
-          try:
-              # Delete progress checkpoint
-              api.delete_file(path_in_repo='_checkpoint/progress.json', repo_id=repo_id, repo_type='dataset')
-              print('Relay checkpoint progress.json deleted')
-
-              # Try to delete deliverable files checkpoint too
-              try:
-                  api.delete_file(path_in_repo='_checkpoint/deliverable_files', repo_id=repo_id, repo_type='dataset')
-                  print('Relay checkpoint deliverable_files deleted')
-              except:
-                  pass
-
-              print('Relay checkpoint cleaned up')
-          except Exception as e:
-              print(f'Cleanup skipped: {str(e)}')
-          "
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/relay_checkpoint.py cleanup \
+            --repo-id "$SOURCE_REPO" \
+            --source-sha "$SOURCE_SHA_INPUT" \
+            --lineage-id "$RELAY_LINEAGE_ID_INPUT" \
+            --sandbox-image-digest "$SANDBOX_IMAGE_DIGEST_INPUT"
 
       # ── Summary step ──
       - name: Show summary
