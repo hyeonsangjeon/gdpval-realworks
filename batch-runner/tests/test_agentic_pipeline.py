@@ -76,6 +76,7 @@ def _config() -> ExperimentConfig:
 def _prepared(agentic: dict | None = None) -> dict:
     payload = {
         "experiment_id": "exp028",
+        "publication_generation": "exp028:100:1",
         "experiment_name": "Agentic fixture",
         "source": "fixture/agentic",
         "execution": {
@@ -142,7 +143,6 @@ def _patch_step2_workspace(tmp_path, monkeypatch, prepared):
     )
     monkeypatch.setattr(step2, "WORKSPACE_DIR", workspace)
     monkeypatch.setattr(step2, "UPLOAD_DIR", upload)
-    monkeypatch.setattr(step2, "DELIVERABLE_DIR", deliverables)
     monkeypatch.setattr(
         step2,
         "_load_private_agentic_config",
@@ -518,7 +518,6 @@ def test_save_files_accepts_nested_canonical_deliverable(tmp_path, monkeypatch):
     upload = tmp_path / "upload"
     deliverables = upload / "deliverable_files"
     monkeypatch.setattr(step2, "UPLOAD_DIR", upload)
-    monkeypatch.setattr(step2, "DELIVERABLE_DIR", deliverables)
 
     saved = step2._save_files(
         [{"filename": "reports/final.pdf", "content": b"pdf"}],
@@ -530,22 +529,21 @@ def test_save_files_accepts_nested_canonical_deliverable(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("task_id", "filename"),
+    ("task_id", "filename", "message"),
     [
-        ("../other-task", "report.txt"),
-        ("task-1", "../escape.txt"),
-        ("task-1", "/tmp/escape.txt"),
-        ("task-1", ".hidden.txt"),
+        ("../other-task", "report.txt", "task_id"),
+        ("task-1", "../escape.txt", "deliverable"),
+        ("task-1", "/tmp/escape.txt", "deliverable"),
+        ("task-1", ".hidden.txt", "deliverable"),
     ],
 )
 def test_save_files_rejects_task_and_filename_traversal(
-    tmp_path, monkeypatch, task_id, filename
+    tmp_path, monkeypatch, task_id, filename, message
 ):
     upload = tmp_path / "upload"
     monkeypatch.setattr(step2, "UPLOAD_DIR", upload)
-    monkeypatch.setattr(step2, "DELIVERABLE_DIR", upload / "deliverable_files")
 
-    with pytest.raises(ValueError, match="deliverable"):
+    with pytest.raises(ValueError, match=message):
         step2._save_files([{"filename": filename, "content": b"x"}], task_id)
 
 
@@ -558,7 +556,6 @@ def test_save_files_rejects_symlink_parent_and_duplicate_name(tmp_path, monkeypa
     outside.mkdir()
     (task_dir / "reports").symlink_to(outside, target_is_directory=True)
     monkeypatch.setattr(step2, "UPLOAD_DIR", upload)
-    monkeypatch.setattr(step2, "DELIVERABLE_DIR", deliverables)
 
     with pytest.raises(ValueError, match="parent"):
         step2._save_files(

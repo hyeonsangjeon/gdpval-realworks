@@ -407,6 +407,82 @@ def test_dry_run_report_marks_hf_target_as_unpublished(monkeypatch, tmp_path):
     assert "/blob/main/self_report.json" not in markdown
 
 
+def test_markdown_reports_failed_files_without_claiming_dummy_creation():
+    report = step6_report._build_report_data(
+        _make_result_payload(),
+        {"grading_referenced": False},
+        {
+            "total_tasks": 2,
+            "success_count": 1,
+            "success_rate_pct": 50.0,
+            "error_count": 1,
+            "retried_count": 0,
+            "avg_qa_score": 0,
+            "min_qa_score": 0,
+            "max_qa_score": 0,
+            "avg_latency_ms": 0,
+            "max_latency_ms": 0,
+            "total_latency_ms": 0,
+        },
+        [],
+        [],
+        [],
+    )
+    report["file_generation"] = {
+        "needs_files_total": 2,
+        "files_succeeded": 1,
+        "files_failed": 1,
+        "dummy_files_created": 0,
+        "dummy_task_ids": [],
+    }
+
+    markdown = step6_report._build_markdown(report)
+
+    assert "Failed (empty outputs preserved)" in markdown
+    assert "dummy created" not in markdown
+
+
+def test_report_preserves_current_pipeline_publication_identity(
+    monkeypatch, tmp_path
+):
+    payload = _make_result_payload()
+    payload["publication_generation"] = "exp_test:100:1"
+    payload["prepared_fingerprint"] = "f" * 64
+    payload["result_fingerprint"] = "e" * 64
+    payload["ordered_task_ids"] = ["task_a", "task_b"]
+
+    rd = _run_step6(
+        monkeypatch,
+        tmp_path,
+        _make_v1_manifest_data(),
+        result_payload=payload,
+    )
+
+    assert rd["meta"]["publication_generation"] == "exp_test:100:1"
+    assert rd["meta"]["prepared_fingerprint"] == "f" * 64
+    assert rd["meta"]["result_fingerprint"] == "e" * 64
+    assert rd["meta"]["ordered_task_ids"] == ["task_a", "task_b"]
+    assert rd["meta"]["publication_plan"] == "step7_upload_requested"
+
+
+def test_report_rejects_result_task_order_outside_pipeline_identity(
+    monkeypatch, tmp_path
+):
+    payload = _make_result_payload()
+    payload["publication_generation"] = "exp_test:100:1"
+    payload["prepared_fingerprint"] = "f" * 64
+    payload["result_fingerprint"] = "e" * 64
+    payload["ordered_task_ids"] = ["task_b", "task_a"]
+
+    with pytest.raises(ValueError, match="task set differs"):
+        _run_step6(
+            monkeypatch,
+            tmp_path,
+            _make_v1_manifest_data(),
+            result_payload=payload,
+        )
+
+
 def test_default_output_dir_uses_selected_result_json_not_stale_workspace(
     monkeypatch, tmp_path
 ):

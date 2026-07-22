@@ -157,7 +157,11 @@ def test_execute_single_task_preserves_compact_observability(monkeypatch):
                 "sandbox_manifest": manifest,
             }
 
-    monkeypatch.setattr(step2, "_save_files", lambda files, task_id: [])
+    monkeypatch.setattr(
+        step2,
+        "_save_files",
+        lambda files, task_id, upload_root=None: [],
+    )
     task = {
         "task_id": "task-1",
         "instruction": "Create a document",

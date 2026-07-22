@@ -67,8 +67,14 @@ bash step6_report.sh --no-narrative --dry-run
 ```
 
 설정 확인만을 위해 Step 7을 실행하지 마세요. 3-row smoke 결과를 의도적으로
-게시하려면 `bash step7_upload_hf.sh --test`를 사용하며, 업로드 전에 대상의
-원격 `data/**`와 `deliverable_files/**`를 삭제합니다.
+게시하려면 먼저 `bash step6_report.sh --no-narrative`로 미게시 self-report를
+교체한 뒤 `bash step7_upload_hf.sh --test`를 실행하세요. Step 7은 dry-run 또는
+stale report를 거부하고 repository, prepared fingerprint, Step 2 result
+fingerprint, run-specific publication generation, ordered task ID, result task
+set이 현재 workspace와 일치하는지 검증합니다. 새 Step 1은 이전 finalized run을
+무효화하고 relay leg는 최초 generation을 유지합니다. Parquet submitter
+text/files/URL/URI도 현재 Step 2 결과와 같을 때만 대상의 원격 `data/**`,
+`deliverable_files/**`, `self_report.json`을 CAS로 교체합니다.
 
 ## 인증과 환경 변수
 
@@ -95,7 +101,9 @@ bash step6_report.sh --no-narrative --dry-run
 
 - 실험 YAML 경로를 받아 `data.source`에서 대상을 읽음:
   `bash step0_bootstrap.sh experiments/exp998_smoke_baseline_sample.yaml`
-- 설정한 public HF dataset이 없으면 `openai/gdpval`을 duplicate
+- target을 먼저 read-only로 분류합니다. 대상이 없을 때만 pinned source를
+  완전히 준비·검증한 뒤 public HF dataset을 생성하며, create와 upload는 각각
+  최대 1회만 시도합니다. upload 결과가 불명확하면 자동 재시도·삭제하지 않습니다.
 - `data/gdpval-local/`에 로컬 스냅샷 다운로드
 - `openai/gdpval`의 full revision 하나를 고정하고 base data와 parquet가 선언한
   reference만 fresh staging에 다운로드. 업로드 전에 exact source column,
@@ -125,7 +133,9 @@ bash step6_report.sh --no-narrative --dry-run
 `workspace/step2_inference_progress_condition_a.json` 같은 조건별 checkpoint와
 `workspace/step2_inference_results_condition_a.json` 같은 최종 결과에 저장.
 condition A는 호환성을 위해 legacy alias도 기록하며, 다중 라운드 resume은
-`error`/`qa_failed` 태스크를 자동 재실행합니다.
+`error`/`qa_failed` 태스크를 자동 재실행합니다. 기존 progress identity는 provider
+client와 executor를 만들기 전에 검증하므로 stale 또는 malformed local resume이
+model budget을 소비하지 않습니다.
 
 ### Step 3: 결과 포맷팅 (`step3_format_results.py`)
 
@@ -133,7 +143,9 @@ condition A는 호환성을 위해 legacy alias도 기록하며, 다중 라운�
 
 ### Step 4: Parquet 병합 (`step4_fill_parquet.py`)
 
-`deliverable_text`와 `deliverable_files`를 base parquet에 병합. 원본 컬럼(rubric_json, rubric_pretty 등) 모두 보존.
+full source parquet를 schema-v4 manifest와 reference byte에 다시 대조한 뒤
+`deliverable_text`와 `deliverable_files`를 병합합니다. 인증된 source column
+(prompt, rubric, taxonomy, reference)은 그대로 보존합니다.
 
 ### Step 5: 유효성 검증 (`step5_validate.py`)
 
@@ -157,9 +169,13 @@ fallback과 identity 검사를 강제합니다.
 
 ### Step 7: HuggingFace 업로드 (`step7_upload_hf.sh`)
 
-원격 `data/**`와 `deliverable_files/**`를 삭제한 뒤 `README.md`,
-`data/train-*.parquet`, `deliverable_files/**`, `self_report.json`만
-업로드합니다. `reference_files/**`는 duplicate 원본을 유지합니다.
+regular file이며 identity가 맞는 `self_report.json`, 모든 게시 row의 source
+projection, exact deliverable tree를 검증한 뒤 원격 `data/**`,
+`deliverable_files/**`, `self_report.json`을 교체합니다. Step 0에서 검증한 target
+HEAD를 HF CAS parent로 사용해 다른 run이 target을 바꿨으면 덮어쓰지 않고
+실패합니다. self-report의 task별 summary와 deliverable 목록도 검증된 Step 2
+result projection과 같아야 합니다. `README.md`, `data/train-*.parquet`, `deliverable_files/**`,
+`self_report.json`만 업로드하며 `reference_files/**`는 duplicate 원본을 유지합니다.
 Markdown report는 HF report directory가 아니라 결과 PR로 기록됩니다.
 
 ## 실험 YAML 설정
@@ -310,7 +326,7 @@ pytest --cov=core --cov-report=html
 - **o-series 모델** (`gpt-5.x`, `o3`, `o4`)은 `temperature` 파라미터를 지원하지 않습니다. `temperature=0`을 전달하면 400 에러가 발생합니다.
 - **`needs_files` 게이트**: 루브릭에서 파일 산출물을 기대하는 태스크는 파일이 생성되지 않으면 실패하여 재시도가 트리거됩니다.
 - **이어하기 동작**: Step 2는 조건별 checkpoint를 분리하고 해당 조건의 `error`/`qa_failed` 태스크만 재실행합니다.
-- **HF 업로드**: Step 7은 원격 `data/**`와 `deliverable_files/**`를 삭제한 뒤 위에 적은 명시적 allowlist만 업로드합니다. `reference_files/**`는 보존합니다.
+- **HF 업로드**: Step 7은 원격 `data/**`, `deliverable_files/**`, `self_report.json`을 CAS로 교체한 뒤 위에 적은 명시적 allowlist만 업로드합니다. `reference_files/**`는 보존합니다.
 - **`code_interpreter` 모드**는 Azure OpenAI의 Responses API와 내장 Code Interpreter를 활용하는 권장 실행 모드입니다. 보안 샌드박스에서 파일을 생성합니다. Anthropic 등 비 OpenAI 프로바이더는 `subprocess` 또는 `json_renderer`를 사용해야 합니다.
 
 ## GitHub Actions
@@ -391,6 +407,9 @@ Code Interpreter는 각 task 종료 뒤 provider-side input file ID를 best-effo
 Step 7이 원격 cleanup을 하기 전 canonical GDPVal parquet shard 하나,
 task 소유 `deliverable_files/<task_id>/...` path, canonical `@main` URL/URI,
 parquet가 선언한 모든 output과 local upload tree의 exact 일치를 요구합니다.
+Step 4와 Step 7은 model 실행 뒤 source semantics를 manifest v4에 다시 대조합니다.
+게시에는 현재 HF HEAD와 Step 0 validated HEAD의 일치 및 유효한 local
+`self_report.json`도 필요하며 concurrent drift는 원격 변경 없이 실패합니다.
 실패 task는 재사용 target의 이전 submitter text/file metadata를 승계하지 않습니다.
 
 Checkpoint generation은 source/lineage별 `_checkpoint/` 경로에 있습니다.

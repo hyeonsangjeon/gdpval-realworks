@@ -222,9 +222,12 @@ class FakeApi:
         self.whoami_error = None
         self.create_error = None
         self.list_error = None
+        self.list_responses = []
         self.files = []
         self.calls = []
         self.uploaded_manifest = None
+        self.uploaded_digest = None
+        self.upload_error = None
         self.head = "d" * 40
         self.repo_info_error = None
 
@@ -242,6 +245,11 @@ class FakeApi:
 
     def list_repo_files(self, **kwargs):
         self.calls.append(("list_repo_files", kwargs))
+        if self.list_responses:
+            response = self.list_responses.pop(0)
+            if isinstance(response, Exception):
+                raise response
+            return response
         if self.list_error is not None:
             raise self.list_error
         return self.files
@@ -251,9 +259,14 @@ class FakeApi:
 
     def upload_folder(self, **kwargs):
         self.calls.append(("upload_folder", kwargs))
+        if self.upload_error is not None:
+            raise self.upload_error
         self.uploaded_manifest = (
             Path(kwargs["folder_path"]) / bootstrapper.MANIFEST_FILENAME
         ).read_bytes()
+        self.uploaded_digest = bootstrapper.RepoBootstrapper._snapshot_payload_sha256(
+            Path(kwargs["folder_path"])
+        )
         return object()
 
     def repo_info(self, **kwargs):
@@ -272,19 +285,42 @@ def _bootstrapper(api):
     return instance
 
 
+def _install_prepared_source(instance, monkeypatch, *, content=b"approved"):
+    prepared = []
+
+    def prepare(root):
+        source_root = Path(root)
+        data = source_root / "data"
+        data.mkdir()
+        (data / bootstrapper.CANONICAL_PARQUET_FILENAME).write_bytes(content)
+        manifest = source_root / bootstrapper.MANIFEST_FILENAME
+        manifest.write_bytes(b"manifest")
+        (source_root / ".gitattributes").write_text("*.parquet filter=lfs\n")
+        prepared.append(
+            bootstrapper.RepoBootstrapper._snapshot_payload_sha256(source_root)
+        )
+        return manifest
+
+    monkeypatch.setattr(instance, "_prepare_pinned_source_snapshot", prepare)
+    return prepared
+
+
 def test_valid_identity_and_missing_repo_create_then_bootstrap(monkeypatch):
     api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
     instance = _bootstrapper(api)
-    duplicated = []
-    monkeypatch.setattr(instance, "_duplicate_stripped", lambda: duplicated.append(True))
+    prepared = _install_prepared_source(instance, monkeypatch)
 
     instance._ensure_remote_repo()
 
-    assert [name for name, _kwargs in api.calls] == ["whoami", "create_repo"]
-    create = api.calls[1][1]
+    assert [name for name, _kwargs in api.calls] == [
+        "whoami", "list_repo_files", "create_repo", "upload_folder"
+    ]
+    create = api.calls[2][1]
     assert create["exist_ok"] is False
     assert create["private"] is False
-    assert duplicated == [True]
+    assert prepared == [api.uploaded_digest]
+    assert not any(name == "delete_repo" for name, _kwargs in api.calls)
 
 
 @pytest.mark.parametrize(
@@ -320,13 +356,20 @@ def test_identity_errors_are_fatal_before_create(error):
 )
 def test_create_errors_other_than_conflict_are_fatal_without_followup(error):
     api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
     api.create_error = error
     instance = _bootstrapper(api)
+    instance._prepare_pinned_source_snapshot = lambda root: (
+        Path(root, "data").mkdir(),
+        Path(root, "data", bootstrapper.CANONICAL_PARQUET_FILENAME).write_bytes(b"data"),
+    )[-1]
 
     with pytest.raises(type(error)) as captured:
         instance._ensure_remote_repo()
     assert captured.value is error
-    assert [name for name, _kwargs in api.calls] == ["whoami", "create_repo"]
+    assert [name for name, _kwargs in api.calls] == [
+        "whoami", "list_repo_files", "create_repo"
+    ]
 
 
 def test_existing_empty_repo_is_never_deleted():
@@ -338,25 +381,24 @@ def test_existing_empty_repo_is_never_deleted():
         instance._ensure_remote_repo()
 
     assert [name for name, _kwargs in api.calls] == [
-        "whoami", "create_repo", "list_repo_files"
+        "whoami", "list_repo_files"
     ]
 
 
 def test_existing_data_repo_is_reused(monkeypatch):
     api = FakeApi()
-    api.create_error = _hf_error(409)
     api.files = ["README.md", "data/train-00000-of-00001.parquet"]
     instance = _bootstrapper(api)
     monkeypatch.setattr(
         instance,
-        "_duplicate_stripped",
+        "_prepare_pinned_source_snapshot",
         lambda: pytest.fail("existing data repo must not be recreated"),
     )
 
     instance._ensure_remote_repo()
 
     assert [name for name, _kwargs in api.calls] == [
-        "whoami", "create_repo", "list_repo_files"
+        "whoami", "list_repo_files"
     ]
 
 
@@ -366,13 +408,13 @@ def test_existing_data_repo_is_reused(monkeypatch):
 )
 def test_inaccessible_existing_repo_does_not_fall_through_to_content(error):
     api = FakeApi()
-    api.create_error = error
+    api.list_error = error
     instance = _bootstrapper(api)
 
     with pytest.raises(type(error)) as captured:
         instance._ensure_remote_repo()
     assert captured.value is error
-    assert [name for name, _kwargs in api.calls] == ["whoami", "create_repo"]
+    assert [name for name, _kwargs in api.calls] == ["whoami", "list_repo_files"]
 
 
 @pytest.mark.parametrize(
@@ -381,7 +423,6 @@ def test_inaccessible_existing_repo_does_not_fall_through_to_content(error):
 )
 def test_existing_repo_content_lookup_errors_are_fatal(error):
     api = FakeApi()
-    api.create_error = _hf_error(409)
     api.list_error = error
     instance = _bootstrapper(api)
 
@@ -389,12 +430,13 @@ def test_existing_repo_content_lookup_errors_are_fatal(error):
         instance._ensure_remote_repo()
     assert captured.value is error
     assert [name for name, _kwargs in api.calls] == [
-        "whoami", "create_repo", "list_repo_files"
+        "whoami", "list_repo_files"
     ]
 
 
 def test_new_target_upload_persists_source_manifest(tmp_path, monkeypatch):
     api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
     instance = _bootstrapper(api)
     instance.manifest_path = tmp_path / "workspace" / bootstrapper.MANIFEST_FILENAME
     canonical = _canonical_manifest()
@@ -407,9 +449,88 @@ def test_new_target_upload_persists_source_manifest(tmp_path, monkeypatch):
 
     monkeypatch.setattr(instance, "_prepare_pinned_source_snapshot", prepare)
 
-    instance._duplicate_stripped()
+    instance._ensure_remote_repo()
 
     assert api.uploaded_manifest == encoded
+
+
+def test_source_prepare_failure_never_creates_or_uploads(monkeypatch):
+    api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
+    instance = _bootstrapper(api)
+    monkeypatch.setattr(
+        instance,
+        "_prepare_pinned_source_snapshot",
+        lambda _root: (_ for _ in ()).throw(ValueError("source invalid")),
+    )
+
+    with pytest.raises(ValueError, match="source invalid"):
+        instance._ensure_remote_repo()
+
+    assert [name for name, _kwargs in api.calls] == [
+        "whoami", "list_repo_files"
+    ]
+
+
+def test_upload_failure_is_not_retried_or_deleted(monkeypatch):
+    api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
+    api.upload_error = TimeoutError("upload outcome unknown")
+    instance = _bootstrapper(api)
+    prepared = _install_prepared_source(instance, monkeypatch)
+
+    with pytest.raises(RuntimeError, match="incomplete or unverified"):
+        instance._ensure_remote_repo()
+
+    assert len(prepared) == 1
+    assert [name for name, _kwargs in api.calls].count("create_repo") == 1
+    assert [name for name, _kwargs in api.calls].count("upload_folder") == 1
+    assert [name for name, _kwargs in api.calls].count("delete_repo") == 0
+
+
+def test_post_create_payload_drift_never_uploads_retries_or_deletes(monkeypatch):
+    api = FakeApi()
+    api.list_error = _hf_error(404, "RepoNotFound")
+    instance = _bootstrapper(api)
+    _install_prepared_source(instance, monkeypatch)
+    digests = iter(("a" * 64, "b" * 64))
+    monkeypatch.setattr(instance, "_snapshot_payload_sha256", lambda _root: next(digests))
+
+    with pytest.raises(RuntimeError, match="changed after validation"):
+        instance._ensure_remote_repo()
+
+    assert [name for name, _kwargs in api.calls].count("create_repo") == 1
+    assert [name for name, _kwargs in api.calls].count("upload_folder") == 0
+    assert [name for name, _kwargs in api.calls].count("delete_repo") == 0
+
+
+@pytest.mark.parametrize(
+    ("race_response", "message"),
+    [
+        (["data/train-00000-of-00001.parquet"], None),
+        ([], "concurrently created without a data"),
+        (_hf_error(404, "RepoNotFound"), "could not be reconciled"),
+    ],
+)
+def test_create_conflict_is_reclassified_read_only(
+    monkeypatch, race_response, message
+):
+    api = FakeApi()
+    api.list_responses = [_hf_error(404, "RepoNotFound"), race_response]
+    api.create_error = _hf_error(409)
+    instance = _bootstrapper(api)
+    prepared = _install_prepared_source(instance, monkeypatch)
+
+    if message is None:
+        instance._ensure_remote_repo()
+    else:
+        with pytest.raises(RuntimeError, match=message):
+            instance._ensure_remote_repo()
+
+    assert len(prepared) == 1
+    assert [name for name, _kwargs in api.calls].count("create_repo") == 1
+    assert [name for name, _kwargs in api.calls].count("upload_folder") == 0
+    assert [name for name, _kwargs in api.calls].count("delete_repo") == 0
 
 
 def test_prepare_pinned_source_downloads_only_data_then_declared_references(
@@ -801,6 +922,11 @@ def test_download_snapshot_refreshes_stale_local_from_exact_head(tmp_path, monke
 
     assert not (instance.local_path / "stale.txt").exists()
     assert (instance.local_path / "data/train-00000-of-00001.parquet").read_bytes() == b"new"
+    identity_path = instance.local_path / bootstrapper.TARGET_HEAD_FILENAME
+    assert bootstrapper.load_target_head_identity(
+        identity_path,
+        "owner/disposable",
+    ) == api.head
     assert downloaded[0]["repo_id"] == "owner/disposable"
     assert downloaded[0]["revision"] == api.head
     assert downloaded[0]["allow_patterns"] == [
@@ -821,6 +947,24 @@ def test_download_snapshot_refreshes_stale_local_from_exact_head(tmp_path, monke
             },
         )
     ]
+
+
+def test_target_head_identity_rejects_repo_or_sha_drift(tmp_path):
+    identity_path = tmp_path / bootstrapper.TARGET_HEAD_FILENAME
+    identity_path.write_text(json.dumps({
+        "schema_version": "step0-target-head-v1",
+        "repo_id": "owner/repository",
+        "head": "a" * 40,
+    }), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="repository identity mismatch"):
+        bootstrapper.load_target_head_identity(identity_path, "other/repository")
+
+    payload = json.loads(identity_path.read_text(encoding="utf-8"))
+    payload["head"] = "main"
+    identity_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="HEAD is invalid"):
+        bootstrapper.load_target_head_identity(identity_path, "owner/repository")
 
 
 def test_download_snapshot_missing_manifest_preserves_previous_local(

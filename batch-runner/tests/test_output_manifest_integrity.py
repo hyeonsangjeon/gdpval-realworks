@@ -8,7 +8,6 @@ import pytest
 import core.repo_bootstrapper as bootstrapper
 from core.repo_bootstrapper import validate_deliverable_tree
 from fill_parquet import _build_deliverable_uris, fill_parquet
-from step5_validate import _build_dummy_urls
 
 
 def _source_frame():
@@ -440,16 +439,47 @@ def test_pre_upload_accepts_current_result_projection(tmp_path, monkeypatch):
     assert not any("differs from Step 2" in error for error in errors)
 
 
-def test_dummy_urls_use_canonical_main_revision_identity():
-    expected_urls, expected_uris = _build_deliverable_uris(
-        ["deliverable_files/task-1/failed_to_generate.txt"],
-        "owner/repository",
+@pytest.mark.parametrize(
+    ("status", "should_reject"),
+    [("success", True), ("error", False), ("qa_failed", False)],
+)
+def test_pre_upload_needs_files_empty_row_follows_step2_status(
+    tmp_path, monkeypatch, status, should_reject
+):
+    data = tmp_path / "data"
+    data.mkdir()
+    frame = _source_frame()
+    frame.to_parquet(data / bootstrapper.CANONICAL_PARQUET_FILENAME, index=False)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / bootstrapper.MANIFEST_FILENAME).write_text(
+        json.dumps({"tasks": {"task-1": {"needs_files": True}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bootstrapper, "WORKSPACE_DIR", workspace)
+    monkeypatch.setattr(
+        bootstrapper, "validate_source_projection_rows", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        bootstrapper, "validate_deliverable_tree", lambda *_args, **_kwargs: []
     )
 
-    result = _build_dummy_urls("task-1", "owner/repository")
+    errors = bootstrapper.validate_pre_upload(
+        local_path=str(tmp_path),
+        submission_repo_id="owner/repository",
+        expected_task_ids=["task-1"],
+        expected_submitter_rows=[{
+            "task_id": "task-1",
+            "status": status,
+            "deliverable_text": "",
+            "deliverable_files": [],
+            "deliverable_file_urls": [],
+            "deliverable_file_hf_uris": [],
+        }],
+    )
 
-    assert result["deliverable_file_urls"] == expected_urls
-    assert result["deliverable_file_hf_uris"] == expected_uris
+    rejected = any("needs_files=true" in error for error in errors)
+    assert rejected is should_reject
 
 
 def test_step7_passes_repo_identity_to_pre_upload_validator():
@@ -462,7 +492,7 @@ def test_step7_passes_repo_identity_to_pre_upload_validator():
     assert "expected_submitter_rows=identity.submitter_rows()" in script
     assert 'os.environ.get("EXPECTED_TARGET_HEAD", "")' in script
     assert "load_target_head_identity(" in script
-    assert "publication = publish_dataset(" in script
+    assert "publication = publish_dataset_with_receipt(" in script
     assert "Verified revision: {publication.oid}" in script
     assert "Publication plan: {publication.plan_sha256}" in script
     assert "if publication.reconciled:" in script

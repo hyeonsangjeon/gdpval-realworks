@@ -22,6 +22,7 @@ from core.data_loader import GDPValDataLoader
 from core.experiment_config import ExperimentConfig
 from core.needs_files import NeedsFilesManifest
 from core.prepared_fingerprint import prepared_fingerprint
+from core.publication_generation import resolve_publication_generation
 from core.source_identity import source_task_projection_sha256
 
 
@@ -169,6 +170,9 @@ def prepare_tasks(config_path: str) -> dict:
 
     output = {
         "experiment_id": config.experiment_id,
+        "publication_generation": resolve_publication_generation(
+            config.experiment_id
+        ),
         "experiment_name": config.name,
         "description": config.description,
         "config_path": str(config_path),

@@ -6,6 +6,10 @@ import math
 import pytest
 
 from core.prepared_fingerprint import prepared_fingerprint
+from core.result_fingerprint import (
+    inference_result_fingerprint,
+    validate_inference_result_fingerprint,
+)
 from step3_format_results import (
     _source_repo_id,
     _validate_input_identity,
@@ -29,6 +33,7 @@ def test_source_repo_id_rejects_invalid_values(value):
 def _prepared_identity() -> dict:
     payload = {
         "experiment_id": "exp998",
+        "publication_generation": "exp998:100:1",
         "source": "student/exp998",
         "task_scope": {"task_ids": ["task-a", "task-b"]},
         "tasks": [{"task_id": "task-a"}, {"task_id": "task-b"}],
@@ -39,13 +44,16 @@ def _prepared_identity() -> dict:
 
 def _inference_identity() -> dict:
     prepared = _prepared_identity()
-    return {
+    payload = {
         "experiment_id": "exp998",
+        "publication_generation": "exp998:100:1",
         "source": "student/exp998",
         "prepared_fingerprint": prepared["prepared_fingerprint"],
         "ordered_task_ids": ["task-a", "task-b"],
         "results": [{"task_id": "task-a"}, {"task_id": "task-b"}],
     }
+    payload["result_fingerprint"] = inference_result_fingerprint(payload)
+    return payload
 
 
 def test_input_identity_accepts_exact_step1_step2_match():
@@ -59,6 +67,7 @@ def test_input_identity_accepts_exact_step1_step2_match():
         ("prepared", "source", "other/repo", "source repository"),
         ("prepared", "experiment_id", "../outside", "experiment"),
         ("inference", "experiment_id", "../outside", "experiment"),
+        ("inference", "publication_generation", "exp998:200:1", "generation"),
         ("inference", "ordered_task_ids", ["task-b", "task-a"], "task order"),
         ("inference", "results", [{"task_id": "task-a"}], "result task"),
         ("inference", "prepared_fingerprint", "b" * 64, "fingerprint"),
@@ -80,6 +89,14 @@ def test_input_identity_rejects_mutated_prepared_payload_with_stale_fingerprint(
 
     with pytest.raises(ValueError, match="fingerprint does not match payload"):
         _validate_input_identity(prepared, inference)
+
+
+def test_result_fingerprint_rejects_mutated_inference_payload():
+    inference = _inference_identity()
+    inference["results"][0]["deliverable_text"] = "stale mutation"
+
+    with pytest.raises(ValueError, match="does not match payload"):
+        validate_inference_result_fingerprint(inference)
 
 
 def test_write_json_outputs_rejects_nan_before_opening_destinations(tmp_path):

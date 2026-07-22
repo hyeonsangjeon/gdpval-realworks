@@ -71,8 +71,15 @@ bash step6_report.sh --no-narrative --dry-run
 ```
 
 Do not run Step 7 just to test setup. If you intentionally want to publish the
-three-row smoke result, `bash step7_upload_hf.sh --test` deletes remote
-`data/**` and `deliverable_files/**` in the configured target before upload.
+three-row smoke result, first replace the unpublished self-report with
+`bash step6_report.sh --no-narrative`, then run
+`bash step7_upload_hf.sh --test`. Step 7 rejects a dry-run or stale report and
+requires its repository, prepared fingerprint, Step 2 result fingerprint,
+run-specific publication generation, ordered task IDs, and result task set to
+match the current workspace. A new Step 1 invalidates a prior finalized run,
+while relay legs retain the initial generation. The parquet submitter
+text/files/URLs/URIs must also equal the current Step 2 result before Step 7
+CAS-replaces remote `data/**`, `deliverable_files/**`, and `self_report.json`.
 
 ## Authentication and environment variables
 
@@ -97,7 +104,10 @@ first-run contract and is not guaranteed here.
 
 - Accepts an experiment YAML path and reads the target from `data.source`:
   `bash step0_bootstrap.sh experiments/exp998_smoke_baseline_sample.yaml`
-- Duplicates `openai/gdpval` to the configured public HF dataset if it does not exist
+- Classifies the target read-only first. For a missing target, prepares and
+  validates the pinned source completely before creating the public HF dataset;
+  create and upload are each attempted at most once, with no automatic retry or
+  deletion after an uncertain upload.
 - Downloads local snapshot to `data/gdpval-local/`
 - Pins one full `openai/gdpval` revision and downloads only its base data plus
   parquet-declared references into fresh staging. Before upload it verifies the
@@ -128,7 +138,9 @@ Reads prepared tasks → calls the LLM for each task → saves condition-specifi
 checkpoints such as `workspace/step2_inference_progress_condition_a.json` and
 final results such as `workspace/step2_inference_results_condition_a.json`.
 Condition A also writes legacy aliases for compatibility. Multi-round resume
-re-runs `error`/`qa_failed` tasks automatically.
+re-runs `error`/`qa_failed` tasks automatically. Existing progress identity is
+validated before provider-client or executor construction, so a stale or
+malformed local resume cannot spend model budget.
 
 ### Step 3: Format Results (`step3_format_results.py`)
 
@@ -136,7 +148,9 @@ Converts inference output into structured JSON + Markdown report under `results/
 
 ### Step 4: Fill Parquet (`step4_fill_parquet.py`)
 
-Merges `deliverable_text` and `deliverable_files` into the base parquet, preserving all original columns (rubric_json, rubric_pretty, etc.).
+Revalidates the full source parquet against the schema-v4 manifest and reference
+bytes, then merges `deliverable_text` and `deliverable_files` while preserving
+the authenticated source columns (prompt, rubric, taxonomy, and references).
 
 ### Step 5: Validate (`step5_validate.py`)
 
@@ -160,9 +174,15 @@ experiment-model fallback. The GitHub workflow enforces a model-free
 
 ### Step 7: Upload to HuggingFace (`step7_upload_hf.sh`)
 
-Deletes remote `data/**` and `deliverable_files/**`, then uploads only
+Requires a regular, identity-bound `self_report.json`, revalidates every
+published row's source projection and exact deliverable tree, then replaces
+remote `data/**`, `deliverable_files/**`, and `self_report.json`. It uploads only
 `README.md`, `data/train-*.parquet`, `deliverable_files/**`, and
-`self_report.json`. `reference_files/**` remains from the duplicated base. The
+`self_report.json` with the Step 0 validated target HEAD as the HF CAS parent.
+If another run changed the target, publication fails instead of overwriting it.
+Each self-report task summary and deliverable list must also equal the validated
+Step 2 result projection.
+`reference_files/**` remains from the duplicated base. The
 Markdown report is committed through the result pull request, not uploaded as a
 report directory to Hugging Face.
 
@@ -381,7 +401,7 @@ Default: `-m "not integration"` — integration tests are skipped by default.
 - **o-series models** (`gpt-5.x`, `o3`, `o4`) do not support the `temperature` parameter. Passing `temperature=0` causes a 400 error.
 - **`needs_files` gate**: Tasks where the rubric expects file deliverables will fail if no files are produced, triggering a retry.
 - **Resume behavior**: Step 2 saves each condition separately and only re-executes `error`/`qa_failed` tasks from that condition's checkpoint.
-- **HF upload**: Step 7 deletes remote `data/**` and `deliverable_files/**`, then uploads only the explicit allowlist documented above. `reference_files/**` is preserved.
+- **HF upload**: Step 7 CAS-replaces remote `data/**`, `deliverable_files/**`, and `self_report.json`, then uploads only the explicit allowlist documented above. `reference_files/**` is preserved.
 - **`code_interpreter` mode** is the recommended execution mode, leveraging Azure OpenAI's Responses API with built-in Code Interpreter for secure, sandboxed file generation. Anthropic and other non-OpenAI providers must use `subprocess` or `json_renderer`.
 - **Reflection loop**: When Self-QA score is below `min_score`, the retry prompt includes a structured critique (`[REFLECTION]` block) with the previous attempt's summary, itemized issues, and improvement suggestions. This follows the [Reflection agentic pattern](https://www.promptingguide.ai/techniques/reflexion). Each reflection attempt is tracked as `reflection_attempts` in the result object.
 
@@ -464,8 +484,11 @@ retention policy, so the disposable target must not contain sensitive material.
 Before Step 7 performs remote cleanup, publication requires exactly the
 canonical GDPVal parquet shard, task-owned `deliverable_files/<task_id>/...`
 paths, canonical `@main` URLs/URIs, and byte-for-byte equality between every
-parquet-declared output and the local upload tree. Failed tasks cannot inherit
-submitter text or file metadata from a reused target.
+parquet-declared output and the local upload tree. Step 4 and Step 7 both
+recheck source semantics against manifest v4 after model execution. Publication
+also requires the current HF HEAD to equal the Step 0 validated HEAD and a valid
+local `self_report.json`; concurrent drift fails without mutation. Failed tasks
+cannot inherit submitter text or file metadata from a reused target.
 
 Checkpoint generations live under a source/lineage-scoped `_checkpoint/` path.
 Successful cleanup removes that lineage from the dataset's current tree with an

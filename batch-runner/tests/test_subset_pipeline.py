@@ -241,6 +241,56 @@ def test_step5_validate_accepts_exact_50_row_subset(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "pyarrow.parquet", parquet)
     monkeypatch.setattr(step5, "WORKSPACE_DIR", workspace)
     monkeypatch.setattr(step5, "UPLOAD_DIR", upload)
-    monkeypatch.setattr(step5, "DELIVERABLE_DIR", deliverable_dir)
 
     assert step5.validate(data_dir=str(upload)) is True
+
+
+def test_step5_failed_file_task_records_stats_without_mutating_outputs(
+    tmp_path, monkeypatch
+):
+    workspace = tmp_path / "workspace"
+    upload = workspace / "upload"
+    data_dir = upload / "data"
+    deliverable_dir = upload / "deliverable_files"
+    data_dir.mkdir(parents=True)
+    deliverable_dir.mkdir()
+    task_id = "task-1"
+    parquet_path = data_dir / "train-00000-of-00001.parquet"
+    pd.DataFrame({
+        "task_id": [task_id],
+        "sector": ["Information"],
+        "occupation": ["Analyst"],
+        "prompt": ["Create a file"],
+        "reference_files": [[]],
+        "reference_file_urls": [[]],
+        "reference_file_hf_uris": [[]],
+        "deliverable_text": [""],
+        "deliverable_files": [[]],
+        "deliverable_file_urls": [[]],
+        "deliverable_file_hf_uris": [[]],
+    }).to_parquet(parquet_path, index=False)
+    (workspace / "step1_tasks_prepared.json").write_text(json.dumps({
+        "task_scope": {
+            "mode": "explicit_ids",
+            "expected_count": 1,
+            "task_ids": [task_id],
+        }
+    }), encoding="utf-8")
+    (workspace / "step0_needs_files_manifest.json").write_text(json.dumps({
+        "tasks": {task_id: {"needs_files": True}},
+        "_summary": {"active_policy": "deliverable_only"},
+    }), encoding="utf-8")
+    before = parquet_path.read_bytes()
+    monkeypatch.setattr(step5, "WORKSPACE_DIR", workspace)
+    monkeypatch.setattr(step5, "UPLOAD_DIR", upload)
+
+    assert step5.validate(data_dir=str(upload)) is True
+
+    assert parquet_path.read_bytes() == before
+    assert list(deliverable_dir.rglob("*")) == []
+    stats = json.loads(
+        (workspace / "validate_stats.json").read_text(encoding="utf-8")
+    )
+    assert stats["files_failed"] == 1
+    assert stats["dummy_files_created"] == 0
+    assert stats["dummy_task_ids"] == []

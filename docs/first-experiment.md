@@ -102,13 +102,18 @@ assignment, reference path/SHA-256/size identity aborts, and Step 0 never
 regenerates this manifest from stripped data. Reused targets must also have
 empty submitter text/file/URL/URI columns and no stale physical deliverables.
 New targets are built from one pinned public-source revision by downloading
-only base data and parquet-declared references. Reused targets are downloaded
+only base data and parquet-declared references. The complete source snapshot,
+manifest, references, stripped submitter state, and frozen payload digest are
+validated before target creation; create and upload are attempted once, and an
+uncertain upload is preserved for inspection rather than retried or deleted.
+Reused targets are downloaded
 at an exact full-SHA HEAD into fresh staging; their canonical columns,
 projection, manifest, complete reference tree, and empty submitter state must
 pass before the previous local snapshot is replaced.
 
-A later non-dry Step 7 deletes remote `data/**` and `deliverable_files/**` before
-uploading the new result. Do not point this config at a dataset you need to keep.
+A later non-dry Step 7 CAS-replaces remote `data/**`, `deliverable_files/**`,
+and `self_report.json` before uploading the new result. Do not point this config
+at a dataset you need to keep.
 
 Commit the edit to your fork's default `main` branch. Never put a token, key, or
 password in this YAML.
@@ -199,7 +204,18 @@ this disposable public target.
 Before the non-dry Step 7 deletes remote outputs, it requires the one canonical
 parquet shard, task-owned output paths, canonical repository URLs/URIs, and an
 exact match between parquet declarations and the local deliverable tree. A
-failed task cannot retain output metadata from an earlier run.
+failed task cannot retain output metadata from an earlier run. Step 4 and Step 7
+recheck each source row against manifest v4 after model execution. Publication
+also requires a non-dry local `self_report.json` whose repository, prepared
+fingerprint, Step 2 result fingerprint, ordered task IDs, and result task set
+match the current run-specific publication generation and workspace. Its
+per-task summary and deliverable files must equal the validated Step 2 result.
+A new
+Step 1 invalidates finalized outputs from an earlier run; relay legs retain the
+initial generation. Parquet submitter text/files/URLs/URIs must equal that same
+Step 2 result. If a local dry-run report was generated, rerun
+`bash step6_report.sh --no-narrative` before Step 7. The Step 0 validated HF HEAD
+is the CAS parent, so a concurrent target change fails without overwriting it.
 
 The smoke config uses provider-hosted `code_interpreter`; it does not exercise
 the repository's Docker sandbox or agentic preflight.

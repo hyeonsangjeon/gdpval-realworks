@@ -1,18 +1,30 @@
 import json
 import hashlib
+import os
+import stat
+import tempfile
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from huggingface_hub import CommitOperationAdd, CommitOperationDelete
 
+import core.hf_publication as hf_publication
 from core.hf_publication import (
+    PublicationFileRecord,
     PublicationIdentity,
+    PublicationReceipt,
     PublicationResult,
     PublicationTaskResult,
     load_publication_identity,
+    load_publication_receipt,
     publish_dataset,
+    publish_dataset_with_receipt,
+    verify_publication_finality,
+    write_publication_receipt,
 )
+from core.inference_manifest import canonical_deliverable_uris
 from core.prepared_fingerprint import prepared_fingerprint
 from core.result_fingerprint import inference_result_fingerprint
 
@@ -33,17 +45,26 @@ class FakeApi:
             "deliverable_files/task/old.pdf": b"old-pdf",
             "self_report.json": b"old-report",
         }
+        self.revision_files = {self.parent: dict(self.remote_files)}
+        self.commit_history = {}
         self.lfs_paths = set()
         self.tree_mutation = None
+        self.tree_mutations = {}
         self.marker_override = None
         self.parent_override = None
         self.final_head = None
+        self.repo_info_sequence = []
         self.fail_tree = False
         self.download_symlinks = False
+        self.remote_dir = tempfile.TemporaryDirectory()
+        self.before_first_remote_call = None
 
     def list_repo_files(self, **kwargs):
         self.calls.append(("list_repo_files", kwargs))
-        return sorted(self.remote_files)
+        files = self.revision_files.get(
+            kwargs.get("revision"), self.remote_files
+        )
+        return sorted(files)
 
     def create_commit(self, **kwargs):
         self.calls.append(("create_commit", kwargs))
@@ -55,9 +76,16 @@ class FakeApi:
             if isinstance(operation, CommitOperationDelete):
                 self.remote_files.pop(operation.path_in_repo, None)
             else:
-                self.remote_files[operation.path_in_repo] = Path(
-                    operation.path_or_fileobj
-                )
+                source = operation.path_or_fileobj
+                assert not isinstance(source, (str, Path))
+                source.seek(0)
+                destination = Path(self.remote_dir.name) / operation.path_in_repo
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with destination.open("wb") as materialized:
+                    while chunk := source.read(1024 * 1024):
+                        materialized.write(chunk)
+                self.remote_files[operation.path_in_repo] = destination
+                self.revision_files[self.candidate] = dict(self.remote_files)
         if self.create_mode == "concurrent_different":
             self.head = "c" * 40
             self.marker = "publication-plan-sha256: " + "0" * 64
@@ -71,6 +99,12 @@ class FakeApi:
 
     def list_repo_commits(self, **kwargs):
         self.calls.append(("list_repo_commits", kwargs))
+        history = self.commit_history.get(kwargs["revision"])
+        if history is not None:
+            return [
+                SimpleNamespace(commit_id=commit_id, message=message)
+                for commit_id, message in history
+            ]
         message = self.marker_override or self.marker
         return [
             SimpleNamespace(commit_id=kwargs["revision"], message=message),
@@ -84,21 +118,26 @@ class FakeApi:
         self.calls.append(("list_repo_tree", kwargs))
         if self.fail_tree:
             raise OSError("tree verification unavailable")
-        remote_files = dict(self.remote_files)
-        if self.tree_mutation == "missing":
+        remote_files = dict(self.revision_files.get(
+            kwargs.get("revision"), self.remote_files
+        ))
+        mutation = self.tree_mutations.get(
+            kwargs.get("revision"), self.tree_mutation
+        )
+        if mutation == "missing":
             remote_files.pop("self_report.json", None)
-        elif self.tree_mutation == "extra":
+        elif mutation == "extra":
             remote_files["data/extra.parquet"] = b"extra"
         entries = []
         for path, value in sorted(remote_files.items()):
             content = value.read_bytes() if isinstance(value, Path) else value
             size = len(content)
-            if self.tree_mutation == "size" and path == "self_report.json":
+            if mutation == "size" and path == "self_report.json":
                 size += 1
             lfs = None
             if path in self.lfs_paths:
                 sha256 = hashlib.sha256(content).hexdigest()
-                if self.tree_mutation == "lfs_hash" and path == "self_report.json":
+                if mutation == "lfs_hash" and path == "self_report.json":
                     sha256 = "0" * 64
                 lfs = SimpleNamespace(size=len(content), sha256=sha256)
             entries.append(SimpleNamespace(path=path, size=size, lfs=lfs))
@@ -106,24 +145,44 @@ class FakeApi:
 
     def hf_hub_download(self, **kwargs):
         self.calls.append(("hf_hub_download", kwargs))
-        value = self.remote_files[kwargs["filename"]]
+        remote_files = self.revision_files.get(
+            kwargs.get("revision"), self.remote_files
+        )
+        value = remote_files[kwargs["filename"]]
         path = value if isinstance(value, Path) else None
         if path is None:
             raise AssertionError("test requested an unmaterialized remote file")
-        if self.tree_mutation == "download_hash" and kwargs["filename"] == "self_report.json":
+        download_source = path
+        mutation = self.tree_mutations.get(
+            kwargs.get("revision"), self.tree_mutation
+        )
+        if mutation == "download_hash" and kwargs["filename"] == "self_report.json":
             corrupt = path.with_name("corrupt-self-report.json")
             corrupt.write_bytes(b"corrupt")
-            return str(corrupt)
+            download_source = corrupt
         if self.download_symlinks:
-            link = path.with_name(f"cache-link-{path.name}")
+            cache_root = Path(self.remote_dir.name) / "cache"
+            blob = cache_root / "blobs" / hashlib.sha256(
+                download_source.read_bytes()
+            ).hexdigest()
+            blob.parent.mkdir(parents=True, exist_ok=True)
+            blob.write_bytes(download_source.read_bytes())
+            link = cache_root / "snapshots" / kwargs["revision"] / kwargs["filename"]
+            link.parent.mkdir(parents=True, exist_ok=True)
             if link.exists() or link.is_symlink():
                 link.unlink()
-            link.symlink_to(path)
+            link.symlink_to(os.path.relpath(blob, start=link.parent))
             return str(link)
-        return str(path)
+        return str(download_source)
 
     def repo_info(self, **kwargs):
+        callback = self.before_first_remote_call
+        self.before_first_remote_call = None
+        if callback is not None:
+            callback()
         self.calls.append(("repo_info", kwargs))
+        if self.repo_info_sequence:
+            return SimpleNamespace(sha=self.repo_info_sequence.pop(0))
         repo_info_calls = sum(name == "repo_info" for name, _ in self.calls)
         if self.final_head is not None and repo_info_calls >= 3:
             return SimpleNamespace(sha=self.final_head)
@@ -142,6 +201,47 @@ def _identity() -> PublicationIdentity:
     )
 
 
+def _report_summary(**overrides) -> dict:
+    summary = {
+        "total_tasks": 1,
+        "success_count": 1,
+        "success_rate_pct": 100.0,
+        "error_count": 0,
+        "retried_count": 0,
+        "avg_qa_score": 0.0,
+        "min_qa_score": 0,
+        "max_qa_score": 0,
+        "avg_latency_ms": 0,
+        "max_latency_ms": 0,
+        "total_latency_ms": 0,
+    }
+    summary.update(overrides)
+    return summary
+
+
+def _report_task_row(**overrides) -> dict:
+    row = {
+        "task_id": "task-1",
+        "sector": "",
+        "occupation": "",
+        "status": "success",
+        "retried": False,
+        "files_count": 0,
+        "qa_score": None,
+        "qa_passed": None,
+        "qa_issues": [],
+        "qa_suggestion": "",
+        "latency_ms": 0,
+        "observability": {},
+        "deliverable_summary": "",
+        "instruction": "",
+        "reference_file_urls": [],
+        "deliverable_files": [],
+    }
+    row.update(overrides)
+    return row
+
+
 def _upload_root(tmp_path: Path, *, report_overrides=None) -> Path:
     root = tmp_path / "upload"
     root.mkdir()
@@ -155,10 +255,12 @@ def _upload_root(tmp_path: Path, *, report_overrides=None) -> Path:
             "ordered_task_ids": ["task-1"],
             "publication_plan": "step7_upload_requested",
         },
-        "task_results": [{"task_id": "task-1"}],
+        "summary": _report_summary(),
+        "task_results": [_report_task_row()],
+        "error_tasks": [],
     }
     for key, value in (report_overrides or {}).items():
-        if key == "task_results":
+        if key in {"summary", "task_results", "error_tasks"}:
             report[key] = value
         else:
             report["meta"][key] = value
@@ -169,6 +271,482 @@ def _upload_root(tmp_path: Path, *, report_overrides=None) -> Path:
     data.mkdir()
     (data / "train-00000-of-00001.parquet").write_bytes(b"parquet")
     return root
+
+
+def _receipt_result() -> PublicationResult:
+    return PublicationResult(
+        oid="b" * 40,
+        plan_sha256="c" * 64,
+        reconciled=False,
+    )
+
+
+def _published_state(tmp_path: Path):
+    api = FakeApi()
+    root = _upload_root(tmp_path)
+    receipt_path = tmp_path / "publication-receipt.json"
+    publication = publish_dataset_with_receipt(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        receipt_path=receipt_path,
+        api=api,
+    )
+    api.calls.clear()
+    return api, root, receipt_path, publication
+
+
+def _add_cleanup_commit(
+    api: FakeApi,
+    generation: str,
+    *,
+    head: str = "c" * 40,
+    parent: str | None = None,
+    message: str | None = None,
+    first_commit: str | None = None,
+) -> str:
+    api.head = head
+    api.revision_files[head] = dict(api.revision_files[api.candidate])
+    api.commit_history[head] = [
+        (
+            first_commit or head,
+            message or f"Clean relay checkpoint {generation[:12]}",
+        ),
+        (parent or api.candidate, "publication"),
+    ]
+    return head
+
+
+def test_publication_receipt_roundtrip_is_private_and_atomic(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "state" / "publication_receipt.json"
+    replace_calls = []
+    fsync_calls = []
+    real_replace = hf_publication.os.replace
+    real_fsync = hf_publication.os.fsync
+
+    def tracked_replace(source, destination):
+        replace_calls.append((Path(source), Path(destination)))
+        return real_replace(source, destination)
+
+    def tracked_fsync(descriptor):
+        fsync_calls.append(descriptor)
+        return real_fsync(descriptor)
+
+    monkeypatch.setattr(hf_publication.os, "replace", tracked_replace)
+    monkeypatch.setattr(hf_publication.os, "fsync", tracked_fsync)
+
+    written = write_publication_receipt(
+        _receipt_result(),
+        expected_head="a" * 40,
+        identity=_identity(),
+        path=path,
+    )
+
+    assert written == PublicationReceipt(
+        repo_id="owner/repository",
+        parent_head="a" * 40,
+        publication_revision="b" * 40,
+        plan_sha256="c" * 64,
+        prepared_fingerprint="f" * 64,
+        result_fingerprint="e" * 64,
+        publication_generation="exp-test:100:1",
+        ordered_task_ids=("task-1",),
+    )
+    assert load_publication_receipt(_identity(), path) == written
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert len(replace_calls) == 1
+    assert replace_calls[0][1] == path
+    assert len(fsync_calls) >= 2
+    assert not list(path.parent.glob(f".{path.name}.*"))
+
+
+@pytest.mark.parametrize("symlink_kind", ["path", "ancestor"])
+def test_publication_receipt_rejects_symlink_state_path_or_ancestor(
+    tmp_path,
+    symlink_kind,
+):
+    real_parent = tmp_path / "real"
+    real_parent.mkdir()
+    target = real_parent / "target.json"
+    target.write_text("unchanged", encoding="utf-8")
+    if symlink_kind == "path":
+        path = real_parent / "receipt.json"
+        path.symlink_to(target)
+    else:
+        linked_parent = tmp_path / "linked"
+        linked_parent.symlink_to(real_parent, target_is_directory=True)
+        path = linked_parent / "receipt.json"
+
+    with pytest.raises(ValueError, match="symlink"):
+        write_publication_receipt(
+            _receipt_result(),
+            expected_head="a" * 40,
+            identity=_identity(),
+            path=path,
+        )
+
+    assert target.read_text(encoding="utf-8") == "unchanged"
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    ["extra", "missing", "plan", "prepared", "task_order"],
+)
+def test_publication_receipt_rejects_schema_or_identity_tamper(
+    tmp_path,
+    tamper,
+):
+    path = tmp_path / "receipt.json"
+    write_publication_receipt(
+        _receipt_result(),
+        expected_head="a" * 40,
+        identity=_identity(),
+        path=path,
+    )
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if tamper == "extra":
+        payload["unexpected"] = True
+    elif tamper == "missing":
+        payload.pop("repo_id")
+    elif tamper == "plan":
+        payload["plan_sha256"] = "not-a-plan"
+    elif tamper == "prepared":
+        payload["prepared_fingerprint"] = "d" * 64
+    else:
+        payload["ordered_task_ids"] = ["task-2"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="publication receipt"):
+        load_publication_receipt(_identity(), path)
+
+
+def test_publication_receipt_rejects_duplicate_json_keys(tmp_path):
+    path = tmp_path / "receipt.json"
+    write_publication_receipt(
+        _receipt_result(),
+        expected_head="a" * 40,
+        identity=_identity(),
+        path=path,
+    )
+    encoded = path.read_text(encoding="utf-8").rstrip()
+    path.write_text(
+        encoded[:-1] + ',"repo_id":"owner/repository"}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate JSON keys"):
+        load_publication_receipt(_identity(), path)
+
+
+def test_failed_publication_removes_stale_receipt_and_writes_no_new_one(tmp_path):
+    receipt_path = tmp_path / "publication-receipt.json"
+    receipt_path.write_text("stale", encoding="utf-8")
+
+    with pytest.raises(OSError, match="failed before mutation"):
+        publish_dataset_with_receipt(
+            "owner/repository",
+            _upload_root(tmp_path),
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            receipt_path=receipt_path,
+            api=FakeApi(create_mode="before_failure"),
+        )
+
+    assert not receipt_path.exists()
+
+
+def test_publication_finality_accepts_normal_publication_without_cleanup(tmp_path):
+    api, root, receipt_path, publication = _published_state(tmp_path)
+
+    final_head = verify_publication_finality(
+        "owner/repository",
+        root,
+        token="token",
+        identity=_identity(),
+        receipt_path=receipt_path,
+        api=api,
+    )
+
+    assert final_head == publication.oid
+    revisions = [
+        kwargs.get("revision")
+        for name, kwargs in api.calls
+        if name in {"list_repo_files", "list_repo_commits", "list_repo_tree"}
+    ]
+    assert "a" * 40 in revisions
+    assert "b" * 40 in revisions
+    assert [
+        kwargs["revision"]
+        for name, kwargs in api.calls
+        if name == "list_repo_tree"
+    ] == [publication.oid]
+    assert Counter(
+        (kwargs["revision"], kwargs["filename"])
+        for name, kwargs in api.calls
+        if name == "hf_hub_download"
+    ) == Counter({
+        (publication.oid, "data/train-00000-of-00001.parquet"): 1,
+        (publication.oid, "self_report.json"): 1,
+    })
+
+
+def test_publication_finality_accepts_exact_cleanup_child(tmp_path):
+    generation = "1" * 64
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+    cleanup_head = _add_cleanup_commit(api, generation)
+
+    assert verify_publication_finality(
+        "owner/repository",
+        root,
+        token="token",
+        identity=_identity(),
+        expected_generation=generation,
+        receipt_path=receipt_path,
+        api=api,
+    ) == cleanup_head
+
+
+@pytest.mark.parametrize("generation", ["1" * 63, "A" * 64, 123])
+def test_publication_finality_rejects_malformed_cleanup_generation(
+    tmp_path,
+    generation,
+):
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+
+    with pytest.raises(ValueError, match="cleanup generation is invalid"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            expected_generation=generation,
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        f"Clean relay checkpoint {'2' * 12}",
+        f"prefix Clean relay checkpoint {'1' * 12}",
+        f"Clean relay checkpoint {'1' * 12} suffix",
+    ],
+)
+def test_publication_finality_rejects_cleanup_message_or_generation_mismatch(
+    tmp_path,
+    message,
+):
+    generation = "1" * 64
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+    _add_cleanup_commit(api, generation, message=message)
+
+    with pytest.raises(RuntimeError, match="finality is unverified"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            expected_generation=generation,
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+
+@pytest.mark.parametrize("relationship", ["unrelated-child", "grandchild"])
+def test_publication_finality_rejects_unrelated_child_or_grandchild(
+    tmp_path,
+    relationship,
+):
+    generation = "1" * 64
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+    if relationship == "unrelated-child":
+        _add_cleanup_commit(api, generation, message="Unrelated commit")
+    else:
+        _add_cleanup_commit(api, generation, parent="d" * 40)
+
+    with pytest.raises(RuntimeError, match="finality is unverified"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            expected_generation=generation,
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+
+@pytest.mark.parametrize("drift", ["parent", "marker"])
+def test_publication_finality_rejects_publication_parent_or_marker_drift(
+    tmp_path,
+    drift,
+):
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+    if drift == "parent":
+        api.parent_override = "d" * 40
+    else:
+        api.marker_override = "publication-plan-sha256: " + "0" * 64
+
+    with pytest.raises(RuntimeError, match="finality is unverified"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["missing", "extra", "size", "download_hash", "lfs_hash"],
+)
+def test_publication_finality_rejects_final_managed_tree_or_hash_drift(
+    tmp_path,
+    mutation,
+):
+    generation = "1" * 64
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+    cleanup_head = _add_cleanup_commit(api, generation)
+    api.tree_mutations[cleanup_head] = mutation
+    if mutation == "lfs_hash":
+        api.lfs_paths.add("self_report.json")
+
+    with pytest.raises(RuntimeError, match="finality is unverified"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            expected_generation=generation,
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+
+def test_publication_finality_revalidates_downloaded_self_report(
+    tmp_path,
+    monkeypatch,
+):
+    generation = "1" * 64
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+    cleanup_head = _add_cleanup_commit(api, generation)
+    original_path = api.revision_files[cleanup_head]["self_report.json"]
+    assert isinstance(original_path, Path)
+    original = original_path.read_bytes()
+    drift = original.replace(b"exp-test", b"exp-tost", 1)
+    assert len(drift) == len(original)
+    drift_path = Path(api.remote_dir.name) / "drift-self-report.json"
+    drift_path.write_bytes(drift)
+    api.revision_files[cleanup_head]["self_report.json"] = drift_path
+    expected_hash = hashlib.sha256(original).hexdigest()
+    real_sha256_file = hf_publication._sha256_file
+
+    def trusted_transport_hash(path):
+        if path == drift_path:
+            return len(original), expected_hash
+        return real_sha256_file(path)
+
+    monkeypatch.setattr(
+        hf_publication,
+        "_sha256_file",
+        trusted_transport_hash,
+    )
+
+    with pytest.raises(RuntimeError, match="finality is unverified"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            expected_generation=generation,
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+
+def test_publication_finality_rejects_head_advance_during_verification(tmp_path):
+    api, root, receipt_path, publication = _published_state(tmp_path)
+    api.repo_info_sequence = [publication.oid, "c" * 40]
+
+    with pytest.raises(RuntimeError, match="finality is unverified"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+
+@pytest.mark.parametrize("tamper", ["plan", "identity"])
+def test_publication_finality_rejects_receipt_plan_or_identity_tamper(
+    tmp_path,
+    tamper,
+):
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+    payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if tamper == "plan":
+        payload["plan_sha256"] = "0" * 64
+    else:
+        payload["result_fingerprint"] = "d" * 64
+    receipt_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    error = RuntimeError if tamper == "plan" else ValueError
+    with pytest.raises(error):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+
+def test_publication_finality_fails_closed_on_api_error_and_closes_streams(
+    tmp_path,
+    monkeypatch,
+):
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+    api.fail_tree = True
+    staged = []
+    real_publication_files = hf_publication._publication_files
+
+    def capture_publication_files(upload_root):
+        files = real_publication_files(upload_root)
+        staged.extend(files)
+        return files
+
+    monkeypatch.setattr(
+        hf_publication,
+        "_publication_files",
+        capture_publication_files,
+    )
+
+    with pytest.raises(RuntimeError, match="finality is unverified"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+    assert staged
+    assert all(record.stream.closed for record in staged)
 
 
 def test_publication_uses_step0_head_as_cas_parent(tmp_path):
@@ -202,7 +780,7 @@ def test_publication_uses_step0_head_as_cas_parent(tmp_path):
         f"publication-plan-sha256: {result.plan_sha256}"
     )
     additions = [
-        operation.path_in_repo
+        operation
         for operation in commit["operations"]
         if isinstance(operation, CommitOperationAdd)
     ]
@@ -211,12 +789,19 @@ def test_publication_uses_step0_head_as_cas_parent(tmp_path):
         for operation in commit["operations"]
         if isinstance(operation, CommitOperationDelete)
     ]
-    assert additions == ["data/train-00000-of-00001.parquet", "self_report.json"]
+    assert [operation.path_in_repo for operation in additions] == [
+        "data/train-00000-of-00001.parquet",
+        "self_report.json",
+    ]
+    assert all(
+        not isinstance(operation.path_or_fileobj, (str, Path))
+        for operation in additions
+    )
     assert deletions == [
         "data/old.parquet",
         "deliverable_files/task/old.pdf",
     ]
-    assert not set(additions) & set(deletions)
+    assert not {operation.path_in_repo for operation in additions} & set(deletions)
     assert "reference_files/task/input.xlsx" not in deletions
 
 
@@ -352,6 +937,26 @@ def test_publication_accepts_revision_pinned_hf_cache_symlinks(tmp_path):
     assert result.oid == "b" * 40
 
 
+def test_publication_rejects_revision_pinned_cache_symlink_with_wrong_bytes(
+    tmp_path,
+):
+    api = FakeApi()
+    api.download_symlinks = True
+    api.tree_mutation = "download_hash"
+
+    with pytest.raises(RuntimeError, match="outcome is unverified") as captured:
+        publish_dataset(
+            "owner/repository",
+            _upload_root(tmp_path),
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+    assert isinstance(captured.value.__cause__, ValueError)
+    assert "remote file hash mismatch" in str(captured.value.__cause__)
+
+
 def test_publication_still_rejects_local_upload_symlink(tmp_path):
     root = _upload_root(tmp_path)
     self_report = root / "self_report.json"
@@ -368,6 +973,184 @@ def test_publication_still_rejects_local_upload_symlink(tmp_path):
             identity=_identity(),
             api=FakeApi(),
         )
+
+
+@pytest.mark.parametrize("mutation", ["replace", "rewrite"])
+def test_publication_uploads_held_bytes_after_source_changes(
+    tmp_path,
+    mutation,
+):
+    root = _upload_root(tmp_path)
+    source = root / "data" / "train-00000-of-00001.parquet"
+    original = source.read_bytes()
+    api = FakeApi()
+
+    def change_source():
+        if mutation == "replace":
+            replacement = source.with_name("replacement.parquet")
+            replacement.write_bytes(b"replacement bytes")
+            replacement.replace(source)
+        else:
+            source.write_bytes(b"rewritten bytes")
+
+    api.before_first_remote_call = change_source
+
+    publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        api=api,
+    )
+
+    uploaded = api.remote_files["data/train-00000-of-00001.parquet"]
+    assert isinstance(uploaded, Path)
+    assert uploaded.read_bytes() == original
+    assert source.read_bytes() != original
+
+
+def test_publication_opens_each_source_once_with_nofollow_and_cloexec(
+    tmp_path,
+    monkeypatch,
+):
+    root = _upload_root(tmp_path)
+    readme = root / "README.md"
+    readme.write_text("readme", encoding="utf-8")
+    real_open = hf_publication.os.open
+    source_calls = []
+
+    def tracked_open(path, flags, *args, **kwargs):
+        candidate = Path(path)
+        if candidate == root or root in candidate.parents:
+            source_calls.append((candidate, flags))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(hf_publication.os, "open", tracked_open)
+
+    publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        api=FakeApi(),
+    )
+
+    counts = Counter(path for path, _flags in source_calls)
+    assert counts == Counter({
+        root / "README.md": 1,
+        root / "data" / "train-00000-of-00001.parquet": 1,
+        root / "self_report.json": 1,
+    })
+    for _path, flags in source_calls:
+        assert flags & os.O_NOFOLLOW
+        assert flags & os.O_CLOEXEC
+        assert flags & os.O_ACCMODE == os.O_RDONLY
+
+
+def test_publication_rejects_hardlinked_source_before_remote_call(tmp_path):
+    root = _upload_root(tmp_path)
+    source = root / "data" / "train-00000-of-00001.parquet"
+    os.link(source, tmp_path / "parquet-hardlink")
+    api = FakeApi()
+
+    with pytest.raises(ValueError, match="single-link regular file"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_rejects_symlink_ancestor_above_upload_root(tmp_path):
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    real_root = _upload_root(real_parent)
+    linked_parent = tmp_path / "linked-parent"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+    api = FakeApi()
+
+    with pytest.raises(ValueError, match="symlink component"):
+        publish_dataset(
+            "owner/repository",
+            linked_parent / real_root.name,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_streams_large_source_without_path_read_bytes(
+    tmp_path,
+    monkeypatch,
+):
+    root = _upload_root(tmp_path)
+    source = root / "data" / "train-00000-of-00001.parquet"
+    source.write_bytes(b"x" * (3 * 1024 * 1024 + 17))
+    real_read_bytes = Path.read_bytes
+
+    def guarded_read_bytes(path):
+        if path == source:
+            raise AssertionError("publication source must not use Path.read_bytes")
+        return real_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", guarded_read_bytes)
+
+    publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        api=FakeApi(),
+    )
+
+
+def test_publication_rejects_source_mutation_during_staging(
+    tmp_path,
+    monkeypatch,
+):
+    root = _upload_root(tmp_path)
+    source = root / "data" / "train-00000-of-00001.parquet"
+    source.write_bytes(b"x" * (2 * 1024 * 1024))
+    real_read = hf_publication.os.read
+    mutated = False
+
+    def mutating_read(descriptor, size):
+        nonlocal mutated
+        chunk = real_read(descriptor, size)
+        if chunk and not mutated:
+            mutated = True
+            with source.open("r+b") as stream:
+                stream.seek(0)
+                stream.write(b"changed")
+                stream.flush()
+                os.fsync(stream.fileno())
+        return chunk
+
+    monkeypatch.setattr(hf_publication.os, "read", mutating_read)
+    api = FakeApi()
+
+    with pytest.raises(ValueError, match="changed while staging"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
 
 
 def test_publication_fails_closed_when_verification_api_is_unavailable(tmp_path):
@@ -418,7 +1201,9 @@ def test_publication_rejects_changed_head_before_upload(tmp_path):
 
 def test_publication_requires_local_self_report_before_remote_call(tmp_path):
     root = tmp_path / "upload"
-    root.mkdir()
+    data = root / "data"
+    data.mkdir(parents=True)
+    (data / "train-00000-of-00001.parquet").write_bytes(b"parquet")
     api = FakeApi()
 
     with pytest.raises(ValueError, match="self_report.json is required"):
@@ -428,6 +1213,56 @@ def test_publication_requires_local_self_report_before_remote_call(tmp_path):
             token="token",
             expected_head="a" * 40,
             identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_rejects_same_path_byte_drift_before_remote_call(tmp_path):
+    api = FakeApi()
+    root = _upload_root(tmp_path)
+    relative = "deliverable_files/task-1/report.pdf"
+    original = b"original"
+    output = root / relative
+    output.parent.mkdir(parents=True)
+    output.write_bytes(original)
+    urls, uris = canonical_deliverable_uris([relative], "owner/repository")
+    identity = PublicationIdentity(
+        experiment_id="exp-test",
+        repo_id="owner/repository",
+        publication_generation="exp-test:100:1",
+        prepared_fingerprint="f" * 64,
+        result_fingerprint="e" * 64,
+        ordered_task_ids=("task-1",),
+        results=(PublicationTaskResult(
+            "task-1",
+            "",
+            (relative,),
+            tuple(urls),
+            tuple(uris),
+            (PublicationFileRecord(
+                relative,
+                hashlib.sha256(original).hexdigest(),
+                len(original),
+            ),),
+            status="success",
+        ),),
+    )
+    report_path = root / "self_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["task_results"][0]["deliverable_files"] = [relative]
+    report["task_results"][0]["files_count"] = 1
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    output.write_bytes(b"tampered")
+
+    with pytest.raises(ValueError, match="bytes differ from Step 2"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=identity,
             api=api,
         )
 
@@ -444,7 +1279,34 @@ def test_publication_requires_local_self_report_before_remote_call(tmp_path):
         ({"result_fingerprint": "d" * 64}, "result fingerprint mismatch"),
         ({"publication_plan": "dry_run_no_step7"}, "plan is not publishable"),
         ({"ordered_task_ids": ["task-2"]}, "task order mismatch"),
-        ({"task_results": [{"task_id": "task-2"}]}, "result task set mismatch"),
+        ({
+            "task_results": [_report_task_row(task_id="task-2")],
+        }, "result task set mismatch"),
+        ({
+            "task_results": [_report_task_row(deliverable_summary="stale")],
+        }, "deliverable summary mismatch"),
+        ({
+            "task_results": [_report_task_row(
+                deliverable_files=["deliverable_files/task-1/stale.pdf"],
+            )],
+        }, "deliverable files mismatch"),
+        ({
+            "task_results": [_report_task_row(status="error")],
+        }, "result status mismatch"),
+        ({
+            "task_results": [_report_task_row(qa_score=1)],
+        }, "task result projection mismatch"),
+        ({
+            "summary": _report_summary(success_count=0),
+        }, "summary mismatch"),
+        ({
+            "error_tasks": [{
+                "task_id": "task-1",
+                "sector": "",
+                "occupation": "",
+                "error": "stale error",
+            }],
+        }, "error task projection mismatch"),
     ],
 )
 def test_publication_rejects_stale_self_report_identity(
@@ -465,23 +1327,223 @@ def test_publication_rejects_stale_self_report_identity(
     assert api.calls == []
 
 
-def test_publication_sends_more_than_250_files_in_one_create_commit(tmp_path):
-    api = FakeApi()
-    root = _upload_root(tmp_path)
-    deliverables = root / "deliverable_files" / "task"
-    deliverables.mkdir(parents=True)
-    for index in range(251):
-        (deliverables / f"result-{index:03d}.txt").write_text(
-            str(index),
-            encoding="utf-8",
-        )
+def test_publication_accepts_exact_step6_projection_with_v2_task_fields(tmp_path):
+    result = PublicationTaskResult(
+        "task-1",
+        "finished output",
+        (),
+        (),
+        (),
+        status="success",
+        sector="Financial Services",
+        occupation="Financial Analyst",
+        retried=True,
+        files_count=4,
+        qa_score=7.25,
+        qa_passed=True,
+        qa_issues=["minor issue"],
+        qa_suggestion="tighten formatting",
+        latency_ms=100.6,
+        observability={"trace_id": "trace-1"},
+        instruction="review the workbook",
+        reference_file_urls=["https://example.test/reference.xlsx"],
+    )
+    identity = PublicationIdentity(
+        experiment_id="exp-test",
+        repo_id="owner/repository",
+        publication_generation="exp-test:100:1",
+        prepared_fingerprint="f" * 64,
+        result_fingerprint="e" * 64,
+        ordered_task_ids=("task-1",),
+        results=(result,),
+    )
+    row = _report_task_row(
+        sector="Financial Services",
+        occupation="Financial Analyst",
+        retried=True,
+        files_count=4,
+        qa_score=7.25,
+        qa_passed=True,
+        qa_issues=["minor issue"],
+        qa_suggestion="tighten formatting",
+        latency_ms=100.6,
+        observability={"trace_id": "trace-1"},
+        deliverable_summary="finished output",
+        instruction="review the workbook",
+        reference_file_urls=["https://example.test/reference.xlsx"],
+        prompt_classification={"needs_files": True},
+        policy_results={"strict": {"needs_files": True}},
+    )
+    root = _upload_root(tmp_path, report_overrides={
+        "summary": _report_summary(
+            retried_count=1,
+            avg_qa_score=7.25,
+            min_qa_score=7.25,
+            max_qa_score=7.25,
+            avg_latency_ms=101,
+            max_latency_ms=101,
+            total_latency_ms=101,
+        ),
+        "task_results": [row],
+    })
+
+    result = publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=identity,
+        api=FakeApi(),
+    )
+
+    assert result.oid == "b" * 40
+
+
+def test_publication_binds_exact_ordered_truthy_error_projection(tmp_path):
+    results = (
+        PublicationTaskResult(
+            "task-1",
+            "",
+            (),
+            (),
+            (),
+            status="error",
+            sector="Sector A",
+            occupation="Occupation A",
+            error="first failure",
+        ),
+        PublicationTaskResult(
+            "task-2",
+            "",
+            (),
+            (),
+            (),
+            status="error",
+            sector="Sector B",
+            occupation="Occupation B",
+            error="second failure",
+        ),
+    )
+    identity = PublicationIdentity(
+        experiment_id="exp-test",
+        repo_id="owner/repository",
+        publication_generation="exp-test:100:1",
+        prepared_fingerprint="f" * 64,
+        result_fingerprint="e" * 64,
+        ordered_task_ids=("task-1", "task-2"),
+        results=results,
+    )
+    error_tasks = [
+        {
+            "task_id": "task-1",
+            "sector": "Sector A",
+            "occupation": "Occupation A",
+            "error": "first failure",
+        },
+        {
+            "task_id": "task-2",
+            "sector": "Sector B",
+            "occupation": "Occupation B",
+            "error": "second failure",
+        },
+    ]
+    root = _upload_root(tmp_path, report_overrides={
+        "ordered_task_ids": ["task-1", "task-2"],
+        "summary": _report_summary(
+            total_tasks=2,
+            success_count=0,
+            success_rate_pct=0.0,
+            error_count=2,
+        ),
+        "task_results": [
+            _report_task_row(
+                status="error",
+                sector="Sector A",
+                occupation="Occupation A",
+            ),
+            _report_task_row(
+                task_id="task-2",
+                status="error",
+                sector="Sector B",
+                occupation="Occupation B",
+            ),
+        ],
+        "error_tasks": error_tasks,
+    })
 
     publish_dataset(
         "owner/repository",
         root,
         token="token",
         expected_head="a" * 40,
-        identity=_identity(),
+        identity=identity,
+        api=FakeApi(),
+    )
+
+    report_path = root / "self_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["error_tasks"].reverse()
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    api = FakeApi()
+    with pytest.raises(ValueError, match="error task projection mismatch"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=identity,
+            api=api,
+        )
+    assert api.calls == []
+
+
+def test_publication_sends_more_than_250_files_in_one_create_commit(tmp_path):
+    api = FakeApi()
+    root = _upload_root(tmp_path)
+    deliverables = root / "deliverable_files" / "task-1"
+    deliverables.mkdir(parents=True)
+    files = []
+    records = []
+    for index in range(251):
+        relative = f"deliverable_files/task-1/result-{index:03d}.txt"
+        content = str(index).encode("utf-8")
+        (root / relative).write_bytes(content)
+        files.append(relative)
+        records.append(PublicationFileRecord(
+            path=relative,
+            sha256=hashlib.sha256(content).hexdigest(),
+            size=len(content),
+        ))
+    urls, uris = canonical_deliverable_uris(files, "owner/repository")
+    identity = PublicationIdentity(
+        experiment_id="exp-test",
+        repo_id="owner/repository",
+        publication_generation="exp-test:100:1",
+        prepared_fingerprint="f" * 64,
+        result_fingerprint="e" * 64,
+        ordered_task_ids=("task-1",),
+        results=(PublicationTaskResult(
+            "task-1",
+            "",
+            tuple(files),
+            tuple(urls),
+            tuple(uris),
+            tuple(records),
+            status="success",
+        ),),
+    )
+    report_path = root / "self_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["task_results"][0]["deliverable_files"] = files
+    report["task_results"][0]["files_count"] = len(files)
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=identity,
         api=api,
     )
 
@@ -504,7 +1566,24 @@ def _write_pipeline_identity(tmp_path: Path) -> tuple[Path, Path, dict]:
             "expected_count": 2,
             "task_ids": ["task-1", "task-2"],
         },
-        "tasks": [{"task_id": "task-1"}, {"task_id": "task-2"}],
+        "tasks": [
+            {
+                "task_id": "task-1",
+                "sector": "Financial Services",
+                "occupation": "Financial Analyst",
+                "instruction": "I" * 2105,
+                "reference_file_urls": [
+                    "https://example.test/reference.xlsx"
+                ],
+            },
+            {
+                "task_id": "task-2",
+                "sector": "Public Sector",
+                "occupation": "Policy Analyst",
+                "instruction": "",
+                "reference_file_urls": [],
+            },
+        ],
     }
     prepared["prepared_fingerprint"] = prepared_fingerprint(prepared)
     inference = {
@@ -516,13 +1595,40 @@ def _write_pipeline_identity(tmp_path: Path) -> tuple[Path, Path, dict]:
         "results": [
             {
                 "task_id": "task-1",
+                "status": "success",
+                "resume_round": 1,
+                "qa": {
+                    "score": 8.25,
+                    "passed": True,
+                    "issues": ["minor issue"],
+                    "suggestion": "tighten formatting",
+                },
+                "latency_ms": 150.6,
+                "observability": {"trace_id": "trace-1"},
+                "error": "",
                 "deliverable_text": "current text",
                 "deliverable_files": ["deliverable_files/task-1/report.pdf"],
+                "deliverable_file_records": [{
+                    "path": "deliverable_files/task-1/report.pdf",
+                    "sha256": "a" * 64,
+                    "size": 7,
+                }],
             },
             {
                 "task_id": "task-2",
+                "status": "error",
+                "qa": {
+                    "score": None,
+                    "passed": False,
+                    "issues": [],
+                    "suggestion": "retry with source data",
+                },
+                "latency_ms": 0,
+                "observability": {},
+                "error": "inference failed",
                 "deliverable_text": None,
                 "deliverable_files": [],
+                "deliverable_file_records": [],
             },
         ],
     }
@@ -561,8 +1667,49 @@ def test_load_publication_identity_binds_exact_step1_step2_scope(tmp_path):
                     "hf://datasets/owner/repository@main/"
                     "deliverable_files/task-1/report.pdf",
                 ),
+                (PublicationFileRecord(
+                    "deliverable_files/task-1/report.pdf",
+                    "a" * 64,
+                    7,
+                ),),
+                status="success",
+                sector="Financial Services",
+                occupation="Financial Analyst",
+                retried=True,
+                files_count=1,
+                qa_score=8.25,
+                qa_passed=True,
+                qa_issues=["minor issue"],
+                qa_suggestion="tighten formatting",
+                latency_ms=150.6,
+                observability={"trace_id": "trace-1"},
+                instruction="I" * 2000,
+                reference_file_urls=[
+                    "https://example.test/reference.xlsx"
+                ],
+                error="",
             ),
-            PublicationTaskResult("task-2", "", (), (), ()),
+            PublicationTaskResult(
+                "task-2",
+                "",
+                (),
+                (),
+                (),
+                status="error",
+                sector="Public Sector",
+                occupation="Policy Analyst",
+                retried=False,
+                files_count=0,
+                qa_score=None,
+                qa_passed=False,
+                qa_issues=[],
+                qa_suggestion="retry with source data",
+                latency_ms=0,
+                observability={},
+                instruction="",
+                reference_file_urls=[],
+                error="inference failed",
+            ),
         ),
     )
 

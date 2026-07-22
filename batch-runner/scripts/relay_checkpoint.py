@@ -21,6 +21,7 @@ from huggingface_hub import (
 )
 from huggingface_hub.utils import HfHubHTTPError
 
+from core.inference_manifest import canonical_deliverable_path, canonical_task_id
 from core.repository_identity import validate_hf_dataset_repo_id
 
 
@@ -28,9 +29,11 @@ CHECKPOINT_SCHEMA = "relay-checkpoint-v2"
 REMOTE_LINEAGES = "_checkpoint/lineages"
 LOCAL_PROGRESS = Path("workspace/step2_inference_progress.json")
 LOCAL_UPLOAD = Path("workspace/upload")
+LOCAL_GENERATION = Path("workspace/relay_checkpoint_generation")
 SANDBOX_IMAGE_PATTERN = re.compile(
     r"ghcr\.io/hyeonsangjeon/gdpval-sandbox@sha256:[0-9a-f]{64}"
 )
+RESULT_STATUSES = frozenset({"success", "error", "qa_failed", "pending"})
 
 
 def _validate_sandbox_image_digest(value: str) -> str:
@@ -74,13 +77,71 @@ def _validate_complete_task_set(payload: dict) -> None:
         or len(ordered_task_ids) != len(set(ordered_task_ids))
     ):
         raise ValueError("relay checkpoint ordered task identity is invalid")
+    try:
+        ordered_task_ids = [canonical_task_id(task_id) for task_id in ordered_task_ids]
+    except ValueError as exc:
+        raise ValueError("relay checkpoint ordered task identity is invalid") from exc
     result_ids = []
     for result in payload["results"]:
         if not isinstance(result, dict) or not isinstance(result.get("task_id"), str):
             raise ValueError("relay checkpoint result task identity is invalid")
-        result_ids.append(result["task_id"])
+        try:
+            result_ids.append(canonical_task_id(result["task_id"]))
+        except ValueError as exc:
+            raise ValueError("relay checkpoint result task identity is invalid") from exc
+        if result.get("status") not in RESULT_STATUSES:
+            raise ValueError("relay checkpoint result status is invalid")
     if result_ids != ordered_task_ids:
         raise ValueError("relay checkpoint result task IDs differ from ordered task set")
+
+
+def resolve_relay_status(progress_path: Path, exit_code: object) -> tuple[int, bool]:
+    """Validate one Step 2 checkpoint and decide whether relay is required."""
+    if not isinstance(exit_code, str) or re.fullmatch(
+        r"(?:0|[1-9][0-9]*)", exit_code
+    ) is None:
+        raise ValueError("Step 2 exit code must be a canonical decimal integer")
+    numeric_exit_code = int(exit_code)
+    if numeric_exit_code > 255:
+        raise ValueError("Step 2 exit code is outside the process exit-code range")
+
+    payload = _load_progress(progress_path)
+    _validate_complete_task_set(payload)
+    total_tasks = payload.get("total_tasks")
+    if type(total_tasks) is not int or total_tasks != len(payload["ordered_task_ids"]):
+        raise ValueError("relay checkpoint total task count is invalid")
+
+    pending_count = sum(
+        result["status"] == "pending" for result in payload["results"]
+    )
+    if numeric_exit_code == 42:
+        if pending_count == 0:
+            raise ValueError(
+                "Step 2a returned checkpoint code 42 without pending tasks"
+            )
+        return pending_count, True
+    if pending_count:
+        raise ValueError(
+            "Step 2a left pending tasks without checkpoint exit code 42"
+        )
+    return pending_count, False
+
+
+def write_relay_status(
+    progress_path: Path,
+    exit_code: object,
+    github_output: Path,
+) -> tuple[int, bool]:
+    """Append validated relay outputs for one GitHub Actions step."""
+    pending_count, needs_relay = resolve_relay_status(progress_path, exit_code)
+    with github_output.open("a", encoding="utf-8") as output:
+        output.write(f"pending_count={pending_count}\n")
+        output.write(f"needs_relay={str(needs_relay).lower()}\n")
+    print(
+        f"Step 2a: exit={exit_code}, pending={pending_count}, "
+        f"needs_relay={str(needs_relay).lower()}"
+    )
+    return pending_count, needs_relay
 
 
 def _required_deliverables(payload: dict) -> tuple[PurePosixPath, ...]:
@@ -96,6 +157,14 @@ def _required_deliverables(payload: dict) -> tuple[PurePosixPath, ...]:
         for value in files:
             if not isinstance(value, str) or not value:
                 raise ValueError("relay deliverable path is malformed")
+            task_id = result.get("task_id")
+            if isinstance(task_id, str):
+                try:
+                    value = canonical_deliverable_path(task_id, value)
+                except ValueError as exc:
+                    raise ValueError(
+                        "relay deliverable path is not owned by result task"
+                    ) from exc
             path = PurePosixPath(value)
             if (
                 path.is_absolute()
@@ -185,6 +254,58 @@ def _commit_oid(info: object) -> str:
     return oid
 
 
+def _generation_value(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ValueError("relay checkpoint generation is invalid")
+    return value
+
+
+def _validate_generation_state_path(path: Path) -> None:
+    for candidate in (path, *path.parents):
+        if candidate.is_symlink():
+            raise ValueError("relay checkpoint generation state path is a symlink")
+    if path.exists() and not path.is_file():
+        raise ValueError("relay checkpoint generation state path is not a regular file")
+
+
+def _write_generation_state(path: Path, generation: str) -> None:
+    generation = _generation_value(generation)
+    _validate_generation_state_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _validate_generation_state_path(path)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as output:
+            temporary = Path(output.name)
+            output.write(generation.encode("ascii"))
+            output.flush()
+            os.fsync(output.fileno())
+        _validate_generation_state_path(path)
+        temporary.replace(path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _read_generation_state(path: Path) -> str:
+    _validate_generation_state_path(path)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"relay checkpoint generation state is missing: {path}"
+        )
+    try:
+        generation = path.read_bytes().decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise ValueError("relay checkpoint generation state is invalid") from exc
+    return _generation_value(generation)
+
+
 def _marker(data: bytes) -> dict:
     payload = json.loads(data)
     if not isinstance(payload, dict) or set(payload) != {
@@ -200,8 +321,7 @@ def _marker(data: bytes) -> dict:
         raise ValueError("relay checkpoint marker is malformed")
     if payload["schema_version"] != CHECKPOINT_SCHEMA:
         raise ValueError("relay checkpoint marker schema is unsupported")
-    if not re.fullmatch(r"[0-9a-f]{64}", payload.get("generation", "")):
-        raise ValueError("relay checkpoint generation is invalid")
+    _generation_value(payload.get("generation", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", payload.get("payload_revision", "")):
         raise ValueError("relay checkpoint revision is invalid")
     if not re.fullmatch(r"[0-9a-f]{40}", payload.get("source_sha", "")):
@@ -316,9 +436,13 @@ def restore_checkpoint(
     sandbox_image_digest: str = "",
     progress_path: Path = LOCAL_PROGRESS,
     upload_root: Path = LOCAL_UPLOAD,
+    generation_path: Path | None = None,
     api: HfApi | None = None,
-) -> None:
+) -> str:
     repo_id = validate_hf_dataset_repo_id(repo_id)
+    if generation_path is None:
+        generation_path = LOCAL_GENERATION
+    _validate_generation_state_path(generation_path)
     marker_remote = _marker_path(source_sha, lineage_id)
     with tempfile.TemporaryDirectory(prefix="gdpval-relay-") as temp_dir:
         staging = Path(temp_dir)
@@ -406,7 +530,11 @@ def restore_checkpoint(
         progress_tmp = progress_path.with_suffix(".json.tmp")
         shutil.copy2(staged_progress, progress_tmp)
         progress_tmp.replace(progress_path)
-    print(f"Relay checkpoint restored from {repo_id}")
+        _write_generation_state(generation_path, marker["generation"])
+    print(
+        f"Relay checkpoint {marker['generation'][:12]} restored from {repo_id}"
+    )
+    return marker["generation"]
 
 
 def upload_checkpoint(
@@ -489,14 +617,33 @@ def upload_checkpoint(
         sandbox_image_digest,
     ) != generation:
         raise ValueError("relay checkpoint uploaded generation hash mismatch")
-    client.upload_file(
-        path_or_fileobj=marker,
-        path_in_repo=marker_remote,
+    try:
+        marker_commit = client.upload_file(
+            path_or_fileobj=marker,
+            path_in_repo=marker_remote,
+            repo_id=repo_id,
+            repo_type="dataset",
+            token=token,
+            parent_commit=payload_revision,
+            commit_message=f"Advance relay checkpoint to {generation[:12]}",
+        )
+        candidate = _commit_oid(marker_commit)
+    except Exception:
+        candidate = _repo_head(client, repo_id=repo_id, token=token)
+        if candidate == payload_revision:
+            raise
+    _verify_marker_advance(
+        client,
         repo_id=repo_id,
-        repo_type="dataset",
         token=token,
-        parent_commit=payload_revision,
-        commit_message=f"Advance relay checkpoint to {generation[:12]}",
+        candidate=candidate,
+        payload_revision=payload_revision,
+        marker_remote=marker_remote,
+        intended_marker=marker,
+        source_sha=source_sha,
+        lineage_id=lineage_id,
+        sandbox_image_digest=sandbox_image_digest,
+        generation=generation,
     )
     print(f"Relay checkpoint {generation[:12]} uploaded to {repo_id}")
 
@@ -508,8 +655,90 @@ def _repo_head(client: HfApi, *, repo_id: str, token: str) -> str:
         token=token,
     ).sha
     if not isinstance(head, str) or not re.fullmatch(r"[0-9a-f]{40}", head):
-        raise ValueError("HF checkpoint cleanup did not resolve a full HEAD")
+        raise ValueError("HF checkpoint did not resolve a full HEAD")
     return head
+
+
+def _history_commit_oid(commit: object) -> str:
+    oid = getattr(commit, "commit_id", None)
+    if not isinstance(oid, str) or not re.fullmatch(r"[0-9a-f]{40}", oid):
+        raise ValueError("HF checkpoint commit history contains an invalid revision")
+    return oid
+
+
+def _verify_marker_advance(
+    client: HfApi,
+    *,
+    repo_id: str,
+    token: str,
+    candidate: str,
+    payload_revision: str,
+    marker_remote: str,
+    intended_marker: bytes,
+    source_sha: str,
+    lineage_id: str,
+    sandbox_image_digest: str,
+    generation: str,
+) -> None:
+    if not re.fullmatch(r"[0-9a-f]{40}", candidate):
+        raise ValueError("relay checkpoint marker candidate is not a full revision")
+    if _repo_head(client, repo_id=repo_id, token=token) != candidate:
+        raise RuntimeError(
+            "relay checkpoint marker outcome is unverified: repository HEAD "
+            "does not match the candidate"
+        )
+    commits = list(
+        client.list_repo_commits(
+            repo_id=repo_id,
+            repo_type="dataset",
+            revision=candidate,
+            token=token,
+        )
+    )
+    if (
+        len(commits) < 2
+        or _history_commit_oid(commits[0]) != candidate
+        or _history_commit_oid(commits[1]) != payload_revision
+    ):
+        raise RuntimeError(
+            "relay checkpoint marker outcome is unverified: candidate direct "
+            "parent is not the payload revision"
+        )
+    marker_path = Path(
+        hf_hub_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            filename=marker_remote,
+            revision=candidate,
+            token=token,
+        )
+    )
+    marker_bytes = marker_path.read_bytes()
+    if marker_bytes != intended_marker:
+        raise RuntimeError(
+            "relay checkpoint marker outcome is unverified: current.json bytes "
+            "do not match the intended marker"
+        )
+    verified_marker = _marker(marker_bytes)
+    _verify_marker_identity(
+        verified_marker,
+        source_sha=source_sha,
+        lineage_id=lineage_id,
+        sandbox_image_digest=sandbox_image_digest,
+    )
+    if (
+        verified_marker["generation"] != generation
+        or verified_marker["payload_revision"] != payload_revision
+    ):
+        raise RuntimeError(
+            "relay checkpoint marker outcome is unverified: marker generation "
+            "or payload revision differs"
+        )
+    if _repo_head(client, repo_id=repo_id, token=token) != candidate:
+        raise RuntimeError(
+            "relay checkpoint marker outcome is unverified: repository HEAD "
+            "advanced during verification"
+        )
 
 
 def _marker_at_head_or_confirm_absent(
@@ -559,9 +788,11 @@ def cleanup_checkpoint(
     token: str,
     source_sha: str,
     lineage_id: str,
+    expected_generation: str,
     sandbox_image_digest: str = "",
     api: HfApi | None = None,
 ) -> None:
+    expected_generation = _generation_value(expected_generation)
     repo_id = validate_hf_dataset_repo_id(repo_id)
     client = api or HfApi(token=token)
     lineage_root = _lineage_root(source_sha, lineage_id)
@@ -585,6 +816,10 @@ def cleanup_checkpoint(
         lineage_id=lineage_id,
         sandbox_image_digest=sandbox_image_digest,
     )
+    if marker["generation"] != expected_generation:
+        raise ValueError(
+            "relay checkpoint cleanup refused a newer or different generation"
+        )
     try:
         client.create_commit(
             repo_id=repo_id,
@@ -601,16 +836,28 @@ def cleanup_checkpoint(
         )
     except Exception:
         confirmed_head = _repo_head(client, repo_id=repo_id, token=token)
-        if _marker_at_head_or_confirm_absent(
+        remaining_marker_path = _marker_at_head_or_confirm_absent(
             client,
             repo_id=repo_id,
             token=token,
             lineage_root=lineage_root,
             marker_remote=marker_remote,
             head=confirmed_head,
-        ) is None:
+        )
+        if remaining_marker_path is None:
             print(f"Relay checkpoint cleaned from {repo_id}")
             return
+        remaining_marker = _marker(remaining_marker_path.read_bytes())
+        _verify_marker_identity(
+            remaining_marker,
+            source_sha=source_sha,
+            lineage_id=lineage_id,
+            sandbox_image_digest=sandbox_image_digest,
+        )
+        if remaining_marker["generation"] != expected_generation:
+            raise ValueError(
+                "relay checkpoint cleanup refused a newer or different generation"
+            )
         raise
     print(f"Relay checkpoint cleaned from {repo_id}")
 
@@ -618,13 +865,34 @@ def cleanup_checkpoint(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "operation", choices=("verify-write", "restore", "upload", "cleanup")
+        "operation",
+        choices=("status", "verify-write", "restore", "upload", "cleanup"),
     )
-    parser.add_argument("--repo-id", required=True)
+    parser.add_argument("--repo-id")
     parser.add_argument("--source-sha")
     parser.add_argument("--lineage-id")
     parser.add_argument("--sandbox-image-digest", default="")
+    parser.add_argument("--expected-generation")
+    parser.add_argument("--progress-path", type=Path, default=LOCAL_PROGRESS)
+    parser.add_argument("--exit-code")
+    parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
+    if args.operation == "status":
+        if args.exit_code is None or args.github_output is None:
+            raise SystemExit(
+                "--exit-code and --github-output are required for status"
+            )
+        try:
+            write_relay_status(
+                args.progress_path,
+                args.exit_code,
+                args.github_output,
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"Relay status rejected: {exc}") from exc
+        return
+    if not args.repo_id:
+        raise SystemExit("--repo-id is required")
     token = os.environ.get("HF_TOKEN")
     if not token:
         raise SystemExit("HF_TOKEN is required")
@@ -639,15 +907,28 @@ def main() -> None:
             source_sha=args.source_sha,
             sandbox_image_digest=args.sandbox_image_digest,
         )
-    else:
+    elif args.operation == "restore":
         if not args.source_sha or not args.lineage_id:
-            raise SystemExit("--source-sha and --lineage-id are required")
-        operation = restore_checkpoint if args.operation == "restore" else cleanup_checkpoint
-        operation(
+            raise SystemExit("--source-sha and --lineage-id are required for restore")
+        restore_checkpoint(
             args.repo_id,
             token=token,
             source_sha=args.source_sha,
             lineage_id=args.lineage_id,
+            sandbox_image_digest=args.sandbox_image_digest,
+        )
+    else:
+        if not args.source_sha or not args.lineage_id:
+            raise SystemExit("--source-sha and --lineage-id are required for cleanup")
+        expected_generation = args.expected_generation
+        if expected_generation is None:
+            expected_generation = _read_generation_state(LOCAL_GENERATION)
+        cleanup_checkpoint(
+            args.repo_id,
+            token=token,
+            source_sha=args.source_sha,
+            lineage_id=args.lineage_id,
+            expected_generation=expected_generation,
             sandbox_image_digest=args.sandbox_image_digest,
         )
 

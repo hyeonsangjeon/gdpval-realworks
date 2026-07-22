@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from core.agentic_budget import AgenticBudgetLedger
@@ -48,8 +49,9 @@ def _response(code, description="generated"):
 
 
 class FakeBackend:
-    def __init__(self, inspections, **_):
+    def __init__(self, inspections, **options):
         self.inspections = list(inspections)
+        self.options = options
         self.calls = []
         self.closed = False
         self._best = None
@@ -205,6 +207,30 @@ def test_hardened_baseline_runs_once_on_verified_first_attempt(tmp_path):
     }
     assert backends[0].calls.count("reset_work") == 1
     assert backends[0].closed is True
+
+
+def test_hardened_baseline_preserves_remote_reference_ids(tmp_path):
+    runner, provider, backends, _ = _runner(
+        tmp_path,
+        [_response("open('report.txt', 'w').write('report')")],
+        [_inspection(True), _inspection(True)],
+    )
+    reference_id = "reference_files/hash/input.xlsx"
+
+    result = runner.run(
+        "Create report.txt from input.xlsx",
+        "model",
+        reference_files=[reference_id],
+        run_id="paired-run",
+        condition_name="baseline",
+        task_id="task-1",
+    )
+
+    assert result["success"] is True
+    assert backends[0].options["reference_files"] == [reference_id]
+    prompt = json.dumps(provider.chat.completions.calls[0]["messages"])
+    assert "input.xlsx" in prompt
+    assert "File not found" not in prompt
 
 
 def test_hardened_baseline_regenerates_complete_solution_once(tmp_path):

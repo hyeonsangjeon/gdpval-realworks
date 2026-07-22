@@ -391,7 +391,7 @@ class SandboxRunner:
         so step2 passes it through here instead of prepending it to the task.
         """
         run_started = time.perf_counter()
-        reference_stage = stage_verified_references(reference_files or [])
+        reference_stage = self._stage_reference_files(reference_files or [])
         reference_stage_entered = False
         try:
             ref_files = reference_stage.__enter__()
@@ -457,6 +457,12 @@ class SandboxRunner:
         finally:
             if reference_stage_entered:
                 reference_stage.__exit__(None, None, None)
+
+    def _stage_reference_files(self, reference_files: List[str]):
+        return stage_verified_references(reference_files)
+
+    def _host_reference_access(self) -> bool:
+        return True
 
     # ── single attempt ────────────────────────────────────────────────────
     def _run_attempt(
@@ -959,6 +965,7 @@ class SandboxRunner:
             reflection=reflection,
             registry=self.registry,
             perception_text=perception_text,
+            host_reference_access=self._host_reference_access(),
         )
         section_order = self.prompt_data.get("sections") or DEFAULT_SECTIONS
         return assemble_sections(section_order, ctx)

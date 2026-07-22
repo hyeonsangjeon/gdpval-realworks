@@ -48,11 +48,40 @@ task. It must be refreshed before a task is reported complete.
   fatal provider upload/local/Docker copy errors, basename-collision rejection,
   partial-copy cleanup, and best-effort provider input-file deletion prevent
   missing or changed inputs from silently reaching a model or generated code.
+- Code Interpreter uploads retain the verified local basename so provider-side
+  file type and extension are explicit. The common sandbox still stages local
+  references privately, while the hardened remote backend carries opaque
+  reference IDs through to its compute backend without a second host-path copy.
+- Step 1 assigns a run-specific publication generation before its prepared
+  fingerprint is calculated. Fresh GitHub/local runs receive a new generation,
+  relay legs preserve the initial lineage, and Step 2 validates it before
+  manifest loading, provider-client construction, or model spend.
+- Relay checkpoints canonicalize ordered/result task IDs, reject unknown result
+  statuses, and require each deliverable path to be owned by its result task.
+  Before the first execution and each QA retry, Step 2 removes the prior task
+  output tree with symlink-aware file/directory handling instead of silently
+  retaining stale artifacts.
+- Condition A keeps the canonical publication/relay upload root while condition
+  B writes to an isolated root. Step 2 binds every selected file to its
+  same-descriptor SHA-256/size and includes those records in a canonical result
+  fingerprint, so later same-path byte drift fails before any HF call.
 - Step 0 always creates and clears all submitter columns and rejects stale text,
   scalar/list manifests, URL/URI values, or physical outputs on reused targets.
   Step 4 rebuilds production selected rows from current results. Step 7 requires
   one canonical parquet shard, row-owned deliverable paths, canonical URLs/URIs,
-  and exact parquet-to-local-file-tree equality before remote cleanup/upload.
+  and exact parquet-to-current-Step-2 text/file/URL/URI/byte equality. Step 3 and
+  publication use one shared production-shaped projection of prepared metadata
+  plus raw Step 2 nested QA/results. The non-dry self-report must match its run
+  generation, prepared/result fingerprints, task order, status, summary, and
+  files. Step 5 records missing file-required outputs as failed empty rows and
+  never creates dummy files or mutates the parquet after result identity binds.
+- Step 0 records the validated target HEAD. Step 7 performs one HF
+  `create_commit(parent_commit=...)`, then proves direct ancestry, plan marker,
+  exact remote tree/hashes, self-report identity, and final HEAD. Ambiguous
+  marker and publication responses are reconciled without retry. Relay cleanup
+  requires the exact restored checkpoint generation, and a private local
+  receipt binds the publication plan so post-cleanup verification accepts only
+  the exact cleanup child with an unchanged managed tree.
 - Added model-free checkpoint identity validation after Step 1 and before Azure
   login/model-client construction. Missing progress, lineage/fingerprint drift,
   or incomplete deliverables abort the continuation instead of rerunning tasks.
@@ -62,9 +91,15 @@ task. It must be refreshed before a task is reported complete.
 
 ## Verification
 
-- Rebased base: `origin/main@30906084dbee384f1c324a8b794cba5aef28170b`.
-- Full backend non-integration suite: **1,670 passed, 6 skipped, 44 deselected,
+- Rebased base: `origin/main@723826c9f8a1c3b6c9b10d8d3ad0082d5810e07a`.
+- Full backend non-integration suite: **1,851 passed, 6 skipped, 44 deselected,
   0 failed**.
+- Focused manifest/reference, relay, publication, output, bootstrap, inference,
+  corruption, observability, and agentic trust matrix: **361 passed**.
+- Final production-shaped publication/report/subset/relay matrix: **188 passed**;
+  condition isolation and byte-finality matrix: **136 passed**; final status,
+  no-dummy, and cleanup-generation matrix: **156 passed**. The full suite above
+  includes every current version of those tests.
 - Focused trust matrices passed for relay generation/marker/CAS, schema v4
   source semantics, private reference staging, provider/local/Docker failures,
   manifest pre-client gates, Step 0 stale-state rejection, Step 4 current-run
@@ -83,11 +118,12 @@ task. It must be refreshed before a task is reported complete.
 - Documentation structure: **157 links**, **100 file/anchor targets**, **12
   fork-relative Actions routes**, and four system-map SVGs validated with no
   broken target, unbalanced fence, or `mermaid.ink` dependency.
-- actionlint reported no diagnostics for `batch-run.yml`; all six external
-  actions remain pinned to 40-character SHAs. YAML parse, Ruff, `py_compile`,
-  static diagnostics, and `git diff --check` passed across all eight workflows
-  and 23 changed Python files. `huggingface-hub==1.24.0` pins the verified
-  write-auth, immutable-revision, and CAS API surface.
+- actionlint 1.7.7 reported no diagnostics for the changed `batch-run.yml`; all
+  six external actions remain pinned to 40-character SHAs. All eight active
+  workflows parsed as YAML. Ruff and `py_compile` passed for **43 changed Python
+  files**; static diagnostics and `git diff --check` also passed.
+  `huggingface-hub==1.24.0` pins the verified write-auth, immutable-revision,
+  and CAS API surface.
 - No workflow dispatch, Azure login, model/API call, batch/grading run, HF write,
   network checkpoint write, or paid execution occurred. Public source bytes
   were downloaded read-only to verify canonical identities.

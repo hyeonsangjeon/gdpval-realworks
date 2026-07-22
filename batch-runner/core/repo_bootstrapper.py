@@ -9,13 +9,12 @@ Also generates ``step0_needs_files_manifest.json`` from the SOURCE dataset --
 a task-level map that records which tasks require file output.
 
 Lifecycle:
-    1. Authenticate and create SUBMISSION_REPO_ID with exist_ok=False
-    2. On 409, reuse a target with data/ or reject a partial target without deletion
-    3. For a new target, download the pinned openai/gdpval revision -> temp dir
-    4. Generate and persist the canonical needs-files manifest before stripping
-    5. Strip deliverable columns + remove deliverable_files/
-    6. Upload cleaned content and the canonical manifest to SUBMISSION_REPO_ID
-    7. Download the target's exact current HEAD to a fresh snapshot and validate
+    1. Authenticate and classify SUBMISSION_REPO_ID read-only
+    2. Reuse a target with data/ or reject a partial target without deletion
+    3. For an absent target, prepare and validate the pinned source in a temp dir
+    4. Create once and upload the exact frozen snapshot once
+    5. On a create race, reclassify read-only without overwrite or deletion
+    6. Download the target's exact current HEAD to a fresh snapshot and validate
 
 Usage:
     from core.repo_bootstrapper import RepoBootstrapper
@@ -58,7 +57,7 @@ from core.config import (
 )
 from core.needs_files import resolve_needs_files
 from core.prompt_classifier import classify_prompt
-from core.inference_manifest import canonical_deliverable_path
+from core.inference_manifest import canonical_deliverable_path, canonical_task_id
 from core.reference_integrity import (
     ReferenceIntegrityError,
     reference_manifest_record,
@@ -86,6 +85,7 @@ _CRITICAL_COLUMNS = {
     "reference_file_urls", "reference_file_hf_uris",
 }
 MANIFEST_FILENAME = "step0_needs_files_manifest.json"
+TARGET_HEAD_FILENAME = "step0_target_head.json"
 CANONICAL_PARQUET_FILENAME = "train-00000-of-00001.parquet"
 SOURCE_REVISION = "11e7900cdcac61bc4daf59e65feb238acda98fbf"
 CANONICAL_ORDERED_TASK_IDS_SHA256 = (
@@ -199,6 +199,42 @@ def _canonical_manifest_digest_error(raw_manifest: bytes) -> Optional[str]:
             f"be {expected}, got {actual}"
         )
     return None
+
+
+def require_canonical_manifest_bytes(raw_manifest: bytes) -> None:
+    """Require exact canonical manifest bytes for the active policy."""
+    error = _canonical_manifest_digest_error(raw_manifest)
+    if error is not None:
+        raise ValueError(error)
+
+
+def load_target_head_identity(path: Path, expected_repo: str) -> str:
+    """Load the exact target HEAD proven by Step 0."""
+    identity_path = Path(path)
+    try:
+        metadata = identity_path.lstat()
+    except FileNotFoundError as exc:
+        raise RuntimeError("Step 0 target HEAD identity is missing") from exc
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise RuntimeError("Step 0 target HEAD identity is not a regular file")
+    try:
+        payload = json.loads(identity_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Step 0 target HEAD identity is malformed") from exc
+    if not isinstance(payload, dict) or set(payload) != {
+        "schema_version",
+        "repo_id",
+        "head",
+    }:
+        raise RuntimeError("Step 0 target HEAD identity is malformed")
+    if payload["schema_version"] != "step0-target-head-v1":
+        raise RuntimeError("Step 0 target HEAD identity schema is unsupported")
+    if payload["repo_id"] != expected_repo:
+        raise RuntimeError("Step 0 target HEAD repository identity mismatch")
+    head = payload["head"]
+    if not isinstance(head, str) or re.fullmatch(r"[0-9a-f]{40}", head) is None:
+        raise RuntimeError("Step 0 target HEAD is invalid")
+    return head
 
 
 def _reject_symlink_components(path: Path) -> None:
@@ -924,13 +960,11 @@ class RepoBootstrapper:
     """Bootstrap a submission HF dataset repo from a pinned openai/gdpval.
 
     Steps:
-        0. Create the target, reuse a 409 target with data, or reject partial data
-        1. Download the pinned openai/gdpval revision to a temporary directory
-        2. Generate and persist the canonical manifest from the original data
-        3. Strip deliverable columns and remove deliverable_files/
-        4. Upload the clean snapshot plus its canonical manifest
-        5. Download the target's exact current HEAD into a fresh local snapshot
-        6. Validate the snapshot and manifest
+        0. Classify the target read-only; reuse data or reject partial data
+        1. For an absent target, prepare and validate the pinned source locally
+        2. Create the target once and upload the exact prepared snapshot once
+        3. Download the target's exact current HEAD into a fresh local snapshot
+        4. Validate the snapshot and manifest
     """
 
     SOURCE_REPO = DATASET_ID  # "openai/gdpval"
@@ -990,92 +1024,124 @@ class RepoBootstrapper:
 
     # -- Remote Repo -------------------------------------------------------
 
-    def _repo_has_content(self) -> bool:
-        files = self.api.list_repo_files(
-            repo_id=self.submission_repo_id,
-            repo_type="dataset",
-            token=self.token,
-        )
-        return any(f.startswith("data/") for f in files)
+    @staticmethod
+    def _is_exact_not_found(exc: Exception) -> bool:
+        response = getattr(exc, "response", None)
+        return getattr(response, "status_code", None) == 404
 
-    def _ensure_remote_repo(self) -> None:
-        """Create submission repo from openai/gdpval with deliverables stripped."""
-        self.api.whoami(token=self.token)
-
+    def _classify_target_read_only(self) -> str:
+        """Return absent, data, or partial without mutating the target."""
         try:
-            self.api.create_repo(
+            files = self.api.list_repo_files(
                 repo_id=self.submission_repo_id,
                 repo_type="dataset",
-                private=self.private,
-                exist_ok=False,
                 token=self.token,
             )
         except HfHubHTTPError as exc:
-            response = getattr(exc, "response", None)
-            status_code = getattr(response, "status_code", None)
-            if status_code != 409:
-                raise
+            if self._is_exact_not_found(exc):
+                return "absent"
+            raise
+        return "data" if any(path.startswith("data/") for path in files) else "partial"
 
-            if self._repo_has_content():
-                print(f"\n   \u2705 Repo already exists with data: {self.submission_repo_id}")
-                print("   Reusing existing repo (idempotent).")
-                return  # idempotent: already bootstrapped, skip
+    @staticmethod
+    def _snapshot_payload_sha256(root: Path) -> str:
+        """Hash one regular upload tree by canonical relative path and bytes."""
+        source_root = Path(root)
+        _validate_regular_tree(source_root)
+        digest = hashlib.sha256(b"gdpval-step0-upload-v1\0")
+        files = sorted(
+            path for path in source_root.rglob("*") if path.is_file()
+        )
+        for path in files:
+            relative = path.relative_to(source_root).as_posix().encode("utf-8")
+            digest.update(len(relative).to_bytes(8, "big"))
+            digest.update(relative)
+            size = path.stat().st_size
+            digest.update(size.to_bytes(8, "big"))
+            with path.open("rb") as stream:
+                while chunk := stream.read(1024 * 1024):
+                    digest.update(chunk)
+        return digest.hexdigest()
 
+    @staticmethod
+    def _remove_sdk_metadata(root: Path) -> None:
+        cache = Path(root) / ".cache"
+        try:
+            metadata = cache.lstat()
+        except FileNotFoundError:
+            return
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise RuntimeError("Prepared source cache metadata is not a directory")
+        shutil.rmtree(cache)
+
+    def _ensure_remote_repo(self) -> None:
+        """Reuse a valid target or publish one locally validated snapshot once."""
+        self.api.whoami(token=self.token)
+        state = self._classify_target_read_only()
+        if state == "data":
+            print(f"\n   ✅ Repo already exists with data: {self.submission_repo_id}")
+            print("   Reusing existing repo (idempotent).")
+            return
+        if state == "partial":
             raise RuntimeError(
                 "Target dataset exists without a data/ snapshot; refusing "
                 "automatic repository deletion. Use a new disposable target "
                 "or remove the partial repository explicitly."
-            ) from exc
+            )
 
-        self._duplicate_stripped()
-
-    def _duplicate_stripped(self) -> None:
-        """Download pinned source, strip deliverables, generate manifest, upload."""
         print(f"\n   Duplicating {self.SOURCE_REPO} -> {self.submission_repo_id}")
         print("      (deliverable columns cleared, deliverable_files/ excluded)")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_root = Path(tmpdir)
+            self._prepare_pinned_source_snapshot(source_root)
+            self._remove_sdk_metadata(source_root)
+            prepared_digest = self._snapshot_payload_sha256(source_root)
+            print("   Downloaded, prepared, and validated in temp dir")
 
-        old_timeout = os.environ.get("HF_HUB_DOWNLOAD_TIMEOUT")
-        os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = str(
-            max(int(old_timeout or "0"), 300)
-        )
+            try:
+                self.api.create_repo(
+                    repo_id=self.submission_repo_id,
+                    repo_type="dataset",
+                    private=self.private,
+                    exist_ok=False,
+                    token=self.token,
+                )
+            except HfHubHTTPError as exc:
+                response = getattr(exc, "response", None)
+                if getattr(response, "status_code", None) != 409:
+                    raise
+                raced_state = self._classify_target_read_only()
+                if raced_state == "data":
+                    print("   Concurrent creator published data; reusing target.")
+                    return
+                if raced_state == "partial":
+                    raise RuntimeError(
+                        "Target dataset was concurrently created without a data/ "
+                        "snapshot; refusing automatic deletion or overwrite."
+                    ) from exc
+                raise RuntimeError(
+                    "Target creation conflict could not be reconciled read-only."
+                ) from exc
 
-        print(f"   Repo created: {self.submission_repo_id}")
-
-        max_retries = 3
-        try:
-            for attempt in range(1, max_retries + 1):
-                try:
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        print(f"\n   Downloading {self.SOURCE_REPO} "
-                              f"(attempt {attempt}/{max_retries}) ...")
-                        source_root = Path(tmpdir)
-                        self._prepare_pinned_source_snapshot(source_root)
-                        print("   Downloaded and prepared in temp dir")
-
-                        print(f"\n   Uploading to {self.submission_repo_id} ...")
-                        self.api.upload_folder(
-                            folder_path=source_root,
-                            repo_id=self.submission_repo_id,
-                            repo_type="dataset",
-                            token=self.token,
-                            ignore_patterns=[".git*", ".cache*"],
-                        )
-                    break
-                except Exception as e:
-                    if attempt == max_retries:
-                        raise RuntimeError(
-                            f"Failed to duplicate {self.SOURCE_REPO} after "
-                            f"{max_retries} attempts: {e}"
-                        ) from e
-                    wait = 30 * attempt
-                    print(f"   Attempt {attempt} failed: {e}")
-                    print(f"      Retrying in {wait}s ...")
-                    time.sleep(wait)
-        finally:
-            if old_timeout is None:
-                os.environ.pop("HF_HUB_DOWNLOAD_TIMEOUT", None)
-            else:
-                os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = old_timeout
+            print(f"   Repo created: {self.submission_repo_id}")
+            if self._snapshot_payload_sha256(source_root) != prepared_digest:
+                raise RuntimeError(
+                    "Prepared source snapshot changed after validation; target may "
+                    "be empty and must not be retried or deleted automatically."
+                )
+            try:
+                self.api.upload_folder(
+                    folder_path=source_root,
+                    repo_id=self.submission_repo_id,
+                    repo_type="dataset",
+                    token=self.token,
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Target {self.submission_repo_id} was created but its upload "
+                    "is incomplete or unverified; do not retry or delete it "
+                    "automatically. Use a new disposable target after review."
+                ) from exc
 
         print(f"   Repo duplicated (clean): {self.submission_repo_id}")
 
@@ -1652,6 +1718,36 @@ class RepoBootstrapper:
 
         # Create empty deliverable_files/ for later experiment outputs
         (self.local_path / "deliverable_files").mkdir(parents=True, exist_ok=True)
+        identity_path = self.local_path / TARGET_HEAD_FILENAME
+        identity_bytes = json.dumps(
+            {
+                "schema_version": "step0-target-head-v1",
+                "repo_id": self.submission_repo_id,
+                "head": head,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{TARGET_HEAD_FILENAME}.",
+            suffix=".tmp",
+            dir=self.local_path,
+        )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as identity_file:
+                descriptor = -1
+                identity_file.write(identity_bytes)
+                identity_file.flush()
+                os.fsync(identity_file.fileno())
+            os.replace(temporary, identity_path)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+        load_target_head_identity(identity_path, self.submission_repo_id)
 
         print(f"   Local snapshot ready: {self.local_path}")
 
@@ -1889,10 +1985,81 @@ def validate_deliverable_tree(
     return errors
 
 
+def validate_source_projection_rows(
+    dataframe,
+    manifest_path: Path,
+    *,
+    snapshot_root: Optional[Path] = None,
+    require_complete: bool = False,
+) -> List[str]:
+    """Bind rows read for fill/publication to the canonical source manifest."""
+    expected_columns = CANONICAL_TARGET_COLUMNS
+    if tuple(dataframe.columns) != expected_columns:
+        return [
+            "Source rows must exactly match canonical columns: "
+            f"expected {expected_columns!r}, "
+            f"got {tuple(dataframe.columns)!r}"
+        ]
+    if require_complete:
+        return validate_needs_files_manifest(
+            dataframe,
+            manifest_path,
+            source_repo=DATASET_ID,
+            snapshot_root=snapshot_root,
+        )
+
+    path = Path(manifest_path)
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return [f"Canonical needs-files manifest not found: {path}"]
+    except OSError as exc:
+        return [f"Unable to inspect needs-files manifest {path}: {exc}"]
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        return [f"Needs-files manifest is not a regular file: {path}"]
+    try:
+        raw_manifest = path.read_bytes()
+        manifest = json.loads(raw_manifest)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return [f"Unable to read needs-files manifest {path}: {exc}"]
+
+    errors: List[str] = []
+    if digest_error := _canonical_manifest_digest_error(raw_manifest):
+        errors.append(digest_error)
+    if not isinstance(manifest, dict):
+        return [*errors, "Needs-files manifest must be a JSON object"]
+    if manifest.get("_schema_version") != 4:
+        errors.append("Manifest _schema_version must be 4")
+    if manifest.get("_source") != DATASET_ID:
+        errors.append(f"Manifest _source must be {DATASET_ID!r}")
+    if manifest.get("_source_revision") != SOURCE_REVISION:
+        errors.append(f"Manifest _source_revision must be {SOURCE_REVISION!r}")
+    tasks = manifest.get("tasks")
+    if not isinstance(tasks, dict):
+        return [*errors, "Manifest tasks must be an object"]
+
+    try:
+        task_ids = [canonical_task_id(value) for value in dataframe["task_id"]]
+        projections = source_projection_hashes(dataframe)
+    except (KeyError, TypeError, ValueError) as exc:
+        return [*errors, f"Unable to compute source task projection: {exc}"]
+    if len(task_ids) != len(set(task_ids)):
+        errors.append("Source projection rows contain duplicate task IDs")
+    for task_id, projection in zip(task_ids, projections, strict=True):
+        entry = tasks.get(task_id)
+        if not isinstance(entry, dict):
+            errors.append(f"task {task_id}: absent from canonical source manifest")
+        elif entry.get("source_projection_sha256") != projection:
+            errors.append(f"task {task_id}: source projection differs from manifest")
+    return errors
+
+
 def validate_pre_upload(
     local_path: Optional[str] = None,
     submission_repo_id: Optional[str] = None,
     expected_rows: Optional[int] = None,
+    expected_task_ids: Optional[List[str]] = None,
+    expected_submitter_rows: Optional[List[dict]] = None,
 ) -> List[str]:
     """Pre-upload validation -- call before step6 upload.
 
@@ -1900,9 +2067,11 @@ def validate_pre_upload(
     Only tasks with needs_files=true are required to have deliverable_files.
 
     Args:
-        expected_rows: Expected row count. If None, uses EXPECTED_TASK_COUNT (220).
-                       Pass sample_size when running in compact/test mode so that
-                       row count and deliverable_files checks cover only present tasks.
+        expected_rows: Expected row count. If None, uses the prepared task scope
+                   when provided, otherwise EXPECTED_TASK_COUNT (220).
+        expected_task_ids: Exact ordered task IDs from the validated Step 1/2 scope.
+        expected_submitter_rows: Exact task-level submitter projection derived
+                     from the validated Step 2 result.
 
     Returns:
         List of error strings (empty = all good)
@@ -1912,7 +2081,30 @@ def validate_pre_upload(
 
     root = Path(local_path) if local_path else DEFAULT_LOCAL_PATH
     errors: List[str] = []
-    expected = expected_rows if expected_rows is not None else EXPECTED_TASK_COUNT
+    prepared_task_ids: Optional[List[str]] = None
+    if expected_task_ids is not None:
+        try:
+            prepared_task_ids = [canonical_task_id(value) for value in expected_task_ids]
+        except (TypeError, ValueError) as exc:
+            errors.append(f"Prepared publication task identity is invalid: {exc}")
+        else:
+            if not prepared_task_ids or len(prepared_task_ids) != len(
+                set(prepared_task_ids)
+            ):
+                errors.append("Prepared publication task identity is invalid")
+                prepared_task_ids = None
+    scope_count = len(prepared_task_ids) if prepared_task_ids is not None else None
+    expected = (
+        expected_rows
+        if expected_rows is not None
+        else scope_count if scope_count is not None
+        else EXPECTED_TASK_COUNT
+    )
+    if scope_count is not None and expected != scope_count:
+        errors.append(
+            "Expected row count differs from prepared publication task count: "
+            f"rows={expected}, prepared={scope_count}"
+        )
     compact_mode = expected != EXPECTED_TASK_COUNT
 
     # Find parquet
@@ -1937,6 +2129,78 @@ def validate_pre_upload(
     # 1. Row count
     if len(df) != expected:
         errors.append(f"Row count: expected {expected}, got {len(df)}")
+    if prepared_task_ids is not None and "task_id" in df.columns:
+        try:
+            parquet_task_ids = [canonical_task_id(value) for value in df["task_id"]]
+        except (TypeError, ValueError) as exc:
+            errors.append(f"Upload parquet task identity is invalid: {exc}")
+        else:
+            if parquet_task_ids != prepared_task_ids:
+                missing = sorted(set(prepared_task_ids) - set(parquet_task_ids))
+                unexpected = sorted(set(parquet_task_ids) - set(prepared_task_ids))
+                errors.append(
+                    "Upload parquet task IDs must exactly match prepared order "
+                    f"(missing={missing}, unexpected={unexpected})"
+                )
+
+    if expected_submitter_rows is not None:
+        if not isinstance(expected_submitter_rows, list):
+            errors.append("Expected submitter projection must be a list")
+        elif len(expected_submitter_rows) != len(df):
+            errors.append(
+                "Upload parquet row count differs from result projection: "
+                f"parquet={len(df)}, results={len(expected_submitter_rows)}"
+            )
+        else:
+            list_columns = (
+                "deliverable_files",
+                "deliverable_file_urls",
+                "deliverable_file_hf_uris",
+            )
+            for index, expected_row in enumerate(expected_submitter_rows):
+                if not isinstance(expected_row, dict):
+                    errors.append(f"Result projection row {index} must be an object")
+                    continue
+                try:
+                    expected_task_id = canonical_task_id(expected_row.get("task_id"))
+                except ValueError as exc:
+                    errors.append(f"Result projection row {index} is invalid: {exc}")
+                    continue
+                actual_row = df.iloc[index]
+                actual_task_id = actual_row.get("task_id")
+                if actual_task_id != expected_task_id:
+                    errors.append(
+                        f"task {expected_task_id}: parquet result order mismatch"
+                    )
+                    continue
+                expected_text = expected_row.get("deliverable_text")
+                if not isinstance(expected_text, str):
+                    errors.append(
+                        f"task {expected_task_id}: expected deliverable_text is invalid"
+                    )
+                elif actual_row.get("deliverable_text") != expected_text:
+                    errors.append(
+                        f"task {expected_task_id}: deliverable_text differs from Step 2"
+                    )
+                for column in list_columns:
+                    expected_values = expected_row.get(column)
+                    if not isinstance(expected_values, list) or any(
+                        not isinstance(value, str) for value in expected_values
+                    ):
+                        errors.append(
+                            f"task {expected_task_id}: expected {column} is invalid"
+                        )
+                        continue
+                    actual_values, cell_errors = _list_cell(
+                        actual_row.get(column),
+                        column=column,
+                        task_id=expected_task_id,
+                    )
+                    errors.extend(cell_errors)
+                    if not cell_errors and actual_values != expected_values:
+                        errors.append(
+                            f"task {expected_task_id}: {column} differs from Step 2"
+                        )
 
     # 2. Column set
     for col in ("rubric_json", "rubric_pretty", "task_id", "sector",
@@ -1947,6 +2211,7 @@ def validate_pre_upload(
     # 3. Manifest-based deliverable_files check
     #    compact_mode: only validate tasks present in parquet (others intentionally excluded)
     manifest_path = WORKSPACE_DIR / MANIFEST_FILENAME
+    errors.extend(validate_source_projection_rows(df, manifest_path))
     if manifest_path.exists() and "deliverable_files" in df.columns:
         with open(manifest_path, "r") as f:
             manifest = json.load(f)
@@ -1966,7 +2231,27 @@ def validate_pre_upload(
                 continue
 
             files = rows.iloc[0].get("deliverable_files")
-            if files is None or (hasattr(files, '__len__') and len(files) == 0):
+            expected_status = None
+            if expected_submitter_rows is not None:
+                expected_row = next(
+                    (
+                        row for row in expected_submitter_rows
+                        if isinstance(row, dict) and row.get("task_id") == task_id
+                    ),
+                    None,
+                )
+                expected_status = (
+                    expected_row.get("status")
+                    if isinstance(expected_row, dict)
+                    else None
+                )
+            if (
+                expected_status in (None, "success")
+                and (
+                    files is None
+                    or (hasattr(files, '__len__') and len(files) == 0)
+                )
+            ):
                 errors.append(
                     f"task {task_id}: needs_files=true but deliverable_files is empty"
                 )

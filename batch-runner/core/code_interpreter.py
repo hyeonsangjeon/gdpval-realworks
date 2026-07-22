@@ -183,7 +183,7 @@ class CodeInterpreterRunner:
         for path in reference_files:
             with open_verified_reference(path) as (reference_file, _verified):
                 uploaded = self.client.files.create(
-                    file=reference_file,
+                    file=(Path(path).name, reference_file),
                     purpose="assistants",
                 )
             file_ids.append(uploaded.id)

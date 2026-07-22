@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
+
 import pytest
 
 from core.inference_manifest import (
+    bind_deliverable_file_records,
     canonical_deliverable_path,
     canonicalize_inference_payload,
     ensure_task_deliverable_dir,
@@ -64,6 +68,31 @@ def test_local_tree_accepts_exact_regular_manifest_files(tmp_path):
     }]
 
     assert validate_local_deliverables(rows, tmp_path) == rows
+
+
+def test_final_result_binds_declared_deliverable_bytes(tmp_path):
+    content = b"current-result-bytes"
+    deliverable = tmp_path / "deliverable_files/task-1/out.txt"
+    deliverable.parent.mkdir(parents=True)
+    deliverable.write_bytes(content)
+
+    bound = bind_deliverable_file_records([_row()], tmp_path)
+
+    assert bound[0]["deliverable_file_records"] == [{
+        "path": "deliverable_files/task-1/out.txt",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "size": len(content),
+    }]
+
+
+def test_final_result_rejects_hardlinked_deliverable(tmp_path):
+    deliverable = tmp_path / "deliverable_files/task-1/out.txt"
+    deliverable.parent.mkdir(parents=True)
+    deliverable.write_bytes(b"shared")
+    os.link(deliverable, tmp_path / "second-link.txt")
+
+    with pytest.raises(ValueError, match="single-link regular file"):
+        bind_deliverable_file_records([_row()], tmp_path)
 
 
 @pytest.mark.parametrize("mutation", ["missing", "extra", "file_symlink", "dir_symlink"])

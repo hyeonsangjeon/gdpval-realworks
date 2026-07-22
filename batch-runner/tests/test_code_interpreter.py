@@ -158,7 +158,13 @@ def test_run_with_reference_files(mock_azure_openai, tmp_path):
     # Mock file upload
     mock_uploaded_file = Mock()
     mock_uploaded_file.id = "uploaded_file_123"
-    mock_client.files.create.return_value = mock_uploaded_file
+    uploaded_payloads = []
+
+    def upload(*, file, purpose):
+        uploaded_payloads.append((file[0], file[1].read(), purpose))
+        return mock_uploaded_file
+
+    mock_client.files.create.side_effect = upload
 
     # Mock response (with responses API)
     mock_response = Mock()
@@ -180,6 +186,9 @@ def test_run_with_reference_files(mock_azure_openai, tmp_path):
 
     # Verify file upload was called
     mock_client.files.create.assert_called_once()
+    assert uploaded_payloads == [
+        ("reference.pdf", b"PDF content", "assistants"),
+    ]
     assert result["success"] is True
     mock_client.files.delete.assert_called_once_with("uploaded_file_123")
     assert runner._uploaded_file_ids == set()

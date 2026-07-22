@@ -164,8 +164,9 @@ From **Actions > Run GDPVal Batch Experiment**, use:
 
 Expected behavior:
 
-1. Step 0 creates a disposable Hugging Face dataset or reuses one with `data/`;
-  an existing partial target aborts without automatic deletion.
+1. Step 0 reuses a valid target or fully validates the pinned source locally
+  before creating and uploading a disposable Hugging Face dataset once. A
+  partial target or ambiguous outcome aborts without retry or automatic deletion.
 2. Step 1 selects three tasks deterministically.
 3. Step 2 calls `gpt-5.2-chat`, creates files, and can retry same-model Self-QA.
 4. Steps 3-4 write formatted results and a three-row Parquet artifact.

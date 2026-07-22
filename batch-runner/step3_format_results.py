@@ -21,6 +21,9 @@ from pathlib import Path
 
 from core.config import WORKSPACE_DIR, BATCH_RUNNER_ROOT
 from core.prepared_fingerprint import validate_prepared_fingerprint
+from core.result_fingerprint import validate_inference_result_fingerprint
+from core.publication_generation import validate_publication_generation
+from core.result_projection import project_result_row
 from core.repository_identity import (
     validate_experiment_id,
     validate_hf_dataset_repo_id,
@@ -156,6 +159,13 @@ def _validate_input_identity(prepared: dict, inference: dict) -> None:
         raise ValueError("Prepared and inference experiment identity mismatch") from exc
     if prepared_experiment != inference_experiment:
         raise ValueError("Prepared and inference experiment identity mismatch")
+    prepared_generation = validate_publication_generation(
+        prepared.get("publication_generation")
+    )
+    if validate_publication_generation(
+        inference.get("publication_generation")
+    ) != prepared_generation:
+        raise ValueError("Prepared and inference publication generation mismatch")
 
     prepared_source = _source_repo_id(prepared)
     inference_source = inference.get("source")
@@ -186,6 +196,7 @@ def _validate_input_identity(prepared: dict, inference: dict) -> None:
         raise ValueError("Prepared result task set does not match task order")
     if _result_task_ids(inference, "inference") != inference_order:
         raise ValueError("Inference result task set does not match task order")
+    validate_inference_result_fingerprint(inference)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
@@ -226,43 +237,7 @@ def format_results():
     for r in inference["results"]:
         task_id = r["task_id"]
         task_meta = task_map.get(task_id, {})
-        qa = r.get("qa") or {}
-
-        retried = r.get("resume_round") is not None
-        enriched_results.append({
-            # identity
-            "task_id": task_id,
-            "sector": task_meta.get("sector", ""),
-            "occupation": task_meta.get("occupation", ""),
-            "needs_files": task_meta.get("needs_files", False),
-            "instruction": task_meta.get("instruction", ""),
-            "reference_file_urls": task_meta.get("reference_file_urls", []),
-            # execution
-            "status": r["status"],
-            "retried": retried,
-            "resume_round": r.get("resume_round"),
-            # output
-            "content": r.get("content"),
-            "deliverable_text": r.get("deliverable_text", ""),
-            "deliverable_files": r.get("deliverable_files", []),
-            "deliverable_files_count": len(r.get("deliverable_files", [])),
-            # model
-            "model": r.get("model"),
-            "usage": r.get("usage"),
-            "observability": r.get("observability", {}),
-            "latency_ms": r.get("latency_ms", 0),
-            "timestamp": r.get("timestamp"),
-            # qa
-            "qa_passed": qa.get("passed"),
-            "qa_score": qa.get("score"),
-            "qa_llm_passed": qa.get("llm_passed"),
-            "qa_issues": qa.get("issues", []),
-            "qa_issues_count": len(qa.get("issues", [])),
-            "qa_suggestion": qa.get("suggestion", ""),
-            "qa_undetermined": qa.get("undetermined", False),
-            # error
-            "error": r.get("error"),
-        })
+        enriched_results.append(project_result_row(task_meta, r))
 
     # 3. Aggregate stats
     retried_tasks = [r for r in enriched_results if r["retried"]]
@@ -280,9 +255,12 @@ def format_results():
 
     final_json = {
         "experiment_id": experiment_id,
+        "publication_generation": prepared["publication_generation"],
         "experiment_name": prepared.get("experiment_name", ""),
         "source_repo_id": _source_repo_id(prepared),
         "prepared_fingerprint": prepared["prepared_fingerprint"],
+        "result_fingerprint": inference["result_fingerprint"],
+        "ordered_task_ids": list(inference["ordered_task_ids"]),
         "condition_name": condition_name,
         "execution_mode": inference.get("execution_mode", ""),
         "model": inference.get("model", ""),

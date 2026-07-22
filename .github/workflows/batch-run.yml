@@ -370,6 +370,7 @@ jobs:
 
       # ── Relay: Restore checkpoint from previous run ──
       - name: 'Restore checkpoint (relay run)'
+        id: restore_checkpoint
         if: inputs.relay_run > 0
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -383,14 +384,35 @@ jobs:
             --source-sha "$SOURCE_SHA_INPUT" \
             --lineage-id "$RELAY_LINEAGE_ID_INPUT" \
             --sandbox-image-digest "$SANDBOX_IMAGE_DIGEST_INPUT"
+          RESTORED_GENERATION=$(<workspace/relay_checkpoint_generation)
+          [[ "$RESTORED_GENERATION" =~ ^[0-9a-f]{64}$ ]]
+          printf 'generation=%s\n' "$RESTORED_GENERATION" >> "$GITHUB_OUTPUT"
 
       # ── Step 0: Bootstrap ──
       - name: 'Step 0: Bootstrap submission repo'
+        id: step0
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
         run: |
           cd batch-runner
           bash step0_bootstrap.sh "experiments/${EXPERIMENT_YAML_INPUT}.yaml"
+          python3 <<'PY'
+          import os
+
+          from core.config import DEFAULT_LOCAL_PATH
+          from core.repo_bootstrapper import (
+              TARGET_HEAD_FILENAME,
+              load_target_head_identity,
+          )
+
+          head = load_target_head_identity(
+              DEFAULT_LOCAL_PATH / TARGET_HEAD_FILENAME,
+              os.environ["SOURCE_REPO"],
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"target_head={head}\n")
+          PY
 
       - name: 'Verify result dataset write access'
         env:
@@ -403,6 +425,8 @@ jobs:
 
       # ── Step 1: Prepare Tasks ──
       - name: 'Step 1: Prepare tasks'
+        env:
+          GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
         run: |
           cd batch-runner
           bash step1_prepare_tasks.sh "experiments/${EXPERIMENT_YAML_INPUT}.yaml"
@@ -499,35 +523,42 @@ jobs:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          set +e
           cd batch-runner
           WALL_TIMEOUT="$WALL_TIMEOUT_INPUT"
-          if [[ "$WALL_TIMEOUT" == "0" ]] && [[ "$CONFIG_WALL_TIMEOUT" =~ ^[0-9]+$ ]] && (( 10#$CONFIG_WALL_TIMEOUT > 0 )); then
+          if ! [[ "$WALL_TIMEOUT" =~ ^[0-9]+$ ]]; then
+            echo "WALL_TIMEOUT_INPUT is not a decimal integer."
+            exit 1
+          fi
+          if ! [[ "$CONFIG_WALL_TIMEOUT" =~ ^[0-9]+$ ]]; then
+            echo "execution.wall_timeout is not a decimal integer."
+            exit 1
+          fi
+          if [[ "$WALL_TIMEOUT" == "0" ]]; then
             WALL_TIMEOUT="$CONFIG_WALL_TIMEOUT"
           fi
-          if [ "$WALL_TIMEOUT" -gt 0 ] 2>/dev/null; then
+          if [[ "$WALL_TIMEOUT" != "0" ]]; then
             bash step2_run_inference.sh condition_a --wall-timeout "$WALL_TIMEOUT"
           else
             bash step2_run_inference.sh condition_a
           fi
+          STEP2_EXIT_CODE=$?
+          echo "exit_code=$STEP2_EXIT_CODE" >> "$GITHUB_OUTPUT"
+          exit "$STEP2_EXIT_CODE"
         continue-on-error: true
 
       # ── Check if relay is needed (exit code 42 = pending tasks) ──
       - name: 'Check relay status'
         id: check_relay
+        env:
+          STEP2_EXIT_CODE: ${{ steps.step2a.outputs.exit_code }}
         run: |
-          PENDING=$(python3 -c "
-          import json
-          try:
-              p = json.load(open('batch-runner/workspace/step2_inference_progress.json'))
-              pending = sum(1 for r in p.get('results', []) if r.get('status') == 'pending')
-              print(pending)
-          except:
-              print(0)
-          ")
-          echo "pending_count=$PENDING" >> "$GITHUB_OUTPUT"
-          NEEDS_RELAY=$( [ "$PENDING" -gt 0 ] && echo true || echo false )
-          echo "needs_relay=$NEEDS_RELAY" >> "$GITHUB_OUTPUT"
-          echo "Step 2a: pending=$PENDING, needs_relay=$NEEDS_RELAY"
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/relay_checkpoint.py status \
+            --progress-path workspace/step2_inference_progress.json \
+            --exit-code "$STEP2_EXIT_CODE" \
+            --github-output "$GITHUB_OUTPUT"
 
       # ── Verify Step 2a success (fail if step failed AND not relay) ──
       - name: 'Verify Step 2a success'
@@ -787,12 +818,68 @@ jobs:
         if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          EXPECTED_TARGET_HEAD: ${{ steps.step0.outputs.target_head }}
         run: |
           cd batch-runner
           bash step7_upload_hf.sh --test
 
+      # ── Cleanup the exact restored relay generation before finality ──
+      - name: 'Cleanup relay checkpoint'
+        if: success() && inputs.dry_run != true && inputs.relay_run > 0 && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
+          EXPECTED_GENERATION: ${{ steps.restore_checkpoint.outputs.generation }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/relay_checkpoint.py cleanup \
+            --repo-id "$SOURCE_REPO" \
+            --source-sha "$SOURCE_SHA_INPUT" \
+            --lineage-id "$RELAY_LINEAGE_ID_INPUT" \
+            --expected-generation "$EXPECTED_GENERATION" \
+            --sandbox-image-digest "$SANDBOX_IMAGE_DIGEST_INPUT"
+
+      - name: Verify publication finality
+        if: success() && inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
+          EXPECTED_GENERATION: ${{ inputs.relay_run > 0 && steps.restore_checkpoint.outputs.generation || '' }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 <<'PY'
+          import os
+          from pathlib import Path
+
+          from core.hf_publication import (
+              load_publication_identity,
+              verify_publication_finality,
+          )
+
+          identity = load_publication_identity(
+              Path("workspace/step1_tasks_prepared.json"),
+              Path("workspace/step2_inference_results.json"),
+          )
+          repo_id = os.environ["SOURCE_REPO"]
+          if identity.repo_id != repo_id:
+              raise SystemExit(
+                  "publication repository differs from prepared identity"
+              )
+          expected_generation = os.environ.get("EXPECTED_GENERATION") or None
+          final_head = verify_publication_finality(
+              repo_id,
+              Path("workspace/upload"),
+              token=os.environ["HF_TOKEN"],
+              identity=identity,
+              expected_generation=expected_generation,
+          )
+          print(f"Publication finality verified at {final_head}")
+          PY
+
       - name: Recheck result PR head after upload
-        if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
+        if: success() && inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
@@ -805,7 +892,7 @@ jobs:
           [[ "$CURRENT_HEAD" == "$PR_HEAD_SHA" ]]
 
       - name: Dispatch exact result PR validation
-        if: inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
+        if: success() && inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_BRANCH: ${{ steps.cpr.outputs.pull-request-branch }}
@@ -817,21 +904,6 @@ jobs:
             --ref "$PR_BRANCH" \
             --raw-field deploy_pages=false \
             --raw-field expected_sha="$PR_HEAD_SHA"
-
-      # ── Cleanup relay checkpoint on HF (only after successful completion) ──
-      - name: 'Cleanup relay checkpoint'
-        if: inputs.relay_run > 0 && steps.check_relay.outputs.needs_relay != 'true'
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
-        run: |
-          set -euo pipefail
-          cd batch-runner
-          python3 scripts/relay_checkpoint.py cleanup \
-            --repo-id "$SOURCE_REPO" \
-            --source-sha "$SOURCE_SHA_INPUT" \
-            --lineage-id "$RELAY_LINEAGE_ID_INPUT" \
-            --sandbox-image-digest "$SANDBOX_IMAGE_DIGEST_INPUT"
 
       # ── Summary step ──
       - name: Show summary

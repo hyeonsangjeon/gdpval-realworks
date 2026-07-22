@@ -80,8 +80,12 @@ python3 - <<'VALIDATE_EOF'
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) or ".")
 from pathlib import Path
-from core.hf_publication import load_publication_identity
+from core.hf_publication import (
+  clear_publication_receipt,
+  load_publication_identity,
+)
 from core.repo_bootstrapper import validate_pre_upload
+clear_publication_receipt()
 identity = load_publication_identity(
   Path("workspace/step1_tasks_prepared.json"),
   Path("workspace/step2_inference_results.json"),
@@ -114,7 +118,7 @@ from core.hf_publication import (
   IGNORE_PATTERNS,
   INCLUDE_PATTERNS,
   load_publication_identity,
-  publish_dataset,
+  publish_dataset_with_receipt,
 )
 from core.repo_bootstrapper import (
   TARGET_HEAD_FILENAME,
@@ -143,7 +147,7 @@ print(f"   Include: {INCLUDE_PATTERNS}")
 print(f"   Delete (remote): {DELETE_PATTERNS}")
 print(f"   Ignore:  {IGNORE_PATTERNS}")
 
-publication = publish_dataset(
+publication = publish_dataset_with_receipt(
   repo_id,
   data_dir,
   token=token,

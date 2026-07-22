@@ -100,13 +100,16 @@ snapshot을 재사용합니다. 이 snapshot에는 source-derived
 path/SHA-256/size까지 어긋나면 중단하며 stripped data에서 manifest를 재생성하지
 않습니다. 재사용 target의 submitter text/file/URL/URI column과 physical
 deliverable tree도 비어 있어야 합니다. 새 target은 pinned public-source
-revision 하나에서 base data와 parquet가 선언한 reference만 받아 만듭니다.
+revision 하나에서 base data와 parquet가 선언한 reference만 받아 만듭니다. 전체
+source snapshot, manifest, reference, 비운 submitter state와 고정 payload digest를
+target 생성 전에 검증합니다. create와 upload는 각각 한 번만 시도하며 upload
+결과가 불명확하면 재시도하거나 삭제하지 않고 점검할 수 있게 보존합니다.
 재사용 target은 exact full-SHA HEAD를 fresh staging에 받고 canonical column,
 projection, manifest, 전체 reference tree, empty submitter state를 통과한 뒤에만
 이전 local snapshot을 교체합니다.
 
-나중에 non-dry Step 7을 실행하면 새 결과를 올리기 전에 원격 `data/**`와
-`deliverable_files/**`를 삭제합니다. 보존해야 할 dataset을 가리키면 안 됩니다.
+나중에 non-dry Step 7을 실행하면 CAS로 원격 `data/**`, `deliverable_files/**`,
+`self_report.json`을 새 결과로 교체합니다. 보존해야 할 dataset을 가리키면 안 됩니다.
 
 수정 내용을 fork의 기본 `main` 브랜치에 커밋하세요. YAML에 토큰, 키,
 비밀번호를 넣지 마세요.
@@ -196,7 +199,17 @@ Cleanup은 현재 tree의 lineage만 제거하며 과거 HF revision은 지우�
 non-dry Step 7은 원격 output을 삭제하기 전에 canonical parquet shard 하나,
 task 소유 output path, canonical repository URL/URI, parquet 선언과 local
 deliverable tree의 exact 일치를 요구합니다. 실패 task는 이전 run의 output
-metadata를 남길 수 없습니다.
+metadata를 남길 수 없습니다. Step 4와 Step 7은 model 실행 뒤 각 source row를
+manifest v4에 다시 대조합니다. 게시에는 repository, prepared fingerprint,
+Step 2 result fingerprint, ordered task ID, result task set이 현재 workspace와
+run-specific publication generation까지 일치하는 non-dry local
+`self_report.json`이 필요합니다. 새 Step 1은 이전 run의 finalized output을
+무효화하고 relay leg는 최초 generation을 유지합니다. Parquet submitter
+text/files/URL/URI도 같은 Step 2 결과와 일치해야 합니다. local dry-run report를
+만들었다면 Step 7 전에 `bash step6_report.sh --no-narrative`를 다시 실행하세요.
+self-report의 task별 summary와 deliverable 파일도 검증된 Step 2 result와 같아야
+합니다. Step 0 validated HF HEAD를 CAS parent로 사용하므로 concurrent target 변경은
+기존 결과를 덮어쓰지 않고 실패합니다.
 
 스모크 설정은 provider-hosted `code_interpreter`를 사용합니다. 저장소의
 Docker sandbox나 agentic preflight를 실행하는 테스트가 아닙니다.

@@ -135,8 +135,18 @@ class NeedsFilesManifest:
                 f"Manifest not found: {p}\n"
                 "Run Step 0 (bootstrap) first to generate it."
             )
-        with open(p, "r", encoding="utf-8") as f:
-            return cls(json.load(f))
+        raw = p.read_bytes()
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Manifest must be valid UTF-8 JSON: {p}") from exc
+        if isinstance(data, dict) and data.get("_schema_version") == 4:
+            # Lazy import avoids a module cycle while keeping the canonical
+            # source contract owned by the Step 0 bootstrapper.
+            from core.repo_bootstrapper import require_canonical_manifest_bytes
+
+            require_canonical_manifest_bytes(raw)
+        return cls(data)
 
     # ── Guardrail ─────────────────────────────────────────────────────
 
