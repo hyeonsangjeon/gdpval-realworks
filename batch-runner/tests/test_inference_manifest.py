@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from core.inference_manifest import (
     canonical_deliverable_path,
     canonicalize_inference_payload,
+    ensure_task_deliverable_dir,
+    reset_task_deliverable_dir,
     validate_local_deliverables,
 )
 
@@ -106,3 +106,54 @@ def test_upload_root_ancestor_symlink_is_rejected(tmp_path):
 
     with pytest.raises(ValueError, match="symlink component"):
         validate_local_deliverables([_row()], linked_workspace / "upload")
+
+
+def test_reset_task_deliverable_dir_replaces_only_owned_task(tmp_path):
+    upload_root = tmp_path / "upload"
+    target = ensure_task_deliverable_dir(upload_root, "task-1")
+    (target / "stale.txt").write_text("stale", encoding="utf-8")
+    sibling = ensure_task_deliverable_dir(upload_root, "task-2")
+    sentinel = sibling / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    reset = reset_task_deliverable_dir(upload_root, "task-1")
+
+    assert reset == target
+    assert list(reset.iterdir()) == []
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize("kind", ["task_symlink", "task_file", "root_symlink"])
+def test_reset_task_deliverable_dir_rejects_non_regular_boundaries(tmp_path, kind):
+    upload_root = tmp_path / "upload"
+    deliverable_root = upload_root / "deliverable_files"
+    deliverable_root.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    if kind == "root_symlink":
+        deliverable_root.rmdir()
+        deliverable_root.symlink_to(outside, target_is_directory=True)
+    elif kind == "task_symlink":
+        (deliverable_root / "task-1").symlink_to(outside, target_is_directory=True)
+    else:
+        (deliverable_root / "task-1").write_text(
+            "not a directory", encoding="utf-8"
+        )
+
+    with pytest.raises(ValueError, match="not a regular directory"):
+        reset_task_deliverable_dir(upload_root, "task-1")
+
+
+def test_reset_task_deliverable_dir_propagates_delete_failure(tmp_path, monkeypatch):
+    import core.inference_manifest as manifest
+
+    upload_root = tmp_path / "upload"
+    ensure_task_deliverable_dir(upload_root, "task-1")
+
+    def fail_delete(_path):
+        raise OSError("delete failed")
+
+    monkeypatch.setattr(manifest.shutil, "rmtree", fail_delete)
+
+    with pytest.raises(OSError, match="delete failed"):
+        reset_task_deliverable_dir(upload_root, "task-1")

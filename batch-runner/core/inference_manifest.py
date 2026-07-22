@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import stat
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -92,6 +94,48 @@ def canonicalize_inference_payload(payload: Any) -> dict:
 
 def task_deliverable_dir(upload_root: Path, task_id: str) -> Path:
     return upload_root / "deliverable_files" / canonical_task_id(task_id)
+
+
+def _regular_directory(path: Path, label: str) -> Path:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        path.mkdir(mode=0o700)
+        metadata = path.lstat()
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise ValueError(f"{label} is not a regular directory")
+    return path
+
+
+def _deliverable_root(upload_root: Path) -> Path:
+    root = Path(os.path.abspath(upload_root))
+    _assert_no_symlink_ancestors(root)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _regular_directory(root, "upload root")
+    return _regular_directory(root / "deliverable_files", "deliverable root")
+
+
+def ensure_task_deliverable_dir(upload_root: Path, task_id: str) -> Path:
+    """Return one canonical, regular task directory, creating it if absent."""
+    deliverable_root = _deliverable_root(upload_root)
+    task_root = task_deliverable_dir(deliverable_root.parent, task_id)
+    return _regular_directory(task_root, "deliverable task path")
+
+
+def reset_task_deliverable_dir(upload_root: Path, task_id: str) -> Path:
+    """Replace only the canonical task-owned directory with an empty directory."""
+    deliverable_root = _deliverable_root(upload_root)
+    task_root = task_deliverable_dir(deliverable_root.parent, task_id)
+    try:
+        metadata = task_root.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError("deliverable task path is not a regular directory")
+        shutil.rmtree(task_root)
+    task_root.mkdir(mode=0o700)
+    return _regular_directory(task_root, "deliverable task path")
 
 
 def _assert_no_symlink_components(path: Path, stop: Path) -> None:

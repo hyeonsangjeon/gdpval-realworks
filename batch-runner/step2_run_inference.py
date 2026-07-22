@@ -41,7 +41,6 @@ from core.config import (
     BATCH_OUTPUT_DIR,
     WORKSPACE_DIR,
     UPLOAD_DIR,
-    DELIVERABLE_DIR,
     DEFAULT_LOCAL_PATH,
     DEFAULT_TOKENS,
 )
@@ -61,6 +60,13 @@ from core.execution_metrics import (
     bounded_duration_ms,
 )
 from core.file_preview import generate_all_previews
+from core.inference_manifest import (
+    canonical_deliverable_path,
+    canonical_task_id,
+    ensure_task_deliverable_dir,
+    reset_task_deliverable_dir,
+    validate_local_deliverables,
+)
 from core.llm_client import create_provider_client, complete
 from core.needs_files import NeedsFilesManifest
 from core.reference_integrity import (
@@ -1046,28 +1052,10 @@ def _run_self_qa(
 
 def _save_files(files: List[dict], task_id: str) -> List[str]:
     """Save generated files to workspace/upload/deliverable_files/<task_id>/."""
+    task_id = canonical_task_id(task_id)
     if not files:
         return []
-    if (
-        not isinstance(task_id, str)
-        or not task_id
-        or task_id in {".", ".."}
-        or task_id.startswith(".")
-        or "/" in task_id
-        or "\\" in task_id
-        or len(task_id.encode("utf-8")) > 240
-    ):
-        raise ValueError("deliverable task ID is invalid")
-
-    DELIVERABLE_DIR.mkdir(parents=True, exist_ok=True)
-    root_metadata = DELIVERABLE_DIR.lstat()
-    if not stat.S_ISDIR(root_metadata.st_mode):
-        raise ValueError("deliverable root is not a directory")
-    output_dir = DELIVERABLE_DIR / task_id
-    output_dir.mkdir(mode=0o700, exist_ok=True)
-    output_metadata = output_dir.lstat()
-    if not stat.S_ISDIR(output_metadata.st_mode):
-        raise ValueError("deliverable task path is not a directory")
+    output_dir = ensure_task_deliverable_dir(UPLOAD_DIR, task_id)
 
     prepared = []
     seen: set[str] = set()
@@ -1123,11 +1111,8 @@ def _save_files(files: List[dict], task_id: str) -> List[str]:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(content)
 
-        try:
-            rel_path = filepath.relative_to(UPLOAD_DIR)
-            saved_paths.append(str(rel_path))
-        except ValueError:
-            saved_paths.append(str(filepath))
+        rel_path = filepath.relative_to(UPLOAD_DIR).as_posix()
+        saved_paths.append(canonical_deliverable_path(task_id, rel_path))
 
     return saved_paths
 
@@ -2335,26 +2320,40 @@ def run_inference(
         def _backup_best_files():
             """현재 upload의 deliverable_files를 백업."""
             nonlocal backup_dir
-            task_dir = DELIVERABLE_DIR / task_id
-            if task_dir.exists() and any(task_dir.iterdir()):
-                backup_dir = tempfile.mkdtemp(prefix=f"qa_best_{task_id}_")
-                shutil.copytree(task_dir, Path(backup_dir) / "files", dirs_exist_ok=True)
+            if best_result is None:
+                return
+            task_dir = ensure_task_deliverable_dir(UPLOAD_DIR, task_id)
+            validate_local_deliverables([best_result], UPLOAD_DIR)
+            backup_dir = Path(tempfile.mkdtemp(prefix=f"qa_best_{task_id}_"))
+            backup_task_dir = reset_task_deliverable_dir(backup_dir, task_id)
+            shutil.copytree(task_dir, backup_task_dir, dirs_exist_ok=True)
+            validate_local_deliverables([best_result], backup_dir)
 
         def _restore_best_files():
             """백업에서 best 파일을 upload로 복원."""
             nonlocal backup_dir
-            if backup_dir:
-                task_dir = DELIVERABLE_DIR / task_id
-                if task_dir.exists():
-                    shutil.rmtree(task_dir, ignore_errors=True)
-                shutil.copytree(Path(backup_dir) / "files", task_dir)
+            if backup_dir is None or best_result is None:
+                raise ValueError("best deliverable backup is missing")
+            validate_local_deliverables([best_result], backup_dir)
+            task_dir = reset_task_deliverable_dir(UPLOAD_DIR, task_id)
+            backup_task_dir = ensure_task_deliverable_dir(backup_dir, task_id)
+            shutil.copytree(backup_task_dir, task_dir, dirs_exist_ok=True)
+            validate_local_deliverables([best_result], UPLOAD_DIR)
 
         def _cleanup_backup():
             """백업 임시 디렉토리 삭제."""
             nonlocal backup_dir
-            if backup_dir:
-                shutil.rmtree(backup_dir, ignore_errors=True)
+            if backup_dir is not None:
+                metadata = backup_dir.lstat()
+                if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(
+                    metadata.st_mode
+                ):
+                    raise ValueError("best deliverable backup is not a directory")
+                shutil.rmtree(backup_dir)
                 backup_dir = None
+
+        def _clear_task_files():
+            reset_task_deliverable_dir(UPLOAD_DIR, task_id)
 
         def _record_execution_metrics(task_result: dict) -> None:
             nonlocal execution_attempt_count, sandbox_attempt_count
@@ -2467,6 +2466,7 @@ def run_inference(
                 ] = bounded_metrics
             return task_result
 
+        _clear_task_files()
         try:
             while True:
                 if qa_attempts > 0:
@@ -2480,9 +2480,7 @@ def run_inference(
 
                     # task_dir 비우기 — 이전 파일이 남아 있으면 LLM이 다른 이름으로
                     # 파일을 생성했을 때 구/신 파일이 공존하게 됨
-                    task_dir = DELIVERABLE_DIR / task_id
-                    if task_dir.exists():
-                        shutil.rmtree(task_dir, ignore_errors=True)
+                    _clear_task_files()
 
                 result = _execute_single_task(
                     task, condition, executor, execution_mode,

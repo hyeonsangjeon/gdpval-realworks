@@ -375,8 +375,6 @@ def patched_run_inference(tmp_path, monkeypatch):
 
     monkeypatch.setattr(s2, "WORKSPACE_DIR", workspace, raising=True)
     monkeypatch.setattr(s2, "UPLOAD_DIR", upload, raising=True)
-    monkeypatch.setattr(s2, "DELIVERABLE_DIR", deliverables, raising=True)
-
     _build_step1_prepared(workspace)
 
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.test/")
@@ -454,6 +452,278 @@ class TestFix3RunTaskWithQA:
             f"Expected qa_failed, got {results[0]['status']!r}; "
             f"qa={results[0].get('qa')}"
         )
+
+    def test_resume_invocation_replaces_prior_task_tree(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+        task_dir.mkdir()
+        (task_dir / "stale.pdf").write_bytes(b"stale")
+        attempts = []
+
+        def execute(*args, **kwargs):
+            attempts.append(kwargs.get("error_context"))
+            task_dir.mkdir(parents=True, exist_ok=True)
+            if len(attempts) == 1:
+                assert not (task_dir / "stale.pdf").exists()
+                (task_dir / "old.pdf").write_bytes(b"old")
+                return {
+                    "task_id": "t1",
+                    "status": "error",
+                    "error": "first attempt failed",
+                    "deliverable_text": "",
+                    "deliverable_files": ["deliverable_files/t1/old.pdf"],
+                    "latency_ms": 10,
+                }
+            assert not (task_dir / "old.pdf").exists()
+            (task_dir / "new.pdf").write_bytes(b"new")
+            return {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "recovered",
+                "deliverable_files": ["deliverable_files/t1/new.pdf"],
+                "latency_ms": 10,
+            }
+
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(
+            s2,
+            "_run_self_qa",
+            lambda *args, **kwargs: {
+                "passed": True,
+                "score": 9,
+                "issues": [],
+                "suggestion": "",
+                "undetermined": False,
+                "llm_passed": True,
+            },
+        )
+
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=1,
+        )
+
+        progress = _read_progress(workspace)
+        assert attempts == [None, "first attempt failed"]
+        assert progress["results"][0]["status"] == "success"
+        assert progress["results"][0]["deliverable_files"] == [
+            "deliverable_files/t1/new.pdf"
+        ]
+        assert sorted(path.name for path in task_dir.iterdir()) == ["new.pdf"]
+
+    @pytest.mark.parametrize("second_status", ["success", "error"])
+    def test_qa_retry_restores_byte_exact_best_task_tree(
+        self, patched_run_inference, monkeypatch, second_status
+    ):
+        s2, workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+        sibling = s2.UPLOAD_DIR / "deliverable_files" / "t2"
+        sibling.mkdir()
+        (sibling / "keep.txt").write_bytes(b"keep")
+        attempts = 0
+
+        def execute(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            task_dir.mkdir(parents=True, exist_ok=True)
+            if attempts == 1:
+                (task_dir / "best.pdf").write_bytes(b"best-bytes")
+                return {
+                    "task_id": "t1",
+                    "status": "success",
+                    "deliverable_text": "best",
+                    "deliverable_files": ["deliverable_files/t1/best.pdf"],
+                    "latency_ms": 10,
+                }
+            assert list(task_dir.iterdir()) == []
+            (task_dir / "worse.pdf").write_bytes(b"worse-bytes")
+            return {
+                "task_id": "t1",
+                "status": second_status,
+                "error": "retry failed" if second_status == "error" else None,
+                "deliverable_text": "worse",
+                "deliverable_files": ["deliverable_files/t1/worse.pdf"],
+                "latency_ms": 10,
+            }
+
+        qa_results = iter([
+            {
+                "passed": False,
+                "score": 5,
+                "issues": ["retry"],
+                "suggestion": "improve",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+            {
+                "passed": False,
+                "score": 3,
+                "issues": ["worse"],
+                "suggestion": "restore",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+        ])
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(s2, "_run_self_qa", lambda *a, **k: next(qa_results))
+
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=0,
+        )
+
+        result = _read_progress(workspace)["results"][0]
+        assert result["deliverable_files"] == ["deliverable_files/t1/best.pdf"]
+        assert sorted(path.name for path in task_dir.iterdir()) == ["best.pdf"]
+        assert (task_dir / "best.pdf").read_bytes() == b"best-bytes"
+        assert (sibling / "keep.txt").read_bytes() == b"keep"
+
+    def test_qa_backup_rejects_cross_task_best_manifest(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, _workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+
+        def execute(*args, **kwargs):
+            task_dir.mkdir(parents=True, exist_ok=True)
+            (task_dir / "best.pdf").write_bytes(b"best")
+            return {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "best",
+                "deliverable_files": ["deliverable_files/t2/best.pdf"],
+                "latency_ms": 10,
+            }
+
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(
+            s2,
+            "_run_self_qa",
+            lambda *a, **k: {
+                "passed": False,
+                "score": 5,
+                "issues": ["retry"],
+                "suggestion": "improve",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+        )
+
+        with pytest.raises(ValueError, match="deliverable path must stay under"):
+            s2.run_inference(
+                condition_key="condition_a",
+                resume=False,
+                resume_max_rounds=1,
+            )
+
+    def test_qa_retry_restores_empty_best_task_tree(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+        attempts = 0
+
+        def execute(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            task_dir.mkdir(parents=True, exist_ok=True)
+            if attempts == 1:
+                return {
+                    "task_id": "t1",
+                    "status": "success",
+                    "deliverable_text": "text-only best",
+                    "deliverable_files": [],
+                    "latency_ms": 10,
+                }
+            (task_dir / "worse.pdf").write_bytes(b"worse")
+            return {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "worse",
+                "deliverable_files": ["deliverable_files/t1/worse.pdf"],
+                "latency_ms": 10,
+            }
+
+        qa_results = iter([
+            {
+                "passed": False,
+                "score": 5,
+                "issues": ["retry"],
+                "suggestion": "improve",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+            {
+                "passed": False,
+                "score": 3,
+                "issues": ["worse"],
+                "suggestion": "restore",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+        ])
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(s2, "_run_self_qa", lambda *a, **k: next(qa_results))
+
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=0,
+        )
+
+        result = _read_progress(workspace)["results"][0]
+        assert result["deliverable_files"] == []
+        assert list(task_dir.iterdir()) == []
+
+    def test_qa_backup_cleanup_failure_is_visible(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, _workspace = patched_run_inference
+        task_dir = s2.UPLOAD_DIR / "deliverable_files" / "t1"
+
+        def execute(*args, **kwargs):
+            task_dir.mkdir(parents=True, exist_ok=True)
+            (task_dir / "best.pdf").write_bytes(b"best")
+            return {
+                "task_id": "t1",
+                "status": "success",
+                "deliverable_text": "best",
+                "deliverable_files": ["deliverable_files/t1/best.pdf"],
+                "latency_ms": 10,
+            }
+
+        monkeypatch.setattr(s2, "_execute_single_task", execute)
+        monkeypatch.setattr(
+            s2,
+            "_run_self_qa",
+            lambda *a, **k: {
+                "passed": False,
+                "score": 5,
+                "issues": ["retry"],
+                "suggestion": "improve",
+                "undetermined": False,
+                "llm_passed": False,
+            },
+        )
+        real_rmtree = __import__("shutil").rmtree
+
+        def fail_backup_cleanup(path, *args, **kwargs):
+            if Path(path).name.startswith("qa_best_t1_"):
+                raise OSError("backup cleanup failed")
+            return real_rmtree(path, *args, **kwargs)
+
+        monkeypatch.setattr("shutil.rmtree", fail_backup_cleanup)
+
+        with pytest.raises(OSError, match="backup cleanup failed"):
+            s2.run_inference(
+                condition_key="condition_a",
+                resume=False,
+                resume_max_rounds=0,
+            )
 
     def test_qa_passes_keeps_status_success(
         self, patched_run_inference, monkeypatch
