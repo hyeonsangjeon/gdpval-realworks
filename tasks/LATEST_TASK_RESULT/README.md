@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-23
-- Status: Mandatory foundation review findings locally resolved
+- Status: Typed Azure AI endpoint foundation shipped via PR #134
 
 ## Task
 
@@ -85,8 +85,20 @@ task. It must be refreshed before a task is reported complete.
 - No token acquisition, network access, Azure/model API call, grading, Hugging
   Face access/write, workflow execution, or paid operation occurred.
 
+## Shipment
+
+- PR #134 squash-merged as
+  `fb3b7fe02ad54a3b095ffbea532a7b1703ba065b` on 2026-07-23 from exact reviewed
+  head `127c948a9832d156d17b151ffe9cb6f063818f92`.
+- The implementation changed exactly eight paths. GitHub attached no Actions
+  run, check suite, or check rollup to either SHA because those paths do not
+  match an active workflow trigger.
+- No manual workflow dispatch, credential injection, token acquisition,
+  Azure/model API call, Hugging Face access/write, deployment, or paid action
+  was used to replace the path-filtered checks.
+
 ## Remaining Work
 
-- Review and integrate this foundation separately.
+- No repository implementation work remains for this foundation slice.
 - Wire inference, Code Interpreter, narrative, grading, reporting, and workflow
   callers only in a later bounded change with separate local validation.

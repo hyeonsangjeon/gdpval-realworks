@@ -51,7 +51,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   `pip check`, exact-pin, `git diff --check`, conflict-marker, and exact
   eight-path scope checks pass. Runtime and workflow integration is `NOT WIRED`;
   no token, network, Azure/model API, Hugging Face, workflow, or paid action
-  occurred.
+  occurred. Shipped through PR #134
+  (`fb3b7fe02ad54a3b095ffbea532a7b1703ba065b`) from reviewed head
+  `127c948a9832d156d17b151ffe9cb6f063818f92`. GitHub created no Actions run,
+  check suite, or check rollup for either SHA because the eight changed paths
+  do not match an active workflow trigger. No workflow was manually dispatched,
+  and no credential, token, Azure/model API, Hugging Face, deployment, or paid
+  action was used to compensate.
 
 ### Changed
 - **GitHub repository About metadata** — replace the contradictory

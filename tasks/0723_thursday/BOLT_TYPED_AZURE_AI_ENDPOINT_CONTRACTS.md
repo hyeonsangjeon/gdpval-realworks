@@ -1,7 +1,7 @@
 # BOLT: Typed Azure AI Endpoint Contracts
 
 - Date: 2026-07-23
-- Status: `LOCALLY_VERIFIED`
+- Status: `SHIPPED`
 - Base: `origin/main@b82d9fea95fb97a1fcbcea6cb6979d09b031afeb`
 - Execution boundary: model-free, local-only, offline, no credentials
 
@@ -83,9 +83,22 @@ credential remained caller-owned.
 | Diff and scope | `git diff --check` clean; zero conflict markers; exactly eight intended status paths |
 | Remote or paid execution | No token, network, Azure/model API, HF, workflow, or paid action |
 
+## Shipment
+
+- PR #134 squash-merged as
+  `fb3b7fe02ad54a3b095ffbea532a7b1703ba065b` on 2026-07-23.
+- The exact reviewed PR head was
+  `127c948a9832d156d17b151ffe9cb6f063818f92` with eight changed paths.
+- GitHub created no Actions run, check suite, or check rollup for either the PR
+  head or merge SHA because the changed paths do not match an active workflow
+  trigger. No workflow was dispatched manually to compensate.
+- The detached clean-checkout evidence above is therefore the merge gate. No
+  credential, token, Azure/model API, Hugging Face, deployment, or paid action
+  occurred.
+
 ## Decision
 
-`LOCALLY_VERIFIED`. Runtime and workflow integration remains `NOT WIRED`.
+`SHIPPED`. Runtime and workflow integration remains `NOT WIRED`.
 Inference, Code Interpreter, grading, reporting, and workflow callers are
 unchanged. No token acquisition, network request, Azure/model API operation,
 Hugging Face access, workflow run, or paid action occurred.
