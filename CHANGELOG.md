@@ -11,6 +11,48 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **Typed Azure AI endpoint foundation** - add exact HTTPS endpoint contracts
+  for direct Azure OpenAI v1, Foundry project, and explicitly authorized legacy
+  rollback routes. Parsing rejects non-ASCII/control normalization, empty ports,
+  malformed percent sequences, host lookalikes, and trailing dots before the
+  exact Microsoft suffix/path allowlist. Strict identity is profile-specific,
+  including direct verification of `AZURE_AI_EXPECTED_LEGACY_ACCOUNT`. The
+  current `CodeInterpreterRunner is Azure-only`; a missing deployment follows
+  the runtime's `gpt-4` default, while malformed model objects, explicit null
+  deployments, and native-provider Code Interpreter fail. Audio/video
+  preprocessors use only the runtime `deployment` field and defaults; other
+  types are excluded. `DefaultAzureCredential`-based settings reject known
+  static Azure key, token, secret, certificate, username, and password
+  variables while allowing `AZURE_FEDERATED_TOKEN_FILE` and native
+  `OPENAI_API_KEY`. Owned factory and token-check paths recheck the real process
+  environment before constructing a credential even with explicit route
+  settings; injected credentials remain caller-managed. Versioned fingerprints
+  bind effective token scope and
+  transport settings while emitted records remain endpoint-free, redacted
+  provenance; the digest is not a confidentiality boundary and not a secret.
+  Synchronous non-thread-safe factory/lease ownership and hardened one-write
+  `GITHUB_OUTPUT` behavior are covered directly. Exact pins are
+  `openai==2.46.0`, `azure-core==1.41.0`, `azure-identity==1.25.3`, and
+  `azure-ai-projects==2.3.0`. An offline real-SDK construction smoke verified
+  the canonical project OpenAI base URL and the exact capability contract:
+  `responses.create`, `files.create`, `files.delete`, fallback `files.content`,
+  `containers.create`, `containers.files.list`, and
+  `containers.files.content.retrieve`. The current runner uses auto-container
+  configuration rather than calling `containers.create` directly; that method
+  is retained as a project-client compatibility gate. Credential and HTTP send
+  counters remained zero and the credential stayed caller-owned. Raw and
+  serialized condition discovery produce the same main, QA, and preprocessor
+  workloads. A detached clean checkout passes the focused suite **224/224 in
+  20.79 seconds**, the exact real-SDK smoke **1/1 in 1.47 seconds**, and the
+  complete credential-free backend non-integration suite with **2,074 passed,
+  9 skipped, and 44 integration tests deselected in 126.02 seconds**. Ruff,
+  `py_compile`,
+  `pip check`, exact-pin, `git diff --check`, conflict-marker, and exact
+  eight-path scope checks pass. Runtime and workflow integration is `NOT WIRED`;
+  no token, network, Azure/model API, Hugging Face, workflow, or paid action
+  occurred.
+
 ### Changed
 - **GitHub repository About metadata** — replace the contradictory
   `220 tasks across 11 industries` description with a concise public value

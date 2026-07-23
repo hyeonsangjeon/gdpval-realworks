@@ -3,167 +3,90 @@
 This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
-- Updated: 2026-07-22
-- Status: PR #129 and cleanup commit identity follow-up PR #131 shipped
+- Updated: 2026-07-23
+- Status: Mandatory foundation review findings locally resolved
 
 ## Task
 
-- Put direct dashboard, sample config, Batch workflow, and result/artifact paths
-  in the English and Korean root README start sections.
-- Align both Batch Runner references and beginner guides with the executable
-  OIDC, bootstrap, dry-run, report, publication, artifact, and relay contracts.
-- Fail closed before Azure/model spend when dispatch identity, relay source,
-  checkpoint/image identity, canonical task/reference semantics, write
-  authorization, or publication output identity cannot be proven.
-- Bind relay cleanup finality to the actual Hugging Face SDK commit model:
-  `title` for `commit_message` and `message` for `commit_description`.
+- Harden typed direct v1, Foundry project, and authorized legacy endpoint
+  contracts plus the standalone route preflight CLI.
+- Align workload discovery, identity, credential, fingerprint, lifecycle,
+  output-file, and SDK reproducibility contracts with the current runtime.
 
 ## Result
 
-- Added four fork-safe first-screen routes in both root READMEs and matching
-  English/Korean Batch Runner start sections. Local debugging now uses the real
-  YAML-driven wrappers and stops before destructive Step 7 publication.
-- Corrected OIDC-only workflow guidance, Azure OpenAI resource endpoint scope,
-  `dry_run` cost/write behavior, Step 0 fail-closed bootstrap, condition-specific
-  checkpoints, Step 6 JSON/Markdown report, Step 7 allowlist, eight dispatch
-  inputs/defaults, result PR ordering, and 30-day artifact layout.
-- Added exact-main/workflow-SHA preflight, canonical `wall_timeout=0..290` and
-  relay bounds, exact checkout checks, initial `source_sha` propagation, and
-  `--ref main` continuation dispatch.
-- Added fail-closed relay transport using the validated full `data.source`.
-  Each payload is a content-addressed generation at one immutable HF revision;
-  `current.json` advances only after exact-tree and SHA-256/size verification.
-  Marker restore/cleanup also require the expected source SHA, lineage, and
-  immutable trusted sandbox image digest. Manual leg 0 cannot inject internal
-  relay identity or image inputs.
-- Added a non-mutating HF write-access preflight after Step 0 and before task
-  preparation, Azure login, or model spend. Read-only sources such as the
-  official public dataset fail before paid execution.
-- Step 0 now treats only an explicit repository-not-found response as absence,
-  propagates 401/403/429/5xx/timeout failures, and refuses automatic deletion of
-  existing partial targets. Manifest schema v4 binds all 220 tasks to prompt,
-  taxonomy, rubric, ordered reference path/URL/URI semantics and 261 declared
-  reference SHA-256/size records from the pinned public source. Step 1 and Step
-  2 recheck that identity before prepared output or provider-client creation.
-- Every reference is copied to read-only private per-task staging before
-  preview, preprocessing, codegen, or execution. Same-file-descriptor hashing,
-  fatal provider upload/local/Docker copy errors, basename-collision rejection,
-  partial-copy cleanup, and best-effort provider input-file deletion prevent
-  missing or changed inputs from silently reaching a model or generated code.
-- Code Interpreter uploads retain the verified local basename so provider-side
-  file type and extension are explicit. The common sandbox still stages local
-  references privately, while the hardened remote backend carries opaque
-  reference IDs through to its compute backend without a second host-path copy.
-- Step 1 assigns a run-specific publication generation before its prepared
-  fingerprint is calculated. Fresh GitHub/local runs receive a new generation,
-  relay legs preserve the initial lineage, and Step 2 validates it before
-  manifest loading, provider-client construction, or model spend.
-- Relay checkpoints canonicalize ordered/result task IDs, reject unknown result
-  statuses, and require each deliverable path to be owned by its result task.
-  Before the first execution and each QA retry, Step 2 removes the prior task
-  output tree with symlink-aware file/directory handling instead of silently
-  retaining stale artifacts.
-- Condition A keeps the canonical publication/relay upload root while condition
-  B writes to an isolated root. Step 2 binds every selected file to its
-  same-descriptor SHA-256/size and includes those records in a canonical result
-  fingerprint, so later same-path byte drift fails before any HF call.
-- Step 0 always creates and clears all submitter columns and rejects stale text,
-  scalar/list manifests, URL/URI values, or physical outputs on reused targets.
-  Step 4 rebuilds production selected rows from current results. Step 7 requires
-  one canonical parquet shard, row-owned deliverable paths, canonical URLs/URIs,
-  and exact parquet-to-current-Step-2 text/file/URL/URI/byte equality. Step 3 and
-  publication use one shared production-shaped projection of prepared metadata
-  plus raw Step 2 nested QA/results. The non-dry self-report must match its run
-  generation, prepared/result fingerprints, task order, status, summary, and
-  files. Step 5 records missing file-required outputs as failed empty rows and
-  never creates dummy files or mutates the parquet after result identity binds.
-- Step 0 records the validated target HEAD. Step 7 performs one HF
-  `create_commit(parent_commit=...)`, then proves direct ancestry, plan marker,
-  exact remote tree/hashes, self-report identity, and final HEAD. Ambiguous
-  marker and publication responses are reconciled without retry. Relay cleanup
-  requires the exact restored checkpoint generation, and a private local
-  receipt binds the publication plan so post-cleanup verification accepts only
-  the exact cleanup child with an unchanged managed tree.
-- The follow-up cleanup commit writes a short generation label to the Hub commit
-  title and the full 64-character generation marker to its description.
-  Response-loss reconciliation and publication finality require that exact
-  `GitCommitInfo.title`, `GitCommitInfo.message`, and direct parent, preventing a
-  valid cleanup from failing due to SDK field confusion and preventing an
-  unrelated child commit from being accepted.
-- Added model-free checkpoint identity validation after Step 1 and before Azure
-  login/model-client construction. Missing progress, lineage/fingerprint drift,
-  or incomplete deliverables abort the continuation instead of rerunning tasks.
-- Renamed runtime evidence to `step_timeout_headroom_minutes`; the UI/docs state
-  that the nominal 60-minute difference is best-effort, not reserved handoff
-  time. Operators must not overlap runs sharing one HF target.
+- URL parsing now rejects non-ASCII text, C0/C1 controls, CR/LF/TAB, Unicode
+  line separators, explicit empty ports, malformed percent sequences,
+  lookalikes, and trailing-dot hosts before applying the exact Microsoft
+  suffix/path allowlist.
+- Strict identity is profile-specific. Direct/project routes bind the active
+  direct account, project also binds project account/name, and legacy binds the
+  active legacy endpoint through `AZURE_AI_EXPECTED_LEGACY_ACCOUNT` without
+  requiring or trusting a separate direct endpoint.
+- The current `CodeInterpreterRunner is Azure-only`. A missing main deployment
+  follows the runtime's `gpt-4` default; malformed model objects, explicit null
+  deployments, and native-provider Code Interpreter fail clearly. Azure
+  `audio_analyzer` and `video_analyzer` preprocessors inherit current runtime
+  defaults `gpt-audio-1.5` and `gpt-5.2`; other preprocessor types are not route
+  workloads. A `model` alias alone does not override the runtime's audio/video
+  `deployment` lookup. Native main models can still discover explicitly Azure
+  audio/video preprocessors.
+- Authentication is `DefaultAzureCredential`-based. Known static Azure keys,
+  tokens, client secrets, certificates, usernames, and passwords are rejected
+  without echoing values. `AZURE_FEDERATED_TOKEN_FILE` and native
+  `OPENAI_API_KEY` remain allowed. Internally owned factory and token-check paths
+  recheck the real process environment before credential construction even with
+  explicit route settings; injected credentials remain caller-managed.
+- Fingerprints now carry a stable contract version and effective token scope in
+  addition to endpoint/deployment identity, SDK versions, timeout, retries,
+  workload, profile, and legacy API version. Emitted output is endpoint-free,
+  redacted provenance; its digest is not a confidentiality boundary and not a
+  secret.
+- Factory and lease contracts explicitly document synchronous, managed,
+  non-thread-safe lifetimes, shared-factory survival, caller-owned injected
+  credentials, and rejection of async close implementations.
+- `GITHUB_OUTPUT` preserves existing contents/mode, creates new files at mode
+  `0600`, rejects directory/FIFO/socket/symlink/missing-ancestor/parent/control
+  paths, and fails on a short single `O_APPEND` write.
+- Exact local SDK pins now occur once each: `openai==2.46.0`,
+  `azure-core==1.41.0`, `azure-identity==1.25.3`, and
+  `azure-ai-projects==2.3.0`.
+- An offline real-SDK construction smoke created the project and OpenAI clients,
+  verified the canonical base URL plus exact `responses.create`, `files.create`,
+  `files.delete`, fallback `files.content`, `containers.create`,
+  `containers.files.list`, and `containers.files.content.retrieve`
+  capabilities, closed both clients, and proved zero token and HTTP send calls
+  while leaving the injected credential caller-owned. The current runner uses
+  auto-container configuration rather than calling `containers.create`
+  directly; that method remains a project-client compatibility gate.
+- Runtime and workflow integration remains `NOT WIRED`.
+- Raw and serialized `ExperimentConfig` conditions resolve to the same main,
+  QA, and audio/video workload identities.
 
 ## Verification
 
-- Follow-up base: `origin/main@8e473361a12c348ee6fb4d4da6bbfb1d8a2b157f`.
-- Full backend non-integration suite: **1,853 passed, 6 skipped, 44 deselected,
-  0 failed**.
-- Focused manifest/reference, relay, publication, output, bootstrap, inference,
-  corruption, observability, and agentic trust matrix: **361 passed**.
-- Final production-shaped publication/report/subset/relay matrix: **188 passed**;
-  condition isolation and byte-finality matrix: **136 passed**; final status,
-  no-dummy, and cleanup-generation matrix: **156 passed**. The full suite above
-  includes every current version of those tests.
-- Focused trust matrices passed for relay generation/marker/CAS, schema v4
-  source semantics, private reference staging, provider/local/Docker failures,
-  manifest pre-client gates, Step 0 stale-state rejection, Step 4 current-run
-  rebuilding, and Step 7 exact publication. The final Step 0 safety matrix is
-  **65 passed**, relay checkpoint/status matrix is **83 passed**, and HF
-  publication/finality matrix is **86 passed**. The final relay plus publication
-  follow-up matrix is **169 passed**. These include source-first
-  mutation ordering, post-create drift rejection, canonical target columns,
-  exact-generation cleanup, realistic HF cache symlinks, and non-relay
-  file-verification call bounds.
-- Exact public source verification downloaded **1,670,067,990 bytes** at pinned
-  revision `11e7900...`: parquet SHA-256 `f8422fab...`, 220 tasks, 301 physical
-  references, 261 declared references, and 220 unique task projections. Four
-  policy manifest v4 identities reproduced byte-for-byte three times; default
-  manifest SHA-256 is `463fc119...` with 185 needs-files / 35 text-only tasks.
-- Onboarding contracts: **8 passed**; complete frontend data contracts:
-  **85 passed**.
-- Production TypeScript/Vite build and runtime, integrity, perception, and
-  success browser suites all passed.
-- Documentation structure: **157 links**, **100 file/anchor targets**, **12
-  fork-relative Actions routes**, and four system-map SVGs validated with no
-  broken target, unbalanced fence, or `mermaid.ink` dependency.
-- The changed `batch-run.yml` parsed as YAML and its eight-test executable
-  onboarding contract passed; all six external actions remain pinned to
-  40-character SHAs. All eight active workflows parsed as YAML. System
-  `actionlint` was unavailable locally, so no unverified downloaded binary was
-  used. Ruff and `py_compile` passed for **43 changed Python files**; the
-  production TypeScript/Vite build and `git diff --check` also passed.
-  `huggingface-hub==1.24.0` pins the verified write-auth, immutable-revision,
-  and CAS API surface.
-- No workflow dispatch, Azure login, model/API call, batch/grading run, HF write,
-  network checkpoint write, or paid execution occurred. Public source bytes
-  were downloaded read-only to verify canonical identities.
-
-## Shipment
-
-- PR #129 squash-merged as
-  `2d4026056b6e27f5111a94d1089573f6b4938a58` on 2026-07-22.
-- Automatic pull-request run
-  [29919172383](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29919172383)
-  completed with `validate` successful and `deploy` skipped.
-- Automatic `main` push run
-  [29919336511](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/29919336511)
-  completed with both `validate` and GitHub Pages `deploy` successful.
-- These were free automatic repository checks. No `workflow_dispatch`, grading,
-  Step 8, Azure/model API, Hugging Face write, or paid execution ran.
-- Follow-up PR #131 squash-merged as
-  `576e6f4f4a72998f0311d74006373bcea40a3cf6` on 2026-07-22. Its changed paths
-  are outside the Pages workflow's PR/push filters, so GitHub attached no
-  automatic run or check to either the PR head or merge SHA. No manual workflow
-  dispatch was used; the exact PR head was covered by the local full suite and
-  two independent reviews before merge.
+- Base identity:
+  `origin/main@b82d9fea95fb97a1fcbcea6cb6979d09b031afeb`.
+- Detached clean-checkout focused core and CLI contracts: **224 passed in 20.79
+  seconds**.
+- Exact clean-checkout real-SDK smoke: **1 passed in 1.47 seconds**, with all
+  pinned versions and seven capabilities verified and zero token/network calls.
+- Detached clean-checkout credential-free backend non-integration suite:
+  **2,074 passed, 9 skipped, and 44 integration tests deselected in 126.02
+  seconds**.
+- All **20** internally owned credential secret cases and the independent
+  raw/serialized workload parity test passed before the full suite.
+- Ruff reported `All checks passed!` for the four Python implementation/test
+  files; `py_compile` completed with no diagnostics.
+- `pip check` reported `No broken requirements found.` The four exact SDK pins
+  and their package prefixes each occur once.
+- `git diff --check` passed, no conflict markers were found, and status contains
+  exactly the eight intended paths, including the ignored CLI and BOLT files.
+- No token acquisition, network access, Azure/model API call, grading, Hugging
+  Face access/write, workflow execution, or paid operation occurred.
 
 ## Remaining Work
 
-- No repository implementation work remains for this task. The cleanup commit
-  identity follow-up required no paid batch smoke or manual workflow dispatch.
-- Repository branch protection remains a separate administrative control; the
-  exact-main preflight does not replace a protected `main` ruleset.
+- Review and integrate this foundation separately.
+- Wire inference, Code Interpreter, narrative, grading, reporting, and workflow
+  callers only in a later bounded change with separate local validation.
