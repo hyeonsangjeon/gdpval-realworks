@@ -17,6 +17,7 @@ See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/code-interp
 
 """
 
+import inspect
 import os
 import re
 from pathlib import Path
@@ -24,14 +25,44 @@ from typing import Optional
 
 from openai import AzureOpenAI
 
+from core.azure_ai_clients import AzureAIWorkload, validate_client_capabilities
 from core.config import DEFAULT_TOKENS
 from core.prompt_loader import load_prompt, render_prompt
 from core.file_preview import build_file_structure_info
 from core.reference_integrity import open_verified_reference
 
 
+def _close_sync_resources(resources: tuple[tuple[str, object | None], ...]) -> None:
+    first_error: BaseException | None = None
+    seen: set[int] = set()
+    for role, resource in resources:
+        if resource is None or id(resource) in seen:
+            continue
+        seen.add(id(resource))
+        close = getattr(resource, "close", None)
+        if not callable(close):
+            continue
+        try:
+            if inspect.iscoroutinefunction(close):
+                raise RuntimeError(
+                    f"sync Code Interpreter lifecycle does not support async {role} close"
+                )
+            result = close()
+            if inspect.isawaitable(result):
+                if inspect.iscoroutine(result):
+                    result.close()
+                raise RuntimeError(
+                    f"sync Code Interpreter lifecycle does not support async {role} close"
+                )
+        except BaseException as exc:
+            if first_error is None:
+                first_error = exc
+    if first_error is not None:
+        raise first_error
+
+
 class CodeInterpreterRunner:
-    """Azure OpenAI Responses API + Code Interpreter for file generation"""
+    """Synchronous Code Interpreter runner; instances are not thread-safe."""
 
     DEFAULT_PROMPT = "code_interpreter_occupation_codegen"
 
@@ -42,51 +73,120 @@ class CodeInterpreterRunner:
         api_version: str = "2025-03-01-preview",
         prompt_name: Optional[str] = None,
         max_completion_tokens: Optional[int] = None,
+        *,
+        client=None,
     ):
-        endpoint = endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
-        api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY")
+        self._closed = False
+        self._credential = None
+        self._owns_client = client is None
+        self._uploaded_file_ids: set = set()
 
-        # Priority 1: DefaultAzureCredential (Entra ID token)
+        if client is not None:
+            if api_key is not None or endpoint is not None:
+                raise ValueError(
+                    "client cannot be combined with api_key or endpoint"
+                )
+            validate_client_capabilities(
+                client,
+                AzureAIWorkload.CODE_INTERPRETER,
+            )
+            self.client = client
+            self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
+            self.max_completion_tokens = (
+                max_completion_tokens
+                if max_completion_tokens is not None
+                else DEFAULT_TOKENS["code_generation"]
+            )
+            return
+
+        endpoint = endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
+        api_key = (
+            api_key
+            or os.getenv("AZURE_OPENAI_API_KEY")
+            or os.getenv("AZURE_API_KEY")
+        )
+        credential = None
+        active_client = None
         try:
-            from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-            credential = DefaultAzureCredential()
-            token_provider = get_bearer_token_provider(
-                credential, "https://cognitiveservices.azure.com/.default"
-            )
-            print("   🔐 CodeInterpreter Auth: DefaultAzureCredential (Entra ID token)")
-            self.client = AzureOpenAI(
-                azure_endpoint=endpoint,
-                azure_ad_token_provider=token_provider,
-                api_version=api_version,
-            )
-        except Exception as e:
-            # Priority 2: API Key fallback
-            if api_key:
-                print(f"   🔑 CodeInterpreter Auth: API Key (DefaultAzureCredential unavailable: {e})")
-                self.client = AzureOpenAI(
-                    api_key=api_key,
+            try:
+                from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+                credential = DefaultAzureCredential()
+                token_provider = get_bearer_token_provider(
+                    credential, "https://cognitiveservices.azure.com/.default"
+                )
+                print("   🔐 CodeInterpreter Auth: DefaultAzureCredential (Entra ID token)")
+                active_client = AzureOpenAI(
                     azure_endpoint=endpoint,
+                    azure_ad_token_provider=token_provider,
                     api_version=api_version,
                 )
-            else:
-                raise ValueError(
-                    f"No Azure credentials available for CodeInterpreter.\n"
-                    f"  - DefaultAzureCredential failed: {e}\n"
-                    f"  - AZURE_OPENAI_API_KEY not set.\n"
-                    f"  Run 'az login' or set AZURE_OPENAI_API_KEY."
+            except Exception as oidc_error:
+                if api_key:
+                    print(
+                        "   🔑 CodeInterpreter Auth: API Key "
+                        "(DefaultAzureCredential unavailable)"
+                    )
+                    failed_credential = credential
+                    credential = None
+                    try:
+                        _close_sync_resources(
+                            (("credential", failed_credential),)
+                        )
+                    except BaseException as close_error:
+                        raise close_error from oidc_error
+                    active_client = AzureOpenAI(
+                        api_key=api_key,
+                        azure_endpoint=endpoint,
+                        api_version=api_version,
+                    )
+                else:
+                    raise ValueError(
+                        "No Azure credentials available for CodeInterpreter.\n"
+                        "  - DefaultAzureCredential unavailable.\n"
+                        "  - AZURE_OPENAI_API_KEY not set.\n"
+                        "  Run 'az login' or set AZURE_OPENAI_API_KEY."
+                    ) from oidc_error
+
+            self.client = active_client
+            self._credential = credential
+            self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
+            self.max_completion_tokens = (
+                max_completion_tokens
+                if max_completion_tokens is not None
+                else DEFAULT_TOKENS["code_generation"]
+            )
+        except BaseException as initialization_error:
+            try:
+                _close_sync_resources(
+                    (
+                        ("client", active_client),
+                        ("credential", credential),
+                    )
                 )
-        # Load prompt template
-        self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
-        # Track uploaded file IDs to distinguish input vs output
-        self._uploaded_file_ids: set = set()
-        # Token limit for Responses API (max_output_tokens)
-        self.max_completion_tokens = (
-            max_completion_tokens
-            if max_completion_tokens is not None
-            else DEFAULT_TOKENS["code_generation"]
-        )
+            except BaseException as cleanup_error:
+                raise cleanup_error from initialization_error
+            raise
 
     # ── public ─────────────────────────────────────────────────────────
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._delete_uploaded_reference_files()
+        if self._owns_client:
+            _close_sync_resources((
+                ("client", self.client),
+                ("credential", self._credential),
+            ))
+
+    def __enter__(self) -> "CodeInterpreterRunner":
+        if self._closed:
+            raise RuntimeError("Code Interpreter runner is closed")
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self.close()
 
     def run(
         self,
@@ -112,6 +212,13 @@ class CodeInterpreterRunner:
         Returns:
             dict with keys: success, text, files, (error)
         """
+        if self._closed:
+            return {
+                "success": False,
+                "text": "",
+                "files": [],
+                "error": "Code Interpreter runner is closed",
+            }
         try:
             # Reset uploaded file tracking
             self._uploaded_file_ids = set()

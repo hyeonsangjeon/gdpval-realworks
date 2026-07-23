@@ -12,6 +12,26 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Typed Azure AI runtime adapters** - add an opt-in managed client wrapper,
+  caller-owned Code Interpreter client injection, and deterministic executor
+  lifecycle without wiring Step 2 or workflows. Closed adapters reject all
+  public client, route, fingerprint, context, and delegated access before an
+  API call. Owned factories close after leases, shared factories and injected
+  credentials remain caller-owned, and create/cleanup failures preserve the
+  foundation exception chain. Code Interpreter keeps same-descriptor reference
+  upload and provider-file cleanup while adding one initialization cleanup
+  boundary for client, credential, prompt, and token-limit failures. Executors
+  close only close-capable runners and never directly close raw LLM clients.
+  The foundation documentation contract now binds its immutable BOLT and
+  changelog entry without freezing the rolling latest-task record.
+  A detached clean checkout passes **279 focused tests with 6 integration cases
+  deselected**. Repeated clean-checkout backend runs completed with **zero
+  failures**, **2,105-2,108 passed**, **6-9 host-dependent skips**, and **44
+  integration tests deselected**. Ruff, `py_compile`, and
+  `git diff --check` pass across the seven changed Python files and three
+  completion records. These adapters remain `NOT WIRED`, and no credential,
+  token, network, Azure/model API, Hugging Face, workflow, or paid action
+  occurred.
 - **Typed Azure AI endpoint foundation** - add exact HTTPS endpoint contracts
   for direct Azure OpenAI v1, Foundry project, and explicitly authorized legacy
   rollback routes. Parsing rejects non-ASCII/control normalization, empty ports,

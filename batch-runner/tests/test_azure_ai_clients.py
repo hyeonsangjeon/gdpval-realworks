@@ -16,7 +16,6 @@ from core.experiment_config import ExperimentConfig
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FOUNDATION_DOCS = (
     REPO_ROOT / "tasks/0723_thursday/BOLT_TYPED_AZURE_AI_ENDPOINT_CONTRACTS.md",
-    REPO_ROOT / "tasks/LATEST_TASK_RESULT/README.md",
     REPO_ROOT / "CHANGELOG.md",
 )
 

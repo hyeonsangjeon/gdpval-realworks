@@ -101,6 +101,7 @@ class TaskExecutor:
         agentic_ordered_task_ids: Optional[list[str]] = None,
         agentic_task_request_sha256: Optional[Mapping[str, str]] = None,
         non_paid_test_mode: bool = False,
+        code_interpreter_client=None,
     ):
         """
         Initialize executor with specified mode.
@@ -128,6 +129,7 @@ class TaskExecutor:
             ValueError: If required parameters are missing for the selected mode
         """
         self.mode = mode
+        self._closed = False
         self.hardened_sandbox = False
         self.tokens = dict(DEFAULT_TOKENS)
         if isinstance(tokens, dict):
@@ -140,6 +142,7 @@ class TaskExecutor:
                 endpoint=endpoint,
                 prompt_name=prompt_name,
                 max_completion_tokens=self.tokens.get("code_generation"),
+                client=code_interpreter_client,
             )
 
         elif mode == "subprocess":
@@ -570,6 +573,22 @@ class TaskExecutor:
         else:
             raise ValueError(f"Unknown execution mode: {mode}")
 
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        close = getattr(self.runner, "close", None)
+        if callable(close):
+            close()
+
+    def __enter__(self) -> "TaskExecutor":
+        if self._closed:
+            raise RuntimeError("Task executor is closed")
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self.close()
+
     def execute(
         self,
         task_prompt: str,
@@ -607,6 +626,8 @@ class TaskExecutor:
                 - error (str, optional): Error message if failed
         """
         try:
+            if self._closed:
+                raise RuntimeError("Task executor is closed")
             if self.mode == "code_interpreter":
                 return self.runner.run(
                     task_prompt=task_prompt,

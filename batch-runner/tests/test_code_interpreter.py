@@ -4,9 +4,36 @@ Note: These are primarily mock tests since actual Code Interpreter
 requires Azure OpenAI Responses API access.
 """
 
+import gc
+import os
+import warnings
+from types import SimpleNamespace
 from unittest.mock import Mock, MagicMock, patch
 
-from core.code_interpreter import CodeInterpreterRunner
+import pytest
+
+from core.code_interpreter import CodeInterpreterRunner, _close_sync_resources
+
+
+def _injected_client(response=None):
+    if response is None:
+        response = SimpleNamespace(output=[], output_text="injected result")
+    return SimpleNamespace(
+        responses=SimpleNamespace(create=Mock(return_value=response)),
+        files=SimpleNamespace(
+            create=Mock(),
+            delete=Mock(),
+            content=Mock(),
+        ),
+        containers=SimpleNamespace(
+            create=Mock(),
+            files=SimpleNamespace(
+                list=Mock(),
+                content=SimpleNamespace(retrieve=Mock()),
+            ),
+        ),
+        close=Mock(),
+    )
 
 
 def test_code_interpreter_initialization():
@@ -26,6 +53,347 @@ def test_code_interpreter_initialization_with_params():
         endpoint="https://explicit.openai.azure.com"
     )
     assert runner.client is not None
+
+
+def test_injected_client_bypasses_environment_and_sdk_construction():
+    client = _injected_client()
+    original_getenv = os.getenv
+
+    def guarded_getenv(name, *args):
+        if name in {
+            "AZURE_OPENAI_ENDPOINT",
+            "AZURE_OPENAI_API_KEY",
+            "AZURE_API_KEY",
+        }:
+            raise AssertionError(f"unexpected Azure environment read: {name}")
+        return original_getenv(name, *args)
+
+    with patch("core.code_interpreter.os.getenv", side_effect=guarded_getenv), patch(
+        "core.code_interpreter.AzureOpenAI"
+    ) as constructor:
+        runner = CodeInterpreterRunner(client=client)
+
+    assert runner.client is client
+    constructor.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "legacy_kwargs",
+    [
+        {"api_key": "key"},
+        {"endpoint": "https://example.invalid"},
+    ],
+)
+def test_injected_client_rejects_conflicting_legacy_arguments(legacy_kwargs):
+    with pytest.raises(ValueError, match="cannot be combined"):
+        CodeInterpreterRunner(client=_injected_client(), **legacy_kwargs)
+
+
+def test_injected_client_requires_exact_code_interpreter_capabilities():
+    client = _injected_client()
+    client.containers.files.content = SimpleNamespace()
+
+    with pytest.raises(RuntimeError, match="containers.files.content.retrieve"):
+        CodeInterpreterRunner(client=client)
+
+    client.close.assert_not_called()
+
+
+def test_injected_client_prompt_failure_preserves_caller_ownership():
+    client = _injected_client()
+    prompt_error = RuntimeError("prompt failed")
+
+    with patch("core.code_interpreter.load_prompt", side_effect=prompt_error):
+        with pytest.raises(RuntimeError) as caught:
+            CodeInterpreterRunner(client=client)
+
+    assert caught.value is prompt_error
+    client.close.assert_not_called()
+
+
+def test_injected_client_run_uses_caller_client():
+    client = _injected_client()
+    runner = CodeInterpreterRunner(client=client)
+
+    result = runner.run(task_prompt="Create a file", model="deployment")
+
+    assert result == {
+        "success": True,
+        "text": "injected result",
+        "files": [],
+    }
+    client.responses.create.assert_called_once()
+
+
+def test_injected_client_close_cleans_files_without_closing_client():
+    client = _injected_client()
+    runner = CodeInterpreterRunner(client=client)
+    runner._uploaded_file_ids.update({"file-b", "file-a"})
+
+    runner.close()
+    runner.close()
+
+    assert client.files.delete.call_args_list == [
+        (("file-a",),),
+        (("file-b",),),
+    ]
+    client.close.assert_not_called()
+    assert runner._uploaded_file_ids == set()
+
+
+def test_injected_client_run_after_close_never_calls_api():
+    client = _injected_client()
+    runner = CodeInterpreterRunner(client=client)
+    runner.close()
+
+    result = runner.run(task_prompt="Create a file", model="deployment")
+
+    assert result["success"] is False
+    assert result["error"] == "Code Interpreter runner is closed"
+    client.responses.create.assert_not_called()
+
+
+@patch("core.code_interpreter.AzureOpenAI")
+def test_legacy_close_closes_owned_client_and_credential(mock_azure_openai):
+    client = Mock()
+    credential = Mock()
+    mock_azure_openai.return_value = client
+    identity = MagicMock()
+    identity.DefaultAzureCredential.return_value = credential
+    identity.get_bearer_token_provider.return_value = object()
+
+    with patch.dict(
+        "sys.modules",
+        {"azure": MagicMock(), "azure.identity": identity},
+    ):
+        runner = CodeInterpreterRunner(endpoint="https://example.invalid")
+
+    runner.close()
+    runner.close()
+
+    client.close.assert_called_once_with()
+    credential.close.assert_called_once_with()
+
+
+@patch("core.code_interpreter.AzureOpenAI")
+def test_internal_prompt_failure_closes_client_and_credential_once(
+    mock_azure_openai,
+):
+    client = _injected_client()
+    credential = Mock()
+    prompt_error = RuntimeError("prompt failed")
+    mock_azure_openai.return_value = client
+    identity = MagicMock()
+    identity.DefaultAzureCredential.return_value = credential
+    identity.get_bearer_token_provider.return_value = object()
+
+    with patch.dict(
+        "sys.modules",
+        {"azure": MagicMock(), "azure.identity": identity},
+    ), patch("core.code_interpreter.load_prompt", side_effect=prompt_error):
+        with pytest.raises(RuntimeError) as caught:
+            CodeInterpreterRunner(endpoint="https://example.invalid")
+
+    assert caught.value is prompt_error
+    client.close.assert_called_once_with()
+    credential.close.assert_called_once_with()
+
+
+@patch("core.code_interpreter.AzureOpenAI")
+def test_internal_token_assignment_failure_uses_same_cleanup_boundary(
+    mock_azure_openai,
+):
+    class FailingTokens:
+        def __getitem__(self, _name):
+            raise token_error
+
+    client = _injected_client()
+    credential = Mock()
+    token_error = RuntimeError("token lookup failed")
+    mock_azure_openai.return_value = client
+    identity = MagicMock()
+    identity.DefaultAzureCredential.return_value = credential
+    identity.get_bearer_token_provider.return_value = object()
+
+    with patch.dict(
+        "sys.modules",
+        {"azure": MagicMock(), "azure.identity": identity},
+    ), patch("core.code_interpreter.load_prompt", return_value={}), patch(
+        "core.code_interpreter.DEFAULT_TOKENS", FailingTokens()
+    ):
+        with pytest.raises(RuntimeError) as caught:
+            CodeInterpreterRunner(endpoint="https://example.invalid")
+
+    assert caught.value is token_error
+    client.close.assert_called_once_with()
+    credential.close.assert_called_once_with()
+
+
+@patch("core.code_interpreter.AzureOpenAI")
+def test_internal_cleanup_failure_is_primary_and_retains_init_cause(
+    mock_azure_openai,
+):
+    client = _injected_client()
+    credential = Mock()
+    initialization_error = RuntimeError("prompt failed")
+    cleanup_error = OSError("client close failed")
+    client.close.side_effect = cleanup_error
+    mock_azure_openai.return_value = client
+    identity = MagicMock()
+    identity.DefaultAzureCredential.return_value = credential
+    identity.get_bearer_token_provider.return_value = object()
+
+    with patch.dict(
+        "sys.modules",
+        {"azure": MagicMock(), "azure.identity": identity},
+    ), patch(
+        "core.code_interpreter.load_prompt",
+        side_effect=initialization_error,
+    ):
+        with pytest.raises(OSError) as caught:
+            CodeInterpreterRunner(endpoint="https://example.invalid")
+
+    assert caught.value is cleanup_error
+    assert caught.value.__cause__ is initialization_error
+    client.close.assert_called_once_with()
+    credential.close.assert_called_once_with()
+
+
+@patch("core.code_interpreter.AzureOpenAI")
+def test_api_key_fallback_closes_failed_oidc_credential_before_construction(
+    mock_azure_openai, capsys
+):
+    events = []
+    oidc_error = RuntimeError("private OIDC detail")
+    credential = Mock()
+    credential.close.side_effect = lambda: events.append("credential-close")
+    key_client = _injected_client()
+
+    def construct(**kwargs):
+        if "azure_ad_token_provider" in kwargs:
+            events.append("oidc-client")
+            raise oidc_error
+        events.append("key-client")
+        return key_client
+
+    mock_azure_openai.side_effect = construct
+    identity = MagicMock()
+    identity.DefaultAzureCredential.return_value = credential
+    identity.get_bearer_token_provider.return_value = object()
+
+    with patch.dict(
+        "sys.modules",
+        {"azure": MagicMock(), "azure.identity": identity},
+    ):
+        runner = CodeInterpreterRunner(
+            api_key="not-a-real-key",
+            endpoint="https://example.invalid",
+        )
+
+    assert events == ["oidc-client", "credential-close", "key-client"]
+    assert runner._credential is None
+    assert "private OIDC detail" not in capsys.readouterr().out
+
+    runner.close()
+
+    credential.close.assert_called_once_with()
+    key_client.close.assert_called_once_with()
+
+
+@patch("core.code_interpreter.AzureOpenAI")
+def test_api_key_fallback_credential_close_failure_is_primary(
+    mock_azure_openai,
+):
+    oidc_error = RuntimeError("OIDC construction failed")
+    close_error = OSError("credential close failed")
+    credential = Mock()
+    credential.close.side_effect = close_error
+    mock_azure_openai.side_effect = oidc_error
+    identity = MagicMock()
+    identity.DefaultAzureCredential.return_value = credential
+    identity.get_bearer_token_provider.return_value = object()
+
+    with patch.dict(
+        "sys.modules",
+        {"azure": MagicMock(), "azure.identity": identity},
+    ):
+        with pytest.raises(OSError) as caught:
+            CodeInterpreterRunner(
+                api_key="not-a-real-key",
+                endpoint="https://example.invalid",
+            )
+
+    assert caught.value is close_error
+    assert caught.value.__cause__ is oidc_error
+    credential.close.assert_called_once_with()
+    assert mock_azure_openai.call_count == 1
+
+
+def test_close_resources_rejects_async_close_and_attempts_next_owner():
+    class AsyncResource:
+        async def close(self):
+            return None
+
+    owner = Mock()
+
+    with pytest.raises(RuntimeError, match="async client close"):
+        _close_sync_resources(
+            (("client", AsyncResource()), ("owner", owner))
+        )
+
+    owner.close.assert_called_once_with()
+
+
+def test_close_resources_closes_returned_coroutine_without_warning():
+    async def async_close():
+        return None
+
+    resource = Mock()
+    resource.close.return_value = async_close()
+    owner = Mock()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(RuntimeError, match="async client close"):
+            _close_sync_resources(
+                (("client", resource), ("owner", owner))
+            )
+        gc.collect()
+
+    assert not [
+        warning
+        for warning in caught
+        if "was never awaited" in str(warning.message)
+    ]
+    owner.close.assert_called_once_with()
+
+
+def test_close_resources_retains_first_failure_after_later_attempts():
+    first_error = RuntimeError("first close failed")
+    later_error = OSError("later close failed")
+    first = Mock()
+    middle = Mock()
+    last = Mock()
+    first.close.side_effect = first_error
+    last.close.side_effect = later_error
+
+    with pytest.raises(RuntimeError) as caught:
+        _close_sync_resources(
+            (("first", first), ("middle", middle), ("last", last))
+        )
+
+    assert caught.value is first_error
+    first.close.assert_called_once_with()
+    middle.close.assert_called_once_with()
+    last.close.assert_called_once_with()
+
+
+def test_close_resources_deduplicates_same_resource():
+    resource = Mock()
+
+    _close_sync_resources((("client", resource), ("credential", resource)))
+
+    resource.close.assert_called_once_with()
 
 
 @patch("core.code_interpreter.AzureOpenAI")
