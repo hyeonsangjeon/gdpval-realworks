@@ -4,7 +4,7 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-23
-- Status: Typed Azure AI runtime adapters locally verified; PR pending
+- Status: Typed Azure AI runtime adapters shipped via PR #136
 
 ## Task
 
@@ -63,9 +63,20 @@ task. It must be refreshed before a task is reported complete.
   grading, Hugging Face access/write, workflow execution, or paid operation
   occurred.
 
+## Shipment
+
+- PR #136 squash-merged as
+  `d8e5796d0f4e4e3b0261fc4419eb5801feb88d07` on 2026-07-23 from exact reviewed
+  head `9356e02d09b77f4a5cb010849548899b516360ec`.
+- The implementation changed exactly ten paths. GitHub attached no Actions run,
+  check suite, or check rollup to either SHA because those paths do not match an
+  active workflow trigger.
+- No manual workflow dispatch, credential injection, token acquisition,
+  Azure/model API call, Hugging Face access/write, deployment, or paid action
+  was used to replace the path-filtered checks.
+
 ## Remaining Work
 
-- Review, commit, and merge this adapter slice through a credential-free pull
-  request.
+- No repository implementation work remains for this adapter slice.
 - Wire typed client construction, executor injection, reverse-order cleanup,
   route fingerprints, and workflow route identity in a separate bounded task.
