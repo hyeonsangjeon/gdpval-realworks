@@ -31,7 +31,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   `git diff --check` pass across the seven changed Python files and three
   completion records. These adapters remain `NOT WIRED`, and no credential,
   token, network, Azure/model API, Hugging Face, workflow, or paid action
-  occurred.
+  occurred. Shipped through PR #136
+  (`d8e5796d0f4e4e3b0261fc4419eb5801feb88d07`) from reviewed head
+  `9356e02d09b77f4a5cb010849548899b516360ec`. GitHub created no Actions run,
+  check suite, or check rollup for either SHA because the ten changed paths do
+  not match an active workflow trigger. No workflow was manually dispatched,
+  and no credential, token, Azure/model API, Hugging Face, deployment, or paid
+  action was used to compensate.
 - **Typed Azure AI endpoint foundation** - add exact HTTPS endpoint contracts
   for direct Azure OpenAI v1, Foundry project, and explicitly authorized legacy
   rollback routes. Parsing rejects non-ASCII/control normalization, empty ports,

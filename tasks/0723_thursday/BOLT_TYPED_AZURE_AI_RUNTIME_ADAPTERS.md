@@ -1,7 +1,7 @@
 # BOLT: Typed Azure AI Runtime Adapters
 
 - Date: 2026-07-23
-- Status: `LOCALLY_VERIFIED`
+- Status: `SHIPPED`
 - Base: `origin/main@9943995623e7156f6acdf921e181af4208be6165`
 - Execution boundary: model-free, local-only, offline, no credentials
 
@@ -89,10 +89,21 @@ must also retain the foundation tests and existing reference upload tests.
 | Diff and scope | `git diff --check` clean; seven Python changes plus this BOLT and two completion records; no conflict markers or committed secrets |
 | Remote or paid execution | None; no token, network, Azure/model API, HF, workflow, or paid action |
 
+## Shipment
+
+- PR #136 squash-merged as
+  `d8e5796d0f4e4e3b0261fc4419eb5801feb88d07` on 2026-07-23 from exact reviewed
+  head `9356e02d09b77f4a5cb010849548899b516360ec`.
+- The implementation changed exactly ten paths. GitHub created no Actions run,
+  check suite, or check rollup for either SHA because those paths do not match
+  an active workflow trigger. No workflow was manually dispatched to compensate.
+- The detached clean-checkout evidence above is the merge gate. No credential,
+  token, network, Azure/model API, Hugging Face, deployment, or paid action
+  occurred.
+
 ## Decision
 
-`LOCALLY_VERIFIED`. The explicit adapters exist only as opt-in construction
+`SHIPPED`. The explicit adapters exist only as opt-in construction
 and injection surfaces. They are not connected to Step 2 or any workflow, so
-there is no active runtime behavior change. The repository ignores `tasks/**`
-by default, so this requested BOLT remains an unstaged ignored file for the
-orchestrator to include explicitly; no Git staging operation was performed.
+there is no active runtime behavior change. This normally ignored BOLT was
+explicitly included in the reviewed ten-path implementation commit.
