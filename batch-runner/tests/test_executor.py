@@ -1,5 +1,7 @@
 """Tests for core/executor.py"""
 
+from types import SimpleNamespace
+
 import pytest
 from unittest.mock import Mock, patch
 
@@ -17,6 +19,65 @@ def test_executor_initialization_code_interpreter():
         executor = TaskExecutor(mode="code_interpreter")
         assert executor.mode == "code_interpreter"
         assert executor.runner is not None
+
+
+def test_executor_forwards_injected_code_interpreter_client_exactly():
+    client = object()
+    with patch("core.executor.CodeInterpreterRunner") as runner_cls:
+        runner_cls.return_value = Mock()
+
+        TaskExecutor(
+            mode="code_interpreter",
+            code_interpreter_client=client,
+        )
+
+    assert runner_cls.call_args.kwargs["client"] is client
+
+
+def test_executor_close_is_idempotent_and_delegates_to_runner():
+    with patch("core.executor.CodeInterpreterRunner") as runner_cls:
+        runner = Mock()
+        runner_cls.return_value = runner
+        executor = TaskExecutor(mode="code_interpreter")
+
+    executor.close()
+    executor.close()
+
+    runner.close.assert_called_once_with()
+
+
+def test_executor_close_tolerates_runner_without_close():
+    executor = TaskExecutor(mode="subprocess", llm_client=Mock())
+    executor.runner = SimpleNamespace(run=Mock())
+
+    executor.close()
+    executor.close()
+
+
+def test_executor_execute_after_close_is_deterministic_without_runner_call():
+    executor = TaskExecutor(mode="subprocess", llm_client=Mock())
+    run = Mock()
+    executor.runner = SimpleNamespace(run=run)
+    executor.close()
+
+    result = executor.execute(task_prompt="task", model="deployment")
+
+    assert result == {
+        "success": False,
+        "text": "",
+        "files": [],
+        "error": "Executor error (subprocess): Task executor is closed",
+    }
+    run.assert_not_called()
+
+
+def test_executor_never_closes_subprocess_llm_client_directly():
+    llm_client = Mock()
+    executor = TaskExecutor(mode="subprocess", llm_client=llm_client)
+
+    executor.close()
+
+    llm_client.close.assert_not_called()
 
 
 def test_executor_initialization_subprocess():

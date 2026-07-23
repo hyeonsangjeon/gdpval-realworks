@@ -3,6 +3,14 @@ import time
 
 from openai import AzureOpenAI
 
+from core.azure_ai_clients import (
+    DEFAULT_LEGACY_API_VERSION,
+    DEFAULT_TIMEOUT,
+    AzureAIClientFactory,
+    AzureAIClientLease,
+    AzureAIRouteSettings,
+    AzureAIWorkload,
+)
 from core.config import (
     DEFAULT_ENDPOINT,
     DEFAULT_API_VERSION,
@@ -142,6 +150,107 @@ class AnthropicClient:
 
 
 # ─── Client Factory ──────────────────────────────────────────────────────
+
+class ManagedAzureAIClient:
+    """Synchronous delegating Azure AI client adapter; not thread-safe.
+
+    The adapter closes its lease before an internally-created factory. A
+    caller-injected factory remains caller-owned.
+    """
+
+    def __init__(
+        self,
+        lease: AzureAIClientLease,
+        owned_factory: AzureAIClientFactory | None = None,
+    ):
+        self._lease = lease
+        self._owned_factory = owned_factory
+        self._closed = False
+
+    def _require_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("managed Azure AI client is closed")
+
+    @property
+    def client(self):
+        self._require_open()
+        return self._lease.client
+
+    @property
+    def route(self):
+        self._require_open()
+        return self._lease.route
+
+    @property
+    def runtime_fingerprint(self) -> str:
+        self._require_open()
+        return self._lease.runtime_fingerprint
+
+    def __getattr__(self, name: str):
+        self._require_open()
+        return getattr(self._lease.client, name)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        first_error: BaseException | None = None
+        for resource in (self._lease, self._owned_factory):
+            if resource is None:
+                continue
+            try:
+                resource.close()
+            except BaseException as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
+
+    def __enter__(self) -> "ManagedAzureAIClient":
+        self._require_open()
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self.close()
+
+
+def create_typed_azure_client(
+    workload: AzureAIWorkload | str,
+    deployment: str,
+    *,
+    factory: AzureAIClientFactory | None = None,
+    settings: AzureAIRouteSettings | None = None,
+    timeout: float | None = DEFAULT_TIMEOUT,
+    max_retries: int | None = None,
+    legacy_api_version: str = DEFAULT_LEGACY_API_VERSION,
+) -> ManagedAzureAIClient:
+    """Create an explicitly managed client from the typed Azure AI foundation."""
+    if factory is not None and settings is not None:
+        raise ValueError("factory and settings are mutually exclusive")
+
+    owned_factory = None
+    active_factory = factory
+    if active_factory is None:
+        owned_factory = AzureAIClientFactory(settings=settings)
+        active_factory = owned_factory
+
+    try:
+        lease = active_factory.create(
+            workload,
+            deployment=deployment,
+            timeout=timeout,
+            max_retries=max_retries,
+            legacy_api_version=legacy_api_version,
+        )
+    except BaseException as creation_error:
+        if owned_factory is not None:
+            try:
+                owned_factory.close()
+            except BaseException as close_error:
+                raise close_error from creation_error
+        raise
+
+    return ManagedAzureAIClient(lease, owned_factory=owned_factory)
 
 def create_client(
     endpoint: str | None = None,

@@ -11,7 +11,13 @@ import pytest
 from unittest.mock import patch, MagicMock
 from types import SimpleNamespace
 
-from core.llm_client import create_client, create_provider_client, complete
+from core.llm_client import (
+    ManagedAzureAIClient,
+    complete,
+    create_client,
+    create_provider_client,
+    create_typed_azure_client,
+)
 from core.config import (
     DEFAULT_ENDPOINT,
     DEFAULT_MODEL,
@@ -160,6 +166,215 @@ class TestCreateClient:
             call_kwargs = mock_cls.call_args[1]
             assert "azure_ad_token_provider" in call_kwargs
             assert "api_key" not in call_kwargs
+
+
+# ─── typed Azure client adapter tests ────────────────────────────────────
+
+class _FakeLease:
+    def __init__(self, events=None, close_error=None):
+        self.response_create = MagicMock()
+        self.client = SimpleNamespace(
+            responses=SimpleNamespace(create=self.response_create),
+            marker="raw-client",
+        )
+        self.route = object()
+        self.runtime_fingerprint = "f" * 64
+        self.events = events if events is not None else []
+        self.close_error = close_error
+        self.close_calls = 0
+
+    def close(self):
+        self.close_calls += 1
+        self.events.append("lease")
+        if self.close_error is not None:
+            raise self.close_error
+
+
+class _FakeFactory:
+    def __init__(self, lease=None, events=None, create_error=None, close_error=None):
+        self.lease = lease or _FakeLease()
+        self.events = events if events is not None else []
+        self.create_error = create_error
+        self.close_error = close_error
+        self.create_calls = []
+        self.close_calls = 0
+
+    def create(self, workload, **kwargs):
+        self.create_calls.append((workload, kwargs))
+        if self.create_error is not None:
+            raise self.create_error
+        return self.lease
+
+    def close(self):
+        self.close_calls += 1
+        self.events.append("factory")
+        if self.close_error is not None:
+            raise self.close_error
+
+
+def test_typed_client_owned_factory_delegates_and_closes_in_order():
+    events = []
+    lease = _FakeLease(events=events)
+    factory = _FakeFactory(lease=lease, events=events)
+    settings = object()
+
+    with patch("core.llm_client.AzureAIClientFactory", return_value=factory) as constructor:
+        client = create_typed_azure_client(
+            "inference",
+            "deployment",
+            settings=settings,
+            timeout=30,
+            max_retries=0,
+            legacy_api_version="legacy-version",
+        )
+
+    constructor.assert_called_once_with(settings=settings)
+    assert client.client is lease.client
+    assert client.responses is lease.client.responses
+    assert client.marker == "raw-client"
+    assert client.route is lease.route
+    assert client.runtime_fingerprint == "f" * 64
+    assert factory.create_calls == [(
+        "inference",
+        {
+            "deployment": "deployment",
+            "timeout": 30,
+            "max_retries": 0,
+            "legacy_api_version": "legacy-version",
+        },
+    )]
+
+    client.close()
+    client.close()
+
+    assert events == ["lease", "factory"]
+    assert lease.close_calls == 1
+    assert factory.close_calls == 1
+
+
+def test_typed_client_rejects_all_public_access_after_close():
+    lease = _FakeLease()
+    client = ManagedAzureAIClient(lease)
+    client.close()
+
+    for access in (
+        lambda: client.client,
+        lambda: client.route,
+        lambda: client.runtime_fingerprint,
+        lambda: client.responses.create(),
+        lambda: client.__enter__(),
+    ):
+        with pytest.raises(RuntimeError) as error:
+            access()
+        assert str(error.value) == "managed Azure AI client is closed"
+
+    lease.response_create.assert_not_called()
+
+
+def test_typed_client_shared_factory_remains_caller_owned():
+    lease = _FakeLease()
+    factory = _FakeFactory(lease=lease)
+
+    with create_typed_azure_client(
+        "grader",
+        "deployment",
+        factory=factory,
+    ) as client:
+        assert isinstance(client, ManagedAzureAIClient)
+
+    assert lease.close_calls == 1
+    assert factory.close_calls == 0
+
+
+def test_typed_client_close_attempts_owned_factory_and_raises_first_error():
+    events = []
+    lease = _FakeLease(events=events, close_error=RuntimeError("lease failed"))
+    factory = _FakeFactory(
+        lease=lease,
+        events=events,
+        close_error=RuntimeError("factory failed"),
+    )
+    client = ManagedAzureAIClient(lease, owned_factory=factory)
+
+    with pytest.raises(RuntimeError, match="lease failed"):
+        client.close()
+
+    assert events == ["lease", "factory"]
+
+
+def test_typed_client_owned_factory_closes_on_create_failure():
+    creation_error = RuntimeError("creation failed")
+    factory = _FakeFactory(create_error=creation_error)
+
+    with patch("core.llm_client.AzureAIClientFactory", return_value=factory):
+        with pytest.raises(RuntimeError) as caught:
+            create_typed_azure_client("inference", "deployment")
+
+    assert caught.value is creation_error
+    assert caught.value.__cause__ is None
+    assert factory.close_calls == 1
+
+
+def test_typed_client_owned_factory_close_failure_is_primary():
+    creation_error = RuntimeError("creation failed")
+    close_error = OSError("factory close failed")
+    factory = _FakeFactory(
+        create_error=creation_error,
+        close_error=close_error,
+    )
+
+    with patch("core.llm_client.AzureAIClientFactory", return_value=factory):
+        with pytest.raises(OSError) as caught:
+            create_typed_azure_client("inference", "deployment")
+
+    assert caught.value is close_error
+    assert caught.value.__cause__ is creation_error
+    assert factory.close_calls == 1
+
+
+def test_typed_client_shared_factory_survives_create_failure():
+    creation_error = RuntimeError("creation failed")
+    factory = _FakeFactory(create_error=creation_error)
+
+    with pytest.raises(RuntimeError) as caught:
+        create_typed_azure_client(
+            "inference",
+            "deployment",
+            factory=factory,
+        )
+
+    assert caught.value is creation_error
+    assert factory.close_calls == 0
+
+
+def test_typed_client_rejects_factory_and_settings_ambiguity():
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        create_typed_azure_client(
+            "inference",
+            "deployment",
+            factory=_FakeFactory(),
+            settings=object(),
+        )
+
+
+def test_create_provider_client_azure_return_contract_is_unchanged():
+    sentinel = object()
+    with patch("core.llm_client.create_client", return_value=sentinel) as legacy:
+        result = create_provider_client(
+            "azure",
+            endpoint="https://example.invalid",
+            api_key="ignored",
+            api_version="version",
+            max_retries=0,
+        )
+
+    assert result is sentinel
+    legacy.assert_called_once_with(
+        endpoint="https://example.invalid",
+        api_key="ignored",
+        api_version="version",
+        max_retries=0,
+    )
 
 
 # ─── complete() Tests ────────────────────────────────────────────────────
