@@ -12,6 +12,30 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Opt-in typed Azure AI Step 2 wiring** - activate the shipped typed route
+  foundation only when `AZURE_AI_ROUTE_PROFILE` is nonempty, while preserving
+  the profile-absent legacy constructors, progress shape, result shape, and
+  workflow behavior. Step 2 preflights every Azure main, Self-QA, Code
+  Interpreter, and recognized audio/video preprocessor workload before
+  credential or client construction; binds canonical deployments to exact
+  endpoint-free route records; verifies each instantiated client's runtime
+  route and fingerprint before use; and includes those records in progress and
+  final-result identity. One shared factory, distinct managed clients, and a
+  role-aware owner enforce executor-first, reverse-client, factory-last cleanup
+  across normal return, exceptions, and `SystemExit`. Typed provider failures,
+  cleanup failures, and malformed or duplicate-member QA payloads are reduced
+  to class-only diagnostics without erasing native or local runner details.
+  Native-only conditions remain entirely legacy even when a profile is
+  requested; native main plus Azure preprocessing uses only the typed
+  preprocessor path. External typed resume checkpoints, positive wall-timeout
+  relay, hardened/agentic typed execution, and workflow activation remain
+  deliberately unsupported. Model-free verification passes **216 focused
+  tests** and the complete credential-free backend with **2,211 passed, 9
+  host-dependent skipped, and 44 integration tests deselected in 134.81
+  seconds**. Ruff, `py_compile`, diff checks, and an independent release-gate
+  review with **0 mandatory findings** pass. No credential, token, network,
+  Azure/model API, grading, Hugging Face, workflow, deployment, or paid action
+  occurred.
 - **Typed Azure AI runtime adapters** - add an opt-in managed client wrapper,
   caller-owned Code Interpreter client injection, and deterministic executor
   lifecycle without wiring Step 2 or workflows. Closed adapters reject all

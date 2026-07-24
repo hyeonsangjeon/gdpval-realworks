@@ -63,6 +63,7 @@ def _analyze_batch(
     audio_paths: List[str],
     task_instruction: Optional[str] = None,
     max_completion_tokens: int = 4096,
+    redact_provider_errors: bool = False,
 ) -> str:
     """Send one or more audio files in a single API call and return analysis.
 
@@ -127,7 +128,13 @@ def _analyze_batch(
         return ""
 
     except Exception as exc:
-        print(f"      ⚠️  Audio preprocessor API error (non-fatal): {exc}")
+        if redact_provider_errors:
+            print(
+                "      ⚠️  Audio preprocessor API error (non-fatal) "
+                f"({type(exc).__name__})"
+            )
+        else:
+            print(f"      ⚠️  Audio preprocessor API error (non-fatal): {exc}")
         return ""
 
 
@@ -138,6 +145,7 @@ def analyze_audio_files(
     audio_paths: List[str],
     task_instruction: Optional[str] = None,
     max_completion_tokens: int = 4096,
+    redact_provider_errors: bool = False,
 ) -> str:
     """Send audio files + task instruction to gpt-audio-1.5 for analysis.
 
@@ -187,6 +195,7 @@ def analyze_audio_files(
         return _analyze_batch(
             client, model_deployment, system_prompt,
             paths, task_instruction, max_completion_tokens,
+            redact_provider_errors,
         )
 
     # ── Too large → per-file individual calls, merge results ──
@@ -199,6 +208,7 @@ def analyze_audio_files(
         result = _analyze_batch(
             client, model_deployment, system_prompt,
             [audio_path], task_instruction, max_completion_tokens,
+            redact_provider_errors,
         )
         if result:
             inner = (

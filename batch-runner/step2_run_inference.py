@@ -23,6 +23,7 @@ Usage:
 """
 
 import argparse
+import copy
 import gc
 import hashlib
 import json
@@ -68,7 +69,12 @@ from core.inference_manifest import (
     reset_task_deliverable_dir,
     validate_local_deliverables,
 )
-from core.llm_client import create_provider_client, complete
+from core.llm_client import (
+    ManagedAzureAIClient,
+    complete,
+    create_provider_client,
+    create_typed_azure_client,
+)
 from core.needs_files import NeedsFilesManifest
 from core.reference_integrity import (
     ReferenceIntegrityError,
@@ -79,6 +85,15 @@ from core.prepared_fingerprint import validate_prepared_fingerprint
 from core.result_fingerprint import inference_result_fingerprint
 from core.publication_generation import validate_publication_generation
 from core.audio_analyzer import analyze_audio_files, filter_audio_files
+from core.azure_ai_clients import (
+    AzureAIClientFactory,
+    AzureAIRouteSettings,
+    AzureAIWorkload,
+    EndpointKind,
+    RouteProfile,
+    inference_route_workloads,
+    preflight_routes,
+)
 from core.video_analyzer import (
     analyze_video_files,
     filter_video_files,
@@ -92,6 +107,372 @@ RETRIABLE_STATUSES = {"error", "qa_failed", "pending"}
 
 # Exit code convention
 EXIT_CHECKPOINT = 42  # checkpoint saved, relay retrigger needed
+
+_AZURE_AI_ROUTE_KEYS = frozenset({
+    "endpoint_kind",
+    "profile",
+    "runtime_fingerprint",
+    "workload",
+})
+
+
+def _raise_redacted_azure_ai_error(error_type: str):
+    raise RuntimeError(
+        f"Typed Azure AI provider error ({error_type})"
+    ) from None
+
+
+class _RedactedAzureAICallProxy:
+    """Delegate one Azure SDK namespace while replacing provider exceptions."""
+
+    def __init__(self, target) -> None:
+        self._target = target
+
+    def _get_raw_attribute(self, name: str):
+        try:
+            value = getattr(self._target, name)
+        except Exception as exc:
+            error_type = type(exc).__name__
+        else:
+            return value
+        _raise_redacted_azure_ai_error(error_type)
+
+    def __getattr__(self, name: str):
+        return _RedactedAzureAICallProxy(self._get_raw_attribute(name))
+
+    def __call__(self, *args, **kwargs):
+        try:
+            result = self._target(*args, **kwargs)
+        except Exception as exc:
+            error_type = type(exc).__name__
+        else:
+            return result
+        _raise_redacted_azure_ai_error(error_type)
+
+
+class _RedactedAzureAIClient(_RedactedAzureAICallProxy):
+    """Non-owning provider-error boundary for a verified managed client."""
+
+    @property
+    def route(self):
+        return self._get_raw_attribute("route")
+
+    @property
+    def runtime_fingerprint(self) -> str:
+        return self._get_raw_attribute("runtime_fingerprint")
+
+
+class _Step2RuntimeResources:
+    """Own typed Step 2 resources without touching legacy raw clients."""
+
+    def __init__(self) -> None:
+        self.executor: Optional[TaskExecutor] = None
+        self.managed_clients: list[ManagedAzureAIClient] = []
+        self.factory: Optional[AzureAIClientFactory] = None
+        self._closed = False
+
+    def own_executor(self, executor: TaskExecutor) -> None:
+        self.executor = executor
+
+    def own_client(self, client: ManagedAzureAIClient) -> None:
+        self.managed_clients.append(client)
+
+    def own_factory(self, factory: AzureAIClientFactory) -> None:
+        if self.factory is not None and self.factory is not factory:
+            raise RuntimeError("Step 2 may own only one Azure AI client factory")
+        self.factory = factory
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        first_error: Optional[BaseException] = None
+        first_error_role: Optional[str] = None
+        seen: set[int] = set()
+        resources = [
+            ("executor", self.executor),
+            *(
+                ("managed client", client)
+                for client in reversed(self.managed_clients)
+            ),
+            ("factory", self.factory),
+        ]
+        for role, resource in resources:
+            if resource is None or id(resource) in seen:
+                continue
+            seen.add(id(resource))
+            executor_error = None
+            typed_error_type = None
+            try:
+                close = getattr(resource, "close", None)
+                if callable(close):
+                    close()
+            except BaseException as exc:
+                if role == "executor":
+                    executor_error = exc
+                else:
+                    typed_error_type = type(exc).__name__
+            if executor_error is not None:
+                close_error = executor_error
+            elif typed_error_type is not None:
+                close_error = RuntimeError(
+                    f"typed Azure AI {role} cleanup failed "
+                    f"({typed_error_type})"
+                )
+            else:
+                continue
+            if first_error is None:
+                first_error = close_error
+                first_error_role = role
+        if first_error is not None:
+            if first_error_role != "executor":
+                raise first_error from None
+            raise first_error
+
+    def __enter__(self) -> "_Step2RuntimeResources":
+        if self._closed:
+            raise RuntimeError("Step 2 runtime resources are closed")
+        return self
+
+    def __exit__(self, _exc_type, exc, _traceback) -> None:
+        try:
+            self.close()
+        except BaseException as cleanup_error:
+            if exc is not None:
+                raise cleanup_error from exc
+            raise
+
+
+def _validate_azure_ai_routes(
+    routes: Optional[list[dict]],
+    *,
+    typed_enabled: bool,
+) -> Optional[list[dict]]:
+    if not typed_enabled:
+        if routes is not None:
+            raise ValueError("legacy Step 2 must not contain Azure AI routes")
+        return None
+    if not isinstance(routes, list) or not routes:
+        raise ValueError("typed Step 2 requires nonempty Azure AI routes")
+
+    validated = []
+    seen: set[tuple[str, str, str, str]] = set()
+    profiles: set[str] = set()
+    for record in routes:
+        if not isinstance(record, dict) or set(record) != _AZURE_AI_ROUTE_KEYS:
+            raise ValueError("Azure AI route record fields are invalid")
+        if any(not isinstance(record[key], str) for key in _AZURE_AI_ROUTE_KEYS):
+            raise ValueError("Azure AI route record values must be strings")
+        try:
+            endpoint_kind = EndpointKind(record["endpoint_kind"])
+            profile = RouteProfile(record["profile"])
+            workload = AzureAIWorkload(record["workload"])
+        except ValueError:
+            raise ValueError("Azure AI route record enum value is unsupported") from None
+        expected_kind = {
+            RouteProfile.DIRECT_V1: EndpointKind.DIRECT_V1,
+            RouteProfile.LEGACY_ROLLBACK: EndpointKind.LEGACY_DATED,
+            RouteProfile.PROJECT_CI: (
+                EndpointKind.PROJECT
+                if workload is AzureAIWorkload.CODE_INTERPRETER
+                else EndpointKind.DIRECT_V1
+            ),
+        }[profile]
+        if endpoint_kind is not expected_kind:
+            raise ValueError(
+                "Azure AI route profile and endpoint kind are incompatible"
+            )
+        if re.fullmatch(r"[0-9a-f]{64}", record["runtime_fingerprint"]) is None:
+            raise ValueError("Azure AI route runtime fingerprint is invalid")
+        identity = tuple(record[key] for key in sorted(_AZURE_AI_ROUTE_KEYS))
+        if identity in seen:
+            raise ValueError("Azure AI route records must not contain duplicates")
+        seen.add(identity)
+        profiles.add(record["profile"])
+        validated.append(dict(record))
+    if len(profiles) != 1:
+        raise ValueError("Azure AI route records must use one profile")
+    return validated
+
+
+def _build_azure_ai_route_plan(
+    workloads: list[tuple[AzureAIWorkload | str, str]],
+    routes: list[dict],
+) -> list[tuple[AzureAIWorkload, str, dict]]:
+    """Bind ordered, deduplicated workload requests to preflight records."""
+    validated_routes = _validate_azure_ai_routes(routes, typed_enabled=True)
+    requested: list[tuple[AzureAIWorkload, str]] = []
+    seen: set[tuple[AzureAIWorkload, str]] = set()
+    for raw_workload, raw_deployment in workloads:
+        try:
+            workload = AzureAIWorkload(raw_workload)
+        except ValueError:
+            raise ValueError("Azure AI route plan workload is unsupported") from None
+        deployment = (
+            raw_deployment.strip()
+            if isinstance(raw_deployment, str)
+            else ""
+        )
+        if not deployment:
+            raise ValueError("Azure AI route plan deployment is invalid")
+        identity = (workload, deployment)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        requested.append(identity)
+
+    if validated_routes is None or len(requested) != len(validated_routes):
+        raise ValueError("Azure AI route plan length mismatch")
+
+    plan = []
+    for (workload, deployment), route in zip(requested, validated_routes):
+        if route["workload"] != workload.value:
+            raise ValueError("Azure AI route plan order or workload mismatch")
+        plan.append((workload, deployment, route))
+    return plan
+
+
+def _canonical_planned_deployment(
+    workload: AzureAIWorkload | str,
+    raw_deployment: str,
+    route_plan: list[tuple[AzureAIWorkload, str, dict]],
+) -> str:
+    """Return the unique canonical deployment bound to one planned workload."""
+    try:
+        requested_workload = AzureAIWorkload(workload)
+    except ValueError:
+        raise ValueError("typed Azure AI canonical workload is unsupported") from None
+    lookup_deployment = (
+        raw_deployment.strip() if isinstance(raw_deployment, str) else ""
+    )
+    if not lookup_deployment:
+        raise ValueError("typed Azure AI canonical deployment is invalid")
+    matches = [
+        planned_deployment
+        for planned_workload, planned_deployment, _ in route_plan
+        if (
+            planned_workload is requested_workload
+            and planned_deployment == lookup_deployment
+        )
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            "typed Azure AI canonical deployment is absent or ambiguous"
+        )
+    return matches[0]
+
+
+def _normalize_typed_azure_condition(
+    condition: dict,
+    route_plan: list[tuple[AzureAIWorkload, str, dict]],
+) -> dict:
+    """Copy one condition and bind typed Azure runtime model fields to its plan."""
+    normalized = copy.deepcopy(condition)
+    model_cfg = normalized.get("model", {})
+    azure_main = model_cfg.get("provider", "azure") in {
+        "azure",
+        "azure_openai",
+    }
+    if azure_main:
+        main_deployment = _canonical_planned_deployment(
+            AzureAIWorkload.INFERENCE,
+            model_cfg.get("deployment", "gpt-4"),
+            route_plan,
+        )
+        model_cfg["deployment"] = main_deployment
+        qa_cfg = normalized.get("qa")
+        if isinstance(qa_cfg, dict) and qa_cfg.get("enabled") is True:
+            raw_qa_deployment = qa_cfg.get("model")
+            qa_cfg["model"] = _canonical_planned_deployment(
+                AzureAIWorkload.INFERENCE,
+                (
+                    main_deployment
+                    if raw_qa_deployment in (None, "")
+                    else raw_qa_deployment
+                ),
+                route_plan,
+            )
+
+    default_deployments = {
+        "audio_analyzer": "gpt-audio-1.5",
+        "video_analyzer": "gpt-5.2",
+    }
+    for preprocessor in normalized.get("preprocessors") or []:
+        preprocessor_type = preprocessor.get("type")
+        if preprocessor_type not in default_deployments:
+            continue
+        preprocessor_model = preprocessor.get("model")
+        if preprocessor_model is None:
+            preprocessor_model = {}
+            preprocessor["model"] = preprocessor_model
+        if preprocessor_model.get("provider", "azure") not in {
+            "azure",
+            "azure_openai",
+        }:
+            continue
+        preprocessor_model["deployment"] = _canonical_planned_deployment(
+            AzureAIWorkload.INFERENCE,
+            preprocessor_model.get(
+                "deployment",
+                default_deployments[preprocessor_type],
+            ),
+            route_plan,
+        )
+    return normalized
+
+
+def _verify_managed_azure_ai_client(
+    client: ManagedAzureAIClient,
+    workload: AzureAIWorkload | str,
+    deployment: str,
+    route_plan: list[tuple[AzureAIWorkload, str, dict]],
+) -> dict:
+    """Prove one managed client exactly matches its planned endpoint-free route."""
+    try:
+        requested_workload = AzureAIWorkload(workload)
+    except ValueError:
+        raise ValueError("typed Azure AI requested workload is unsupported") from None
+    requested_deployment = (
+        deployment.strip() if isinstance(deployment, str) else ""
+    )
+    if not requested_deployment:
+        raise ValueError("typed Azure AI requested deployment is invalid")
+
+    matches = [
+        record
+        for planned_workload, planned_deployment, record in route_plan
+        if (
+            planned_workload is requested_workload
+            and planned_deployment == requested_deployment
+        )
+    ]
+    if len(matches) != 1:
+        raise ValueError("typed Azure AI runtime route is absent from plan")
+
+    try:
+        route = client.route
+        if (
+            not isinstance(route.profile, RouteProfile)
+            or not isinstance(route.workload, AzureAIWorkload)
+            or not isinstance(route.endpoint.kind, EndpointKind)
+        ):
+            raise TypeError
+        actual = {
+            "endpoint_kind": route.endpoint.kind.value,
+            "profile": route.profile.value,
+            "runtime_fingerprint": client.runtime_fingerprint,
+            "workload": route.workload.value,
+        }
+        validated_actual = _validate_azure_ai_routes(
+            [actual], typed_enabled=True
+        )
+    except Exception:
+        raise ValueError(
+            "typed Azure AI runtime route provenance is invalid"
+        ) from None
+    if validated_actual is None or validated_actual[0] != matches[0]:
+        raise ValueError("typed Azure AI runtime route mismatch")
+    return validated_actual[0]
 
 
 def _condition_upload_root(condition_key: str) -> Path:
@@ -145,6 +526,10 @@ def _run_preprocessors(
     abs_ref_files: list[str] | None,
     task_instruction: str,
     observations: Optional[list[dict]] = None,
+    azure_ai_factory: Optional[AzureAIClientFactory] = None,
+    azure_ai_route_plan: Optional[
+        list[tuple[AzureAIWorkload, str, dict]]
+    ] = None,
 ) -> str:
     """Run preprocessors defined in condition YAML (e.g. audio_analyzer).
 
@@ -199,15 +584,55 @@ def _run_preprocessors(
             observation["provider"] = pp_provider
             observation["model"] = pp_deployment
 
+            managed_pp_client = None
+            typed_azure_preprocessor = (
+                azure_ai_factory is not None
+                and pp_provider in {"azure", "azure_openai"}
+            )
             try:
-                pp_client = create_provider_client(pp_provider)
-                analysis = analyze_audio_files(
-                    client=pp_client,
-                    model_deployment=pp_deployment,
-                    system_prompt=pp_system,
-                    audio_paths=audio_files,
-                    task_instruction=task_instruction if include_task else None,
-                )
+                if typed_azure_preprocessor:
+                    pp_deployment = _canonical_planned_deployment(
+                        AzureAIWorkload.INFERENCE,
+                        pp_deployment,
+                        azure_ai_route_plan or [],
+                    )
+                    managed_pp_client = create_typed_azure_client(
+                        AzureAIWorkload.INFERENCE,
+                        pp_deployment,
+                        factory=azure_ai_factory,
+                    )
+                    try:
+                        verified_route = _verify_managed_azure_ai_client(
+                            managed_pp_client,
+                            AzureAIWorkload.INFERENCE,
+                            pp_deployment,
+                            azure_ai_route_plan or [],
+                        )
+                        pp_client = managed_pp_client
+                        observation["runtime_fingerprint"] = verified_route[
+                            "runtime_fingerprint"
+                        ]
+                        analysis = analyze_audio_files(
+                            client=pp_client,
+                            model_deployment=pp_deployment,
+                            system_prompt=pp_system,
+                            audio_paths=audio_files,
+                            task_instruction=(
+                                task_instruction if include_task else None
+                            ),
+                            redact_provider_errors=True,
+                        )
+                    finally:
+                        managed_pp_client.close()
+                else:
+                    pp_client = create_provider_client(pp_provider)
+                    analysis = analyze_audio_files(
+                        client=pp_client,
+                        model_deployment=pp_deployment,
+                        system_prompt=pp_system,
+                        audio_paths=audio_files,
+                        task_instruction=task_instruction if include_task else None,
+                    )
                 if analysis:
                     results.append(analysis)
                     observation.update({
@@ -257,19 +682,63 @@ def _run_preprocessors(
             frame_max_width = pp_cfg.get("frame_max_width", 768)
             frame_detail = pp_cfg.get("frame_detail", "auto")
 
+            managed_pp_client = None
+            typed_azure_preprocessor = (
+                azure_ai_factory is not None
+                and pp_provider in {"azure", "azure_openai"}
+            )
             try:
-                pp_client = create_provider_client(pp_provider)
-                analysis = analyze_video_files(
-                    client=pp_client,
-                    model_deployment=pp_deployment,
-                    system_prompt=pp_system,
-                    video_paths=video_files,
-                    task_instruction=task_instruction if include_task else None,
-                    frames_per_video=frames_per_video,
-                    max_total_frames=max_total_frames,
-                    frame_max_width=frame_max_width,
-                    frame_detail=frame_detail,
-                )
+                if typed_azure_preprocessor:
+                    pp_deployment = _canonical_planned_deployment(
+                        AzureAIWorkload.INFERENCE,
+                        pp_deployment,
+                        azure_ai_route_plan or [],
+                    )
+                    managed_pp_client = create_typed_azure_client(
+                        AzureAIWorkload.INFERENCE,
+                        pp_deployment,
+                        factory=azure_ai_factory,
+                    )
+                    try:
+                        verified_route = _verify_managed_azure_ai_client(
+                            managed_pp_client,
+                            AzureAIWorkload.INFERENCE,
+                            pp_deployment,
+                            azure_ai_route_plan or [],
+                        )
+                        pp_client = managed_pp_client
+                        observation["runtime_fingerprint"] = verified_route[
+                            "runtime_fingerprint"
+                        ]
+                        analysis = analyze_video_files(
+                            client=pp_client,
+                            model_deployment=pp_deployment,
+                            system_prompt=pp_system,
+                            video_paths=video_files,
+                            task_instruction=(
+                                task_instruction if include_task else None
+                            ),
+                            frames_per_video=frames_per_video,
+                            max_total_frames=max_total_frames,
+                            frame_max_width=frame_max_width,
+                            frame_detail=frame_detail,
+                            redact_provider_errors=True,
+                        )
+                    finally:
+                        managed_pp_client.close()
+                else:
+                    pp_client = create_provider_client(pp_provider)
+                    analysis = analyze_video_files(
+                        client=pp_client,
+                        model_deployment=pp_deployment,
+                        system_prompt=pp_system,
+                        video_paths=video_files,
+                        task_instruction=task_instruction if include_task else None,
+                        frames_per_video=frames_per_video,
+                        max_total_frames=max_total_frames,
+                        frame_max_width=frame_max_width,
+                        frame_detail=frame_detail,
+                    )
                 if analysis:
                     results.append(analysis)
                     observation.update({
@@ -902,6 +1371,35 @@ def _extract_essential_fields(text: str) -> dict | None:
     return None
 
 
+def _load_typed_qa_json(text: str):
+    def reject_duplicate_members(pairs):
+        parsed = {}
+        for key, value in pairs:
+            if key in parsed:
+                raise ValueError("Typed QA JSON members must be unique")
+            parsed[key] = value
+        return parsed
+
+    return json.loads(text, object_pairs_hook=reject_duplicate_members)
+
+
+def _validate_typed_qa_result(result: object) -> dict:
+    expected_keys = {"passed", "score", "issues", "suggestion"}
+    if (
+        not isinstance(result, dict)
+        or set(result) != expected_keys
+        or type(result["passed"]) is not bool
+        or type(result["score"]) is not int
+        or not 1 <= result["score"] <= 10
+        or not isinstance(result["issues"], list)
+        or len(result["issues"]) > 3
+        or any(not isinstance(issue, str) for issue in result["issues"])
+        or not isinstance(result["suggestion"], str)
+    ):
+        raise ValueError("Typed QA response schema is invalid")
+    return result
+
+
 # ── Self-QA: LLM inspects its own output ────────────────────────────────────
 
 
@@ -913,6 +1411,7 @@ def _run_self_qa(
     client,
     qa_max_tokens: int = DEFAULT_TOKENS["qa_check"],
     upload_root: Optional[Path] = None,
+    redact_provider_errors: bool = False,
 ) -> dict:
     """
     LLM acts as QA inspector and evaluates the output.
@@ -1027,8 +1526,22 @@ def _run_self_qa(
             }
 
         try:
-            result = _extract_json_from_response(raw)
+            result = (
+                _load_typed_qa_json(raw)
+                if redact_provider_errors
+                else _extract_json_from_response(raw)
+            )
+            if redact_provider_errors:
+                result = _validate_typed_qa_result(result)
         except (json.JSONDecodeError, ValueError) as parse_err:
+            if redact_provider_errors:
+                error = f"QA JSON parse failed ({type(parse_err).__name__})"
+                print(f"  ⚠️  {error}")
+                return {
+                    "passed": None, "score": None,
+                    "issues": [error],
+                    "suggestion": "", "undetermined": True,
+                }
             print(f"  ⚠️  QA JSON parse failed: {parse_err}")
             print(f"     Raw response ({len(raw)} chars): {repr(raw[:300])}")
             return {
@@ -1051,11 +1564,16 @@ def _run_self_qa(
             "undetermined": False,
         }
 
-    except Exception as e:
-        print(f"  ⚠️  QA API call failed: {e}")
+    except Exception as exc:
+        if redact_provider_errors:
+            error = f"QA API error ({type(exc).__name__})"
+            print(f"  ⚠️  QA API call failed ({type(exc).__name__})")
+        else:
+            error = f"QA API error: {str(exc)}"
+            print(f"  ⚠️  QA API call failed: {exc}")
         return {
             "passed": None, "score": None,
-            "issues": [f"QA API error: {str(e)}"],
+            "issues": [error],
             "suggestion": "", "undetermined": True,
         }
 
@@ -1334,6 +1852,10 @@ def _execute_single_task(
     strict_inputs: bool = False,
     experiment_id: Optional[str] = None,
     upload_root: Optional[Path] = None,
+    azure_ai_factory: Optional[AzureAIClientFactory] = None,
+    azure_ai_route_plan: Optional[
+        list[tuple[AzureAIWorkload, str, dict]]
+    ] = None,
 ) -> dict:
     """Execute a single task and return result dict."""
     task_id = task_info["task_id"]
@@ -1434,6 +1956,8 @@ def _execute_single_task(
             abs_ref_files,
             instruction,
             observations=preprocessor_observations,
+            azure_ai_factory=azure_ai_factory,
+            azure_ai_route_plan=azure_ai_route_plan,
         )
         perception_text = None
         if preprocessor_prefix:
@@ -1596,11 +2120,11 @@ def _execute_single_task(
             "latency_ms": None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-    except Exception as e:
+    except Exception as exc:
         return {
             "task_id": task_id,
             "status": "error",
-            "error": str(e),
+            "error": str(exc),
             "content": None,
             "deliverable_text": None,
             "deliverable_files": [],
@@ -1652,6 +2176,7 @@ def _save_progress(
     ordered_task_ids: List[str],
     prepared_fingerprint: str = "",
     resume_round: int = 0,
+    azure_ai_routes: Optional[list[dict]] = None,
 ) -> None:
     """Atomic incremental save."""
     _validate_result_task_set(
@@ -1660,6 +2185,10 @@ def _save_progress(
     success = sum(1 for r in results if r.get("status") == "success")
     error = sum(1 for r in results if r.get("status") == "error")
 
+    validated_routes = _validate_azure_ai_routes(
+        azure_ai_routes,
+        typed_enabled=azure_ai_routes is not None,
+    )
     data = {
         "schema_version": "step2-progress-v2",
         "experiment_id": experiment_id,
@@ -1680,6 +2209,8 @@ def _save_progress(
         },
         "results": results,
     }
+    if validated_routes is not None:
+        data["azure_ai_routes"] = validated_routes
 
     tmp_path = path.with_suffix(".json.tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
@@ -1705,6 +2236,7 @@ def _load_and_validate_progress(
     ordered_task_ids: List[str],
     prepared_fingerprint: str = "",
     allow_missing_results: bool = True,
+    azure_ai_routes: Optional[list[dict]] = None,
 ) -> dict:
     with path.open("r", encoding="utf-8") as stream:
         progress = json.load(stream)
@@ -1723,6 +2255,22 @@ def _load_and_validate_progress(
     }
     if any(progress.get(key) != value for key, value in expected_identity.items()):
         raise ValueError("progress checkpoint identity mismatch")
+    expected_routes = _validate_azure_ai_routes(
+        azure_ai_routes,
+        typed_enabled=azure_ai_routes is not None,
+    )
+    if expected_routes is None:
+        if "azure_ai_routes" in progress:
+            raise ValueError("legacy progress checkpoint contains Azure AI routes")
+    else:
+        if "azure_ai_routes" not in progress:
+            raise ValueError("typed progress checkpoint is missing Azure AI routes")
+        actual_routes = _validate_azure_ai_routes(
+            progress["azure_ai_routes"],
+            typed_enabled=True,
+        )
+        if actual_routes != expected_routes:
+            raise ValueError("progress checkpoint Azure AI route mismatch")
     results = progress.get("results")
     if not isinstance(results, list):
         raise ValueError("progress checkpoint results must be a list")
@@ -1880,6 +2428,30 @@ def run_inference(
     verbose: bool = False,
     wall_timeout: int = None,
 ):
+    with _Step2RuntimeResources() as runtime_resources:
+        return _run_inference_impl(
+            execution_mode=execution_mode,
+            max_retries=max_retries,
+            resume=resume,
+            condition_key=condition_key,
+            resume_max_rounds=resume_max_rounds,
+            verbose=verbose,
+            wall_timeout=wall_timeout,
+            runtime_resources=runtime_resources,
+        )
+
+
+def _run_inference_impl(
+    execution_mode: str = None,
+    max_retries: int = None,
+    resume: bool = True,
+    condition_key: str = "condition_a",
+    resume_max_rounds: int = None,
+    verbose: bool = False,
+    wall_timeout: int = None,
+    *,
+    runtime_resources: _Step2RuntimeResources,
+):
     """Run inference for all prepared tasks with multi-round resume.
 
     Args:
@@ -1890,6 +2462,16 @@ def run_inference(
     Resume rounds automatically re-execute failed tasks from progress.json,
     replacing the error objects in-place on success.
     """
+
+    typed_azure_requested = bool(
+        os.getenv("AZURE_AI_ROUTE_PROFILE", "").strip()
+    )
+    typed_azure_active = False
+    azure_ai_settings = None
+    azure_ai_routes = None
+    azure_ai_route_plan: list[
+        tuple[AzureAIWorkload, str, dict]
+    ] = []
 
     # 1. Load prepared tasks
     prepared_path = WORKSPACE_DIR / "step1_tasks_prepared.json"
@@ -1904,6 +2486,17 @@ def run_inference(
     condition = prepared[condition_key]
     if condition is None:
         print(f"❌ {condition_key} not found in config")
+        sys.exit(1)
+
+    provider = condition.get("model", {}).get("provider", "azure")
+    if (
+        not isinstance(provider, str)
+        or provider not in {"azure", "azure_openai", "openai", "anthropic"}
+    ):
+        print(
+            f"❌ Unsupported provider: '{provider}'. Use: "
+            "azure, azure_openai, openai, anthropic"
+        )
         sys.exit(1)
 
     experiment_id = prepared["experiment_id"]
@@ -1996,6 +2589,23 @@ def run_inference(
             and sandbox_options.get("hardened_substrate") is True
         )
     )
+    progress_path, output_path = _condition_workspace_paths(condition_key)
+    legacy_progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
+    if typed_azure_requested and hardened_requested:
+        print("❌ typed Azure AI routing does not support hardened/agentic modes")
+        sys.exit(1)
+    if typed_azure_requested and wall_timeout and wall_timeout > 0:
+        print("❌ typed Azure AI routing does not support wall-timeout relay runs")
+        sys.exit(1)
+    if typed_azure_requested and resume and (
+        progress_path.exists()
+        or (
+            condition_key == "condition_a"
+            and legacy_progress_path.exists()
+        )
+    ):
+        print("❌ typed Azure AI routing does not support external resume checkpoints")
+        sys.exit(1)
     if experiment_id in AGENTIC_EXPERIMENT_IDS:
         expected_mode = (
             "sandbox" if experiment_id == AGENTIC_BASELINE_ID
@@ -2057,6 +2667,47 @@ def run_inference(
     metrics_cfg_raw = execution_cfg.get("metrics")
     metrics_cfg = metrics_cfg_raw if isinstance(metrics_cfg_raw, dict) else {}
     metrics_enabled = metrics_cfg.get("enabled") is True
+
+    typed_preflight_error_type = None
+    if typed_azure_requested:
+        try:
+            route_workloads = inference_route_workloads(
+                condition,
+                execution_mode,
+            )
+            if route_workloads:
+                azure_ai_settings = AzureAIRouteSettings.from_env()
+                preflight_records = preflight_routes(
+                    route_workloads,
+                    settings=azure_ai_settings,
+                )
+                azure_ai_route_plan = _build_azure_ai_route_plan(
+                    route_workloads,
+                    preflight_records,
+                )
+                condition = _normalize_typed_azure_condition(
+                    condition,
+                    azure_ai_route_plan,
+                )
+                model = condition["model"]["deployment"]
+                azure_ai_routes = [
+                    dict(record)
+                    for _, _, record in azure_ai_route_plan
+                ]
+                typed_azure_active = True
+        except Exception as exc:
+            typed_preflight_error_type = type(exc).__name__
+    if typed_preflight_error_type is not None:
+        print(
+            "❌ typed Azure AI route preflight failed "
+            f"({typed_preflight_error_type})"
+        )
+        sys.exit(1)
+
+    typed_azure_main = (
+        typed_azure_active
+        and provider in {"azure", "azure_openai"}
+    )
 
     print(f"\n{'='*60}")
     print("🚀 Step 2: Run Inference")
@@ -2129,9 +2780,9 @@ def run_inference(
     else:
         run_identity = _resolve_run_identity(experiment_id)
 
-    progress_path, output_path = _condition_workspace_paths(condition_key)
-    legacy_progress_path = WORKSPACE_DIR / "step2_inference_progress.json"
     if (
+        not typed_azure_active
+        and
         condition_key == "condition_a"
         and not progress_path.exists()
         and legacy_progress_path.exists()
@@ -2149,6 +2800,7 @@ def run_inference(
                 execution_mode=execution_mode,
                 ordered_task_ids=ordered_task_ids,
                 prepared_fingerprint=prepared_fingerprint,
+                azure_ai_routes=azure_ai_routes,
             )
         except Exception as exc:
             print(f"❌ progress checkpoint rejected: {exc}")
@@ -2179,7 +2831,6 @@ def run_inference(
 
     # 2. Create LLM client (provider-aware). Agentic mode defers construction
     # until its compute preflight and signed approval gate pass.
-    provider = condition.get("model", {}).get("provider", "azure")
     validation_provider = "azure" if provider == "azure_openai" else provider
     if (
         (
@@ -2202,6 +2853,21 @@ def run_inference(
         execution_mode == "sandbox"
         and sandbox_options.get("hardened_substrate") is True
     )
+
+    azure_ai_factory = None
+    typed_factory_error_type = None
+    if typed_azure_active:
+        try:
+            azure_ai_factory = AzureAIClientFactory(settings=azure_ai_settings)
+            runtime_resources.own_factory(azure_ai_factory)
+        except Exception as exc:
+            typed_factory_error_type = type(exc).__name__
+    if typed_factory_error_type is not None:
+        print(
+            "❌ typed Azure AI client factory init failed "
+            f"({typed_factory_error_type})"
+        )
+        sys.exit(1)
 
     if execution_mode == "agentic_sandbox" or hardened_baseline:
         if condition.get("qa", {}).get("enabled"):
@@ -2245,12 +2911,38 @@ def run_inference(
         print("   Client:             deferred until signed hardened preflight")
 
     elif provider in ("azure", "azure_openai"):
-        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_ENDPOINT")
-        if not endpoint:
-            print("❌ Missing AZURE_OPENAI_ENDPOINT. Set AZURE_OPENAI_ENDPOINT env var.")
-            sys.exit(1)
-        client = create_provider_client("azure", endpoint=endpoint)
-        print(f"   Client:             Azure @ {endpoint}")
+        if typed_azure_active:
+            typed_main_error_type = None
+            try:
+                managed_main_client = create_typed_azure_client(
+                    AzureAIWorkload.INFERENCE,
+                    model,
+                    factory=azure_ai_factory,
+                )
+                runtime_resources.own_client(managed_main_client)
+                _verify_managed_azure_ai_client(
+                    managed_main_client,
+                    AzureAIWorkload.INFERENCE,
+                    model,
+                    azure_ai_route_plan,
+                )
+                client = _RedactedAzureAIClient(managed_main_client)
+            except Exception as exc:
+                typed_main_error_type = type(exc).__name__
+            if typed_main_error_type is not None:
+                print(
+                    "❌ typed Azure AI inference client init failed "
+                    f"({typed_main_error_type})"
+                )
+                sys.exit(1)
+            print("   Client:             typed Azure AI inference route")
+        else:
+            endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_ENDPOINT")
+            if not endpoint:
+                print("❌ Missing AZURE_OPENAI_ENDPOINT. Set AZURE_OPENAI_ENDPOINT env var.")
+                sys.exit(1)
+            client = create_provider_client("azure", endpoint=endpoint)
+            print(f"   Client:             Azure @ {endpoint}")
 
     elif provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
@@ -2269,8 +2961,67 @@ def run_inference(
         print("   Client:             Anthropic")
 
     else:
-        print(f"❌ Unsupported provider: '{provider}'. Use: azure, openai, anthropic")
-        sys.exit(1)
+        raise AssertionError("provider validation drift")
+
+    qa_client = client
+    if (
+        typed_azure_active
+        and provider in {"azure", "azure_openai"}
+        and qa_enabled
+    ):
+        raw_qa_deployment = qa_cfg.get("model")
+        qa_deployment = (
+            model
+            if raw_qa_deployment in (None, "")
+            else raw_qa_deployment.strip()
+        )
+        typed_qa_error_type = None
+        try:
+            qa_client = create_typed_azure_client(
+                AzureAIWorkload.INFERENCE,
+                qa_deployment,
+                factory=azure_ai_factory,
+            )
+            runtime_resources.own_client(qa_client)
+            _verify_managed_azure_ai_client(
+                qa_client,
+                AzureAIWorkload.INFERENCE,
+                qa_deployment,
+                azure_ai_route_plan,
+            )
+        except Exception as exc:
+            typed_qa_error_type = type(exc).__name__
+        if typed_qa_error_type is not None:
+            print(
+                "❌ typed Azure AI Self-QA client init failed "
+                f"({typed_qa_error_type})"
+            )
+            sys.exit(1)
+
+    code_interpreter_client = None
+    if typed_azure_active and execution_mode == "code_interpreter":
+        typed_ci_error_type = None
+        try:
+            code_interpreter_client = create_typed_azure_client(
+                AzureAIWorkload.CODE_INTERPRETER,
+                model,
+                factory=azure_ai_factory,
+            )
+            runtime_resources.own_client(code_interpreter_client)
+            _verify_managed_azure_ai_client(
+                code_interpreter_client,
+                AzureAIWorkload.CODE_INTERPRETER,
+                model,
+                azure_ai_route_plan,
+            )
+        except Exception as exc:
+            typed_ci_error_type = type(exc).__name__
+        if typed_ci_error_type is not None:
+            print(
+                "❌ typed Azure AI Code Interpreter client init failed "
+                f"({typed_ci_error_type})"
+            )
+            sys.exit(1)
 
     # 3. Initialize executor (no silent fallback — fail loudly)
     reasoning_effort = condition.get("model", {}).get("reasoning_effort")
@@ -2297,6 +3048,7 @@ def run_inference(
         )
         print(f"   Paired run:         {run_identity}")
         print(f"   Workflow audit:     {workflow_audit}")
+    typed_executor_error_type = None
     try:
         executor = TaskExecutor(
             mode=execution_mode, llm_client=client, tokens=tokens_cfg,
@@ -2314,11 +3066,32 @@ def run_inference(
             run_id=run_identity,
             condition_name=execution_condition,
             model_name=model,
+            code_interpreter_client=code_interpreter_client,
+            **(
+                {"redact_provider_errors": True}
+                if (
+                    typed_azure_active
+                    and execution_mode == "code_interpreter"
+                )
+                else {}
+            ),
         )
     except Exception as e:
-        print(f"❌ Executor init failed for mode '{execution_mode}': {e}")
+        if typed_azure_main:
+            typed_executor_error_type = type(e).__name__
+        else:
+            print(f"❌ Executor init failed for mode '{execution_mode}': {e}")
+            print("   Fix the issue or change execution.mode in your YAML config.")
+            sys.exit(1)
+    if typed_executor_error_type is not None:
+        print(
+            "❌ typed Azure AI executor init failed "
+            f"({typed_executor_error_type})"
+        )
         print("   Fix the issue or change execution.mode in your YAML config.")
         sys.exit(1)
+    if typed_azure_active:
+        runtime_resources.own_executor(executor)
 
     print(f"   Manifest:           {manifest}")
 
@@ -2344,6 +3117,7 @@ def run_inference(
             ordered_task_ids=ordered_task_ids,
             prepared_fingerprint=prepared_fingerprint,
             resume_round=int(current.get("resume_round", 0) or 0),
+            azure_ai_routes=azure_ai_routes,
         )
         if condition_key == "condition_a":
             legacy_progress_path.write_bytes(progress_path.read_bytes())
@@ -2567,6 +3341,8 @@ def run_inference(
                     strict_inputs=hardened_requested,
                     experiment_id=experiment_id,
                     upload_root=condition_upload_root,
+                    azure_ai_factory=azure_ai_factory,
+                    azure_ai_route_plan=azure_ai_route_plan,
                 )
                 if metrics_enabled:
                     _record_execution_metrics(result)
@@ -2591,9 +3367,17 @@ def run_inference(
                     task, condition,
                     result.get("deliverable_text", ""),
                     result.get("deliverable_files", []),
-                    client,
+                    qa_client,
                     qa_max_tokens=qa_max_tokens,
                     upload_root=condition_upload_root,
+                    **(
+                        {"redact_provider_errors": True}
+                        if (
+                            typed_azure_active
+                            and provider in {"azure", "azure_openai"}
+                        )
+                        else {}
+                    ),
                 )
                 if metrics_enabled:
                     self_qa_call_count += 1
@@ -2812,6 +3596,8 @@ def run_inference(
             "resume_round": 0,
             "results": [],
         }
+        if azure_ai_routes is not None:
+            progress["azure_ai_routes"] = azure_ai_routes
 
         for i, task in enumerate(tasks):
             # ── Watchdog: wall-clock timeout check ──
@@ -2958,6 +3744,8 @@ def run_inference(
         },
         "results": results,
     }
+    if azure_ai_routes is not None:
+        final_output["azure_ai_routes"] = azure_ai_routes
     final_output["result_fingerprint"] = inference_result_fingerprint(final_output)
 
     with open(output_path, "w", encoding="utf-8") as f:

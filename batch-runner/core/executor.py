@@ -102,6 +102,7 @@ class TaskExecutor:
         agentic_task_request_sha256: Optional[Mapping[str, str]] = None,
         non_paid_test_mode: bool = False,
         code_interpreter_client=None,
+        redact_provider_errors: bool = False,
     ):
         """
         Initialize executor with specified mode.
@@ -143,6 +144,7 @@ class TaskExecutor:
                 prompt_name=prompt_name,
                 max_completion_tokens=self.tokens.get("code_generation"),
                 client=code_interpreter_client,
+                redact_provider_errors=redact_provider_errors,
             )
 
         elif mode == "subprocess":
@@ -672,12 +674,12 @@ class TaskExecutor:
                     model=model
                 )
 
-        except Exception as e:
+        except Exception as exc:
             return {
                 "success": False,
                 "text": "",
                 "files": [],
-                "error": f"Executor error ({self.mode}): {str(e)}"
+                "error": f"Executor error ({self.mode}): {str(exc)}",
             }
 
     @staticmethod

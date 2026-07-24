@@ -29,9 +29,11 @@ def test_executor_forwards_injected_code_interpreter_client_exactly():
         TaskExecutor(
             mode="code_interpreter",
             code_interpreter_client=client,
+            redact_provider_errors=True,
         )
 
     assert runner_cls.call_args.kwargs["client"] is client
+    assert runner_cls.call_args.kwargs["redact_provider_errors"] is True
 
 
 def test_executor_close_is_idempotent_and_delegates_to_runner():
@@ -209,6 +211,25 @@ def test_executor_execute_error_handling():
     assert result["success"] is False
     assert "Test error" in result["error"]
     assert result["files"] == []
+
+
+def test_executor_redaction_option_preserves_local_runner_error_detail():
+    detail = "local runner parse detail"
+    executor = TaskExecutor(
+        mode="subprocess",
+        llm_client=Mock(),
+        redact_provider_errors=True,
+    )
+    executor.runner.run = Mock(side_effect=RuntimeError(detail))
+
+    result = executor.execute(task_prompt="Test task", model="deployment")
+
+    assert result == {
+        "success": False,
+        "text": "",
+        "files": [],
+        "error": f"Executor error (subprocess): {detail}",
+    }
 
 
 def test_executor_subprocess_passes_token_override():
