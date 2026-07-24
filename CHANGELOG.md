@@ -35,7 +35,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   seconds**. Ruff, `py_compile`, diff checks, and an independent release-gate
   review with **0 mandatory findings** pass. No credential, token, network,
   Azure/model API, grading, Hugging Face, workflow, deployment, or paid action
-  occurred.
+  occurred. A clean detached checkout of reviewed head
+  `6ee41d2a89ff796dc06c238892fe5f78ec1f29a1` passes **216 focused tests in
+  2.16 seconds** and the complete backend with **2,214 passed, 6
+  host-dependent skipped, and 44 integration tests deselected in 137.30
+  seconds**. Shipped through PR #138 as
+  `4654b4316ecef30f19da55dd513b35d625f7d30d`. GitHub attached no check run,
+  check suite, commit status, or PR check rollup to the reviewed or merge SHA;
+  no workflow was manually dispatched to compensate.
 - **Typed Azure AI runtime adapters** - add an opt-in managed client wrapper,
   caller-owned Code Interpreter client injection, and deterministic executor
   lifecycle without wiring Step 2 or workflows. Closed adapters reject all

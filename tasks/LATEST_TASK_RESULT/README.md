@@ -3,8 +3,8 @@
 This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
-- Updated: 2026-07-23
-- Status: Typed Azure AI Step 2 wiring locally verified; not yet shipped
+- Updated: 2026-07-24
+- Status: Typed Azure AI Step 2 wiring shipped via PR #138
 
 ## Task
 
@@ -56,20 +56,29 @@ task. It must be refreshed before a task is reported complete.
 - Eight concrete high-risk review findings were reproduced, repaired, and
   covered. The final independent release-gate review returned
   `MANDATORY_FINDINGS: 0`.
+- Clean detached checkout of exact reviewed head
+  `6ee41d2a89ff796dc06c238892fe5f78ec1f29a1`: **216 focused tests passed in
+  2.16 seconds**; the complete credential-free backend passed **2,214 tests**
+  with **6 host-dependent skips** and **44 integration tests deselected** in
+  **137.30 seconds**.
 - No credential or token acquisition, network access, Azure/model API call,
   grading, Hugging Face access/write, workflow execution, or paid operation
   occurred.
 
 ## Shipment
 
-- Not yet shipped. This record describes the locally verified implementation
-  before clean detached verification, commit, PR, and merge.
+- PR #138 squash-merged as
+  `4654b4316ecef30f19da55dd513b35d625f7d30d` on 2026-07-24 from reviewed head
+  `6ee41d2a89ff796dc06c238892fe5f78ec1f29a1`.
+- The implementation changed exactly 11 paths. GitHub attached no check run,
+  check suite, commit status, or PR check rollup to the reviewed or merge SHA
+  because the paths do not match an active workflow trigger.
+- No manual workflow dispatch, credential injection, token acquisition,
+  Azure/model API call, grading, Hugging Face access/write, deployment, or paid
+  action was used to replace the path-filtered checks.
 
 ## Remaining Work
 
-- Re-run the exact implementation commit from a clean detached checkout, then
-  open and merge the bounded implementation PR.
-- After merge, update this rolling record, the BOLT, and changelog with the
-  exact reviewed head, merge SHA, and any GitHub check/run evidence.
+- No repository implementation work remains for this Step 2 wiring slice.
 - Typed workflow activation, relay/resume support, and hardened/agentic routing
   remain separate future BOLTs.
