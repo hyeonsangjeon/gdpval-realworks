@@ -16,8 +16,6 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -87,7 +85,6 @@ def _v2_cfg(with_perception: bool) -> dict:
                  / "prompts" / "grader_judge.md")
     judge = {
         "provider": "azure_openai",
-        "endpoint_env": "AZURE_OPENAI_ENDPOINT",
         "api_version": "2025-04-01-preview",
         "model": "gpt-5.4",
         "reasoning": {"effort": "medium"},
@@ -112,20 +109,17 @@ def _v2_cfg(with_perception: bool) -> dict:
     }
 
 
-def test_grader_wires_perception_subjudges(monkeypatch):
+def test_grader_wires_perception_subjudges():
     from core.grader import Grader
-    import core.grader as grader_mod
 
-    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://fake.openai.azure.com")
     fake_client = SimpleNamespace(responses=ScriptedResponses([]))
-    monkeypatch.setattr(grader_mod, "AzureOpenAI", lambda **kw: fake_client)
 
     config = _v2_cfg(with_perception=True)
     config["_runtime"] = {
         "experiment_id": "exp003_GPT52Chat_baseline_runner_exec",
         "rubric_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
     }
-    grader = Grader(config, rubric_loader=None)
+    grader = Grader(config, rubric_loader=None, client=fake_client)
     tj = grader._tool_judge
     assert tj is not None
     assert tj.vision_perception is not None, "VisionPerception must be wired"
@@ -157,15 +151,16 @@ def test_grader_wires_perception_subjudges(monkeypatch):
     assert grader.prompt_version == "v2.2"
 
 
-def test_grader_no_perception_block_leaves_subjudges_none(monkeypatch):
+def test_grader_no_perception_block_leaves_subjudges_none():
     from core.grader import Grader
-    import core.grader as grader_mod
 
-    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://fake.openai.azure.com")
     fake_client = SimpleNamespace(responses=ScriptedResponses([]))
-    monkeypatch.setattr(grader_mod, "AzureOpenAI", lambda **kw: fake_client)
 
-    grader = Grader(_v2_cfg(with_perception=False), rubric_loader=None)
+    grader = Grader(
+        _v2_cfg(with_perception=False),
+        rubric_loader=None,
+        client=fake_client,
+    )
     tj = grader._tool_judge
     assert tj is not None
     assert tj.vision_perception is None

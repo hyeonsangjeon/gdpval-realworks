@@ -36,7 +36,6 @@ judge:
   model: "gpt-5.4-mini"
   deployment: "gpt-5.4-mini"
   api_version: "2025-04-01-preview"
-  endpoint_env: "AZURE_OPENAI_ENDPOINT"
   timeout_sec: 600
   reasoning:
     effort: "medium"
@@ -78,5 +77,5 @@ prompt:
 
 output:
   directory: "../data/grades"
-  filename_template: "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json"
+  filename_template: "{exp_id}__judge_{judge_slug}__{config_name}__cfg_{config_hash}__rubric_{rubric_sha}__inference_{inference_sha}__src_{grader_source_hash_short}__{prompt_v}.json"
   partial_save_every_n_tasks: 10

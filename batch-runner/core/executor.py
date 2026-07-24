@@ -694,12 +694,19 @@ class TaskExecutor:
         Returns:
             (is_valid, error_message) tuple
         """
-        if mode in {"code_interpreter", "agentic_sandbox"}:
-            # Code Interpreter only works with OpenAI/Azure OpenAI
+        if mode == "code_interpreter":
+            if model_provider not in ["azure", "azure_openai"]:
+                return (
+                    False,
+                    "code_interpreter mode requires Azure, "
+                    f"got {model_provider}"
+                )
+        if mode == "agentic_sandbox":
             if model_provider not in ["azure", "openai"]:
                 return (
                     False,
-                    f"{mode} mode requires OpenAI/Azure OpenAI, got {model_provider}"
+                    "agentic_sandbox mode requires OpenAI/Azure OpenAI, "
+                    f"got {model_provider}"
                 )
 
         return (True, None)
@@ -721,7 +728,7 @@ class TaskExecutor:
             return "json_renderer"
 
         # Tool-assisted mode: use best available for each provider
-        if model_provider in ["azure", "openai"]:
+        if model_provider in ["azure", "azure_openai"]:
             return "code_interpreter"
         else:
             return "subprocess"

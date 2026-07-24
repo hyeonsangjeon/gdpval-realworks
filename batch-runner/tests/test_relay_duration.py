@@ -20,6 +20,35 @@ def _identity(total_tasks):
     }
 
 
+def _checkpoint_result(task_id, status):
+    timestamp = "2026-03-27T02:58:37+00:00"
+    if status == "pending":
+        return {
+            "task_id": task_id,
+            "status": status,
+            "error": "wall_timeout",
+            "timestamp": timestamp,
+        }
+    result = {
+        "task_id": task_id,
+        "status": status,
+        "content": None,
+        "deliverable_text": None,
+        "deliverable_files": [],
+        "model": "test-model",
+        "usage": None,
+        "observability": {},
+        "latency_ms": 1.0,
+        "timestamp": timestamp,
+    }
+    if status == "error":
+        result["error"] = "test_error"
+    else:
+        result["content"] = "done"
+        result["deliverable_text"] = "done"
+    return result
+
+
 class TestSaveProgressStartedAt:
     """Verify _save_progress persists started_at in progress.json."""
 
@@ -33,7 +62,7 @@ class TestSaveProgressStartedAt:
             condition_name="test_condition",
             execution_mode="subprocess",
             total_tasks=220,
-            results=[{"task_id": "t1", "status": "success"}],
+            results=[_checkpoint_result("t1", "success")],
             started_at=original_time,
             path=progress_path,
             **_identity(220),
@@ -57,8 +86,8 @@ class TestSaveProgressStartedAt:
             execution_mode="subprocess",
             total_tasks=220,
             results=[
-                {"task_id": "t1", "status": "success"},
-                {"task_id": "t2", "status": "pending"},
+                _checkpoint_result("t1", "success"),
+                _checkpoint_result("t2", "pending"),
             ],
             started_at=original_time,
             path=progress_path,
@@ -83,10 +112,10 @@ class TestSaveProgressStartedAt:
         progress_path = tmp_path / "progress.json"
 
         results = [
-            {"task_id": "t1", "status": "success"},
-            {"task_id": "t2", "status": "success"},
-            {"task_id": "t3", "status": "error"},
-            {"task_id": "t4", "status": "pending"},
+            _checkpoint_result("t1", "success"),
+            _checkpoint_result("t2", "success"),
+            _checkpoint_result("t3", "error"),
+            _checkpoint_result("t4", "pending"),
         ]
 
         _save_progress(
@@ -125,6 +154,73 @@ class TestSaveProgressStartedAt:
 
         assert progress_path.exists()
         assert not progress_path.with_suffix(".json.tmp").exists()
+
+    def test_provider_error_is_sanitized_before_checkpoint_write(self, tmp_path):
+        progress_path = tmp_path / "progress.json"
+        raw_error = (
+            "BadRequestError: https://secret.services.ai.azure.com/"
+            "api/projects/private"
+        )
+        result = _checkpoint_result("t1", "error")
+        result["error"] = raw_error
+
+        _save_progress(
+            experiment_id="exp_test",
+            condition_name="cond",
+            execution_mode="subprocess",
+            total_tasks=1,
+            results=[result],
+            started_at="2026-03-27T02:58:37+00:00",
+            path=progress_path,
+            **_identity(1),
+        )
+
+        serialized = progress_path.read_text(encoding="utf-8")
+        assert "secret.services.ai.azure.com" not in serialized
+        assert json.loads(serialized)["results"][0]["error"] == (
+            "task_execution_error:BadRequestError"
+        )
+
+    def test_progress_rejects_malformed_success_on_save(self, tmp_path):
+        with pytest.raises(ValueError, match="timestamp is invalid"):
+            _save_progress(
+                experiment_id="exp_test",
+                condition_name="cond",
+                execution_mode="subprocess",
+                total_tasks=1,
+                results=[{"task_id": "t1", "status": "success"}],
+                started_at="2026-01-01T00:00:00+00:00",
+                path=tmp_path / "progress.json",
+                **_identity(1),
+            )
+
+    def test_progress_rejects_tampered_success_on_load(self, tmp_path):
+        progress_path = tmp_path / "progress.json"
+        _save_progress(
+            experiment_id="exp_test",
+            condition_name="cond",
+            execution_mode="subprocess",
+            total_tasks=1,
+            results=[_checkpoint_result("t1", "success")],
+            started_at="2026-01-01T00:00:00+00:00",
+            path=progress_path,
+            **_identity(1),
+        )
+        payload = json.loads(progress_path.read_text(encoding="utf-8"))
+        del payload["results"][0]["deliverable_text"]
+        progress_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ValueError, match="fields are incomplete"):
+            _load_and_validate_progress(
+                progress_path,
+                experiment_id="exp_test",
+                condition_name="cond",
+                condition_identity="condition_a",
+                run_id="relay-test-run",
+                execution_mode="subprocess",
+                ordered_task_ids=["t1"],
+                prepared_fingerprint="a" * 64,
+            )
 
     def test_progress_rejects_prepared_fingerprint_mismatch(self, tmp_path):
         progress_path = tmp_path / "progress.json"

@@ -14,7 +14,8 @@ PROVES the wired path fires end-to-end against real Azure:
 
 Acceptance (spec PHASE 2): perception call > 0 AND judge_error < 2%.
 
-Run:  GRADER_ALLOW_API_KEY_FALLBACK=1 python scripts/phase2_perception_probe.py
+Run after ``az login`` with typed Azure AI route env configured:
+    python scripts/phase2_perception_probe.py
 """
 from __future__ import annotations
 
@@ -28,22 +29,6 @@ ROOT = Path(__file__).resolve().parents[1]
 BR = ROOT / "batch-runner"
 sys.path.insert(0, str(BR))
 os.chdir(BR)
-
-# Load .env (AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY) for local run.
-# Strip inline `# comment` suffixes — .env in this repo has Korean comments
-# trailing the values; otherwise the secret becomes non-ASCII and Azure's
-# HTTP layer ASCII-encodes the api-key header and raises UnicodeEncodeError.
-for line in (BR / ".env").read_text().splitlines():
-    line = line.strip()
-    if not line or line.startswith("#") or "=" not in line:
-        continue
-    k, v = line.split("=", 1)
-    # cut at first ' #' (space-hash) so values can still contain '#'
-    i = v.find(" #")
-    if i != -1:
-        v = v[:i]
-    os.environ.setdefault(k.strip(), v.strip())
-os.environ["GRADER_ALLOW_API_KEY_FALLBACK"] = "1"
 
 import yaml  # noqa: E402
 from PIL import Image, ImageDraw  # noqa: E402
@@ -70,10 +55,7 @@ def make_chart_png(path: Path, *, with_title: bool) -> None:
     img.save(path, format="PNG")
 
 
-def main() -> int:
-    cfg = yaml.safe_load(open("grading_configs/default_v2_mini.yaml"))
-
-    grader = Grader(cfg, rubric_loader=None)
+def _run_probe(grader: Grader, tmp: Path) -> int:
     tj = grader._tool_judge
     print(f"tool_judge active: {tj is not None}")
     print(f"vision_perception wired: {tj.vision_perception is not None}")
@@ -81,7 +63,6 @@ def main() -> int:
     print(f"judge model: {grader.model} | vision model: "
           f"{tj.vision_perception.deployment if tj.vision_perception else None}")
 
-    tmp = Path(tempfile.mkdtemp(prefix="phase2_probe_"))
     chart = tmp / "revenue_chart.png"
     make_chart_png(chart, with_title=True)
     print(f"deliverable: {chart} ({chart.stat().st_size} bytes)")
@@ -134,9 +115,18 @@ def main() -> int:
     ok = n_perc > 0 and (n_err / max(1, n_judge)) < 0.02
     print(f"ACCEPTANCE: {'PASS' if ok else 'FAIL'}")
 
-    json.dump(out, open(ROOT / "tasks/0531_sunday/phase2_probe_raw.json", "w"),
-              ensure_ascii=False, indent=2)
+    output_path = ROOT / "tasks/0531_sunday/phase2_probe_raw.json"
+    with output_path.open("w", encoding="utf-8") as stream:
+        json.dump(out, stream, ensure_ascii=False, indent=2)
     return 0 if ok else 1
+
+
+def main() -> int:
+    with open("grading_configs/default_v2_mini.yaml", encoding="utf-8") as stream:
+        cfg = yaml.safe_load(stream)
+    with tempfile.TemporaryDirectory(prefix="phase2_probe_") as temp_dir:
+        with Grader(cfg, rubric_loader=None) as grader:
+            return _run_probe(grader, Path(temp_dir))
 
 
 if __name__ == "__main__":

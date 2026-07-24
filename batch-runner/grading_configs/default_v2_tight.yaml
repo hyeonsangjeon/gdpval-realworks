@@ -29,7 +29,6 @@ judge:
   model: "gpt-5.4"
   deployment: "gpt-5.4"
   api_version: "2025-04-01-preview"
-  endpoint_env: "AZURE_OPENAI_ENDPOINT"
   timeout_sec: 600
   reasoning:
     effort: "medium"
@@ -58,7 +57,6 @@ judge:
       call_cap_per_task: 72  # checked-in 220 inventory: max 68 supported calls
     audio:
       model: "gpt-audio-1.5"
-      endpoint_env: "AZURE_AUDIO_ENDPOINT"
       call_cap_per_task: 3
       trim_seconds: 30
 

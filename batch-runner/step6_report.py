@@ -5,9 +5,9 @@ Reads workspace/result.json and generates two output files under workspace/repor
   - report_data.json : structured JSON for dashboard rendering
   - report.md        : human-readable Markdown report
 
-Narrative sections use the two-call GPT-5.4 Pro analyzer with a one-call
-experiment-model fallback. Step 6 always emits a pre-grading report; external
-grading remains a separate pipeline.
+Narrative sections use the two-call GPT-5.4 Pro analyzer with a sanitized
+model-free fallback. Step 6 always emits a pre-grading report; external grading
+remains a separate pipeline.
 
 Usage:
     python step6_report.py                          # default: workspace/result.json
@@ -39,11 +39,7 @@ from core.execution_metrics import bounded_count, bounded_duration_ms  # noqa: E
 from core.prepared_fingerprint import FINGERPRINT_RE  # noqa: E402
 from core.result_fingerprint import RESULT_FINGERPRINT_RE  # noqa: E402
 from core.publication_generation import validate_publication_generation  # noqa: E402
-from core.narrative_analyzer import (  # noqa: E402
-    _build_grade_source,
-    _build_grading_guard_clause,
-    _build_grading_results_section,
-)
+from core.public_error import public_task_error  # noqa: E402
 from core.repository_identity import (  # noqa: E402
     validate_experiment_id,
     validate_hf_dataset_repo_id,
@@ -475,7 +471,7 @@ def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dic
                 "task_id": r.get("task_id", ""),
                 "sector": r.get("sector", ""),
                 "occupation": r.get("occupation", ""),
-                "error": r.get("error", ""),
+                **public_task_error(r.get("error")),
             })
     return task_results, error_tasks
 
@@ -483,111 +479,19 @@ def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dic
 # ── LLM Narrative ─────────────────────────────────────────────────────────
 
 
-def _generate_narrative(
-    data: dict,
-    summary: dict,
-    sector_breakdown: list[dict],
-    grade: dict | None = None,
-) -> dict:
-    """Call Azure OpenAI once and return narrative dict. Never crashes."""
-    empty = {
+def _model_free_narrative(error: Exception | None = None) -> dict:
+    narrative = {
         "overview": "",
         "quality_analysis": "",
         "failure_patterns": "",
         "recommendations": "",
-        "grading_referenced": grade is not None,
-        "grade_source": _build_grade_source(grade),
+        "grading_referenced": False,
+        "grade_source": None,
+        "runtime_fingerprint": None,
     }
-
-    try:
-        from core.llm_client import create_client, complete
-
-        model = data.get("model", "gpt-5.2-chat")
-        client = create_client()
-
-        sector_lines = "\n".join(
-            f"  - {s['sector']}: {s['success']}/{s['total']} success "
-            f"(avg QA {s['avg_qa_score']:.1f}/10, avg latency {s['avg_latency_ms']}ms)"
-            for s in sector_breakdown
-        )
-
-        error_count = summary["error_count"]
-        retried_count = summary["retried_count"]
-        grading_guard = _build_grading_guard_clause(grade)
-        grading_results_section = _build_grading_results_section(grade)
-        overview_instruction = (
-            "Describe execution outcomes as Self-QA signals, then separately "
-            "summarize the provided automated LLM-judge grade. Never present "
-            "either source as human expert review."
-            if grade is not None
-            else
-            "These are self-assessed scores from the LLM during execution, "
-            "not external grading results. Use language such as "
-            "'self-assessed confidence', 'task completion rate', and "
-            "'LLM-evaluated quality'."
-        )
-
-        prompt_content = f"""You are a technical evaluator reviewing an LLM experiment run.
-
-Experiment: {data.get("experiment_name", "")} ({data.get("experiment_id", "")})
-Condition: {data.get("condition_name", "")}
-Model: {model}
-Execution Mode: {data.get("execution_mode", "")}
-Date: {data.get("started_at", "")}
-
-Summary:
-  - Total tasks: {summary["total_tasks"]}
-  - Success: {summary["success_count"]} ({summary["success_rate_pct"]}%)
-  - Errors: {error_count}
-  - Retried tasks: {retried_count}
-  - Avg QA score: {summary["avg_qa_score"]}/10 (min {summary["min_qa_score"]}, max {summary["max_qa_score"]})
-  - Avg latency: {summary["avg_latency_ms"]}ms
-
-Sector breakdown:
-{sector_lines}
-
-IMPORTANT CONSTRAINTS:
-{grading_guard}
-- Focus ONLY on: task completion, Self-QA scores, latency patterns, sector/occupation observations, deliverable file generation quality.
-- Write as a technical evaluator, NOT a marketer.
-- Be concise and factual.
-
-{grading_results_section}
-
-Return ONLY valid JSON with these exact keys (no markdown code fences):
-{{
-    "overview": "2-3 paragraphs describing what experiment was run, task execution outcomes, and key highlights. IMPORTANT: {overview_instruction}",
-  "quality_analysis": "2-3 paragraphs: QA score patterns, notable issues, occupation/sector observations",
-  "failure_patterns": "Analysis of errors and retries. Empty string if no failures.",
-  "recommendations": "2-3 actionable suggestions for improving the next experiment run"
-}}"""
-
-        messages = [
-            {"role": "system", "content": "You are a precise technical evaluator. Return only valid JSON."},
-            {"role": "user", "content": prompt_content},
-        ]
-
-        response, _ = complete(client, model, messages)
-        raw = response.choices[0].message.content.strip()
-
-        # Strip accidental markdown code fences
-        if raw.startswith("```"):
-            lines = raw.split("\n")
-            raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-
-        narrative = json.loads(raw)
-        for key in ("overview", "quality_analysis", "failure_patterns", "recommendations"):
-            if key not in narrative:
-                narrative[key] = ""
-        narrative["grading_referenced"] = grade is not None
-        narrative["grade_source"] = _build_grade_source(grade)
-        return narrative
-
-    except Exception as exc:
-        print(f"⚠️  Narrative LLM call failed: {exc}")
-        result = dict(empty)
-        result["_narrative_error"] = str(exc)
-        return result
+    if error is not None:
+        narrative["_narrative_error"] = type(error).__name__
+    return narrative
 
 
 # ── Report builders ───────────────────────────────────────────────────────
@@ -602,23 +506,26 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
     meta_date = (data.get("started_at") or "")[:10]
     grading_referenced = bool(narrative.get("grading_referenced", False))
     report_meta = {
-            "experiment_id": _validated_experiment_id(data),
-            "experiment_name": data.get("experiment_name", ""),
-            "condition_name": data.get("condition_name", ""),
-            "model": data.get("model", ""),
-            "execution_mode": data.get("execution_mode", ""),
-            "date": meta_date,
-            "duration": data.get("duration", ""),
-            "source_repo_id": _validated_source_repo_id(data),
-            "publication_plan": (
-                "dry_run_no_step7" if dry_run else "step7_upload_requested"
-            ),
-            "report_scope": (
-                "graded"
-                if grading_referenced
-                else "self_assessed_pre_grading"
-            ),
-        }
+        "experiment_id": _validated_experiment_id(data),
+        "experiment_name": data.get("experiment_name", ""),
+        "condition_name": data.get("condition_name", ""),
+        "model": data.get("model", ""),
+        "execution_mode": data.get("execution_mode", ""),
+        "date": meta_date,
+        "duration": data.get("duration", ""),
+        "source_repo_id": _validated_source_repo_id(data),
+        "publication_plan": (
+            "dry_run_no_step7" if dry_run else "step7_upload_requested"
+        ),
+        "report_scope": (
+            "graded"
+            if grading_referenced
+            else "self_assessed_pre_grading"
+        ),
+        "narrative_runtime_fingerprint": narrative.get(
+            "runtime_fingerprint"
+        ),
+    }
     report_meta.update(_validated_report_provenance(data))
     report = {
         "meta": report_meta,
@@ -1401,24 +1308,42 @@ def generate_report(
 
     # Generate narrative
     if no_narrative:
-        narrative: dict = {
-            "overview": "",
-            "quality_analysis": "",
-            "failure_patterns": "",
-            "recommendations": "",
-            "grading_referenced": False,
-            "grade_source": None,
-        }
+        narrative = _model_free_narrative()
         print("   Skipping narrative (--no-narrative)")
     else:
-        # Try GPT-5.4 Pro (Responses API) first, fallback to standard
+        # Try GPT-5.4 Pro (Responses API) once, then fall back model-free.
         try:
-            from core.narrative_analyzer import create_narrative_analyzer
-            print("   Generating narrative via GPT-5.4 Pro (Responses API)…")
-            analyzer = create_narrative_analyzer()
-            result = analyzer.analyze(
-                data, summary, sector_breakdown, task_results, error_tasks, grade=None
+            from core.azure_ai_clients import (
+                narrative_route_workloads,
+                preflight_routes,
             )
+            from core.narrative_analyzer import (
+                NarrativeAnalyzer,
+                create_narrative_analyzer,
+            )
+            print("   Generating narrative via GPT-5.4 Pro (Responses API)…")
+            expected_routes = preflight_routes(
+                narrative_route_workloads(NarrativeAnalyzer.DEFAULT_MODEL),
+                timeout=NarrativeAnalyzer.DEFAULT_TIMEOUT,
+                legacy_api_version=NarrativeAnalyzer.DEFAULT_API_VERSION,
+            )
+            with create_narrative_analyzer() as analyzer:
+                if not any(
+                    route["runtime_fingerprint"]
+                    == analyzer.runtime_fingerprint
+                    for route in expected_routes
+                ):
+                    raise ValueError(
+                        "primary narrative route differs from preflight"
+                    )
+                result = analyzer.analyze(
+                    data,
+                    summary,
+                    sector_breakdown,
+                    task_results,
+                    error_tasks,
+                    grade=None,
+                )
             narrative = {
                 "overview": result.overview,
                 "quality_analysis": result.quality_analysis,
@@ -1426,14 +1351,15 @@ def generate_report(
                 "recommendations": result.recommendations,
                 "grading_referenced": result.grading_referenced,
                 "grade_source": result.grade_source,
+                "runtime_fingerprint": result.runtime_fingerprint,
             }
             total_ms = result.call_1_latency_ms + result.call_2_latency_ms
             print(f"   ✅ Pro narrative generated ({total_ms:,.0f}ms, "
                   f"{result.total_tokens['input']:,}+{result.total_tokens['output']:,} tokens)")
         except Exception as exc:
-            print(f"   ⚠️ Pro narrative failed: {exc}")
-            print("   Falling back to standard narrative…")
-            narrative = _generate_narrative(data, summary, sector_breakdown, grade=None)
+            print(f"   ⚠️ Pro narrative failed: {type(exc).__name__}")
+            print("   Using model-free narrative fallback.")
+            narrative = _model_free_narrative(exc)
 
     # Build report_data.json
     rd = _build_report_data(

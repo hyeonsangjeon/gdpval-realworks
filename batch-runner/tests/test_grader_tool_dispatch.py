@@ -4,10 +4,8 @@ when the config opts into the v2 path (PR2 task 203)."""
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -44,8 +42,6 @@ def test_grader_dispatch_uses_tool_calling_judge_when_configured(monkeypatch, tm
     from core.grader import Grader
     from core.rubric_loader import RubricItem, TaskRubric
 
-    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://fake.openai.azure.com")
-
     final_payload = json.dumps({
         "verdict": "pass", "partial_score": 1.0,
         "evidence": "kind=xlsx", "confidence": 0.9,
@@ -56,9 +52,7 @@ def test_grader_dispatch_uses_tool_calling_judge_when_configured(monkeypatch, tm
         responses=ScriptedResponses([_response(output=[_final(final_payload)])])
     )
 
-    # Stub out AzureOpenAI in Grader's namespace so __init__ uses our fake.
     import core.grader as grader_mod
-    monkeypatch.setattr(grader_mod, "AzureOpenAI", lambda **kw: fake_client)
 
     # Write a deliverable file.
     deliverable_dir = tmp_path / "deliverables"
@@ -74,7 +68,6 @@ def test_grader_dispatch_uses_tool_calling_judge_when_configured(monkeypatch, tm
         "schema_version": "2.0",
         "judge": {
             "provider": "azure_openai",
-            "endpoint_env": "AZURE_OPENAI_ENDPOINT",
             "api_version": "2025-04-01-preview",
             "model": "gpt-5.4",
             "reasoning": {"effort": "medium"},
@@ -94,7 +87,7 @@ def test_grader_dispatch_uses_tool_calling_judge_when_configured(monkeypatch, tm
         "tpm_guard": {},
     }
 
-    grader = Grader(cfg, rubric_loader=None)
+    grader = Grader(cfg, rubric_loader=None, client=fake_client)
     assert grader._tool_judge is not None, "tool-calling judge should be active"
     assert grader._tool_judge.finalization_retries == 1
 
@@ -131,15 +124,13 @@ def test_grader_without_tools_block_uses_legacy_path(monkeypatch, tmp_path):
     from core.grader import Grader
     import core.grader as grader_mod
 
-    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://fake.openai.azure.com")
-    monkeypatch.setattr(grader_mod, "AzureOpenAI", lambda **kw: SimpleNamespace())
+    fake_client = SimpleNamespace()
 
     prompt_v1 = Path(grader_mod.__file__).resolve().parent.parent / "prompts" / "grader_judge.md"
     cfg = {
         "schema_version": "1.0",
         "judge": {
             "provider": "azure_openai",
-            "endpoint_env": "AZURE_OPENAI_ENDPOINT",
             "api_version": "2025-04-01-preview",
             "model": "gpt-5.4",
             "reasoning": {"effort": "high"},
@@ -149,5 +140,5 @@ def test_grader_without_tools_block_uses_legacy_path(monkeypatch, tmp_path):
         "grader": {},
         "tpm_guard": {},
     }
-    grader = Grader(cfg, rubric_loader=None)
+    grader = Grader(cfg, rubric_loader=None, client=fake_client)
     assert grader._tool_judge is None

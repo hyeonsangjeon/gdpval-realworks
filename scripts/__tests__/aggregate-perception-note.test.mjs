@@ -4,7 +4,10 @@ import { readFile, readdir } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import test from 'node:test'
 
-import { buildPerceptionNoteData } from '../aggregate-perception-note.mjs'
+import {
+  buildPerceptionNoteData,
+  skillDirectoryNames,
+} from '../aggregate-perception-note.mjs'
 
 const execFileAsync = promisify(execFile)
 const readRepoFile = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8')
@@ -18,9 +21,24 @@ async function loadSources() {
     readRepoFile('batch-runner/experiments/exp026_sandbox_skills_multimodal.yaml'),
     readdir(new URL('../../batch-runner/skills/', import.meta.url), { withFileTypes: true }),
   ])
-  const skills = skillEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+  const skills = skillDirectoryNames(skillEntries)
   return { source, configs: { exp011, exp012, exp026 }, skills }
 }
+
+test('skill registry ignores generated hidden and Python cache directories', () => {
+  const directory = (name) => ({ name, isDirectory: () => true })
+  const file = (name) => ({ name, isDirectory: () => false })
+
+  assert.deepEqual(
+    skillDirectoryNames([
+      directory('audio'),
+      directory('__pycache__'),
+      directory('.cache'),
+      file('README.md'),
+    ]),
+    ['audio'],
+  )
+})
 
 test('perception note projects checked-in packages, preprocessors, sandbox, and non-causal limits', async () => {
   const { source, configs, skills } = await loadSources()

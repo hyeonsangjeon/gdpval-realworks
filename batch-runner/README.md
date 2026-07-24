@@ -31,7 +31,7 @@ boundaries, and the three-task smoke test.
 1. Fork this repository and edit only `data.source` in the
    [three-task sample config](experiments/exp998_smoke_baseline_sample.yaml) to
    point to a new disposable dataset in your Hugging Face namespace.
-2. Configure the five repository secrets listed in the
+2. Configure the five repository secrets and required identity variables listed in the
    [beginner guide](../docs/first-experiment.md#5-add-repository-secrets).
 3. Open the
   [Batch workflow](../../../actions/workflows/batch-run.yml) in your fork on
@@ -57,7 +57,9 @@ pip install -r requirements.txt
 az login
 
 export HF_TOKEN="<dedicated-hf-write-token>"
-export AZURE_OPENAI_ENDPOINT="<azure-openai-resource-endpoint>"
+export AZURE_AI_ROUTE_PROFILE="project-ci"
+export AZURE_OPENAI_V1_ENDPOINT="https://<foundry-resource>.services.ai.azure.com/openai/v1/"
+export FOUNDRY_PROJECT_ENDPOINT="https://<foundry-resource>.services.ai.azure.com/api/projects/<project-name>"
 CONFIG="experiments/exp998_smoke_baseline_sample.yaml"
 
 bash step0_bootstrap.sh "$CONFIG"
@@ -86,17 +88,47 @@ CAS-replaces remote `data/**`, `deliverable_files/**`, and `self_report.json`.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `HF_TOKEN` | Cloud publication | Dedicated Hugging Face write token used by bootstrap, relay persistence, and Step 7 |
-| `AZURE_OPENAI_ENDPOINT` | Azure | Azure OpenAI resource endpoint for `AzureOpenAI(azure_endpoint=...)`; not a Foundry project URL or `/openai/v1/` base URL |
+| `AZURE_AI_ROUTE_PROFILE` | Azure | `direct-v1` for direct inference, or `project-ci` to route only Code Interpreter through the Foundry project |
+| `AZURE_OPENAI_V1_ENDPOINT` | Azure | Direct OpenAI-compatible `/openai/v1/` endpoint on the approved Azure/Foundry resource |
+| `FOUNDRY_PROJECT_ENDPOINT` | `project-ci` | Foundry project endpoint ending in `/api/projects/<project-name>` |
+| `AZURE_OPENAI_LEGACY_ENDPOINT` | Rollback only | Dated Azure OpenAI resource endpoint; never used by the supported direct/project workflows |
+| `AZURE_AI_ALLOW_LEGACY_ROLLBACK` | Rollback only | Must be exactly `1` to authorize the `legacy-rollback` profile |
 | `AZURE_CLIENT_ID` | GitHub Actions + Azure | Entra application client ID for OIDC |
 | `AZURE_TENANT_ID` | GitHub Actions + Azure | Entra directory tenant ID for OIDC |
 | `AZURE_SUBSCRIPTION_ID` | GitHub Actions + Azure | Azure subscription ID for `azure/login` |
+| `AZURE_AI_EXPECTED_CLIENT_ID` | GitHub Actions + Azure | Independent repository variable for the approved OIDC client ID |
+| `AZURE_AI_EXPECTED_TENANT_ID` | GitHub Actions + Azure | Independent repository variable for the approved OIDC tenant ID |
+| `AZURE_AI_EXPECTED_SUBSCRIPTION_ID` | GitHub Actions + Azure | Independent repository variable for the approved Azure subscription ID |
+| `AZURE_AI_EXPECTED_LEGACY_ACCOUNT` | Strict rollback only | Exact account parsed from `AZURE_OPENAI_LEGACY_ENDPOINT` |
 | `OPENAI_API_KEY` | OpenAI | Native OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic | Anthropic API key |
 
-The supported GitHub Actions path never injects `AZURE_OPENAI_API_KEY`; it uses
-`azure/login` and OIDC. The local example uses `az login` through
-`DefaultAzureCredential`. API-key-only direct runner behavior is outside this
-first-run contract and is not guaranteed here.
+The supported path rejects `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`,
+`AZURE_API_KEY`, `AZURE_OPENAI_AD_TOKEN`, and `AZURE_CLIENT_SECRET`. It uses
+`azure/login` or local `az login` with `DefaultAzureCredential` and the
+`https://ai.azure.com/.default` scope. Inference, narrative, and grading use the
+direct v1 route; only Code Interpreter uses the project route under
+`project-ci`. The separately authorized `legacy-rollback` profile uses the
+dated Azure OpenAI client and its required
+`https://cognitiveservices.azure.com/.default` audience; token preflight checks
+the audience selected by each typed route.
+
+GitHub Actions retains the old repository secret name
+`AZURE_OPENAI_ENDPOINT` only as an onboarding input and maps it to the typed
+runtime variable `FOUNDRY_PROJECT_ENDPOINT`; it never injects the old runtime
+environment variable.
+
+CI always requires `AZURE_AI_EXPECTED_CLIENT_ID`,
+`AZURE_AI_EXPECTED_TENANT_ID`, `AZURE_AI_EXPECTED_SUBSCRIPTION_ID`, and
+`AZURE_AI_EXPECTED_DIRECT_ACCOUNT`; `project-ci` additionally requires
+`AZURE_AI_EXPECTED_PROJECT_ACCOUNT` and `AZURE_AI_EXPECTED_PROJECT_NAME`.
+An explicitly authorized strict `legacy-rollback` run requires
+`AZURE_AI_EXPECTED_LEGACY_ACCOUNT` instead of the direct/project account
+variables.
+Configured secrets are compared before login, then the active account and
+Azure AI token claims are checked after login. Route fingerprints do not attest
+Azure SKU, PTU assignment, or provisioned capacity; verify those separately
+before paid capacity-sensitive experiments.
 
 ## Pipeline Steps
 
@@ -168,23 +200,29 @@ For the workspace-owned result, `report_data.json` is also copied to
 `workspace/upload/self_report.json` for Step 7. HTML generation is disabled.
 External grading remains a separate pipeline.
 
-The default narrative path attempts two `gpt-5.4-pro` calls and then a one-call
-experiment-model fallback. The GitHub workflow enforces a model-free
-`--no-narrative` fallback and identity check before any publication.
+The default narrative path attempts up to two `gpt-5.4-pro` calls. Any setup,
+call, parse, or route-validation failure immediately produces a model-free
+report; no experiment-model fallback is called. The workflow verifies report
+identity before any publication.
 
 ### Step 7: Upload to HuggingFace (`step7_upload_hf.sh`)
 
-Requires a regular, identity-bound `self_report.json`, revalidates every
-published row's source projection and exact deliverable tree, then replaces
-remote `data/**`, `deliverable_files/**`, and `self_report.json`. It uploads only
-`README.md`, `data/train-*.parquet`, `deliverable_files/**`, and
+Requires regular, identity-bound `self_report.json` and
+`inference_provenance.json`, revalidates every published row's source projection
+and exact deliverable tree, then CAS-replaces remote `data/**`,
+`deliverable_files/**`, and `self_report.json` while deleting any stale
+`step2_inference_results.json`. It publishes only `README.md`,
+`data/train-*.parquet`, `deliverable_files/**`, `inference_provenance.json`, and
 `self_report.json` with the Step 0 validated target HEAD as the HF CAS parent.
 If another run changed the target, publication fails instead of overwriting it.
-Each self-report task summary and deliverable list must also equal the validated
-Step 2 result projection.
-`reference_files/**` remains from the duplicated base. The
-Markdown report is committed through the result pull request, not uploaded as a
-report directory to Hugging Face.
+The self-report identity must match the prepared/result fingerprints,
+publication generation, and ordered task identity; each task summary and
+deliverable list must equal the validated Step 2 result projection. The
+endpoint-free sidecar must match the verified experiment, source, task identity,
+and typed route fingerprints.
+`reference_files/**` remains from the duplicated base. The Markdown report is
+committed through the result pull request, not uploaded as a report directory to
+Hugging Face.
 
 ## Experiment YAML Configuration
 
@@ -219,8 +257,16 @@ execution:
   resume_max_rounds: 3
 ```
 
-The real sample file contains the complete prompt and Self-QA contract.
-`condition_b` is optional; omit it for a single-condition run.
+The real sample file contains the complete prompt and Self-QA contract. The
+general Batch workflow is single-condition and rejects `condition_b` before
+credentials. Run separately versioned experiment configs when comparing two
+conditions.
+
+Required and optional preprocessors both participate in credential and route
+planning. Every configured Azure preprocessor deployment is included in the
+strict route preflight, while configured OpenAI or Anthropic preprocessors,
+including optional ones, require the corresponding repository secret.
+`optional` does not remove a configured provider from credential discovery.
 
 ## Execution Modes
 
@@ -232,7 +278,7 @@ The primary execution mode, powered by the **Azure OpenAI Responses API with bui
 - File generation (Excel, PDF, Word, PowerPoint, images) happens in the provider-managed sandbox, reducing host-code execution and local dependency risk; normal cloud, prompt, data, and output-review risks still apply
 - The Responses API streams tool calls (`code_interpreter`) in real-time, and generated files are retrieved via the Files API
 - Supports iterative code execution: the model can inspect outputs, fix errors, and retry — all within a single API call
-- Available on **Azure OpenAI** and **OpenAI** endpoints
+- Available only through the **Azure Foundry project route**; native OpenAI and other providers must use another execution mode
 
 > This is the recommended mode for production use with Azure OpenAI, providing the safest and most capable file generation workflow.
 
@@ -330,7 +376,7 @@ execution:
 
 | Mode | Compatible Providers | Security | Best For |
 |------|---------------------|----------|----------|
-| `code_interpreter` | Azure OpenAI, OpenAI | Sandboxed (cloud) | Production runs, complex file generation |
+| `code_interpreter` | Azure Foundry project route | Sandboxed (cloud) | Production runs, complex file generation |
 | `subprocess` | Any | Isolated temp dir | Non-OpenAI models |
 | `sandbox` | Any | Container (`--network none`) + local fallback | Multimodal/skill-aware, reproducible execution |
 | `json_renderer` | Any | No code execution | Fair cross-model comparison |
@@ -341,7 +387,7 @@ execution:
 
 | Provider | SDK | Env Variable |
 |----------|-----|--------------|
-| `azure` / `azure_openai` | `AzureOpenAI` | `AZURE_OPENAI_ENDPOINT` + `DefaultAzureCredential` (`az login` locally, OIDC in CI) |
+| `azure` / `azure_openai` | `OpenAI` direct v1; Code Interpreter uses `AIProjectClient` | Typed route env + `DefaultAzureCredential` (`az login` locally, OIDC in CI) |
 | `openai` | `OpenAI` | `OPENAI_API_KEY` |
 | `anthropic` | `AnthropicClient` wrapper | `ANTHROPIC_API_KEY` |
 
@@ -370,7 +416,7 @@ experiment YAML
   -> workspace/step1_tasks_prepared.json
   -> workspace/step2_inference_{progress,results}_<condition>.json
   -> workspace/result.json + results/<experiment_id>/
-  -> workspace/upload/{data,deliverable_files,self_report.json}
+  -> workspace/upload/{data,deliverable_files,inference_provenance.json,self_report.json}
   -> result PR (report.md) + Hugging Face allowlist + Actions artifact
 ```
 
@@ -401,8 +447,8 @@ Default: `-m "not integration"` — integration tests are skipped by default.
 - **o-series models** (`gpt-5.x`, `o3`, `o4`) do not support the `temperature` parameter. Passing `temperature=0` causes a 400 error.
 - **`needs_files` gate**: Tasks where the rubric expects file deliverables will fail if no files are produced, triggering a retry.
 - **Resume behavior**: Step 2 saves each condition separately and only re-executes `error`/`qa_failed` tasks from that condition's checkpoint.
-- **HF upload**: Step 7 CAS-replaces remote `data/**`, `deliverable_files/**`, and `self_report.json`, then uploads only the explicit allowlist documented above. `reference_files/**` is preserved.
-- **`code_interpreter` mode** is the recommended execution mode, leveraging Azure OpenAI's Responses API with built-in Code Interpreter for secure, sandboxed file generation. Anthropic and other non-OpenAI providers must use `subprocess` or `json_renderer`.
+- **HF upload**: Step 7 CAS-replaces remote `data/**`, `deliverable_files/**`, and `self_report.json`, deletes any stale `step2_inference_results.json`, then uploads only the explicit allowlist documented below. `reference_files/**` is preserved.
+- **`code_interpreter` mode** is the recommended Azure execution mode, using the typed Foundry project route for secure, sandboxed file generation. Native OpenAI, Anthropic, and other providers must use `subprocess` or `json_renderer`.
 - **Reflection loop**: When Self-QA score is below `min_score`, the retry prompt includes a structured critique (`[REFLECTION]` block) with the previous attempt's summary, itemized issues, and improvement suggestions. This follows the [Reflection agentic pattern](https://www.promptingguide.ai/techniques/reflexion). Each reflection attempt is tracked as `reflection_attempts` in the result object.
 
 ## GitHub Actions
@@ -492,10 +538,12 @@ cannot inherit submitter text or file metadata from a reused target.
 
 Checkpoint generations live under a source/lineage-scoped `_checkpoint/` path.
 Successful cleanup removes that lineage from the dataset's current tree with an
-exact-HEAD CAS commit. Failed uploads or cleanup can leave orphan generations,
-and path deletion does not erase prior Hugging Face revisions or stored history.
-Use only a disposable public target with non-sensitive inputs and outputs; inspect
-or delete the dataset explicitly if historical retention is unacceptable.
+exact-HEAD CAS commit bound to the restored expected generation; a mismatched
+cleanup lineage or generation fails finality. Failed uploads or cleanup can
+leave orphan generations, and path deletion does not erase prior Hugging Face
+revisions or stored history. Use only a disposable public target with
+non-sensitive inputs and outputs; inspect or delete the dataset explicitly if
+historical retention is unacceptable.
 Do not manually populate `relay_run`, `relay_lineage_id`, `source_sha`, or
 `sandbox_image_digest`.
 
@@ -509,6 +557,20 @@ that same Hugging Face target.
 - Step 3 writes formatted outputs under `results/<experiment_id>/`.
 - Step 6 writes `report_data.json` and `report.md` under
   `results/<experiment_id>/report/`, then stages `self_report.json` for HF.
+- Step 7 publishes only `README.md`, `data/train-*.parquet`,
+  `deliverable_files/**`, `inference_provenance.json`, and `self_report.json`.
+  The endpoint-free provenance sidecar contains experiment, source, prepared
+  input, ordered task, and typed route fingerprints; it contains no endpoint
+  URL or credential. It is provenance only and does not attest SKU, PTU, or
+  provisioned capacity.
+- Full Step 2 inference JSON stays in the 30-day Actions artifact and is never
+  in the HF allowlist. Step 7 deletes a stale remote
+  `step2_inference_results.json` left by an older publisher.
+- Step 7 writes a receipt only after verifying the publication revision. The
+  read-only finality check recomputes the receipt-bound plan and verifies that
+  final `main` is either that publication or, for a resumed run, exactly one
+  expected-generation cleanup commit above it; it then confirms HEAD did not
+  advance during verification.
 - A non-dry workflow proves a one-file result PR containing `report.md` before
   Step 7 modifies Hugging Face.
 - The workflow uploads `batch-runner/workspace/` and `batch-runner/results/` for

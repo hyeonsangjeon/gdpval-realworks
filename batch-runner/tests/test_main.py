@@ -66,8 +66,8 @@ def mock_response():
 def mock_env():
     """Mock environment variables"""
     return {
-        "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com/",
-        "AZURE_OPENAI_API_KEY": "test-key"
+        "AZURE_AI_ROUTE_PROFILE": "direct-v1",
+        "AZURE_OPENAI_V1_ENDPOINT": "https://test.openai.azure.com/openai/v1/",
     }
 
 
@@ -611,7 +611,6 @@ class TestIncrementalSaveAndResume:
         """Error context is appended to prompt for retry"""
         from main import _execute_single_task
 
-        captured_prompts = []
         task = mock_tasks[0]
 
         def mock_build(t):
@@ -668,7 +667,6 @@ class TestIncrementalSaveAndResume:
         mock_builder = Mock()
         mock_builder.build = Mock(return_value={"system": "sys", "user": "prompt"})
 
-        mock_executor_cls = Mock()
         mock_result = {"success": True, "text": "ok", "deliverable_text": "d", "files": []}
 
         with patch("main.TaskExecutor") as mock_exec_cls, \

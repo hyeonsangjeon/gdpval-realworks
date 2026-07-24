@@ -14,8 +14,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from core.grader import Grader
 from core.rubric_loader import RubricItem, TaskRubric
 
@@ -112,7 +110,6 @@ def _config(prompt_path: Path, *, batch_size: int = 1, judge_routing: dict | Non
             "model": "gpt-std",
             "deployment": "gpt-std",
             "api_version": "2025-04-01-preview",
-            "endpoint_env": "AZURE_OPENAI_ENDPOINT",
             "reasoning": {"effort": "medium"},
             "generation": {"max_output_tokens": 1024},
         },
@@ -139,12 +136,8 @@ def _config(prompt_path: Path, *, batch_size: int = 1, judge_routing: dict | Non
 
 
 def _make_grader(monkeypatch, tmp_path: Path, cfg: dict) -> Grader:
-    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
-    monkeypatch.setattr("core.grader.DefaultAzureCredential", lambda: object())
-    monkeypatch.setattr("core.grader.get_bearer_token_provider", lambda *a, **k: (lambda: "tok"))
     client = _FakeClient()
-    monkeypatch.setattr("core.grader.AzureOpenAI", lambda **kwargs: client)
-    g = Grader(config=cfg, rubric_loader=object())
+    g = Grader(config=cfg, rubric_loader=object(), client=client)
     g._fake_client = client  # type: ignore[attr-defined]
     return g
 

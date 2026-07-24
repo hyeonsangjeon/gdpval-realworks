@@ -58,6 +58,7 @@ from core.grader_routing import (
     classify_criterion,
     is_overall_style_criterion,
 )
+from core.public_error import public_provider_error_text, public_task_error_text
 from core.rubric_loader import RubricItem, TaskRubric
 from core.tools import (
     MODEL_READ_DELIVERABLE_OPS,
@@ -563,7 +564,7 @@ class ToolCallingJudge:
                 # once and keep going so the run isn't blocked.
                 logger.warning(
                     "ToolCallingJudge SDK fallback (%s); using legacy call shape",
-                    exc,
+                    type(exc).__name__,
                 )
                 try:
                     self._guard_upstream_call()
@@ -589,7 +590,7 @@ class ToolCallingJudge:
                         main_latency_ms += (
                             time.perf_counter() - call_started
                         ) * 1000.0
-                    judge_error = f"{type(exc2).__name__}: {exc2}"
+                    judge_error = public_provider_error_text(exc2)
                     break
             except Exception as exc:  # noqa: BLE001
                 if call_started is not None:
@@ -597,7 +598,7 @@ class ToolCallingJudge:
                         time.perf_counter() - call_started
                     ) * 1000.0
                 usage_complete = False
-                judge_error = f"{type(exc).__name__}: {exc}"
+                judge_error = public_provider_error_text(exc)
                 logger.warning(
                     "ToolCallingJudge upstream call failed for %s: %s",
                     item.rubric_item_id, judge_error,
@@ -932,7 +933,7 @@ class ToolCallingJudge:
             except Exception as exc:  # noqa: BLE001
                 return {
                     "ok": False,
-                    "error": f"{type(exc).__name__}: {exc}",
+                    "error": public_task_error_text(exc),
                     "error_type": "tool_exception",
                 }
 
@@ -972,7 +973,7 @@ class ToolCallingJudge:
             except Exception as exc:  # noqa: BLE001
                 return {
                     "ok": False,
-                    "error": f"{type(exc).__name__}: {exc}",
+                    "error": public_provider_error_text(exc),
                     "error_type": "perception_exception",
                 }
 
@@ -1070,7 +1071,7 @@ class ToolCallingJudge:
             except Exception as exc:  # noqa: BLE001
                 result.judge_error = (
                     f"required_visual_hash_failed:{file_name}:"
-                    f"{type(exc).__name__}:{exc}"
+                    f"{public_task_error_text(exc)}"
                 )
                 return result
 
@@ -1088,7 +1089,7 @@ class ToolCallingJudge:
                 rendered = {
                     "ok": False,
                     "error_type": "render_exception",
-                    "error": f"{type(exc).__name__}: {exc}",
+                    "error": public_task_error_text(exc),
                 }
             render_latency_ms = (
                 time.perf_counter() - render_started
@@ -1133,7 +1134,7 @@ class ToolCallingJudge:
                 result.usage_complete = False
                 result.judge_error = (
                     "required_visual_perception_failed:"
-                    f"{file_name}:{type(exc).__name__}:{exc}"
+                    f"{file_name}:{public_provider_error_text(exc)}"
                 )
                 return result
             if not isinstance(verdict_data, Mapping):

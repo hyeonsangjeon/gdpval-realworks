@@ -34,6 +34,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, Optional
 
+from core.public_error import public_provider_error_text
+
 logger = logging.getLogger(__name__)
 
 #: Hard per-task ceiling on vision sub-judge invocations.
@@ -298,7 +300,10 @@ class VisionPerception:
                 usage_complete=usage_complete,
             )
         except InvalidVisionEnvelope as exc:
-            logger.warning("Vision response failed envelope validation: %s", exc)
+            logger.warning(
+                "Vision response failed envelope validation (%s)",
+                type(exc).__name__,
+            )
             latency_ms = (
                 (time.perf_counter() - call_started) * 1000.0
                 if call_started else 0.0
@@ -308,7 +313,7 @@ class VisionPerception:
                 partial_score=0.0,
                 evidence="",
                 confidence=0.0,
-                reasoning=f"invalid vision response envelope: {exc}"[:300],
+                reasoning="invalid vision response envelope",
                 judge_error="invalid_vision_envelope",
                 api_call_count=int(api_attempted),
                 input_tokens=input_tokens,
@@ -328,7 +333,7 @@ class VisionPerception:
                 evidence="",
                 confidence=0.0,
                 reasoning=f"vision call failed: {type(exc).__name__}",
-                judge_error=f"{type(exc).__name__}: {exc}",
+                judge_error=public_provider_error_text(exc),
                 api_call_count=int(api_attempted),
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,

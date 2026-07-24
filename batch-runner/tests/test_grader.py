@@ -1,9 +1,10 @@
 from pathlib import Path
+from unittest.mock import MagicMock
 
-import openpyxl
 import pytest
 
-from core.grader import Grader
+from core.azure_ai_clients import AzureAIWorkload
+from core.grader import Grader, grader_transport_options
 from core.rubric_loader import RubricItem, TaskRubric
 
 
@@ -53,7 +54,6 @@ def _config(tmp_path: Path) -> dict:
             "model": "gpt-5.4-pro",
             "deployment": "gpt-5.4-pro",
             "api_version": "2025-04-01-preview",
-            "endpoint_env": "AZURE_OPENAI_ENDPOINT",
             "generation": {"temperature": 0, "seed": 42, "max_output_tokens": 1024},
             "reasoning": {"effort": "high"},
         },
@@ -88,14 +88,137 @@ def _task(item: RubricItem) -> TaskRubric:
 
 
 def _make_grader(monkeypatch, tmp_path: Path, fake_client: _FakeClient | None = None) -> Grader:
-    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
-    monkeypatch.setattr("core.grader.DefaultAzureCredential", lambda: object())
-    monkeypatch.setattr("core.grader.get_bearer_token_provider", lambda *args, **kwargs: _FakeTokenProvider())
     fake = fake_client or _FakeClient()
-    monkeypatch.setattr("core.grader.AzureOpenAI", lambda **kwargs: fake)
-    g = Grader(config=_config(tmp_path), rubric_loader=_Loader())
+    g = Grader(config=_config(tmp_path), rubric_loader=_Loader(), client=fake)
     g._fake_client = fake
     return g
+
+
+def test_grader_transport_options_match_factory_defaults(tmp_path):
+    config = _config(tmp_path)
+    assert grader_transport_options(config) == {
+        "timeout": 600,
+        "legacy_api_version": "2025-04-01-preview",
+    }
+
+    config["judge"]["timeout_sec"] = 321
+    config["judge"]["api_version"] = "custom-version"
+    assert grader_transport_options(config) == {
+        "timeout": 321,
+        "legacy_api_version": "custom-version",
+    }
+
+
+def test_grader_routes_typed_workload_and_closes_lease(tmp_path):
+    client = _FakeClient()
+    lease = MagicMock(client=client, runtime_fingerprint="fingerprint")
+    factory = MagicMock()
+    factory.create.return_value = lease
+
+    grader = Grader(
+        config=_config(tmp_path),
+        rubric_loader=_Loader(),
+        client_factory=factory,
+    )
+
+    assert grader.client is client
+    assert grader.runtime_fingerprint == "fingerprint"
+    factory.create.assert_called_once_with(
+        AzureAIWorkload.GRADER,
+        deployment="gpt-5.4-pro",
+        timeout=600,
+        max_retries=None,
+        legacy_api_version="2025-04-01-preview",
+    )
+    grader.close()
+    lease.close.assert_called_once_with()
+
+
+def test_grader_close_failure_clears_owned_client_references(tmp_path):
+    sensitive = "https://private.services.ai.azure.com/"
+    client = _FakeClient()
+    lease = MagicMock(client=client, runtime_fingerprint="fingerprint")
+    lease.close.side_effect = OSError(sensitive)
+    factory = MagicMock()
+    factory.create.return_value = lease
+    grader = Grader(
+        config=_config(tmp_path),
+        rubric_loader=_Loader(),
+        client_factory=factory,
+    )
+
+    with pytest.raises(OSError, match="private.services"):
+        grader.close()
+
+    assert grader._managed_client is None
+    assert grader.client is None
+    grader.close()
+    lease.close.assert_called_once_with()
+
+
+def test_owned_grader_factory_closes_after_managed_client(
+    tmp_path, monkeypatch
+):
+    events = []
+    lease = MagicMock(
+        client=_FakeClient(),
+        runtime_fingerprint="fingerprint",
+    )
+    lease.close.side_effect = lambda: events.append("lease")
+    factory = MagicMock()
+    factory.create.return_value = lease
+    factory.close.side_effect = lambda: events.append("factory")
+    monkeypatch.setattr(
+        "core.llm_client.AzureAIClientFactory",
+        MagicMock(return_value=factory),
+    )
+
+    grader = Grader(config=_config(tmp_path), rubric_loader=_Loader())
+    grader.close()
+
+    assert events == ["lease", "factory"]
+
+
+def test_grader_constructor_failure_closes_acquired_lease(tmp_path):
+    config = _config(tmp_path)
+    Path(config["prompt"]["template"]).unlink()
+    lease = MagicMock(client=_FakeClient(), runtime_fingerprint="fingerprint")
+    factory = MagicMock()
+    factory.create.return_value = lease
+
+    with pytest.raises(FileNotFoundError):
+        Grader(
+            config=config,
+            rubric_loader=_Loader(),
+            client_factory=factory,
+        )
+
+    lease.close.assert_called_once_with()
+
+
+def test_grader_rejects_deprecated_endpoint_env(tmp_path):
+    config = _config(tmp_path)
+    config["judge"]["endpoint_env"] = "AZURE_OPENAI_ENDPOINT"
+
+    with pytest.raises(ValueError, match="judge.endpoint_env is deprecated"):
+        Grader(config=config, rubric_loader=_Loader(), client=_FakeClient())
+
+
+def test_grader_rejects_model_deployment_drift(tmp_path):
+    config = _config(tmp_path)
+    config["judge"]["deployment"] = "different-deployment"
+
+    with pytest.raises(ValueError, match="judge.model and judge.deployment must match"):
+        Grader(config=config, rubric_loader=_Loader(), client=_FakeClient())
+
+
+def test_injected_grader_client_is_not_closed(tmp_path):
+    client = MagicMock()
+    grader = Grader(config=_config(tmp_path), rubric_loader=_Loader(), client=client)
+
+    grader.close()
+
+    client.close.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -185,18 +308,33 @@ def test_judge_parse_retry_then_judge_error(monkeypatch, tmp_path):
     assert ig.verdict == "judge_error"
 
 
-def test_judge_api_failure_becomes_judge_error(monkeypatch, tmp_path):
-    class _RateLimit(Exception):
+def test_judge_api_failure_becomes_class_only_judge_error(
+    monkeypatch, tmp_path, caplog
+):
+    class RateLimitError(Exception):
         status_code = 429
 
-    grader = _make_grader(monkeypatch, tmp_path, _FakeClient(error=_RateLimit("rate limited")))
+    sensitive = "https://private.services.ai.azure.com/ deployment=private"
+    config = _config(tmp_path)
+    config["grader"]["save_raw_responses"] = True
+    grader = Grader(
+        config=config,
+        rubric_loader=_Loader(),
+        client=_FakeClient(error=RateLimitError(sensitive)),
+    )
     deliverable = tmp_path / "d.txt"
     deliverable.write_text("content", encoding="utf-8")
 
     item = RubricItem("r1", "evaluate quality", 3, None)
-    ig, input_tokens, output_tokens = grader._judge(_task(item), item, [deliverable])
+    with caplog.at_level("WARNING", logger="core.grader"):
+        ig, input_tokens, output_tokens = grader._judge(
+            _task(item), item, [deliverable]
+        )
     assert ig.verdict == "judge_error"
     assert ig.evidence == "judge_api_call_failed"
+    assert ig.judge_raw_response == "provider_error:RateLimitError"
+    assert sensitive not in caplog.text
+    assert sensitive not in (ig.judge_raw_response or "")
     assert input_tokens == 0
     assert output_tokens == 0
 

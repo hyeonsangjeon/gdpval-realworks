@@ -18,12 +18,9 @@ See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/code-interp
 """
 
 import inspect
-import os
 import re
 from pathlib import Path
 from typing import Optional
-
-from openai import AzureOpenAI
 
 from core.azure_ai_clients import AzureAIWorkload, validate_client_capabilities
 from core.config import DEFAULT_TOKENS
@@ -114,111 +111,33 @@ class CodeInterpreterRunner:
         redact_provider_errors: bool = False,
     ):
         self._closed = False
-        self._credential = None
-        self._raw_client = None
-        self._owns_client = client is None
         self._uploaded_file_ids: set = set()
         self.redact_provider_errors = redact_provider_errors
-
-        if client is not None:
-            if api_key is not None or endpoint is not None:
-                raise ValueError(
-                    "client cannot be combined with api_key or endpoint"
-                )
-            validate_client_capabilities(
-                client,
-                AzureAIWorkload.CODE_INTERPRETER,
+        if endpoint is not None:
+            raise ValueError(
+                "endpoint overrides are forbidden; use a typed project route"
             )
-            self.client = (
-                _CodeInterpreterProviderCallProxy(client)
-                if self.redact_provider_errors
-                else client
+        if api_key is not None:
+            raise ValueError("static Azure AI API keys are forbidden")
+        if client is None:
+            raise ValueError(
+                "typed Azure AI Code Interpreter client is required"
             )
-            self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
-            self.max_completion_tokens = (
-                max_completion_tokens
-                if max_completion_tokens is not None
-                else DEFAULT_TOKENS["code_generation"]
-            )
-            return
-
-        endpoint = endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
-        api_key = (
-            api_key
-            or os.getenv("AZURE_OPENAI_API_KEY")
-            or os.getenv("AZURE_API_KEY")
+        validate_client_capabilities(
+            client,
+            AzureAIWorkload.CODE_INTERPRETER,
         )
-        credential = None
-        active_client = None
-        try:
-            try:
-                from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-                credential = DefaultAzureCredential()
-                token_provider = get_bearer_token_provider(
-                    credential, "https://cognitiveservices.azure.com/.default"
-                )
-                print("   🔐 CodeInterpreter Auth: DefaultAzureCredential (Entra ID token)")
-                active_client = AzureOpenAI(
-                    azure_endpoint=endpoint,
-                    azure_ad_token_provider=token_provider,
-                    api_version=api_version,
-                )
-            except Exception as oidc_error:
-                if api_key:
-                    print(
-                        "   🔑 CodeInterpreter Auth: API Key "
-                        "(DefaultAzureCredential unavailable)"
-                    )
-                    failed_credential = credential
-                    credential = None
-                    try:
-                        _close_sync_resources(
-                            (("credential", failed_credential),)
-                        )
-                    except BaseException as close_error:
-                        raise close_error from oidc_error
-                    active_client = AzureOpenAI(
-                        api_key=api_key,
-                        azure_endpoint=endpoint,
-                        api_version=api_version,
-                    )
-                else:
-                    raise ValueError(
-                        "No Azure credentials available for CodeInterpreter.\n"
-                        "  - DefaultAzureCredential unavailable.\n"
-                        "  - AZURE_OPENAI_API_KEY not set.\n"
-                        "  Run 'az login' or set AZURE_OPENAI_API_KEY."
-                    ) from oidc_error
-
-            if self.redact_provider_errors:
-                validate_client_capabilities(
-                    active_client,
-                    AzureAIWorkload.CODE_INTERPRETER,
-                )
-            self._raw_client = active_client
-            self.client = (
-                _CodeInterpreterProviderCallProxy(active_client)
-                if self.redact_provider_errors
-                else active_client
-            )
-            self._credential = credential
-            self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
-            self.max_completion_tokens = (
-                max_completion_tokens
-                if max_completion_tokens is not None
-                else DEFAULT_TOKENS["code_generation"]
-            )
-        except BaseException as initialization_error:
-            try:
-                _close_sync_resources(
-                    (
-                        ("client", active_client),
-                        ("credential", credential),
-                    )
-                )
-            except BaseException as cleanup_error:
-                raise cleanup_error from initialization_error
-            raise
+        self.client = (
+            _CodeInterpreterProviderCallProxy(client)
+            if self.redact_provider_errors
+            else client
+        )
+        self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
+        self.max_completion_tokens = (
+            max_completion_tokens
+            if max_completion_tokens is not None
+            else DEFAULT_TOKENS["code_generation"]
+        )
 
     # ── public ─────────────────────────────────────────────────────────
 
@@ -227,11 +146,6 @@ class CodeInterpreterRunner:
             return
         self._closed = True
         self._delete_uploaded_reference_files()
-        if self._owns_client:
-            _close_sync_resources((
-                ("client", self._raw_client),
-                ("credential", self._credential),
-            ))
 
     def __enter__(self) -> "CodeInterpreterRunner":
         if self._closed:

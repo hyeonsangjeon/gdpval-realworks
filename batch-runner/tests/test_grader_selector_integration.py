@@ -127,8 +127,6 @@ def _grader(monkeypatch, fake_client):
     from core.grader import Grader
     import core.grader as grader_mod
 
-    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://fake.openai.azure.com")
-    monkeypatch.setattr(grader_mod, "AzureOpenAI", lambda **kw: fake_client)
     prompt_v1 = (
         Path(grader_mod.__file__).resolve().parent.parent
         / "prompts"
@@ -137,7 +135,6 @@ def _grader(monkeypatch, fake_client):
     cfg = {
         "judge": {
             "provider": "azure_openai",
-            "endpoint_env": "AZURE_OPENAI_ENDPOINT",
             "api_version": "2025-04-01-preview",
             "model": "gpt-5.4",
             "reasoning": {"effort": "medium"},
@@ -156,7 +153,7 @@ def _grader(monkeypatch, fake_client):
         "grader": {"evidence_max_chars": 200},
         "tpm_guard": {},
     }
-    return Grader(cfg, rubric_loader=None)
+    return Grader(cfg, rubric_loader=None, client=fake_client)
 
 
 def test_selector_filters_reference_and_records_audit(monkeypatch, tmp_path):

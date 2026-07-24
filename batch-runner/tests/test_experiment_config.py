@@ -398,6 +398,64 @@ class TestExperimentConfigValidation:
         assert len(errors) > 0
         assert any("provider" in e for e in errors)
 
+    @pytest.mark.parametrize(
+        ("preprocessors", "expected_error"),
+        [
+            ({"type": "audio_analyzer"}, "preprocessors must be a list"),
+            (["audio_analyzer"], "preprocessors[0] must be an object"),
+            (
+                [{"type": "document_analyzer", "model": {
+                    "provider": "azure", "deployment": "probe-model",
+                }}],
+                "preprocessors[0].type must be one of",
+            ),
+            (
+                [{"type": "audio_analyzer"}],
+                "preprocessors[0].model must be an object",
+            ),
+            (
+                [{"type": "audio_analyzer", "model": {
+                    "provider": "vertex", "deployment": "probe-model",
+                }}],
+                "preprocessors[0].model.provider must be one of",
+            ),
+            (
+                [{"type": "audio_analyzer", "model": {
+                    "provider": "azure", "deployment": " ",
+                }}],
+                "preprocessors[0].model.deployment must be a non-empty string",
+            ),
+            (
+                [{"type": "audio_analyzer", "optional": "false", "model": {
+                    "provider": "azure", "deployment": "probe-model",
+                }}],
+                "preprocessors[0].optional must be a boolean",
+            ),
+        ],
+    )
+    def test_validate_rejects_malformed_preprocessor(
+        self, sample_config_dict, preprocessors, expected_error
+    ):
+        sample_config_dict["condition_a"]["preprocessors"] = preprocessors
+
+        errors = ExperimentConfig.from_dict(sample_config_dict).validate()
+
+        assert any(expected_error in error for error in errors)
+
+    @pytest.mark.parametrize("provider", [None, "azure_openai"])
+    def test_validate_accepts_runtime_azure_preprocessor_aliases(
+        self, sample_config_dict, provider
+    ):
+        model = {"deployment": "probe-model"}
+        if provider is not None:
+            model["provider"] = provider
+        sample_config_dict["condition_a"]["preprocessors"] = [{
+            "type": "audio_analyzer",
+            "model": model,
+        }]
+
+        assert ExperimentConfig.from_dict(sample_config_dict).validate() == []
+
     def test_validate_agentic_sandbox_provider(self, sample_config_dict):
         sample_config_dict["execution"]["mode"] = "agentic_sandbox"
         sample_config_dict["experiment"]["id"] = "exp028"

@@ -13,13 +13,13 @@ from types import SimpleNamespace
 
 from core.llm_client import (
     ManagedAzureAIClient,
+    close_provider_client,
     complete,
     create_client,
     create_provider_client,
     create_typed_azure_client,
 )
 from core.config import (
-    DEFAULT_ENDPOINT,
     DEFAULT_MODEL,
     DEFAULT_API_VERSION,
     DEFAULT_TOKENS,
@@ -53,9 +53,6 @@ def _make_mock_response(content="Hello from Azure!", model="gpt-5.2-chat-2025-12
 class TestDefaults:
     """기본 설정값 테스트"""
 
-    def test_default_endpoint(self):
-        assert "openai.azure.com" in DEFAULT_ENDPOINT
-
     def test_default_model(self):
         assert DEFAULT_MODEL == "gpt-5.2-chat"
 
@@ -71,66 +68,46 @@ class TestDefaults:
 class TestCreateClient:
     """create_client() 팩토리 함수 테스트"""
 
-    @patch("core.llm_client.AzureOpenAI")
-    def test_api_key_fallback_disabled_raises(self, mock_cls):
-        """DefaultAzureCredential 실패 시 API Key fallback 없이 즉시 raise (OIDC only)"""
-        with patch.dict("sys.modules", {"azure.identity": None}):
-            with pytest.raises(ValueError, match="Azure authentication failed"):
-                create_client(
-                    endpoint="https://test.openai.azure.com/",
-                    api_key="test-key",
-                    api_version="2024-12-01-preview",
-                )
-            mock_cls.assert_not_called()
+    @patch("core.llm_client.AzureAIClientFactory")
+    def test_returns_managed_typed_client(self, factory_cls):
+        lease = _FakeLease()
+        factory_cls.return_value.create.return_value = lease
 
-    @patch("core.llm_client.AzureOpenAI")
-    def test_env_api_key_ignored_when_oidc_unavailable(self, mock_cls):
-        """OIDC 실패 시 env AZURE_API_KEY 가 있어도 사용 안 함 (fail-loud)"""
-        with patch.dict("sys.modules", {"azure.identity": None}):
-            with patch.dict(os.environ, {
-                "AZURE_OPENAI_ENDPOINT": "https://env-endpoint.azure.com/",
-                "AZURE_API_KEY": "env-key",
-            }):
-                with pytest.raises(ValueError, match="API key fallback disabled"):
-                    create_client()
-                mock_cls.assert_not_called()
+        client = create_client(deployment="deployment")
 
-    @patch("core.llm_client.AzureOpenAI")
-    def test_returns_azure_openai_instance(self, mock_cls):
-        """반환 타입이 AzureOpenAI mock 인스턴스 (OIDC path)"""
-        mock_identity = MagicMock()
-        mock_identity.DefaultAzureCredential.return_value = MagicMock()
-        mock_identity.get_bearer_token_provider.return_value = MagicMock()
-        with patch.dict("sys.modules", {"azure.identity": mock_identity, "azure": MagicMock()}):
-            client = create_client(endpoint="https://x.com/")
-            assert client == mock_cls.return_value
+        assert isinstance(client, ManagedAzureAIClient)
+        assert client.client is lease.client
+        factory_cls.return_value.create.assert_called_once_with(
+            "inference",
+            deployment="deployment",
+            timeout=480.0,
+            max_retries=None,
+            legacy_api_version=DEFAULT_API_VERSION,
+        )
 
-    @patch("core.llm_client.AzureOpenAI")
-    def test_grok_different_endpoint(self, mock_cls):
-        """Grok용 다른 endpoint — 같은 SDK (OIDC token provider)"""
-        mock_identity = MagicMock()
-        mock_identity.DefaultAzureCredential.return_value = MagicMock()
-        mock_identity.get_bearer_token_provider.return_value = MagicMock()
-        with patch.dict("sys.modules", {"azure.identity": mock_identity, "azure": MagicMock()}):
-            create_client(endpoint="https://grok-resource.azure.com/")
-            call_kwargs = mock_cls.call_args[1]
-            assert call_kwargs["azure_endpoint"] == "https://grok-resource.azure.com/"
-            assert "azure_ad_token_provider" in call_kwargs
-            assert "api_key" not in call_kwargs
+    def test_endpoint_override_is_rejected(self):
+        with pytest.raises(ValueError, match="overrides are forbidden"):
+            create_client(endpoint="https://account.openai.azure.com/")
 
-    @patch("core.llm_client.AzureOpenAI")
-    def test_explicit_zero_transport_retries_reach_azure_sdk(self, mock_cls):
-        mock_identity = MagicMock()
-        mock_identity.DefaultAzureCredential.return_value = MagicMock()
-        mock_identity.get_bearer_token_provider.return_value = MagicMock()
-        with patch.dict(
-            "sys.modules", {"azure.identity": mock_identity, "azure": MagicMock()}
-        ):
-            create_provider_client(
-                "azure", endpoint="https://x.com/", max_retries=0
-            )
+    def test_api_key_argument_is_rejected(self):
+        with pytest.raises(ValueError, match="API keys are forbidden"):
+            create_client(api_key="not-a-real-key")
 
-        assert mock_cls.call_args.kwargs["max_retries"] == 0
+    @patch("core.llm_client.AzureAIClientFactory")
+    def test_explicit_zero_transport_retries_reach_typed_factory(
+        self, factory_cls
+    ):
+        factory_cls.return_value.create.return_value = _FakeLease()
+
+        create_provider_client(
+            "azure",
+            deployment="deployment",
+            max_retries=0,
+        )
+
+        assert factory_cls.return_value.create.call_args.kwargs[
+            "max_retries"
+        ] == 0
 
     def test_explicit_zero_transport_retries_reach_openai_sdk(self):
         openai_module = MagicMock()
@@ -139,33 +116,14 @@ class TestCreateClient:
 
         assert openai_module.OpenAI.call_args.kwargs["max_retries"] == 0
 
-    def test_no_credentials_raises(self):
-        """DefaultAzureCredential 실패 시 항상 ValueError (OIDC only)"""
-        with patch.dict("sys.modules", {"azure.identity": None}):
-            with patch.dict(os.environ, {}, clear=True):
-                with pytest.raises(ValueError, match="Azure authentication failed"):
-                    create_client(endpoint="https://x.com/")
+    def test_close_provider_client_delegates_to_managed_client(self):
+        client = MagicMock()
 
-    @patch("core.llm_client.AzureOpenAI")
-    def test_default_azure_credential_priority(self, mock_cls):
-        """DefaultAzureCredential 사용 가능 시 우선 사용"""
-        mock_credential = MagicMock()
-        mock_token_provider = MagicMock()
-        with patch("core.llm_client.DefaultAzureCredential", return_value=mock_credential, create=True):
-            with patch("core.llm_client.get_bearer_token_provider", return_value=mock_token_provider, create=True):
-                # This should fail because the imports are inside create_client
-                # Instead, mock at module level
-                pass
+        from core.llm_client import close_provider_client
 
-        # Test via import mock
-        mock_identity = MagicMock()
-        mock_identity.DefaultAzureCredential.return_value = mock_credential
-        mock_identity.get_bearer_token_provider.return_value = mock_token_provider
-        with patch.dict("sys.modules", {"azure.identity": mock_identity, "azure": MagicMock()}):
-            create_client(endpoint="https://x.com/", api_key="should-not-be-used")
-            call_kwargs = mock_cls.call_args[1]
-            assert "azure_ad_token_provider" in call_kwargs
-            assert "api_key" not in call_kwargs
+        close_provider_client(client)
+
+        client.close.assert_called_once_with()
 
 
 # ─── typed Azure client adapter tests ────────────────────────────────────
@@ -357,7 +315,7 @@ def test_typed_client_rejects_factory_and_settings_ambiguity():
         )
 
 
-def test_create_provider_client_azure_return_contract_is_unchanged():
+def test_create_provider_client_forwards_typed_azure_identity():
     sentinel = object()
     with patch("core.llm_client.create_client", return_value=sentinel) as legacy:
         result = create_provider_client(
@@ -366,6 +324,8 @@ def test_create_provider_client_azure_return_contract_is_unchanged():
             api_key="ignored",
             api_version="version",
             max_retries=0,
+            deployment="deployment",
+            workload="grader",
         )
 
     assert result is sentinel
@@ -374,6 +334,8 @@ def test_create_provider_client_azure_return_contract_is_unchanged():
         api_key="ignored",
         api_version="version",
         max_retries=0,
+        deployment="deployment",
+        workload="grader",
     )
 
 
@@ -500,26 +462,26 @@ class TestComplete:
 
 @pytest.mark.integration
 class TestIntegration:
-    """실제 Azure OpenAI API를 사용하는 통합 테스트
+    """실제 typed Azure AI route를 사용하는 통합 테스트
 
     실행 전 환경변수 필요:
-        export AZURE_API_KEY="your-key"
-        export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+        az login
+        export AZURE_AI_ROUTE_PROFILE="direct-v1"
+        export AZURE_OPENAI_V1_ENDPOINT="https://resource.services.ai.azure.com/openai/v1/"
 
     실행:
         pytest -m integration -v
     """
 
     @pytest.fixture
-    def client(self):
-        """환경변수에서 AzureOpenAI 클라이언트 생성"""
-        api_key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY")
-        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_ENDPOINT")
-
-        if not api_key or not endpoint:
-            pytest.skip("Azure credentials not set. Set AZURE_API_KEY and AZURE_OPENAI_ENDPOINT.")
-
-        return create_client(endpoint=endpoint, api_key=api_key)
+    def client(self, model):
+        if not os.getenv("AZURE_AI_ROUTE_PROFILE") or not os.getenv(
+            "AZURE_OPENAI_V1_ENDPOINT"
+        ):
+            pytest.skip("typed Azure AI route env is not configured")
+        client = create_client(deployment=model)
+        yield client
+        close_provider_client(client)
 
     @pytest.fixture
     def model(self):

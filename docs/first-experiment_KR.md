@@ -57,11 +57,11 @@ job에서 이어갑니다. **OpenID Connect(OIDC)**는 Azure client secret을 �
 않고 job에 단기 Azure 권한을 부여합니다.
 
 체크인된 스모크 설정은 Azure 배포 `gpt-5.2-chat`을 사용하고 3개 태스크를
-선택하며 Self-QA를 최대 3회 재시도할 수 있습니다. Step 6은 먼저
-`gpt-5.4-pro`를 순차적으로 최대 2회 호출합니다. 이 경로에서 오류가 나면
-`gpt-5.2-chat` fallback을 1회 시도하며, 오류 전에 완료된 호출도 과금될 수
-있습니다. 따라서 시간과 비용은 출력 크기, 재시도, 쿼터, 사용 가능한
-deployment, Azure 가격에 따라 달라집니다.
+선택하며 Self-QA를 최대 3회 재시도할 수 있습니다. Step 6은
+`gpt-5.4-pro`를 순차적으로 최대 2회 호출하며 오류 전에 완료된 호출도 과금될
+수 있습니다. 설정, 호출, 파싱, route 검증 중 하나라도 실패하면 즉시
+model-free report를 만들고 실험 모델은 추가 호출하지 않습니다. 따라서 시간과
+비용은 출력 크기, 재시도, 쿼터, Azure 가격에 따라 달라집니다.
 
 ### 1. 계정 준비
 
@@ -129,12 +129,14 @@ projection, manifest, 전체 reference tree, empty submitter state를 통과한 
    subject는
    `repo:YOUR_GITHUB_OWNER/gdpval-realworks:ref:refs/heads/main`을 나타내야
    합니다.
-6. Azure OpenAI 리소스의 **Access control (IAM)**에서 이 앱의 service
-   principal에 **Cognitive Services OpenAI User** 역할을 부여합니다.
-7. Azure 구독 ID와 이 저장소의 `AzureOpenAI(azure_endpoint=...)` client가
-   사용하는 Azure OpenAI **resource endpoint**를 기록합니다. Foundry에서
-   복사한다면 Foundry project URL이나 `/openai/v1/` base URL이 아니라 Azure
-   OpenAI resource endpoint를 사용합니다.
+6. Foundry resource에서 direct model call용 **Cognitive Services OpenAI
+   User**를 부여합니다. Code Interpreter가 사용할 project에는 최소 권한
+   **Foundry User**를 부여합니다. subscription-wide `Contributor`나 `Owner`는
+   부여하지 마세요.
+7. `/api/projects/<project-name>`으로 끝나는 project endpoint를 기록합니다.
+   workflow는 같은 승인 resource host에서 direct `/openai/v1/` route를
+   결정적으로 파생합니다. sample의 inference, Self-QA, narrative, grading은
+   direct v1을, Code Interpreter만 project route를 사용합니다.
 
 Microsoft 공식 절차는
 [GitHub Actions에서 OpenID Connect 사용](https://learn.microsoft.com/azure/developer/github/connect-from-azure-openid-connect)을
@@ -158,11 +160,40 @@ secret**에서 다음을 추가합니다.
 | `AZURE_CLIENT_ID` | Entra 앱의 client ID |
 | `AZURE_TENANT_ID` | Entra directory tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
-| `AZURE_OPENAI_ENDPOINT` | `AzureOpenAI(azure_endpoint=...)`용 Azure OpenAI resource endpoint. Foundry project URL은 아님 |
+| `AZURE_OPENAI_ENDPOINT` | `/api/projects/<project-name>` Foundry project endpoint. migration 동안 GitHub secret 이름만 유지 |
 | `HF_TOKEN` | Hugging Face 전용 write token |
 
-이 경로에는 `AZURE_OPENAI_API_KEY`를 추가하지 마세요. `GITHUB_TOKEN`은
-GitHub가 자동으로 제공합니다.
+**Settings > Secrets and variables > Actions > Variables**에는 fail-closed
+route preflight가 사용할 identity를 등록합니다.
+
+| Variable | 값 |
+|---|---|
+| `AZURE_AI_EXPECTED_CLIENT_ID` | secret과 독립 저장한 exact client ID |
+| `AZURE_AI_EXPECTED_TENANT_ID` | secret과 독립 저장한 exact tenant ID |
+| `AZURE_AI_EXPECTED_SUBSCRIPTION_ID` | secret과 독립 저장한 exact subscription ID |
+| `AZURE_AI_EXPECTED_DIRECT_ACCOUNT` | direct endpoint host의 resource account 이름 |
+| `AZURE_AI_EXPECTED_PROJECT_ACCOUNT` | project endpoint host의 resource account 이름 |
+| `AZURE_AI_EXPECTED_PROJECT_NAME` | exact Foundry project 이름 |
+| `AZURE_AI_EXPECTED_LEGACY_ACCOUNT` | 명시적으로 승인한 local rollback 전용 dated endpoint exact account |
+
+지원 workflow에서는 OIDC identity 변수 세 개와 direct account 변수가 항상
+필수입니다. 값이 없거나 identity가 다르면 Hugging Face 접근, Azure login,
+모델 호출보다 먼저 중단합니다. Code Interpreter에는 project account/name도
+추가로 필요합니다. 로그인 뒤에는 active account tenant/subscription과
+`ai.azure.com` token의 tenant/client claim도 이 독립 변수와 다시 비교합니다.
+지원 workflow는 `legacy-rollback`을 선택하지 않으며, 명시적인 local strict
+rollback에서는 direct/project account 변수 대신 legacy account 변수가 필요합니다.
+
+workflow는 `AZURE_OPENAI_ENDPOINT` secret을 typed runtime 변수
+`FOUNDRY_PROJECT_ENDPOINT`로 mapping하며 Python에는 deprecated 이름을 전달하지
+않습니다. `AZURE_OPENAI_API_KEY`, `AZURE_API_KEY`, `AZURE_OPENAI_AD_TOKEN`,
+`AZURE_CLIENT_SECRET`은 추가하지 마세요. `GITHUB_TOKEN`은 GitHub가 자동으로
+제공합니다.
+
+route fingerprint는 endpoint kind/hash, deployment 이름, SDK version,
+workload를 결합하지만 Azure deployment의 SKU, PTU 할당, provisioned capacity를
+증명하지는 않습니다. PTU routing이나 throughput이 실험 조건이면 paid run 전에
+Azure에서 별도로 확인해야 합니다.
 
 나중에 non-dry run을 하려면 **Settings > Actions > General > Workflow
 permissions**에서 **Read and write permissions**와 Actions의 PR 생성을
@@ -180,7 +211,11 @@ permissions**에서 **Read and write permissions**와 Actions의 PR 생성을
 6. 위 비용 경고를 확인한 뒤 `dry_run`을 `true`로 설정하고 실행합니다.
 
 workflow는 checkout이나 cloud 접근 전에 exact `main`이 아닌 dispatch ref를
-거부하고 그 commit을 relay 전체에 고정합니다. GitHub concurrency는 durable
+거부하고 그 commit을 relay 전체에 고정합니다. Hugging Face나 Azure 접근
+전에는 URL을 출력하지 않고 endpoint shape와 expected identity를 검증하고,
+OIDC login 뒤 첫 model call 전에 active tenant/subscription과
+`ai.azure.com` token의 client/tenant claim을 확인합니다. GitHub
+concurrency는 durable
 queue가 아니므로 같은 `data.source`를 공유하는 실행을 겹치지 마세요.
 Relay checkpoint는 그 exact `data.source`를 사용합니다. progress, identity,
 fingerprint, 참조 deliverable을 복원·검증할 수 없으면 Azure login 전에
@@ -227,7 +262,7 @@ Docker sandbox나 agentic preflight를 실행하는 테스트가 아닙니다.
 | Step 2 | 모델 호출, 산출물 생성, 같은 모델의 Self-QA 실행 |
 | Steps 3-4 | JSON/Markdown 결과와 3-row Parquet 생성 |
 | Step 5 | `dry_run`이 true이고 sample도 3개이므로 건너뜀 |
-| Step 6 | `gpt-5.4-pro` 2-call report와 `gpt-5.2-chat` fallback을 시도. Narrative 실패 시 게시 전에 model-free report를 반드시 생성 |
+| Step 6 | `gpt-5.4-pro` report를 최대 2회 호출. Narrative 실패 시 실험 모델 fallback 없이 게시 전에 즉시 model-free report 생성 |
 | Step 7과 결과 PR | `dry_run`이므로 건너뜀 |
 
 credentialed batch job이 마지막 `always()` 단계에 도달하면

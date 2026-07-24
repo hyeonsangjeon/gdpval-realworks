@@ -92,6 +92,14 @@
     }
   },
   "type": "object",
+  "allOf": [
+    {
+      "if": {"required": ["run_status"]},
+      "then": {
+        "required": ["azure_ai_routes", "azure_ai_runtime_fingerprint"]
+      }
+    }
+  ],
   "required": [
     "schema_version",
     "experiment_id",
@@ -106,6 +114,9 @@
   ],
   "properties": {
     "schema_version": {"enum": ["1.0", "1.1"], "description": "1.0 = v1 grade JSON (legacy, pre-sign-aware). 1.1 = v2sm-backfilled or freshly-graded with PR1 sign-aware math (model_did_right, |max_score|>=4 critical, positive-only denominator, pct_raw diagnostic)."},
+    "run_status": {"enum": ["partial", "final", "diagnostic"]},
+    "expected_task_count": {"type": "integer", "minimum": 1},
+    "expected_ordered_task_ids_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "experiment_id": {"type": "string"},
     "experiment_yaml_name": {"type": "string"},
     "source_inference_experiment_id": {"type": ["string", "null"]},
@@ -117,6 +128,42 @@
     "source_inference_revision": {
       "type": ["string", "null"],
       "pattern": "^[0-9a-f]{40}$"
+    },
+    "source_azure_ai_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["endpoint_kind", "profile", "runtime_fingerprint", "workload"],
+        "properties": {
+          "endpoint_kind": {"enum": ["direct-v1", "project", "legacy-dated"]},
+          "profile": {"enum": ["direct-v1", "project-ci", "legacy-rollback"]},
+          "runtime_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "workload": {"enum": ["inference", "code-interpreter", "narrative", "grader"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "source_azure_ai_provenance_status": {
+      "enum": ["runtime-verified", "verified-sidecar", "legacy-missing", "local-runtime"]
+    },
+    "azure_ai_routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["endpoint_kind", "profile", "runtime_fingerprint", "workload"],
+        "properties": {
+          "endpoint_kind": {"enum": ["direct-v1", "project", "legacy-dated"]},
+          "profile": {"enum": ["direct-v1", "project-ci", "legacy-rollback"]},
+          "runtime_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "workload": {"const": "grader"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "azure_ai_runtime_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     },
     "grader_source_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "renderer_fingerprint": {

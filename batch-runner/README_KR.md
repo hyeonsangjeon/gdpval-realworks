@@ -30,7 +30,7 @@ OIDC, 일회성 Hugging Face 대상, 비용 경계, 3-task smoke test의 정본 
   [3-task 샘플 config](experiments/exp998_smoke_baseline_sample.yaml)의
   `data.source`만 내 Hugging Face namespace의 새 일회성 dataset으로 바꿉니다.
 2. [초보자 가이드](../docs/first-experiment_KR.md#5-repository-secrets-등록)의
-  repository secret 5개를 설정합니다.
+  repository secret 5개와 필수 identity variable을 설정합니다.
 3. `main`의
   내 fork의 [Batch workflow](../../../actions/workflows/batch-run.yml)를 열고
   `exp998_smoke_baseline_sample`을 입력하며 내부 relay 필드는 기본값으로 둡니다.
@@ -53,7 +53,9 @@ pip install -r requirements.txt
 az login
 
 export HF_TOKEN="<전용-HF-write-token>"
-export AZURE_OPENAI_ENDPOINT="<Azure-OpenAI-resource-endpoint>"
+export AZURE_AI_ROUTE_PROFILE="project-ci"
+export AZURE_OPENAI_V1_ENDPOINT="https://<foundry-resource>.services.ai.azure.com/openai/v1/"
+export FOUNDRY_PROJECT_ENDPOINT="https://<foundry-resource>.services.ai.azure.com/api/projects/<project-name>"
 CONFIG="experiments/exp998_smoke_baseline_sample.yaml"
 
 bash step0_bootstrap.sh "$CONFIG"
@@ -81,17 +83,45 @@ text/files/URL/URI도 현재 Step 2 결과와 같을 때만 대상의 원격 `da
 | 변수명 | 필수 여부 | 설명 |
 |--------|----------|------|
 | `HF_TOKEN` | 클라우드 게시 | bootstrap, relay 저장, Step 7에 사용하는 전용 Hugging Face write token |
-| `AZURE_OPENAI_ENDPOINT` | Azure | `AzureOpenAI(azure_endpoint=...)`용 Azure OpenAI resource endpoint. Foundry project URL이나 `/openai/v1/` base URL은 아님 |
+| `AZURE_AI_ROUTE_PROFILE` | Azure | direct inference는 `direct-v1`, Code Interpreter만 Foundry project로 보낼 때는 `project-ci` |
+| `AZURE_OPENAI_V1_ENDPOINT` | Azure | 승인된 Azure/Foundry resource의 OpenAI-compatible `/openai/v1/` endpoint |
+| `FOUNDRY_PROJECT_ENDPOINT` | `project-ci` | `/api/projects/<project-name>`으로 끝나는 Foundry project endpoint |
+| `AZURE_OPENAI_LEGACY_ENDPOINT` | rollback 전용 | dated Azure OpenAI resource endpoint. 지원 direct/project workflow에서는 사용하지 않음 |
+| `AZURE_AI_ALLOW_LEGACY_ROLLBACK` | rollback 전용 | `legacy-rollback` profile 승인을 위해 정확히 `1`이어야 함 |
 | `AZURE_CLIENT_ID` | GitHub Actions + Azure | OIDC용 Entra application client ID |
 | `AZURE_TENANT_ID` | GitHub Actions + Azure | OIDC용 Entra directory tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | GitHub Actions + Azure | `azure/login`용 Azure subscription ID |
+| `AZURE_AI_EXPECTED_CLIENT_ID` | GitHub Actions + Azure | 승인된 OIDC client ID를 고정하는 독립 repository variable |
+| `AZURE_AI_EXPECTED_TENANT_ID` | GitHub Actions + Azure | 승인된 OIDC tenant ID를 고정하는 독립 repository variable |
+| `AZURE_AI_EXPECTED_SUBSCRIPTION_ID` | GitHub Actions + Azure | 승인된 Azure subscription ID를 고정하는 독립 repository variable |
+| `AZURE_AI_EXPECTED_LEGACY_ACCOUNT` | strict rollback 전용 | `AZURE_OPENAI_LEGACY_ENDPOINT`에서 파싱한 exact account |
 | `OPENAI_API_KEY` | OpenAI 사용 시 | 네이티브 OpenAI API 키 |
 | `ANTHROPIC_API_KEY` | Anthropic 사용 시 | Anthropic API 키 |
 
-지원되는 GitHub Actions 경로는 `AZURE_OPENAI_API_KEY`를 주입하지 않고
-`azure/login`과 OIDC를 사용합니다. 로컬 예시는 `az login`과
-`DefaultAzureCredential`로 인증합니다. API-key-only direct runner 동작은 이
-첫 실행 계약 밖이며 여기서는 보장하지 않습니다.
+지원 경로는 `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_API_KEY`,
+`AZURE_OPENAI_AD_TOKEN`, `AZURE_CLIENT_SECRET`을 거부합니다. CI는
+`azure/login`, 로컬은 `az login`과 `DefaultAzureCredential`을 사용하며 scope는
+`https://ai.azure.com/.default`입니다. inference, narrative, grading은 direct
+v1 route를 사용하고 `project-ci`에서도 Code Interpreter만 project route를
+사용합니다. 별도 승인한 `legacy-rollback` profile은 dated Azure OpenAI
+client와 필수 audience인 `https://cognitiveservices.azure.com/.default`를
+사용하며 token preflight는 typed route가 선택한 audience를 검증합니다.
+
+GitHub Actions는 기존 repository secret 이름 `AZURE_OPENAI_ENDPOINT`를
+onboarding 입력으로만 유지하고 typed runtime 변수
+`FOUNDRY_PROJECT_ENDPOINT`로 매핑합니다. 기존 runtime 환경 변수는 주입하지
+않습니다.
+
+CI에는 `AZURE_AI_EXPECTED_CLIENT_ID`, `AZURE_AI_EXPECTED_TENANT_ID`,
+`AZURE_AI_EXPECTED_SUBSCRIPTION_ID`, `AZURE_AI_EXPECTED_DIRECT_ACCOUNT`가 항상
+필수이며, `project-ci`에는 `AZURE_AI_EXPECTED_PROJECT_ACCOUNT`와
+`AZURE_AI_EXPECTED_PROJECT_NAME`도 필요합니다. 명시적으로 승인한 strict
+`legacy-rollback`은 direct/project account 변수 대신
+`AZURE_AI_EXPECTED_LEGACY_ACCOUNT`를 요구합니다. 로그인 전에는 secret과 독립
+variable을 비교하고 로그인 후에는 active account와 Azure AI token claim을
+다시 검증합니다. route fingerprint는 Azure SKU, PTU 할당, provisioned
+capacity를 증명하지 않으므로 비용·처리량 민감 실험 전에 별도로 확인해야
+합니다.
 
 ## 파이프라인 단계별 상세
 
@@ -163,20 +193,28 @@ workspace 소유 결과에서는 `report_data.json`을
 `workspace/upload/self_report.json`으로도 복사합니다. HTML은 생성하지 않으며
 외부 채점은 별도 pipeline입니다.
 
-기본 narrative 경로는 `gpt-5.4-pro`를 2회 호출한 뒤 실험 모델 fallback을
-1회 시도합니다. GitHub workflow는 게시 전에 model-free `--no-narrative`
-fallback과 identity 검사를 강제합니다.
+기본 narrative 경로는 `gpt-5.4-pro`를 최대 2회 호출합니다. 설정, 호출, 파싱,
+route 검증 중 하나라도 실패하면 즉시 model-free report를 만들며 실험 모델
+fallback은 호출하지 않습니다. workflow는 게시 전에 report identity를
+검증합니다.
 
 ### Step 7: HuggingFace 업로드 (`step7_upload_hf.sh`)
 
-regular file이며 identity가 맞는 `self_report.json`, 모든 게시 row의 source
-projection, exact deliverable tree를 검증한 뒤 원격 `data/**`,
-`deliverable_files/**`, `self_report.json`을 교체합니다. Step 0에서 검증한 target
-HEAD를 HF CAS parent로 사용해 다른 run이 target을 바꿨으면 덮어쓰지 않고
-실패합니다. self-report의 task별 summary와 deliverable 목록도 검증된 Step 2
-result projection과 같아야 합니다. `README.md`, `data/train-*.parquet`, `deliverable_files/**`,
-`self_report.json`만 업로드하며 `reference_files/**`는 duplicate 원본을 유지합니다.
-Markdown report는 HF report directory가 아니라 결과 PR로 기록됩니다.
+regular file이며 identity가 맞는 `self_report.json`과
+`inference_provenance.json`, 모든 게시 row의 source projection, exact
+deliverable tree를 다시 검증합니다. 그 뒤 원격 `data/**`,
+`deliverable_files/**`, `self_report.json`을 CAS로 교체하고 오래된
+`step2_inference_results.json`을 삭제합니다. Step 0에서 검증한 target HEAD를
+HF CAS parent로 사용해 `README.md`, `data/train-*.parquet`,
+`deliverable_files/**`, `inference_provenance.json`, `self_report.json`만
+게시하므로 다른 run이 target을 바꿨으면 덮어쓰지 않고 실패합니다.
+self-report identity는 prepared/result fingerprint, publication generation,
+ordered task identity와 일치해야 하고, task별 summary와 deliverable 목록은
+검증된 Step 2 result projection과 같아야 합니다. endpoint-free sidecar는
+검증된 experiment, source, task identity, typed route fingerprint와 일치해야
+합니다.
+`reference_files/**`는 duplicate 원본을 유지합니다. Markdown report는 HF
+report directory가 아니라 결과 PR로 기록됩니다.
 
 ## 실험 YAML 설정
 
@@ -211,8 +249,15 @@ execution:
   resume_max_rounds: 3
 ```
 
-실제 샘플 파일에는 전체 prompt와 Self-QA 계약이 있습니다. `condition_b`를
-생략하면 단일 조건 실행으로 동작합니다.
+실제 샘플 파일에는 전체 prompt와 Self-QA 계약이 있습니다. 일반 Batch
+workflow는 단일 조건만 지원하고 credential 사용 전에 `condition_b`를
+거부합니다. 두 조건 비교는 별도 versioned experiment config로 실행하세요.
+
+필수 preprocessor와 선택적 preprocessor는 모두 credential 및 route 계획에
+참여합니다. 설정된 모든 Azure preprocessor deployment는 strict route
+preflight에 포함되고, optional을 포함해 설정된 OpenAI 또는 Anthropic
+preprocessor에는 해당 repository secret이 필요합니다. `optional`이어도 설정된
+provider는 credential 탐색에서 제외되지 않습니다.
 
 ## 실행 모드
 
@@ -224,7 +269,7 @@ execution:
 - 파일 생성(Excel, PDF, Word, PowerPoint, 이미지)은 provider-managed sandbox에서 이루어져 host code 실행과 로컬 dependency 위험을 줄입니다. 일반적인 cloud, prompt, data, output review 위험은 남습니다.
 - Responses API가 도구 호출(`code_interpreter`)을 실시간 스트리밍하며, 생성된 파일은 Files API로 회수
 - 반복적 코드 실행 지원: 모델이 출력을 검사하고, 오류를 수정하고, 재시도 — 단일 API 호출 내에서 모든 것이 완료
-- **Azure OpenAI** 및 **OpenAI** 엔드포인트에서 사용 가능
+- **Azure Foundry project route**에서만 사용할 수 있으며, native OpenAI와 다른 프로바이더는 다른 실행 모드를 사용해야 함
 
 > 이것은 Azure OpenAI를 사용한 프로덕션 실행에 권장되는 모드로, 가장 안전하고 강력한 파일 생성 워크플로우를 제공합니다.
 
@@ -255,7 +300,7 @@ fallback, cache, manifest 계약은 [sandbox 문서](sandbox/README.md)를
 
 | 모드 | 지원 프로바이더 | 보안 | 적합한 용도 |
 |------|---------------|------|----------|
-| `code_interpreter` | Azure OpenAI, OpenAI | 샌드박스 (클라우드) | 프로덕션 실행, 복잡한 파일 생성 |
+| `code_interpreter` | Azure Foundry project route | 샌드박스 (클라우드) | 프로덕션 실행, 복잡한 파일 생성 |
 | `subprocess` | 모든 프로바이더 | 격리된 임시 디렉토리 | 비 OpenAI 모델 |
 | `sandbox` | 모든 프로바이더 | network 없는 container + local fallback | 멀티모달·skill 기반 재현 실행 |
 | `json_renderer` | 모든 프로바이더 | 코드 실행 없음 | 공정한 모델 간 비교 |
@@ -266,7 +311,7 @@ fallback, cache, manifest 계약은 [sandbox 문서](sandbox/README.md)를
 
 | 프로바이더 | SDK | 환경 변수 |
 |-----------|-----|----------|
-| `azure` / `azure_openai` | `AzureOpenAI` | `AZURE_OPENAI_ENDPOINT` + `DefaultAzureCredential` (로컬 `az login`, CI OIDC) |
+| `azure` / `azure_openai` | `OpenAI` direct v1; Code Interpreter는 `AIProjectClient` | typed route env + `DefaultAzureCredential` (로컬 `az login`, CI OIDC) |
 | `openai` | `OpenAI` | `OPENAI_API_KEY` |
 | `anthropic` | `AnthropicClient` 래퍼 | `ANTHROPIC_API_KEY` |
 
@@ -295,7 +340,7 @@ experiment YAML
   -> workspace/step1_tasks_prepared.json
   -> workspace/step2_inference_{progress,results}_<condition>.json
   -> workspace/result.json + results/<experiment_id>/
-  -> workspace/upload/{data,deliverable_files,self_report.json}
+  -> workspace/upload/{data,deliverable_files,inference_provenance.json,self_report.json}
   -> 결과 PR(report.md) + Hugging Face allowlist + Actions artifact
 ```
 
@@ -326,8 +371,8 @@ pytest --cov=core --cov-report=html
 - **o-series 모델** (`gpt-5.x`, `o3`, `o4`)은 `temperature` 파라미터를 지원하지 않습니다. `temperature=0`을 전달하면 400 에러가 발생합니다.
 - **`needs_files` 게이트**: 루브릭에서 파일 산출물을 기대하는 태스크는 파일이 생성되지 않으면 실패하여 재시도가 트리거됩니다.
 - **이어하기 동작**: Step 2는 조건별 checkpoint를 분리하고 해당 조건의 `error`/`qa_failed` 태스크만 재실행합니다.
-- **HF 업로드**: Step 7은 원격 `data/**`, `deliverable_files/**`, `self_report.json`을 CAS로 교체한 뒤 위에 적은 명시적 allowlist만 업로드합니다. `reference_files/**`는 보존합니다.
-- **`code_interpreter` 모드**는 Azure OpenAI의 Responses API와 내장 Code Interpreter를 활용하는 권장 실행 모드입니다. 보안 샌드박스에서 파일을 생성합니다. Anthropic 등 비 OpenAI 프로바이더는 `subprocess` 또는 `json_renderer`를 사용해야 합니다.
+- **HF 업로드**: Step 7은 원격 `data/**`, `deliverable_files/**`, `self_report.json`을 CAS로 교체하고 오래된 `step2_inference_results.json`을 삭제한 뒤 아래 명시적 allowlist만 업로드합니다. `reference_files/**`는 보존합니다.
+- **`code_interpreter` 모드**는 typed Foundry project route를 사용하는 Azure 권장 실행 모드입니다. Native OpenAI, Anthropic 등 다른 프로바이더는 `subprocess` 또는 `json_renderer`를 사용해야 합니다.
 
 ## GitHub Actions
 
@@ -414,10 +459,12 @@ Step 4와 Step 7은 model 실행 뒤 source semantics를 manifest v4에 다시 �
 
 Checkpoint generation은 source/lineage별 `_checkpoint/` 경로에 있습니다.
 성공한 cleanup은 exact-HEAD CAS commit으로 현재 dataset tree에서 그 lineage를
-제거합니다. 실패한 upload/cleanup은 orphan generation을 남길 수 있고, path
-삭제는 이전 Hugging Face revision이나 저장 이력을 지우지 않습니다. 민감하지
-않은 입력·출력만 새 public 일회성 target에 사용하고, 이력 보존이 허용되지
-않으면 dataset을 명시적으로 점검하거나 삭제하세요.
+제거하며 restored expected generation에 결속됩니다. cleanup lineage 또는
+generation이 다르면 finality 검증이 실패합니다. 실패한 upload/cleanup은
+orphan generation을 남길 수 있고, path 삭제는 이전 Hugging Face revision이나
+저장 이력을 지우지 않습니다. 민감하지 않은 입력·출력만 새 public 일회성
+target에 사용하고, 이력 보존이 허용되지 않으면 dataset을 명시적으로
+점검하거나 삭제하세요.
 `relay_run`, `relay_lineage_id`, `source_sha`, `sandbox_image_digest`를 수동으로
 채우지 마세요.
 
@@ -431,6 +478,19 @@ Hugging Face 대상을 사용합니다.
 - Step 3은 `results/<experiment_id>/`에 포맷된 결과를 씁니다.
 - Step 6은 `results/<experiment_id>/report/`에 `report_data.json`과
   `report.md`를 쓰고 HF용 `self_report.json`을 staging합니다.
+- Step 7은 `README.md`, `data/train-*.parquet`, `deliverable_files/**`,
+  `inference_provenance.json`, `self_report.json`만 게시합니다. endpoint-free
+  provenance sidecar에는 experiment, source, prepared input, ordered task,
+  typed route fingerprint만 있으며 endpoint URL과 credential은 없습니다. 이
+  정보는 provenance일 뿐 SKU, PTU, provisioned capacity를 증명하지 않습니다.
+- 전체 Step 2 inference JSON은 30일 Actions artifact에만 남고 HF allowlist에는
+  들어가지 않습니다. Step 7은 이전 게시자가 남긴 원격
+  `step2_inference_results.json`도 삭제합니다.
+- Step 7은 publication revision을 검증한 뒤에만 receipt를 씁니다. read-only
+  finality check는 receipt-bound plan을 다시 계산하고 최종 `main`이 해당
+  publication이거나 resumed run에서는 그 바로 위의 expected-generation
+  cleanup commit 하나인지 검증한 뒤, 검증 중 HEAD가 전진하지 않았는지도
+  확인합니다.
 - non-dry workflow는 Step 7이 HF를 수정하기 전에 `report.md` 하나만 담은
   결과 PR 계약을 검증합니다.
 - workflow는 `batch-runner/workspace/`와 `batch-runner/results/`를 30일

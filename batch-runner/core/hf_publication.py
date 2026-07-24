@@ -15,10 +15,15 @@ from typing import BinaryIO
 from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
 from core.inference_manifest import (
+    canonical_execution_mode,
     canonical_deliverable_uris,
+    canonicalize_azure_ai_routes,
     canonicalize_inference_results,
+    validate_execution_route_binding,
+    validate_inference_provenance,
 )
 from core.prepared_fingerprint import FINGERPRINT_RE, validate_prepared_fingerprint
+from core.public_error import public_task_error
 from core.publication_generation import validate_publication_generation
 from core.result_fingerprint import (
     RESULT_FINGERPRINT_RE,
@@ -33,6 +38,7 @@ INCLUDE_PATTERNS = [
     "README.md",
     "data/train-*.parquet",
     "deliverable_files/**",
+    "inference_provenance.json",
     "self_report.json",
 ]
 IGNORE_PATTERNS = [
@@ -48,7 +54,9 @@ IGNORE_PATTERNS = [
 DELETE_PATTERNS = [
     "data/**",
     "deliverable_files/**",
+    "inference_provenance.json",
     "self_report.json",
+    "step2_inference_results.json",
 ]
 DEFAULT_PUBLICATION_RECEIPT_PATH = Path("workspace/publication_receipt.json")
 _PUBLICATION_RECEIPT_FIELDS = frozenset({
@@ -122,6 +130,8 @@ class PublicationIdentity:
     result_fingerprint: str
     ordered_task_ids: tuple[str, ...]
     results: tuple[PublicationTaskResult, ...]
+    azure_ai_routes: tuple[dict[str, str], ...] = ()
+    execution_mode: str = "subprocess"
 
     def submitter_rows(self) -> list[dict]:
         return [result.as_dict() for result in self.results]
@@ -489,6 +499,11 @@ def load_publication_identity(
         raise ValueError("inference publication result task set mismatch")
     result_fingerprint = validate_inference_result_fingerprint(inference)
     normalized_results = canonicalize_inference_results(inference["results"])
+    azure_ai_routes = tuple(
+        canonicalize_azure_ai_routes(inference.get("azure_ai_routes", []))
+    )
+    execution_mode = canonical_execution_mode(inference.get("execution_mode"))
+    validate_execution_route_binding(execution_mode, list(azure_ai_routes))
     prepared_task_map = {
         task["task_id"]: task
         for task in prepared["tasks"]
@@ -559,6 +574,8 @@ def load_publication_identity(
         result_fingerprint=result_fingerprint,
         ordered_task_ids=task_ids,
         results=tuple(publication_results),
+        azure_ai_routes=azure_ai_routes,
+        execution_mode=execution_mode,
     )
 
 
@@ -611,6 +628,19 @@ def _publication_source_paths(root: Path) -> list[Path]:
     ):
         raise ValueError("self_report.json must be a regular file")
 
+    provenance_path = root / "inference_provenance.json"
+    try:
+        provenance_metadata = provenance_path.lstat()
+    except FileNotFoundError as exc:
+        raise ValueError(
+            "inference_provenance.json is required for publication"
+        ) from exc
+    if (
+        stat.S_ISLNK(provenance_metadata.st_mode)
+        or not stat.S_ISREG(provenance_metadata.st_mode)
+    ):
+        raise ValueError("inference_provenance.json must be a regular file")
+
     data_root = root / "data"
     _assert_no_symlink_ancestors(data_root)
     try:
@@ -619,7 +649,11 @@ def _publication_source_paths(root: Path) -> list[Path]:
         raise ValueError("publication data directory is missing") from exc
     if stat.S_ISLNK(data_metadata.st_mode) or not stat.S_ISDIR(data_metadata.st_mode):
         raise ValueError("publication data directory is not a regular directory")
-    paths = [data_root / "train-00000-of-00001.parquet", self_report_path]
+    paths = [
+        data_root / "train-00000-of-00001.parquet",
+        provenance_path,
+        self_report_path,
+    ]
     if _regular_file(root / "README.md", required=False):
         paths.append(root / "README.md")
     _regular_file(paths[0], required=True)
@@ -740,9 +774,7 @@ def _publication_deletions(
     stale = sorted(
         path
         for path in remote_paths
-        if path == "self_report.json"
-        or path.startswith("data/")
-        or path.startswith("deliverable_files/")
+        if _is_managed_publication_path(path)
         if path not in addition_paths
     )
     return [
@@ -919,7 +951,7 @@ def _validate_self_report_payload(
             "task_id": result.task_id,
             "sector": result.sector,
             "occupation": result.occupation,
-            "error": result.error,
+            **public_task_error(result.error),
         }
         for result in identity.results
         if result.error
@@ -967,6 +999,32 @@ def _validate_publication_files(
     identity: PublicationIdentity,
 ) -> None:
     _validate_self_report(files, identity)
+    provenance_records = [
+        record
+        for record in files
+        if record.path == "inference_provenance.json"
+    ]
+    if len(provenance_records) != 1:
+        raise ValueError(
+            "inference_provenance.json is required for publication"
+        )
+    provenance = provenance_records[0]
+    try:
+        provenance.stream.seek(0)
+        payload = json.load(provenance.stream)
+        validate_inference_provenance(
+            payload,
+            experiment_id=identity.experiment_id,
+            source_repo_id=identity.repo_id,
+            task_ids=list(identity.ordered_task_ids),
+            prepared_fingerprint=identity.prepared_fingerprint,
+            azure_ai_routes=list(identity.azure_ai_routes),
+            execution_mode=identity.execution_mode,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError("publication inference provenance is invalid") from exc
+    finally:
+        provenance.stream.seek(0)
     expected_deliverables = {
         record.path: (record.size, record.sha256)
         for result in identity.results
@@ -983,7 +1041,11 @@ def _validate_publication_files(
 
 def _is_managed_publication_path(path: str) -> bool:
     return (
-        path == "self_report.json"
+        path in {
+            "inference_provenance.json",
+            "self_report.json",
+            "step2_inference_results.json",
+        }
         or path.startswith("data/")
         or path.startswith("deliverable_files/")
     )
@@ -1111,6 +1173,10 @@ def _validate_publication_identity(
         raise ValueError("expected publication fingerprint is invalid")
     if RESULT_FINGERPRINT_RE.fullmatch(identity.result_fingerprint) is None:
         raise ValueError("expected publication result fingerprint is invalid")
+    validate_execution_route_binding(
+        identity.execution_mode,
+        list(identity.azure_ai_routes),
+    )
     if (
         not isinstance(identity.results, tuple)
         or any(
@@ -1382,7 +1448,7 @@ def verify_publication_finality(
                     revision=final_head,
                     files=files,
                     identity=identity,
-                    managed_only=True,
+                    managed_only=False,
                 )
             confirmed_head = getattr(client.repo_info(
                 repo_id=repo_id,

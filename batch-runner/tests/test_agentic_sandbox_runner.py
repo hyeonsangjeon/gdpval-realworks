@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from core.agentic_budget import AgenticBudgetLedger
 from core.agentic_sandbox_runner import AgenticPricing, AgenticSandboxRunner
 
@@ -367,6 +369,80 @@ def test_authorization_happens_before_deferred_client_factory(tmp_path):
     assert events[:3] == ["reserve", "authorize", "client_factory"]
     assert scripted.calls
     assert result["success"] is False
+
+
+@pytest.mark.parametrize(
+    ("validation_error", "public_error"),
+    [
+        (ValueError("https://private.invalid/"), "provider_error:ValueError"),
+        (SystemExit("https://private.invalid/"), "provider_error:TaskExecutionError"),
+    ],
+)
+def test_deferred_client_validation_failure_closes_candidate_without_raw_chain(
+    tmp_path, monkeypatch, validation_error, public_error
+):
+    candidate = SimpleNamespace(close=lambda: None)
+    runner = AgenticSandboxRunner(
+        client_factory=lambda: candidate,
+        backend_factory=lambda **_: FakeBackend(),
+        budget_ledger=AgenticBudgetLedger(tmp_path / "budget.sqlite3"),
+        authorize_request=lambda *_args: None,
+        pricing={
+            "input_per_million": "0",
+            "output_per_million": "0",
+            "cached_input_per_million": "0",
+        },
+    )
+    candidate.close = lambda: setattr(candidate, "closed", True)
+    monkeypatch.setattr(
+        runner,
+        "_validate_client",
+        lambda _client: (_ for _ in ()).throw(validation_error),
+    )
+
+    with pytest.raises(RuntimeError, match=public_error) as caught:
+        runner._acquire_deferred_client()
+
+    assert candidate.closed is True
+    assert "private.invalid" not in str(caught.value)
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert runner.client is None
+
+
+def test_deferred_client_validation_cleanup_failure_is_class_only(
+    tmp_path, monkeypatch
+):
+    sensitive = "https://private.services.ai.azure.com/"
+
+    class Candidate:
+        def close(self):
+            raise OSError(sensitive)
+
+    runner = AgenticSandboxRunner(
+        client_factory=Candidate,
+        backend_factory=lambda **_: FakeBackend(),
+        budget_ledger=AgenticBudgetLedger(tmp_path / "budget.sqlite3"),
+        authorize_request=lambda *_args: None,
+        pricing={
+            "input_per_million": "0",
+            "output_per_million": "0",
+            "cached_input_per_million": "0",
+        },
+    )
+    monkeypatch.setattr(
+        runner,
+        "_validate_client",
+        lambda _client: (_ for _ in ()).throw(ValueError(sensitive)),
+    )
+
+    with pytest.raises(RuntimeError, match="provider_error:OSError") as caught:
+        runner._acquire_deferred_client()
+
+    assert sensitive not in str(caught.value)
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert runner.client is None
 
 
 def test_later_model_failure_preserves_best_verified_files(tmp_path):

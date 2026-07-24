@@ -56,11 +56,11 @@ later Actions job. **OpenID Connect (OIDC)** gives that job short-lived Azure
 access without storing an Azure client secret.
 
 The checked-in smoke config uses Azure deployment `gpt-5.2-chat`, selects three
-tasks, and can retry Self-QA up to three times. Step 6 first attempts two
-sequential `gpt-5.4-pro` report calls. If that path raises an error, it attempts
-one `gpt-5.2-chat` fallback call; calls completed before the error can still be
-billed. The exact time and cost therefore depend on output size, retries, quota,
-available deployments, and your Azure pricing.
+tasks, and can retry Self-QA up to three times. Step 6 attempts up to two
+sequential `gpt-5.4-pro` report calls; calls completed before an error can still
+be billed. Any setup, call, parse, or route-validation failure immediately
+produces a model-free report and does not call the experiment model. Exact time
+and cost depend on output size, retries, quota, and your Azure pricing.
 
 ### 1. Prepare the accounts
 
@@ -132,12 +132,14 @@ OIDC token. A straightforward portal setup is:
 5. Enter your GitHub owner and repository, select **Branch**, and set the branch
    to `main`. The subject should represent
    `repo:YOUR_GITHUB_OWNER/gdpval-realworks:ref:refs/heads/main`.
-6. On the Azure OpenAI resource, open **Access control (IAM)** and assign the
-   app's service principal the **Cognitive Services OpenAI User** role.
-7. Record the Azure subscription ID and the Azure OpenAI **resource endpoint**
-   consumed by this repository's `AzureOpenAI(azure_endpoint=...)` client. If
-   you copy it from Foundry, use the Azure OpenAI resource endpoint, not a
-   Foundry project URL or an `/openai/v1/` base URL.
+6. On the Foundry resource, assign the service principal **Cognitive Services
+   OpenAI User** for direct model calls. On the project used by Code
+   Interpreter, assign the least-privilege **Foundry User** role. Do not assign
+   subscription-wide `Contributor` or `Owner`.
+7. Record the project endpoint ending in `/api/projects/<project-name>`. The
+   workflow derives the direct `/openai/v1/` route from that same approved
+   resource host. The sample's inference, Self-QA, narrative, and grading use
+   direct v1; only Code Interpreter uses the project route.
 
 Microsoft's reference setup is
 [Use OpenID Connect with GitHub Actions](https://learn.microsoft.com/azure/developer/github/connect-from-azure-openid-connect).
@@ -161,11 +163,41 @@ repository secret** and add:
 | `AZURE_CLIENT_ID` | Entra application client ID |
 | `AZURE_TENANT_ID` | Entra directory tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
-| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI resource endpoint for `AzureOpenAI(azure_endpoint=...)`; not a Foundry project URL |
+| `AZURE_OPENAI_ENDPOINT` | Foundry project endpoint ending in `/api/projects/<project-name>`; retained as the GitHub secret name during migration |
 | `HF_TOKEN` | Dedicated Hugging Face write token |
 
-Do not add `AZURE_OPENAI_API_KEY` for this path. `GITHUB_TOKEN` is supplied by
+Under **Settings > Secrets and variables > Actions > Variables**, add the
+expected identities used by the fail-closed route preflight:
+
+| Variable | Value |
+|---|---|
+| `AZURE_AI_EXPECTED_CLIENT_ID` | Exact client ID stored independently from the secret |
+| `AZURE_AI_EXPECTED_TENANT_ID` | Exact tenant ID stored independently from the secret |
+| `AZURE_AI_EXPECTED_SUBSCRIPTION_ID` | Exact subscription ID stored independently from the secret |
+| `AZURE_AI_EXPECTED_DIRECT_ACCOUNT` | Resource account name from the direct endpoint host |
+| `AZURE_AI_EXPECTED_PROJECT_ACCOUNT` | Resource account name from the project endpoint host |
+| `AZURE_AI_EXPECTED_PROJECT_NAME` | Exact Foundry project name |
+| `AZURE_AI_EXPECTED_LEGACY_ACCOUNT` | Exact dated-endpoint account for an explicitly authorized local rollback only |
+
+The three OIDC identity variables and direct account variable are always
+required by the supported workflows. A missing or mismatched value aborts
+before Hugging Face access, Azure login, or model calls. Project account/name
+are additionally required for Code Interpreter. After login, the workflow also
+matches the active account tenant/subscription and the `ai.azure.com` token's
+tenant/client claims to those independent variables. The supported workflows
+do not select `legacy-rollback`; an explicit local strict rollback requires the
+legacy account variable instead of direct/project account variables.
+
+The workflow maps the `AZURE_OPENAI_ENDPOINT` secret into the typed
+`FOUNDRY_PROJECT_ENDPOINT` runtime variable; Python never receives the
+deprecated name. Do not add `AZURE_OPENAI_API_KEY`, `AZURE_API_KEY`,
+`AZURE_OPENAI_AD_TOKEN`, or `AZURE_CLIENT_SECRET`. `GITHUB_TOKEN` is supplied by
 GitHub automatically.
+
+The route fingerprint binds endpoint kind, endpoint hash, deployment name, SDK
+version, and workload. It does **not** prove the Azure deployment SKU, PTU
+assignment, or provisioned capacity. Confirm those properties in Azure before a
+paid run when PTU routing or throughput is an experiment requirement.
 
 For later non-dry runs, open **Settings > Actions > General > Workflow
 permissions**, select **Read and write permissions**, and allow GitHub Actions
@@ -184,7 +216,11 @@ this.
 6. Set `dry_run` to `true`, acknowledge the cost warning above, and run it.
 
 The workflow rejects any dispatch ref other than exact `main` before checkout
-or cloud access and pins that commit through relay legs. Do not overlap runs
+or cloud access and pins that commit through relay legs. Before Hugging Face or
+Azure access, it validates the endpoint shapes and expected identities without
+printing either URL. After OIDC login it verifies the active tenant,
+subscription, and `ai.azure.com` token client/tenant claims before the first
+model call. Do not overlap runs
 that share one `data.source`; GitHub concurrency is not a durable queue.
 Relay checkpoints use that exact `data.source`. A continuation fails before
 Azure login if progress, identity, fingerprint, or referenced deliverables
@@ -233,7 +269,7 @@ The expected path is:
 | Step 2 | Calls the model, creates deliverables, and runs same-model Self-QA |
 | Steps 3-4 | Writes JSON/Markdown results and a three-row Parquet file |
 | Step 5 | Skipped because `dry_run` is true and because this sample has three tasks |
-| Step 6 | Attempts two `gpt-5.4-pro` report calls, then a one-call `gpt-5.2-chat` fallback; narrative failure triggers a mandatory model-free report before publication |
+| Step 6 | Attempts up to two `gpt-5.4-pro` report calls; any narrative failure triggers an immediate model-free report before publication, with no experiment-model fallback |
 | Step 7 and result PR | Skipped because `dry_run` is true |
 
 When the credentialed batch job reaches its final `always()` step, it attempts

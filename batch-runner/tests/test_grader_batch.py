@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from core.grader import Grader, ItemGrade  # ItemGrade only for type-check
 from core.grader_batch import BatchJudge
 from core.rubric_loader import RubricItem, TaskRubric
 
@@ -276,3 +275,39 @@ def test_api_kwargs_omit_seed_and_temperature(tmp_path: Path):
     assert kwargs["model"] == "gpt-test"
     assert kwargs["reasoning"] == {"effort": "medium"}
     assert kwargs["max_output_tokens"] == 1024
+
+
+def test_api_failure_is_class_only_in_log_and_raw_response(
+    tmp_path: Path, caplog
+):
+    sensitive = "https://private.services.ai.azure.com/ deployment=secret"
+
+    class RateLimitError(Exception):
+        status_code = 429
+
+    client = _FakeClient()
+
+    def fail(**_kwargs):
+        raise RateLimitError(sensitive)
+
+    client.responses.create = fail
+    deliverable = tmp_path / "d.txt"
+    deliverable.write_text("content", encoding="utf-8")
+    items = _items(2)
+    judge = _make_judge(
+        client=client,
+        grader_overrides={"save_raw_responses": True},
+    )
+
+    with caplog.at_level("WARNING", logger="core.grader_batch"):
+        result = judge.judge_items_batch(
+            _task(items), items, [deliverable]
+        )
+
+    assert all(item.verdict == "judge_error" for item in result.items)
+    assert all(
+        item.judge_raw_response == "provider_error:RateLimitError"
+        for item in result.items
+    )
+    assert sensitive not in caplog.text
+    assert sensitive not in str(result.items)

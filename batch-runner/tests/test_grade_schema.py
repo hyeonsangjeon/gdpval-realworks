@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 from jsonschema import ValidationError, validate
 
+from core.grade_payload import validate_grade_payload
+
 
 def _load_schema() -> dict:
     return json.loads(Path("schemas/grade.schema.json").read_text(encoding="utf-8"))
@@ -186,6 +188,59 @@ def test_pinned_inference_and_grader_source_identity_pass_schema():
     payload["grader_source_hash"] = "b" * 64
 
     validate(instance=payload, schema=_load_schema())
+
+
+def test_present_grader_runtime_fingerprint_must_not_be_null():
+    payload = _minimal_payload()
+    payload["azure_ai_runtime_fingerprint"] = None
+
+    with pytest.raises(ValidationError):
+        validate(instance=payload, schema=_load_schema())
+
+
+def _current_grade_payload() -> dict:
+    payload = _minimal_payload()
+    payload.update({
+        "run_status": "partial",
+        "expected_task_count": 1,
+        "expected_ordered_task_ids_sha256": "a" * 64,
+        "azure_ai_routes": [
+            {
+                "endpoint_kind": "direct-v1",
+                "profile": "direct-v1",
+                "runtime_fingerprint": "b" * 64,
+                "workload": "grader",
+            },
+            {
+                "endpoint_kind": "direct-v1",
+                "profile": "direct-v1",
+                "runtime_fingerprint": "c" * 64,
+                "workload": "grader",
+            },
+        ],
+        "azure_ai_runtime_fingerprint": "b" * 64,
+    })
+    return payload
+
+
+@pytest.mark.parametrize(
+    "missing_field", ["azure_ai_routes", "azure_ai_runtime_fingerprint"]
+)
+def test_current_grade_requires_azure_runtime_identity(missing_field):
+    payload = _current_grade_payload()
+    del payload[missing_field]
+
+    with pytest.raises(ValidationError):
+        validate_grade_payload(payload, _load_schema())
+
+
+def test_current_grade_binds_top_level_fingerprint_to_primary_route():
+    payload = _current_grade_payload()
+    validate_grade_payload(payload, _load_schema())
+    payload["azure_ai_runtime_fingerprint"] = "c" * 64
+
+    with pytest.raises(ValueError, match="primary grader route fingerprint"):
+        validate_grade_payload(payload, _load_schema())
 
 
 @pytest.mark.parametrize(

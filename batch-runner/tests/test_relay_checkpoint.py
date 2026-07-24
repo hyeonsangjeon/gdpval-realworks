@@ -23,6 +23,48 @@ _FAKE_SNAPSHOT_ROOT = None
 _FAKE_DOWNLOAD_CALLS = None
 
 
+def _checkpoint_result(task_id, status="success", deliverables=None):
+    timestamp = "2026-07-22T00:00:00+00:00"
+    if status == "pending":
+        return {
+            "task_id": task_id,
+            "status": status,
+            "error": "wall_timeout",
+            "timestamp": timestamp,
+        }
+    result = {
+        "task_id": task_id,
+        "status": status,
+        "content": None,
+        "deliverable_text": None,
+        "deliverable_files": list(deliverables or []),
+        "model": "test-model",
+        "usage": None,
+        "observability": {},
+        "latency_ms": 1.0,
+        "timestamp": timestamp,
+    }
+    if status == "error":
+        result["error"] = "test_error"
+    else:
+        result["content"] = "done"
+        result["deliverable_text"] = "done"
+    return result
+
+
+def _write_status_progress(path, statuses):
+    task_ids = [f"task-{index}" for index in range(len(statuses))]
+    path.write_text(json.dumps({
+        "schema_version": "step2-progress-v2",
+        "ordered_task_ids": task_ids,
+        "total_tasks": len(task_ids),
+        "results": [
+            _checkpoint_result(task_id, status)
+            for task_id, status in zip(task_ids, statuses, strict=True)
+        ],
+    }), encoding="utf-8")
+
+
 @pytest.fixture(autouse=True)
 def _fake_uploaded_snapshots(tmp_path, monkeypatch):
     global _FAKE_DOWNLOAD_CALLS, _FAKE_SNAPSHOT_ROOT
@@ -265,11 +307,9 @@ def _write_progress(path: Path, deliverables=None):
                 "ordered_task_ids": ["task-1"],
                 "total_tasks": 1,
                 "results": [
-                    {
-                        "task_id": "task-1",
-                        "status": "success",
-                        "deliverable_files": deliverables or [],
-                    }
+                    _checkpoint_result(
+                        "task-1", deliverables=deliverables
+                    )
                 ],
             }
         ),
@@ -387,7 +427,7 @@ def _write_prepared_checkpoint(tmp_path, monkeypatch, *, run_id="lineage"):
         "Baseline",
         "subprocess",
         1,
-        [{"task_id": "task-1", "status": "pending"}],
+        [_checkpoint_result("task-1", "pending")],
         "2026-07-22T00:00:00+00:00",
         workspace / "step2_inference_progress_condition_a.json",
         run_id=run_id,
@@ -711,6 +751,26 @@ def test_upload_rejects_missing_result_task_before_hf_write(tmp_path):
         relay.upload_checkpoint(
             "owner/repository", token="token", source_sha=SOURCE_SHA,
             progress_path=progress, upload_root=upload, api=api
+        )
+
+    assert api.calls == []
+
+
+def test_upload_rejects_malformed_success_before_hf_write(tmp_path):
+    progress, upload = _write_local_checkpoint(tmp_path)
+    payload = json.loads(progress.read_text(encoding="utf-8"))
+    del payload["results"][0]["deliverable_text"]
+    progress.write_text(json.dumps(payload), encoding="utf-8")
+    api = FakeApi()
+
+    with pytest.raises(ValueError, match="fields are incomplete"):
+        relay.upload_checkpoint(
+            "owner/repository",
+            token="token",
+            source_sha=SOURCE_SHA,
+            progress_path=progress,
+            upload_root=upload,
+            api=api,
         )
 
     assert api.calls == []
@@ -1388,15 +1448,7 @@ def test_relay_status_uses_validated_result_statuses(
     tmp_path, statuses, exit_code, expected
 ):
     progress = tmp_path / "progress.json"
-    task_ids = [f"task-{index}" for index in range(len(statuses))]
-    progress.write_text(json.dumps({
-        "ordered_task_ids": task_ids,
-        "total_tasks": len(task_ids),
-        "results": [
-            {"task_id": task_id, "status": status}
-            for task_id, status in zip(task_ids, statuses, strict=True)
-        ],
-    }), encoding="utf-8")
+    _write_status_progress(progress, statuses)
 
     assert relay.resolve_relay_status(progress, exit_code) == expected
 
@@ -1413,11 +1465,7 @@ def test_relay_status_rejects_exit_and_pending_mismatch(
     tmp_path, status, exit_code, message
 ):
     progress = tmp_path / "progress.json"
-    progress.write_text(json.dumps({
-        "ordered_task_ids": ["task-1"],
-        "total_tasks": 1,
-        "results": [{"task_id": "task-1", "status": status}],
-    }), encoding="utf-8")
+    _write_status_progress(progress, [status])
 
     with pytest.raises(ValueError, match=message):
         relay.resolve_relay_status(progress, exit_code)
@@ -1438,10 +1486,13 @@ def test_relay_status_rejects_noncanonical_exit_code(tmp_path, exit_code):
 @pytest.mark.parametrize("status", [None, True, -1, "", "1+1", "unknown"])
 def test_relay_status_rejects_malformed_pending_status(tmp_path, status):
     progress = tmp_path / "progress.json"
+    result = _checkpoint_result("task-1")
+    result["status"] = status
     progress.write_text(json.dumps({
+        "schema_version": "step2-progress-v2",
         "ordered_task_ids": ["task-1"],
         "total_tasks": 1,
-        "results": [{"task_id": "task-1", "status": status}],
+        "results": [result],
     }), encoding="utf-8")
 
     with pytest.raises(ValueError, match="result status is invalid"):
@@ -1493,6 +1544,82 @@ def test_checkpoint_identity_validation_never_constructs_model_client(tmp_path, 
     progress = step2.validate_restored_checkpoint("condition_a")
 
     assert progress["run_id"] == "lineage"
+
+
+def test_typed_checkpoint_identity_recomputes_and_binds_routes_before_client(
+    tmp_path, monkeypatch
+):
+    prepared, workspace = _write_prepared_checkpoint(tmp_path, monkeypatch)
+    prepared["condition_a"]["model"] = {
+        "provider": "azure",
+        "deployment": "main-model",
+    }
+    prepared["prepared_fingerprint"] = prepared_fingerprint(prepared)
+    (workspace / "step1_tasks_prepared.json").write_text(
+        json.dumps(prepared), encoding="utf-8"
+    )
+    monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
+    monkeypatch.setenv(
+        "AZURE_OPENAI_V1_ENDPOINT",
+        "https://account.services.ai.azure.com/openai/v1/",
+    )
+    routes = step2._azure_ai_route_provenance(
+        prepared["condition_a"], "subprocess"
+    )
+    progress_path = workspace / "step2_inference_progress_condition_a.json"
+    step2._save_progress(
+        "exp-test",
+        "Baseline",
+        "subprocess",
+        1,
+        [_checkpoint_result("task-1", "pending")],
+        "2026-07-22T00:00:00+00:00",
+        progress_path,
+        run_id="lineage",
+        condition_identity="condition_a",
+        ordered_task_ids=["task-1"],
+        prepared_fingerprint=prepared["prepared_fingerprint"],
+        azure_ai_routes=routes,
+    )
+    monkeypatch.setattr(
+        step2,
+        "create_provider_client",
+        lambda *_args, **_kwargs: pytest.fail(
+            "model client must not be constructed"
+        ),
+    )
+
+    progress = step2.validate_restored_checkpoint("condition_a")
+
+    assert progress["azure_ai_routes"] == routes
+
+    payload = json.loads(progress_path.read_text(encoding="utf-8"))
+    payload["azure_ai_routes"][0]["runtime_fingerprint"] = "b" * 64
+    progress_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="route mismatch"):
+        step2.validate_restored_checkpoint("condition_a")
+
+
+def test_code_interpreter_restore_requires_project_profile_before_client(
+    tmp_path, monkeypatch
+):
+    prepared, workspace = _write_prepared_checkpoint(tmp_path, monkeypatch)
+    prepared["execution"]["mode"] = "code_interpreter"
+    prepared["prepared_fingerprint"] = prepared_fingerprint(prepared)
+    (workspace / "step1_tasks_prepared.json").write_text(
+        json.dumps(prepared), encoding="utf-8"
+    )
+    monkeypatch.delenv("AZURE_AI_ROUTE_PROFILE", raising=False)
+    monkeypatch.setattr(
+        step2,
+        "create_provider_client",
+        lambda *_args, **_kwargs: pytest.fail(
+            "model client must not be constructed"
+        ),
+    )
+
+    with pytest.raises(ValueError, match="requires the project-ci"):
+        step2.validate_restored_checkpoint("condition_a")
 
 
 def test_checkpoint_identity_rejects_lineage_before_model_client(tmp_path, monkeypatch):

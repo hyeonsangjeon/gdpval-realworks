@@ -21,7 +21,12 @@ from huggingface_hub import (
 )
 from huggingface_hub.utils import HfHubHTTPError
 
-from core.inference_manifest import canonical_deliverable_path, canonical_task_id
+from core.inference_manifest import (
+    STEP2_RESULT_STATUSES,
+    canonical_deliverable_path,
+    canonical_task_id,
+    validate_step2_progress_results,
+)
 from core.repository_identity import validate_hf_dataset_repo_id
 
 
@@ -33,7 +38,7 @@ LOCAL_GENERATION = Path("workspace/relay_checkpoint_generation")
 SANDBOX_IMAGE_PATTERN = re.compile(
     r"ghcr\.io/hyeonsangjeon/gdpval-sandbox@sha256:[0-9a-f]{64}"
 )
-RESULT_STATUSES = frozenset({"success", "error", "qa_failed", "pending"})
+RESULT_STATUSES = STEP2_RESULT_STATUSES
 CLEANUP_COMMIT_TITLE_PREFIX = "Clean relay checkpoint "
 CLEANUP_GENERATION_MARKER_PREFIX = "relay-cleanup-generation: "
 
@@ -101,6 +106,10 @@ def _load_progress(path: Path) -> dict:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
         raise ValueError("relay progress checkpoint is malformed")
+    validate_step2_progress_results(
+        payload["results"],
+        schema_version=payload.get("schema_version"),
+    )
     return payload
 
 

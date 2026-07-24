@@ -11,11 +11,7 @@ from core.executor import TaskExecutor
 
 def test_executor_initialization_code_interpreter():
     """Test executor initializes code_interpreter mode"""
-    from unittest.mock import patch
-    with patch.dict("os.environ", {
-        "AZURE_OPENAI_API_KEY": "test_key",
-        "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com",
-    }):
+    with patch("core.executor.CodeInterpreterRunner"):
         executor = TaskExecutor(mode="code_interpreter")
         assert executor.mode == "code_interpreter"
         assert executor.runner is not None
@@ -90,6 +86,16 @@ def test_executor_initialization_subprocess():
     assert executor.runner is not None
 
 
+def test_executor_close_releases_code_interpreter_runner():
+    runner = Mock()
+    with patch("core.executor.CodeInterpreterRunner", return_value=runner):
+        executor = TaskExecutor(mode="code_interpreter")
+
+        executor.close()
+
+    runner.close.assert_called_once_with()
+
+
 def test_executor_initialization_json_renderer():
     """Test executor initializes json_renderer mode with llm_client"""
     mock_client = Mock()
@@ -119,8 +125,8 @@ def test_executor_invalid_mode():
 def test_executor_validate_mode_code_interpreter_openai():
     """Test code_interpreter mode validation with OpenAI provider"""
     valid, error = TaskExecutor.validate_mode("code_interpreter", "openai")
-    assert valid is True
-    assert error is None
+    assert valid is False
+    assert "requires Azure" in error
 
 
 def test_executor_validate_mode_code_interpreter_azure():
@@ -134,7 +140,7 @@ def test_executor_validate_mode_code_interpreter_anthropic():
     """Test code_interpreter mode validation fails with non-OpenAI provider"""
     valid, error = TaskExecutor.validate_mode("code_interpreter", "anthropic")
     assert valid is False
-    assert "requires OpenAI/Azure OpenAI" in error
+    assert "requires Azure" in error
 
 
 def test_executor_validate_mode_subprocess():
@@ -147,7 +153,7 @@ def test_executor_validate_mode_subprocess():
 def test_executor_recommend_mode_openai_tool_assisted():
     """Test mode recommendation for OpenAI with tool_assisted"""
     mode = TaskExecutor.recommend_mode("openai", "tool_assisted")
-    assert mode == "code_interpreter"
+    assert mode == "subprocess"
 
 
 def test_executor_recommend_mode_azure_tool_assisted():

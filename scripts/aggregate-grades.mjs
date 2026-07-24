@@ -248,7 +248,12 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
     id: filename,
     experiment_id,
     source_inference_experiment_id: source_experiment_id,
-    grade_status: 'graded_v1',
+    grade_status: raw.run_status === 'partial'
+      ? 'grading_partial'
+      : raw.run_status === 'diagnostic'
+        ? 'grading_diagnostic'
+        : 'graded_v1',
+    run_status: raw.run_status || 'legacy_final',
     schema_version: raw.schema_version || '1.0',
     is_dummy: false,
     label,
@@ -290,6 +295,12 @@ export function processGradesFile(filePath, raw, taskQaByExperiment = new Map())
     return processV1GradesFile(filePath, raw, taskQaByExperiment);
   }
   return processLegacyGradesFile(filePath, raw, taskQaByExperiment);
+}
+
+export function isPublishableGrade(result) {
+  return !['grading_partial', 'grading_diagnostic'].includes(
+    result?.grade_status,
+  );
 }
 
 // ── taskQaByExperiment lookup ─────────────────────────────────────────────
@@ -349,7 +360,12 @@ async function main() {
     const content = await readFile(join(GRADES_DIR, file), 'utf-8');
     try {
       const data = JSON.parse(content);
-      results.push(processGradesFile(file, data, taskQaByExperiment));
+      const processed = processGradesFile(file, data, taskQaByExperiment);
+      if (!isPublishableGrade(processed)) {
+        console.warn(`⚠️  ${file} is ${processed.grade_status}; excluded from dashboard`);
+        continue;
+      }
+      results.push(processed);
     } catch (err) {
       console.error(`⚠️  ${file} 파싱 실패:`, err.message);
     }

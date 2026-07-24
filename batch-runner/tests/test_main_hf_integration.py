@@ -9,8 +9,7 @@ the test suite can collect.
 """
 
 import pytest
-from unittest.mock import patch, Mock, MagicMock
-from pathlib import Path
+from unittest.mock import Mock, patch
 
 pytest.importorskip("main")
 # Skip if huggingface_hub not available
@@ -39,8 +38,11 @@ class TestMainHuggingFaceIntegration:
     ):
         """Test run_experiment with publish_to_hf=True"""
         # Setup environment
-        monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://test.openai.azure.com")
-        monkeypatch.setenv("AZURE_OPENAI_API_KEY", "test-key")
+        monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
+        monkeypatch.setenv(
+            "AZURE_OPENAI_V1_ENDPOINT",
+            "https://test.openai.azure.com/openai/v1/",
+        )
         monkeypatch.setenv("HF_TOKEN", "hf_test_token")
 
         # Mock data loader
@@ -112,8 +114,11 @@ class TestMainHuggingFaceIntegration:
     ):
         """Test run_experiment with publish_to_hf=False (default)"""
         # Setup environment
-        monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://test.openai.azure.com")
-        monkeypatch.setenv("AZURE_OPENAI_API_KEY", "test-key")
+        monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
+        monkeypatch.setenv(
+            "AZURE_OPENAI_V1_ENDPOINT",
+            "https://test.openai.azure.com/openai/v1/",
+        )
 
         # Mock data loader
         mock_task = Mock()
@@ -176,8 +181,11 @@ class TestMainHuggingFaceIntegration:
     ):
         """Test run_experiment_from_config with publish_mode=True"""
         # Setup environment
-        monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://test.openai.azure.com")
-        monkeypatch.setenv("AZURE_OPENAI_API_KEY", "test-key")
+        monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
+        monkeypatch.setenv(
+            "AZURE_OPENAI_V1_ENDPOINT",
+            "https://test.openai.azure.com/openai/v1/",
+        )
         monkeypatch.setenv("HF_TOKEN", "hf_test_token")
 
         # Mock config

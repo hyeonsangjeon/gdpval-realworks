@@ -114,6 +114,47 @@ class ExecutionConfig:
     metrics: Optional[Dict[str, Any]] = None  # opt-in job metrics (execution.metrics block)
 
 
+def _validate_preprocessors(
+    label: str,
+    value: Any,
+    valid_providers: List[str],
+) -> List[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return [f"{label}.preprocessors must be a list"]
+
+    errors = []
+    valid_types = ["audio_analyzer", "video_analyzer"]
+    for index, preprocessor in enumerate(value):
+        prefix = f"{label}.preprocessors[{index}]"
+        if not isinstance(preprocessor, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        if preprocessor.get("type") not in valid_types:
+            errors.append(f"{prefix}.type must be one of {valid_types}")
+
+        model = preprocessor.get("model")
+        if not isinstance(model, dict):
+            errors.append(f"{prefix}.model must be an object")
+        else:
+            if model.get("provider", "azure") not in valid_providers:
+                errors.append(
+                    f"{prefix}.model.provider must be one of {valid_providers}"
+                )
+            deployment = model.get("deployment")
+            if not isinstance(deployment, str) or not deployment.strip():
+                errors.append(
+                    f"{prefix}.model.deployment must be a non-empty string"
+                )
+
+        if "optional" in preprocessor and not isinstance(
+            preprocessor["optional"], bool
+        ):
+            errors.append(f"{prefix}.optional must be a boolean")
+    return errors
+
+
 class ExperimentConfig:
     """Experiment configuration from YAML file
 
@@ -430,9 +471,12 @@ class ExperimentConfig:
             errors.append("condition_a.name is required")
 
         # Check model providers
-        valid_providers = ["azure", "openai", "anthropic"]
+        valid_providers = ["azure", "azure_openai", "openai", "anthropic"]
         if self.condition_a.model.provider not in valid_providers:
             errors.append(f"condition_a.model.provider must be one of {valid_providers}")
+        errors.extend(_validate_preprocessors(
+            "condition_a", self.condition_a.preprocessors, valid_providers
+        ))
 
         # Validate condition_b only if present (A/B test)
         if self.condition_b is not None:
@@ -440,6 +484,9 @@ class ExperimentConfig:
                 errors.append("condition_b.name is required")
             if self.condition_b.model.provider not in valid_providers:
                 errors.append(f"condition_b.model.provider must be one of {valid_providers}")
+            errors.extend(_validate_preprocessors(
+                "condition_b", self.condition_b.preprocessors, valid_providers
+            ))
 
         # Validate execution mode (Phase 5-3)
         valid_modes = [
@@ -460,12 +507,12 @@ class ExperimentConfig:
             if self.data_filter.sample_size is not None:
                 errors.append("data.filter.task_ids and sample_size are mutually exclusive")
 
-        # Validate code_interpreter mode requires OpenAI/Azure
+        # The current CodeInterpreterRunner uses the typed Azure project route.
         if self.execution.mode == "code_interpreter":
-            if self.condition_a.model.provider not in ["azure", "openai"]:
-                errors.append("code_interpreter mode requires azure or openai provider for condition_a")
-            if self.condition_b and self.condition_b.model.provider not in ["azure", "openai"]:
-                errors.append("code_interpreter mode requires azure or openai provider for condition_b")
+            if self.condition_a.model.provider not in {"azure", "azure_openai"}:
+                errors.append("code_interpreter mode requires azure provider for condition_a")
+            if self.condition_b and self.condition_b.model.provider not in {"azure", "azure_openai"}:
+                errors.append("code_interpreter mode requires azure provider for condition_b")
 
         if self.execution.mode == "agentic_sandbox":
             if self.condition_a.model.provider not in ["azure", "openai"]:

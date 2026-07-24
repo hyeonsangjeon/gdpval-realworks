@@ -2,17 +2,21 @@
 
 import hashlib
 from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
 
 import step2_run_inference as step2
 
 
-def _condition(pp_type: str) -> dict:
+def _condition(pp_type: str, *, optional: bool = True) -> dict:
     return {
         "preprocessors": [{
             "type": pp_type,
             "trigger": f"has_{pp_type.split('_')[0]}_files",
             "model": {"provider": "azure", "deployment": "probe-model"},
             "include_task_instruction": True,
+            "optional": optional,
         }]
     }
 
@@ -40,7 +44,12 @@ def test_audio_success_records_hash_without_body(monkeypatch):
     monkeypatch.setattr(
         step2, "filter_audio_files", lambda files: ["/private/input.wav"]
     )
-    monkeypatch.setattr(step2, "create_provider_client", lambda provider: object())
+    client = object()
+    close_client = MagicMock()
+    monkeypatch.setattr(
+        step2, "create_provider_client", lambda *_args, **_kwargs: client
+    )
+    monkeypatch.setattr(step2, "close_provider_client", close_client)
     monkeypatch.setattr(step2, "analyze_audio_files", lambda **kwargs: analysis)
     observations = []
 
@@ -58,13 +67,19 @@ def test_audio_success_records_hash_without_body(monkeypatch):
     ).hexdigest()
     assert analysis not in str(observations)
     assert "/private" not in str(observations)
+    close_client.assert_called_once_with(client)
 
 
 def test_video_error_records_type_without_message(monkeypatch, capsys):
     monkeypatch.setattr(
         step2, "filter_video_files", lambda files: ["/secret/input.mp4"]
     )
-    monkeypatch.setattr(step2, "create_provider_client", lambda provider: object())
+    client = object()
+    close_client = MagicMock()
+    monkeypatch.setattr(
+        step2, "create_provider_client", lambda *_args, **_kwargs: client
+    )
+    monkeypatch.setattr(step2, "close_provider_client", close_client)
 
     def _fail(**kwargs):
         raise RuntimeError("sensitive upstream detail")
@@ -72,8 +87,10 @@ def test_video_error_records_type_without_message(monkeypatch, capsys):
     monkeypatch.setattr(step2, "analyze_video_files", _fail)
     observations = []
 
+    condition = _condition("video_analyzer")
+    condition["preprocessors"][0]["optional"] = True
     output = step2._run_preprocessors(
-        _condition("video_analyzer"), ["/secret/input.mp4"], "task", observations
+        condition, ["/secret/input.mp4"], "task", observations
     )
 
     assert output == ""
@@ -86,6 +103,82 @@ def test_video_error_records_type_without_message(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "RuntimeError" in captured.out
     assert "sensitive upstream detail" not in captured.out
+    close_client.assert_called_once_with(client)
+
+
+def test_required_preprocessor_failure_is_fatal_and_closes_client(monkeypatch):
+    monkeypatch.setattr(
+        step2, "filter_audio_files", lambda files: ["/private/input.wav"]
+    )
+    client = object()
+    close_client = MagicMock()
+    monkeypatch.setattr(
+        step2, "create_provider_client", lambda *_args, **_kwargs: client
+    )
+    monkeypatch.setattr(step2, "close_provider_client", close_client)
+    monkeypatch.setattr(
+        step2,
+        "analyze_audio_files",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("private detail")),
+    )
+
+    with pytest.raises(RuntimeError, match="required preprocessor failed"):
+        step2._run_preprocessors(
+            _condition("audio_analyzer", optional=False),
+            ["/private/input.wav"],
+            "task",
+            [],
+        )
+
+    close_client.assert_called_once_with(client)
+
+
+def test_required_preprocessor_empty_result_is_fatal_and_closes_client(monkeypatch):
+    monkeypatch.setattr(
+        step2, "filter_audio_files", lambda files: ["/private/input.wav"]
+    )
+    client = object()
+    close_client = MagicMock()
+    monkeypatch.setattr(
+        step2, "create_provider_client", lambda *_args, **_kwargs: client
+    )
+    monkeypatch.setattr(step2, "close_provider_client", close_client)
+    monkeypatch.setattr(step2, "analyze_audio_files", lambda **_kwargs: "")
+    observations = []
+
+    with pytest.raises(
+        RuntimeError,
+        match="required preprocessor returned empty result: audio_analyzer",
+    ):
+        step2._run_preprocessors(
+            _condition("audio_analyzer", optional=False),
+            ["/private/input.wav"],
+            "task",
+            observations,
+        )
+
+    assert observations[0]["status"] == "empty_result"
+    close_client.assert_called_once_with(client)
+
+
+def test_required_unknown_preprocessor_type_is_fatal():
+    observations = []
+
+    with pytest.raises(
+        RuntimeError,
+        match="required preprocessor has unknown type: document_analyzer",
+    ):
+        step2._run_preprocessors(
+            {"preprocessors": [{
+                "type": "document_analyzer",
+                "optional": False,
+            }]},
+            [],
+            "task",
+            observations,
+        )
+
+    assert observations[0]["status"] == "skipped_unknown_type"
 
 
 def test_compact_observability_keeps_only_provenance():

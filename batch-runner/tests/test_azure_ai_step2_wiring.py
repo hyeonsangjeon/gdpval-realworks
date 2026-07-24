@@ -3,9 +3,11 @@
 import copy
 import hashlib
 import json
+import os
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -52,6 +54,21 @@ def _planned_fingerprint(workload, deployment):
     return hashlib.sha256(
         f"{AzureAIWorkload(workload).value}:{deployment.strip()}".encode()
     ).hexdigest()
+
+
+def _checkpoint_success(task_id="task-1"):
+    return {
+        "task_id": task_id,
+        "status": "success",
+        "content": "done",
+        "deliverable_text": "done",
+        "deliverable_files": [],
+        "model": "main-model",
+        "usage": None,
+        "observability": {},
+        "latency_ms": 1.0,
+        "timestamp": "2026-07-23T00:00:00+00:00",
+    }
 
 
 def _runtime_route(
@@ -222,9 +239,9 @@ def _patch_run(monkeypatch, tmp_path, **prepared_kwargs):
     return workspace
 
 
-def _enable_typed(monkeypatch, events, routes=None):
+def _enable_typed(monkeypatch, events, routes=None, profile="direct-v1"):
     settings = object()
-    monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
+    monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", profile)
 
     class _Settings:
         @classmethod
@@ -269,9 +286,16 @@ def _enable_typed(monkeypatch, events, routes=None):
             if identity in seen:
                 continue
             seen.add(identity)
+            endpoint_kind = (
+                "project"
+                if workload is AzureAIWorkload.CODE_INTERPRETER
+                else "direct-v1"
+            )
             output.append(_route(
                 workload.value,
                 _planned_fingerprint(workload, deployment),
+                endpoint_kind=endpoint_kind,
+                profile=profile,
             ))
         return output
 
@@ -298,6 +322,12 @@ def _install_runtime_fakes(monkeypatch, events, managed_overrides=None):
             if len(created["managed"]) < len(managed_overrides)
             else {}
         )
+        profile = RouteProfile(os.environ["AZURE_AI_ROUTE_PROFILE"])
+        endpoint_kind = (
+            EndpointKind.PROJECT
+            if workload is AzureAIWorkload.CODE_INTERPRETER
+            else EndpointKind.DIRECT_V1
+        )
         managed = _Managed(
             f"{workload.value}:{deployment}",
             events,
@@ -305,7 +335,14 @@ def _install_runtime_fakes(monkeypatch, events, managed_overrides=None):
                 "fingerprint",
                 _planned_fingerprint(workload, deployment),
             ),
-            route=override.get("route", _runtime_route(workload)),
+            route=override.get(
+                "route",
+                _runtime_route(
+                    workload,
+                    endpoint_kind=endpoint_kind,
+                    profile=profile,
+                ),
+            ),
         )
         managed.factory = factory
         created["managed"].append(managed)
@@ -342,7 +379,7 @@ def _write_valid_typed_checkpoint(path):
         "Baseline",
         "subprocess",
         1,
-        [{"task_id": "task-1", "status": "success"}],
+        [_checkpoint_success()],
         "2026-07-23T00:00:00+00:00",
         path,
         run_id="exp-test:local:1",
@@ -438,7 +475,7 @@ def test_profile_absent_keeps_legacy_client_and_output_shape(monkeypatch, tmp_pa
     assert "azure_ai_routes" not in json.loads(
         (workspace / "step2_inference_progress_condition_a.json").read_text()
     )
-    assert "close:executor" not in events
+    assert events[-1] == "close:executor"
 
 
 def test_typed_preflight_precedes_factory_and_client(monkeypatch, tmp_path):
@@ -523,59 +560,22 @@ def test_typed_invalid_route_configuration_rejects_before_runtime(
     )
 
 
-@pytest.mark.parametrize(
-    ("mode", "wall_timeout", "expected"),
-    [
-        (
-            "agentic_sandbox",
-            None,
-            "❌ typed Azure AI routing does not support hardened/agentic modes",
-        ),
-        (
-            "subprocess",
-            1,
-            "❌ typed Azure AI routing does not support wall-timeout relay runs",
-        ),
-    ],
-)
-def test_requested_profile_guards_reject_with_exact_text_before_planning(
-    mode, wall_timeout, expected, monkeypatch, tmp_path, capsys
+def test_typed_agentic_invalid_experiment_rejects_before_planning(
+    monkeypatch, tmp_path, capsys
 ):
+    mode = "agentic_sandbox"
     _patch_run(monkeypatch, tmp_path, mode=mode)
     events = []
     _enable_typed(monkeypatch, events)
     _install_runtime_fakes(monkeypatch, events)
 
     with pytest.raises(SystemExit):
-        _run(mode=mode, wall_timeout=wall_timeout)
+        _run(mode=mode)
 
-    assert capsys.readouterr().out == expected + "\n"
+    output = capsys.readouterr().out
+    assert "failed to reload hardened execution config" in output
+    assert "experiment ID must be exp028 or exp030" in output
     assert events == []
-
-
-@pytest.mark.parametrize("checkpoint", ["condition", "legacy"])
-def test_typed_external_checkpoint_rejects_before_runtime(
-    checkpoint, monkeypatch, tmp_path, capsys
-):
-    workspace = _patch_run(monkeypatch, tmp_path)
-    name = (
-        "step2_inference_progress_condition_a.json"
-        if checkpoint == "condition"
-        else "step2_inference_progress.json"
-    )
-    _write_valid_typed_checkpoint(workspace / name)
-    events = []
-    _enable_typed(monkeypatch, events)
-    _install_runtime_fakes(monkeypatch, events)
-
-    with pytest.raises(SystemExit):
-        _run(resume=True)
-
-    assert capsys.readouterr().out == (
-        "❌ typed Azure AI routing does not support external resume checkpoints\n"
-    )
-    assert events == []
-
 
 def test_typed_resume_false_starts_fresh_with_stale_checkpoints(
     monkeypatch, tmp_path
@@ -662,7 +662,11 @@ def test_requested_profile_with_native_only_workload_uses_no_typed_resources(
     assert created["managed"] == []
     assert created["factories"] == []
     assert created["executors"][0].kwargs["llm_client"] is native
-    assert events == ["preflight:workloads", "create:executor"]
+    assert events == [
+        "preflight:workloads",
+        "create:executor",
+        "close:executor",
+    ]
     assert "azure_ai_routes" not in output
     assert "azure_ai_routes" not in progress
 
@@ -673,7 +677,11 @@ def test_typed_clients_share_factory_and_reach_exact_executor_slots(
 ):
     _patch_run(monkeypatch, tmp_path, mode=mode)
     events = []
-    settings = _enable_typed(monkeypatch, events)
+    settings = _enable_typed(
+        monkeypatch,
+        events,
+        profile="project-ci" if mode == "code_interpreter" else "direct-v1",
+    )
     created = _install_runtime_fakes(monkeypatch, events)
     monkeypatch.setattr(
         step2,
@@ -710,6 +718,34 @@ def test_typed_clients_share_factory_and_reach_exact_executor_slots(
             "close:inference:main-model",
             "close:factory",
         ]
+
+
+@pytest.mark.parametrize("profile", [None, "direct-v1", "legacy-rollback"])
+def test_code_interpreter_requires_project_profile_before_clients(
+    profile, monkeypatch, tmp_path, capsys
+):
+    _patch_run(monkeypatch, tmp_path, mode="code_interpreter")
+    if profile is None:
+        monkeypatch.delenv("AZURE_AI_ROUTE_PROFILE", raising=False)
+    else:
+        monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", profile)
+    factory = MagicMock()
+    provider_client = MagicMock()
+    typed_client = MagicMock()
+    executor = MagicMock()
+    monkeypatch.setattr(step2, "AzureAIClientFactory", factory)
+    monkeypatch.setattr(step2, "create_provider_client", provider_client)
+    monkeypatch.setattr(step2, "create_typed_azure_client", typed_client)
+    monkeypatch.setattr(step2, "TaskExecutor", executor)
+
+    with pytest.raises(SystemExit):
+        _run(mode="code_interpreter")
+
+    assert "requires the project-ci route profile" in capsys.readouterr().out
+    factory.assert_not_called()
+    provider_client.assert_not_called()
+    typed_client.assert_not_called()
+    executor.assert_not_called()
 
 
 def test_planned_runtime_fingerprint_mismatch_fails_before_use_and_cleans_up(
@@ -776,7 +812,7 @@ def test_typed_self_qa_uses_distinct_verified_wrapper_and_closes_in_order(
 ):
     _patch_run(monkeypatch, tmp_path, qa_enabled=True)
     events = []
-    _enable_typed(monkeypatch, events)
+    _enable_typed(monkeypatch, events, profile="project-ci")
     created = _install_runtime_fakes(monkeypatch, events)
     qa_clients = []
 
@@ -814,7 +850,7 @@ def test_executor_init_failure_exits_and_closes_typed_resources(
 ):
     _patch_run(monkeypatch, tmp_path)
     events = []
-    _enable_typed(monkeypatch, events)
+    _enable_typed(monkeypatch, events, profile="project-ci")
     created = _install_runtime_fakes(monkeypatch, events)
     sensitive_detail = "private-executor-detail"
     monkeypatch.setattr(
@@ -884,7 +920,11 @@ def test_typed_init_errors_hide_sensitive_endpoint_and_identity_text(
         qa_enabled=qa_enabled,
     )
     events = []
-    _enable_typed(monkeypatch, events)
+    _enable_typed(
+        monkeypatch,
+        events,
+        profile="project-ci" if mode == "code_interpreter" else "direct-v1",
+    )
     _install_runtime_fakes(monkeypatch, events)
     sensitive_endpoint = "https://private-account.invalid/openai/v1/"
     sensitive_identity = "private-identity-value"
@@ -1428,8 +1468,9 @@ def test_native_main_with_azure_preprocessor_preserves_local_failure_detail(
     )
     assert created["executors"][0].kwargs["llm_client"] is native
     assert "redact_provider_errors" not in created["executors"][0].kwargs
-    assert progress["results"][0]["error"] == detail
-    assert final["results"][0]["error"] == detail
+    expected = "task_execution_error:TaskExecutionError"
+    assert progress["results"][0]["error"] == expected
+    assert final["results"][0]["error"] == expected
 
 
 def test_route_plan_preserves_exact_deduped_workload_order():
@@ -1439,8 +1480,16 @@ def test_route_plan_preserves_exact_deduped_workload_order():
         (AzureAIWorkload.CODE_INTERPRETER, " main "),
     ]
     routes = [
-        _route(fingerprint="a" * 64),
-        _route(workload="code-interpreter", fingerprint="b" * 64),
+        _route(
+            fingerprint="a" * 64,
+            profile="project-ci",
+        ),
+        _route(
+            workload="code-interpreter",
+            fingerprint="b" * 64,
+            endpoint_kind="project",
+            profile="project-ci",
+        ),
     ]
 
     plan = step2._build_azure_ai_route_plan(workloads, routes)
@@ -1450,6 +1499,23 @@ def test_route_plan_preserves_exact_deduped_workload_order():
         ("code-interpreter", "main"),
     ]
     assert [record for _, _, record in plan] == routes
+
+
+@pytest.mark.parametrize(
+    ("profile", "endpoint_kind"),
+    [("direct-v1", "direct-v1"), ("legacy-rollback", "legacy-dated")],
+)
+def test_validate_route_records_rejects_non_project_code_interpreter(
+    profile, endpoint_kind
+):
+    route = _route(
+        workload="code-interpreter",
+        profile=profile,
+        endpoint_kind=endpoint_kind,
+    )
+
+    with pytest.raises(ValueError, match="workload are incompatible"):
+        step2._validate_azure_ai_routes([route], typed_enabled=True)
 
 
 def test_canonical_planned_deployment_requires_one_exact_planned_identity():
@@ -2064,10 +2130,7 @@ def test_typed_main_provider_error_is_redacted_by_client_proxy(
     final_text = (
         workspace / "step2_inference_results_condition_a.json"
     ).read_text()
-    expected = (
-        "JSON rendering failed: "
-        "Typed Azure AI provider error (RuntimeError)"
-    )
+    expected = "task_execution_error:RuntimeError"
     assert sensitive not in stdout + progress_text + final_text
     assert json.loads(progress_text)["results"][0]["error"] == expected
     assert json.loads(final_text)["results"][0]["error"] == expected
@@ -2113,7 +2176,7 @@ def test_typed_main_local_failure_preserves_result_fields_and_observability(
     ).read_text())
     for document in (progress, final):
         result = document["results"][0]
-        assert result["error"] == detail
+        assert result["error"] == "task_execution_error:TaskExecutionError"
         assert result["content"] == "local partial output"
         assert result["deliverable_text"] == "local draft"
         assert result["observability"]["sandbox"]["backend"] == "local_fallback"
@@ -2133,7 +2196,7 @@ def test_typed_code_interpreter_response_error_uses_canonical_model_and_redacts(
         main_deployment="  main-model  ",
     )
     events = []
-    _enable_typed(monkeypatch, events)
+    _enable_typed(monkeypatch, events, profile="project-ci")
     created = _install_runtime_fakes(monkeypatch, events)
     sensitive = (
         "https://private-account.invalid/openai/v1/ "
@@ -2182,7 +2245,7 @@ def test_typed_code_interpreter_response_error_uses_canonical_model_and_redacts(
     assert sensitive not in stdout + progress + final
     assert "Code Interpreter provider error (RuntimeError)" in stdout
     assert json.loads(progress)["results"][0]["error"] == (
-        "Code Interpreter provider error (RuntimeError)"
+        "task_execution_error:RuntimeError"
     )
     assert created["managed"][1].close_calls == 1
 
@@ -2232,7 +2295,7 @@ def test_typed_code_interpreter_auxiliary_api_errors_never_escape_run_outputs(
         _open_reference,
     )
     events = []
-    _enable_typed(monkeypatch, events)
+    _enable_typed(monkeypatch, events, profile="project-ci")
     _install_runtime_fakes(monkeypatch, events)
     sensitive = (
         "https://private-account.invalid/openai/v1/ "
@@ -2494,7 +2557,7 @@ def test_progress_routes_roundtrip_and_reject_mismatch_or_downgrade(tmp_path):
         "Baseline",
         "subprocess",
         1,
-        [{"task_id": "task-1", "status": "success"}],
+        [_checkpoint_success()],
         "2026-07-23T00:00:00+00:00",
         path,
         azure_ai_routes=routes,

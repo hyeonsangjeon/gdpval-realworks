@@ -24,6 +24,7 @@ from core.agentic_tools import (
     AgenticToolDispatcher,
     responses_tool_definitions,
 )
+from core.public_error import public_provider_error_text
 
 
 DEFAULT_PROMPT = "agentic_sandbox_solver"
@@ -214,6 +215,8 @@ class AgenticSandboxRunner:
             self._validate_client(llm_client)
         self.client = llm_client
         self.client_factory = client_factory
+        self._owns_client = llm_client is None
+        self._closed = False
         self.backend_factory = backend_factory
         self.ledger = budget_ledger
         self.authorize_request = authorize_request
@@ -229,6 +232,54 @@ class AgenticSandboxRunner:
             aggregate_budget
         )
         self.instructions = self._load_instructions(prompt_name)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if self._owns_client and self.client is not None:
+            client = self.client
+            public_error = None
+            try:
+                close = getattr(client, "close", None)
+                if callable(close):
+                    close()
+            except BaseException as exc:
+                public_error = public_provider_error_text(exc)
+            finally:
+                self.client = None
+            if public_error is not None:
+                raise RuntimeError(public_error) from None
+
+    def _acquire_deferred_client(self) -> Any:
+        assert self.client_factory is not None
+        candidate = None
+        factory_error = None
+        try:
+            candidate = self.client_factory()
+        except BaseException as exc:
+            factory_error = public_provider_error_text(exc)
+        if factory_error is not None:
+            raise RuntimeError(factory_error) from None
+
+        validation_error = None
+        try:
+            self._validate_client(candidate)
+        except BaseException as exc:
+            validation_error = public_provider_error_text(exc)
+        if validation_error is None:
+            return candidate
+
+        cleanup_error = None
+        try:
+            close = getattr(candidate, "close", None)
+            if callable(close):
+                close()
+        except BaseException as exc:
+            cleanup_error = public_provider_error_text(exc)
+        if cleanup_error is not None:
+            raise RuntimeError(cleanup_error) from None
+        raise RuntimeError(validation_error) from None
 
     def run(
         self,
@@ -393,10 +444,7 @@ class AgenticSandboxRunner:
                         },
                     )
                     if self.client is None:
-                        assert self.client_factory is not None
-                        client = self.client_factory()
-                        self._validate_client(client)
-                        self.client = client
+                        self.client = self._acquire_deferred_client()
                 except BudgetExceeded as exc:
                     terminal_error = str(exc)
                     break

@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from core.config import WORKSPACE_DIR, BATCH_RUNNER_ROOT
+from core.inference_manifest import build_inference_provenance
 from core.prepared_fingerprint import validate_prepared_fingerprint
 from core.result_fingerprint import validate_inference_result_fingerprint
 from core.publication_generation import validate_publication_generation
@@ -264,6 +265,8 @@ def format_results():
         "condition_name": condition_name,
         "execution_mode": inference.get("execution_mode", ""),
         "model": inference.get("model", ""),
+        "azure_ai_routes": inference.get("azure_ai_routes", []),
+        "azure_ai_provenance_status": "runtime-verified",
         "started_at": inference.get("started_at"),
         "completed_at": inference.get("completed_at"),
         "duration": duration,
@@ -286,6 +289,11 @@ def format_results():
     # Serialize before either file is opened so invalid numeric values cannot
     # leave one output updated and the other stale or emit non-standard JSON.
     _write_json_outputs(final_json, json_path, workspace_result)
+    provenance = build_inference_provenance(final_json)
+    _write_json_outputs(
+        provenance,
+        WORKSPACE_DIR / "upload" / "inference_provenance.json",
+    )
 
     # 5. Build Markdown report
     success_rate = round(summary["success"] / summary["total"] * 100) if summary["total"] else 0

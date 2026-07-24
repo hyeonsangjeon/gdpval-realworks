@@ -403,10 +403,11 @@ class AzureAIRouteSettings:
 
     def select(self, workload: AzureAIWorkload | str) -> RouteSelection:
         selected_workload = AzureAIWorkload(workload)
-        if (
-            self.profile is RouteProfile.PROJECT_CI
-            and selected_workload is AzureAIWorkload.CODE_INTERPRETER
-        ):
+        if selected_workload is AzureAIWorkload.CODE_INTERPRETER:
+            if self.profile is not RouteProfile.PROJECT_CI:
+                raise ValueError(
+                    "Code Interpreter requires the project-ci profile"
+                )
             if self.project is None:
                 raise ValueError("Foundry project endpoint is unavailable")
             return RouteSelection(
@@ -805,6 +806,35 @@ def verify_direct_token(credential=None) -> None:
         active_credential = credential
     try:
         active_credential.get_token(DIRECT_TOKEN_SCOPE)
+    finally:
+        if owns_credential:
+            _close_sync(active_credential, "credential")
+
+
+def verify_route_tokens(
+    workloads: Sequence[tuple[AzureAIWorkload | str, str]],
+    *,
+    settings: AzureAIRouteSettings | None = None,
+    credential=None,
+) -> None:
+    """Acquire one token for every audience selected by the typed routes."""
+    resolved = settings or AzureAIRouteSettings.from_env()
+    scopes = {
+        resolved.select(workload).token_scope
+        for workload, _deployment in workloads
+    }
+    if not scopes:
+        raise ValueError("at least one Azure AI workload is required")
+
+    owns_credential = credential is None
+    if owns_credential:
+        _reject_static_azure_credential_env(os.environ)
+        active_credential = DefaultAzureCredential()
+    else:
+        active_credential = credential
+    try:
+        for scope in sorted(scopes):
+            active_credential.get_token(scope)
     finally:
         if owns_credential:
             _close_sync(active_credential, "credential")
