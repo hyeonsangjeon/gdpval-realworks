@@ -32,6 +32,42 @@ from core.file_preview import build_file_structure_info
 from core.reference_integrity import open_verified_reference
 
 
+def _raise_redacted_provider_error(error_type: str):
+    raise RuntimeError(
+        f"Code Interpreter provider error ({error_type})"
+    ) from None
+
+
+class _CodeInterpreterProviderCallProxy:
+    """Delegate nested SDK calls while replacing provider exceptions."""
+
+    def __init__(self, target) -> None:
+        self._target = target
+
+    def _get_raw_attribute(self, name: str):
+        try:
+            value = getattr(self._target, name)
+        except Exception as exc:
+            error_type = type(exc).__name__
+        else:
+            return value
+        _raise_redacted_provider_error(error_type)
+
+    def __getattr__(self, name: str):
+        return _CodeInterpreterProviderCallProxy(
+            self._get_raw_attribute(name)
+        )
+
+    def __call__(self, *args, **kwargs):
+        try:
+            result = self._target(*args, **kwargs)
+        except Exception as exc:
+            error_type = type(exc).__name__
+        else:
+            return result
+        _raise_redacted_provider_error(error_type)
+
+
 def _close_sync_resources(resources: tuple[tuple[str, object | None], ...]) -> None:
     first_error: BaseException | None = None
     seen: set[int] = set()
@@ -75,11 +111,14 @@ class CodeInterpreterRunner:
         max_completion_tokens: Optional[int] = None,
         *,
         client=None,
+        redact_provider_errors: bool = False,
     ):
         self._closed = False
         self._credential = None
+        self._raw_client = None
         self._owns_client = client is None
         self._uploaded_file_ids: set = set()
+        self.redact_provider_errors = redact_provider_errors
 
         if client is not None:
             if api_key is not None or endpoint is not None:
@@ -90,7 +129,11 @@ class CodeInterpreterRunner:
                 client,
                 AzureAIWorkload.CODE_INTERPRETER,
             )
-            self.client = client
+            self.client = (
+                _CodeInterpreterProviderCallProxy(client)
+                if self.redact_provider_errors
+                else client
+            )
             self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
             self.max_completion_tokens = (
                 max_completion_tokens
@@ -147,7 +190,17 @@ class CodeInterpreterRunner:
                         "  Run 'az login' or set AZURE_OPENAI_API_KEY."
                     ) from oidc_error
 
-            self.client = active_client
+            if self.redact_provider_errors:
+                validate_client_capabilities(
+                    active_client,
+                    AzureAIWorkload.CODE_INTERPRETER,
+                )
+            self._raw_client = active_client
+            self.client = (
+                _CodeInterpreterProviderCallProxy(active_client)
+                if self.redact_provider_errors
+                else active_client
+            )
             self._credential = credential
             self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
             self.max_completion_tokens = (
@@ -176,7 +229,7 @@ class CodeInterpreterRunner:
         self._delete_uploaded_reference_files()
         if self._owns_client:
             _close_sync_resources((
-                ("client", self.client),
+                ("client", self._raw_client),
                 ("credential", self._credential),
             ))
 
@@ -269,12 +322,13 @@ class CodeInterpreterRunner:
                 "files": output_files,
             }
 
-        except Exception as e:
+        except Exception as exc:
+            error = str(exc)
             return {
                 "success": False,
                 "text": "",
                 "files": [],
-                "error": str(e),
+                "error": error,
             }
         finally:
             self._delete_uploaded_reference_files()
@@ -303,7 +357,13 @@ class CodeInterpreterRunner:
             try:
                 self.client.files.delete(file_id)
             except Exception as exc:
-                print(f"      ⚠️  Input file cleanup failed ({file_id}): {exc}")
+                if self.redact_provider_errors:
+                    print(
+                        f"      ⚠️  Input file cleanup failed ({file_id}) "
+                        f"({type(exc).__name__})"
+                    )
+                else:
+                    print(f"      ⚠️  Input file cleanup failed ({file_id}): {exc}")
         self._uploaded_file_ids.clear()
 
     def _download_file(self, file_id: str, container_id: str = None) -> Optional[bytes]:
@@ -316,15 +376,30 @@ class CodeInterpreterRunner:
                     container_id=container_id,
                 )
                 return content_resp.read() if hasattr(content_resp, "read") else content_resp
-            except Exception as e:
-                print(f"      ⚠️  Container download failed ({file_id}), trying files API: {e}")
+            except Exception as exc:
+                if self.redact_provider_errors:
+                    print(
+                        f"      ⚠️  Container download failed ({file_id}), "
+                        f"trying files API ({type(exc).__name__})"
+                    )
+                else:
+                    print(
+                        f"      ⚠️  Container download failed ({file_id}), "
+                        f"trying files API: {exc}"
+                    )
 
         # Strategy 2: Files API fallback
         try:
             content_resp = self.client.files.content(file_id)
             return content_resp.read() if hasattr(content_resp, "read") else content_resp
-        except Exception as e:
-            print(f"      ⚠️  Files API download also failed ({file_id}): {e}")
+        except Exception as exc:
+            if self.redact_provider_errors:
+                print(
+                    f"      ⚠️  Files API download also failed ({file_id}) "
+                    f"({type(exc).__name__})"
+                )
+            else:
+                print(f"      ⚠️  Files API download also failed ({file_id}): {exc}")
 
         return None
 
@@ -434,8 +509,17 @@ class CodeInterpreterRunner:
                         if content:
                             output_files.append({"filename": fname, "content": content})
 
-                except Exception as e:
-                    print(f"      \u26a0\ufe0f  Container scan failed ({container_id}): {e}")
+                except Exception as exc:
+                    if self.redact_provider_errors:
+                        print(
+                            f"      \u26a0\ufe0f  Container scan failed ({container_id}) "
+                            f"({type(exc).__name__})"
+                        )
+                    else:
+                        print(
+                            f"      \u26a0\ufe0f  Container scan failed "
+                            f"({container_id}): {exc}"
+                        )
 
         # ── Warn: sandbox paths in text but no files collected ──
         if not output_files:

@@ -5,6 +5,7 @@ requires Azure OpenAI Responses API access.
 """
 
 import gc
+import json
 import os
 import warnings
 from types import SimpleNamespace
@@ -12,7 +13,11 @@ from unittest.mock import Mock, MagicMock, patch
 
 import pytest
 
-from core.code_interpreter import CodeInterpreterRunner, _close_sync_resources
+from core.code_interpreter import (
+    CodeInterpreterRunner,
+    _CodeInterpreterProviderCallProxy,
+    _close_sync_resources,
+)
 
 
 def _injected_client(response=None):
@@ -125,6 +130,241 @@ def test_injected_client_run_uses_caller_client():
     client.responses.create.assert_called_once()
 
 
+def test_redacted_injected_client_proxy_returns_raw_result_and_is_non_owning():
+    response = SimpleNamespace(output=[], output_text="raw result")
+    client = _injected_client(response)
+    runner = CodeInterpreterRunner(
+        client=client,
+        redact_provider_errors=True,
+    )
+
+    assert isinstance(runner.client, _CodeInterpreterProviderCallProxy)
+    assert runner.client._target is client
+    assert runner.client.responses.create(model="deployment") is response
+
+    runner.close()
+    runner.close()
+
+    client.close.assert_not_called()
+
+
+@pytest.mark.parametrize("failure_mode", ["attribute", "invocation"])
+def test_redacted_proxy_exception_has_no_raw_detail_or_exception_chain(
+    failure_mode, capsys
+):
+    sensitive = (
+        "https://private-account.invalid/openai/v1/ "
+        "account=private deployment=leaked-only"
+    )
+    client = _injected_client()
+    if failure_mode == "attribute":
+        class _Responses:
+            def __init__(self):
+                self.access_count = 0
+
+            @property
+            def create(self):
+                self.access_count += 1
+                if self.access_count == 1:
+                    return lambda **kwargs: object()
+                raise OSError(sensitive)
+
+        client.responses = _Responses()
+    else:
+        client.responses.create.side_effect = OSError(sensitive)
+    runner = CodeInterpreterRunner(
+        client=client,
+        redact_provider_errors=True,
+    )
+
+    with pytest.raises(RuntimeError) as caught:
+        runner.client.responses.create(model="deployment")
+
+    captured = capsys.readouterr()
+    assert str(caught.value) == "Code Interpreter provider error (OSError)"
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert sensitive not in str(caught.value)
+    assert sensitive not in repr(caught.value)
+    assert sensitive not in captured.out + captured.err
+    client.close.assert_not_called()
+
+
+def test_redacted_response_error_uses_class_only(capsys):
+    sensitive = (
+        "https://private-account.invalid/openai/v1/ "
+        "account=private deployment=leaked-only"
+    )
+    client = _injected_client()
+    client.responses.create.side_effect = OSError(sensitive)
+    runner = CodeInterpreterRunner(
+        client=client,
+        redact_provider_errors=True,
+    )
+
+    result = runner.run(task_prompt="Create a file", model="deployment")
+
+    captured = capsys.readouterr()
+    assert result["error"] == "Code Interpreter provider error (OSError)"
+    assert sensitive not in captured.out + captured.err + json.dumps(result)
+
+
+def test_redacted_upload_error_uses_class_only(tmp_path, capsys):
+    sensitive = (
+        "https://private-account.invalid/openai/v1/ "
+        "account=private deployment=leaked-only"
+    )
+    reference = tmp_path / "reference.txt"
+    reference.write_text("reference", encoding="utf-8")
+    client = _injected_client()
+    client.files.create.side_effect = OSError(sensitive)
+    runner = CodeInterpreterRunner(
+        client=client,
+        redact_provider_errors=True,
+    )
+
+    result = runner.run(
+        task_prompt="Create a file",
+        model="deployment",
+        reference_files=[str(reference)],
+    )
+
+    captured = capsys.readouterr()
+    assert result["error"] == "Code Interpreter provider error (OSError)"
+    assert sensitive not in captured.out + captured.err + json.dumps(result)
+    client.responses.create.assert_not_called()
+
+
+def test_redacted_input_deletion_error_uses_class_only(capsys):
+    sensitive = (
+        "https://private-account.invalid/openai/v1/ "
+        "account=private deployment=leaked-only"
+    )
+    client = _injected_client()
+    client.files.delete.side_effect = OSError(sensitive)
+    runner = CodeInterpreterRunner(
+        client=client,
+        redact_provider_errors=True,
+    )
+    runner._uploaded_file_ids.add("file-1")
+
+    runner._delete_uploaded_reference_files()
+
+    output = capsys.readouterr().out
+    assert "Input file cleanup failed (file-1) (RuntimeError)" in output
+    assert sensitive not in output
+    assert runner._uploaded_file_ids == set()
+
+
+def test_redacted_download_errors_use_class_only(capsys):
+    sensitive = (
+        "https://private-account.invalid/openai/v1/ "
+        "account=private deployment=leaked-only"
+    )
+    client = _injected_client()
+    client.containers.files.content.retrieve.side_effect = OSError(sensitive)
+    client.files.content.side_effect = OSError(sensitive)
+    runner = CodeInterpreterRunner(
+        client=client,
+        redact_provider_errors=True,
+    )
+
+    assert runner._download_file("file-1", "container-1") is None
+
+    output = capsys.readouterr().out
+    assert "trying files API (RuntimeError)" in output
+    assert "Files API download also failed (file-1) (RuntimeError)" in output
+    assert sensitive not in output
+
+
+def test_redacted_container_scan_error_uses_class_only(capsys):
+    sensitive = (
+        "https://private-account.invalid/openai/v1/ "
+        "account=private deployment=leaked-only"
+    )
+    client = _injected_client()
+    client.containers.files.list.side_effect = OSError(sensitive)
+    runner = CodeInterpreterRunner(
+        client=client,
+        redact_provider_errors=True,
+    )
+    response = SimpleNamespace(
+        output=[SimpleNamespace(
+            type="code_interpreter_call",
+            container_id="container-1",
+            outputs=[],
+        )],
+        output_text="done",
+        container_id=None,
+    )
+
+    assert runner._collect_output(response) == []
+
+    output = capsys.readouterr().out
+    assert "Container scan failed (container-1) (RuntimeError)" in output
+    assert sensitive not in output
+
+
+def test_legacy_response_error_default_preserves_detail():
+    sensitive = "legacy Code Interpreter provider detail"
+    client = _injected_client()
+    client.responses.create.side_effect = RuntimeError(sensitive)
+    runner = CodeInterpreterRunner(client=client)
+
+    result = runner.run(task_prompt="Create a file", model="deployment")
+
+    assert result["error"] == sensitive
+
+
+@pytest.mark.parametrize(
+    ("target", "detail", "with_reference"),
+    [
+        (
+            "build_file_structure_info",
+            "local file structure detail: /tmp/private-reference.xlsx",
+            False,
+        ),
+        (
+            "render_prompt",
+            "local prompt rendering detail: occupation mapping missing",
+            False,
+        ),
+        (
+            "open_verified_reference",
+            "local verified reference detail: digest mismatch",
+            True,
+        ),
+    ],
+)
+def test_redacted_local_run_errors_preserve_exact_detail(
+    target, detail, with_reference, tmp_path
+):
+    client = _injected_client()
+    runner = CodeInterpreterRunner(
+        client=client,
+        redact_provider_errors=True,
+    )
+    reference_files = None
+    if with_reference:
+        reference = tmp_path / "reference.txt"
+        reference.write_text("reference", encoding="utf-8")
+        reference_files = [str(reference)]
+
+    with patch(
+        f"core.code_interpreter.{target}",
+        side_effect=RuntimeError(detail),
+    ):
+        result = runner.run(
+            task_prompt="Create a file",
+            model="deployment",
+            reference_files=reference_files,
+        )
+
+    assert result["error"] == detail
+    client.files.create.assert_not_called()
+    client.responses.create.assert_not_called()
+
+
 def test_injected_client_close_cleans_files_without_closing_client():
     client = _injected_client()
     runner = CodeInterpreterRunner(client=client)
@@ -167,6 +407,35 @@ def test_legacy_close_closes_owned_client_and_credential(mock_azure_openai):
         {"azure": MagicMock(), "azure.identity": identity},
     ):
         runner = CodeInterpreterRunner(endpoint="https://example.invalid")
+
+    runner.close()
+    runner.close()
+
+    client.close.assert_called_once_with()
+    credential.close.assert_called_once_with()
+
+
+@patch("core.code_interpreter.AzureOpenAI")
+def test_redacted_owned_close_closes_raw_client_once(mock_azure_openai):
+    client = _injected_client()
+    credential = Mock()
+    mock_azure_openai.return_value = client
+    identity = MagicMock()
+    identity.DefaultAzureCredential.return_value = credential
+    identity.get_bearer_token_provider.return_value = object()
+
+    with patch.dict(
+        "sys.modules",
+        {"azure": MagicMock(), "azure.identity": identity},
+    ):
+        runner = CodeInterpreterRunner(
+            endpoint="https://example.invalid",
+            redact_provider_errors=True,
+        )
+
+    assert isinstance(runner.client, _CodeInterpreterProviderCallProxy)
+    assert runner.client._target is client
+    assert runner._raw_client is client
 
     runner.close()
     runner.close()

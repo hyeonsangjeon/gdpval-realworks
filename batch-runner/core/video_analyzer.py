@@ -155,8 +155,6 @@ def _extract_frames_cv2(
 
 def _sequential_read_cv2(cap, max_frames, max_width, fps) -> List[Tuple[float, bytes]]:
     """Sample frames by stepping through the stream (unknown frame count)."""
-    import cv2
-
     frames: List[Tuple[float, bytes]] = []
     step = 30  # grab roughly 1 frame/sec at 30fps
     i = 0
@@ -210,13 +208,11 @@ def _extract_frames_av(
                     container.seek(int(t / time_base), stream=stream)
                 except Exception:
                     pass
-                grabbed = False
                 for frame in container.decode(video=0):
                     jpeg = _av_frame_to_jpeg(frame, max_width)
                     if jpeg is not None:
                         ts = float(frame.pts * time_base) if frame.pts is not None else t
                         frames.append((round(ts, 3), jpeg))
-                        grabbed = True
                     break
                 if len(frames) >= max_frames:
                     break
@@ -294,6 +290,7 @@ def _analyze_one(
     frame_max_width: int,
     frame_detail: str,
     max_completion_tokens: int,
+    redact_provider_errors: bool = False,
 ) -> Tuple[str, object]:
     """Analyze a single video; returns (filename, parsed_json_or_text|None)."""
     filename = Path(video_path).name
@@ -359,7 +356,13 @@ def _analyze_one(
         except json.JSONDecodeError:
             return filename, raw
     except Exception as exc:
-        print(f"      ⚠️  Video preprocessor API error (non-fatal): {exc}")
+        if redact_provider_errors:
+            print(
+                "      ⚠️  Video preprocessor API error (non-fatal) "
+                f"({type(exc).__name__})"
+            )
+        else:
+            print(f"      ⚠️  Video preprocessor API error (non-fatal): {exc}")
         return filename, None
 
 
@@ -374,6 +377,7 @@ def analyze_video_files(
     max_total_frames: int = DEFAULT_MAX_TOTAL_FRAMES,
     frame_max_width: int = DEFAULT_FRAME_MAX_WIDTH,
     frame_detail: str = DEFAULT_FRAME_DETAIL,
+    redact_provider_errors: bool = False,
 ) -> str:
     """Sample keyframes from video files and send them to a vision model.
 
@@ -419,6 +423,7 @@ def analyze_video_files(
             frame_max_width=frame_max_width,
             frame_detail=frame_detail,
             max_completion_tokens=max_completion_tokens,
+            redact_provider_errors=redact_provider_errors,
         )
         if parsed is not None:
             analyses[filename] = parsed
