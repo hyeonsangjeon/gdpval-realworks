@@ -1,7 +1,7 @@
 # BOLT: Typed Azure AI Step 2 Wiring
 
 - Date: 2026-07-23
-- Status: `LOCALLY_VERIFIED`
+- Status: `SHIPPED`
 - Base: `origin/main@41f47b1934baaaa7ad0fabb26041ea695b90f104`
 - Execution boundary: model-free, local-only, offline, no credentials
 
@@ -144,6 +144,8 @@ supported; external resume and wall-timeout are intentionally unsupported.
 | Latest init-context and QA regression | From `batch-runner`, the credential-free wiring test filtered with `-k 'typed_init_errors or invalid_route_configuration or qa'`; exit `0`, `27 passed, 65 deselected` in `0.96s`. This includes raw `SystemExit` context and duplicate-member reproductions. |
 | Latest focused suite (exact command and scope) | From `batch-runner`: `env -i HOME="$HOME" PATH="$PATH" LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 /tmp/gdpval-readme-contract-final-venv/bin/python -m pytest -q tests/test_azure_ai_step2_wiring.py tests/test_code_interpreter.py tests/test_executor.py tests/test_preprocessor_observability.py tests/test_silent_corruption_fixes.py`; exit `0`, `216 passed`, zero failures in `2.20s`. |
 | Complete credential-free backend | From `batch-runner`, isolated `python -m pytest -q` used the repository's `not integration` marker; exit `0`, `2,211 passed, 9 host-dependent skipped, 44 integration deselected` in `134.81s`. |
+| Clean detached focused suite | Exact reviewed commit `6ee41d2a89ff796dc06c238892fe5f78ec1f29a1`; `216 passed` in `2.16s`. |
+| Clean detached complete backend | From the detached checkout's `batch-runner` directory, `2,214 passed, 6 host-dependent skipped, 44 integration deselected` in `137.30s`, exit `0`. An earlier repository-root invocation was invalid because relative-path tests require the `batch-runner` working directory; it is excluded from the gate. |
 | Independent release-gate review | `MANDATORY_FINDINGS: 0` after all eight follow-up reproductions were fixed and revalidated. |
 | Previous Ruff | `step2_run_inference.py` and `tests/test_azure_ai_step2_wiring.py`, `All checks passed!`, exit `0` in `0.0304s` |
 | Final Ruff | `step2_run_inference.py`, `core/code_interpreter.py`, `tests/test_azure_ai_step2_wiring.py`, and `tests/test_code_interpreter.py`; `All checks passed!`, exit `0` in `0.01s` |
@@ -163,13 +165,23 @@ Interpreter, executor, preprocessor observability, and silent corruption.
 Pre-existing typed-wiring changes outside this repair's five-file allowlist
 were not edited.
 
+## Shipment
+
+- PR #138 squash-merged as
+  `4654b4316ecef30f19da55dd513b35d625f7d30d` on 2026-07-24 from exact reviewed
+  head `6ee41d2a89ff796dc06c238892fe5f78ec1f29a1`.
+- The implementation changed exactly 11 paths. GitHub attached no check run,
+  check suite, commit status, or PR check rollup to the reviewed or merge SHA
+  because the paths do not match an active workflow trigger.
+- No workflow was manually dispatched to compensate. No credential, token,
+  Azure/model API, grading, Hugging Face, deployment, or paid action occurred.
+
 ## Decision
 
-`LOCALLY_VERIFIED`, not shipped or complete. Typed Step 2 remains explicitly
-opt-in and is not wired to an existing workflow. External typed resume
-checkpoints, positive wall-timeout relay runs, and hardened/agentic typed modes
-remain unsupported. The missing requested audio test path remains a local
-verification limitation: the original command remains an exit-4 failure, and
-neither the adjusted earlier suite nor the immediate repair suite reclassifies
-it as successful. The valid complete backend suite has zero failures. No remote
-or paid action was performed.
+`SHIPPED`. Typed Step 2 is available only through the explicit profile opt-in
+and is not enabled by an existing workflow. External typed resume checkpoints,
+positive wall-timeout relay runs, and hardened/agentic typed modes remain
+unsupported. The original command containing a nonexistent audio test path
+remains recorded as an exit-4 failure; the valid local and clean detached
+backend gates both have zero failures. No remote or paid runtime action was
+performed.
