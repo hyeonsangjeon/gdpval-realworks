@@ -39,7 +39,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   contracts**, **9 analysis tests**, both changed workflows under actionlint
   and Ruby Psych, the TypeScript/Vite production build, and all **4 Chromium
   browser suites**. No Azure, model, paid grading, or Hugging Face execution
-  occurred.
+  occurred. Shipped through PR #144 from reviewed head
+  `148c1838b185c01e97ccfd5286f08b8403a7c97b` as squash merge
+  `bc27f882446a5c2c93ecd97e75b4c7cf8d9576f4`. Automatic PR validation passed;
+  the post-merge `main` validation and Pages deployment also passed. Neither
+  automatic run dispatched grading, Azure, model, or Hugging Face work.
 - **Dashboard source-build provenance** - derive the displayed dashboard
   version from `package.json`, bind Pages builds to the exact checked-out
   GitHub SHA and repository, and link the footer to that full commit only after

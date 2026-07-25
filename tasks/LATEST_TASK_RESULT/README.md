@@ -4,9 +4,9 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-26
-- Status: GPT-5.6 Sol Max narrative and grading policy implemented and fully
-  validated; protected `grading` Environment configured; repository shipment
-  pending
+- Status: GPT-5.6 Sol Max narrative and grading policy shipped through PR #144;
+  protected `grading` Environment configured; automatic PR validation,
+  post-merge validation, and Pages deployment passed
 
 ## Task
 
@@ -87,17 +87,25 @@ task. It must be refreshed before a task is reported complete.
 
 ## Shipment
 
-- Implementation is validated in the isolated
-  `feat/sol-max-narrative-grading` worktree based on
-  `ddc52ea3afc7f546ff210b6bbb7e13c180234295`.
-- Commit, push, pull request checks, merge, and post-merge verification remain
-  in progress and will replace this section before completion is reported.
+- Reviewed implementation head:
+  `148c1838b185c01e97ccfd5286f08b8403a7c97b`.
+- PR [#144](https://github.com/hyeonsangjeon/gdpval-realworks/pull/144)
+  passed automatic validation and was squash-merged as
+  `bc27f882446a5c2c93ecd97e75b4c7cf8d9576f4` on 2026-07-25 UTC.
+- Automatic PR run
+  [30175334019](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30175334019)
+  passed `validate` in 1 minute 52 seconds; `deploy` was skipped as required for
+  pull requests.
+- Automatic `main` push run
+  [30175424979](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30175424979)
+  passed `validate` in 107 seconds and Pages `deploy` in 11 seconds.
+- The feature branch was deleted after merge. Both automatic runs were free
+  repository validation/deployment paths; neither dispatched paid grading,
+  Azure login, model calls, or Hugging Face operations.
 
 ## Remaining Work
 
-- Commit the reviewed snapshot including the new production config, push the
-  branch, open a PR, wait for required checks, and merge.
-- Verify the merged `main` state and refresh this rolling record with exact PR,
-  merge SHA, and check results.
+- No repository implementation or delivery work remains for the Sol Max policy
+  migration.
 - A live paid Sol Max canary remains intentionally outside this task and still
   requires explicit owner input plus protected Environment approval.
