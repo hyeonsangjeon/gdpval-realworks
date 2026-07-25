@@ -2,7 +2,7 @@
 
 - Date: 2026-07-25
 - Base: `f849856c6a91c357becc74ae93b60a5c9289917f`
-- Status: build-provenance slice implemented and locally validated
+- Status: shipped through PR #142 and verified on GitHub Pages
 - External reference: `open-webui/open-webui@ecd48e2f718220a6400ecf49eafd4867a38feb10`
 - External license signal: `NOASSERTION`; no external code or copy is reused
 
@@ -121,6 +121,24 @@ GitHub link.
   installed YAML parser and is covered by the aggregate wiring contract.
 - No batch, grading, Azure, Hugging Face, deployment, or paid action ran during
   local validation.
+
+## Shipment Result
+
+- Reviewed implementation head
+  `a1353c14665d4da3c5bdfe02820f811bddfa0c69` passed automatic PR run
+  [30148221820](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30148221820):
+  `validate` succeeded and the PR `deploy` job was skipped.
+- PR [#142](https://github.com/hyeonsangjeon/gdpval-realworks/pull/142)
+  squash-merged as `a9cc93bb07297332d4f6cfe1a4dea54e07d28fef`.
+- Automatic `main` push run
+  [30148302740](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30148302740)
+  completed both `validate` and GitHub Pages `deploy` successfully.
+- The live dashboard displays `Dashboard build v0.2.0 · a9cc93b`; its
+  accessible label and href contain the exact full merge SHA, and the 390px
+  viewport has no horizontal overflow.
+- These were free automatic repository checks. No workflow was manually
+  dispatched, and no Azure/model API, grading, Hugging Face, or other paid
+  execution was used.
 
 ## Acceptance Criteria
 
