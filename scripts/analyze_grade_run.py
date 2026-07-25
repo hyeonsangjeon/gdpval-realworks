@@ -5,10 +5,10 @@ Usage:
     python scripts/analyze_grade_run.py data/grades/<exp_id>__<judge>__<sha>__v1.json
     python scripts/analyze_grade_run.py <new.json> --compare <baseline.json>
 
-The pricing table is a coarse estimate (Azure OpenAI list prices, 2025-Q2);
-edit `PRICING_USD_PER_M_TOKENS` to keep current. `estimated_cost_usd` written
-by step8 is always 0.0; this script computes a price-table-based estimate from
-actual main-judge and perception input/output tokens.
+The pricing table is a coarse estimate for historical runs; unregistered models
+remain explicitly unpriced instead of being reported as zero. Step 8 records
+current payload cost as null/incomplete; this script computes an estimate only
+for models present in its reviewed price table.
 """
 from __future__ import annotations
 
@@ -52,6 +52,13 @@ def _price_for(model: str) -> tuple[float, float]:
 
 def _estimate_cost(in_tok: int, out_tok: int, model: str) -> dict:
     """Return cost as {input_usd, output_usd, total_usd} for transparency."""
+    if model not in PRICING_USD_PER_M_TOKENS:
+        return {
+            "input_usd": None,
+            "output_usd": None,
+            "total_usd": None,
+            "pricing_available": False,
+        }
     pi, po = _price_for(model)
     in_cost = (in_tok / 1_000_000.0) * pi
     out_cost = (out_tok / 1_000_000.0) * po
@@ -59,6 +66,7 @@ def _estimate_cost(in_tok: int, out_tok: int, model: str) -> dict:
         "input_usd": round(in_cost, 4),
         "output_usd": round(out_cost, 4),
         "total_usd": round(in_cost + out_cost, 4),
+        "pricing_available": True,
     }
 
 
@@ -79,6 +87,8 @@ def _hybrid_cost_estimate(grade: dict, total_in: int, total_out: int) -> dict:
             "cost_usd": c["total_usd"],
             "input_usd": c["input_usd"],
             "output_usd": c["output_usd"],
+            "pricing_complete": c["pricing_available"],
+            "unpriced_models": [] if c["pricing_available"] else [m],
         }
 
     # tier proxy: count items decided_by != precheck and split by ... we have
@@ -101,13 +111,24 @@ def _hybrid_cost_estimate(grade: dict, total_in: int, total_out: int) -> dict:
             "input_usd_at_100pct": c["input_usd"],
             "output_usd_at_100pct": c["output_usd"],
         })
-    costs = [p["cost_at_100pct"] for p in per_model]
+    unpriced_models = sorted({
+        entry["model"]
+        for entry in per_model
+        if entry["cost_at_100pct"] is None
+    })
+    costs = [
+        entry["cost_at_100pct"]
+        for entry in per_model
+        if entry["cost_at_100pct"] is not None
+    ]
     return {
         "mode": "routing_blended_estimate",
         "tier_models": tier_models,
-        "cost_usd_min": min(costs),
-        "cost_usd_max": max(costs),
+        "cost_usd_min": min(costs) if costs and not unpriced_models else None,
+        "cost_usd_max": max(costs) if costs and not unpriced_models else None,
         "per_model_if_100pct": per_model,
+        "pricing_complete": not unpriced_models,
+        "unpriced_models": unpriced_models,
         "note": "Token split per tier is not recorded; range = single-model bounds.",
     }
 
@@ -231,7 +252,7 @@ def _combined_cost_estimate(
     main_model = grade.get("judge", {}).get("model", "")
     perception_cfg = grade.get("judge", {}).get("perception", {}) or {}
     components = []
-    unpriced_models = []
+    unpriced_models = list(main.get("unpriced_models", []))
     perception_total = 0.0
     for modality, token_usage in sorted(perception_usage.items()):
         model = (
@@ -244,7 +265,8 @@ def _combined_cost_estimate(
         )
         if not priced:
             unpriced_models.append(model)
-        perception_total += estimate["total_usd"]
+        if estimate["total_usd"] is not None:
+            perception_total += estimate["total_usd"]
         components.append({
             "modality": modality,
             "model": model,
@@ -260,7 +282,13 @@ def _combined_cost_estimate(
         "pricing_complete": not unpriced_models,
         "unpriced_models": sorted(set(unpriced_models)),
     }
-    if main.get("mode") == "single":
+    if unpriced_models:
+        if main.get("mode") == "single":
+            out["cost_usd"] = None
+        else:
+            out["cost_usd_min"] = None
+            out["cost_usd_max"] = None
+    elif main.get("mode") == "single":
         out["cost_usd"] = round(main["cost_usd"] + perception_total, 4)
     else:
         out["cost_usd_min"] = round(
@@ -275,6 +303,14 @@ def _combined_cost_estimate(
 def _effective_component(
     in_tok: int, out_tok: int, cached_tok: int, model: str
 ) -> dict:
+    if model not in PRICING_USD_PER_M_TOKENS:
+        return {
+            "model": model,
+            "input_usd": None,
+            "output_usd": None,
+            "total_usd": None,
+            "pricing_available": False,
+        }
     pi, po = _price_for(model)
     input_usd = (
         (in_tok - cached_tok) * pi
@@ -424,16 +460,24 @@ def analyze(path: Path) -> dict:
                 token_usage["cached_tokens"],
                 model,
             ))
-        eff_in_cost = sum(component["input_usd"] for component in components)
-        eff_out_cost = sum(component["output_usd"] for component in components)
         unpriced_models = sorted({
             component["model"] for component in components
             if not component["pricing_available"]
         })
+        eff_in_cost = None if unpriced_models else sum(
+            component["input_usd"] for component in components
+        )
+        eff_out_cost = None if unpriced_models else sum(
+            component["output_usd"] for component in components
+        )
         effective_cost = {
-            "input_usd": round(eff_in_cost, 4),
-            "output_usd": round(eff_out_cost, 4),
-            "total_usd": round(eff_in_cost + eff_out_cost, 4),
+            "input_usd": round(eff_in_cost, 4) if eff_in_cost is not None else None,
+            "output_usd": round(eff_out_cost, 4) if eff_out_cost is not None else None,
+            "total_usd": (
+                round(eff_in_cost + eff_out_cost, 4)
+                if eff_in_cost is not None and eff_out_cost is not None
+                else None
+            ),
             "cache_hit_ratio": cache_hit_ratio,
             "cached_tokens": total_cached,
             "pricing_complete": not unpriced_models,
@@ -495,6 +539,8 @@ def analyze(path: Path) -> dict:
 
 
 def _fmt_cost(c: dict) -> str:
+    if not c.get("pricing_complete", True):
+        return f"unpriced ({','.join(c.get('unpriced_models', []))})"
     if c["mode"] == "single":
         return (
             f"${c['cost_usd']:.2f}  (model={c['model']}; "
@@ -559,11 +605,17 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
     lines.append(f"- raw: {_fmt_cost(a['cost_estimate'])}")
     ec = a.get("effective_cost")
     if ec is not None:
-        lines.append(
-            f"- effective (cached-discounted): ${ec['total_usd']:.2f}  "
-            f"(cache_hit_ratio={ec['cache_hit_ratio']*100:.1f}%, "
-            f"cached_tokens={ec['cached_tokens']:,})"
-        )
+        if ec.get("pricing_complete", False):
+            lines.append(
+                f"- effective (cached-discounted): ${ec['total_usd']:.2f}  "
+                f"(cache_hit_ratio={ec['cache_hit_ratio']*100:.1f}%, "
+                f"cached_tokens={ec['cached_tokens']:,})"
+            )
+        else:
+            lines.append(
+                "- effective (cached-discounted): unpriced "
+                f"({','.join(ec.get('unpriced_models', []))})"
+            )
     lines.append("")
     lines.append("## Top-5 slowest tasks")
     lines.append("| task_id | latency (s) | calls | tokens (in,out) | pct | critical_fail |")

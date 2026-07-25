@@ -100,7 +100,15 @@ export interface GradeCostSummary {
   total_input_tokens?: number
   total_output_tokens?: number
   estimated_cost_usd?: number | null
+  pricing_complete?: boolean
+  unpriced_models?: string[]
   total_judge_latency_sec?: number
+}
+
+export interface CurrentGradeCostSummary extends GradeCostSummary {
+  estimated_cost_usd: null
+  pricing_complete: false
+  unpriced_models: string[]
 }
 
 export interface GradeSummaryV1 {
@@ -125,9 +133,9 @@ export interface JudgeTierConfig {
 
 /**
  * Tier-routing block emitted by hybrid grading configs (see
- * `batch-runner/grading_configs/validation_hybrid.yaml`). Present only
- * when the grade JSON was produced by a tiered judge config; absent for
- * single-model runs (default_gpt5pro, validation_pro_only, ...).
+ * the archived v1 validation configs). Present only when a historical grade
+ * JSON was produced by a tiered judge config; absent for current single-model
+ * runs such as `default_v2_sol_max`.
  */
 export interface JudgeRouting {
   tier_pro?: JudgeTierConfig
@@ -144,7 +152,7 @@ export interface JudgeProvenance {
   reasoning_effort: string
   temperature: number
   seed?: number
-  /** Grading config name (e.g. 'default_gpt5pro', 'validation_hybrid'). */
+  /** Grading config name (e.g. 'default_v2_sol_max'). */
   config_name?: string
   /** Stable 16-char hash of the config used as part of the cache key. */
   config_hash?: string

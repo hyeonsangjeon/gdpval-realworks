@@ -285,7 +285,6 @@ jobs:
           from core.azure_ai_clients import (
             AzureAIWorkload,
             inference_route_workloads,
-            narrative_route_workloads,
           )
           from core.experiment_config import ExperimentConfig
           from core.repository_identity import validate_hf_dataset_repo_id
@@ -356,18 +355,13 @@ jobs:
             provider_requirements.add(condition.model.provider)
             for preprocessor in condition.preprocessors or []:
               provider_requirements.add(preprocessor["model"]["provider"])
-          azure_workloads = [(AzureAIWorkload.NARRATIVE, "gpt-5.4-pro")]
+          azure_workloads = [(AzureAIWorkload.NARRATIVE, "gpt-5.6-sol")]
           for condition_name in ("condition_a", "condition_b"):
             condition = config.get(condition_name)
             if condition is not None:
               azure_workloads.extend(
                 inference_route_workloads(condition, str(mode or "subprocess"))
               )
-              model = condition.get("model") or {}
-              if model.get("provider", "azure") in {"azure", "azure_openai"}:
-                azure_workloads.extend(
-                  narrative_route_workloads(str(model.get("deployment", "")))
-                )
           values = {
             "install_libreoffice": str(
               execution.get("install_libreoffice") is True
@@ -940,6 +934,10 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           EXPECTED_TARGET_HEAD: ${{ steps.step0.outputs.target_head }}
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
         run: |
           cd batch-runner
           bash step7_upload_hf.sh --test
@@ -967,6 +965,10 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
           EXPECTED_GENERATION: ${{ inputs.relay_run > 0 && steps.restore_checkpoint.outputs.generation || '' }}
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
         run: |
           set -euo pipefail
           cd batch-runner
@@ -978,10 +980,17 @@ jobs:
               load_publication_identity,
               verify_publication_finality,
           )
+          from core.narrative_analyzer import (
+              expected_narrative_publication_identity,
+          )
 
+          model, effort, fingerprint = expected_narrative_publication_identity()
           identity = load_publication_identity(
               Path("workspace/step1_tasks_prepared.json"),
               Path("workspace/step2_inference_results.json"),
+              expected_narrative_model=model,
+              expected_narrative_reasoning_effort=effort,
+              expected_narrative_runtime_fingerprint=fingerprint,
           )
           repo_id = os.environ["SOURCE_REPO"]
           if identity.repo_id != repo_id:

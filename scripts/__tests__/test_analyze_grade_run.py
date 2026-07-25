@@ -93,6 +93,44 @@ def test_single_model_cost_is_nonzero(tmp_path: Path):
     assert cost["cost_usd"] < 0.02
 
 
+def test_sol_max_and_audio_remain_explicitly_unpriced(tmp_path: Path):
+    grade = _grade_json(model="gpt-5.6-sol", n_tasks=1)
+    grade["judge"]["reasoning_effort"] = "max"
+    grade["judge"]["perception"] = {
+        "visual": {"model": "gpt-5.6-sol"},
+        "audio": {"model": "gpt-audio-1.5"},
+    }
+    task = grade["tasks"][0]
+    task.update({
+        "judge_cached_tokens": 100,
+        "perception_call_count": 1,
+        "perception_input_tokens": 1_000,
+        "perception_output_tokens": 100,
+        "perception_cached_tokens": 10,
+    })
+    task["items"] = [{
+        "routing_modality": "audio",
+        "perception_input_tokens": 1_000,
+        "perception_output_tokens": 100,
+        "perception_cached_tokens": 10,
+    }]
+
+    analyzed = _run(tmp_path, grade)["this"]
+    raw = analyzed["cost_estimate"]
+    effective = analyzed["effective_cost"]
+
+    assert raw["pricing_complete"] is False
+    assert raw["cost_usd"] is None
+    assert raw["unpriced_models"] == ["gpt-5.6-sol", "gpt-audio-1.5"]
+    assert effective["pricing_complete"] is False
+    assert effective["total_usd"] is None
+    assert effective["unpriced_models"] == ["gpt-5.6-sol", "gpt-audio-1.5"]
+
+    markdown = _run(tmp_path, grade, as_json=False)
+    assert "$0.00" not in markdown
+    assert "unpriced" in markdown
+
+
 def test_perception_usage_is_included_and_reported_separately(tmp_path: Path):
     grade = _grade_json(model="gpt-5.4", n_tasks=1)
     task = grade["tasks"][0]

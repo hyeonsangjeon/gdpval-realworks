@@ -182,7 +182,7 @@ class TestFactory:
         assert analyzer.runtime_fingerprint == "fingerprint"
         factory.create.assert_called_once_with(
             AzureAIWorkload.NARRATIVE,
-            deployment="gpt-5.4-pro",
+            deployment="gpt-5.6-sol",
             timeout=10000,
             max_retries=None,
             legacy_api_version="2025-04-01-preview",
@@ -230,7 +230,8 @@ class TestAnalyze:
         """Create analyzer with mocked client and fast heartbeat."""
         analyzer = NarrativeAnalyzer.__new__(NarrativeAnalyzer)
         analyzer.client = MagicMock()
-        analyzer.model = "gpt-5.4-pro"
+        analyzer.model = "gpt-5.6-sol"
+        analyzer.reasoning_effort = "max"
         analyzer._heartbeat_active = False
         analyzer._heartbeat_thread = None
         # Disable heartbeat in tests to avoid 30s sleeps
@@ -279,9 +280,14 @@ class TestAnalyze:
         assert result.quality_analysis == "Test QA"
         assert result.failure_patterns == "Test FP"
         assert result.recommendations == "Test rec"
+        assert result.narrative_model == "gpt-5.6-sol"
+        assert result.narrative_reasoning_effort == "max"
         assert result.total_tokens["input"] == 9600
         assert result.total_tokens["output"] == 3900
         assert analyzer.client.responses.create.call_count == 2
+        for call in analyzer.client.responses.create.call_args_list:
+            assert call.kwargs["model"] == "gpt-5.6-sol"
+            assert call.kwargs["reasoning"] == {"effort": "max"}
 
     def test_analyze_call1_invalid_json(self):
         analyzer = self._make_analyzer()

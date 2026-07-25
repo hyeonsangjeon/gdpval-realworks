@@ -152,6 +152,83 @@ def test_minimal_valid_grade_passes_schema():
     validate(instance=_minimal_payload(), schema=_load_schema())
 
 
+def test_current_grade_requires_explicit_unpriced_cost_provenance():
+    payload = _minimal_payload()
+    payload.update({
+        "schema_version": "1.2",
+        "run_status": "final",
+        "expected_task_count": 1,
+        "expected_ordered_task_ids_sha256": "a" * 64,
+        "azure_ai_routes": [{
+            "endpoint_kind": "direct-v1",
+            "profile": "direct-v1",
+            "workload": "grader",
+            "runtime_fingerprint": "b" * 64,
+        }],
+        "azure_ai_runtime_fingerprint": "b" * 64,
+    })
+    payload["summary"]["cost"].update({
+        "estimated_cost_usd": None,
+        "pricing_complete": False,
+        "unpriced_models": ["gpt-5.4-pro"],
+    })
+
+    validate_grade_payload(payload, _load_schema())
+
+    for field, value in (
+        ("estimated_cost_usd", 0.0),
+        ("pricing_complete", True),
+        ("unpriced_models", []),
+    ):
+        invalid = deepcopy(payload)
+        invalid["summary"]["cost"][field] = value
+        with pytest.raises((ValidationError, ValueError)):
+            validate_grade_payload(invalid, _load_schema())
+
+    for field in (
+        "estimated_cost_usd",
+        "pricing_complete",
+        "unpriced_models",
+    ):
+        invalid = deepcopy(payload)
+        del invalid["summary"]["cost"][field]
+        with pytest.raises(ValidationError):
+            validate_grade_payload(invalid, _load_schema())
+
+    invalid = deepcopy(payload)
+    invalid["summary"]["cost"]["unpriced_models"] = ["gpt-audio-1.5"]
+    with pytest.raises(ValueError, match="persisted model identity"):
+        validate_grade_payload(invalid, _load_schema())
+
+    invalid = deepcopy(payload)
+    del invalid["run_status"]
+    invalid["summary"]["cost"]["unpriced_models"] = ["wrong-model"]
+    with pytest.raises((ValidationError, ValueError)):
+        validate_grade_payload(invalid, _load_schema())
+
+
+@pytest.mark.parametrize("schema_version", ["1.0", "1.1"])
+def test_previous_lifecycle_grade_keeps_numeric_cost_compatibility(
+    schema_version
+):
+    payload = _minimal_payload()
+    payload.update({
+        "schema_version": schema_version,
+        "run_status": "final",
+        "expected_task_count": 1,
+        "expected_ordered_task_ids_sha256": "a" * 64,
+        "azure_ai_routes": [{
+            "endpoint_kind": "direct-v1",
+            "profile": "direct-v1",
+            "workload": "grader",
+            "runtime_fingerprint": "b" * 64,
+        }],
+        "azure_ai_runtime_fingerprint": "b" * 64,
+    })
+
+    validate_grade_payload(payload, _load_schema())
+
+
 def test_missing_required_field_fails():
     payload = _minimal_payload()
     del payload["judge"]
@@ -201,6 +278,7 @@ def test_present_grader_runtime_fingerprint_must_not_be_null():
 def _current_grade_payload() -> dict:
     payload = _minimal_payload()
     payload.update({
+        "schema_version": "1.2",
         "run_status": "partial",
         "expected_task_count": 1,
         "expected_ordered_task_ids_sha256": "a" * 64,
@@ -219,6 +297,11 @@ def _current_grade_payload() -> dict:
             },
         ],
         "azure_ai_runtime_fingerprint": "b" * 64,
+    })
+    payload["summary"]["cost"].update({
+        "estimated_cost_usd": None,
+        "pricing_complete": False,
+        "unpriced_models": ["gpt-5.4-pro"],
     })
     return payload
 

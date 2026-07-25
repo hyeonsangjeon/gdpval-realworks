@@ -57,8 +57,9 @@ access without storing an Azure client secret.
 
 The checked-in smoke config uses Azure deployment `gpt-5.2-chat`, selects three
 tasks, and can retry Self-QA up to three times. Step 6 attempts up to two
-sequential `gpt-5.4-pro` report calls; calls completed before an error can still
-be billed. Any setup, call, parse, or route-validation failure immediately
+sequential `gpt-5.6-sol` report calls with `reasoning=max`; calls completed
+before an error can still be billed. The 1.05M context window is supplied by
+the deployment. Any setup, call, parse, or route-validation failure immediately
 produces a model-free report and does not call the experiment model. Exact time
 and cost depend on output size, retries, quota, and your Azure pricing.
 
@@ -67,8 +68,8 @@ and cost depend on output size, retries, quota, and your Azure pricing.
 You need:
 
 - a GitHub account and a fork of this repository;
-- an Azure subscription with an Azure OpenAI resource and a required deployment
-   named `gpt-5.2-chat`; `gpt-5.4-pro` is optional but needed for the primary
+- an Azure subscription with an Azure OpenAI resource and required deployments
+   named `gpt-5.2-chat` and `gpt-5.6-sol`; the latter owns the primary Sol Max
    two-call report path;
 - permission to create a Microsoft Entra app registration and assign the
   **Cognitive Services OpenAI User** role on that Azure OpenAI resource; and
@@ -269,7 +270,7 @@ The expected path is:
 | Step 2 | Calls the model, creates deliverables, and runs same-model Self-QA |
 | Steps 3-4 | Writes JSON/Markdown results and a three-row Parquet file |
 | Step 5 | Skipped because `dry_run` is true and because this sample has three tasks |
-| Step 6 | Attempts up to two `gpt-5.4-pro` report calls; any narrative failure triggers an immediate model-free report before publication, with no experiment-model fallback |
+| Step 6 | Attempts up to two `gpt-5.6-sol` report calls with `reasoning=max`; any narrative failure triggers an immediate model-free report before publication, with no experiment-model fallback |
 | Step 7 and result PR | Skipped because `dry_run` is true |
 
 When the credentialed batch job reaches its final `always()` step, it attempts
@@ -313,7 +314,11 @@ size. Unchecking `dry_run` publishes results and opens a result pull request; it
 does not turn a three-task config into a 220-task run.
 
 Full runs can use substantial model quota and take multiple relay jobs. External
-grading is a separate pipeline. Read the
+grading is a separate pipeline. `grade-run.yml` starts as a model-free dry run;
+paid grading requires `paid_approval: true` plus approval in the protected
+`grading` GitHub Environment. Automatic grading continuations preserve the
+approval input, exact config, inference revision, and task limit, but each new
+chunk requires a fresh protected Environment approval. Read the
 [Batch Runner documentation](../batch-runner/README.md) and the
 [sandbox documentation](../batch-runner/sandbox/README.md) before changing the
 execution mode or scaling to all 220 tasks.

@@ -5,7 +5,7 @@ Reads workspace/result.json and generates two output files under workspace/repor
   - report_data.json : structured JSON for dashboard rendering
   - report.md        : human-readable Markdown report
 
-Narrative sections use the two-call GPT-5.4 Pro analyzer with a sanitized
+Narrative sections use the two-call GPT-5.6 Sol 1M Max analyzer with a sanitized
 model-free fallback. Step 6 always emits a pre-grading report; external grading
 remains a separate pipeline.
 
@@ -487,6 +487,8 @@ def _model_free_narrative(error: Exception | None = None) -> dict:
         "recommendations": "",
         "grading_referenced": False,
         "grade_source": None,
+        "model": None,
+        "reasoning_effort": None,
         "runtime_fingerprint": None,
     }
     if error is not None:
@@ -525,6 +527,8 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
         "narrative_runtime_fingerprint": narrative.get(
             "runtime_fingerprint"
         ),
+        "narrative_model": narrative.get("model"),
+        "narrative_reasoning_effort": narrative.get("reasoning_effort"),
     }
     report_meta.update(_validated_report_provenance(data))
     report = {
@@ -1311,30 +1315,24 @@ def generate_report(
         narrative = _model_free_narrative()
         print("   Skipping narrative (--no-narrative)")
     else:
-        # Try GPT-5.4 Pro (Responses API) once, then fall back model-free.
+        # Try GPT-5.6 Sol Max (Responses API) once, then fall back model-free.
         try:
-            from core.azure_ai_clients import (
-                narrative_route_workloads,
-                preflight_routes,
-            )
             from core.narrative_analyzer import (
-                NarrativeAnalyzer,
                 create_narrative_analyzer,
+                expected_narrative_publication_identity,
             )
-            print("   Generating narrative via GPT-5.4 Pro (Responses API)…")
-            expected_routes = preflight_routes(
-                narrative_route_workloads(NarrativeAnalyzer.DEFAULT_MODEL),
-                timeout=NarrativeAnalyzer.DEFAULT_TIMEOUT,
-                legacy_api_version=NarrativeAnalyzer.DEFAULT_API_VERSION,
+            print("   Generating narrative via GPT-5.6 Sol Max (Responses API)…")
+            expected_model, expected_effort, expected_fingerprint = (
+                expected_narrative_publication_identity()
             )
             with create_narrative_analyzer() as analyzer:
-                if not any(
-                    route["runtime_fingerprint"]
-                    == analyzer.runtime_fingerprint
-                    for route in expected_routes
+                if (
+                    analyzer.model != expected_model
+                    or analyzer.reasoning_effort != expected_effort
+                    or analyzer.runtime_fingerprint != expected_fingerprint
                 ):
                     raise ValueError(
-                        "primary narrative route differs from preflight"
+                        "primary narrative identity differs from preflight"
                     )
                 result = analyzer.analyze(
                     data,
@@ -1351,13 +1349,15 @@ def generate_report(
                 "recommendations": result.recommendations,
                 "grading_referenced": result.grading_referenced,
                 "grade_source": result.grade_source,
+                "model": result.narrative_model,
+                "reasoning_effort": result.narrative_reasoning_effort,
                 "runtime_fingerprint": result.runtime_fingerprint,
             }
             total_ms = result.call_1_latency_ms + result.call_2_latency_ms
-            print(f"   ✅ Pro narrative generated ({total_ms:,.0f}ms, "
+            print(f"   ✅ Sol Max narrative generated ({total_ms:,.0f}ms, "
                   f"{result.total_tokens['input']:,}+{result.total_tokens['output']:,} tokens)")
         except Exception as exc:
-            print(f"   ⚠️ Pro narrative failed: {type(exc).__name__}")
+            print(f"   ⚠️ Sol Max narrative failed: {type(exc).__name__}")
             print("   Using model-free narrative fallback.")
             narrative = _model_free_narrative(exc)
 

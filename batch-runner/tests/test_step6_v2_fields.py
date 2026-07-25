@@ -417,9 +417,9 @@ def test_primary_narrative_failure_uses_sanitized_model_free_fallback(
 
     secret = "private endpoint and credential detail"
     monkeypatch.setattr(
-        azure_ai_clients,
-        "preflight_routes",
-        lambda workloads, **_kwargs: [],
+        narrative_analyzer,
+        "expected_narrative_publication_identity",
+        lambda: ("gpt-5.6-sol", "max", "f" * 64),
     )
     monkeypatch.setattr(
         narrative_analyzer,
@@ -450,7 +450,11 @@ def test_narrative_route_drift_falls_back_before_api_call(
     import core.azure_ai_clients as azure_ai_clients
     import core.narrative_analyzer as narrative_analyzer
 
-    analyzer = MagicMock(runtime_fingerprint="actual")
+    analyzer = MagicMock(
+        model="gpt-5.6-sol",
+        reasoning_effort="max",
+        runtime_fingerprint="a" * 64,
+    )
     analyzer.__enter__.return_value = analyzer
     analyzer.__exit__.return_value = None
     monkeypatch.setattr(
@@ -462,7 +466,7 @@ def test_narrative_route_drift_falls_back_before_api_call(
 
     def preflight(workloads, **kwargs):
         captured.update(kwargs)
-        return [{"runtime_fingerprint": "expected"}]
+        return [{"runtime_fingerprint": "e" * 64}]
 
     monkeypatch.setattr(azure_ai_clients, "preflight_routes", preflight)
     monkeypatch.setattr(step6_report, "WORKSPACE_DIR", tmp_path)

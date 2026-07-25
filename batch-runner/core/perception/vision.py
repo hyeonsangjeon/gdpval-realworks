@@ -8,17 +8,17 @@ appended to the judge's evidence chain.
 
 Design notes (task 205):
 
-* Same Azure deployment as the main judge — gpt-5.4 with vision
-  enabled. No separate model key.
+* Config-selected Azure deployment. Production uses GPT-5.6 Sol Max and
+    historical comparison configs retain their original model identities.
 * The client is **injected**, never constructed inside this class. The
   main judge owns the Responses API client and shares it; tests pass a
   ``FakeClient``.
 * Image cache: ``(path, page)`` rendered once per task and reused —
   prevents the judge from burning tokens re-rendering the same chart
   on a second item.
-* Per-task call cap = 5. The harness preflights the full bounded visual
-    plan against the remaining cap before rendering. A cap error is returned
-    to the grader as a score-excluded visual ``judge_error``.
+* The generic wrapper default cap is 5; production config explicitly raises it
+    to 72 after checking the 220-task visual inventory. The harness preflights
+    the full bounded plan before rendering.
 * Graceful degradation on dependency errors: a corrupt PNG or a
   Responses-API exception returns ``judge_error`` rather than raising.
 """
@@ -170,10 +170,10 @@ class VisionPerception:
         client:       any object exposing ``responses.create(**kwargs)`` ->
                       ``response.output_text`` (Azure OpenAI Responses API
                       shape; tests pass a fake with the same shape).
-        deployment:   Azure deployment name (e.g. ``"gpt-5.4"`` with
+        deployment:   Azure deployment name (e.g. ``"gpt-5.6-sol"`` with
                       vision enabled).
         call_cap:     optional override (default ``VISION_CALL_CAP``).
-        reasoning_effort: optional ``"low" | "medium" | "high"``.
+        reasoning_effort: optional Responses API reasoning effort.
     """
 
     client: Any

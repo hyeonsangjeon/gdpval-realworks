@@ -358,7 +358,7 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
     assert.match(await readFile(outputPath, 'utf8'), /^source_repo=openai\/gdpval$/m)
     assert.match(
       await readFile(outputPath, 'utf8'),
-      /^azure_ai_workloads_json=\["narrative=gpt-5\.4-pro","inference=main-deployment","inference=qa-deployment","inference=audio-deployment","code-interpreter=main-deployment","narrative=main-deployment"\]$/m,
+      /^azure_ai_workloads_json=\["narrative=gpt-5\.6-sol","inference=main-deployment","inference=qa-deployment","inference=audio-deployment","code-interpreter=main-deployment"\]$/m,
     )
     assert.match(await readFile(outputPath, 'utf8'), /^requires_openai_key=true$/m)
     assert.match(await readFile(outputPath, 'utf8'), /^requires_anthropic_key=true$/m)
@@ -809,7 +809,10 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
   assert.match(step6Text, /"ordered_task_ids": list\(ordered_task_ids\)/)
   assert.match(narrativeText, /Call 1: Sector-level analysis/)
   assert.match(narrativeText, /Call 2: Deep analysis/)
-  assert.match(narrativeText, /DEFAULT_MODEL = "gpt-5\.4-pro"/)
+  assert.match(narrativeText, /DEFAULT_MODEL = "gpt-5\.6-sol"/)
+  assert.match(narrativeText, /DEFAULT_REASONING_EFFORT = "max"/)
+  assert.match(step6Text, /"narrative_model": narrative\.get\("model"\)/)
+  assert.match(step6Text, /"narrative_reasoning_effort": narrative\.get\("reasoning_effort"\)/)
 
   assert.deepEqual(
     extractPythonStringList(publicationText, 'INCLUDE_PATTERNS'),
@@ -931,6 +934,55 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
     assert.doesNotMatch(runner, /results\/<experiment_id>\/report\/[^\n]*HuggingFace/)
     assert.match(runner, /step6_report\.sh --no-narrative/)
   }
+})
+
+test('current operator docs bind narrative and grading to Sol 1M Max', async () => {
+  const [
+    rootEnglish,
+    rootKorean,
+    runnerEnglish,
+    runnerKorean,
+    guideEnglish,
+    guideKorean,
+    gradingReadme,
+    gradeWorkflowText,
+    productionConfigText,
+  ] = await Promise.all([
+    readRepoFile('README.md'),
+    readRepoFile('README_KR.md'),
+    readRepoFile('batch-runner/README.md'),
+    readRepoFile('batch-runner/README_KR.md'),
+    readRepoFile('docs/first-experiment.md'),
+    readRepoFile('docs/first-experiment_KR.md'),
+    readRepoFile('batch-runner/grading_configs/README.md'),
+    readRepoFile('.github/workflows/grade-run.yml'),
+    readRepoFile('batch-runner/grading_configs/default_v2_sol_max.yaml'),
+  ])
+
+  for (const document of [
+    rootEnglish,
+    rootKorean,
+    runnerEnglish,
+    runnerKorean,
+    guideEnglish,
+    guideKorean,
+  ]) {
+    assert.match(document, /gpt-5\.6-sol/)
+    assert.match(document, /reasoning=max/)
+    assert.doesNotMatch(document, /gpt-5\.4-pro/)
+  }
+
+  const gradeWorkflow = parse(gradeWorkflowText)
+  assert.equal(
+    gradeWorkflow.on.workflow_dispatch.inputs.grading_config.default,
+    'default_v2_sol_max.yaml',
+  )
+  assert.match(gradingReadme, /Production default[\s\S]*GPT-5\.6 Sol 1M Max/)
+  assert.match(productionConfigText, /model: "gpt-5\.6-sol"/)
+  assert.match(productionConfigText, /effort: "max"/)
+  assert.match(productionConfigText, /finalization_reasoning_effort: "max"/)
+  assert.match(productionConfigText, /model: "gpt-audio-1\.5"/)
+  assert.doesNotMatch(productionConfigText, /^\s*context_window:/m)
 })
 
 test('English and Korean Batch Runner references retain structural parity', async () => {

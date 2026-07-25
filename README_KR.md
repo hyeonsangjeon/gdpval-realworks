@@ -171,10 +171,12 @@ sandbox와 agentic 통제는 각각 이름이 붙은 경로에만 적용됩니�
 3. Step 2가 `gpt-5.2-chat`을 호출하고 파일을 만든 뒤 같은 모델의 Self-QA를 재시도할 수 있습니다.
 4. Step 3-4가 포맷된 결과와 3-row Parquet artifact를 만듭니다.
 5. dry run이면서 3-task sample이므로 Step 5를 건너뜁니다.
-6. Step 6의 기본 report 경로는 `gpt-5.4-pro`를 순차적으로 최대 2회 호출하며,
-  완료된 호출은 과금될 수 있습니다. 설정, 호출, 파싱, route 검증 중 하나라도
-  실패하면 즉시 model-free report를 만들고 다른 모델 fallback은 호출하지
-  않습니다. 게시 전에 report identity 검증을 반드시 통과해야 합니다.
+6. Step 6의 기본 report 경로는 `gpt-5.6-sol`을 `reasoning=max`로 순차적으로
+  최대 2회 호출합니다. 1.05M context는 별도 요청 설정이 아니라 deployment
+  capability입니다. 완료된 호출은 과금될 수 있습니다. 설정, 호출, 파싱,
+  route 검증 중 하나라도 실패하면 즉시 model-free report를 만들고 다른 모델
+  fallback은 호출하지 않습니다. 게시 전에 report identity 검증을 반드시
+  통과해야 합니다.
 7. `dry_run: true`이므로 Step 7과 결과 PR을 건너뜁니다.
 
 인증된 batch job이 마지막 `always()` 단계에 도달하면

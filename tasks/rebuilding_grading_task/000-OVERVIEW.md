@@ -5,8 +5,10 @@
 
 ## 핵심 요약
 
-1. **단일 메인 judge**: `gpt-5.4` reasoning_effort=`medium`. tier 없음.
-2. **눈/귀 부착**: text 추출 폐기, judge가 `read_deliverable` tool로 파일 직접 조회. 시각 항목 → gpt-5.4 vision, 오디오 지각 → gpt-audio-1.5.
+1. **단일 메인 judge**: production은 `gpt-5.6-sol`
+	reasoning_effort=`max`. tier 없음. 최초 PR2 baseline인 `gpt-5.4 medium`은
+	`default_v2.yaml` 비교 identity로 보존.
+2. **눈/귀 부착**: text 추출 폐기, judge가 `read_deliverable` tool로 파일 직접 조회. production 시각 항목 → `gpt-5.6-sol` reasoning_effort=`max`, 오디오 지각 → `gpt-audio-1.5`.
 3. **score-math sign-bug fix**: `verdict='pass'` 부호 시멘틱 정규화, `|max_score|≥4` critical 재정의, `total_max≤0` degenerate 케이스 explicit 처리.
 4. **legacy 제거**: `deliverable_extract_max_chars`, tier 분기, `required` OR-가지 잔재 전부.
 
@@ -66,8 +68,8 @@
 | perception routing 테스트 위치 | 기존 `test_grader_routing.py`(tier routing)와 분리해 `test_perception_routing.py` 신규 | concern 분리 — 207에서 legacy tier 테스트 삭제해도 modality routing 테스트는 살아남 |
 | perception 클래스 의존성 주입 방향 | `client`을 생성자에 inject (클래스 내부 생성 X) | main judge가 Responses API 클라이언트 소유 + 테스트에서 FakeClient 제공 용이 |
 | audio deployment 누락 처리 | `judge()` 호출 시점에 endpoint env 체크, 누락이면 `judge_error=endpoint_missing` graceful return | import-time hard fail 피하고 audio 항목에서만 결속 (main judge는 계속 동작) |
-| grade-run.yml default config 교체 타이밍 | 208에서 교체 하지 않음 — PR3 task 302 비용 검증 이후 별도 commit으로 전환 | 명시적 테스트 없이 default를 v2로 돌리면 다음 trigger에서 러닝웨이 cost 위험. 사용자는 명시적으로 default_v2.yaml 지정 가능. |
-| 207 legacy 주니케이션 범위 | **조건부 PARTIAL**: v1 sweep/tier configs (`validation_*`, `tiered_*`, `_sweep_template`, `recommended_*`) 명시 아카이브 + README + `_archive_v1/README.md`. **하지만** `core/grader.py`의 `_use_batch`/`_tier_judges`/`_summarize_deliverables`/`deliverable_extract_max_chars` 코드 렌더링 변경 없음. `core/grader_batch.py`도 올. | 완전 삭제는 `default_gpt5pro.yaml` (현재 grade-run.yml default)과 30+ test_grader/test_grader_batch 케이스를 그대로 깨뜨림. 안전하게 하려면 (1) PR3의 v2 검증 완료 → (2) grade-run.yml default 전환 → (3) `default_gpt5pro.yaml` archive → (4) legacy 코드 일괄 드롭 순서 필요. PR2 테스트를 한 번에 깨뜨려서는 안 됨. 별도 cleanup PR로 처리. 207 acceptance grep 조건은 충족 안 됨 — PR3 종료 이후 완전 수행. |
+| grade-run.yml default config 교체 타이밍 | 2026-07-26 `default_v2_sol_max.yaml`로 전환 완료 | dry-run 기본, 명시적 paid 승인, protected `grading` environment를 함께 적용. 이전 5.4 config는 비교·재현용으로 보존. |
+| 207 legacy 주니케이션 범위 | **조건부 PARTIAL**: v1 sweep/tier configs (`validation_*`, `tiered_*`, `_sweep_template`, `recommended_*`) 명시 아카이브 + README + `_archive_v1/README.md`. **하지만** `core/grader.py`의 `_use_batch`/`_tier_judges`/`_summarize_deliverables`/`deliverable_extract_max_chars` 코드 렌더링 변경 없음. `core/grader_batch.py`도 올. | `default_gpt5pro.yaml`은 현재 default가 아니라 historical comparison identity로 보존. legacy 코드 제거는 별도 cleanup PR에서 기존 historical config 재현성과 함께 처리. |
 
 ## 작업 흐름 (자동, 사용자 개입 없음)
 

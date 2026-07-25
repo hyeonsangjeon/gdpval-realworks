@@ -98,6 +98,40 @@
       "then": {
         "required": ["azure_ai_routes", "azure_ai_runtime_fingerprint"]
       }
+    },
+    {
+      "if": {
+        "required": ["schema_version"],
+        "properties": {"schema_version": {"const": "1.2"}}
+      },
+      "then": {
+        "required": [
+          "run_status",
+          "expected_task_count",
+          "expected_ordered_task_ids_sha256",
+          "azure_ai_routes",
+          "azure_ai_runtime_fingerprint"
+        ],
+        "properties": {
+          "summary": {
+            "properties": {
+              "cost": {
+                "required": ["estimated_cost_usd", "pricing_complete", "unpriced_models"],
+                "properties": {
+                  "estimated_cost_usd": {"type": "null"},
+                  "pricing_complete": {"const": false},
+                  "unpriced_models": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "required": [
@@ -113,7 +147,7 @@
     "summary"
   ],
   "properties": {
-    "schema_version": {"enum": ["1.0", "1.1"], "description": "1.0 = v1 grade JSON (legacy, pre-sign-aware). 1.1 = v2sm-backfilled or freshly-graded with PR1 sign-aware math (model_did_right, |max_score|>=4 critical, positive-only denominator, pct_raw diagnostic)."},
+    "schema_version": {"enum": ["1.0", "1.1", "1.2"], "description": "1.0 = legacy item-level grade JSON. 1.1 = sign-aware backfill. 1.2 = current lifecycle and explicit unpriced-cost provenance."},
     "run_status": {"enum": ["partial", "final", "diagnostic"]},
     "expected_task_count": {"type": "integer", "minimum": 1},
     "expected_ordered_task_ids_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},

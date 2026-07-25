@@ -321,6 +321,41 @@ def _safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
             return None
 
 
+def _validated_final_envelope(
+    parsed: Mapping[str, Any],
+) -> Optional[Tuple[str, float, float]]:
+    verdict_raw = parsed.get("verdict")
+    partial_raw = parsed.get("partial_score")
+    confidence_raw = parsed.get("confidence")
+    verdict = verdict_raw.lower() if isinstance(verdict_raw, str) else ""
+    if verdict not in {"pass", "partial", "fail"}:
+        return None
+    if isinstance(partial_raw, bool) or not isinstance(
+        partial_raw, (int, float)
+    ):
+        return None
+    if isinstance(confidence_raw, bool) or not isinstance(
+        confidence_raw, (int, float)
+    ):
+        return None
+    try:
+        partial = float(partial_raw)
+        confidence = float(confidence_raw)
+    except (OverflowError, TypeError, ValueError):
+        return None
+    if not math.isfinite(partial) or not 0.0 <= partial <= 1.0:
+        return None
+    if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+        return None
+    if (
+        (verdict == "pass" and partial != 1.0)
+        or (verdict == "fail" and partial != 0.0)
+        or (verdict == "partial" and not 0.0 < partial < 1.0)
+    ):
+        return None
+    return verdict, partial, confidence
+
+
 def _finalization_retry_reason(
     final_text: str,
     response: Any,
@@ -332,8 +367,11 @@ def _finalization_retry_reason(
             response, max_output_tokens, output_tokens
         )
         return f"empty_final_text:{finish_reason}"
-    if _safe_json_loads(final_text) is None:
+    parsed = _safe_json_loads(final_text)
+    if parsed is None:
         return "final_json_parse_failed"
+    if _validated_final_envelope(parsed) is None:
+        return "invalid_final_envelope"
     return None
 
 
@@ -349,13 +387,14 @@ class ToolCallingJudge:
     Args:
         client:                  object with ``.responses.create(**kwargs)``
                                  (Azure OpenAI Responses client or a fake).
-        model:                   deployment name (e.g. ``"gpt-5.4"``).
+        model:                   deployment name (e.g. ``"gpt-5.6-sol"``).
         prompt_template:         contents of ``prompts/grader_judge_v2.md``
                                  — must contain a ``<!-- ===SPLIT=== -->``
                                  marker separating the stable scaffold
                                  (sent as ``instructions=``, cached server-
                                  side) from the per-item variable content.
-        reasoning_effort:        ``"low" | "medium" | "high"``.
+        reasoning_effort:        ``"none" | "low" | "medium" | "high" |
+                     "xhigh" | "max"``.
         max_output_tokens:       per-call output budget.
         per_item_tool_call_cap:  hard upper bound on tool dispatches for
                                  a single rubric item. Loop exits with
@@ -366,6 +405,9 @@ class ToolCallingJudge:
                                  iteration).
         finalization_retries:    bounded retries when a final response is
                      missing or malformed after evidence is ready.
+        finalization_reasoning_effort: reasoning effort used for the bounded
+                 no-tools finalization retry. Defaults to ``"low"`` for
+                 existing configs.
         vision_perception:       optional ``VisionPerception`` instance.
                      For VISUAL items the harness renders and
                      invokes it before the first main request;
@@ -394,6 +436,7 @@ class ToolCallingJudge:
     per_item_tool_call_cap: int = 8
     max_iterations: int = 10
     finalization_retries: int = 1
+    finalization_reasoning_effort: str = "low"
     model_read_ops: Tuple[str, ...] = MODEL_READ_DELIVERABLE_OPS
     vision_perception: Any = None
     audio_perception: Any = None
@@ -414,6 +457,10 @@ class ToolCallingJudge:
         if self.finalization_retries < 0:
             raise ValueError("finalization_retries must be non-negative")
         self.finalization_retries = min(self.finalization_retries, 1)
+        if self.finalization_reasoning_effort not in {
+            "none", "low", "medium", "high", "xhigh", "max"
+        }:
+            raise ValueError("finalization_reasoning_effort is invalid")
         invalid_ops = set(self.model_read_ops) - set(MODEL_READ_DELIVERABLE_OPS)
         if invalid_ops:
             raise ValueError(
@@ -512,7 +559,9 @@ class ToolCallingJudge:
         finalization_only = False
         finalization_retries_used = 0
 
-        while iterations < self.max_iterations:
+        while iterations < self.max_iterations + (
+            finalization_retries_used if finalization_only else 0
+        ):
             iterations += 1
             call_started: Optional[float] = None
             try:
@@ -537,10 +586,12 @@ class ToolCallingJudge:
                 if finalization_only:
                     create_kwargs.pop("tools")
                     create_kwargs.pop("parallel_tool_calls")
-                    create_kwargs["reasoning"] = {"effort": "low"}
+                    create_kwargs["reasoning"] = {
+                        "effort": self.finalization_reasoning_effort
+                    }
                 # PR3 step 1b — context_management server-side compaction.
                 # The SDK signature exposes a dict shape but Azure's
-                # current API rev for gpt-5.4 rejects dict with HTTP 400
+                # legacy gpt-5.4 validation rejected dict with HTTP 400
                 # ('expected an array of objects'). Disabled by default
                 # until the array contract is documented; set
                 # compact_threshold=None to opt out (default).
@@ -574,7 +625,8 @@ class ToolCallingJudge:
                         model=self.model,
                         input=messages,
                         reasoning={
-                            "effort": "low" if finalization_only
+                            "effort": self.finalization_reasoning_effort
+                            if finalization_only
                             else self.reasoning_effort
                         },
                         max_output_tokens=self.max_output_tokens,
@@ -690,7 +742,6 @@ class ToolCallingJudge:
             if (
                 retry_reason is not None
                 and finalization_retries_used < self.finalization_retries
-                and iterations < self.max_iterations
             ):
                 logger.warning(
                     "ToolCallingJudge invalid final response for %s (%s); "
@@ -1456,55 +1507,8 @@ class ToolCallingJudge:
                 **instrumentation,
             )
 
-        verdict_raw = parsed.get("verdict")
-        partial_raw = parsed.get("partial_score")
-        confidence_raw = parsed.get("confidence")
-        invalid_envelope = False
-        verdict = verdict_raw.lower() if isinstance(verdict_raw, str) else ""
-        if verdict not in {"pass", "partial", "fail"}:
-            invalid_envelope = True
-
-        partial = 0.0
-        if (
-            isinstance(partial_raw, bool)
-            or not isinstance(partial_raw, (int, float))
-        ):
-            invalid_envelope = True
-        else:
-            try:
-                partial = float(partial_raw)
-            except (OverflowError, TypeError, ValueError):
-                invalid_envelope = True
-            else:
-                if not math.isfinite(partial) or not 0.0 <= partial <= 1.0:
-                    invalid_envelope = True
-
-        if not invalid_envelope and (
-            (verdict == "pass" and partial != 1.0)
-            or (verdict == "fail" and partial != 0.0)
-            or (verdict == "partial" and not 0.0 < partial < 1.0)
-        ):
-            invalid_envelope = True
-
-        confidence: Optional[float] = None
-        if (
-            isinstance(confidence_raw, bool)
-            or not isinstance(confidence_raw, (int, float))
-        ):
-            invalid_envelope = True
-        else:
-            try:
-                confidence = float(confidence_raw)
-            except (OverflowError, TypeError, ValueError):
-                invalid_envelope = True
-            else:
-                if (
-                    not math.isfinite(confidence)
-                    or not 0.0 <= confidence <= 1.0
-                ):
-                    invalid_envelope = True
-
-        if invalid_envelope:
+        validated_envelope = _validated_final_envelope(parsed)
+        if validated_envelope is None:
             return ToolCallingResult(
                 verdict="judge_error",
                 partial_score=0.0,
@@ -1526,6 +1530,8 @@ class ToolCallingJudge:
                 score_excluded=True,
                 **instrumentation,
             )
+
+        verdict, partial, confidence = validated_envelope
 
         evidence = str(parsed.get("evidence") or "").strip()[:200]
         if not evidence:
