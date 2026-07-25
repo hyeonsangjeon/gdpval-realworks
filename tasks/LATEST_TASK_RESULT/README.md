@@ -3,9 +3,9 @@
 This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
-- Updated: 2026-07-24
-- Status: Foundry route migration implemented and fully validated on latest
-  `main`; final clean-tree review, push, pull request, merge, and separately
+- Updated: 2026-07-25
+- Status: Foundry route migration implemented, fully validated, and approved
+  from a clean detached checkout; push, pull request, merge, and separately
   approved remote paid/write validation remain pending
 
 ## Task
@@ -130,8 +130,9 @@ task. It must be refreshed before a task is reported complete.
   final full-suite run. A later re-review found full-plan cleanup and empty
   narrative gaps; both were repaired and covered. The final independent
   re-review found one hardened deferred-client lifecycle leak; it was
-  reproduced, repaired, and covered before the final full-suite run. Final
-  approval of the repaired exact head remains pending.
+  reproduced, repaired, and covered before the final full-suite run. Exact
+  clean-tree head `c396ab5f5a4b1c9b07fabaac894642a41074c185` received final
+  independent **APPROVE** with no remaining blocker, major, or minor finding.
 - `git diff --check` passed. The latest-main candidate spans **97 files**.
 - No workflow dispatch, credential or token acquisition, Azure/model API call,
   grading run, Hugging Face write, network checkpoint write, deployment, or
@@ -139,10 +140,8 @@ task. It must be refreshed before a task is reported complete.
 
 ## Remaining Work
 
-- Obtain final independent approval from a clean detached checkout, amend the
-  local migration commit with the review fixes and current completion records,
-  push the feature branch, open a pull request, wait for free CI, and merge only
-  if the exact reviewed head passes.
+- Push the feature branch, open a pull request, wait for free CI, and merge only
+  if the reviewed implementation commit and this docs-only approval record pass.
 - Configure the independent OIDC expected-ID variables and expected
   direct/project account/project-name variables in repository settings.
   Configure `AZURE_AI_EXPECTED_LEGACY_ACCOUNT` only for an explicitly approved
