@@ -12,6 +12,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Dashboard source-build provenance** - derive the displayed dashboard
+  version from `package.json`, bind Pages builds to the exact checked-out
+  GitHub SHA and repository, and link the footer to that full commit only after
+  strict public-value validation. Local or malformed builds fail closed to a
+  non-link label, while generated-data time remains a separate signal. The
+  existing read-only PR validation job now checks published and local browser
+  states, exact href and accessible name, keyboard focus, and desktop/mobile
+  overflow without adding a workflow or changing Pages permissions. The
+  accompanying refined Bolt records why README restructuring, a duplicate fast
+  gate, and Action pin churn were deferred. Validation passes **3 focused
+  contracts**, **92 aggregate contracts**, the production TypeScript/Vite
+  build, the provenance browser matrix, and all four existing Field Notes
+  browser suites. Independent code and workflow/security reviews returned
+  **APPROVE** after a malformed repository-slug edge case was fixed and covered.
+  No batch, grading, Azure, Hugging Face, deployment, or paid action ran during
+  local validation.
 - **Opt-in typed Azure AI Step 2 wiring** - activate the shipped typed route
   foundation only when `AZURE_AI_ROUTE_PROFILE` is nonempty, while preserving
   the profile-absent legacy constructors, progress shape, result shape, and

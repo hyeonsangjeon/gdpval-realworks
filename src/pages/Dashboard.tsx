@@ -15,6 +15,7 @@ import { tooltipTexts } from '../data/tooltipTexts'
 import { onboarding } from '../utils/onboarding'
 import { substituteTaskTotal } from '../lib/textFormat'
 import { OFFICIAL_TASK_COUNT } from '../lib/officialFilter'
+import { resolveBuildProvenance } from '../lib/buildProvenance'
 import {
   getDashboardDisplayData,
 } from '../lib/officialExperimentScope.js'
@@ -27,6 +28,12 @@ const TABS: { id: TabKey; label: string; icon: React.ReactNode; color: string }[
   { id: 'errors', label: 'Execution Errors', icon: <AlertTriangle className="w-4 h-4" />, color: '#ef4444' },
   { id: 'grading', label: 'Grading Analysis', icon: <Award className="w-4 h-4" />, color: '#f59e0b' },
 ]
+
+const BUILD_PROVENANCE = resolveBuildProvenance({
+  version: __APP_VERSION__,
+  sha: import.meta.env.VITE_BUILD_SHA,
+  repository: import.meta.env.VITE_BUILD_REPOSITORY,
+})
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -316,14 +323,30 @@ export default function Dashboard() {
         className="border-t border-dash-border bg-dash-card/50 mt-16"
       >
         <div className="max-w-[1400px] mx-auto px-3 md:px-6 py-4 md:py-6 flex flex-col md:flex-row items-center justify-between gap-1 text-xs text-dash-text-faint">
-          <div>
-            {generated && (
-              <p>Generated {new Date(generated).toLocaleString()}</p>
-            )}
-          </div>
-          <a href="https://github.com/hyeonsangjeon/gdpval-realworks" className="hover:text-dash-text-secondary transition-colors">
-            GDPVal RealWorks • v0.2.0
-          </a>
+          {generated ? (
+            <p aria-label="Dashboard data generation time">
+              Data generated {new Date(generated).toLocaleString()}
+            </p>
+          ) : <span />}
+          {BUILD_PROVENANCE.kind === 'published' ? (
+            <a
+              href={BUILD_PROVENANCE.commitUrl}
+              aria-label={BUILD_PROVENANCE.accessibleLabel}
+              title={BUILD_PROVENANCE.accessibleLabel}
+              data-build-provenance="published"
+              className="max-w-full rounded-sm text-center font-mono text-[11px] text-dash-text-secondary hover:text-dash-heading transition-colors"
+            >
+              {BUILD_PROVENANCE.displayLabel}
+            </a>
+          ) : (
+            <span
+              aria-label={BUILD_PROVENANCE.accessibleLabel}
+              data-build-provenance="local"
+              className="max-w-full text-center font-mono text-[11px] text-dash-text-secondary"
+            >
+              {BUILD_PROVENANCE.displayLabel}
+            </span>
+          )}
         </div>
       </motion.footer>
 
