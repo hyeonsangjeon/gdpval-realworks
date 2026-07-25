@@ -150,6 +150,8 @@ jobs:
           # prebuild에서도 aggregate가 실행되지만,
           # 위에서 이미 실행했으므로 2번 실행됨 (멱등이라 OK)
           NODE_ENV: production
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_BUILD_REPOSITORY: ${{ github.repository }}
 
       - name: Verify aggregate contracts and pinned history
         timeout-minutes: 3
@@ -162,6 +164,13 @@ jobs:
       - name: Verify Field Notes in browser
         timeout-minutes: 8
         run: npm run test:notes-browser:dist
+
+      - name: Verify dashboard build provenance in browser
+        timeout-minutes: 8
+        run: npm run test:build-provenance-browser:dist
+        env:
+          EXPECTED_BUILD_SHA: ${{ github.sha }}
+          EXPECTED_BUILD_REPOSITORY: ${{ github.repository }}
 
       - name: Upload Pages artifact
         if: >-
