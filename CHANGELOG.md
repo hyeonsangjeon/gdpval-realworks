@@ -202,7 +202,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   token `aud`, `nbf`, and `exp` in addition to tenant and client claims.
   Relay cleanup finality revalidates the exact child against the full
   publication plan, including optional README bytes. Frontend skill discovery
-  ignores generated cache directories. Credential-free validation passes 2,327
+  ignores generated cache directories. Model-free route planning no longer
+  imports Azure/OpenAI SDKs until credential or client construction, so the
+  Node-only aggregate gate runs without paid-runtime dependencies.
+  Credential-free validation passes 2,328
   backend tests with 6 skips and 44 integration
   deselections, 89 frontend data contracts, nine onboarding contracts, the
   production build, four browser suites, Ruff, Python compilation, actionlint,

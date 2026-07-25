@@ -4,9 +4,11 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-25
-- Status: Foundry route migration implemented, fully validated, and approved
-  from a clean detached checkout; push, pull request, merge, and separately
-  approved remote paid/write validation remain pending
+- Status: Foundry route migration implementation and approval are pushed in
+  PR #140. Its first free `validate` run exposed an eager Azure SDK import in
+  the Node-only aggregate job; the lazy-import fix is locally validated, while
+  fix push, CI rerun, merge, and separately approved remote paid/write
+  validation remain pending
 
 ## Task
 
@@ -107,8 +109,12 @@ task. It must be refreshed before a task is reported complete.
 ## Verification
 
 - Base: `origin/main@bfa2bb70a063ba621f95929c69b7218e4dce9563`.
-- Complete backend non-integration suite: **2,327 passed, 6 skipped,
+- Complete backend non-integration suite: **2,328 passed, 6 skipped,
   44 integration tests deselected, 0 failed**.
+- Azure foundation and route-preflight regression: **229 passed, 0 failed**.
+- The exact failed CI command, `npm run test:aggregate`, now passes **89/89**;
+  a fresh subprocess explicitly blocks both `azure` and `openai` imports while
+  model-free route planning succeeds.
 - Final hardened lifecycle matrix: **172 passed, 0 failed**.
 - Final Code Interpreter, provenance, publication, grading schema, and workflow
   follow-up matrix: **762 passed, 0 failed**; the complete suite above includes
@@ -140,8 +146,8 @@ task. It must be refreshed before a task is reported complete.
 
 ## Remaining Work
 
-- Push the feature branch, open a pull request, wait for free CI, and merge only
-  if the reviewed implementation commit and this docs-only approval record pass.
+- Commit and push the lazy SDK import fix to PR #140, wait for its free
+  `validate` check, and merge only if the exact updated head passes.
 - Configure the independent OIDC expected-ID variables and expected
   direct/project account/project-name variables in repository settings.
   Configure `AZURE_AI_EXPECTED_LEGACY_ACCOUNT` only for an explicitly approved

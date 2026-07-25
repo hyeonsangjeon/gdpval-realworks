@@ -1,6 +1,8 @@
 import gc
 import importlib.metadata
 import re
+import subprocess
+import sys
 import warnings
 from dataclasses import replace
 from pathlib import Path
@@ -18,6 +20,41 @@ FOUNDATION_DOCS = (
     REPO_ROOT / "tasks/0723_thursday/BOLT_TYPED_AZURE_AI_ENDPOINT_CONTRACTS.md",
     REPO_ROOT / "CHANGELOG.md",
 )
+
+
+def test_route_planning_imports_when_paid_sdks_are_blocked():
+    script = r'''
+import sys
+
+class BlockPaidSDKs:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "azure" or fullname.startswith("azure."):
+            raise ModuleNotFoundError("blocked Azure SDK")
+        if fullname == "openai" or fullname.startswith("openai."):
+            raise ModuleNotFoundError("blocked OpenAI SDK")
+        return None
+
+sys.meta_path.insert(0, BlockPaidSDKs())
+from core.azure_ai_clients import AzureAIRouteSettings, preflight_routes
+
+settings = AzureAIRouteSettings.from_env({
+    "AZURE_AI_ROUTE_PROFILE": "direct-v1",
+    "AZURE_OPENAI_V1_ENDPOINT": (
+        "https://account.services.ai.azure.com/openai/v1/"
+    ),
+})
+records = preflight_routes([("inference", "deployment")], settings=settings)
+assert records[0]["workload"] == "inference"
+'''
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def _direct_settings(

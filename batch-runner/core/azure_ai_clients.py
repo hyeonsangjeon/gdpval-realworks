@@ -18,10 +18,6 @@ from enum import Enum
 from typing import Mapping, Sequence
 from urllib.parse import urlsplit
 
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from openai import AzureOpenAI, OpenAI
-
-
 DIRECT_TOKEN_SCOPE = "https://ai.azure.com/.default"
 LEGACY_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
 DEFAULT_TIMEOUT = 480.0
@@ -54,6 +50,32 @@ _ACCOUNT_PATTERN = re.compile(
 _PROJECT_PATTERN = re.compile(
     r"[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?"
 )
+
+
+def DefaultAzureCredential(*args, **kwargs):
+    from azure.identity import DefaultAzureCredential as Credential
+
+    return Credential(*args, **kwargs)
+
+
+def get_bearer_token_provider(*args, **kwargs):
+    from azure.identity import get_bearer_token_provider as provider_factory
+
+    return provider_factory(*args, **kwargs)
+
+
+def OpenAI(*args, **kwargs):
+    from openai import OpenAI as Client
+
+    return Client(*args, **kwargs)
+
+
+def AzureOpenAI(*args, **kwargs):
+    from openai import AzureOpenAI as Client
+
+    return Client(*args, **kwargs)
+
+
 class EndpointKind(str, Enum):
     DIRECT_V1 = "direct-v1"
     PROJECT = "project"
