@@ -288,10 +288,9 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
 }
 
 export function processGradesFile(filePath, raw, taskQaByExperiment = new Map()) {
-  // PR1 task 103 — schema 1.1 is a superset of 1.0 (adds model_did_right,
-  // pct_raw, sign-aware critical_item_pass_rate). Route both through the
-  // same v1 processor.
-  if (raw && (raw.schema_version === '1.0' || raw.schema_version === '1.1')) {
+  // All item-level 1.x payloads share the rich grade projection. Later minor
+  // versions add provenance contracts without changing dashboard score shape.
+  if (raw && ['1.0', '1.1', '1.2'].includes(raw.schema_version)) {
     return processV1GradesFile(filePath, raw, taskQaByExperiment);
   }
   return processLegacyGradesFile(filePath, raw, taskQaByExperiment);
@@ -389,7 +388,7 @@ async function main() {
   console.log(`✅ Aggregated ${results.length} grade file(s) → grades-index.json`);
   for (const r of results) {
     const dummy = r.is_dummy ? ' [DUMMY]' : '';
-    const v1 = r.schema_version === '1.0' ? ' [v1.0]' : '';
+    const v1 = r.schema_version ? ` [v${r.schema_version}]` : '';
     console.log(`   ${r.id}: ${r.summary.avg_score_pct}% avg (${r.summary.graded_tasks}/${r.summary.total_tasks} tasks)${dummy}${v1}`);
   }
 }

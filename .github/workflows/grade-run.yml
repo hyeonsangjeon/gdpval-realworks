@@ -11,7 +11,7 @@ on:
         description: "Grading config file under batch-runner/grading_configs/"
         required: true
         type: string
-        default: "default_gpt5pro.yaml"
+        default: "default_v2_sol_max.yaml"
       inference_revision:
         description: "Full HF dataset commit SHA for resume; blank resolves initial main"
         required: false
@@ -31,6 +31,11 @@ on:
         description: "Classify only, no LLM calls"
         required: false
         type: boolean
+        default: true
+      paid_approval:
+        description: "Explicitly authorize paid model calls (protected environment also required)"
+        required: false
+        type: boolean
         default: false
       resume:
         description: "Resume from existing partial grade JSON (chunked execution)"
@@ -44,16 +49,14 @@ on:
         default: 0
 
 permissions:
-  contents: write
-  id-token: write
-  actions: write  # required for self-retrigger via gh workflow run
+  contents: read
 
 concurrency:
   group: grade-${{ inputs.experiment_yaml }}-${{ inputs.grading_config }}
   cancel-in-progress: false
 
 jobs:
-  grade:
+  validate-request:
     runs-on: ubuntu-24.04
     env:
       GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
@@ -62,14 +65,9 @@ jobs:
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
       GRADE_DRY_RUN: ${{ inputs.dry_run }}
+      GRADE_PAID_APPROVAL: ${{ inputs.paid_approval }}
       GRADE_RESUME: ${{ inputs.resume }}
       GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
-    # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
-    # extended. We set 320min so step8_grade.py's internal 4h time guard (env
-    # GRADER_TIME_BUDGET_SEC=14400) trips first, partial-saves, and exits 7,
-    # leaving ~40min headroom for the commit + retrigger steps below.
-    timeout-minutes: 320
-
     steps:
       - name: Validate workflow context and inputs
         shell: bash
@@ -110,13 +108,21 @@ jobs:
             exit 1
           fi
 
-          for boolean_name in GRADE_FORCE GRADE_DRY_RUN GRADE_RESUME; do
+          for boolean_name in GRADE_FORCE GRADE_DRY_RUN GRADE_PAID_APPROVAL GRADE_RESUME; do
             boolean_value="${!boolean_name}"
             if [[ "$boolean_value" != "true" && "$boolean_value" != "false" ]]; then
               echo "::error::$boolean_name must be exactly true or false"
               exit 1
             fi
           done
+          if [[ "$GRADE_DRY_RUN" != "true" && "$GRADE_PAID_APPROVAL" != "true" ]]; then
+            echo "::error::non-dry grading requires paid_approval=true"
+            exit 1
+          fi
+          if [[ "$GRADE_DRY_RUN" == "true" && "$GRADE_PAID_APPROVAL" != "false" ]]; then
+            echo "::error::dry-run grading must not request paid approval"
+            exit 1
+          fi
           if [[ ! "$GRADE_TASKS_LIMIT" =~ ^(0|[1-9][0-9]{0,2})$ ]] ||
              (( 10#$GRADE_TASKS_LIMIT > 220 )); then
             echo "::error::tasks_limit must be an integer between 0 and 220"
@@ -138,6 +144,145 @@ jobs:
             echo "::error::resume_chunk must be 0 when resume is false"
             exit 1
           fi
+
+  approve-paid:
+    name: Approve paid Sol Max grading (${{ inputs.experiment_yaml }}, ${{ inputs.grading_config }}, chunk ${{ inputs.resume_chunk }})
+    needs: validate-request
+    if: inputs.dry_run == false && inputs.paid_approval == true
+    runs-on: ubuntu-24.04
+    environment:
+      name: grading
+    steps:
+      - name: Record approved request
+        env:
+          GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
+          GRADE_CONFIG: ${{ inputs.grading_config }}
+          GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
+          GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+          GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
+        run: |
+          printf '%s\n' \
+            "Approved paid grading request:" \
+            "  experiment=$GRADE_EXPERIMENT_YAML" \
+            "  config=$GRADE_CONFIG" \
+            "  inference_revision=${GRADE_INFERENCE_REVISION:-initial-main-resolution}" \
+            "  tasks_limit=$GRADE_TASKS_LIMIT" \
+            "  resume_chunk=$GRADE_RESUME_CHUNK"
+
+  grade-dry-run:
+    needs: validate-request
+    if: inputs.dry_run == true
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
+      GRADE_CONFIG: ${{ inputs.grading_config }}
+      GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
+      GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
+    steps:
+      - name: Checkout exact main revision (read-only)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Verify read-only checkout and input files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
+            echo "::error::checked out HEAD does not match the dispatched main SHA"
+            exit 1
+          fi
+          if [[ "$(git symbolic-ref --quiet --short HEAD)" != "main" ]]; then
+            echo "::error::checkout is not on the local main branch"
+            exit 1
+          fi
+          if [[ "$(git rev-parse refs/remotes/origin/main)" != "$GITHUB_SHA" ]]; then
+            echo "::error::origin/main moved after dispatch; retry from the new main"
+            exit 1
+          fi
+          if git config --local --name-only --get-regexp '^http\..*\.extraheader$' >/dev/null; then
+            echo "::error::dry-run checkout must not retain repository credentials"
+            exit 1
+          fi
+
+          EXPERIMENT_PATH="batch-runner/experiments/${GRADE_EXPERIMENT_YAML}.yaml"
+          CONFIG_PATH="batch-runner/grading_configs/${GRADE_CONFIG}"
+          for input_path in "$EXPERIMENT_PATH" "$CONFIG_PATH"; do
+            if [[ ! -f "$input_path" || -L "$input_path" ]]; then
+              echo "::error::required input must be a regular non-symlink file: $input_path"
+              exit 1
+            fi
+          done
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Download inference results anonymously
+        run: |
+          cd batch-runner
+          python scripts/download_inference_from_hf.py \
+            --experiment "$GRADE_EXPERIMENT_YAML" \
+            --output workspace/step2_inference_results.json \
+            --revision "$GRADE_INFERENCE_REVISION"
+
+      - name: Classify grading work only
+        run: |
+          cd batch-runner
+          ARGS=(
+            "$GRADE_EXPERIMENT_YAML"
+            --config "grading_configs/$GRADE_CONFIG"
+            --source local
+            --dry-run
+          )
+          if [[ "$GRADE_TASKS_LIMIT" != "0" ]]; then
+            ARGS+=(--limit "$GRADE_TASKS_LIMIT")
+          fi
+          python step8_grade.py "${ARGS[@]}"
+
+  grade:
+    needs: [validate-request, approve-paid]
+    if: >-
+      ${{
+        inputs.dry_run == false &&
+        inputs.paid_approval == true &&
+        needs.validate-request.result == 'success' &&
+        needs.approve-paid.result == 'success'
+      }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      actions: write  # required for self-retrigger via gh workflow run
+    env:
+      GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
+      GRADE_CONFIG: ${{ inputs.grading_config }}
+      GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
+      GRADE_FORCE: ${{ inputs.force }}
+      GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+      GRADE_DRY_RUN: ${{ inputs.dry_run }}
+      GRADE_PAID_APPROVAL: ${{ inputs.paid_approval }}
+      GRADE_RESUME: ${{ inputs.resume }}
+      GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
+    # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
+    # extended. We set 320min so step8_grade.py's internal 4h time guard (env
+    # GRADER_TIME_BUDGET_SEC=14400) trips first, partial-saves, and exits 7,
+    # leaving ~40min headroom for the commit + retrigger steps below.
+    timeout-minutes: 320
+
+    steps:
 
       - name: Checkout exact main revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -517,6 +662,7 @@ jobs:
             -f force=false \
             -f tasks_limit="$GRADE_TASKS_LIMIT" \
             -f dry_run=false \
+            -f paid_approval="$GRADE_PAID_APPROVAL" \
             -f resume=true \
             -f resume_chunk=$NEXT_CHUNK
           echo "[auto-resume] chunk $NEXT_CHUNK dispatched"

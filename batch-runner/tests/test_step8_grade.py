@@ -118,7 +118,10 @@ def test_compute_summary_includes_perception_in_total_cost_volume():
         "usage_complete": True,
     }
 
-    cost = s8._compute_summary([task])["cost"]
+    cost = s8._compute_summary(
+        [task],
+        unpriced_models=["gpt-5.6-sol", "gpt-audio-1.5"],
+    )["cost"]
 
     assert cost["total_judge_calls"] == 5
     assert cost["total_main_judge_calls"] == 2
@@ -132,6 +135,9 @@ def test_compute_summary_includes_perception_in_total_cost_volume():
     assert cost["total_render_calls"] == 3
     assert cost["total_render_latency_sec"] == 0.01
     assert cost["usage_complete"] is True
+    assert cost["estimated_cost_usd"] is None
+    assert cost["pricing_complete"] is False
+    assert cost["unpriced_models"] == ["gpt-5.6-sol", "gpt-audio-1.5"]
 
 
 def _setup_workspace(tmp_path: Path):
@@ -455,7 +461,7 @@ def test_force_overwrites(monkeypatch, tmp_path):
     code = s8.main()
     assert code == 0
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.0"
+    assert payload["schema_version"] == "1.2"
 
 
 def test_main_preflight_matches_grader_transport_before_calls(
@@ -1211,7 +1217,7 @@ def _seed_partial_grade(
         )
     )
     payload = {
-        "schema_version": "1.0",
+        "schema_version": "1.2",
         "run_status": run_status,
         "expected_task_count": 3,
         "expected_ordered_task_ids_sha256": s8._ordered_task_ids_sha256(
@@ -1254,7 +1260,10 @@ def _seed_partial_grade(
         "graded_at": "2026-05-27T00:00:00Z",
         "graded_by": "step8_grade.py",
         "tasks": task_rows,
-        "summary": s8._compute_summary(task_rows),
+        "summary": s8._compute_summary(
+            task_rows,
+            unpriced_models=["gpt-5.4-pro"],
+        ),
     }
     payload["azure_ai_runtime_fingerprint"] = payload[
         "azure_ai_routes"
@@ -1555,7 +1564,10 @@ def test_track2_resume_rejects_runtime_failure_before_grader(
     payload = json.loads(out.read_text(encoding="utf-8"))
     payload["tasks"][0]["error"] = "judge_error"
     payload["tasks"][0]["usage_complete"] = False
-    payload["summary"] = s8._compute_summary(payload["tasks"])
+    payload["summary"] = s8._compute_summary(
+        payload["tasks"],
+        unpriced_models=["gpt-5.4-pro"],
+    )
     out.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr("sys.argv", [
         "step8_grade.py", "exp998_smoke_baseline_sample",
@@ -2023,7 +2035,7 @@ def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path, capsys):
     out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
     assert out.exists()
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.0"
+    assert payload["schema_version"] == "1.2"
     assert [task["task_id"] for task in payload["tasks"]] == ["task-001"]
     stderr = capsys.readouterr().err
     assert "provider_error:OSError" in stderr
@@ -2131,16 +2143,63 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         encoding="utf-8"
     )
     parsed = yaml.safe_load(workflow)
-    assert list(parsed["jobs"]) == ["grade"]
-    assert parsed["permissions"] == {
+    assert list(parsed["jobs"]) == [
+        "validate-request",
+        "approve-paid",
+        "grade-dry-run",
+        "grade",
+    ]
+    assert parsed["permissions"] == {"contents": "read"}
+
+    validate_job = parsed["jobs"]["validate-request"]
+    approval_job = parsed["jobs"]["approve-paid"]
+    dry_run_job = parsed["jobs"]["grade-dry-run"]
+    grade_job = parsed["jobs"]["grade"]
+    assert approval_job["needs"] == "validate-request"
+    assert approval_job["if"] == (
+        "inputs.dry_run == false && inputs.paid_approval == true"
+    )
+    assert approval_job["environment"] == {"name": "grading"}
+    assert "permissions" not in approval_job
+    assert dry_run_job["needs"] == "validate-request"
+    assert dry_run_job["if"] == "inputs.dry_run == true"
+    assert dry_run_job["permissions"] == {"contents": "read"}
+    assert "environment" not in dry_run_job
+    dry_steps = dry_run_job["steps"]
+    dry_by_name = {
+        step.get("name"): step for step in dry_steps if step.get("name")
+    }
+    assert dry_by_name["Checkout exact main revision (read-only)"]["with"] == {
+        "ref": "main",
+        "persist-credentials": False,
+    }
+    assert "repository credentials" in dry_by_name[
+        "Verify read-only checkout and input files"
+    ]["run"]
+    assert "--dry-run" in dry_by_name["Classify grading work only"]["run"]
+    assert "secrets." not in yaml.safe_dump(dry_run_job)
+    assert "id-token" not in yaml.safe_dump(dry_run_job)
+    assert "actions" not in dry_run_job["permissions"]
+    assert grade_job["needs"] == ["validate-request", "approve-paid"]
+    assert "inputs.dry_run == false" in grade_job["if"]
+    assert "inputs.paid_approval == true" in grade_job["if"]
+    assert "needs.validate-request.result == 'success'" in grade_job["if"]
+    assert "needs.approve-paid.result == 'success'" in grade_job["if"]
+    assert "environment" not in grade_job
+    assert grade_job["permissions"] == {
         "contents": "write",
         "id-token": "write",
         "actions": "write",
     }
 
-    steps = parsed["jobs"]["grade"]["steps"]
+    validate_steps = validate_job["steps"]
+    validate_inputs = next(
+        step
+        for step in validate_steps
+        if step.get("name") == "Validate workflow context and inputs"
+    )
+    steps = grade_job["steps"]
     by_name = {step.get("name"): step for step in steps if step.get("name")}
-    validate_inputs = by_name["Validate workflow context and inputs"]
     checkout = by_name["Checkout exact main revision"]
     verify_checkout = by_name["Verify checked out main and input files"]
     download = by_name["Download inference results from HF"]
@@ -2228,6 +2287,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert "steps.commit_grade.outputs.committed == 'true'" in retrigger["if"]
     assert '-f inference_revision="$RESOLVED_INFERENCE_REVISION"' in retrigger["run"]
     assert '-f tasks_limit="$GRADE_TASKS_LIMIT"' in retrigger["run"]
+    assert '-f paid_approval="$GRADE_PAID_APPROVAL"' in retrigger["run"]
 
     assert workflow.index("- name: Validate workflow context and inputs") < workflow.index(
         "- name: Checkout exact main revision"
@@ -2246,7 +2306,7 @@ def _run_grade_workflow_input_preflight(**overrides):
     )
     validate_step = next(
         step
-        for step in workflow["jobs"]["grade"]["steps"]
+        for step in workflow["jobs"]["validate-request"]["steps"]
         if step.get("name") == "Validate workflow context and inputs"
     )
     sha = "a" * 40
@@ -2266,7 +2326,8 @@ def _run_grade_workflow_input_preflight(**overrides):
         "GRADE_INFERENCE_REVISION": "",
         "GRADE_FORCE": "false",
         "GRADE_TASKS_LIMIT": "0",
-        "GRADE_DRY_RUN": "false",
+        "GRADE_DRY_RUN": "true",
+        "GRADE_PAID_APPROVAL": "false",
         "GRADE_RESUME": "false",
         "GRADE_RESUME_CHUNK": "0",
         **overrides,
@@ -2286,6 +2347,8 @@ def _run_grade_workflow_input_preflight(**overrides):
         {},
         {
             "GRADE_INFERENCE_REVISION": "b" * 40,
+            "GRADE_DRY_RUN": "false",
+            "GRADE_PAID_APPROVAL": "true",
             "GRADE_RESUME": "true",
             "GRADE_RESUME_CHUNK": "1",
         },
@@ -2307,6 +2370,9 @@ def test_grade_workflow_input_preflight_accepts_valid_dispatch(overrides):
         ({"GRADE_CONFIG": "../config.yaml"}, "grading_config"),
         ({"GRADE_INFERENCE_REVISION": "A" * 40}, "inference_revision"),
         ({"GRADE_FORCE": "yes"}, "GRADE_FORCE"),
+        ({"GRADE_PAID_APPROVAL": "yes"}, "GRADE_PAID_APPROVAL"),
+        ({"GRADE_DRY_RUN": "false"}, "requires paid_approval=true"),
+        ({"GRADE_PAID_APPROVAL": "true"}, "must not request paid approval"),
         ({"GRADE_TASKS_LIMIT": "01"}, "tasks_limit"),
         ({"GRADE_TASKS_LIMIT": "221"}, "tasks_limit"),
         ({"GRADE_RESUME_CHUNK": "11"}, "resume_chunk"),

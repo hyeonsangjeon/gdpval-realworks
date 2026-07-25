@@ -233,6 +233,9 @@ export interface ReportMeta {
   date: string
   duration: string
   report_scope: 'self_assessed_pre_grading' | 'graded'
+  narrative_model?: string | null
+  narrative_reasoning_effort?: string | null
+  narrative_runtime_fingerprint?: string | null
 }
 
 export interface ReportSummary {

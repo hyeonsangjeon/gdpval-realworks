@@ -9,6 +9,7 @@ from step8_grade import (
     resolve_grade_output_path,
     validate_grading_config,
 )
+from core.azure_ai_clients import AzureAIWorkload, grader_route_workloads
 
 
 INFERENCE_SHA = "a" * 40
@@ -83,11 +84,94 @@ def test_default_v2_config_loads_and_validates():
     assert data["judge"]["critical"]["rule"] == "abs_max_score_threshold"
 
 
+def test_default_v2_sol_max_config_is_complete_production_identity():
+    path = Path("grading_configs/default_v2_sol_max.yaml")
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    validate_grading_config(data)
+
+    judge = data["judge"]
+    assert judge["model"] == judge["deployment"] == "gpt-5.6-sol"
+    assert judge["reasoning"] == {"effort": "max"}
+    assert judge["generation"]["finalization_reasoning_effort"] == "max"
+    assert judge["perception"]["visual"]["model"] == "gpt-5.6-sol"
+    assert judge["perception"]["visual"]["deployment"] == "gpt-5.6-sol"
+    assert judge["perception"]["visual"]["reasoning_effort"] == "max"
+    assert judge["perception"]["audio"]["deployment"] == "gpt-audio-1.5"
+    assert "context_window" not in path.read_text(encoding="utf-8")
+    assert grader_route_workloads(data) == [
+        (AzureAIWorkload.GRADER, "gpt-5.6-sol"),
+        (AzureAIWorkload.GRADER, "gpt-5.6-sol"),
+        (AzureAIWorkload.GRADER, "gpt-audio-1.5"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("main", None, "judge.reasoning.effort is invalid"),
+        ("main", "maximum", "judge.reasoning.effort is invalid"),
+        (
+            "finalization",
+            None,
+            "judge.generation.finalization_reasoning_effort is invalid",
+        ),
+        (
+            "finalization",
+            "maximum",
+            "judge.generation.finalization_reasoning_effort is invalid",
+        ),
+        (
+            "visual",
+            None,
+            "judge.perception.visual.reasoning_effort is invalid",
+        ),
+        (
+            "visual",
+            "maximum",
+            "judge.perception.visual.reasoning_effort is invalid",
+        ),
+    ],
+)
+def test_reasoning_efforts_reject_null_and_unknown_values(
+    tmp_path, field, value, message
+):
+    cfg = _valid_config(tmp_path)
+    if field == "main":
+        cfg["judge"]["reasoning"] = {"effort": value}
+    elif field == "finalization":
+        cfg["judge"]["generation"] = {
+            "finalization_reasoning_effort": value,
+        }
+    else:
+        cfg["judge"]["perception"] = {
+            "visual": {
+                "model": "gpt-5.6-sol",
+                "reasoning_effort": value,
+            },
+        }
+
+    with pytest.raises(ValueError, match=message):
+        validate_grading_config(cfg)
+
+
+def test_grade_workflow_defaults_to_v2_sol_max():
+    workflow = yaml.safe_load(
+        Path("../.github/workflows/grade-run.yml").read_text(encoding="utf-8")
+    )
+    triggers = workflow.get("on") or workflow.get(True)
+    assert (
+        triggers["workflow_dispatch"]["inputs"]["grading_config"]["default"]
+        == "default_v2_sol_max.yaml"
+    )
+
+
 @pytest.mark.parametrize(
     "filename",
     [
         "default_gpt5pro.yaml",
         "default_v2.yaml",
+        "default_v2_sol_max.yaml",
         "default_v2_mini.yaml",
         "default_v2_tight.yaml",
         "validation_v2_mini_cohort3.yaml",

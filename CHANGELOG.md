@@ -12,6 +12,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **GPT-5.6 Sol Max narrative and grading production policy** - move the
+  dashboard narrative analyzer and the default v2 grading profile to
+  `gpt-5.6-sol` with `reasoning_effort=max`; use the same identity for the
+  main judge, visual perception, and bounded no-tools finalization while
+  retaining `gpt-audio-1.5` for audio. Step 6 and Hugging Face publication now
+  bind model, effort, runtime fingerprint, and model-backed narrative content;
+  explicit all-null identity plus empty narrative remains the only model-free
+  fallback. Semantic-invalid final envelopes receive one independent bounded
+  retry, and grade schema 1.2 keeps unknown prices fail-closed as explicit
+  `null`/incomplete provenance tied to the persisted model set while retaining
+  numeric-cost compatibility for prior 1.0/1.1 payloads. The
+  grading workflow defaults to a credential-free read-only dry run. Paid runs
+  require `paid_approval=true`, a separate protected `grading` Environment
+  approval, and then execute Azure OIDC from the environment-free `main`
+  branch job so the federated subject remains branch-bound; chunk continuation
+  preserves the exact config, inference revision, task limit, and approval
+  input while requiring a fresh protected Environment approval for each newly
+  dispatched workflow run.
+  The remote `grading` Environment has one owner reviewer, administrator bypass
+  disabled, and a custom `main`-only deployment policy. Self-review prevention
+  remains disabled because no independent collaborator exists. Current manuals
+  and specs identify Sol Max as production while preserving historical 5.4
+  configs, results, and measurements. Final credential-free validation passes
+  **2,358 backend tests** with **6 skipped and 44 deselected**, **94 Node
+  contracts**, **9 analysis tests**, both changed workflows under actionlint
+  and Ruby Psych, the TypeScript/Vite production build, and all **4 Chromium
+  browser suites**. No Azure, model, paid grading, or Hugging Face execution
+  occurred.
 - **Dashboard source-build provenance** - derive the displayed dashboard
   version from `package.json`, bind Pages builds to the exact checked-out
   GitHub SHA and repository, and link the footer to that full commit only after

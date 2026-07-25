@@ -1,11 +1,11 @@
-"""NarrativeAnalyzer — Standalone Responses API module for GPT-5.4 Pro.
+"""NarrativeAnalyzer — typed Responses API module for GPT-5.6 Sol 1M Max.
 
 Generates rich narrative analysis (overview, quality_analysis, failure_patterns,
 recommendations) for experiment reports using a 2-call sequential pattern.
 
-This module is intentionally standalone — it does NOT import or depend on
-core/llm_client.py (which uses Chat Completions API). GPT-5.4 Pro only
-supports the Responses API, so this module creates its own AzureOpenAI client.
+The analyzer uses the shared typed direct-v1 Azure AI client and performs two
+sequential Responses API calls. The 1.05M context window is a deployment
+capability; ``reasoning={"effort": "max"}`` is sent explicitly per request.
 
 Usage:
     from core.narrative_analyzer import create_narrative_analyzer
@@ -21,7 +21,10 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from core.azure_ai_clients import AzureAIClientFactory, AzureAIWorkload
+from core.azure_ai_clients import (
+    AzureAIClientFactory,
+    AzureAIWorkload,
+)
 from core.llm_client import ManagedAzureAIClient, create_typed_azure_client
 
 logger = logging.getLogger(__name__)
@@ -37,6 +40,8 @@ class NarrativeResult:
     quality_analysis: str = ""
     failure_patterns: str = ""
     recommendations: str = ""
+    narrative_model: str = ""
+    narrative_reasoning_effort: str = ""
     call_1_latency_ms: float = 0.0
     call_2_latency_ms: float = 0.0
     total_tokens: dict = field(default_factory=lambda: {"input": 0, "output": 0})
@@ -207,7 +212,7 @@ Failure pattern hint (precheck vs judge):
 
 
 class NarrativeAnalyzer:
-    """GPT-5.4 Pro narrative generator using Azure OpenAI Responses API.
+    """GPT-5.6 Sol Max narrative generator using Azure OpenAI Responses API.
 
     Architecture:
         Call 1: Sector-level analysis → overview + quality_analysis
@@ -217,10 +222,12 @@ class NarrativeAnalyzer:
         endpoint:    Azure OpenAI endpoint URL
         api_version: API version (default: 2025-04-01-preview)
         timeout:     Client-level timeout in seconds (default: 10000)
-        model:       Deployment name (default: gpt-5.4-pro)
+        model:       Deployment name (default: gpt-5.6-sol)
+        reasoning_effort: Responses API reasoning effort (default: max)
     """
 
-    DEFAULT_MODEL = "gpt-5.4-pro"
+    DEFAULT_MODEL = "gpt-5.6-sol"
+    DEFAULT_REASONING_EFFORT = "max"
     DEFAULT_API_VERSION = "2025-04-01-preview"
     DEFAULT_TIMEOUT = 10000
 
@@ -230,6 +237,7 @@ class NarrativeAnalyzer:
         api_version: str = DEFAULT_API_VERSION,
         timeout: int = DEFAULT_TIMEOUT,
         model: str = DEFAULT_MODEL,
+        reasoning_effort: str = DEFAULT_REASONING_EFFORT,
         client=None,
         client_factory: AzureAIClientFactory | None = None,
     ):
@@ -249,6 +257,7 @@ class NarrativeAnalyzer:
             client = self._managed_client.client
         self.client = client
         self.model = model
+        self.reasoning_effort = reasoning_effort
         self._heartbeat_active = False
         self._heartbeat_thread: threading.Thread | None = None
 
@@ -331,6 +340,8 @@ class NarrativeAnalyzer:
             quality_analysis=call1_result.get("quality_analysis", ""),
             failure_patterns=call2_result.get("failure_patterns", ""),
             recommendations=call2_result.get("recommendations", ""),
+            narrative_model=self.model,
+            narrative_reasoning_effort=self.reasoning_effort,
             call_1_latency_ms=call1_latency,
             call_2_latency_ms=call2_latency,
             total_tokens={"input": total_input, "output": total_output},
@@ -498,6 +509,7 @@ Return ONLY valid JSON (no markdown code fences) with these exact keys:
             model=self.model,
             instructions=system_prompt,
             input=user_prompt,
+            reasoning={"effort": self.reasoning_effort},
             max_output_tokens=max_output_tokens,
         )
         latency_ms = (time.time() - start) * 1000
@@ -520,7 +532,7 @@ Return ONLY valid JSON (no markdown code fences) with these exact keys:
                 time.sleep(30)
                 if self._heartbeat_active:
                     print(
-                        f"   💓 [{time.strftime('%H:%M:%S')}] waiting for Pro response...",
+                        f"   💓 [{time.strftime('%H:%M:%S')}] waiting for narrative response...",
                         flush=True,
                     )
 
@@ -577,6 +589,29 @@ Return ONLY valid JSON (no markdown code fences) with these exact keys:
         return result
 
 
+def expected_narrative_publication_identity() -> tuple[str, str, str]:
+    """Return the model-free expected Sol Max publication identity."""
+    from core import azure_ai_clients
+
+    routes = azure_ai_clients.preflight_routes(
+        azure_ai_clients.narrative_route_workloads(
+            NarrativeAnalyzer.DEFAULT_MODEL
+        ),
+        timeout=NarrativeAnalyzer.DEFAULT_TIMEOUT,
+        legacy_api_version=NarrativeAnalyzer.DEFAULT_API_VERSION,
+    )
+    if len(routes) != 1:
+        raise ValueError("primary narrative route identity is ambiguous")
+    fingerprint = routes[0].get("runtime_fingerprint")
+    if not isinstance(fingerprint, str) or len(fingerprint) != 64:
+        raise ValueError("primary narrative route fingerprint is invalid")
+    return (
+        NarrativeAnalyzer.DEFAULT_MODEL,
+        NarrativeAnalyzer.DEFAULT_REASONING_EFFORT,
+        fingerprint,
+    )
+
+
 # ─── Factory Function ─────────────────────────────────────────────────────
 
 
@@ -584,6 +619,7 @@ def create_narrative_analyzer(
     endpoint: str | None = None,
     timeout: int = 10000,
     model: str = NarrativeAnalyzer.DEFAULT_MODEL,
+    reasoning_effort: str = NarrativeAnalyzer.DEFAULT_REASONING_EFFORT,
     client=None,
     client_factory: AzureAIClientFactory | None = None,
 ) -> NarrativeAnalyzer:
@@ -592,7 +628,8 @@ def create_narrative_analyzer(
     Args:
         endpoint: Deprecated. Explicit endpoint overrides are rejected.
         timeout:  Client timeout in seconds (default: 10000).
-        model:    Model deployment name (default: gpt-5.4-pro).
+        model:    Model deployment name (default: gpt-5.6-sol).
+        reasoning_effort: Responses API reasoning effort (default: max).
 
     Returns:
         Configured NarrativeAnalyzer instance.
@@ -601,6 +638,7 @@ def create_narrative_analyzer(
         endpoint=endpoint,
         timeout=timeout,
         model=model,
+        reasoning_effort=reasoning_effort,
         client=client,
         client_factory=client_factory,
     )

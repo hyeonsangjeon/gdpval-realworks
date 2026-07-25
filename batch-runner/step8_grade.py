@@ -3,7 +3,7 @@
 
 Usage:
     python step8_grade.py exp998_smoke_baseline_sample \
-      --config grading_configs/default_gpt5pro.yaml \
+    --config grading_configs/default_v2_sol_max.yaml \
       --dry-run --limit 3
 """
 
@@ -50,7 +50,7 @@ from core.public_error import public_provider_error_text
 from core.rubric_loader import RubricLoader
 from core.tools import ReadDeliverableError, get_renderer_fingerprint
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.2"
 GRADED_BY_VERSION = "0.1.0"
 FULL_HF_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 FULL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -355,6 +355,28 @@ def validate_grading_config(config: dict) -> None:
         )
     if judge["model"] != judge["deployment"]:
         raise ValueError("judge.model and judge.deployment must match")
+    allowed_reasoning_efforts = {
+        "none", "low", "medium", "high", "xhigh", "max"
+    }
+    reasoning = judge.get("reasoning", {})
+    if not isinstance(reasoning, dict):
+        raise ValueError("judge.reasoning must be an object")
+    if (
+        "effort" in reasoning
+        and reasoning["effort"] not in allowed_reasoning_efforts
+    ):
+        raise ValueError("judge.reasoning.effort is invalid")
+    generation = judge.get("generation", {})
+    if not isinstance(generation, dict):
+        raise ValueError("judge.generation must be an object")
+    if (
+        "finalization_reasoning_effort" in generation
+        and generation["finalization_reasoning_effort"]
+        not in allowed_reasoning_efforts
+    ):
+        raise ValueError(
+            "judge.generation.finalization_reasoning_effort is invalid"
+        )
     grader_route_workloads(config)
 
     # --- v2 tool-calling block (optional) ------------------------------
@@ -384,16 +406,31 @@ def validate_grading_config(config: dict) -> None:
             )
 
     # --- v2 perception block (optional) --------------------------------
-    perception = (judge.get("perception") or {})
+    perception = judge.get("perception", {})
+    if not isinstance(perception, dict):
+        raise ValueError("judge.perception must be an object")
     if perception:
         for sub in ("visual", "audio"):
             sub_cfg = perception.get(sub)
-            if sub_cfg is not None and not any(
-                key in sub_cfg for key in ("model", "deployment")
-            ):
+            if sub_cfg is None:
+                continue
+            if not isinstance(sub_cfg, dict):
+                raise ValueError(
+                    f"judge.perception.{sub} must be an object"
+                )
+            if not any(key in sub_cfg for key in ("model", "deployment")):
                 raise ValueError(
                     f"judge.perception.{sub} present but missing model/deployment"
                 )
+        visual = perception.get("visual")
+        if (
+            isinstance(visual, dict)
+            and "reasoning_effort" in visual
+            and visual["reasoning_effort"] not in allowed_reasoning_efforts
+        ):
+            raise ValueError(
+                "judge.perception.visual.reasoning_effort is invalid"
+            )
 
     # --- v2 critical block (optional) ----------------------------------
     critical = (judge.get("critical") or {})
@@ -807,7 +844,24 @@ def _task_to_dict(task_grade) -> dict:
     return data
 
 
-def _compute_summary(task_dicts: list[dict]) -> dict:
+def _unpriced_models(config: dict) -> list[str]:
+    judge = config["judge"]
+    models = [canonical_deployment(judge, "judge")]
+    perception = judge.get("perception", {}) or {}
+    for modality_name, modality in perception.items():
+        if isinstance(modality, dict):
+            models.append(canonical_deployment(
+                modality,
+                f"judge.perception.{modality_name}",
+            ))
+    return sorted(set(models))
+
+
+def _compute_summary(
+    task_dicts: list[dict],
+    *,
+    unpriced_models: list[str] | None = None,
+) -> dict:
     total = len(task_dicts)
     scored_tasks = [task for task in task_dicts if not task.get("error")]
     graded_tasks = len(scored_tasks)
@@ -933,7 +987,9 @@ def _compute_summary(task_dicts: list[dict]) -> dict:
             "perception_input_tokens": perception_in_tok,
             "perception_output_tokens": perception_out_tok,
             "perception_cached_tokens": perception_cached_tok,
-            "estimated_cost_usd": 0.0,
+            "estimated_cost_usd": None,
+            "pricing_complete": False,
+            "unpriced_models": sorted(set(unpriced_models or [])),
             "total_judge_latency_sec": round(
                 (main_latency_ms + perception_latency_ms) / 1000.0, 2
             ),
@@ -1075,7 +1131,10 @@ def _build_grade_payload(
         "graded_by": "step8_grade.py",
         "graded_by_version": GRADED_BY_VERSION,
         "tasks": task_dicts,
-        "summary": _compute_summary(task_dicts),
+        "summary": _compute_summary(
+            task_dicts,
+            unpriced_models=_unpriced_models(config),
+        ),
     }
 
 

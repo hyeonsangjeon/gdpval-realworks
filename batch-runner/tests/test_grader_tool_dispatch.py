@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 
 def _final(text: str) -> dict:
@@ -32,6 +33,24 @@ class ScriptedResponses:
     def create(self, **kwargs):
         self.calls.append(kwargs)
         return self.script.pop(0)
+
+
+def test_production_sol_max_config_wires_all_grading_roles():
+    from core.grader import Grader
+
+    config_path = Path("grading_configs/default_v2_sol_max.yaml")
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    client = SimpleNamespace(responses=ScriptedResponses([]))
+
+    grader = Grader(config, rubric_loader=None, client=client)
+
+    assert grader.model == "gpt-5.6-sol"
+    assert grader._tool_judge.model == "gpt-5.6-sol"
+    assert grader._tool_judge.reasoning_effort == "max"
+    assert grader._tool_judge.finalization_reasoning_effort == "max"
+    assert grader._tool_judge.vision_perception.deployment == "gpt-5.6-sol"
+    assert grader._tool_judge.vision_perception.reasoning_effort == "max"
+    assert grader._tool_judge.audio_perception.deployment == "gpt-audio-1.5"
 
 
 def test_grader_dispatch_uses_tool_calling_judge_when_configured(monkeypatch, tmp_path):

@@ -101,7 +101,7 @@ function StatMini({ icon: Icon, label, value, color }: { icon: typeof Award; lab
 
 function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
   const s = grade.summary
-  const isV1 = grade.schema_version === '1.0'
+  const isV1 = grade.schema_version != null
   const isLegacyDummy = grade.grade_status === 'legacy_dummy'
 
   return (

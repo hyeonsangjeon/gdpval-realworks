@@ -2,7 +2,7 @@
 
 ## 0. 메타
 
-- **Status**: Draft → 작업 오푸스 핸드오프용
+- **Status**: Implemented; production model policy updated 2026-07-26
 - **Owner**: hyeonsangjeon
 - **Repo**: `hyeonsangjeon/gdpval-realworks`
 - **영향 범위**: `batch-runner/core/grader.py`, `core/rubric_loader.py`, grading 호출 경로 전체, `data/grades/*`
@@ -13,6 +13,13 @@
   - `scripts/stratify_critical_gap_v2.py`
 
 이 SPEC은 grading subsystem을 처음부터 다시 짜기 위한 것이다. inference / 220 deliverable 생성 경로는 **건드리지 않는다** (기존 산출물 신뢰).
+
+> **Production override (2026-07-26):** tool-calling architecture, scoring,
+> rubric, and modality routing remain unchanged. The production main judge,
+> visual judge, and bounded finalization retry now use `gpt-5.6-sol` with
+> `reasoning_effort=max`; audio perception remains `gpt-audio-1.5`. The 1.05M
+> context window is a deployment capability, not a request parameter. The
+> original `gpt-5.4 medium` policy remains reproducible as `default_v2.yaml`.
 
 ---
 
@@ -74,7 +81,7 @@ deliverable을 *생성*하는 모델은 라이브러리 접근이 있는 풍부�
 
 ```
 [task rubric (openai/gdpval)] ─┐
-                               ├─→ [MAIN JUDGE: gpt-5.4 medium]
+                               ├─→ [MAIN JUDGE: gpt-5.6-sol max]
 [deliverable file path] ───────┘        │
                                          │ tool calls (필요 시)
                                          ▼
@@ -103,8 +110,8 @@ deliverable을 *생성*하는 모델은 라이브러리 접근이 있는 풍부�
 
 ### 4.1 메인 rubric judge
 
-- **모델**: `gpt-5.4`, `reasoning_effort=medium`. 단일. tier 없음.
-- **근거**: content 항목에서 mini=standard=pro 동급(정확도 차이 無). standard를 쓰는 이유는 정확도가 아니라 **tool-use / agentic 신뢰도** — judge가 멀티스텝 tool 루프를 돌려야 하므로 mini의 tool 오케스트레이션 약점을 피하기 위함. mini→standard 비용 차는 mini→pro의 9×와 달리 modest.
+- **모델**: production은 `gpt-5.6-sol`, `reasoning_effort=max`. 단일, tier 없음. 시각 perception과 bounded finalization도 같은 model/effort를 사용한다.
+- **역사적 근거**: 최초 PR2 baseline은 tool-use 신뢰도를 위해 `gpt-5.4 medium`을 채택했다. 해당 byte identity는 `default_v2.yaml`에 보존되고, 현행 production은 별도 `default_v2_sol_max.yaml`이 소유한다.
 - **호출 API**: Azure OpenAI Responses API (`client.responses.create()`), function/tool calling 활성화. timeout은 per-request로 설정(client 생성 시점 X — NarrativeAnalyzer 교훈과 동일).
 - **프롬프트 계약**: "여기 루브릭이 있다. `read_deliverable` tool로 실제 deliverable 파일을 직접 열어 구조·서식·내용을 확인한 뒤, 각 루브릭 항목을 네가 *관찰한 사실*에 근거해 채점하라. 각 항목에 verdict + evidence(관찰 근거)를 남겨라." (기존 `prompts/grader_judge.md`를 tool-aware 버전으로 개정.)
 - temperature=0, seed 고정 유지.
@@ -133,7 +140,7 @@ judge에 노출할 tool 연산(operation) 제안:
 | 표/스프레드시트 | openpyxl (값·서식·차트) | — (대부분 라이브러리로 충분) |
 | 문서 | python-docx (스타일·구조) | — |
 | 슬라이드 | python-pptx (레이아웃) | — |
-| 시각 (차트 모양·polish) | render_to_image | **gpt-5.4 vision** |
+| 시각 (차트 모양·polish) | render_to_image | **gpt-5.6-sol**, reasoning_effort=`max` |
 | 오디오 | soundfile/ffmpeg (probe) | **gpt-audio-1.5** (믹싱/음질 등) |
 | 비디오 | ffmpeg (probe) | (이번 범위: 객관까지. 지각은 후속) |
 
@@ -207,8 +214,8 @@ judge에 노출할 tool 연산(operation) 제안:
 
 ```yaml
 judge:
-  model: gpt-5.4
-  reasoning_effort: medium        # mini→standard: tool-use 신뢰도. pro 아님
+  model: gpt-5.6-sol
+  reasoning_effort: max
   api: responses                  # Azure OpenAI Responses API, per-request timeout
   temperature: 0
   seed: 42
@@ -223,7 +230,7 @@ judge:
       read_only: true
 
   perception:
-    visual:  { model: gpt-5.4, vision: true }   # 차트·레이아웃 등 시각 항목만
+    visual:  { model: gpt-5.6-sol, reasoning_effort: max, vision: true }  # 차트·레이아웃 등 시각 항목만
     audio:   { model: gpt-audio-1.5 }           # 지각적 음질만
     # 구조/객관은 모델 아님 — tool(op) 직접 사용
 
@@ -246,7 +253,7 @@ judge:
 - **새 비용**: vision/audio 경로로 per-task 비용이 옛날 $18보다 오름. perception 라우팅으로 bound하되 **새 파이프라인 비용 재추정 필요**(아직 미산정). 운영 한도는 저장소 외부 설정으로 검증.
 - **env 가용성 확정**: ffmpeg/soundfile/openpyxl 등 실제 Dockerfile/requirements에서 검증 후 진행(내 기억 아닌 repo가 authoritative).
 - **threshold=4 적정성**: 저자 signal 부재 하의 임의 경계. gold-ceiling 검증과 함께 민감도 점검 여지.
-- **vision 모델 충분성**: gpt-5.4 vision이 시각 항목을 충분히 판단하는지 — 부족하면 해당 항목만 상향(전체 모델 교체 아님).
+- **vision 품질 모니터링**: production `gpt-5.6-sol` Max 시각 경로의 judge_error와 modality별 품질을 실제 paid run에서 별도 측정. 이번 정책 전환 작업에서는 유료 호출하지 않음.
 
 ---
 

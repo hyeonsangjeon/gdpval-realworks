@@ -85,7 +85,8 @@ def _minimal_grade(model: str = "gpt-5.4-pro", avg: float = 67.4) -> dict:
 def _make_analyzer() -> NarrativeAnalyzer:
     analyzer = NarrativeAnalyzer.__new__(NarrativeAnalyzer)
     analyzer.client = None
-    analyzer.model = "gpt-5.4-pro"
+    analyzer.model = "gpt-5.6-sol"
+    analyzer.reasoning_effort = "max"
     analyzer._heartbeat_active = False
     analyzer._heartbeat_thread = None
     analyzer._start_heartbeat = lambda: None
@@ -220,6 +221,9 @@ def test_step6_report_is_always_pre_grading():
         "overview": "Execution evidence is available.",
         "grading_referenced": False,
         "grade_source": None,
+        "model": "gpt-5.6-sol",
+        "reasoning_effort": "max",
+        "runtime_fingerprint": "f" * 64,
     }
     report = step6_report._build_report_data(
         _result_identity(),
@@ -243,6 +247,9 @@ def test_step6_report_is_always_pre_grading():
     )
 
     assert report["meta"]["report_scope"] == "self_assessed_pre_grading"
+    assert report["meta"]["narrative_model"] == "gpt-5.6-sol"
+    assert report["meta"]["narrative_reasoning_effort"] == "max"
+    assert report["meta"]["narrative_runtime_fingerprint"] == "f" * 64
     markdown = step6_report._build_markdown(report)
     assert "Self-Assessed, Pre-Grading" in markdown
     assert "Awaiting external grading" in markdown

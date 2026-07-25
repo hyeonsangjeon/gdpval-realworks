@@ -58,18 +58,19 @@ job에서 이어갑니다. **OpenID Connect(OIDC)**는 Azure client secret을 �
 
 체크인된 스모크 설정은 Azure 배포 `gpt-5.2-chat`을 사용하고 3개 태스크를
 선택하며 Self-QA를 최대 3회 재시도할 수 있습니다. Step 6은
-`gpt-5.4-pro`를 순차적으로 최대 2회 호출하며 오류 전에 완료된 호출도 과금될
-수 있습니다. 설정, 호출, 파싱, route 검증 중 하나라도 실패하면 즉시
-model-free report를 만들고 실험 모델은 추가 호출하지 않습니다. 따라서 시간과
-비용은 출력 크기, 재시도, 쿼터, Azure 가격에 따라 달라집니다.
+`gpt-5.6-sol`을 `reasoning=max`로 순차적으로 최대 2회 호출하며 오류 전에
+완료된 호출도 과금될 수 있습니다. 1.05M context window는 deployment가
+제공합니다. 설정, 호출, 파싱, route 검증 중 하나라도 실패하면 즉시 model-free
+report를 만들고 실험 모델은 추가 호출하지 않습니다. 따라서 시간과 비용은
+출력 크기, 재시도, 쿼터, Azure 가격에 따라 달라집니다.
 
 ### 1. 계정 준비
 
 다음이 필요합니다.
 
 - GitHub 계정과 이 저장소의 fork
-- Azure 구독, Azure OpenAI 리소스, 필수 `gpt-5.2-chat` 배포. 기본 2-call
-   report 경로를 사용하려면 선택적으로 `gpt-5.4-pro` 배포도 필요
+- Azure 구독, Azure OpenAI 리소스, 필수 `gpt-5.2-chat` 및
+   `gpt-5.6-sol` 배포. 후자가 기본 Sol Max 2-call report 경로를 담당
 - Microsoft Entra 앱 등록 권한과 해당 Azure OpenAI 리소스에
   **Cognitive Services OpenAI User** 역할을 부여할 권한
 - 쓰기 토큰을 만들 수 있는 Hugging Face 계정
@@ -262,7 +263,7 @@ Docker sandbox나 agentic preflight를 실행하는 테스트가 아닙니다.
 | Step 2 | 모델 호출, 산출물 생성, 같은 모델의 Self-QA 실행 |
 | Steps 3-4 | JSON/Markdown 결과와 3-row Parquet 생성 |
 | Step 5 | `dry_run`이 true이고 sample도 3개이므로 건너뜀 |
-| Step 6 | `gpt-5.4-pro` report를 최대 2회 호출. Narrative 실패 시 실험 모델 fallback 없이 게시 전에 즉시 model-free report 생성 |
+| Step 6 | `gpt-5.6-sol` report를 `reasoning=max`로 최대 2회 호출. Narrative 실패 시 실험 모델 fallback 없이 게시 전에 즉시 model-free report 생성 |
 | Step 7과 결과 PR | `dry_run`이므로 건너뜀 |
 
 credentialed batch job이 마지막 `always()` 단계에 도달하면
@@ -305,8 +306,12 @@ Self-QA는 산출물을 만든 같은 모델의 재시도 신호입니다. 독�
 220-task 전체 실행으로 바뀌는 것은 아닙니다.
 
 전체 실행은 큰 모델 쿼터를 사용할 수 있고 여러 relay job이 필요할 수
-있습니다. 외부 채점은 별도 파이프라인입니다. 실행 모드를 바꾸거나 220개로
-확대하기 전에 [Batch Runner 문서](../batch-runner/README_KR.md)와
+있습니다. 외부 채점은 별도 pipeline입니다. `grade-run.yml`은 model-free
+dry run으로 시작하며, 유료 채점은 `paid_approval: true`와 보호된 `grading`
+GitHub Environment 승인이 모두 필요합니다. 자동 grading continuation은
+approval input과 exact config, inference revision, task limit을 전달하지만,
+새로 dispatch되는 각 chunk는 보호된 Environment 승인을 다시 받아야 합니다.
+실행 모드를 바꾸거나 220개로 확대하기 전에 [Batch Runner 문서](../batch-runner/README_KR.md)와
 [sandbox 문서](../batch-runner/sandbox/README.md)를 읽으세요.
 
 한 번만 시험했다면 일회성 Hugging Face dataset을 삭제하고, 전용 token을

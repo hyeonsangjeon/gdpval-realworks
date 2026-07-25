@@ -383,13 +383,13 @@ function GradeDetail() {
           </div>
         </motion.div>
 
-        {/* ── HealthStrip: judge run-quality diagnostics (v1.0 only) ── */}
-        {grade.schema_version === '1.0' && grade.summary_v1 ? (
+        {/* ── HealthStrip: item-level judge run-quality diagnostics ── */}
+        {grade.schema_version != null && grade.summary_v1 ? (
           <HealthStrip summaryV1={grade.summary_v1} delay={0.2} />
         ) : null}
 
-        {/* ── WOW: Item-level Rubric Insights (v1.0 only) ── */}
-        {grade.schema_version === '1.0' && grade.summary_v1 ? (
+        {/* ── WOW: Item-level Rubric Insights ── */}
+        {grade.schema_version != null && grade.summary_v1 ? (
           <WowSection summary={grade.summary_v1} tasksV1={grade.tasks_v1 ?? []} />
         ) : null}
 

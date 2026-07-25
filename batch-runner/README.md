@@ -200,10 +200,21 @@ For the workspace-owned result, `report_data.json` is also copied to
 `workspace/upload/self_report.json` for Step 7. HTML generation is disabled.
 External grading remains a separate pipeline.
 
-The default narrative path attempts up to two `gpt-5.4-pro` calls. Any setup,
-call, parse, or route-validation failure immediately produces a model-free
-report; no experiment-model fallback is called. The workflow verifies report
-identity before any publication.
+The default narrative path attempts up to two `gpt-5.6-sol` calls with
+`reasoning=max`. Its 1.05M context window is a deployment capability rather
+than a separate request parameter. Any setup, call, parse, or route-validation
+failure immediately produces a model-free report; no experiment-model fallback
+is called. The workflow verifies model, effort, runtime fingerprint, and report
+identity before publication.
+
+Production grading defaults to `grading_configs/default_v2_sol_max.yaml`: the
+main tool-calling judge, visual perception, and bounded finalization retry use
+GPT-5.6 Sol Max; audio perception remains on `gpt-audio-1.5`. The gpt-5.4 and
+legacy text-extract configs remain explicit historical comparison identities.
+`grade-run.yml` defaults to a model-free dry run. Paid grading additionally
+requires `paid_approval: true` and approval in the protected `grading`
+environment. Continuations preserve the approval input and exact run identity,
+but each newly dispatched chunk requires a fresh protected Environment approval.
 
 ### Step 7: Upload to HuggingFace (`step7_upload_hf.sh`)
 

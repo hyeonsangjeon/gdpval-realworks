@@ -62,6 +62,29 @@ test('processGradesFile treats v1 as real even when contradictory legacy dummy m
   assert.equal(out.experiment_id, 'exp-v1-real');
 });
 
+test('processGradesFile routes current schema 1.2 through item-level grading', () => {
+  const raw = {
+    schema_version: '1.2',
+    experiment_id: 'exp-current',
+    inference_model: 'gpt-5.2-chat',
+    judge: { model: 'gpt-5.6-sol' },
+    summary: {
+      total_tasks: 0,
+      graded_tasks: 0,
+      error_tasks: 0,
+      openai_compat: {},
+      wow: {},
+    },
+    tasks: [],
+  };
+
+  const out = processGradesFile('current.json', raw);
+
+  assert.equal(out.grade_status, 'graded_v1');
+  assert.equal(out.schema_version, '1.2');
+  assert.equal(out.judge_model, 'gpt-5.6-sol');
+});
+
 // ── Fixture A — minimal v1 grade with empty `inference_model` ───────────────
 test('processGradesFile: v1 with empty inference_model does not fall back to judge.model', () => {
   const raw = {

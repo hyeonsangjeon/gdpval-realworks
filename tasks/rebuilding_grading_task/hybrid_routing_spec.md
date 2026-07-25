@@ -1,5 +1,10 @@
 # PR3 Step 6 — Hybrid Routing Spec (deterministic, rule-based)
 
+> **Historical (superseded 2026-07-26):** 이 문서는 당시 5.4 mini/standard
+> hybrid 실험을 기록한다. 현재 production grading default는
+> `default_v2_sol_max.yaml` (`gpt-5.6-sol`, Max)이며 아래 측정과 routing
+> identity는 재현을 위해 그대로 보존한다.
+
 > Required only if Step 5 PASS. Defines the rule-based router that
 > sends each task to `gpt-5.4-mini` (cheap default) or `gpt-5.4` standard
 > (expensive fallback). NOT LLM-routed — deterministic and inspectable.

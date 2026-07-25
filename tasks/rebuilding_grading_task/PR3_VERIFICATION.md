@@ -1,5 +1,10 @@
 # PR3_VERIFICATION
 
+> **Historical (superseded 2026-07-26):** 아래의 "현재 default" 표현은 이
+> 검증이 수행된 당시 상태를 뜻한다. 현재 production grading default는
+> `default_v2_sol_max.yaml` (`gpt-5.6-sol`, Max)이며 기존 수치와 5.4
+> identity는 provenance 보존을 위해 수정하지 않는다.
+
 > READ-ONLY 진단. 코드 + 기존 `data/grades/*.json` 만으로 재계산. 어떤 grade run/네트워크/수정/commit 없음.
 > 모든 숫자는 파일에서 직접 재계산했고 방법을 명시함. 저장 위치: `tasks/rebuilding_grading_task/PR3_VERIFICATION.md`
 > (repo에 `outputs/` 디렉터리가 없어 PR3 산출물 형제 위치에 저장).

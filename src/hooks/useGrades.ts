@@ -67,8 +67,8 @@ export interface GradeResult {
   summary: GradeSummary
   tasks: TaskGrade[]
 
-  // ── v1.0 additions (007 schema) ──
-  schema_version?: '1.0' | null
+  // ── Item-level grade schema additions ──
+  schema_version?: '1.0' | '1.1' | '1.2' | null
   judge?: JudgeProvenance
   rubric?: RubricProvenance
   prompt?: GradePromptInfo

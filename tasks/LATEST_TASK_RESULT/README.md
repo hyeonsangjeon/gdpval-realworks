@@ -3,110 +3,101 @@
 This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
-- Updated: 2026-07-25
-- Status: dashboard source-build provenance shipped through PR #142; automatic
-  PR validation, post-merge validation, Pages deployment, and live verification
-  passed
+- Updated: 2026-07-26
+- Status: GPT-5.6 Sol Max narrative and grading policy implemented and fully
+  validated; protected `grading` Environment configured; repository shipment
+  pending
 
 ## Task
 
-- Re-audit the supplied README/evidence improvement Bolt against current
-  `main` after the Foundry migration.
-- Save a refined repository task before implementation, defer already-shipped
-  or invalid work, and complete the remaining non-duplicative work.
-- Preserve batch, grading, publication, Foundry, permission, and paid-execution
-  semantics.
+- Set dashboard narrative and production grading to GPT-5.6 Sol 1M Max.
+- Apply the policy through runtime code, grading config, publication identity,
+  workflow guardrails, schemas, types, tests, and current operator manuals.
+- Find and correct current 5.4/5.4 Pro narrative or grading claims without
+  rewriting historical configs, results, measurements, or provenance.
+- Validate end to end, then commit, push, open a PR, pass checks, and merge.
 
 ## Result
 
-- Saved `tasks/0725_saturday/BOLT_README_EVIDENCE_AND_BUILD_PROVENANCE.md` with
-  current-main evidence, defer decisions, implementation boundaries,
-  acceptance criteria, and rollback.
-- Deferred README restructuring because the first screen already exposes live
-  evidence, credential-free local preview, a three-task cloud path, artifact
-  inspection, and explicit cost/write boundaries backed by onboarding tests.
-- Deferred a new fast PR workflow because `deploy.yml` already runs exact
-  checkout, aggregation, production build, aggregate contracts, and Chromium
-  checks with read-only PR permissions and main-only Pages deployment.
-- Deferred Action pin churn because the named workflow target no longer exists,
-  active relevant Actions are SHA-pinned, and no reviewed replacement pin set
-  was supplied.
-- Replaced the hardcoded footer version with package-derived dashboard build
-  provenance. A valid lowercase 40-character SHA and two-segment repository
-  slug produce a fixed GitHub full-commit link with a short visible SHA.
-- Missing or malformed version, SHA, or repository values fail closed to an
-  accessible, non-link local-build label.
-- Kept dashboard source-build identity separate from the generated-data
-  timestamp and from experiment, model, Foundry, and grading provenance.
-- Added exact compile-time declarations and limited the Build-step public inputs
-  to `${{ github.sha }}` and `${{ github.repository }}`. No environment object,
-  token, endpoint, ref, actor, or workflow payload enters the bundle.
-- Extended the existing PR validation job rather than creating another
-  workflow. Pages and OIDC write permissions remain isolated to the main-only
-  deploy job.
-- Added focused contracts and production-browser checks for exact links,
-  invalid-input fallback, accessible names, keyboard focus, and desktop/mobile
-  overflow.
-- External comparison used only commit/license metadata and a general
-  provenance pattern. No external code or copy was reused.
+- Narrative analysis now defaults to `gpt-5.6-sol` with `max` reasoning over
+  direct-v1. Step 6 persists model, effort, and runtime fingerprint; route or
+  model failure remains a model-free report and never falls back to the
+  experiment model.
+- Publication independently recomputes and verifies the expected narrative
+  identity. Model-backed publication also requires all four narrative fields
+  to be nonempty strings; model-free publication requires all three identity
+  keys to exist as `null` and all four narrative fields to be empty strings.
+- Added `grading_configs/default_v2_sol_max.yaml` as the workflow default:
+  `gpt-5.6-sol` Max for main judge, visual perception, and finalization;
+  `gpt-audio-1.5` remains the dedicated audio deployment. The 1.05M context is
+  documented as deployment-owned rather than a synthetic request field.
+- Main, visual, and finalization effort values share one fail-closed enum
+  contract. Explicit null or unknown values are rejected before API calls.
+- Semantic-invalid final JSON receives one no-tools retry with its own bounded
+  budget, including when the normal tool-loop iteration budget is exhausted.
+- Grade schema 1.2 costs remain explicitly unpriced: `estimated_cost_usd=null`,
+  `pricing_complete=false`, and a nonempty unique model set exactly matching
+  the persisted main and perception identities. Prior 1.0/1.1 lifecycle
+  payloads retain their numeric-cost compatibility.
+- Split the grading workflow into request validation, credential-free dry-run,
+  protected paid approval, and paid grading jobs. Dry-run has read-only contents
+  permission, does not retain checkout credentials, cannot mint OIDC tokens,
+  and receives no repository secret. Paid grading requires both explicit input
+  authorization and Environment approval; the Azure login job has no
+  Environment, preserving the `refs/heads/main` OIDC subject. Resume chunks
+  inherit exact config, resolved inference revision, task limit, and approval
+  input; each newly dispatched chunk requires a fresh Environment approval.
+- Created the remote `grading` Environment with required owner review,
+  `can_admins_bypass=false`, and one exact `main` custom branch policy.
+  `prevent_self_review=false` is explicit because the repository has no
+  independent collaborator; enabling it would make approval impossible.
+  Existing `copilot` Environment metadata, secrets, and variables were not
+  changed.
+- Updated English/Korean READMEs, first-experiment manuals, config guide,
+  authoritative grading specs, analysis semantics, and frontend types. Current
+  policy now consistently names Sol Max; 5.4 references are clearly historical
+  comparison, benchmark, or provenance identities.
 
 ## Verification
 
-- Base and current remote main:
-  `f849856c6a91c357becc74ae93b60a5c9289917f` with 0 ahead / 0 behind before
-  commit.
-- Focused build-provenance contracts: **3 passed, 0 failed**.
-- Frontend/data aggregate contracts: **92 passed, 0 failed, 0 skipped**.
-- Production TypeScript and Vite build passed with explicit exact SHA and
-  repository inputs.
-- The provenance browser matrix passed both the published exact-commit state
-  and a separately generated local-build fallback. It verified full-SHA href,
-  short-SHA display, accessible name, actual keyboard focus, visible focus
-  outline, and no horizontal overflow at mobile and desktop viewports.
-- Runtime, integrity, perception, and success browser suites all passed against
-  the production dist.
-- Editor diagnostics reported no errors in every changed source, test, config,
-  and workflow file.
-- `git diff --check` passed; no generated or dist artifact is modified or
-  untracked.
-- `actionlint` was unavailable locally. The changed workflow parsed with the
-  installed YAML parser, and the aggregate contract verifies exact Build and
-  browser-step wiring.
-- First review found one fail-closed defect where a slashless repository slug
-  could be accepted through regex coercion. The defect was reproduced, fixed by
-  requiring exactly two segments, and covered by a regression case. Subsequent
-  code and mandatory workflow/security re-reviews both returned **APPROVE** with
-  no remaining finding.
-- No workflow dispatch, deployment, credential or token acquisition, Azure or
-  model call, grading run, Hugging Face write, network checkpoint write, or paid
-  execution occurred during local work.
+- Full credential-free backend: **2,358 passed, 6 skipped, 44 deselected** in
+  130.59 seconds after all review fixes.
+- Frontend/data/onboarding contracts: **94 passed** using real Ruby 3.3 for the
+  embedded workflow syntax checks.
+- Grade analysis tests: **9 passed**.
+- Both changed workflows passed actionlint 1.7.7 and Ruby Psych 3.3 parsing.
+- TypeScript compilation and Vite production build passed after aggregation of
+  1 experiment, 23 reports, 17 grades, 28 prompt architectures, and 4 field
+  notes. Only the existing large-chunk and stale Browserslist-data warnings
+  remain.
+- Runtime, integrity, perception, and success browser suites passed in real
+  Chromium from Playwright 1.61.1: **4 passed, 0 failed**, with no console or
+  page errors.
+- Four independent review passes found publication-content, finalization-budget,
+  reasoning-effort, cost-identity, dry-run-permission, and dated-document
+  boundaries. Every finding was fixed and covered by focused tests before the
+  final full validation.
+- Remote GET verification confirms `grading` has one required owner reviewer,
+  administrator bypass disabled, custom branch policies enabled, and exactly
+  one `main` branch policy. `copilot` remains unprotected with no Environment
+  secrets or variables, matching its prior state.
+- No paid workflow, Azure login/token acquisition, model call, grading run,
+  Hugging Face read/write, or deployment was executed. The only remote mutation
+  was the explicitly requested GitHub `grading` Environment configuration.
 
 ## Shipment
 
-- Reviewed implementation head:
-  `a1353c14665d4da3c5bdfe02820f811bddfa0c69`.
-- PR [#142](https://github.com/hyeonsangjeon/gdpval-realworks/pull/142)
-  squash-merged as `a9cc93bb07297332d4f6cfe1a4dea54e07d28fef`
-  on 2026-07-25.
-- Automatic PR run
-  [30148221820](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30148221820)
-  passed `validate` in 1 minute 54 seconds; `deploy` was skipped as required for
-  pull requests.
-- Automatic `main` push run
-  [30148302740](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30148302740)
-  passed `validate` in 2 minutes 2 seconds and Pages `deploy` in 10 seconds.
-- The live dashboard at
-  [GitHub Pages](https://hyeonsangjeon.github.io/gdpval-realworks/) displays
-  `Dashboard build v0.2.0 · a9cc93b`. Its accessible label and href contain the
-  exact full merge SHA, `data-build-provenance` is `published`, and a 390px
-  viewport has no horizontal overflow.
-- These were free automatic repository checks. No manual workflow dispatch,
-  credential/token acquisition, Azure/model call, grading run, Hugging Face
-  write, network checkpoint write, or paid execution occurred.
+- Implementation is validated in the isolated
+  `feat/sol-max-narrative-grading` worktree based on
+  `ddc52ea3afc7f546ff210b6bbb7e13c180234295`.
+- Commit, push, pull request checks, merge, and post-merge verification remain
+  in progress and will replace this section before completion is reported.
 
 ## Remaining Work
 
-- No repository implementation or delivery work remains for this Bolt.
-- Future dependency-security maintenance may address the pre-existing `npm ci`
-  audit findings separately; this task changed neither dependency versions nor
-  the lockfile.
+- Commit the reviewed snapshot including the new production config, push the
+  branch, open a PR, wait for required checks, and merge.
+- Verify the merged `main` state and refresh this rolling record with exact PR,
+  merge SHA, and check results.
+- A live paid Sol Max canary remains intentionally outside this task and still
+  requires explicit owner input plus protected Environment approval.

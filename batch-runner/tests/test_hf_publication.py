@@ -219,7 +219,18 @@ def _identity() -> PublicationIdentity:
         result_fingerprint="e" * 64,
         ordered_task_ids=("task-1",),
         results=(PublicationTaskResult("task-1", "", (), (), ()),),
+        expected_narrative_model="gpt-5.6-sol",
+        expected_narrative_reasoning_effort="max",
+        expected_narrative_runtime_fingerprint="d" * 64,
     )
+
+
+def _narrative_identity_kwargs() -> dict:
+    return {
+        "expected_narrative_model": "gpt-5.6-sol",
+        "expected_narrative_reasoning_effort": "max",
+        "expected_narrative_runtime_fingerprint": "d" * 64,
+    }
 
 
 def _report_summary(**overrides) -> dict:
@@ -280,13 +291,22 @@ def _upload_root(
             "result_fingerprint": "e" * 64,
             "ordered_task_ids": ["task-1"],
             "publication_plan": "step7_upload_requested",
+            "narrative_model": "gpt-5.6-sol",
+            "narrative_reasoning_effort": "max",
+            "narrative_runtime_fingerprint": "d" * 64,
+        },
+        "narrative": {
+            "overview": "overview",
+            "quality_analysis": "quality",
+            "failure_patterns": "failures",
+            "recommendations": "recommendations",
         },
         "summary": _report_summary(),
         "task_results": [_report_task_row()],
         "error_tasks": [],
     }
     for key, value in (report_overrides or {}).items():
-        if key in {"summary", "task_results", "error_tasks"}:
+        if key in {"summary", "task_results", "error_tasks", "narrative"}:
             report[key] = value
         else:
             report["meta"][key] = value
@@ -1546,6 +1566,7 @@ def test_publication_rejects_same_path_byte_drift_before_remote_call(tmp_path):
             ),),
             status="success",
         ),),
+        **_narrative_identity_kwargs(),
     )
     report_path = root / "self_report.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -1625,6 +1646,111 @@ def test_publication_rejects_stale_self_report_identity(
     assert api.calls == []
 
 
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"narrative_model": "gpt-5.4-pro"}, "narrative model mismatch"),
+        ({"narrative_reasoning_effort": "high"}, "narrative reasoning mismatch"),
+        ({"narrative_runtime_fingerprint": "c" * 64}, "narrative fingerprint mismatch"),
+        ({"narrative_runtime_fingerprint": None}, "narrative identity is incomplete"),
+    ],
+)
+def test_publication_rejects_wrong_or_partial_narrative_identity(
+    tmp_path, overrides, message
+):
+    api = FakeApi()
+
+    with pytest.raises(ValueError, match=message):
+        publish_dataset(
+            "owner/repository",
+            _upload_root(tmp_path, report_overrides=overrides),
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_rejects_missing_narrative_identity_keys(tmp_path):
+    api = FakeApi()
+    root = _upload_root(tmp_path)
+    report_path = root / "self_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    for field in (
+        "narrative_model",
+        "narrative_reasoning_effort",
+        "narrative_runtime_fingerprint",
+    ):
+        del report["meta"][field]
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="narrative identity is incomplete"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+@pytest.mark.parametrize("invalid_value", [None, 7, "", "   "])
+def test_publication_rejects_invalid_model_backed_narrative(
+    tmp_path, invalid_value
+):
+    api = FakeApi()
+    root = _upload_root(tmp_path, report_overrides={
+        "narrative": {
+            "overview": invalid_value,
+            "quality_analysis": "quality",
+            "failure_patterns": "failures",
+            "recommendations": "recommendations",
+        },
+    })
+
+    with pytest.raises(ValueError, match="model-backed narrative is invalid"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_accepts_exact_model_free_narrative_fallback(tmp_path):
+    root = _upload_root(tmp_path, report_overrides={
+        "narrative_model": None,
+        "narrative_reasoning_effort": None,
+        "narrative_runtime_fingerprint": None,
+        "narrative": {
+            "overview": "",
+            "quality_analysis": "",
+            "failure_patterns": "",
+            "recommendations": "",
+        },
+    })
+
+    result = publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        api=FakeApi(),
+    )
+
+    assert result.oid == "b" * 40
+
+
 def test_publication_accepts_exact_step6_projection_with_v2_task_fields(tmp_path):
     result = PublicationTaskResult(
         "task-1",
@@ -1654,6 +1780,7 @@ def test_publication_accepts_exact_step6_projection_with_v2_task_fields(tmp_path
         result_fingerprint="e" * 64,
         ordered_task_ids=("task-1",),
         results=(result,),
+        **_narrative_identity_kwargs(),
     )
     row = _report_task_row(
         sector="Financial Services",
@@ -1730,6 +1857,7 @@ def test_publication_binds_exact_ordered_truthy_error_projection(tmp_path):
         result_fingerprint="e" * 64,
         ordered_task_ids=("task-1", "task-2"),
         results=results,
+        **_narrative_identity_kwargs(),
     )
     error_tasks = [
         {
@@ -1835,6 +1963,7 @@ def test_publication_sends_more_than_250_files_in_one_create_commit(tmp_path):
             tuple(records),
             status="success",
         ),),
+        **_narrative_identity_kwargs(),
     )
     report_path = root / "self_report.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))

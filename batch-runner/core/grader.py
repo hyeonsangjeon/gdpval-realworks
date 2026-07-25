@@ -1891,8 +1891,10 @@ class Grader:
                 client=self.client,
                 deployment=vision_deployment,
                 call_cap=int(vis_cfg.get("call_cap_per_task", 5)),
-                reasoning_effort=(judge_cfg.get("reasoning") or {})
-                    .get("effort", "medium"),
+                reasoning_effort=vis_cfg.get(
+                    "reasoning_effort",
+                    (judge_cfg.get("reasoning") or {}).get("effort", "medium"),
+                ),
                 before_upstream_call=self._apply_tpm_delay,
             )
         if aud_cfg.get("model") is not None or aud_cfg.get("deployment") is not None:
@@ -1920,6 +1922,8 @@ class Grader:
             finalization_retries=int(
                 self.config.get("grader", {}).get("judge_max_retries", 1)
             ),
+            finalization_reasoning_effort=(judge_cfg.get("generation") or {})
+                .get("finalization_reasoning_effort", "low"),
             model_read_ops=model_read_ops,
             vision_perception=vision_perception,
             audio_perception=audio_perception,

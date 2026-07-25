@@ -4,13 +4,21 @@
 
 | file | path | grader path | when to use |
 |---|---|---|---|
-| `default_v2.yaml` | tool-calling judge | v2 (`ToolCallingJudge` via `judge.tools.read_deliverable`) | Explicit opt-in for new tool-calling runs. Single-tier gpt-5.4 medium, read_deliverable tool surface, vision/audio perception. |
-| `default_gpt5pro.yaml` | text-extract judge | v1 (`Judge` / `BatchJudge`) | Current workflow default while the v2 cost/capacity envelope remains a separate operator decision. |
+| `default_v2_sol_max.yaml` | tool-calling judge | v2 (`ToolCallingJudge` via `judge.tools.read_deliverable`) | **Production default.** GPT-5.6 Sol 1M Max for main, visual, and bounded finalization; gpt-audio-1.5 for audio perception. |
+| `default_v2.yaml` | tool-calling judge | v2 | Historical gpt-5.4 medium comparison identity. Pass explicitly when reproducing that condition. |
+| `default_gpt5pro.yaml` | text-extract judge | v1 (`Judge` / `BatchJudge`) | Historical mini/text-extract comparison identity. Pass explicitly only for provenance-compatible analysis. |
 
-`grade-run.yml`'s `grading_config` input default is **currently still
-`default_gpt5pro.yaml`**. v2 is opt-in by passing
-`default_v2.yaml` to the workflow input. There is no automatic hybrid follow-up
-or config flip in the active workflow.
+`grade-run.yml` defaults to `default_v2_sol_max.yaml`. The 1.05M context window
+belongs to the deployment and is not represented by a synthetic request field.
+There is no automatic hybrid follow-up in the active workflow.
+
+The workflow itself defaults to `dry_run: true`. Any non-dry invocation must
+set `paid_approval: true` and pass the protected `grading` GitHub Environment.
+If a time-bounded run needs another chunk, the exact config, inference revision,
+task limit, and paid-approval input are inherited by the continuation. Each new
+chunk is a separate workflow run and requires a fresh protected Environment
+approval. Model prices are not guessed: grade payloads and analyses remain
+explicitly `unpriced` until verified FDPO rates are configured.
 
 ## Provenance and diagnostic scopes
 
@@ -45,24 +53,24 @@ boundary.
 
 ## v1 vs v2 quick reference
 
-|  | v1 (`default_gpt5pro.yaml`) | v2 (`default_v2.yaml`) |
+|  | historical v1 (`default_gpt5pro.yaml`) | production v2 (`default_v2_sol_max.yaml`) |
 |---|---|---|
 | schema_version | `1.0` | `2.0` |
-| judge tier | mini / standard / pro routing | single (gpt-5.4) |
-| reasoning_effort | medium / high / mini-low (per tier) | medium |
+| judge tier | mini / standard / pro routing | single (gpt-5.6-sol) |
+| reasoning_effort | medium / high / mini-low (per tier) | max for main, visual, and finalization |
 | deliverable input | pre-extracted text, 1500 char cap | live file via `read_deliverable` tool |
 | `deliverable_extract_max_chars` | present | **removed** |
 | tools | none | `read_deliverable` + opt. `vision_judge` + opt. `audio_judge` |
-| perception | none | gpt-5.4 vision / gpt-audio-1.5 (modality-routed) |
+| perception | none | gpt-5.6-sol max vision / gpt-audio-1.5 (modality-routed) |
 | critical rule | `weight >= 4` | `\|max_score\| >= 4` (sign-aware, includes 94 penalty items) |
 | score math | clamp-hidden negatives | sign-aware, explicit non-positive total_max handling |
 | rubric execution | one final verdict per rubric item | one final verdict per rubric item (plus bounded tool/finalization calls) |
 
 ## How to add a new config
 
-1. Copy `default_v2.yaml` to `<your_name>.yaml` and edit only the
+1. Copy `default_v2_sol_max.yaml` to `<your_name>.yaml` and edit only the
    fields you mean to change. `schema_version` must stay `2.0`.
 2. `python step8_grade.py <exp_id> --config grading_configs/<your_name>.yaml --dry-run`
    to validate.
-3. Run on the smoke experiment (`exp998_smoke_baseline_sample`,
-   `--limit 3`) before triggering the full 220 to bound cost.
+3. Run the model-free `--dry-run` first. Any paid smoke or full 220 run requires
+   separate operator approval and artifact-level acceptance.

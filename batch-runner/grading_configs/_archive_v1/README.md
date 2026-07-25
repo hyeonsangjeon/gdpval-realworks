@@ -22,5 +22,5 @@ the result as a new run identity. Never resume an old partial across that
 migration boundary.
 
 **Do not author new configs here.** Add new configs under
-`grading_configs/<name>.yaml` based on `default_v2.yaml`. See the
+`grading_configs/<name>.yaml` based on `default_v2_sol_max.yaml`. See the
 top-level `grading_configs/README.md` for the migration table.

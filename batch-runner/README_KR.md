@@ -193,10 +193,21 @@ workspace 소유 결과에서는 `report_data.json`을
 `workspace/upload/self_report.json`으로도 복사합니다. HTML은 생성하지 않으며
 외부 채점은 별도 pipeline입니다.
 
-기본 narrative 경로는 `gpt-5.4-pro`를 최대 2회 호출합니다. 설정, 호출, 파싱,
-route 검증 중 하나라도 실패하면 즉시 model-free report를 만들며 실험 모델
-fallback은 호출하지 않습니다. workflow는 게시 전에 report identity를
-검증합니다.
+기본 narrative 경로는 `gpt-5.6-sol`을 `reasoning=max`로 최대 2회 호출합니다.
+1.05M context window는 별도 request parameter가 아니라 deployment
+capability입니다. 설정, 호출, 파싱, route 검증 중 하나라도 실패하면 즉시
+model-free report를 만들며 실험 모델 fallback은 호출하지 않습니다. workflow는
+게시 전에 model, effort, runtime fingerprint, report identity를 검증합니다.
+
+Production grading 기본값은 `grading_configs/default_v2_sol_max.yaml`입니다.
+메인 tool-calling judge, visual perception, bounded finalization retry는
+GPT-5.6 Sol Max를 사용하고 audio perception은 `gpt-audio-1.5`를 유지합니다.
+gpt-5.4와 legacy text-extract config는 명시적으로 선택하는 과거 비교
+identity로 보존됩니다.
+`grade-run.yml`은 model-free dry run이 기본입니다. 유료 grading은
+`paid_approval: true`와 보호된 `grading` environment 승인이 추가로 필요하며,
+continuation은 approval input과 exact run identity를 전달합니다. 다만 새로
+dispatch되는 각 chunk는 보호된 environment 승인을 다시 받아야 합니다.
 
 ### Step 7: HuggingFace 업로드 (`step7_upload_hf.sh`)
 

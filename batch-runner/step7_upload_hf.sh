@@ -88,12 +88,17 @@ from core.hf_publication import (
   clear_publication_receipt,
   load_publication_identity,
 )
+from core.narrative_analyzer import expected_narrative_publication_identity
 from core.repo_bootstrapper import validate_pre_upload
 
 clear_publication_receipt()
+model, effort, fingerprint = expected_narrative_publication_identity()
 identity = load_publication_identity(
   Path("workspace/step1_tasks_prepared.json"),
   Path("workspace/step2_inference_results.json"),
+  expected_narrative_model=model,
+  expected_narrative_reasoning_effort=effort,
+  expected_narrative_runtime_fingerprint=fingerprint,
 )
 if identity.repo_id != os.environ["REPO_ID"]:
   raise SystemExit("publication repository differs from prepared identity")
@@ -129,6 +134,7 @@ from core.hf_publication import (
   load_publication_identity,
   publish_dataset_with_receipt,
 )
+from core.narrative_analyzer import expected_narrative_publication_identity
 from core.repo_bootstrapper import (
   TARGET_HEAD_FILENAME,
   load_target_head_identity,
@@ -168,9 +174,13 @@ if DELETE_PATTERNS != DELETE:
 repo_id = os.environ["REPO_ID"]
 data_dir = Path(os.environ["UPLOAD_DIR"])
 token = os.environ["HF_TOKEN"]
+model, effort, fingerprint = expected_narrative_publication_identity()
 identity = load_publication_identity(
   Path("workspace/step1_tasks_prepared.json"),
   Path("workspace/step2_inference_results.json"),
+  expected_narrative_model=model,
+  expected_narrative_reasoning_effort=effort,
+  expected_narrative_runtime_fingerprint=fingerprint,
 )
 if identity.repo_id != repo_id:
   raise SystemExit("publication repository differs from prepared identity")

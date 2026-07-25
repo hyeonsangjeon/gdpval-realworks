@@ -2,8 +2,9 @@
 
 Two thin wrappers around Azure OpenAI Responses API:
 
-  - ``VisionPerception``  (task 205) — gpt-5.4 vision input, used when
-    the routing classifier marks a rubric item as ``VISUAL``.
+  - ``VisionPerception``  (task 205) — config-selected vision input. The
+    production profile uses GPT-5.6 Sol with reasoning=max when the routing
+    classifier marks a rubric item as ``VISUAL``.
   - ``AudioPerception``   (task 206) — gpt-audio-1.5, used when the
     routing classifier marks a rubric item as ``AUDIO``.
 

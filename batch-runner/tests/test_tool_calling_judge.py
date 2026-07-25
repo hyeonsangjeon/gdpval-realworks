@@ -363,6 +363,144 @@ def test_empty_final_retry_budget_exhaustion_stays_fail_closed(
     assert len(client.responses.calls) == 2
 
 
+def test_finalization_retry_uses_configured_max_effort(
+    deliverable_dir, task_and_item
+):
+    task, item = task_and_item
+    empty = _response(
+        out_tok=2400,
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+    )
+    final = _response(
+        output=[_final(json.dumps({
+            "verdict": "pass",
+            "partial_score": 1.0,
+            "evidence": "validated from prior evidence",
+            "confidence": 0.9,
+            "reasoning": "finalized with max effort",
+        }))],
+    )
+    client = FakeClient(ScriptedResponses([empty, final]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.6-sol",
+        prompt_template=PROMPT_TEMPLATE,
+        reasoning_effort="max",
+        finalization_reasoning_effort="max",
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "pass"
+    assert client.responses.calls[0]["reasoning"] == {"effort": "max"}
+    assert client.responses.calls[1]["reasoning"] == {"effort": "max"}
+
+
+def test_semantic_invalid_final_retries_once_with_configured_max_effort(
+    deliverable_dir, task_and_item
+):
+    task, item = task_and_item
+    invalid = _response(output=[_final("{}")])
+    final = _response(
+        output=[_final(json.dumps({
+            "verdict": "pass",
+            "partial_score": 1.0,
+            "evidence": "validated from prior evidence",
+            "confidence": 0.9,
+            "reasoning": "semantic envelope recovered",
+        }))],
+    )
+    client = FakeClient(ScriptedResponses([invalid, final]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.6-sol",
+        prompt_template=PROMPT_TEMPLATE,
+        reasoning_effort="max",
+        finalization_reasoning_effort="max",
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "pass"
+    assert result.main_api_call_count == 2
+    assert "tools" not in client.responses.calls[1]
+    assert client.responses.calls[1]["reasoning"] == {"effort": "max"}
+
+
+def test_semantic_invalid_final_at_iteration_limit_uses_retry_budget(
+    deliverable_dir, task_and_item
+):
+    task, item = task_and_item
+    invalid = _response(output=[_final("{}")])
+    final = _response(output=[_final(json.dumps({
+        "verdict": "pass",
+        "partial_score": 1.0,
+        "evidence": "recovered after the normal iteration budget",
+        "confidence": 0.9,
+        "reasoning": "bounded finalization succeeded",
+    }))])
+    client = FakeClient(ScriptedResponses([invalid, final]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.6-sol",
+        prompt_template=PROMPT_TEMPLATE,
+        max_iterations=1,
+        finalization_retries=1,
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "pass"
+    assert result.main_api_call_count == 2
+    assert result.iterations == 2
+    assert "tools" not in client.responses.calls[1]
+
+
+def test_semantic_invalid_final_at_iteration_limit_retries_only_once(
+    deliverable_dir, task_and_item
+):
+    task, item = task_and_item
+    client = FakeClient(ScriptedResponses([
+        _response(output=[_final("{}")]),
+        _response(output=[_final("{}")]),
+    ]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.6-sol",
+        prompt_template=PROMPT_TEMPLATE,
+        max_iterations=1,
+        finalization_retries=1,
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "judge_error"
+    assert result.main_api_call_count == 2
+    assert result.iterations == 2
+    assert len(client.responses.calls) == 2
+
+
 def test_malformed_final_json_retries_once_without_tools(
     deliverable_dir, task_and_item, caplog
 ):
@@ -1682,6 +1820,7 @@ def test_invalid_numeric_final_envelope_is_score_excluded_judge_error(
         client=client,
         model="gpt-5.4",
         prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=0,
     ).judge_item(
         task=task,
         item=item,
@@ -1713,7 +1852,8 @@ def test_missing_confidence_is_invalid_final_envelope(
     ]))
 
     result = ToolCallingJudge(
-        client=client, model="gpt-5.4", prompt_template=PROMPT_TEMPLATE
+        client=client, model="gpt-5.4", prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=0,
     ).judge_item(
         task=task,
         item=item,
@@ -1742,7 +1882,8 @@ def test_five_thousand_digit_json_integer_is_invalid_not_an_exception(
     ]))
 
     result = ToolCallingJudge(
-        client=client, model="gpt-5.4", prompt_template=PROMPT_TEMPLATE
+        client=client, model="gpt-5.4", prompt_template=PROMPT_TEMPLATE,
+        finalization_retries=0,
     ).judge_item(
         task=task,
         item=item,

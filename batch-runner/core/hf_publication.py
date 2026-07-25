@@ -132,6 +132,9 @@ class PublicationIdentity:
     results: tuple[PublicationTaskResult, ...]
     azure_ai_routes: tuple[dict[str, str], ...] = ()
     execution_mode: str = "subprocess"
+    expected_narrative_model: str | None = None
+    expected_narrative_reasoning_effort: str | None = None
+    expected_narrative_runtime_fingerprint: str | None = None
 
     def submitter_rows(self) -> list[dict]:
         return [result.as_dict() for result in self.results]
@@ -452,6 +455,10 @@ def write_publication_receipt(
 def load_publication_identity(
     prepared_path: Path,
     inference_path: Path,
+    *,
+    expected_narrative_model: str | None = None,
+    expected_narrative_reasoning_effort: str | None = None,
+    expected_narrative_runtime_fingerprint: str | None = None,
 ) -> PublicationIdentity:
     """Load one exact Step 1/2 identity or fail before publication."""
     prepared = _load_json_object(Path(prepared_path), "prepared task payload")
@@ -576,6 +583,11 @@ def load_publication_identity(
         results=tuple(publication_results),
         azure_ai_routes=azure_ai_routes,
         execution_mode=execution_mode,
+        expected_narrative_model=expected_narrative_model,
+        expected_narrative_reasoning_effort=expected_narrative_reasoning_effort,
+        expected_narrative_runtime_fingerprint=(
+            expected_narrative_runtime_fingerprint
+        ),
     )
 
 
@@ -810,6 +822,13 @@ def _publication_plan_sha256(
         "prepared_fingerprint": identity.prepared_fingerprint,
         "result_fingerprint": identity.result_fingerprint,
         "ordered_task_ids": list(identity.ordered_task_ids),
+        "expected_narrative_model": identity.expected_narrative_model,
+        "expected_narrative_reasoning_effort": (
+            identity.expected_narrative_reasoning_effort
+        ),
+        "expected_narrative_runtime_fingerprint": (
+            identity.expected_narrative_runtime_fingerprint
+        ),
         "additions": [
             {"path": record.path, "size": record.size, "sha256": record.sha256}
             for record in files
@@ -912,6 +931,48 @@ def _validate_self_report_payload(
         raise ValueError("self_report.json result fingerprint mismatch")
     if meta.get("publication_plan") != "step7_upload_requested":
         raise ValueError("self_report.json publication plan is not publishable")
+    narrative_identity_fields = (
+        "narrative_model",
+        "narrative_reasoning_effort",
+        "narrative_runtime_fingerprint",
+    )
+    if any(field not in meta for field in narrative_identity_fields):
+        raise ValueError("self_report.json narrative identity is incomplete")
+    actual_narrative = tuple(meta[field] for field in narrative_identity_fields)
+    narrative_fields = (
+        "overview",
+        "quality_analysis",
+        "failure_patterns",
+        "recommendations",
+    )
+    narrative = payload.get("narrative")
+    if actual_narrative == (None, None, None):
+        if not isinstance(narrative, dict) or any(
+            narrative.get(field) != "" for field in narrative_fields
+        ):
+            raise ValueError("self_report.json model-free narrative is invalid")
+    else:
+        if any(value is None for value in actual_narrative):
+            raise ValueError("self_report.json narrative identity is incomplete")
+        expected_narrative = (
+            identity.expected_narrative_model,
+            identity.expected_narrative_reasoning_effort,
+            identity.expected_narrative_runtime_fingerprint,
+        )
+        if any(value is None for value in expected_narrative):
+            raise ValueError("expected publication narrative identity is missing")
+        if actual_narrative[0] != expected_narrative[0]:
+            raise ValueError("self_report.json narrative model mismatch")
+        if actual_narrative[1] != expected_narrative[1]:
+            raise ValueError("self_report.json narrative reasoning mismatch")
+        if actual_narrative[2] != expected_narrative[2]:
+            raise ValueError("self_report.json narrative fingerprint mismatch")
+        if not isinstance(narrative, dict) or any(
+            not isinstance(narrative.get(field), str)
+            or not narrative[field].strip()
+            for field in narrative_fields
+        ):
+            raise ValueError("self_report.json model-backed narrative is invalid")
     if _ordered_task_ids(
         meta.get("ordered_task_ids"), "self-report scope"
     ) != identity.ordered_task_ids:
@@ -1177,6 +1238,21 @@ def _validate_publication_identity(
         identity.execution_mode,
         list(identity.azure_ai_routes),
     )
+    narrative_identity = (
+        identity.expected_narrative_model,
+        identity.expected_narrative_reasoning_effort,
+        identity.expected_narrative_runtime_fingerprint,
+    )
+    if narrative_identity != (None, None, None):
+        if (
+            not isinstance(narrative_identity[0], str)
+            or not narrative_identity[0]
+            or not isinstance(narrative_identity[1], str)
+            or not narrative_identity[1]
+            or not isinstance(narrative_identity[2], str)
+            or re.fullmatch(r"[0-9a-f]{64}", narrative_identity[2]) is None
+        ):
+            raise ValueError("expected publication narrative identity is invalid")
     if (
         not isinstance(identity.results, tuple)
         or any(
