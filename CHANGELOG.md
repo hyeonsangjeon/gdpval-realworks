@@ -27,7 +27,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   browser suites. Independent code and workflow/security reviews returned
   **APPROVE** after a malformed repository-slug edge case was fixed and covered.
   No batch, grading, Azure, Hugging Face, deployment, or paid action ran during
-  local validation.
+  local validation. Shipped through PR #142 as
+  `a9cc93bb07297332d4f6cfe1a4dea54e07d28fef`; automatic PR validation and the
+  post-merge `main` validation/Pages deployment passed. The live dashboard was
+  then verified to display `v0.2.0 · a9cc93b`, link to the exact full merge
+  commit, expose the full source identity accessibly, and remain overflow-free
+  at a 390px viewport.
 - **Opt-in typed Azure AI Step 2 wiring** - activate the shipped typed route
   foundation only when `AZURE_AI_ROUTE_PROFILE` is nonempty, while preserving
   the profile-absent legacy constructors, progress shape, result shape, and

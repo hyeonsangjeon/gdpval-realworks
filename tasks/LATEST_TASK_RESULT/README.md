@@ -4,7 +4,9 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-25
-- Status: refined Bolt implemented and locally validated; PR shipment pending
+- Status: dashboard source-build provenance shipped through PR #142; automatic
+  PR validation, post-merge validation, Pages deployment, and live verification
+  passed
 
 ## Task
 
@@ -81,13 +83,30 @@ task. It must be refreshed before a task is reported complete.
 
 ## Shipment
 
-- Implementation branch: `feat/readme-evidence-paths`.
-- Commit, pull request, automatic validation, merge, and post-merge Pages
-  deployment are pending.
+- Reviewed implementation head:
+  `a1353c14665d4da3c5bdfe02820f811bddfa0c69`.
+- PR [#142](https://github.com/hyeonsangjeon/gdpval-realworks/pull/142)
+  squash-merged as `a9cc93bb07297332d4f6cfe1a4dea54e07d28fef`
+  on 2026-07-25.
+- Automatic PR run
+  [30148221820](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30148221820)
+  passed `validate` in 1 minute 54 seconds; `deploy` was skipped as required for
+  pull requests.
+- Automatic `main` push run
+  [30148302740](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30148302740)
+  passed `validate` in 2 minutes 2 seconds and Pages `deploy` in 10 seconds.
+- The live dashboard at
+  [GitHub Pages](https://hyeonsangjeon.github.io/gdpval-realworks/) displays
+  `Dashboard build v0.2.0 · a9cc93b`. Its accessible label and href contain the
+  exact full merge SHA, `data-build-provenance` is `published`, and a 390px
+  viewport has no horizontal overflow.
+- These were free automatic repository checks. No manual workflow dispatch,
+  credential/token acquisition, Azure/model call, grading run, Hugging Face
+  write, network checkpoint write, or paid execution occurred.
 
 ## Remaining Work
 
-- Commit and push the reviewed tree, open a pull request, wait for the automatic
-  read-only validation, and merge only after it passes.
-- Record the exact PR, merge SHA, and automatic `main` validation/Pages run in a
-  docs-only shipment follow-up.
+- No repository implementation or delivery work remains for this Bolt.
+- Future dependency-security maintenance may address the pre-existing `npm ci`
+  audit findings separately; this task changed neither dependency versions nor
+  the lockfile.
