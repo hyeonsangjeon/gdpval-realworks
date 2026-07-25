@@ -211,7 +211,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   production build, four browser suites, Ruff, Python compilation, actionlint,
   shell syntax, and diff checks. No workflow dispatch, Azure/model call,
   grading run, Hugging Face write, or paid execution was used for this
-  validation.
+  validation. Shipped through PR #140 as
+  `f730068a64b2ebe04c42eb68cea696fd69e1e978`; updated PR run
+  [30146185099](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30146185099)
+  passed validation with deployment skipped, and automatic `main` run
+  [30146254229](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30146254229)
+  passed validation and GitHub Pages deployment. The first PR run
+  [30145929181](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30145929181)
+  found the eager SDK import and was superseded by the validated lazy-import
+  fix. None of these automatic runs performed Azure/model calls, grading, or
+  Hugging Face writes.
 - **Batch relay provenance and recovery integrity** — require exact `main` and
   equal workflow/event SHAs before checkout, bound canonical timeout/relay
   inputs, pin every continuation to the initial `source_sha`, and keep relay

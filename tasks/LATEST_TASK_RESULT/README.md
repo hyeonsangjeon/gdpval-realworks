@@ -4,11 +4,9 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-25
-- Status: Foundry route migration implementation and approval are pushed in
-  PR #140. Its first free `validate` run exposed an eager Azure SDK import in
-  the Node-only aggregate job; the lazy-import fix is locally validated, while
-  fix push, CI rerun, merge, and separately approved remote paid/write
-  validation remain pending
+- Status: Foundry route migration shipped through PR #140; automatic PR
+  validation and the post-merge `main` validation/Pages deployment passed.
+  Separately approved remote paid/write validation remains pending
 
 ## Task
 
@@ -140,14 +138,32 @@ task. It must be refreshed before a task is reported complete.
   clean-tree head `c396ab5f5a4b1c9b07fabaac894642a41074c185` received final
   independent **APPROVE** with no remaining blocker, major, or minor finding.
 - `git diff --check` passed. The latest-main candidate spans **97 files**.
-- No workflow dispatch, credential or token acquisition, Azure/model API call,
-  grading run, Hugging Face write, network checkpoint write, deployment, or
-  paid execution occurred.
+- Local pre-shipment validation used no workflow dispatch, credential or token
+  acquisition, Azure/model API call, grading run, Hugging Face write, network
+  checkpoint write, deployment, or paid execution.
+
+## Shipment
+
+- PR #140 squash-merged as
+  `f730068a64b2ebe04c42eb68cea696fd69e1e978` on 2026-07-25 from exact head
+  `78fc4482f42bbcec8755457e355f66f9ff0963ed`.
+- The first PR run
+  [30145929181](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30145929181)
+  exposed the eager Azure SDK import in the Node-only aggregate step. The lazy
+  import fix then passed the complete backend and exact aggregate command.
+- The updated PR run
+  [30146185099](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30146185099)
+  completed `validate` successfully with `deploy` skipped.
+- Automatic `main` push run
+  [30146254229](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30146254229)
+  completed both `validate` and GitHub Pages `deploy` successfully.
+- These were free automatic repository checks. No manual workflow dispatch,
+  Azure credential/token acquisition, model call, grading run, Hugging Face
+  write, network checkpoint write, or paid execution occurred.
 
 ## Remaining Work
 
-- Commit and push the lazy SDK import fix to PR #140, wait for its free
-  `validate` check, and merge only if the exact updated head passes.
+- No repository implementation or delivery work remains for this task.
 - Configure the independent OIDC expected-ID variables and expected
   direct/project account/project-name variables in repository settings.
   Configure `AZURE_AI_EXPECTED_LEGACY_ACCOUNT` only for an explicitly approved
