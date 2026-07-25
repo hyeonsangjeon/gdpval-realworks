@@ -8,6 +8,7 @@ import pytest
 from huggingface_hub.utils import hf_raise_for_status
 
 import core.repo_bootstrapper as bootstrapper
+from core.inference_manifest import build_inference_provenance
 from core.needs_files import NeedsFilesManifest
 from core.prepared_fingerprint import prepared_fingerprint
 from core.source_identity import (
@@ -75,6 +76,66 @@ class TaskFrame:
             "rubric_json": "{}",
         }
         return [values[key] for _task_id in self.task_ids]
+
+
+def _publication_sidecar(task_ids):
+    return build_inference_provenance({
+        "experiment_id": "exp",
+        "source_repo_id": "owner/repo",
+        "prepared_fingerprint": "e" * 64,
+        "execution_mode": "subprocess",
+        "azure_ai_routes": [{
+            "endpoint_kind": "direct-v1",
+            "profile": "direct-v1",
+            "runtime_fingerprint": "f" * 64,
+            "workload": "inference",
+        }],
+        "results": [
+            {"task_id": task_id, "deliverable_files": []}
+            for task_id in task_ids
+        ],
+    })
+
+
+def test_publication_provenance_accepts_exact_repo_and_task_order(tmp_path):
+    path = tmp_path / "inference_provenance.json"
+    path.write_text(json.dumps(_publication_sidecar(["task-1"])), encoding="utf-8")
+
+    assert bootstrapper.validate_publication_provenance(
+        tmp_path,
+        TaskFrame(["task-1"]),
+        submission_repo_id="owner/repo",
+        experiment_id="exp",
+    ) == []
+
+
+@pytest.mark.parametrize("mutation", ["missing", "repo", "task_order", "symlink"])
+def test_publication_provenance_rejects_missing_or_drifted_sidecar(
+    tmp_path, mutation
+):
+    path = tmp_path / "inference_provenance.json"
+    payload = _publication_sidecar(["task-1", "task-2"])
+    if mutation == "repo":
+        payload["source_repo_id"] = "other/repo"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    task_ids = ["task-1", "task-2"]
+    if mutation == "missing":
+        path.unlink()
+    elif mutation == "task_order":
+        task_ids.reverse()
+    elif mutation == "symlink":
+        target = tmp_path / "target.json"
+        path.replace(target)
+        path.symlink_to(target)
+
+    errors = bootstrapper.validate_publication_provenance(
+        tmp_path,
+        TaskFrame(task_ids),
+        submission_repo_id="owner/repo",
+        experiment_id="exp",
+    )
+
+    assert errors
 
 
 def _canonical_manifest(total=220, needs_count=185):

@@ -109,9 +109,6 @@ jobs:
       - name: "Step 2a: Run inference (condition_a)"
         timeout-minutes: 350
         run: bash step2_run_inference.sh condition_a --wall-timeout "$WALL_TIMEOUT"
-      - name: "Step 2b: Run inference (condition_b)"
-        timeout-minutes: 350
-        run: bash step2_run_inference.sh condition_b
 `
   const incidents = `
 incidents:
@@ -147,8 +144,8 @@ test('runtime note data rejects duplicate inference steps', async () => {
     readRepoFile('data/notes/runtime-incidents.yaml'),
   ])
   const duplicate = workflow.replace(
-    "      - name: 'Step 2b: Run inference (condition_b)'",
-    "      - name: 'Step 2a: Run inference (condition_a)'\n        timeout-minutes: 350\n      - name: 'Step 2b: Run inference (condition_b)'",
+    "      - name: 'Step 2a: Run inference (condition_a)'",
+    "      - name: 'Step 2a: Run inference (condition_a)'\n        timeout-minutes: 350\n        run: echo duplicate\n      - name: 'Step 2a: Run inference (condition_a)'",
   )
 
   assert.throws(() => buildRuntimeNoteData(duplicate, incidents), /must appear exactly once/)

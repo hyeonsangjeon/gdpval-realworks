@@ -10,6 +10,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import json
 import math
@@ -24,16 +25,28 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from jsonschema import SchemaError, ValidationError, validate
+from jsonschema import SchemaError, ValidationError
 
+from core.azure_ai_clients import (
+    canonical_deployment,
+    grader_route_workloads,
+    preflight_routes,
+)
 from core.experiment_config import ExperimentConfig
-from core.grader import Grader, _is_critical_item, resolve_tool_prompt_path
+from core.grader import (
+    Grader,
+    _is_critical_item,
+    grader_transport_options,
+    resolve_tool_prompt_path,
+)
+from core.grade_payload import validate_grade_payload
 from core.inference_manifest import (
     canonical_task_id,
     canonicalize_inference_payload,
     task_deliverable_dir,
     validate_local_deliverables,
 )
+from core.public_error import public_provider_error_text
 from core.rubric_loader import RubricLoader
 from core.tools import ReadDeliverableError, get_renderer_fingerprint
 
@@ -45,6 +58,15 @@ FULL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _ordered_task_ids_sha256(task_ids: list[str]) -> str:
+    encoded = json.dumps(
+        task_ids,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def hash_config(path: str) -> str:
@@ -82,6 +104,35 @@ def _checked_grader_source_file(batch_root: Path, path: Path) -> tuple[str, Path
     return f"batch-runner/{relative.as_posix()}", candidate
 
 
+def _checked_repository_config_file(
+    batch_root: Path, path: Path
+) -> tuple[str, Path]:
+    repo_root = batch_root.parent
+    candidate = path if path.is_absolute() else batch_root / path
+    candidate = Path(os.path.abspath(candidate))
+    try:
+        relative = candidate.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"grading config path is outside the repository: {path}"
+        ) from exc
+
+    current = repo_root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(
+                f"grading config path must not be a symlink: {relative}"
+            )
+    if not candidate.is_file():
+        raise ValueError(f"grading config file is missing: {relative}")
+    if candidate.resolve() != candidate:
+        raise ValueError(
+            f"grading config path must not traverse a symlink: {relative}"
+        )
+    return relative.as_posix(), candidate
+
+
 def compute_grader_source_hash(config_path: str | Path, config: dict) -> str:
     batch_root = _batch_runner_root()
     core_root = batch_root / "core"
@@ -105,7 +156,6 @@ def compute_grader_source_hash(config_path: str | Path, config: dict) -> str:
         batch_root / "schemas" / "grade.schema.json",
         batch_root / "requirements.txt",
         batch_root / "scripts" / "download_inference_from_hf.py",
-        Path(config_path),
         Path(config["prompt"]["template"]),
     ]
     if config.get("prompt", {}).get("tool_template") or (
@@ -119,6 +169,12 @@ def compute_grader_source_hash(config_path: str | Path, config: dict) -> str:
         if relative in checked:
             raise ValueError(f"duplicate grader source path: {relative}")
         checked[relative] = candidate
+    config_relative, config_candidate = _checked_repository_config_file(
+        batch_root, Path(config_path)
+    )
+    if config_relative in checked:
+        raise ValueError(f"duplicate grader source path: {config_relative}")
+    checked[config_relative] = config_candidate
 
     digest = hashlib.sha256()
     digest.update(b"gdpval-grader-source-v1\x00")
@@ -155,24 +211,31 @@ def resolve_grade_output_path(
     prompt_version: str,
     inference_sha: str | None = None,
     grader_source_hash: str | None = None,
+    diagnostic_task_scope_sha: str | None = None,
 ) -> Path:
-    if config.get("schema_version") == "2.0":
-        if not FULL_HF_SHA_RE.fullmatch(rubric_sha):
-            raise ValueError(
-                "Track 2 rubric_sha must be a full 40-character lowercase HF commit SHA"
-            )
-        if not isinstance(inference_sha, str) or not FULL_HF_SHA_RE.fullmatch(
-            inference_sha
-        ):
-            raise ValueError(
-                "Track 2 inference_sha must be a full 40-character lowercase HF commit SHA"
-            )
-        if not isinstance(grader_source_hash, str) or not FULL_SHA256_RE.fullmatch(
-            grader_source_hash
-        ):
-            raise ValueError(
-                "Track 2 grader_source_hash must be a full 64-character lowercase SHA-256"
-            )
+    if not FULL_HF_SHA_RE.fullmatch(rubric_sha):
+        raise ValueError(
+            "rubric_sha must be a full 40-character lowercase HF commit SHA"
+        )
+    if not isinstance(inference_sha, str) or not FULL_HF_SHA_RE.fullmatch(
+        inference_sha
+    ):
+        raise ValueError(
+            "inference_sha must be a full 40-character lowercase HF commit SHA"
+        )
+    if not isinstance(grader_source_hash, str) or not FULL_SHA256_RE.fullmatch(
+        grader_source_hash
+    ):
+        raise ValueError(
+            "grader_source_hash must be a full 64-character lowercase SHA-256"
+        )
+    if (
+        diagnostic_task_scope_sha is not None
+        and not FULL_SHA256_RE.fullmatch(diagnostic_task_scope_sha)
+    ):
+        raise ValueError(
+            "diagnostic_task_scope_sha must be a full lowercase SHA-256"
+        )
     out_name = config["output"]["filename_template"].format(
         exp_id=experiment_id,
         judge_slug=judge_slug,
@@ -188,7 +251,15 @@ def resolve_grade_output_path(
     )
     if any(char in out_name for char in ("\r", "\n")) or Path(out_name).name != out_name:
         raise ValueError("formatted grade filename must be a single safe path component")
-    return Path(config["output"]["directory"]) / out_name
+    output_root = Path(config["output"]["directory"])
+    if diagnostic_task_scope_sha is not None:
+        return (
+            output_root
+            / "_diagnostic"
+            / diagnostic_task_scope_sha
+            / out_name
+        )
+    return output_root / out_name
 
 
 def _repo_relative_grade_file(out_path: Path) -> str:
@@ -275,9 +346,16 @@ def validate_grading_config(config: dict) -> None:
             raise ValueError(f"missing config key: {key}")
 
     judge = config.get("judge", {})
-    for key in ["provider", "api", "model", "endpoint_env"]:
+    for key in ["provider", "api", "model", "deployment"]:
         if key not in judge:
             raise ValueError(f"missing config key: judge.{key}")
+    if "endpoint_env" in judge:
+        raise ValueError(
+            "judge.endpoint_env is deprecated; use typed Azure AI runtime env"
+        )
+    if judge["model"] != judge["deployment"]:
+        raise ValueError("judge.model and judge.deployment must match")
+    grader_route_workloads(config)
 
     # --- v2 tool-calling block (optional) ------------------------------
     tools = (judge.get("tools") or {})
@@ -310,9 +388,11 @@ def validate_grading_config(config: dict) -> None:
     if perception:
         for sub in ("visual", "audio"):
             sub_cfg = perception.get(sub)
-            if sub_cfg is not None and "model" not in sub_cfg:
+            if sub_cfg is not None and not any(
+                key in sub_cfg for key in ("model", "deployment")
+            ):
                 raise ValueError(
-                    f"judge.perception.{sub} present but missing 'model'"
+                    f"judge.perception.{sub} present but missing model/deployment"
                 )
 
     # --- v2 critical block (optional) ----------------------------------
@@ -363,12 +443,17 @@ def requires_track2_office_renderer(config: dict) -> bool:
     read_tool = tools.get("read_deliverable") if isinstance(tools, dict) else None
     perception = judge.get("perception")
     visual = perception.get("visual") if isinstance(perception, dict) else None
+    visual_deployment = (
+        canonical_deployment(visual, "judge.perception.visual")
+        if isinstance(visual, dict)
+        else None
+    )
     return (
         isinstance(read_tool, dict)
         and isinstance(read_tool.get("ops"), list)
         and bool(read_tool["ops"])
         and isinstance(visual, dict)
-        and bool(visual.get("model"))
+        and bool(visual_deployment)
     )
 
 
@@ -410,7 +495,7 @@ def resolve_source_inference_identity(
     return repo_id, revision
 
 
-def _validate_track2_resume_identity(
+def _validate_grade_resume_identity(
     existing: dict,
     *,
     experiment_id: str,
@@ -468,9 +553,33 @@ def _validate_track2_resume_identity(
         if actual != expected:
             state = "missing" if actual is None else "mismatch"
             raise ValueError(
-                f"Track 2 resume identity {state} for {field_name}: "
+                f"Grade resume identity {state} for {field_name}: "
                 f"existing={actual!r}, current={expected!r}"
             )
+
+
+def _validate_azure_ai_resume_identity(
+    existing: dict,
+    azure_ai_routes: list[dict[str, str]],
+    primary_runtime_fingerprint: str,
+) -> None:
+    actual = existing.get("azure_ai_routes")
+    if actual != azure_ai_routes:
+        state = "missing" if actual is None else "mismatch"
+        raise ValueError(
+            "Azure AI resume identity "
+            f"{state} for azure_ai_routes: existing={actual!r}, "
+            f"current={azure_ai_routes!r}"
+        )
+    actual_fingerprint = existing.get("azure_ai_runtime_fingerprint")
+    if actual_fingerprint != primary_runtime_fingerprint:
+        state = "missing" if actual_fingerprint is None else "mismatch"
+        raise ValueError(
+            "Azure AI resume identity "
+            f"{state} for azure_ai_runtime_fingerprint: "
+            f"existing={actual_fingerprint!r}, "
+            f"current={primary_runtime_fingerprint!r}"
+        )
 
 
 def _load_existing_grade(path: Path) -> dict:
@@ -509,29 +618,40 @@ def _task_ids(rows: list[dict], *, label: str) -> list[str]:
     return task_ids
 
 
-def _validate_track2_task_set(
+def _validate_grade_task_set(
     existing: dict,
     expected_tasks: list[dict],
     *,
     require_complete: bool,
+    complete_status: str = "final",
 ) -> set[str]:
     try:
         _validate_schema(existing)
     except (SchemaError, ValidationError) as exc:
         raise ValueError(
-            f"existing Track 2 grade schema validation failed: {exc.message}"
+            f"existing grade schema validation failed: {exc.message}"
         ) from exc
 
     expected_ids = _task_ids(expected_tasks, label="current inference")
     existing_ids = _task_ids(existing["tasks"], label="existing grade")
-    expected_set = set(expected_ids)
-    existing_set = set(existing_ids)
-    extra = sorted(existing_set - expected_set)
-    missing = sorted(expected_set - existing_set)
-    if extra:
-        raise ValueError(f"existing grade contains unexpected task_ids: {extra}")
-    if require_complete and missing:
-        raise ValueError(f"existing grade is incomplete; missing task_ids: {missing}")
+    if complete_status not in {"final", "diagnostic"}:
+        raise ValueError("complete grade status is invalid")
+    expected_status = complete_status if require_complete else "partial"
+    if existing.get("run_status") != expected_status:
+        raise ValueError(
+            f"existing grade run_status must be {expected_status!r}"
+        )
+    if existing.get("expected_task_count") != len(expected_ids):
+        raise ValueError("existing grade expected task count mismatch")
+    if existing.get("expected_ordered_task_ids_sha256") != (
+        _ordered_task_ids_sha256(expected_ids)
+    ):
+        raise ValueError("existing grade expected task order mismatch")
+    if require_complete:
+        if existing_ids != expected_ids:
+            raise ValueError("existing final grade task order is incomplete or mismatched")
+    elif existing_ids != expected_ids[: len(existing_ids)]:
+        raise ValueError("existing partial grade tasks are not an ordered prefix")
     runtime_errors = [
         (task["task_id"], error)
         for task in existing["tasks"]
@@ -543,7 +663,7 @@ def _validate_track2_task_set(
         )
     if existing["summary"]["cost"].get("usage_complete") is not True:
         raise ValueError("existing grade has incomplete aggregate usage")
-    return existing_set
+    return set(existing_ids)
 
 
 def load_experiment_yaml(experiment_yaml_name: str) -> ExperimentConfig:
@@ -637,17 +757,6 @@ def resolve_deliverable_dir(task_result: dict) -> str:
     )))
 
 
-    runtime_errors = [
-        (task["task_id"], error)
-        for task in existing["tasks"]
-        if (error := _track2_task_runtime_error(task)) is not None
-    ]
-    if runtime_errors:
-        raise ValueError(
-            f"existing grade contains runtime failures: {runtime_errors}"
-        )
-    if existing["summary"]["cost"].get("usage_complete") is not True:
-        raise ValueError("existing grade has incomplete aggregate usage")
 def _judge_slug(model: str) -> str:
     return model.replace(".", "_")
 
@@ -893,19 +1002,47 @@ def _build_grade_payload(
     grader_source_hash: str,
     source_inference_repo_id: str | None,
     source_inference_revision: str | None,
+    azure_ai_runtime_fingerprint: str,
+    azure_ai_routes: list[dict[str, str]],
+    run_status: str = "final",
+    expected_task_ids: list[str] | None = None,
     exp_config: ExperimentConfig | None = None,
     source_experiment_id: str | None = None,
     renderer_fingerprint: dict[str, str] | None = None,
 ) -> dict:
+    if run_status not in {"partial", "final", "diagnostic"}:
+        raise ValueError("grade run_status is invalid")
+    expected_ids = list(expected_task_ids or [row["task_id"] for row in task_dicts])
+    expected_ids = [canonical_task_id(value) for value in expected_ids]
+    if len(expected_ids) != len(set(expected_ids)):
+        raise ValueError("expected grade task IDs must be unique")
+    if re.fullmatch(r"[0-9a-f]{64}", azure_ai_runtime_fingerprint) is None:
+        raise ValueError("primary grader runtime fingerprint is invalid")
+    if (
+        not azure_ai_routes
+        or azure_ai_routes[0].get("workload") != "grader"
+        or azure_ai_routes[0].get("runtime_fingerprint")
+        != azure_ai_runtime_fingerprint
+    ):
+        raise ValueError("primary grader route identity is invalid")
     src_id = (source_experiment_id or exp_name or "").strip() or exp_name
     return {
         "schema_version": SCHEMA_VERSION,
+        "run_status": run_status,
+        "expected_task_count": len(expected_ids),
+        "expected_ordered_task_ids_sha256": _ordered_task_ids_sha256(expected_ids),
         "experiment_id": exp_name,
         "experiment_yaml_name": exp_name,
         "source_inference_experiment_id": src_id,
         "source_inference_run_dir": _resolve_source_inference_run_dir(src_id),
         "source_inference_repo_id": source_inference_repo_id,
         "source_inference_revision": source_inference_revision,
+        "source_azure_ai_routes": inf_results.get("azure_ai_routes", []),
+        "source_azure_ai_provenance_status": inf_results.get(
+            "azure_ai_provenance_status", "local-runtime"
+        ),
+        "azure_ai_routes": list(azure_ai_routes),
+        "azure_ai_runtime_fingerprint": azure_ai_runtime_fingerprint,
         "grader_source_hash": grader_source_hash,
         "renderer_fingerprint": renderer_fingerprint,
         "inference_model": _resolve_inference_model(inf_results, exp_config),
@@ -944,7 +1081,7 @@ def _build_grade_payload(
 
 def _validate_schema(payload: dict) -> None:
     schema = _read_schema()
-    validate(instance=payload, schema=schema)
+    validate_grade_payload(payload, schema)
 
 
 def _print_dry_run_stats(tasks: list[dict], loader: RubricLoader) -> None:
@@ -1016,6 +1153,27 @@ def main() -> int:
     judge_slug = _judge_slug(config["judge"]["model"])
     prompt_v = config["prompt"]["version"]
     try:
+        tasks = filter_tasks(inf_results, args.tasks, args.limit)
+    except ValueError as exc:
+        print(f"ERROR: invalid grading task selection: {exc}", file=sys.stderr)
+        return 1
+
+    expected_task_ids = [task["task_id"] for task in tasks]
+    source_provenance_status = inf_results.get(
+        "azure_ai_provenance_status", "local-runtime"
+    )
+    diagnostic_run = (
+        args.tasks is not None
+        or args.limit > 0
+        or source_provenance_status == "legacy-missing"
+    )
+    completed_run_status = "diagnostic" if diagnostic_run else "final"
+    diagnostic_task_scope_sha = (
+        _ordered_task_ids_sha256(expected_task_ids)
+        if diagnostic_run
+        else None
+    )
+    try:
         out_path = resolve_grade_output_path(
             config,
             experiment_id=args.experiment_yaml_name,
@@ -1026,22 +1184,29 @@ def main() -> int:
             prompt_version=prompt_v,
             inference_sha=inference_revision,
             grader_source_hash=grader_source_hash,
+            diagnostic_task_scope_sha=diagnostic_task_scope_sha,
         )
         _write_github_output("grade_file", _repo_relative_grade_file(out_path))
+        _write_github_output("grade_status", completed_run_status)
     except (KeyError, ValueError) as exc:
         print(f"ERROR: grade output path resolution failed: {exc}", file=sys.stderr)
-        return 1
-
-    try:
-        tasks = filter_tasks(inf_results, args.tasks, args.limit)
-    except ValueError as exc:
-        print(f"ERROR: invalid grading task selection: {exc}", file=sys.stderr)
         return 1
 
     if args.dry_run:
         _print_dry_run_stats(tasks, loader)
         return 0
 
+    try:
+        azure_ai_routes = preflight_routes(
+            grader_route_workloads(config),
+            **grader_transport_options(config),
+        )
+        primary_runtime_fingerprint = azure_ai_routes[0][
+            "runtime_fingerprint"
+        ]
+    except ValueError as exc:
+        print(f"ERROR: Azure AI route validation failed: {exc}", file=sys.stderr)
+        return 1
     try:
         tasks = validate_local_deliverables(
             tasks, Path("workspace") / "upload"
@@ -1063,41 +1228,44 @@ def main() -> int:
             return 1
 
     if out_path.exists() and not args.force and not args.resume:
-        if config.get("schema_version") == "2.0":
-            try:
-                existing = _load_existing_grade(out_path)
-                _validate_track2_resume_identity(
-                    existing,
-                    experiment_id=args.experiment_yaml_name,
-                    rubric_commit_sha=rubric_sha,
-                    prompt_version=prompt_v,
-                    config_hash=config_hash,
-                    source_inference_repo_id=inference_repo_id,
-                    source_inference_revision=inference_revision,
-                    grader_source_hash=grader_source_hash,
-                    renderer_fingerprint=(
-                        renderer_fingerprint if renderer_required else None
-                    ),
-                )
-                _validate_track2_task_set(
-                    existing, tasks, require_complete=True
-                )
-            except ValueError as exc:
-                print(f"ERROR: Track 2 cache identity validation failed: {exc}", file=sys.stderr)
-                return 1
+        try:
+            existing = _load_existing_grade(out_path)
+            _validate_azure_ai_resume_identity(
+                existing,
+                azure_ai_routes,
+                primary_runtime_fingerprint,
+            )
+            _validate_grade_resume_identity(
+                existing,
+                experiment_id=args.experiment_yaml_name,
+                rubric_commit_sha=rubric_sha,
+                prompt_version=prompt_v,
+                config_hash=config_hash,
+                source_inference_repo_id=inference_repo_id,
+                source_inference_revision=inference_revision,
+                grader_source_hash=grader_source_hash,
+                renderer_fingerprint=(
+                    renderer_fingerprint if renderer_required else None
+                ),
+            )
+            _validate_grade_task_set(
+                existing,
+                tasks,
+                require_complete=True,
+                complete_status=completed_run_status,
+            )
+        except ValueError as exc:
+            print(f"ERROR: grade cache identity validation failed: {exc}", file=sys.stderr)
+            return 1
         print(
             f"SKIP - exists: {out_path}. "
             "Use --force to overwrite or --resume to continue."
         )
         return 0
 
-    if (
-        args.resume
-        and config.get("schema_version") == "2.0"
-        and not out_path.exists()
-    ):
+    if args.resume and not out_path.exists():
         print(
-            f"ERROR: --resume Track 2 partial not found at {out_path}; "
+            f"ERROR: --resume partial not found at {out_path}; "
             "refusing to start a fresh paid run",
             file=sys.stderr,
         )
@@ -1110,6 +1278,11 @@ def main() -> int:
         try:
             existing = _load_existing_grade(out_path)
             existing_tasks = existing["tasks"]
+            _validate_azure_ai_resume_identity(
+                existing,
+                azure_ai_routes,
+                primary_runtime_fingerprint,
+            )
         except ValueError as exc:
             print(
                 f"ERROR: --resume could not load existing partial "
@@ -1118,35 +1291,28 @@ def main() -> int:
             )
             return 1
 
-        if config.get("schema_version") == "2.0":
-            try:
-                _validate_track2_resume_identity(
-                    existing,
-                    experiment_id=args.experiment_yaml_name,
-                    rubric_commit_sha=loader.rubric_sha,
-                    prompt_version=prompt_v,
-                    config_hash=config_hash,
-                    source_inference_repo_id=inference_repo_id,
-                    source_inference_revision=inference_revision,
-                    grader_source_hash=grader_source_hash,
-                    renderer_fingerprint=(
-                        renderer_fingerprint if renderer_required else None
-                    ),
-                )
-                completed_task_ids = _validate_track2_task_set(
-                    existing, tasks, require_complete=False
-                )
-            except ValueError as exc:
-                print(f"ERROR: --resume {exc}", file=sys.stderr)
-                return 1
+        try:
+            _validate_grade_resume_identity(
+                existing,
+                experiment_id=args.experiment_yaml_name,
+                rubric_commit_sha=loader.rubric_sha,
+                prompt_version=prompt_v,
+                config_hash=config_hash,
+                source_inference_repo_id=inference_repo_id,
+                source_inference_revision=inference_revision,
+                grader_source_hash=grader_source_hash,
+                renderer_fingerprint=(
+                    renderer_fingerprint if renderer_required else None
+                ),
+            )
+            completed_task_ids = _validate_grade_task_set(
+                existing, tasks, require_complete=False
+            )
+        except ValueError as exc:
+            print(f"ERROR: --resume {exc}", file=sys.stderr)
+            return 1
 
         task_payloads = list(existing_tasks)
-        if config.get("schema_version") != "2.0":
-            completed_task_ids = {
-                task.get("task_id")
-                for task in task_payloads
-                if isinstance(task, dict) and task.get("task_id")
-            }
         print(
             f"[resume] loaded {len(completed_task_ids)} previously graded "
             f"tasks from {out_path}",
@@ -1157,10 +1323,60 @@ def main() -> int:
         config["_runtime"] = {
             "experiment_id": args.experiment_yaml_name,
             "rubric_sha": loader.rubric_sha,
+            "azure_ai_runtime_fingerprint": primary_runtime_fingerprint,
         }
         grader = Grader(config=config, rubric_loader=loader)
-    except Exception as exc:
-        print(f"ERROR: judge initialization failed: {exc}", file=sys.stderr)
+    except BaseException as exc:
+        print(
+            "ERROR: judge initialization failed: "
+            f"{public_provider_error_text(exc)}",
+            file=sys.stderr,
+        )
+        return 4
+
+    def close_grader() -> None:
+        nonlocal grader
+        active_grader = grader
+        grader = None
+        try:
+            close = getattr(active_grader, "close", None)
+            if callable(close):
+                close()
+        except BaseException as exc:
+            print(
+                "ERROR: judge cleanup failed: "
+                f"{public_provider_error_text(exc)}",
+                file=sys.stderr,
+            )
+
+    grader_exit_cleanup = atexit.register(close_grader)
+
+    try:
+        azure_ai_runtime_fingerprint = getattr(
+            grader,
+            "runtime_fingerprint",
+            None,
+        )
+    except BaseException as exc:
+        print(
+            "ERROR: grader route verification failed: "
+            f"{public_provider_error_text(exc)}",
+            file=sys.stderr,
+        )
+        try:
+            close_grader()
+        finally:
+            atexit.unregister(grader_exit_cleanup)
+        return 4
+    if azure_ai_runtime_fingerprint != primary_runtime_fingerprint:
+        print(
+            "ERROR: grader client route differs from preflight provenance",
+            file=sys.stderr,
+        )
+        try:
+            close_grader()
+        finally:
+            atexit.unregister(grader_exit_cleanup)
         return 4
 
     partial_every = int(config.get("output", {}).get("partial_save_every_n_tasks", 10))
@@ -1175,6 +1391,13 @@ def main() -> int:
     GRADE_EXIT_RESUME = 7  # contract with grade-run.yml's auto-trigger step
     GRADE_EXIT_PERSISTENCE_FAILURE = 5
     GRADE_EXIT_RUNTIME_FAILURE = 6
+
+    def finish(code: int) -> int:
+        try:
+            close_grader()
+        finally:
+            atexit.unregister(grader_exit_cleanup)
+        return code
 
     for idx, task_result in enumerate(tasks, start=1):
         # Resume skip
@@ -1192,7 +1415,7 @@ def main() -> int:
                     "refusing to request another paid resume",
                     file=sys.stderr,
                 )
-                return GRADE_EXIT_PERSISTENCE_FAILURE
+                return finish(GRADE_EXIT_PERSISTENCE_FAILURE)
             print(
                 f"\n[time-guard] elapsed {elapsed_sec/60:.1f}min > budget "
                 f"{time_budget_sec/60:.0f}min; graded={graded_count}/{len(tasks)} "
@@ -1211,6 +1434,10 @@ def main() -> int:
                     grader_source_hash,
                     inference_repo_id,
                     inference_revision,
+                    azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
+                    azure_ai_routes=azure_ai_routes,
+                    run_status="partial",
+                    expected_task_ids=expected_task_ids,
                     exp_config=exp_config,
                     source_experiment_id=args.source_experiment_id,
                     renderer_fingerprint=renderer_fingerprint,
@@ -1226,8 +1453,8 @@ def main() -> int:
                 import traceback
                 print(f"[time-guard] partial save FAILED: {save_exc}", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
-                return GRADE_EXIT_PERSISTENCE_FAILURE
-            return GRADE_EXIT_RESUME
+                return finish(GRADE_EXIT_PERSISTENCE_FAILURE)
+            return finish(GRADE_EXIT_RESUME)
 
         task = loader.load(task_result["task_id"])
         deliverable_dir = resolve_deliverable_dir(task_result)
@@ -1258,6 +1485,10 @@ def main() -> int:
                     grader_source_hash,
                     inference_repo_id,
                     inference_revision,
+                    azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
+                    azure_ai_routes=azure_ai_routes,
+                    run_status="diagnostic",
+                    expected_task_ids=expected_task_ids,
                     exp_config=exp_config,
                     source_experiment_id=args.source_experiment_id,
                     renderer_fingerprint=renderer_fingerprint,
@@ -1273,13 +1504,13 @@ def main() -> int:
                     f"ERROR: Track 2 runtime diagnostic save failed: {save_exc}",
                     file=sys.stderr,
                 )
-                return GRADE_EXIT_PERSISTENCE_FAILURE
+                return finish(GRADE_EXIT_PERSISTENCE_FAILURE)
             print(
                 "ERROR: Track 2 grading stopped after runtime failure "
                 f"for {task.task_id}: {runtime_error}",
                 file=sys.stderr,
             )
-            return GRADE_EXIT_RUNTIME_FAILURE
+            return finish(GRADE_EXIT_RUNTIME_FAILURE)
 
         if partial_every > 0 and idx % partial_every == 0:
             try:
@@ -1294,6 +1525,10 @@ def main() -> int:
                     grader_source_hash,
                     inference_repo_id,
                     inference_revision,
+                    azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
+                    azure_ai_routes=azure_ai_routes,
+                    run_status="partial",
+                    expected_task_ids=expected_task_ids,
                     exp_config=exp_config,
                     source_experiment_id=args.source_experiment_id,
                     renderer_fingerprint=renderer_fingerprint,
@@ -1324,6 +1559,10 @@ def main() -> int:
         grader_source_hash,
         inference_repo_id,
         inference_revision,
+        azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
+        azure_ai_routes=azure_ai_routes,
+        run_status=completed_run_status,
+        expected_task_ids=expected_task_ids,
         exp_config=exp_config,
         source_experiment_id=args.source_experiment_id,
         renderer_fingerprint=renderer_fingerprint,
@@ -1333,7 +1572,7 @@ def main() -> int:
 
     avg = final["summary"]["openai_compat"]["avg_score_pct"]
     print(f"Completed grading: tasks={len(task_payloads)}, avg_pct={avg:.2f}, out={out_path}")
-    return 0
+    return finish(0)
 
 
 if __name__ == "__main__":

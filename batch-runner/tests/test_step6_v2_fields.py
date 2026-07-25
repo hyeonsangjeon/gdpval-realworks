@@ -21,6 +21,7 @@ import json
 import sys
 import warnings
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -283,6 +284,24 @@ def test_build_task_results_v2_adds_per_task_fields():
     }
 
 
+def test_public_error_tasks_exclude_raw_provider_details():
+    payload = _make_result_payload()
+    payload["results"][0]["error"] = (
+        "BadRequestError: https://secret.services.ai.azure.com/api/projects/private"
+    )
+
+    _task_results, error_tasks = step6_report._build_task_results(payload)
+
+    assert error_tasks == [{
+        "task_id": "task_a",
+        "sector": "Tech",
+        "occupation": "Engineer",
+        "error_code": "task_execution_error",
+        "error_type": "BadRequestError",
+    }]
+    assert "secret.services.ai.azure.com" not in str(error_tasks)
+
+
 def test_build_task_results_v2_preserves_existing_fields():
     """The append-only invariant: v2 must not change any v1 field value."""
     data = _make_result_payload()
@@ -387,6 +406,81 @@ def _run_step6(
         )
 
     return json.loads((output_dir / "report_data.json").read_text(encoding="utf-8"))
+
+
+def test_primary_narrative_failure_uses_sanitized_model_free_fallback(
+    monkeypatch, tmp_path
+):
+    import core.azure_ai_clients as azure_ai_clients
+    import core.llm_client as llm_client
+    import core.narrative_analyzer as narrative_analyzer
+
+    secret = "private endpoint and credential detail"
+    monkeypatch.setattr(
+        azure_ai_clients,
+        "preflight_routes",
+        lambda workloads, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        narrative_analyzer,
+        "create_narrative_analyzer",
+        lambda: (_ for _ in ()).throw(RuntimeError(secret)),
+    )
+    monkeypatch.setattr(
+        llm_client,
+        "create_client",
+        lambda **_kwargs: pytest.fail("secondary narrative client was created"),
+    )
+    monkeypatch.setattr(step6_report, "WORKSPACE_DIR", tmp_path)
+    result_json, output_dir = _write_workspace(tmp_path, None)
+
+    step6_report.generate_report(result_json, output_dir, no_narrative=False)
+
+    report = json.loads(
+        (output_dir / "report_data.json").read_text(encoding="utf-8")
+    )
+    assert report["narrative_error"] == "RuntimeError"
+    assert all(not value for value in report["narrative"].values() if value)
+    assert secret not in json.dumps(report)
+
+
+def test_narrative_route_drift_falls_back_before_api_call(
+    monkeypatch, tmp_path
+):
+    import core.azure_ai_clients as azure_ai_clients
+    import core.narrative_analyzer as narrative_analyzer
+
+    analyzer = MagicMock(runtime_fingerprint="actual")
+    analyzer.__enter__.return_value = analyzer
+    analyzer.__exit__.return_value = None
+    monkeypatch.setattr(
+        narrative_analyzer,
+        "create_narrative_analyzer",
+        lambda: analyzer,
+    )
+    captured = {}
+
+    def preflight(workloads, **kwargs):
+        captured.update(kwargs)
+        return [{"runtime_fingerprint": "expected"}]
+
+    monkeypatch.setattr(azure_ai_clients, "preflight_routes", preflight)
+    monkeypatch.setattr(step6_report, "WORKSPACE_DIR", tmp_path)
+    result_json, output_dir = _write_workspace(tmp_path, None)
+
+    step6_report.generate_report(result_json, output_dir, no_narrative=False)
+
+    analyzer.analyze.assert_not_called()
+    assert captured == {
+        "timeout": narrative_analyzer.NarrativeAnalyzer.DEFAULT_TIMEOUT,
+        "legacy_api_version": (
+            narrative_analyzer.NarrativeAnalyzer.DEFAULT_API_VERSION
+        ),
+    }
+    report = json.loads(
+        (output_dir / "report_data.json").read_text(encoding="utf-8")
+    )
+    assert report["narrative_error"] == "ValueError"
 
 
 def test_dry_run_report_marks_hf_target_as_unpublished(monkeypatch, tmp_path):

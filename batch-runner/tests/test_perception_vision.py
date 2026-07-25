@@ -20,7 +20,7 @@ vision_module = importlib.import_module("core.perception.vision")
 
 
 def _png_b64() -> str:
-    PIL = pytest.importorskip("PIL")
+    pytest.importorskip("PIL")
     from PIL import Image
     buf = io.BytesIO()
     Image.new("RGB", (8, 8), color="green").save(buf, format="PNG")
@@ -170,12 +170,13 @@ def test_corrupt_image_returns_judge_error():
 
 
 def test_upstream_exception_returns_judge_error():
-    client = FakeClient(FakeResponses(raise_with=RuntimeError("boom")))
+    sensitive = "https://private.services.ai.azure.com/ deployment=private"
+    client = FakeClient(FakeResponses(raise_with=RuntimeError(sensitive)))
     vp = VisionPerception(client=client)
     v = vp.judge(criterion="x", image_b64=_png_b64())
     assert v.verdict == "judge_error"
-    assert v.judge_error is not None
-    assert "RuntimeError" in v.judge_error
+    assert v.judge_error == "provider_error:RuntimeError"
+    assert sensitive not in v.judge_error
     assert v.api_call_count == 1
     assert v.usage_complete is False
     # The cap counter SHOULD increment because we actually issued the
@@ -230,7 +231,8 @@ def test_invalid_semantic_envelope_logs_only_validation_reason(caplog):
         )
 
     assert verdict.judge_error == "invalid_vision_envelope"
-    assert "verdict and partial_score are inconsistent" in caplog.text
+    assert "InvalidVisionEnvelope" in caplog.text
+    assert "verdict and partial_score are inconsistent" not in caplog.text
     assert "private model text" not in caplog.text
 
 

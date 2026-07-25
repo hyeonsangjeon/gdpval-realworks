@@ -45,6 +45,11 @@ const requireDate = (value, label) => {
   return date
 }
 
+export const skillDirectoryNames = (entries) => entries
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .filter((name) => !name.startsWith('.') && !name.startsWith('__'))
+
 const preprocessorProjection = (config) => (config?.condition_a?.preprocessors ?? []).map((preprocessor) => ({
   type: preprocessor.type,
   deployment: preprocessor.model?.deployment,
@@ -174,7 +179,7 @@ export async function aggregatePerceptionNote() {
     ...Object.values(CONFIG_PATHS).map((path) => readFile(path, 'utf8')),
   ])
   const configTexts = Object.fromEntries(Object.keys(CONFIG_PATHS).map((id, index) => [id, configValues[index]]))
-  const skillNames = skillEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+  const skillNames = skillDirectoryNames(skillEntries)
   const data = { ...buildPerceptionNoteData(sourceText, configTexts, skillNames), _generated: new Date().toISOString() }
   await mkdir(dirname(OUTPUT_PATH), { recursive: true })
   await writeFile(OUTPUT_PATH, `${JSON.stringify(data, null, 2)}\n`)

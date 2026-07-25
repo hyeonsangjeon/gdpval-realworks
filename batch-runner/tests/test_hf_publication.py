@@ -24,7 +24,10 @@ from core.hf_publication import (
     verify_publication_finality,
     write_publication_receipt,
 )
-from core.inference_manifest import canonical_deliverable_uris
+from core.inference_manifest import (
+    build_inference_provenance,
+    canonical_deliverable_uris,
+)
 from core.prepared_fingerprint import prepared_fingerprint
 from core.result_fingerprint import inference_result_fingerprint
 
@@ -43,7 +46,9 @@ class FakeApi:
             "data/train-00000-of-00001.parquet": b"old-parquet",
             "data/old.parquet": b"old",
             "deliverable_files/task/old.pdf": b"old-pdf",
+            "inference_provenance.json": b"old-provenance",
             "self_report.json": b"old-report",
+            "step2_inference_results.json": b"stale-full-results",
         }
         self.revision_files = {self.parent: dict(self.remote_files)}
         self.commit_history = {}
@@ -130,8 +135,12 @@ class FakeApi:
         )
         if mutation == "missing":
             remote_files.pop("self_report.json", None)
+        elif mutation == "missing_provenance":
+            remote_files.pop("inference_provenance.json", None)
         elif mutation == "extra":
             remote_files["data/extra.parquet"] = b"extra"
+        elif mutation == "stale_step2":
+            remote_files["step2_inference_results.json"] = b"stale-full-results"
         entries = []
         for path, value in sorted(remote_files.items()):
             content = value.read_bytes() if isinstance(value, Path) else value
@@ -163,6 +172,14 @@ class FakeApi:
         if mutation == "download_hash" and kwargs["filename"] == "self_report.json":
             corrupt = path.with_name("corrupt-self-report.json")
             corrupt.write_bytes(b"corrupt")
+            download_source = corrupt
+        elif (
+            mutation == "provenance_hash"
+            and kwargs["filename"] == "inference_provenance.json"
+        ):
+            content = path.read_bytes()
+            corrupt = path.with_name("corrupt-inference-provenance.json")
+            corrupt.write_bytes(content.replace(b"exp-test", b"exp-tost", 1))
             download_source = corrupt
         if self.download_symlinks:
             cache_root = Path(self.remote_dir.name) / "cache"
@@ -246,7 +263,12 @@ def _report_task_row(**overrides) -> dict:
     return row
 
 
-def _upload_root(tmp_path: Path, *, report_overrides=None) -> Path:
+def _upload_root(
+    tmp_path: Path,
+    *,
+    report_overrides=None,
+    provenance_task_ids=("task-1",),
+) -> Path:
     root = tmp_path / "upload"
     root.mkdir()
     report = {
@@ -271,6 +293,20 @@ def _upload_root(tmp_path: Path, *, report_overrides=None) -> Path:
     (root / "self_report.json").write_text(
         json.dumps(report), encoding="utf-8"
     )
+    provenance = build_inference_provenance({
+        "experiment_id": "exp-test",
+        "source_repo_id": "owner/repository",
+        "prepared_fingerprint": "f" * 64,
+        "execution_mode": "subprocess",
+        "azure_ai_routes": [],
+        "results": [
+            {"task_id": task_id, "deliverable_files": []}
+            for task_id in provenance_task_ids
+        ],
+    })
+    (root / "inference_provenance.json").write_text(
+        json.dumps(provenance), encoding="utf-8"
+    )
     data = root / "data"
     data.mkdir()
     (data / "train-00000-of-00001.parquet").write_bytes(b"parquet")
@@ -285,9 +321,11 @@ def _receipt_result() -> PublicationResult:
     )
 
 
-def _published_state(tmp_path: Path):
+def _published_state(tmp_path: Path, *, include_readme: bool = False):
     api = FakeApi()
     root = _upload_root(tmp_path)
+    if include_readme:
+        (root / "README.md").write_bytes(b"planned-readme")
     receipt_path = tmp_path / "publication-receipt.json"
     publication = publish_dataset_with_receipt(
         "owner/repository",
@@ -506,6 +544,7 @@ def test_publication_finality_accepts_normal_publication_without_cleanup(tmp_pat
         if name == "hf_hub_download"
     ) == Counter({
         (publication.oid, "data/train-00000-of-00001.parquet"): 1,
+        (publication.oid, "inference_provenance.json"): 1,
         (publication.oid, "self_report.json"): 1,
     })
 
@@ -524,6 +563,30 @@ def test_publication_finality_accepts_exact_cleanup_child(tmp_path):
         receipt_path=receipt_path,
         api=api,
     ) == cleanup_head
+
+
+def test_publication_finality_rejects_readme_drift_after_cleanup(tmp_path):
+    generation = "1" * 64
+    api, root, receipt_path, _publication = _published_state(
+        tmp_path, include_readme=True
+    )
+    cleanup_head = _add_cleanup_commit(api, generation)
+    original = api.revision_files[cleanup_head]["README.md"]
+    assert isinstance(original, Path)
+    drift = original.with_name("drift-readme.md")
+    drift.write_bytes(b"x" * original.stat().st_size)
+    api.revision_files[cleanup_head]["README.md"] = drift
+
+    with pytest.raises(RuntimeError, match="finality is unverified"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            expected_generation=generation,
+            receipt_path=receipt_path,
+            api=api,
+        )
 
 
 @pytest.mark.parametrize("generation", ["1" * 63, "A" * 64, 123])
@@ -662,6 +725,37 @@ def test_publication_finality_rejects_final_managed_tree_or_hash_drift(
             token="token",
             identity=_identity(),
             expected_generation=generation,
+            receipt_path=receipt_path,
+            api=api,
+        )
+
+
+@pytest.mark.parametrize("after_cleanup", [False, True])
+@pytest.mark.parametrize(
+    "mutation",
+    ["missing_provenance", "provenance_hash", "stale_step2"],
+)
+def test_publication_finality_rejects_provenance_or_stale_step2_drift(
+    tmp_path,
+    after_cleanup,
+    mutation,
+):
+    generation = "1" * 64
+    api, root, receipt_path, publication = _published_state(tmp_path)
+    revision = publication.oid
+    expected_generation = None
+    if after_cleanup:
+        revision = _add_cleanup_commit(api, generation)
+        expected_generation = generation
+    api.tree_mutations[revision] = mutation
+
+    with pytest.raises(RuntimeError, match="finality is unverified"):
+        verify_publication_finality(
+            "owner/repository",
+            root,
+            token="token",
+            identity=_identity(),
+            expected_generation=expected_generation,
             receipt_path=receipt_path,
             api=api,
         )
@@ -824,6 +918,7 @@ def test_publication_uses_step0_head_as_cas_parent(tmp_path):
     ]
     assert [operation.path_in_repo for operation in additions] == [
         "data/train-00000-of-00001.parquet",
+        "inference_provenance.json",
         "self_report.json",
     ]
     assert all(
@@ -833,9 +928,89 @@ def test_publication_uses_step0_head_as_cas_parent(tmp_path):
     assert deletions == [
         "data/old.parquet",
         "deliverable_files/task/old.pdf",
+        "step2_inference_results.json",
     ]
     assert not {operation.path_in_repo for operation in additions} & set(deletions)
     assert "reference_files/task/input.xlsx" not in deletions
+
+
+def test_publication_plan_and_receipt_bind_provenance_bytes(tmp_path):
+    root = _upload_root(tmp_path)
+    first_receipt_path = tmp_path / "first-publication-receipt.json"
+    first = publish_dataset_with_receipt(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        receipt_path=first_receipt_path,
+        api=FakeApi(),
+    )
+    first_receipt = load_publication_receipt(_identity(), first_receipt_path)
+
+    provenance_path = root / "inference_provenance.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance_path.write_text(
+        json.dumps(provenance, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    second_receipt_path = tmp_path / "second-publication-receipt.json"
+    second = publish_dataset_with_receipt(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        receipt_path=second_receipt_path,
+        api=FakeApi(),
+    )
+    second_receipt = load_publication_receipt(_identity(), second_receipt_path)
+
+    assert first.plan_sha256 != second.plan_sha256
+    assert first_receipt.plan_sha256 == first.plan_sha256
+    assert second_receipt.plan_sha256 == second.plan_sha256
+
+
+def test_publication_plan_binds_stale_step2_deletion(tmp_path):
+    root = _upload_root(tmp_path)
+    stale_api = FakeApi()
+    with_stale = publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        api=stale_api,
+    )
+    commit = next(
+        kwargs for name, kwargs in stale_api.calls if name == "create_commit"
+    )
+    deletion_paths = {
+        operation.path_in_repo
+        for operation in commit["operations"]
+        if isinstance(operation, CommitOperationDelete)
+    }
+    addition_paths = {
+        operation.path_in_repo
+        for operation in commit["operations"]
+        if isinstance(operation, CommitOperationAdd)
+    }
+
+    clean_api = FakeApi()
+    clean_api.remote_files.pop("step2_inference_results.json")
+    clean_api.revision_files[clean_api.parent] = dict(clean_api.remote_files)
+    without_stale = publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        api=clean_api,
+    )
+
+    assert "step2_inference_results.json" in deletion_paths
+    assert "step2_inference_results.json" not in addition_paths
+    assert with_stale.plan_sha256 != without_stale.plan_sha256
 
 
 @pytest.mark.parametrize("mode", ["response_lost", "malformed_response"])
@@ -1074,6 +1249,7 @@ def test_publication_opens_each_source_once_with_nofollow_and_cloexec(
     assert counts == Counter({
         root / "README.md": 1,
         root / "data" / "train-00000-of-00001.parquet": 1,
+        root / "inference_provenance.json": 1,
         root / "self_report.json": 1,
     })
     for _path, flags in source_calls:
@@ -1082,10 +1258,20 @@ def test_publication_opens_each_source_once_with_nofollow_and_cloexec(
         assert flags & os.O_ACCMODE == os.O_RDONLY
 
 
-def test_publication_rejects_hardlinked_source_before_remote_call(tmp_path):
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "data/train-00000-of-00001.parquet",
+        "inference_provenance.json",
+    ],
+)
+def test_publication_rejects_hardlinked_source_before_remote_call(
+    tmp_path,
+    relative_path,
+):
     root = _upload_root(tmp_path)
-    source = root / "data" / "train-00000-of-00001.parquet"
-    os.link(source, tmp_path / "parquet-hardlink")
+    source = root / relative_path
+    os.link(source, tmp_path / f"{source.name}-hardlink")
     api = FakeApi()
 
     with pytest.raises(ValueError, match="single-link regular file"):
@@ -1240,6 +1426,85 @@ def test_publication_requires_local_self_report_before_remote_call(tmp_path):
     api = FakeApi()
 
     with pytest.raises(ValueError, match="self_report.json is required"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_requires_local_inference_provenance_before_remote_call(
+    tmp_path,
+):
+    root = _upload_root(tmp_path)
+    (root / "inference_provenance.json").unlink()
+    api = FakeApi()
+
+    with pytest.raises(ValueError, match="inference_provenance.json is required"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_rejects_symlinked_inference_provenance_before_remote_call(
+    tmp_path,
+):
+    root = _upload_root(tmp_path)
+    provenance = root / "inference_provenance.json"
+    target = root / "provenance-target.json"
+    provenance.rename(target)
+    provenance.symlink_to(target)
+    api = FakeApi()
+
+    with pytest.raises(ValueError, match="must be a regular file"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["malformed_json", "experiment", "repository", "task_order"],
+)
+def test_publication_rejects_invalid_inference_provenance_before_remote_call(
+    tmp_path,
+    mutation,
+):
+    root = _upload_root(tmp_path)
+    provenance_path = root / "inference_provenance.json"
+    if mutation == "malformed_json":
+        provenance_path.write_text("{", encoding="utf-8")
+    else:
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+        if mutation == "experiment":
+            provenance["experiment_id"] = "other-experiment"
+        elif mutation == "repository":
+            provenance["source_repo_id"] = "other/repository"
+        else:
+            provenance["ordered_task_ids_sha256"] = "0" * 64
+        provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
+    api = FakeApi()
+
+    with pytest.raises(ValueError, match="inference provenance is invalid"):
         publish_dataset(
             "owner/repository",
             root,
@@ -1471,38 +1736,44 @@ def test_publication_binds_exact_ordered_truthy_error_projection(tmp_path):
             "task_id": "task-1",
             "sector": "Sector A",
             "occupation": "Occupation A",
-            "error": "first failure",
+            "error_code": "task_execution_error",
+            "error_type": "TaskExecutionError",
         },
         {
             "task_id": "task-2",
             "sector": "Sector B",
             "occupation": "Occupation B",
-            "error": "second failure",
+            "error_code": "task_execution_error",
+            "error_type": "TaskExecutionError",
         },
     ]
-    root = _upload_root(tmp_path, report_overrides={
-        "ordered_task_ids": ["task-1", "task-2"],
-        "summary": _report_summary(
-            total_tasks=2,
-            success_count=0,
-            success_rate_pct=0.0,
-            error_count=2,
-        ),
-        "task_results": [
-            _report_task_row(
-                status="error",
-                sector="Sector A",
-                occupation="Occupation A",
+    root = _upload_root(
+        tmp_path,
+        report_overrides={
+            "ordered_task_ids": ["task-1", "task-2"],
+            "summary": _report_summary(
+                total_tasks=2,
+                success_count=0,
+                success_rate_pct=0.0,
+                error_count=2,
             ),
-            _report_task_row(
-                task_id="task-2",
-                status="error",
-                sector="Sector B",
-                occupation="Occupation B",
-            ),
-        ],
-        "error_tasks": error_tasks,
-    })
+            "task_results": [
+                _report_task_row(
+                    status="error",
+                    sector="Sector A",
+                    occupation="Occupation A",
+                ),
+                _report_task_row(
+                    task_id="task-2",
+                    status="error",
+                    sector="Sector B",
+                    occupation="Occupation B",
+                ),
+            ],
+            "error_tasks": error_tasks,
+        },
+        provenance_task_ids=("task-1", "task-2"),
+    )
 
     publish_dataset(
         "owner/repository",
@@ -1587,7 +1858,7 @@ def test_publication_sends_more_than_250_files_in_one_create_commit(tmp_path):
         for operation in create_calls[0]["operations"]
         if isinstance(operation, CommitOperationAdd)
     ]
-    assert len(additions) == 253
+    assert len(additions) == 254
 
 
 def _write_pipeline_identity(tmp_path: Path) -> tuple[Path, Path, dict]:
@@ -1623,6 +1894,7 @@ def _write_pipeline_identity(tmp_path: Path) -> tuple[Path, Path, dict]:
         "experiment_id": "exp-test",
         "publication_generation": "exp-test:100:1",
         "source": "owner/repository",
+        "execution_mode": "subprocess",
         "prepared_fingerprint": prepared["prepared_fingerprint"],
         "ordered_task_ids": ["task-1", "task-2"],
         "results": [

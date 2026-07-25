@@ -17,14 +17,12 @@ Usage:
 
 import json
 import logging
-import os
 import threading
 import time
 from dataclasses import dataclass, field
 
-from openai import AzureOpenAI
-
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from core.azure_ai_clients import AzureAIClientFactory, AzureAIWorkload
+from core.llm_client import ManagedAzureAIClient, create_typed_azure_client
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +42,7 @@ class NarrativeResult:
     total_tokens: dict = field(default_factory=lambda: {"input": 0, "output": 0})
     grading_referenced: bool = False
     grade_source: dict | None = None
+    runtime_fingerprint: str | None = None
 
 
 # ─── Grading Prompt Helpers ───────────────────────────────────────────────
@@ -223,27 +222,54 @@ class NarrativeAnalyzer:
 
     DEFAULT_MODEL = "gpt-5.4-pro"
     DEFAULT_API_VERSION = "2025-04-01-preview"
+    DEFAULT_TIMEOUT = 10000
 
     def __init__(
         self,
-        endpoint: str,
+        endpoint: str | None = None,
         api_version: str = DEFAULT_API_VERSION,
-        timeout: int = 10000,
+        timeout: int = DEFAULT_TIMEOUT,
         model: str = DEFAULT_MODEL,
+        client=None,
+        client_factory: AzureAIClientFactory | None = None,
     ):
-        credential = DefaultAzureCredential()
-        token_provider = get_bearer_token_provider(
-            credential, "https://cognitiveservices.azure.com/.default"
-        )
-        self.client = AzureOpenAI(
-            azure_endpoint=endpoint,
-            azure_ad_token_provider=token_provider,
-            api_version=api_version,
-            timeout=timeout,
-        )
+        if endpoint is not None:
+            raise ValueError(
+                "endpoint overrides are forbidden; configure a typed Azure AI endpoint"
+            )
+        self._managed_client: ManagedAzureAIClient | None = None
+        if client is None:
+            self._managed_client = create_typed_azure_client(
+                AzureAIWorkload.NARRATIVE,
+                model,
+                factory=client_factory,
+                timeout=timeout,
+                legacy_api_version=api_version,
+            )
+            client = self._managed_client.client
+        self.client = client
         self.model = model
         self._heartbeat_active = False
         self._heartbeat_thread: threading.Thread | None = None
+
+    @property
+    def runtime_fingerprint(self) -> str | None:
+        managed = getattr(self, "_managed_client", None)
+        if managed is None:
+            return None
+        return managed.runtime_fingerprint
+
+    def close(self) -> None:
+        self._stop_heartbeat()
+        if self._managed_client is not None:
+            self._managed_client.close()
+            self._managed_client = None
+
+    def __enter__(self) -> "NarrativeAnalyzer":
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self.close()
 
     # ── Public API ─────────────────────────────────────────────────────
 
@@ -310,6 +336,7 @@ class NarrativeAnalyzer:
             total_tokens={"input": total_input, "output": total_output},
             grading_referenced=grade is not None,
             grade_source=_build_grade_source(grade),
+            runtime_fingerprint=self.runtime_fingerprint,
         )
 
     # ── Call 1 ─────────────────────────────────────────────────────────
@@ -518,7 +545,7 @@ Return ONLY valid JSON (no markdown code fences) with these exact keys:
             expected_keys: Keys to ensure exist in result (filled with "" if missing)
 
         Returns:
-            Parsed dict. On parse failure, returns dict with expected_keys set to "".
+            Parsed narrative object with the exact expected string fields.
         """
         text = raw_text.strip()
 
@@ -533,14 +560,19 @@ Return ONLY valid JSON (no markdown code fences) with these exact keys:
         try:
             result = json.loads(text)
         except json.JSONDecodeError:
-            logger.warning("JSON parse failed. Raw text: %s", text[:500])
-            result = {}
+            raise ValueError("narrative response is not valid JSON") from None
+        if not isinstance(result, dict):
+            raise ValueError("narrative response must be a JSON object")
 
-        # Ensure expected keys exist
         if expected_keys:
-            for key in expected_keys:
-                if key not in result:
-                    result[key] = ""
+            if set(result) != set(expected_keys):
+                raise ValueError("narrative response fields are invalid")
+            if any(not isinstance(result[key], str) for key in expected_keys):
+                raise ValueError("narrative response values must be strings")
+            if any(not result[key].strip() for key in expected_keys):
+                raise ValueError(
+                    "narrative response values must be nonempty strings"
+                )
 
         return result
 
@@ -552,21 +584,23 @@ def create_narrative_analyzer(
     endpoint: str | None = None,
     timeout: int = 10000,
     model: str = NarrativeAnalyzer.DEFAULT_MODEL,
+    client=None,
+    client_factory: AzureAIClientFactory | None = None,
 ) -> NarrativeAnalyzer:
     """Create a NarrativeAnalyzer instance.
 
     Args:
-        endpoint: Azure OpenAI endpoint. Reads AZURE_OPENAI_ENDPOINT env if not provided.
+        endpoint: Deprecated. Explicit endpoint overrides are rejected.
         timeout:  Client timeout in seconds (default: 10000).
         model:    Model deployment name (default: gpt-5.4-pro).
 
     Returns:
         Configured NarrativeAnalyzer instance.
     """
-    endpoint = endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
-    if not endpoint:
-        raise ValueError(
-            "Azure OpenAI endpoint required. "
-            "Set AZURE_OPENAI_ENDPOINT env var or pass endpoint= argument."
-        )
-    return NarrativeAnalyzer(endpoint=endpoint, timeout=timeout, model=model)
+    return NarrativeAnalyzer(
+        endpoint=endpoint,
+        timeout=timeout,
+        model=model,
+        client=client,
+        client_factory=client_factory,
+    )

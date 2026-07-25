@@ -19,7 +19,7 @@ from core.azure_ai_clients import (  # noqa: E402
     AzureAIRouteSettings,
     AzureAIWorkload,
     preflight_routes,
-    verify_direct_token,
+    verify_route_tokens,
 )
 
 
@@ -226,9 +226,12 @@ def main(
 
     if args.verify_token:
         try:
-            (token_verifier or verify_direct_token)()
+            if token_verifier is not None:
+                token_verifier()
+            else:
+                verify_route_tokens(workloads, settings=settings)
         except Exception:
-            parser.error("direct token verification failed")
+            parser.error("Azure AI route token verification failed")
 
     encoded = json.dumps(records, sort_keys=True, separators=(",", ":"))
     output_path = values.get("GITHUB_OUTPUT", "")

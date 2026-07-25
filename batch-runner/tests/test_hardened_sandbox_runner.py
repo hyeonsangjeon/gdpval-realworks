@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from core.agentic_budget import AgenticBudgetLedger
 from core.hardened_sandbox_runner import HardenedSandboxRunner
 
@@ -33,6 +35,10 @@ class FakeProviderClient:
         self.chat = SimpleNamespace(
             completions=ScriptedCompletions(responses)
         )
+        self.close_calls = 0
+
+    def close(self):
+        self.close_calls += 1
 
 
 def _response(code, description="generated"):
@@ -207,6 +213,8 @@ def test_hardened_baseline_runs_once_on_verified_first_attempt(tmp_path):
     }
     assert backends[0].calls.count("reset_work") == 1
     assert backends[0].closed is True
+    assert provider.close_calls == 1
+    assert runner._provider_client is None
 
 
 def test_hardened_baseline_preserves_remote_reference_ids(tmp_path):
@@ -344,3 +352,89 @@ def test_hardened_start_and_close_failure_returns_structured_metrics(tmp_path):
     assert result["error"] == "compute_cleanup_failed"
     assert result["prior_error"] == "runner_internal_error"
     assert result["budget_metrics"]["usage_complete"] is False
+
+
+def test_hardened_provider_client_closes_after_failed_task(tmp_path):
+    runner, provider, _, _ = _runner(tmp_path, [], [_inspection(True)])
+
+    result = runner.run(
+        "Create report.txt",
+        "model",
+        run_id="paired-run",
+        condition_name="baseline",
+        task_id="task-1",
+    )
+
+    assert result["success"] is False
+    assert provider.close_calls == 1
+    assert runner._provider_client is None
+
+
+def test_hardened_consecutive_tasks_close_distinct_clients(tmp_path):
+    runner, _, _, _ = _runner(tmp_path, [], [_inspection(True)])
+    clients = [
+        FakeProviderClient([_response("raise RuntimeError('first')")]),
+        FakeProviderClient([_response("raise RuntimeError('second')")]),
+    ]
+    iterator = iter(clients)
+    runner.client_factory = lambda: next(iterator)
+
+    for task_id in ("task-1", "task-2"):
+        runner.run(
+            "Create report.txt",
+            "model",
+            run_id="paired-run",
+            condition_name="baseline",
+            task_id=task_id,
+        )
+
+    assert [client.close_calls for client in clients] == [1, 1]
+    assert runner._provider_client is None
+
+
+@pytest.mark.parametrize("cleanup_error", [
+    RuntimeError("private endpoint detail"),
+    SystemExit("private endpoint detail"),
+])
+def test_hardened_provider_cleanup_error_is_class_only(
+    tmp_path, cleanup_error
+):
+    runner, provider, _, _ = _runner(
+        tmp_path,
+        [_response("open('report.txt', 'w').write('report')")],
+        [_inspection(True), _inspection(True)],
+    )
+
+    def fail_close():
+        provider.close_calls += 1
+        raise cleanup_error
+
+    provider.close = fail_close
+    result = runner.run(
+        "Create report.txt",
+        "model",
+        run_id="paired-run",
+        condition_name="baseline",
+        task_id="task-1",
+    )
+
+    assert result["success"] is False
+    assert result["error"] == (
+        f"provider_cleanup_failed:{type(cleanup_error).__name__}"
+    )
+    assert "private endpoint detail" not in str(result)
+    assert provider.close_calls == 1
+    assert runner._provider_client is None
+
+
+def test_hardened_runner_close_is_idempotent_and_class_only():
+    runner = HardenedSandboxRunner.__new__(HardenedSandboxRunner)
+    client = FakeProviderClient([])
+    runner._provider_client = client
+    runner._closed = False
+
+    runner.close()
+    runner.close()
+
+    assert client.close_calls == 1
+    assert runner._provider_client is None

@@ -1,8 +1,6 @@
 import os
 import time
 
-from openai import AzureOpenAI
-
 from core.azure_ai_clients import (
     DEFAULT_LEGACY_API_VERSION,
     DEFAULT_TIMEOUT,
@@ -12,8 +10,8 @@ from core.azure_ai_clients import (
     AzureAIWorkload,
 )
 from core.config import (
-    DEFAULT_ENDPOINT,
     DEFAULT_API_VERSION,
+    DEFAULT_DEPLOYMENT,
     DEFAULT_TOKENS,
 )
 
@@ -252,70 +250,35 @@ def create_typed_azure_client(
 
     return ManagedAzureAIClient(lease, owned_factory=owned_factory)
 
+
+def close_provider_client(client) -> None:
+    """Close a provider client when it exposes synchronous ownership."""
+    close = getattr(client, "close", None)
+    if callable(close):
+        close()
+
+
 def create_client(
     endpoint: str | None = None,
     api_key: str | None = None,
     api_version: str | None = None,
     max_retries: int | None = None,
-) -> AzureOpenAI:
-    """AzureOpenAI 클라이언트 생성 (DefaultAzureCredential 전용 / OIDC only)
-
-    인증 정책:
-    - DefaultAzureCredential (Entra ID 토큰) — az login / Managed Identity / OIDC 전용
-    - API Key fallback 비활성화 (Azure 리소스 disableLocalAuth=true). 또한 openai SDK 가
-      AZURE_OPENAI_API_KEY 환경변수를 자동 픽업해 azure_ad_token_provider 를 silently
-      덮어쓰는 문제 회피.
-
-    Args:
-        endpoint:    Azure endpoint (기본: AZURE_OPENAI_ENDPOINT 환경변수)
-        api_key:     (deprecated) 사용되지 않음. fail-loud 진단 목적으로만 남김.
-        api_version: API version   (기본: 2025-04-01-preview)
-
-    Returns:
-        openai.AzureOpenAI 클라이언트
-
-    Raises:
-        ValueError: DefaultAzureCredential 가 실패하면 항상 raise.
-                    로컬: `az login`. CI: azure/login@v2 OIDC step 확인.
-    """
-    endpoint = endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", DEFAULT_ENDPOINT)
-    api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY")
-    api_version = api_version or DEFAULT_API_VERSION
-
-    # OIDC only: DefaultAzureCredential (Entra ID token)
-    try:
-        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-        credential = DefaultAzureCredential()
-        token_provider = get_bearer_token_provider(
-            credential, "https://cognitiveservices.azure.com/.default"
-        )
-        print("   🔐 Auth: DefaultAzureCredential (Entra ID token)")
-        if max_retries is None:
-            return AzureOpenAI(
-                azure_endpoint=endpoint,
-                azure_ad_token_provider=token_provider,
-                api_version=api_version,
-                timeout=480,
-            )
-        return AzureOpenAI(
-            azure_endpoint=endpoint,
-            azure_ad_token_provider=token_provider,
-            api_version=api_version,
-            timeout=480,
-            max_retries=max_retries,
-        )
-    except Exception as e:
-        # API Key fallback disabled — fail loud with OIDC debug guidance.
-        print(f"   ⚠️  DefaultAzureCredential failed: {e}")
-        print("   ⚠️  API Key fallback disabled (Azure disableLocalAuth=true)")
-        print("   ⚠️  Local: run 'az login' then retry")
-        print("   ⚠️  CI: verify azure/login@v2 OIDC step succeeded")
+    deployment: str | None = None,
+    workload: AzureAIWorkload | str = AzureAIWorkload.INFERENCE,
+) -> ManagedAzureAIClient:
+    """Create an OIDC-only managed client from the typed Azure AI route."""
+    if endpoint is not None:
         raise ValueError(
-            f"Azure authentication failed.\n"
-            f"  - DefaultAzureCredential failed: {e}\n"
-            f"  - API key fallback disabled (disableLocalAuth=true).\n"
-            f"  Fix: 'az login' locally, or check OIDC config in GitHub Actions."
+            "endpoint overrides are forbidden; configure a typed Azure AI endpoint"
         )
+    if api_key is not None:
+        raise ValueError("static Azure AI API keys are forbidden")
+    return create_typed_azure_client(
+        workload,
+        deployment or DEFAULT_DEPLOYMENT,
+        max_retries=max_retries,
+        legacy_api_version=api_version or DEFAULT_API_VERSION,
+    )
 
 
 def create_provider_client(
@@ -324,6 +287,8 @@ def create_provider_client(
     api_key: str | None = None,
     api_version: str | None = None,
     max_retries: int | None = None,
+    deployment: str | None = None,
+    workload: AzureAIWorkload | str = AzureAIWorkload.INFERENCE,
 ):
     """Provider별 클라이언트 생성.
 
@@ -347,6 +312,8 @@ def create_provider_client(
             api_key=api_key,
             api_version=api_version,
             max_retries=max_retries,
+            deployment=deployment,
+            workload=workload,
         )
 
     elif provider == "openai":

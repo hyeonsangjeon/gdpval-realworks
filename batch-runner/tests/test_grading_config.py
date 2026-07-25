@@ -25,7 +25,7 @@ def _valid_config(tmp_path: Path) -> dict:
             "provider": "azure_openai",
             "api": "responses",
             "model": "gpt-5.4-pro",
-            "endpoint_env": "AZURE_OPENAI_ENDPOINT",
+            "deployment": "gpt-5.4-pro",
         },
         "rubric": {
             "repo_id": "openai/gdpval",
@@ -179,7 +179,7 @@ def test_v2_perception_block_requires_model(tmp_path):
     cfg = _valid_config(tmp_path)
     cfg["schema_version"] = "2.0"
     cfg["judge"]["perception"] = {"visual": {"vision": True}}  # no model
-    with pytest.raises(ValueError, match="missing 'model'"):
+    with pytest.raises(ValueError, match="missing model/deployment"):
         validate_grading_config(cfg)
 
 
@@ -399,9 +399,11 @@ def test_config_name_is_slugged_for_filename_substitution(tmp_path):
         experiment_id="exp",
         judge_slug="judge",
         config_hash="0123456789abcdef",
-        rubric_sha="rubric",
-        rubric_short_sha="rubric",
+        rubric_sha="a" * 40,
+        rubric_short_sha="a" * 7,
         prompt_version="v1",
+        inference_sha="b" * 40,
+        grader_source_hash="c" * 64,
     )
 
     assert output.name == "Candidate-A-tight__0123456789abcdef.json"

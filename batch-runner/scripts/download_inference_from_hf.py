@@ -36,8 +36,9 @@ if "core" not in sys.modules:
     core_package.__package__ = "core"
     sys.modules["core"] = core_package
 
-from core.inference_manifest import (
+from core.inference_manifest import (  # noqa: E402
     canonicalize_inference_payload,
+    validate_inference_provenance,
     validate_local_deliverables,
 )
 
@@ -73,6 +74,11 @@ def parse_args() -> argparse.Namespace:
             "Expected leading task ID in source order; repeat to download only "
             "an exact leading cohort"
         ),
+    )
+    parser.add_argument(
+        "--allow-legacy-missing-provenance",
+        action="store_true",
+        help="Allow non-publishable analysis of revisions without a provenance sidecar",
     )
     return parser.parse_args()
 
@@ -151,6 +157,55 @@ def _canonicalize_inference_payload(payload: object, repo_id: str, revision: str
     return normalized
 
 
+def _attach_inference_provenance(
+    payload: dict,
+    *,
+    experiment: str,
+    repo_id: str,
+    revision: str,
+    allow_legacy_missing_provenance: bool = False,
+) -> dict:
+    task_ids = [row["task_id"] for row in payload["results"]]
+    had_embedded_routes = bool(payload.get("azure_ai_routes"))
+    try:
+        provenance_file = hf_hub_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            filename="inference_provenance.json",
+            revision=revision,
+            token=_hf_token(),
+        )
+    except (EntryNotFoundError, FileNotFoundError) as exc:
+        if had_embedded_routes or not allow_legacy_missing_provenance:
+            raise ValueError(
+                "inference route provenance sidecar is missing"
+            ) from exc
+        normalized = dict(payload)
+        normalized["azure_ai_routes"] = []
+        normalized["azure_ai_provenance_status"] = "legacy-missing"
+        return normalized
+
+    provenance = json.loads(Path(provenance_file).read_text(encoding="utf-8"))
+    verified = validate_inference_provenance(
+        provenance,
+        experiment_id=experiment,
+        source_repo_id=repo_id,
+        task_ids=task_ids,
+        prepared_fingerprint=payload.get("prepared_fingerprint"),
+        azure_ai_routes=(
+            payload["azure_ai_routes"]
+            if "azure_ai_routes" in payload
+            else None
+        ),
+        execution_mode=payload.get("execution_mode"),
+    )
+    normalized = dict(payload)
+    normalized["prepared_fingerprint"] = verified["prepared_fingerprint"]
+    normalized["azure_ai_routes"] = verified["azure_ai_routes"]
+    normalized["azure_ai_provenance_status"] = "verified-sidecar"
+    return normalized
+
+
 def _select_expected_leading_tasks(
     payload: dict, expected_task_ids: list[str]
 ) -> dict:
@@ -192,6 +247,8 @@ def _download_or_reconstruct_inference(
     repo_id: str,
     revision: str,
     out: Path,
+    *,
+    allow_legacy_missing_provenance: bool = False,
 ) -> None:
     token = _hf_token()
     try:
@@ -214,6 +271,13 @@ def _download_or_reconstruct_inference(
         payload = _build_inference_from_parquet(parquet_file, experiment, repo_id)
 
     canonical = _canonicalize_inference_payload(payload, repo_id, revision)
+    canonical = _attach_inference_provenance(
+        canonical,
+        experiment=experiment,
+        repo_id=repo_id,
+        revision=revision,
+        allow_legacy_missing_provenance=allow_legacy_missing_provenance,
+    )
     _atomic_write_json(out, canonical)
 
 
@@ -279,7 +343,15 @@ def main() -> int:
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    _download_or_reconstruct_inference(args.experiment, repo_id, revision, out)
+    _download_or_reconstruct_inference(
+        args.experiment,
+        repo_id,
+        revision,
+        out,
+        allow_legacy_missing_provenance=(
+            args.allow_legacy_missing_provenance
+        ),
+    )
     payload = json.loads(out.read_text(encoding="utf-8"))
     canonical = _canonicalize_inference_payload(payload, repo_id, revision)
     selected = _select_expected_leading_tasks(

@@ -7,8 +7,6 @@ import hashlib
 import importlib
 import io
 import json
-import struct
-import wave
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -201,6 +199,38 @@ def test_no_tool_call_path_parses_final_json(deliverable_dir, task_and_item):
     assert res.iterations == 1
     assert res.judge_error is None
     assert res.routing_modality == "text"
+
+
+def test_upstream_provider_error_is_class_only_in_result_and_log(
+    deliverable_dir, task_and_item, caplog
+):
+    task, item = task_and_item
+    sensitive = (
+        "https://private.services.ai.azure.com/openai/v1/ "
+        "deployment=private"
+    )
+
+    class FailingResponses:
+        def create(self, **_kwargs):
+            raise RuntimeError(sensitive)
+
+    judge = ToolCallingJudge(
+        client=FakeClient(FailingResponses()),
+        model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE,
+    )
+
+    with caplog.at_level("WARNING", logger="core.tool_calling_judge"):
+        result = judge.judge_item(
+            task=task,
+            item=item,
+            deliverable_dir=str(deliverable_dir),
+            file_names=["report.xlsx"],
+        )
+
+    assert result.judge_error == "provider_error:RuntimeError"
+    assert sensitive not in result.judge_error
+    assert sensitive not in caplog.text
 
 
 # ── One tool round then final ────────────────────────────────────────
@@ -651,7 +681,7 @@ def test_visual_preflight_runs_before_main_without_vision_tool_or_base64(
         criterion="Chart formatting is clean and colors are legible",
         score=4, required=None,
     )
-    PIL = pytest.importorskip("PIL")
+    pytest.importorskip("PIL")
     from PIL import Image
     image = io.BytesIO()
     Image.new("RGB", (8, 8), color="blue").save(image, format="PNG")
@@ -1206,7 +1236,42 @@ def test_tool_exception_becomes_function_output_error(
         if entry.get("type") == "function_call_output"
     )
     assert "tool_exception" in output["output"]
-    assert "tool boom" in output["output"]
+    assert "task_execution_error:RuntimeError" in output["output"]
+    assert "tool boom" not in output["output"]
+
+
+def test_audio_dispatch_exception_is_class_only(
+    deliverable_dir, task_and_item
+):
+    task, item = task_and_item
+    sensitive = "https://private.services.ai.azure.com/"
+
+    class FailingAudio:
+        def judge(self, **_kwargs):
+            raise RuntimeError(sensitive)
+
+    audio = deliverable_dir / "clip.wav"
+    audio.write_bytes(b"audio")
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([])),
+        model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE,
+        audio_perception=FailingAudio(),
+    )
+
+    result = judge._dispatch_tool(
+        _fc(
+            "a1",
+            "audio_judge",
+            criterion=item.criterion,
+            audio_path="clip.wav",
+        ),
+        deliverable_dir=str(deliverable_dir),
+        allowed_paths={"clip.wav"},
+    )
+
+    assert result["error"] == "provider_error:RuntimeError"
+    assert sensitive not in str(result)
 
 
 def test_main_api_usage_call_count_and_latency_are_exact(
@@ -1264,7 +1329,7 @@ def test_visual_preflight_processes_bounded_paths_in_stable_order(
         score=4, required=None,
     )
 
-    PIL = pytest.importorskip("PIL")
+    pytest.importorskip("PIL")
     from PIL import Image
     buf = io.BytesIO()
     Image.new("RGB", (8, 8), color="blue").save(buf, format="PNG")
@@ -1344,7 +1409,7 @@ def test_visual_preflight_filters_unsupported_bundle_paths(
     (deliverable_dir / "Brief.docx").write_bytes(b"docx")
     (deliverable_dir / "Chart.pdf").write_bytes(b"pdf")
 
-    PIL = pytest.importorskip("PIL")
+    pytest.importorskip("PIL")
     from PIL import Image
     buf = io.BytesIO()
     Image.new("RGB", (8, 8), color="blue").save(buf, format="PNG")

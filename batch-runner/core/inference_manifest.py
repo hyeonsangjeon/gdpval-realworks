@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import math
 import os
 import re
 import shutil
@@ -14,6 +16,26 @@ from urllib.parse import quote
 
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
+FULL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+INFERENCE_PROVENANCE_SCHEMA = "azure-ai-inference-provenance-v2"
+INFERENCE_EXECUTION_MODES = frozenset({
+    "legacy",
+    "code_interpreter",
+    "subprocess",
+    "json_renderer",
+    "sandbox",
+    "agentic_sandbox",
+})
+STEP2_PROGRESS_SCHEMA = "step2-progress-v2"
+STEP2_RESULT_STATUSES = frozenset({
+    "success", "error", "qa_failed", "pending"
+})
+_ROUTE_KEYS = {
+    "endpoint_kind",
+    "profile",
+    "runtime_fingerprint",
+    "workload",
+}
 
 
 def canonical_task_id(value: Any) -> str:
@@ -52,6 +74,92 @@ def canonical_deliverable_path(task_id: str, value: Any) -> str:
             f"deliverable path must stay under deliverable_files/{task_id}/"
         )
     return value
+
+
+def validate_step2_progress_results(
+    results: Any,
+    *,
+    schema_version: Any,
+) -> None:
+    if schema_version != STEP2_PROGRESS_SCHEMA:
+        raise ValueError("Step 2 progress schema version is unsupported")
+    if not isinstance(results, list):
+        raise ValueError("Step 2 progress results must be an array")
+
+    terminal_fields = {
+        "content",
+        "deliverable_text",
+        "deliverable_files",
+        "model",
+        "usage",
+        "observability",
+        "latency_ms",
+        "timestamp",
+    }
+    for index, result in enumerate(results):
+        if not isinstance(result, dict):
+            raise ValueError(
+                f"Step 2 progress result {index} must be an object"
+            )
+        task_id = canonical_task_id(result.get("task_id"))
+        status = result.get("status")
+        if status not in STEP2_RESULT_STATUSES:
+            raise ValueError("Step 2 progress result status is invalid")
+        timestamp = result.get("timestamp")
+        if not isinstance(timestamp, str) or not timestamp:
+            raise ValueError("Step 2 progress result timestamp is invalid")
+
+        if status == "pending":
+            error = result.get("error")
+            if not isinstance(error, str) or not error:
+                raise ValueError("Step 2 pending result error is invalid")
+            continue
+
+        if not terminal_fields <= result.keys():
+            raise ValueError("Step 2 terminal result fields are incomplete")
+        if result["content"] is not None and not isinstance(
+            result["content"], str
+        ):
+            raise ValueError("Step 2 result content is invalid")
+        if result["deliverable_text"] is not None and not isinstance(
+            result["deliverable_text"], str
+        ):
+            raise ValueError("Step 2 result deliverable text is invalid")
+        files = result["deliverable_files"]
+        if not isinstance(files, list):
+            raise ValueError("Step 2 result deliverable files are invalid")
+        canonical_files = [
+            canonical_deliverable_path(task_id, path) for path in files
+        ]
+        if len(canonical_files) != len(set(canonical_files)):
+            raise ValueError("Step 2 result deliverable files are duplicated")
+        if not isinstance(result["model"], str) or not result["model"]:
+            raise ValueError("Step 2 result model is invalid")
+        if result["usage"] is not None and not isinstance(
+            result["usage"], dict
+        ):
+            raise ValueError("Step 2 result usage is invalid")
+        if not isinstance(result["observability"], dict):
+            raise ValueError("Step 2 result observability is invalid")
+        latency_ms = result["latency_ms"]
+        if latency_ms is not None and (
+            isinstance(latency_ms, bool)
+            or not isinstance(latency_ms, (int, float))
+            or not math.isfinite(latency_ms)
+            or latency_ms < 0
+        ):
+            raise ValueError("Step 2 result latency is invalid")
+
+        if status == "error":
+            error = result.get("error")
+            if not isinstance(error, str) or not error:
+                raise ValueError("Step 2 error result error is invalid")
+        elif not any((
+            bool(result["content"]),
+            bool(result["deliverable_text"]),
+            bool(canonical_files),
+        )):
+            raise ValueError("Step 2 successful result has no output")
 
 
 def canonical_deliverable_uris(
@@ -104,6 +212,198 @@ def canonicalize_inference_payload(payload: Any) -> dict:
         raise ValueError("inference JSON must be an object with a results array")
     normalized = dict(payload)
     normalized["results"] = canonicalize_inference_results(payload["results"])
+    return normalized
+
+
+def canonicalize_azure_ai_routes(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise ValueError("azure_ai_routes must be an array")
+    routes: list[dict[str, str]] = []
+    fingerprints: set[str] = set()
+    for index, route in enumerate(value):
+        if not isinstance(route, dict) or set(route) != _ROUTE_KEYS:
+            raise ValueError(f"Azure AI route {index} has invalid fields")
+        endpoint_kind = route.get("endpoint_kind")
+        profile = route.get("profile")
+        fingerprint = route.get("runtime_fingerprint")
+        workload = route.get("workload")
+        if endpoint_kind not in {"direct-v1", "project", "legacy-dated"}:
+            raise ValueError(f"Azure AI route {index} endpoint kind is invalid")
+        if profile not in {"direct-v1", "project-ci", "legacy-rollback"}:
+            raise ValueError(f"Azure AI route {index} profile is invalid")
+        if not isinstance(fingerprint, str) or not FULL_SHA256_RE.fullmatch(
+            fingerprint
+        ):
+            raise ValueError(f"Azure AI route {index} fingerprint is invalid")
+        if workload not in {
+            "inference",
+            "code-interpreter",
+            "narrative",
+            "grader",
+        }:
+            raise ValueError(f"Azure AI route {index} workload is invalid")
+        expected_endpoint_kind = {
+            "direct-v1": "direct-v1",
+            "legacy-rollback": "legacy-dated",
+            "project-ci": (
+                "project" if workload == "code-interpreter" else "direct-v1"
+            ),
+        }[profile]
+        if (
+            endpoint_kind != expected_endpoint_kind
+            or workload == "code-interpreter" and profile != "project-ci"
+        ):
+            raise ValueError(
+                f"Azure AI route {index} profile, endpoint, and workload disagree"
+            )
+        if fingerprint in fingerprints:
+            raise ValueError("Azure AI route fingerprints must be unique")
+        fingerprints.add(fingerprint)
+        routes.append(dict(route))
+    return routes
+
+
+def canonical_execution_mode(value: Any) -> str:
+    if value not in INFERENCE_EXECUTION_MODES:
+        raise ValueError("inference execution mode is invalid")
+    return value
+
+
+def validate_execution_route_binding(
+    execution_mode: Any,
+    routes: list[dict[str, str]],
+) -> str:
+    mode = canonical_execution_mode(execution_mode)
+    code_interpreter_routes = [
+        route
+        for route in routes
+        if route["workload"] == "code-interpreter"
+    ]
+    if mode == "code_interpreter":
+        if (
+            len(code_interpreter_routes) != 1
+            or code_interpreter_routes[0]["profile"] != "project-ci"
+            or code_interpreter_routes[0]["endpoint_kind"] != "project"
+            or any(route["profile"] != "project-ci" for route in routes)
+        ):
+            raise ValueError(
+                "Code Interpreter provenance requires one project-ci route"
+            )
+    elif code_interpreter_routes:
+        raise ValueError(
+            "non-Code-Interpreter provenance contains a Code Interpreter route"
+        )
+    return mode
+
+
+def _ordered_task_ids_sha256(task_ids: list[str]) -> str:
+    encoded = json.dumps(
+        task_ids,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def build_inference_provenance(payload: Any) -> dict:
+    normalized = canonicalize_inference_payload(payload)
+    experiment_id = normalized.get("experiment_id")
+    source_repo_id = normalized.get("source_repo_id")
+    prepared_fingerprint = normalized.get("prepared_fingerprint")
+    if not isinstance(experiment_id, str) or not experiment_id:
+        raise ValueError("inference provenance experiment_id is invalid")
+    if not isinstance(source_repo_id, str) or "/" not in source_repo_id:
+        raise ValueError("inference provenance source_repo_id is invalid")
+    if (
+        not isinstance(prepared_fingerprint, str)
+        or not FULL_SHA256_RE.fullmatch(prepared_fingerprint)
+    ):
+        raise ValueError("inference provenance prepared_fingerprint is invalid")
+    task_ids = [row["task_id"] for row in normalized["results"]]
+    routes = canonicalize_azure_ai_routes(
+        normalized.get("azure_ai_routes", [])
+    )
+    execution_mode = validate_execution_route_binding(
+        normalized.get("execution_mode"), routes
+    )
+    return {
+        "schema_version": INFERENCE_PROVENANCE_SCHEMA,
+        "experiment_id": experiment_id,
+        "source_repo_id": source_repo_id,
+        "prepared_fingerprint": prepared_fingerprint,
+        "execution_mode": execution_mode,
+        "task_count": len(task_ids),
+        "ordered_task_ids_sha256": _ordered_task_ids_sha256(task_ids),
+        "azure_ai_routes": routes,
+    }
+
+
+def validate_inference_provenance(
+    payload: Any,
+    *,
+    experiment_id: str,
+    source_repo_id: str,
+    task_ids: list[str],
+    prepared_fingerprint: str | None = None,
+    azure_ai_routes: list[dict[str, str]] | None = None,
+    execution_mode: str | None = None,
+) -> dict:
+    expected_keys = {
+        "schema_version",
+        "experiment_id",
+        "source_repo_id",
+        "prepared_fingerprint",
+        "execution_mode",
+        "task_count",
+        "ordered_task_ids_sha256",
+        "azure_ai_routes",
+    }
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        raise ValueError("inference provenance fields are invalid")
+    if payload.get("schema_version") != INFERENCE_PROVENANCE_SCHEMA:
+        raise ValueError("inference provenance schema is invalid")
+    if payload.get("experiment_id") != experiment_id:
+        raise ValueError("inference provenance experiment identity mismatch")
+    if payload.get("source_repo_id") != source_repo_id:
+        raise ValueError("inference provenance repository identity mismatch")
+    claimed_execution_mode = canonical_execution_mode(
+        payload.get("execution_mode")
+    )
+    if (
+        execution_mode is not None
+        and claimed_execution_mode != canonical_execution_mode(execution_mode)
+    ):
+        raise ValueError("inference provenance execution mode mismatch")
+    claimed_prepared_fingerprint = payload.get("prepared_fingerprint")
+    if (
+        not isinstance(claimed_prepared_fingerprint, str)
+        or not FULL_SHA256_RE.fullmatch(claimed_prepared_fingerprint)
+    ):
+        raise ValueError("inference provenance prepared fingerprint is invalid")
+    if (
+        prepared_fingerprint is not None
+        and claimed_prepared_fingerprint != prepared_fingerprint
+    ):
+        raise ValueError("inference provenance prepared fingerprint mismatch")
+    canonical_task_ids = [canonical_task_id(value) for value in task_ids]
+    if payload.get("task_count") != len(canonical_task_ids):
+        raise ValueError("inference provenance task count mismatch")
+    if payload.get("ordered_task_ids_sha256") != _ordered_task_ids_sha256(
+        canonical_task_ids
+    ):
+        raise ValueError("inference provenance task order mismatch")
+    normalized = dict(payload)
+    normalized["azure_ai_routes"] = canonicalize_azure_ai_routes(
+        payload.get("azure_ai_routes")
+    )
+    validate_execution_route_binding(
+        claimed_execution_mode,
+        normalized["azure_ai_routes"],
+    )
+    if azure_ai_routes is not None:
+        expected_routes = canonicalize_azure_ai_routes(azure_ai_routes)
+        if normalized["azure_ai_routes"] != expected_routes:
+            raise ValueError("inference provenance Azure AI routes mismatch")
     return normalized
 
 

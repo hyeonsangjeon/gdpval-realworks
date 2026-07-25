@@ -117,6 +117,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   action was used to compensate.
 
 ### Changed
+- **Microsoft Foundry workflow activation and OIDC enforcement** — extend the
+  shipped typed endpoint foundation, runtime adapters, and Step 2 wiring into
+  the active batch, report, publication, and grading paths. Inference,
+  narrative, and grading use the Foundry direct
+  `/openai/v1/` route; only Code Interpreter may use the project endpoint, and
+  dated Azure OpenAI remains an explicitly authorized rollback profile. Batch
+  and grading workflows reject static Azure keys, enumerate every configured
+  workload before remote writes, compare OIDC client/tenant/subscription
+  secrets with independent repository variables, and recheck the active Azure
+  account plus `ai.azure.com` token claims after login. Route token preflight
+  verifies the selected audience, including Cognitive Services only for the
+  explicit legacy rollback. English/Korean onboarding now documents the typed
+  routes, expected identities, and local/CI authentication contract.
 - **GitHub repository About metadata** — replace the contradictory
   `220 tasks across 11 industries` description with a concise public value
   proposition for the tracked Gold Subset: 220 real professional tasks across
@@ -146,6 +159,59 @@ entries land under a fresh dated heading the day they merge to `main`.
   execution.
 
 ### Fixed
+- **Foundry provenance, publication, and grading finality** — bind prepared,
+  result, ordered-task, deployment-route, and runtime identities through Step 2
+  checkpoints/final output, inference provenance sidecars, HF CAS publication,
+  grading cache/resume, and every partial/diagnostic save. Impossible
+  profile/endpoint/workload combinations fail closed; grading downloads require
+  the sidecar unless an explicit non-publishable legacy-analysis override is
+  used. Provider errors are projected to stable endpoint-free public values
+  before relay or final-result fingerprinting. Subset and legacy grades use
+  full ordered-task-hash diagnostic paths and cannot collide with root final
+  grades; nested analysis artifacts follow the exact emitted path. Cost sweeps
+  translate archived endpoint fields to the typed contract, hash
+  repository-contained generated configs, and consume only Step 8's exact
+  `GITHUB_OUTPUT` path. Sidecar bytes participate in the core publication plan,
+  receipt, and finality checks while stale full Step 2 JSON is removed from the
+  public managed tree. Step 6 removes its unused experiment-model fallback:
+  after up to two primary `gpt-5.4-pro` calls, any setup, call, parse, or route
+  failure emits a model-free report and prevents the second call after an
+  invalid, partial, empty, or whitespace-only first response. Typed relay
+  restore recomputes the endpoint-free route plan before accepting a checkpoint.
+  A shared versioned per-status validator
+  rejects malformed success/error/QA/pending rows on local save/restore and
+  relay status/upload, while Code Interpreter is rejected outside the
+  project-only profile at runtime mode, route selection, and restored-route
+  boundaries before client construction. Inference provenance schema v2 binds
+  execution mode and rejects route-less/non-project Code Interpreter sidecars
+  across formatting, download, bootstrap, and HF publication. Azure
+  hardened execution constructs its typed client only after the signed
+  authorization and budget reservation; profile-absent runs fail before
+  executor creation, and capability-rejected deferred candidates close before
+  ownership transfer. The common hardened baseline closes each deferred client
+  at task finalization and any residual client at idempotent runner shutdown;
+  cleanup failures expose only `provider_cleanup_failed:<Type>`. Main, vision,
+  audio, v1 single/batch grader, local
+  audio-preparation/tool-dispatch, initialization, and cleanup exceptions use
+  class-only public identities; owned clients are released even when close
+  fails, without retaining the raw cause or context. Grading cache/resume and
+  all output states require the exact non-null primary grader fingerprint, not
+  any tier/perception route match, while cleanup failures preserve durable exit
+  codes 0, 6, and 7. One shared schema/cross-field validator protects Step 8 and
+  both workflow commit gates before and after rebase. OIDC session checks bind
+  token `aud`, `nbf`, and `exp` in addition to tenant and client claims.
+  Relay cleanup finality revalidates the exact child against the full
+  publication plan, including optional README bytes. Frontend skill discovery
+  ignores generated cache directories. Model-free route planning no longer
+  imports Azure/OpenAI SDKs until credential or client construction, so the
+  Node-only aggregate gate runs without paid-runtime dependencies.
+  Credential-free validation passes 2,328
+  backend tests with 6 skips and 44 integration
+  deselections, 89 frontend data contracts, nine onboarding contracts, the
+  production build, four browser suites, Ruff, Python compilation, actionlint,
+  shell syntax, and diff checks. No workflow dispatch, Azure/model call,
+  grading run, Hugging Face write, or paid execution was used for this
+  validation.
 - **Batch relay provenance and recovery integrity** — require exact `main` and
   equal workflow/event SHAs before checkout, bound canonical timeout/relay
   inputs, pin every continuation to the initial `source_sha`, and keep relay

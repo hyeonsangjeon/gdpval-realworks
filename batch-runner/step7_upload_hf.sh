@@ -6,7 +6,8 @@
 #   HF_TOKEN=hf_xxx ./step7_upload_hf.sh [repo_id]  # repo override
 #   HF_TOKEN=hf_xxx ./step7_upload_hf.sh --test      # smoke/subset prepared scope 게시
 #
-# 업로드 대상: README.md, data/train-*.parquet, deliverable_files/**, self_report.json
+# 업로드 대상: README.md, data/train-*.parquet, deliverable_files/**,
+#               inference_provenance.json, self_report.json
 # 제외 대상: .cache/, train/, dataset_dict.json 등 캐시 아티팩트
 # Step 0 validated HEAD를 CAS parent로 사용하며 reference_files/**는 그대로 유지
 
@@ -77,14 +78,18 @@ echo "🔍 Pre-upload validation..."
 export REPO_ID UPLOAD_DIR
 
 python3 - <<'VALIDATE_EOF'
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) or ".")
 from pathlib import Path
+
 from core.hf_publication import (
   clear_publication_receipt,
   load_publication_identity,
 )
 from core.repo_bootstrapper import validate_pre_upload
+
 clear_publication_receipt()
 identity = load_publication_identity(
   Path("workspace/step1_tasks_prepared.json"),
@@ -92,12 +97,16 @@ identity = load_publication_identity(
 )
 if identity.repo_id != os.environ["REPO_ID"]:
   raise SystemExit("publication repository differs from prepared identity")
+workflow_experiment_id = os.environ.get("EXPERIMENT_ID")
+if workflow_experiment_id and workflow_experiment_id != identity.experiment_id:
+  raise SystemExit("publication experiment differs from prepared identity")
 errors = validate_pre_upload(
-    local_path=os.environ["UPLOAD_DIR"],
-    submission_repo_id=os.environ["REPO_ID"],
+  local_path=os.environ["UPLOAD_DIR"],
+  submission_repo_id=os.environ["REPO_ID"],
   expected_rows=len(identity.ordered_task_ids),
   expected_task_ids=list(identity.ordered_task_ids),
   expected_submitter_rows=identity.submitter_rows(),
+  expected_experiment_id=identity.experiment_id,
 )
 if errors:
     print("❌ Pre-upload validation FAILED:")
@@ -124,6 +133,37 @@ from core.repo_bootstrapper import (
   TARGET_HEAD_FILENAME,
   load_target_head_identity,
 )
+
+INCLUDE = [
+  "README.md",
+  "data/train-*.parquet",
+  "deliverable_files/**",
+  "inference_provenance.json",
+  "self_report.json",
+]
+IGNORE = [
+  ".cache/**",
+  "train/**",
+  "dataset_dict.json",
+  "*.arrow",
+  "*.lock",
+  "__pycache__/**",
+  "state.json",
+  "dataset_info.json",
+]
+DELETE = [
+  "data/**",
+  "deliverable_files/**",
+  "inference_provenance.json",
+  "self_report.json",
+  "step2_inference_results.json",
+]
+if INCLUDE_PATTERNS != INCLUDE:
+  raise SystemExit("publication allowlist contract changed")
+if IGNORE_PATTERNS != IGNORE:
+  raise SystemExit("publication ignore-list contract changed")
+if DELETE_PATTERNS != DELETE:
+  raise SystemExit("publication delete-list contract changed")
 
 repo_id = os.environ["REPO_ID"]
 data_dir = Path(os.environ["UPLOAD_DIR"])

@@ -378,9 +378,20 @@ def patched_run_inference(tmp_path, monkeypatch):
     monkeypatch.setattr(s2, "UPLOAD_DIR", upload, raising=True)
     _build_step1_prepared(workspace)
 
-    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.test/")
+    monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
+    monkeypatch.setenv(
+        "AZURE_OPENAI_V1_ENDPOINT",
+        "https://example.openai.azure.com/openai/v1/",
+    )
+    from core.azure_ai_clients import preflight_routes
+
+    fingerprint = preflight_routes([("inference", "gpt-test")])[0][
+        "runtime_fingerprint"
+    ]
+    fake_client = MagicMock()
+    fake_client._gdpval_runtime_fingerprint = fingerprint
     monkeypatch.setattr(
-        s2, "create_provider_client", MagicMock(return_value=MagicMock())
+        s2, "create_provider_client", MagicMock(return_value=fake_client)
     )
     monkeypatch.setattr(s2, "TaskExecutor", MagicMock(return_value=MagicMock()))
     manifest = s2.NeedsFilesManifest({
@@ -410,6 +421,29 @@ def _write_mock_deliverables(upload_root: Path, files: list[str]) -> None:
         output = Path(upload_root) / relative
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(relative.encode("utf-8"))
+
+
+def _terminal_result(
+    status: str = "success",
+    task_id: str = "t1",
+    **updates,
+) -> dict:
+    result = {
+        "task_id": task_id,
+        "status": status,
+        "content": "done" if status != "error" else None,
+        "deliverable_text": "done" if status != "error" else None,
+        "deliverable_files": [],
+        "model": "test-model",
+        "usage": None,
+        "observability": {},
+        "latency_ms": 10,
+        "timestamp": "2026-07-24T00:00:00+00:00",
+    }
+    if status == "error":
+        result["error"] = "test_error"
+    result.update(updates)
+    return result
 
 
 def test_malformed_resume_checkpoint_fails_before_provider_client(
@@ -458,13 +492,10 @@ def test_condition_b_never_overwrites_condition_a_deliverables(
         output = upload_root / relative
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(condition.encode("utf-8"))
-        return {
-            "task_id": "t1",
-            "status": "success",
-            "deliverable_text": condition,
-            "deliverable_files": [relative],
-            "latency_ms": 10,
-        }
+        return _terminal_result(
+            deliverable_text=condition,
+            deliverable_files=[relative],
+        )
 
     monkeypatch.setattr(s2, "_execute_single_task", execute)
 
@@ -493,13 +524,10 @@ class TestFix3RunTaskWithQA:
     """
 
     def _success_execute(self, *args, **kwargs):
-        return {
-            "task_id": "t1",
-            "status": "success",
-            "deliverable_text": "hello",
-            "deliverable_files": [],
-            "latency_ms": 10,
-        }
+        return _terminal_result(
+            deliverable_text="hello",
+            deliverable_files=[],
+        )
 
     def test_genuine_qa_fail_marks_status_qa_failed(
         self, patched_run_inference, monkeypatch
@@ -550,23 +578,18 @@ class TestFix3RunTaskWithQA:
             if len(attempts) == 1:
                 assert not (task_dir / "stale.pdf").exists()
                 (task_dir / "old.pdf").write_bytes(b"old")
-                return {
-                    "task_id": "t1",
-                    "status": "error",
-                    "error": "first attempt failed",
-                    "deliverable_text": "",
-                    "deliverable_files": ["deliverable_files/t1/old.pdf"],
-                    "latency_ms": 10,
-                }
+                return _terminal_result(
+                    "error",
+                    error="first attempt failed",
+                    deliverable_text="",
+                    deliverable_files=["deliverable_files/t1/old.pdf"],
+                )
             assert not (task_dir / "old.pdf").exists()
             (task_dir / "new.pdf").write_bytes(b"new")
-            return {
-                "task_id": "t1",
-                "status": "success",
-                "deliverable_text": "recovered",
-                "deliverable_files": ["deliverable_files/t1/new.pdf"],
-                "latency_ms": 10,
-            }
+            return _terminal_result(
+                deliverable_text="recovered",
+                deliverable_files=["deliverable_files/t1/new.pdf"],
+            )
 
         monkeypatch.setattr(s2, "_execute_single_task", execute)
         monkeypatch.setattr(
@@ -613,23 +636,18 @@ class TestFix3RunTaskWithQA:
             task_dir.mkdir(parents=True, exist_ok=True)
             if attempts == 1:
                 (task_dir / "best.pdf").write_bytes(b"best-bytes")
-                return {
-                    "task_id": "t1",
-                    "status": "success",
-                    "deliverable_text": "best",
-                    "deliverable_files": ["deliverable_files/t1/best.pdf"],
-                    "latency_ms": 10,
-                }
+                return _terminal_result(
+                    deliverable_text="best",
+                    deliverable_files=["deliverable_files/t1/best.pdf"],
+                )
             assert list(task_dir.iterdir()) == []
             (task_dir / "worse.pdf").write_bytes(b"worse-bytes")
-            return {
-                "task_id": "t1",
-                "status": second_status,
-                "error": "retry failed" if second_status == "error" else None,
-                "deliverable_text": "worse",
-                "deliverable_files": ["deliverable_files/t1/worse.pdf"],
-                "latency_ms": 10,
-            }
+            return _terminal_result(
+                second_status,
+                error="retry failed" if second_status == "error" else None,
+                deliverable_text="worse",
+                deliverable_files=["deliverable_files/t1/worse.pdf"],
+            )
 
         qa_results = iter([
             {
@@ -673,13 +691,10 @@ class TestFix3RunTaskWithQA:
         def execute(*args, **kwargs):
             task_dir.mkdir(parents=True, exist_ok=True)
             (task_dir / "best.pdf").write_bytes(b"best")
-            return {
-                "task_id": "t1",
-                "status": "success",
-                "deliverable_text": "best",
-                "deliverable_files": ["deliverable_files/t2/best.pdf"],
-                "latency_ms": 10,
-            }
+            return _terminal_result(
+                deliverable_text="best",
+                deliverable_files=["deliverable_files/t2/best.pdf"],
+            )
 
         monkeypatch.setattr(s2, "_execute_single_task", execute)
         monkeypatch.setattr(
@@ -714,21 +729,15 @@ class TestFix3RunTaskWithQA:
             attempts += 1
             task_dir.mkdir(parents=True, exist_ok=True)
             if attempts == 1:
-                return {
-                    "task_id": "t1",
-                    "status": "success",
-                    "deliverable_text": "text-only best",
-                    "deliverable_files": [],
-                    "latency_ms": 10,
-                }
+                return _terminal_result(
+                    deliverable_text="text-only best",
+                    deliverable_files=[],
+                )
             (task_dir / "worse.pdf").write_bytes(b"worse")
-            return {
-                "task_id": "t1",
-                "status": "success",
-                "deliverable_text": "worse",
-                "deliverable_files": ["deliverable_files/t1/worse.pdf"],
-                "latency_ms": 10,
-            }
+            return _terminal_result(
+                deliverable_text="worse",
+                deliverable_files=["deliverable_files/t1/worse.pdf"],
+            )
 
         qa_results = iter([
             {
@@ -770,13 +779,10 @@ class TestFix3RunTaskWithQA:
         def execute(*args, **kwargs):
             task_dir.mkdir(parents=True, exist_ok=True)
             (task_dir / "best.pdf").write_bytes(b"best")
-            return {
-                "task_id": "t1",
-                "status": "success",
-                "deliverable_text": "best",
-                "deliverable_files": ["deliverable_files/t1/best.pdf"],
-                "latency_ms": 10,
-            }
+            return _terminal_result(
+                deliverable_text="best",
+                deliverable_files=["deliverable_files/t1/best.pdf"],
+            )
 
         monkeypatch.setattr(s2, "_execute_single_task", execute)
         monkeypatch.setattr(
@@ -839,6 +845,44 @@ class TestFix3RunTaskWithQA:
         assert results[0]["status"] == "success"
         assert "execution_metrics" not in results[0].get("observability", {})
 
+    def test_fresh_final_result_sanitizes_provider_error_before_fingerprint(
+        self, patched_run_inference, monkeypatch
+    ):
+        s2, workspace = patched_run_inference
+        raw_error = (
+            "BadRequestError: https://private.services.ai.azure.com/"
+            "api/projects/secret"
+        )
+        monkeypatch.setattr(
+            s2,
+            "_execute_single_task",
+            lambda *args, **kwargs: _terminal_result(
+                "error",
+                error=raw_error,
+                deliverable_text=None,
+                deliverable_files=[],
+            ),
+        )
+
+        s2.run_inference(
+            condition_key="condition_a",
+            resume=False,
+            resume_max_rounds=0,
+        )
+
+        progress = _read_progress(workspace)
+        final_path = workspace / "step2_inference_results.json"
+        serialized = final_path.read_text(encoding="utf-8")
+        final = json.loads(serialized)
+        expected = "task_execution_error:BadRequestError"
+        assert progress["results"][0]["error"] == expected
+        assert final["results"][0]["error"] == expected
+        assert "private.services.ai.azure.com" not in serialized
+        from core.result_fingerprint import validate_inference_result_fingerprint
+        assert validate_inference_result_fingerprint(final) == (
+            final["result_fingerprint"]
+        )
+
     def test_opt_in_job_metrics_include_phase_times_and_counts(
         self, patched_run_inference, monkeypatch
     ):
@@ -853,13 +897,10 @@ class TestFix3RunTaskWithQA:
         def execute_with_metrics(*args, **kwargs):
             files = ["deliverable_files/t1/out.pdf"]
             _write_mock_deliverables(kwargs["upload_root"], files)
-            return {
-                "task_id": "t1",
-                "status": "success",
-                "deliverable_text": "hello",
-                "deliverable_files": files,
-                "latency_ms": 10,
-                "observability": {
+            return _terminal_result(
+                deliverable_text="hello",
+                deliverable_files=files,
+                observability={
                     "sandbox": {"final_status": "ok"},
                     "execution_metrics": {
                         "schema_version": "1.0",
@@ -873,7 +914,7 @@ class TestFix3RunTaskWithQA:
                         "validated_artifact_count": 1,
                     }
                 },
-            }
+            )
 
         monkeypatch.setattr(s2, "_execute_single_task", execute_with_metrics)
         monkeypatch.setattr(
@@ -948,14 +989,11 @@ class TestFix3RunTaskWithQA:
 
         def execute_with_files(*args, **kwargs):
             _write_mock_deliverables(kwargs["upload_root"], files)
-            return {
-                "task_id": "t1",
-                "status": "success",
-                "deliverable_text": "hello",
-                "deliverable_files": files,
-                "latency_ms": 10,
-                "observability": observability,
-            }
+            return _terminal_result(
+                deliverable_text="hello",
+                deliverable_files=files,
+                observability=observability,
+            )
 
         monkeypatch.setattr(s2, "_execute_single_task", execute_with_files)
         monkeypatch.setattr(
@@ -1212,6 +1250,10 @@ def test_resume_timeout_relay_preserves_cumulative_task_metrics(
         "execution_mode": "sandbox",
         "ordered_task_ids": ["t1"],
         "prepared_fingerprint": prepared["prepared_fingerprint"],
+            "azure_ai_routes": s2._azure_ai_route_provenance(
+                prepared["condition_a"],
+                "sandbox",
+            ),
         "total_tasks": 1,
         "started_at": "2026-07-15T00:00:00+00:00",
         "resume_round": 0,
@@ -1219,6 +1261,13 @@ def test_resume_timeout_relay_preserves_cumulative_task_metrics(
             "task_id": "t1",
             "status": "error",
             "error": "initial failure",
+              "content": None,
+              "deliverable_text": None,
+              "deliverable_files": [],
+              "model": "test-model",
+              "usage": None,
+              "latency_ms": 1.0,
+              "timestamp": "2026-07-15T00:00:00+00:00",
             "observability": {"execution_metrics": {
                 "schema_version": "1.0",
                 "task_wall_time_ms": 100,
@@ -1270,9 +1319,13 @@ def test_resume_timeout_relay_preserves_cumulative_task_metrics(
         return {
             "task_id": "t1",
             "status": "success",
+              "content": "recovered",
             "deliverable_text": "recovered",
             "deliverable_files": files,
+              "model": "test-model",
+              "usage": None,
             "latency_ms": 10,
+              "timestamp": "2026-07-15T00:01:00+00:00",
             "observability": {
                 "sandbox": {"final_status": "ok"},
                 "execution_metrics": {

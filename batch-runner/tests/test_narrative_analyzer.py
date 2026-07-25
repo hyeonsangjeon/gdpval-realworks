@@ -1,12 +1,12 @@
 """Tests for core.narrative_analyzer — standalone Responses API module."""
 
 import json
-import threading
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.azure_ai_clients import AzureAIWorkload
 from core.narrative_analyzer import NarrativeAnalyzer, NarrativeResult, create_narrative_analyzer
 
 
@@ -33,17 +33,19 @@ class TestParseResponse:
         result = NarrativeAnalyzer._parse_response(raw, expected_keys=["overview"])
         assert result["overview"] == "no close"
 
-    def test_invalid_json_returns_empty(self):
+    def test_invalid_json_raises(self):
         raw = "This is not JSON at all"
-        result = NarrativeAnalyzer._parse_response(raw, expected_keys=["overview", "quality_analysis"])
-        assert result["overview"] == ""
-        assert result["quality_analysis"] == ""
+        with pytest.raises(ValueError, match="not valid JSON"):
+            NarrativeAnalyzer._parse_response(
+                raw, expected_keys=["overview", "quality_analysis"]
+            )
 
-    def test_missing_expected_keys_filled(self):
+    def test_missing_expected_keys_raise(self):
         raw = '{"overview": "present"}'
-        result = NarrativeAnalyzer._parse_response(raw, expected_keys=["overview", "quality_analysis"])
-        assert result["overview"] == "present"
-        assert result["quality_analysis"] == ""
+        with pytest.raises(ValueError, match="fields are invalid"):
+            NarrativeAnalyzer._parse_response(
+                raw, expected_keys=["overview", "quality_analysis"]
+            )
 
     def test_no_expected_keys(self):
         raw = '{"foo": "bar"}'
@@ -51,8 +53,32 @@ class TestParseResponse:
         assert result["foo"] == "bar"
 
     def test_empty_string(self):
-        result = NarrativeAnalyzer._parse_response("", expected_keys=["overview"])
-        assert result["overview"] == ""
+        with pytest.raises(ValueError, match="not valid JSON"):
+            NarrativeAnalyzer._parse_response(
+                "", expected_keys=["overview"]
+            )
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            '[{"overview": "array"}]',
+            '{"overview": 7}',
+            '{"overview": "ok", "unexpected": "field"}',
+        ],
+    )
+    def test_invalid_envelope_raises(self, raw):
+        with pytest.raises(ValueError):
+            NarrativeAnalyzer._parse_response(
+                raw, expected_keys=["overview"]
+            )
+
+    @pytest.mark.parametrize("value", ["", "  \n  "])
+    def test_empty_expected_value_raises(self, value):
+        with pytest.raises(ValueError, match="nonempty strings"):
+            NarrativeAnalyzer._parse_response(
+                json.dumps({"overview": value}),
+                expected_keys=["overview"],
+            )
 
     def test_whitespace_json(self):
         raw = '  \n  {"overview": "trimmed"}  \n  '
@@ -104,8 +130,7 @@ class TestNarrativeResult:
 class TestHeartbeat:
     """Test heartbeat start/stop without hanging threads."""
 
-    @patch("core.narrative_analyzer.DefaultAzureCredential", side_effect=Exception("no cred"))
-    def test_heartbeat_lifecycle(self, _mock_cred):
+    def test_heartbeat_lifecycle(self):
         """Heartbeat starts and stops cleanly."""
         # Create analyzer with mocked client (bypass Azure auth)
         analyzer = NarrativeAnalyzer.__new__(NarrativeAnalyzer)
@@ -133,29 +158,66 @@ class TestHeartbeat:
 class TestFactory:
     """Test create_narrative_analyzer factory function."""
 
-    def test_missing_endpoint_raises(self):
+    def test_missing_route_profile_raises(self):
         with patch.dict("os.environ", {}, clear=True):
-            # Remove AZURE_OPENAI_ENDPOINT if present
-            import os
-            os.environ.pop("AZURE_OPENAI_ENDPOINT", None)
-            with pytest.raises(ValueError, match="Azure OpenAI endpoint required"):
+            with pytest.raises(ValueError, match="AZURE_AI_ROUTE_PROFILE is required"):
                 create_narrative_analyzer()
 
-    @patch("core.narrative_analyzer.AzureOpenAI")
-    @patch("core.narrative_analyzer.get_bearer_token_provider")
-    @patch("core.narrative_analyzer.DefaultAzureCredential")
-    def test_factory_with_endpoint(self, mock_cred, mock_token, mock_azure):
-        analyzer = create_narrative_analyzer(endpoint="https://test.openai.azure.com/")
-        assert analyzer.model == "gpt-5.4-pro"
-        mock_azure.assert_called_once()
+    def test_endpoint_override_is_rejected(self):
+        with pytest.raises(ValueError, match="endpoint overrides are forbidden"):
+            create_narrative_analyzer(endpoint="https://test.openai.azure.com/")
 
-    @patch("core.narrative_analyzer.AzureOpenAI")
-    @patch("core.narrative_analyzer.get_bearer_token_provider")
-    @patch("core.narrative_analyzer.DefaultAzureCredential")
-    def test_factory_reads_env(self, mock_cred, mock_token, mock_azure):
-        with patch.dict("os.environ", {"AZURE_OPENAI_ENDPOINT": "https://env.openai.azure.com/"}):
-            analyzer = create_narrative_analyzer()
-            assert analyzer.model == "gpt-5.4-pro"
+    def test_factory_routes_narrative_workload(self):
+        client = MagicMock()
+        lease = MagicMock(
+            client=client,
+            runtime_fingerprint="fingerprint",
+        )
+        factory = MagicMock()
+        factory.create.return_value = lease
+
+        analyzer = create_narrative_analyzer(client_factory=factory)
+
+        assert analyzer.client is client
+        assert analyzer.runtime_fingerprint == "fingerprint"
+        factory.create.assert_called_once_with(
+            AzureAIWorkload.NARRATIVE,
+            deployment="gpt-5.4-pro",
+            timeout=10000,
+            max_retries=None,
+            legacy_api_version="2025-04-01-preview",
+        )
+        analyzer.close()
+        lease.close.assert_called_once_with()
+
+    def test_owned_factory_closes_after_managed_client(self, monkeypatch):
+        events = []
+        lease = MagicMock(
+            client=MagicMock(),
+            runtime_fingerprint="fingerprint",
+        )
+        lease.close.side_effect = lambda: events.append("lease")
+        factory = MagicMock()
+        factory.create.return_value = lease
+        factory.close.side_effect = lambda: events.append("factory")
+        monkeypatch.setattr(
+            "core.llm_client.AzureAIClientFactory",
+            MagicMock(return_value=factory),
+        )
+
+        analyzer = create_narrative_analyzer()
+        analyzer.close()
+
+        assert events == ["lease", "factory"]
+
+    def test_injected_client_is_not_closed(self):
+        client = MagicMock()
+
+        with create_narrative_analyzer(client=client) as analyzer:
+            assert analyzer.client is client
+            assert analyzer.runtime_fingerprint is None
+
+        client.close.assert_not_called()
 
 
 # ─── analyze() orchestration tests ────────────────────────────────────────
@@ -236,11 +298,44 @@ class TestAnalyze:
             "min_qa_score": 8, "max_qa_score": 8, "avg_latency_ms": 1000,
         }
 
-        result = analyzer.analyze(data, summary, [], [{"task_id": "t1", "sector": "S", "occupation": "O", "status": "success"}], [])
+        with pytest.raises(ValueError, match="not valid JSON"):
+            analyzer.analyze(
+                data,
+                summary,
+                [],
+                [{
+                    "task_id": "t1",
+                    "sector": "S",
+                    "occupation": "O",
+                    "status": "success",
+                }],
+                [],
+            )
 
-        # Call 1 failed to parse → overview/quality_analysis should be ""
-        assert result.overview == ""
-        assert result.quality_analysis == ""
-        # Call 2 should still work
-        assert result.failure_patterns == "fp"
-        assert result.recommendations == "rec"
+        assert analyzer.client.responses.create.call_count == 1
+
+    def test_analyze_call1_empty_field_stops_before_call2(self):
+        analyzer = self._make_analyzer()
+        analyzer.client.responses.create.side_effect = [
+            self._mock_response(json.dumps({
+                "overview": "",
+                "quality_analysis": "Test QA",
+            }))
+        ]
+        data = {"meta": {"experiment_id": "test"}}
+        summary = {
+            "total_tasks": 1,
+            "success_count": 1,
+            "success_rate_pct": 100,
+            "error_count": 0,
+            "retried_count": 0,
+            "avg_qa_score": 8,
+            "min_qa_score": 8,
+            "max_qa_score": 8,
+            "avg_latency_ms": 1000,
+        }
+
+        with pytest.raises(ValueError, match="nonempty strings"):
+            analyzer.analyze(data, summary, [], [], [])
+
+        assert analyzer.client.responses.create.call_count == 1

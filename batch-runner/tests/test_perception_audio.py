@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import struct
 import wave
 from pathlib import Path
@@ -62,13 +61,6 @@ def wav_file(tmp_path: Path) -> Path:
     return p
 
 
-@pytest.fixture(autouse=True)
-def _set_endpoint(monkeypatch):
-    """All tests run as if the audio deployment endpoint is configured."""
-    monkeypatch.setenv("AZURE_AUDIO_ENDPOINT", "https://fake.openai.azure.com")
-    yield
-
-
 # ── Tests ────────────────────────────────────────────────────────────
 
 
@@ -119,33 +111,50 @@ def test_missing_file_returns_judge_error(tmp_path):
     ap = AudioPerception(client=client)
     v = ap.judge(criterion="x", audio_path=str(tmp_path / "nope.wav"))
     assert v.verdict == "judge_error"
-    assert v.judge_error.startswith("FileNotFoundError")
+    assert v.judge_error == "task_execution_error:FileNotFoundError"
     assert v.api_call_count == 0
     assert ap.calls_used == 0
 
 
 def test_upstream_exception_graceful(wav_file):
-    client = FakeClient(FakeResponses(raise_with=RuntimeError("boom")))
+    sensitive = "https://private.services.ai.azure.com/ deployment=private"
+    client = FakeClient(FakeResponses(raise_with=RuntimeError(sensitive)))
     ap = AudioPerception(client=client)
     v = ap.judge(criterion="x", audio_path=str(wav_file))
     assert v.verdict == "judge_error"
-    assert "RuntimeError" in v.judge_error
+    assert v.judge_error == "provider_error:RuntimeError"
+    assert sensitive not in v.judge_error
     assert v.api_call_count == 1
     assert v.usage_complete is False
 
 
-def test_endpoint_unset_graceful(monkeypatch, wav_file):
-    # Force both env vars unset.
+def test_audio_preparation_oserror_is_class_only(monkeypatch, wav_file):
+    sensitive = "https://private.local/path"
+    monkeypatch.setattr(
+        "core.perception.audio._trim_audio_bytes",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            OSError(sensitive)
+        ),
+    )
+
+    verdict = AudioPerception(
+        client=FakeClient(FakeResponses())
+    ).judge(criterion="x", audio_path=str(wav_file))
+
+    assert verdict.judge_error == "task_execution_error:OSError"
+    assert verdict.reasoning == "audio preparation failed: OSError"
+    assert sensitive not in str(verdict.to_dict())
+
+
+def test_injected_client_runs_without_endpoint_env(monkeypatch, wav_file):
     monkeypatch.delenv("AZURE_AUDIO_ENDPOINT", raising=False)
     monkeypatch.delenv("AZURE_OPENAI_ENDPOINT", raising=False)
     client = FakeClient(FakeResponses())
     ap = AudioPerception(client=client)
     v = ap.judge(criterion="x", audio_path=str(wav_file))
-    assert v.verdict == "judge_error"
-    assert v.judge_error == "endpoint_missing"
-    assert v.api_call_count == 0
-    # No upstream call made.
-    assert len(client.responses.calls) == 0
+    assert v.verdict == "pass"
+    assert v.api_call_count == 1
+    assert len(client.responses.calls) == 1
 
 
 def test_reset_clears_counter(wav_file):

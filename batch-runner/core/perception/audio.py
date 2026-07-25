@@ -12,9 +12,9 @@ Design notes (task 206):
   see ``tasks/rebuilding_grading_task/PR2_ENV_AUDIT.md`` for the
   deferred verification (we check on first call rather than at import
   time so missing-deployment failures are isolated to audio items).
-* Endpoint override via ``AZURE_AUDIO_ENDPOINT`` env (defaults to
-  ``AZURE_OPENAI_ENDPOINT``). The client is **injected** like in
-  ``VisionPerception`` — no client construction inside this class.
+* The client is injected from the typed grader route like in
+    ``VisionPerception`` — no endpoint lookup or client construction occurs
+    inside this class.
 * Duration trim: only the first 30 seconds of the file are sent. If
   the audio is longer than 30 s the head-only slice keeps cost
   bounded; the main judge still has access to full-clip statistics
@@ -33,6 +33,8 @@ import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
+
+from core.public_error import public_provider_error_text, public_task_error_text
 
 #: Hard per-task ceiling on audio sub-judge invocations.
 AUDIO_CALL_CAP = 3
@@ -150,7 +152,6 @@ class AudioPerception:
     deployment: str = "gpt-audio-1.5"
     call_cap: int = AUDIO_CALL_CAP
     trim_seconds: int = AUDIO_TRIM_SECONDS
-    endpoint_env: str = "AZURE_AUDIO_ENDPOINT"
 
     _calls_used: int = field(default=0, init=False)
 
@@ -161,30 +162,12 @@ class AudioPerception:
     def reset(self) -> None:
         self._calls_used = 0
 
-    def _deployment_available(self) -> bool:
-        """Skip-friendly check: if the audio endpoint env is unset AND no
-        primary endpoint is configured either, the deployment is treated
-        as unavailable and ``judge`` returns a graceful judge_error."""
-        return bool(
-            os.getenv(self.endpoint_env)
-            or os.getenv("AZURE_OPENAI_ENDPOINT")
-        )
-
     def judge(
         self,
         *,
         criterion: str,
         audio_path: str,
     ) -> AudioVerdict:
-        if not self._deployment_available():
-            return AudioVerdict(
-                verdict="judge_error",
-                partial_score=0.0,
-                evidence="",
-                confidence=0.0,
-                reasoning="audio deployment endpoint not configured",
-                judge_error="endpoint_missing",
-            )
         if self._calls_used >= self.call_cap:
             return AudioVerdict(
                 verdict="judge_error",
@@ -196,14 +179,14 @@ class AudioPerception:
             )
         try:
             data, fmt = _trim_audio_bytes(audio_path, self.trim_seconds)
-        except FileNotFoundError as exc:
+        except Exception as exc:  # noqa: BLE001
             return AudioVerdict(
                 verdict="judge_error",
                 partial_score=0.0,
                 evidence="",
                 confidence=0.0,
-                reasoning="audio file not found",
-                judge_error=f"FileNotFoundError: {exc}",
+                reasoning=f"audio preparation failed: {type(exc).__name__}",
+                judge_error=public_task_error_text(exc),
             )
         b64 = base64.b64encode(data).decode("ascii")
         self._calls_used += 1
@@ -263,7 +246,7 @@ class AudioPerception:
                 evidence="",
                 confidence=0.0,
                 reasoning=f"audio call failed: {type(exc).__name__}",
-                judge_error=f"{type(exc).__name__}: {exc}",
+                judge_error=public_provider_error_text(exc),
                 api_call_count=1,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,

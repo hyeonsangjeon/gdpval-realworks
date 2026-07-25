@@ -10,6 +10,28 @@ import step8_grade as s8
 
 
 INFERENCE_SHA = "a" * 40
+_SENSITIVE_CLEANUP_DETAIL = (
+    "https://private.services.ai.azure.com/ deployment=secret"
+)
+
+
+@pytest.fixture(autouse=True)
+def _typed_azure_ai_route(monkeypatch):
+    for name in (
+        "AZURE_OPENAI_ENDPOINT",
+        "AZURE_OPENAI_API_KEY",
+        "AZURE_API_KEY",
+        "AZURE_OPENAI_AD_TOKEN",
+        "AZURE_CLIENT_SECRET",
+        "OPENAI_API_KEY",
+        "FOUNDRY_PROJECT_ENDPOINT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
+    monkeypatch.setenv(
+        "AZURE_OPENAI_V1_ENDPOINT",
+        "https://test-account.services.ai.azure.com/openai/v1/",
+    )
 
 
 class _FakeLoader:
@@ -37,6 +59,9 @@ class _FakeGrader:
 
     def __init__(self, config, rubric_loader):
         self.calls = 0
+        self.runtime_fingerprint = config["_runtime"][
+            "azure_ai_runtime_fingerprint"
+        ]
 
     def grade_task(self, task, deliverable_dir):
         from core.grader import ItemGrade, TaskGrade
@@ -163,7 +188,7 @@ def _setup_workspace(tmp_path: Path):
     cfg = {
         "schema_version": "1.0",
         "config_name": "default_gpt5pro",
-        "judge": {"provider": "azure_openai", "api": "responses", "model": "gpt-5.4-pro", "deployment": "gpt-5.4-pro", "api_version": "2025-04-01-preview", "endpoint_env": "AZURE_OPENAI_ENDPOINT"},
+        "judge": {"provider": "azure_openai", "api": "responses", "model": "gpt-5.4-pro", "deployment": "gpt-5.4-pro", "api_version": "2025-04-01-preview"},
         "rubric": {"source": "huggingface", "repo_id": "openai/gdpval", "revision": "main", "cache_dir": "data/gdpval-local"},
         "prompt": {"template": "prompts/grader_judge.md", "version": "v1"},
         "output": {"directory": "data/grades", "filename_template": "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json", "partial_save_every_n_tasks": 10},
@@ -174,6 +199,15 @@ def _setup_workspace(tmp_path: Path):
     # Reuse repo schema
     schema_src = Path("schemas/grade.schema.json").read_text(encoding="utf-8")
     (tmp_path / "schemas" / "grade.schema.json").write_text(schema_src, encoding="utf-8")
+
+
+def _diagnostic_grade_path(tmp_path: Path, task_ids: list[str]) -> Path:
+    return (
+        tmp_path
+        / "data/grades/_diagnostic"
+        / s8._ordered_task_ids_sha256(task_ids)
+        / "exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    )
 
 
 _RENDERER_FINGERPRINT = {
@@ -216,6 +250,20 @@ def test_compute_grader_source_hash_is_deterministic_and_content_sensitive(
         "# changed test core\n", encoding="utf-8"
     )
     assert s8.compute_grader_source_hash(config_path, config) != first
+
+
+def test_renderer_requirement_accepts_deployment_only_visual_config():
+    config = {
+        "schema_version": "2.0",
+        "judge": {
+            "tools": {"read_deliverable": {"ops": ["render_page"]}},
+            "perception": {
+                "visual": {"deployment": "vision-deployment"},
+            },
+        },
+    }
+
+    assert s8.requires_track2_office_renderer(config) is True
 
 
 def test_compute_grader_source_hash_changes_when_source_path_changes(
@@ -267,6 +315,45 @@ def test_compute_grader_source_hash_rejects_symlink(monkeypatch, tmp_path):
         s8.compute_grader_source_hash(config_path, config)
 
 
+def test_compute_grader_source_hash_accepts_repository_generated_config(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "grading_configs/default.yaml"
+    config = yaml.safe_load(source.read_text(encoding="utf-8"))
+    generated_dir = tmp_path.parent / f"{tmp_path.name}-generated-config"
+    generated_dir.mkdir()
+    generated = generated_dir / "config.yaml"
+    generated.write_bytes(source.read_bytes())
+
+    first = s8.compute_grader_source_hash(generated, config)
+    config["description"] = "changed"
+    generated.write_text(yaml.safe_dump(config), encoding="utf-8")
+    second = s8.compute_grader_source_hash(generated, config)
+
+    assert len(first) == 64
+    assert second != first
+
+
+def test_compute_grader_source_hash_rejects_symlinked_generated_config(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "grading_configs/default.yaml"
+    config = yaml.safe_load(source.read_text(encoding="utf-8"))
+    generated_dir = tmp_path.parent / f"{tmp_path.name}-symlinked-config"
+    generated_dir.mkdir()
+    target = generated_dir / "target.yaml"
+    target.write_bytes(source.read_bytes())
+    generated = generated_dir / "config.yaml"
+    generated.symlink_to(target)
+
+    with pytest.raises(ValueError, match="symlink"):
+        s8.compute_grader_source_hash(generated, config)
+
+
 def test_compute_grader_source_hash_rejects_outside_and_duplicate_paths(
     monkeypatch, tmp_path
 ):
@@ -315,6 +402,12 @@ def test_track2_rejects_missing_or_invalid_inference_identity_before_grader(
     else:
         inference[field] = value
     inference_path.write_text(json.dumps(inference), encoding="utf-8")
+    experiment_path = (
+        tmp_path / "experiments" / "exp998_smoke_baseline_sample.yaml"
+    )
+    experiment = yaml.safe_load(experiment_path.read_text(encoding="utf-8"))
+    experiment["data"]["filter"]["sample_size"] = 10
+    experiment_path.write_text(yaml.safe_dump(experiment), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
 
@@ -337,9 +430,11 @@ def test_skip_when_grade_exists(monkeypatch, tmp_path):
     monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
     monkeypatch.setattr(s8, "Grader", _FakeGrader)
 
-    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("{}", encoding="utf-8")
+    _seed_partial_grade(
+        tmp_path,
+        ["task-001", "task-002", "task-003"],
+        run_status="final",
+    )
 
     monkeypatch.setattr("sys.argv", ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml"])
     code = s8.main()
@@ -361,6 +456,150 @@ def test_force_overwrites(monkeypatch, tmp_path):
     assert code == 0
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "1.0"
+
+
+def test_main_preflight_matches_grader_transport_before_calls(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    fingerprint = "f" * 64
+    captured = {}
+
+    class RouteBoundGrader(_FakeGrader):
+        runtime_fingerprint = fingerprint
+
+    def preflight(workloads, **kwargs):
+        captured["workloads"] = workloads
+        captured["options"] = kwargs
+        return [{
+            "endpoint_kind": "direct-v1",
+            "profile": "direct-v1",
+            "runtime_fingerprint": fingerprint,
+            "workload": "grader",
+        }]
+
+    monkeypatch.setattr(s8, "Grader", RouteBoundGrader)
+    monkeypatch.setattr(s8, "preflight_routes", preflight)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--force",
+    ])
+
+    assert s8.main() == 0
+    assert captured["options"] == {
+        "timeout": 600,
+        "legacy_api_version": "2025-04-01-preview",
+    }
+    assert [
+        (workload.value, deployment)
+        for workload, deployment in captured["workloads"]
+    ] == [("grader", "gpt-5.4-pro")]
+
+
+@pytest.mark.parametrize("runtime_fingerprint", [None, "b" * 64])
+def test_main_rejects_missing_or_secondary_grader_fingerprint(
+    monkeypatch, tmp_path, runtime_fingerprint
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    closed = []
+
+    class UnboundGrader:
+        def __init__(self, config, rubric_loader):
+            self.runtime_fingerprint = runtime_fingerprint
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(s8, "Grader", UnboundGrader)
+    monkeypatch.setattr(s8, "preflight_routes", lambda *_args, **_kwargs: [
+        {
+            "endpoint_kind": "direct-v1",
+            "profile": "direct-v1",
+            "runtime_fingerprint": "a" * 64,
+            "workload": "grader",
+        },
+        {
+            "endpoint_kind": "direct-v1",
+            "profile": "direct-v1",
+            "runtime_fingerprint": "b" * 64,
+            "workload": "grader",
+        },
+    ])
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--force",
+    ])
+
+    assert s8.main() == 4
+    assert closed == [True]
+
+
+def test_judge_initialization_error_is_class_only(
+    monkeypatch, tmp_path, capsys
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class FailingGrader:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(_SENSITIVE_CLEANUP_DETAIL)
+
+    monkeypatch.setattr(s8, "Grader", FailingGrader)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--force",
+    ])
+
+    assert s8.main() == 4
+    stderr = capsys.readouterr().err
+    assert "provider_error:RuntimeError" in stderr
+    assert _SENSITIVE_CLEANUP_DETAIL not in stderr
+
+
+def test_cleanup_failure_preserves_final_exit_and_payload(
+    monkeypatch, tmp_path, capsys
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class CloseFailureGrader(_FakeGrader):
+        def close(self):
+            raise OSError(_SENSITIVE_CLEANUP_DETAIL)
+
+    monkeypatch.setattr(s8, "Grader", CloseFailureGrader)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--force",
+    ])
+
+    assert s8.main() == 0
+    out = (
+        tmp_path
+        / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__"
+        "11e7900__v1.json"
+    )
+    assert out.is_file()
+    stderr = capsys.readouterr().err
+    assert "provider_error:OSError" in stderr
+    assert _SENSITIVE_CLEANUP_DETAIL not in stderr
 
 
 def test_dry_run_no_llm_calls(monkeypatch, tmp_path):
@@ -391,9 +630,39 @@ def test_limit_n_tasks(monkeypatch, tmp_path):
     code = s8.main()
     assert code == 0
 
-    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    out = _diagnostic_grade_path(tmp_path, ["task-001", "task-002"])
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert len(payload["tasks"]) == 2
+    assert payload["run_status"] == "diagnostic"
+
+
+def test_legacy_missing_provenance_full_run_stays_diagnostic(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    inference_path = tmp_path / "workspace/step2_inference_results.json"
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    inference["azure_ai_provenance_status"] = "legacy-missing"
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--force",
+    ])
+
+    assert s8.main() == 0
+
+    task_ids = ["task-001", "task-002", "task-003"]
+    payload = json.loads(
+        _diagnostic_grade_path(tmp_path, task_ids).read_text(encoding="utf-8")
+    )
+    assert payload["run_status"] == "diagnostic"
+    assert payload["source_azure_ai_provenance_status"] == "legacy-missing"
 
 
 def test_track2_limit_three_mock_smoke(monkeypatch, tmp_path):
@@ -420,7 +689,10 @@ def test_track2_limit_three_mock_smoke(monkeypatch, tmp_path):
     assert s8.main() == 0
     out = (
         tmp_path
-        / "data/grades"
+        / "data/grades/_diagnostic"
+        / s8._ordered_task_ids_sha256([
+            "task-001", "task-002", "task-003"
+        ])
         / (
             "exp998_smoke_baseline_sample__gpt-5_4-pro__"
             f"{_FakeLoader().rubric_sha}__v1.json"
@@ -428,12 +700,13 @@ def test_track2_limit_three_mock_smoke(monkeypatch, tmp_path):
     )
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert len(payload["tasks"]) == 3
+    assert payload["run_status"] == "diagnostic"
     assert payload["rubric"]["commit_sha"] == _FakeLoader().rubric_sha
     assert payload["renderer_fingerprint"] == _RENDERER_FINGERPRINT
 
 
 def test_track2_runtime_judge_error_stops_and_persists_diagnostic(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, capsys
 ):
     _setup_workspace(tmp_path)
     _configure_track2(tmp_path)
@@ -471,6 +744,9 @@ def test_track2_runtime_judge_error_stops_and_persists_diagnostic(
             grade.usage_complete = False
             return grade
 
+        def close(self):
+            raise OSError(_SENSITIVE_CLEANUP_DETAIL)
+
     monkeypatch.setattr(s8, "Grader", _RuntimeFailureGrader)
     monkeypatch.setattr(
         s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
@@ -498,6 +774,9 @@ def test_track2_runtime_judge_error_stops_and_persists_diagnostic(
     assert payload["summary"]["openai_compat"]["perfect_count"] == 0
     assert payload["summary"]["wow"]["judge_error_rate"] == 1.0
     assert payload["summary"]["cost"]["usage_complete"] is False
+    stderr = capsys.readouterr().err
+    assert "provider_error:OSError" in stderr
+    assert _SENSITIVE_CLEANUP_DETAIL not in stderr
 
 
 def test_track2_runtime_error_allows_call_free_unscorable_selection():
@@ -555,10 +834,37 @@ def test_tasks_filter(monkeypatch, tmp_path):
     code = s8.main()
     assert code == 0
 
-    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    out = _diagnostic_grade_path(tmp_path, ["task-002", "task-003"])
     payload = json.loads(out.read_text(encoding="utf-8"))
     ids = [t["task_id"] for t in payload["tasks"]]
     assert ids == ["task-002", "task-003"]
+    assert payload["run_status"] == "diagnostic"
+
+
+def test_all_task_selection_flag_still_uses_diagnostic_scope(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    task_ids = ["task-001", "task-002", "task-003"]
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--force",
+        "--tasks",
+        ",".join(task_ids),
+    ])
+
+    assert s8.main() == 0
+
+    payload = json.loads(
+        _diagnostic_grade_path(tmp_path, task_ids).read_text(encoding="utf-8")
+    )
+    assert payload["run_status"] == "diagnostic"
 
 
 @pytest.mark.parametrize(
@@ -872,6 +1178,7 @@ def _seed_partial_grade(
     tmp_path: Path,
     task_ids: list[str],
     renderer_fingerprint: dict[str, str] | None = None,
+    run_status: str = "partial",
 ) -> Path:
     """Drop a valid partial grade JSON at the templated output path."""
     out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
@@ -898,19 +1205,29 @@ def _seed_partial_grade(
         }
         for tid in task_ids
     ]
+    config = yaml.safe_load(
+        (tmp_path / "grading_configs" / "default.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
     payload = {
         "schema_version": "1.0",
+        "run_status": run_status,
+        "expected_task_count": 3,
+        "expected_ordered_task_ids_sha256": s8._ordered_task_ids_sha256(
+            ["task-001", "task-002", "task-003"]
+        ),
         "experiment_id": "exp998_smoke_baseline_sample",
         "experiment_yaml_name": "exp998_smoke_baseline_sample",
         "source_inference_repo_id": "owner/repo",
         "source_inference_revision": INFERENCE_SHA,
+        "azure_ai_routes": s8.preflight_routes(
+            s8.grader_route_workloads(config),
+            **s8.grader_transport_options(config),
+        ),
         "grader_source_hash": s8.compute_grader_source_hash(
             tmp_path / "grading_configs" / "default.yaml",
-            yaml.safe_load(
-                (tmp_path / "grading_configs" / "default.yaml").read_text(
-                    encoding="utf-8"
-                )
-            ),
+            config,
         ),
         "judge": {
             "provider": "azure_openai",
@@ -939,6 +1256,9 @@ def _seed_partial_grade(
         "tasks": task_rows,
         "summary": s8._compute_summary(task_rows),
     }
+    payload["azure_ai_runtime_fingerprint"] = payload[
+        "azure_ai_routes"
+    ][0]["runtime_fingerprint"]
     if renderer_fingerprint is not None:
         payload["renderer_fingerprint"] = renderer_fingerprint
     out.write_text(json.dumps(payload), encoding="utf-8")
@@ -996,15 +1316,150 @@ def test_resume_skips_already_completed_tasks(monkeypatch, tmp_path):
     assert rc == 0
     # Only task-003 should have hit the grader.
     assert grader_instance["g"].calls == 1
-
     out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
     payload = json.loads(out.read_text(encoding="utf-8"))
-    ids = [t["task_id"] for t in payload["tasks"]]
+    ids = [task["task_id"] for task in payload["tasks"]]
     assert ids == ["task-001", "task-002", "task-003"]
 
 
-def test_resume_without_existing_file_starts_fresh(monkeypatch, tmp_path):
-    """--resume on a clean workspace must NOT crash; it should grade everything."""
+@pytest.mark.parametrize("missing", [False, True])
+def test_resume_rejects_azure_route_drift_before_grader(
+    monkeypatch, tmp_path, missing
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed after route drift")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    out = _seed_partial_grade(tmp_path, ["task-001"])
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    if missing:
+        del payload["azure_ai_routes"]
+    else:
+        payload["azure_ai_routes"][0]["runtime_fingerprint"] = "f" * 64
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() != 0
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_resume_rejects_primary_grader_fingerprint_drift_before_grader(
+    monkeypatch, tmp_path, missing
+):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not be constructed after fingerprint drift")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    out = _seed_partial_grade(tmp_path, ["task-001"])
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    if missing:
+        del payload["azure_ai_runtime_fingerprint"]
+    else:
+        payload["azure_ai_runtime_fingerprint"] = "f" * 64
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--resume",
+    ])
+
+    assert s8.main() != 0
+
+
+def test_grade_payload_records_judge_and_perception_routes(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["judge"]["perception"] = {
+        "visual": {"model": "vision-deployment"},
+        "audio": {"model": "audio-deployment"},
+    }
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() == 0
+    out = (
+        tmp_path
+        / "data/grades"
+        / "exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert len(payload["azure_ai_routes"]) == 3
+    assert {record["workload"] for record in payload["azure_ai_routes"]} == {
+        "grader"
+    }
+
+
+@pytest.mark.parametrize("track2", [False, True])
+def test_periodic_partial_persists_complete_azure_routes(
+    monkeypatch, tmp_path, track2
+):
+    _setup_workspace(tmp_path)
+    if track2:
+        _configure_track2(tmp_path)
+        monkeypatch.setattr(
+            s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+        )
+    inference_path = tmp_path / "workspace" / "step2_inference_results.json"
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    inference["results"] = []
+    for index in range(1, 11):
+        task_id = f"task-{index:03d}"
+        relative = f"deliverable_files/{task_id}/Sample.xlsx"
+        inference["results"].append(
+            {"task_id": task_id, "deliverable_files": [relative]}
+        )
+        deliverable = tmp_path / "workspace" / "upload" / relative
+        deliverable.parent.mkdir(parents=True, exist_ok=True)
+        deliverable.write_bytes(b"test deliverable")
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    saved_payloads = []
+    original_save = s8._save_json
+
+    def capture_save(path, payload):
+        saved_payloads.append(json.loads(json.dumps(payload)))
+        original_save(path, payload)
+
+    monkeypatch.setattr(s8, "_save_json", capture_save)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() == 0
+    assert len(saved_payloads) >= 2
+    periodic = saved_payloads[-2]
+    assert len(periodic["tasks"]) == 10
+    assert periodic["azure_ai_routes"]
+    s8._validate_schema(periodic)
+
+
+def test_resume_without_existing_file_refuses_fresh_paid_run(monkeypatch, tmp_path):
+    """--resume on a clean workspace must fail before grader construction."""
     _setup_workspace(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
@@ -1023,8 +1478,8 @@ def test_resume_without_existing_file_starts_fresh(monkeypatch, tmp_path):
         "--resume",
     ])
     rc = s8.main()
-    assert rc == 0
-    assert grader_instance["g"].calls == 3  # all three
+    assert rc != 0
+    assert "g" not in grader_instance
 
 
 def test_track2_resume_without_partial_fails_before_grader(monkeypatch, tmp_path):
@@ -1135,6 +1590,7 @@ def test_track2_valid_cache_hit_checks_fingerprint_and_skips(
         tmp_path,
         ["task-001", "task-002", "task-003"],
         dict(_RENDERER_FINGERPRINT),
+        run_status="final",
     )
     monkeypatch.setattr("sys.argv", [
         "step8_grade.py", "exp998_smoke_baseline_sample",
@@ -1530,7 +1986,7 @@ def test_track2_dry_run_does_not_probe_renderer(monkeypatch, tmp_path):
     assert s8.main() == 0
 
 
-def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path):
+def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path, capsys):
     """When GRADER_TIME_BUDGET_SEC elapses before all tasks are graded, step8
     must (a) save a valid partial JSON and (b) return exit code 7 so the
     workflow's auto-retrigger step fires."""
@@ -1543,6 +1999,9 @@ def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path):
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
             grader_instance["g"] = self
+
+        def close(self):
+            raise OSError(_SENSITIVE_CLEANUP_DETAIL)
 
     monkeypatch.setattr(s8, "Grader", _TrackGrader)
 
@@ -1566,6 +2025,9 @@ def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path):
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "1.0"
     assert [task["task_id"] for task in payload["tasks"]] == ["task-001"]
+    stderr = capsys.readouterr().err
+    assert "provider_error:OSError" in stderr
+    assert _SENSITIVE_CLEANUP_DETAIL not in stderr
 
 
 def test_time_budget_without_new_progress_never_requests_resume(
@@ -1683,6 +2145,8 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     verify_checkout = by_name["Verify checked out main and input files"]
     download = by_name["Download inference results from HF"]
     commit = by_name["Commit grade result"]
+    analysis = by_name["Auto-analyze (final chunk only)"]
+    commit_analysis = by_name["Commit analysis"]
     retrigger = by_name["Auto-retrigger next chunk (time budget hit)"]
     setup_python = by_name["Setup Python"]
     azure_login = by_name["Azure Login (OIDC)"]
@@ -1724,8 +2188,15 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     script = commit["run"]
     assert commit["id"] == "commit_grade"
     assert "steps.grade.conclusion == 'success'" in commit["if"]
+    assert commit["env"]["EXPECTED_GRADE_STATUS"] == (
+        "${{ steps.grade.outputs.rc == '7' && 'partial' || "
+        "steps.grade.outputs.grade_status }}"
+    )
     assert 'git add -- "$GRADE_FILE"' in script
-    assert script.count("validate(instance=payload, schema=schema)") == 2
+    assert script.count("validate_grade_payload(payload, schema)") == 2
+    assert script.count(
+        "from core.grade_payload import validate_grade_payload"
+    ) == 2
     assert "GRADE_BLOB_SHA=" in script
     assert "POST_REBASE_GRADE_BLOB_SHA=" in script
     assert '[[ "$POST_REBASE_GRADE_BLOB_SHA" != "$GRADE_BLOB_SHA" ]]' in script
@@ -1733,11 +2204,26 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert 'git pull --rebase origin "${GITHUB_REF_NAME}" || true' not in script
     assert "rc=7 requires a newly persisted partial grade diff" in script
     assert script.index('git pull --rebase origin "${GITHUB_REF_NAME}"') < script.rindex(
-        "validate(instance=payload, schema=schema)"
+        "validate_grade_payload(payload, schema)"
     )
-    assert script.rindex("validate(instance=payload, schema=schema)") < script.index(
+    assert script.rindex("validate_grade_payload(payload, schema)") < script.index(
         'echo "committed=true"'
     )
+
+    assert analysis["id"] == "analysis"
+    assert 'echo "analysis_file=$OUT" >> "$GITHUB_OUTPUT"' in analysis["run"]
+    assert "! -f \"$OUT\" || -L \"$OUT\"" in analysis["run"]
+    assert commit_analysis["env"]["ANALYSIS_FILE"] == (
+        "${{ steps.analysis.outputs.analysis_file }}"
+    )
+    assert 'git add -- "$ANALYSIS_FILE"' in commit_analysis["run"]
+    assert "data/grades/*.analysis.md 2>/dev/null || true" not in (
+        commit_analysis["run"]
+    )
+    assert "! -f \"$ANALYSIS_FILE\" || -L \"$ANALYSIS_FILE\"" in (
+        commit_analysis["run"]
+    )
+    assert "${{ steps.analysis.outputs.analysis_file }}" in upload["with"]["path"]
 
     assert "steps.commit_grade.outputs.committed == 'true'" in retrigger["if"]
     assert '-f inference_revision="$RESOLVED_INFERENCE_REVISION"' in retrigger["run"]

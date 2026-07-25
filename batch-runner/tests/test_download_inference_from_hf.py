@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import subprocess
 import sys
@@ -27,6 +28,7 @@ def test_direct_script_entrypoint_resolves_core_import():
 
     assert completed.returncode == 0
     assert "--revision" in completed.stdout
+    assert "--allow-legacy-missing-provenance" in completed.stdout
     assert completed.stderr == ""
     assert "No module named 'core'" not in completed.stdout
 
@@ -151,18 +153,27 @@ def test_downloaded_json_metadata_overrides_stale_values(monkeypatch, tmp_path):
 
     def fake_hf_hub_download(**kwargs):
         calls.append(kwargs)
+        if kwargs["filename"] == "inference_provenance.json":
+            raise module.EntryNotFoundError("legacy revision")
         return str(downloaded)
 
     monkeypatch.setenv("HF_TOKEN", "secret-token")
     monkeypatch.setattr(module, "hf_hub_download", fake_hf_hub_download)
     out = tmp_path / "step2_inference_results.json"
 
-    module._download_or_reconstruct_inference("exp", "owner/repo", FULL_SHA, out)
+    module._download_or_reconstruct_inference(
+        "exp",
+        "owner/repo",
+        FULL_SHA,
+        out,
+        allow_legacy_missing_provenance=True,
+    )
 
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["source_repo_id"] == "owner/repo"
     assert payload["source_revision"] == FULL_SHA
     assert payload["source"] == "legacy/source"
+    assert payload["azure_ai_provenance_status"] == "legacy-missing"
     assert calls == [
         {
             "repo_id": "owner/repo",
@@ -170,8 +181,151 @@ def test_downloaded_json_metadata_overrides_stale_values(monkeypatch, tmp_path):
             "filename": "step2_inference_results.json",
             "revision": FULL_SHA,
             "token": "secret-token",
-        }
+        },
+        {
+            "repo_id": "owner/repo",
+            "repo_type": "dataset",
+            "filename": "inference_provenance.json",
+            "revision": FULL_SHA,
+            "token": "secret-token",
+        },
     ]
+
+
+def test_verified_sidecar_restores_endpoint_free_routes(monkeypatch, tmp_path):
+    module = _load_module()
+    route = {
+        "endpoint_kind": "direct-v1",
+        "profile": "direct-v1",
+        "runtime_fingerprint": "f" * 64,
+        "workload": "inference",
+    }
+    downloaded = tmp_path / "downloaded.json"
+    downloaded.write_text(
+        json.dumps({
+            "experiment_id": "exp",
+            "prepared_fingerprint": "e" * 64,
+              "execution_mode": "subprocess",
+            "azure_ai_routes": [route],
+            "results": [{"task_id": "task-1", "deliverable_files": []}],
+        }),
+        encoding="utf-8",
+    )
+    provenance = tmp_path / "inference_provenance.json"
+    provenance.write_text(
+        json.dumps({
+              "schema_version": "azure-ai-inference-provenance-v2",
+            "experiment_id": "exp",
+            "source_repo_id": "owner/repo",
+            "prepared_fingerprint": "e" * 64,
+              "execution_mode": "subprocess",
+            "task_count": 1,
+            "ordered_task_ids_sha256": hashlib.sha256(
+                b'["task-1"]'
+            ).hexdigest(),
+            "azure_ai_routes": [route],
+        }),
+        encoding="utf-8",
+    )
+
+    def fake_download(**kwargs):
+        return str(
+            provenance
+            if kwargs["filename"] == "inference_provenance.json"
+            else downloaded
+        )
+
+    monkeypatch.setattr(module, "hf_hub_download", fake_download)
+    out = tmp_path / "output.json"
+
+    module._download_or_reconstruct_inference(
+        "exp", "owner/repo", FULL_SHA, out
+    )
+
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["azure_ai_routes"] == [route]
+    assert payload["azure_ai_provenance_status"] == "verified-sidecar"
+    assert payload["prepared_fingerprint"] == "e" * 64
+
+
+def test_missing_sidecar_is_rejected_without_explicit_legacy_override(
+    monkeypatch,
+):
+    module = _load_module()
+    monkeypatch.setattr(
+        module,
+        "hf_hub_download",
+        lambda **kwargs: (_ for _ in ()).throw(
+            module.EntryNotFoundError("missing")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="provenance sidecar is missing"):
+        module._attach_inference_provenance(
+            {"results": [{"task_id": "task-1", "deliverable_files": []}]},
+            experiment="exp",
+            repo_id="owner/repo",
+            revision=FULL_SHA,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("prepared_fingerprint", "d" * 64, "prepared fingerprint mismatch"),
+        (
+            "azure_ai_routes",
+            [{
+                "endpoint_kind": "direct-v1",
+                "profile": "direct-v1",
+                "runtime_fingerprint": "d" * 64,
+                "workload": "inference",
+            }],
+            "Azure AI routes mismatch",
+        ),
+    ],
+)
+def test_verified_sidecar_rejects_embedded_identity_mismatch(
+    monkeypatch, tmp_path, field, value, message
+):
+    module = _load_module()
+    route = {
+        "endpoint_kind": "direct-v1",
+        "profile": "direct-v1",
+        "runtime_fingerprint": "f" * 64,
+        "workload": "inference",
+    }
+    provenance = tmp_path / "inference_provenance.json"
+    provenance.write_text(json.dumps({
+          "schema_version": "azure-ai-inference-provenance-v2",
+        "experiment_id": "exp",
+        "source_repo_id": "owner/repo",
+        "prepared_fingerprint": "e" * 64,
+          "execution_mode": "subprocess",
+        "task_count": 1,
+        "ordered_task_ids_sha256": hashlib.sha256(
+            b'["task-1"]'
+        ).hexdigest(),
+        "azure_ai_routes": [route],
+    }), encoding="utf-8")
+    monkeypatch.setattr(
+        module, "hf_hub_download", lambda **kwargs: str(provenance)
+    )
+    payload = {
+        "prepared_fingerprint": "e" * 64,
+          "execution_mode": "subprocess",
+        "azure_ai_routes": [route],
+        "results": [{"task_id": "task-1", "deliverable_files": []}],
+    }
+    payload[field] = value
+
+    with pytest.raises(ValueError, match=message):
+        module._attach_inference_provenance(
+            payload,
+            experiment="exp",
+            repo_id="owner/repo",
+            revision=FULL_SHA,
+        )
 
 
 def test_expected_leading_tasks_preserve_exact_source_prefix():
@@ -246,6 +400,8 @@ def test_main_pins_all_downloads_and_removes_stale_deliverables(monkeypatch, tmp
         calls.append(("file", kwargs))
         if kwargs["filename"] == "step2_inference_results.json":
             raise module.EntryNotFoundError("missing")
+        if kwargs["filename"] == "inference_provenance.json":
+            raise module.EntryNotFoundError("legacy revision")
         return "unused.parquet"
 
     def fake_snapshot_download(**kwargs):
@@ -268,6 +424,7 @@ def test_main_pins_all_downloads_and_removes_stale_deliverables(monkeypatch, tmp
             output="workspace/inference.json",
             revision="",
             expected_leading_task_id=[],
+            allow_legacy_missing_provenance=True,
         ),
     )
     monkeypatch.setenv("HF_TOKEN", "secret-token")
@@ -281,7 +438,7 @@ def test_main_pins_all_downloads_and_removes_stale_deliverables(monkeypatch, tmp
     assert payload["source_repo_id"] == "owner/repo"
     assert payload["source_revision"] == FULL_SHA
     assert list(Path("workspace/upload/deliverable_files").iterdir()) == []
-    assert len(calls) == 3
+    assert len(calls) == 4
     assert all(call[1]["revision"] == FULL_SHA for call in calls)
     assert all(call[1]["token"] == "secret-token" for call in calls)
     assert calls[-1][1]["allow_patterns"] == [
@@ -311,11 +468,12 @@ def test_main_filters_manifest_and_snapshot_to_expected_leading_tasks(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(module, "resolve_repo_id", lambda experiment: "owner/repo")
     monkeypatch.setattr(module, "resolve_immutable_revision", lambda *args: FULL_SHA)
-    monkeypatch.setattr(
-        module,
-        "hf_hub_download",
-        lambda **kwargs: str(downloaded),
-    )
+    def fake_download(**kwargs):
+        if kwargs["filename"] == "inference_provenance.json":
+            raise module.EntryNotFoundError("legacy revision")
+        return str(downloaded)
+
+    monkeypatch.setattr(module, "hf_hub_download", fake_download)
 
     def fake_snapshot_download(**kwargs):
         snapshot_calls.append(kwargs)
@@ -334,6 +492,7 @@ def test_main_filters_manifest_and_snapshot_to_expected_leading_tasks(
             output="workspace/inference.json",
             revision=FULL_SHA,
             expected_leading_task_id=["task-1", "task-2"],
+            allow_legacy_missing_provenance=True,
         ),
     )
 

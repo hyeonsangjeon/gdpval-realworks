@@ -10,7 +10,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { processGradesFile } from '../aggregate-grades.mjs';
+import { isPublishableGrade, processGradesFile } from '../aggregate-grades.mjs';
 import { gradeIdentityFromRaw } from '../grade-identity.mjs';
 
 test('gradeIdentityFromRaw supports top-level, legacy meta, filename fallback, source pointer, and dummy', () => {
@@ -135,6 +135,35 @@ test('processGradesFile: v1 grade sets grade_status=graded_v1 and lifts raw.expe
   assert.equal(out.judge_model, 'gpt-5.4-pro');
   assert.equal(out.schema_version, '1.0');
 });
+
+for (const [runStatus, gradeStatus] of [
+  ['partial', 'grading_partial'],
+  ['diagnostic', 'grading_diagnostic'],
+]) {
+  test(`processGradesFile marks ${runStatus} grades non-publishable`, () => {
+    const raw = {
+      schema_version: '1.0',
+      run_status: runStatus,
+      experiment_id: 'exp-partial',
+      inference_model: 'gpt-5.2-chat',
+      judge: { model: 'gpt-5.4-pro' },
+      summary: {
+        total_tasks: 3,
+        graded_tasks: 1,
+        error_tasks: 0,
+        openai_compat: {},
+        wow: {},
+      },
+      tasks: [{ task_id: 't1', pct: 50, error: null }],
+    };
+
+    const output = processGradesFile('partial.json', raw);
+
+    assert.equal(output.grade_status, gradeStatus);
+    assert.equal(output.run_status, runStatus);
+    assert.equal(isPublishableGrade(output), false);
+  });
+}
 
 // ── Fixture C — legacy dummy with _meta.is_dummy ────────────────────────────
 test('processGradesFile: legacy dummy sets grade_status=legacy_dummy and judge_model=null', () => {

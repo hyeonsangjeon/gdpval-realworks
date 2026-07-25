@@ -9,10 +9,12 @@ import pytest
 
 from core.inference_manifest import (
     bind_deliverable_file_records,
+    build_inference_provenance,
     canonical_deliverable_path,
     canonicalize_inference_payload,
     ensure_task_deliverable_dir,
     reset_task_deliverable_dir,
+    validate_inference_provenance,
     validate_local_deliverables,
 )
 
@@ -186,3 +188,189 @@ def test_reset_task_deliverable_dir_propagates_delete_failure(tmp_path, monkeypa
 
     with pytest.raises(OSError, match="delete failed"):
         reset_task_deliverable_dir(upload_root, "task-1")
+
+
+def test_inference_provenance_round_trip_binds_routes_and_task_order():
+    route = {
+        "endpoint_kind": "direct-v1",
+        "profile": "direct-v1",
+        "runtime_fingerprint": "f" * 64,
+        "workload": "inference",
+    }
+    source = {
+        "experiment_id": "exp",
+        "source_repo_id": "owner/repo",
+        "prepared_fingerprint": "e" * 64,
+        "execution_mode": "subprocess",
+        "azure_ai_routes": [route],
+        "results": [
+            {"task_id": "task-1", "deliverable_files": []},
+            {"task_id": "task-2", "deliverable_files": []},
+        ],
+    }
+
+    sidecar = build_inference_provenance(source)
+    verified = validate_inference_provenance(
+        sidecar,
+        experiment_id="exp",
+        source_repo_id="owner/repo",
+        task_ids=["task-1", "task-2"],
+        prepared_fingerprint="e" * 64,
+        azure_ai_routes=[route],
+    )
+
+    assert verified["azure_ai_routes"] == [route]
+
+
+@pytest.mark.parametrize("mutation", ["task_order", "route", "extra_field"])
+def test_inference_provenance_rejects_drift(mutation):
+    source = {
+        "experiment_id": "exp",
+        "source_repo_id": "owner/repo",
+        "prepared_fingerprint": "e" * 64,
+        "execution_mode": "subprocess",
+        "azure_ai_routes": [{
+            "endpoint_kind": "direct-v1",
+            "profile": "direct-v1",
+            "runtime_fingerprint": "f" * 64,
+            "workload": "inference",
+        }],
+        "results": [
+            {"task_id": "task-1", "deliverable_files": []},
+            {"task_id": "task-2", "deliverable_files": []},
+        ],
+    }
+    sidecar = build_inference_provenance(source)
+    task_ids = ["task-1", "task-2"]
+    if mutation == "task_order":
+        task_ids.reverse()
+    elif mutation == "route":
+        sidecar["azure_ai_routes"][0]["runtime_fingerprint"] = "invalid"
+    else:
+        sidecar["unexpected"] = True
+
+    with pytest.raises(ValueError):
+        validate_inference_provenance(
+            sidecar,
+            experiment_id="exp",
+            source_repo_id="owner/repo",
+            task_ids=task_ids,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("prepared_fingerprint", "d" * 64, "prepared fingerprint mismatch"),
+        (
+            "azure_ai_routes",
+            [{
+                "endpoint_kind": "direct-v1",
+                "profile": "direct-v1",
+                "runtime_fingerprint": "d" * 64,
+                "workload": "inference",
+            }],
+            "Azure AI routes mismatch",
+        ),
+    ],
+)
+def test_inference_provenance_rejects_valid_wrong_identity(
+    field, value, message
+):
+    route = {
+        "endpoint_kind": "direct-v1",
+        "profile": "direct-v1",
+        "runtime_fingerprint": "f" * 64,
+        "workload": "inference",
+    }
+    source = {
+        "experiment_id": "exp",
+        "source_repo_id": "owner/repo",
+        "prepared_fingerprint": "e" * 64,
+        "execution_mode": "subprocess",
+        "azure_ai_routes": [route],
+        "results": [{"task_id": "task-1", "deliverable_files": []}],
+    }
+
+    with pytest.raises(ValueError, match=message):
+        validate_inference_provenance(
+            build_inference_provenance(source),
+            experiment_id="exp",
+            source_repo_id="owner/repo",
+            task_ids=["task-1"],
+            prepared_fingerprint=(
+                value if field == "prepared_fingerprint" else "e" * 64
+            ),
+            azure_ai_routes=(value if field == "azure_ai_routes" else [route]),
+        )
+
+
+@pytest.mark.parametrize(
+    ("profile", "endpoint_kind", "workload"),
+    [
+        ("direct-v1", "project", "inference"),
+        ("direct-v1", "direct-v1", "code-interpreter"),
+        ("project-ci", "direct-v1", "code-interpreter"),
+        ("project-ci", "project", "grader"),
+        ("legacy-rollback", "direct-v1", "grader"),
+        ("legacy-rollback", "legacy-dated", "code-interpreter"),
+    ],
+)
+def test_inference_provenance_rejects_impossible_route_combinations(
+    profile, endpoint_kind, workload
+):
+    source = {
+        "experiment_id": "exp",
+        "source_repo_id": "owner/repo",
+        "prepared_fingerprint": "e" * 64,
+        "execution_mode": "subprocess",
+        "azure_ai_routes": [{
+            "endpoint_kind": endpoint_kind,
+            "profile": profile,
+            "runtime_fingerprint": "f" * 64,
+            "workload": workload,
+        }],
+        "results": [{"task_id": "task-1", "deliverable_files": []}],
+    }
+
+    with pytest.raises(ValueError, match="profile, endpoint, and workload"):
+        build_inference_provenance(source)
+
+
+def test_code_interpreter_provenance_requires_project_route_and_binds_mode():
+    source = {
+        "experiment_id": "exp",
+        "source_repo_id": "owner/repo",
+        "prepared_fingerprint": "e" * 64,
+        "execution_mode": "code_interpreter",
+        "azure_ai_routes": [],
+        "results": [{"task_id": "task-1", "deliverable_files": []}],
+    }
+
+    with pytest.raises(ValueError, match="requires one project-ci route"):
+        build_inference_provenance(source)
+
+    source["azure_ai_routes"] = [
+        {
+            "endpoint_kind": "direct-v1",
+            "profile": "project-ci",
+            "runtime_fingerprint": "a" * 64,
+            "workload": "inference",
+        },
+        {
+            "endpoint_kind": "project",
+            "profile": "project-ci",
+            "runtime_fingerprint": "b" * 64,
+            "workload": "code-interpreter",
+        },
+    ]
+    sidecar = build_inference_provenance(source)
+
+    assert sidecar["execution_mode"] == "code_interpreter"
+    assert validate_inference_provenance(
+        sidecar,
+        experiment_id="exp",
+        source_repo_id="owner/repo",
+        task_ids=["task-1"],
+        execution_mode="code_interpreter",
+    )["azure_ai_routes"] == source["azure_ai_routes"]

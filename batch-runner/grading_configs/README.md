@@ -4,21 +4,41 @@
 
 | file | path | grader path | when to use |
 |---|---|---|---|
-| `default_v2.yaml` | tool-calling judge | v2 (`ToolCallingJudge` via `judge.tools.read_deliverable`) | **default for new grade-run jobs after PR3 validation.** Single-tier gpt-5.4 medium, read_deliverable tool surface, vision/audio perception. |
-| `default_gpt5pro.yaml` | text-extract judge | v1 (`Judge` / `BatchJudge`) | legacy default. Kept active until PR3 task 302 confirms v2 cost envelope. After PR3 PASS, `grade-run.yml` default flips and this file moves to `_archive_v1/`. |
+| `default_v2.yaml` | tool-calling judge | v2 (`ToolCallingJudge` via `judge.tools.read_deliverable`) | Explicit opt-in for new tool-calling runs. Single-tier gpt-5.4 medium, read_deliverable tool surface, vision/audio perception. |
+| `default_gpt5pro.yaml` | text-extract judge | v1 (`Judge` / `BatchJudge`) | Current workflow default while the v2 cost/capacity envelope remains a separate operator decision. |
 
 `grade-run.yml`'s `grading_config` input default is **currently still
 `default_gpt5pro.yaml`**. v2 is opt-in by passing
-`default_v2.yaml` to the workflow input. The flip is a PR3 follow-up.
+`default_v2.yaml` to the workflow input. There is no automatic hybrid follow-up
+or config flip in the active workflow.
+
+## Provenance and diagnostic scopes
+
+The grading downloader requires `inference_provenance.json` by default and
+binds it to the embedded prepared fingerprint, ordered tasks, and Azure AI
+routes. `--allow-legacy-missing-provenance` is an explicit local-analysis
+override, not a publishable grading path.
+
+Runs selected with `--tasks` or `--limit`, plus the legacy override above, are
+saved with `run_status: diagnostic` under
+`data/grades/_diagnostic/<ordered-task-sha256>/`. The full task hash prevents a
+subset from sharing a cache/resume path with a complete run, and the dashboard
+aggregator only discovers root-level grade JSON. A verified complete run keeps
+the root output path and `run_status: final`.
 
 ## Archived (no longer recommended)
 
-Under `_archive_v1/`. Kept on disk so historical grade JSON files can
-be reproduced and PR2 task 207 backfill scripts have a reference.
+Under `_archive_v1/`. These files are provenance references, not runnable inputs
+to the current typed-route validator: they retain the historical
+`judge.endpoint_env` contract that is now rejected. To reproduce an old run,
+use the historical commit/environment or copy the config to a new top-level
+file, remove `endpoint_env`, add an explicit matching `deployment`, and record
+the migration as a new run identity. Never resume an old partial across that
+boundary.
 
 | file | why archived |
 |---|---|
-| `recommended_gpt5_4_mini_2026-05-24.yaml` | cost-sweep winner from 2026-05-24 — v1 mini judge, text-extract path, no tool calling. Replaced by `default_v2.yaml` for normal grading; only used now for legacy reruns. |
+| `recommended_gpt5_4_mini_2026-05-24.yaml` | cost-sweep winner from 2026-05-24 — v1 mini judge, text-extract path, no tool calling. Retained for provenance; not directly runnable under the typed endpoint contract. |
 | `validation_hybrid.yaml`, `validation_pro_only.yaml` | tier-routing PR2-preceding validation configs. v2 is single-tier; tier configs no longer match the grader path. |
 | `tiered_critical_pro_mini.yaml` | tier-routing experiment config. Same reason as above. |
 | `_sweep_template.yaml` | cost-sweep parameterization template. Useful only for reproducing the v1 sweep; v2 has a different cost surface and will get its own template if/when needed. |

@@ -125,6 +125,7 @@ jobs:
             File.read(path), permitted_classes: [], permitted_symbols: [], aliases: false
           ) || {}
           abort('experiment YAML root must be a mapping') unless config.is_a?(Hash)
+          abort('condition_b is unsupported in the general batch workflow') if config.key?('condition_b')
           execution = config.fetch('execution', {}) || {}
           abort('execution must be a mapping') unless execution.is_a?(Hash)
           sandbox = execution.fetch('sandbox', {}) || {}
@@ -226,6 +227,7 @@ jobs:
         run: |
           cd batch-runner
           python3 <<'PY'
+          import json
           import os
 
           from core.experiment_config import ExperimentConfig
@@ -272,6 +274,7 @@ jobs:
         id: read_config
         run: |
           python3 <<'PY'
+          import json
           import os
           import pathlib
           import re
@@ -279,12 +282,24 @@ jobs:
           import yaml
 
           sys.path.insert(0, "batch-runner")
+          from core.azure_ai_clients import (
+            AzureAIWorkload,
+            inference_route_workloads,
+            narrative_route_workloads,
+          )
+          from core.experiment_config import ExperimentConfig
           from core.repository_identity import validate_hf_dataset_repo_id
 
           path = pathlib.Path("batch-runner/experiments") / (
             os.environ["EXPERIMENT_YAML_INPUT"] + ".yaml"
           )
           config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+          parsed_config = ExperimentConfig.from_dict(config)
+          validation_errors = parsed_config.validate()
+          if validation_errors:
+            raise SystemExit(
+              "invalid experiment config: " + "; ".join(validation_errors)
+            )
           execution = config.get("execution") or {}
           sandbox = execution.get("sandbox") or {}
           if not isinstance(execution, dict) or not isinstance(sandbox, dict):
@@ -305,6 +320,54 @@ jobs:
             raise SystemExit("execution.relay_max_runs is invalid")
           mode = execution.get("mode")
           hardened = sandbox.get("hardened_substrate") is True
+
+          def model_identity(condition_name):
+            condition = config.get(condition_name)
+            if condition is None:
+              return "", ""
+            if not isinstance(condition, dict):
+              raise SystemExit(f"{condition_name} must be a mapping")
+            model = condition.get("model") or {}
+            if not isinstance(model, dict):
+              raise SystemExit(f"{condition_name}.model must be a mapping")
+            provider = model.get("provider", "azure")
+            deployment = model.get("deployment", "")
+            if provider in {"azure", "azure_openai"} and (
+              not isinstance(deployment, str) or not deployment
+            ):
+              raise SystemExit(
+                f"{condition_name}.model.deployment is required for Azure"
+              )
+            return str(provider), str(deployment)
+
+          condition_a_provider, condition_a_deployment = model_identity(
+            "condition_a"
+          )
+          condition_b_provider, condition_b_deployment = model_identity(
+            "condition_b"
+          )
+          provider_requirements = set()
+          for condition in (
+            parsed_config.condition_a,
+            parsed_config.condition_b,
+          ):
+            if condition is None:
+              continue
+            provider_requirements.add(condition.model.provider)
+            for preprocessor in condition.preprocessors or []:
+              provider_requirements.add(preprocessor["model"]["provider"])
+          azure_workloads = [(AzureAIWorkload.NARRATIVE, "gpt-5.4-pro")]
+          for condition_name in ("condition_a", "condition_b"):
+            condition = config.get(condition_name)
+            if condition is not None:
+              azure_workloads.extend(
+                inference_route_workloads(condition, str(mode or "subprocess"))
+              )
+              model = condition.get("model") or {}
+              if model.get("provider", "azure") in {"azure", "azure_openai"}:
+                azure_workloads.extend(
+                  narrative_route_workloads(str(model.get("deployment", "")))
+                )
           values = {
             "install_libreoffice": str(
               execution.get("install_libreoffice") is True
@@ -317,6 +380,23 @@ jobs:
             "uses_agentic": str(
               mode == 'agentic_sandbox' or hardened
             ).lower(),
+            "uses_code_interpreter": str(
+              mode == "code_interpreter"
+            ).lower(),
+            "condition_a_provider": condition_a_provider,
+            "condition_a_deployment": condition_a_deployment,
+            "condition_b_provider": condition_b_provider,
+            "condition_b_deployment": condition_b_deployment,
+            "requires_openai_key": str(
+              "openai" in provider_requirements
+            ).lower(),
+            "requires_anthropic_key": str(
+              "anthropic" in provider_requirements
+            ).lower(),
+            "azure_ai_workloads_json": json.dumps([
+              f"{workload.value}={deployment}"
+              for workload, deployment in azure_workloads
+            ], separators=(",", ":")),
           }
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
             for key, value in values.items():
@@ -332,6 +412,33 @@ jobs:
           echo "Use the dedicated signed compute/control workflow only after the"
           echo "paid gate is merged. No model client or cloud credential was used."
           exit 1
+
+      - name: Validate Azure OIDC identity before remote access
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/azure_oidc_identity_preflight.py
+
+      - name: Validate Azure AI routes before remote writes
+        env:
+          AZURE_AI_ROUTE_PROFILE: ${{ steps.read_config.outputs.uses_code_interpreter == 'true' && 'project-ci' || 'direct-v1' }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
+          AZURE_AI_WORKLOADS_JSON: ${{ steps.read_config.outputs.azure_ai_workloads_json }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/azure_ai_route_preflight.py
 
       - name: Install LibreOffice & Noto Sans fonts
         if: steps.read_config.outputs.install_libreoffice == 'True'
@@ -435,6 +542,13 @@ jobs:
         if: inputs.relay_run > 0
         env:
           GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
+          AZURE_AI_ROUTE_PROFILE: ${{ steps.read_config.outputs.uses_code_interpreter == 'true' && 'project-ci' || 'direct-v1' }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
+          AZURE_AI_WORKLOADS_JSON: ${{ steps.read_config.outputs.azure_ai_workloads_json }}
         run: |
           set -euo pipefail
           cd batch-runner
@@ -509,6 +623,30 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Verify Azure OIDC session identity
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/azure_oidc_identity_preflight.py --verify-session
+
+      - name: Verify Azure AI token before model calls
+        env:
+          AZURE_AI_ROUTE_PROFILE: ${{ steps.read_config.outputs.uses_code_interpreter == 'true' && 'project-ci' || 'direct-v1' }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
+          AZURE_AI_WORKLOADS_JSON: ${{ steps.read_config.outputs.azure_ai_workloads_json }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/azure_ai_route_preflight.py --verify-token
+
       - name: 'Step 2a: Run inference (condition_a)'
         id: step2a
         # Nominally 60min above the 290min watchdog. This is not guaranteed
@@ -518,10 +656,14 @@ jobs:
         env:
           GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
           CONFIG_WALL_TIMEOUT: ${{ steps.read_config.outputs.wall_timeout }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # Removed AZURE_OPENAI_API_KEY — openai SDK auto-detects env key and overrides azure_ad_token_provider. OIDC only via DefaultAzureCredential / azure/login@v2.
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ steps.read_config.outputs.requires_openai_key == 'true' && secrets.OPENAI_API_KEY || '' }}
+          ANTHROPIC_API_KEY: ${{ steps.read_config.outputs.requires_anthropic_key == 'true' && secrets.ANTHROPIC_API_KEY || '' }}
+          AZURE_AI_ROUTE_PROFILE: ${{ steps.read_config.outputs.uses_code_interpreter == 'true' && 'project-ci' || 'direct-v1' }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
         run: |
           set +e
           cd batch-runner
@@ -626,28 +768,6 @@ jobs:
           echo "Relay run #$NEXT_RELAY triggered. This run will now exit."
           exit 0
 
-      # ── Step 2b: Run Inference (condition_b) — CONDITIONAL ──
-      - name: 'Check if condition_b exists'
-        id: check_condition_b
-        run: |
-          YAML_PATH="batch-runner/experiments/${EXPERIMENT_YAML_INPUT}.yaml"
-          HAS_CONDITION_B=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${YAML_PATH}')); print('true' if 'condition_b' in cfg else 'false')")
-          echo "has_condition_b=$HAS_CONDITION_B" >> "$GITHUB_OUTPUT"
-          echo "Condition B exists: $HAS_CONDITION_B"
-
-      - name: 'Step 2b: Run inference (condition_b)'
-        timeout-minutes: 350    # mirrors Step 2a hard ceiling; no watchdog is forwarded
-        if: steps.check_condition_b.outputs.has_condition_b == 'true' && steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
-        env:
-          GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # Removed AZURE_OPENAI_API_KEY — openai SDK auto-detects env key and overrides azure_ad_token_provider. OIDC only via DefaultAzureCredential / azure/login@v2.
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          cd batch-runner
-          bash step2_run_inference.sh condition_b
-
       # ── Step 3: Format Results ──
       - name: 'Step 3: Format results'
         if: steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
@@ -685,8 +805,10 @@ jobs:
         id: step6
         if: steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
         env:
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          # Removed AZURE_OPENAI_API_KEY — openai SDK auto-detects env key and overrides azure_ad_token_provider. OIDC only via DefaultAzureCredential / azure/login@v2.
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
         run: |
           cd batch-runner
           if [[ "$DRY_RUN_INPUT" == "true" ]]; then
@@ -758,7 +880,6 @@ jobs:
             - ✅ Step 0: Bootstrap submission repo
             - ✅ Step 1: Prepare tasks
             - ✅ Step 2: Run inference (condition_a)
-            - ✅ Step 2: Run inference (condition_b) — ${{ steps.check_condition_b.outputs.has_condition_b == 'true' && 'Run' || 'Skipped' }}
             - ✅ Step 3: Format results
             - ✅ Step 4: Fill parquet
             - ✅ Step 5: Validate dataset — ${{ steps.check_smoke_test.outputs.is_smoke_test == 'true' && 'Skipped (smoke test)' || 'Run' }}

@@ -15,6 +15,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Optional
 
+from core.azure_ai_clients import (
+    AzureAIClientFactory,
+    AzureAIWorkload,
+    canonical_deployment,
+    grader_route_workloads,
+)
+from core.llm_client import ManagedAzureAIClient, create_typed_azure_client
+from core.public_error import public_provider_error_text
 from core.deliverable_selector import (
     CriterionTargetPlan,
     DeliverableSelection,
@@ -25,7 +33,6 @@ from core.file_reader import read_reference_file
 from core.grader_routing import (
     Modality,
     RoutingDecision,
-    classify_criterion,
     is_overall_style_criterion,
     resolve_runtime_routing,
 )
@@ -33,23 +40,23 @@ from core.rubric_loader import RubricItem, TaskRubric
 
 logger = logging.getLogger(__name__)
 
-
-def DefaultAzureCredential(*args, **kwargs):
-    from azure.identity import DefaultAzureCredential as credential_type
-
-    return credential_type(*args, **kwargs)
+DEFAULT_GRADER_TIMEOUT = 600
+DEFAULT_GRADER_API_VERSION = "2025-04-01-preview"
 
 
-def get_bearer_token_provider(*args, **kwargs):
-    from azure.identity import get_bearer_token_provider as provider_factory
-
-    return provider_factory(*args, **kwargs)
-
-
-def AzureOpenAI(*args, **kwargs):
-    from openai import AzureOpenAI as client_type
-
-    return client_type(*args, **kwargs)
+def grader_transport_options(config: dict) -> dict[str, object]:
+    """Return the exact transport fields bound into grader route identity."""
+    judge = config.get("judge") or {}
+    timeout = int(judge.get("timeout_sec", DEFAULT_GRADER_TIMEOUT))
+    api_version = judge.get("api_version", DEFAULT_GRADER_API_VERSION)
+    if timeout <= 0:
+        raise ValueError("judge.timeout_sec must be positive")
+    if not isinstance(api_version, str) or not api_version.strip():
+        raise ValueError("judge.api_version must be a nonempty string")
+    return {
+        "timeout": timeout,
+        "legacy_api_version": api_version.strip(),
+    }
 
 
 def resolve_tool_prompt_path(config: dict) -> Path:
@@ -221,7 +228,14 @@ class _RuntimeCriterionPlan:
 
 
 class Grader:
-    def __init__(self, config: dict, rubric_loader):
+    def __init__(
+        self,
+        config: dict,
+        rubric_loader,
+        *,
+        client=None,
+        client_factory: AzureAIClientFactory | None = None,
+    ):
         self.config = config
         self.rubric_loader = rubric_loader
 
@@ -229,87 +243,84 @@ class Grader:
         if provider != "azure_openai":
             raise NotImplementedError(f"Unsupported judge provider: {provider}")
 
-        endpoint_env = self.config["judge"]["endpoint_env"]
-        endpoint = os.getenv(endpoint_env)
-        if not endpoint:
-            raise ValueError(f"Missing Azure endpoint env var: {endpoint_env}")
-
-        timeout = int(self.config.get("judge", {}).get("timeout_sec", 600))
-        api_version = self.config.get("judge", {}).get(
-            "api_version", "2025-04-01-preview"
-        )
-        self.model = self.config["judge"]["model"]
-
-        # Auth: default is OIDC (DefaultAzureCredential). Opt-in API key
-        # fallback is available ONLY when GRADER_ALLOW_API_KEY_FALLBACK=1
-        # is set. This preserves the OIDC-only invariant for production
-        # while letting the cost-optimization sweep recover from stale SP
-        # secrets without an interactive credential rotation.
-        allow_api_key_fallback = (
-            os.getenv("GRADER_ALLOW_API_KEY_FALLBACK", "0") == "1"
-        )
-        api_key = os.getenv("AZURE_OPENAI_API_KEY") if allow_api_key_fallback else None
-
-        client_kwargs: dict = {
-            "azure_endpoint": endpoint,
-            "api_version": api_version,
-            "timeout": timeout,
-        }
-        try:
-            credential = DefaultAzureCredential()
-            token_provider = get_bearer_token_provider(
-                credential, "https://cognitiveservices.azure.com/.default"
+        endpoint_env = self.config["judge"].get("endpoint_env")
+        if endpoint_env is not None:
+            raise ValueError(
+                "judge.endpoint_env is deprecated; use typed Azure AI runtime env"
             )
-            # Force a token fetch up front so we fail fast if OIDC is broken.
-            if allow_api_key_fallback:
-                try:
-                    _ = token_provider()
-                except Exception as oidc_err:  # noqa: BLE001
-                    if not api_key:
-                        raise
-                    print(
-                        f"   ⚠️  Grader OIDC failed ({type(oidc_err).__name__}); "
-                        f"falling back to AZURE_OPENAI_API_KEY"
+
+        transport = grader_transport_options(self.config)
+        deployment = canonical_deployment(self.config["judge"], "judge")
+        self.model = deployment
+        grader_route_workloads(self.config)
+
+        self._managed_client: ManagedAzureAIClient | None = None
+        if client is None:
+            self._managed_client = create_typed_azure_client(
+                AzureAIWorkload.GRADER,
+                deployment,
+                factory=client_factory,
+                **transport,
+            )
+            client = self._managed_client.client
+        self.client = client
+
+        try:
+            self.prompt_template = self._read_prompt_template(
+                self.config["prompt"]["template"]
+            )
+            self.prompt_version = self._extract_prompt_version(self.prompt_template)
+            self._min_delay_seconds = (
+                float(
+                    self.config.get("tpm_guard", {}).get(
+                        "min_delay_ms_between_calls", 0
                     )
-                    raise oidc_err
-            client_kwargs["azure_ad_token_provider"] = token_provider
-        except Exception:
-            if api_key:
-                client_kwargs["api_key"] = api_key
-            else:
-                raise
+                )
+                / 1000.0
+            )
+            self._last_judge_call_at: float | None = None
 
-        self.client = AzureOpenAI(**client_kwargs)
+            # --- Optional: prompt-level batching + tiered judge routing ---
+            self.batch_size = int(
+                self.config.get("grader", {}).get("batch_size", 1) or 1
+            )
+            self.judge_routing = self.config.get("judge_routing") or None
+            self._use_batch = (self.batch_size > 1) or bool(self.judge_routing)
+            self._tier_judges: dict[str, "object"] = {}
+            if self._use_batch:
+                self._build_tier_judges()
 
-        self.prompt_template = self._read_prompt_template(self.config["prompt"]["template"])
-        self.prompt_version = self._extract_prompt_version(self.prompt_template)
-        self._min_delay_seconds = (
-            float(self.config.get("tpm_guard", {}).get("min_delay_ms_between_calls", 0))
-            / 1000.0
-        )
-        self._last_judge_call_at: float | None = None
+            self._tool_judge = None
+            if self._is_tool_calling_config():
+                self._tool_judge = self._build_tool_calling_judge()
+        except BaseException:
+            try:
+                self.close()
+            except BaseException:
+                pass
+            raise
 
-        # --- Optional: prompt-level batching + tiered judge routing ------
-        # These are no-ops when the grading config does not set them; the
-        # single-item path above is left untouched. See `core.grader_batch`
-        # for the implementation. Note: `judge_call_count` becomes per-API-call
-        # (not per-item) the moment batching is active.
-        self.batch_size = int(self.config.get("grader", {}).get("batch_size", 1) or 1)
-        self.judge_routing = self.config.get("judge_routing") or None
-        self._use_batch = (self.batch_size > 1) or bool(self.judge_routing)
-        self._tier_judges: dict[str, "object"] = {}
-        if self._use_batch:
-            self._build_tier_judges()
+    @property
+    def runtime_fingerprint(self) -> str | None:
+        if self._managed_client is None:
+            return None
+        return self._managed_client.runtime_fingerprint
 
-        # --- PR2 task 203: v2 tool-calling judge opt-in ------------------
-        # Activated when the grading config sets `judge.tools.read_deliverable`
-        # (a structure unique to v2 configs). When set we instantiate a
-        # `ToolCallingJudge`; `_judge()` then dispatches to it instead of
-        # the legacy text-extraction path. Tier batching + tool-calling
-        # are mutually exclusive — v2 configs do not set judge_routing.
-        self._tool_judge = None
-        if self._is_tool_calling_config():
-            self._tool_judge = self._build_tool_calling_judge()
+    def close(self) -> None:
+        managed_client = self._managed_client
+        if managed_client is None:
+            return
+        try:
+            managed_client.close()
+        finally:
+            self._managed_client = None
+            self.client = None
+
+    def __enter__(self) -> "Grader":
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self.close()
 
     # ------------------------------------------------------------------
     # Batch / tier routing (no-op unless config opts in)
@@ -347,7 +358,14 @@ class Grader:
         def _tier_cfg(tier_block: dict | None, defaults: dict) -> dict:
             cfg = dict(defaults)
             if tier_block:
-                for k in ("model", "deployment", "reasoning_effort", "max_output_tokens"):
+                deployment = canonical_deployment(
+                    tier_block,
+                    "judge_routing.tier",
+                    fallback=str(defaults.get("deployment") or defaults.get("model") or ""),
+                )
+                cfg["model"] = deployment
+                cfg["deployment"] = deployment
+                for k in ("reasoning_effort", "max_output_tokens"):
                     if k in tier_block and tier_block[k] is not None:
                         cfg[k] = tier_block[k]
             return cfg
@@ -1420,10 +1438,11 @@ class Grader:
             try:
                 raw, latency_ms, input_tok, output_tok, finish_reason = self._call_judge(prompt)
             except Exception as exc:
+                public_error = public_provider_error_text(exc)
                 logger.warning(
                     "Judge call failed for %s after retries: %s",
                     item.rubric_item_id,
-                    exc,
+                    public_error,
                 )
                 return (
                     ItemGrade(
@@ -1438,7 +1457,9 @@ class Grader:
                         judge_confidence=None,
                         judge_latency_ms=0.0,
                         precheck_pattern_id=None,
-                        judge_raw_response=str(exc) if self._save_raw() else None,
+                        judge_raw_response=(
+                            public_error if self._save_raw() else None
+                        ),
                     ),
                     0,
                     0,
@@ -1861,25 +1882,29 @@ class Grader:
         perception_cfg = judge_cfg.get("perception") or {}
         vis_cfg = perception_cfg.get("visual") or {}
         aud_cfg = perception_cfg.get("audio") or {}
-        generation_cfg = judge_cfg.get("generation") or {}
-        if vis_cfg.get("model"):
+        if vis_cfg.get("model") is not None or vis_cfg.get("deployment") is not None:
             from core.perception.vision import VisionPerception  # local import
+            vision_deployment = canonical_deployment(
+                vis_cfg, "judge.perception.visual"
+            )
             vision_perception = VisionPerception(
                 client=self.client,
-                deployment=str(vis_cfg["model"]),
+                deployment=vision_deployment,
                 call_cap=int(vis_cfg.get("call_cap_per_task", 5)),
                 reasoning_effort=(judge_cfg.get("reasoning") or {})
                     .get("effort", "medium"),
                 before_upstream_call=self._apply_tpm_delay,
             )
-        if aud_cfg.get("model"):
+        if aud_cfg.get("model") is not None or aud_cfg.get("deployment") is not None:
             from core.perception.audio import AudioPerception  # local import
+            audio_deployment = canonical_deployment(
+                aud_cfg, "judge.perception.audio"
+            )
             audio_perception = AudioPerception(
                 client=self.client,
-                deployment=str(aud_cfg["model"]),
+                deployment=audio_deployment,
                 call_cap=int(aud_cfg.get("call_cap_per_task", 3)),
                 trim_seconds=int(aud_cfg.get("trim_seconds", 30)),
-                endpoint_env=str(aud_cfg.get("endpoint_env", "AZURE_AUDIO_ENDPOINT")),
             )
 
         return ToolCallingJudge(

@@ -71,6 +71,55 @@ const extractHeredoc = (script, marker, terminator) => {
   return body.map((line) => line.slice(indent)).join('\n')
 }
 
+const pythonHeredocs = (workflow) => {
+  const sources = []
+  for (const [jobName, job] of Object.entries(workflow.jobs || {})) {
+    for (const [stepIndex, step] of (job.steps || []).entries()) {
+      const lines = typeof step.run === 'string' ? step.run.split('\n') : []
+      for (let index = 0; index < lines.length; index += 1) {
+        if (!/^\s*python3?(?:\s+-)?\s+<<'PY'\s*$/.test(lines[index])) continue
+        const end = lines.findIndex((line, candidate) => candidate > index && line.trim() === 'PY')
+        assert.notEqual(end, -1, `unterminated Python heredoc: ${jobName}/${step.name || stepIndex}`)
+        const body = lines.slice(index + 1, end)
+        const indents = body.filter((line) => line.trim()).map((line) => line.length - line.trimStart().length)
+        const indent = indents.length ? Math.min(...indents) : 0
+        sources.push({
+          label: `${jobName}/${step.name || stepIndex}`,
+          source: body.map((line) => line.slice(indent)).join('\n'),
+        })
+        index = end
+      }
+    }
+  }
+  return sources
+}
+
+test('workflow Python heredocs compile before merge', async () => {
+  const workflowPaths = [
+    '.github/workflows/batch-run.yml',
+    '.github/workflows/grade-run.yml',
+  ]
+  let count = 0
+  for (const path of workflowPaths) {
+    const workflow = parse(await readRepoFile(path))
+    for (const heredoc of pythonHeredocs(workflow)) {
+      count += 1
+      await execFileAsync(
+        'python3',
+        ['-c', 'import os; compile(os.environ["WORKFLOW_PYTHON"], os.environ["WORKFLOW_LABEL"], "exec")'],
+        {
+          env: {
+            ...process.env,
+            WORKFLOW_LABEL: `${path}:${heredoc.label}`,
+            WORKFLOW_PYTHON: heredoc.source,
+          },
+        },
+      )
+    }
+  }
+  assert.ok(count >= 6, `expected at least 6 workflow Python heredocs, got ${count}`)
+})
+
 test('first-screen routes stay complete and fork-relative', async () => {
   const [rootEnglish, rootKorean, runnerEnglish, runnerKorean] = await Promise.all([
     readRepoFile('README.md'),
@@ -268,6 +317,29 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
     const config = (wallTimeout) => [
       'data:',
       '  source: openai/gdpval',
+      'condition_a:',
+      '  name: Baseline',
+      '  model:',
+      '    provider: azure',
+      '    deployment: main-deployment',
+      '  qa:',
+      '    enabled: true',
+      '    model: qa-deployment',
+      '  preprocessors:',
+      '    - type: audio_analyzer',
+      '      model:',
+      '        provider: azure',
+      '        deployment: audio-deployment',
+      '    - type: audio_analyzer',
+      '      optional: true',
+      '      model:',
+      '        provider: openai',
+      '        deployment: openai-audio-deployment',
+      '    - type: video_analyzer',
+      '      optional: true',
+      '      model:',
+      '        provider: anthropic',
+      '        deployment: anthropic-video-deployment',
       'execution:',
       '  mode: code_interpreter',
       `  wall_timeout: ${wallTimeout}`,
@@ -284,6 +356,32 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
       },
     })
     assert.match(await readFile(outputPath, 'utf8'), /^source_repo=openai\/gdpval$/m)
+    assert.match(
+      await readFile(outputPath, 'utf8'),
+      /^azure_ai_workloads_json=\["narrative=gpt-5\.4-pro","inference=main-deployment","inference=qa-deployment","inference=audio-deployment","code-interpreter=main-deployment","narrative=main-deployment"\]$/m,
+    )
+    assert.match(await readFile(outputPath, 'utf8'), /^requires_openai_key=true$/m)
+    assert.match(await readFile(outputPath, 'utf8'), /^requires_anthropic_key=true$/m)
+    const inspectMode = workflow.jobs['inspect-mode'].steps.find(
+      (step) => step.name === 'Inspect execution mode without credentials',
+    )
+    assert.ok(inspectMode)
+    const inspectRuby = extractHeredoc(inspectMode.run, "ruby <<'RUBY'", 'RUBY')
+    await writeFile(
+      fixturePath,
+      config(290).replace('execution:', 'condition_b:\n  name: B\nexecution:'),
+      'utf8',
+    )
+    await assert.rejects(
+      execFileAsync('ruby', ['-e', inspectRuby], {
+        cwd: fixtureRoot,
+        env: {
+          ...process.env,
+          EXPERIMENT_YAML: 'fixture',
+          GITHUB_OUTPUT: outputPath,
+        },
+      }),
+    )
     await writeFile(fixturePath, config(291), 'utf8')
     await assert.rejects(
       execFileAsync('python3', ['-c', readConfigPython], {
@@ -307,24 +405,133 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
   }
 })
 
-test('documented authentication narrows OIDC and excludes direct fallback from first-run guarantees', async () => {
-  const [batchText, runnerEnglish, runnerKorean, guideEnglish, guideKorean, codeInterpreter] = await Promise.all([
+test('documented authentication uses typed Foundry routes and OIDC-only credentials', async () => {
+  const [batchText, gradeText, runnerEnglish, runnerKorean, guideEnglish, guideKorean, codeInterpreter, azureClients] = await Promise.all([
     readRepoFile('.github/workflows/batch-run.yml'),
+    readRepoFile('.github/workflows/grade-run.yml'),
     readRepoFile('batch-runner/README.md'),
     readRepoFile('batch-runner/README_KR.md'),
     readRepoFile('docs/first-experiment.md'),
     readRepoFile('docs/first-experiment_KR.md'),
     readRepoFile('batch-runner/core/code_interpreter.py'),
+    readRepoFile('batch-runner/core/azure_ai_clients.py'),
   ])
   const workflow = parse(batchText)
-  for (const name of [
-    'Step 2a: Run inference (condition_a)',
-    'Step 2b: Run inference (condition_b)',
-    'Step 6: Generate experiment report',
-  ]) {
+  for (const name of ['Step 2a: Run inference (condition_a)']) {
     const env = findStep(workflow, name).env || {}
     assert.equal(Object.hasOwn(env, 'AZURE_OPENAI_API_KEY'), false)
-    assert.equal(Object.hasOwn(env, 'AZURE_OPENAI_ENDPOINT'), true)
+    assert.equal(Object.hasOwn(env, 'AZURE_OPENAI_ENDPOINT'), false)
+    assert.equal(Object.hasOwn(env, 'AZURE_AI_ROUTE_PROFILE'), true)
+    assert.equal(Object.hasOwn(env, 'AZURE_OPENAI_V1_ENDPOINT'), false)
+    assert.equal(Object.hasOwn(env, 'FOUNDRY_PROJECT_ENDPOINT'), true)
+  }
+  const reportEnv = findStep(workflow, 'Step 6: Generate experiment report').env || {}
+  assert.equal(reportEnv.AZURE_AI_ROUTE_PROFILE, 'direct-v1')
+  assert.equal(Object.hasOwn(reportEnv, 'FOUNDRY_PROJECT_ENDPOINT'), true)
+  assert.equal(Object.hasOwn(reportEnv, 'AZURE_OPENAI_ENDPOINT'), false)
+
+  const steps = workflow.jobs['batch-run'].steps
+  assert.equal(
+    steps.some((step) => step.name === 'Step 2b: Run inference (condition_b)'),
+    false,
+  )
+  const modeStep = workflow.jobs['inspect-mode'].steps.find(
+    (step) => step.name === 'Inspect execution mode without credentials',
+  )
+  assert.ok(modeStep)
+  assert.match(modeStep.run, /condition_b is unsupported in the general batch workflow/)
+  const configuredIdentity = findStep(workflow, 'Validate Azure OIDC identity before remote access')
+  const routePreflight = findStep(workflow, 'Validate Azure AI routes before remote writes')
+  const restore = findStep(workflow, 'Restore checkpoint (relay run)')
+  const step0 = findStep(workflow, 'Step 0: Bootstrap submission repo')
+  const login = findStep(workflow, 'Azure Login (OIDC)')
+  const sessionIdentity = findStep(workflow, 'Verify Azure OIDC session identity')
+  const tokenPreflight = findStep(workflow, 'Verify Azure AI token before model calls')
+  const step2a = findStep(workflow, 'Step 2a: Run inference (condition_a)')
+  assert.ok(steps.indexOf(configuredIdentity) < steps.indexOf(routePreflight))
+  assert.ok(steps.indexOf(routePreflight) < steps.indexOf(restore))
+  assert.ok(steps.indexOf(routePreflight) < steps.indexOf(step0))
+  assert.ok(steps.indexOf(routePreflight) < steps.indexOf(login))
+  assert.ok(steps.indexOf(login) < steps.indexOf(sessionIdentity))
+  assert.ok(steps.indexOf(sessionIdentity) < steps.indexOf(tokenPreflight))
+  assert.ok(steps.indexOf(login) < steps.indexOf(tokenPreflight))
+  assert.ok(steps.indexOf(tokenPreflight) < steps.indexOf(step2a))
+  assert.match(step2a.env.OPENAI_API_KEY, /requires_openai_key/)
+  assert.match(step2a.env.ANTHROPIC_API_KEY, /requires_anthropic_key/)
+  assert.doesNotMatch(step2a.env.OPENAI_API_KEY, /condition_a_provider/)
+  assert.doesNotMatch(step2a.env.ANTHROPIC_API_KEY, /condition_a_provider/)
+  assert.match(routePreflight.env.AZURE_AI_ROUTE_PROFILE, /uses_code_interpreter/)
+  assert.equal(routePreflight.env.AZURE_AI_REQUIRE_EXPECTED_IDENTITIES, '1')
+  assert.equal(
+    routePreflight.env.AZURE_AI_WORKLOADS_JSON,
+    '${{ steps.read_config.outputs.azure_ai_workloads_json }}',
+  )
+  assert.equal(Object.hasOwn(routePreflight.env, 'AZURE_AI_EXPECTED_DIRECT_ACCOUNT'), true)
+  assert.equal(Object.hasOwn(routePreflight.env, 'AZURE_AI_EXPECTED_PROJECT_NAME'), true)
+  assert.match(routePreflight.run, /azure_ai_route_preflight\.py/)
+  assert.match(tokenPreflight.run, /--verify-token/)
+  for (const step of [configuredIdentity, sessionIdentity]) {
+    for (const suffix of ['CLIENT_ID', 'TENANT_ID', 'SUBSCRIPTION_ID']) {
+      assert.equal(Object.hasOwn(step.env, `AZURE_AI_EXPECTED_${suffix}`), true)
+    }
+    assert.match(step.run, /azure_oidc_identity_preflight\.py/)
+  }
+  assert.match(sessionIdentity.run, /--verify-session/)
+  assert.equal(Object.hasOwn(workflow.on.workflow_dispatch.inputs, 'route_profile'), false)
+
+  const relayIdentity = findStep(workflow, 'Validate restored checkpoint identity')
+  assert.equal(relayIdentity.env.AZURE_AI_REQUIRE_EXPECTED_IDENTITIES, '1')
+  assert.match(relayIdentity.env.AZURE_AI_ROUTE_PROFILE, /uses_code_interpreter/)
+  assert.equal(Object.hasOwn(relayIdentity.env, 'FOUNDRY_PROJECT_ENDPOINT'), true)
+  for (const name of [
+    'Verify Azure AI token before model calls',
+    'Step 2a: Run inference (condition_a)',
+    'Step 6: Generate experiment report',
+  ]) {
+    assert.equal(findStep(workflow, name).env.AZURE_AI_REQUIRE_EXPECTED_IDENTITIES, '1')
+  }
+  assert.equal(
+    tokenPreflight.env.AZURE_AI_WORKLOADS_JSON,
+    '${{ steps.read_config.outputs.azure_ai_workloads_json }}',
+  )
+
+  const gradeWorkflow = parse(gradeText)
+  const gradeSteps = gradeWorkflow.jobs.grade.steps
+  const renderer = gradeSteps.find((step) => step.name === 'Determine renderer requirement')
+  assert.ok(renderer)
+  assert.match(renderer.run, /grader_route_workloads\(config\)/)
+  assert.match(renderer.run, /azure_ai_workloads_json=/)
+  const gradeStep = gradeSteps.find((step) => step.name === 'Run grading')
+  assert.ok(gradeStep)
+  assert.match(gradeStep.env.FOUNDRY_PROJECT_ENDPOINT, /!inputs\.dry_run/)
+  assert.match(gradeStep.env.AZURE_AI_ROUTE_PROFILE, /!inputs\.dry_run/)
+  const gradeConfiguredIdentity = gradeSteps.find(
+    (step) => step.name === 'Validate Azure OIDC identity before remote access',
+  )
+  const gradeLogin = gradeSteps.find((step) => step.name === 'Azure Login (OIDC)')
+  const gradeSessionIdentity = gradeSteps.find(
+    (step) => step.name === 'Verify Azure OIDC session identity',
+  )
+  assert.ok(gradeSteps.indexOf(gradeConfiguredIdentity) < gradeSteps.indexOf(gradeLogin))
+  assert.ok(gradeSteps.indexOf(gradeLogin) < gradeSteps.indexOf(gradeSessionIdentity))
+  for (const step of [gradeConfiguredIdentity, gradeSessionIdentity]) {
+    assert.equal(step.if, 'inputs.dry_run != true')
+    for (const suffix of ['CLIENT_ID', 'TENANT_ID', 'SUBSCRIPTION_ID']) {
+      assert.equal(Object.hasOwn(step.env, `AZURE_AI_EXPECTED_${suffix}`), true)
+    }
+  }
+  assert.match(gradeSessionIdentity.run, /--verify-session/)
+  for (const name of [
+    'Validate Azure AI route before remote access',
+    'Verify Azure AI token before grading',
+  ]) {
+    const step = gradeSteps.find((candidate) => candidate.name === name)
+    assert.ok(step)
+    assert.equal(step.env.AZURE_AI_REQUIRE_EXPECTED_IDENTITIES, '1')
+    assert.equal(
+      step.env.AZURE_AI_WORKLOADS_JSON,
+      '${{ steps.renderer.outputs.azure_ai_workloads_json }}',
+    )
   }
 
   const expectedSecrets = [
@@ -334,6 +541,15 @@ test('documented authentication narrows OIDC and excludes direct fallback from f
     'AZURE_OPENAI_ENDPOINT',
     'HF_TOKEN',
   ]
+  const expectedVariables = [
+    'AZURE_AI_EXPECTED_CLIENT_ID',
+    'AZURE_AI_EXPECTED_TENANT_ID',
+    'AZURE_AI_EXPECTED_SUBSCRIPTION_ID',
+    'AZURE_AI_EXPECTED_DIRECT_ACCOUNT',
+    'AZURE_AI_EXPECTED_PROJECT_ACCOUNT',
+    'AZURE_AI_EXPECTED_PROJECT_NAME',
+    'AZURE_AI_EXPECTED_LEGACY_ACCOUNT',
+  ]
   for (const [guide, heading] of [
     [guideEnglish, '### 5. Add repository secrets'],
     [guideKorean, '### 5. Repository secrets 등록'],
@@ -341,20 +557,22 @@ test('documented authentication narrows OIDC and excludes direct fallback from f
     const table = parseTables(extractSection(guide, heading)).find((candidate) => candidate[0][0] === 'Secret')
     assert.ok(table)
     assert.deepEqual(dataRows(table).map((row) => cleanCode(row[0])), expectedSecrets)
-    const endpoint = dataRows(table).find((row) => cleanCode(row[0]) === 'AZURE_OPENAI_ENDPOINT')[1]
-    assert.match(endpoint, /AzureOpenAI\(azure_endpoint=\.\.\.\)/)
-    assert.match(endpoint, /not a Foundry project URL|Foundry project URL은 아님/)
-    assert.match(guide, /not a\s+Foundry project URL|Foundry project URL이나/)
-    assert.match(guide, /`\/openai\/v1\/` base URL/)
-    assert.doesNotMatch(guide, /compatible Foundry endpoint/)
+    const variableTable = parseTables(extractSection(guide, heading)).find((candidate) => candidate[0][0] === 'Variable')
+    assert.ok(variableTable)
+    assert.deepEqual(dataRows(variableTable).map((row) => cleanCode(row[0])), expectedVariables)
+    assert.match(guide, /`\/openai\/v1\/`/)
+    assert.match(guide, /`\/api\/projects\/<project-name>`/)
+    assert.match(guide, /maps the `AZURE_OPENAI_ENDPOINT` secret|secret을 typed runtime 변수/)
+    assert.match(guide, /`https:\/\/ai\.azure\.com\/\.default`|`ai\.azure\.com` token/)
   }
 
-  assert.match(codeInterpreter, /os\.getenv\("AZURE_OPENAI_API_KEY"\)/)
-  assert.match(codeInterpreter, /Priority 2: API Key fallback/)
-  assert.match(runnerEnglish, /supported GitHub Actions path never injects `AZURE_OPENAI_API_KEY`/)
-  assert.match(runnerEnglish, /API-key-only direct runner behavior is outside this\s+first-run contract and is not guaranteed/)
-  assert.match(runnerKorean, /지원되는 GitHub Actions 경로는 `AZURE_OPENAI_API_KEY`를 주입하지 않고/)
-  assert.match(runnerKorean, /API-key-only direct runner 동작은 이\s+첫 실행 계약 밖이며 여기서는 보장하지/)
+  assert.doesNotMatch(codeInterpreter, /AZURE_OPENAI_API_KEY|API Key fallback/)
+  assert.match(codeInterpreter, /AzureAIWorkload\.CODE_INTERPRETER/)
+  assert.match(azureClients, /DIRECT_TOKEN_SCOPE = "https:\/\/ai\.azure\.com\/\.default"/)
+  assert.match(azureClients, /url=f"https:\/\/{host}\/openai\/v1\/"/)
+  assert.match(azureClients, /static Azure credential environment variables are forbidden/)
+  assert.match(runnerEnglish, /only Code Interpreter uses the project route/)
+  assert.match(runnerKorean, /Code Interpreter만 project route/)
 })
 
 test('local quick starts and bootstrap warnings follow their owning code', async () => {
@@ -595,11 +813,23 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
 
   assert.deepEqual(
     extractPythonStringList(publicationText, 'INCLUDE_PATTERNS'),
-    ['README.md', 'data/train-*.parquet', 'deliverable_files/**', 'self_report.json'],
+    [
+      'README.md',
+      'data/train-*.parquet',
+      'deliverable_files/**',
+      'inference_provenance.json',
+      'self_report.json',
+    ],
   )
   assert.deepEqual(
     extractPythonStringList(publicationText, 'DELETE_PATTERNS'),
-    ['data/**', 'deliverable_files/**', 'self_report.json'],
+    [
+      'data/**',
+      'deliverable_files/**',
+      'inference_provenance.json',
+      'self_report.json',
+      'step2_inference_results.json',
+    ],
   )
   assert.match(fillText, /validate_source_projection_rows\(/)
   assert.match(bootstrapText, /errors\.extend\(validate_source_projection_rows\(df, manifest_path\)\)/)
@@ -618,6 +848,37 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
   assert.match(publicationText, /prepared fingerprint mismatch/)
   assert.match(publicationText, /result fingerprint mismatch/)
   assert.match(publicationText, /result task set mismatch/)
+  assert.deepEqual(
+    extractPythonStringList(step7Text, 'INCLUDE'),
+    [
+      'README.md',
+      'data/train-*.parquet',
+      'deliverable_files/**',
+      'inference_provenance.json',
+      'self_report.json',
+    ],
+  )
+  assert.deepEqual(
+    extractPythonStringList(step7Text, 'DELETE'),
+    [
+      'data/**',
+      'deliverable_files/**',
+      'inference_provenance.json',
+      'self_report.json',
+      'step2_inference_results.json',
+    ],
+  )
+  assert.match(step7Text, /if INCLUDE_PATTERNS != INCLUDE:/)
+  assert.match(step7Text, /if DELETE_PATTERNS != DELETE:/)
+  assert.match(publicationText, /validate_inference_provenance\(/)
+  assert.match(publicationText, /if _is_managed_publication_path\(path\)/)
+  assert.match(publicationText, /"step2_inference_results\.json"/)
+  assert.doesNotMatch(step7Text, /CommitOperationDelete/)
+  assert.doesNotMatch(
+    step7Text,
+    /hf_publication\._publication_(?:source_paths|validate_files|deletions|plan_sha256)/,
+  )
+  assert.doesNotMatch(step7Text, /hf_publication\._is_managed_publication_path/)
 
   const createPr = findStep(workflow, 'Create Pull Request with results')
   const verifyPr = findStep(workflow, 'Verify result PR outputs and contract')
@@ -661,6 +922,10 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
   for (const runner of [runnerEnglish, runnerKorean]) {
     assert.match(runner, /results\/<experiment_id>\/report\//)
     assert.match(runner, /workspace\/upload\/self_report\.json/)
+    assert.match(runner, /`inference_provenance\.json`/)
+    assert.match(runner, /endpoint-free/)
+    assert.match(runner, /endpoint\s+URL/)
+    assert.match(runner, /stale remote|원격[\s\S]{0,80}step2_inference_results\.json/)
     assert.doesNotMatch(runner, /workspace\/report\//)
     assert.doesNotMatch(runner, /- \*\*`report\.html`\*\*/)
     assert.doesNotMatch(runner, /results\/<experiment_id>\/report\/[^\n]*HuggingFace/)

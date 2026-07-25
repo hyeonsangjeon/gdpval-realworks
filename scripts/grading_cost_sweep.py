@@ -28,6 +28,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -52,7 +53,6 @@ SWEEP_TEMPLATE = (
 )
 BASELINE_CONFIG = BATCH_RUNNER / "grading_configs" / "default_gpt5pro.yaml"
 STEP8 = BATCH_RUNNER / "step8_grade.py"
-BATCH_RUNNER_ENV = BATCH_RUNNER / ".env"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 # Hard-coded model TPM table for the current Azure deployment. Update
@@ -429,6 +429,10 @@ def render_temp_config(
             rendered.pop("judge_routing", None)
 
     # Hard guards (always enforced, regardless of plan input).
+    rendered["judge"].pop("endpoint_env", None)
+    for tier in (rendered.get("judge_routing") or {}).values():
+        if isinstance(tier, dict):
+            tier.pop("endpoint_env", None)
     rendered["judge"].setdefault("generation", {})
     rendered["judge"]["generation"]["temperature"] = 0
     rendered["judge"]["generation"]["seed"] = 42
@@ -464,61 +468,33 @@ def render_temp_config(
 # step8 invocation
 # ---------------------------------------------------------------------
 
-def _judge_slug(model: str) -> str:
-    return model.replace(".", "_")
-
-
-def _expected_grade_filename(config_path: Path, benchmark: dict[str, Any]) -> str:
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    template = cfg["output"]["filename_template"]
-    return template.format(
-        exp_id=benchmark["experiment_yaml_name"],
-        judge_slug=_judge_slug(cfg["judge"]["model"]),
-        rubric_short_sha=benchmark["rubric_sha"],
-        prompt_v=cfg["prompt"]["version"],
-    )
+def _load_step8_grade_path(output_path: Path, variant_dir: Path) -> Path:
+    values = []
+    for line in output_path.read_text(encoding="utf-8").splitlines():
+        name, separator, value = line.partition("=")
+        if separator and name == "grade_file":
+            values.append(value)
+    if len(values) != 1:
+        raise RuntimeError("step8_grade.py must emit exactly one grade_file")
+    relative = Path(values[0])
+    if relative.is_absolute() or relative.name == "":
+        raise RuntimeError("step8_grade.py emitted an invalid grade_file")
+    candidate = (REPO_ROOT / relative).resolve()
+    try:
+        candidate.relative_to(REPO_ROOT.resolve())
+        candidate.relative_to(variant_dir.resolve())
+    except ValueError as exc:
+        raise RuntimeError(
+            "step8_grade.py emitted grade_file outside the variant directory"
+        ) from exc
+    if not candidate.is_file():
+        raise RuntimeError("step8_grade.py emitted a missing grade_file")
+    return candidate
 
 
 def _load_subprocess_env() -> dict[str, str]:
-    """Build the env dict for step8_grade subprocesses.
-
-    Strategy: start from os.environ, then overlay batch-runner/.env so that
-    AZURE_OPENAI_ENDPOINT and SP credentials are present. We do not mutate
-    the parent process env to avoid surprising callers. Quoted values
-    (single or double) are stripped. Lines that do not match KEY=VALUE or
-    that start with '#' are ignored. Caller-set env vars take precedence
-    over .env (so CI overrides work).
-    """
-    env = dict(os.environ)
-    if not BATCH_RUNNER_ENV.exists():
-        LOG.warning(
-            "batch-runner/.env not found at %s; subprocess relies on parent env only",
-            BATCH_RUNNER_ENV,
-        )
-        return env
-
-    for raw_line in BATCH_RUNNER_ENV.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        if " #" in line:
-            line = line.split(" #", 1)[0].rstrip()
-        key, _, val = line.partition("=")
-        key = key.strip()
-        val = val.strip()
-        if (val.startswith('"') and val.endswith('"')) or (
-            val.startswith("'") and val.endswith("'")
-        ):
-            val = val[1:-1]
-        if key and key not in env:
-            env[key] = val
-
-    # Enable grader's API key fallback for the sweep so we recover from
-    # stale SP secrets without manual rotation. grader.py's default is
-    # still OIDC-only (the fallback is opt-in by this flag).
-    env.setdefault("GRADER_ALLOW_API_KEY_FALLBACK", "1")
-    return env
+    """Use caller-provided typed route env; never load local secret files."""
+    return dict(os.environ)
 
 
 def run_step8_grade(
@@ -529,11 +505,8 @@ def run_step8_grade(
 ) -> Path:
     """Invoke step8_grade.py for the variant. Returns the moved grade.json path.
 
-    Subprocess inherits parent env (OIDC token, AZURE_OPENAI_ENDPOINT) plus
-    any KEY=VALUE pairs from batch-runner/.env. The .env loading is needed
-    because step8_grade.py and core/* do not call load_dotenv themselves;
-    they only read from os.environ. Without this, AZURE_OPENAI_ENDPOINT
-    and SP credentials are missing and grader initialization fails fast.
+    Subprocess inherits the caller's typed Azure AI route env and OIDC context.
+    Local ``.env`` files and API-key fallback are intentionally unsupported.
     """
     log_path = variant_dir / "run.log"
     grade_target = variant_dir / "grade.json"
@@ -550,40 +523,33 @@ def run_step8_grade(
     ]
 
     sub_env = _load_subprocess_env()
+    descriptor, github_output_name = tempfile.mkstemp(
+        prefix=".step8-github-output-",
+        dir=variant_dir,
+    )
+    os.close(descriptor)
+    github_output = Path(github_output_name)
+    sub_env["GITHUB_OUTPUT"] = str(github_output)
+    try:
+        with open(log_path, "w", encoding="utf-8") as logf:
+            logf.write(f"# {' '.join(cmd)}\n# cwd={BATCH_RUNNER}\n\n")
+            logf.flush()
+            proc = subprocess.run(
+                cmd,
+                cwd=str(BATCH_RUNNER),
+                stdout=logf,
+                stderr=subprocess.STDOUT,
+                check=False,
+                env=sub_env,
+            )
 
-    with open(log_path, "w", encoding="utf-8") as logf:
-        logf.write(f"# {' '.join(cmd)}\n# cwd={BATCH_RUNNER}\n\n")
-        logf.flush()
-        proc = subprocess.run(
-            cmd,
-            cwd=str(BATCH_RUNNER),
-            stdout=logf,
-            stderr=subprocess.STDOUT,
-            check=False,
-            env=sub_env,
-        )
-
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"step8_grade.py exited {proc.returncode}; see {log_path}"
-        )
-
-    # Locate the produced grade JSON. Output directory is the variant's
-    # runs/<name>/ folder (redirected by render_temp_config so we never
-    # touch production data/grades/*.json). We expect the templated
-    # filename to land there; if not, fall back to any *.json in the dir.
-    expected_name = _expected_grade_filename(config_path, benchmark)
-    src = (variant_dir / expected_name).resolve()
-    if not src.exists():
-        candidates = sorted(
-            variant_dir.glob(f"{benchmark['experiment_yaml_name']}__*.json"),
-            key=lambda p: p.stat().st_mtime,
-        )
-        # Filter out the grade.json target itself in case of a re-run.
-        candidates = [c for c in candidates if c.resolve() != grade_target.resolve()]
-        if not candidates:
-            raise RuntimeError(f"no grade.json produced; expected {src}")
-        src = candidates[-1]
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"step8_grade.py exited {proc.returncode}; see {log_path}"
+            )
+        src = _load_step8_grade_path(github_output, variant_dir)
+    finally:
+        github_output.unlink(missing_ok=True)
 
     if src.resolve() != grade_target.resolve():
         # copy2 preserves the source for debugging/audit; the consolidated

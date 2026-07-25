@@ -1,6 +1,8 @@
 import gc
 import importlib.metadata
 import re
+import subprocess
+import sys
 import warnings
 from dataclasses import replace
 from pathlib import Path
@@ -18,6 +20,41 @@ FOUNDATION_DOCS = (
     REPO_ROOT / "tasks/0723_thursday/BOLT_TYPED_AZURE_AI_ENDPOINT_CONTRACTS.md",
     REPO_ROOT / "CHANGELOG.md",
 )
+
+
+def test_route_planning_imports_when_paid_sdks_are_blocked():
+    script = r'''
+import sys
+
+class BlockPaidSDKs:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "azure" or fullname.startswith("azure."):
+            raise ModuleNotFoundError("blocked Azure SDK")
+        if fullname == "openai" or fullname.startswith("openai."):
+            raise ModuleNotFoundError("blocked OpenAI SDK")
+        return None
+
+sys.meta_path.insert(0, BlockPaidSDKs())
+from core.azure_ai_clients import AzureAIRouteSettings, preflight_routes
+
+settings = AzureAIRouteSettings.from_env({
+    "AZURE_AI_ROUTE_PROFILE": "direct-v1",
+    "AZURE_OPENAI_V1_ENDPOINT": (
+        "https://account.services.ai.azure.com/openai/v1/"
+    ),
+})
+records = preflight_routes([("inference", "deployment")], settings=settings)
+assert records[0]["workload"] == "inference"
+'''
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def _direct_settings(
@@ -303,24 +340,40 @@ def test_project_ci_routes_only_code_interpreter_through_project():
     assert code_route.token_scope == clients.DIRECT_TOKEN_SCOPE
 
 
-def test_direct_profile_routes_all_workloads_to_direct_v1():
+def test_direct_profile_routes_non_ci_workloads_to_direct_v1():
     settings = _direct_settings()
 
-    for workload in clients.AzureAIWorkload:
+    for workload in (
+        clients.AzureAIWorkload.INFERENCE,
+        clients.AzureAIWorkload.NARRATIVE,
+        clients.AzureAIWorkload.GRADER,
+    ):
         route = settings.select(workload)
         assert route.endpoint.kind is clients.EndpointKind.DIRECT_V1
         assert route.token_scope == "https://ai.azure.com/.default"
 
 
-def test_legacy_profile_routes_all_workloads_with_legacy_scope():
+def test_legacy_profile_routes_non_ci_workloads_with_legacy_scope():
     settings = _legacy_settings()
 
-    for workload in clients.AzureAIWorkload:
+    for workload in (
+        clients.AzureAIWorkload.INFERENCE,
+        clients.AzureAIWorkload.NARRATIVE,
+        clients.AzureAIWorkload.GRADER,
+    ):
         route = settings.select(workload)
         assert route.endpoint.kind is clients.EndpointKind.LEGACY_DATED
         assert route.token_scope == (
             "https://cognitiveservices.azure.com/.default"
         )
+
+
+@pytest.mark.parametrize("settings", [_direct_settings(), _legacy_settings()])
+def test_code_interpreter_rejects_non_project_profile(settings):
+    with pytest.raises(
+        ValueError, match="Code Interpreter requires the project-ci profile"
+    ):
+        settings.select(clients.AzureAIWorkload.CODE_INTERPRETER)
 
 
 def test_project_endpoint_derives_same_account_direct_v1_route():
@@ -1796,6 +1849,52 @@ def test_verify_direct_token_uses_scope_without_closing_injected_credential():
         "https://ai.azure.com/.default"
     )
     credential.close.assert_not_called()
+
+
+def test_route_token_check_uses_explicit_legacy_scope():
+    credential = MagicMock()
+    settings = clients.AzureAIRouteSettings.from_env({
+        "AZURE_AI_ROUTE_PROFILE": "legacy-rollback",
+        "AZURE_AI_ALLOW_LEGACY_ROLLBACK": "1",
+        "AZURE_OPENAI_LEGACY_ENDPOINT": "https://account.openai.azure.com/",
+    })
+
+    clients.verify_route_tokens(
+        [(clients.AzureAIWorkload.GRADER, "deployment")],
+        settings=settings,
+        credential=credential,
+    )
+
+    credential.get_token.assert_called_once_with(
+        "https://cognitiveservices.azure.com/.default"
+    )
+    credential.close.assert_not_called()
+
+
+def test_route_token_check_deduplicates_shared_foundry_scope():
+    credential = MagicMock()
+    settings = clients.AzureAIRouteSettings.from_env({
+        "AZURE_AI_ROUTE_PROFILE": "project-ci",
+        "AZURE_OPENAI_V1_ENDPOINT": (
+            "https://account.services.ai.azure.com/openai/v1/"
+        ),
+        "FOUNDRY_PROJECT_ENDPOINT": (
+            "https://account.services.ai.azure.com/api/projects/project-one"
+        ),
+    })
+
+    clients.verify_route_tokens(
+        [
+            (clients.AzureAIWorkload.INFERENCE, "deployment"),
+            (clients.AzureAIWorkload.CODE_INTERPRETER, "deployment"),
+        ],
+        settings=settings,
+        credential=credential,
+    )
+
+    credential.get_token.assert_called_once_with(
+        "https://ai.azure.com/.default"
+    )
 
 
 @pytest.mark.parametrize("name", clients.FORBIDDEN_API_KEY_ENV)

@@ -55,9 +55,13 @@ from core.config import (
     NEEDS_FILES_POLICY,
     WORKSPACE_DIR,
 )
+from core.inference_manifest import (
+    canonical_deliverable_path,
+    canonical_task_id,
+    validate_inference_provenance,
+)
 from core.needs_files import resolve_needs_files
 from core.prompt_classifier import classify_prompt
-from core.inference_manifest import canonical_deliverable_path, canonical_task_id
 from core.reference_integrity import (
     ReferenceIntegrityError,
     reference_manifest_record,
@@ -2054,12 +2058,43 @@ def validate_source_projection_rows(
     return errors
 
 
+def validate_publication_provenance(
+    root: Path,
+    dataframe,
+    *,
+    submission_repo_id: str,
+    experiment_id: str,
+) -> List[str]:
+    path = Path(root) / "inference_provenance.json"
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return ["inference_provenance.json not found"]
+    except OSError as exc:
+        return [f"Unable to inspect inference provenance: {exc}"]
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        return ["inference_provenance.json is not a regular file"]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        task_ids = list(dataframe["task_id"])
+        validate_inference_provenance(
+            payload,
+            experiment_id=experiment_id,
+            source_repo_id=submission_repo_id,
+            task_ids=task_ids,
+        )
+    except (KeyError, OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        return [f"Inference provenance validation failed: {exc}"]
+    return []
+
+
 def validate_pre_upload(
     local_path: Optional[str] = None,
     submission_repo_id: Optional[str] = None,
     expected_rows: Optional[int] = None,
     expected_task_ids: Optional[List[str]] = None,
     expected_submitter_rows: Optional[List[dict]] = None,
+    expected_experiment_id: Optional[str] = None,
 ) -> List[str]:
     """Pre-upload validation -- call before step6 upload.
 
@@ -2072,6 +2107,8 @@ def validate_pre_upload(
         expected_task_ids: Exact ordered task IDs from the validated Step 1/2 scope.
         expected_submitter_rows: Exact task-level submitter projection derived
                      from the validated Step 2 result.
+        expected_experiment_id: Exact experiment ID bound to the publication
+                 provenance sidecar.
 
     Returns:
         List of error strings (empty = all good)
@@ -2273,5 +2310,19 @@ def validate_pre_upload(
             errors.append(
                 f"Unique task_id count: expected {expected}, got {len(ids)}"
             )
+
+    if submission_repo_id and expected_experiment_id and "task_id" in df.columns:
+        errors.extend(
+            validate_publication_provenance(
+                root,
+                df,
+                submission_repo_id=submission_repo_id,
+                experiment_id=expected_experiment_id,
+            )
+        )
+    else:
+        errors.append(
+            "submission_repo_id and expected_experiment_id are required for provenance validation"
+        )
 
     return errors

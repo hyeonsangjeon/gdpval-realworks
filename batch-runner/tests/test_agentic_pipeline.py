@@ -12,6 +12,7 @@ import pytest
 import step1_prepare_tasks as step1
 import step2_run_inference as step2
 from core.agentic_experiments import agentic_condition_identity
+from core.agentic_sandbox_runner import AgenticSandboxRunner
 from core.experiment_config import ExperimentConfig
 from core.prepared_fingerprint import prepared_fingerprint
 from core.source_identity import source_task_projection_sha256
@@ -133,6 +134,23 @@ def _canonical_manifest():
     })
 
 
+def test_executor_constructor_failure_closes_precreated_client(monkeypatch):
+    client = object()
+    close_client = MagicMock()
+    monkeypatch.setattr(
+        step2, "TaskExecutor", MagicMock(side_effect=ValueError("invalid mode"))
+    )
+    monkeypatch.setattr(step2, "close_provider_client", close_client)
+
+    with pytest.raises(ValueError, match="invalid mode"):
+        step2._create_executor_with_client_cleanup(
+            client,
+            mode="subprocess",
+        )
+
+    close_client.assert_called_once_with(client)
+
+
 def _patch_step2_workspace(tmp_path, monkeypatch, prepared):
     workspace = tmp_path / "workspace"
     upload = workspace / "upload"
@@ -231,7 +249,17 @@ def test_step1_redacts_agentic_control_plane_paths(tmp_path, monkeypatch):
 
 def test_step2_defers_provider_client_and_passes_factory(tmp_path, monkeypatch):
     _patch_step2_workspace(tmp_path, monkeypatch, _prepared())
+    monkeypatch.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
+    monkeypatch.setenv(
+        "AZURE_OPENAI_V1_ENDPOINT",
+        "https://test-resource.services.ai.azure.com/openai/v1/",
+    )
     provider_factory = MagicMock(side_effect=AssertionError("must stay deferred"))
+    managed = MagicMock()
+    typed_creator = MagicMock(return_value=managed)
+    verifier = MagicMock()
+    monkeypatch.setattr(step2, "create_typed_azure_client", typed_creator)
+    monkeypatch.setattr(step2, "_verify_managed_azure_ai_client", verifier)
     executor_instance = MagicMock()
     executor_class = MagicMock(return_value=executor_instance)
     monkeypatch.setattr(step2, "create_provider_client", provider_factory)
@@ -242,9 +270,14 @@ def test_step2_defers_provider_client_and_passes_factory(tmp_path, monkeypatch):
         lambda *args, **kwargs: {
             "task_id": "task-1",
             "status": "success",
+            "content": "done",
             "deliverable_text": "done",
             "deliverable_files": [],
+            "model": "test-deployment",
+            "usage": None,
+            "observability": {},
             "latency_ms": 1,
+            "timestamp": "2026-07-24T00:00:00+00:00",
         },
     )
 
@@ -260,6 +293,63 @@ def test_step2_defers_provider_client_and_passes_factory(tmp_path, monkeypatch):
     assert kwargs["run_id"] == "paired-run"
     assert kwargs["condition_name"] == "canary"
     assert kwargs["model_name"] == "test-deployment"
+
+    assert kwargs["client_factory"]() is managed
+    typed_creator.assert_called_once()
+    verifier.assert_called_once()
+
+
+def test_azure_agentic_without_typed_profile_fails_before_executor(
+    tmp_path, monkeypatch, capsys
+):
+    _patch_step2_workspace(tmp_path, monkeypatch, _prepared())
+    monkeypatch.delenv("AZURE_AI_ROUTE_PROFILE", raising=False)
+    executor = MagicMock()
+    monkeypatch.setattr(step2, "TaskExecutor", executor)
+
+    with pytest.raises(SystemExit):
+        step2.run_inference(
+            condition_key="condition_a", resume=False, resume_max_rounds=0
+        )
+
+    assert "requires a typed Azure AI route profile" in capsys.readouterr().out
+    executor.assert_not_called()
+
+
+def test_agentic_runner_closes_only_deferred_owned_client():
+    owned = MagicMock()
+    runner = AgenticSandboxRunner.__new__(AgenticSandboxRunner)
+    runner.client = owned
+    runner._owns_client = True
+    runner._closed = False
+
+    runner.close()
+    runner.close()
+
+    owned.close.assert_called_once_with()
+    assert runner.client is None
+
+
+def test_agentic_runner_cleanup_failure_is_class_only_and_clears_client():
+    sensitive = "https://private.services.ai.azure.com/"
+    owned = MagicMock()
+    owned.close.side_effect = OSError(sensitive)
+    runner = AgenticSandboxRunner.__new__(AgenticSandboxRunner)
+    runner.client = owned
+    runner._owns_client = True
+    runner._closed = False
+
+    with pytest.raises(
+        RuntimeError, match="provider_error:OSError"
+    ) as caught:
+        runner.close()
+
+    assert sensitive not in str(caught.value)
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert runner.client is None
+    runner.close()
+    owned.close.assert_called_once_with()
 
 
 def test_reserved_experiments_have_distinct_condition_budget_identities():
@@ -588,7 +678,18 @@ def test_progress_checkpoint_requires_exact_identity_and_recovers_missing_tasks(
         "total_tasks": 2,
         "started_at": "2026-07-17T00:00:00+00:00",
         "resume_round": 0,
-        "results": [{"task_id": "task-1", "status": "success"}],
+        "results": [{
+            "task_id": "task-1",
+            "status": "success",
+            "content": "done",
+            "deliverable_text": "done",
+            "deliverable_files": [],
+            "model": "test-model",
+            "usage": None,
+            "observability": {},
+            "latency_ms": 1.0,
+            "timestamp": "2026-07-17T00:00:00+00:00",
+        }],
     }
     path.write_text(json.dumps(document), encoding="utf-8")
 
@@ -621,22 +722,49 @@ def test_progress_checkpoint_requires_exact_identity_and_recovers_missing_tasks(
             prepared_fingerprint="a" * 64,
         )
 
+    with pytest.raises(ValueError, match="missing Azure AI routes"):
+        step2._load_and_validate_progress(
+            path,
+            experiment_id="exp030",
+            condition_name="Treatment",
+            condition_identity="treatment",
+            run_id="paired-run",
+            execution_mode="agentic_sandbox",
+            ordered_task_ids=["task-1", "task-2"],
+            prepared_fingerprint="a" * 64,
+            azure_ai_routes=[{
+                "endpoint_kind": "direct-v1",
+                "profile": "direct-v1",
+                "runtime_fingerprint": "f" * 64,
+                "workload": "inference",
+            }],
+        )
+
 
 def test_progress_task_set_rejects_duplicate_extra_and_final_reordering():
     ordered = ["task-1", "task-2"]
+
+    def pending(task_id):
+        return {
+            "task_id": task_id,
+            "status": "pending",
+            "error": "wall_timeout",
+            "timestamp": "2026-07-24T00:00:00+00:00",
+        }
+
     with pytest.raises(ValueError, match="duplicate"):
         step2._validate_result_task_set(
-            [{"task_id": "task-1"}, {"task_id": "task-1"}],
+            [pending("task-1"), pending("task-1")],
             ordered,
             allow_missing=True,
         )
     with pytest.raises(ValueError, match="unexpected"):
         step2._validate_result_task_set(
-            [{"task_id": "task-3"}], ordered, allow_missing=True
+            [pending("task-3")], ordered, allow_missing=True
         )
     with pytest.raises(ValueError, match="differ from ordered"):
         step2._validate_result_task_set(
-            [{"task_id": "task-2"}, {"task_id": "task-1"}],
+            [pending("task-2"), pending("task-1")],
             ordered,
             allow_missing=False,
         )

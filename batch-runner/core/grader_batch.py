@@ -61,6 +61,7 @@ from pathlib import Path
 from typing import Optional
 
 from core.file_reader import read_reference_file
+from core.public_error import public_provider_error_text
 from core.rubric_loader import RubricItem, TaskRubric
 
 logger = logging.getLogger(__name__)
@@ -176,9 +177,17 @@ class BatchJudge:
         try:
             raw, latency_ms, in_tok, out_tok, finish_reason = self._call_api(prompt)
         except Exception as exc:  # pragma: no cover - exercised via tests
-            logger.warning("Batch judge API call failed: %s", exc)
+            public_error = public_provider_error_text(exc)
+            logger.warning("Batch judge API call failed: %s", public_error)
             return BatchResult(
-                items=[self._judge_error_item(it, "judge_api_call_failed", str(exc)) for it in items_chunk],
+                items=[
+                    self._judge_error_item(
+                        it,
+                        "judge_api_call_failed",
+                        public_error,
+                    )
+                    for it in items_chunk
+                ],
                 input_tokens=0,
                 output_tokens=0,
                 num_api_calls=1,

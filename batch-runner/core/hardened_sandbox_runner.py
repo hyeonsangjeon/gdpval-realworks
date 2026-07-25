@@ -82,6 +82,7 @@ class HardenedSandboxRunner(SandboxRunner):
             raise ValueError("hardened baseline aggregate budget is required")
         self.aggregate_budget = aggregate
         self._provider_client = None
+        self._closed = False
         self._backend: Optional[AgenticComputeBackend] = None
         self._startup: Optional[dict] = None
         self._task_id = ""
@@ -105,6 +106,28 @@ class HardenedSandboxRunner(SandboxRunner):
             **sandbox_options,
         )
 
+    def _release_provider_client(self) -> Optional[str]:
+        client = self._provider_client
+        self._provider_client = None
+        if client is None:
+            return None
+        close = getattr(client, "close", None)
+        if not callable(close):
+            return None
+        try:
+            close()
+        except BaseException as exc:
+            return f"provider_cleanup_failed:{type(exc).__name__}"
+        return None
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        cleanup_error = self._release_provider_client()
+        if cleanup_error is not None:
+            raise RuntimeError(cleanup_error) from None
+
     def run(
         self,
         task_prompt: str,
@@ -118,6 +141,11 @@ class HardenedSandboxRunner(SandboxRunner):
         condition_name: Optional[str] = None,
         task_id: Optional[str] = None,
     ) -> dict:
+        if self._closed:
+            return self._terminal_failure("hardened_runner_closed")
+        stale_cleanup_error = self._release_provider_client()
+        if stale_cleanup_error is not None:
+            return self._terminal_failure(stale_cleanup_error)
         if model != self.model_name:
             return self._terminal_failure("baseline_model_identity_mismatch")
         if run_id != self.run_id or condition_name != self.condition_name or not task_id:
@@ -152,7 +180,6 @@ class HardenedSandboxRunner(SandboxRunner):
             "output_tokens": existing_usage.output_tokens,
             "conservative_cost_usd": str(existing_usage.cost_usd),
         })
-        self._provider_client = None
         outcome: Optional[dict] = None
 
         def finish(result: Mapping[str, Any]) -> dict:
@@ -193,7 +220,7 @@ class HardenedSandboxRunner(SandboxRunner):
         finally:
             try:
                 backend.close()
-            except Exception:
+            except BaseException:
                 if outcome is None:
                     outcome = self._terminal_failure("compute_cleanup_failed")
                 prior_error = outcome.get("error")
@@ -215,6 +242,17 @@ class HardenedSandboxRunner(SandboxRunner):
                 outcome["success"] = False
                 outcome["prior_error"] = prior_error
                 outcome["error"] = "compute_cleanup_failed"
+                self._budget_metrics["usage_complete"] = False
+                outcome["budget_metrics"] = dict(self._budget_metrics)
+            provider_cleanup_error = self._release_provider_client()
+            if provider_cleanup_error is not None:
+                if outcome is None:
+                    outcome = self._terminal_failure(provider_cleanup_error)
+                else:
+                    prior_error = outcome.get("error")
+                    outcome["success"] = False
+                    outcome["prior_error"] = prior_error
+                    outcome["error"] = provider_cleanup_error
                 self._budget_metrics["usage_complete"] = False
                 outcome["budget_metrics"] = dict(self._budget_metrics)
             self._backend = None

@@ -20,6 +20,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 # Importing module under test.
 from scripts import grading_cost_sweep as sweep  # noqa: E402
+sys.path.insert(0, str(REPO_ROOT / "batch-runner"))
+import step8_grade as step8  # noqa: E402
 
 PLAN_PATH = REPO_ROOT / "tasks" / "0523_saturday" / "grading_cost_sweep_plan.yaml"
 
@@ -163,7 +165,7 @@ def test_default_sweep_template_is_the_tracked_v1_archive():
     ] == "1.0"
 
 
-def test_render_temp_config_enforces_seed_temp(plan, tmp_path):
+def test_render_temp_config_enforces_seed_temp(plan, tmp_path, monkeypatch):
     variant = plan.phase_a[2]  # A1_pro_medium
     # Try to inject hostile overrides.
     variant.raw["judge"]["generation"] = {"temperature": 0.7, "seed": 999}
@@ -176,6 +178,49 @@ def test_render_temp_config_enforces_seed_temp(plan, tmp_path):
     assert Path(rendered["output"]["directory"]) == expected_variant_dir
     assert rendered["judge"]["generation"]["temperature"] == 0
     assert rendered["judge"]["generation"]["seed"] == 42
+    assert "endpoint_env" not in rendered["judge"]
+    monkeypatch.chdir(REPO_ROOT / "batch-runner")
+    step8.validate_grading_config(rendered)
+
+
+def test_step8_grade_path_uses_exact_github_output_for_nested_scope(
+    monkeypatch, tmp_path
+):
+    repo_root = tmp_path / "repo"
+    variant_dir = repo_root / "runs" / "variant"
+    grade_path = variant_dir / "_diagnostic" / ("a" * 64) / "result.json"
+    grade_path.parent.mkdir(parents=True)
+    grade_path.write_text("{}", encoding="utf-8")
+    output = tmp_path / "github-output"
+    output.write_text(
+        f"grade_file={grade_path.relative_to(repo_root).as_posix()}\n"
+        "grade_status=diagnostic\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sweep, "REPO_ROOT", repo_root)
+
+    assert sweep._load_step8_grade_path(output, variant_dir) == grade_path
+
+
+def test_step8_grade_path_rejects_missing_or_escaping_output(
+    monkeypatch, tmp_path
+):
+    repo_root = tmp_path / "repo"
+    variant_dir = repo_root / "runs" / "variant"
+    variant_dir.mkdir(parents=True)
+    output = tmp_path / "github-output"
+    monkeypatch.setattr(sweep, "REPO_ROOT", repo_root)
+
+    output.write_text("grade_status=final\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="exactly one grade_file"):
+        sweep._load_step8_grade_path(output, variant_dir)
+
+    outside = repo_root / "other" / "result.json"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("{}", encoding="utf-8")
+    output.write_text("grade_file=other/result.json\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="outside the variant"):
+        sweep._load_step8_grade_path(output, variant_dir)
 
 
 # ---------------------------------------------------------------------

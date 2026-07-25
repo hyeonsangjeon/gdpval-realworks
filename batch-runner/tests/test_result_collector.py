@@ -393,26 +393,27 @@ class TestResultCollector:
 
 @pytest.mark.integration
 class TestResultCollectorIntegration:
-    """실제 Azure OpenAI API를 사용하여 ResultCollector E2E 테스트
+    """실제 typed Azure AI route를 사용한 ResultCollector E2E 테스트
 
     실행 전 환경변수 필요:
-        export AZURE_API_KEY="your-key"
-        export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+        az login
+        export AZURE_AI_ROUTE_PROFILE="direct-v1"
+        export AZURE_OPENAI_V1_ENDPOINT="https://resource.services.ai.azure.com/openai/v1/"
 
     실행:
         pytest tests/test_result_collector.py -m integration -v
     """
 
     @pytest.fixture
-    def client(self):
-        from core.llm_client import create_client
-        api_key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY")
-        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_ENDPOINT")
-
-        if not api_key or not endpoint:
-            pytest.skip("Azure credentials not set.")
-
-        return create_client(endpoint=endpoint, api_key=api_key)
+    def client(self, model):
+        from core.llm_client import close_provider_client, create_client
+        if not os.getenv("AZURE_AI_ROUTE_PROFILE") or not os.getenv(
+            "AZURE_OPENAI_V1_ENDPOINT"
+        ):
+            pytest.skip("typed Azure AI route env is not configured")
+        client = create_client(deployment=model)
+        yield client
+        close_provider_client(client)
 
     @pytest.fixture
     def model(self):

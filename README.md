@@ -171,10 +171,10 @@ Expected behavior:
 3. Step 2 calls `gpt-5.2-chat`, creates files, and can retry same-model Self-QA.
 4. Steps 3-4 write formatted results and a three-row Parquet artifact.
 5. Step 5 is skipped because this is both a dry run and a three-task sample.
-6. Step 6's primary report path makes up to two sequential `gpt-5.4-pro` calls;
-  on error, it attempts one `gpt-5.2-chat` fallback call. Completed calls can
-  be billed. Narrative failure is non-blocking only because a mandatory
-  model-free report fallback and identity check run before publication.
+6. Step 6's primary report path makes up to two sequential `gpt-5.4-pro` calls.
+  Completed calls can be billed. Any setup, call, parse, or route-validation
+  failure immediately produces a model-free report; there is no second-model
+  fallback. Report identity must pass before publication.
 7. Step 7 and the result PR are skipped by `dry_run: true`.
 
 If the credentialed batch job reaches its final `always()` step, it attempts to

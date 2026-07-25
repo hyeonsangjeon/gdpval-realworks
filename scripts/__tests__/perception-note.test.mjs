@@ -3,7 +3,10 @@ import { readFile, readdir } from 'node:fs/promises'
 import test from 'node:test'
 import ts from 'typescript'
 
-import { buildPerceptionNoteData } from '../aggregate-perception-note.mjs'
+import {
+  buildPerceptionNoteData,
+  skillDirectoryNames,
+} from '../aggregate-perception-note.mjs'
 
 const readRepoFile = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8')
 
@@ -24,7 +27,7 @@ async function loadFixture() {
     readRepoFile('batch-runner/experiments/exp026_sandbox_skills_multimodal.yaml'),
     readdir(new URL('../../batch-runner/skills/', import.meta.url), { withFileTypes: true }),
   ])
-  const skills = skillEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+  const skills = skillDirectoryNames(skillEntries)
   const note = { ...buildPerceptionNoteData(source, { exp011, exp012, exp026 }, skills), _generated: '2026-07-18T00:00:00.000Z' }
   return { ...selector, reports: reportsIndex.reports, note }
 }

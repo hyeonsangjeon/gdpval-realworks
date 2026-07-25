@@ -230,6 +230,26 @@ def test_main_verifies_token_only_when_explicitly_requested(capsys):
     assert "private-deployment" not in capsys.readouterr().out
 
 
+def test_main_uses_route_specific_verifier_when_requested(monkeypatch):
+    verifier = MagicMock()
+    monkeypatch.setattr(preflight, "verify_route_tokens", verifier)
+
+    preflight.main(
+        [
+            "--workload",
+            "inference=private-deployment",
+            "--verify-token",
+        ],
+        env=_direct_env(),
+    )
+
+    workloads, = verifier.call_args.args
+    assert workloads == [
+        (preflight.AzureAIWorkload.INFERENCE, "private-deployment")
+    ]
+    assert verifier.call_args.kwargs["settings"].profile.value == "direct-v1"
+
+
 def test_token_verification_error_is_sanitized(capsys):
     verifier = MagicMock(
         side_effect=RuntimeError(
@@ -250,7 +270,7 @@ def test_token_verification_error_is_sanitized(capsys):
         )
 
     stderr = capsys.readouterr().err
-    assert "direct token verification failed" in stderr
+    assert "Azure AI route token verification failed" in stderr
     assert "private-account" not in stderr
     assert "private-deployment" not in stderr
 

@@ -50,24 +50,17 @@ export function extractWorkflowPolicy(workflowSource) {
   const dispatch = workflow?.on?.workflow_dispatch
   const steps = job?.steps ?? []
   const step2a = findExactStep(steps, 'Step 2a: Run inference (condition_a)')
-  const step2b = findExactStep(steps, 'Step 2b: Run inference (condition_b)')
 
   const watchdogMinutes = requirePositiveInteger(dispatch?.inputs?.wall_timeout?.default, 'wall timeout')
   const step2aMinutes = requirePositiveInteger(step2a?.['timeout-minutes'], 'Step 2a timeout')
-  const step2bMinutes = requirePositiveInteger(step2b?.['timeout-minutes'], 'Step 2b timeout')
   const jobMinutes = requirePositiveInteger(job?.['timeout-minutes'], 'job timeout')
   const step2aRun = requireString(step2a?.run, 'Step 2a run')
-  const step2bRun = requireString(step2b?.run, 'Step 2b run')
 
-  if (step2aMinutes !== step2bMinutes) throw new Error('Step 2a and Step 2b timeouts must match')
   if (!(watchdogMinutes < step2aMinutes && step2aMinutes < jobMinutes)) {
     throw new Error('runtime boundaries must satisfy watchdog < step < job')
   }
   if (!step2aRun.includes('step2_run_inference.sh condition_a --wall-timeout "$WALL_TIMEOUT"')) {
     throw new Error('Step 2a must forward the wall timeout')
-  }
-  if (step2bRun.includes('--wall-timeout') || !step2bRun.includes('step2_run_inference.sh condition_b')) {
-    throw new Error('Step 2b watchdog wiring changed; update the runtime policy scope')
   }
 
   return {
