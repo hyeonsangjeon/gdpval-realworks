@@ -53,7 +53,9 @@ def test_general_batch_blocks_agentic_before_any_credential_step():
     )
     assert inspect_checkout["with"]["persist-credentials"] is False
     assert "YAML.safe_load" in inspect_job["steps"][-1]["run"]
-    assert "mode'] == 'agentic_sandbox'" in inspect_job["steps"][-1]["run"]
+    inspect_script = inspect_job["steps"][-1]["run"]
+    assert "'agentic_sandbox'" in inspect_script
+    assert "'agentic_sandbox_v2'" in inspect_script
     assert reject_job["if"] == (
         "needs.inspect-mode.outputs.uses_agentic == 'true'"
     )
@@ -68,9 +70,9 @@ def test_general_batch_blocks_agentic_before_any_credential_step():
     assert steps[block_index]["if"] == (
         "steps.read_config.outputs.uses_agentic == 'true'"
     )
-    assert "mode == 'agentic_sandbox' or hardened" in steps[
-        names.index("Read experiment config flags")
-    ]["run"]
+    read_config_script = steps[names.index("Read experiment config flags")]["run"]
+    assert '"agentic_sandbox"' in read_config_script
+    assert '"agentic_sandbox_v2"' in read_config_script
     credential_indices = [
         index
         for index, step in enumerate(steps)

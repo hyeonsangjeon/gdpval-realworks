@@ -35,7 +35,7 @@ from core.hardened_sandbox_runner import HardenedSandboxRunner
 # Execution modes
 ExecutionMode = Literal[
     "code_interpreter", "subprocess", "sandbox", "agentic_sandbox",
-    "json_renderer",
+    "agentic_sandbox_v2", "json_renderer",
 ]
 
 
@@ -88,6 +88,7 @@ class TaskExecutor:
         provider: Optional[str] = None,
         client_factory: Optional[Callable[[], object]] = None,
         agentic_options: Optional[dict] = None,
+        agentic_v2_options: Optional[dict] = None,
         run_id: Optional[str] = None,
         condition_name: Optional[str] = None,
         model_name: Optional[str] = None,
@@ -100,6 +101,9 @@ class TaskExecutor:
         agentic_endpoint: Optional[str] = None,
         agentic_ordered_task_ids: Optional[list[str]] = None,
         agentic_task_request_sha256: Optional[Mapping[str, str]] = None,
+        agentic_v2_backend_factory=None,
+        agentic_v2_fixture_root: Optional[str | Path] = None,
+        agentic_v2_scripted_calls=None,
         non_paid_test_mode: bool = False,
         code_interpreter_client=None,
         redact_provider_errors: bool = False,
@@ -564,6 +568,57 @@ class TaskExecutor:
                     ],
                 )
 
+        elif mode == "agentic_sandbox_v2":
+            from core.agentic_v2_runner import AgenticV2IsolatedFixtureRunner
+
+            if not non_paid_test_mode:
+                raise ValueError(
+                    "agentic_sandbox_v2 foundation is model-free only"
+                )
+            if llm_client is not None or client_factory is not None:
+                raise ValueError(
+                    "agentic_sandbox_v2 foundation refuses model clients"
+                )
+            if any(value is not None for value in (
+                api_key,
+                endpoint,
+                code_interpreter_client,
+            )):
+                raise ValueError(
+                    "agentic_sandbox_v2 foundation refuses credential inputs"
+                )
+            if any(value is not None for value in (
+                prompt_name,
+                tokens,
+                timeout,
+                reasoning_effort,
+                sandbox_options,
+                metrics_options,
+                provider,
+                agentic_options,
+                model_name,
+            )):
+                raise ValueError(
+                    "agentic_sandbox_v2 foundation refuses model inputs"
+                )
+            if agentic_v2_backend_factory is not None:
+                raise ValueError(
+                    "agentic_sandbox_v2 foundation rejects custom backend factories"
+                )
+            if agentic_v2_fixture_root is None:
+                raise ValueError(
+                    "agentic_sandbox_v2 foundation requires a fixture root"
+                )
+            if not isinstance(agentic_v2_scripted_calls, (list, tuple)):
+                raise ValueError(
+                    "agentic_sandbox_v2 foundation requires scripted calls"
+                )
+            self.runner = AgenticV2IsolatedFixtureRunner(
+                fixture_root=agentic_v2_fixture_root,
+                scripted_calls=agentic_v2_scripted_calls,
+                profile=agentic_v2_options or {},
+            )
+
         elif mode == "json_renderer":
             if llm_client is None:
                 raise ValueError("json_renderer mode requires llm_client")
@@ -649,6 +704,25 @@ class TaskExecutor:
                     experiment_prompt=experiment_prompt,
                 )
 
+            elif self.mode == "agentic_sandbox_v2":
+                if model:
+                    raise ValueError(
+                        "agentic_sandbox_v2 foundation refuses model input"
+                    )
+                if experiment_prompt is not None:
+                    raise ValueError(
+                        "agentic_sandbox_v2 foundation refuses model prompts"
+                    )
+                return self.runner.run(
+                    task_prompt=task_prompt,
+                    reference_files=reference_files,
+                    occupation=occupation,
+                    perception_text=perception_text,
+                    run_id=run_id or "local-nonpaid",
+                    condition_name=condition_name or "condition_a",
+                    task_id=task_id or "unknown-task",
+                )
+
             elif self.mode in {"sandbox", "agentic_sandbox"}:
                 extra = {}
                 if self.mode == "agentic_sandbox" or self.hardened_sandbox:
@@ -708,7 +782,6 @@ class TaskExecutor:
                     "agentic_sandbox mode requires OpenAI/Azure OpenAI, "
                     f"got {model_provider}"
                 )
-
         return (True, None)
 
     @staticmethod

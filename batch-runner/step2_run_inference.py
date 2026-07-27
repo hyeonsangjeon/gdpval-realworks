@@ -132,6 +132,25 @@ def _require_code_interpreter_route_profile(execution_mode: str) -> None:
         )
 
 
+def _require_runnable_execution_mode(execution_mode: str) -> None:
+    if execution_mode == "agentic_sandbox_v2":
+        raise ValueError(
+            "agentic_sandbox_v2 foundation is model-free and must run through "
+            "the scripted fixture harness"
+        )
+
+
+def _resolve_runnable_execution_mode(
+    configured_execution_mode: str,
+    override_execution_mode: Optional[str],
+) -> str:
+    _require_runnable_execution_mode(configured_execution_mode)
+    if override_execution_mode is not None:
+        _require_runnable_execution_mode(override_execution_mode)
+        return override_execution_mode
+    return configured_execution_mode
+
+
 def _raise_redacted_azure_ai_error(error_type: str):
     raise RuntimeError(
         f"Typed Azure AI provider error ({error_type})"
@@ -2443,6 +2462,7 @@ def validate_restored_checkpoint(condition_key: str = "condition_a") -> dict:
         "mode", prepared.get("execution_mode", "subprocess")
     )
     _require_code_interpreter_route_profile(execution_mode)
+    _require_runnable_execution_mode(execution_mode)
     if execution_mode == "agentic_sandbox" or (
         execution_mode == "sandbox" and sandbox.get("hardened_substrate") is True
     ):
@@ -2684,9 +2704,11 @@ def _run_inference_impl(
     configured_execution_mode = execution_cfg.get(
         "mode", prepared.get("execution_mode", "subprocess")
     )
-    if execution_mode is None:
-        execution_mode = configured_execution_mode
     try:
+        execution_mode = _resolve_runnable_execution_mode(
+            configured_execution_mode,
+            execution_mode,
+        )
         _require_code_interpreter_route_profile(execution_mode)
     except ValueError as exc:
         print(f"❌ {exc}")

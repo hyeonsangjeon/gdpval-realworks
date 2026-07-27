@@ -12,6 +12,32 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Agentic Sandbox V2 model-free foundation** - add an explicitly
+  non-production `agentic_sandbox_v2` execution contract with eight versioned
+  tools, strict lifecycle and result schemas, three policy profiles, and a
+  required `foundation_only=true` marker. The shared executor accepts only the
+  built-in scripted fixture in non-paid mode and rejects model, client,
+  credential, prompt, provider, custom-backend, publication, grading, and
+  preprocessing inputs. Each fixture run uses a task-local process group with
+  hard wall-time termination, descendant cleanup, descriptor-relative
+  filesystem containment, prospective file/entry/byte caps, immutable package
+  locks, exact terminal artifact byte binding, and canonical source/runtime
+  identity. Private audit and public-redacted traces independently bind
+  requests, results, state continuity, replay history, capability/package
+  semantics, failures, and final deliverables. General Batch and Step 2 reject
+  configured or overridden V2 mode before credentials or provider construction;
+  V1 prompt, tool, limit, checkpoint, result, restore, import, and default-mode
+  identities remain frozen. Final model-free validation passes **196 focused
+  contracts** and the complete credential-free backend with **2,551 passed, 6
+  host-dependent skipped, and 44 integration tests deselected**, with no
+  warnings, clean static diagnostics, clean diff checks, and an independent
+  security/release **APPROVE** after seven high-stakes review rounds and an
+  iterative full-diff review. PyYAML parsing passes;
+  actionlint and Ruby are unavailable in the local validation environment. No
+  model, credential, Azure, Hugging Face, grading, deployment, workflow,
+  network-write, or paid operation ran. Real compute, package broker, web,
+  model-loop, publication, and microVM integration remain deferred to later
+  phases.
 - **GPT-5.6 Sol Max narrative and grading production policy** - move the
   dashboard narrative analyzer and the default v2 grading profile to
   `gpt-5.6-sol` with `reasoning_effort=max`; use the same identity for the
