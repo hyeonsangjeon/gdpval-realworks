@@ -130,7 +130,9 @@ jobs:
           abort('execution must be a mapping') unless execution.is_a?(Hash)
           sandbox = execution.fetch('sandbox', {}) || {}
           abort('execution.sandbox must be a mapping') unless sandbox.is_a?(Hash)
-          uses_agentic = execution['mode'] == 'agentic_sandbox' || sandbox['hardened_substrate'] == true
+          uses_agentic = ['agentic_sandbox', 'agentic_sandbox_v2'].include?(
+            execution['mode']
+          ) || sandbox['hardened_substrate'] == true
           File.open(ENV.fetch('GITHUB_OUTPUT'), 'a') do |output|
             output.puts("uses_agentic=#{uses_agentic}")
           end
@@ -372,7 +374,7 @@ jobs:
             "uses_sandbox": str(mode == "sandbox").lower(),
             "sandbox_image": image,
             "uses_agentic": str(
-              mode == 'agentic_sandbox' or hardened
+              mode in {"agentic_sandbox", "agentic_sandbox_v2"} or hardened
             ).lower(),
             "uses_code_interpreter": str(
               mode == "code_interpreter"
@@ -400,7 +402,7 @@ jobs:
       - name: 'Block agentic modes in credentialed general workflow'
         if: steps.read_config.outputs.uses_agentic == 'true'
         run: |
-          echo "FATAL: agentic_sandbox and its hardened paired baseline are not"
+          echo "FATAL: agentic sandbox modes and the hardened paired baseline are not"
           echo "authorized in batch-run.yml. This workflow co-locates Docker,"
           echo "Azure/HF credentials, relay, narrative, and upload permissions."
           echo "Use the dedicated signed compute/control workflow only after the"

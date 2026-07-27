@@ -202,6 +202,9 @@ def prepare_tasks(config_path: str) -> dict:
             } if (public_agentic := _public_agentic_config(
                 config.execution.agentic
             )) is not None else {}),
+            **({
+                "agentic_v2": dict(config.execution.agentic_v2)
+            } if config.execution.agentic_v2 is not None else {}),
             **({"metrics": config.execution.metrics} if config.execution.metrics is not None else {}),
         },
         "total_tasks": len(task_list),

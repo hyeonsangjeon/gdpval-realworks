@@ -101,7 +101,7 @@ class ExecutionConfig:
     """Execution mode configuration (Phase 5-3)"""
     mode: Literal[
         "code_interpreter", "subprocess", "json_renderer", "sandbox",
-        "agentic_sandbox",
+        "agentic_sandbox", "agentic_sandbox_v2",
     ] = "subprocess"
     score_type: Literal["tool_assisted", "portable"] = "tool_assisted"
     max_retries: int = 3           # Infrastructure retries within task execution
@@ -111,6 +111,7 @@ class ExecutionConfig:
     timeout: Optional[int] = None  # subprocess timeout override (seconds)
     sandbox: Optional[Dict[str, Any]] = None  # sandbox-mode settings (execution.sandbox block)
     agentic: Optional[Dict[str, Any]] = None  # agentic-mode settings (execution.agentic block)
+    agentic_v2: Optional[Dict[str, Any]] = None  # v2 contract/profile identity
     metrics: Optional[Dict[str, Any]] = None  # opt-in job metrics (execution.metrics block)
 
 
@@ -295,6 +296,11 @@ class ExperimentConfig:
                 if isinstance(execution_data.get("agentic"), dict)
                 else None
             ),
+            agentic_v2=(
+                dict(execution_data["agentic_v2"])
+                if isinstance(execution_data.get("agentic_v2"), dict)
+                else None
+            ),
             metrics=(
                 {"enabled": True}
                 if isinstance(execution_data.get("metrics"), dict)
@@ -408,6 +414,7 @@ class ExperimentConfig:
                 "timeout": self.execution.timeout,
                 "sandbox": self.execution.sandbox,
                 **({"agentic": self.execution.agentic} if self.execution.agentic is not None else {}),
+                **({"agentic_v2": self.execution.agentic_v2} if self.execution.agentic_v2 is not None else {}),
                 **({"metrics": self.execution.metrics} if self.execution.metrics is not None else {}),
             },
         }
@@ -491,7 +498,7 @@ class ExperimentConfig:
         # Validate execution mode (Phase 5-3)
         valid_modes = [
             "code_interpreter", "subprocess", "sandbox", "agentic_sandbox",
-            "json_renderer",
+            "agentic_sandbox_v2", "json_renderer",
         ]
         if self.execution.mode not in valid_modes:
             errors.append(f"execution.mode must be one of {valid_modes}")
@@ -519,6 +526,36 @@ class ExperimentConfig:
                 errors.append("agentic_sandbox mode requires azure or openai provider for condition_a")
             if self.condition_b and self.condition_b.model.provider not in ["azure", "openai"]:
                 errors.append("agentic_sandbox mode requires azure or openai provider for condition_b")
+
+        if self.execution.mode == "agentic_sandbox_v2":
+            from core.agentic_v2_contract import AgenticV2Profile
+
+            if self.condition_b is not None:
+                errors.append(
+                    "agentic_sandbox_v2 foundation requires exactly condition_a"
+                )
+            if self.output.publish_to_hf or self.output.submit_to_evals:
+                errors.append(
+                    "agentic_sandbox_v2 foundation cannot publish or submit"
+                )
+            if self.condition_a.qa and self.condition_a.qa.enabled:
+                errors.append(
+                    "condition_a.qa must be disabled for agentic_sandbox_v2 "
+                    "foundation"
+                )
+            if self.condition_a.preprocessors:
+                errors.append(
+                    "condition_a.preprocessors must be empty for "
+                    "agentic_sandbox_v2 foundation"
+                )
+            try:
+                AgenticV2Profile.from_mapping(self.execution.agentic_v2)
+            except ValueError as exc:
+                errors.append(str(exc))
+        elif self.execution.agentic_v2 is not None:
+            errors.append(
+                "execution.agentic_v2 is only valid for agentic_sandbox_v2 mode"
+            )
 
         hardened = (
             self.execution.mode == "agentic_sandbox"
