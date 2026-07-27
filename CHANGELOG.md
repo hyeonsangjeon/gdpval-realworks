@@ -34,10 +34,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   security/release **APPROVE** after seven high-stakes review rounds and an
   iterative full-diff review. PyYAML parsing passes;
   actionlint and Ruby are unavailable in the local validation environment. No
-  model, credential, Azure, Hugging Face, grading, deployment, workflow,
-  network-write, or paid operation ran. Real compute, package broker, web,
-  model-loop, publication, and microVM integration remain deferred to later
-  phases.
+  model, Azure, grading, paid operation, or manual workflow dispatch ran. Real
+  compute, package broker, web, model-loop, publication, and microVM integration
+  remain deferred to later phases. Shipped through PR #146 from reviewed head
+  `c969aa8d317f843c0060a64d466852c771f97f19` as squash merge
+  `f4c0e9e65f2dc244fb7ffa59d4c1454cd3f0f0c4`. Automatic PR validation passed
+  with deploy skipped; post-merge `main` validation and Pages deployment also
+  passed. Each automatic validation made 23 unauthenticated public Hugging Face
+  report reads with no fallback or failure; neither run used Hugging Face
+  credentials, writes, uploads, or publication, nor invoked model, Azure,
+  grading, or paid work.
 - **GPT-5.6 Sol Max narrative and grading production policy** - move the
   dashboard narrative analyzer and the default v2 grading profile to
   `gpt-5.6-sol` with `reasoning_effort=max`; use the same identity for the

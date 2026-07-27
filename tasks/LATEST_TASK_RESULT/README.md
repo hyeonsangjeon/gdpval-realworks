@@ -4,8 +4,8 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-27
-- Status: Agentic Sandbox V2 Phase 1A foundation implemented, fully validated,
-  and independently approved; shipment pending
+- Status: Agentic Sandbox V2 Phase 1A foundation shipped through PR #146;
+  automatic PR validation, post-merge validation, and Pages deployment passed
 
 ## Task
 
@@ -69,22 +69,37 @@ task. It must be refreshed before a task is reported complete.
   process, filesystem, identity, provenance, replay, terminal, workflow, and
   V1-compatibility finding was fixed and covered by a focused regression before
   the complete backend run.
-- No model, credential, token, Azure, Hugging Face, grading, deployment,
-  workflow dispatch, network write, remote mutation, or paid action occurred.
+- No model, Azure, grading, paid action, or manual workflow dispatch occurred.
+  Remote activity comprised the requested branch/PR/merge operations,
+  automatic repository validation, automatic Pages deployment, and 23
+  unauthenticated public Hugging Face report reads in each automatic validation.
+  No Hugging Face credential, write, upload, or publication was used.
 
 ## Shipment
 
-- Clean worktree: `/tmp/gdpval-agentic-sandbox-v2`.
-- Branch: `feat/agentic-sandbox-v2-foundation`.
-- Base: `origin/main@8ba02a40255a55c69075d8ba30bded1c874b4f8c`.
-- Commit, push, PR checks, merge, and post-merge completion record are pending.
-- The local planning Bolt remains intentionally ignored/private and is not part
-  of the public repository change.
+- Reviewed implementation head:
+  `c969aa8d317f843c0060a64d466852c771f97f19`.
+- PR [#146](https://github.com/hyeonsangjeon/gdpval-realworks/pull/146)
+  passed automatic validation and was squash-merged as
+  `f4c0e9e65f2dc244fb7ffa59d4c1454cd3f0f0c4` on 2026-07-27 UTC.
+- Automatic PR run
+  [30289467985](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30289467985)
+  passed `validate` in 124 seconds; `deploy` was skipped as required for pull
+  requests.
+- Automatic `main` push run
+  [30289701139](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30289701139)
+  passed `validate` in 109 seconds and Pages `deploy` in 11 seconds.
+- The remote feature branch was deleted after merge. Both automatic runs were
+  repository validation/deployment paths. Each read 23 public Hugging Face
+  reports without authentication, fallback, or failure; neither used Hugging
+  Face credentials or writes, nor dispatched model, Azure, grading, or paid
+  work.
+- The local planning Bolt remains intentionally ignored/private and was not
+  included in the public repository change.
 
 ## Remaining Work
 
-- Ship the reviewed implementation, verify automatic checks, and update this
-  rolling record with the reviewed head, PR, merge commit, and check runs.
+- No repository implementation or primary delivery work remains for Phase 1A.
 - Phase 1B and later must separately prove real microVM/container compute,
   package-broker supply chain, browser/web egress, model-loop budgeting,
   publication, and production authorization. None is approved by Phase 1A.
