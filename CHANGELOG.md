@@ -43,7 +43,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   integration tests deselected. CVE scanning, complete transitive artifact
   locks, signature, provenance, and a real Firecracker boot remain visible
   activation blockers. No login, push, promotion, model, Azure, grading,
-  publication, or paid operation ran.
+  publication, or paid operation ran. Shipped through PR #148 from reviewed
+  head `992b4feb6379eff756c9812d3ae5931808c7ea0d` as squash merge
+  `6e6a463f087f7d3d229ce4f0c2de19349efbf8c4`. No automatic PR or `main`
+  workflow run was created because the changed paths are outside every active
+  automatic workflow filter; no manual workflow was dispatched to compensate.
 - **Agentic Sandbox V2 model-free foundation** - add an explicitly
   non-production `agentic_sandbox_v2` execution contract with eight versioned
   tools, strict lifecycle and result schemas, three policy profiles, and a
