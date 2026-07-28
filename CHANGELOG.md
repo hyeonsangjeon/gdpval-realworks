@@ -12,6 +12,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Agentic Sandbox V2 Phase 1B professional-work candidate** - add a separate,
+  local-only image substrate without activating the Phase 1A executor, Step 2,
+  workflows, models, grading, publication, or a registry path. An exact GHCR
+  parent digest, seven top-level Debian versions, and one hash-pinned Python
+  wheel define a candidate with 20 required commands, 13 Python modules, three
+  font families, and nine GDPVal artifact round trips spanning Office/PDF,
+  spreadsheets, Chromium, compiled languages, ML, GIS, DXF, media, and OCR.
+  The clean-tree builder uses a committed Git-blob allowlist, an empty Docker
+  config, one local Unix daemon, a unique local tag, an immutable staged host
+  verifier, and an always-disabled default entrypoint. Host-owned bounded OCI
+  conversion rejects traversal, duplicate JSON or archive members, symlinks,
+  hardlinks, FIFOs, unreferenced blobs, digest/size/config/layer drift, and
+  verify-then-reopen races. Capability observations include exact package
+  records; deterministic SPDX generation is reconciled bidirectionally by
+  package, purl, SPDXID, relationship, namespace, and inventory digest; license
+  expressions use the SPDX registry and unknown or denied values fail closed.
+  Evidence files are reopened with secure Unix flags and rebound to their
+  subject, tool, semantic validator, and aggregate gate. A trusted exact-parent
+  probe verifies effective network, rootfs, identity, capability, privilege,
+  memory, PID, and CPU controls before any candidate code can run. On the local
+  host, unsupported CPU and PID cgroups keep containment failed, leave the
+  capability receipt, SBOM, and license evidence absent and `not_run`, verify
+  only the OCI layout, and keep the aggregate blocked. The exact checkpoint
+  candidate has image ID `sha256:faed2a1b0638d9a34e2144eb5914c78ea2a6c19f198d61aff03a8fb90bb0de78`
+  and OCI manifest `sha256:5046051464690f95eb561c60cc424de42ce90a9764bba3a7b2580648749220c9`.
+  Validation passes 57 Phase 1B static contracts, the exact degraded-host
+  integration, 604 combined Agentic Sandbox compatibility tests, and the full
+  credential-free backend with 2,608 passed, 6 host-dependent skipped, and 45
+  integration tests deselected. CVE scanning, complete transitive artifact
+  locks, signature, provenance, and a real Firecracker boot remain visible
+  activation blockers. No login, push, promotion, model, Azure, grading,
+  publication, or paid operation ran.
 - **Agentic Sandbox V2 model-free foundation** - add an explicitly
   non-production `agentic_sandbox_v2` execution contract with eight versioned
   tools, strict lifecycle and result schemas, three policy profiles, and a

@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0",
+  "substrate_id": "professional-work-v1",
+  "foundation_only": true,
+  "production_activation": "disabled",
+  "platform": {
+    "os": "linux",
+    "architecture": "amd64",
+    "python": "3.11"
+  },
+  "capability_families": [
+    "browser-local",
+    "cad-dxf",
+    "compilers",
+    "data-science",
+    "documents",
+    "fonts",
+    "gis",
+    "machine-learning",
+    "media",
+    "ocr",
+    "pdf",
+    "presentations",
+    "programming",
+    "shell",
+    "spreadsheets"
+  ],
+  "commands": [
+    {"name": "Rscript", "capability": "data-science", "probe": ["Rscript", "--version"]},
+    {"name": "bash", "capability": "shell", "probe": ["bash", "--version"]},
+    {"name": "chromium", "capability": "browser-local", "probe": ["chromium", "--version"]},
+    {"name": "cmake", "capability": "compilers", "probe": ["cmake", "--version"]},
+    {"name": "ffmpeg", "capability": "media", "probe": ["ffmpeg", "-version"]},
+    {"name": "ffprobe", "capability": "media", "probe": ["ffprobe", "-version"]},
+    {"name": "g++", "capability": "compilers", "probe": ["g++", "--version"]},
+    {"name": "gcc", "capability": "compilers", "probe": ["gcc", "--version"]},
+    {"name": "gdalinfo", "capability": "gis", "probe": ["gdalinfo", "--version"]},
+    {"name": "gfortran", "capability": "compilers", "probe": ["gfortran", "--version"]},
+    {"name": "libreoffice", "capability": "documents", "probe": ["libreoffice", "--version"]},
+    {"name": "make", "capability": "compilers", "probe": ["make", "--version"]},
+    {"name": "node", "capability": "programming", "probe": ["node", "--version"]},
+    {"name": "npm", "capability": "programming", "probe": ["npm", "--version"]},
+    {"name": "ogr2ogr", "capability": "gis", "probe": ["ogr2ogr", "--version"]},
+    {"name": "pandoc", "capability": "documents", "probe": ["pandoc", "--version"]},
+    {"name": "pdftoppm", "capability": "pdf", "probe": ["pdftoppm", "-v"]},
+    {"name": "pdftotext", "capability": "pdf", "probe": ["pdftotext", "-v"]},
+    {"name": "python", "capability": "programming", "probe": ["python", "--version"]},
+    {"name": "tesseract", "capability": "ocr", "probe": ["tesseract", "--version"]}
+  ],
+  "python_modules": [
+    {"name": "PIL", "capability": "documents"},
+    {"name": "av", "capability": "media"},
+    {"name": "ezdxf", "capability": "cad-dxf"},
+    {"name": "geopandas", "capability": "gis"},
+    {"name": "matplotlib", "capability": "data-science"},
+    {"name": "numpy", "capability": "data-science"},
+    {"name": "openpyxl", "capability": "spreadsheets"},
+    {"name": "pandas", "capability": "data-science"},
+    {"name": "pptx", "capability": "presentations"},
+    {"name": "reportlab", "capability": "pdf"},
+    {"name": "scipy", "capability": "data-science"},
+    {"name": "sklearn", "capability": "machine-learning"},
+    {"name": "weasyprint", "capability": "documents"}
+  ],
+  "font_families": [
+    "DejaVu Sans",
+    "Liberation Sans",
+    "Noto Sans CJK KR"
+  ],
+  "smoke_matrix": [
+    {"id": "browser-local-screenshot", "capability": "browser-local"},
+    {"id": "compiler-matrix", "capability": "compilers"},
+    {"id": "data-ml-fit", "capability": "machine-learning"},
+    {"id": "dxf-roundtrip", "capability": "cad-dxf"},
+    {"id": "gis-geopackage", "capability": "gis"},
+    {"id": "media-generate-probe", "capability": "media"},
+    {"id": "ocr-local-image", "capability": "ocr"},
+    {"id": "office-pdf-roundtrip", "capability": "documents"},
+    {"id": "spreadsheet-formula-roundtrip", "capability": "spreadsheets"}
+  ],
+  "supply_chain": {
+    "sbom_format": "SPDX-2.3",
+    "provenance_profile": "buildkit-max-v1",
+    "signature_profile": "cosign-offline-v1",
+    "cve_policy_id": "agentic-v2-cve-v1",
+    "license_policy_id": "agentic-v2-license-v1"
+  },
+  "microvm": {
+    "required": true,
+    "runtime": "firecracker",
+    "network": "none",
+    "rootfs": "read-only",
+    "workdir": "ephemeral-quota"
+  }
+}

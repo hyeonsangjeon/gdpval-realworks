@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "reference": "ghcr.io/hyeonsangjeon/gdpval-sandbox@sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+  "manifest_digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+  "observed_local_image_id": "sha256:32657f9b59f69dd5f41292f8b4270e9fb5d6ed4d2cc75474d0dfbd95fa39d874",
+  "source_revision": "78ac71cb2c6f19bf488a53143c4368ec19853e7c",
+  "platform": "linux/amd64",
+  "v1_dockerfile_sha256": "a22f415d405969b6350e7c20f33bbc268539ba46a79b32dfb95c4e100d184e09"
+}
