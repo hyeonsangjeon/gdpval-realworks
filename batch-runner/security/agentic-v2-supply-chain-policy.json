@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "policy_id": "agentic-v2-phase1b-candidate-v1",
+  "foundation_only": true,
+  "production_activation": "disabled",
+  "required_evidence": [
+    "capability_receipt",
+    "containment",
+    "cve",
+    "license",
+    "microvm",
+    "oci_layout",
+    "provenance",
+    "sbom",
+    "signature"
+  ],
+  "cve": {
+    "policy_id": "agentic-v2-cve-v1",
+    "scanner_db_max_age_days": 7,
+    "denied_severities": ["CRITICAL", "HIGH"],
+    "exceptions_require": ["cve", "purl", "reason", "approver", "expires_at"]
+  },
+  "license": {
+    "policy_id": "agentic-v2-license-v1",
+    "unknown_is_failure": true,
+    "denied_identifiers": ["BUSL-1.1", "Commons-Clause", "SSPL-1.0"],
+    "exceptions_require": ["purl", "license", "reason", "approver", "expires_at"]
+  },
+  "signature": {
+    "profile": "cosign-offline-v1",
+    "trusted_key_required": true,
+    "bundle_required": true
+  },
+  "provenance": {
+    "profile": "buildkit-max-v1",
+    "required_subjects": ["candidate", "parent", "dockerfile", "locks", "manifest", "probe", "sbom", "policy"]
+  },
+  "microvm": {
+    "runtime": "firecracker",
+    "jailer_required": true,
+    "kvm_required": true,
+    "network": "none",
+    "read_only_rootfs": true,
+    "ephemeral_work_disk": true
+  }
+}

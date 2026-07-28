@@ -1,5 +1,9 @@
 # GDPVal Sandbox Image
 
+> Agentic Sandbox V2 uses a separate, non-activated Phase 1B candidate context.
+> See [`sandbox/v2/README.md`](v2/README.md). The candidate does not change this
+> V1 image or enable V2 task execution.
+
 Skill-aware, multimodal **container sandbox** for the `execution.mode: sandbox`
 solving path. It is the container evolution of `subprocess` mode.
 
