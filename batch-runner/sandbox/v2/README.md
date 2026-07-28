@@ -60,14 +60,17 @@ python sandbox/v2/build_candidate.py \
 The builder:
 
 1. refuses credential-bearing environments;
-2. verifies the exact local parent;
-3. creates only a local Docker tag;
-4. verifies the disabled entrypoint;
-5. exports a local Docker archive into a host-verified OCI layout;
-6. runs the candidate with no network, read-only root, fixed non-root identity,
-   dropped capabilities, resource caps, and ephemeral tmpfs workspaces;
-7. writes a candidate receipt, OCI report, SPDX SBOM, license report, microVM
-   readiness report, and aggregate gate report.
+2. stages an allowlisted build context and host verifier from exact committed
+  Git blobs;
+3. verifies the exact local parent and creates only a unique local Docker tag;
+4. verifies the disabled entrypoint and exports a host-verified OCI layout;
+5. probes effective containment in the trusted exact parent before candidate
+  code can run;
+6. runs the candidate probe and SBOM only when every network, rootfs, identity,
+  capability, privilege, memory, PID, and CPU containment check is enforced;
+7. always writes subject, OCI, containment, microVM-readiness, and aggregate
+  gate reports; receipt, SBOM, and license files exist only after verified
+  containment.
 
 There is no login, push, promotion, `latest` tag, workflow, model client,
 experiment, or publication path in this directory.
@@ -76,14 +79,34 @@ experiment, or publication path in this directory.
 
 | Evidence | Candidate behavior |
 |---|---|
-| Capability receipt | Verified against one exact local image/config/OCI digest |
+| Capability receipt | `not_run` until containment is verified; then bound to one exact local image/config/OCI digest |
 | OCI layout | Host-generated and every blob rehashed |
-| Effective SBOM | Generated from installed Debian, Python, R, and npm metadata |
-| License | Conservative; unknown or denied licenses fail |
+| Effective SBOM | `not_run` until containment is verified; then generated from exact installed Debian, Python, R, and npm records |
+| License | `not_run` with no SBOM; otherwise unknown or denied SPDX expressions fail |
 | CVE | `not_run` until a pinned scanner and DB snapshot are supplied |
 | Signature | `not_run` until an approved offline trust root and bundle exist |
 | Provenance | `not_run` until source/locks/build/SBOM policy subjects are attested |
 | MicroVM | `not_run` unless Firecracker, jailer, KVM, kernel, and rootfs exist |
+
+## Validated Checkpoint
+
+Commit `5bab79f6bfbb2f3b75f7904035a4b3b5b39314dc` produced one local-only
+candidate:
+
+- image ID:
+  `sha256:faed2a1b0638d9a34e2144eb5914c78ea2a6c19f198d61aff03a8fb90bb0de78`;
+- OCI manifest:
+  `sha256:5046051464690f95eb561c60cc424de42ce90a9764bba3a7b2580648749220c9`;
+- OCI status: `verified`, 22 layers, `linux/amd64`;
+- containment status: `failed` because this host cannot enforce CPU quota or
+  PID limits;
+- capability, SBOM, and license: `not_run`, with no corresponding files;
+- CVE, signature, provenance, and microVM: `not_run`;
+- aggregate gate: `blocked`, with production activation still `disabled`.
+
+This result proves fail-closed candidate construction and evidence handling. It
+does not prove the professional-work capability matrix for this final image,
+because candidate code correctly did not execute on the degraded host.
 
 ## Anti-Claims
 
