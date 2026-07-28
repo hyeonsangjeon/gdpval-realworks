@@ -4,8 +4,8 @@ This is the canonical rolling record of the most recently completed repository
 task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-28
-- Status: Agentic Sandbox V2 Phase 1B implementation and local evidence
-  validation complete; remote shipment pending
+- Status: Agentic Sandbox V2 Phase 1B professional-work candidate shipped
+  through PR #148; exact local evidence and full regression validation passed
 
 ## Task
 
@@ -81,13 +81,20 @@ task. It must be refreshed before a task is reported complete.
 
 - Implementation checkpoint:
   `5bab79f6bfbb2f3b75f7904035a4b3b5b39314dc`.
-- Branch: `feat/agentic-sandbox-v2-phase1b`.
-- Push, pull request, automatic checks, and merge are pending. This section must
-  be updated with final remote evidence before the task is reported complete.
+- Reviewed branch head: `992b4feb6379eff756c9812d3ae5931808c7ea0d`.
+- PR [#148](https://github.com/hyeonsangjeon/gdpval-realworks/pull/148)
+  was squash-merged as `6e6a463f087f7d3d229ce4f0c2de19349efbf8c4`
+  on 2026-07-28 UTC.
+- GitHub reported the PR `CLEAN` and `MERGEABLE` with no required review,
+  status check, or branch protection gate. No automatic PR or `main` workflow
+  run was created because the 27 changed paths are outside every active
+  automatic workflow filter; no manual workflow was dispatched to compensate.
+- The remote feature branch was deleted after merge. No image, OCI layout, or
+  local evidence artifact was pushed or published.
 
 ## Remaining Work
 
-- Complete remote review, checks, merge, and final shipment recording.
+- No repository implementation or primary shipment work remains for Phase 1B.
 - Production activation remains blocked on complete retained/transitive package
   artifacts, a pinned CVE scanner and database, approved signature trust root,
   provenance attestation, and a real Firecracker/jailer/KVM boot and cleanup
