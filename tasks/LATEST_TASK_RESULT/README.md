@@ -5,8 +5,8 @@ task. It must be refreshed before a task is reported complete.
 
 - Updated: 2026-07-29
 - Status: Agentic Sandbox V2 evidence collection decoupled from CPU/PID
-  production limits; local implementation and exact validation complete,
-  remote shipment pending
+  production limits and shipped through PR #150; exact evidence and full
+  regression validation passed
 
 ## Task
 
@@ -88,14 +88,23 @@ task. It must be refreshed before a task is reported complete.
 
 ## Shipment
 
-- Branch: `fix/agentic-v2-evidence-containment-decoupling`.
-- Reviewed code checkpoint:
+- Exact evidence code checkpoint:
   `133df3f0aa5e4361c6c6cb7fd142ef5bdff8c1b5`.
-- Push, pull request, checks, merge, and final shipment recording are pending.
+- Reviewed branch head: `870dfa9576e028fdf82dbcfbcd2bc61acc8e3085`.
+- PR [#150](https://github.com/hyeonsangjeon/gdpval-realworks/pull/150)
+  was squash-merged as `a4f770627aea772203d54f472f4f9d956b0e3dfd`
+  on 2026-07-29 UTC.
+- GitHub reported the PR `MERGEABLE` with no required review, status check, or
+  branch protection gate. No automatic PR or `main` workflow run was created
+  because the nine changed paths are outside every active automatic workflow
+  filter; no manual workflow was dispatched to compensate.
+- The remote feature branch was deleted after merge. No image, OCI layout, or
+  local evidence artifact was pushed or published.
 
 ## Remaining Work
 
-- Complete remote review, merge, and final shipment recording.
+- No repository implementation or primary shipment work remains for this
+  evidence-containment correction.
 - Production activation remains blocked on CPU and PID containment, complete
   retained/transitive package artifacts, a pinned CVE scanner and database,
   approved signature trust root, provenance attestation, and a real
