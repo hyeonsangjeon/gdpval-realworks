@@ -238,6 +238,30 @@ entries land under a fresh dated heading the day they merge to `main`.
   action was used to compensate.
 
 ### Changed
+- **Agentic Sandbox V2 evidence and production containment split** - allow the
+  fixed, Git-bound capability and SBOM probes to run when six effective
+  collection-isolation checks pass, without requiring host CPU quota or PID
+  controllers. Collection isolation combines runtime capability, `prctl`,
+  route, memory, identity, and read-only-root observations with exact Docker
+  HostConfig and network attachment; production containment remains a separate
+  eight-check policy and still fails when CPU or PID controls are unavailable.
+  Parent and candidate execution use immutable local image IDs with
+  `--pull=never`; no candidate code runs before collection isolation passes;
+  default-entrypoint behavior requires exact exit/stdout/stderr bytes; and all
+  containers use predeclared UUID names with verified cleanup. On exact source
+  `133df3f0aa5e4361c6c6cb7fd142ef5bdff8c1b5`, the local candidate image
+  `sha256:dea418e4964c2e73bf77496633d0e16e5fc4fb66dddbb743d91d0020b672a77a`
+  and OCI manifest
+  `sha256:e55817b206dfc4fed855742b327bf6a7c7bdd3b08bc391c2470f9b16efa7f525`
+  verify 20 commands, 13 Python modules, three fonts, all nine smokes, and a
+  1,422-package SPDX SBOM. License policy remains failed on 1,255 unknown
+  declarations with zero denied packages. The aggregate remains blocked by
+  containment, license, CVE, microVM, provenance, and signature. Validation
+  passes 93 Phase 1B static contracts, one exact Docker integration, 640
+  combined Agentic Sandbox compatibility tests, and the complete backend with
+  2,644 passed, 6 host-dependent skipped, and 45 integration tests deselected.
+  No workflow, model, Azure, grading, registry push, publication, or paid
+  operation ran.
 - **Microsoft Foundry workflow activation and OIDC enforcement** — extend the
   shipped typed endpoint foundation, runtime adapters, and Step 2 wiring into
   the active batch, report, publication, and grading paths. Inference,
