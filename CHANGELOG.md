@@ -261,7 +261,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   combined Agentic Sandbox compatibility tests, and the complete backend with
   2,644 passed, 6 host-dependent skipped, and 45 integration tests deselected.
   No workflow, model, Azure, grading, registry push, publication, or paid
-  operation ran.
+  operation ran. Shipped through PR #150 from reviewed head
+  `870dfa9576e028fdf82dbcfbcd2bc61acc8e3085` as squash merge
+  `a4f770627aea772203d54f472f4f9d956b0e3dfd`. No automatic PR or `main`
+  workflow run was created because the nine changed paths are outside every
+  active automatic workflow filter; no manual workflow was dispatched to
+  compensate.
 - **Microsoft Foundry workflow activation and OIDC enforcement** — extend the
   shipped typed endpoint foundation, runtime adapters, and Step 2 wiring into
   the active batch, report, publication, and grading paths. Inference,
