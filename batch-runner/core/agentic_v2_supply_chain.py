@@ -48,6 +48,14 @@ IMPLEMENTED_EVIDENCE_STATUSES = {
     "sbom": frozenset({"verified", "failed", "not_run"}),
     "signature": frozenset({"not_run"}),
 }
+EVIDENCE_COLLECTION_CHECKS = frozenset({
+    "cap_drop_all",
+    "memory_limit",
+    "network_none",
+    "no_new_privileges",
+    "non_root_uid",
+    "read_only_rootfs",
+})
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _HEX_DIGEST = re.compile(r"[0-9a-f]{64}")
 _SOURCE_SHA = re.compile(r"[0-9a-f]{40}")
@@ -631,8 +639,10 @@ def validate_evidence_directory(
         tool_sha256=subject.document["verifier_sha256"],
     )
     if capability_status == "verified":
-        if containment["status"] != "verified":
-            raise ValueError("agentic v2 capability evidence requires containment")
+        if not evidence_collection_allowed(containment):
+            raise ValueError(
+                "agentic v2 capability evidence requires collection isolation"
+            )
         receipt = validate_candidate_receipt(
             _read_json(receipt_path, 16 * 1024 * 1024), manifest
         )
@@ -671,7 +681,8 @@ def validate_evidence_directory(
             tool_sha256=policy.sha256,
         )
     elif (
-        containment["status"] != "failed"
+        evidence_collection_allowed(containment)
+        or containment["status"] != "failed"
         or any(
             gate["evidence"][name]["status"] != "not_run"
             for name in ("capability_receipt", "sbom", "license")
@@ -687,16 +698,22 @@ def validate_evidence_directory(
     return gate
 
 
+def evidence_collection_allowed(value: Any) -> bool:
+    report = validate_containment_report(value)
+    return report["collection_status"] == "verified"
+
+
 def validate_containment_report(value: Any) -> dict[str, Any]:
     if not isinstance(value, Mapping) or set(value) != {
         "schema_version", "status", "checks", "required", "host_scope",
-        "report_sha256",
+        "collection_status", "collection_checks", "report_sha256",
     }:
         raise ValueError("agentic v2 containment report fields are invalid")
     document = deepcopy(dict(value))
     claimed = document.pop("report_sha256")
     checks = document["checks"]
     required = document["required"]
+    collection_checks = document["collection_checks"]
     expected_checks = {
         "cap_drop_all",
         "cpu_quota",
@@ -708,13 +725,23 @@ def validate_containment_report(value: Any) -> dict[str, Any]:
         "read_only_rootfs",
     }
     if (
-        document["schema_version"] != "1.0"
+        document["schema_version"] != "1.1"
         or document["host_scope"] != "exact-docker-daemon"
         or not isinstance(checks, dict)
         or set(checks) != expected_checks
         or any(type(item) is not bool for item in checks.values())
         or required != sorted(checks)
         or document["status"] != ("verified" if all(checks.values()) else "failed")
+        or not isinstance(collection_checks, dict)
+        or set(collection_checks) != EVIDENCE_COLLECTION_CHECKS
+        or any(type(item) is not bool for item in collection_checks.values())
+        or document["collection_status"] != (
+            "verified" if all(collection_checks.values()) else "failed"
+        )
+        or any(
+            collection_checks[name] and not checks[name]
+            for name in EVIDENCE_COLLECTION_CHECKS
+        )
         or claimed != canonical_sha256(document)
     ):
         raise ValueError("agentic v2 containment report identity is invalid")

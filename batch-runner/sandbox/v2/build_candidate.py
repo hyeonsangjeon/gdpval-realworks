@@ -133,16 +133,6 @@ def _build_locked(
             check=True,
         )
     image_id = _docker_json(["docker", "image", "inspect", image])[0]["Id"]
-    disabled = subprocess.run(
-        ["docker", "run", "--rm", "--network", "none", image_id],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=30,
-        check=False,
-    )
-    if disabled.returncode != 78 or b"candidate_not_activated" not in disabled.stderr:
-        raise RuntimeError("candidate default entrypoint is not fail-closed")
     temporary = Path(tempfile.mkdtemp(prefix=".phase1b-output-", dir=output_root.parent))
     archive = temporary / "candidate.docker.tar"
     try:

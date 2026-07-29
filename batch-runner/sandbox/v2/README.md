@@ -63,14 +63,20 @@ The builder:
 2. stages an allowlisted build context and host verifier from exact committed
   Git blobs;
 3. verifies the exact local parent and creates only a unique local Docker tag;
-4. verifies the disabled entrypoint and exports a host-verified OCI layout;
-5. probes effective containment in the trusted exact parent before candidate
-  code can run;
-6. runs the candidate probe and SBOM only when every network, rootfs, identity,
-  capability, privilege, memory, PID, and CPU containment check is enforced;
+4. verifies the disabled entrypoint identity and exports a host-verified OCI
+  layout without executing the candidate;
+5. verifies six effective collection-isolation checks in the immutable trusted
+  parent before fixed candidate evidence probes can run;
+6. runs the capability and SBOM probes under network-none, read-only-root,
+  non-root, cap-drop, no-new-privileges, memory, timeout, and cleanup controls;
+  CPU and PID limits are added when the host supports them;
 7. always writes subject, OCI, containment, microVM-readiness, and aggregate
   gate reports; receipt, SBOM, and license files exist only after verified
-  containment.
+  collection isolation.
+
+Collection isolation is not production authorization. Production containment
+still requires all eight checks, including effective CPU quota and PID limits,
+and remains a required blocking evidence item.
 
 There is no login, push, promotion, `latest` tag, workflow, model client,
 experiment, or publication path in this directory.
@@ -79,9 +85,9 @@ experiment, or publication path in this directory.
 
 | Evidence | Candidate behavior |
 |---|---|
-| Capability receipt | `not_run` until containment is verified; then bound to one exact local image/config/OCI digest |
+| Capability receipt | `not_run` until collection isolation is verified; then bound to one exact local image/config/OCI digest |
 | OCI layout | Host-generated and every blob rehashed |
-| Effective SBOM | `not_run` until containment is verified; then generated from exact installed Debian, Python, R, and npm records |
+| Effective SBOM | `not_run` until collection isolation is verified; then generated from exact installed Debian, Python, R, and npm records |
 | License | `not_run` with no SBOM; otherwise unknown or denied SPDX expressions fail |
 | CVE | `not_run` until a pinned scanner and DB snapshot are supplied |
 | Signature | `not_run` until an approved offline trust root and bundle exist |
@@ -90,23 +96,30 @@ experiment, or publication path in this directory.
 
 ## Validated Checkpoint
 
-Commit `5bab79f6bfbb2f3b75f7904035a4b3b5b39314dc` produced one local-only
+Commit `133df3f0aa5e4361c6c6cb7fd142ef5bdff8c1b5` produced one local-only
 candidate:
 
 - image ID:
-  `sha256:faed2a1b0638d9a34e2144eb5914c78ea2a6c19f198d61aff03a8fb90bb0de78`;
+  `sha256:dea418e4964c2e73bf77496633d0e16e5fc4fb66dddbb743d91d0020b672a77a`;
 - OCI manifest:
-  `sha256:5046051464690f95eb561c60cc424de42ce90a9764bba3a7b2580648749220c9`;
+  `sha256:e55817b206dfc4fed855742b327bf6a7c7bdd3b08bc391c2470f9b16efa7f525`;
 - OCI status: `verified`, 22 layers, `linux/amd64`;
-- containment status: `failed` because this host cannot enforce CPU quota or
-  PID limits;
-- capability, SBOM, and license: `not_run`, with no corresponding files;
+- collection isolation: `verified` for network, read-only root, non-root
+  identity, dropped capabilities, no-new-privileges, and memory;
+- production containment: `failed` only because this host cannot enforce CPU
+  quota or PID limits;
+- capability receipt: `verified` for 20 commands, 13 Python modules, three font
+  families, and all nine artifact smokes;
+- effective SPDX SBOM: `verified` for 1,422 packages across Debian, Python, R,
+  and npm inventories;
+- license: `failed` on 1,255 unknown declarations with zero denied packages;
 - CVE, signature, provenance, and microVM: `not_run`;
 - aggregate gate: `blocked`, with production activation still `disabled`.
 
-This result proves fail-closed candidate construction and evidence handling. It
-does not prove the professional-work capability matrix for this final image,
-because candidate code correctly did not execute on the degraded host.
+This result proves the exact candidate's observed professional-work capability
+matrix and SBOM while keeping production execution fail-closed. It does not
+prove a complete dependency lock, license compliance, vulnerability status,
+signature, provenance, or microVM isolation.
 
 ## Anti-Claims
 
