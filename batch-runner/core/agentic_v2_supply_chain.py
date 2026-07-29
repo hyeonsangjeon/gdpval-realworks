@@ -700,19 +700,20 @@ def validate_evidence_directory(
 
 def evidence_collection_allowed(value: Any) -> bool:
     report = validate_containment_report(value)
-    return all(report["checks"][name] for name in EVIDENCE_COLLECTION_CHECKS)
+    return report["collection_status"] == "verified"
 
 
 def validate_containment_report(value: Any) -> dict[str, Any]:
     if not isinstance(value, Mapping) or set(value) != {
         "schema_version", "status", "checks", "required", "host_scope",
-        "report_sha256",
+        "collection_status", "collection_checks", "report_sha256",
     }:
         raise ValueError("agentic v2 containment report fields are invalid")
     document = deepcopy(dict(value))
     claimed = document.pop("report_sha256")
     checks = document["checks"]
     required = document["required"]
+    collection_checks = document["collection_checks"]
     expected_checks = {
         "cap_drop_all",
         "cpu_quota",
@@ -724,13 +725,23 @@ def validate_containment_report(value: Any) -> dict[str, Any]:
         "read_only_rootfs",
     }
     if (
-        document["schema_version"] != "1.0"
+        document["schema_version"] != "1.1"
         or document["host_scope"] != "exact-docker-daemon"
         or not isinstance(checks, dict)
         or set(checks) != expected_checks
         or any(type(item) is not bool for item in checks.values())
         or required != sorted(checks)
         or document["status"] != ("verified" if all(checks.values()) else "failed")
+        or not isinstance(collection_checks, dict)
+        or set(collection_checks) != EVIDENCE_COLLECTION_CHECKS
+        or any(type(item) is not bool for item in collection_checks.values())
+        or document["collection_status"] != (
+            "verified" if all(collection_checks.values()) else "failed"
+        )
+        or any(
+            collection_checks[name] and not checks[name]
+            for name in EVIDENCE_COLLECTION_CHECKS
+        )
         or claimed != canonical_sha256(document)
     ):
         raise ValueError("agentic v2 containment report identity is invalid")

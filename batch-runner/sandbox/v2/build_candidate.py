@@ -133,7 +133,6 @@ def _build_locked(
             check=True,
         )
     image_id = _docker_json(["docker", "image", "inspect", image])[0]["Id"]
-    _verify_disabled_entrypoint(image_id)
     temporary = Path(tempfile.mkdtemp(prefix=".phase1b-output-", dir=output_root.parent))
     archive = temporary / "candidate.docker.tar"
     try:
@@ -291,70 +290,6 @@ def _docker_json(command: list[str]):
         timeout=60,
         check=True,
     ).stdout)
-
-
-def _verify_disabled_entrypoint(image_id: str) -> None:
-    container = f"gdpval-agentic-v2-disabled-{uuid.uuid4().hex}"
-    try:
-        disabled = subprocess.run(
-            [
-                "docker", "run", "--name", container,
-                "--network", "none", image_id,
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=30,
-            check=False,
-        )
-    finally:
-        _remove_container(container)
-    if disabled.returncode != 78 or b"candidate_not_activated" not in disabled.stderr:
-        raise RuntimeError("candidate default entrypoint is not fail-closed")
-
-
-def _remove_container(container: str) -> None:
-    try:
-        subprocess.run(
-            ["docker", "container", "rm", "--force", container],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            timeout=60,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        pass
-    try:
-        inspected = subprocess.run(
-            ["docker", "container", "inspect", container],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            timeout=60,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise RuntimeError(
-            "candidate container cleanup could not be verified"
-        ) from exc
-    if inspected.returncode == 0:
-        raise RuntimeError("candidate container cleanup did not remove container")
-    if not _container_absence_confirmed(inspected.stderr, container):
-        raise RuntimeError("candidate container cleanup could not be verified")
-
-
-def _container_absence_confirmed(stderr: bytes, container: str) -> bool:
-    message = stderr.decode("utf-8", errors="strict")
-    if message.endswith("\n"):
-        message = message[:-1]
-    allowed = {
-        f"Error: No such object: {container}",
-        f"Error: No such container: {container}",
-        f"Error response from daemon: No such object: {container}",
-        f"Error response from daemon: No such container: {container}",
-    }
-    return message in allowed
 
 
 def _stage_git_context(source_revision: str, root: Path) -> None:

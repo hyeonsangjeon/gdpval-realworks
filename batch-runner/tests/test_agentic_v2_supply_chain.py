@@ -119,11 +119,21 @@ def _degraded_evidence_directory(
         "pids_limit": False,
         "read_only_rootfs": True,
     }
+    collection_checks = {
+        "cap_drop_all": True,
+        "memory_limit": True,
+        "network_none": collection_allowed,
+        "no_new_privileges": True,
+        "non_root_uid": True,
+        "read_only_rootfs": True,
+    }
     containment = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "status": "failed",
         "checks": checks,
         "required": sorted(checks),
+        "collection_status": "verified" if collection_allowed else "failed",
+        "collection_checks": collection_checks,
         "host_scope": "exact-docker-daemon",
     }
     containment["report_sha256"] = canonical_sha256(containment)
@@ -269,6 +279,39 @@ def test_evidence_directory_accepts_resource_only_containment_degradation(
     assert gate["evidence"]["capability_receipt"]["status"] == "verified"
     assert gate["evidence"]["sbom"]["status"] == "verified"
     assert gate["evidence"]["license"]["status"] == "verified"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "cap_drop_all", "memory_limit", "network_none", "no_new_privileges",
+        "non_root_uid", "read_only_rootfs",
+    ],
+)
+def test_containment_report_rejects_collection_runtime_contradiction(
+    tmp_path,
+    monkeypatch,
+    name,
+):
+    root, subject, policy, manifest = _degraded_evidence_directory(
+        tmp_path,
+        monkeypatch,
+        collection_allowed=True,
+    )
+    path = root / "containment-report.json"
+    containment = json.loads(path.read_text(encoding="utf-8"))
+    containment["checks"][name] = False
+    unsigned = dict(containment)
+    unsigned.pop("report_sha256")
+    containment["status"] = "failed"
+    containment["report_sha256"] = canonical_sha256({
+        key: value for key, value in containment.items()
+        if key != "report_sha256"
+    })
+    path.write_text(json.dumps(containment), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="containment report identity"):
+        _validate_directory(root, subject, policy, manifest)
 
 
 def test_evidence_directory_rejects_report_tampering(tmp_path, monkeypatch):

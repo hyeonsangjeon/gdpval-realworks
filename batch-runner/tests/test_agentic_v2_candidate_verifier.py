@@ -10,6 +10,12 @@ import sandbox.v2.verify_candidate as verifier
 from core.agentic_v2_supply_chain import evidence_collection_allowed
 
 
+_DISABLED_ENTRYPOINT_STDERR = (
+    b'{"error":"agentic_v2_phase1b_candidate_not_activated",'
+    b'"foundation_only":true,"production_activation":"disabled"}\n'
+)
+
+
 def test_candidate_verifier_refuses_credential_environment(monkeypatch):
     monkeypatch.setenv("HF_TOKEN", "must-not-be-consumed")
 
@@ -17,45 +23,40 @@ def test_candidate_verifier_refuses_credential_environment(monkeypatch):
         verifier._require_no_credentials()
 
 
-@pytest.mark.parametrize(
-    ("returncode", "stderr", "failed_checks", "expected_status"),
-    [
-        (0, b"", (), "verified"),
-        (0, b"WARNING: PIDs limit discarded", ("pids_limit",), "failed"),
-        (
-            0,
-            b"WARNING: Your kernel does not support CPU CFS scheduler or the "
-            b"cgroup is not mounted. Period/quota discarded.",
-            ("cpu_quota",),
-            "failed",
-        ),
-        (1, b"runtime error", (), "failed"),
-    ],
-)
-def test_containment_probe_uses_effective_runtime_observation(
-    monkeypatch, returncode, stderr, failed_checks, expected_status
-):
+def test_containment_report_separates_collection_from_production(monkeypatch):
     checks = {name: True for name in verifier._CONTAINMENT_CHECKS}
-    for name in failed_checks:
-        checks[name] = False
-    monkeypatch.setattr(verifier, "_remove_container", lambda _name: None)
+    checks["cpu_quota"] = False
+    checks["pids_limit"] = False
+    collection = {
+        "cap_drop_all": True,
+        "memory_limit": True,
+        "network_none": True,
+        "no_new_privileges": True,
+        "non_root_uid": True,
+        "read_only_rootfs": True,
+    }
     monkeypatch.setattr(
         verifier.subprocess,
-        "run",
-        lambda *args, **kwargs: SimpleNamespace(
-            returncode=returncode,
-            stdout=__import__("json").dumps(checks).encode("utf-8"),
-            stderr=stderr,
-        ),
+        "run", lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_docker_base_isolation_probe",
+        lambda _image: (dict(checks), dict(collection)),
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_docker_resource_limit_probe",
+        lambda _image, *, name, arguments: False,
     )
 
     report = verifier._inspect_containment("candidate:test")
 
-    assert report["status"] == expected_status
-    if returncode == 0:
-        assert report["checks"] == checks
-    else:
-        assert not any(report["checks"].values())
+    assert report["schema_version"] == "1.1"
+    assert report["status"] == "failed"
+    assert report["collection_status"] == "verified"
+    assert report["checks"] == checks
+    assert report["collection_checks"] == collection
 
 
 def test_evidence_collection_allows_only_resource_limit_degradation():
@@ -63,17 +64,27 @@ def test_evidence_collection_allows_only_resource_limit_degradation():
     checks["cpu_quota"] = False
     checks["pids_limit"] = False
     report = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "status": "failed",
         "checks": checks,
         "required": sorted(checks),
+        "collection_status": "verified",
+        "collection_checks": {
+            "cap_drop_all": True,
+            "memory_limit": True,
+            "network_none": True,
+            "no_new_privileges": True,
+            "non_root_uid": True,
+            "read_only_rootfs": True,
+        },
         "host_scope": "exact-docker-daemon",
     }
     report["report_sha256"] = verifier.canonical_sha256(report)
 
     assert evidence_collection_allowed(report) is True
 
-    report["checks"]["network_none"] = False
+    report["collection_checks"]["network_none"] = False
+    report["collection_status"] = "failed"
     report_without_hash = dict(report)
     report_without_hash.pop("report_sha256")
     report["report_sha256"] = verifier.canonical_sha256(report_without_hash)
@@ -82,6 +93,11 @@ def test_evidence_collection_allows_only_resource_limit_degradation():
 
 def test_containment_probe_rejects_incomplete_runtime_observation(monkeypatch):
     monkeypatch.setattr(verifier, "_remove_container", lambda _name: None)
+    monkeypatch.setattr(
+        verifier,
+        "_docker_json",
+        lambda _command: [{"Config": {}, "HostConfig": {}}],
+    )
     monkeypatch.setattr(
         verifier.subprocess,
         "run",
@@ -92,14 +108,66 @@ def test_containment_probe_rejects_incomplete_runtime_observation(monkeypatch):
         ),
     )
 
-    assert not any(
-        verifier._docker_containment_probe("candidate:test").values()
+    checks, collection = verifier._docker_base_isolation_probe("candidate:test")
+
+    assert not any(checks.values())
+    assert not any(collection.values())
+
+
+def test_collection_checks_bind_host_config_and_runtime():
+    runtime = {name: False for name in verifier._CONTAINMENT_CHECKS}
+    runtime.update({
+        "cap_drop_all": True,
+        "memory_limit": True,
+        "network_none": True,
+        "no_new_privileges": True,
+        "non_root_uid": True,
+        "read_only_rootfs": True,
+    })
+    inspected = [{
+        "Config": {"User": "65532:65532"},
+        "HostConfig": {
+            "CapDrop": ["ALL"],
+            "Memory": 64 * 1024 * 1024,
+            "NetworkMode": "none",
+            "ReadonlyRootfs": True,
+            "SecurityOpt": ["no-new-privileges"],
+        },
+        "NetworkSettings": {
+            "Networks": {
+                "none": {
+                    "Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "IPAddress": "",
+                    "IPv6Gateway": "",
+                },
+            },
+        },
+    }]
+
+    assert all(
+        verifier._collection_checks_from_inspect(inspected, runtime).values()
     )
+
+    inspected[0]["HostConfig"]["NetworkMode"] = "bridge"
+    assert verifier._collection_checks_from_inspect(
+        inspected, runtime
+    )["network_none"] is False
+
+
+def test_containment_probe_uses_prctl_and_route_tables():
+    assert "prctl(39, 0, 0, 0, 0) == 1" in verifier._CONTAINMENT_PROBE
+    assert 'open("/proc/net/route"' in verifier._CONTAINMENT_PROBE
+    assert 'open("/proc/net/ipv6_route"' in verifier._CONTAINMENT_PROBE
 
 
 def test_containment_probe_requires_all_capability_sets():
     for name in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
         assert name in verifier._CONTAINMENT_PROBE
+    assert '"CapAmb" not in status' in verifier._CONTAINMENT_PROBE
+    assert 'for name in ("CapInh", "CapPrm", "CapEff", "CapBnd")' in (
+        verifier._CONTAINMENT_PROBE
+    )
 
 
 def test_resource_warning_overrides_forged_runtime_check(monkeypatch):
@@ -115,10 +183,11 @@ def test_resource_warning_overrides_forged_runtime_check(monkeypatch):
         ),
     )
 
-    observed = verifier._docker_containment_probe("candidate:test")
-
-    assert observed["pids_limit"] is False
-    assert all(value for name, value in observed.items() if name != "pids_limit")
+    assert verifier._docker_resource_limit_probe(
+        "candidate:test",
+        name="pids_limit",
+        arguments=["--pids-limit", "16"],
+    ) is False
 
 
 def test_unknown_docker_warning_blocks_evidence_collection(monkeypatch):
@@ -134,7 +203,11 @@ def test_unknown_docker_warning_blocks_evidence_collection(monkeypatch):
         ),
     )
 
-    assert not any(verifier._docker_containment_probe("candidate:test").values())
+    assert verifier._docker_resource_limit_probe(
+        "candidate:test",
+        name="pids_limit",
+        arguments=["--pids-limit", "16"],
+    ) is False
 
 
 def test_mixed_resource_and_unknown_warning_blocks_evidence_collection(monkeypatch):
@@ -150,17 +223,24 @@ def test_mixed_resource_and_unknown_warning_blocks_evidence_collection(monkeypat
         ),
     )
 
-    assert not any(verifier._docker_containment_probe("candidate:test").values())
+    assert verifier._docker_resource_limit_probe(
+        "candidate:test",
+        name="pids_limit",
+        arguments=["--pids-limit", "16"],
+    ) is False
 
 
 def test_candidate_runs_use_predeclared_names_instead_of_cidfiles():
     run_source = inspect.getsource(verifier._run_image_json)
-    containment_source = inspect.getsource(verifier._docker_containment_probe)
+    isolation_source = inspect.getsource(verifier._docker_base_isolation_probe)
+    resource_source = inspect.getsource(verifier._docker_resource_limit_probe)
 
     assert '"--name", container' in run_source
-    assert '"--name", container' in containment_source
+    assert '"--name", container' in isolation_source
+    assert '"--name", container' in resource_source
     assert "cidfile" not in run_source
-    assert "cidfile" not in containment_source
+    assert "cidfile" not in isolation_source
+    assert "cidfile" not in resource_source
 
 
 def test_verifier_uses_inspected_image_id_for_candidate_operations():
@@ -251,7 +331,6 @@ def test_container_absence_requires_exact_message(message):
     ).encode("utf-8")
 
     assert verifier._container_absence_confirmed(rendered, container) is False
-    assert builder._container_absence_confirmed(rendered, container) is False
 
 
 @pytest.mark.parametrize(
@@ -268,7 +347,6 @@ def test_container_absence_accepts_only_known_exact_messages(message):
     rendered = message.format(name=container).encode("utf-8")
 
     assert verifier._container_absence_confirmed(rendered, container) is True
-    assert builder._container_absence_confirmed(rendered, container) is True
 
 
 def test_container_cleanup_inspects_after_remove_timeout(monkeypatch):
@@ -291,26 +369,91 @@ def test_container_cleanup_inspects_after_remove_timeout(monkeypatch):
     assert calls[-1][:3] == ["docker", "container", "inspect"]
 
 
-def test_builder_disabled_entrypoint_cleans_up_on_timeout(monkeypatch):
+def test_verifier_disabled_entrypoint_cleans_up_on_timeout(monkeypatch):
     cleaned = []
     monkeypatch.setattr(
-        builder.subprocess,
+        verifier.subprocess,
         "run",
         lambda command, **kwargs: (_ for _ in ()).throw(
-            builder.subprocess.TimeoutExpired(command, 30)
+            verifier.subprocess.TimeoutExpired(command, 30)
         ),
     )
     monkeypatch.setattr(
-        builder,
+        verifier,
         "_remove_container",
         lambda container: cleaned.append(container),
     )
 
-    with pytest.raises(builder.subprocess.TimeoutExpired):
-        builder._verify_disabled_entrypoint("sha256:" + "a" * 64)
+    with pytest.raises(verifier.subprocess.TimeoutExpired):
+        verifier._verify_disabled_entrypoint(
+            "sha256:" + "a" * 64,
+            containment_checks={name: False for name in verifier._CONTAINMENT_CHECKS},
+        )
 
     assert len(cleaned) == 1
     assert cleaned[0].startswith("gdpval-agentic-v2-disabled-")
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "stderr"),
+    [
+        (0, b"", _DISABLED_ENTRYPOINT_STDERR),
+        (78, b"unexpected", _DISABLED_ENTRYPOINT_STDERR),
+        (78, b"", b"prefix\n" + _DISABLED_ENTRYPOINT_STDERR),
+        (78, b"", _DISABLED_ENTRYPOINT_STDERR + b"suffix\n"),
+        (78, b"", _DISABLED_ENTRYPOINT_STDERR * 2),
+    ],
+)
+def test_disabled_entrypoint_rejects_non_exact_output(
+    monkeypatch,
+    returncode,
+    stdout,
+    stderr,
+):
+    monkeypatch.setattr(verifier, "_remove_container", lambda _name: None)
+    monkeypatch.setattr(
+        verifier.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="entrypoint is not fail-closed"):
+        verifier._verify_disabled_entrypoint(
+            "sha256:" + "a" * 64,
+            containment_checks={name: False for name in verifier._CONTAINMENT_CHECKS},
+        )
+
+
+def test_disabled_entrypoint_accepts_exact_output(monkeypatch):
+    monkeypatch.setattr(verifier, "_remove_container", lambda _name: None)
+    monkeypatch.setattr(
+        verifier.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=78,
+            stdout=b"",
+            stderr=_DISABLED_ENTRYPOINT_STDERR,
+        ),
+    )
+
+    verifier._verify_disabled_entrypoint(
+        "sha256:" + "a" * 64,
+        containment_checks={name: False for name in verifier._CONTAINMENT_CHECKS},
+    )
+
+
+def test_candidate_runs_disable_pull_fallback():
+    for function in (
+        verifier._run_image_json,
+        verifier._docker_base_isolation_probe,
+        verifier._docker_resource_limit_probe,
+        verifier._verify_disabled_entrypoint,
+    ):
+        assert '"--pull=never"' in inspect.getsource(function)
 
 
 def test_embedded_inspection_cleans_up_malformed_create_output(monkeypatch, tmp_path):

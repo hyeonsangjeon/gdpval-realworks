@@ -64,6 +64,7 @@ _CONTAINMENT_CHECKS = frozenset({
     "read_only_rootfs",
 })
 _CONTAINMENT_PROBE = r'''
+import ctypes
 import json
 import os
 
@@ -88,6 +89,23 @@ with open("/proc/self/status", "r", encoding="utf-8") as stream:
         key, separator, value = line.partition(":")
         if separator:
             status[key] = value.strip()
+
+libc = ctypes.CDLL(None, use_errno=True)
+prctl = libc.prctl
+prctl.argtypes = [
+    ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong,
+]
+prctl.restype = ctypes.c_int
+no_new_privileges = prctl(39, 0, 0, 0, 0) == 1
+
+with open("/proc/net/route", "r", encoding="utf-8") as stream:
+    ipv4_routes = [line for line in stream.read().splitlines()[1:] if line]
+with open("/proc/net/ipv6_route", "r", encoding="utf-8") as stream:
+    ipv6_routes = [line for line in stream.read().splitlines() if line]
+network_none = (
+    not ipv4_routes
+    and all(line.split()[-1] == "lo" for line in ipv6_routes)
+)
 
 memory = read_first((
     "/sys/fs/cgroup/memory.max",
@@ -121,14 +139,17 @@ except (TypeError, ValueError):
     cpu_limited = False
 
 checks = {
-    "cap_drop_all": all(
-        int(status.get(name, "-1"), 16) == 0
-        for name in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb")
+    "cap_drop_all": (
+        all(
+            name in status and int(status[name], 16) == 0
+            for name in ("CapInh", "CapPrm", "CapEff", "CapBnd")
+        )
+        and ("CapAmb" not in status or int(status["CapAmb"], 16) == 0)
     ),
     "cpu_quota": cpu_limited,
     "memory_limit": bounded_integer(memory, 64 * 1024 * 1024),
-    "network_none": sorted(os.listdir("/sys/class/net")) == ["lo"],
-    "no_new_privileges": status.get("NoNewPrivs") == "1",
+    "network_none": network_none,
+    "no_new_privileges": no_new_privileges,
     "non_root_uid": os.geteuid() == 65532 and os.getegid() == 65532,
     "pids_limit": bounded_integer(pids, 16),
     "read_only_rootfs": bool(os.statvfs("/").f_flag & os.ST_RDONLY),
@@ -188,6 +209,7 @@ def verify_candidate(
     parent_layers = ((parent_document.get("RootFS") or {}).get("Layers") or [])
     candidate_layers = ((image_document.get("RootFS") or {}).get("Layers") or [])
     labels = ((image_document.get("Config") or {}).get("Labels") or {})
+    entrypoint = ((image_document.get("Config") or {}).get("Entrypoint") or [])
     image_id = image_document.get("Id")
     if (
         image_id != oci_report["config_digest"]
@@ -199,6 +221,9 @@ def verify_candidate(
         or labels.get("io.gdpval.agentic-v2.foundation-only") != "true"
         or labels.get("io.gdpval.agentic-v2.production-activation") != "disabled"
         or labels.get("io.gdpval.agentic-v2.capability-manifest-sha256") != manifest.sha256
+        or entrypoint != [
+            "python", "-I", "-B", "/opt/gdpval/v2/disabled_entrypoint.py"
+        ]
         or parent_document.get("Id") != parent_lock["observed_local_image_id"]
         or parent_lock["reference"] not in (parent_document.get("RepoDigests") or [])
         or parent_labels.get("org.opencontainers.image.revision") != parent_lock["source_revision"]
@@ -257,7 +282,7 @@ def verify_candidate(
     })
     microvm_report = inspect_microvm_readiness(asset_paths={})
     validate_microvm_readiness_report(microvm_report)
-    containment_report = _inspect_containment(parent_lock["reference"])
+    containment_report = _inspect_containment(parent_document["Id"])
     tool_sha = subject.document["verifier_sha256"]
     evidence = {
         name: evidence_item(subject, name=name, status="not_run")
@@ -288,6 +313,10 @@ def verify_candidate(
     sbom = None
     license_report = None
     if evidence_collection_allowed(containment_report):
+        _verify_disabled_entrypoint(
+            image_id,
+            containment_checks=containment_report["checks"],
+        )
         observation = _run_image_json(
             image_id,
             "/opt/gdpval/v2/image_probe.py",
@@ -373,7 +402,7 @@ def _run_image_json(
     if containment_checks["cpu_quota"]:
         optional_limits.extend(["--cpus", "2"])
     command = [
-        "docker", "run", "--name", container,
+        "docker", "run", "--pull=never", "--name", container,
         "--network", "none", "--read-only",
         "--user", "65532:65532", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--memory", "6g",
@@ -410,29 +439,165 @@ def _run_image_json(
 
 
 def _inspect_containment(image: str) -> dict:
-    checks = _docker_containment_probe(image)
+    checks, collection_checks = _docker_base_isolation_probe(image)
+    checks["pids_limit"] = _docker_resource_limit_probe(
+        image,
+        name="pids_limit",
+        arguments=["--pids-limit", "16"],
+    )
+    checks["cpu_quota"] = _docker_resource_limit_probe(
+        image,
+        name="cpu_quota",
+        arguments=["--cpus", "0.25"],
+    )
     report = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "status": "verified" if all(checks.values()) else "failed",
         "checks": checks,
         "required": sorted(checks),
+        "collection_status": (
+            "verified" if all(collection_checks.values()) else "failed"
+        ),
+        "collection_checks": collection_checks,
         "host_scope": "exact-docker-daemon",
     }
     report["report_sha256"] = canonical_sha256(report)
     return report
 
 
-def _docker_containment_probe(image: str) -> dict[str, bool]:
+def _docker_base_isolation_probe(
+    image: str,
+) -> tuple[dict[str, bool], dict[str, bool]]:
     failed = {name: False for name in _CONTAINMENT_CHECKS}
-    container = _container_name("containment")
+    collection_failed = {
+        name: False
+        for name in (
+            "cap_drop_all", "memory_limit", "network_none",
+            "no_new_privileges", "non_root_uid", "read_only_rootfs",
+        )
+    }
+    container = _container_name("isolation")
+    inspected = None
     try:
         completed = subprocess.run(
             [
-                "docker", "run", "--name", container,
+                "docker", "run", "--pull=never", "--name", container,
                 "--network", "none", "--read-only",
                 "--user", "65532:65532", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges",
-                "--memory", "64m", "--pids-limit", "16", "--cpus", "0.25",
+                "--memory", "64m",
+                "--entrypoint", "python", image, "-I", "-B", "-c",
+                _CONTAINMENT_PROBE,
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        if completed.returncode == 0:
+            inspected = _docker_json(["docker", "container", "inspect", container])
+    finally:
+        _remove_container(container)
+    if (
+        completed.returncode != 0
+        or not completed.stdout
+        or len(completed.stdout) > 65536
+        or len(completed.stderr) > 65536
+    ):
+        return failed, collection_failed
+    try:
+        checks = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return failed, collection_failed
+    if (
+        not isinstance(checks, dict)
+        or set(checks) != _CONTAINMENT_CHECKS
+        or any(type(value) is not bool for value in checks.values())
+    ):
+        return failed, collection_failed
+    if completed.stderr:
+        return failed, collection_failed
+    return checks, _collection_checks_from_inspect(inspected, checks)
+
+
+def _collection_checks_from_inspect(
+    value,
+    runtime_checks: dict[str, bool],
+) -> dict[str, bool]:
+    failed = {
+        name: False
+        for name in (
+            "cap_drop_all", "memory_limit", "network_none",
+            "no_new_privileges", "non_root_uid", "read_only_rootfs",
+        )
+    }
+    if not isinstance(value, list) or len(value) != 1 or not isinstance(value[0], dict):
+        return failed
+    document = value[0]
+    host = document.get("HostConfig")
+    config = document.get("Config")
+    network_settings = document.get("NetworkSettings")
+    if (
+        not isinstance(host, dict)
+        or not isinstance(config, dict)
+        or not isinstance(network_settings, dict)
+    ):
+        return failed
+    networks = network_settings.get("Networks")
+    network = networks.get("none") if isinstance(networks, dict) else None
+    network_identity = (
+        isinstance(networks, dict)
+        and set(networks) == {"none"}
+        and isinstance(network, dict)
+        and network.get("IPAddress") in {None, ""}
+        and network.get("GlobalIPv6Address") in {None, ""}
+        and network.get("Gateway") in {None, ""}
+        and network.get("IPv6Gateway") in {None, ""}
+    )
+    return {
+        "cap_drop_all": (
+            host.get("CapDrop") == ["ALL"] and runtime_checks["cap_drop_all"]
+        ),
+        "memory_limit": (
+            host.get("Memory") == 64 * 1024 * 1024
+            and runtime_checks["memory_limit"]
+        ),
+        "network_none": (
+            host.get("NetworkMode") == "none"
+            and network_identity
+            and runtime_checks["network_none"]
+        ),
+        "no_new_privileges": (
+            host.get("SecurityOpt") == ["no-new-privileges"]
+            and runtime_checks["no_new_privileges"]
+        ),
+        "non_root_uid": (
+            config.get("User") == "65532:65532"
+            and runtime_checks["non_root_uid"]
+        ),
+        "read_only_rootfs": (
+            host.get("ReadonlyRootfs") is True
+            and runtime_checks["read_only_rootfs"]
+        ),
+    }
+
+
+def _docker_resource_limit_probe(
+    image: str,
+    *,
+    name: str,
+    arguments: list[str],
+) -> bool:
+    container = _container_name(name)
+    try:
+        completed = subprocess.run(
+            [
+                "docker", "run", "--pull=never", "--name", container,
+                "--network", "none", "--read-only",
+                "--user", "65532:65532", "--cap-drop", "ALL",
+                "--security-opt", "no-new-privileges", "--memory", "64m",
+                *arguments,
                 "--entrypoint", "python", image, "-I", "-B", "-c",
                 _CONTAINMENT_PROBE,
             ],
@@ -450,23 +615,23 @@ def _docker_containment_probe(image: str) -> dict[str, bool]:
         or len(completed.stdout) > 65536
         or len(completed.stderr) > 65536
     ):
-        return failed
+        return False
     try:
         checks = json.loads(completed.stdout)
     except json.JSONDecodeError:
-        return failed
+        return False
     if (
         not isinstance(checks, dict)
         or set(checks) != _CONTAINMENT_CHECKS
-        or any(type(value) is not bool for value in checks.values())
+        or any(type(item) is not bool for item in checks.values())
     ):
-        return failed
+        return False
     warning_checks = _resource_warning_checks(completed.stderr)
-    if warning_checks is None:
-        return failed
-    for name in warning_checks:
-        checks[name] = False
-    return checks
+    return (
+        warning_checks is not None
+        and name not in warning_checks
+        and checks[name] is True
+    )
 
 
 def _resource_warning_checks(stderr: bytes) -> set[str] | None:
@@ -505,6 +670,51 @@ def _docker_json(command: list[str]):
     return json.loads(completed.stdout)
 
 
+def _verify_disabled_entrypoint(
+    image_id: str,
+    *,
+    containment_checks: dict[str, bool],
+) -> None:
+    container = _container_name("disabled")
+    optional_limits = []
+    if containment_checks["pids_limit"]:
+        optional_limits.extend(["--pids-limit", "16"])
+    if containment_checks["cpu_quota"]:
+        optional_limits.extend(["--cpus", "0.25"])
+    try:
+        completed = subprocess.run(
+            [
+                "docker", "run", "--pull=never", "--name", container,
+                "--network", "none", "--read-only",
+                "--user", "65532:65532", "--cap-drop", "ALL",
+                "--security-opt", "no-new-privileges", "--memory", "64m",
+                *optional_limits,
+                image_id,
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+    finally:
+        _remove_container(container)
+    expected_stderr = (
+        json.dumps({
+            "error": "agentic_v2_phase1b_candidate_not_activated",
+            "foundation_only": True,
+            "production_activation": "disabled",
+        }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        + b"\n"
+    )
+    if (
+        completed.returncode != 78
+        or completed.stdout != b""
+        or completed.stderr != expected_stderr
+    ):
+        raise RuntimeError("candidate default entrypoint is not fail-closed")
+
+
 def _verify_embedded_files(
     image: str,
     source_revision: str,
@@ -525,7 +735,8 @@ def _verify_embedded_files(
         created = subprocess.run(
             [
                 "docker", "container", "create", "--name", container,
-                "--network", "none", "--entrypoint", "/bin/true", image,
+                "--network", "none", "--entrypoint", "/bin/true",
+                image,
             ],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,

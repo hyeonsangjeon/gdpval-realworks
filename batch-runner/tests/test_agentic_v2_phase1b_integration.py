@@ -36,11 +36,7 @@ def test_agentic_v2_phase1b_local_candidate_evidence(tmp_path):
             encoding="utf-8"
         )
     )
-    collection_checks = {
-        "cap_drop_all", "memory_limit", "network_none", "no_new_privileges",
-        "non_root_uid", "read_only_rootfs",
-    }
-    if all(containment["checks"][name] for name in collection_checks):
+    if containment["collection_status"] == "verified":
         assert gate["evidence"]["capability_receipt"]["status"] == "verified"
         assert gate["evidence"]["sbom"]["status"] == "verified"
         receipt = json.loads(
