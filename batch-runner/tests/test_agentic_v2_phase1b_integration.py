@@ -31,8 +31,16 @@ def test_agentic_v2_phase1b_local_candidate_evidence(tmp_path):
     assert gate["evidence"]["provenance"]["status"] == "not_run"
     assert gate["evidence"]["signature"]["status"] == "not_run"
 
-    containment = gate["evidence"]["containment"]["status"]
-    if containment == "verified":
+    containment = json.loads(
+        (tmp_path / "evidence" / "containment-report.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    collection_checks = {
+        "cap_drop_all", "memory_limit", "network_none", "no_new_privileges",
+        "non_root_uid", "read_only_rootfs",
+    }
+    if all(containment["checks"][name] for name in collection_checks):
         assert gate["evidence"]["capability_receipt"]["status"] == "verified"
         assert gate["evidence"]["sbom"]["status"] == "verified"
         receipt = json.loads(
@@ -44,7 +52,7 @@ def test_agentic_v2_phase1b_local_candidate_evidence(tmp_path):
         assert receipt["production_activation"] == "disabled"
         assert receipt["subject"]["source_revision"] == source_revision
     else:
-        assert containment == "failed"
+        assert containment["status"] == "failed"
         assert gate["evidence"]["capability_receipt"]["status"] == "not_run"
         assert gate["evidence"]["sbom"]["status"] == "not_run"
         assert not (tmp_path / "evidence" / "candidate-receipt.json").exists()

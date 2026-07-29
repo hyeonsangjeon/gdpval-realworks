@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 
 
@@ -34,6 +35,7 @@ from core.agentic_v2_supply_chain import (  # noqa: E402
     SupplyChainPolicy,
     build_candidate_receipt,
     build_evidence_report,
+    evidence_collection_allowed,
     evidence_item,
     evaluate_license_policy,
     validate_effective_sbom,
@@ -119,7 +121,10 @@ except (TypeError, ValueError):
     cpu_limited = False
 
 checks = {
-    "cap_drop_all": int(status.get("CapEff", "-1"), 16) == 0,
+    "cap_drop_all": all(
+        int(status.get(name, "-1"), 16) == 0
+        for name in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb")
+    ),
     "cpu_quota": cpu_limited,
     "memory_limit": bounded_integer(memory, 64 * 1024 * 1024),
     "network_none": sorted(os.listdir("/sys/class/net")) == ["lo"],
@@ -204,7 +209,7 @@ def verify_candidate(
     ):
         raise ValueError("candidate image identity or labels are invalid")
     embedded_source_sha256 = _verify_embedded_files(
-        image, source_revision, repository_root
+        image_id, source_revision, repository_root
     )
     lock_set_sha256 = canonical_sha256([
         {
@@ -282,13 +287,19 @@ def verify_candidate(
     receipt = None
     sbom = None
     license_report = None
-    if containment_report["status"] == "verified":
+    if evidence_collection_allowed(containment_report):
         observation = _run_image_json(
-            image, "/opt/gdpval/v2/image_probe.py", 8 * 1024 * 1024
+            image_id,
+            "/opt/gdpval/v2/image_probe.py",
+            8 * 1024 * 1024,
+            containment_checks=containment_report["checks"],
         )
         validate_capability_receipt(observation, manifest)
         sbom = _run_image_json(
-            image, "/opt/gdpval/v2/effective_sbom.py", 64 * 1024 * 1024
+            image_id,
+            "/opt/gdpval/v2/effective_sbom.py",
+            64 * 1024 * 1024,
+            containment_checks=containment_report["checks"],
         )
         validate_effective_sbom(sbom, observation)
         license_report = evaluate_license_policy(sbom, policy)
@@ -348,17 +359,25 @@ def verify_candidate(
     return gate
 
 
-def _run_image_json(image: str, script: str, maximum: int) -> dict:
-    descriptor, cidfile_name = tempfile.mkstemp(prefix="phase1b-cid-")
-    os.close(descriptor)
-    cidfile = Path(cidfile_name)
-    cidfile.unlink()
+def _run_image_json(
+    image: str,
+    script: str,
+    maximum: int,
+    *,
+    containment_checks: dict[str, bool],
+) -> dict:
+    container = _container_name("evidence")
+    optional_limits = []
+    if containment_checks["pids_limit"]:
+        optional_limits.extend(["--pids-limit", "512"])
+    if containment_checks["cpu_quota"]:
+        optional_limits.extend(["--cpus", "2"])
     command = [
-        "docker", "run", "--rm", "--cidfile", str(cidfile),
+        "docker", "run", "--name", container,
         "--network", "none", "--read-only",
         "--user", "65532:65532", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--memory", "6g",
-        "--pids-limit", "512", "--cpus", "2",
+        *optional_limits,
         "--tmpfs",
         "/work:rw,exec,nosuid,nodev,size=2147483648,uid=65532,gid=65532,mode=0700",
         "--tmpfs",
@@ -376,7 +395,7 @@ def _run_image_json(image: str, script: str, maximum: int) -> dict:
             check=False,
         )
     finally:
-        _remove_cidfile_container(cidfile)
+        _remove_container(container)
     if completed.returncode != 0:
         raise RuntimeError(
             "candidate image probe failed: "
@@ -405,14 +424,11 @@ def _inspect_containment(image: str) -> dict:
 
 def _docker_containment_probe(image: str) -> dict[str, bool]:
     failed = {name: False for name in _CONTAINMENT_CHECKS}
-    descriptor, cidfile_name = tempfile.mkstemp(prefix="phase1b-flag-cid-")
-    os.close(descriptor)
-    cidfile = Path(cidfile_name)
-    cidfile.unlink()
+    container = _container_name("containment")
     try:
         completed = subprocess.run(
             [
-                "docker", "run", "--rm", "--cidfile", str(cidfile),
+                "docker", "run", "--name", container,
                 "--network", "none", "--read-only",
                 "--user", "65532:65532", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges",
@@ -427,15 +443,12 @@ def _docker_containment_probe(image: str) -> dict[str, bool]:
             check=False,
         )
     finally:
-        _remove_cidfile_container(cidfile)
-    stderr = completed.stderr.decode("utf-8", errors="replace").lower()
+        _remove_container(container)
     if (
         completed.returncode != 0
         or not completed.stdout
         or len(completed.stdout) > 65536
-        or "discarded" in stderr
-        or "does not support" in stderr
-        or "not supported" in stderr
+        or len(completed.stderr) > 65536
     ):
         return failed
     try:
@@ -448,7 +461,36 @@ def _docker_containment_probe(image: str) -> dict[str, bool]:
         or any(type(value) is not bool for value in checks.values())
     ):
         return failed
+    warning_checks = _resource_warning_checks(completed.stderr)
+    if warning_checks is None:
+        return failed
+    for name in warning_checks:
+        checks[name] = False
     return checks
+
+
+def _resource_warning_checks(stderr: bytes) -> set[str] | None:
+    affected = set()
+    patterns = {
+        "pids_limit": re.compile(
+            r"(?:warning:\s*)?(?:pids limit discarded|"
+            r"(?:your )?kernel does not support pids limit capabilities or the "
+            r"cgroup is not mounted\. pids limit discarded)\.?",
+        ),
+        "cpu_quota": re.compile(
+            r"(?:warning:\s*)?(?:your )?kernel does not support cpu cfs scheduler "
+            r"or the cgroup is not mounted\. period/quota discarded\.?",
+        ),
+    }
+    for raw_line in stderr.decode("utf-8", errors="replace").splitlines():
+        line = raw_line.strip().lower()
+        if not line:
+            continue
+        matches = [name for name, pattern in patterns.items() if pattern.fullmatch(line)]
+        if len(matches) != 1:
+            return None
+        affected.add(matches[0])
+    return affected
 
 
 def _docker_json(command: list[str]):
@@ -477,19 +519,23 @@ def _verify_embedded_files(
         "/opt/gdpval/v2/image_probe.py": "batch-runner/sandbox/v2/image_probe.py",
         "/opt/gdpval/v2/python-extra.lock": "batch-runner/sandbox/v2/python-extra.lock",
     }
-    container = subprocess.run(
-        ["docker", "container", "create", "--network", "none", "--entrypoint", "/bin/true", image],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=60,
-        check=True,
-        text=True,
-    ).stdout.strip()
-    if not re.fullmatch(r"[0-9a-f]{64}", container):
-        raise RuntimeError("candidate inspection container identity is invalid")
+    container = _container_name("inspect")
     records = []
     try:
+        created = subprocess.run(
+            [
+                "docker", "container", "create", "--name", container,
+                "--network", "none", "--entrypoint", "/bin/true", image,
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=60,
+            check=True,
+            text=True,
+        ).stdout.strip()
+        if not re.fullmatch(r"[0-9a-f]{64}", created):
+            raise RuntimeError("candidate inspection container identity is invalid")
         with tempfile.TemporaryDirectory(prefix="phase1b-embedded-") as temporary:
             root = Path(temporary)
             for index, (container_path, repository_path) in enumerate(sorted(expected.items())):
@@ -518,15 +564,12 @@ def _verify_embedded_files(
                     "size": target.stat().st_size,
                 })
     finally:
-        subprocess.run(
-            ["docker", "container", "rm", "--force", container],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=60,
-            check=False,
-        )
+        _remove_container(container)
     return canonical_sha256(records)
+
+
+def _container_name(purpose: str) -> str:
+    return f"gdpval-agentic-v2-{purpose}-{uuid.uuid4().hex}"
 
 
 def _load_parent_lock(path: Path) -> dict:
@@ -578,21 +621,48 @@ def _require_local_docker() -> None:
         raise RuntimeError("DOCKER_HOST differs from verified local endpoint")
 
 
-def _remove_cidfile_container(cidfile: Path) -> None:
+def _remove_container(container: str) -> None:
     try:
-        container = cidfile.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        container = ""
-    if re.fullmatch(r"[0-9a-f]{64}", container):
         subprocess.run(
             ["docker", "container", "rm", "--force", container],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             timeout=60,
             check=False,
         )
-    cidfile.unlink(missing_ok=True)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        inspected = subprocess.run(
+            ["docker", "container", "inspect", container],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(
+            "candidate container cleanup could not be verified"
+        ) from exc
+    if inspected.returncode == 0:
+        raise RuntimeError("candidate container cleanup did not remove container")
+    if not _container_absence_confirmed(inspected.stderr, container):
+        raise RuntimeError("candidate container cleanup could not be verified")
+
+
+def _container_absence_confirmed(stderr: bytes, container: str) -> bool:
+    message = stderr.decode("utf-8", errors="strict")
+    if message.endswith("\n"):
+        message = message[:-1]
+    allowed = {
+        f"Error: No such object: {container}",
+        f"Error: No such container: {container}",
+        f"Error response from daemon: No such object: {container}",
+        f"Error response from daemon: No such container: {container}",
+    }
+    return message in allowed
 
 
 def _git_blob(

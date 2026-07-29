@@ -88,7 +88,12 @@ def _observation(manifest):
     }
 
 
-def _degraded_evidence_directory(tmp_path, monkeypatch):
+def _degraded_evidence_directory(
+    tmp_path,
+    monkeypatch,
+    *,
+    collection_allowed=False,
+):
     manifest = AgenticV2SubstrateManifest.load(MANIFEST)
     subject = _subject(manifest)
     policy = SupplyChainPolicy.load(POLICY)
@@ -108,7 +113,7 @@ def _degraded_evidence_directory(tmp_path, monkeypatch):
         "cap_drop_all": True,
         "cpu_quota": False,
         "memory_limit": True,
-        "network_none": True,
+        "network_none": collection_allowed,
         "no_new_privileges": True,
         "non_root_uid": True,
         "pids_limit": False,
@@ -152,16 +157,61 @@ def _degraded_evidence_directory(tmp_path, monkeypatch):
         tool_sha256=subject.document["verifier_sha256"],
         report_sha256=canonical_sha256(containment),
     )
+    receipt = None
+    sbom = None
+    license_report = None
+    if collection_allowed:
+        inventory_observation, sbom = _effective_sbom_fixture()
+        observation = _observation(manifest)
+        observation["package_inventory"] = inventory_observation[
+            "package_inventory"
+        ]
+        receipt = build_candidate_receipt(subject, observation, manifest)
+        license_report = evaluate_license_policy(sbom, policy)
+        evidence["capability_receipt"] = evidence_item(
+            subject,
+            name="capability_receipt",
+            status="verified",
+            tool_name="gdpval-agentic-v2-host-verifier",
+            tool_version="1.0",
+            tool_sha256=subject.document["verifier_sha256"],
+            report_sha256=canonical_sha256(receipt),
+        )
+        evidence["sbom"] = evidence_item(
+            subject,
+            name="sbom",
+            status="verified",
+            tool_name="gdpval-agentic-v2-effective-sbom",
+            tool_version="1.0",
+            tool_sha256=subject.document["sbom_generator_sha256"],
+            report_sha256=canonical_sha256(sbom),
+        )
+        evidence["license"] = evidence_item(
+            subject,
+            name="license",
+            status=license_report["status"],
+            tool_name="gdpval-agentic-v2-license-policy",
+            tool_version="1.0",
+            tool_sha256=policy.sha256,
+            report_sha256=canonical_sha256(license_report),
+        )
     gate = build_evidence_report(subject, policy, evidence)
     root = tmp_path / "evidence"
     root.mkdir()
-    for name, value in {
+    documents = {
         "candidate-subject.json": subject.document,
         "containment-report.json": containment,
         "gate-report.json": gate,
         "microvm-readiness.json": microvm,
         "oci-report.json": oci_report,
-    }.items():
+    }
+    if collection_allowed:
+        documents.update({
+            "candidate-receipt.json": receipt,
+            "effective-sbom.spdx.json": sbom,
+            "license-report.json": license_report,
+        })
+    for name, value in documents.items():
         (root / name).write_text(
             json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n",
             encoding="utf-8",
@@ -200,6 +250,25 @@ def test_evidence_directory_reopens_degraded_host_reports(tmp_path, monkeypatch)
     assert gate["gate_status"] == "blocked"
     assert gate["evidence"]["containment"]["status"] == "failed"
     assert gate["evidence"]["capability_receipt"]["status"] == "not_run"
+
+
+def test_evidence_directory_accepts_resource_only_containment_degradation(
+    tmp_path,
+    monkeypatch,
+):
+    arguments = _degraded_evidence_directory(
+        tmp_path,
+        monkeypatch,
+        collection_allowed=True,
+    )
+
+    gate = _validate_directory(*arguments)
+
+    assert gate["gate_status"] == "blocked"
+    assert gate["evidence"]["containment"]["status"] == "failed"
+    assert gate["evidence"]["capability_receipt"]["status"] == "verified"
+    assert gate["evidence"]["sbom"]["status"] == "verified"
+    assert gate["evidence"]["license"]["status"] == "verified"
 
 
 def test_evidence_directory_rejects_report_tampering(tmp_path, monkeypatch):
