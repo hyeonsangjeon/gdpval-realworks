@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+from email.header import Header
 from email.parser import BytesParser
 from email.policy import compat32
 import json
@@ -191,6 +192,20 @@ def _virtual_evidence(source: str, value: dict) -> dict:
     }
 
 
+def _unverifiable_path_evidence(source: str, path: Path) -> dict:
+    encoded = _canonical_json({
+        "path": str(path),
+        "reason": "symlink-or-nondirectory",
+    })
+    return {
+        "source": source,
+        "path": str(path),
+        "resolved_path": None,
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "size": len(encoded),
+    }
+
+
 def _license_file_tokens(value: bytes) -> list[str]:
     tokens = sorted({
         match.group(1).decode("ascii")
@@ -202,10 +217,17 @@ def _license_file_tokens(value: bytes) -> list[str]:
     return tokens
 
 
-def _debian_fields(stanza: str, source: str) -> dict[str, str]:
+def _debian_fields(
+    stanza: str,
+    source: str,
+    *,
+    allow_noncritical_duplicates: bool = False,
+) -> dict[str, str]:
     fields = {}
     current = None
     for line in stanza.splitlines():
+        if line.startswith("#"):
+            continue
         if line[:1].isspace():
             if current is None:
                 raise RuntimeError(f"Debian {source} metadata is malformed")
@@ -222,12 +244,15 @@ def _debian_fields(stanza: str, source: str) -> dict[str, str]:
         if _DEBIAN_FIELD_NAME.fullmatch(key) is None:
             raise RuntimeError(f"Debian {source} field name is malformed")
         if normalized in fields:
-            raise RuntimeError(f"Debian {source} field is duplicated")
-        fields[normalized] = value.strip()
+            if not allow_noncritical_duplicates or normalized in {"format", "license"}:
+                raise RuntimeError(f"Debian {source} field is duplicated")
+            fields[normalized] += "\n" + value.strip()
+        else:
+            fields[normalized] = value.strip()
         if len(fields[normalized]) > MAX_DEBIAN_FIELD_CHARS:
             raise RuntimeError(f"Debian {source} field is too large")
         current = normalized
-    return fields
+    return {key: value.strip() for key, value in fields.items()}
 
 
 def _debian_license_values(value: bytes, source: str) -> list[str]:
@@ -240,21 +265,68 @@ def _debian_license_values(value: bytes, source: str) -> list[str]:
     })
 
 
-def _debian_copyright_metadata(value: bytes) -> tuple[str | None, list[str]]:
+def _validate_unstructured_debian_field_names(text: str) -> None:
+    for line in text.splitlines():
+        if (
+            line
+            and not line[0].isspace()
+            and _DEBIAN_COPYRIGHT_FIELD_LIKE.match(line)
+            and _DEBIAN_FIELD_NAME.fullmatch(line.split(":", 1)[0]) is None
+        ):
+            raise RuntimeError("Debian copyright field name is malformed")
+
+
+def _debian_copyright_metadata(
+    value: bytes,
+    *,
+    require_canonical_format: bool = False,
+) -> tuple[str | None, list[str]]:
     text = value.decode("utf-8", errors="strict")
-    if not any(
-        _DEBIAN_COPYRIGHT_FIELD_LIKE.match(line)
-        for line in text.splitlines()
-    ):
-        return None, []
     stanzas = _split_debian_stanzas(text)
-    first_fields = _debian_fields(stanzas[0], "copyright")
+    first_lines = stanzas[0].splitlines()
+    format_lines = [
+        line for line in first_lines
+        if line.casefold().startswith("format:")
+    ]
+    if not format_lines:
+        if require_canonical_format:
+            raise RuntimeError("Debian copyright DEP-5 Format header is invalid")
+        _validate_unstructured_debian_field_names(text)
+        return None, []
+    preliminary_format = format_lines[0].split(":", 1)[1].strip()
+    if not preliminary_format:
+        raise RuntimeError("Debian copyright DEP-5 Format header is invalid")
+    if preliminary_format != DEP5_FORMAT_URI:
+        if require_canonical_format:
+            raise RuntimeError("Debian copyright DEP-5 Format header is invalid")
+        _validate_unstructured_debian_field_names(text)
+        return None, []
+    if any(
+        lines and all(line[0].isspace() for line in lines)
+        for stanza in stanzas
+        for lines in [[
+            line for line in stanza.splitlines()
+            if line and not line.startswith("#")
+        ]]
+    ):
+        if require_canonical_format:
+            raise RuntimeError("Debian copyright metadata is malformed")
+        return None, []
+    first_fields = _debian_fields(
+        stanzas[0],
+        "copyright",
+        allow_noncritical_duplicates=True,
+    )
     format_value = first_fields.get("format")
     if format_value != DEP5_FORMAT_URI:
         raise RuntimeError("Debian copyright DEP-5 Format header is invalid")
     license_fields = []
     for index, stanza in enumerate(stanzas):
-        fields = _debian_fields(stanza, "copyright")
+        fields = _debian_fields(
+            stanza,
+            "copyright",
+            allow_noncritical_duplicates=True,
+        )
         if "format" in fields:
             if index != 0 or fields["format"] != format_value:
                 raise RuntimeError("Debian copyright Format field is duplicated")
@@ -290,7 +362,12 @@ def _debian_records() -> list[dict]:
                 allowed_roots=(DEBIAN_DOCUMENTATION_ROOT,),
             )
         except _UnavailableEvidencePath as exc:
-            if exc.error_number != errno.ENOENT:
+            if exc.error_number in {errno.ELOOP, errno.ENOTDIR}:
+                evidence.append(_unverifiable_path_evidence(
+                    "debian-copyright-path-unverifiable",
+                    copyright_path,
+                ))
+            elif exc.error_number != errno.ENOENT:
                 raise
         else:
             evidence.append(copyright_evidence)
@@ -391,10 +468,18 @@ def _python_records() -> list[dict]:
             _DEBIAN_FIELD_NAME.fullmatch(key) is None for key in metadata.keys()
         ):
             raise RuntimeError(f"Python package metadata is malformed: {metadata_path}")
-        names = metadata.get_all("Name", [])
-        versions = metadata.get_all("Version", [])
-        licenses = metadata.get_all("License", [])
-        expressions = metadata.get_all("License-Expression", [])
+        def metadata_values(key):
+            values = metadata.get_all(key, [])
+            if any(not isinstance(value, (str, Header)) for value in values):
+                raise RuntimeError(
+                    f"Python package metadata value is invalid: {metadata_path}"
+                )
+            return [str(value) for value in values]
+
+        names = metadata_values("Name")
+        versions = metadata_values("Version")
+        licenses = metadata_values("License")
+        expressions = metadata_values("License-Expression")
         if (
             len(names) != 1
             or len(versions) != 1
@@ -414,10 +499,10 @@ def _python_records() -> list[dict]:
         license_value = licenses[0] if licenses else None
         classifiers = sorted({
             value
-            for value in metadata.get_all("Classifier", [])
+            for value in metadata_values("Classifier")
             if value.startswith("License ::")
         })
-        declared_files = metadata.get_all("License-File", [])
+        declared_files = metadata_values("License-File")
         raw_values = []
         if isinstance(license_expression, str) and license_expression.strip():
             raw_values.append(license_expression.strip())

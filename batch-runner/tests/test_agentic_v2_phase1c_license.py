@@ -1282,6 +1282,24 @@ def test_phase1c_license_evidence_rejects_inventory_and_source_tampering():
     with pytest.raises(ValueError, match="remain lexical"):
         validate_license_evidence(followed, sbom)
 
+    unresolved_file = deepcopy(evidence)
+    python_record = next(
+        item for item in unresolved_file["records"]
+        if item["ecosystem"] == "python"
+    )
+    python_record["evidence"][0]["resolved_path"] = None
+    unresolved_file["records_sha256"] = canonical_sha256(
+        unresolved_file["records"]
+    )
+    with pytest.raises(ValueError, match="unresolved license evidence source"):
+        validate_license_evidence(unresolved_file, sbom)
+    with pytest.raises(ValueError, match="unresolved license evidence source"):
+        verifier._verify_license_evidence_files(
+            "fixture-image",
+            unresolved_file,
+            session=verifier.VerificationSession("a" * 32),
+        )
+
     shadow = deepcopy(evidence)
     python_record = next(
         item for item in shadow["records"] if item["ecosystem"] == "python"
@@ -1932,15 +1950,31 @@ def test_phase1c_debian_dep5_fields_are_case_insensitive_and_stanza_scoped():
         "Format: fixture\nLicense: MIT\n", "copyright"
     )
     second = collector._debian_fields("license: SSPL-1.0\n", "copyright")
+    continued = collector._debian_fields(
+        "License:\n MIT\n SSPL-1.0\n", "copyright"
+    )
 
     assert first == {"format": "fixture", "license": "MIT"}
     assert second == {"license": "SSPL-1.0"}
+    assert continued == {"license": "MIT\nSSPL-1.0"}
     with pytest.raises(RuntimeError, match="Debian copyright field is duplicated"):
         collector._debian_fields(
             "License: MIT\nlicense: SSPL-1.0\n", "copyright"
         )
     with pytest.raises(RuntimeError, match="Debian copyright field is duplicated"):
         collector._debian_fields("Format: one\nformat: two\n", "copyright")
+    merged = collector._debian_fields(
+        "# separator\nComment: one\ncomment: two\nLicense: MIT\n",
+        "copyright",
+        allow_noncritical_duplicates=True,
+    )
+    assert merged == {"comment": "one\ntwo", "license": "MIT"}
+    with pytest.raises(RuntimeError, match="Debian copyright field is duplicated"):
+        collector._debian_fields(
+            "License: MIT\nlicense: SSPL-1.0\n",
+            "copyright",
+            allow_noncritical_duplicates=True,
+        )
 
 
 def test_phase1c_debian_license_continuation_is_preserved_and_denied(
@@ -1997,29 +2031,40 @@ def test_phase1c_debian_continuation_denial_reaches_full_report():
     assert decision["denied_identifiers"] == ["SSPL-1.0"]
 
 
-def test_phase1c_debian_copyright_symlink_is_not_treated_as_missing(monkeypatch):
-    calls = 0
+def test_phase1c_debian_copyright_symlink_is_unverifiable(tmp_path, monkeypatch):
+    status = tmp_path / "status"
+    status.write_text(
+        "Package: fixture\nStatus: install ok installed\n"
+        "Version: 1\nArchitecture: amd64\n",
+        encoding="utf-8",
+    )
+    documentation_root = tmp_path / "doc"
+    copyright_path = documentation_root / "fixture" / "copyright"
+    copyright_path.parent.mkdir(parents=True)
+    (copyright_path.parent / "copyright.real").write_text(
+        "Format: fixture\nLicense: MIT\n",
+        encoding="utf-8",
+    )
+    copyright_path.symlink_to("copyright.real")
+    monkeypatch.setattr(collector, "DEBIAN_STATUS_PATH", status)
+    monkeypatch.setattr(
+        collector, "DEBIAN_DOCUMENTATION_ROOT", documentation_root
+    )
 
-    def read_file(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            return (
-                {"source": "debian-status"},
-                b"Package: fixture\nStatus: install ok installed\n"
-                b"Version: 1\nArchitecture: amd64\n",
-            )
-        raise collector._UnavailableEvidencePath(
-            Path("/usr/share/doc/fixture/copyright"), collector.errno.ELOOP
-        )
+    record = collector._debian_records()[0]
+    decision = license_module._decision(record, set(), {})
+    blocked = record["evidence"][1]
 
-    monkeypatch.setattr(collector, "_read_regular_file", read_file)
-
-    with pytest.raises(RuntimeError, match="symlink-free"):
-        collector._debian_records()
+    assert blocked["source"] == "debian-copyright-path-unverifiable"
+    assert blocked["path"] == str(copyright_path)
+    assert blocked["resolved_path"] is None
+    assert decision["classification"] == "unverifiable"
+    assert decision["normalization_reason"] == (
+        "debian-copyright-path-unverifiable"
+    )
 
 
-def test_phase1c_debian_copyright_enotdir_is_not_treated_as_missing(
+def test_phase1c_debian_copyright_enotdir_is_unverifiable(
     tmp_path, monkeypatch
 ):
     status = tmp_path / "status"
@@ -2035,8 +2080,16 @@ def test_phase1c_debian_copyright_enotdir_is_not_treated_as_missing(
         collector, "DEBIAN_DOCUMENTATION_ROOT", documentation_root
     )
 
-    with pytest.raises(RuntimeError, match="symlink-free"):
-        collector._debian_records()
+    record = collector._debian_records()[0]
+    decision = license_module._decision(record, set(), {})
+
+    assert record["evidence"][1]["source"] == (
+        "debian-copyright-path-unverifiable"
+    )
+    assert decision["classification"] == "unverifiable"
+    assert decision["normalization_reason"] == (
+        "debian-copyright-path-unverifiable"
+    )
 
 
 @pytest.mark.parametrize(
@@ -2129,9 +2182,78 @@ def test_phase1c_unstructured_debian_copyright_is_unverifiable(
     )
 
 
-@pytest.mark.parametrize("copyright_present", [False, True])
+def test_phase1c_noncanonical_debian_format_is_unverifiable(
+    tmp_path, monkeypatch
+):
+    status = tmp_path / "status"
+    status.write_text(
+        "Package: fixture\nStatus: install ok installed\n"
+        "Version: 1\nArchitecture: amd64\n",
+        encoding="utf-8",
+    )
+    documentation_root = tmp_path / "doc"
+    copyright_path = documentation_root / "fixture" / "copyright"
+    copyright_path.parent.mkdir(parents=True)
+    copyright_path.write_text(
+        "Format: http://www.debian.org/doc/packaging-manuals/"
+        "copyright-format/1.0/\n"
+        "# Non-control-file comments remain untrusted.\n"
+        "License: MIT\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(collector, "DEBIAN_STATUS_PATH", status)
+    monkeypatch.setattr(
+        collector, "DEBIAN_DOCUMENTATION_ROOT", documentation_root
+    )
+
+    record = collector._debian_records()[0]
+    decision = license_module._decision(record, set(), {})
+
+    assert record["metadata"]["copyright_format"] is None
+    assert record["raw_values"] == []
+    assert decision["classification"] == "unverifiable"
+    assert decision["normalization_reason"] == (
+        "debian-copyright-has-no-dep5-license-fields"
+    )
+
+
+def test_phase1c_orphan_debian_license_prose_is_unverifiable(
+    tmp_path, monkeypatch
+):
+    status = tmp_path / "status"
+    status.write_text(
+        "Package: fixture\nStatus: install ok installed\n"
+        "Version: 1\nArchitecture: amd64\n",
+        encoding="utf-8",
+    )
+    documentation_root = tmp_path / "doc"
+    copyright_path = documentation_root / "fixture" / "copyright"
+    copyright_path.parent.mkdir(parents=True)
+    copyright_path.write_text(
+        f"Format: {collector.DEP5_FORMAT_URI}\n\n"
+        "Files: *\nLicense: MIT\n\n"
+        "    Detached SSPL-1.0 prose must not be ignored.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(collector, "DEBIAN_STATUS_PATH", status)
+    monkeypatch.setattr(
+        collector, "DEBIAN_DOCUMENTATION_ROOT", documentation_root
+    )
+
+    record = collector._debian_records()[0]
+    decision = license_module._decision(record, set(), {})
+
+    assert record["metadata"]["copyright_format"] is None
+    assert record["raw_values"] == []
+    assert decision["classification"] == "unverifiable"
+    assert decision["denied_identifiers"] == []
+
+
+@pytest.mark.parametrize(
+    "copyright_state", ["missing", "unstructured", "unverifiable_path"]
+)
 def test_phase1c_debian_without_dep5_cannot_receive_exception(
-    copyright_present,
+    copyright_state,
 ):
     _fixture_value, subject, sbom, evidence, policy, _report = _fixture()
     record = next(
@@ -2141,8 +2263,15 @@ def test_phase1c_debian_without_dep5_cannot_receive_exception(
         item for item in record["evidence"]
         if item["source"] == "debian-copyright"
     ]
-    if not copyright_present:
+    if copyright_state == "missing":
         record["evidence"].remove(copyright_items[0])
+    elif copyright_state == "unverifiable_path":
+        record["evidence"][record["evidence"].index(copyright_items[0])] = (
+            collector._unverifiable_path_evidence(
+                "debian-copyright-path-unverifiable",
+                Path(f"/usr/share/doc/{record['package']}/copyright"),
+            )
+        )
     record["raw_values"] = []
     record["metadata"]["copyright_format"] = None
     evidence_sha256 = canonical_sha256(record["evidence"])
@@ -2180,6 +2309,36 @@ def test_phase1c_debian_without_dep5_cannot_receive_exception(
         )
 
 
+@pytest.mark.parametrize("tampering", ["digest", "resolved_path"])
+def test_phase1c_debian_unverifiable_path_observation_is_exact(tampering):
+    _fixture_value, _subject, sbom, evidence, _policy, _report = _fixture()
+    record = next(
+        item for item in evidence["records"] if item["ecosystem"] == "debian"
+    )
+    copyright_item = next(
+        item for item in record["evidence"]
+        if item["source"] == "debian-copyright"
+    )
+    blocked = collector._unverifiable_path_evidence(
+        "debian-copyright-path-unverifiable",
+        Path(f"/usr/share/doc/{record['package']}/copyright"),
+    )
+    record["evidence"][record["evidence"].index(copyright_item)] = blocked
+    record["raw_values"] = []
+    record["metadata"]["copyright_format"] = None
+    evidence["records_sha256"] = canonical_sha256(evidence["records"])
+
+    assert validate_license_evidence(evidence, sbom) == evidence
+
+    if tampering == "digest":
+        blocked["sha256"] = "0" * 64
+    else:
+        blocked["resolved_path"] = blocked["path"]
+    evidence["records_sha256"] = canonical_sha256(evidence["records"])
+    with pytest.raises(ValueError, match="unverifiable path evidence is invalid"):
+        validate_license_evidence(evidence, sbom)
+
+
 def test_phase1c_debian_malformed_denied_field_fails_collector(
     tmp_path, monkeypatch
 ):
@@ -2209,13 +2368,12 @@ def test_phase1c_debian_malformed_denied_field_fails_collector(
     ("copyright_text", "newline"),
     [
         ("License: MIT{nl}", "\n"),
-        ("Format:   {nl}License: MIT{nl}", "\n"),
         ("License: MIT{nl}{nl}Format: fixture{nl}", "\n"),
         ("License: MIT{nl}{nl}Format: fixture{nl}", "\r\n"),
         ("License: MIT{nl}{nl}Format: fixture{nl}", "\r"),
     ],
 )
-def test_phase1c_dep5_requires_nonempty_first_stanza_format(
+def test_phase1c_formatless_dep5_like_document_is_unverifiable(
     tmp_path, monkeypatch, copyright_text, newline
 ):
     status = tmp_path / "status"
@@ -2228,6 +2386,32 @@ def test_phase1c_dep5_requires_nonempty_first_stanza_format(
     copyright_path = documentation_root / "fixture" / "copyright"
     copyright_path.parent.mkdir(parents=True)
     copyright_path.write_bytes(copyright_text.format(nl=newline).encode("utf-8"))
+    monkeypatch.setattr(collector, "DEBIAN_STATUS_PATH", status)
+    monkeypatch.setattr(
+        collector, "DEBIAN_DOCUMENTATION_ROOT", documentation_root
+    )
+
+    record = collector._debian_records()[0]
+    decision = license_module._decision(record, set(), {})
+
+    assert record["metadata"]["copyright_format"] is None
+    assert record["raw_values"] == []
+    assert decision["classification"] == "unverifiable"
+
+
+def test_phase1c_dep5_requires_nonempty_first_stanza_format(
+    tmp_path, monkeypatch
+):
+    status = tmp_path / "status"
+    status.write_text(
+        "Package: fixture\nStatus: install ok installed\n"
+        "Version: 1\nArchitecture: amd64\n",
+        encoding="utf-8",
+    )
+    documentation_root = tmp_path / "doc"
+    copyright_path = documentation_root / "fixture" / "copyright"
+    copyright_path.parent.mkdir(parents=True)
+    copyright_path.write_text("Format:   \nLicense: MIT\n", encoding="utf-8")
     monkeypatch.setattr(collector, "DEBIAN_STATUS_PATH", status)
     monkeypatch.setattr(
         collector, "DEBIAN_DOCUMENTATION_ROOT", documentation_root
@@ -2251,7 +2435,7 @@ def test_phase1c_dep5_requires_nonempty_first_stanza_format(
         "Files-Excluded-component: generated/*",
     ],
 )
-def test_phase1c_dep5_field_set_requires_format(
+def test_phase1c_dep5_field_set_without_format_is_unverifiable(
     tmp_path, monkeypatch, field_line
 ):
     status = tmp_path / "status"
@@ -2269,8 +2453,12 @@ def test_phase1c_dep5_field_set_requires_format(
         collector, "DEBIAN_DOCUMENTATION_ROOT", documentation_root
     )
 
-    with pytest.raises(RuntimeError, match="DEP-5 Format header is invalid"):
-        collector._debian_records()
+    record = collector._debian_records()[0]
+    decision = license_module._decision(record, set(), {})
+
+    assert record["metadata"]["copyright_format"] is None
+    assert record["raw_values"] == []
+    assert decision["classification"] == "unverifiable"
 
 
 @pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
@@ -2374,6 +2562,28 @@ def test_phase1c_python_malformed_denied_header_fails_collector(
 
     with pytest.raises(RuntimeError, match="metadata is malformed"):
         collector._python_records()
+
+
+def test_phase1c_python_utf8_multiline_license_is_serializable(
+    tmp_path, monkeypatch
+):
+    site_root = tmp_path / "python3.11" / "site-packages"
+    metadata_root = site_root / "fixture-1.0.dist-info"
+    metadata_root.mkdir(parents=True)
+    (metadata_root / "METADATA").write_bytes(
+        b"Name: fixture\nVersion: 1.0\nLicense: BSD prose\n"
+        b" Copyright Jos\xc3\xa9 Example\n\n"
+    )
+    monkeypatch.setattr(collector, "PYTHON_PURELIB_PATH", str(site_root))
+    monkeypatch.setattr(
+        collector.sysconfig, "get_path", lambda name: str(site_root)
+    )
+
+    record = collector._python_records()[0]
+
+    assert isinstance(record["metadata"]["license"], str)
+    assert "Jos" in record["metadata"]["license"]
+    json.dumps(record, sort_keys=True, allow_nan=False)
 
 
 def test_phase1c_python_invalid_utf8_fails_collector(tmp_path, monkeypatch):
@@ -2834,21 +3044,144 @@ def test_phase1c_r_records_surface_mixed_case_runtime_denied(
     assert decision["denied_identifiers"] == ["SSPL-1.0"]
 
 
+def test_phase1c_effective_sbom_r_inventory_is_static(tmp_path, monkeypatch):
+    library_root = tmp_path / "R" / "library"
+    for package, license_value in (
+        ("base", "Part of R 4.2.2"),
+        ("translations", "Part of R 4.2.2"),
+    ):
+        package_root = library_root / package
+        package_root.mkdir(parents=True)
+        (package_root / "DESCRIPTION").write_text(
+            f"Package: {package}\nVersion: 4.2.2\nLicense: {license_value}\n",
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(sbom_collector, "R_LIBRARY_ROOT", library_root)
+
+    packages = sbom_collector._r_packages()
+
+    assert [
+        item["externalRefs"][0]["referenceLocator"] for item in packages
+    ] == [
+        "pkg:cran/base@4.2.2",
+        "pkg:cran/translations@4.2.2",
+    ]
+
+
+def test_phase1c_effective_sbom_r_inventory_is_bounded(tmp_path, monkeypatch):
+    library_root = tmp_path / "R" / "library"
+    package_root = library_root / "base"
+    package_root.mkdir(parents=True)
+    description_path = package_root / "DESCRIPTION"
+    description_path.write_text(
+        "Package: base\nVersion: 4.2.2\nLicense: " + "M" * 65 + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sbom_collector, "R_LIBRARY_ROOT", library_root)
+    monkeypatch.setattr(sbom_collector, "MAX_R_FIELD_CHARS", 64)
+
+    with pytest.raises(RuntimeError, match="field is too large"):
+        sbom_collector._r_packages()
+
+    monkeypatch.setattr(sbom_collector, "MAX_R_FIELD_CHARS", 1024)
+    monkeypatch.setattr(
+        sbom_collector,
+        "MAX_R_DESCRIPTION_BYTES",
+        description_path.stat().st_size - 1,
+    )
+    with pytest.raises(RuntimeError, match="file is too large"):
+        sbom_collector._r_packages()
+
+
 @pytest.mark.parametrize(
     "runtime_copyright",
     [
-        b"License: MIT\n",
+        b"Runtime prose.\n\nLicense: GPL-2\nPortions License: Artistic\n",
         b"Format: vendor-text-v1\n\nLicense: MIT\n",
-        b"Format: \n\nLicense: MIT\n",
     ],
 )
-def test_phase1c_r_runtime_requires_canonical_dep5_format(
+def test_phase1c_unstructured_r_runtime_is_unverifiable(
     tmp_path, monkeypatch, runtime_copyright
 ):
     _configure_r_tree(
         tmp_path,
         monkeypatch,
         runtime_copyright=runtime_copyright,
+    )
+
+    record = collector._r_records()[0]
+    decision = license_module._decision(record, set(), {})
+
+    assert record["metadata"]["runtime_copyright_format"] is None
+    assert record["metadata"]["runtime_license_fields"] == []
+    assert decision["classification"] == "unverifiable"
+    assert decision["normalization_reason"] == (
+        "r-runtime-copyright-unstructured"
+    )
+
+
+@pytest.mark.parametrize(
+    ("declared_license", "priority"),
+    [
+        ("Part of R 4.2.2", "base"),
+        ("Part of R anything", "optional"),
+        ("(Part of R anything)", "optional"),
+        ("GPL-2 | Part of R anything", "optional"),
+        ("MIT | part-of-r anything", "optional"),
+        ("Part\u00a0of\u00a0R anything", "optional"),
+        ("MIT | Part\u2011of\u2011R anything", "optional"),
+    ],
+)
+def test_phase1c_unstructured_r_runtime_cannot_receive_exception(
+    declared_license,
+    priority,
+):
+    _fixture_value, subject, sbom, evidence, policy, _report = _fixture()
+    record = next(item for item in evidence["records"] if item["ecosystem"] == "r")
+    record["metadata"]["declared_license"] = declared_license
+    record["metadata"]["priority"] = priority
+    record["metadata"]["runtime_copyright_format"] = None
+    record["metadata"]["runtime_license_fields"] = []
+    record["raw_values"] = [record["metadata"]["declared_license"]]
+    evidence_sha256 = canonical_sha256(record["evidence"])
+    exception = {
+        "ecosystem": "r",
+        "package": record["package"],
+        "version": record["version"],
+        "purl": record["purl"],
+        "normalized_expression": "MIT",
+        "evidence_sha256": evidence_sha256,
+        "reason": "unstructured-runtime-review",
+        "approver": "reviewer",
+        "expires_at": "2027-07-31",
+    }
+    policy["license"]["exceptions"].append(exception)
+    evidence["records_sha256"] = canonical_sha256(evidence["records"])
+
+    decision = license_module._decision(
+        record,
+        set(policy["license"]["denied_identifiers"]),
+        {(record["purl"], evidence_sha256): exception},
+    )
+
+    assert decision["classification"] == "unverifiable"
+    assert decision["exception"] is None
+    with pytest.raises(ValueError, match="stale or unmatched"):
+        build_license_report(
+            subject=subject,
+            subject_sha256=canonical_sha256(subject),
+            sbom=sbom,
+            license_evidence=evidence,
+            policy=policy,
+            policy_sha256=canonical_sha256(policy),
+        )
+
+
+def test_phase1c_r_runtime_rejects_empty_dep5_format(tmp_path, monkeypatch):
+    _configure_r_tree(
+        tmp_path,
+        monkeypatch,
+        runtime_copyright=b"Format: \n\nLicense: MIT\n",
     )
 
     with pytest.raises(RuntimeError, match="DEP-5 Format header is invalid"):
@@ -3158,6 +3491,54 @@ def test_phase1c_noncanonical_reference_cannot_receive_exception(
 
     assert decision["classification"] == "unverifiable"
     assert decision["exception"] is None
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [
+        "SEE\u00a0LICENSE\u00a0IN LICENSE",
+        "SEE\u2011LICENSE\u2011IN LICENSE",
+    ],
+)
+def test_phase1c_unicode_npm_reference_cannot_receive_exception(declared):
+    _fixture_value, subject, sbom, evidence, policy, _report = _fixture()
+    record = next(
+        item for item in evidence["records"] if item["ecosystem"] == "npm"
+    )
+    record["metadata"]["license"] = declared
+    record["raw_values"] = [declared]
+    evidence_sha256 = canonical_sha256(record["evidence"])
+    exception = {
+        "ecosystem": "npm",
+        "package": record["package"],
+        "version": record["version"],
+        "purl": record["purl"],
+        "normalized_expression": "MIT",
+        "evidence_sha256": evidence_sha256,
+        "reason": "unicode-reference-review",
+        "approver": "reviewer",
+        "expires_at": "2027-07-31",
+    }
+    policy["license"]["exceptions"].append(exception)
+    evidence["records_sha256"] = canonical_sha256(evidence["records"])
+
+    decision = license_module._decision(
+        record,
+        set(policy["license"]["denied_identifiers"]),
+        {(record["purl"], evidence_sha256): exception},
+    )
+
+    assert decision["classification"] == "unverifiable"
+    assert decision["exception"] is None
+    with pytest.raises(ValueError, match="stale or unmatched"):
+        build_license_report(
+            subject=subject,
+            subject_sha256=canonical_sha256(subject),
+            sbom=sbom,
+            license_evidence=evidence,
+            policy=policy,
+            policy_sha256=canonical_sha256(policy),
+        )
 
 
 def test_phase1c_license_expression_size_is_bounded():

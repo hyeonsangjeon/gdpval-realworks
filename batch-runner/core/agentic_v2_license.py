@@ -76,8 +76,14 @@ _NPM_LICENSE_REFERENCE = re.compile(
     r"SEE LICENSE IN ([A-Za-z0-9][A-Za-z0-9._+-]*)\Z", re.ASCII
 )
 _R_REFERENCE_LIKE = re.compile(r"\bfile\b", re.IGNORECASE | re.ASCII)
+_R_RUNTIME_REFERENCE_LIKE = re.compile(
+    r"(?<![A-Za-z0-9])Part[^A-Za-z0-9]+of[^A-Za-z0-9]+R(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
 _NPM_REFERENCE_LIKE = re.compile(
-    r"\bSEE\s+LICENSE\s+IN\b", re.IGNORECASE | re.ASCII
+    r"(?<![A-Za-z0-9])SEE[^A-Za-z0-9]+LICENSE[^A-Za-z0-9]+IN"
+    r"(?![A-Za-z0-9])",
+    re.IGNORECASE,
 )
 _LICENSE_FILE_TOKEN_TEXT = re.compile(
     r"[A-Za-z0-9](?:[A-Za-z0-9.+-]{0,126}[A-Za-z0-9+])?\Z",
@@ -607,6 +613,13 @@ def _r_outcome(record: Mapping[str, Any]) -> _Outcome:
         if isinstance(runtime_fields, list) and runtime_fields:
             outcomes = [_debian_expression(value) for value in runtime_fields]
             return _combine("AND", outcomes, "r-runtime-copyright-license")
+        if metadata.get("runtime_copyright_format") != _DEP5_FORMAT_URI:
+            return _Outcome(
+                None,
+                "unverifiable",
+                "r-runtime-copyright-unstructured",
+                frozenset(),
+            )
         if not isinstance(runtime, str) or not runtime:
             return _Outcome(None, "missing_metadata", "r-runtime-license-missing", frozenset())
         if not _valid_expression_shape(runtime):
@@ -648,6 +661,16 @@ def _normalize(record: Mapping[str, Any]) -> _Outcome:
     if ecosystem == "debian":
         raw_values = record["raw_values"]
         if not raw_values:
+            if any(
+                item["source"] == "debian-copyright-path-unverifiable"
+                for item in record["evidence"]
+            ):
+                return _Outcome(
+                    None,
+                    "unverifiable",
+                    "debian-copyright-path-unverifiable",
+                    frozenset(),
+                )
             if not any(
                 item["source"] == "debian-copyright"
                 for item in record["evidence"]
@@ -697,9 +720,18 @@ def _validate_evidence_item(value: Any) -> dict[str, Any]:
             or ".." in PurePosixPath(path).parts
         ):
             raise ValueError("agentic v2 license evidence path is invalid")
-    if (item["path"] is None) != (item["resolved_path"] is None):
+    if item["path"] is None and item["resolved_path"] is not None:
         raise ValueError("agentic v2 virtual license evidence paths are invalid")
-    if item["path"] is not None and item["path"] != item["resolved_path"]:
+    if (
+        item["path"] is not None
+        and item["resolved_path"] is None
+        and item["source"] != "debian-copyright-path-unverifiable"
+    ):
+        raise ValueError("agentic v2 unresolved license evidence source is invalid")
+    if (
+        item["resolved_path"] is not None
+        and item["path"] != item["resolved_path"]
+    ):
         raise ValueError("agentic v2 license evidence path did not remain lexical")
     return item
 
@@ -742,6 +774,10 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
         copyright_items = [
             item for item in evidence if item["source"] == "debian-copyright"
         ]
+        unverifiable_path_items = [
+            item for item in evidence
+            if item["source"] == "debian-copyright-path-unverifiable"
+        ]
         if (
             set(metadata) != {"architecture", "copyright_format"}
             or not isinstance(metadata["architecture"], str)
@@ -764,7 +800,10 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
             )
             or len(status_items) != 1
             or len(copyright_items) > 1
-            or len(status_items) + len(copyright_items) != len(evidence)
+            or len(unverifiable_path_items) > 1
+            or copyright_items and unverifiable_path_items
+            or len(status_items) + len(copyright_items)
+            + len(unverifiable_path_items) != len(evidence)
             or record["purl"] != (
                 f"pkg:deb/debian/{quote(record['package'], safe='')}@"
                 f"{quote(record['version'], safe='')}?arch="
@@ -788,6 +827,27 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
                 raise ValueError("agentic v2 Debian copyright format is invalid")
             if raw_values and metadata["copyright_format"] is None:
                 raise ValueError("agentic v2 Debian license fields lack DEP-5 format")
+        elif unverifiable_path_items:
+            item = unverifiable_path_items[0]
+            path = f"/usr/share/doc/{record['package']}/copyright"
+            _require_exact_path(item, path)
+            observation = json.dumps(
+                {"path": path, "reason": "symlink-or-nondirectory"},
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+                allow_nan=False,
+            ).encode("utf-8")
+            if (
+                item["resolved_path"] is not None
+                or item["sha256"] != hashlib.sha256(observation).hexdigest()
+                or item["size"] != len(observation)
+                or metadata["copyright_format"] is not None
+                or raw_values
+            ):
+                raise ValueError(
+                    "agentic v2 Debian unverifiable path evidence is invalid"
+                )
         elif metadata["copyright_format"] is not None or raw_values:
             raise ValueError("agentic v2 Debian license fields lack evidence")
         return
@@ -889,7 +949,8 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
             != metadata["declared_license"].strip()
             or metadata["runtime_version"] != metadata["runtime_version"].strip()
             or metadata["runtime_license"] != ""
-            or metadata["runtime_copyright_format"] != _DEP5_FORMAT_URI
+            or metadata["runtime_copyright_format"] is not None
+            and metadata["runtime_copyright_format"] != _DEP5_FORMAT_URI
             or metadata["priority"] is not None
             and not isinstance(metadata["priority"], str)
             or isinstance(metadata["priority"], str)
@@ -907,6 +968,8 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
                 or item != item.strip()
                 for item in metadata["runtime_license_fields"]
             )
+            or metadata["runtime_license_fields"]
+            and metadata["runtime_copyright_format"] != _DEP5_FORMAT_URI
             or not valid_file_tokens(metadata["license_file_tokens"])
         ):
             raise ValueError("agentic v2 R license metadata is invalid")
@@ -1242,7 +1305,22 @@ def _decision(
         )
     elif record["ecosystem"] == "r":
         declared = record["metadata"].get("declared_license", "")
-        if isinstance(declared, str) and _R_REFERENCE_LIKE.search(declared):
+        runtime_version = record["metadata"].get("runtime_version")
+        if (
+            isinstance(declared, str)
+            and _R_RUNTIME_REFERENCE_LIKE.search(declared)
+        ):
+            reference_evidence_complete = (
+                declared == f"Part of R {runtime_version}"
+                and record["metadata"].get("priority") == "base"
+                and record["metadata"].get("runtime_copyright_format")
+                == _DEP5_FORMAT_URI
+                and sum(
+                    item["source"] == "r-runtime-copyright"
+                    for item in record["evidence"]
+                ) == 1
+            )
+        elif isinstance(declared, str) and _R_REFERENCE_LIKE.search(declared):
             reference_evidence_complete = (
                 _R_LICENSE_REFERENCE.fullmatch(declared) is not None
                 and sum(

@@ -1077,6 +1077,12 @@ def _verify_license_evidence_files(
             path = item["path"]
             if path is None:
                 continue
+            if item["resolved_path"] is None:
+                if item["source"] != "debian-copyright-path-unverifiable":
+                    raise ValueError(
+                        "candidate unresolved license evidence source is invalid"
+                    )
+                continue
             candidate = PurePosixPath(path)
             roots = [
                 PurePosixPath(root)

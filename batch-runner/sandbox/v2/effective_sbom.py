@@ -6,14 +6,17 @@ import hashlib
 import importlib.metadata
 import json
 import re
-import subprocess
 from pathlib import Path
 from urllib.parse import quote
 
 
 DEBIAN_STATUS_PATH = Path("/var/lib/dpkg/status")
+R_LIBRARY_ROOT = Path("/usr/lib/R/library")
 _DEBIAN_FIELD_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*\Z", re.ASCII)
+_R_FIELD_NAME = re.compile(r"[A-Za-z][A-Za-z0-9._-]*\Z", re.ASCII)
 MAX_DEBIAN_FIELD_CHARS = 1024 * 1024
+MAX_R_FIELD_CHARS = 1024 * 1024
+MAX_R_DESCRIPTION_BYTES = 64 * 1024 * 1024
 
 
 def _split_debian_stanzas(value: str) -> list[str]:
@@ -125,26 +128,69 @@ def _python_packages() -> list[dict]:
     return packages
 
 
+def _parse_r_dcf(value: bytes) -> dict[str, str]:
+    fields = {}
+    identities = set()
+    key = None
+    record_ended = False
+    for line in value.decode("utf-8", errors="strict").splitlines():
+        if not line:
+            record_ended = True
+            key = None
+            continue
+        if record_ended:
+            raise RuntimeError("R DESCRIPTION contains multiple records")
+        if line[:1].isspace() and key is not None:
+            fields[key] += "\n" + line.strip()
+            if len(fields[key]) > MAX_R_FIELD_CHARS:
+                raise RuntimeError("R DESCRIPTION field is too large")
+        elif line[:1].isspace():
+            raise RuntimeError("R DESCRIPTION metadata is malformed")
+        elif ":" in line:
+            raw_key, raw_value = line.split(":", 1)
+            if _R_FIELD_NAME.fullmatch(raw_key) is None:
+                raise RuntimeError("R DESCRIPTION field name is malformed")
+            identity = raw_key.casefold()
+            if identity in identities:
+                raise RuntimeError("R DESCRIPTION field is duplicated")
+            identities.add(identity)
+            key = identity
+            fields[key] = raw_value.strip()
+            if len(fields[key]) > MAX_R_FIELD_CHARS:
+                raise RuntimeError("R DESCRIPTION field is too large")
+        else:
+            raise RuntimeError("R DESCRIPTION metadata is malformed")
+    return fields
+
+
 def _r_packages() -> list[dict]:
-    expression = (
-        "p<-installed.packages();"
-        "cat(apply(p[,c('Package','Version','License'),drop=FALSE],1,"
-        "function(x) paste(x,collapse='\\t')),sep='\\n')"
-    )
-    completed = subprocess.run(
-        ["Rscript", "--vanilla", "-e", expression],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=60,
-        check=True,
-    )
+    library_root = R_LIBRARY_ROOT
+    if not library_root.is_dir() or library_root.is_symlink():
+        raise RuntimeError("R library root is missing")
     packages = []
-    for line in completed.stdout.decode("utf-8").splitlines():
-        parts = line.split("\t", 2)
-        if len(parts) != 3:
-            raise RuntimeError("R package inventory is malformed")
-        name, version, license_value = parts
+    for package_root in sorted(library_root.iterdir(), key=lambda value: value.name):
+        if package_root.is_symlink():
+            raise RuntimeError("R package root is symlinked")
+        description_path = package_root / "DESCRIPTION"
+        if not description_path.exists():
+            continue
+        if not description_path.is_file() or description_path.is_symlink():
+            raise RuntimeError("R DESCRIPTION is not a regular file")
+        metadata = description_path.stat()
+        if metadata.st_size < 0 or metadata.st_size > MAX_R_DESCRIPTION_BYTES:
+            raise RuntimeError("R DESCRIPTION file is too large")
+        description_bytes = description_path.read_bytes()
+        if len(description_bytes) != metadata.st_size:
+            raise RuntimeError("R DESCRIPTION changed while reading")
+        fields = _parse_r_dcf(description_bytes)
+        name = fields.get("package")
+        version = fields.get("version")
+        license_value = fields.get("license")
+        if not all(
+            isinstance(item, str) and item
+            for item in (name, version, license_value)
+        ):
+            raise RuntimeError("R package inventory is incomplete")
         packages.append(_package(
             "cran",
             name,
