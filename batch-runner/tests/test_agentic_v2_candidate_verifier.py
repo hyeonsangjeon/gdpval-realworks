@@ -808,6 +808,101 @@ def test_host_rejects_symlinked_copied_license_evidence(tmp_path):
         )
 
 
+def _license_archive(
+    relative: str,
+    value: bytes,
+    *,
+    parent_symlink: bool = False,
+    duplicate: bool = False,
+) -> bytes:
+    output = verifier.io.BytesIO()
+    with verifier.tarfile.open(fileobj=output, mode="w:") as archive:
+        root = verifier.tarfile.TarInfo(".")
+        root.type = verifier.tarfile.DIRTYPE
+        archive.addfile(root)
+        parents = [
+            parent
+            for parent in verifier.PurePosixPath(relative).parents
+            if parent != verifier.PurePosixPath(".")
+        ]
+        for parent in reversed(parents):
+            member = verifier.tarfile.TarInfo(f"./{parent}")
+            if parent_symlink and parent == parents[0]:
+                member.type = verifier.tarfile.SYMTYPE
+                member.linkname = "../../outside"
+            else:
+                member.type = verifier.tarfile.DIRTYPE
+            archive.addfile(member)
+        for _index in range(2 if duplicate else 1):
+            member = verifier.tarfile.TarInfo(f"./{relative}")
+            member.size = len(value)
+            archive.addfile(member, verifier.io.BytesIO(value))
+        unrelated = verifier.tarfile.TarInfo("./unrelated")
+        unrelated.type = verifier.tarfile.SYMTYPE
+        unrelated.linkname = "../../outside"
+        archive.addfile(unrelated)
+    return output.getvalue()
+
+
+def _archive_with_alias(alias: str) -> bytes:
+    output = verifier.io.BytesIO()
+    with verifier.tarfile.open(fileobj=output, mode="w:") as archive:
+        for name in (".", "./package"):
+            member = verifier.tarfile.TarInfo(name)
+            member.type = verifier.tarfile.DIRTYPE
+            archive.addfile(member)
+        for name in ("./package/LICENSE", alias):
+            value = b"MIT\n"
+            member = verifier.tarfile.TarInfo(name)
+            member.size = len(value)
+            archive.addfile(member, verifier.io.BytesIO(value))
+    return output.getvalue()
+
+
+def test_host_reopens_expected_archive_member_without_extracting_symlinks():
+    value = b"SSPL-1.0\n"
+    archive = _license_archive("package/LICENSE", value)
+    expected = {
+        "package/LICENSE": (
+            __import__("hashlib").sha256(value).hexdigest(),
+            len(value),
+        ),
+    }
+
+    verifier._verify_evidence_archive(archive, expected)
+
+    with pytest.raises(ValueError, match="digest differs"):
+        verifier._verify_evidence_archive(
+            archive,
+            {"package/LICENSE": ("0" * 64, len(value))},
+        )
+    with pytest.raises(ValueError, match="parent is invalid"):
+        verifier._verify_evidence_archive(
+            _license_archive("package/LICENSE", value, parent_symlink=True),
+            expected,
+        )
+    with pytest.raises(ValueError, match="member is invalid"):
+        verifier._verify_evidence_archive(
+            _license_archive("package/LICENSE", value, duplicate=True),
+            expected,
+        )
+    for alias in (
+        "package//LICENSE",
+        "package/./LICENSE",
+        "././package/LICENSE",
+    ):
+        with pytest.raises(ValueError, match="member is invalid"):
+            verifier._verify_evidence_archive(
+                _archive_with_alias(alias),
+                {
+                    "package/LICENSE": (
+                        __import__("hashlib").sha256(b"MIT\n").hexdigest(),
+                        4,
+                    ),
+                },
+            )
+
+
 def test_host_reopens_all_exact_image_evidence_roots(monkeypatch):
     import hashlib
 
@@ -817,6 +912,7 @@ def test_host_reopens_all_exact_image_evidence_roots(monkeypatch):
             "/usr/local/lib/python3.11/site-packages/"
             "fixture-1.0.dist-info/METADATA"
         ): b"Name: fixture\nVersion: 1.0\n",
+        "/usr/share/doc/fixture/copyright": b"License: MIT\n",
     }
     document = {
         "records": [{
@@ -844,6 +940,16 @@ def test_host_reopens_all_exact_image_evidence_roots(monkeypatch):
             )
         assert command[1:3] == ["container", "cp"]
         source = command[-2].split(":", 1)[1].removesuffix("/.")
+        if command[-1] == "-":
+            assert source == "/usr/share/doc"
+            return SimpleNamespace(
+                returncode=0,
+                stdout=_license_archive(
+                    "fixture/copyright",
+                    values["/usr/share/doc/fixture/copyright"],
+                ),
+                stderr=b"",
+            )
         destination = Path(command[-1])
         for path, value in values.items():
             if path == source or path.startswith(source + "/"):
@@ -876,6 +982,7 @@ def test_host_reopens_all_exact_image_evidence_roots(monkeypatch):
     assert copied_roots == {
         "/var/lib/dpkg",
         "/usr/local/lib/python3.11/site-packages",
+        "/usr/share/doc",
     }
     assert session.label_arguments()[1] in commands[0]
     assert len(removed) == 1

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import math
 import os
@@ -13,6 +14,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import uuid
@@ -71,6 +73,12 @@ _LICENSE_EVIDENCE_ROOTS = (
     "/usr/lib/R/library",
     "/var/lib/dpkg",
 )
+_LICENSE_EVIDENCE_ARCHIVE_ROOTS = frozenset({
+    "/usr/share/doc",
+    "/usr/share/nodejs/npm",
+})
+_LICENSE_EVIDENCE_ARCHIVE_MAX_BYTES = 64 * 1024 * 1024
+_LICENSE_EVIDENCE_ARCHIVE_MAX_MEMBERS = 100_000
 _IMAGE_STDLIB_SCRIPT_BOOTSTRAP = (
     "import runpy,sys;"
     "script=sys.argv[1];sys.argv=sys.argv[1:];"
@@ -1154,6 +1162,35 @@ def _verify_license_evidence_files(
         with tempfile.TemporaryDirectory(prefix="phase1c-license-files-") as temporary:
             temporary_root = Path(temporary)
             for index, (source_root, records) in enumerate(sorted(grouped.items())):
+                if source_root in _LICENSE_EVIDENCE_ARCHIVE_ROOTS:
+                    copied = _run_bounded_command(
+                        [
+                            _TRUSTED_DOCKER,
+                            "container",
+                            "cp",
+                            f"{container}:{source_root}/.",
+                            "-",
+                        ],
+                        timeout=AGENTIC_V2_EVIDENCE_ROOT_COPY_TIMEOUT_SECONDS,
+                        stdout_limit=_LICENSE_EVIDENCE_ARCHIVE_MAX_BYTES,
+                        stderr_limit=64 * 1024,
+                    )
+                    if (
+                        copied.returncode != 0
+                        or not copied.stdout
+                        or copied.stderr
+                    ):
+                        raise RuntimeError(
+                            "candidate license evidence root archive failed"
+                        )
+                    _verify_evidence_archive(
+                        copied.stdout,
+                        {
+                            identity[3]: (identity[0], identity[1])
+                            for _path, identity in records
+                        },
+                    )
+                    continue
                 destination = temporary_root / f"root-{index}"
                 destination.mkdir(mode=0o700)
                 copied = _run_bounded_command(
@@ -1179,6 +1216,91 @@ def _verify_license_evidence_files(
                     )
     finally:
         _remove_container(container)
+
+
+def _verify_evidence_archive(
+    value: bytes,
+    expected: dict[str, tuple[str, int]],
+) -> None:
+    if not value or len(value) > _LICENSE_EVIDENCE_ARCHIVE_MAX_BYTES or not expected:
+        raise ValueError("candidate license evidence archive size is invalid")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(value), mode="r:") as archive:
+            members = archive.getmembers()
+            if len(members) > _LICENSE_EVIDENCE_ARCHIVE_MAX_MEMBERS:
+                raise ValueError("candidate license evidence archive is too large")
+            indexed = {}
+            for member in members:
+                if member.name == ".":
+                    raw_name = "."
+                elif member.name.startswith("./"):
+                    raw_name = member.name[2:]
+                else:
+                    raw_name = member.name
+                path = PurePosixPath(raw_name)
+                canonical_name = str(path)
+                if (
+                    not raw_name
+                    or path.is_absolute()
+                    or ".." in path.parts
+                    or len(raw_name) > 4096
+                    or canonical_name != raw_name
+                    or canonical_name in indexed
+                ):
+                    raise ValueError(
+                        "candidate license evidence archive member is invalid"
+                    )
+                indexed[canonical_name] = member
+            for relative, (expected_sha256, expected_size) in expected.items():
+                path = PurePosixPath(relative)
+                if (
+                    path.is_absolute()
+                    or ".." in path.parts
+                    or str(path) != relative
+                ):
+                    raise ValueError(
+                        "candidate license evidence archive path is invalid"
+                    )
+                for parent in path.parents:
+                    if parent == PurePosixPath("."):
+                        continue
+                    parent_member = indexed.get(str(parent))
+                    if parent_member is None or not parent_member.isdir():
+                        raise ValueError(
+                            "candidate license evidence archive parent is invalid"
+                        )
+                member = indexed.get(relative)
+                if (
+                    member is None
+                    or not member.isfile()
+                    or member.size != expected_size
+                ):
+                    raise ValueError(
+                        "candidate license evidence archive file identity differs"
+                    )
+                stream = archive.extractfile(member)
+                if stream is None:
+                    raise ValueError(
+                        "candidate license evidence archive file is unavailable"
+                    )
+                digest = hashlib.sha256()
+                total = 0
+                while True:
+                    chunk = stream.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                    total += len(chunk)
+                    if total > expected_size:
+                        raise ValueError(
+                            "candidate license evidence archive file size differs"
+                        )
+                if total != expected_size or digest.hexdigest() != expected_sha256:
+                    raise ValueError(
+                        "candidate license evidence archive file digest differs"
+                    )
+    except tarfile.TarError as exc:
+        raise ValueError("candidate license evidence archive is invalid") from exc
 
 
 def _verify_copied_evidence_file(
