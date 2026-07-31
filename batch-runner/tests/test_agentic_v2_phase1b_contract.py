@@ -88,6 +88,14 @@ def test_phase1b_manifest_rejects_policy_drift(mutation):
         AgenticV2SubstrateManifest.from_mapping(value)
 
 
+def test_phase1b_manifest_rejects_numeric_microvm_required():
+    value = deepcopy(_manifest().document)
+    value["microvm"]["required"] = 1
+
+    with pytest.raises(ValueError, match="microvm policy"):
+        AgenticV2SubstrateManifest.from_mapping(value)
+
+
 def test_phase1b_capability_receipt_binds_inventory_and_manifest():
     manifest = _manifest()
     receipt = _receipt(manifest)
@@ -103,3 +111,28 @@ def test_phase1b_capability_receipt_binds_inventory_and_manifest():
     missing["smokes"].pop()
     with pytest.raises(ValueError, match="smoke matrix"):
         validate_capability_receipt(missing, manifest)
+
+
+@pytest.mark.parametrize(
+    ("section", "digest_field"),
+    [
+        ("commands", "sha256"),
+        ("python_modules", "sha256"),
+        ("font_families", "sha256"),
+        ("smokes", "artifact_sha256"),
+        ("package_inventory", "sha256"),
+    ],
+)
+def test_phase1b_capability_receipt_rejects_numeric_digests(
+    section,
+    digest_field,
+):
+    manifest = _manifest()
+    receipt = _receipt(manifest)
+    if section == "package_inventory":
+        receipt[section]["debian"][digest_field] = int("1" * 64)
+    else:
+        receipt[section][0][digest_field] = int("1" * 64)
+
+    with pytest.raises(ValueError, match="capability receipt"):
+        validate_capability_receipt(receipt, manifest)

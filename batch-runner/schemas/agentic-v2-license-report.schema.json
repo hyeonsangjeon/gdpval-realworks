@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GDPVal Agentic Sandbox V2 Phase 1C License Report",
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "imageDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "counts": {
+      "type": "object",
+      "required": ["ambiguous", "denied", "exception", "missing_metadata", "resolved", "unverifiable"],
+      "properties": {
+        "ambiguous": {"type": "integer", "minimum": 0},
+        "denied": {"type": "integer", "minimum": 0},
+        "exception": {"type": "integer", "minimum": 0},
+        "missing_metadata": {"type": "integer", "minimum": 0},
+        "resolved": {"type": "integer", "minimum": 0},
+        "unverifiable": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["source", "path", "resolved_path", "sha256", "size"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1},
+        "path": {"type": ["string", "null"]},
+        "resolved_path": {"type": ["string", "null"]},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "exception": {
+      "type": "object",
+      "required": ["ecosystem", "package", "version", "purl", "normalized_expression", "evidence_sha256", "reason", "approver", "expires_at"],
+      "properties": {
+        "ecosystem": {"enum": ["debian", "python", "r", "npm"]},
+        "package": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "purl": {"type": "string", "pattern": "^pkg:"},
+        "normalized_expression": {"type": "string", "minLength": 1},
+        "evidence_sha256": {"$ref": "#/$defs/sha256"},
+        "reason": {"type": "string", "minLength": 1},
+        "approver": {"type": "string", "minLength": 1},
+        "expires_at": {"type": "string", "format": "date"}
+      },
+      "allOf": [
+        {"if": {"properties": {"ecosystem": {"const": "debian"}}}, "then": {"properties": {"purl": {"pattern": "^pkg:deb/debian/"}}}},
+        {"if": {"properties": {"ecosystem": {"const": "python"}}}, "then": {"properties": {"purl": {"pattern": "^pkg:pypi/"}}}},
+        {"if": {"properties": {"ecosystem": {"const": "r"}}}, "then": {"properties": {"purl": {"pattern": "^pkg:cran/"}}}},
+        {"if": {"properties": {"ecosystem": {"const": "npm"}}}, "then": {"properties": {"purl": {"pattern": "^pkg:npm/"}}}}
+      ],
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": ["ecosystem", "package", "version", "purl", "classification", "normalized_expression", "raw_values", "normalization_reason", "denied_identifiers", "evidence", "evidence_sha256", "exception"],
+      "properties": {
+        "ecosystem": {"enum": ["debian", "python", "r", "npm"]},
+        "package": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "purl": {"type": "string", "pattern": "^pkg:"},
+        "classification": {"enum": ["resolved", "missing_metadata", "ambiguous", "unverifiable", "denied", "exception"]},
+        "normalized_expression": {"type": ["string", "null"]},
+        "raw_values": {"type": "array", "items": {"type": "string"}},
+        "normalization_reason": {"type": "string", "minLength": 1},
+        "denied_identifiers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}},
+        "evidence_sha256": {"$ref": "#/$defs/sha256"},
+        "exception": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/exception"}]}
+      },
+      "allOf": [
+        {"if": {"properties": {"ecosystem": {"const": "debian"}}}, "then": {"properties": {"purl": {"pattern": "^pkg:deb/debian/"}}}},
+        {"if": {"properties": {"ecosystem": {"const": "python"}}}, "then": {"properties": {"purl": {"pattern": "^pkg:pypi/"}}}},
+        {"if": {"properties": {"ecosystem": {"const": "r"}}}, "then": {"properties": {"purl": {"pattern": "^pkg:cran/"}}}},
+        {"if": {"properties": {"ecosystem": {"const": "npm"}}}, "then": {"properties": {"purl": {"pattern": "^pkg:npm/"}}}}
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "required": ["schema_version", "policy_id", "foundation_only", "production_activation", "status", "binding", "package_count", "counts", "unresolved_count", "ecosystem_counts", "exceptions", "decisions", "decisions_sha256", "report_sha256"],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "policy_id": {"const": "agentic-v2-license-v2"},
+    "foundation_only": {"const": true},
+    "production_activation": {"const": "disabled"},
+    "status": {"enum": ["verified", "failed"]},
+    "binding": {
+      "type": "object",
+      "required": ["subject_sha256", "image_id", "config_digest", "oci_manifest_digest", "source_revision", "effective_sbom_sha256", "license_evidence_sha256", "license_collector_sha256", "license_evaluator_sha256", "license_evaluator_packaging_version", "license_evaluator_parser_sha256", "license_evaluator_python_version", "license_evaluator_callable_sha256", "license_evaluator_runtime_graph_sha256", "license_evaluator_spdx_version", "license_evaluator_spdx_sha256", "policy_sha256"],
+      "properties": {
+        "subject_sha256": {"$ref": "#/$defs/sha256"},
+        "image_id": {"$ref": "#/$defs/imageDigest"},
+        "config_digest": {"$ref": "#/$defs/imageDigest"},
+        "oci_manifest_digest": {"$ref": "#/$defs/imageDigest"},
+        "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "effective_sbom_sha256": {"$ref": "#/$defs/sha256"},
+        "license_evidence_sha256": {"$ref": "#/$defs/sha256"},
+        "license_collector_sha256": {"$ref": "#/$defs/sha256"},
+        "license_evaluator_sha256": {"$ref": "#/$defs/sha256"},
+        "license_evaluator_packaging_version": {"const": "26.2"},
+        "license_evaluator_parser_sha256": {"const": "fc9c745d1883ff9f296a5b169f22eb2ee879f59a4608f20f5cb29d668f4e26f4"},
+        "license_evaluator_python_version": {"const": "3.10.12"},
+        "license_evaluator_callable_sha256": {"const": "e27e24ff0053d4f68aca4d2ec770d83b8cd8536629c01406c7f5578f6972a78b"},
+        "license_evaluator_runtime_graph_sha256": {"const": "8fff34b3a069995de020a123594de0254935b12ab154b272057807c8de7be459"},
+        "license_evaluator_spdx_version": {"const": "3.27.0"},
+        "license_evaluator_spdx_sha256": {"const": "ecc082fdc1fcdcae47b2f56c4ce2cdc2c9d6d54ca555a09814abd78dece7a230"},
+        "policy_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "package_count": {"type": "integer", "minimum": 1},
+    "counts": {"$ref": "#/$defs/counts"},
+    "unresolved_count": {"type": "integer", "minimum": 0},
+    "ecosystem_counts": {
+      "type": "object",
+      "required": ["debian", "python", "r", "npm"],
+      "properties": {
+        "debian": {"$ref": "#/$defs/counts"},
+        "python": {"$ref": "#/$defs/counts"},
+        "r": {"$ref": "#/$defs/counts"},
+        "npm": {"$ref": "#/$defs/counts"}
+      },
+      "additionalProperties": false
+    },
+    "exceptions": {"type": "array", "items": {"$ref": "#/$defs/exception"}},
+    "decisions": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/decision"}},
+    "decisions_sha256": {"$ref": "#/$defs/sha256"},
+    "report_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "additionalProperties": false
+}

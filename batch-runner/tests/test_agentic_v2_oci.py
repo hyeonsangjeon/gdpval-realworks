@@ -4,7 +4,6 @@ import io
 import json
 import os
 import tarfile
-from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -54,6 +53,31 @@ def _add(archive: tarfile.TarFile, name: str, value: bytes) -> None:
     archive.addfile(info, io.BytesIO(value))
 
 
+def _reseal_manifest(output: Path, mutate) -> str:
+    import hashlib
+
+    index_path = output / "index.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    descriptor = index["manifests"][0]
+    old_digest = descriptor["digest"].removeprefix("sha256:")
+    old_path = output / "blobs" / "sha256" / old_digest
+    manifest = json.loads(old_path.read_text(encoding="utf-8"))
+    mutate(manifest)
+    manifest_bytes = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":"), allow_nan=True
+    ).encode("utf-8")
+    new_digest = hashlib.sha256(manifest_bytes).hexdigest()
+    (output / "blobs" / "sha256" / new_digest).write_bytes(manifest_bytes)
+    old_path.unlink()
+    descriptor["digest"] = f"sha256:{new_digest}"
+    descriptor["size"] = len(manifest_bytes)
+    index_path.write_text(
+        json.dumps(index, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    return descriptor["digest"]
+
+
 def test_docker_archive_exports_to_verified_oci_layout(tmp_path):
     archive = tmp_path / "candidate.tar"
     output = tmp_path / "oci"
@@ -82,6 +106,131 @@ def test_oci_verifier_rejects_blob_tampering(tmp_path):
 
     with pytest.raises(ValueError, match="OCI blob identity mismatch"):
         verify_oci_layout(output, expected_manifest_digest=identity["manifest_digest"])
+
+
+def test_oci_verifier_rejects_resealed_wrong_config_media_type(tmp_path):
+    archive = tmp_path / "candidate.tar"
+    output = tmp_path / "oci"
+    _archive(archive)
+    export_docker_archive_to_oci(archive, output)
+    index_path = output / "index.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    descriptor = index["manifests"][0]
+    old_manifest_digest = descriptor["digest"].removeprefix("sha256:")
+    old_manifest_path = output / "blobs" / "sha256" / old_manifest_digest
+    manifest = json.loads(old_manifest_path.read_text(encoding="utf-8"))
+    manifest["config"]["mediaType"] = "application/octet-stream"
+    manifest_bytes = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    import hashlib
+
+    new_manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
+    (output / "blobs" / "sha256" / new_manifest_digest).write_bytes(
+        manifest_bytes
+    )
+    old_manifest_path.unlink()
+    descriptor["digest"] = f"sha256:{new_manifest_digest}"
+    descriptor["size"] = len(manifest_bytes)
+    index_path.write_text(
+        json.dumps(index, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="OCI config descriptor is invalid"):
+        verify_oci_layout(
+            output,
+            expected_manifest_digest=descriptor["digest"],
+        )
+
+
+@pytest.mark.parametrize("target", ["index", "manifest"])
+def test_oci_verifier_rejects_float_schema_version(tmp_path, target):
+    archive = tmp_path / "candidate.tar"
+    output = tmp_path / "oci"
+    _archive(archive)
+    identity = export_docker_archive_to_oci(archive, output)
+    if target == "index":
+        index_path = output / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["schemaVersion"] = 2.0
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        expected = identity["manifest_digest"]
+    else:
+        expected = _reseal_manifest(
+            output, lambda manifest: manifest.update({"schemaVersion": 2.0})
+        )
+
+    with pytest.raises(ValueError, match="OCI (index identity|image manifest)"):
+        verify_oci_layout(output, expected_manifest_digest=expected)
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "1e400"])
+def test_oci_verifier_rejects_nonfinite_config_json(tmp_path, constant):
+    import hashlib
+
+    archive = tmp_path / "candidate.tar"
+    output = tmp_path / "oci"
+    _archive(archive)
+    export_docker_archive_to_oci(archive, output)
+    index = json.loads((output / "index.json").read_text())
+    manifest_digest = index["manifests"][0]["digest"].removeprefix("sha256:")
+    manifest = json.loads(
+        (output / "blobs" / "sha256" / manifest_digest).read_text()
+    )
+    config_digest = manifest["config"]["digest"].removeprefix("sha256:")
+    config_path = output / "blobs" / "sha256" / config_digest
+    config_bytes = config_path.read_bytes()
+    assert config_bytes.endswith(b"}")
+    config_bytes = (
+        config_bytes[:-1]
+        + b',"invalid":'
+        + constant.encode("ascii")
+        + b"}"
+    )
+    new_config_digest = hashlib.sha256(config_bytes).hexdigest()
+    (output / "blobs" / "sha256" / new_config_digest).write_bytes(config_bytes)
+    config_path.unlink()
+    expected_manifest = _reseal_manifest(
+        output,
+        lambda value: value["config"].update({
+            "digest": f"sha256:{new_config_digest}",
+            "size": len(config_bytes),
+        }),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="JSON (constant is invalid|float is not finite)",
+    ):
+        verify_oci_layout(
+            output,
+            expected_manifest_digest=expected_manifest,
+        )
+
+
+@pytest.mark.parametrize(
+    ("raw", "message"),
+    [
+        (b'{"value":' + b"9" * 101 + b'}', "integer is too large"),
+        (b'{"value":1e400}', "float is not finite"),
+        (("[" * 65 + "0" + "]" * 65).encode("utf-8"), "structure exceeds"),
+        (json.dumps("x" * (1024 * 1024 + 1)).encode(), "string exceeds"),
+    ],
+)
+def test_oci_json_parser_rejects_large_or_deep_values(raw, message):
+    import core.agentic_v2_oci as module
+
+    with pytest.raises(ValueError, match=message):
+        module._json_loads(raw)
+
+
+def test_oci_json_parser_rejects_node_limit():
+    import core.agentic_v2_oci as module
+
+    raw = ("[" + ",".join("0" for _ in range(500_000)) + "]").encode()
+    with pytest.raises(ValueError, match="structure exceeds"):
+        module._json_loads(raw)
 
 
 def test_oci_export_rejects_layer_diff_id_mismatch(tmp_path):

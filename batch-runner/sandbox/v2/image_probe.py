@@ -49,6 +49,9 @@ def _run(
     cwd: Path,
     timeout: int = COMMAND_TIMEOUT_SECONDS,
 ) -> subprocess.CompletedProcess:
+    command = list(argv)
+    if Path(command[0]).name in {"python", "python3", "python3.11"}:
+        command[1:1] = ["-I", "-S", "-B"]
     environment = {
         "HOME": str(cwd / ".home"),
         "TMPDIR": str(cwd / ".tmp"),
@@ -62,7 +65,7 @@ def _run(
     for name in (".home", ".tmp", ".cache", ".config"):
         (cwd / name).mkdir(mode=0o700, parents=True, exist_ok=True)
     completed = subprocess.run(
-        argv,
+        command,
         cwd=cwd,
         env=environment,
         stdin=subprocess.DEVNULL,

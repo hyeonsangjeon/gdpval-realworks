@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "id": "debian-or",
+      "ecosystem": "debian",
+      "raw_values": ["GPL-2+ or BSD-3-clause"],
+      "metadata": {"architecture": "amd64", "copyright_format": "fixture"},
+      "expected_classification": "resolved",
+      "expected_expression": "(BSD-3-Clause) OR (GPL-2.0-or-later)"
+    },
+    {
+      "id": "debian-with",
+      "ecosystem": "debian",
+      "raw_values": ["GPL-2+ with Bison exception"],
+      "metadata": {"architecture": "amd64", "copyright_format": "fixture"},
+      "expected_classification": "resolved",
+      "expected_expression": "GPL-2.0-or-later WITH Bison-exception-2.2"
+    },
+    {
+      "id": "python-compatible-composite",
+      "ecosystem": "python",
+      "raw_values": [
+        "MIT OR Apache-2.0",
+        "License :: OSI Approved :: Apache Software License",
+        "License :: OSI Approved :: MIT License"
+      ],
+      "metadata": {
+        "license_expression": null,
+        "license": "MIT OR Apache-2.0",
+        "classifiers": [
+          "License :: OSI Approved :: Apache Software License",
+          "License :: OSI Approved :: MIT License"
+        ]
+      },
+      "expected_classification": "resolved",
+      "expected_expression": "MIT OR Apache-2.0"
+    },
+    {
+      "id": "python-generic-bsd",
+      "ecosystem": "python",
+      "raw_values": ["License :: OSI Approved :: BSD License"],
+      "metadata": {
+        "license_expression": null,
+        "license": null,
+        "classifiers": ["License :: OSI Approved :: BSD License"]
+      },
+      "expected_classification": "ambiguous",
+      "expected_expression": null
+    },
+    {
+      "id": "python-missing",
+      "ecosystem": "python",
+      "raw_values": [],
+      "metadata": {"license_expression": null, "license": null, "classifiers": []},
+      "expected_classification": "missing_metadata",
+      "expected_expression": null
+    },
+    {
+      "id": "npm-custom",
+      "ecosystem": "npm",
+      "raw_values": ["Vendor-Custom"],
+      "metadata": {"license": "Vendor-Custom"},
+      "expected_classification": "unverifiable",
+      "expected_expression": null
+    },
+    {
+      "id": "python-denied",
+      "ecosystem": "python",
+      "raw_values": ["Commons-Clause"],
+      "metadata": {"license_expression": null, "license": "Commons-Clause", "classifiers": []},
+      "expected_classification": "denied",
+      "expected_expression": null
+    },
+    {
+      "id": "r-runtime",
+      "ecosystem": "r",
+      "raw_values": ["Part of R 4.2.2", "GPL-2"],
+      "metadata": {
+        "declared_license": "Part of R 4.2.2",
+        "priority": "base",
+        "runtime_license": "",
+        "runtime_license_fields": ["GPL-2"],
+        "runtime_version": "4.2.2"
+      },
+      "expected_classification": "resolved",
+      "expected_expression": "GPL-2.0-only"
+    },
+    {
+      "id": "python-exception",
+      "ecosystem": "python",
+      "raw_values": ["Reviewed-Custom"],
+      "metadata": {"license_expression": null, "license": "Reviewed-Custom", "classifiers": []},
+      "expected_classification": "exception",
+      "expected_expression": "MIT"
+    }
+  ]
+}

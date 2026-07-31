@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import uuid
 
 import pytest
 
@@ -22,6 +23,7 @@ def test_agentic_v2_phase1b_local_candidate_evidence(tmp_path):
         source_revision=source_revision,
         oci_layout=oci_layout,
         output_directory=tmp_path / "evidence",
+        session_id=uuid.uuid4().hex,
     )
 
     assert gate["gate_status"] == "blocked"

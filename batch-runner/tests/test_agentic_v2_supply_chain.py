@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import core.agentic_v2_supply_chain as supply_chain_module
 from core.agentic_v2_microvm import (
     inspect_microvm_readiness,
     validate_microvm_readiness_report,
@@ -15,6 +16,7 @@ from core.agentic_v2_substrate import (
     AgenticV2SubstrateManifest,
     canonical_sha256,
 )
+from core.agentic_v2_license import build_license_report
 from core.agentic_v2_supply_chain import (
     CandidateSubject,
     SupplyChainPolicy,
@@ -50,6 +52,23 @@ def _subject(manifest):
         "verifier_sha256": "7" * 64,
         "oci_exporter_sha256": "8" * 64,
         "sbom_generator_sha256": "a" * 64,
+        "license_collector_sha256": "b" * 64,
+        "license_evaluator_sha256": "c" * 64,
+        "license_evaluator_packaging_version": "26.2",
+        "license_evaluator_parser_sha256": (
+            "fc9c745d1883ff9f296a5b169f22eb2ee879f59a4608f20f5cb29d668f4e26f4"
+        ),
+        "license_evaluator_python_version": "3.10.12",
+        "license_evaluator_callable_sha256": (
+            "e27e24ff0053d4f68aca4d2ec770d83b8cd8536629c01406c7f5578f6972a78b"
+        ),
+        "license_evaluator_runtime_graph_sha256": (
+            "8fff34b3a069995de020a123594de0254935b12ab154b272057807c8de7be459"
+        ),
+        "license_evaluator_spdx_version": "3.27.0",
+        "license_evaluator_spdx_sha256": (
+            "ecc082fdc1fcdcae47b2f56c4ce2cdc2c9d6d54ca555a09814abd78dece7a230"
+        ),
         "lock_set_sha256": "9" * 64,
     })
 
@@ -169,6 +188,7 @@ def _degraded_evidence_directory(
     )
     receipt = None
     sbom = None
+    license_evidence = None
     license_report = None
     if collection_allowed:
         inventory_observation, sbom = _effective_sbom_fixture()
@@ -177,7 +197,15 @@ def _degraded_evidence_directory(
             "package_inventory"
         ]
         receipt = build_candidate_receipt(subject, observation, manifest)
-        license_report = evaluate_license_policy(sbom, policy)
+        license_evidence = _license_evidence_fixture(sbom)
+        license_report = build_license_report(
+            subject=subject.document,
+            subject_sha256=subject.sha256,
+            sbom=sbom,
+            license_evidence=license_evidence,
+            policy=policy.document,
+            policy_sha256=policy.sha256,
+        )
         evidence["capability_receipt"] = evidence_item(
             subject,
             name="capability_receipt",
@@ -200,9 +228,9 @@ def _degraded_evidence_directory(
             subject,
             name="license",
             status=license_report["status"],
-            tool_name="gdpval-agentic-v2-license-policy",
+            tool_name="gdpval-agentic-v2-license-evaluator",
             tool_version="1.0",
-            tool_sha256=policy.sha256,
+            tool_sha256=subject.document["license_evaluator_sha256"],
             report_sha256=canonical_sha256(license_report),
         )
     gate = build_evidence_report(subject, policy, evidence)
@@ -219,6 +247,7 @@ def _degraded_evidence_directory(
         documents.update({
             "candidate-receipt.json": receipt,
             "effective-sbom.spdx.json": sbom,
+            "license-evidence.json": license_evidence,
             "license-report.json": license_report,
         })
     for name, value in documents.items():
@@ -239,6 +268,32 @@ def _validate_directory(root, subject, policy, manifest):
     )
 
 
+@pytest.mark.parametrize(
+    ("raw", "message"),
+    [
+        (b'{"value":1e400}', "float is not finite"),
+        (b'{"value":' + b"9" * 101 + b'}', "integer is too large"),
+        (("[" * 65 + "0" + "]" * 65).encode(), "structure exceeds"),
+        (json.dumps("x" * (1024 * 1024 + 1)).encode(), "string exceeds"),
+    ],
+)
+def test_persisted_evidence_json_limits(tmp_path, raw, message):
+    path = tmp_path / "evidence.json"
+    path.write_bytes(raw)
+
+    with pytest.raises(ValueError, match=message):
+        supply_chain_module._read_json(path, 2 * 1024 * 1024)
+
+
+def test_persisted_evidence_json_node_limit(tmp_path):
+    raw = ("[" + ",".join("0" for _ in range(500_000)) + "]").encode()
+    path = tmp_path / "evidence.json"
+    path.write_bytes(raw)
+
+    with pytest.raises(ValueError, match="structure exceeds"):
+        supply_chain_module._read_json(path, 2 * 1024 * 1024)
+
+
 def test_candidate_receipt_binds_subject_manifest_and_observation():
     manifest = AgenticV2SubstrateManifest.load(MANIFEST)
     subject = _subject(manifest)
@@ -251,6 +306,11 @@ def test_candidate_receipt_binds_subject_manifest_and_observation():
     with pytest.raises(ValueError, match="observation hash mismatch"):
         validate_candidate_receipt(tampered, manifest)
 
+    numeric = _observation(manifest)
+    numeric["commands"][0]["sha256"] = int("1" * 64)
+    with pytest.raises(ValueError, match="capability receipt command"):
+        build_candidate_receipt(subject, numeric, manifest)
+
 
 def test_evidence_directory_reopens_degraded_host_reports(tmp_path, monkeypatch):
     arguments = _degraded_evidence_directory(tmp_path, monkeypatch)
@@ -260,6 +320,37 @@ def test_evidence_directory_reopens_degraded_host_reports(tmp_path, monkeypatch)
     assert gate["gate_status"] == "blocked"
     assert gate["evidence"]["containment"]["status"] == "failed"
     assert gate["evidence"]["capability_receipt"]["status"] == "not_run"
+
+
+def test_evidence_directory_rejects_oci_config_subject_mismatch(
+    tmp_path, monkeypatch
+):
+    root, subject, policy, manifest = _degraded_evidence_directory(
+        tmp_path, monkeypatch
+    )
+    oci_path = root / "oci-report.json"
+    oci_report = json.loads(oci_path.read_text(encoding="utf-8"))
+    oci_report["config_digest"] = "sha256:" + "f" * 64
+    oci_path.write_text(
+        json.dumps(oci_report, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    gate_path = root / "gate-report.json"
+    gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    gate["evidence"]["oci_layout"]["report_sha256"] = canonical_sha256(
+        oci_report
+    )
+    gate_path.write_text(
+        json.dumps(gate, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_oci.verify_oci_layout",
+        lambda *_args, **_kwargs: deepcopy(oci_report),
+    )
+
+    with pytest.raises(ValueError, match="OCI evidence report mismatch"):
+        _validate_directory(root, subject, policy, manifest)
 
 
 def test_evidence_directory_accepts_resource_only_containment_degradation(
@@ -279,6 +370,61 @@ def test_evidence_directory_accepts_resource_only_containment_degradation(
     assert gate["evidence"]["capability_receipt"]["status"] == "verified"
     assert gate["evidence"]["sbom"]["status"] == "verified"
     assert gate["evidence"]["license"]["status"] == "verified"
+
+
+def test_evidence_directory_rejects_license_report_type_coercion(
+    tmp_path, monkeypatch
+):
+    root, subject, policy, manifest = _degraded_evidence_directory(
+        tmp_path,
+        monkeypatch,
+        collection_allowed=True,
+    )
+    path = root / "license-report.json"
+    report = json.loads(path.read_text(encoding="utf-8"))
+    report["foundation_only"] = 1
+    unsigned = deepcopy(report)
+    unsigned.pop("report_sha256")
+    report["report_sha256"] = canonical_sha256(unsigned)
+    path.write_text(
+        json.dumps(report, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    gate_path = root / "gate-report.json"
+    gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    gate["evidence"]["license"]["report_sha256"] = canonical_sha256(report)
+    gate_path.write_text(
+        json.dumps(gate, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="license report identity"):
+        _validate_directory(root, subject, policy, manifest)
+
+
+def test_evidence_directory_rejects_resealed_oci_report_type_coercion(
+    tmp_path, monkeypatch
+):
+    root, subject, policy, manifest = _degraded_evidence_directory(
+        tmp_path, monkeypatch
+    )
+    path = root / "oci-report.json"
+    report = json.loads(path.read_text(encoding="utf-8"))
+    report["layer_count"] = float(report["layer_count"])
+    path.write_text(
+        json.dumps(report, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    gate_path = root / "gate-report.json"
+    gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    gate["evidence"]["oci_layout"]["report_sha256"] = canonical_sha256(report)
+    gate_path.write_text(
+        json.dumps(gate, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="OCI evidence report mismatch"):
+        _validate_directory(root, subject, policy, manifest)
 
 
 @pytest.mark.parametrize(
@@ -368,6 +514,54 @@ def test_missing_supply_chain_evidence_keeps_candidate_blocked():
         validate_evidence_report(forged, subject, policy)
 
 
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("cve", "policy_id", None),
+        ("cve", "unexpected", True),
+        ("cve", "scanner_db_max_age_days", "7"),
+        ("cve", "denied_severities", ["LOW"]),
+        ("provenance", "profile", None),
+        ("provenance", "unexpected", True),
+        ("provenance", "required_subjects", "candidate"),
+        ("provenance", "profile", "forged"),
+    ],
+)
+def test_supply_chain_policy_rejects_incomplete_cve_and_provenance(
+    section, field, value
+):
+    document = json.loads(POLICY.read_text(encoding="utf-8"))
+    if value is None:
+        del document[section][field]
+    else:
+        document[section][field] = value
+
+    with pytest.raises(ValueError, match="supply-chain policy"):
+        SupplyChainPolicy.from_mapping(document)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("cve", "scanner_db_max_age_days", 7.0),
+        ("signature", "trusted_key_required", 1),
+        ("signature", "bundle_required", 1),
+        ("microvm", "jailer_required", 1),
+        ("microvm", "kvm_required", 1),
+        ("microvm", "read_only_rootfs", 1),
+        ("microvm", "ephemeral_work_disk", 1),
+    ],
+)
+def test_supply_chain_policy_rejects_numeric_security_types(
+    section, field, value
+):
+    document = json.loads(POLICY.read_text(encoding="utf-8"))
+    document[section][field] = value
+
+    with pytest.raises(ValueError, match="supply-chain policy"):
+        SupplyChainPolicy.from_mapping(document)
+
+
 def test_evidence_subject_mismatch_is_rejected():
     manifest = AgenticV2SubstrateManifest.load(MANIFEST)
     subject = _subject(manifest)
@@ -381,6 +575,44 @@ def test_evidence_subject_mismatch_is_rejected():
     report["evidence"]["capability_receipt"]["subject_sha256"] = "f" * 64
 
     with pytest.raises(ValueError, match="evidence identity"):
+        validate_evidence_report(report, subject, policy)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source_revision", int("1" * 40)),
+        ("image_id", int("1" * 64)),
+        ("license_evaluator_sha256", int("1" * 64)),
+    ],
+)
+def test_candidate_subject_rejects_numeric_identities(field, value):
+    manifest = AgenticV2SubstrateManifest.load(MANIFEST)
+    document = deepcopy(_subject(manifest).document)
+    document[field] = value
+
+    with pytest.raises(ValueError, match="candidate subject identity"):
+        CandidateSubject.from_mapping(document)
+
+
+@pytest.mark.parametrize("field", ["sha256", "report_sha256"])
+def test_evidence_report_rejects_numeric_digests(field):
+    manifest = AgenticV2SubstrateManifest.load(MANIFEST)
+    subject = _subject(manifest)
+    policy = SupplyChainPolicy.load(POLICY)
+    report = build_blocked_evidence_report(
+        subject,
+        policy,
+        capability_receipt_sha256="a" * 64,
+        oci_layout_report_sha256="b" * 64,
+    )
+    item = report["evidence"]["capability_receipt"]
+    if field == "sha256":
+        item["tool"]["sha256"] = int("1" * 64)
+    else:
+        item["report_sha256"] = int("1" * 64)
+
+    with pytest.raises(ValueError, match="evidence tool identity"):
         validate_evidence_report(report, subject, policy)
 
 
@@ -509,6 +741,123 @@ def _effective_sbom_fixture():
         } for package in packages],
     }
     return observation, sbom
+
+
+def _license_evidence_fixture(sbom):
+    records = []
+
+    def evidence(source, path, index):
+        return {
+            "source": source,
+            "path": path,
+            "resolved_path": path,
+            "sha256": f"{index + 1:064x}",
+            "size": index + 1,
+        }
+
+    for index, package in enumerate(sbom["packages"]):
+        purl = package["externalRefs"][0]["referenceLocator"]
+        if purl.startswith("pkg:deb/"):
+            ecosystem = "debian"
+            metadata = {
+                "architecture": "amd64",
+                "copyright_format": (
+                    "https://www.debian.org/doc/packaging-manuals/"
+                    "copyright-format/1.0/"
+                ),
+            }
+            raw_values = [package["licenseDeclared"]]
+            evidence_items = [
+                evidence("debian-status", "/var/lib/dpkg/status", 800),
+                evidence(
+                    "debian-copyright",
+                    f"/usr/share/doc/{package['name']}/copyright",
+                    index,
+                ),
+            ]
+        elif purl.startswith("pkg:pypi/"):
+            ecosystem = "python"
+            metadata = {
+                "license_expression": package["licenseDeclared"],
+                "license": None,
+                "classifiers": [],
+                "license_file_tokens": [],
+                "license_files": [],
+            }
+            raw_values = [package["licenseDeclared"]]
+            metadata_path = (
+                "/usr/local/lib/python3.11/site-packages/"
+                f"{package['name']}-{package['versionInfo']}.dist-info/METADATA"
+            )
+            evidence_items = [evidence("python-metadata", metadata_path, index)]
+        elif purl.startswith("pkg:cran/"):
+            ecosystem = "r"
+            runtime_value = {"version": "4.2.2", "license": ""}
+            runtime_bytes = json.dumps(
+                runtime_value,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            metadata = {
+                "declared_license": package["licenseDeclared"],
+                "priority": None,
+                "runtime_license": "",
+                "runtime_license_fields": ["GPL-2"],
+                "runtime_copyright_format": (
+                    "https://www.debian.org/doc/packaging-manuals/"
+                    "copyright-format/1.0/"
+                ),
+                "runtime_version": "4.2.2",
+                "license_file_tokens": [],
+            }
+            raw_values = [package["licenseDeclared"], "GPL-2"]
+            description_path = f"/usr/lib/R/library/{package['name']}/DESCRIPTION"
+            evidence_items = [
+                evidence("r-description", description_path, index),
+                evidence(
+                    "r-runtime-description",
+                    "/usr/lib/R/library/base/DESCRIPTION",
+                    700,
+                ),
+                {
+                    "source": "r-runtime-license",
+                    "path": None,
+                    "resolved_path": None,
+                    "sha256": hashlib.sha256(runtime_bytes).hexdigest(),
+                    "size": len(runtime_bytes),
+                },
+                evidence(
+                    "r-runtime-copyright",
+                    "/usr/share/doc/r-base-core/copyright",
+                    701,
+                ),
+            ]
+        else:
+            ecosystem = "npm"
+            metadata = {
+                "license": package["licenseDeclared"],
+                "license_file_tokens": [],
+            }
+            raw_values = [package["licenseDeclared"]]
+            evidence_items = [evidence(
+                "npm-package-json", "/usr/share/nodejs/npm/package.json", index
+            )]
+        records.append({
+            "ecosystem": ecosystem,
+            "package": package["name"],
+            "version": package["versionInfo"],
+            "purl": purl,
+            "raw_values": raw_values,
+            "metadata": metadata,
+            "evidence": evidence_items,
+        })
+    records.sort(key=lambda item: item["purl"])
+    return {
+        "schema_version": "1.0",
+        "collector": "gdpval-agentic-v2-license-evidence-v1",
+        "records": records,
+        "records_sha256": canonical_sha256(records),
+    }
 
 
 def test_effective_sbom_reconciles_ecosystem_counts():
