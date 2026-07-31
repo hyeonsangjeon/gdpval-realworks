@@ -127,6 +127,16 @@ def _matches(pattern: re.Pattern, value) -> bool:
     return isinstance(value, str) and pattern.fullmatch(value) is not None
 
 
+def _validate_candidate_runtime_config(value) -> dict:
+    if (
+        not isinstance(value, dict)
+        or value.get("Volumes") is not None
+        or value.get("Healthcheck") is not None
+    ):
+        raise ValueError("candidate image runtime configuration is invalid")
+    return value
+
+
 def _require_trusted_executable(path: str) -> None:
     executable = Path(path)
     if executable not in {Path(_TRUSTED_GIT), Path(_TRUSTED_DOCKER)}:
@@ -296,8 +306,9 @@ def verify_candidate(
     parent_labels = ((parent_document.get("Config") or {}).get("Labels") or {})
     parent_layers = ((parent_document.get("RootFS") or {}).get("Layers") or [])
     candidate_layers = ((image_document.get("RootFS") or {}).get("Layers") or [])
-    labels = ((image_document.get("Config") or {}).get("Labels") or {})
-    entrypoint = ((image_document.get("Config") or {}).get("Entrypoint") or [])
+    image_config = _validate_candidate_runtime_config(image_document.get("Config"))
+    labels = image_config.get("Labels") or {}
+    entrypoint = image_config.get("Entrypoint") or []
     image_id = image_document.get("Id")
     if (
         image_id != oci_report["config_digest"]
@@ -436,6 +447,7 @@ def verify_candidate(
             containment_checks=containment_report["checks"],
             include_purelib=True,
             session=session,
+            arguments=(subject.document["sbom_generator_sha256"],),
         )
         validate_capability_receipt(observation, manifest)
         sbom = _run_image_json(
@@ -543,7 +555,15 @@ def _run_image_json(
     containment_checks: dict[str, bool],
     include_purelib: bool,
     session: VerificationSession,
+    arguments: tuple[str, ...] = (),
 ) -> dict:
+    if any(
+        not isinstance(value, str)
+        or not value
+        or len(value) > 4096
+        for value in arguments
+    ):
+        raise ValueError("candidate image probe arguments are invalid")
     bootstrap = (
         _IMAGE_PURELIB_SCRIPT_BOOTSTRAP
         if include_purelib
@@ -558,7 +578,7 @@ def _run_image_json(
     command = [
         _TRUSTED_DOCKER, "run", "--pull=never", "--name", container,
         *session.label_arguments(),
-        "--network", "none", "--read-only",
+        "--network", "none", "--read-only", "--no-healthcheck",
         "--user", "65532:65532", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--memory", "6g",
         *optional_limits,
@@ -567,7 +587,7 @@ def _run_image_json(
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,nodev,size=268435456,uid=65532,gid=65532,mode=0700",
         "--entrypoint", "python",
-        image, "-I", "-S", "-B", "-c", bootstrap, script,
+        image, "-I", "-S", "-B", "-c", bootstrap, script, *arguments,
     ]
     try:
         completed = _run_bounded_command(

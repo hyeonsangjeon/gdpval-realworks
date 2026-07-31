@@ -285,6 +285,25 @@ def test_verifier_uses_inspected_image_id_for_candidate_operations():
     assert source.count("_run_image_json(\n            image_id") == 3
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"Volumes": {"/opt/gdpval/v2": {}}},
+        {"Healthcheck": {"Test": ["CMD", "false"]}},
+    ],
+)
+def test_candidate_runtime_config_rejects_declared_mutators(mutation):
+    config = {"Volumes": None, "Healthcheck": None, **mutation}
+
+    with pytest.raises(ValueError, match="runtime configuration"):
+        verifier._validate_candidate_runtime_config(config)
+
+    assert verifier._validate_candidate_runtime_config({
+        "Volumes": None,
+        "Healthcheck": None,
+    }) == {"Volumes": None, "Healthcheck": None}
+
+
 def test_container_cleanup_accepts_confirmed_absence(monkeypatch):
     container = "a" * 64
     results = iter([
@@ -560,6 +579,36 @@ def test_license_collector_uses_site_disabled_python(monkeypatch):
         verifier._IMAGE_STDLIB_SCRIPT_BOOTSTRAP,
         "/opt/gdpval/v2/license_evidence.py",
     ]
+    assert "--no-healthcheck" in commands[0]
+
+
+def test_image_probe_receives_git_bound_sbom_digest(monkeypatch):
+    commands = []
+    monkeypatch.setattr(
+        verifier,
+        "_run_bounded_command",
+        lambda command, **kwargs: (
+            commands.append(command)
+            or SimpleNamespace(returncode=0, stdout=b"{}", stderr=b"")
+        ),
+    )
+    monkeypatch.setattr(verifier, "_remove_container", lambda _name: None)
+
+    verifier._run_image_json(
+        "sha256:" + "a" * 64,
+        "/opt/gdpval/v2/image_probe.py",
+        1024,
+        containment_checks={name: False for name in verifier._CONTAINMENT_CHECKS},
+        include_purelib=True,
+        session=_session(),
+        arguments=("b" * 64,),
+    )
+
+    assert commands[0][-2:] == [
+        "/opt/gdpval/v2/image_probe.py",
+        "b" * 64,
+    ]
+    assert "--no-healthcheck" in commands[0]
 
 
 def test_all_image_json_probes_require_no_site(monkeypatch):

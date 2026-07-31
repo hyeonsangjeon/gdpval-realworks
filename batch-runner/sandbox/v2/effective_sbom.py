@@ -163,11 +163,11 @@ def _parse_r_dcf(value: bytes) -> dict[str, str]:
     return fields
 
 
-def _r_packages() -> list[dict]:
+def r_inventory_records() -> list[dict[str, str]]:
     library_root = R_LIBRARY_ROOT
     if not library_root.is_dir() or library_root.is_symlink():
         raise RuntimeError("R library root is missing")
-    packages = []
+    records = []
     for package_root in sorted(library_root.iterdir(), key=lambda value: value.name):
         if package_root.is_symlink():
             raise RuntimeError("R package root is symlinked")
@@ -191,14 +191,29 @@ def _r_packages() -> list[dict]:
             for item in (name, version, license_value)
         ):
             raise RuntimeError("R package inventory is incomplete")
-        packages.append(_package(
+        records.append({
+            "name": name,
+            "version": version,
+            "license": license_value,
+        })
+    identities = [(item["name"].casefold(), item["version"]) for item in records]
+    if len(identities) != len(set(identities)):
+        raise RuntimeError("R package inventory is duplicated")
+    return records
+
+
+def _r_packages() -> list[dict]:
+    return [
+        _package(
             "cran",
-            name,
-            version,
-            license_value or "NOASSERTION",
-            f"pkg:cran/{quote(name, safe='')}@{quote(version, safe='')}",
-        ))
-    return packages
+            item["name"],
+            item["version"],
+            item["license"],
+            f"pkg:cran/{quote(item['name'], safe='')}@"
+            f"{quote(item['version'], safe='')}",
+        )
+        for item in r_inventory_records()
+    ]
 
 
 def _npm_packages() -> list[dict]:

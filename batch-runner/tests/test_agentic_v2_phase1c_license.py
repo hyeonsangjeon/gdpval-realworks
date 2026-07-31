@@ -6,6 +6,7 @@ import inspect
 import json
 import os
 from pathlib import Path
+import py_compile
 import signal
 import subprocess
 import sys
@@ -3059,6 +3060,13 @@ def test_phase1c_effective_sbom_r_inventory_is_static(tmp_path, monkeypatch):
     monkeypatch.setattr(sbom_collector, "R_LIBRARY_ROOT", library_root)
 
     packages = sbom_collector._r_packages()
+    monkeypatch.setattr(
+        image_probe,
+        "_effective_sbom_namespace",
+        lambda _expected: {
+            "r_inventory_records": sbom_collector.r_inventory_records,
+        },
+    )
 
     assert [
         item["externalRefs"][0]["referenceLocator"] for item in packages
@@ -3066,6 +3074,63 @@ def test_phase1c_effective_sbom_r_inventory_is_static(tmp_path, monkeypatch):
         "pkg:cran/base@4.2.2",
         "pkg:cran/translations@4.2.2",
     ]
+    assert image_probe._r_inventory_records("a" * 64) == [
+        "base=4.2.2",
+        "translations=4.2.2",
+    ]
+
+
+def test_phase1c_image_probe_ignores_effective_sbom_shadow_bytecode(
+    tmp_path, monkeypatch
+):
+    probe_path = tmp_path / "image_probe.py"
+    probe_path.write_text("", encoding="utf-8")
+    source_path = tmp_path / "effective_sbom.py"
+    source_path.write_text(
+        "def r_inventory_records():\n"
+        "    return [{'name': 'bytecode', 'version': '0', 'license': 'MIT'}]\n",
+        encoding="utf-8",
+    )
+    cache_path = (
+        tmp_path / "__pycache__"
+        / f"effective_sbom.{sys.implementation.cache_tag}.pyc"
+    )
+    cache_path.parent.mkdir()
+    py_compile.compile(
+        str(source_path),
+        cfile=str(cache_path),
+        doraise=True,
+        invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH,
+    )
+    source_path.write_text(
+        "def r_inventory_records():\n"
+        "    return [{'name': 'source', 'version': '1', 'license': 'MIT'}]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(image_probe, "__file__", str(probe_path))
+    expected_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+
+    records = image_probe._effective_sbom_namespace(expected_sha256)[
+        "r_inventory_records"
+    ]()
+
+    assert records == [{"name": "source", "version": "1", "license": "MIT"}]
+    with pytest.raises(RuntimeError, match="digest differs"):
+        image_probe._effective_sbom_namespace("0" * 64)
+
+
+def test_phase1c_image_probe_rejects_symlinked_effective_sbom_source(
+    tmp_path, monkeypatch
+):
+    probe_path = tmp_path / "image_probe.py"
+    probe_path.write_text("", encoding="utf-8")
+    target = tmp_path / "target.py"
+    target.write_text("def r_inventory_records(): return []\n", encoding="utf-8")
+    (tmp_path / "effective_sbom.py").symlink_to(target)
+    monkeypatch.setattr(image_probe, "__file__", str(probe_path))
+
+    with pytest.raises(OSError):
+        image_probe._effective_sbom_namespace("0" * 64)
 
 
 def test_phase1c_effective_sbom_r_inventory_is_bounded(tmp_path, monkeypatch):
