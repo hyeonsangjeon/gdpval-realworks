@@ -12,6 +12,36 @@ from typing import Any, Mapping
 
 SUBSTRATE_SCHEMA_VERSION = "1.0"
 SUBSTRATE_ID = "professional-work-v1"
+AGENTIC_V2_IMAGE_PROBE_COUNT = 3
+AGENTIC_V2_IMAGE_PROBE_TIMEOUT_SECONDS = 900
+AGENTIC_V2_SHORT_DOCKER_COMMAND_LIMIT = 64
+AGENTIC_V2_SHORT_DOCKER_TIMEOUT_SECONDS = 60
+AGENTIC_V2_GIT_COMMAND_LIMIT = 64
+AGENTIC_V2_GIT_TIMEOUT_SECONDS = 30
+AGENTIC_V2_EVIDENCE_ROOT_COPY_LIMIT = 6
+AGENTIC_V2_EVIDENCE_ROOT_COPY_TIMEOUT_SECONDS = 900
+AGENTIC_V2_VERIFICATION_SESSION_MAX_CONTAINERS = 16
+AGENTIC_V2_VERIFICATION_SESSION_SWEEP_LIMIT = 3
+AGENTIC_V2_VERIFICATION_SESSION_INVENTORY_TIMEOUT_SECONDS = 60
+AGENTIC_V2_VERIFICATION_SESSION_REMOVE_TIMEOUT_SECONDS = 30
+AGENTIC_V2_HOST_VALIDATION_BUDGET_SECONDS = 1800
+AGENTIC_V2_VERIFIER_OVERHEAD_SECONDS = (
+    AGENTIC_V2_SHORT_DOCKER_COMMAND_LIMIT
+    * AGENTIC_V2_SHORT_DOCKER_TIMEOUT_SECONDS
+    + AGENTIC_V2_GIT_COMMAND_LIMIT * AGENTIC_V2_GIT_TIMEOUT_SECONDS
+    + AGENTIC_V2_EVIDENCE_ROOT_COPY_LIMIT
+    * AGENTIC_V2_EVIDENCE_ROOT_COPY_TIMEOUT_SECONDS
+    + (AGENTIC_V2_VERIFICATION_SESSION_SWEEP_LIMIT + 1)
+    * AGENTIC_V2_VERIFICATION_SESSION_INVENTORY_TIMEOUT_SECONDS
+    + AGENTIC_V2_VERIFICATION_SESSION_MAX_CONTAINERS
+    * AGENTIC_V2_VERIFICATION_SESSION_SWEEP_LIMIT
+    * AGENTIC_V2_VERIFICATION_SESSION_REMOVE_TIMEOUT_SECONDS
+    + AGENTIC_V2_HOST_VALIDATION_BUDGET_SECONDS
+)
+AGENTIC_V2_VERIFIER_TIMEOUT_SECONDS = (
+    AGENTIC_V2_IMAGE_PROBE_COUNT * AGENTIC_V2_IMAGE_PROBE_TIMEOUT_SECONDS
+    + AGENTIC_V2_VERIFIER_OVERHEAD_SECONDS
+)
 REQUIRED_CAPABILITY_FAMILIES = frozenset({
     "browser-local",
     "cad-dxf",
@@ -162,7 +192,8 @@ def validate_capability_receipt(
         or any(
             set(item) != {"id", "status", "artifact_sha256"}
             or item.get("status") != "pass"
-            or _DIGEST.fullmatch(str(item.get("artifact_sha256", ""))) is None
+            or not isinstance(item.get("artifact_sha256"), str)
+            or _DIGEST.fullmatch(item["artifact_sha256"]) is None
             for item in smokes
             if isinstance(item, Mapping)
         )
@@ -178,7 +209,8 @@ def validate_capability_receipt(
             or set(item) != {"count", "sha256", "records"}
             or type(item.get("count")) is not int
             or item["count"] <= 0
-            or _DIGEST.fullmatch(str(item.get("sha256", ""))) is None
+            or not isinstance(item.get("sha256"), str)
+            or _DIGEST.fullmatch(item["sha256"]) is None
             or not isinstance(item.get("records"), list)
             or item["records"] != sorted(set(item["records"]))
             or len(item["records"]) != item["count"]
@@ -254,7 +286,7 @@ def _validate_manifest(value: Any) -> dict[str, Any]:
         "provenance_profile": "buildkit-max-v1",
         "signature_profile": "cosign-offline-v1",
         "cve_policy_id": "agentic-v2-cve-v1",
-        "license_policy_id": "agentic-v2-license-v1",
+        "license_policy_id": "agentic-v2-license-v2",
     }:
         raise ValueError("agentic v2 substrate supply-chain policy is invalid")
     if document["microvm"] != {
@@ -263,7 +295,7 @@ def _validate_manifest(value: Any) -> dict[str, Any]:
         "network": "none",
         "rootfs": "read-only",
         "workdir": "ephemeral-quota",
-    }:
+    } or document["microvm"].get("required") is not True:
         raise ValueError("agentic v2 substrate microvm policy is invalid")
     return document
 
@@ -310,7 +342,8 @@ def _receipt_records(value: Any, label: str) -> dict[str, dict[str, Any]]:
             or not isinstance(item.get("name"), str)
             or not isinstance(item.get("version"), str)
             or not item["version"]
-            or _DIGEST.fullmatch(str(item.get("sha256", ""))) is None
+            or not isinstance(item.get("sha256"), str)
+            or _DIGEST.fullmatch(item["sha256"]) is None
             or item["name"] in records
         ):
             raise ValueError(f"agentic v2 capability receipt {label} is invalid")

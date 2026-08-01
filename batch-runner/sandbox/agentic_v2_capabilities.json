@@ -83,7 +83,7 @@
     "provenance_profile": "buildkit-max-v1",
     "signature_profile": "cosign-offline-v1",
     "cve_policy_id": "agentic-v2-cve-v1",
-    "license_policy_id": "agentic-v2-license-v1"
+    "license_policy_id": "agentic-v2-license-v2"
   },
   "microvm": {
     "required": true,

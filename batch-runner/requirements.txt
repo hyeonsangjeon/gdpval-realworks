@@ -14,7 +14,7 @@ azure-ai-projects==2.3.0
 jsonschema>=4.21.0
 cryptography>=42.0.0
 ijson>=3.3.0
-packaging>=24.2
+packaging==26.2
 
 # Reference file readers
 pdfplumber>=0.10.0

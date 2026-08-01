@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import posixpath
 import shutil
@@ -168,7 +169,7 @@ def verify_oci_layout(
     index = _json_loads(index_bytes)
     if not isinstance(index, dict) or set(index) != {
         "schemaVersion", "mediaType", "manifests"
-    } or index["schemaVersion"] != 2 or index["mediaType"] != (
+    } or type(index["schemaVersion"]) is not int or index["schemaVersion"] != 2 or index["mediaType"] != (
         "application/vnd.oci.image.index.v1+json"
     ):
         raise ValueError("OCI index identity is invalid")
@@ -188,10 +189,17 @@ def verify_oci_layout(
     manifest = _json_loads(manifest_bytes)
     if not isinstance(manifest, dict) or set(manifest) != {
         "schemaVersion", "mediaType", "config", "layers"
-    } or manifest["schemaVersion"] != 2 or manifest["mediaType"] != OCI_MANIFEST_MEDIA_TYPE:
+    } or type(manifest["schemaVersion"]) is not int or manifest["schemaVersion"] != 2 or manifest["mediaType"] != OCI_MANIFEST_MEDIA_TYPE:
         raise ValueError("OCI image manifest is invalid")
+    config_descriptor = manifest["config"]
+    if (
+        not isinstance(config_descriptor, dict)
+        or set(config_descriptor) != {"mediaType", "digest", "size"}
+        or config_descriptor["mediaType"] != OCI_CONFIG_MEDIA_TYPE
+    ):
+        raise ValueError("OCI config descriptor is invalid")
     config_bytes = _read_verified_blob(
-        root, manifest["config"], maximum=64 * 1024 * 1024
+        root, config_descriptor, maximum=64 * 1024 * 1024
     )
     config = _json_loads(config_bytes)
     layers = manifest["layers"]
@@ -211,7 +219,7 @@ def verify_oci_layout(
     total_layer_bytes = 0
     referenced_digests = {
         descriptor["digest"].removeprefix("sha256:"),
-        manifest["config"]["digest"].removeprefix("sha256:"),
+        config_descriptor["digest"].removeprefix("sha256:"),
     }
     for layer in layers:
         if not isinstance(layer, dict) or layer.get("mediaType") != OCI_LAYER_MEDIA_TYPE:
@@ -473,7 +481,44 @@ def _json_loads(value: bytes):
             result[key] = item
         return result
 
+    def bounded_int(raw):
+        if len(raw.lstrip("-")) > 100:
+            raise ValueError("JSON integer is too large")
+        return int(raw)
+
+    def reject_constant(raw):
+        raise ValueError(f"JSON constant is invalid: {raw}")
+
+    def bounded_float(raw):
+        if len(raw) > 100:
+            raise ValueError("JSON float is too large")
+        value = float(raw)
+        if not math.isfinite(value):
+            raise ValueError("JSON float is not finite")
+        return value
+
     try:
-        return json.loads(value, object_pairs_hook=reject_duplicates)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        document = json.loads(
+            value,
+            object_pairs_hook=reject_duplicates,
+            parse_int=bounded_int,
+            parse_float=bounded_float,
+            parse_constant=reject_constant,
+        )
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         raise ValueError("JSON document is invalid") from exc
+    stack = [(document, 1)]
+    nodes = 0
+    while stack:
+        item, depth = stack.pop()
+        nodes += 1
+        if nodes > 500_000 or depth > 64:
+            raise ValueError("JSON document structure exceeds limits")
+        if isinstance(item, str) and len(item) > 1024 * 1024:
+            raise ValueError("JSON string exceeds size limit")
+        if isinstance(item, dict):
+            stack.extend((key, depth + 1) for key in item)
+            stack.extend((child, depth + 1) for child in item.values())
+        elif isinstance(item, list):
+            stack.extend((child, depth + 1) for child in item)
+    return document

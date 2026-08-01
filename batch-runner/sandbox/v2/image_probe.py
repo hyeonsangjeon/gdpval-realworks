@@ -7,8 +7,11 @@ import importlib.metadata
 import importlib.util
 import json
 import os
+import re
 import shutil
+import stat
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Callable
@@ -17,6 +20,7 @@ from typing import Callable
 MANIFEST_PATH = Path("/opt/gdpval/v2/capabilities.json")
 MAX_OUTPUT_BYTES = 65536
 COMMAND_TIMEOUT_SECONDS = 45
+_HEX_SHA256 = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 
 
 def _canonical_sha256(value) -> str:
@@ -49,6 +53,9 @@ def _run(
     cwd: Path,
     timeout: int = COMMAND_TIMEOUT_SECONDS,
 ) -> subprocess.CompletedProcess:
+    command = list(argv)
+    if Path(command[0]).name in {"python", "python3", "python3.11"}:
+        command[1:1] = ["-I", "-S", "-B"]
     environment = {
         "HOME": str(cwd / ".home"),
         "TMPDIR": str(cwd / ".tmp"),
@@ -62,7 +69,7 @@ def _run(
     for name in (".home", ".tmp", ".cache", ".config"):
         (cwd / name).mkdir(mode=0o700, parents=True, exist_ok=True)
     completed = subprocess.run(
-        argv,
+        command,
         cwd=cwd,
         env=environment,
         stdin=subprocess.DEVNULL,
@@ -162,7 +169,66 @@ def _font_observation(name: str, work: Path) -> dict:
     }
 
 
-def _inventory(work: Path) -> dict:
+def _effective_sbom_namespace(expected_sha256: str) -> dict:
+    if _HEX_SHA256.fullmatch(expected_sha256) is None:
+        raise RuntimeError("effective SBOM inventory digest is invalid")
+    path = Path(__file__).with_name("effective_sbom.py")
+    required_flags = ("O_NOFOLLOW", "O_CLOEXEC")
+    if any(not isinstance(getattr(os, name, None), int) for name in required_flags):
+        raise RuntimeError("secure Unix open flags are required for image inventory")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_size < 0
+            or before.st_size > 1024 * 1024
+        ):
+            raise RuntimeError("effective SBOM inventory module is invalid")
+        chunks = []
+        while True:
+            chunk = os.read(descriptor, 64 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    source = b"".join(chunks)
+    def identity(value):
+        return (
+            value.st_dev, value.st_ino, value.st_mode, value.st_nlink,
+            value.st_size, value.st_mtime_ns,
+        )
+
+    if identity(before) != identity(after) or len(source) != before.st_size:
+        raise RuntimeError("effective SBOM inventory module changed while reading")
+    if hashlib.sha256(source).hexdigest() != expected_sha256:
+        raise RuntimeError("effective SBOM inventory module digest differs")
+    namespace = {
+        "__builtins__": __builtins__,
+        "__file__": str(path),
+        "__name__": "_gdpval_agentic_v2_effective_sbom",
+        "__package__": None,
+    }
+    exec(compile(source, "effective_sbom.py", "exec"), namespace)
+    if not callable(namespace.get("r_inventory_records")):
+        raise RuntimeError("effective SBOM R inventory is unavailable")
+    return namespace
+
+
+def _r_inventory_records(expected_sbom_sha256: str) -> list[str]:
+    records = _effective_sbom_namespace(expected_sbom_sha256)[
+        "r_inventory_records"
+    ]()
+    values = sorted(f"{item['name']}={item['version']}" for item in records)
+    if len(values) != len(set(values)):
+        raise RuntimeError("R package observation is duplicated")
+    return values
+
+
+def _inventory(work: Path, expected_sbom_sha256: str) -> dict:
     debian = _run(
         ["dpkg-query", "-W", "-f=${Package}:${Architecture}=${Version}\\n"], cwd=work
     ).stdout.decode("utf-8").splitlines()
@@ -170,13 +236,7 @@ def _inventory(work: Path) -> dict:
         f"{distribution.metadata.get('Name') or distribution.name}={distribution.version}"
         for distribution in importlib.metadata.distributions()
     })
-    r_output = _run([
-        "Rscript",
-        "--vanilla",
-        "-e",
-        "p<-installed.packages();cat(paste(p[,1],p[,3],sep='=',collapse='\\n'))",
-    ], cwd=work).stdout.decode("utf-8")
-    r_packages = sorted(filter(None, r_output.splitlines()))
+    r_packages = _r_inventory_records(expected_sbom_sha256)
     npm_output = _run(["npm", "--version"], cwd=work).stdout.decode("utf-8").strip()
     records = {
         "debian": sorted(debian),
@@ -449,7 +509,7 @@ SMOKES: dict[str, Callable[[Path], str]] = {
 }
 
 
-def collect() -> dict:
+def collect(expected_sbom_sha256: str) -> dict:
     if os.geteuid() != 65532 or os.getegid() != 65532:
         raise RuntimeError("Phase 1B probe must run as UID/GID 65532")
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -477,7 +537,7 @@ def collect() -> dict:
                 "status": "pass",
                 "artifact_sha256": SMOKES[item["id"]](smoke_root),
             })
-        inventory = _inventory(root)
+        inventory = _inventory(root, expected_sbom_sha256)
     return {
         "schema_version": "1.0",
         "substrate_id": "professional-work-v1",
@@ -491,7 +551,9 @@ def collect() -> dict:
 
 
 def main() -> None:
-    print(json.dumps(collect(), sort_keys=True, separators=(",", ":")))
+    if len(sys.argv) != 2:
+        raise RuntimeError("effective SBOM inventory digest argument is required")
+    print(json.dumps(collect(sys.argv[1]), sort_keys=True, separators=(",", ":")))
 
 
 if __name__ == "__main__":

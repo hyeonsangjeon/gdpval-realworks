@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import math
 import os
 import re
 import stat
@@ -22,6 +23,19 @@ from core.agentic_v2_substrate import (
     AgenticV2SubstrateManifest,
     canonical_sha256,
     validate_capability_receipt,
+)
+from core.agentic_v2_license import (
+    DENIED_LICENSE_IDENTIFIERS,
+    LICENSE_EVALUATOR_CALLABLE_SHA256,
+    LICENSE_EVALUATOR_PACKAGING_VERSION,
+    LICENSE_EVALUATOR_PARSER_SHA256,
+    LICENSE_EVALUATOR_PYTHON_VERSION,
+    LICENSE_EVALUATOR_RUNTIME_GRAPH_SHA256,
+    LICENSE_EVALUATOR_SPDX_SHA256,
+    LICENSE_EVALUATOR_SPDX_VERSION,
+    validate_license_evidence,
+    validate_license_exceptions,
+    validate_license_report,
 )
 
 
@@ -59,6 +73,10 @@ EVIDENCE_COLLECTION_CHECKS = frozenset({
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _HEX_DIGEST = re.compile(r"[0-9a-f]{64}")
 _SOURCE_SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def _matches(pattern: re.Pattern, value: Any) -> bool:
+    return isinstance(value, str) and pattern.fullmatch(value) is not None
 
 
 @dataclass(frozen=True)
@@ -151,9 +169,9 @@ def build_blocked_evidence_report(
     capability_receipt_sha256: str,
     oci_layout_report_sha256: str,
 ) -> dict[str, Any]:
-    if _HEX_DIGEST.fullmatch(capability_receipt_sha256) is None:
+    if not _matches(_HEX_DIGEST, capability_receipt_sha256):
         raise ValueError("capability receipt evidence digest is invalid")
-    if _HEX_DIGEST.fullmatch(oci_layout_report_sha256) is None:
+    if not _matches(_HEX_DIGEST, oci_layout_report_sha256):
         raise ValueError("OCI evidence digest is invalid")
     evidence = {
         name: _not_run_evidence(subject.sha256)
@@ -585,7 +603,10 @@ def validate_evidence_directory(
         oci_layout,
         expected_manifest_digest=subject.document["oci_manifest_digest"],
     )
-    if oci_report != verified_oci:
+    if (
+        canonical_sha256(oci_report) != canonical_sha256(verified_oci)
+        or verified_oci.get("config_digest") != subject.document["image_id"]
+    ):
         raise ValueError("agentic v2 OCI evidence report mismatch")
     _match_report_evidence(gate, "oci_layout", oci_report)
 
@@ -606,6 +627,7 @@ def validate_evidence_directory(
 
     receipt_path = root / "candidate-receipt.json"
     sbom_path = root / "effective-sbom.spdx.json"
+    license_evidence_path = root / "license-evidence.json"
     license_path = root / "license-report.json"
     capability_status = gate["evidence"]["capability_receipt"]["status"]
     expected_files = {
@@ -619,6 +641,7 @@ def validate_evidence_directory(
         expected_files.update({
             "candidate-receipt.json",
             "effective-sbom.spdx.json",
+            "license-evidence.json",
             "license-report.json",
         })
     if _regular_directory_files(root) != expected_files:
@@ -668,17 +691,25 @@ def validate_evidence_directory(
             tool_name="gdpval-agentic-v2-effective-sbom",
             tool_sha256=subject.document["sbom_generator_sha256"],
         )
-        license_report = _read_json(license_path, 4 * 1024 * 1024)
-        expected_license = evaluate_license_policy(sbom, policy)
-        if license_report != expected_license:
-            raise ValueError("agentic v2 license evidence report mismatch")
+        license_evidence = validate_license_evidence(
+            _read_json(license_evidence_path, 256 * 1024 * 1024), sbom
+        )
+        license_report = validate_license_report(
+            _read_json(license_path, 256 * 1024 * 1024),
+            subject=subject.document,
+            subject_sha256=subject.sha256,
+            sbom=sbom,
+            license_evidence=license_evidence,
+            policy=policy.document,
+            policy_sha256=policy.sha256,
+        )
         _match_report_evidence(gate, "license", license_report)
         _require_evidence_binding(
             gate,
             "license",
             status=license_report["status"],
-            tool_name="gdpval-agentic-v2-license-policy",
-            tool_sha256=policy.sha256,
+            tool_name="gdpval-agentic-v2-license-evaluator",
+            tool_sha256=subject.document["license_evaluator_sha256"],
         )
     elif (
         evidence_collection_allowed(containment)
@@ -764,6 +795,15 @@ def _validate_subject(value: Any) -> dict[str, Any]:
         "verifier_sha256",
         "oci_exporter_sha256",
         "sbom_generator_sha256",
+        "license_collector_sha256",
+        "license_evaluator_sha256",
+        "license_evaluator_packaging_version",
+        "license_evaluator_parser_sha256",
+        "license_evaluator_python_version",
+        "license_evaluator_callable_sha256",
+        "license_evaluator_runtime_graph_sha256",
+        "license_evaluator_spdx_version",
+        "license_evaluator_spdx_sha256",
         "lock_set_sha256",
     }:
         raise ValueError("agentic v2 candidate subject fields are invalid")
@@ -772,11 +812,11 @@ def _validate_subject(value: Any) -> dict[str, Any]:
         document["schema_version"] != "1.0"
         or document["substrate_id"] != "professional-work-v1"
         or any(
-            _DIGEST.fullmatch(str(document[name])) is None
+            not _matches(_DIGEST, document[name])
             for name in ("image_id", "oci_manifest_digest", "parent_manifest_digest")
         )
         or any(
-            _HEX_DIGEST.fullmatch(str(document[name])) is None
+            not _matches(_HEX_DIGEST, document[name])
             for name in (
                 "dockerfile_sha256",
                 "manifest_sha256",
@@ -785,11 +825,31 @@ def _validate_subject(value: Any) -> dict[str, Any]:
                 "verifier_sha256",
                 "oci_exporter_sha256",
                 "sbom_generator_sha256",
+                "license_collector_sha256",
+                "license_evaluator_sha256",
+                "license_evaluator_parser_sha256",
+                "license_evaluator_callable_sha256",
+                "license_evaluator_runtime_graph_sha256",
+                "license_evaluator_spdx_sha256",
                 "lock_set_sha256",
             )
         )
+        or document["license_evaluator_packaging_version"]
+        != LICENSE_EVALUATOR_PACKAGING_VERSION
+        or document["license_evaluator_spdx_version"]
+        != LICENSE_EVALUATOR_SPDX_VERSION
+        or document["license_evaluator_spdx_sha256"]
+        != LICENSE_EVALUATOR_SPDX_SHA256
+        or document["license_evaluator_parser_sha256"]
+        != LICENSE_EVALUATOR_PARSER_SHA256
+        or document["license_evaluator_python_version"]
+        != LICENSE_EVALUATOR_PYTHON_VERSION
+        or document["license_evaluator_callable_sha256"]
+        != LICENSE_EVALUATOR_CALLABLE_SHA256
+        or document["license_evaluator_runtime_graph_sha256"]
+        != LICENSE_EVALUATOR_RUNTIME_GRAPH_SHA256
         or document["platform"] != "linux/amd64"
-        or _SOURCE_SHA.fullmatch(str(document["source_revision"])) is None
+        or not _matches(_SOURCE_SHA, document["source_revision"])
     ):
         raise ValueError("agentic v2 candidate subject identity is invalid")
     return document
@@ -813,18 +873,59 @@ def _validate_policy(value: Any) -> dict[str, Any]:
     if set(value) != expected:
         raise ValueError("agentic v2 supply-chain policy fields are invalid")
     document = deepcopy(dict(value))
+    license_policy = document.get("license")
+    cve = document.get("cve")
+    signature = document.get("signature")
+    microvm = document.get("microvm")
     if (
         document["schema_version"] != "1.0"
-        or document["policy_id"] != "agentic-v2-phase1b-candidate-v1"
+        or document["policy_id"] != "agentic-v2-phase1c-candidate-v1"
         or document["foundation_only"] is not True
         or document["production_activation"] != "disabled"
         or document["required_evidence"] != sorted(EVIDENCE_NAMES)
-        or document["cve"]["policy_id"] != "agentic-v2-cve-v1"
-        or document["license"]["policy_id"] != "agentic-v2-license-v1"
+        or not isinstance(cve, dict)
+        or type(cve.get("scanner_db_max_age_days")) is not int
+        or document["cve"] != {
+            "policy_id": "agentic-v2-cve-v1",
+            "scanner_db_max_age_days": 7,
+            "denied_severities": ["CRITICAL", "HIGH"],
+            "exceptions_require": [
+                "cve", "purl", "reason", "approver", "expires_at",
+            ],
+        }
+        or document["license"]["policy_id"] != "agentic-v2-license-v2"
+        or not isinstance(license_policy, dict)
+        or set(license_policy) != {
+            "policy_id", "as_of_date", "unknown_is_failure",
+            "unknown_classifications", "denied_identifiers",
+            "exceptions_require", "exceptions",
+        }
+        or license_policy["unknown_is_failure"] is not True
+        or license_policy["denied_identifiers"]
+        != list(DENIED_LICENSE_IDENTIFIERS)
+        or document["license"].get("as_of_date") != "2026-07-31"
+        or document["license"].get("unknown_classifications") != [
+            "ambiguous", "missing_metadata", "unverifiable"
+        ]
+        or document["license"].get("exceptions_require") != [
+            "ecosystem", "package", "version", "purl",
+            "normalized_expression", "evidence_sha256", "reason", "approver",
+            "expires_at",
+        ]
         or document["signature"] != {
             "profile": "cosign-offline-v1",
             "trusted_key_required": True,
             "bundle_required": True,
+        }
+        or not isinstance(signature, dict)
+        or signature.get("trusted_key_required") is not True
+        or signature.get("bundle_required") is not True
+        or document["provenance"] != {
+            "profile": "buildkit-max-v1",
+            "required_subjects": [
+                "candidate", "parent", "dockerfile", "locks", "manifest",
+                "probe", "sbom", "policy",
+            ],
         }
         or document["microvm"] != {
             "runtime": "firecracker",
@@ -834,8 +935,14 @@ def _validate_policy(value: Any) -> dict[str, Any]:
             "read_only_rootfs": True,
             "ephemeral_work_disk": True,
         }
+        or not isinstance(microvm, dict)
+        or microvm.get("jailer_required") is not True
+        or microvm.get("kvm_required") is not True
+        or microvm.get("read_only_rootfs") is not True
+        or microvm.get("ephemeral_work_disk") is not True
     ):
         raise ValueError("agentic v2 supply-chain policy is invalid")
+    validate_license_exceptions(document)
     return document
 
 
@@ -886,8 +993,8 @@ def _validate_evidence_item(name: str, value: Any, subject_sha256: str) -> None:
         not isinstance(tool, dict)
         or set(tool) != {"name", "version", "sha256"}
         or not all(isinstance(tool[key], str) and tool[key] for key in ("name", "version"))
-        or _HEX_DIGEST.fullmatch(str(tool.get("sha256", ""))) is None
-        or _HEX_DIGEST.fullmatch(str(value.get("report_sha256", ""))) is None
+        or not _matches(_HEX_DIGEST, tool.get("sha256"))
+        or not _matches(_HEX_DIGEST, value.get("report_sha256"))
     ):
         raise ValueError(f"agentic v2 {name} evidence tool identity is invalid")
 
@@ -975,10 +1082,47 @@ def _read_json(path: Path, maximum: int):
             result[key] = item
         return result
 
+    def bounded_int(raw):
+        if len(raw.lstrip("-")) > 100:
+            raise ValueError("agentic v2 evidence JSON integer is too large")
+        return int(raw)
+
+    def bounded_float(raw):
+        if len(raw) > 100:
+            raise ValueError("agentic v2 evidence JSON float is too large")
+        result = float(raw)
+        if not math.isfinite(result):
+            raise ValueError("agentic v2 evidence JSON float is not finite")
+        return result
+
+    def reject_constant(raw):
+        raise ValueError(f"agentic v2 evidence JSON constant is invalid: {raw}")
+
     try:
-        return json.loads(value, object_pairs_hook=reject_duplicates)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        document = json.loads(
+            value,
+            object_pairs_hook=reject_duplicates,
+            parse_int=bounded_int,
+            parse_float=bounded_float,
+            parse_constant=reject_constant,
+        )
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         raise ValueError("agentic v2 evidence JSON is invalid") from exc
+    stack = [(document, 1)]
+    nodes = 0
+    while stack:
+        item, depth = stack.pop()
+        nodes += 1
+        if nodes > 500_000 or depth > 64:
+            raise ValueError("agentic v2 evidence JSON structure exceeds limits")
+        if isinstance(item, str) and len(item) > 1024 * 1024:
+            raise ValueError("agentic v2 evidence JSON string exceeds size limit")
+        if isinstance(item, dict):
+            stack.extend((key, depth + 1) for key in item)
+            stack.extend((child, depth + 1) for child in item.values())
+        elif isinstance(item, list):
+            stack.extend((child, depth + 1) for child in item)
+    return document
 
 
 def _secure_read_flags() -> int:

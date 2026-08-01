@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "policy_id": "agentic-v2-phase1b-candidate-v1",
+  "policy_id": "agentic-v2-phase1c-candidate-v1",
   "foundation_only": true,
   "production_activation": "disabled",
   "required_evidence": [
@@ -21,10 +21,13 @@
     "exceptions_require": ["cve", "purl", "reason", "approver", "expires_at"]
   },
   "license": {
-    "policy_id": "agentic-v2-license-v1",
+    "policy_id": "agentic-v2-license-v2",
+    "as_of_date": "2026-07-31",
     "unknown_is_failure": true,
+    "unknown_classifications": ["ambiguous", "missing_metadata", "unverifiable"],
     "denied_identifiers": ["BUSL-1.1", "Commons-Clause", "SSPL-1.0"],
-    "exceptions_require": ["purl", "license", "reason", "approver", "expires_at"]
+    "exceptions_require": ["ecosystem", "package", "version", "purl", "normalized_expression", "evidence_sha256", "reason", "approver", "expires_at"],
+    "exceptions": []
   },
   "signature": {
     "profile": "cosign-offline-v1",

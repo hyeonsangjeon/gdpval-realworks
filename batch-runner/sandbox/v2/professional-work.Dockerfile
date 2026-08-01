@@ -51,6 +51,7 @@ COPY core/agentic_v2_substrate.py /opt/gdpval/v2/agentic_v2_substrate.py
 COPY sandbox/agentic_v2_capabilities.json /opt/gdpval/v2/capabilities.json
 COPY sandbox/v2/image_probe.py /opt/gdpval/v2/image_probe.py
 COPY sandbox/v2/effective_sbom.py /opt/gdpval/v2/effective_sbom.py
+COPY sandbox/v2/license_evidence.py /opt/gdpval/v2/license_evidence.py
 COPY sandbox/v2/disabled_entrypoint.py /opt/gdpval/v2/disabled_entrypoint.py
 
 RUN if ! getent group 65532 >/dev/null; then \
@@ -70,4 +71,4 @@ RUN if ! getent group 65532 >/dev/null; then \
 USER 65532:65532
 WORKDIR /work
 
-ENTRYPOINT ["python", "-I", "-B", "/opt/gdpval/v2/disabled_entrypoint.py"]
+ENTRYPOINT ["python", "-I", "-S", "-B", "/opt/gdpval/v2/disabled_entrypoint.py"]

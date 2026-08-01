@@ -4,15 +4,22 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
+import math
 import os
 import re
+import selectors
 import shutil
+import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
+import time
 import uuid
-from pathlib import Path
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 
 
 BATCH_ROOT = Path(__file__).resolve().parents[2]
@@ -24,8 +31,16 @@ from core.agentic_v2_microvm import (  # noqa: E402
     inspect_microvm_readiness,
     validate_microvm_readiness_report,
 )
+from core.agentic_v2_license import (  # noqa: E402
+    build_license_report,
+    license_evaluator_runtime_identity,
+    validate_license_evidence,
+    validate_license_report,
+)
 from core.agentic_v2_oci import verify_oci_layout  # noqa: E402
 from core.agentic_v2_substrate import (  # noqa: E402
+    AGENTIC_V2_EVIDENCE_ROOT_COPY_TIMEOUT_SECONDS,
+    AGENTIC_V2_IMAGE_PROBE_TIMEOUT_SECONDS,
     AgenticV2SubstrateManifest,
     canonical_sha256,
     validate_capability_receipt,
@@ -37,7 +52,6 @@ from core.agentic_v2_supply_chain import (  # noqa: E402
     build_evidence_report,
     evidence_collection_allowed,
     evidence_item,
-    evaluate_license_policy,
     validate_effective_sbom,
     validate_evidence_directory,
 )
@@ -45,6 +59,37 @@ from core.agentic_v2_supply_chain import (  # noqa: E402
 
 _SOURCE_SHA = re.compile(r"[0-9a-f]{40}")
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+_TRUSTED_PATH = "/usr/bin:/bin"
+_TRUSTED_GIT = "/usr/bin/git"
+_TRUSTED_DOCKER = "/usr/bin/docker"
+_VERIFICATION_SESSION_LABEL = "io.gdpval.agentic-v2.verification-session"
+_SESSION_ID = re.compile(r"[0-9a-f]{32}")
+_IMAGE_PURELIB_PATH = "/usr/local/lib/python3.11/site-packages"
+_LICENSE_EVIDENCE_ROOTS = (
+    "/usr/local/lib/python3.11/site-packages",
+    "/usr/share/R/share/licenses",
+    "/usr/share/nodejs/npm",
+    "/usr/share/doc",
+    "/usr/lib/R/library",
+    "/var/lib/dpkg",
+)
+_LICENSE_EVIDENCE_ARCHIVE_ROOTS = frozenset({
+    "/usr/share/doc",
+    "/usr/share/nodejs/npm",
+})
+_LICENSE_EVIDENCE_ARCHIVE_MAX_BYTES = 64 * 1024 * 1024
+_LICENSE_EVIDENCE_ARCHIVE_MAX_MEMBERS = 100_000
+_IMAGE_STDLIB_SCRIPT_BOOTSTRAP = (
+    "import runpy,sys;"
+    "script=sys.argv[1];sys.argv=sys.argv[1:];"
+    "runpy.run_path(script,run_name='__main__')"
+)
+_IMAGE_PURELIB_SCRIPT_BOOTSTRAP = (
+    "import runpy,sys;"
+    f"sys.path.append({_IMAGE_PURELIB_PATH!r});"
+    "script=sys.argv[1];sys.argv=sys.argv[1:];"
+    "runpy.run_path(script,run_name='__main__')"
+)
 _FORBIDDEN_ENV = (
     "AZURE_CLIENT_SECRET",
     "AZURE_OPENAI_API_KEY",
@@ -63,6 +108,65 @@ _CONTAINMENT_CHECKS = frozenset({
     "pids_limit",
     "read_only_rootfs",
 })
+
+
+@dataclass(frozen=True)
+class VerificationSession:
+    session_id: str
+
+    def __post_init__(self) -> None:
+        if _SESSION_ID.fullmatch(self.session_id) is None:
+            raise ValueError("candidate verification session identity is invalid")
+
+    def container_name(self, purpose: str) -> str:
+        return (
+            f"gdpval-agentic-v2-{purpose}-{self.session_id[:12]}-"
+            f"{uuid.uuid4().hex[:12]}"
+        )
+
+    def label_arguments(self) -> list[str]:
+        return [
+            "--label",
+            f"{_VERIFICATION_SESSION_LABEL}={self.session_id}",
+        ]
+
+
+def _matches(pattern: re.Pattern, value) -> bool:
+    return isinstance(value, str) and pattern.fullmatch(value) is not None
+
+
+def _validate_candidate_runtime_config(value) -> dict:
+    if (
+        not isinstance(value, dict)
+        or value.get("Volumes") is not None
+        or value.get("Healthcheck") is not None
+    ):
+        raise ValueError("candidate image runtime configuration is invalid")
+    return value
+
+
+def _require_trusted_executable(path: str) -> None:
+    executable = Path(path)
+    if executable not in {Path(_TRUSTED_GIT), Path(_TRUSTED_DOCKER)}:
+        raise RuntimeError("candidate verifier executable is not allowlisted")
+    for directory in (Path("/usr"), Path("/usr/bin")):
+        metadata = directory.lstat()
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or stat.S_ISLNK(metadata.st_mode)
+            or metadata.st_uid != 0
+            or metadata.st_mode & 0o022
+        ):
+            raise RuntimeError("candidate verifier trusted tool directory is invalid")
+    metadata = executable.lstat()
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or stat.S_ISLNK(metadata.st_mode)
+        or metadata.st_uid != 0
+        or metadata.st_mode & 0o022
+        or not metadata.st_mode & 0o111
+    ):
+        raise RuntimeError("candidate verifier trusted executable is invalid")
 _CONTAINMENT_PROBE = r'''
 import ctypes
 import json
@@ -165,10 +269,12 @@ def verify_candidate(
     oci_layout: Path,
     output_directory: Path,
     repository_root: Path | None = None,
+    session_id: str,
 ) -> dict:
+    session = VerificationSession(session_id)
     _require_no_credentials()
     _require_local_docker()
-    if _SOURCE_SHA.fullmatch(source_revision) is None:
+    if not _matches(_SOURCE_SHA, source_revision):
         raise ValueError("candidate source revision is invalid")
     repository_root = _require_repository_root(
         repository_root or REPOSITORY_ROOT,
@@ -195,12 +301,12 @@ def verify_candidate(
     ):
         raise ValueError("candidate parent lock differs from committed V1 Dockerfile")
     oci_report = verify_oci_layout(oci_layout)
-    inspect = _docker_json(["docker", "image", "inspect", image])
+    inspect = _docker_json([_TRUSTED_DOCKER, "image", "inspect", image])
     if not isinstance(inspect, list) or len(inspect) != 1:
         raise ValueError("candidate image inspect result is invalid")
     image_document = inspect[0]
     parent_inspect = _docker_json([
-        "docker", "image", "inspect", parent_lock["reference"]
+        _TRUSTED_DOCKER, "image", "inspect", parent_lock["reference"]
     ])
     if not isinstance(parent_inspect, list) or len(parent_inspect) != 1:
         raise ValueError("candidate parent image inspect result is invalid")
@@ -208,8 +314,9 @@ def verify_candidate(
     parent_labels = ((parent_document.get("Config") or {}).get("Labels") or {})
     parent_layers = ((parent_document.get("RootFS") or {}).get("Layers") or [])
     candidate_layers = ((image_document.get("RootFS") or {}).get("Layers") or [])
-    labels = ((image_document.get("Config") or {}).get("Labels") or {})
-    entrypoint = ((image_document.get("Config") or {}).get("Entrypoint") or [])
+    image_config = _validate_candidate_runtime_config(image_document.get("Config"))
+    labels = image_config.get("Labels") or {}
+    entrypoint = image_config.get("Entrypoint") or []
     image_id = image_document.get("Id")
     if (
         image_id != oci_report["config_digest"]
@@ -222,7 +329,7 @@ def verify_candidate(
         or labels.get("io.gdpval.agentic-v2.production-activation") != "disabled"
         or labels.get("io.gdpval.agentic-v2.capability-manifest-sha256") != manifest.sha256
         or entrypoint != [
-            "python", "-I", "-B", "/opt/gdpval/v2/disabled_entrypoint.py"
+            "python", "-I", "-S", "-B", "/opt/gdpval/v2/disabled_entrypoint.py"
         ]
         or parent_document.get("Id") != parent_lock["observed_local_image_id"]
         or parent_lock["reference"] not in (parent_document.get("RepoDigests") or [])
@@ -234,7 +341,7 @@ def verify_candidate(
     ):
         raise ValueError("candidate image identity or labels are invalid")
     embedded_source_sha256 = _verify_embedded_files(
-        image_id, source_revision, repository_root
+        image_id, source_revision, repository_root, session=session
     )
     lock_set_sha256 = canonical_sha256([
         {
@@ -247,6 +354,7 @@ def verify_candidate(
             "batch-runner/sandbox/v2/python-extra.lock",
         )
     ])
+    evaluator_runtime = license_evaluator_runtime_identity()
     subject = CandidateSubject.from_mapping({
         "schema_version": "1.0",
         "substrate_id": "professional-work-v1",
@@ -278,11 +386,32 @@ def verify_candidate(
             "batch-runner/sandbox/v2/effective_sbom.py",
             repository_root,
         ),
+        "license_collector_sha256": _git_blob_sha256(
+            source_revision,
+            "batch-runner/sandbox/v2/license_evidence.py",
+            repository_root,
+        ),
+        "license_evaluator_sha256": _git_blob_sha256(
+            source_revision,
+            "batch-runner/core/agentic_v2_license.py",
+            repository_root,
+        ),
+        "license_evaluator_packaging_version": evaluator_runtime["packaging_version"],
+        "license_evaluator_parser_sha256": evaluator_runtime["parser_sha256"],
+        "license_evaluator_python_version": evaluator_runtime["python_version"],
+        "license_evaluator_callable_sha256": evaluator_runtime["callable_sha256"],
+        "license_evaluator_runtime_graph_sha256": evaluator_runtime[
+            "runtime_graph_sha256"
+        ],
+        "license_evaluator_spdx_version": evaluator_runtime["spdx_version"],
+        "license_evaluator_spdx_sha256": evaluator_runtime["spdx_sha256"],
         "lock_set_sha256": lock_set_sha256,
     })
     microvm_report = inspect_microvm_readiness(asset_paths={})
     validate_microvm_readiness_report(microvm_report)
-    containment_report = _inspect_containment(parent_document["Id"])
+    containment_report = _inspect_containment(
+        parent_document["Id"], session=session
+    )
     tool_sha = subject.document["verifier_sha256"]
     evidence = {
         name: evidence_item(subject, name=name, status="not_run")
@@ -312,16 +441,21 @@ def verify_candidate(
     receipt = None
     sbom = None
     license_report = None
+    license_evidence = None
     if evidence_collection_allowed(containment_report):
         _verify_disabled_entrypoint(
             image_id,
             containment_checks=containment_report["checks"],
+            session=session,
         )
         observation = _run_image_json(
             image_id,
             "/opt/gdpval/v2/image_probe.py",
             8 * 1024 * 1024,
             containment_checks=containment_report["checks"],
+            include_purelib=True,
+            session=session,
+            arguments=(subject.document["sbom_generator_sha256"],),
         )
         validate_capability_receipt(observation, manifest)
         sbom = _run_image_json(
@@ -329,9 +463,41 @@ def verify_candidate(
             "/opt/gdpval/v2/effective_sbom.py",
             64 * 1024 * 1024,
             containment_checks=containment_report["checks"],
+            include_purelib=True,
+            session=session,
         )
         validate_effective_sbom(sbom, observation)
-        license_report = evaluate_license_policy(sbom, policy)
+        license_evidence = _run_image_json(
+            image_id,
+            "/opt/gdpval/v2/license_evidence.py",
+            16 * 1024 * 1024,
+            containment_checks=containment_report["checks"],
+            include_purelib=False,
+            session=session,
+        )
+        license_evidence = validate_license_evidence(license_evidence, sbom)
+        _verify_license_evidence_files(
+            image_id,
+            license_evidence,
+            session=session,
+        )
+        license_report = build_license_report(
+            subject=subject.document,
+            subject_sha256=subject.sha256,
+            sbom=sbom,
+            license_evidence=license_evidence,
+            policy=policy.document,
+            policy_sha256=policy.sha256,
+        )
+        validate_license_report(
+            license_report,
+            subject=subject.document,
+            subject_sha256=subject.sha256,
+            sbom=sbom,
+            license_evidence=license_evidence,
+            policy=policy.document,
+            policy_sha256=policy.sha256,
+        )
         receipt = build_candidate_receipt(subject, observation, manifest)
         evidence["capability_receipt"] = evidence_item(
             subject,
@@ -355,9 +521,9 @@ def verify_candidate(
             subject,
             name="license",
             status=license_report["status"],
-            tool_name="gdpval-agentic-v2-license-policy",
+            tool_name="gdpval-agentic-v2-license-evaluator",
             tool_version="1.0",
-            tool_sha256=policy.sha256,
+            tool_sha256=subject.document["license_evaluator_sha256"],
             report_sha256=canonical_sha256(license_report),
         )
     gate = build_evidence_report(subject, policy, evidence)
@@ -370,6 +536,7 @@ def verify_candidate(
         if sbom is not None:
             _write_json(temporary / "effective-sbom.spdx.json", sbom)
         if license_report is not None:
+            _write_json(temporary / "license-evidence.json", license_evidence)
             _write_json(temporary / "license-report.json", license_report)
         _write_json(temporary / "containment-report.json", containment_report)
         _write_json(temporary / "microvm-readiness.json", microvm_report)
@@ -394,16 +561,32 @@ def _run_image_json(
     maximum: int,
     *,
     containment_checks: dict[str, bool],
+    include_purelib: bool,
+    session: VerificationSession,
+    arguments: tuple[str, ...] = (),
 ) -> dict:
-    container = _container_name("evidence")
+    if any(
+        not isinstance(value, str)
+        or not value
+        or len(value) > 4096
+        for value in arguments
+    ):
+        raise ValueError("candidate image probe arguments are invalid")
+    bootstrap = (
+        _IMAGE_PURELIB_SCRIPT_BOOTSTRAP
+        if include_purelib
+        else _IMAGE_STDLIB_SCRIPT_BOOTSTRAP
+    )
+    container = session.container_name("evidence")
     optional_limits = []
     if containment_checks["pids_limit"]:
         optional_limits.extend(["--pids-limit", "512"])
     if containment_checks["cpu_quota"]:
         optional_limits.extend(["--cpus", "2"])
     command = [
-        "docker", "run", "--pull=never", "--name", container,
-        "--network", "none", "--read-only",
+        _TRUSTED_DOCKER, "run", "--pull=never", "--name", container,
+        *session.label_arguments(),
+        "--network", "none", "--read-only", "--no-healthcheck",
         "--user", "65532:65532", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--memory", "6g",
         *optional_limits,
@@ -412,16 +595,14 @@ def _run_image_json(
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,nodev,size=268435456,uid=65532,gid=65532,mode=0700",
         "--entrypoint", "python",
-        image, "-I", "-B", script,
+        image, "-I", "-S", "-B", "-c", bootstrap, script, *arguments,
     ]
     try:
-        completed = subprocess.run(
+        completed = _run_bounded_command(
             command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=900,
-            check=False,
+            timeout=AGENTIC_V2_IMAGE_PROBE_TIMEOUT_SECONDS,
+            stdout_limit=maximum,
+            stderr_limit=64 * 1024,
         )
     finally:
         _remove_container(container)
@@ -430,25 +611,155 @@ def _run_image_json(
             "candidate image probe failed: "
             + completed.stderr.decode("utf-8", errors="replace")[-1000:]
         )
-    if not completed.stdout or len(completed.stdout) > maximum:
+    if not completed.stdout:
         raise RuntimeError("candidate image probe output size is invalid")
-    value = json.loads(completed.stdout)
+    value = _bounded_json_loads(completed.stdout)
     if not isinstance(value, dict):
         raise RuntimeError("candidate image probe result is invalid")
     return value
 
 
-def _inspect_containment(image: str) -> dict:
-    checks, collection_checks = _docker_base_isolation_probe(image)
+def _run_bounded_command(
+    command: list[str],
+    *,
+    timeout: float,
+    stdout_limit: int,
+    stderr_limit: int,
+) -> subprocess.CompletedProcess:
+    environment = (
+        _docker_environment()
+        if command and command[0] == _TRUSTED_DOCKER
+        else None
+    )
+    process = subprocess.Popen(
+        command,
+        env=environment,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if process.stdout is None or process.stderr is None:
+        process.kill()
+        raise RuntimeError("bounded command pipes are unavailable")
+    selector = selectors.DefaultSelector()
+    streams = {
+        process.stdout: ("stdout", stdout_limit, bytearray()),
+        process.stderr: ("stderr", stderr_limit, bytearray()),
+    }
+    for stream in streams:
+        os.set_blocking(stream.fileno(), False)
+        selector.register(stream, selectors.EVENT_READ)
+    deadline = time.monotonic() + timeout
+    try:
+        while selector.get_map() or process.poll() is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            for key, _events in selector.select(min(remaining, 0.2)):
+                stream = key.fileobj
+                name, limit, buffer = streams[stream]
+                try:
+                    chunk = os.read(stream.fileno(), 64 * 1024)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    selector.unregister(stream)
+                    continue
+                buffer.extend(chunk)
+                if len(buffer) > limit:
+                    raise RuntimeError(f"candidate {name} exceeds size limit")
+        return subprocess.CompletedProcess(
+            command,
+            process.wait(),
+            bytes(streams[process.stdout][2]),
+            bytes(streams[process.stderr][2]),
+        )
+    except Exception:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        raise
+    finally:
+        selector.close()
+        process.stdout.close()
+        process.stderr.close()
+
+
+def _bounded_json_loads(value: bytes):
+    def reject_duplicates(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("candidate JSON contains duplicate keys")
+            result[key] = item
+        return result
+
+    def bounded_int(raw):
+        if len(raw.lstrip("-")) > 100:
+            raise ValueError("candidate JSON integer is too large")
+        return int(raw)
+
+    def reject_constant(raw):
+        raise ValueError(f"candidate JSON constant is invalid: {raw}")
+
+    def bounded_float(raw):
+        if len(raw) > 100:
+            raise ValueError("candidate JSON float is too large")
+        result = float(raw)
+        if not math.isfinite(result):
+            raise ValueError("candidate JSON float is not finite")
+        return result
+
+    try:
+        document = json.loads(
+            value,
+            object_pairs_hook=reject_duplicates,
+            parse_int=bounded_int,
+            parse_float=bounded_float,
+            parse_constant=reject_constant,
+        )
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
+        raise RuntimeError("candidate image probe returned invalid JSON") from exc
+    stack = [(document, 1)]
+    nodes = 0
+    while stack:
+        item, depth = stack.pop()
+        nodes += 1
+        if nodes > 500_000 or depth > 64:
+            raise RuntimeError("candidate JSON structure exceeds limits")
+        if isinstance(item, str) and len(item) > 1024 * 1024:
+            raise RuntimeError("candidate JSON string exceeds size limit")
+        if isinstance(item, dict):
+            stack.extend((key, depth + 1) for key in item)
+            stack.extend((child, depth + 1) for child in item.values())
+        elif isinstance(item, list):
+            stack.extend((child, depth + 1) for child in item)
+    return document
+
+
+def _inspect_containment(
+    image: str,
+    *,
+    session: VerificationSession,
+) -> dict:
+    checks, collection_checks = _docker_base_isolation_probe(
+        image, session=session
+    )
     checks["pids_limit"] = _docker_resource_limit_probe(
         image,
         name="pids_limit",
         arguments=["--pids-limit", "16"],
+        session=session,
     )
     checks["cpu_quota"] = _docker_resource_limit_probe(
         image,
         name="cpu_quota",
         arguments=["--cpus", "0.25"],
+        session=session,
     )
     report = {
         "schema_version": "1.1",
@@ -467,6 +778,8 @@ def _inspect_containment(image: str) -> dict:
 
 def _docker_base_isolation_probe(
     image: str,
+    *,
+    session: VerificationSession,
 ) -> tuple[dict[str, bool], dict[str, bool]]:
     failed = {name: False for name in _CONTAINMENT_CHECKS}
     collection_failed = {
@@ -476,39 +789,38 @@ def _docker_base_isolation_probe(
             "no_new_privileges", "non_root_uid", "read_only_rootfs",
         )
     }
-    container = _container_name("isolation")
+    container = session.container_name("isolation")
     inspected = None
     try:
-        completed = subprocess.run(
+        completed = _run_bounded_command(
             [
-                "docker", "run", "--pull=never", "--name", container,
+                _TRUSTED_DOCKER, "run", "--pull=never", "--name", container,
+                *session.label_arguments(),
                 "--network", "none", "--read-only",
                 "--user", "65532:65532", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges",
                 "--memory", "64m",
-                "--entrypoint", "python", image, "-I", "-B", "-c",
+                "--entrypoint", "python", image, "-I", "-S", "-B", "-c",
                 _CONTAINMENT_PROBE,
             ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             timeout=30,
-            check=False,
+            stdout_limit=64 * 1024,
+            stderr_limit=64 * 1024,
         )
         if completed.returncode == 0:
-            inspected = _docker_json(["docker", "container", "inspect", container])
+            inspected = _docker_json([
+                _TRUSTED_DOCKER, "container", "inspect", container
+            ])
     finally:
         _remove_container(container)
     if (
         completed.returncode != 0
         or not completed.stdout
-        or len(completed.stdout) > 65536
-        or len(completed.stderr) > 65536
     ):
         return failed, collection_failed
     try:
-        checks = json.loads(completed.stdout)
-    except json.JSONDecodeError:
+        checks = _bounded_json_loads(completed.stdout)
+    except (RuntimeError, ValueError):
         return failed, collection_failed
     if (
         not isinstance(checks, dict)
@@ -588,37 +900,35 @@ def _docker_resource_limit_probe(
     *,
     name: str,
     arguments: list[str],
+    session: VerificationSession,
 ) -> bool:
-    container = _container_name(name)
+    container = session.container_name(name)
     try:
-        completed = subprocess.run(
+        completed = _run_bounded_command(
             [
-                "docker", "run", "--pull=never", "--name", container,
+                _TRUSTED_DOCKER, "run", "--pull=never", "--name", container,
+                *session.label_arguments(),
                 "--network", "none", "--read-only",
                 "--user", "65532:65532", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges", "--memory", "64m",
                 *arguments,
-                "--entrypoint", "python", image, "-I", "-B", "-c",
+                "--entrypoint", "python", image, "-I", "-S", "-B", "-c",
                 _CONTAINMENT_PROBE,
             ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             timeout=30,
-            check=False,
+            stdout_limit=64 * 1024,
+            stderr_limit=64 * 1024,
         )
     finally:
         _remove_container(container)
     if (
         completed.returncode != 0
         or not completed.stdout
-        or len(completed.stdout) > 65536
-        or len(completed.stderr) > 65536
     ):
         return False
     try:
-        checks = json.loads(completed.stdout)
-    except json.JSONDecodeError:
+        checks = _bounded_json_loads(completed.stdout)
+    except (RuntimeError, ValueError):
         return False
     if (
         not isinstance(checks, dict)
@@ -659,43 +969,43 @@ def _resource_warning_checks(stderr: bytes) -> set[str] | None:
 
 
 def _docker_json(command: list[str]):
-    completed = subprocess.run(
+    completed = _run_bounded_command(
         command,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
         timeout=60,
-        check=True,
+        stdout_limit=2 * 1024 * 1024,
+        stderr_limit=64 * 1024,
     )
-    return json.loads(completed.stdout)
+    if completed.returncode != 0 or completed.stderr:
+        raise RuntimeError("Docker inspection failed")
+    return _bounded_json_loads(completed.stdout)
 
 
 def _verify_disabled_entrypoint(
     image_id: str,
     *,
     containment_checks: dict[str, bool],
+    session: VerificationSession,
 ) -> None:
-    container = _container_name("disabled")
+    container = session.container_name("disabled")
     optional_limits = []
     if containment_checks["pids_limit"]:
         optional_limits.extend(["--pids-limit", "16"])
     if containment_checks["cpu_quota"]:
         optional_limits.extend(["--cpus", "0.25"])
     try:
-        completed = subprocess.run(
+        completed = _run_bounded_command(
             [
-                "docker", "run", "--pull=never", "--name", container,
+                _TRUSTED_DOCKER, "run", "--pull=never", "--name", container,
+                *session.label_arguments(),
                 "--network", "none", "--read-only",
                 "--user", "65532:65532", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges", "--memory", "64m",
                 *optional_limits,
                 image_id,
             ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             timeout=30,
-            check=False,
+            stdout_limit=64 * 1024,
+            stderr_limit=64 * 1024,
         )
     finally:
         _remove_container(container)
@@ -719,6 +1029,8 @@ def _verify_embedded_files(
     image: str,
     source_revision: str,
     repository_root: Path,
+    *,
+    session: VerificationSession,
 ) -> str:
     expected = {
         "/opt/gdpval/v2/agentic_v2_substrate.py": "batch-runner/core/agentic_v2_substrate.py",
@@ -727,38 +1039,40 @@ def _verify_embedded_files(
         "/opt/gdpval/v2/disabled_entrypoint.py": "batch-runner/sandbox/v2/disabled_entrypoint.py",
         "/opt/gdpval/v2/effective_sbom.py": "batch-runner/sandbox/v2/effective_sbom.py",
         "/opt/gdpval/v2/image_probe.py": "batch-runner/sandbox/v2/image_probe.py",
+        "/opt/gdpval/v2/license_evidence.py": "batch-runner/sandbox/v2/license_evidence.py",
         "/opt/gdpval/v2/python-extra.lock": "batch-runner/sandbox/v2/python-extra.lock",
     }
-    container = _container_name("inspect")
+    container = session.container_name("inspect")
     records = []
     try:
-        created = subprocess.run(
+        created_result = _run_bounded_command(
             [
-                "docker", "container", "create", "--name", container,
+                _TRUSTED_DOCKER, "container", "create", "--name", container,
+                *session.label_arguments(),
                 "--network", "none", "--entrypoint", "/bin/true",
                 image,
             ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             timeout=60,
-            check=True,
-            text=True,
-        ).stdout.strip()
+            stdout_limit=4096,
+            stderr_limit=64 * 1024,
+        )
+        if created_result.returncode != 0:
+            raise RuntimeError("candidate inspection container creation failed")
+        created = created_result.stdout.decode("ascii", errors="strict").strip()
         if not re.fullmatch(r"[0-9a-f]{64}", created):
             raise RuntimeError("candidate inspection container identity is invalid")
         with tempfile.TemporaryDirectory(prefix="phase1b-embedded-") as temporary:
             root = Path(temporary)
             for index, (container_path, repository_path) in enumerate(sorted(expected.items())):
                 target = root / f"item-{index}"
-                subprocess.run(
-                    ["docker", "container", "cp", f"{container}:{container_path}", str(target)],
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE,
+                copied = _run_bounded_command(
+                    [_TRUSTED_DOCKER, "container", "cp", f"{container}:{container_path}", str(target)],
                     timeout=60,
-                    check=True,
+                    stdout_limit=4096,
+                    stderr_limit=64 * 1024,
                 )
+                if copied.returncode != 0:
+                    raise RuntimeError("candidate embedded file copy failed")
                 if not target.is_file() or target.is_symlink():
                     raise RuntimeError("candidate embedded file is not regular")
                 actual_sha = _sha256(target)
@@ -779,8 +1093,273 @@ def _verify_embedded_files(
     return canonical_sha256(records)
 
 
-def _container_name(purpose: str) -> str:
-    return f"gdpval-agentic-v2-{purpose}-{uuid.uuid4().hex}"
+def _verify_license_evidence_files(
+    image: str,
+    license_evidence: dict,
+    *,
+    session: VerificationSession,
+) -> None:
+    expected: dict[str, tuple[str, int, str, str]] = {}
+    for record in license_evidence["records"]:
+        for item in record["evidence"]:
+            path = item["path"]
+            if path is None:
+                continue
+            if item["resolved_path"] is None:
+                if item["source"] != "debian-copyright-path-unverifiable":
+                    raise ValueError(
+                        "candidate unresolved license evidence source is invalid"
+                    )
+                continue
+            candidate = PurePosixPath(path)
+            roots = [
+                PurePosixPath(root)
+                for root in _LICENSE_EVIDENCE_ROOTS
+                if PurePosixPath(root) in candidate.parents
+            ]
+            if not roots:
+                raise ValueError("candidate license evidence path root is invalid")
+            source_root = max(roots, key=lambda value: len(value.parts))
+            relative = candidate.relative_to(source_root)
+            identity = (
+                item["sha256"],
+                item["size"],
+                str(source_root),
+                str(relative),
+            )
+            previous = expected.setdefault(path, identity)
+            if previous != identity:
+                raise ValueError("candidate license evidence path identity conflicts")
+    grouped: dict[str, list[tuple[str, tuple[str, int, str, str]]]] = {}
+    for path, identity in expected.items():
+        grouped.setdefault(identity[2], []).append((path, identity))
+    container = session.container_name("license-files")
+    try:
+        created = _run_bounded_command(
+            [
+                _TRUSTED_DOCKER,
+                "container",
+                "create",
+                "--name",
+                container,
+                *session.label_arguments(),
+                "--network",
+                "none",
+                "--entrypoint",
+                "/bin/true",
+                image,
+            ],
+            timeout=60,
+            stdout_limit=4096,
+            stderr_limit=64 * 1024,
+        )
+        if (
+            created.returncode != 0
+            or created.stderr
+            or re.fullmatch(rb"[0-9a-f]{64}\n?", created.stdout) is None
+        ):
+            raise RuntimeError("candidate license evidence container creation failed")
+        with tempfile.TemporaryDirectory(prefix="phase1c-license-files-") as temporary:
+            temporary_root = Path(temporary)
+            for index, (source_root, records) in enumerate(sorted(grouped.items())):
+                if source_root in _LICENSE_EVIDENCE_ARCHIVE_ROOTS:
+                    copied = _run_bounded_command(
+                        [
+                            _TRUSTED_DOCKER,
+                            "container",
+                            "cp",
+                            f"{container}:{source_root}/.",
+                            "-",
+                        ],
+                        timeout=AGENTIC_V2_EVIDENCE_ROOT_COPY_TIMEOUT_SECONDS,
+                        stdout_limit=_LICENSE_EVIDENCE_ARCHIVE_MAX_BYTES,
+                        stderr_limit=64 * 1024,
+                    )
+                    if (
+                        copied.returncode != 0
+                        or not copied.stdout
+                        or copied.stderr
+                    ):
+                        raise RuntimeError(
+                            "candidate license evidence root archive failed"
+                        )
+                    _verify_evidence_archive(
+                        copied.stdout,
+                        {
+                            identity[3]: (identity[0], identity[1])
+                            for _path, identity in records
+                        },
+                    )
+                    continue
+                destination = temporary_root / f"root-{index}"
+                destination.mkdir(mode=0o700)
+                copied = _run_bounded_command(
+                    [
+                        _TRUSTED_DOCKER,
+                        "container",
+                        "cp",
+                        f"{container}:{source_root}/.",
+                        str(destination),
+                    ],
+                    timeout=AGENTIC_V2_EVIDENCE_ROOT_COPY_TIMEOUT_SECONDS,
+                    stdout_limit=4096,
+                    stderr_limit=64 * 1024,
+                )
+                if copied.returncode != 0 or copied.stdout or copied.stderr:
+                    raise RuntimeError("candidate license evidence root copy failed")
+                for _path, identity in records:
+                    _verify_copied_evidence_file(
+                        destination,
+                        PurePosixPath(identity[3]),
+                        expected_sha256=identity[0],
+                        expected_size=identity[1],
+                    )
+    finally:
+        _remove_container(container)
+
+
+def _verify_evidence_archive(
+    value: bytes,
+    expected: dict[str, tuple[str, int]],
+) -> None:
+    if not value or len(value) > _LICENSE_EVIDENCE_ARCHIVE_MAX_BYTES or not expected:
+        raise ValueError("candidate license evidence archive size is invalid")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(value), mode="r:") as archive:
+            members = archive.getmembers()
+            if len(members) > _LICENSE_EVIDENCE_ARCHIVE_MAX_MEMBERS:
+                raise ValueError("candidate license evidence archive is too large")
+            indexed = {}
+            for member in members:
+                if member.name == ".":
+                    raw_name = "."
+                elif member.name.startswith("./"):
+                    raw_name = member.name[2:]
+                else:
+                    raw_name = member.name
+                path = PurePosixPath(raw_name)
+                canonical_name = str(path)
+                if (
+                    not raw_name
+                    or path.is_absolute()
+                    or ".." in path.parts
+                    or len(raw_name) > 4096
+                    or canonical_name != raw_name
+                    or canonical_name in indexed
+                ):
+                    raise ValueError(
+                        "candidate license evidence archive member is invalid"
+                    )
+                indexed[canonical_name] = member
+            for relative, (expected_sha256, expected_size) in expected.items():
+                path = PurePosixPath(relative)
+                if (
+                    path.is_absolute()
+                    or ".." in path.parts
+                    or str(path) != relative
+                ):
+                    raise ValueError(
+                        "candidate license evidence archive path is invalid"
+                    )
+                for parent in path.parents:
+                    if parent == PurePosixPath("."):
+                        continue
+                    parent_member = indexed.get(str(parent))
+                    if parent_member is None or not parent_member.isdir():
+                        raise ValueError(
+                            "candidate license evidence archive parent is invalid"
+                        )
+                member = indexed.get(relative)
+                if (
+                    member is None
+                    or not member.isfile()
+                    or member.size != expected_size
+                ):
+                    raise ValueError(
+                        "candidate license evidence archive file identity differs"
+                    )
+                stream = archive.extractfile(member)
+                if stream is None:
+                    raise ValueError(
+                        "candidate license evidence archive file is unavailable"
+                    )
+                digest = hashlib.sha256()
+                total = 0
+                while True:
+                    chunk = stream.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                    total += len(chunk)
+                    if total > expected_size:
+                        raise ValueError(
+                            "candidate license evidence archive file size differs"
+                        )
+                if total != expected_size or digest.hexdigest() != expected_sha256:
+                    raise ValueError(
+                        "candidate license evidence archive file digest differs"
+                    )
+    except tarfile.TarError as exc:
+        raise ValueError("candidate license evidence archive is invalid") from exc
+
+
+def _verify_copied_evidence_file(
+    root: Path,
+    relative: PurePosixPath,
+    *,
+    expected_sha256: str,
+    expected_size: int,
+) -> None:
+    current = root
+    for index, part in enumerate(relative.parts):
+        current = current / part
+        metadata = current.lstat()
+        if current.is_symlink():
+            raise ValueError("copied license evidence path is a symlink")
+        if index < len(relative.parts) - 1 and not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError("copied license evidence parent is not a directory")
+    descriptor = os.open(
+        current,
+        os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
+    )
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_size != expected_size
+        ):
+            raise ValueError("copied license evidence file identity differs")
+        digest = hashlib.sha256()
+        total = 0
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            total += len(chunk)
+            if total > expected_size:
+                raise ValueError("copied license evidence file size differs")
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    def identity(item):
+        return (
+            item.st_dev,
+            item.st_ino,
+            item.st_mode,
+            item.st_nlink,
+            item.st_size,
+            item.st_mtime_ns,
+        )
+    if (
+        identity(before) != identity(after)
+        or total != expected_size
+        or digest.hexdigest() != expected_sha256
+    ):
+        raise ValueError("copied license evidence file digest differs")
+
+
 
 
 def _load_parent_lock(path: Path) -> dict:
@@ -799,10 +1378,10 @@ def _load_parent_lock_bytes(raw: bytes) -> dict:
         or value["reference"] != (
             "ghcr.io/hyeonsangjeon/gdpval-sandbox@" + value["manifest_digest"]
         )
-        or _DIGEST.fullmatch(value["manifest_digest"]) is None
-        or _DIGEST.fullmatch(value["observed_local_image_id"]) is None
+        or not _matches(_DIGEST, value["manifest_digest"])
+        or not _matches(_DIGEST, value["observed_local_image_id"])
         or value["platform"] != "linux/amd64"
-        or _SOURCE_SHA.fullmatch(value["source_revision"]) is None
+        or not _matches(_SOURCE_SHA, value["source_revision"])
         or len(value["v1_dockerfile_sha256"]) != 64
     ):
         raise ValueError("candidate parent lock identity is invalid")
@@ -816,44 +1395,61 @@ def _require_no_credentials() -> None:
 
 
 def _require_local_docker() -> None:
-    completed = subprocess.run(
-        ["docker", "context", "inspect", "--format", "{{json .Endpoints.docker.Host}}"],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+    _require_trusted_executable(_TRUSTED_DOCKER)
+    docker_host = os.getenv("DOCKER_HOST")
+    if docker_host and not docker_host.startswith("unix://"):
+        raise RuntimeError("candidate verifier requires a local Unix Docker daemon")
+    completed = _run_bounded_command(
+        [_TRUSTED_DOCKER, "context", "inspect", "--format", "{{json .Endpoints.docker.Host}}"],
         timeout=30,
-        check=True,
-        text=True,
+        stdout_limit=64 * 1024,
+        stderr_limit=64 * 1024,
     )
-    endpoint = json.loads(completed.stdout)
+    if completed.returncode != 0 or completed.stderr:
+        raise RuntimeError("candidate verifier could not inspect Docker context")
+    endpoint = _bounded_json_loads(completed.stdout)
     if not isinstance(endpoint, str) or not endpoint.startswith("unix://"):
         raise RuntimeError("candidate verifier requires a local Unix Docker daemon")
-    if os.getenv("DOCKER_HOST") and os.environ["DOCKER_HOST"] != endpoint:
+    if docker_host and docker_host != endpoint:
         raise RuntimeError("DOCKER_HOST differs from verified local endpoint")
+
+
+def _docker_environment() -> dict[str, str]:
+    environment = {
+        "PATH": _TRUSTED_PATH,
+        "HOME": "/nonexistent",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+    }
+    docker_host = os.getenv("DOCKER_HOST")
+    if docker_host:
+        if not docker_host.startswith("unix://"):
+            raise RuntimeError("candidate verifier requires a local Unix Docker daemon")
+        environment["DOCKER_HOST"] = docker_host
+    return environment
 
 
 def _remove_container(container: str) -> None:
     try:
-        subprocess.run(
-            ["docker", "container", "rm", "--force", container],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+        _run_bounded_command(
+            [_TRUSTED_DOCKER, "container", "rm", "--force", container],
             timeout=60,
-            check=False,
+            stdout_limit=4096,
+            stderr_limit=64 * 1024,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, RuntimeError, subprocess.SubprocessError):
         pass
     try:
-        inspected = subprocess.run(
-            ["docker", "container", "inspect", container],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+        inspected = _run_bounded_command(
+            [
+                _TRUSTED_DOCKER, "container", "inspect", "--format", "{{.Id}}",
+                container,
+            ],
             timeout=60,
-            check=False,
+            stdout_limit=4096,
+            stderr_limit=64 * 1024,
         )
-    except (OSError, subprocess.SubprocessError) as exc:
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         raise RuntimeError(
             "candidate container cleanup could not be verified"
         ) from exc
@@ -881,9 +1477,10 @@ def _git_blob(
     repository_path: str,
     repository_root: Path = REPOSITORY_ROOT,
 ) -> bytes:
+    _require_trusted_executable(_TRUSTED_GIT)
     return subprocess.run(
         [
-            "git", "--no-replace-objects",
+            _TRUSTED_GIT, "--no-replace-objects",
             "-c", "core.fsmonitor=false",
             "-c", "core.hooksPath=/dev/null",
             "-C", str(repository_root),
@@ -909,10 +1506,11 @@ def _git_blob_sha256(
 
 
 def _require_repository_root(path: Path, source_revision: str) -> Path:
+    _require_trusted_executable(_TRUSTED_GIT)
     root = path.resolve(strict=True)
     completed = subprocess.run(
         [
-            "git", "--no-replace-objects",
+            _TRUSTED_GIT, "--no-replace-objects",
             "-c", "core.fsmonitor=false",
             "-c", "core.hooksPath=/dev/null",
             "-C", str(root), "rev-parse", "--show-toplevel",
@@ -929,7 +1527,7 @@ def _require_repository_root(path: Path, source_revision: str) -> Path:
         raise RuntimeError("candidate repository root identity is invalid")
     subprocess.run(
         [
-            "git", "--no-replace-objects",
+            _TRUSTED_GIT, "--no-replace-objects",
             "-c", "core.fsmonitor=false",
             "-c", "core.hooksPath=/dev/null",
             "-C", str(root),
@@ -947,7 +1545,7 @@ def _require_repository_root(path: Path, source_revision: str) -> Path:
 
 def _git_environment() -> dict[str, str]:
     return {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "PATH": _TRUSTED_PATH,
         "HOME": "/nonexistent",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
@@ -973,12 +1571,21 @@ def _write_json(path: Path, value) -> None:
 
 
 def main() -> None:
+    if (
+        sys.flags.isolated != 1
+        or sys.flags.no_site != 1
+        or not sys.dont_write_bytecode
+    ):
+        raise RuntimeError(
+            "candidate verifier requires isolated no-site no-bytecode startup"
+        )
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True)
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
     parser.add_argument("--oci-layout", required=True, type=Path)
     parser.add_argument("--output-directory", required=True, type=Path)
+    parser.add_argument("--session-id", required=True)
     arguments = parser.parse_args()
     gate = verify_candidate(
         image=arguments.image,
@@ -986,6 +1593,7 @@ def main() -> None:
         repository_root=arguments.repository_root,
         oci_layout=arguments.oci_layout,
         output_directory=arguments.output_directory,
+        session_id=arguments.session_id,
     )
     print(json.dumps(gate, sort_keys=True, separators=(",", ":")))
 
