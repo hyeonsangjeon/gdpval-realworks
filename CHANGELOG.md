@@ -40,7 +40,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   passed, 6 skipped, and 45 integration tests deselected. Independent
   adversarial review finished with zero mandatory or optional findings. No
   model, Azure, grading, Hugging Face write, registry push, publication,
-  workflow dispatch, or paid operation ran.
+  workflow dispatch, or paid operation ran. Shipped through PR #152 from
+  reviewed head `23c61bdfc32ce7afb65606acbb8df6a9eb5b95b7` as squash merge
+  `2f35fe633bab80d76793de78221c2652bc46fa52`. GitHub reported the PR
+  `MERGEABLE` and `CLEAN`; no automatic workflow run was created because the
+  changed paths are outside active automatic workflow filters, and no manual
+  workflow was dispatched to compensate.
 - **Agentic Sandbox V2 Phase 1B professional-work candidate** - add a separate,
   local-only image substrate without activating the Phase 1A executor, Step 2,
   workflows, models, grading, publication, or a registry path. An exact GHCR

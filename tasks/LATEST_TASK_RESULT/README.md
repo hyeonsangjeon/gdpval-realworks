@@ -107,15 +107,20 @@ This is the canonical rolling record of the most recently completed repository t
 
 ## Shipment
 
-- Implementation branch: `feat/agentic-v2-phase1c-license-evidence`.
-- Current reviewed checkpoint: `1397f92b5257747ca3faf99e00a74269d4b14875`.
-- Push, pull request, remote checks, squash merge, and completion-only record PR
-  remain pending at this checkpoint.
+- Exact evidence checkpoint: `1397f92b5257747ca3faf99e00a74269d4b14875`.
+- Reviewed branch head: `23c61bdfc32ce7afb65606acbb8df6a9eb5b95b7`.
+- PR [#152](https://github.com/hyeonsangjeon/gdpval-realworks/pull/152)
+  was squash-merged as `2f35fe633bab80d76793de78221c2652bc46fa52`
+  on 2026-08-01 UTC.
+- GitHub reported the PR `MERGEABLE` and `CLEAN`, with no required review,
+  status check, or branch-protection gate. No automatic PR workflow run was
+  created because the changed paths are outside active automatic workflow
+  filters; no manual workflow was dispatched to compensate.
+- No image, OCI layout, license evidence, or report artifact was pushed or
+  published.
 
 ## Remaining Work
 
-- Ship the reviewed branch through a pull request and record its squash-merge
-  identity; update this rolling record in a completion-only PR if needed.
 - Production remains blocked on enforceable CPU/PID containment, complete
   retained/transitive package artifacts, a pinned CVE scanner and database,
   approved signature trust root, provenance attestation, and a real
