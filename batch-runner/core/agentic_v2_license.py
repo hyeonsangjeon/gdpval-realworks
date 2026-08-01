@@ -2,30 +2,37 @@
 
 from __future__ import annotations
 
+import ast
+import builtins
 import hashlib
 import json
-import marshal
 import os
-import re
 import stat
 import sys
 import types
 import packaging
 import packaging.licenses as packaging_licenses
-from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 from urllib.parse import quote
 
-from packaging.licenses import InvalidLicenseExpression, canonicalize_license_expression
+from packaging.licenses import InvalidLicenseExpression
+from packaging.licenses import (
+    canonicalize_license_expression as _packaging_canonicalize_license_expression,
+)
 from packaging.licenses import _spdx
 
 from core.agentic_v2_substrate import canonical_sha256
 
 
-CLASSIFICATIONS = frozenset({
+_INTERPRETER_FROZENSET_TYPE = (
+    lambda value: value in {"a", "b"}
+).__code__.co_consts[1].__class__
+
+
+CLASSIFICATIONS = _INTERPRETER_FROZENSET_TYPE({
     "resolved",
     "missing_metadata",
     "ambiguous",
@@ -51,58 +58,18 @@ LICENSE_EVALUATOR_RUNTIME_GRAPH_SHA256 = (
 )
 LICENSE_EVALUATOR_PYTHON_VERSION = "3.10.12"
 LICENSE_EVALUATOR_CALLABLE_SHA256 = (
-    "e27e24ff0053d4f68aca4d2ec770d83b8cd8536629c01406c7f5578f6972a78b"
+    "825f97f04b9b94c048326625a7e56b6a0960b196964dabcf4ba7ad3e8e9b3056"
 )
-UNRESOLVED_CLASSIFICATIONS = frozenset({
+UNRESOLVED_CLASSIFICATIONS = _INTERPRETER_FROZENSET_TYPE({
     "missing_metadata", "ambiguous", "unverifiable",
 })
-_HEX_DIGEST = re.compile(r"[0-9a-f]{64}")
-_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
-_SOURCE_SHA = re.compile(r"[0-9a-f]{40}")
-_EXPRESSION_TOKEN = re.compile(
-    r"(?<![A-Za-z0-9.+-])"
-    r"([A-Za-z0-9](?:[A-Za-z0-9.+-]{0,126}[A-Za-z0-9+])?)"
-    r"(?![A-Za-z0-9+-])",
-    re.ASCII,
-)
 _PYTHON_PURELIB_PATH = PurePosixPath("/usr/local/lib/python3.11/site-packages")
 _MAX_LICENSE_EXPRESSION_LENGTH = 4096
 _MAX_LICENSE_EXPRESSION_DEPTH = 64
 _MAX_LICENSE_EXPRESSION_TOKENS = 512
-_R_LICENSE_REFERENCE = re.compile(
-    r"file ([A-Za-z0-9][A-Za-z0-9._+-]*)\Z", re.ASCII
-)
-_NPM_LICENSE_REFERENCE = re.compile(
-    r"SEE LICENSE IN ([A-Za-z0-9][A-Za-z0-9._+-]*)\Z", re.ASCII
-)
-_R_REFERENCE_LIKE = re.compile(r"\bfile\b", re.IGNORECASE | re.ASCII)
-_R_RUNTIME_REFERENCE_LIKE = re.compile(
-    r"(?<![A-Za-z0-9])Part[^A-Za-z0-9]+of[^A-Za-z0-9]+R(?![A-Za-z0-9])",
-    re.IGNORECASE,
-)
-_NPM_REFERENCE_LIKE = re.compile(
-    r"(?<![A-Za-z0-9])SEE[^A-Za-z0-9]+LICENSE[^A-Za-z0-9]+IN"
-    r"(?![A-Za-z0-9])",
-    re.IGNORECASE,
-)
-_LICENSE_FILE_TOKEN_TEXT = re.compile(
-    r"[A-Za-z0-9](?:[A-Za-z0-9.+-]{0,126}[A-Za-z0-9+])?\Z",
-    re.ASCII,
-)
 _DEP5_FORMAT_URI = (
     "https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
 )
-_REGISTERED_SPDX_IDENTIFIERS = frozenset(
-    value["id"]
-    for collection in (_spdx.LICENSES, _spdx.EXCEPTIONS)
-    for value in collection.values()
-)
-
-
-def _matches(pattern: re.Pattern, value: Any) -> bool:
-    return isinstance(value, str) and pattern.fullmatch(value) is not None
-
-
 _EXACT_ALIASES = {
     "2-clause BSD": "BSD-2-Clause",
     "Apache 2.0": "Apache-2.0",
@@ -163,11 +130,10 @@ _PYTHON_EXACT_ALIASES = {
     "LGPLv3+": "LGPL-3.0-or-later",
 }
 
-_DEBIAN_OPERATORS = re.compile(
-    r"(\(|\)|,\s+and\s+|,\s+or\s+|\s+and\s+|\s+or\s+|\s+with\s+)",
-    re.IGNORECASE,
-)
-
+_EXACT_ALIASES = types.MappingProxyType(dict(_EXACT_ALIASES))
+_DEBIAN_EXACT_ALIASES = types.MappingProxyType(dict(_DEBIAN_EXACT_ALIASES))
+_PYTHON_CLASSIFIERS = types.MappingProxyType(dict(_PYTHON_CLASSIFIERS))
+_PYTHON_EXACT_ALIASES = types.MappingProxyType(dict(_PYTHON_EXACT_ALIASES))
 
 @dataclass(frozen=True)
 class _Outcome:
@@ -175,6 +141,724 @@ class _Outcome:
     issue: str | None
     reason: str
     identifiers: frozenset[str]
+
+
+_FROZEN_OUTCOME_TYPE = _Outcome
+_FROZEN_OUTCOME_INIT = _Outcome.__init__
+_FROZEN_OUTCOME_INIT_CODE = _Outcome.__init__.__code__
+_FROZEN_OUTCOME_INIT_DEFAULTS = _Outcome.__init__.__defaults__
+_FROZEN_DATE_TYPE = date
+_FROZEN_CANONICAL_SHA256 = canonical_sha256
+_FROZEN_CANONICAL_SHA256_CODE = canonical_sha256.__code__
+_FROZEN_CANONICAL_SHA256_DEFAULTS = canonical_sha256.__defaults__
+_FROZEN_ALIAS_BINDINGS = (
+    ("debian", _DEBIAN_EXACT_ALIASES),
+    ("exact", _EXACT_ALIASES),
+    ("python-classifiers", _PYTHON_CLASSIFIERS),
+    ("python-exact", _PYTHON_EXACT_ALIASES),
+)
+
+
+def _callable_constant_identity(value):
+    if value is None:
+        return {"type": "none"}
+    if value is Ellipsis:
+        return {"type": "ellipsis"}
+    if type(value) is bool:
+        return {"type": "bool", "value": value}
+    if type(value) is int:
+        return {"type": "int", "value": str(value)}
+    if type(value) is float:
+        return {"type": "float", "value": value.hex()}
+    if type(value) is complex:
+        return {
+            "type": "complex",
+            "real": value.real.hex(),
+            "imag": value.imag.hex(),
+        }
+    if type(value) is str:
+        return {"type": "str", "value": value}
+    if type(value) is bytes:
+        return {"type": "bytes", "value": value.hex()}
+    if type(value) is tuple:
+        return {
+            "type": "tuple",
+            "items": [_callable_constant_identity(item) for item in value],
+        }
+    if type(value) is frozenset:
+        items = [_callable_constant_identity(item) for item in value]
+        return {
+            "type": "frozenset",
+            "items": sorted(
+                items,
+                key=lambda item: json.dumps(
+                    item,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                ),
+            ),
+        }
+    if type(value) is _FROZEN_CODE_TYPE:
+        return {"type": "code", "value": _callable_code_identity(value)}
+    raise RuntimeError("agentic v2 license evaluator code constant is invalid")
+
+
+def _callable_code_identity(code: types.CodeType) -> dict[str, Any]:
+    return {
+        "argcount": code.co_argcount,
+        "posonlyargcount": code.co_posonlyargcount,
+        "kwonlyargcount": code.co_kwonlyargcount,
+        "nlocals": code.co_nlocals,
+        "stacksize": code.co_stacksize,
+        "flags": code.co_flags,
+        "code": code.co_code.hex(),
+        "constants": [
+            _callable_constant_identity(value) for value in code.co_consts
+        ],
+        "names": list(code.co_names),
+        "varnames": list(code.co_varnames),
+        "freevars": list(code.co_freevars),
+        "cellvars": list(code.co_cellvars),
+        "filename": "packaging/licenses/__init__.py",
+        "name": code.co_name,
+        "qualname": getattr(code, "co_qualname", code.co_name),
+        "firstlineno": code.co_firstlineno,
+        "line_table": getattr(code, "co_linetable", code.co_lnotab).hex(),
+        "exception_table": getattr(code, "co_exceptiontable", b"").hex(),
+    }
+
+
+_FROZEN_FUNCTION_TYPE = (lambda: None).__class__
+_FROZEN_CODE_TYPE = (lambda: None).__code__.__class__
+_FROZEN_MAPPING_PROXY_TYPE = _FROZEN_FUNCTION_TYPE.__dict__.__class__
+_FROZEN_BUILTIN_FUNCTION_TYPE = {}.get.__class__
+_FROZEN_STR_TYPE = "".__class__
+_FROZEN_BOOL_TYPE = (1 == 1).__class__
+_FROZEN_DICT_TYPE = {}.__class__
+_FROZEN_FLOAT_TYPE = (0.0).__class__
+_FROZEN_INT_TYPE = (0).__class__
+_FROZEN_LIST_TYPE = [].__class__
+_FROZEN_SET_TYPE = {None}.__class__
+_FROZEN_TUPLE_TYPE = ().__class__
+_FROZEN_TYPE_TYPE = _FROZEN_STR_TYPE.__class__
+_FROZEN_FROZENSET_TYPE = _INTERPRETER_FROZENSET_TYPE
+
+
+def _capture_value_error_type():
+    try:
+        "".index("missing")
+    except:  # noqa: E722
+        return sys.exc_info()[0]
+    raise RuntimeError("agentic v2 ValueError identity is unavailable")
+
+
+_FROZEN_VALUE_ERROR = _capture_value_error_type()
+_FROZEN_EXCEPTION = _FROZEN_VALUE_ERROR.__base__
+_FROZEN_BASE_EXCEPTION = _FROZEN_EXCEPTION.__base__
+
+
+def _capture_recursion_error_type():
+    def recurse():
+        return recurse()
+
+    try:
+        recurse()
+    except _FROZEN_BASE_EXCEPTION:
+        value = sys.exc_info()[0]
+        if value.__module__ == "builtins" and value.__qualname__ == "RecursionError":
+            return value
+    raise RuntimeError("agentic v2 RecursionError identity is unavailable")
+
+
+_FROZEN_RECURSION_ERROR = _capture_recursion_error_type()
+_FROZEN_RUNTIME_ERROR = _FROZEN_RECURSION_ERROR.__base__
+
+
+def _is_ascii_alphanumeric(value: str) -> bool:
+    return (
+        "0" <= value <= "9"
+        or "A" <= value <= "Z"
+        or "a" <= value <= "z"
+    )
+
+
+_FROZEN_ASCII_ALPHANUMERIC = _is_ascii_alphanumeric
+_FROZEN_ASCII_ALPHANUMERIC_CODE = _is_ascii_alphanumeric.__code__
+
+
+def _expression_tokens(
+    value: str,
+    str_type=_FROZEN_STR_TYPE,
+    ascii_alphanumeric=_FROZEN_ASCII_ALPHANUMERIC,
+) -> tuple[str, ...]:
+    if value.__class__ is not str_type:
+        return ()
+    tokens = []
+    start = None
+    index = 0
+    for character in value:
+        allowed = ascii_alphanumeric(character) or character in ".+-"
+        if allowed and start is None:
+            start = index
+        if not allowed and start is not None:
+            candidate = value[start:index]
+            start = None
+            while candidate and candidate[-1] in ".-":
+                candidate = candidate[:-1]
+            if candidate and ascii_alphanumeric(candidate[0]):
+                tokens.append(candidate)
+        index += 1
+    if start is not None:
+        candidate = value[start:]
+        while candidate and candidate[-1] in ".-":
+            candidate = candidate[:-1]
+        if candidate and ascii_alphanumeric(candidate[0]):
+            tokens.append(candidate)
+    return (*tokens,)
+
+
+_FROZEN_EXPRESSION_TOKENS = _expression_tokens
+_FROZEN_EXPRESSION_TOKENS_CODE = _expression_tokens.__code__
+_FROZEN_EXPRESSION_TOKENS_DEFAULTS = _expression_tokens.__defaults__
+
+
+def _license_ref_allowed(
+    value: str,
+    str_type=_FROZEN_STR_TYPE,
+    ascii_alphanumeric=_FROZEN_ASCII_ALPHANUMERIC,
+) -> bool:
+    if value.__class__ is not str_type:
+        return False
+    for character in value:
+        if not ascii_alphanumeric(character) and character not in ".-":
+            return False
+    return True
+
+
+_FROZEN_LICENSE_REF_ALLOWED = _license_ref_allowed
+_FROZEN_LICENSE_REF_ALLOWED_CODE = _license_ref_allowed.__code__
+_FROZEN_LICENSE_REF_ALLOWED_DEFAULTS = _license_ref_allowed.__defaults__
+
+
+def _clone_json(
+    value,
+    bool_type=_FROZEN_BOOL_TYPE,
+    int_type=_FROZEN_INT_TYPE,
+    float_type=_FROZEN_FLOAT_TYPE,
+    str_type=_FROZEN_STR_TYPE,
+    list_type=_FROZEN_LIST_TYPE,
+    dict_type=_FROZEN_DICT_TYPE,
+):
+    scalar_types = {bool_type, int_type, float_type, str_type}
+    def clone(item):
+        if item is None or item.__class__ in scalar_types:
+            return item
+        if item.__class__ is list_type:
+            return [clone(child) for child in item]
+        if item.__class__ is dict_type:
+            return {key: clone(child) for key, child in item.items()}
+        raise RuntimeError("agentic v2 license JSON value type is invalid")
+
+    return clone(value)
+
+
+def _is_lower_hex(
+    value,
+    length: int,
+    str_type=_FROZEN_STR_TYPE,
+) -> bool:
+    if value.__class__ is not str_type or value.__len__() != length:
+        return False
+    for character in value:
+        if not ("0" <= character <= "9" or "a" <= character <= "f"):
+            return False
+    return True
+
+
+def _is_license_file_token(
+    value,
+    str_type=_FROZEN_STR_TYPE,
+    ascii_alphanumeric=_FROZEN_ASCII_ALPHANUMERIC,
+) -> bool:
+    if (
+        value.__class__ is not str_type
+        or not value
+        or value.__len__() > 128
+        or not ascii_alphanumeric(value[0])
+    ):
+        return False
+    if value.__len__() > 1 and not (
+        ascii_alphanumeric(value[-1]) or value[-1] == "+"
+    ):
+        return False
+    for character in value:
+        if not ascii_alphanumeric(character) and character not in ".+-":
+            return False
+    return True
+
+
+def _ascii_words(
+    value,
+    str_type=_FROZEN_STR_TYPE,
+    ascii_alphanumeric=_FROZEN_ASCII_ALPHANUMERIC,
+) -> tuple[str, ...]:
+    if value.__class__ is not str_type:
+        return ()
+    words = []
+    start = None
+    index = 0
+    for character in value:
+        if ascii_alphanumeric(character):
+            if start is None:
+                start = index
+        elif start is not None:
+            words.append(value[start:index].casefold())
+            start = None
+        index += 1
+    if start is not None:
+        words.append(value[start:].casefold())
+    return (*words,)
+
+
+def _contains_words(
+    value,
+    expected: tuple[str, ...],
+    word_parser=_ascii_words,
+) -> bool:
+    words = word_parser(value)
+    width = expected.__len__()
+    if width == 0 or words.__len__() < width:
+        return False
+    index = 0
+    while index <= words.__len__() - width:
+        if words[index:index + width] == expected:
+            return True
+        index += 1
+    return False
+
+
+def _reference_filename(
+    value,
+    prefix: str,
+    str_type=_FROZEN_STR_TYPE,
+    ascii_alphanumeric=_FROZEN_ASCII_ALPHANUMERIC,
+) -> str | None:
+    if value.__class__ is not str_type or not value.startswith(prefix):
+        return None
+    filename = value[prefix.__len__():]
+    if not filename or not ascii_alphanumeric(filename[0]):
+        return None
+    for character in filename:
+        if not ascii_alphanumeric(character) and character not in "._+-":
+            return None
+    return filename
+
+
+def _split_debian_operators(
+    value: str,
+    str_type=_FROZEN_STR_TYPE,
+) -> list[str]:
+    if value.__class__ is not str_type:
+        return []
+    tokens = []
+    start = 0
+    index = 0
+    length = value.__len__()
+    while index < length:
+        if value[index] in "()":
+            if start < index:
+                tokens.append(value[start:index])
+            tokens.append(value[index])
+            index += 1
+            start = index
+            continue
+        candidate_start = index
+        if value[index] == ",":
+            index += 1
+            whitespace_start = index
+            while index < length and value[index].isspace():
+                index += 1
+            if index == whitespace_start:
+                index = candidate_start + 1
+                continue
+        elif value[index].isspace():
+            while index < length and value[index].isspace():
+                index += 1
+        else:
+            index += 1
+            continue
+        for operator in ("and", "or", "with"):
+            end = index + operator.__len__()
+            if (
+                value[index:end].casefold() == operator
+                and end < length
+                and value[end].isspace()
+            ):
+                while end < length and value[end].isspace():
+                    end += 1
+                if start < candidate_start:
+                    tokens.append(value[start:candidate_start])
+                tokens.append(operator)
+                index = end
+                start = end
+                break
+        else:
+            index = candidate_start + 1
+    if start < length:
+        tokens.append(value[start:])
+    return tokens
+
+
+def _freeze_spdx_collection(value, label: str):
+    if type(value) is not dict:
+        raise RuntimeError(f"agentic v2 {label} SPDX table is invalid")
+    frozen = {}
+    for key, item in value.items():
+        if (
+            type(key) is not str
+            or type(item) is not dict
+            or type(item.get("id")) is not str
+            or not item["id"]
+        ):
+            raise RuntimeError(f"agentic v2 {label} SPDX table is invalid")
+        frozen[key] = _FROZEN_MAPPING_PROXY_TYPE({"id": item["id"]})
+    return _FROZEN_MAPPING_PROXY_TYPE(frozen)
+
+
+_FROZEN_LICENSES = _freeze_spdx_collection(_spdx.LICENSES, "license")
+_FROZEN_EXCEPTIONS = _freeze_spdx_collection(_spdx.EXCEPTIONS, "exception")
+_REGISTERED_SPDX_IDENTIFIERS = _FROZEN_FROZENSET_TYPE(
+    value["id"]
+    for collection in (_FROZEN_LICENSES, _FROZEN_EXCEPTIONS)
+    for value in collection.values()
+)
+_TRUSTED_COMPILE = builtins.compile
+_TRUSTED_LEN = builtins.len
+_TRUSTED_ALL = builtins.all
+_TRUSTED_ANY = builtins.any
+_TRUSTED_BOOL = builtins.bool
+_TRUSTED_DICT = builtins.dict
+_TRUSTED_FROZENSET = builtins.frozenset
+_TRUSTED_GETATTR = builtins.getattr
+_TRUSTED_HASATTR = builtins.hasattr
+_TRUSTED_ISINSTANCE = builtins.isinstance
+_TRUSTED_LIST = builtins.list
+_TRUSTED_MAX = builtins.max
+_TRUSTED_MIN = builtins.min
+_TRUSTED_NEXT = builtins.next
+_TRUSTED_SET = builtins.set
+_TRUSTED_SORTED = builtins.sorted
+_TRUSTED_STR = builtins.str
+_TRUSTED_SUM = builtins.sum
+_TRUSTED_TUPLE = builtins.tuple
+_TRUSTED_TYPE = builtins.type
+_FROZEN_UPSTREAM_PARSER_CODE = (
+    _packaging_canonicalize_license_expression.__code__
+)
+
+
+def _capture_syntax_error_type():
+    try:
+        _TRUSTED_COMPILE("(", "", "eval")
+    except _FROZEN_BASE_EXCEPTION:
+        return sys.exc_info()[0]
+    raise RuntimeError("agentic v2 SyntaxError identity is unavailable")
+
+
+_TRUSTED_SYNTAX_ERROR = _capture_syntax_error_type()
+
+
+class _TransformLicenseParser(ast.NodeTransformer):
+    def __init__(self) -> None:
+        self.cast_replacements = 0
+        self.license_ref_replacements = 0
+
+    def visit_Call(self, node):
+        node = self.generic_visit(node)
+        if (
+            isinstance(node.func, ast.Name)
+            and node.func.id == "cast"
+            and len(node.args) == 2
+            and not node.keywords
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "NormalizedLicenseExpression"
+        ):
+            self.cast_replacements += 1
+            return ast.copy_location(node.args[1], node)
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "match"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "license_ref_allowed"
+            and len(node.args) == 1
+            and not node.keywords
+        ):
+            self.license_ref_replacements += 1
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id="_license_ref_allowed", ctx=ast.Load()),
+                    args=node.args,
+                    keywords=[],
+                ),
+                node,
+            )
+        return node
+
+
+def _read_frozen_parser_source() -> bytes:
+    path = Path(str(packaging_licenses.__file__))
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_size < 0
+            or before.st_size > 1024 * 1024
+        ):
+            raise RuntimeError("agentic v2 license parser source is invalid")
+        chunks = []
+        while True:
+            chunk = os.read(descriptor, 64 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    source = b"".join(chunks)
+    def identity(value):
+        return (
+            value.st_dev, value.st_ino, value.st_mode, value.st_nlink,
+            value.st_size, value.st_mtime_ns,
+        )
+
+    if (
+        identity(before) != identity(after)
+        or len(source) != before.st_size
+        or hashlib.sha256(source).hexdigest() != LICENSE_EVALUATOR_PARSER_SHA256
+    ):
+        raise RuntimeError("agentic v2 license parser source identity differs")
+    return source
+
+
+def _build_frozen_parser_code() -> types.CodeType:
+    tree = ast.parse(
+        _read_frozen_parser_source(),
+        filename="packaging/licenses/__init__.py",
+        mode="exec",
+    )
+    functions = [
+        node for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "canonicalize_license_expression"
+    ]
+    if len(functions) != 1 or not isinstance(functions[0], ast.FunctionDef):
+        raise RuntimeError("agentic v2 license parser function is invalid")
+    function = functions[0]
+    function.decorator_list = []
+    function.returns = None
+    for argument in (
+        *function.args.posonlyargs,
+        *function.args.args,
+        *function.args.kwonlyargs,
+    ):
+        argument.annotation = None
+    transformer = _TransformLicenseParser()
+    function = transformer.visit(function)
+    if (
+        transformer.cast_replacements != 1
+        or transformer.license_ref_replacements != 1
+    ):
+        raise RuntimeError("agentic v2 license parser transform shape is invalid")
+    module = ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[]))
+    namespace = {"__builtins__": {}}
+    exec(
+        _TRUSTED_COMPILE(
+            module,
+            "packaging/licenses/__init__.py",
+            "exec",
+            dont_inherit=True,
+            optimize=2,
+        ),
+        namespace,
+    )
+    parser = namespace.get("canonicalize_license_expression")
+    if type(parser) is not _FROZEN_FUNCTION_TYPE:
+        raise RuntimeError("agentic v2 frozen license parser is invalid")
+    return parser.__code__
+
+
+_FROZEN_PARSER_CODE = _build_frozen_parser_code()
+
+
+def _license_parser_binding_identity() -> dict[str, Any]:
+    if (
+        builtins.compile is not _TRUSTED_COMPILE
+        or builtins.len is not _TRUSTED_LEN
+        or builtins.all is not _TRUSTED_ALL
+        or builtins.any is not _TRUSTED_ANY
+        or builtins.bool is not _TRUSTED_BOOL
+        or builtins.dict is not _TRUSTED_DICT
+        or builtins.frozenset is not _TRUSTED_FROZENSET
+        or builtins.getattr is not _TRUSTED_GETATTR
+        or builtins.hasattr is not _TRUSTED_HASATTR
+        or builtins.isinstance is not _TRUSTED_ISINSTANCE
+        or builtins.list is not _TRUSTED_LIST
+        or builtins.max is not _TRUSTED_MAX
+        or builtins.min is not _TRUSTED_MIN
+        or builtins.next is not _TRUSTED_NEXT
+        or builtins.set is not _TRUSTED_SET
+        or builtins.sorted is not _TRUSTED_SORTED
+        or builtins.str is not _TRUSTED_STR
+        or builtins.sum is not _TRUSTED_SUM
+        or builtins.tuple is not _TRUSTED_TUPLE
+        or builtins.type is not _TRUSTED_TYPE
+        or builtins.SyntaxError is not _TRUSTED_SYNTAX_ERROR
+        or _TRUSTED_SYNTAX_ERROR.__module__ != "builtins"
+        or _TRUSTED_SYNTAX_ERROR.__qualname__ != "SyntaxError"
+        or _TRUSTED_SYNTAX_ERROR.__mro__[1:] != (
+            _FROZEN_EXCEPTION,
+            _FROZEN_BASE_EXCEPTION,
+            object,
+        )
+        or _FROZEN_VALUE_ERROR.__module__ != "builtins"
+        or _FROZEN_VALUE_ERROR.__qualname__ != "ValueError"
+        or _FROZEN_VALUE_ERROR.__mro__[1:] != (
+            _FROZEN_EXCEPTION,
+            _FROZEN_BASE_EXCEPTION,
+            object,
+        )
+        or builtins.RecursionError is not _FROZEN_RECURSION_ERROR
+        or _FROZEN_RECURSION_ERROR.__mro__[1:] != (
+            _FROZEN_RUNTIME_ERROR,
+            _FROZEN_EXCEPTION,
+            _FROZEN_BASE_EXCEPTION,
+            object,
+        )
+        or InvalidLicenseExpression is not packaging_licenses.InvalidLicenseExpression
+        or InvalidLicenseExpression.__module__ != "packaging.licenses"
+        or InvalidLicenseExpression.__qualname__ != "InvalidLicenseExpression"
+        or InvalidLicenseExpression.__bases__ != (_FROZEN_VALUE_ERROR,)
+        or _packaging_canonicalize_license_expression.__defaults__ is not None
+        or _packaging_canonicalize_license_expression.__kwdefaults__ is not None
+        or _packaging_canonicalize_license_expression.__closure__ is not None
+    ):
+        raise RuntimeError("agentic v2 license evaluator binding identity differs")
+    try:
+        _TRUSTED_COMPILE("(", "", "eval")
+    except _FROZEN_BASE_EXCEPTION:
+        if sys.exc_info()[0] is not _TRUSTED_SYNTAX_ERROR:
+            raise RuntimeError(
+                "agentic v2 license evaluator builtin behavior differs"
+            )
+    else:
+        raise RuntimeError("agentic v2 license evaluator builtin behavior differs")
+    return {
+        "builtins": [
+            _trusted_builtin_identity(_TRUSTED_ALL, "all"),
+            _trusted_builtin_identity(_TRUSTED_ANY, "any"),
+            _trusted_builtin_identity(_TRUSTED_COMPILE, "compile"),
+            _trusted_builtin_identity(_TRUSTED_GETATTR, "getattr"),
+            _trusted_builtin_identity(_TRUSTED_HASATTR, "hasattr"),
+            _trusted_builtin_identity(_TRUSTED_ISINSTANCE, "isinstance"),
+            _trusted_builtin_identity(_TRUSTED_LEN, "len"),
+            _trusted_builtin_identity(_TRUSTED_MAX, "max"),
+            _trusted_builtin_identity(_TRUSTED_MIN, "min"),
+            _trusted_builtin_identity(_TRUSTED_NEXT, "next"),
+            _trusted_builtin_identity(_TRUSTED_SORTED, "sorted"),
+            _trusted_builtin_identity(_TRUSTED_SUM, "sum"),
+            _trusted_type_identity(_TRUSTED_BOOL, _FROZEN_BOOL_TYPE, "bool"),
+            _trusted_type_identity(_TRUSTED_DICT, _FROZEN_DICT_TYPE, "dict"),
+            _trusted_type_identity(
+                _TRUSTED_FROZENSET,
+                _FROZEN_FROZENSET_TYPE,
+                "frozenset",
+            ),
+            _trusted_type_identity(_TRUSTED_LIST, _FROZEN_LIST_TYPE, "list"),
+            _trusted_type_identity(_TRUSTED_SET, _FROZEN_SET_TYPE, "set"),
+            _trusted_type_identity(_TRUSTED_STR, _FROZEN_STR_TYPE, "str"),
+            _trusted_type_identity(_TRUSTED_TUPLE, _FROZEN_TUPLE_TYPE, "tuple"),
+            _trusted_type_identity(_TRUSTED_TYPE, _FROZEN_TYPE_TYPE, "type"),
+            {"module": "builtins", "qualname": "SyntaxError"},
+            {"module": "builtins", "qualname": "ValueError"},
+            {"module": "builtins", "qualname": "RecursionError"},
+        ],
+        "exceptions": sorted(
+            (key, value["id"]) for key, value in _FROZEN_EXCEPTIONS.items()
+        ),
+        "invalid_expression": {
+            "module": "builtins",
+            "qualname": "ValueError",
+        },
+        "licenses": sorted(
+            (key, value["id"]) for key, value in _FROZEN_LICENSES.items()
+        ),
+        "transform": "remove-cast-and-license-ref-regex-v2",
+        "function_type": {"module": "builtins", "qualname": "function"},
+    }
+
+
+def _execute_frozen_license_parser(
+    value: str,
+    _code=_FROZEN_PARSER_CODE,
+    _function_type=_FROZEN_FUNCTION_TYPE,
+    _compile=_TRUSTED_COMPILE,
+    _length=_TRUSTED_LEN,
+    _syntax_error=_TRUSTED_SYNTAX_ERROR,
+    _licenses=_FROZEN_LICENSES,
+    _exceptions=_FROZEN_EXCEPTIONS,
+    _license_ref_allowed=_FROZEN_LICENSE_REF_ALLOWED,
+    _invalid_expression=_FROZEN_VALUE_ERROR,
+):
+    parser_globals = {
+        "__builtins__": {
+            "compile": _compile,
+            "len": _length,
+            "SyntaxError": _syntax_error,
+        },
+        "EXCEPTIONS": _exceptions,
+        "InvalidLicenseExpression": _invalid_expression,
+        "LICENSES": _licenses,
+        "_license_ref_allowed": _license_ref_allowed,
+    }
+    parser = _function_type(
+        _code,
+        parser_globals,
+        "canonicalize_license_expression",
+    )
+    return parser(value)
+
+
+_FROZEN_PARSER_EXECUTOR = _execute_frozen_license_parser
+_FROZEN_PARSER_EXECUTOR_CODE = _execute_frozen_license_parser.__code__
+_FROZEN_PARSER_EXECUTOR_DEFAULTS = _execute_frozen_license_parser.__defaults__
+
+
+def _trusted_builtin_identity(value, name: str) -> dict[str, str]:
+    if (
+        value.__class__ is not _FROZEN_BUILTIN_FUNCTION_TYPE
+        or value.__module__ != "builtins"
+        or value.__name__ != name
+        or value.__qualname__ != name
+        or value.__self__ is not builtins
+    ):
+        raise RuntimeError("agentic v2 license evaluator builtin identity differs")
+    return {"module": "builtins", "qualname": name}
+
+
+def _trusted_type_identity(value, expected, name: str) -> dict[str, str]:
+    if (
+        value is not expected
+        or value.__class__ is not _FROZEN_TYPE_TYPE
+        or value.__module__ != "builtins"
+        or value.__name__ != name
+        or value.__qualname__ != name
+    ):
+        raise RuntimeError("agentic v2 license evaluator type identity differs")
+    return {"module": "builtins", "qualname": name}
 
 
 def license_evaluator_runtime_identity() -> dict[str, str]:
@@ -191,15 +875,62 @@ def license_evaluator_runtime_identity() -> dict[str, str]:
         packaging_path != expected_paths["packaging/__init__.py"]
         or parser_path != expected_paths["packaging/licenses/__init__.py"]
         or spdx_path != expected_paths["packaging/licenses/_spdx.py"]
-        or canonicalize_license_expression
+        or _packaging_canonicalize_license_expression
         is not packaging_licenses.canonicalize_license_expression
-        or canonicalize_license_expression.__module__ != "packaging.licenses"
-        or canonicalize_license_expression.__qualname__
+        or _packaging_canonicalize_license_expression.__module__
+        != "packaging.licenses"
+        or _packaging_canonicalize_license_expression.__qualname__
         != "canonicalize_license_expression"
-        or not hasattr(canonicalize_license_expression, "__code__")
-        or Path(canonicalize_license_expression.__code__.co_filename) != parser_path
-        or canonicalize_license_expression.__globals__
+        or not hasattr(_packaging_canonicalize_license_expression, "__code__")
+        or Path(
+            _packaging_canonicalize_license_expression.__code__.co_filename
+        ) != parser_path
+        or _packaging_canonicalize_license_expression.__code__
+        is not _FROZEN_UPSTREAM_PARSER_CODE
+        or _packaging_canonicalize_license_expression.__globals__
         is not packaging_licenses.__dict__
+        or _execute_frozen_license_parser is not _FROZEN_PARSER_EXECUTOR
+        or _execute_frozen_license_parser.__code__
+        is not _FROZEN_PARSER_EXECUTOR_CODE
+        or _execute_frozen_license_parser.__defaults__
+        is not _FROZEN_PARSER_EXECUTOR_DEFAULTS
+        or _is_ascii_alphanumeric is not _FROZEN_ASCII_ALPHANUMERIC
+        or _is_ascii_alphanumeric.__code__
+        is not _FROZEN_ASCII_ALPHANUMERIC_CODE
+        or _expression_tokens is not _FROZEN_EXPRESSION_TOKENS
+        or _expression_tokens.__code__ is not _FROZEN_EXPRESSION_TOKENS_CODE
+        or _expression_tokens.__defaults__
+        is not _FROZEN_EXPRESSION_TOKENS_DEFAULTS
+        or _license_ref_allowed is not _FROZEN_LICENSE_REF_ALLOWED
+        or _license_ref_allowed.__code__ is not _FROZEN_LICENSE_REF_ALLOWED_CODE
+        or _license_ref_allowed.__defaults__
+        is not _FROZEN_LICENSE_REF_ALLOWED_DEFAULTS
+        or _identifiers is not _FROZEN_IDENTIFIERS
+        or _identifiers.__code__ is not _FROZEN_IDENTIFIERS_CODE
+        or _identifiers.__defaults__ is not _FROZEN_IDENTIFIERS_DEFAULTS
+        or _valid_expression_shape is not _FROZEN_VALID_EXPRESSION_SHAPE
+        or _valid_expression_shape.__code__
+        is not _FROZEN_VALID_EXPRESSION_SHAPE_CODE
+        or _valid_expression_shape.__defaults__
+        is not _FROZEN_VALID_EXPRESSION_SHAPE_DEFAULTS
+        or _canonical is not _FROZEN_CANONICAL
+        or _canonical.__code__ is not _FROZEN_CANONICAL_CODE
+        or _canonical.__defaults__ is not _FROZEN_CANONICAL_DEFAULTS
+        or _classification_surface_identity
+        is not _FROZEN_CLASSIFICATION_IDENTITY
+        or _classification_surface_identity.__code__
+        is not _FROZEN_CLASSIFICATION_IDENTITY_CODE
+        or _classification_surface_identity.__defaults__
+        is not _FROZEN_CLASSIFICATION_IDENTITY_DEFAULTS
+        or _Outcome is not _FROZEN_OUTCOME_TYPE
+        or _Outcome.__init__ is not _FROZEN_OUTCOME_INIT
+        or _Outcome.__init__.__code__ is not _FROZEN_OUTCOME_INIT_CODE
+        or _Outcome.__init__.__defaults__ is not _FROZEN_OUTCOME_INIT_DEFAULTS
+        or date is not _FROZEN_DATE_TYPE
+        or canonical_sha256 is not _FROZEN_CANONICAL_SHA256
+        or canonical_sha256.__code__ is not _FROZEN_CANONICAL_SHA256_CODE
+        or canonical_sha256.__defaults__ is not _FROZEN_CANONICAL_SHA256_DEFAULTS
+        or types.FunctionType is not _FROZEN_FUNCTION_TYPE
         or packaging_licenses.LICENSES is not _spdx.LICENSES
         or packaging_licenses.EXCEPTIONS is not _spdx.EXCEPTIONS
         or InvalidLicenseExpression
@@ -260,19 +991,119 @@ def license_evaluator_runtime_identity() -> dict[str, str]:
             "sha256": hashlib.sha256(source_bytes).hexdigest(),
             "size": len(source_bytes),
         })
-    def normalize_code(code):
-        constants = tuple(
-            normalize_code(value) if isinstance(value, types.CodeType) else value
-            for value in code.co_consts
+    current_licenses = _freeze_spdx_collection(_spdx.LICENSES, "license")
+    current_exceptions = _freeze_spdx_collection(_spdx.EXCEPTIONS, "exception")
+    if (
+        dict(current_licenses) != dict(_FROZEN_LICENSES)
+        or dict(current_exceptions) != dict(_FROZEN_EXCEPTIONS)
+    ):
+        raise RuntimeError("agentic v2 license evaluator SPDX bindings differ")
+    alias_globals = {
+        "debian": _DEBIAN_EXACT_ALIASES,
+        "exact": _EXACT_ALIASES,
+        "python-classifiers": _PYTHON_CLASSIFIERS,
+        "python-exact": _PYTHON_EXACT_ALIASES,
+    }
+    for name, mapping in _FROZEN_ALIAS_BINDINGS:
+        if (
+            alias_globals.get(name) is not mapping
+            or mapping.__class__ is not _FROZEN_MAPPING_PROXY_TYPE
+            or any(
+                key.__class__ is not _FROZEN_STR_TYPE
+                or value.__class__ is not _FROZEN_STR_TYPE
+                for key, value in mapping.items()
+            )
+        ):
+            raise RuntimeError("agentic v2 license alias bindings differ")
+    policy_date = _FROZEN_DATE_TYPE.fromisoformat("2026-07-31")
+    later_date = _FROZEN_DATE_TYPE.fromisoformat("2027-07-31")
+    if (
+        policy_date.__class__ is not _FROZEN_DATE_TYPE
+        or policy_date.isoformat() != "2026-07-31"
+        or later_date.__class__ is not _FROZEN_DATE_TYPE
+        or not policy_date < later_date
+        or _FROZEN_DATE_TYPE.__module__ != "datetime"
+        or _FROZEN_DATE_TYPE.__qualname__ != "date"
+    ):
+        raise RuntimeError("agentic v2 license date binding differs")
+    if (
+        _FROZEN_IDENTIFIERS_DEFAULTS != (
+            _FROZEN_EXPRESSION_TOKENS,
+            _FROZEN_FROZENSET_TYPE,
         )
-        return code.replace(
-            co_consts=constants,
-            co_filename="packaging/licenses/__init__.py",
+        or _FROZEN_EXPRESSION_TOKENS_DEFAULTS != (
+            _FROZEN_STR_TYPE,
+            _FROZEN_ASCII_ALPHANUMERIC,
         )
-
-    callable_sha256 = hashlib.sha256(marshal.dumps(normalize_code(
-        canonicalize_license_expression.__code__
-    ))).hexdigest()
+        or _FROZEN_LICENSE_REF_ALLOWED_DEFAULTS != (
+            _FROZEN_STR_TYPE,
+            _FROZEN_ASCII_ALPHANUMERIC,
+        )
+        or _FROZEN_VALID_EXPRESSION_SHAPE_DEFAULTS != (
+            _FROZEN_STR_TYPE,
+            _TRUSTED_LEN,
+            _MAX_LICENSE_EXPRESSION_LENGTH,
+            _MAX_LICENSE_EXPRESSION_DEPTH,
+            _MAX_LICENSE_EXPRESSION_TOKENS,
+        )
+        or _FROZEN_CANONICAL_DEFAULTS != (
+            _FROZEN_PARSER_EXECUTOR,
+            _FROZEN_VALID_EXPRESSION_SHAPE,
+            _FROZEN_IDENTIFIERS,
+            _REGISTERED_SPDX_IDENTIFIERS,
+            (_FROZEN_VALUE_ERROR, _FROZEN_RECURSION_ERROR),
+            _FROZEN_STR_TYPE,
+        )
+    ):
+        raise RuntimeError("agentic v2 canonicalizer bindings differ")
+    callable_sha256 = canonical_sha256({
+        "aliases": {
+            name: sorted(mapping.items())
+            for name, mapping in _FROZEN_ALIAS_BINDINGS
+        },
+        "bindings": _license_parser_binding_identity(),
+        "canonical": _callable_code_identity(_FROZEN_CANONICAL_CODE),
+        "canonical_sha256": _callable_code_identity(
+            _FROZEN_CANONICAL_SHA256_CODE
+        ),
+        "classification_checker": _callable_code_identity(
+            _FROZEN_CLASSIFICATION_IDENTITY_CODE
+        ),
+        "classification_surface": _classification_surface_identity(),
+        "canonical_bindings": {
+            "errors": ["builtins.RecursionError", "builtins.ValueError"],
+            "expression_tokenizer": "ascii-alnum-dot-plus-hyphen-v1",
+            "limits": {
+                "depth": _MAX_LICENSE_EXPRESSION_DEPTH,
+                "length": _MAX_LICENSE_EXPRESSION_LENGTH,
+                "tokens": _MAX_LICENSE_EXPRESSION_TOKENS,
+            },
+            "registered": sorted(_REGISTERED_SPDX_IDENTIFIERS),
+            "return_type": "builtins.str",
+        },
+        "executor": _callable_code_identity(_FROZEN_PARSER_EXECUTOR_CODE),
+        "expression_tokens": _callable_code_identity(
+            _FROZEN_EXPRESSION_TOKENS_CODE
+        ),
+        "identifiers": _callable_code_identity(_FROZEN_IDENTIFIERS_CODE),
+        "license_ref_allowed": _callable_code_identity(
+            _FROZEN_LICENSE_REF_ALLOWED_CODE
+        ),
+        "outcome": {
+            "init": _callable_code_identity(_FROZEN_OUTCOME_INIT_CODE),
+            "module": _FROZEN_OUTCOME_TYPE.__module__,
+            "qualname": _FROZEN_OUTCOME_TYPE.__qualname__,
+        },
+        "parser": _callable_code_identity(_FROZEN_PARSER_CODE),
+        "shape": _callable_code_identity(
+            _FROZEN_VALID_EXPRESSION_SHAPE_CODE
+        ),
+        "date": {
+            "module": "datetime",
+            "qualname": "date",
+            "ordering": "2026-07-31<2027-07-31",
+        },
+    })
     payload = {
         "packaging_version": packaging.__version__,
         "spdx_version": _spdx.VERSION,
@@ -303,16 +1134,30 @@ def license_evaluator_runtime_identity() -> dict[str, str]:
     return identity
 
 
-def _identifiers(expression: str) -> frozenset[str]:
-    return frozenset(
+def _identifiers(
+    expression: str,
+    tokenizer=_FROZEN_EXPRESSION_TOKENS,
+    frozen_type=_FROZEN_FROZENSET_TYPE,
+) -> frozenset[str]:
+    return frozen_type(
         token
-        for token in _EXPRESSION_TOKEN.findall(expression)
+        for token in tokenizer(expression)
         if token not in {"AND", "OR", "WITH"}
     )
 
 
-def _valid_expression_shape(expression: Any) -> bool:
-    if not isinstance(expression, str) or len(expression) > _MAX_LICENSE_EXPRESSION_LENGTH:
+def _valid_expression_shape(
+    expression: Any,
+    str_type=_FROZEN_STR_TYPE,
+    length=_TRUSTED_LEN,
+    max_length=_MAX_LICENSE_EXPRESSION_LENGTH,
+    max_depth=_MAX_LICENSE_EXPRESSION_DEPTH,
+    max_tokens=_MAX_LICENSE_EXPRESSION_TOKENS,
+) -> bool:
+    if (
+        expression.__class__ is not str_type
+        or length(expression) > max_length
+    ):
         return False
     depth = 0
     maximum_depth = 0
@@ -321,7 +1166,8 @@ def _valid_expression_shape(expression: Any) -> bool:
     for character in expression:
         if character == "(":
             depth += 1
-            maximum_depth = max(maximum_depth, depth)
+            if depth > maximum_depth:
+                maximum_depth = depth
             tokens += 1
             in_token = False
         elif character == ")":
@@ -339,23 +1185,44 @@ def _valid_expression_shape(expression: Any) -> bool:
             tokens += 1
             in_token = True
         if (
-            maximum_depth > _MAX_LICENSE_EXPRESSION_DEPTH
-            or tokens > _MAX_LICENSE_EXPRESSION_TOKENS
+            maximum_depth > max_depth
+            or tokens > max_tokens
         ):
             return False
     return depth == 0
 
 
-def _canonical(expression: Any) -> str | None:
-    if not _valid_expression_shape(expression):
+def _canonical(
+    expression: Any,
+    parser=_FROZEN_PARSER_EXECUTOR,
+    valid_shape=_valid_expression_shape,
+    identifiers=_identifiers,
+    registered=_REGISTERED_SPDX_IDENTIFIERS,
+    errors=(_FROZEN_VALUE_ERROR, _FROZEN_RECURSION_ERROR),
+    str_type=_FROZEN_STR_TYPE,
+) -> str | None:
+    if not valid_shape(expression):
         return None
     try:
-        canonical = str(canonicalize_license_expression(expression))
-    except (InvalidLicenseExpression, RecursionError):
+        canonical = parser(expression)
+    except errors:
         return None
-    if not _identifiers(canonical).issubset(_REGISTERED_SPDX_IDENTIFIERS):
+    if canonical.__class__ is not str_type:
+        return None
+    if not identifiers(canonical).issubset(registered):
         return None
     return canonical
+
+
+_FROZEN_IDENTIFIERS = _identifiers
+_FROZEN_IDENTIFIERS_CODE = _identifiers.__code__
+_FROZEN_IDENTIFIERS_DEFAULTS = _identifiers.__defaults__
+_FROZEN_VALID_EXPRESSION_SHAPE = _valid_expression_shape
+_FROZEN_VALID_EXPRESSION_SHAPE_CODE = _valid_expression_shape.__code__
+_FROZEN_VALID_EXPRESSION_SHAPE_DEFAULTS = _valid_expression_shape.__defaults__
+_FROZEN_CANONICAL = _canonical
+_FROZEN_CANONICAL_CODE = _canonical.__code__
+_FROZEN_CANONICAL_DEFAULTS = _canonical.__defaults__
 
 
 def _atom(value: str, aliases: Mapping[str, str]) -> _Outcome:
@@ -378,12 +1245,14 @@ def _atom(value: str, aliases: Mapping[str, str]) -> _Outcome:
         None,
         "ambiguous" if ambiguous else "unverifiable",
         "ambiguous-license-label" if ambiguous else "unmapped-exact-license-label",
-        frozenset(),
+        _FROZEN_FROZENSET_TYPE(),
     )
 
 
 def _combine(operator: str, outcomes: list[_Outcome], reason: str) -> _Outcome:
-    identifiers = frozenset().union(*(item.identifiers for item in outcomes))
+    identifiers = _FROZEN_FROZENSET_TYPE().union(
+        *(item.identifiers for item in outcomes)
+    )
     issues = [item.issue for item in outcomes if item.issue]
     if issues:
         issue = "ambiguous" if "ambiguous" in issues else "unverifiable"
@@ -406,12 +1275,15 @@ def _debian_expression(raw: str) -> _Outcome:
             None,
             "unverifiable",
             "invalid-debian-license-expression-shape",
-            frozenset(),
+            _FROZEN_FROZENSET_TYPE(),
         )
     direct = _atom(raw, {**_EXACT_ALIASES, **_DEBIAN_EXACT_ALIASES})
     if direct.expression is not None:
         return direct
-    tokens = [token for token in _DEBIAN_OPERATORS.split(raw) if token and token.strip()]
+    tokens = [
+        token for token in _split_debian_operators(raw)
+        if token and token.strip()
+    ]
     if len(tokens) == 1:
         return direct
 
@@ -517,7 +1389,7 @@ def _python_outcome(record: Mapping[str, Any]) -> _Outcome:
             ambiguous_classifier = True
         else:
             unknown_classifier = True
-    all_identifiers = frozenset().union(*(
+    all_identifiers = _FROZEN_FROZENSET_TYPE().union(*(
         item.identifiers for item in outcomes + classifier_values
     ))
     if unknown_classifier:
@@ -579,7 +1451,9 @@ def _python_outcome(record: Mapping[str, Any]) -> _Outcome:
     if len(resolved) > 1:
         return _Outcome(
             None, "ambiguous", "conflicting-python-license-metadata",
-            frozenset().union(*(item.identifiers for item in outcomes + classifier_values)),
+            _FROZEN_FROZENSET_TYPE().union(*(
+                item.identifiers for item in outcomes + classifier_values
+            )),
         )
     if resolved:
         return _Outcome(
@@ -588,8 +1462,18 @@ def _python_outcome(record: Mapping[str, Any]) -> _Outcome:
             _identifiers(resolved[0]),
         )
     if not record["raw_values"]:
-        return _Outcome(None, "missing_metadata", "python-license-metadata-missing", frozenset())
-    return _Outcome(None, "unverifiable", "python-license-metadata-unverifiable", frozenset())
+        return _Outcome(
+            None,
+            "missing_metadata",
+            "python-license-metadata-missing",
+            _FROZEN_FROZENSET_TYPE(),
+        )
+    return _Outcome(
+        None,
+        "unverifiable",
+        "python-license-metadata-unverifiable",
+        _FROZEN_FROZENSET_TYPE(),
+    )
 
 
 def _r_outcome(record: Mapping[str, Any]) -> _Outcome:
@@ -602,7 +1486,7 @@ def _r_outcome(record: Mapping[str, Any]) -> _Outcome:
             None,
             "unverifiable",
             "invalid-r-license-expression-shape",
-            frozenset(),
+            _FROZEN_FROZENSET_TYPE(),
         )
     if (
         isinstance(declared, str)
@@ -618,22 +1502,27 @@ def _r_outcome(record: Mapping[str, Any]) -> _Outcome:
                 None,
                 "unverifiable",
                 "r-runtime-copyright-unstructured",
-                frozenset(),
+                _FROZEN_FROZENSET_TYPE(),
             )
         if not isinstance(runtime, str) or not runtime:
-            return _Outcome(None, "missing_metadata", "r-runtime-license-missing", frozenset())
+            return _Outcome(
+                None,
+                "missing_metadata",
+                "r-runtime-license-missing",
+                _FROZEN_FROZENSET_TYPE(),
+            )
         if not _valid_expression_shape(runtime):
             return _Outcome(
                 None,
                 "unverifiable",
                 "invalid-r-license-expression-shape",
-                frozenset(),
+                _FROZEN_FROZENSET_TYPE(),
             )
         parts = [part.strip() for part in runtime.split("|")]
         if not parts or any(not part for part in parts):
             return _Outcome(
                 None, "unverifiable", "invalid-r-license-alternatives",
-                frozenset(),
+                _FROZEN_FROZENSET_TYPE(),
             )
         outcomes = [_atom(part, _DEBIAN_EXACT_ALIASES) for part in parts]
         return _combine("OR", outcomes, "r-base-runtime-license")
@@ -642,18 +1531,23 @@ def _r_outcome(record: Mapping[str, Any]) -> _Outcome:
             None,
             "unverifiable",
             "invalid-r-runtime-license-reference",
-            frozenset(),
+            _FROZEN_FROZENSET_TYPE(),
         )
     if isinstance(declared, str) and declared:
         parts = [part.strip() for part in declared.split("|")]
         if not parts or any(not part for part in parts):
             return _Outcome(
                 None, "unverifiable", "invalid-r-license-alternatives",
-                frozenset(),
+                _FROZEN_FROZENSET_TYPE(),
             )
         outcomes = [_atom(part, _DEBIAN_EXACT_ALIASES) for part in parts]
         return _combine("OR", outcomes, "r-description-license")
-    return _Outcome(None, "missing_metadata", "r-license-metadata-missing", frozenset())
+    return _Outcome(
+        None,
+        "missing_metadata",
+        "r-license-metadata-missing",
+        _FROZEN_FROZENSET_TYPE(),
+    )
 
 
 def _normalize(record: Mapping[str, Any]) -> _Outcome:
@@ -669,7 +1563,7 @@ def _normalize(record: Mapping[str, Any]) -> _Outcome:
                     None,
                     "unverifiable",
                     "debian-copyright-path-unverifiable",
-                    frozenset(),
+                    _FROZEN_FROZENSET_TYPE(),
                 )
             if not any(
                 item["source"] == "debian-copyright"
@@ -679,11 +1573,11 @@ def _normalize(record: Mapping[str, Any]) -> _Outcome:
                     None,
                     "missing_metadata",
                     "debian-copyright-metadata-missing",
-                    frozenset(),
+                    _FROZEN_FROZENSET_TYPE(),
                 )
             return _Outcome(
                 None, "unverifiable", "debian-copyright-has-no-dep5-license-fields",
-                frozenset(),
+                _FROZEN_FROZENSET_TYPE(),
             )
         outcomes = [_debian_expression(value) for value in raw_values]
         return _combine("AND", outcomes, "debian-file-stanza-license-conjunction")
@@ -693,13 +1587,18 @@ def _normalize(record: Mapping[str, Any]) -> _Outcome:
         return _r_outcome(record)
     if ecosystem == "npm":
         if not record["raw_values"]:
-            return _Outcome(None, "missing_metadata", "npm-license-missing", frozenset())
+            return _Outcome(
+                None,
+                "missing_metadata",
+                "npm-license-missing",
+                _FROZEN_FROZENSET_TYPE(),
+            )
         return _atom(record["raw_values"][0], _EXACT_ALIASES)
     raise ValueError("unsupported license evidence ecosystem")
 
 
 def _validate_evidence_item(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping) or set(value) != {
+    if not isinstance(value, Mapping) or {item for item in value} != {
         "source", "path", "resolved_path", "sha256", "size",
     }:
         raise ValueError("agentic v2 license evidence item fields are invalid")
@@ -707,7 +1606,7 @@ def _validate_evidence_item(value: Any) -> dict[str, Any]:
     if (
         not isinstance(item["source"], str)
         or not item["source"]
-        or not _matches(_HEX_DIGEST, item["sha256"])
+        or not _is_lower_hex(item["sha256"], 64)
         or type(item["size"]) is not int
         or item["size"] < 0
     ):
@@ -759,11 +1658,11 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
     def valid_file_tokens(value: Any) -> bool:
         return (
             isinstance(value, list)
-            and value == sorted(set(value))
+            and value == sorted({item for item in value})
             and len(value) <= 4096
             and all(
                 isinstance(item, str)
-                and _LICENSE_FILE_TOKEN_TEXT.fullmatch(item) is not None
+                and _is_license_file_token(item)
                 and "-" in item
                 for item in value
             )
@@ -779,7 +1678,7 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
             if item["source"] == "debian-copyright-path-unverifiable"
         ]
         if (
-            set(metadata) != {"architecture", "copyright_format"}
+            {item for item in metadata} != {"architecture", "copyright_format"}
             or not isinstance(metadata["architecture"], str)
             or not metadata["architecture"]
             or metadata["architecture"] != metadata["architecture"].strip()
@@ -791,7 +1690,7 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
                 or metadata["copyright_format"]
                 != metadata["copyright_format"].strip()
             )
-            or raw_values != sorted(set(raw_values))
+            or raw_values != sorted({item for item in raw_values})
             or any(
                 not isinstance(item, str)
                 or not item
@@ -853,7 +1752,7 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
         return
     if ecosystem == "python":
         if (
-            set(metadata) != {
+            {item for item in metadata} != {
                 "license_expression", "license", "classifiers",
                 "license_file_tokens", "license_files",
             }
@@ -862,7 +1761,9 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
                 for key in ("license_expression", "license")
             )
             or not isinstance(metadata["classifiers"], list)
-            or metadata["classifiers"] != sorted(set(metadata["classifiers"]))
+            or metadata["classifiers"] != sorted({
+                item for item in metadata["classifiers"]
+            })
             or any(not isinstance(item, str) for item in metadata["classifiers"])
             or not valid_file_tokens(metadata["license_file_tokens"])
             or not isinstance(metadata["license_files"], list)
@@ -896,11 +1797,11 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
             raise ValueError("agentic v2 Python METADATA path is invalid")
         distribution_root = metadata_file.parent
         expected_paths = []
-        declared = set()
+        declared = {item for item in ()}
         for selection in metadata["license_files"]:
             if (
                 not isinstance(selection, Mapping)
-                or set(selection) != {"declared", "path"}
+                or {item for item in selection} != {"declared", "path"}
                 or not isinstance(selection["declared"], str)
                 or not selection["declared"]
                 or PurePosixPath(selection["declared"]).is_absolute()
@@ -931,7 +1832,7 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
         return
     if ecosystem == "r":
         if (
-            set(metadata) != {
+            {item for item in metadata} != {
                 "declared_license", "priority", "runtime_license",
                 "runtime_license_fields", "runtime_copyright_format",
                 "runtime_version",
@@ -959,9 +1860,9 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
                 or metadata["priority"] != metadata["priority"].strip()
             )
             or not isinstance(metadata["runtime_license_fields"], list)
-            or metadata["runtime_license_fields"] != sorted(
-                set(metadata["runtime_license_fields"])
-            )
+            or metadata["runtime_license_fields"] != sorted({
+                item for item in metadata["runtime_license_fields"]
+            })
             or any(
                 not isinstance(item, str)
                 or not item
@@ -983,7 +1884,7 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
             if value
         ]
         sources = [item["source"] for item in evidence]
-        reference = _R_LICENSE_REFERENCE.fullmatch(metadata["declared_license"])
+        reference = _reference_filename(metadata["declared_license"], "file ")
         reference_items = [item for item in evidence if item["source"] == "r-license-file"]
         if (
             raw_values != expected_raw
@@ -1047,7 +1948,7 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
                 _require_resolved_under(item, "/usr/share/R/share/licenses")
         if reference is not None:
             referenced_path = (
-                f"/usr/lib/R/library/{record['package']}/{reference.group(1)}"
+            f"/usr/lib/R/library/{record['package']}/{reference}"
             )
             _require_exact_path(reference_items[0], referenced_path)
             _require_resolved_under(
@@ -1055,7 +1956,10 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
             )
         return
     if ecosystem == "npm":
-        reference = _NPM_LICENSE_REFERENCE.fullmatch(metadata.get("license", ""))
+        reference = _reference_filename(
+            metadata.get("license", ""),
+            "SEE LICENSE IN ",
+        )
         package_items = [
             item for item in evidence if item["source"] == "npm-package-json"
         ]
@@ -1063,7 +1967,7 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
             item for item in evidence if item["source"] == "npm-license-file"
         ]
         if (
-            set(metadata) != {"license", "license_file_tokens"}
+            {item for item in metadata} != {"license", "license_file_tokens"}
             or not isinstance(metadata["license"], str)
             or not metadata["license"]
             or metadata["license"] != metadata["license"].strip()
@@ -1079,7 +1983,7 @@ def _validate_record_metadata(record: dict[str, Any]) -> None:
         _require_resolved_under(package_items[0], "/usr/share/nodejs/npm")
         if reference is not None:
             _require_exact_path(
-                reference_items[0], f"/usr/share/nodejs/npm/{reference.group(1)}"
+                reference_items[0], f"/usr/share/nodejs/npm/{reference}"
             )
             _require_resolved_under(reference_items[0], "/usr/share/nodejs/npm")
         return
@@ -1090,11 +1994,11 @@ def validate_license_evidence(
     value: Any,
     sbom: Mapping[str, Any],
 ) -> dict[str, Any]:
-    if not isinstance(value, Mapping) or set(value) != {
+    if not isinstance(value, Mapping) or {item for item in value} != {
         "schema_version", "collector", "records", "records_sha256",
     }:
         raise ValueError("agentic v2 license evidence fields are invalid")
-    document = deepcopy(dict(value))
+    document = _clone_json({key: item for key, item in value.items()})
     if (
         document["schema_version"] != "1.0"
         or document["collector"] != "gdpval-agentic-v2-license-evidence-v1"
@@ -1122,7 +2026,7 @@ def validate_license_evidence(
         "npm": "pkg:npm/",
     }
     for raw_record in document["records"]:
-        if not isinstance(raw_record, Mapping) or set(raw_record) != {
+        if not isinstance(raw_record, Mapping) or {item for item in raw_record} != {
             "ecosystem", "package", "version", "purl", "raw_values",
             "metadata", "evidence",
         }:
@@ -1190,8 +2094,11 @@ def validate_license_evidence(
     }
     if len(debian_status_identities) > 1:
         raise ValueError("agentic v2 Debian status evidence identity is inconsistent")
-    if set(records) != set(packages) or document["records"] != sorted(
+    if (
+        {item for item in records} != {item for item in packages}
+        or document["records"] != sorted(
         document["records"], key=lambda item: item["purl"]
+        )
     ):
         raise ValueError("agentic v2 license evidence package inventory mismatch")
     return document
@@ -1212,14 +2119,16 @@ def validate_license_exceptions(policy: Mapping[str, Any]) -> list[dict[str, Any
     if not isinstance(exceptions, list):
         raise ValueError("agentic v2 license exceptions are invalid")
     validated = []
-    identities = set()
+    identities = {item for item in ()}
     expected_fields = {
         "ecosystem", "package", "version", "purl", "normalized_expression",
         "evidence_sha256", "reason", "approver", "expires_at",
     }
-    denied_identifiers = set(license_policy.get("denied_identifiers", []))
+    denied_identifiers = {
+        item for item in license_policy.get("denied_identifiers", [])
+    }
     for raw in exceptions:
-        if not isinstance(raw, Mapping) or set(raw) != expected_fields:
+        if not isinstance(raw, Mapping) or {item for item in raw} != expected_fields:
             raise ValueError("agentic v2 license exception fields are invalid")
         item = dict(raw)
         normalized = _canonical(item["normalized_expression"])
@@ -1235,7 +2144,7 @@ def validate_license_exceptions(policy: Mapping[str, Any]) -> list[dict[str, Any
                     "reason", "approver", "expires_at",
                 )
             )
-            or not _matches(_HEX_DIGEST, item["evidence_sha256"])
+            or not _is_lower_hex(item["evidence_sha256"], 64)
             or normalized != item["normalized_expression"]
             or bool(denied_identifiers.intersection(
                 _identifiers(item["normalized_expression"])
@@ -1264,25 +2173,27 @@ def _decision(
     exceptions: Mapping[tuple[str, str], Mapping[str, Any]],
 ) -> dict[str, Any]:
     outcome = _normalize(record)
-    evidence = deepcopy(record["evidence"])
+    evidence = _clone_json(record["evidence"])
     evidence_sha256 = canonical_sha256(evidence)
     policy_by_casefold = {
         identifier.casefold(): identifier for identifier in denied_identifiers
     }
-    raw_identifiers = set()
+    raw_identifiers = {item for item in ()}
     for raw in record["raw_values"]:
-        for token in _EXPRESSION_TOKEN.findall(raw):
+        for token in _FROZEN_EXPRESSION_TOKENS(raw):
             if token.upper() in {"AND", "OR", "WITH"}:
                 continue
-            spdx = _spdx.LICENSES.get(token.casefold()) or _spdx.EXCEPTIONS.get(
+            spdx = _FROZEN_LICENSES.get(
                 token.casefold()
-            )
+            ) or _FROZEN_EXCEPTIONS.get(token.casefold())
             if spdx is not None:
                 raw_identifiers.add(spdx["id"])
             elif token.casefold() in policy_by_casefold:
                 raw_identifiers.add(policy_by_casefold[token.casefold()])
     denied = sorted(
-        denied_identifiers.intersection(outcome.identifiers | frozenset(raw_identifiers))
+        denied_identifiers.intersection(
+            outcome.identifiers | _FROZEN_FROZENSET_TYPE(raw_identifiers)
+        )
     )
     if denied:
         classification = "denied"
@@ -1308,7 +2219,7 @@ def _decision(
         runtime_version = record["metadata"].get("runtime_version")
         if (
             isinstance(declared, str)
-            and _R_RUNTIME_REFERENCE_LIKE.search(declared)
+            and _contains_words(declared, ("part", "of", "r"))
         ):
             reference_evidence_complete = (
                 declared == f"Part of R {runtime_version}"
@@ -1320,9 +2231,9 @@ def _decision(
                     for item in record["evidence"]
                 ) == 1
             )
-        elif isinstance(declared, str) and _R_REFERENCE_LIKE.search(declared):
+        elif isinstance(declared, str) and _contains_words(declared, ("file",)):
             reference_evidence_complete = (
-                _R_LICENSE_REFERENCE.fullmatch(declared) is not None
+            _reference_filename(declared, "file ") is not None
                 and sum(
                     item["source"] == "r-license-file"
                     for item in record["evidence"]
@@ -1330,9 +2241,12 @@ def _decision(
             )
     elif record["ecosystem"] == "npm":
         declared = record["metadata"].get("license", "")
-        if isinstance(declared, str) and _NPM_REFERENCE_LIKE.search(declared):
+        if (
+            isinstance(declared, str)
+            and _contains_words(declared, ("see", "license", "in"))
+        ):
             reference_evidence_complete = (
-                _NPM_LICENSE_REFERENCE.fullmatch(declared) is not None
+                _reference_filename(declared, "SEE LICENSE IN ") is not None
                 and sum(
                     item["source"] == "npm-license-file"
                     for item in record["evidence"]
@@ -1352,7 +2266,9 @@ def _decision(
         classification = "exception"
         normalized_expression = exception["normalized_expression"]
         reason = "package-version-specific-policy-exception"
-        exception_applied = deepcopy(dict(exception))
+        exception_applied = _clone_json({
+            key: item for key, item in exception.items()
+        })
     return {
         "ecosystem": record["ecosystem"],
         "package": record["package"],
@@ -1360,7 +2276,7 @@ def _decision(
         "purl": record["purl"],
         "classification": classification,
         "normalized_expression": normalized_expression,
-        "raw_values": deepcopy(record["raw_values"]),
+        "raw_values": _clone_json(record["raw_values"]),
         "normalization_reason": reason,
         "denied_identifiers": denied,
         "evidence": evidence,
@@ -1406,7 +2322,9 @@ def build_license_report(
         (item["purl"], item["evidence_sha256"]): item
         for item in exceptions
     }
-    denied_identifiers = set(policy["license"]["denied_identifiers"])
+    denied_identifiers = {
+        item for item in policy["license"]["denied_identifiers"]
+    }
     records_by_purl = {item["purl"]: item for item in evidence["records"]}
     decisions = [
         _decision(records_by_purl[purl], denied_identifiers, exception_map)
@@ -1417,7 +2335,7 @@ def build_license_report(
         for decision in decisions
         if decision["exception"] is not None
     }
-    if applied_exceptions != set(exception_map):
+    if applied_exceptions != {item for item in exception_map}:
         raise ValueError("agentic v2 license exception is stale or unmatched")
     counts = {name: 0 for name in sorted(CLASSIFICATIONS)}
     ecosystem_counts = {
@@ -1469,6 +2387,73 @@ def build_license_report(
     return report
 
 
+_CLASSIFICATION_SURFACE_NAMES = (
+    "_clone_json",
+    "_is_lower_hex",
+    "_is_license_file_token",
+    "_ascii_words",
+    "_contains_words",
+    "_reference_filename",
+    "_split_debian_operators",
+    "_identifiers",
+    "_valid_expression_shape",
+    "_canonical",
+    "_atom",
+    "_combine",
+    "_debian_expression",
+    "_python_outcome",
+    "_r_outcome",
+    "_normalize",
+    "_validate_evidence_item",
+    "_validate_record_metadata",
+    "validate_license_evidence",
+    "validate_license_exceptions",
+    "_decision",
+    "build_license_report",
+)
+_MODULE_GLOBALS = globals()
+_FROZEN_CLASSIFICATION_SURFACE = _FROZEN_MAPPING_PROXY_TYPE({
+    name: (
+        _MODULE_GLOBALS[name],
+        _MODULE_GLOBALS[name].__code__,
+        _MODULE_GLOBALS[name].__defaults__,
+        _MODULE_GLOBALS[name].__kwdefaults__,
+    )
+    for name in _CLASSIFICATION_SURFACE_NAMES
+})
+
+
+def _classification_surface_identity(
+    _module_globals=_MODULE_GLOBALS,
+    _surface=_FROZEN_CLASSIFICATION_SURFACE,
+    _names=_CLASSIFICATION_SURFACE_NAMES,
+) -> dict[str, Any]:
+    identity = {}
+    for name in _names:
+        expected_function, expected_code, expected_defaults, expected_kwdefaults = (
+            _surface[name]
+        )
+        current = _module_globals.get(name)
+        if (
+            current is not expected_function
+            or current.__code__ is not expected_code
+            or current.__defaults__ is not expected_defaults
+            or current.__kwdefaults__ is not expected_kwdefaults
+        ):
+            raise RuntimeError(
+                "agentic v2 license classification surface differs"
+            )
+        identity[name] = _callable_code_identity(expected_code)
+    return identity
+
+
+_FROZEN_CLASSIFICATION_IDENTITY = _classification_surface_identity
+_FROZEN_CLASSIFICATION_IDENTITY_CODE = _classification_surface_identity.__code__
+_FROZEN_CLASSIFICATION_IDENTITY_DEFAULTS = (
+    _classification_surface_identity.__defaults__
+)
+
+
 def validate_license_report(
     value: Any,
     *,
@@ -1489,12 +2474,12 @@ def validate_license_report(
     )
     if not isinstance(value, Mapping):
         raise ValueError("agentic v2 license report identity is invalid")
-    supplied = deepcopy(dict(value))
+    supplied = _clone_json({key: item for key, item in value.items()})
     claimed = supplied.pop("report_sha256", None)
     if (
-        not _matches(_HEX_DIGEST, claimed)
+        not _is_lower_hex(claimed, 64)
         or claimed != canonical_sha256(supplied)
         or canonical_sha256(value) != canonical_sha256(expected)
     ):
         raise ValueError("agentic v2 license report identity is invalid")
-    return deepcopy(expected)
+    return _clone_json(expected)

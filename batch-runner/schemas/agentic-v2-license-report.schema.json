@@ -101,7 +101,7 @@
         "license_evaluator_packaging_version": {"const": "26.2"},
         "license_evaluator_parser_sha256": {"const": "fc9c745d1883ff9f296a5b169f22eb2ee879f59a4608f20f5cb29d668f4e26f4"},
         "license_evaluator_python_version": {"const": "3.10.12"},
-        "license_evaluator_callable_sha256": {"const": "e27e24ff0053d4f68aca4d2ec770d83b8cd8536629c01406c7f5578f6972a78b"},
+        "license_evaluator_callable_sha256": {"const": "825f97f04b9b94c048326625a7e56b6a0960b196964dabcf4ba7ad3e8e9b3056"},
         "license_evaluator_runtime_graph_sha256": {"const": "8fff34b3a069995de020a123594de0254935b12ab154b272057807c8de7be459"},
         "license_evaluator_spdx_version": {"const": "3.27.0"},
         "license_evaluator_spdx_sha256": {"const": "ecc082fdc1fcdcae47b2f56c4ce2cdc2c9d6d54ca555a09814abd78dece7a230"},

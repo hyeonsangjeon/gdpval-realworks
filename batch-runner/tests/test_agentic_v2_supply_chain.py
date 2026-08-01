@@ -60,7 +60,7 @@ def _subject(manifest):
         ),
         "license_evaluator_python_version": "3.10.12",
         "license_evaluator_callable_sha256": (
-            "e27e24ff0053d4f68aca4d2ec770d83b8cd8536629c01406c7f5578f6972a78b"
+            "825f97f04b9b94c048326625a7e56b6a0960b196964dabcf4ba7ad3e8e9b3056"
         ),
         "license_evaluator_runtime_graph_sha256": (
             "8fff34b3a069995de020a123594de0254935b12ab154b272057807c8de7be459"

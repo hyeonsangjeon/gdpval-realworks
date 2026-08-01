@@ -65,7 +65,7 @@ def _subject():
         ),
         "license_evaluator_python_version": "3.10.12",
         "license_evaluator_callable_sha256": (
-            "e27e24ff0053d4f68aca4d2ec770d83b8cd8536629c01406c7f5578f6972a78b"
+            "825f97f04b9b94c048326625a7e56b6a0960b196964dabcf4ba7ad3e8e9b3056"
         ),
         "license_evaluator_runtime_graph_sha256": (
             "8fff34b3a069995de020a123594de0254935b12ab154b272057807c8de7be459"
@@ -407,6 +407,470 @@ def test_phase1c_evaluator_callable_tamper_is_rejected(monkeypatch):
 
     with pytest.raises(RuntimeError, match="parser identity differs"):
         license_module.license_evaluator_runtime_identity()
+
+
+def test_phase1c_evaluator_callable_constant_subclass_is_rejected(monkeypatch):
+    original = license_module._packaging_canonicalize_license_expression
+
+    class ForgedString(str):
+        def join(self, iterable):
+            del iterable
+            return "MIT"
+
+    def replace_constant(value):
+        if type(value) is str and value == " ":
+            return ForgedString(value)
+        if type(value) is tuple:
+            return tuple(replace_constant(item) for item in value)
+        if type(value) is license_module.types.CodeType:
+            return value.replace(
+                co_consts=tuple(
+                    replace_constant(item) for item in value.co_consts
+                )
+            )
+        return value
+
+    forged_code = replace_constant(original.__code__)
+    with pytest.raises(RuntimeError, match="code constant is invalid"):
+        license_module._callable_code_identity(forged_code)
+    monkeypatch.setattr(original, "__code__", forged_code)
+
+    with pytest.raises(RuntimeError, match="parser identity differs"):
+        license_module.license_evaluator_runtime_identity()
+
+
+def test_phase1c_evaluator_live_parser_global_is_not_executed(monkeypatch):
+    monkeypatch.setattr(
+        license_module.packaging_licenses,
+        "cast",
+        lambda _type, _value: "MIT",
+    )
+
+    assert license_module._canonical("BUSL-1.1") == "BUSL-1.1"
+    assert license_module.license_evaluator_runtime_identity()[
+        "callable_sha256"
+    ] == license_module.LICENSE_EVALUATOR_CALLABLE_SHA256
+
+
+def test_phase1c_evaluator_executor_code_mutation_is_rejected(monkeypatch):
+    def forged(_value):
+        return "MIT"
+
+    monkeypatch.setattr(
+        license_module._execute_frozen_license_parser,
+        "__code__",
+        forged.__code__,
+    )
+
+    with pytest.raises(RuntimeError, match="parser identity differs"):
+        license_module.license_evaluator_runtime_identity()
+
+
+def test_phase1c_evaluator_function_factory_rebinding_is_rejected(monkeypatch):
+    monkeypatch.setattr(
+        license_module.types,
+        "FunctionType",
+        lambda *_args, **_kwargs: (lambda _value: "MIT"),
+    )
+
+    assert license_module._canonical("BUSL-1.1") == "BUSL-1.1"
+    with pytest.raises(RuntimeError, match="parser identity differs"):
+        license_module.license_evaluator_runtime_identity()
+
+
+def test_phase1c_evaluator_spdx_subclass_poisoning_is_rejected(monkeypatch):
+    class ForgedString(str):
+        def __add__(self, _other):
+            return "MIT"
+
+    poisoned = dict(license_module._spdx.LICENSES)
+    poisoned["busl-1.1"] = dict(poisoned["busl-1.1"])
+    poisoned["busl-1.1"]["id"] = ForgedString("BUSL-1.1")
+    monkeypatch.setattr(license_module._spdx, "LICENSES", poisoned)
+
+    assert license_module._canonical("BUSL-1.1") == "BUSL-1.1"
+    with pytest.raises(RuntimeError, match="parser identity differs"):
+        license_module.license_evaluator_runtime_identity()
+
+
+def test_phase1c_evaluator_preimport_builtin_poisoning_is_rejected():
+    script = (
+        "import builtins\n"
+        "original = builtins.compile\n"
+        "def forged(source, filename, mode, *args, **kwargs):\n"
+        "    if isinstance(source, str) and mode == 'eval' and source != '(':\n"
+        "        source = 'False'\n"
+        "    return original(source, filename, mode, *args, **kwargs)\n"
+        "builtins.compile = forged\n"
+        "import core.agentic_v2_license as module\n"
+        "try:\n"
+        "    module.license_evaluator_runtime_identity()\n"
+        "except RuntimeError:\n"
+        "    print('rejected')\n"
+        "else:\n"
+        "    raise SystemExit('poisoned compile was accepted')\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    assert completed.stdout == b"rejected\n"
+
+
+def test_phase1c_evaluator_preimport_regex_poisoning_has_no_effect():
+    script = (
+        "import re, runpy\n"
+        "original = re.compile\n"
+        "class ForgedPattern:\n"
+        "    def __init__(self, pattern, flags):\n"
+        "        self.pattern = pattern\n"
+        "        self.flags = flags\n"
+        "    def findall(self, _value): return []\n"
+        "    def match(self, _value): return None\n"
+        "def forged(pattern, flags=0):\n"
+        "    if isinstance(pattern, str) and (pattern == '^[A-Za-z0-9.-]*$' "
+        "or 'A-Za-z0-9.+-' in pattern):\n"
+        "        return ForgedPattern(pattern, flags)\n"
+        "    return original(pattern, flags)\n"
+        "re.compile = forged\n"
+        "namespace = runpy.run_path('tests/test_agentic_v2_phase1c_license.py')\n"
+        "report = namespace['_fixture']()[-1]\n"
+        "assert report['counts']['denied'] == 1\n"
+        "assert report['status'] == 'failed'\n"
+        "print('regex-poisoning-isolated')\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=60,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    assert completed.stdout == b"regex-poisoning-isolated\n"
+
+
+def test_phase1c_evaluator_preimport_set_poisoning_is_rejected():
+    script = (
+        "import copy, inspect, json, os, pathlib, py_compile, signal, "
+        "subprocess, sys, types, pytest, jsonschema, builtins, runpy\n"
+        "import core.agentic_v2_substrate\n"
+        "original = builtins.set\n"
+        "def forged(iterable=()):\n"
+        "    value = original(iterable)\n"
+        "    if value == {'BUSL-1.1', 'Commons-Clause', 'SSPL-1.0'}:\n"
+        "        return original()\n"
+        "    return value\n"
+        "builtins.set = forged\n"
+        "try:\n"
+        "    namespace = runpy.run_path('tests/test_agentic_v2_phase1c_license.py')\n"
+        "    namespace['_fixture']()\n"
+        "except Exception:\n"
+        "    print('set-poisoning-rejected')\n"
+        "else:\n"
+        "    raise SystemExit('poisoned set was accepted')\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=60,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    assert completed.stdout == b"set-poisoning-rejected\n"
+
+
+def test_phase1c_evaluator_preimport_enumerate_poisoning_has_no_effect():
+    script = (
+        "import copy, inspect, json, os, pathlib, py_compile, signal, "
+        "subprocess, sys, types, pytest, jsonschema, builtins, runpy\n"
+        "import core.agentic_v2_substrate\n"
+        "original = builtins.enumerate\n"
+        "def forged(iterable, start=0):\n"
+        "    if isinstance(iterable, str) and 'BUSL-1.1' in iterable:\n"
+        "        return iter(())\n"
+        "    return original(iterable, start)\n"
+        "builtins.enumerate = forged\n"
+        "namespace = runpy.run_path('tests/test_agentic_v2_phase1c_license.py')\n"
+        "report = namespace['_fixture']()[-1]\n"
+        "assert report['counts']['denied'] == 1\n"
+        "print('enumerate-poisoning-isolated')\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=60,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    assert completed.stdout == b"enumerate-poisoning-isolated\n"
+
+
+def test_phase1c_evaluator_preimport_tuple_poisoning_is_rejected():
+    script = (
+        "import copy, inspect, json, os, pathlib, py_compile, signal, "
+        "subprocess, sys, types, pytest, jsonschema, builtins, runpy\n"
+        "import core.agentic_v2_substrate\n"
+        "original = builtins.tuple\n"
+        "def forged(iterable=()): return original(iterable)\n"
+        "builtins.tuple = forged\n"
+        "try:\n"
+        "    namespace = runpy.run_path('tests/test_agentic_v2_phase1c_license.py')\n"
+        "    namespace['_fixture']()\n"
+        "except Exception:\n"
+        "    print('tuple-poisoning-rejected')\n"
+        "else:\n"
+        "    raise SystemExit('poisoned tuple was accepted')\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=60,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    assert completed.stdout == b"tuple-poisoning-rejected\n"
+
+
+def test_phase1c_evaluator_preimport_deepcopy_poisoning_has_no_effect():
+    script = (
+        "import copy, runpy\n"
+        "original = copy.deepcopy\n"
+        "def forged(value, memo=None, _nil=[]):\n"
+        "    result = original(value, memo)\n"
+        "    if isinstance(result, dict) and result.get('raw_values') "
+        "== ['SSPL-1.0']:\n"
+        "        result['raw_values'] = ['MIT']\n"
+        "    return result\n"
+        "copy.deepcopy = forged\n"
+        "namespace = runpy.run_path('tests/test_agentic_v2_phase1c_license.py')\n"
+        "report = namespace['_fixture']()[-1]\n"
+        "assert report['counts']['denied'] == 1\n"
+        "assert report['status'] == 'failed'\n"
+        "print('deepcopy-poisoning-isolated')\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=60,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    assert completed.stdout == b"deepcopy-poisoning-isolated\n"
+
+
+def test_phase1c_evaluator_preimport_reference_regex_poisoning_has_no_effect():
+    script = (
+        "import re, runpy\n"
+        "original = re.compile\n"
+        "class ForgedPattern:\n"
+        "    def __init__(self, pattern, flags):\n"
+        "        self.pattern = pattern\n"
+        "        self.flags = flags\n"
+        "    def fullmatch(self, _value): return None\n"
+        "    def search(self, _value): return None\n"
+        "def forged(pattern, flags=0):\n"
+        "    if isinstance(pattern, str) and ('SEE LICENSE IN' in pattern "
+        "or 'file (' in pattern or 'Part' in pattern):\n"
+        "        return ForgedPattern(pattern, flags)\n"
+        "    return original(pattern, flags)\n"
+        "re.compile = forged\n"
+        "namespace = runpy.run_path('tests/test_agentic_v2_phase1c_license.py')\n"
+        "namespace['test_phase1c_unicode_npm_reference_cannot_receive_exception']"
+        "('SEE\\u00a0LICENSE\\u00a0IN LICENSE')\n"
+        "namespace['test_phase1c_unstructured_r_runtime_cannot_receive_exception']"
+        "('(Part of R anything)', 'optional')\n"
+        "print('reference-regex-poisoning-isolated')\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=60,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    assert completed.stdout == b"reference-regex-poisoning-isolated\n"
+
+
+@pytest.mark.parametrize("mutation", ["canonical-code", "canonical-defaults", "shape-code"])
+def test_phase1c_evaluator_canonicalizer_mutation_is_rejected(
+    monkeypatch,
+    mutation,
+):
+    def forged(_value):
+        return "MIT"
+
+    if mutation == "canonical-code":
+        monkeypatch.setattr(license_module._canonical, "__code__", forged.__code__)
+    elif mutation == "canonical-defaults":
+        defaults = list(license_module._canonical.__defaults__)
+        defaults[0] = forged
+        monkeypatch.setattr(license_module._canonical, "__defaults__", tuple(defaults))
+    else:
+        monkeypatch.setattr(
+            license_module._valid_expression_shape,
+            "__code__",
+            forged.__code__,
+        )
+
+    with pytest.raises(RuntimeError, match="parser identity differs"):
+        license_module.license_evaluator_runtime_identity()
+
+
+def test_phase1c_evaluator_decision_mutation_is_rejected(monkeypatch):
+    def forged(*_args, **_kwargs):
+        return {"classification": "resolved"}
+
+    monkeypatch.setattr(license_module._decision, "__code__", forged.__code__)
+
+    with pytest.raises(RuntimeError, match="classification surface differs"):
+        license_module.license_evaluator_runtime_identity()
+
+
+def test_phase1c_evaluator_shadow_module_globals_cannot_hide_decision_rebinding(
+    monkeypatch,
+):
+    def forged(*_args, **_kwargs):
+        return {"classification": "resolved"}
+
+    monkeypatch.setattr(
+        license_module,
+        "_MODULE_GLOBALS",
+        dict(license_module._MODULE_GLOBALS),
+    )
+    monkeypatch.setattr(license_module, "_decision", forged)
+
+    with pytest.raises(RuntimeError, match="classification surface differs"):
+        license_module.license_evaluator_runtime_identity()
+
+
+def test_phase1c_evaluator_alias_rebinding_is_rejected(monkeypatch):
+    aliases = dict(license_module._PYTHON_EXACT_ALIASES)
+    aliases["Proprietary"] = "MIT"
+    monkeypatch.setattr(license_module, "_PYTHON_EXACT_ALIASES", aliases)
+
+    with pytest.raises(RuntimeError, match="alias bindings differ"):
+        license_module.license_evaluator_runtime_identity()
+
+
+@pytest.mark.parametrize("dependency", ["outcome", "date", "hash"])
+def test_phase1c_evaluator_dependency_mutation_is_rejected(
+    monkeypatch,
+    dependency,
+):
+    if dependency == "outcome":
+        def forged_init(self, expression, issue, reason, identifiers):
+            del expression, issue, reason, identifiers
+            object.__setattr__(self, "expression", "MIT")
+
+        monkeypatch.setattr(
+            license_module._Outcome,
+            "__init__",
+            forged_init,
+        )
+    elif dependency == "date":
+        monkeypatch.setattr(license_module, "date", object)
+    else:
+        monkeypatch.setattr(
+            license_module,
+            "canonical_sha256",
+            lambda _value: "0" * 64,
+        )
+
+    with pytest.raises(RuntimeError, match="parser identity differs"):
+        license_module.license_evaluator_runtime_identity()
+
+
+def test_phase1c_evaluator_preimport_hash_poisoning_is_rejected():
+    script = (
+        "import core.agentic_v2_substrate as substrate\n"
+        "original = substrate.canonical_sha256\n"
+        "def forged(value): return original(value)\n"
+        "substrate.canonical_sha256 = forged\n"
+        "import core.agentic_v2_license as module\n"
+        "try:\n"
+        "    module.license_evaluator_runtime_identity()\n"
+        "except RuntimeError:\n"
+        "    print('hash-poisoning-rejected')\n"
+        "else:\n"
+        "    raise SystemExit('poisoned hash was accepted')\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    assert completed.stdout == b"hash-poisoning-rejected\n"
+
+
+def test_phase1c_evaluator_callable_identity_is_import_order_stable():
+    outputs = []
+    for prelude in ("", "import core.executor\n"):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                prelude
+                + "import core.agentic_v2_license as module\n"
+                + "print(module.license_evaluator_runtime_identity()"
+                + "['callable_sha256'])\n",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        assert completed.returncode == 0, completed.stderr.decode(
+            "utf-8", errors="replace"
+        )
+        outputs.append(completed.stdout.decode("ascii").strip())
+
+    assert outputs == [license_module.LICENSE_EVALUATOR_CALLABLE_SHA256] * 2
 
 
 def test_phase1c_staged_evaluator_runtime_is_source_only(tmp_path):
@@ -1203,7 +1667,7 @@ def test_phase1c_report_binds_candidate_oci_sbom_evidence_tools_and_policy():
         ),
         "license_evaluator_python_version": "3.10.12",
         "license_evaluator_callable_sha256": (
-            "e27e24ff0053d4f68aca4d2ec770d83b8cd8536629c01406c7f5578f6972a78b"
+            "825f97f04b9b94c048326625a7e56b6a0960b196964dabcf4ba7ad3e8e9b3056"
         ),
         "license_evaluator_runtime_graph_sha256": (
             "8fff34b3a069995de020a123594de0254935b12ab154b272057807c8de7be459"
@@ -3628,16 +4092,13 @@ def test_phase1c_license_expression_depth_is_bounded_below_size_limit():
 )
 def test_phase1c_expression_shape_rejects_before_parser(
     expression,
-    monkeypatch,
 ):
     assert len(expression) < 4096
-    monkeypatch.setattr(
-        license_module,
-        "canonicalize_license_expression",
-        lambda _value: pytest.fail("invalid shape reached SPDX parser"),
-    )
 
-    assert license_module._canonical(expression) is None
+    assert license_module._canonical(
+        expression,
+        parser=lambda _value: pytest.fail("invalid shape reached SPDX parser"),
+    ) is None
 
 
 @pytest.mark.parametrize(
@@ -3682,14 +4143,11 @@ def test_phase1c_r_fallback_cannot_bypass_expression_shape():
     assert outcome.reason == "invalid-r-license-expression-shape"
 
 
-def test_phase1c_spdx_parser_recursion_is_normalized(monkeypatch):
-    monkeypatch.setattr(
-        license_module,
-        "canonicalize_license_expression",
-        lambda _value: (_ for _ in ()).throw(RecursionError("fixture")),
-    )
-
-    assert license_module._canonical("MIT") is None
+def test_phase1c_spdx_parser_recursion_is_normalized():
+    assert license_module._canonical(
+        "MIT",
+        parser=lambda _value: (_ for _ in ()).throw(RecursionError("fixture")),
+    ) is None
 
 
 @pytest.mark.parametrize("declared", ["MIT || Apache-2.0", "| MIT", "MIT |"])
