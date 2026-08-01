@@ -12,6 +12,35 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Agentic Sandbox V2 Phase 1C deterministic license evidence closure** - add
+  model-free, exact-image Debian, Python, R, and npm license collection with
+  same-descriptor bytes and hashes; host-owned SPDX normalization; honest
+  `missing_metadata`, `ambiguous`, and `unverifiable` outcomes; denied-first
+  decisions; and package/version/purl/evidence-digest/expression/reviewer-bound
+  exceptions. The evaluator is staged from pinned Git and packaging source,
+  runs under `python -I -S -B`, and binds its transformed parser, frozen SPDX
+  tables, normalization/classification/report surface, semantic dependencies,
+  and import-order-independent callable identity. Exact-image integration also
+  aligns static R receipt/SBOM inventory, rejects image volumes and
+  healthchecks, binds probe-loaded source to Git, treats hybrid and
+  noncanonical Debian metadata as unresolved, represents blocked symlink paths
+  without following them, and rehashes 1,720 physical evidence files through
+  safe host copies or bounded non-extracted archives. Checkpoint
+  `1397f92b5257747ca3faf99e00a74269d4b14875` produced image
+  `sha256:e47537b8f7ac7c595b3a055dea4d16283efaa9c9a67c0f8a3e0fc2d65e834e29`
+  and OCI manifest
+  `sha256:0064ce70a26d6df58353a2e305a69d1d03e1db4525eee9870841fe10c6b3d02a`.
+  Its 1,423 packages classify as 186 resolved, 898 ambiguous, 1 missing
+  metadata, 338 unverifiable, and zero denied/exceptions; all 1,237 unresolved
+  packages remain visible, license status stays failed, and production remains
+  disabled and blocked on containment, CVE, license, microVM, provenance, and
+  signature evidence. Validation passes 372 focused contracts, one exact
+  Docker/OCI integration, 923 agentic/sandbox/executor regressions with one
+  host-dependent skip, and the complete credential-free backend with 2,927
+  passed, 6 skipped, and 45 integration tests deselected. Independent
+  adversarial review finished with zero mandatory or optional findings. No
+  model, Azure, grading, Hugging Face write, registry push, publication,
+  workflow dispatch, or paid operation ran.
 - **Agentic Sandbox V2 Phase 1B professional-work candidate** - add a separate,
   local-only image substrate without activating the Phase 1A executor, Step 2,
   workflows, models, grading, publication, or a registry path. An exact GHCR
