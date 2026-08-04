@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 import test from 'node:test'
 import { parse } from 'yaml'
@@ -9,6 +11,13 @@ import { buildRuntimeNoteData, extractWorkflowPolicy } from '../aggregate-runtim
 
 const readRepoFile = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8')
 const execFileAsync = promisify(execFile)
+const rubyAvailable = await execFileAsync('ruby', ['--version']).then(
+  () => true,
+  (error) => {
+    if (error.code === 'ENOENT') return false
+    throw error
+  },
+)
 
 const compilePythonHeredocs = async (script) => {
   const lines = script.split('\n')
@@ -33,9 +42,9 @@ const compilePythonHeredocs = async (script) => {
   return count
 }
 
-const compileRubyHeredocs = async (script) => {
+const rubyHeredocs = (script) => {
   const lines = script.split('\n')
-  let count = 0
+  const sources = []
   for (let index = 0; index < lines.length; index += 1) {
     if (lines[index].trim() !== "ruby <<'RUBY'") continue
     const body = []
@@ -49,12 +58,54 @@ const compileRubyHeredocs = async (script) => {
       .filter((line) => line.trim())
       .map((line) => line.length - line.trimStart().length)
     const indent = indents.length ? Math.min(...indents) : 0
-    const source = body.map((line) => line.slice(indent)).join('\n')
-    await execFileAsync('ruby', ['-c', '-e', source])
-    count += 1
+    sources.push(body.map((line) => line.slice(indent)).join('\n'))
   }
-  return count
+  return sources
 }
+
+test('batch workflow Ruby inspection compiles and rejects condition_b', {
+  skip: !rubyAvailable && !process.env.CI ? 'Ruby is not installed locally' : false,
+}, async () => {
+  assert.equal(rubyAvailable, true, 'Ruby is required in CI')
+  const batch = parse(await readRepoFile('.github/workflows/batch-run.yml'))
+  const inspectModeStep = batch.jobs['inspect-mode'].steps.find(
+    (step) => step.name === 'Inspect execution mode without credentials',
+  )
+  const sources = rubyHeredocs(inspectModeStep.run)
+  assert.equal(sources.length, 1)
+  const [source] = sources
+  await execFileAsync('ruby', ['-c', '-e', source])
+
+  const fixtureRoot = await mkdtemp(join(tmpdir(), 'gdpval-ruby-inspection-'))
+  try {
+    const experimentDir = join(fixtureRoot, 'batch-runner', 'experiments')
+    const outputPath = join(fixtureRoot, 'output.txt')
+    await mkdir(experimentDir, { recursive: true })
+    await writeFile(join(experimentDir, 'fixture.yaml'), [
+      'condition_b:',
+      '  name: Unsupported',
+      'execution:',
+      '  mode: code_interpreter',
+      '',
+    ].join('\n'), 'utf8')
+    await assert.rejects(
+      execFileAsync('ruby', ['-e', source], {
+        cwd: fixtureRoot,
+        env: {
+          ...process.env,
+          EXPERIMENT_YAML: 'fixture',
+          GITHUB_OUTPUT: outputPath,
+        },
+      }),
+      (error) => {
+        assert.match(error.stderr, /condition_b is unsupported in the general batch workflow/)
+        return true
+      },
+    )
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true })
+  }
+})
 
 test('runtime note data is derived from workflow and incident sources', async () => {
   const [workflow, incidents] = await Promise.all([
@@ -235,6 +286,13 @@ test('runtime source changes trigger isolated PR validation and serialized Pages
   const eventContractStep = validateJob.steps.find(
     (step) => step.name === 'Verify non-PR event contract',
   )
+  const aggregateContractStep = validateJob.steps.find(
+    (step) => step.name === 'Verify aggregate contracts and pinned history',
+  )
+  const provenanceBrowserStep = validateJob.steps.find(
+    (step) => step.name === 'Verify dashboard build provenance in browser',
+  )
+  const cleanStep = validateJob.steps.find((step) => step.name === 'Verify clean working tree')
   const uploadStep = validateJob.steps.find((step) => step.name === 'Upload Pages artifact')
   const createPullRequestStep = batch.jobs['batch-run'].steps.find(
     (step) => step.name === 'Create Pull Request with results',
@@ -273,9 +331,13 @@ test('runtime source changes trigger isolated PR validation and serialized Pages
   assert.equal(validateJob.permissions, undefined)
   assert.equal(validateJob.environment, undefined)
   assert.equal(validateJob.steps.find((step) => step.name === 'Checkout').with['fetch-depth'], 0)
-  assert.ok(validateJob.steps.some((step) => step.run === 'npm run test:aggregate'))
+  assert.equal(aggregateContractStep.run, 'npm run test:aggregate:prepared')
   assert.ok(validateJob.steps.some((step) => step.run?.includes('playwright install --with-deps --only-shell chromium')))
   assert.ok(validateJob.steps.some((step) => step.run === 'npm run test:notes-browser:dist'))
+  assert.match(cleanStep.run, /git status --porcelain=v1 --untracked-files=all/)
+  assert.match(cleanStep.run, /\[\[ -n "\$status" \]\][\s\S]*exit 1/)
+  assert.ok(validateJob.steps.indexOf(provenanceBrowserStep) < validateJob.steps.indexOf(cleanStep))
+  assert.ok(validateJob.steps.indexOf(cleanStep) < validateJob.steps.indexOf(uploadStep))
   assert.doesNotMatch(eventContractStep.run, /ref_protected/i)
   assert.match(eventContractStep.run, /GITHUB_EVENT_NAME.*push[\s\S]*?GITHUB_REF.*refs\/heads\/main/)
   assert.match(eventContractStep.run, /DEPLOY_PAGES.*true[\s\S]*?GITHUB_REF.*refs\/heads\/main[\s\S]*?-z.*EXPECTED_SHA/)
@@ -306,7 +368,6 @@ test('runtime source changes trigger isolated PR validation and serialized Pages
   assert.equal(await compilePythonHeredocs(validateConfigStep.run), 1)
   assert.equal(await compilePythonHeredocs(fallbackStep.run), 1)
   assert.equal(await compilePythonHeredocs(verifyPrStep.run), 1)
-  assert.equal(await compileRubyHeredocs(inspectModeStep.run), 1)
   assert.match(verifyPrStep.run, /\$PR_NUMBER.*\^\[1-9\]/s)
   assert.match(verifyPrStep.run, /isCrossRepository,files/)
   assert.match(verifyPrStep.run, /paths == \[expected_path\]/)
@@ -327,4 +388,44 @@ test('runtime source changes trigger isolated PR validation and serialized Pages
   assert.match(step2Text, /step2_inference_results_\{condition_key\}/)
   assert.match(batchText, /EXPERIMENT_ID=\{config\.experiment_id\}/)
   assert.match(batchText, /step6_report\.sh --dry-run/)
+})
+
+test('Pages cleanliness gate rejects repository drift and ignores build outputs', async () => {
+  const [deployText, gitignore] = await Promise.all([
+    readRepoFile('.github/workflows/deploy.yml'),
+    readRepoFile('.gitignore'),
+  ])
+  const deploy = parse(deployText)
+  const cleanStep = deploy.jobs.validate.steps.find(
+    (step) => step.name === 'Verify clean working tree',
+  )
+  assert.ok(cleanStep)
+
+  const fixtureRoot = await mkdtemp(join(tmpdir(), 'gdpval-cleanliness-'))
+  try {
+    await execFileAsync('git', ['init', '--quiet'], { cwd: fixtureRoot })
+    await writeFile(join(fixtureRoot, '.gitignore'), gitignore, 'utf8')
+    await writeFile(join(fixtureRoot, 'tracked.txt'), 'clean\n', 'utf8')
+    await execFileAsync('git', ['add', '.gitignore', 'tracked.txt'], { cwd: fixtureRoot })
+    await execFileAsync('git', [
+      '-c', 'user.name=GDPVal Tests',
+      '-c', 'user.email=tests@example.invalid',
+      'commit', '--quiet', '-m', 'baseline',
+    ], { cwd: fixtureRoot })
+
+    for (const path of ['dist/index.html', 'public/generated/reports-index.json', 'node_modules/package.json']) {
+      await mkdir(join(fixtureRoot, path, '..'), { recursive: true })
+      await writeFile(join(fixtureRoot, path), '{}\n', 'utf8')
+    }
+    await execFileAsync('bash', ['-c', cleanStep.run], { cwd: fixtureRoot })
+
+    await writeFile(join(fixtureRoot, 'untracked.txt'), 'drift\n', 'utf8')
+    await assert.rejects(execFileAsync('bash', ['-c', cleanStep.run], { cwd: fixtureRoot }))
+    await rm(join(fixtureRoot, 'untracked.txt'))
+
+    await writeFile(join(fixtureRoot, 'tracked.txt'), 'changed\n', 'utf8')
+    await assert.rejects(execFileAsync('bash', ['-c', cleanStep.run], { cwd: fixtureRoot }))
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true })
+  }
 })

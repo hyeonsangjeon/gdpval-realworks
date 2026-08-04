@@ -58,6 +58,26 @@ npm ci
 npm run dev
 ```
 
+### Verify a fresh checkout
+
+Run the dashboard contracts and production build before making changes:
+
+```bash
+npm ci
+npm run test:aggregate
+npm run build
+git status --short
+```
+
+These checks require Git, Bash, Python 3, and Node.js 20+. The aggregate tests
+prepare their generated data automatically. When a report is not checked in,
+aggregation makes unauthenticated, read-only requests to the public Hugging Face
+`main` report; it does not require cloud credentials, call a model, or write or
+upload remote data. Ruby is optional locally: the Ruby-backed workflow contract
+is reported as skipped when Ruby is unavailable, while CI executes it on
+Ubuntu 24.04. The final `git status --short` should print nothing because build
+outputs are ignored.
+
 > **Cloud-run boundary:** `dry_run: true` still calls the model, runs Self-QA,
 > and can create or update the configured Hugging Face dataset. It skips Step 5
 > validation, final result publication, and the result PR; it does not mean
@@ -225,13 +245,13 @@ Dashboard implementation details are in [`src/README.md`](src/README.md).
 
 ## Develop and verify
 
-Dashboard checks require Node.js 20 or newer:
+Dashboard checks require Git, Bash, Python 3, and Node.js 20 or newer:
 
 ```bash
 npm ci
-npm run aggregate
 npm run test:aggregate
 npm run build
+git status --short
 ```
 
 Backend unit tests do not require model credentials:
