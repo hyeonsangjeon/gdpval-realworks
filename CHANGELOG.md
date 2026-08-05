@@ -21,7 +21,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   changes. Validation passes 51 available `read_deliverable` contracts and 55
   grader dispatch, perception wiring, and grading configuration contracts; one
   unrelated PDF content test remains unexecuted locally because `pdfplumber` is
-  unavailable in the active interpreter.
+  unavailable in the active interpreter. PR #156 reached `MERGED` at
+  `2026-08-05T06:31:46Z` from reviewed head
+  `89f4e5b23df127795b0682e91bfbd6c23c27bc33` as commit
+  `609992ede1346da51aac1a8887dbcaaf736d54a3`. No model, grading run, cloud
+  credential, publication, or paid API call was used for this fix.
 
 ### Added
 - **Self-preparing dashboard validation** - make `npm run test:aggregate`

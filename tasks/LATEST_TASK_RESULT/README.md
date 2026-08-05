@@ -1,8 +1,8 @@
 # Latest Task Result
 
 - Updated: 2026-08-05
-- Status: Excel non-RGB formatting observation fix implemented and locally
-  validated on a clean worktree; changes are not committed or deployed
+- Status: Excel non-RGB formatting observation fix shipped to `main` through
+  PR #156
 
 ## Task
 
@@ -45,6 +45,19 @@
 - Python compilation, static diagnostics, and `git diff --check` passed.
 - Ruff reports the same seven pre-existing unused-import/variable findings on
   both this branch and `origin/main`; no new Ruff category was introduced.
+
+## Shipment
+
+- Reviewed branch head:
+  `89f4e5b23df127795b0682e91bfbd6c23c27bc33`.
+- PR [#156](https://github.com/hyeonsangjeon/gdpval-realworks/pull/156)
+  reached `MERGED` at `2026-08-05T06:31:46Z` as commit
+  `609992ede1346da51aac1a8887dbcaaf736d54a3`.
+- The changed backend paths are outside the active automatic Pages workflow
+  filters, so GitHub created no PR or post-merge workflow run. Local focused
+  tests and two independent reviews supplied the acceptance evidence.
+- No model, grading run, cloud credential, publication, or paid API call was
+  used for this fix.
 
 ## Remaining Work
 
