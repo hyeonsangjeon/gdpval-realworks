@@ -1,71 +1,63 @@
 # Latest Task Result
 
 - Updated: 2026-08-05
-- Status: Excel non-RGB formatting observation fix shipped to `main` through
-  PR #156
+- Status: Completed 220-task mini regrade history restored and locally verified
+  on a clean worktree; changes are not committed or deployed
 
 ## Task
 
-- Recover the useful non-RGB Excel color parser fix from historical local work
-  without merging the stale dirty checkout or its unrelated changes.
-- Prevent openpyxl descriptor validation messages from entering grader-facing
-  XLSX formatting observations.
-- Preserve explicit color information while excluding workbook defaults from
-  styled-cell counts.
+- Recover the useful completed-run content from the preserved dirty checkout
+  without merging its stale code, UI regressions, generated artifacts, or
+  unrelated local work.
+- Replace the checked-in `BLOCKED` pre-run note with a reproducible historical
+  record of the completed `default_v2_mini.yaml` 220-task grading relay.
+- Correct stale provenance and incorporate later experiments that resolved the
+  original future-work hypotheses.
 
 ## Result
 
-- Reproduced the root cause: reading `.rgb` from theme, indexed, or auto colors
-  returns `Values must be of type <class 'str'>` in the active openpyxl runtime.
-- Added type-aware color serialization:
-  - RGB remains an aRGB string such as `FF112233`.
-  - Theme colors use `theme:N` and retain nonzero tint.
-  - Indexed colors use `indexed:N`.
-  - Automatic colors use `auto`.
-- Added defensive workbook-default font lookup using the Normal named style,
-  with font-table fallback and fail-soft handling when openpyxl internals are
-  unavailable.
-- Plain cells and cells with number formatting only no longer appear explicitly
-  styled solely because the workbook default font uses `theme:1`.
-- Unknown or malformed color types fail soft to no color token instead of
-  emitting descriptor error text.
-- No grading score, rubric, routing, workflow, model, prompt, schema, or
-  publication behavior was changed.
+- Replaced the pre-run note with the four successful GitHub Actions runs,
+  workflow input heads, preserved output commits, and cumulative task counts.
+- Corrected the chunk-2 output identity to
+  `110f3bf604f62029fe12e5737b777687439e4b15`.
+- Recomputed from the checked-in final grade JSON:
+  - selection status: 194 ok, 20 wrong-format primary, 1 no generated
+    candidate, and 5 selection errors;
+  - 113 tasks with excluded reference files and no reference fallback;
+  - 8,904 judge calls, 130,092,056 input tokens, and 5,523,697 output tokens;
+  - 10,453 item audit coverage with no missing required audit fields;
+  - 355 judge errors, including 100 score-included zeros across 53 tasks with
+    max-score weight 164.
+- Rejoined owner gold 20 by exact task and criterion. Overall Style bias is
+  -0.1625/5 and MAE is 1.2125/5.
+- Clarified that the baseline is selector-clean, not error-free, and that
+  `perception_called=false` does not imply the judge had no tool observation.
+- Replaced obsolete future work with the checked-in follow-up findings:
+  broad rendering was effectively null at equal model, the GPT-5.4 full run was
+  completed, and production grading now defaults to GPT-5.6 Sol Max.
+- No source code, grading output, grade score, workflow, model configuration,
+  current production policy, or published artifact was changed.
 
 ## Verification
 
-- The new public `read_deliverable("inspect_formatting", ...)` regression failed
-  before the fix on the theme color descriptor string.
-- The strengthened regression then exposed default-font overcounting before the
-  second fix and passed afterward.
-- Color compatibility tests: 2 passed.
-- Available `read_deliverable` suite: 51 passed, 1 deselected.
-- Grader dispatch, perception wiring, and grading configuration suites: 55
-  passed.
-- Python compilation, static diagnostics, and `git diff --check` passed.
-- Ruff reports the same seven pre-existing unused-import/variable findings on
-  both this branch and `origin/main`; no new Ruff category was introduced.
-
-## Shipment
-
-- Reviewed branch head:
-  `89f4e5b23df127795b0682e91bfbd6c23c27bc33`.
-- PR [#156](https://github.com/hyeonsangjeon/gdpval-realworks/pull/156)
-  reached `MERGED` at `2026-08-05T06:31:46Z` as commit
-  `609992ede1346da51aac1a8887dbcaaf736d54a3`.
-- The changed backend paths are outside the active automatic Pages workflow
-  filters, so GitHub created no PR or post-merge workflow run. Local focused
-  tests and two independent reviews supplied the acceptance evidence.
-- No model, grading run, cloud credential, publication, or paid API call was
-  used for this fix.
+- Recomputed selector, reference, token, judge-error, audit, population score,
+  and gold metrics directly from the final 220-task mini grade JSON.
+- Verified all four GitHub Actions runs are complete and successful.
+- Reopened each preserved output commit and verified the cumulative progression:
+  46 -> 112 -> 162 -> 220 tasks.
+- Verified final grade and auto-analysis commits and all linked evidence paths.
+- Verified the follow-up GPT-5.4 JSON reproduces the same selector distribution
+  and the checked-in vision report records the null broad-render result.
+- Executable historical-report contract and `git diff --check` passed.
+- Independent grading review returned `APPROVE` with no findings.
+- No model call, grading run, workflow dispatch, cloud credential, publication,
+  or paid API call was used for this documentation recovery.
 
 ## Remaining Work
 
-- The deselected PDF content test requires `pdfplumber`, which is declared in
-  `batch-runner/requirements.txt` but unavailable in the active local Python
-  interpreter. Run the complete suite in CI or a fully provisioned environment.
-- Theme/indexed tokens identify workbook color sources rather than resolved
-  display RGB values. Resolving a theme and palette to rendered color remains a
-  separate enhancement.
-- Historical grade artifacts that already contain descriptor junk are not
-  rewritten.
+- The historical mini headline includes score-included judge errors and must not
+  be cited as an error-free judge-quality estimate.
+- Historical grade artifacts are preserved as recorded; this task does not
+  rewrite their scores or remove old error evidence.
+- Reproduction requires explicitly selecting the historical
+  `default_v2_mini.yaml` identity because it is no longer the production default.

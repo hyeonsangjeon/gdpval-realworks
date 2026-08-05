@@ -11,6 +11,20 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+- **Verified 220-task mini regrade history** - replace the stale pre-run
+  `BLOCKED` note with an evidence-reopened record of the completed four-run
+  `default_v2_mini.yaml` relay. The report now binds each successful GitHub run
+  to its preserved Git output, recomputes selector/reference/audit and owner
+  gold metrics from the checked-in 220-task grade JSON, binds chunk 2 to exact
+  output `110f3bf604f62029fe12e5737b777687439e4b15`, and discloses all 355
+  `judge_error` items including the 100 score-included zeros across 53 tasks.
+  It also incorporates the later null
+  broad-render result, completed GPT-5.4 comparison, and current GPT-5.6 Sol Max
+  production default so resolved experiments are not left as future work. This
+  documentation recovery made no model call, grading run, workflow dispatch,
+  credential use, publication, or paid API call.
+
 ### Fixed
 - **Excel formatting color observations** - stop openpyxl's inactive color
   descriptors from leaking validation-error strings into grader evidence.
