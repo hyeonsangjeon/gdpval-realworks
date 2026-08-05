@@ -165,6 +165,28 @@ test('first-screen routes stay complete and fork-relative', async () => {
   assert.equal(runnerAction.href, rootAction.href)
 })
 
+test('fresh dashboard verification is self-preparing and credential-free', async () => {
+  const [readme, packageMetadata] = await Promise.all([
+    readRepoFile('README.md'),
+    readRepoFile('package.json').then(JSON.parse),
+  ])
+  const section = extractSection(readme, '### Verify a fresh checkout')
+  const commands = [
+    'npm ci',
+    'npm run test:aggregate',
+    'npm run build',
+    'git status --short',
+  ]
+  for (let index = 0; index < commands.length - 1; index += 1) {
+    assert.ok(section.indexOf(commands[index]) < section.indexOf(commands[index + 1]))
+  }
+  assert.match(section, /unauthenticated, read-only requests/)
+  assert.match(section, /does not require cloud credentials, call a model, or write or[\s\S]*upload remote data/)
+  assert.match(section, /Ruby is optional locally/)
+  assert.equal(packageMetadata.scripts['pretest:aggregate'], 'npm run aggregate')
+  assert.equal(packageMetadata.scripts['test:aggregate'], 'npm run test:aggregate:prepared')
+})
+
 test('workflow input tables mirror defaults and watchdog delegation', async () => {
   const [batchText, rootEnglish, rootKorean, runnerEnglish, runnerKorean, guideEnglish, guideKorean] = await Promise.all([
     readRepoFile('.github/workflows/batch-run.yml'),
@@ -362,26 +384,6 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
     )
     assert.match(await readFile(outputPath, 'utf8'), /^requires_openai_key=true$/m)
     assert.match(await readFile(outputPath, 'utf8'), /^requires_anthropic_key=true$/m)
-    const inspectMode = workflow.jobs['inspect-mode'].steps.find(
-      (step) => step.name === 'Inspect execution mode without credentials',
-    )
-    assert.ok(inspectMode)
-    const inspectRuby = extractHeredoc(inspectMode.run, "ruby <<'RUBY'", 'RUBY')
-    await writeFile(
-      fixturePath,
-      config(290).replace('execution:', 'condition_b:\n  name: B\nexecution:'),
-      'utf8',
-    )
-    await assert.rejects(
-      execFileAsync('ruby', ['-e', inspectRuby], {
-        cwd: fixtureRoot,
-        env: {
-          ...process.env,
-          EXPERIMENT_YAML: 'fixture',
-          GITHUB_OUTPUT: outputPath,
-        },
-      }),
-    )
     await writeFile(fixturePath, config(291), 'utf8')
     await assert.rejects(
       execFileAsync('python3', ['-c', readConfigPython], {

@@ -12,6 +12,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Self-preparing dashboard validation** - make `npm run test:aggregate`
+  generate its required dashboard/report fixtures before running while exposing
+  a prepared-only entry point for CI reuse; isolate the Ruby-backed workflow
+  contract so Ruby-less local environments report one explicit skip while CI
+  still requires and exercises Ruby; document the fresh-checkout
+  `npm ci -> test -> build -> status` path and its unauthenticated public
+  Hugging Face reads; and add a fail-closed tracked/untracked cleanliness gate
+  after browser validation and before Pages artifact upload. The existing
+  build-before-test CI snapshot, permissions, concurrency, dispatch validation,
+  Pages/OIDC scope, deployment conditions, experiment paths, and Vite base are
+  unchanged. Credential-free validation passes 96 contracts with one expected
+  local Ruby skip and a production build; no model, cloud credential, remote
+  write, upload, deployment, grading, or paid operation ran.
 - **Agentic Sandbox V2 Phase 1C deterministic license evidence closure** - add
   model-free, exact-image Debian, Python, R, and npm license collection with
   same-descriptor bytes and hashes; host-owned SPDX normalization; honest

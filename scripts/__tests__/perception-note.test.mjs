@@ -177,8 +177,8 @@ test('perception inputs and browser suite are wired into the Pages gate', async 
   ])
   assert.match(packageJson.scripts.aggregate, /aggregate-perception-note\.mjs/)
   assert.match(packageJson.scripts.prebuild, /aggregate-perception-note\.mjs/)
-  assert.match(packageJson.scripts['test:aggregate'], /aggregate-perception-note\.test\.mjs/)
-  assert.match(packageJson.scripts['test:aggregate'], /perception-note\.test\.mjs/)
+  assert.match(packageJson.scripts['test:aggregate:prepared'], /aggregate-perception-note\.test\.mjs/)
+  assert.match(packageJson.scripts['test:aggregate:prepared'], /perception-note\.test\.mjs/)
   assert.match(packageJson.scripts['test:notes-browser:dist'], /test:perception-browser:dist/)
   for (const path of [
     "batch-runner/skills/**",
