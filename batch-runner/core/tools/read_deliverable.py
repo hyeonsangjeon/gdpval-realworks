@@ -412,10 +412,69 @@ def _op_read_content(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
 # ── inspect_formatting ───────────────────────────────────────────────
 
 
+def _safe_cell_color(color: Any) -> Optional[str]:
+    """Return a stable token for an openpyxl color without reading inactive descriptors."""
+    if color is None:
+        return None
+
+    color_type = getattr(color, "type", None)
+    if color_type == "rgb":
+        value = color.rgb
+        if isinstance(value, str) and "Values must be of type" not in value:
+            return value
+    elif color_type == "theme":
+        value = color.theme
+        if isinstance(value, int) and not isinstance(value, bool):
+            token = f"theme:{value}"
+            tint = getattr(color, "tint", 0.0)
+            if isinstance(tint, (int, float)) and not isinstance(tint, bool) and tint:
+                token += f":tint:{tint:g}"
+            return token
+    elif color_type == "indexed":
+        value = color.indexed
+        if isinstance(value, int) and not isinstance(value, bool):
+            return f"indexed:{value}"
+    elif color_type == "auto" and color.auto is True:
+        return "auto"
+    return None
+
+
+def _workbook_default_font_color(workbook: Any) -> Any:
+    """Find the workbook's default font color across supported openpyxl layouts."""
+    named_styles = getattr(workbook, "_named_styles", None)
+    if named_styles is not None:
+        try:
+            normal_style = named_styles["Normal"]
+        except (KeyError, TypeError):
+            pass
+        else:
+            normal_font = getattr(normal_style, "font", None)
+            if normal_font is not None:
+                return getattr(normal_font, "color", None)
+
+    fonts = getattr(workbook, "_fonts", None)
+    if fonts:
+        return getattr(fonts[0], "color", None)
+    return None
+
+
+def _nondefault_font_color(cell: Any, default_color: Any) -> Any:
+    """Return a cell's explicit font color, omitting the workbook default."""
+    font = getattr(cell, "font", None)
+    color = getattr(font, "color", None)
+    if default_color is not None:
+        return color if color != default_color else None
+
+    style = getattr(cell, "_style", None)
+    font_id = getattr(style, "fontId", None)
+    return color if font_id not in (None, 0) else None
+
+
 def _format_xlsx(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
     import openpyxl  # type: ignore
 
     wb = openpyxl.load_workbook(p, data_only=False)
+    default_font_color = _workbook_default_font_color(wb)
     target = scope.get("sheet")
     sheets_meta = []
     for name in wb.sheetnames[:MAX_SHEETS]:
@@ -434,13 +493,13 @@ def _format_xlsx(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
                 seen += 1
                 if cell.value is None:
                     continue
-                fill_color = None
-                if cell.fill and cell.fill.fgColor and cell.fill.fgColor.rgb:
-                    fill_color = str(cell.fill.fgColor.rgb)
+                fill_color = _safe_cell_color(
+                    cell.fill.fgColor if cell.fill else None
+                )
                 font_bold = bool(cell.font and cell.font.bold)
-                font_color = (str(cell.font.color.rgb)
-                              if cell.font and cell.font.color
-                              and cell.font.color.rgb else None)
+                font_color = _safe_cell_color(
+                    _nondefault_font_color(cell, default_font_color)
+                )
                 has_border = bool(cell.border and (
                     (cell.border.top and cell.border.top.style) or
                     (cell.border.bottom and cell.border.bottom.style) or
