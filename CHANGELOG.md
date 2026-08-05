@@ -22,9 +22,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   after browser validation and before Pages artifact upload. The existing
   build-before-test CI snapshot, permissions, concurrency, dispatch validation,
   Pages/OIDC scope, deployment conditions, experiment paths, and Vite base are
-  unchanged. Credential-free validation passes 96 contracts with one expected
-  local Ruby skip and a production build; no model, cloud credential, remote
-  write, upload, deployment, grading, or paid operation ran.
+  unchanged. The local aggregate suite passes 96 contracts with one expected
+  Ruby skip, and the production build passes separately. PR #154 reached
+  `MERGED` at `2026-08-05T05:01:27Z` from reviewed head
+  `69821d3cc289fe6f1e3c7cb3352551fcbe92a9af` as commit
+  `49fc90acf8117bb1a6961f04783942c1e7bd8f75`. PR validation run
+  `30916398926` and post-merge main run `30976841158` both passed; the latter
+  uploaded and deployed the exact Pages artifact. The aggregate validation path
+  used no model, cloud credential, Hugging Face write, grading, or paid API call.
 - **Agentic Sandbox V2 Phase 1C deterministic license evidence closure** - add
   model-free, exact-image Debian, Python, R, and npm license collection with
   same-descriptor bytes and hashes; host-owned SPDX normalization; honest
