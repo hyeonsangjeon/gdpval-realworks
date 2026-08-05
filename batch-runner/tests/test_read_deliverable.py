@@ -281,6 +281,72 @@ def test_inspect_formatting_xlsx(base_dir, xlsx_file):
     assert sheet["styled_cells_count"] >= 1
 
 
+def test_inspect_formatting_xlsx_preserves_color_types_without_descriptor_junk(
+    base_dir,
+):
+    openpyxl = pytest.importorskip("openpyxl")
+    from openpyxl.styles import Color, Font, PatternFill
+
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    colors = {
+        "A1": (Color(rgb="FF112233"), Color(rgb="FF445566")),
+        "A2": (Color(theme=4, tint=0.4), Color(theme=5, tint=-0.25)),
+        "A3": (Color(indexed=7), Color(indexed=8)),
+        "A4": (Color(auto=True), Color(auto=True)),
+    }
+    for ref, (font_color, fill_color) in colors.items():
+        sheet[ref] = ref
+        sheet[ref].font = Font(color=font_color)
+        sheet[ref].fill = PatternFill(fill_type="solid", fgColor=fill_color)
+    sheet["A5"] = "plain"
+    sheet["A6"] = 1
+    sheet["A6"].number_format = "0.00"
+
+    path = base_dir / "colors.xlsx"
+    workbook.save(path)
+
+    result = read_deliverable("inspect_formatting", path.name, base_dir=str(base_dir))
+
+    assert result["ok"] is True
+    styled = {
+        cell["ref"]: cell
+        for cell in result["data"]["sheets"][0]["styled_cells_sample"]
+    }
+    assert styled["A1"]["font_color"] == "FF112233"
+    assert styled["A1"]["fill"] == "FF445566"
+    assert styled["A2"]["font_color"] == "theme:4:tint:0.4"
+    assert styled["A2"]["fill"] == "theme:5:tint:-0.25"
+    assert styled["A3"]["font_color"] == "indexed:7"
+    assert styled["A3"]["fill"] == "indexed:8"
+    assert styled["A4"]["font_color"] == "auto"
+    assert styled["A4"]["fill"] == "auto"
+    assert set(styled) == set(colors)
+    assert result["data"]["sheets"][0]["styled_cells_count"] == len(colors)
+    assert "Values must be of type" not in str(result)
+
+
+def test_default_font_color_lookup_fails_soft_when_openpyxl_internals_change():
+    class WorkbookWithoutStyleInternals:
+        pass
+
+    class CellWithoutStyleInternals:
+        font = type("Font", (), {"color": "explicit"})()
+
+    assert (
+        read_deliverable_module._workbook_default_font_color(
+            WorkbookWithoutStyleInternals()
+        )
+        is None
+    )
+    assert (
+        read_deliverable_module._nondefault_font_color(
+            CellWithoutStyleInternals(), None
+        )
+        is None
+    )
+
+
 def test_inspect_formatting_docx(base_dir, docx_file):
     r = read_deliverable("inspect_formatting", docx_file.name, base_dir=str(base_dir))
     assert r["ok"] is True

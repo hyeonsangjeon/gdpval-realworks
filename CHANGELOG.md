@@ -11,6 +11,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+- **Excel formatting color observations** - stop openpyxl's inactive color
+  descriptors from leaking validation-error strings into grader evidence.
+  XLSX inspection now emits stable RGB, theme, indexed, and auto tokens,
+  preserves nonzero theme tint, and excludes the workbook's default font color
+  so plain and number-format-only cells are not misclassified as explicitly
+  styled. Defensive default-style lookup fails soft across openpyxl layout
+  changes. Validation passes 51 available `read_deliverable` contracts and 55
+  grader dispatch, perception wiring, and grading configuration contracts; one
+  unrelated PDF content test remains unexecuted locally because `pdfplumber` is
+  unavailable in the active interpreter.
+
 ### Added
 - **Self-preparing dashboard validation** - make `npm run test:aggregate`
   generate its required dashboard/report fixtures before running while exposing
