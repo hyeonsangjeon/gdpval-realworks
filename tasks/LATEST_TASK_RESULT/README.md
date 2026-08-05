@@ -1,8 +1,8 @@
 # Latest Task Result
 
 - Updated: 2026-08-05
-- Status: Completed 220-task mini regrade history restored and locally verified
-  on a clean worktree; changes are not committed or deployed
+- Status: Completed 220-task mini regrade history restored on `main` through
+  PR #158
 
 ## Task
 
@@ -52,6 +52,17 @@
 - Independent grading review returned `APPROVE` with no findings.
 - No model call, grading run, workflow dispatch, cloud credential, publication,
   or paid API call was used for this documentation recovery.
+
+## Shipment
+
+- Reviewed branch head:
+  `3a303590ca08484e3bd9c83303500d44d0a9b31e`.
+- PR [#158](https://github.com/hyeonsangjeon/gdpval-realworks/pull/158)
+  reached `MERGED` at `2026-08-05T09:35:56Z` as commit
+  `d610c717696b4e6589cf28fb8a122c7b3b9aa2d8`.
+- The changed documentation paths are outside the active automatic workflow
+  filters, so GitHub created no PR or post-merge workflow run. The executable
+  evidence contract and two independent reviews supplied acceptance evidence.
 
 ## Remaining Work
 
