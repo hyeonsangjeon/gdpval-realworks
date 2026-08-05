@@ -1,8 +1,8 @@
 # Latest Task Result
 
-- Updated: 2026-08-04
-- Status: Self-preparing dashboard validation implemented and locally validated
-  on a clean worktree; changes are not committed or deployed
+- Updated: 2026-08-05
+- Status: Self-preparing dashboard validation shipped to `main`; PR and
+  post-merge Pages validation passed
 
 ## Task
 
@@ -39,19 +39,37 @@
 - Focused prepared aggregate suite: 97 tests, 96 passed, 1 intentional local
   Ruby skip, 0 failed.
 - Documented fresh sequence: `npm ci`, `npm run test:aggregate`, and
-  `npm run build` all succeeded without cloud credentials.
+  `npm run build` all succeeded. The aggregate path ran with cloud credential
+  environment variables unset.
 - Production Vite build: 2,783 modules transformed successfully.
 - The cleanliness gate executable contract passes for ignored outputs and
   fails for both tracked and untracked repository drift.
 - Static diagnostics report no errors in changed JSON, YAML, or JavaScript
   files; `git diff --check` passes.
 - Aggregation made unauthenticated, read-only requests for 23 public Hugging
-  Face reports. No model, credential, remote write, upload, workflow dispatch,
-  deployment, grading, or paid operation ran.
+  Face reports. The aggregate validation path used no model, cloud credential,
+  Hugging Face write, grading, or paid API call.
+
+## Shipment
+
+- Reviewed branch head:
+  `69821d3cc289fe6f1e3c7cb3352551fcbe92a9af`.
+- PR [#154](https://github.com/hyeonsangjeon/gdpval-realworks/pull/154)
+  reached `MERGED` at `2026-08-05T05:01:27Z` as commit
+  `49fc90acf8117bb1a6961f04783942c1e7bd8f75`.
+- PR validation run
+  [`30916398926`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30916398926)
+  passed the build, 97 aggregate contracts including the Ruby path, browser
+  suites, and clean working-tree gate. Deployment was correctly skipped for
+  the pull request.
+- Post-merge main run
+  [`30976841158`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/30976841158)
+  passed validation, uploaded the exact Pages artifact, and deployed it.
 
 ## Remaining Work
 
-- Run the Ruby-backed contract and the complete Pages/browser job in GitHub
-  Actions after these uncommitted changes are reviewed and committed.
 - The public report fallback still reads mutable Hugging Face `main`; this path
   is credential-free and read-only, but it is not offline or fully deterministic.
+- GitHub reported a non-blocking warning that pinned JavaScript actions still
+  target the deprecated Node.js 20 action runtime while the workflow forces
+  Node.js 24. Track upstream action updates without weakening the current pinning.
