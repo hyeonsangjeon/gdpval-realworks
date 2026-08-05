@@ -23,7 +23,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   broad-render result, completed GPT-5.4 comparison, and current GPT-5.6 Sol Max
   production default so resolved experiments are not left as future work. This
   documentation recovery made no model call, grading run, workflow dispatch,
-  credential use, publication, or paid API call.
+  credential use, publication, or paid API call. PR #158 reached `MERGED` at
+  `2026-08-05T09:35:56Z` from reviewed head
+  `3a303590ca08484e3bd9c83303500d44d0a9b31e` as commit
+  `d610c717696b4e6589cf28fb8a122c7b3b9aa2d8`.
 
 ### Fixed
 - **Excel formatting color observations** - stop openpyxl's inactive color
