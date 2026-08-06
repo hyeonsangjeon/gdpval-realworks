@@ -1,74 +1,82 @@
 # Latest Task Result
 
-- Updated: 2026-08-05
-- Status: Completed 220-task mini regrade history restored on `main` through
-  PR #158
+- Updated: 2026-08-06
+- Status: Phase 1D-A offline Python wheel broker candidate implemented,
+  validated, and still disconnected from production
 
 ## Task
 
-- Recover the useful completed-run content from the preserved dirty checkout
-  without merging its stale code, UI regressions, generated artifacts, or
-  unrelated local work.
-- Replace the checked-in `BLOCKED` pre-run note with a reproducible historical
-  record of the completed `default_v2_mini.yaml` 220-task grading relay.
-- Correct stale provenance and incorporate later experiments that resolved the
-  original future-work hypotheses.
+- Continue Agentic Sandbox V2 toward installable external packages and Linux
+  execution without weakening containment, reproducibility, or fail-closed
+  behavior.
+- Deliver the smallest model-free package slice that can be proved on this
+  host, while deferring command execution that lacks enforceable isolation.
+- Preserve the intentional dirty primary checkout byte-for-byte by working from
+  clean `origin/main@fa76d24973e6` in a separate worktree.
 
 ## Result
 
-- Replaced the pre-run note with the four successful GitHub Actions runs,
-  workflow input heads, preserved output commits, and cumulative task counts.
-- Corrected the chunk-2 output identity to
-  `110f3bf604f62029fe12e5737b777687439e4b15`.
-- Recomputed from the checked-in final grade JSON:
-  - selection status: 194 ok, 20 wrong-format primary, 1 no generated
-    candidate, and 5 selection errors;
-  - 113 tasks with excluded reference files and no reference fallback;
-  - 8,904 judge calls, 130,092,056 input tokens, and 5,523,697 output tokens;
-  - 10,453 item audit coverage with no missing required audit fields;
-  - 355 judge errors, including 100 score-included zeros across 53 tasks with
-    max-score weight 164.
-- Rejoined owner gold 20 by exact task and criterion. Overall Style bias is
-  -0.1625/5 and MAE is 1.2125/5.
-- Clarified that the baseline is selector-clean, not error-free, and that
-  `perception_called=false` does not imply the judge had no tool observation.
-- Replaced obsolete future work with the checked-in follow-up findings:
-  broad rendering was effectively null at equal model, the GPT-5.4 full run was
-  completed, and production grading now defaults to GPT-5.6 Sol Max.
-- No source code, grading output, grade score, workflow, model configuration,
-  current production policy, or published artifact was changed.
+- Added a foundation-only snapshot schema and runtime policy for at most eight
+  exact, canonical, dependency-free `py3-none-any` wheels on Linux amd64 and the
+  active Python major/minor.
+- Added strict artifact admission for size/hash, archive paths and controls,
+  RECORD inventory and hashes, METADATA identity and `Requires-Python`, exact
+  WHEEL headers, aggregate limits, collisions, links, executable-mode entries,
+  `.data`, `.pth`, `.egg-link`, `.pyc`, and startup hooks.
+- Added stateless lock resolution. A returned digest can be activated after a
+  broker restart without hidden resolver state.
+- Added deterministic stdlib wheel extraction with no pip, installer
+  subprocess, package index, or network path. Activation uses private
+  descriptor-anchored staging, independent expected inventory, canonical
+  receipt bytes, mode sealing, and atomic rename.
+- Added process-shared nonblocking leases, shared-root global state and quota
+  validation, canonical receipt baselines, bounded descriptor replay and
+  cleanup, orphan recovery, last-lease cleanup, and fail-closed root/lease/
+  content/mode/size drift handling.
+- Added a dispatcher candidate that permits only capabilities query, package
+  resolve, and package activation. Command execution, workspace mutation,
+  browser, public verification, and finalization return
+  `capability_unavailable`.
+- Confirmed the candidate is not wired into executor, Step 2, the Agentic V2
+  runner, experiments, workflows, grading, upload, or publication.
+- Kept the implementation under `sandbox/v2/`, outside the existing
+  `COPY core` image input, core-tree identity, Phase 1B/1C build allowlist, and
+  embedded-image manifest. Tracked Dockerignore rules also exclude every
+  Phase 1D-A artifact from existing publication build contexts.
 
 ## Verification
 
-- Recomputed selector, reference, token, judge-error, audit, population score,
-  and gold metrics directly from the final 220-task mini grade JSON.
-- Verified all four GitHub Actions runs are complete and successful.
-- Reopened each preserved output commit and verified the cumulative progression:
-  46 -> 112 -> 162 -> 220 tasks.
-- Verified final grade and auto-analysis commits and all linked evidence paths.
-- Verified the follow-up GPT-5.4 JSON reproduces the same selector distribution
-  and the checked-in vision report records the null broad-render result.
-- Executable historical-report contract and `git diff --check` passed.
-- Independent grading review returned `APPROVE` with no findings.
-- No model call, grading run, workflow dispatch, cloud credential, publication,
-  or paid API call was used for this documentation recovery.
+- Focused Phase 1D-A adversarial suite: 75 passed.
+- Agentic V2 contract, foundation, compatibility, candidate verifier, Phase 1B
+  static/contract/OCI/supply-chain, and Phase 1C license regressions: 644
+  passed.
+- Ruff, `py_compile`, VS Code diagnostics, and `git diff --check`: passed.
+- Credential-free backend: 3,001 passed, 6 skipped, and 45 integration tests
+  deselected. Three unrelated environment failures remain: installed
+  `openai==2.45.0`, `azure-core==1.39.0`, and `azure-ai-projects==1.0.0` do not
+  match repository pins 2.46.0/1.41.0/2.3.0, and `pdfplumber` is absent. The
+  failing tests and requirements are unchanged from `origin/main`.
+- Independent security and code reviews returned `APPROVE` with no blocking
+  findings for this foundation-only candidate.
+- No model call, package index, external network, credential, workflow,
+  grading, upload, publication, or paid operation was used.
 
 ## Shipment
 
-- Reviewed branch head:
-  `3a303590ca08484e3bd9c83303500d44d0a9b31e`.
-- PR [#158](https://github.com/hyeonsangjeon/gdpval-realworks/pull/158)
-  reached `MERGED` at `2026-08-05T09:35:56Z` as commit
-  `d610c717696b4e6589cf28fb8a122c7b3b9aa2d8`.
-- The changed documentation paths are outside the active automatic workflow
-  filters, so GitHub created no PR or post-merge workflow run. The executable
-  evidence contract and two independent reviews supplied acceptance evidence.
+- Working branch: `feat/agentic-v2-package-broker`.
+- Base: `origin/main@fa76d24973e660f4e93b26fe7ef7d87dc5ba3223`.
+- This record describes the reviewed local candidate before remote shipment.
 
 ## Remaining Work
 
-- The historical mini headline includes score-included judge errors and must not
-  be cited as an error-free judge-quality estimate.
-- Historical grade artifacts are preserved as recorded; this task does not
-  rewrite their scores or remove old error evidence.
-- Reproduction requires explicitly selecting the historical
-  `default_v2_mini.yaml` identity because it is no longer the production default.
+- Production activation remains disabled. The candidate is not connected to a
+  model loop, experiment, workflow, grader, uploader, or public artifact path.
+- `exec_run` remains blocked. The local Bubblewrap probe cannot create the
+  required user namespace, so arbitrary Linux execution has no enforceable
+  containment proof on this host.
+- npm, Debian/apt, live indexes, URL/VCS requirements, sdists, and editable
+  installs remain unsupported.
+- Package admission SBOM, license, CVE, provenance, signature, OS-level network
+  containment, and crash durability remain `not_run` or `not_claimed`.
+- A later production phase must add approved supply-chain evidence and a proven
+  containment substrate before connecting package environments to execution.

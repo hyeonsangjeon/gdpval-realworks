@@ -1,4 +1,4 @@
-# Agentic Sandbox V2 Phase 1B/1C Candidate
+# Agentic Sandbox V2 Phase 1B/1C/1D-A Candidates
 
 This directory defines a **model-free, local-only professional-work substrate
 candidate**. It does not activate `agentic_sandbox_v2`, publish an image, or
@@ -47,7 +47,59 @@ stays `blocked`.
 - `professional-work.Dockerfile` has no default parent and no registry output.
 - `disabled_entrypoint.py` exits 78 for every default invocation.
 
-## Local Candidate Build
+## Phase 1D-A Offline Python Wheel Broker
+
+Phase 1D-A adds a separate **model-free, local-only package activation
+candidate**. It is not imported by `TaskExecutor`, Step 2, the Agentic V2
+runner, an experiment, a workflow, grading, upload, or publication code. Its
+dispatcher candidate exposes package resolve and activation while returning
+`capability_unavailable` for workspace mutation, command execution, browser,
+verification, and finalization.
+
+The implementation remains under `sandbox/v2/`, outside the existing agentic
+image's `COPY core` input and core-tree identity. The tracked
+`batch-runner/.dockerignore` also excludes the implementation, this README,
+the snapshot schema, broker policy, and tests from existing Docker publication
+contexts. Phase 1B/1C explicit build allowlists and embedded-image manifests do
+not include the broker.
+
+The checked-in snapshot contract accepts at most eight canonical exact Python
+coordinates for the current Linux amd64 Python major/minor. Each artifact must
+be a dependency-free `py3-none-any` wheel without a build tag. Admission
+reopens exact local bytes, verifies size and SHA-256, validates every bounded
+ZIP path and RECORD member, matches METADATA name/version and
+`Requires-Python`, rejects `Requires-Dist`, file/directory collisions,
+executable-mode entries, `.data`, `.pth`, `.egg-link`, `.pyc`, and all
+`sitecustomize`/`usercustomize` forms, and requires one strict WHEEL identity.
+The snapshot and runtime policy are both identity-bound.
+
+`environment_resolve` is stateless: it returns the existing V2 lock shape and
+does not change backend state. Activation reconstructs an approved lock from
+the snapshot, then uses a deterministic stdlib wheel extractor. It does not
+invoke pip, a package index, a package installer subprocess, or network code.
+Content is staged beneath the already-open private environment-root descriptor,
+verified against an independently derived expected inventory, mode-sealed,
+and atomically renamed. Canonical receipt bytes bind the exact lock, snapshot,
+policy, installer implementation, Python version, file modes, sizes, and
+hashes.
+
+Linux `flock` leases serialize processes and preserve shared environments until
+the last broker closes. Global state and quota checks validate every live
+digest/lease pair, reject unaccounted root entries, and bind all receipt hashes
+and payload bytes. Limits include 256 MiB and 4,096 entries per environment,
+eight environments and 512 MiB per root, 4,104 cleanup entries, and cleanup
+depth 128. Replay uses bounded descriptor-relative traversal and exact-length
+reads; FIFO, symlink, hardlink, growth, mode, content, receipt, lease, and root
+identity drift fail closed.
+
+This slice does not authorize arbitrary Linux execution. The local Bubblewrap
+probe could not create the required user namespace, so `exec_run` remains
+`capability_unavailable`. npm, Debian/apt, live indexes, URLs, VCS, sdists,
+editable installs, model execution, and production wiring remain disabled.
+SBOM, license, CVE, provenance, signature, OS network containment, and crash
+durability are explicitly `not_run` or `not_claimed` for package admission.
+
+## Phase 1B/1C Local Candidate Build
 
 From a **clean committed worktree**:
 
@@ -160,5 +212,6 @@ microVM isolation.
 - MicroVM readiness is not a boot/escape/cleanup proof and does not authorize
   task execution.
 - No GHCR image is pushed, promoted, signed, or tagged `latest`.
-- Phase 1A remains fixture-only. Real package broker, web, model, grading, and
-  publication paths remain disabled.
+- Phase 1A remains fixture-only. Phase 1D-A proves only exact local wheel
+  activation through a disconnected candidate; production package, web,
+  command execution, model, grading, and publication paths remain disabled.
