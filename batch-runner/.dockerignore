@@ -1,6 +1,12 @@
 # Docker build context ignore list for the sandbox image.
 # Build context is batch-runner/; keep it small and reproducible.
 
+# Disconnected Agentic V2 package broker candidate
+sandbox/v2/agentic_v2_package_broker.py
+sandbox/v2/README.md
+schemas/agentic-v2-package-snapshot.schema.json
+security/agentic-v2-package-broker-policy.json
+
 # VCS / tooling
 .git
 .gitignore

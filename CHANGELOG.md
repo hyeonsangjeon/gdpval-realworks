@@ -45,6 +45,32 @@ entries land under a fresh dated heading the day they merge to `main`.
   credential, publication, or paid API call was used for this fix.
 
 ### Added
+- **Agentic Sandbox V2 Phase 1D-A offline wheel broker candidate** - add a
+  disconnected, model-free local candidate for stateless resolution and atomic
+  activation of at most eight exact dependency-free `py3-none-any` wheels from
+  one approved Linux/amd64/current-Python snapshot. Admission verifies exact
+  artifact bytes, ZIP/RECORD/METADATA/WHEEL identity, compatibility, bounded
+  paths and resources, and rejects dependency, startup-hook, executable-mode,
+  collision, link, FIFO, and mutable-coordinate surfaces. Activation uses a
+  deterministic stdlib extractor rather than pip or a subprocess; canonical
+  receipts bind independently derived file inventories to the lock, snapshot,
+  policy, implementation, and Python identity. Descriptor-relative staging,
+  bounded replay and cleanup, process-shared nonblocking leases, global root
+  state, and 8-environment/512 MiB quotas fail closed on drift and preserve
+  shared environments until the last lease closes. The implementation is
+  outside existing image/core-tree and Phase 1B/1C allowlist inputs, while
+  tracked Dockerignore rules exclude all Phase 1D-A artifacts from existing
+  publication build contexts. The 75 focused adversarial contracts and 644
+  Agentic V2/Phase 1B/1C regressions pass; independent
+  security and code reviews returned `APPROVE`. The credential-free backend
+  completed 3,001 passes and 6 skips with 45 integration tests deselected, and
+  three unchanged environment failures caused by stale local Azure SDK versions
+  and missing `pdfplumber`. No package
+  index, network, model, credential, workflow, grading, upload, publication, or
+  paid operation ran. `exec_run`, npm, Debian/apt, URLs/VCS/sdists/editables,
+  production wiring, and admission claims for SBOM/license/CVE/provenance/
+  signature remain disabled or `not_run`; OS containment and crash durability
+  remain unproven.
 - **Self-preparing dashboard validation** - make `npm run test:aggregate`
   generate its required dashboard/report fixtures before running while exposing
   a prepared-only entry point for CI reuse; isolate the Ruby-backed workflow

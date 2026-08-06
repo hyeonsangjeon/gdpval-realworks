@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "policy_id": "agentic-v2-package-broker-candidate-v1",
+  "foundation_only": true,
+  "production_activation": "disabled",
+  "network": {
+    "package_index": "disabled",
+    "os_containment": "not_run"
+  },
+  "supported_ecosystems": ["python-wheel"],
+  "exec_run": "blocked_pending_containment",
+  "limits": {
+    "requested_packages": 8,
+    "artifact_bytes": 67108864,
+    "snapshot_artifact_bytes": 67108864,
+    "environment_bytes": 268435456,
+    "environment_entries": 4096,
+    "active_environments": 8,
+    "active_environment_payload_bytes": 536870912,
+    "wheel_path_bytes": 240,
+    "wheel_metadata_bytes": 1048576,
+    "wheel_control_bytes": 65536,
+    "wheel_record_bytes": 2097152,
+    "cleanup_entries": 4104,
+    "cleanup_depth": 128
+  },
+  "activation": {
+    "concurrency": "linux-flock",
+    "seal": "read-only-modes-with-drift-verification",
+    "crash_durability": "not_claimed"
+  },
+  "admission_evidence": {
+    "sbom": "not_run",
+    "license": "not_run",
+    "cve": "not_run",
+    "provenance": "not_run",
+    "signature": "not_run"
+  },
+  "python": {
+    "requirements": "exact-name-version-only",
+    "wheel_tags": ["py3-none-any"],
+    "dependencies": "preclosed-none-only",
+    "installer": "deterministic-stdlib-wheel-extractor-v1"
+  },
+  "denied": [
+    "live-index",
+    "url-requirement",
+    "vcs-requirement",
+    "sdist",
+    "editable",
+    "npm",
+    "debian-apt",
+    "shell-exec",
+    "model-loop",
+    "workflow",
+    "publication"
+  ]
+}
