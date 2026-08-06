@@ -58,14 +58,22 @@
   failing tests and requirements are unchanged from `origin/main`.
 - Independent security and code reviews returned `APPROVE` with no blocking
   findings for this foundation-only candidate.
-- No model call, package index, external network, credential, workflow,
-  grading, upload, publication, or paid operation was used.
+- Local implementation and executable validation used no model call, package
+  index, external network, cloud credential, workflow, grading, artifact
+  upload/publication, or paid operation.
+- Shipment used authenticated Git and GitHub PR operations only; no CI workflow
+  or artifact publication ran.
 
 ## Shipment
 
-- Working branch: `feat/agentic-v2-package-broker`.
-- Base: `origin/main@fa76d24973e660f4e93b26fe7ef7d87dc5ba3223`.
-- This record describes the reviewed local candidate before remote shipment.
+- Reviewed branch head:
+  `15138d88678dfaf08cb478855c6f395a90e32b51`.
+- PR [#160](https://github.com/hyeonsangjeon/gdpval-realworks/pull/160)
+  reached `MERGED` at `2026-08-06T14:05:35Z` as squash commit
+  `4dbb23c9abc3662db984ca8358887184eac4092f`.
+- GitHub reported the PR `MERGEABLE` and `CLEAN`. The changed paths did not
+  create an automatic PR or post-merge workflow run; local executable evidence
+  and independent reviews supplied the acceptance evidence.
 
 ## Remaining Work
 

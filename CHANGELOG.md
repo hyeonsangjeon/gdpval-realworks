@@ -65,12 +65,18 @@ entries land under a fresh dated heading the day they merge to `main`.
   security and code reviews returned `APPROVE`. The credential-free backend
   completed 3,001 passes and 6 skips with 45 integration tests deselected, and
   three unchanged environment failures caused by stale local Azure SDK versions
-  and missing `pdfplumber`. No package
-  index, network, model, credential, workflow, grading, upload, publication, or
-  paid operation ran. `exec_run`, npm, Debian/apt, URLs/VCS/sdists/editables,
-  production wiring, and admission claims for SBOM/license/CVE/provenance/
-  signature remain disabled or `not_run`; OS containment and crash durability
-  remain unproven.
+  and missing `pdfplumber`. PR #160 reached `MERGED` at
+  `2026-08-06T14:05:35Z` from reviewed head
+  `15138d88678dfaf08cb478855c6f395a90e32b51` as squash merge
+  `4dbb23c9abc3662db984ca8358887184eac4092f`. GitHub reported the PR
+  `MERGEABLE` and `CLEAN`; no automatic workflow run was created for the PR or
+  merge commit. Local implementation and executable validation used no package
+  index, external network, model, cloud credential, workflow, grading, artifact
+  upload/publication, or paid operation. Shipment used authenticated Git and
+  GitHub PR operations only. `exec_run`, npm, Debian/apt,
+  URLs/VCS/sdists/editables, production wiring, and admission claims for
+  SBOM/license/CVE/provenance/signature remain disabled or `not_run`; OS
+  containment and crash durability remain unproven.
 - **Self-preparing dashboard validation** - make `npm run test:aggregate`
   generate its required dashboard/report fixtures before running while exposing
   a prepared-only entry point for CI reuse; isolate the Ruby-backed workflow
