@@ -63,6 +63,12 @@ async function main() {
       await page.getByRole('navigation', { name: 'perception 단계별 실험 상세' }).getByRole('link').allTextContents(),
       ['exp011packages25/25QA 5.80 · 0 path', 'exp012audio*24/25QA 5.79 · 1 path', 'exp026audio+video23/25QA 6.00 · 2 path'],
     )
+    const exp026Links = page.locator('a[href="https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp026"]')
+    assert.ok(await exp026Links.count() >= 3)
+    for (const link of await exp026Links.all()) {
+      assert.equal(await link.getAttribute('target'), '_blank')
+      assert.equal(await link.getAttribute('rel'), 'noopener noreferrer')
+    }
     for (const title of chapterTitles) {
       assert.equal(await page.getByRole('heading', { name: title, exact: true }).count(), 1)
     }

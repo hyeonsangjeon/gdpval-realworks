@@ -452,6 +452,27 @@ function resolveSuccessArticle(article: JournalArticleData, benchmark: ReadySucc
   }
 }
 
+function ExperimentDetailLink({
+  experimentId,
+  label,
+  className,
+}: {
+  experimentId: string
+  label: string
+  className: string
+}) {
+  const href = getExperimentHref(experimentId)
+  return isExternalExperimentHref(href) ? (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+      {label} <ExternalLink className="h-3 w-3" />
+    </a>
+  ) : (
+    <Link to={href} className={className}>
+      {label} <ArrowRight className="h-3 w-3" />
+    </Link>
+  )
+}
+
 function BenchmarkDataSource({ rows, generated }: { rows: PromptComplexityBenchmarkRow[]; generated: string }) {
   return (
     <aside className="mb-10 border-y border-dash-border py-4 text-[11px]/[1.7] text-dash-text-secondary" aria-label="Benchmark data source">
@@ -466,13 +487,12 @@ function BenchmarkDataSource({ rows, generated }: { rows: PromptComplexityBenchm
           reports-index.json <ExternalLink className="h-3 w-3" />
         </a>
         {rows.map((row) => (
-          <Link
+          <ExperimentDetailLink
             key={row.shortId}
-            to={getExperimentHref(row.shortId)}
+            experimentId={row.shortId}
+            label={`${row.shortId} 상세`}
             className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400"
-          >
-            {row.shortId} 상세 <ArrowRight className="h-3 w-3" />
-          </Link>
+          />
         ))}
       </div>
       <div className="mt-2 text-dash-text-muted">
@@ -512,9 +532,12 @@ function RuntimeDataSource({ benchmark }: { benchmark: ReadyRuntimeBenchmark }) 
       </div>
       <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2">
         {benchmark.rows.map((row) => (
-          <Link key={row.shortId} to={getExperimentHref(row.shortId)} className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400">
-            {row.shortId} · {row.executionMode} · {row.duration} <ArrowRight className="h-3 w-3" />
-          </Link>
+          <ExperimentDetailLink
+            key={row.shortId}
+            experimentId={row.shortId}
+            label={`${row.shortId} · ${row.executionMode} · ${row.duration}`}
+            className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400"
+          />
         ))}
       </div>
       <div className="mt-3 text-dash-text-muted">
@@ -552,9 +575,12 @@ function IntegrityDataSource({ benchmark }: { benchmark: ReadyIntegrityBenchmark
       </div>
       <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2">
         {benchmark.rows.map((row) => (
-          <Link key={row.shortId} to={getExperimentHref(row.shortId)} className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400">
-            {row.shortId} · {row.successCount}/{row.totalTasks} · {row.successRatePct.toFixed(1)}% <ArrowRight className="h-3 w-3" />
-          </Link>
+          <ExperimentDetailLink
+            key={row.shortId}
+            experimentId={row.shortId}
+            label={`${row.shortId} · ${row.successCount}/${row.totalTasks} · ${row.successRatePct.toFixed(1)}%`}
+            className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400"
+          />
         ))}
       </div>
       <div className="mt-3 text-dash-text-muted">
@@ -591,9 +617,12 @@ function PerceptionDataSource({ benchmark }: { benchmark: ReadyPerceptionBenchma
       </div>
       <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2">
         {benchmark.rows.map((row) => (
-          <Link key={row.shortId} to={getExperimentHref(row.shortId)} className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400">
-            {row.shortId} · {row.information.success}/{row.information.total} · QA {row.information.avgQaScore.toFixed(2)} <ArrowRight className="h-3 w-3" />
-          </Link>
+          <ExperimentDetailLink
+            key={row.shortId}
+            experimentId={row.shortId}
+            label={`${row.shortId} · ${row.information.success}/${row.information.total} · QA ${row.information.avgQaScore.toFixed(2)}`}
+            className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400"
+          />
         ))}
       </div>
       <div className="mt-3 text-dash-text-muted">
@@ -628,9 +657,11 @@ function SuccessDataSource({ benchmark }: { benchmark: ReadySuccessBenchmark }) 
         <a href={`${repo}/tree/main/${benchmark.sources.grades}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
           grade inventory <ExternalLink className="h-3 w-3" />
         </a>
-        <Link to={getExperimentHref('exp026')} className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400">
-          exp026 상세 <ArrowRight className="h-3 w-3" />
-        </Link>
+        <ExperimentDetailLink
+          experimentId="exp026"
+          label="exp026 상세"
+          className="inline-flex items-center gap-1 font-mono hover:text-emerald-600 dark:hover:text-emerald-400"
+        />
       </div>
       <div className="mt-3 text-dash-text-muted">
         report는 self-assessed pre-grading이다. artifact는 HF revision {benchmark.huggingface.revision.slice(0, 7)}와 SHA-256으로 고정했으며, 구조 검사는 외부 금융 품질 평가를 대신하지 않는다.

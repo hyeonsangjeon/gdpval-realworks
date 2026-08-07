@@ -33,10 +33,12 @@
 
 ## 여기서 시작하세요
 
-**[라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)** |
-**[3-task 샘플 config](batch-runner/experiments/exp998_smoke_baseline_sample.yaml)** |
-**[Batch workflow 실행](../../actions/workflows/batch-run.yml)** |
-**[결과와 아티팩트](docs/first-experiment_KR.md#7-성공-상태-확인)**
+| 경로 | 비용과 모델 경계 |
+|---|---|
+| **[라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)** | **$0 · 모델 호출 없음** |
+| **[3-task 샘플 config](batch-runner/experiments/exp998_smoke_baseline_sample.yaml)** | **확인 비용 $0 · 모델 호출 없음** |
+| **[Batch workflow 실행](../../actions/workflows/batch-run.yml)** | **유료 API 사용 · 모델 호출과 원격 쓰기** |
+| **[결과와 아티팩트](docs/first-experiment_KR.md#7-성공-상태-확인)** | **확인 비용 $0 · 모델 호출 없음** |
 
 - **근거 보기:** [라이브 대시보드](https://hyeonsangjeon.github.io/gdpval-realworks/)를
   엽니다. 브라우저만 있으면 됩니다.
@@ -132,13 +134,15 @@ Step 0-7은 실험 실행과 게시를 담당합니다. 외부 채점은 별도 
 | 설정 입력 | 인증 정보 없는 job이 실험 이름을 검사하고 YAML을 안전하게 파싱한 뒤 credential job을 시작하며, 일반 배치 경로는 agentic mode를 거부함 | [`batch-run.yml`](.github/workflows/batch-run.yml) |
 | Container sandbox | sandbox 실행은 relay 전체에 immutable image digest를 유지하며, Docker 실행은 network를 끄고 resource limit을 적용함 | [`batch-run.yml`](.github/workflows/batch-run.yml), [`sandbox_runner.py`](batch-runner/core/sandbox_runner.py) |
 | Agentic image supply chain | 수동 protected-main 게시에 immutable dependency lock, digest-pinned base, runtime audit, SBOM 근거를 요구함 | [`build-sandbox-image.yml`](.github/workflows/build-sandbox-image.yml) |
-| Agentic containment preflight | 수동 model-free job이 model/HF credential 부재, 정확한 preloaded image와 AppArmor 입력, containment test, 종료 후 정리를 검사함 | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
+| Agentic containment preflight | 정의돼 있으나 미실행(`not_run`): 수동 model-free job은 `[self-hosted, linux, x64, agentic-sandbox]` 러너를 요구하지만 일치하는 러너가 없어 containment 결과가 확립되지 않음 | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
 | Dashboard publication | PR에서 aggregate, build, data/browser contract를 실행하고 push/manual deploy job만 Pages/OIDC 권한을 받음 | [`deploy.yml`](.github/workflows/deploy.yml) |
 
 기본 3-task smoke는 provider-hosted `code_interpreter`를 사용합니다. Docker
 sandbox와 agentic 통제는 각각 이름이 붙은 경로에만 적용됩니다. 일반 배치
 워크플로는 cloud credential을 사용하기 전에 agentic 실행을 거부하며,
-체크인된 agentic 워크플로는 유료 실행이 아니라 model-free preflight입니다.
+체크인된 agentic 워크플로는 실행 근거나 유료 실행이 아니라 model-free
+preflight 정의입니다. `not_run` / `failed` / `verified` 근거 사다리에서 이
+containment 근거는 `not_run`으로 남아 있습니다.
 
 ---
 
@@ -168,15 +172,16 @@ sandbox와 agentic 통제는 각각 이름이 붙은 경로에만 적용됩니�
   뒤 일회성 Hugging Face dataset을 한 번 생성·업로드합니다. 기존 partial 또는
   결과가 불명확한 target은 재시도나 자동 삭제 없이 중단합니다.
 2. Step 1이 태스크 3개를 결정적으로 선택합니다.
-3. Step 2가 `gpt-5.2-chat`을 호출하고 파일을 만든 뒤 같은 모델의 Self-QA를 재시도할 수 있습니다.
+3. Step 2가 **샘플 config 예시값**인 `gpt-5.2-chat`을 호출하고 파일을 만든 뒤
+  같은 모델의 Self-QA를 재시도할 수 있습니다.
 4. Step 3-4가 포맷된 결과와 3-row Parquet artifact를 만듭니다.
 5. dry run이면서 3-task sample이므로 Step 5를 건너뜁니다.
-6. Step 6의 기본 report 경로는 `gpt-5.6-sol`을 `reasoning=max`로 순차적으로
-  최대 2회 호출합니다. 1.05M context는 별도 요청 설정이 아니라 deployment
-  capability입니다. 완료된 호출은 과금될 수 있습니다. 설정, 호출, 파싱,
-  route 검증 중 하나라도 실패하면 즉시 model-free report를 만들고 다른 모델
-  fallback은 호출하지 않습니다. 게시 전에 report identity 검증을 반드시
-  통과해야 합니다.
+6. Step 6의 **현재 프로덕션 report 기본값**은 `gpt-5.6-sol`이며,
+  `reasoning=max`로 순차적으로 최대 2회 호출합니다. 1.05M context는 별도 요청
+  설정이 아니라 deployment capability입니다. 완료된 호출은 과금될 수
+  있습니다. 설정, 호출, 파싱, route 검증 중 하나라도 실패하면 즉시
+  model-free report를 만들고 다른 모델 fallback은 호출하지 않습니다. 게시
+  전에 report identity 검증을 반드시 통과해야 합니다.
 7. `dry_run: true`이므로 Step 7과 결과 PR을 건너뜁니다.
 
 인증된 batch job이 마지막 `always()` 단계에 도달하면
@@ -218,7 +223,7 @@ threshold 아래에서 재시도합니다. inference-time reflection gate입니�
 | Sector heatmap | 9개 산업의 성능 차이 |
 | Experiment detail | 220개 태스크 상태, 파일, prompt, retry, error |
 | Grading analysis | 근거가 연결된 rubric 결과와 judge metadata |
-| RealWorks Field Notes | 근거의 한계를 명시한 시간순 엔지니어링 의사결정 |
+| [RealWorks Field Notes](https://hyeonsangjeon.github.io/gdpval-realworks/notes) | 근거의 한계를 명시한 시간순 엔지니어링 의사결정 |
 
 구현 상세는 [`src/README_KR.md`](src/README_KR.md)에 있습니다.
 

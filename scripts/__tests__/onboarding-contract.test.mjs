@@ -140,6 +140,10 @@ test('first-screen routes stay complete and fork-relative', async () => {
     assert.ok(links.some((link) => /docs\/first-experiment(?:_KR)?\.md#7-/.test(link)))
     assert.doesNotMatch(section, /github\.com\/hyeonsangjeon\/gdpval-realworks\/actions/)
   }
+  assert.match(rootSections[0], /\$0 · no model calls/)
+  assert.match(rootSections[0], /Paid API usage · model calls and remote writes/)
+  assert.match(rootSections[1], /\$0 · 모델 호출 없음/)
+  assert.match(rootSections[1], /유료 API 사용 · 모델 호출과 원격 쓰기/)
 
   const runnerSections = [
     extractSection(runnerEnglish, '## Start here'),
@@ -163,6 +167,41 @@ test('first-screen routes stay complete and fork-relative', async () => {
   )
   assert.equal(rootAction.href, 'https://github.com/fork-owner/gdpval-realworks/actions/workflows/batch-run.yml')
   assert.equal(runnerAction.href, rootAction.href)
+})
+
+test('root docs keep agentic preflight not_run and label model roles', async () => {
+  const [rootEnglish, rootKorean, preflightText] = await Promise.all([
+    readRepoFile('README.md'),
+    readRepoFile('README_KR.md'),
+    readRepoFile('.github/workflows/agentic-sandbox-preflight.yml'),
+  ])
+  const preflight = parse(preflightText)
+  assert.deepEqual(
+    preflight.jobs['model-free-preflight']['runs-on'],
+    ['self-hosted', 'linux', 'x64', 'agentic-sandbox'],
+  )
+
+  const operationalSections = [
+    extractSection(rootEnglish, '## Operational controls'),
+    extractSection(rootKorean, '## 운영 통제'),
+  ]
+  for (const section of operationalSections) {
+    assert.match(section, /not_run/)
+    assert.match(section, /self-hosted, linux, x64, agentic-sandbox/)
+    assert.match(section, /no matching runner exists|일치하는 러너가 없어/)
+    assert.match(section, /not_run[^\n]*failed[^\n]*verified/)
+  }
+
+  const cloudSections = [
+    extractSection(rootEnglish, '## First cloud experiment'),
+    extractSection(rootKorean, '## 첫 클라우드 실험'),
+  ]
+  assert.match(cloudSections[0], /gpt-5\.2-chat[^\n]*sample configuration value/)
+  assert.match(cloudSections[0], /current production report default[^\n]*gpt-5\.6-sol/)
+  assert.match(cloudSections[1], /샘플 config 예시값[^\n]*gpt-5\.2-chat/)
+  assert.match(cloudSections[1], /현재 프로덕션 report 기본값[^\n]*gpt-5\.6-sol/)
+  assert.match(rootEnglish, /\[RealWorks Field Notes\]\(https:\/\/hyeonsangjeon\.github\.io\/gdpval-realworks\/notes\)/)
+  assert.match(rootKorean, /\[RealWorks Field Notes\]\(https:\/\/hyeonsangjeon\.github\.io\/gdpval-realworks\/notes\)/)
 })
 
 test('fresh dashboard verification is self-preparing and credential-free', async () => {

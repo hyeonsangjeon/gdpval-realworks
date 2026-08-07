@@ -1,90 +1,84 @@
 # Latest Task Result
 
-- Updated: 2026-08-06
-- Status: Phase 1D-A offline Python wheel broker candidate implemented,
-  validated, and still disconnected from production
+- Updated: 2026-08-07
+- Status: Field Notes rescue reconciled against current `main`; README facts and
+  public experiment links corrected and validated; `first-reviewer` approved;
+  single PR #162 open
 
 ## Task
 
-- Continue Agentic Sandbox V2 toward installable external packages and Linux
-  execution without weakening containment, reproducibility, or fail-closed
-  behavior.
-- Deliver the smallest model-free package slice that can be proved on this
-  host, while deferring command execution that lacks enforceable isolation.
-- Preserve the intentional dirty primary checkout byte-for-byte by working from
-  clean `origin/main@fa76d24973e6` in a separate worktree.
+- Back up the only three-week primary worktree copy before any Git mutation.
+- Surgically rescue seven requested Field Notes assets onto
+  `origin/main@a6593c2` without importing the primary worktree's other changes.
+- Correct English and Korean root README claims about the unexecuted agentic
+  preflight, model roles, Start here cost boundaries, and Field Notes status.
 
 ## Result
 
-- Added a foundation-only snapshot schema and runtime policy for at most eight
-  exact, canonical, dependency-free `py3-none-any` wheels on Linux amd64 and the
-  active Python major/minor.
-- Added strict artifact admission for size/hash, archive paths and controls,
-  RECORD inventory and hashes, METADATA identity and `Requires-Python`, exact
-  WHEEL headers, aggregate limits, collisions, links, executable-mode entries,
-  `.data`, `.pth`, `.egg-link`, `.pyc`, and startup hooks.
-- Added stateless lock resolution. A returned digest can be activated after a
-  broker restart without hidden resolver state.
-- Added deterministic stdlib wheel extraction with no pip, installer
-  subprocess, package index, or network path. Activation uses private
-  descriptor-anchored staging, independent expected inventory, canonical
-  receipt bytes, mode sealing, and atomic rename.
-- Added process-shared nonblocking leases, shared-root global state and quota
-  validation, canonical receipt baselines, bounded descriptor replay and
-  cleanup, orphan recovery, last-lease cleanup, and fail-closed root/lease/
-  content/mode/size drift handling.
-- Added a dispatcher candidate that permits only capabilities query, package
-  resolve, and package activation. Command execution, workspace mutation,
-  browser, public verification, and finalization return
-  `capability_unavailable`.
-- Confirmed the candidate is not wired into executor, Step 2, the Agentic V2
-  runner, experiments, workflows, grading, upload, or publication.
-- Kept the implementation under `sandbox/v2/`, outside the existing
-  `COPY core` image input, core-tree identity, Phase 1B/1C build allowlist, and
-  embedded-image manifest. Tracked Dockerignore rules also exclude every
-  Phase 1D-A artifact from existing publication build contexts.
+- Created and checksum-verified an external physical backup outside the
+  repository: 16,173 regular files, 27 symlinks, and 521,099,777 bytes. Its Git
+  status fingerprint is the pre-task 1,235-line SHA-256
+  `8e96ad2cfdaceb05d61c978ad786df13c3647b8ae810771344dd3430314d91ce`.
+- Reconciled all seven requested paths and found the supplied absence premise
+  was no longer true: every path is tracked on current `main`, with Field Notes
+  history from initial commit `8ac9c20` through later evidence-backed fixes.
+- Five primary filesystem assets were exact older Git blobs, `Journal.tsx` was
+  already identical to `main`, and the missing filesystem test had a newer
+  committed successor. The only unique `journal.ts` blob was a stale
+  intermediate that would remove the prompt-complexity note and later runtime,
+  integrity, perception, and success evidence/citation contracts. No stale blob
+  was copied over current `main`.
+- The clean branch keeps all seven canonical paths as ordinary tracked files,
+  resolving the intended final file set without changing the primary
+  index/worktree D/?? state.
+- Fixed all public exp026 detail links in Field Notes evidence and mobile cards
+  to use
+  `https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp026` with
+  `target="_blank" rel="noopener noreferrer"`.
+- Corrected both root READMEs:
+  - the self-hosted agentic preflight is defined but never run and its
+    containment evidence remains `not_run`;
+  - `gpt-5.2-chat` is labeled as the sample config value and `gpt-5.6-sol` as
+    the current production report default;
+  - every Start here route identifies $0/no-model inspection or paid model and
+    remote-write behavior;
+  - RealWorks Field Notes links to the deployed `/notes` view.
+- The primary worktree was not modified by this task. Relative to the physical
+  backup, its only new status entry is one user-created private task spec
+  supplied during the session.
 
 ## Verification
 
-- Focused Phase 1D-A adversarial suite: 75 passed.
-- Agentic V2 contract, foundation, compatibility, candidate verifier, Phase 1B
-  static/contract/OCI/supply-chain, and Phase 1C license regressions: 644
-  passed.
-- Ruff, `py_compile`, VS Code diagnostics, and `git diff --check`: passed.
-- Credential-free backend: 3,001 passed, 6 skipped, and 45 integration tests
-  deselected. Three unrelated environment failures remain: installed
-  `openai==2.45.0`, `azure-core==1.39.0`, and `azure-ai-projects==1.0.0` do not
-  match repository pins 2.46.0/1.41.0/2.3.0, and `pdfplumber` is absent. The
-  failing tests and requirements are unchanged from `origin/main`.
-- Independent security and code reviews returned `APPROVE` with no blocking
-  findings for this foundation-only candidate.
-- Local implementation and executable validation used no model call, package
-  index, external network, cloud credential, workflow, grading, artifact
-  upload/publication, or paid operation.
-- Shipment used authenticated Git and GitHub PR operations only; no CI workflow
-  or artifact publication ran.
+- Focused Field Notes and bilingual onboarding contracts: 21 passed.
+- Self-preparing aggregate suite: 98 passed, 1 expected skip because Ruby is
+  unavailable locally.
+- `npm run build`: passed with 2,783 transformed modules.
+- Four Field Notes Chromium suites passed inside the pinned
+  `mcr.microsoft.com/playwright:v1.61.1-noble` image. They verify:
+  - `/journal/:slug` redirects at runtime to `/notes/:slug` while preserving
+    query parameters;
+  - all visible exp026 links use the public URL and exact safe new-tab
+    attributes;
+  - 390px and 1,280px layouts have zero horizontal overflow;
+  - reduced-motion charts remain static and evidence failure states fail closed.
+- The host Playwright binary itself could not start because `libnspr4.so` is
+  absent; the matching container supplied the browser runtime without changing
+  the host.
+- `git diff --check`: passed.
+- Independent `first-reviewer` review: `APPROVE`, with no blocking findings.
+- No model, grading, cloud credential, workflow dispatch, Hugging Face write,
+  or paid operation ran. Aggregation made unauthenticated read-only requests to
+  23 public report datasets.
 
 ## Shipment
 
-- Reviewed branch head:
-  `15138d88678dfaf08cb478855c6f395a90e32b51`.
-- PR [#160](https://github.com/hyeonsangjeon/gdpval-realworks/pull/160)
-  reached `MERGED` at `2026-08-06T14:05:35Z` as squash commit
-  `4dbb23c9abc3662db984ca8358887184eac4092f`.
-- GitHub reported the PR `MERGEABLE` and `CLEAN`. The changed paths did not
-  create an automatic PR or post-merge workflow run; local executable evidence
-  and independent reviews supplied the acceptance evidence.
+- Working branch: `feat/field-notes-readme-facts`.
+- Base: `origin/main@a6593c2f0b9888a49a90fb96210b0d61b48f6332`.
+- PR [#162](https://github.com/hyeonsangjeon/gdpval-realworks/pull/162) is open
+  with the Field Notes link correction, bilingual README update, regression
+  contracts, changelog, and this completion record in one review unit.
 
 ## Remaining Work
 
-- Production activation remains disabled. The candidate is not connected to a
-  model loop, experiment, workflow, grader, uploader, or public artifact path.
-- `exec_run` remains blocked. The local Bubblewrap probe cannot create the
-  required user namespace, so arbitrary Linux execution has no enforceable
-  containment proof on this host.
-- npm, Debian/apt, live indexes, URL/VCS requirements, sdists, and editable
-  installs remain unsupported.
-- Package admission SBOM, license, CVE, provenance, signature, OS-level network
-  containment, and crash durability remain `not_run` or `not_claimed`.
-- A later production phase must add approved supply-chain evidence and a proven
-  containment substrate before connecting package environments to execution.
+- PR #162 awaits the owner's merge decision. Do not merge it or create a second
+  completion PR unless the owner explicitly requests it.

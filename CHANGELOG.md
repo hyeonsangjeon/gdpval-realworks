@@ -12,6 +12,32 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **Field Notes rescue reconciliation and onboarding truth labels** - preserve a
+  physical copy of the full three-week primary worktree before Git mutation,
+  then reconcile the seven requested Field Notes paths against
+  `origin/main@a6593c2`. All seven were already tracked on `main`; five primary
+  filesystem blobs were exact July 15-16 historical versions, `Journal.tsx`
+  was already identical to `main`, the missing filesystem test had a newer
+  committed successor, and the one unique `journal.ts` snapshot would remove
+  later evidence-backed articles, citations, and selectors. The rescue
+  therefore keeps the evolved canonical files instead of overwriting them with
+  stale snapshots. Current Field Notes now route every public exp026 detail
+  link through its deployed URL with safe new-tab attributes, including mobile
+  perception cards and evidence rows. English and Korean root onboarding mark
+  the unavailable self-hosted agentic preflight as `not_run`, distinguish the
+  sample `gpt-5.2-chat` value from the current production report default
+  `gpt-5.6-sol`, label every Start here path with its cost/model-call boundary,
+  and link directly to the deployed `/notes` view. Validation passes 21 focused
+  Field Notes/onboarding contracts, the self-preparing aggregate suite with 98
+  passes and one expected Ruby skip, the production build, and all four
+  containerized Chromium Field Notes suites with zero 390px overflow, runtime
+  legacy-route redirection, and exact exp026 `href`/`target`/`rel` checks. No
+  model, grading, cloud credential, workflow dispatch, Hugging Face write, or
+  paid operation ran; aggregation made only unauthenticated public report
+  reads.
+  Independent `first-reviewer` review returned `APPROVE` with no blocking
+  findings; its only note was a nonblocking future-proofing opportunity for
+  experiment IDs that are currently internal-only.
 - **Verified 220-task mini regrade history** - replace the stale pre-run
   `BLOCKED` note with an evidence-reopened record of the completed four-run
   `default_v2_mini.yaml` relay. The report now binds each successful GitHub run

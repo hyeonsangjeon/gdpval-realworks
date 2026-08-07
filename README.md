@@ -33,10 +33,12 @@
 
 ## Start here
 
-**[Live dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/)** |
-**[Three-task sample config](batch-runner/experiments/exp998_smoke_baseline_sample.yaml)** |
-**[Run Batch workflow](../../actions/workflows/batch-run.yml)** |
-**[Results and artifacts](docs/first-experiment.md#7-know-what-success-looks-like)**
+| Path | Cost and model boundary |
+|---|---|
+| **[Live dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/)** | **$0 · no model calls** |
+| **[Three-task sample config](batch-runner/experiments/exp998_smoke_baseline_sample.yaml)** | **$0 to inspect · no model calls** |
+| **[Run Batch workflow](../../actions/workflows/batch-run.yml)** | **Paid API usage · model calls and remote writes** |
+| **[Results and artifacts](docs/first-experiment.md#7-know-what-success-looks-like)** | **$0 to inspect · no model calls** |
 
 - **See the evidence:** [open the live dashboard](https://hyeonsangjeon.github.io/gdpval-realworks/).
   A browser is enough.
@@ -152,13 +154,15 @@ These are code-backed, path-specific controls, not a blanket security claim:
 | Configuration input | A no-credential job validates the experiment name and safely parses YAML before the credentialed job; agentic modes are rejected from the general batch path | [`batch-run.yml`](.github/workflows/batch-run.yml) |
 | Container sandbox | Sandbox runs resolve an immutable image digest across relay jobs; Docker execution disables networking and applies resource limits | [`batch-run.yml`](.github/workflows/batch-run.yml), [`sandbox_runner.py`](batch-runner/core/sandbox_runner.py) |
 | Agentic image supply chain | Manual protected-main publication requires immutable dependency locks, a digest-pinned base, runtime audit, and SBOM evidence | [`build-sandbox-image.yml`](.github/workflows/build-sandbox-image.yml) |
-| Agentic containment preflight | A manual model-free job rejects model/HF credentials, requires an exact preloaded image and AppArmor input, runs containment tests, and asserts cleanup | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
+| Agentic containment preflight | Defined but never run (`not_run`): the manual model-free job requires `[self-hosted, linux, x64, agentic-sandbox]`, and no matching runner exists. No containment result is established. | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
 | Dashboard publication | Pull requests aggregate, build, and run data/browser contracts; only push/manual deploy jobs receive Pages/OIDC permissions | [`deploy.yml`](.github/workflows/deploy.yml) |
 
 The default three-task smoke config uses provider-hosted `code_interpreter`.
 Docker sandbox and agentic controls apply only to their named paths. The general
 batch workflow currently rejects agentic execution before cloud credentials are
-used; the checked-in agentic workflow is a model-free preflight, not a paid run.
+used. The checked-in agentic workflow is a model-free preflight definition, not
+an executed proof or a paid run. Under the `not_run` / `failed` / `verified`
+evidence ladder, its containment evidence remains `not_run`.
 
 ---
 
@@ -188,14 +192,16 @@ Expected behavior:
   before creating and uploading a disposable Hugging Face dataset once. A
   partial target or ambiguous outcome aborts without retry or automatic deletion.
 2. Step 1 selects three tasks deterministically.
-3. Step 2 calls `gpt-5.2-chat`, creates files, and can retry same-model Self-QA.
+3. Step 2 uses `gpt-5.2-chat`, the **sample configuration value**, creates
+  files, and can retry same-model Self-QA.
 4. Steps 3-4 write formatted results and a three-row Parquet artifact.
 5. Step 5 is skipped because this is both a dry run and a three-task sample.
-6. Step 6's primary report path makes up to two sequential `gpt-5.6-sol` calls
-  with `reasoning=max`. Its 1.05M context is a deployment capability, not an
-  extra request setting. Completed calls can be billed. Any setup, call, parse,
-  or route-validation failure immediately produces a model-free report; there
-  is no second-model fallback. Report identity must pass before publication.
+6. Step 6's **current production report default** is `gpt-5.6-sol`; its primary
+  path makes up to two sequential calls with `reasoning=max`. Its 1.05M context
+  is a deployment capability, not an extra request setting. Completed calls can
+  be billed. Any setup, call, parse, or route-validation failure immediately
+  produces a model-free report; there is no second-model fallback. Report
+  identity must pass before publication.
 7. Step 7 and the result PR are skipped by `dry_run: true`.
 
 If the credentialed batch job reaches its final `always()` step, it attempts to
@@ -237,7 +243,7 @@ static React application backed by generated repository data.
 | Sector heatmap | Performance variation across 9 sectors |
 | Experiment detail | All 220 task states, files, prompts, retries, and errors |
 | Grading analysis | Evidence-linked rubric results and judge metadata |
-| RealWorks Field Notes | Chronological engineering decisions with explicit evidence caveats |
+| [RealWorks Field Notes](https://hyeonsangjeon.github.io/gdpval-realworks/notes) | Chronological engineering decisions with explicit evidence caveats |
 
 Dashboard implementation details are in [`src/README.md`](src/README.md).
 
