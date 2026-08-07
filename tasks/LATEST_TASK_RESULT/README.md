@@ -3,7 +3,7 @@
 - Updated: 2026-08-08
 - Status: Root English/Korean containment documentation now separates the
   unexecuted self-hosted preflight from verified hosted Docker controls;
-  `exec_run` and the aggregate gate remain blocked
+  merged through PR #165 while `exec_run` and the aggregate gate remain blocked
 
 ## Current Task: Root README Containment Evidence
 
@@ -45,18 +45,20 @@
 
 ### Shipment
 
-- Working branch: `docs/hosted-containment-readme`.
-- Base: `origin/main@ec8503334ca1725b3b60db9b65cb878a020cfd14`.
+- Reviewed branch head:
+  `c3b2a0b4e814d8bb2c830b01162d627f1277739b`.
 - Independent `first-reviewer` verdict: `APPROVE`, with no blocking finding.
-- Follow-up PR
-  [#165](https://github.com/hyeonsangjeon/gdpval-realworks/pull/165) contains
-  the bilingual README update, regression contract, changelog entry, and this
-  completion record and remains open for the owner's decision.
+- PR [#165](https://github.com/hyeonsangjeon/gdpval-realworks/pull/165) reached
+  `MERGED` at `2026-08-07T17:04:12Z` as squash commit
+  `2d82691ffb5d1911f19f996be0807d4ca037ae81`.
+- GitHub reported the PR `MERGEABLE` and `CLEAN`; automatic PR validation passed
+  with deployment skipped. Automatic post-merge main run
+  [`31200577265`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/31200577265)
+  passed validation and Pages deployment. No workflow was manually dispatched.
 
 ### Remaining Work
 
-- The owner decides whether and when to merge PR #165. Do not push directly to
-  `main` or dispatch a workflow.
+- No remaining shipment work is carried by this README correction record.
 
 ---
 
