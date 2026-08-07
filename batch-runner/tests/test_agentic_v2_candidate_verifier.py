@@ -53,6 +53,77 @@ def test_candidate_verifier_refuses_credential_environment(monkeypatch):
         verifier._require_no_credentials()
 
 
+def test_public_containment_measurement_validates_image_and_report(monkeypatch):
+    checks = {name: True for name in verifier._CONTAINMENT_CHECKS}
+    collection = {
+        name: True
+        for name in (
+            "cap_drop_all", "memory_limit", "network_none",
+            "no_new_privileges", "non_root_uid", "read_only_rootfs",
+        )
+    }
+    report = {
+        "schema_version": "1.1",
+        "status": "verified",
+        "checks": checks,
+        "required": sorted(checks),
+        "collection_status": "verified",
+        "collection_checks": collection,
+        "host_scope": "exact-docker-daemon",
+    }
+    report["report_sha256"] = verifier.canonical_sha256(report)
+    monkeypatch.setattr(verifier, "_require_no_credentials", lambda: None)
+    monkeypatch.setattr(verifier, "_require_local_docker", lambda: None)
+    monkeypatch.setattr(
+        verifier,
+        "_docker_json",
+        lambda _command: [{
+            "Id": "sha256:" + "a" * 64,
+            "Architecture": "amd64",
+            "Os": "linux",
+            "RepoDigests": ["example.test/image@sha256:" + "b" * 64],
+        }],
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_inspect_containment",
+        lambda _image, *, session: dict(report),
+    )
+
+    measured = verifier.measure_docker_containment(
+        "example.test/image@sha256:" + "b" * 64,
+        session_id="c" * 32,
+    )
+
+    assert measured == {
+        "image_id": "sha256:" + "a" * 64,
+        "platform": "linux/amd64",
+        "repo_digests": ["example.test/image@sha256:" + "b" * 64],
+        "containment": report,
+    }
+
+
+def test_public_containment_measurement_rejects_invalid_image(monkeypatch):
+    monkeypatch.setattr(verifier, "_require_no_credentials", lambda: None)
+    monkeypatch.setattr(verifier, "_require_local_docker", lambda: None)
+    monkeypatch.setattr(
+        verifier,
+        "_docker_json",
+        lambda _command: [{
+            "Id": "sha256:" + "a" * 64,
+            "Architecture": "arm64",
+            "Os": "linux",
+            "RepoDigests": [],
+        }],
+    )
+
+    with pytest.raises(ValueError, match="image identity"):
+        verifier.measure_docker_containment(
+            "example.test/image@sha256:" + "b" * 64,
+            session_id="c" * 32,
+        )
+
+
 def test_containment_report_separates_collection_from_production(monkeypatch):
     checks = {name: True for name in verifier._CONTAINMENT_CHECKS}
     checks["cpu_quota"] = False

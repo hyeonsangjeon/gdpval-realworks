@@ -96,10 +96,11 @@ def test_agentic_image_build_is_sha_bound_and_attested():
     text = BUILD_WORKFLOW.read_text(encoding="utf-8")
     steps = _steps(BUILD_WORKFLOW)
     workflow = yaml.safe_load(BUILD_WORKFLOW.read_text(encoding="utf-8"))
-    assert set(workflow[True]) == {"workflow_dispatch"}
+    assert set(workflow[True]) == {"workflow_dispatch", "pull_request"}
     job = workflow["jobs"]["build-sandbox-image"]
     assert job["if"] == (
-        "github.ref == 'refs/heads/main' && github.ref_protected == true"
+        "github.event_name == 'workflow_dispatch' && github.ref == "
+        "'refs/heads/main' && github.ref_protected == true"
     )
     assert all(
         not str(step.get("uses", "")).endswith(("@v3", "@v4", "@v6"))
@@ -183,6 +184,57 @@ def test_agentic_image_build_is_sha_bound_and_attested():
     assert "imagetools create" in promote["run"]
     assert steps.index(candidate_audit) < steps.index(agentic)
     assert steps.index(published_audit) < steps.index(promote)
+
+
+def test_hosted_containment_measurement_is_read_only_and_exact():
+    _assert_actions_are_commit_pinned(BUILD_WORKFLOW)
+    workflow = yaml.safe_load(BUILD_WORKFLOW.read_text(encoding="utf-8"))
+    paths = workflow[True]["pull_request"]["paths"]
+    job = workflow["jobs"]["hosted-containment-measurement"]
+    text = str(job)
+    names = [step.get("name") for step in job["steps"]]
+
+    assert job["if"] == "github.event_name == 'pull_request'"
+    assert job["runs-on"] == "ubuntu-latest"
+    assert job["permissions"] == {"contents": "read"}
+    assert job["timeout-minutes"] == 45
+    assert "batch-runner/sandbox/v2/measure_hosted_containment.py" in paths
+    assert "batch-runner/sandbox/v2/verify_candidate.py" in paths
+    assert "batch-runner/sandbox/v2/parent.lock.json" in paths
+    assert "azure/login" not in text
+    assert "docker/login-action" not in text
+    assert "packages" not in job["permissions"]
+
+    checkout = job["steps"][0]
+    assert checkout["with"]["persist-credentials"] is False
+    assert checkout["with"]["ref"] == "${{ github.event.pull_request.head.sha }}"
+    verify = job["steps"][names.index("Verify exact clean measurement checkout")]
+    assert "git rev-parse HEAD" in verify["run"]
+    assert "git status --porcelain --untracked-files=all" in verify["run"]
+    runtime = job["steps"][names.index("Install hash-pinned verifier runtime")]
+    assert "packaging==26.2" in runtime["run"]
+    assert runtime["run"].count("--hash=sha256:") == 2
+    assert "--require-hashes" in runtime["run"]
+    pull = job["steps"][names.index("Pull exact public parent image")]
+    assert "parent.lock.json" in pull["run"]
+    assert "EMPTY_DOCKER_CONFIG" in pull["run"]
+    assert "docker pull" in pull["run"]
+    measure = job["steps"][names.index("Measure eight containment controls")]
+    assert measure["env"] == {
+        "MEASUREMENT_SOURCE_SHA": "${{ github.event.pull_request.head.sha }}",
+        "RUNNER_ENVIRONMENT": "${{ runner.environment }}",
+    }
+    assert "measure_hosted_containment.py" in measure["run"]
+    assert "GITHUB_STEP_SUMMARY" in measure["run"]
+    upload = job["steps"][names.index("Upload hosted containment evidence")]
+    assert upload["uses"] == (
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+    )
+    assert upload["with"]["if-no-files-found"] == "error"
+    assert upload["with"]["retention-days"] == 14
+    cleanup = job["steps"][names.index("Assert terminal cleanup")]
+    assert cleanup["if"] == "always()"
+    assert "gdpval-agentic-v2-" in cleanup["run"]
 
 
 def test_agentic_preflight_is_dedicated_and_model_free():

@@ -27,9 +27,19 @@ on:
         required: true
         default: false
         type: boolean
+  pull_request:
+    paths:
+      - ".github/workflows/build-sandbox-image.yml"
+      - "batch-runner/core/agentic_v2_supply_chain.py"
+      - "batch-runner/sandbox/v2/measure_hosted_containment.py"
+      - "batch-runner/sandbox/v2/parent.lock.json"
+      - "batch-runner/sandbox/v2/verify_candidate.py"
+      - "batch-runner/tests/test_agentic_v2_candidate_verifier.py"
+      - "batch-runner/tests/test_agentic_v2_hosted_containment.py"
+      - "batch-runner/tests/test_agentic_workflows.py"
 
 concurrency:
-  group: build-sandbox-image
+  group: build-sandbox-image-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Least privilege: only what buildx needs to push to GHCR. No id-token, no
@@ -40,7 +50,7 @@ permissions:
 
 jobs:
   build-sandbox-image:
-    if: github.ref == 'refs/heads/main' && github.ref_protected == true
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected == true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -279,3 +289,95 @@ jobs:
           docker buildx imagetools create \
             --tag ghcr.io/hyeonsangjeon/gdpval-agentic-sandbox:latest \
             "$IMAGE"
+
+  hosted-containment-measurement:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify exact clean measurement checkout
+        env:
+          MEASUREMENT_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "pull_request"
+          test "$(git rev-parse HEAD)" = "$MEASUREMENT_SOURCE_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+      - name: Set up exact Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11.9"
+
+      - name: Install hash-pinned verifier runtime
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/packaging.lock" <<'EOF'
+          packaging==26.2 \
+              --hash=sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e \
+              --hash=sha256:ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661
+          EOF
+          python -m pip install \
+            --disable-pip-version-check \
+            --only-binary=:all: \
+            --require-hashes \
+            --no-deps \
+            -r "$RUNNER_TEMP/packaging.lock"
+          python -I - <<'PY'
+          import packaging
+          assert packaging.__version__ == "26.2", packaging.__version__
+          PY
+
+      - name: Verify model-free credential boundary
+        run: |
+          set -euo pipefail
+          for name in AZURE_CLIENT_SECRET AZURE_OPENAI_API_KEY DOCKER_AUTH_CONFIG GITHUB_TOKEN HF_TOKEN OPENAI_API_KEY; do
+            test -z "${!name:-}"
+          done
+
+      - name: Pull exact public parent image
+        run: |
+          set -euo pipefail
+          PARENT_IMAGE=$(python -I - <<'PY'
+          import json
+          from pathlib import Path
+          print(json.loads(Path("batch-runner/sandbox/v2/parent.lock.json").read_text())["reference"])
+          PY
+          )
+          EMPTY_DOCKER_CONFIG=$(mktemp -d)
+          trap 'rm -f "$EMPTY_DOCKER_CONFIG/config.json"; rmdir "$EMPTY_DOCKER_CONFIG"' EXIT
+          printf '{}\n' > "$EMPTY_DOCKER_CONFIG/config.json"
+          DOCKER_CONFIG="$EMPTY_DOCKER_CONFIG" docker pull "$PARENT_IMAGE"
+
+      - name: Measure eight containment controls
+        env:
+          MEASUREMENT_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          python -I -B \
+            batch-runner/sandbox/v2/measure_hosted_containment.py \
+            --output-directory "$RUNNER_TEMP/agentic-v2-hosted-containment"
+          cat "$RUNNER_TEMP/agentic-v2-hosted-containment/hosted-containment-result.md" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload hosted containment evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agentic-v2-hosted-containment-${{ github.run_id }}
+          path: ${{ runner.temp }}/agentic-v2-hosted-containment
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Assert terminal cleanup
+        if: always()
+        run: |
+          test -z "$(docker ps -aq --filter name=gdpval-agentic-v2-)"

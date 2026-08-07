@@ -37,7 +37,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   reads.
   Independent `first-reviewer` review returned `APPROVE` with no blocking
   findings; its only note was a nonblocking future-proofing opportunity for
-  experiment IDs that are currently internal-only.
+  experiment IDs that are currently internal-only. PR #162 reached `MERGED` at
+  `2026-08-07T15:15:36Z` from reviewed head
+  `b5d4c2ec68ff027a3187b183183c8b8d81fbf1fb` as squash merge
+  `8216181834b4687fd41e543b77f146918e849a23`.
 - **Verified 220-task mini regrade history** - replace the stale pre-run
   `BLOCKED` note with an evidence-reopened record of the completed four-run
   `default_v2_mini.yaml` relay. The report now binds each successful GitHub run
@@ -71,6 +74,29 @@ entries land under a fresh dated heading the day they merge to `main`.
   credential, publication, or paid API call was used for this fix.
 
 ### Added
+- **GitHub-hosted Agentic V2 containment measurement** - add a branch-safe,
+  model-free `ubuntu-latest` job that pulls the exact public parent digest with
+  an empty Docker config and executes the same validated Docker containment
+  path used by the Phase 1B/1C verifier. Run
+  [`31193818481`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/31193818481)
+  on source `bedcdd8229cc4b96c93f52323dcf2099acc7a0ca` measured Linux
+  `6.17.0-1021-azure` with cgroup v2 and verified all eight controls: network
+  disabled, read-only root, non-root UID/GID, all capabilities dropped,
+  no-new-privileges, memory limit, effective CPU quota, and PID limit. Bound
+  JSON/Markdown evidence has result SHA-256
+  `5caeb42cbe5032169d520e93160a9e19ecbecc0f066faed96979aa44a2103624`
+  and containment-report SHA-256
+  `f0c4ec3cdff7d714d0db8aca58b1f5669c3958c6b6203be00095b8acb827e50e`;
+  an earlier hosted run produced the same containment report. Containment is
+  no longer blocking for this exact hosted measurement, but the aggregate gate
+  remains `blocked` because capability, CVE, license, microVM, OCI, provenance,
+  SBOM, and signature evidence were `not_run` in Tier 1. Existing protected-main
+  image publication stayed skipped; no Azure, OIDC, client secret, model,
+  grading, Hugging Face write, registry push, paid infrastructure, or Phase
+  1D-B execution path was used. Focused workflow/result/verifier tests pass
+  74/74, broad Agentic V2 regressions pass 654/654, and Ruff, `py_compile`,
+  diagnostics, and diff checks pass. Independent Azure infrastructure and code
+  reviews returned `APPROVE`.
 - **Agentic Sandbox V2 Phase 1D-A offline wheel broker candidate** - add a
   disconnected, model-free local candidate for stateless resolution and atomic
   activation of at most eight exact dependency-free `py3-none-any` wheels from

@@ -201,6 +201,37 @@ compliance because 1,237 packages remain unresolved. It also does not prove a
 complete dependency lock, vulnerability status, signature, provenance, or
 microVM isolation.
 
+## GitHub-Hosted Tier 1 Containment Checkpoint
+
+GitHub Actions run
+[`31193818481`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/31193818481)
+measured the exact public parent image on `ubuntu-latest` from source
+`bedcdd8229cc4b96c93f52323dcf2099acc7a0ca`. The runner reported Linux
+`6.17.0-1021-azure`, amd64, and cgroup v2. The machine-readable result SHA-256 is
+`5caeb42cbe5032169d520e93160a9e19ecbecc0f066faed96979aa44a2103624`;
+the underlying containment report SHA-256 is
+`f0c4ec3cdff7d714d0db8aca58b1f5669c3958c6b6203be00095b8acb827e50e`.
+
+| Required containment check | Status |
+|---|---|
+| Network disabled | `verified` |
+| Read-only root filesystem | `verified` |
+| Non-root UID/GID | `verified` |
+| All capabilities dropped | `verified` |
+| No new privileges | `verified` |
+| Effective memory limit | `verified` |
+| Effective CPU quota | `verified` |
+| PID limit | `verified` |
+
+The hosted Docker daemon therefore verifies all eight production-containment
+controls, and containment is no longer a blocking item for this exact hosted
+measurement. The aggregate gate nevertheless remains `blocked` and production
+activation remains `disabled`: Tier 1 did not measure the capability receipt,
+CVE, license, microVM, OCI layout, provenance, SBOM, or signature evidence for
+one complete candidate subject. This result does not authorize `exec_run` or
+Phase 1D-B. A second hosted run on the preceding implementation revision
+produced the same containment report, providing one repeatability check.
+
 ## Anti-Claims
 
 - The capability receipt records observations for one exact candidate. It is
