@@ -1,11 +1,60 @@
 # Latest Task Result
 
 - Updated: 2026-08-08
+- Status: Completion records retain verified task evidence without forcing
+  documentation-only PRs that restate their carrying PR's merge status
+
+## Current Task: Non-Recursive Completion Records
+
+### Task
+
+- Clarify the repository completion requirements so the latest-task result and
+  changelog remain complete without describing the carrying PR's own merge.
+- Preserve task scope, concrete outcome, verification evidence, reviewed head
+  SHA, remaining work, bounded history, `[Unreleased]`, and unrelated entries.
+- Preserve every existing historical merge record and require genuine earlier
+  corrections to ride with the next substantive work PR.
+
+### Result
+
+- Both completion records now stop at pre-merge facts and exclude their
+  carrying PR's own merge SHA, merge time, and `OPEN` / `MERGED` state.
+- The policy states the reason directly: Git history already holds those facts,
+  while a record describing its own merge cannot be written before that merge
+  and therefore forces an unnecessary follow-up PR.
+- Earlier status corrections remain supported, but they must be folded into the
+  next substantive work PR instead of opening a documentation-only PR solely
+  for merge status.
+- Existing rigor is unchanged: scope, outcome, verification, reviewed head,
+  remaining work, bounded history, changelog category, unrelated-entry
+  preservation, and post-validation/pre-response timing all remain required.
+- The previous README containment, Hosted Tier 1, and Field Notes records are
+  preserved below, and no historical merge metadata was rewritten.
+
+### Verification
+
+- Exact-phrase completion-policy contract: passed.
+- Scope and preservation contract: exactly three changed files, all six prior
+  changelog merge markers unchanged, all three prior latest-task records
+  preserved, and no carrying-PR identity in the new completion entries.
+- VS Code diagnostics and `git diff --check`: passed.
+- No application model/API call, credential, workflow dispatch, or paid
+  operation ran; shipment is limited to authenticated Git and GitHub branch/PR
+  writes.
+
+### Remaining Work
+
+- Obtain independent `first-reviewer` approval and create the substantive PR
+  for the owner's merge decision. Do not create a later documentation-only PR
+  to record that PR's merge metadata.
+
+---
+
+## Preserved Prior Result: Root README Containment Evidence (2026-08-08)
+
 - Status: Root English/Korean containment documentation now separates the
   unexecuted self-hosted preflight from verified hosted Docker controls;
   merged through PR #165 while `exec_run` and the aggregate gate remain blocked
-
-## Current Task: Root README Containment Evidence
 
 ### Task
 
