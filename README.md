@@ -154,15 +154,19 @@ These are code-backed, path-specific controls, not a blanket security claim:
 | Configuration input | A no-credential job validates the experiment name and safely parses YAML before the credentialed job; agentic modes are rejected from the general batch path | [`batch-run.yml`](.github/workflows/batch-run.yml) |
 | Container sandbox | Sandbox runs resolve an immutable image digest across relay jobs; Docker execution disables networking and applies resource limits | [`batch-run.yml`](.github/workflows/batch-run.yml), [`sandbox_runner.py`](batch-runner/core/sandbox_runner.py) |
 | Agentic image supply chain | Manual protected-main publication requires immutable dependency locks, a digest-pinned base, runtime audit, and SBOM evidence | [`build-sandbox-image.yml`](.github/workflows/build-sandbox-image.yml) |
-| Agentic containment preflight | Defined but never run (`not_run`): the manual model-free job requires `[self-hosted, linux, x64, agentic-sandbox]`, and no matching runner exists. No containment result is established. | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
+| Agentic self-hosted preflight | Defined but never run (`not_run`): the manual model-free job requires `[self-hosted, linux, x64, agentic-sandbox]`, and no matching runner exists. This workflow itself has produced no result. | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
+| Agentic hosted containment evidence | The eight Docker controls are `verified` on GitHub-hosted `ubuntu-latest` (run [`31193818481`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/31193818481), PR #163 / merge `4b1bff35`; containment report SHA-256 `f0c4ec3cdff7d714d0db8aca58b1f5669c3958c6b6203be00095b8acb827e50e`) | [`build-sandbox-image.yml`](.github/workflows/build-sandbox-image.yml), [`sandbox/v2/README.md`](batch-runner/sandbox/v2/README.md) |
 | Dashboard publication | Pull requests aggregate, build, and run data/browser contracts; only push/manual deploy jobs receive Pages/OIDC permissions | [`deploy.yml`](.github/workflows/deploy.yml) |
 
 The default three-task smoke config uses provider-hosted `code_interpreter`.
 Docker sandbox and agentic controls apply only to their named paths. The general
 batch workflow currently rejects agentic execution before cloud credentials are
-used. The checked-in agentic workflow is a model-free preflight definition, not
-an executed proof or a paid run. Under the `not_run` / `failed` / `verified`
-evidence ladder, its containment evidence remains `not_run`.
+used. Under the `not_run` / `failed` / `verified` evidence ladder, the
+self-hosted preflight workflow remains `not_run`, while the separate hosted
+Docker-control measurement is `verified` for all eight checks. This does not
+prove arbitrary execution isolation: `exec_run` remains blocked. The aggregate
+gate also remains `blocked` because capability, CVE, license, microVM, OCI,
+provenance, SBOM, and signature evidence is still unmeasured.
 
 ---
 
