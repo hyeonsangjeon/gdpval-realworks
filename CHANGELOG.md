@@ -28,7 +28,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   passes and one expected Ruby skip, the production build with 2,783 modules,
   diagnostics, and diff checks. No model, grading, cloud credential, workflow
   dispatch, Hugging Face write, or paid operation ran; aggregation made only
-  unauthenticated read-only public report requests.
+  unauthenticated read-only public report requests. Independent
+  `first-reviewer` review returned `APPROVE` with no blocking findings. PR #165
+  reached `MERGED` at `2026-08-07T17:04:12Z` from reviewed head
+  `c3b2a0b4e814d8bb2c830b01162d627f1277739b` as squash merge
+  `2d82691ffb5d1911f19f996be0807d4ca037ae81`. GitHub reported the PR
+  `MERGEABLE` and `CLEAN`; automatic PR validation passed with deployment
+  skipped. Automatic post-merge main run
+  [`31200577265`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/31200577265)
+  then passed validation and Pages deployment; no workflow was manually
+  dispatched.
 - **Field Notes rescue reconciliation and onboarding truth labels** - preserve a
   physical copy of the full three-week primary worktree before Git mutation,
   then reconcile the seven requested Field Notes paths against
