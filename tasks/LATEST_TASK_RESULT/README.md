@@ -15,10 +15,9 @@
 
 ## Result
 
-- Created and checksum-verified the external physical backup at
-  `/ai-work/copilot/.gdpval-realworks-backups/20260807-field-notes-pre-s1`:
-  16,173 regular files, 27 symlinks, and 521,099,777 bytes. Its Git status
-  fingerprint is the pre-task 1,235-line SHA-256
+- Created and checksum-verified an external physical backup outside the
+  repository: 16,173 regular files, 27 symlinks, and 521,099,777 bytes. Its Git
+  status fingerprint is the pre-task 1,235-line SHA-256
   `8e96ad2cfdaceb05d61c978ad786df13c3647b8ae810771344dd3430314d91ce`.
 - Reconciled all seven requested paths and found the supplied absence premise
   was no longer true: every path is tracked on current `main`, with Field Notes
@@ -45,8 +44,8 @@
     remote-write behavior;
   - RealWorks Field Notes links to the deployed `/notes` view.
 - The primary worktree was not modified by this task. Relative to the physical
-  backup, its only new status entry is the user-created
-  `tasks/0807_friday/task.md` supplied during the session.
+  backup, its only new status entry is one user-created private task spec
+  supplied during the session.
 
 ## Verification
 
