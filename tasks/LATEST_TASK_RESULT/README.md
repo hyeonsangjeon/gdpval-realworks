@@ -48,13 +48,15 @@
 - Working branch: `docs/hosted-containment-readme`.
 - Base: `origin/main@ec8503334ca1725b3b60db9b65cb878a020cfd14`.
 - Independent `first-reviewer` verdict: `APPROVE`, with no blocking finding.
-- A single documentation follow-up PR will contain the bilingual README update,
-  regression contract, changelog entry, and this completion record.
+- Follow-up PR
+  [#165](https://github.com/hyeonsangjeon/gdpval-realworks/pull/165) contains
+  the bilingual README update, regression contract, changelog entry, and this
+  completion record and remains open for the owner's decision.
 
 ### Remaining Work
 
-- Create the follow-up PR and leave it open for the owner's merge decision; do
-  not push directly to `main` or dispatch a workflow.
+- The owner decides whether and when to merge PR #165. Do not push directly to
+  `main` or dispatch a workflow.
 
 ---
 
