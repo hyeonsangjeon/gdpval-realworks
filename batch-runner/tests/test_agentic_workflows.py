@@ -220,6 +220,10 @@ def test_hosted_containment_measurement_is_read_only_and_exact():
     assert "EMPTY_DOCKER_CONFIG" in pull["run"]
     assert "docker pull" in pull["run"]
     measure = job["steps"][names.index("Measure eight containment controls")]
+    assert measure["env"] == {
+        "MEASUREMENT_SOURCE_SHA": "${{ github.event.pull_request.head.sha }}",
+        "RUNNER_ENVIRONMENT": "${{ runner.environment }}",
+    }
     assert "measure_hosted_containment.py" in measure["run"]
     assert "GITHUB_STEP_SUMMARY" in measure["run"]
     upload = job["steps"][names.index("Upload hosted containment evidence")]

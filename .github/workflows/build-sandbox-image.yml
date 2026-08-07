@@ -360,6 +360,7 @@ jobs:
       - name: Measure eight containment controls
         env:
           MEASUREMENT_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
           set -euo pipefail
           python -I -B \
