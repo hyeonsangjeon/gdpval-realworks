@@ -165,7 +165,8 @@ test('journal article resolves visuals from reports and links to source details'
   assert.match(article, /useReports\(usesReportBenchmark\)/)
   assert.match(article, /<JournalArticleContent key=\{slug \?\? 'missing'\} slug=\{slug\} \/>/)
   assert.match(article, /generated\/reports-index\.json/)
-  assert.match(article, /getExperimentHref\(row\.shortId\)/)
+  assert.match(article, /const href = getExperimentHref\(experimentId\)/)
+  assert.match(article, /experimentId=\{row\.shortId\}/)
   assert.match(article, /promptBenchmark=\{readyPromptBenchmark\?\.rows\}/)
   assert.match(article, /promptBenchmark\?\.status === 'invalid'/)
   assert.match(reportsHook, /new AbortController\(\)/)
@@ -180,4 +181,25 @@ test('comparison chart preserves mobile labels and reduced-motion behavior', asy
   assert.match(chart, /interval=\{chart\.kind === 'dual' \? 0 : undefined\}/)
   assert.match(chart, /const reduceMotion = useReducedMotion\(\)/)
   assert.equal(chart.match(/isAnimationActive=\{!reduceMotion\}/g)?.length, 4)
+})
+
+test('legacy journal routes and the public exp026 detail link stay canonical', async () => {
+  const [app, article, links] = await Promise.all([
+    readSource('src/App.tsx'),
+    readSource('src/pages/JournalArticle.tsx'),
+    importTypeScriptModule('src/data/journalLinks.ts'),
+  ])
+
+  assert.match(app, /pathname: slug \? `\/notes\/\$\{slug\}` : '\/notes'/)
+  assert.match(app, /<Route path="\/journal\/:slug" element=\{<LegacyJournalRedirect \/>\} \/>/)
+  assert.equal(
+    links.getExperimentHref('exp026'),
+    'https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp026',
+  )
+  assert.equal(links.isExternalExperimentHref(links.getExperimentHref('exp026')), true)
+  assert.match(
+    article,
+    /function ExperimentDetailLink[\s\S]*target="_blank" rel="noopener noreferrer"/,
+  )
+  assert.match(article, /<ExperimentDetailLink[\s\S]*experimentId="exp026"[\s\S]*label="exp026 상세"/)
 })

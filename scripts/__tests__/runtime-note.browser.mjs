@@ -52,6 +52,12 @@ async function main() {
     const source = page.getByRole('complementary', { name: 'Runtime evidence source' })
     await source.waitFor()
     assert.equal(await source.locator('a').count(), 11)
+    const exp026Links = page.locator('a[href="https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp026"]')
+    assert.ok(await exp026Links.count() >= 2)
+    for (const link of await exp026Links.all()) {
+      assert.equal(await link.getAttribute('target'), '_blank')
+      assert.equal(await link.getAttribute('rel'), 'noopener noreferrer')
+    }
     assert.equal(await page.getByRole('heading', { name: '같은 220개, 서로 다른 시간', exact: true }).count(), 1)
     assert.equal(await page.getByRole('img', { name: /330분 step hard timeout/ }).count(), 1)
     assert.deepEqual(

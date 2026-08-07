@@ -54,8 +54,9 @@ async function main() {
       await released
       await route.fulfill({ json: successNote })
     })
-    await page.goto(`${base}/notes/what-does-success-mean`)
+    await page.goto(`${base}/journal/what-does-success-mean?source=legacy`)
     await intercepted
+    await page.waitForURL('**/notes/what-does-success-mean?source=legacy')
     await page.getByRole('status').waitFor()
     await assertSuccessHidden(page)
     releaseSuccess()
@@ -64,6 +65,13 @@ async function main() {
     await page.unroute('**/generated/success-note.json*')
 
     assert.equal(await source.locator('a').count(), 7)
+    const exp026Detail = source.getByRole('link', { name: 'exp026 상세', exact: true })
+    assert.equal(
+      await exp026Detail.getAttribute('href'),
+      'https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp026',
+    )
+    assert.equal(await exp026Detail.getAttribute('target'), '_blank')
+    assert.equal(await exp026Detail.getAttribute('rel'), 'noopener noreferrer')
     for (const title of chapterTitles) {
       assert.equal(await page.getByRole('heading', { name: title, exact: true }).count(), 1)
     }

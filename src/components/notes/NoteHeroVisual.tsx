@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import type { JournalHero } from '../../data/journal'
-import { getExperimentHref } from '../../data/journalLinks'
+import { getExperimentHref, isExternalExperimentHref } from '../../data/journalLinks'
 import type { PromptComplexityBenchmarkRow } from '../../lib/promptComplexityBenchmark'
 import type { RuntimeNoteBenchmarkSelection } from '../../lib/runtimeNoteBenchmark'
 import type { IntegrityNoteSelection } from '../../lib/integrityNoteBenchmark'
@@ -424,12 +424,21 @@ function MobileVisualSummary({
         <div className="font-mono text-[11px] text-dash-text-secondary mb-5">CONFIGURED PATHS · OBSERVED ROW</div>
         <nav className="grid grid-cols-3 gap-2" aria-label="perception 단계별 실험 상세">
           {perceptionBenchmark.rows.map((row, index) => (
-            <Link key={row.shortId} to={getExperimentHref(row.shortId)} className="min-w-0 border border-dash-border bg-dash-card px-2 py-4 text-center" aria-label={`${row.shortId} 실험 상세 보기`}>
-              <div className="font-mono text-xs font-semibold text-dash-heading">{row.shortId}</div>
-              <div className="mt-1 min-h-8 text-[10px]/4 text-dash-text-secondary break-words">{stageLabels[index]}</div>
-              <div className="mt-3 font-mono text-xl font-semibold text-dash-heading">{row.information.success}/{row.information.total}</div>
-              <div className="mt-2 text-[10px]/4 text-dash-text-secondary">QA {row.information.avgQaScore.toFixed(2)} · {row.perceptionPaths.length} path</div>
-            </Link>
+            isExternalExperimentHref(getExperimentHref(row.shortId)) ? (
+              <a key={row.shortId} href={getExperimentHref(row.shortId)} target="_blank" rel="noopener noreferrer" className="min-w-0 border border-dash-border bg-dash-card px-2 py-4 text-center" aria-label={`${row.shortId} 실험 상세 보기`}>
+                <div className="font-mono text-xs font-semibold text-dash-heading">{row.shortId}</div>
+                <div className="mt-1 min-h-8 text-[10px]/4 text-dash-text-secondary break-words">{stageLabels[index]}</div>
+                <div className="mt-3 font-mono text-xl font-semibold text-dash-heading">{row.information.success}/{row.information.total}</div>
+                <div className="mt-2 text-[10px]/4 text-dash-text-secondary">QA {row.information.avgQaScore.toFixed(2)} · {row.perceptionPaths.length} path</div>
+              </a>
+            ) : (
+              <Link key={row.shortId} to={getExperimentHref(row.shortId)} className="min-w-0 border border-dash-border bg-dash-card px-2 py-4 text-center" aria-label={`${row.shortId} 실험 상세 보기`}>
+                <div className="font-mono text-xs font-semibold text-dash-heading">{row.shortId}</div>
+                <div className="mt-1 min-h-8 text-[10px]/4 text-dash-text-secondary break-words">{stageLabels[index]}</div>
+                <div className="mt-3 font-mono text-xl font-semibold text-dash-heading">{row.information.success}/{row.information.total}</div>
+                <div className="mt-2 text-[10px]/4 text-dash-text-secondary">QA {row.information.avgQaScore.toFixed(2)} · {row.perceptionPaths.length} path</div>
+              </Link>
+            )
           ))}
         </nav>
         <p className="mt-5 text-center text-xs/[1.7] text-dash-text-secondary">configured path 수와 Information success는 인과 관계가 아니다.</p>
