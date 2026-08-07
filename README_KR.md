@@ -134,15 +134,18 @@ Step 0-7은 실험 실행과 게시를 담당합니다. 외부 채점은 별도 
 | 설정 입력 | 인증 정보 없는 job이 실험 이름을 검사하고 YAML을 안전하게 파싱한 뒤 credential job을 시작하며, 일반 배치 경로는 agentic mode를 거부함 | [`batch-run.yml`](.github/workflows/batch-run.yml) |
 | Container sandbox | sandbox 실행은 relay 전체에 immutable image digest를 유지하며, Docker 실행은 network를 끄고 resource limit을 적용함 | [`batch-run.yml`](.github/workflows/batch-run.yml), [`sandbox_runner.py`](batch-runner/core/sandbox_runner.py) |
 | Agentic image supply chain | 수동 protected-main 게시에 immutable dependency lock, digest-pinned base, runtime audit, SBOM 근거를 요구함 | [`build-sandbox-image.yml`](.github/workflows/build-sandbox-image.yml) |
-| Agentic containment preflight | 정의돼 있으나 미실행(`not_run`): 수동 model-free job은 `[self-hosted, linux, x64, agentic-sandbox]` 러너를 요구하지만 일치하는 러너가 없어 containment 결과가 확립되지 않음 | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
+| Agentic self-hosted preflight | 정의돼 있으나 미실행(`not_run`): 수동 model-free job은 `[self-hosted, linux, x64, agentic-sandbox]` 러너를 요구하지만 일치하는 러너가 없음. 이 워크플로 자체는 결과를 만들지 못함 | [`agentic-sandbox-preflight.yml`](.github/workflows/agentic-sandbox-preflight.yml) |
+| Agentic hosted containment 근거 | GitHub-hosted `ubuntu-latest`에서 Docker 통제 8개가 모두 `verified`됨(run [`31193818481`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/31193818481), PR #163 / merge `4b1bff35`; containment report SHA-256 `f0c4ec3cdff7d714d0db8aca58b1f5669c3958c6b6203be00095b8acb827e50e`) | [`build-sandbox-image.yml`](.github/workflows/build-sandbox-image.yml), [`sandbox/v2/README.md`](batch-runner/sandbox/v2/README.md) |
 | Dashboard publication | PR에서 aggregate, build, data/browser contract를 실행하고 push/manual deploy job만 Pages/OIDC 권한을 받음 | [`deploy.yml`](.github/workflows/deploy.yml) |
 
 기본 3-task smoke는 provider-hosted `code_interpreter`를 사용합니다. Docker
 sandbox와 agentic 통제는 각각 이름이 붙은 경로에만 적용됩니다. 일반 배치
-워크플로는 cloud credential을 사용하기 전에 agentic 실행을 거부하며,
-체크인된 agentic 워크플로는 실행 근거나 유료 실행이 아니라 model-free
-preflight 정의입니다. `not_run` / `failed` / `verified` 근거 사다리에서 이
-containment 근거는 `not_run`으로 남아 있습니다.
+워크플로는 cloud credential을 사용하기 전에 agentic 실행을 거부합니다.
+`not_run` / `failed` / `verified` 근거 사다리에서 self-hosted preflight
+워크플로는 `not_run`이지만, 별도의 hosted Docker 통제 실측은 8개 항목 모두
+`verified`입니다. 이는 임의 실행 격리 증명이 아니므로 `exec_run`은 계속
+blocked입니다. capability, CVE, license, microVM, OCI, provenance, SBOM,
+signature 근거가 미측정이라 aggregate gate도 계속 `blocked`입니다.
 
 ---
 

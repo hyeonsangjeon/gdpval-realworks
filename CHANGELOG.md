@@ -12,6 +12,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **Root README containment evidence split** - update the English and Korean
+  operational-control tables after PR #163 without conflating two separate
+  evidence states. The dedicated
+  `[self-hosted, linux, x64, agentic-sandbox]` preflight workflow remains
+  unexecuted and `not_run` because no matching runner exists. Separately, the
+  GitHub-hosted Docker-control measurement is now identified as `verified` for
+  all eight checks, with run `31193818481`, PR #163 merge `4b1bff35`, and the
+  exact containment-report SHA-256. Both READMEs retain the
+  `not_run` / `failed` / `verified` ladder and explicitly state that this is not
+  proof of arbitrary execution isolation: `exec_run` and the aggregate gate
+  remain `blocked`, with capability, CVE, license, microVM, OCI, provenance,
+  SBOM, and signature evidence still unmeasured. Validation passes all 12
+  bilingual onboarding contracts, the self-preparing aggregate suite with 98
+  passes and one expected Ruby skip, the production build with 2,783 modules,
+  diagnostics, and diff checks. No model, grading, cloud credential, workflow
+  dispatch, Hugging Face write, or paid operation ran; aggregation made only
+  unauthenticated read-only public report requests.
 - **Field Notes rescue reconciliation and onboarding truth labels** - preserve a
   physical copy of the full three-week primary worktree before Git mutation,
   then reconcile the seven requested Field Notes paths against

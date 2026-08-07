@@ -1,10 +1,67 @@
 # Latest Task Result
 
 - Updated: 2026-08-08
+- Status: Root English/Korean containment documentation now separates the
+  unexecuted self-hosted preflight from verified hosted Docker controls;
+  `exec_run` and the aggregate gate remain blocked
+
+## Current Task: Root README Containment Evidence
+
+### Task
+
+- Correct the stale implication that no containment result exists after PR
+  #163, without claiming that the self-hosted preflight itself ran.
+- Keep English and Korean root README descriptions structurally parallel.
+- Preserve the evidence ladder and the blocked boundaries for arbitrary
+  execution and the aggregate gate.
+
+### Result
+
+- Split the operational-control entry into two distinct facts:
+  - the `[self-hosted, linux, x64, agentic-sandbox]` preflight remains
+    unexecuted and `not_run` because no matching runner exists;
+  - the separate GitHub-hosted Docker-control measurement is `verified` for all
+    eight checks through run `31193818481`, PR #163 / merge `4b1bff35`, and
+    containment-report SHA-256
+    `f0c4ec3cdff7d714d0db8aca58b1f5669c3958c6b6203be00095b8acb827e50e`.
+- Both READMEs state that the hosted result measures Docker control
+  effectiveness, not arbitrary execution isolation. `exec_run` remains
+  blocked.
+- Both READMEs retain aggregate gate `blocked` because capability, CVE, license,
+  microVM, OCI, provenance, SBOM, and signature evidence remains unmeasured.
+- Removed the now-false English statement that no containment result is
+  established and its Korean equivalent, while preserving the accurate
+  `not_run` status of the self-hosted workflow.
+
+### Verification
+
+- Bilingual onboarding contracts: 12 passed.
+- Self-preparing aggregate suite: 98 passed, 1 expected Ruby skip.
+- `npm run build`: passed with 2,783 transformed modules.
+- VS Code diagnostics and `git diff --check`: passed.
+- No model, grading, cloud credential, workflow dispatch, Hugging Face write,
+  or paid operation ran. Aggregation made unauthenticated read-only public
+  report requests only.
+
+### Shipment
+
+- Working branch: `docs/hosted-containment-readme`.
+- Base: `origin/main@ec8503334ca1725b3b60db9b65cb878a020cfd14`.
+- Independent `first-reviewer` verdict: `APPROVE`, with no blocking finding.
+- A single documentation follow-up PR will contain the bilingual README update,
+  regression contract, changelog entry, and this completion record.
+
+### Remaining Work
+
+- Create the follow-up PR and leave it open for the owner's merge decision; do
+  not push directly to `main` or dispatch a workflow.
+
+---
+
+## Preserved Prior Result: Hosted Containment Tier 1 (2026-08-08)
+
 - Status: GitHub-hosted Agentic Sandbox V2 containment verified 8/8; aggregate
   gate remains blocked and production execution remains disabled
-
-## Current Task: Hosted Containment Tier 1
 
 ### Task
 

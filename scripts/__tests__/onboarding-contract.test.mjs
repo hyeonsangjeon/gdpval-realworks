@@ -169,7 +169,7 @@ test('first-screen routes stay complete and fork-relative', async () => {
   assert.equal(runnerAction.href, rootAction.href)
 })
 
-test('root docs keep agentic preflight not_run and label model roles', async () => {
+test('root docs separate unrun preflight from verified hosted containment', async () => {
   const [rootEnglish, rootKorean, preflightText] = await Promise.all([
     readRepoFile('README.md'),
     readRepoFile('README_KR.md'),
@@ -188,8 +188,18 @@ test('root docs keep agentic preflight not_run and label model roles', async () 
   for (const section of operationalSections) {
     assert.match(section, /not_run/)
     assert.match(section, /self-hosted, linux, x64, agentic-sandbox/)
-    assert.match(section, /no matching runner exists|일치하는 러너가 없어/)
+    assert.match(section, /no matching runner exists|일치하는 러너가 없(?:어|음)/)
     assert.match(section, /not_run[^\n]*failed[^\n]*verified/)
+    assert.match(section, /31193818481/)
+    assert.match(section, /4b1bff35/)
+    assert.match(section, /f0c4ec3cdff7d714d0db8aca58b1f5669c3958c6b6203be00095b8acb827e50e/)
+    assert.match(section, /all eight checks|8개 항목 모두/)
+    assert.match(section, /exec_run[^\n]*(?:blocked|계속)/)
+    assert.match(section, /aggregate\s+gate[\s\S]{0,80}blocked/i)
+    for (const evidence of ['capability', 'CVE', 'license', 'microVM', 'OCI', 'provenance', 'SBOM', 'signature']) {
+      assert.match(section, new RegExp(evidence, 'i'))
+    }
+    assert.doesNotMatch(section, /No containment result is established|containment 근거는 `not_run`으로 남아/)
   }
 
   const cloudSections = [
