@@ -3,7 +3,7 @@
 - Updated: 2026-08-07
 - Status: Field Notes rescue reconciled against current `main`; README facts and
   public experiment links corrected and validated; `first-reviewer` approved;
-  single PR pending creation
+  single PR #162 open
 
 ## Task
 
@@ -74,11 +74,11 @@
 
 - Working branch: `feat/field-notes-readme-facts`.
 - Base: `origin/main@a6593c2f0b9888a49a90fb96210b0d61b48f6332`.
-- One pull request will contain the current Field Notes link correction,
-  bilingual README update, regression contracts, changelog, and this record
-  after the required independent review approves the complete diff.
+- PR [#162](https://github.com/hyeonsangjeon/gdpval-realworks/pull/162) is open
+  with the Field Notes link correction, bilingual README update, regression
+  contracts, changelog, and this completion record in one review unit.
 
 ## Remaining Work
 
-- Create the single requested pull request. Do not merge or create a second
+- PR #162 awaits the owner's merge decision. Do not merge it or create a second
   completion PR unless the owner explicitly requests it.
