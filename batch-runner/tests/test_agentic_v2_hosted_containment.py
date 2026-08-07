@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 
 import pytest
 
@@ -121,10 +122,12 @@ def test_hosted_result_hash_and_markdown_are_bound():
         runner=_runner(),
     )
     markdown = render_markdown(result)
+    round_tripped = json.loads(json.dumps(result, sort_keys=True))
 
     assert markdown.count("| `verified` |") == 8
     assert "- Status: `blocked`" in markdown
     assert "- Can leave blocked: `false`" in markdown
+    assert render_markdown(round_tripped) == markdown
 
     forged = deepcopy(result)
     forged["runner"]["kernel_release"] = "changed"

@@ -272,8 +272,9 @@ def render_markdown(result: Mapping[str, Any]) -> str:
         "|---|---|",
     ]
     lines.extend(
-        f"| {item['label']} | `{item['status']}` |"
-        for item in validated["containment"]["checks"].values()
+        f"| {validated['containment']['checks'][name]['label']} | "
+        f"`{validated['containment']['checks'][name]['status']}` |"
+        for name in _CHECK_LABELS
     )
     lines.extend([
         "",
