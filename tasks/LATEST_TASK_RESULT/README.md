@@ -42,11 +42,16 @@
   operation ran; shipment is limited to authenticated Git and GitHub branch/PR
   writes.
 
+### Review Evidence
+
+- Reviewed substantive head:
+  `e800734576dbcc314e5646af80281114672e05dc`.
+- Independent `first-reviewer` verdict: `APPROVE`, with no blocking findings.
+
 ### Remaining Work
 
-- Obtain independent `first-reviewer` approval and create the substantive PR
-  for the owner's merge decision. Do not create a later documentation-only PR
-  to record that PR's merge metadata.
+- The owner decides whether and when to merge the reviewed change. Do not create
+  a later documentation-only PR to record the carrying PR's merge metadata.
 
 ---
 

@@ -28,6 +28,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   three-record preservation check, diagnostics, and diff checks pass. No
   application model/API call, credential, workflow dispatch, or paid operation
   ran; shipment is limited to authenticated Git and GitHub branch/PR writes.
+  Independent `first-reviewer` review approved substantive head
+  `e800734576dbcc314e5646af80281114672e05dc` with no blocking findings.
 - **Root README containment evidence split** - update the English and Korean
   operational-control tables after PR #163 without conflating two separate
   evidence states. The dedicated
