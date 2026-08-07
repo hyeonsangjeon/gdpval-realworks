@@ -52,6 +52,7 @@ from core.agentic_v2_supply_chain import (  # noqa: E402
     build_evidence_report,
     evidence_collection_allowed,
     evidence_item,
+    validate_containment_report,
     validate_effective_sbom,
     validate_evidence_directory,
 )
@@ -409,9 +410,9 @@ def verify_candidate(
     })
     microvm_report = inspect_microvm_readiness(asset_paths={})
     validate_microvm_readiness_report(microvm_report)
-    containment_report = _inspect_containment(
+    containment_report = _measure_docker_containment(
         parent_document["Id"], session=session
-    )
+    )["containment"]
     tool_sha = subject.document["verifier_sha256"]
     evidence = {
         name: evidence_item(subject, name=name, status="not_run")
@@ -553,6 +554,51 @@ def verify_candidate(
         shutil.rmtree(temporary, ignore_errors=True)
         raise
     return gate
+
+
+def measure_docker_containment(
+    image: str,
+    *,
+    session_id: str,
+) -> dict:
+    """Measure the eight Docker controls without activating candidate execution."""
+    session = VerificationSession(session_id)
+    _require_no_credentials()
+    _require_local_docker()
+    return _measure_docker_containment(image, session=session)
+
+
+def _measure_docker_containment(
+    image: str,
+    *,
+    session: VerificationSession,
+) -> dict:
+    inspected = _docker_json([_TRUSTED_DOCKER, "image", "inspect", image])
+    if not isinstance(inspected, list) or len(inspected) != 1:
+        raise ValueError("containment image inspect result is invalid")
+    document = inspected[0]
+    image_id = document.get("Id")
+    if (
+        not _matches(_DIGEST, image_id)
+        or document.get("Architecture") != "amd64"
+        or document.get("Os") != "linux"
+    ):
+        raise ValueError("containment image identity is invalid")
+    report = validate_containment_report(
+        _inspect_containment(image_id, session=session)
+    )
+    repo_digests = document.get("RepoDigests") or []
+    if (
+        not isinstance(repo_digests, list)
+        or any(not isinstance(item, str) for item in repo_digests)
+    ):
+        raise ValueError("containment image repository identity is invalid")
+    return {
+        "image_id": image_id,
+        "platform": "linux/amd64",
+        "repo_digests": sorted(repo_digests),
+        "containment": report,
+    }
 
 
 def _run_image_json(
