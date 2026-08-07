@@ -73,15 +73,17 @@
 
 ### Shipment
 
-- Working branch: `feat/agentic-v2-hosted-containment`.
-- Base: `origin/main@8216181834b4687fd41e543b77f146918e849a23`.
-- PR [#163](https://github.com/hyeonsangjeon/gdpval-realworks/pull/163) contains
-  the measurement workflow, shared verifier path, evidence renderer, tests, and
-  these result records.
+- Reviewed branch head:
+  `7e4289e5e9a7707b61caabd61d5102cae2361c61`.
+- PR [#163](https://github.com/hyeonsangjeon/gdpval-realworks/pull/163) reached
+  `MERGED` at `2026-08-07T16:22:26Z` as squash commit
+  `4b1bff35541e953e0e0fc583e4f9c4f832db01d2`.
+- GitHub reported the PR `MERGEABLE` and `CLEAN`. The final hosted measurement
+  succeeded with the protected-main publication job skipped; the merge commit
+  created no additional workflow run.
 
 ### Remaining Work
 
-- Keep PR #163 open for owner review unless explicitly asked to merge it.
 - A future activation task must bind the hosted containment result to one
   complete candidate subject and verify every remaining required evidence item
   before enabling production execution.

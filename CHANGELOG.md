@@ -96,7 +96,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   1D-B execution path was used. Focused workflow/result/verifier tests pass
   74/74, broad Agentic V2 regressions pass 654/654, and Ruff, `py_compile`,
   diagnostics, and diff checks pass. Independent Azure infrastructure and code
-  reviews returned `APPROVE`.
+  reviews returned `APPROVE`. PR #163 reached `MERGED` at
+  `2026-08-07T16:22:26Z` from reviewed head
+  `7e4289e5e9a7707b61caabd61d5102cae2361c61` as squash merge
+  `4b1bff35541e953e0e0fc583e4f9c4f832db01d2`. GitHub reported the PR
+  `MERGEABLE` and `CLEAN`; the final hosted measurement passed with the existing
+  publication job skipped, and the merge commit created no additional workflow
+  run.
 - **Agentic Sandbox V2 Phase 1D-A offline wheel broker candidate** - add a
   disconnected, model-free local candidate for stateless resolution and atomic
   activation of at most eight exact dependency-free `py3-none-any` wheels from
