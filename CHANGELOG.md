@@ -12,6 +12,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **Non-recursive repository completion records** - clarify that the latest-task
+  result and changelog entry stop at facts available before merge: task scope,
+  concrete outcome, verification evidence, the reviewed head SHA when a review
+  gate applies, and remaining work. Neither record duplicates the carrying PR's
+  own merge SHA, merge time, or `OPEN` / `MERGED` state. Git history already
+  holds those facts, and a record describing its own merge cannot be written
+  before that merge, so requiring it forces an unnecessary follow-up PR. A
+  genuine correction to an earlier entry must ride with the next substantive
+  work PR instead of creating a documentation-only merge-status PR. Existing
+  bounded-history, `[Unreleased]`, unrelated-entry preservation, validation,
+  and pre-response update requirements remain mandatory; the existing
+  historical merge records below are intentionally unchanged. The exact policy
+  contract, exact three-file scope, six-marker historical-preservation check,
+  three-record preservation check, diagnostics, and diff checks pass. No
+  application model/API call, credential, workflow dispatch, or paid operation
+  ran; shipment is limited to authenticated Git and GitHub branch/PR writes.
+  Independent `first-reviewer` review approved substantive head
+  `e800734576dbcc314e5646af80281114672e05dc` with no blocking findings.
 - **Root README containment evidence split** - update the English and Korean
   operational-control tables after PR #163 without conflating two separate
   evidence states. The dedicated
