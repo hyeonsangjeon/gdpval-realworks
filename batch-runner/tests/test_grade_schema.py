@@ -152,10 +152,13 @@ def test_minimal_valid_grade_passes_schema():
     validate(instance=_minimal_payload(), schema=_load_schema())
 
 
-def test_current_grade_requires_explicit_unpriced_cost_provenance():
+@pytest.mark.parametrize("schema_version", ["1.2", "1.3"])
+def test_current_grade_requires_explicit_unpriced_cost_provenance(
+    schema_version
+):
     payload = _minimal_payload()
     payload.update({
-        "schema_version": "1.2",
+        "schema_version": schema_version,
         "run_status": "final",
         "expected_task_count": 1,
         "expected_ordered_task_ids_sha256": "a" * 64,
@@ -275,10 +278,10 @@ def test_present_grader_runtime_fingerprint_must_not_be_null():
         validate(instance=payload, schema=_load_schema())
 
 
-def _current_grade_payload() -> dict:
+def _current_grade_payload(schema_version: str = "1.2") -> dict:
     payload = _minimal_payload()
     payload.update({
-        "schema_version": "1.2",
+        "schema_version": schema_version,
         "run_status": "partial",
         "expected_task_count": 1,
         "expected_ordered_task_ids_sha256": "a" * 64,
@@ -304,6 +307,104 @@ def _current_grade_payload() -> dict:
         "unpriced_models": ["gpt-5.4-pro"],
     })
     return payload
+
+
+def test_schema_1_3_requires_judge_errors_to_be_score_excluded():
+    payload = _current_grade_payload("1.3")
+    item = payload["tasks"][0]["items"][0]
+    scored_item = deepcopy(item)
+    scored_item["rubric_item_id"] = "ri-scored"
+    payload["tasks"][0]["items"].append(scored_item)
+    item.update({
+        "verdict": "judge_error",
+        "decided_by": "judge",
+        "awarded_score": 0,
+        "score_excluded": True,
+    })
+    payload["summary"]["wow"]["judge_error_rate"] = 1.0
+
+    validate_grade_payload(payload, _load_schema())
+
+    for invalid_value in (False, None):
+        invalid = deepcopy(payload)
+        if invalid_value is None:
+            del invalid["tasks"][0]["items"][0]["score_excluded"]
+        else:
+            invalid["tasks"][0]["items"][0]["score_excluded"] = invalid_value
+        with pytest.raises(ValidationError):
+            validate_grade_payload(invalid, _load_schema())
+
+
+@pytest.mark.parametrize("schema_version", ["1.0", "1.1", "1.2"])
+def test_previous_schemas_keep_historical_judge_error_compatibility(
+    schema_version
+):
+    payload = _current_grade_payload(schema_version)
+    payload["tasks"][0]["items"][0].update({
+        "verdict": "judge_error",
+        "decided_by": "judge",
+        "awarded_score": 0,
+        "score_excluded": False,
+    })
+
+    validate_grade_payload(payload, _load_schema())
+
+    payload["summary"]["openai_compat"]["avg_score_pct"] = None
+    payload["summary"]["openai_compat"]["ci_pct"] = None
+    with pytest.raises(ValidationError):
+        validate_grade_payload(payload, _load_schema())
+
+
+def test_schema_1_3_requires_visible_judge_error_rate():
+    payload = _current_grade_payload("1.3")
+    del payload["summary"]["wow"]["judge_error_rate"]
+
+    with pytest.raises(ValidationError):
+        validate_grade_payload(payload, _load_schema())
+
+    previous = deepcopy(payload)
+    previous["schema_version"] = "1.2"
+    validate_grade_payload(previous, _load_schema())
+
+
+def test_schema_1_3_rejects_all_excluded_task_as_zero_score():
+    payload = _current_grade_payload("1.3")
+    item = payload["tasks"][0]["items"][0]
+    item.update({
+        "verdict": "judge_error",
+        "decided_by": "judge",
+        "awarded_score": 0,
+        "score_excluded": True,
+    })
+    payload["summary"].update({"graded_tasks": 0, "error_tasks": 1})
+    payload["summary"]["wow"]["judge_error_rate"] = 1.0
+    payload["summary"]["openai_compat"].update({
+        "avg_score_pct": None,
+        "ci_pct": None,
+        "perfect_count": 0,
+        "zero_count": 0,
+        "partial_count": 0,
+    })
+
+    invalid = deepcopy(payload)
+    invalid["tasks"][0]["error"] = None
+    invalid["summary"]["openai_compat"]["avg_score_pct"] = 0.0
+    invalid["summary"]["openai_compat"]["ci_pct"] = 0.0
+    invalid["summary"]["openai_compat"]["zero_count"] = 1
+    with pytest.raises((ValidationError, ValueError)):
+        validate_grade_payload(invalid, _load_schema())
+
+    payload["tasks"][0]["error"] = "all_items_score_excluded"
+    validate_grade_payload(payload, _load_schema())
+
+    payload["summary"]["total_tasks"] = 999
+    with pytest.raises(ValueError, match="task counts"):
+        validate_grade_payload(payload, _load_schema())
+
+    payload["summary"]["total_tasks"] = 1
+    payload["summary"]["openai_compat"]["inconsistent_count"] = 7
+    with pytest.raises(ValueError, match="headline scores"):
+        validate_grade_payload(payload, _load_schema())
 
 
 @pytest.mark.parametrize(

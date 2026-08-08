@@ -592,6 +592,77 @@ def test_model_did_right_judge_error_is_conservative(monkeypatch, tmp_path):
     assert neg.model_did_right is False
 
 
+def test_aggregate_excludes_judge_error_from_runtime_score_denominator(
+    monkeypatch, tmp_path
+):
+    """A producer flag omission cannot turn judge failure into model score."""
+    from core.grader import ItemGrade
+
+    grader = _make_grader(monkeypatch, tmp_path)
+    task = _task(RubricItem("pass", "correct", 10, None))
+    grade = grader._aggregate(
+        [
+            ItemGrade(
+                rubric_item_id="pass",
+                criterion="correct",
+                max_score=10,
+                awarded_score=10,
+                verdict="pass",
+                decided_by="judge",
+                required=None,
+                evidence="verified",
+            ),
+            ItemGrade(
+                rubric_item_id="error",
+                criterion="unresolved",
+                max_score=90,
+                awarded_score=0,
+                verdict="judge_error",
+                decided_by="judge",
+                required=None,
+                evidence="final_json_parse_failed",
+                score_excluded=False,
+            ),
+        ],
+        task,
+    )
+
+    error_item = grade.items[1]
+    assert error_item.score_excluded is True
+    assert error_item.model_did_right is False
+    assert grade.total_awarded == 10
+    assert grade.total_max == 10
+    assert grade.pct == 100
+    assert grade.critical_fail is False
+
+
+def test_aggregate_marks_all_judge_error_task_unscored(monkeypatch, tmp_path):
+    from core.grader import ItemGrade
+
+    grader = _make_grader(monkeypatch, tmp_path)
+    task = _task(RubricItem("error", "unresolved", 10, None))
+    grade = grader._aggregate(
+        [
+            ItemGrade(
+                rubric_item_id="error",
+                criterion="unresolved",
+                max_score=10,
+                awarded_score=0,
+                verdict="judge_error",
+                decided_by="judge",
+                required=None,
+                evidence="empty_final_text",
+            )
+        ],
+        task,
+    )
+
+    assert grade.error == "all_items_score_excluded"
+    assert grade.items[0].score_excluded is True
+    assert grade.total_max == 0
+    assert grade.pct == 0
+
+
 def test_model_did_right_persisted_in_json(monkeypatch, tmp_path):
     """asdict() in step8_grade._task_to_dict should emit the new field."""
     from dataclasses import asdict

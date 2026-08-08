@@ -176,7 +176,7 @@ function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, delay: 0.3 }}
               >
-                {s.avg_score_pct}%
+                {s.avg_score_pct == null ? '—' : `${s.avg_score_pct}%`}
               </motion.p>
               {s.ci_pct && (
                 <p className="text-xs text-muted-foreground">± {s.ci_pct}% (95% CI)</p>

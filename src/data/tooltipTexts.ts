@@ -54,7 +54,7 @@ export const tooltipTexts = {
     row:
       'Run-quality diagnostics: judge call success rate, pass rates by decision type, and cost/latency totals. Distinct from the score itself.',
     judgeErrorRate:
-      'Percentage of judge calls that failed (timeout, parse error, or hit token limit). Alert threshold > 5% — unreliable run.',
+      'Percentage of judge-decided rubric items that failed (timeout, parse error, or token limit). These items are excluded from score denominators but remain visible here. Alert threshold > 5% — unreliable run.',
     judgePassRate:
       'Pass rate among LLM-judge-decided rubric items (content-quality criteria). Distinct from precheck (deterministic structural checks).',
     precheckPassRate:

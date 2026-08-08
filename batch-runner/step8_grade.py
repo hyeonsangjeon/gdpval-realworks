@@ -39,7 +39,7 @@ from core.grader import (
     grader_transport_options,
     resolve_tool_prompt_path,
 )
-from core.grade_payload import validate_grade_payload
+from core.grade_payload import canonical_rate, validate_grade_payload
 from core.inference_manifest import (
     canonical_task_id,
     canonicalize_inference_payload,
@@ -50,7 +50,7 @@ from core.public_error import public_provider_error_text
 from core.rubric_loader import RubricLoader
 from core.tools import ReadDeliverableError, get_renderer_fingerprint
 
-SCHEMA_VERSION = "1.2"
+SCHEMA_VERSION = "1.3"
 GRADED_BY_VERSION = "0.1.0"
 FULL_HF_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 FULL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -469,6 +469,42 @@ def validate_grading_config(config: dict) -> None:
     if int(config.get("tpm_guard", {}).get("max_concurrent", 1)) < 1:
         raise ValueError("tpm_guard.max_concurrent must be >= 1")
 
+    rerun_identity = config.get("rerun_identity")
+    if rerun_identity is not None:
+        if schema_version != "2.0" or not isinstance(rerun_identity, dict):
+            raise ValueError("rerun_identity requires a schema 2.0 object")
+        required_identity_fields = {
+            "experiment_id",
+            "expected_task_count",
+            "rubric_commit_sha",
+            "inference_revision",
+        }
+        if set(rerun_identity) != required_identity_fields:
+            raise ValueError(
+                "rerun_identity must contain exactly experiment_id, "
+                "expected_task_count, rubric_commit_sha, and inference_revision"
+            )
+        experiment_id = rerun_identity["experiment_id"]
+        if not isinstance(experiment_id, str) or not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", experiment_id
+        ):
+            raise ValueError("rerun_identity.experiment_id is invalid")
+        expected_task_count = rerun_identity["expected_task_count"]
+        if (
+            type(expected_task_count) is not int
+            or expected_task_count < 1
+            or expected_task_count > 220
+        ):
+            raise ValueError("rerun_identity.expected_task_count is invalid")
+        for field_name in ("rubric_commit_sha", "inference_revision"):
+            value = rerun_identity[field_name]
+            if not isinstance(value, str) or not FULL_HF_SHA_RE.fullmatch(value):
+                raise ValueError(f"rerun_identity.{field_name} is invalid")
+        if rubric["revision"] != rerun_identity["rubric_commit_sha"]:
+            raise ValueError(
+                "rubric.revision must match rerun_identity.rubric_commit_sha"
+            )
+
 
 def requires_track2_office_renderer(config: dict) -> bool:
     if config.get("schema_version") != "2.0":
@@ -545,6 +581,7 @@ def _validate_grade_resume_identity(
     renderer_fingerprint: dict[str, str] | None,
 ) -> None:
     checks = (
+        ("schema_version", existing.get("schema_version"), SCHEMA_VERSION),
         ("experiment_id", existing.get("experiment_id"), experiment_id),
         (
             "rubric.commit_sha",
@@ -592,6 +629,39 @@ def _validate_grade_resume_identity(
             raise ValueError(
                 f"Grade resume identity {state} for {field_name}: "
                 f"existing={actual!r}, current={expected!r}"
+            )
+
+
+def _validate_pinned_rerun_identity(
+    config: dict,
+    *,
+    experiment_id: str,
+    task_count: int,
+    rubric_commit_sha: str,
+    inference_revision: str | None,
+) -> None:
+    identity = config.get("rerun_identity")
+    if identity is None:
+        return
+    checks = (
+        ("experiment_id", experiment_id, identity["experiment_id"]),
+        ("task_count", task_count, identity["expected_task_count"]),
+        (
+            "rubric_commit_sha",
+            rubric_commit_sha,
+            identity["rubric_commit_sha"],
+        ),
+        (
+            "inference_revision",
+            inference_revision,
+            identity["inference_revision"],
+        ),
+    )
+    for field_name, actual, expected in checks:
+        if actual != expected:
+            raise ValueError(
+                f"pinned rerun identity mismatch for {field_name}: "
+                f"actual={actual!r}, expected={expected!r}"
             )
 
 
@@ -752,6 +822,7 @@ def filter_tasks(inference_results: dict, tasks_csv: str | None, limit: int) -> 
 def _track2_task_runtime_error(task: dict) -> str | None:
     existing_error = task.get("error")
     if existing_error and existing_error not in {
+        "all_items_score_excluded",
         "no_deliverables",
         "selection_error",
     }:
@@ -763,22 +834,11 @@ def _track2_task_runtime_error(task: dict) -> str | None:
     for item in items:
         if not isinstance(item, dict):
             return "invalid_item"
-        if item.get("verdict") != "judge_error":
-            continue
-        call_count = sum(
-            int(item.get(field, 0) or 0)
-            for field in (
-                "judge_call_count",
-                "perception_call_count",
-                "render_call_count",
-            )
-        )
-        evidence = str(item.get("evidence") or "")
-        if call_count > 0 or evidence.startswith((
-            "required_visual_",
-            "task_visual_budget_exceeded",
-        )):
-            return "judge_error"
+        if (
+            item.get("verdict") == "judge_error"
+            and item.get("score_excluded") is not True
+        ):
+            return "invalid_score_exclusion"
 
     if task.get("usage_complete") is not True:
         return "usage_incomplete"
@@ -867,7 +927,7 @@ def _compute_summary(
     graded_tasks = len(scored_tasks)
     error_tasks = total - graded_tasks
     pcts = [float(task["pct"]) for task in scored_tasks]
-    avg_pct = (sum(pcts) / len(pcts)) if pcts else 0.0
+    avg_pct = (sum(pcts) / len(pcts)) if pcts else None
 
     perfect = sum(1 for x in pcts if x >= 99.0)
     zero = sum(1 for x in pcts if x <= 1.0)
@@ -956,8 +1016,8 @@ def _compute_summary(
         "graded_tasks": graded_tasks,
         "error_tasks": error_tasks,
         "openai_compat": {
-            "avg_score_pct": round(avg_pct, 2),
-            "ci_pct": round(_ci_pct(pcts), 2),
+            "avg_score_pct": round(avg_pct, 2) if avg_pct is not None else None,
+            "ci_pct": round(_ci_pct(pcts), 2) if pcts else None,
             "perfect_count": perfect,
             "zero_count": zero,
             "partial_count": partial,
@@ -968,7 +1028,7 @@ def _compute_summary(
             "critical_item_pass_rate": round((critical_pass / critical_items) if critical_items else 0.0, 4),
             "precheck_pass_rate": round((pre_pass / pre_items) if pre_items else 0.0, 4),
             "judge_pass_rate": round((judge_pass / judge_items) if judge_items else 0.0, 4),
-            "judge_error_rate": round((judge_errors / judge_items) if judge_items else 0.0, 4),
+            "judge_error_rate": canonical_rate(judge_errors, judge_items),
             "by_sector": {},
             "by_rubric_category": {},
             "score_density_histogram": [],
@@ -1215,6 +1275,18 @@ def main() -> int:
         tasks = filter_tasks(inf_results, args.tasks, args.limit)
     except ValueError as exc:
         print(f"ERROR: invalid grading task selection: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        _validate_pinned_rerun_identity(
+            config,
+            experiment_id=args.experiment_yaml_name,
+            task_count=len(tasks),
+            rubric_commit_sha=rubric_sha,
+            inference_revision=inference_revision,
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
     expected_task_ids = [task["task_id"] for task in tasks]
@@ -1630,7 +1702,11 @@ def main() -> int:
     _save_json(out_path, final)
 
     avg = final["summary"]["openai_compat"]["avg_score_pct"]
-    print(f"Completed grading: tasks={len(task_payloads)}, avg_pct={avg:.2f}, out={out_path}")
+    avg_text = "unscored" if avg is None else f"{avg:.2f}"
+    print(
+        f"Completed grading: tasks={len(task_payloads)}, "
+        f"avg_pct={avg_text}, out={out_path}"
+    )
     return finish(0)
 
 

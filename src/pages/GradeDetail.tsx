@@ -348,7 +348,7 @@ function GradeDetail() {
               icon={Target}
               label="Average Score"
               tooltip="Mean score across all graded tasks (excluding errors), expressed as a percentage."
-              value={`${s.avg_score_pct}%`}
+              value={s.avg_score_pct == null ? '—' : `${s.avg_score_pct}%`}
               sub={s.ci_pct ? `± ${s.ci_pct}%` : undefined}
               color="text-blue-500"
               bg="bg-blue-500/10"
@@ -581,8 +581,10 @@ function GradeDetail() {
                 {s.error_tasks > 0 && (
                   <> <strong className="text-orange-500">{s.error_tasks}</strong> task{s.error_tasks > 1 ? 's' : ''} could not be evaluated.</>
                 )}
-                {' '}The average score was <strong>{s.avg_score_pct}%</strong>
-                {s.ci_pct && <> (±{s.ci_pct}% at 95% confidence)</>}.
+                {s.avg_score_pct == null
+                  ? <> No headline score is available.</>
+                  : <> The average score was <strong>{s.avg_score_pct}%</strong>
+                    {s.ci_pct && <> (±{s.ci_pct}% at 95% confidence)</>}.</>}
                 {s.inconsistent_grades > 0 && (
                   <> Graders disagreed on <strong className="text-purple-500">{s.inconsistent_grades}</strong> task{s.inconsistent_grades > 1 ? 's' : ''}.</>
                 )}

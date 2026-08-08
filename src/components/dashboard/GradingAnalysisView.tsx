@@ -403,7 +403,9 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
             </div>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold text-dash-heading font-mono">{s.avg_score_pct}%</p>
+            <p className="text-2xl font-bold text-dash-heading font-mono">
+              {s.avg_score_pct == null ? '—' : `${s.avg_score_pct}%`}
+            </p>
             {s.ci_pct && <p className="text-[10px] text-dash-text-faint flex items-center gap-0.5 justify-end">± {s.ci_pct}% CI <InfoTooltip content={tooltipTexts.grading.ci} position="left" /></p>}
           </div>
         </div>

@@ -10,6 +10,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { isPublishableGrade, processGradesFile } from '../aggregate-grades.mjs';
 import { gradeIdentityFromRaw } from '../grade-identity.mjs';
 
@@ -83,6 +84,265 @@ test('processGradesFile routes current schema 1.2 through item-level grading', (
   assert.equal(out.grade_status, 'graded_v1');
   assert.equal(out.schema_version, '1.2');
   assert.equal(out.judge_model, 'gpt-5.6-sol');
+});
+
+test('processGradesFile preserves visible zero judge-error rate for schema 1.3', () => {
+  const raw = {
+    schema_version: '1.3',
+    experiment_id: 'exp-score-excluded',
+    inference_model: 'gpt-5.2-chat',
+    judge: { model: 'gpt-5.4-mini' },
+    summary: {
+      total_tasks: 1,
+      graded_tasks: 1,
+      error_tasks: 0,
+      openai_compat: {
+        avg_score_pct: 100,
+        ci_pct: 0,
+        perfect_count: 1,
+        partial_count: 0,
+        zero_count: 0,
+        inconsistent_count: 0,
+      },
+      wow: { judge_error_rate: 0 },
+    },
+    tasks: [{ task_id: 'task-1', pct: 100, error: null, items: [] }],
+  };
+
+  const out = processGradesFile('score-excluded.json', raw);
+
+  assert.equal(out.grade_status, 'graded_v1');
+  assert.equal(out.schema_version, '1.3');
+  assert.equal(out.summary_v1.wow.judge_error_rate, 0);
+});
+
+test('processGradesFile rejects malformed schema 1.3 required shapes', () => {
+  const valid = {
+    schema_version: '1.3',
+    experiment_id: 'exp-shape',
+    summary: {
+      total_tasks: 1,
+      graded_tasks: 1,
+      error_tasks: 0,
+      openai_compat: {
+        avg_score_pct: 100,
+        ci_pct: 0,
+        perfect_count: 1,
+        partial_count: 0,
+        zero_count: 0,
+        inconsistent_count: 0,
+      },
+      wow: { judge_error_rate: 0 },
+    },
+    tasks: [{ task_id: 'task-1', pct: 100, error: null, items: [] }],
+  };
+
+  for (const mutate of [
+    (raw) => { delete raw.tasks; },
+    (raw) => { delete raw.tasks[0].items; },
+    (raw) => { delete raw.summary.openai_compat.ci_pct; },
+    (raw) => { delete raw.summary.openai_compat.zero_count; },
+  ]) {
+    const invalid = structuredClone(valid);
+    mutate(invalid);
+    assert.throws(
+      () => processGradesFile('invalid-shape.json', invalid),
+      /schema 1.3 .*missing|schema 1.3 .*invalid/,
+    );
+  }
+});
+
+test('processGradesFile rejects nullable headline before schema 1.3', () => {
+  const raw = {
+    schema_version: '1.2',
+    experiment_id: 'exp-old-null',
+    summary: {
+      total_tasks: 0,
+      graded_tasks: 0,
+      error_tasks: 0,
+      openai_compat: {
+        avg_score_pct: null,
+        ci_pct: null,
+        perfect_count: 0,
+        partial_count: 0,
+        zero_count: 0,
+        inconsistent_count: 0,
+      },
+      wow: {},
+    },
+    tasks: [],
+  };
+
+  assert.throws(
+    () => processGradesFile('old-null.json', raw),
+    /schema 1.0-1.2 headline must remain numeric/,
+  );
+});
+
+test('processGradesFile rejects hidden or score-included schema 1.3 judge errors', () => {
+  const raw = {
+    schema_version: '1.3',
+    experiment_id: 'exp-invalid-score-policy',
+    summary: {
+      total_tasks: 1,
+      graded_tasks: 1,
+      error_tasks: 0,
+      openai_compat: {
+        avg_score_pct: 0,
+        ci_pct: 0,
+        perfect_count: 0,
+        partial_count: 1,
+        zero_count: 0,
+        inconsistent_count: 0,
+      },
+      wow: { judge_error_rate: 1 },
+    },
+    tasks: [{
+      task_id: 'task-1',
+      pct: 0,
+      error: null,
+      items: [{
+        verdict: 'judge_error',
+        decided_by: 'judge',
+        score_excluded: false,
+      }],
+    }],
+  };
+
+  assert.throws(
+    () => processGradesFile('invalid.json', raw),
+    /judge_error must be score_excluded/,
+  );
+
+  raw.tasks[0].items[0].score_excluded = true;
+  raw.tasks[0].items.push({
+    verdict: 'pass',
+    decided_by: 'precheck',
+    score_excluded: false,
+  });
+  delete raw.summary.wow.judge_error_rate;
+  assert.throws(
+    () => processGradesFile('invalid.json', raw),
+    /judge_error_rate is missing or inconsistent/,
+  );
+
+  raw.summary.wow.judge_error_rate = 0.99999;
+  assert.throws(
+    () => processGradesFile('invalid.json', raw),
+    /judge_error_rate is missing or inconsistent/,
+  );
+});
+
+test('processGradesFile renders an all-excluded schema 1.3 run as unscored', () => {
+  const raw = {
+    schema_version: '1.3',
+    experiment_id: 'exp-unscored',
+    summary: {
+      total_tasks: 1,
+      graded_tasks: 0,
+      error_tasks: 1,
+      openai_compat: {
+        avg_score_pct: null,
+        ci_pct: null,
+        perfect_count: 0,
+        partial_count: 0,
+        zero_count: 0,
+        inconsistent_count: 0,
+      },
+      wow: { judge_error_rate: 1 },
+    },
+    tasks: [{
+      task_id: 'task-1',
+      pct: 0,
+      error: 'all_items_score_excluded',
+      items: [{
+        verdict: 'judge_error',
+        decided_by: 'judge',
+        score_excluded: true,
+      }],
+    }],
+  };
+
+  const out = processGradesFile('unscored.json', raw);
+
+  assert.equal(out.summary.avg_score_pct, null);
+  assert.equal(out.summary.zero_score, 0);
+  assert.equal(out.tasks[0].error, true);
+
+  raw.summary.total_tasks = 999;
+  assert.throws(
+    () => processGradesFile('invalid-count.json', raw),
+    /task counts are inconsistent/,
+  );
+  raw.summary.total_tasks = 1;
+
+  raw.summary.openai_compat.inconsistent_count = 7;
+  assert.throws(
+    () => processGradesFile('invalid-inconsistent.json', raw),
+    /unscored grade must not report headline scores/,
+  );
+  raw.summary.openai_compat.inconsistent_count = 0;
+
+  raw.tasks[0].error = null;
+  raw.summary.openai_compat.avg_score_pct = 0;
+  raw.summary.openai_compat.ci_pct = 0;
+  raw.summary.openai_compat.zero_count = 1;
+  assert.throws(
+    () => processGradesFile('invalid-unscored.json', raw),
+    /all-excluded task must be unscored/,
+  );
+});
+
+test('schema 1.3 judge-error rate uses the backend half-up tie rule', () => {
+  const items = Array.from({ length: 32 }, (_, index) => ({
+    verdict: index === 0 ? 'judge_error' : 'pass',
+    decided_by: 'judge',
+    score_excluded: index === 0,
+  }));
+  const raw = {
+    schema_version: '1.3',
+    experiment_id: 'exp-rate-tie',
+    summary: {
+      total_tasks: 1,
+      graded_tasks: 1,
+      error_tasks: 0,
+      openai_compat: {
+        avg_score_pct: 100,
+        ci_pct: 0,
+        perfect_count: 1,
+        partial_count: 0,
+        zero_count: 0,
+        inconsistent_count: 0,
+      },
+      wow: { judge_error_rate: 0.0313 },
+    },
+    tasks: [{ task_id: 'task-1', pct: 100, error: null, items }],
+  };
+
+  assert.equal(
+    processGradesFile('rate-tie.json', raw).summary_v1.wow.judge_error_rate,
+    0.0313,
+  );
+  raw.summary.wow.judge_error_rate = 0.0312;
+  assert.throws(
+    () => processGradesFile('rate-tie-invalid.json', raw),
+    /judge_error_rate is missing or inconsistent/,
+  );
+});
+
+test('dashboard always renders judge-error rate and discloses score exclusion', async () => {
+  const healthStrip = await readFile(
+    new URL('../../src/components/wow/HealthStrip.tsx', import.meta.url),
+    'utf8',
+  );
+  const tooltips = await readFile(
+    new URL('../../src/data/tooltipTexts.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(healthStrip, /label="err"[\s\S]*value=\{fmtPct\(errRate\)\}/);
+  assert.doesNotMatch(healthStrip, /errRate\s*&&\s*<Pill/);
+  assert.match(tooltips, /excluded from score denominators but remain visible here/);
 });
 
 // ── Fixture A — minimal v1 grade with empty `inference_model` ───────────────
