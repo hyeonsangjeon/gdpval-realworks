@@ -12,6 +12,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **Judge errors excluded from score denominators** - make `judge_error` a
+  visible unscored outcome rather than a model failure. Runtime aggregation now
+  overrides stale producer flags, excludes judge failures from task numerators,
+  denominators, coverage, and critical metrics, and marks fully excluded tasks
+  unscored with null headline score and confidence interval. Track 2 continues
+  past complete score-excluded errors while malformed items, incomplete usage,
+  and unexcluded errors remain fatal. Output schema `1.3`, its Python validator,
+  resume identity, and the dashboard parser enforce the same cross-field
+  contract; schemas `1.0`-`1.2` remain readable with numeric historical
+  headlines. The dashboard always exposes canonical four-decimal
+  `judge_error_rate`, discloses denominator exclusion, rejects malformed 1.3
+  payloads, and renders unscored headlines as an em dash. Read-only analysis of
+  tracked payload SHA-256
+  `b5cbb6a80c776b458f99f007841a946c1c5f9ec8bf60be052500713dd6f13570`
+  found 355 judge errors; 100 score-included zeros affected 53 tasks and split
+  into 61 final-JSON parse failures, 31 empty final responses, five rate limits,
+  and three content-policy errors. A dedicated future full-run config pins all
+  220 tasks, config hash `55a7dc5cfb8023fe`, rubric commit
+  `11e7900cdcac61bc4daf59e65feb238acda98fbf`, and inference revision
+  `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`; Step 8 checks that identity
+  before its route preflight and model construction. Headline scores across the
+  schema 1.2/1.3 boundary are explicitly non-comparable without a complete
+  rerun under one identity. Validation completed 3,033 backend passes with six
+  skips and 45 integration deselections; three host-dependency failures passed
+  under exact temporary Python 3.10 dependencies. Aggregate contracts passed
+  105 with one expected Ruby skip, the production build transformed 2,783
+  modules, and Ruff, `py_compile`, diagnostics, and diff checks passed. No grade
+  payload was modified, no partial or paid regrade ran, and no credential or
+  workflow dispatch was used. Independent grading and code reviews approved
+  substantive head `3c8ab817916129dff7a33291520a1f4f2db7d048` with no
+  blocking findings.
 - **Non-recursive repository completion records** - clarify that the latest-task
   result and changelog entry stop at facts available before merge: task scope,
   concrete outcome, verification evidence, the reviewed head SHA when a review
