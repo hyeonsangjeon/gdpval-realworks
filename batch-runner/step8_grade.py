@@ -898,8 +898,16 @@ def _ci_pct(values: list[float]) -> float:
     return 1.96 * std / math.sqrt(n)
 
 
-def _task_to_dict(task_grade) -> dict:
+def _task_to_dict(
+    task_grade,
+    *,
+    grading_wall_time_ms: float | None = None,
+) -> dict:
     data = asdict(task_grade)
+    if grading_wall_time_ms is not None:
+        if not math.isfinite(grading_wall_time_ms) or grading_wall_time_ms < 0:
+            raise ValueError("grading wall time must be finite and nonnegative")
+        data["grading_wall_time_ms"] = round(grading_wall_time_ms, 2)
     data["graded_at"] = _now_iso()
     return data
 
@@ -1589,8 +1597,13 @@ def main() -> int:
 
         task = loader.load(task_result["task_id"])
         deliverable_dir = resolve_deliverable_dir(task_result)
+        task_started = time.perf_counter()
         grade = grader.grade_task(task, deliverable_dir)
-        row = _task_to_dict(grade)
+        grading_wall_time_ms = (time.perf_counter() - task_started) * 1000.0
+        row = _task_to_dict(
+            grade,
+            grading_wall_time_ms=grading_wall_time_ms,
+        )
         runtime_error = None
         if config.get("schema_version") == "2.0":
             runtime_error = _track2_task_runtime_error(row)

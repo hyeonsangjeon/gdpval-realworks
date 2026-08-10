@@ -7,6 +7,8 @@
 | `default_v2_sol_max.yaml` | tool-calling judge | v2 (`ToolCallingJudge` via `judge.tools.read_deliverable`) | **Production default.** GPT-5.6 Sol 1M Max for main, visual, and bounded finalization; gpt-audio-1.5 for audio perception. |
 | `default_v2.yaml` | tool-calling judge | v2 | Historical gpt-5.4 medium comparison identity. Pass explicitly when reproducing that condition. |
 | `regrade_exp003_v2_mini_score_excluded.yaml` | tool-calling judge | v2 | Full-220 exp003 rerun only. Pins score-excluded semantics, the historical mini judge condition, rubric commit, inference revision, and exact task count. |
+| `regrade_exp003_v2_sol_max_score_excluded.yaml` | tool-calling judge | v2 | Planned full-220 exp003 Sol Max rerun. Pins score-excluded semantics, production judge/perception settings, rubric commit, inference revision, and exact task count. |
+| `validation_exp003_v2_sol_max_anchor3.yaml` | tool-calling judge | v2 | Paid three-task Sol Max anchor with the same runtime semantics and pinned source identities as the planned full rerun. |
 | `default_gpt5pro.yaml` | text-extract judge | v1 (`Judge` / `BatchJudge`) | Historical mini/text-extract comparison identity. Pass explicitly only for provenance-compatible analysis. |
 
 `grade-run.yml` defaults to `default_v2_sol_max.yaml`. The 1.05M context window
@@ -70,6 +72,37 @@ Inside Step 8, the config's `rerun_identity` block is checked before its Azure
 route preflight and before model-client construction, so a partial task set or
 identity drift cannot start model grading. The workflow may authenticate and
 perform its own route checks earlier.
+
+The pinned Sol Max identities are:
+
+| purpose | config | config hash | tasks |
+|---|---|---|---:|
+| full rerun | `regrade_exp003_v2_sol_max_score_excluded.yaml` | `14fc577ea39d98c5` | 220 |
+| paid anchor | `validation_exp003_v2_sol_max_anchor3.yaml` | `25653df2d5841c97` | 3 |
+
+Both pin rubric commit `11e7900cdcac61bc4daf59e65feb238acda98fbf`
+and inference revision `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`.
+Their audio block remains the production `gpt-audio-1.5` configuration with a
+three-call task cap and 30-second trim, and their visual task cap remains 72.
+
+The first paid anchor is deliberately three tasks, not ten. There is no prior
+Sol Max grade payload, while the matching mini cohorts already report zero
+judge errors at both sizes. Three tasks bound the first exposure while still
+covering 536 mini baseline calls and four visual-perception calls. Consequently,
+the anchor can establish token/latency volume and detect an error-rate
+regression, but it cannot prove an error-rate reduction below the mini floor of
+zero. The ten-task mini baseline remains available for a later owner-approved
+expansion if the three-task anchor is operationally acceptable.
+
+| mini baseline | main calls | visual calls | audio calls | main tokens (in/out/cached) | visual tokens (in/out/cached) | audio tokens | summed judge latency | judge errors |
+|---|---:|---:|---:|---|---|---|---:|---:|
+| cohort3 | 532 | 4 | 0 | 4,540,399 / 176,531 / 1,955,328 | 4,751 / 1,032 / 0 | 0 / 0 / 0 | 41.2 min | 0 |
+| cohort10 | 1,333 | 26 | 0 | 6,833,450 / 369,014 / 3,389,440 | 30,282 / 6,836 / 0 | 0 / 0 / 0 | 88.8 min | 0 |
+
+These historical payloads predate task-level `grading_wall_time_ms`, so their
+true task wall-clock values cannot be reconstructed. The Sol Max anchor records
+that field prospectively and the analyzer projects serial 220-task wall time
+against the 44-hour resume envelope without inventing a USD estimate.
 
 ## Archived (no longer recommended)
 

@@ -431,6 +431,7 @@
           "judge_call_count": {"type": "integer", "minimum": 0},
           "precheck_count": {"type": "integer", "minimum": 0},
           "judge_total_latency_ms": {"type": "number", "minimum": 0},
+          "grading_wall_time_ms": {"type": "number", "minimum": 0},
           "judge_input_tokens": {"type": "integer", "minimum": 0},
           "judge_output_tokens": {"type": "integer", "minimum": 0},
           "judge_cached_tokens": {"type": "integer", "minimum": 0},

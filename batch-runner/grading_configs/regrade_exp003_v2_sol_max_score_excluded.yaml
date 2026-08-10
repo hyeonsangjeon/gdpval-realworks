@@ -1,0 +1,95 @@
+schema_version: "2.0"
+config_name: "regrade_exp003_v2_sol_max_score_excluded"
+description: |
+  Full 220-task exp003 regrade identity for schema 1.3 score semantics.
+  This preserves the production Sol Max judge, visual, audio, and retry
+  settings while pinning the exact task count, rubric, and inference revision.
+
+rerun_identity:
+  experiment_id: "exp003_GPT52Chat_baseline_runner_exec"
+  expected_task_count: 220
+  rubric_commit_sha: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  inference_revision: "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f"
+
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.6-sol"
+  deployment: "gpt-5.6-sol"
+  api_version: "2025-04-01-preview"
+  timeout_sec: 600
+  reasoning:
+    effort: "max"
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 2400
+    finalization_reasoning_effort: "max"
+
+  tools:
+    read_deliverable:
+      env: "exp011_subprocess"
+      ops:
+        - inspect_structure
+        - read_content
+        - inspect_formatting
+        - probe_audio
+        - probe_video
+      read_only: true
+      per_item_call_cap: 8
+      max_iterations: 10
+
+  perception:
+    visual:
+      model: "gpt-5.6-sol"
+      deployment: "gpt-5.6-sol"
+      reasoning_effort: "max"
+      vision: true
+      call_cap_per_task: 72
+    audio:
+      model: "gpt-audio-1.5"
+      deployment: "gpt-audio-1.5"
+      call_cap_per_task: 3
+      trim_seconds: 30
+
+  critical:
+    rule: "abs_max_score_threshold"
+    threshold: 4
+    sign_aware: true
+
+  scoring:
+    sign_aware_pct: true
+    handle_nonpositive_total_max: "explicit"
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v2"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  task_prompt_truncate_chars: 500
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  tool_template: "prompts/grader_judge_v2.md"
+  version: "v2.2"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__judge_{judge_slug}__{config_name}__cfg_{config_hash}__rubric_{rubric_sha}__inference_{inference_sha}__src_{grader_source_hash_short}__{prompt_v}.json"

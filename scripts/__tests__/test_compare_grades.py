@@ -143,3 +143,35 @@ def test_handles_zero_mini_critical_pass(tmp_path: Path):
     assert rc == 0
     assert dec["decision"] == "ABORT"
     assert dec["ratio"] == 0
+
+
+@pytest.mark.parametrize("unscored_side", ["hybrid", "mini"])
+def test_null_headline_is_unscored_and_has_no_delta(
+    tmp_path: Path, unscored_side: str
+):
+    tids = ["t01"]
+    hybrid = _grade(tids, critical_pass=1.0, avg_score=80.0)
+    mini = _grade(tids, critical_pass=1.0, avg_score=80.0)
+    target = hybrid if unscored_side == "hybrid" else mini
+    target["summary"]["openai_compat"]["avg_score_pct"] = None
+
+    rc, dec, md = _run(tmp_path, hybrid, mini)
+
+    assert rc == 0
+    assert dec[f"{unscored_side}_avg"] is None
+    assert "| avg_score_pct | unscored | 80.00 | — |" in md or (
+        "| avg_score_pct | 80.00 | unscored | — |" in md
+    )
+    assert "None" not in md
+
+
+def test_unscored_task_has_no_pairwise_delta(tmp_path: Path):
+    hybrid = _grade(["t01"], critical_pass=1.0, avg_score=80.0)
+    mini = _grade(["t01"], critical_pass=1.0, avg_score=60.32)
+    hybrid["tasks"][0]["pct"] = 0
+    hybrid["tasks"][0]["error"] = "all_items_score_excluded"
+
+    _, _, md = _run(tmp_path, hybrid, mini)
+
+    assert "| `t01…` | unscored | 60.32 | — |" in md
+    assert "-60.3" not in md

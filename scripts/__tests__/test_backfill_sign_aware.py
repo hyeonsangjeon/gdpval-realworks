@@ -171,3 +171,31 @@ def test_backfill_preserves_input_file(tmp_path: Path):
     after = p.read_text()
     assert before == after, "input v1 file must NOT be modified"
     assert (tmp_path / "grade__v2sm.json").exists()
+
+
+def test_backfill_rejects_schema_1_3_instead_of_downgrading_null_score(
+    tmp_path: Path,
+):
+    payload = _v1_grade([
+        _task(
+            "t1",
+            [_item("r1", 4, 0, "judge_error")],
+            error="all_items_score_excluded",
+        )
+    ])
+    payload["schema_version"] = "1.3"
+    payload["summary"]["graded_tasks"] = 0
+    payload["summary"]["error_tasks"] = 1
+    payload["summary"]["openai_compat"]["avg_score_pct"] = None
+    source = tmp_path / "grade.json"
+    source.write_text(json.dumps(payload))
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(source)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "schema 1.0" in result.stderr
+    assert not (tmp_path / "grade__v2sm.json").exists()
