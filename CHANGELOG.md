@@ -12,6 +12,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **Sol Max regrade preparation and anchor instrumentation** - preserve schema
+  `1.3` nullable headlines across grading analysis: the sign-aware backfill now
+  rejects non-`1.0` inputs instead of downgrading them, pairwise comparison
+  renders aggregate and task-level null/error scores as `unscored` without a
+  delta, and run analysis keeps null in JSON and Markdown. Add pinned exp003 Sol
+  Max configs for the planned full 220-task rerun and a bounded three-task paid
+  anchor. Their hashes are `14fc577ea39d98c5` and `25653df2d5841c97`;
+  both bind rubric commit `11e7900cdcac61bc4daf59e65feb238acda98fbf`
+  and inference revision `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`.
+  The production audio block remains byte-equivalent in semantics
+  (`gpt-audio-1.5`, three calls, 30-second trim), the visual cap remains 72,
+  and all existing comparison configs remain unchanged. Step 8 now records
+  measured per-task grading wall time. The analyzer emits task-level wall,
+  main/visual/audio/unknown calls, tokens, cache, latency, render usage, and
+  public judge-error subtypes, treats unknown perception token attribution as
+  unpriced, and projects serial 220-task wall time against the 44-hour resume
+  envelope without inventing USD cost. The three-task anchor is deliberately
+  smaller than ten because Sol Max has no prior payload; matching mini baselines
+  already have zero judge errors. Cohort 3 records 532 main and four visual
+  calls with 41.2 minutes summed latency; cohort 10 records 1,333 main and 26
+  visual calls with 88.8 minutes. Neither has an audio call or judge error, so
+  the first Sol Max anchor can establish operational volume and detect a
+  regression or match, but cannot prove improvement below the mini zero floor.
+  Validation passes 28 analysis tests, 312 grading/config/schema/perception
+  tests, 3,038 backend tests with nine skips and 45 integration deselections,
+  plus the three host-dependency cases under exact temporary Python 3.10
+  dependencies. Aggregate contracts pass 105 with one expected Ruby skip, the
+  production build transforms 2,783 modules, and `py_compile`, diagnostics,
+  and diff checks pass. No workflow, credential, paid model call, grade payload,
+  or existing config was changed or executed. Independent grading and code
+  reviews approved substantive head
+  `eee62b8e3fc6cff0ed447781251cde37f10e6b4f`. The paid anchor remains pending
+  because its config must first reach exact `main`; it requires a separate
+  owner-approved protected grading dispatch.
 - **Judge errors excluded from score denominators** - make `judge_error` a
   visible unscored outcome rather than a model failure. Runtime aggregation now
   overrides stale producer flags, excludes judge failures from task numerators,

@@ -175,6 +175,8 @@ def test_grade_workflow_defaults_to_v2_sol_max():
         "default_v2_mini.yaml",
         "default_v2_tight.yaml",
         "regrade_exp003_v2_mini_score_excluded.yaml",
+        "regrade_exp003_v2_sol_max_score_excluded.yaml",
+        "validation_exp003_v2_sol_max_anchor3.yaml",
         "validation_v2_mini_cohort3.yaml",
         "validation_v2_mini_cohort10.yaml",
     ],
@@ -260,6 +262,76 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
     rerun.pop("rerun_identity")
     baseline["rubric"]["revision"] = identity["rubric_commit_sha"]
     assert rerun == baseline
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected_task_count", "expected_hash"),
+    [
+        (
+            "regrade_exp003_v2_sol_max_score_excluded.yaml",
+            220,
+            "14fc577ea39d98c5",
+        ),
+        (
+            "validation_exp003_v2_sol_max_anchor3.yaml",
+            3,
+            "25653df2d5841c97",
+        ),
+    ],
+)
+def test_exp003_sol_max_configs_are_pinned_and_preserve_modalities(
+    filename: str,
+    expected_task_count: int,
+    expected_hash: str,
+):
+    baseline_path = Path("grading_configs/default_v2_sol_max.yaml")
+    candidate_path = Path("grading_configs") / filename
+    baseline = yaml.safe_load(baseline_path.read_text(encoding="utf-8"))
+    candidate = yaml.safe_load(candidate_path.read_text(encoding="utf-8"))
+
+    validate_grading_config(candidate)
+
+    identity = candidate["rerun_identity"]
+    assert identity == {
+        "experiment_id": "exp003_GPT52Chat_baseline_runner_exec",
+        "expected_task_count": expected_task_count,
+        "rubric_commit_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "inference_revision": "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f",
+    }
+    assert candidate["rubric"]["revision"] == identity["rubric_commit_sha"]
+    assert hash_config(str(candidate_path)) == expected_hash
+    assert candidate["judge"]["perception"]["audio"] == (
+        baseline["judge"]["perception"]["audio"]
+    )
+    assert candidate["judge"]["perception"]["visual"]["call_cap_per_task"] == 72
+
+    for key in ("config_name", "description"):
+        baseline.pop(key)
+        candidate.pop(key)
+    candidate.pop("rerun_identity")
+    baseline["rubric"]["revision"] = identity["rubric_commit_sha"]
+    assert candidate == baseline
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("expected_task_count", 0, "expected_task_count"),
+        ("expected_task_count", 221, "expected_task_count"),
+        ("inference_revision", "main", "inference_revision"),
+    ],
+)
+def test_sol_max_rerun_identity_rejects_invalid_values(
+    field: str,
+    value,
+    message: str,
+):
+    path = Path("grading_configs/regrade_exp003_v2_sol_max_score_excluded.yaml")
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["rerun_identity"][field] = value
+
+    with pytest.raises(ValueError, match=message):
+        validate_grading_config(config)
 
 
 def test_v2_tools_block_requires_ops_list(tmp_path):

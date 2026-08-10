@@ -16,6 +16,7 @@ import argparse
 import json
 import statistics
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -133,42 +134,72 @@ def _hybrid_cost_estimate(grade: dict, total_in: int, total_out: int) -> dict:
     }
 
 
-def _perception_usage_by_modality(grade: dict) -> dict[str, dict[str, int]]:
-    usage: dict[str, dict[str, int]] = {}
+def _perception_usage_by_modality(
+    grade: dict,
+) -> dict[str, dict[str, int | float]]:
+    usage: dict[str, dict[str, int | float]] = {}
 
-    def add(modality: str, in_tok: int, out_tok: int, cached_tok: int) -> None:
+    def add(
+        modality: str,
+        in_tok: int,
+        out_tok: int,
+        cached_tok: int,
+        call_count: int,
+        latency_ms: float,
+    ) -> None:
         bucket = usage.setdefault(
-            modality, {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
+            modality,
+            {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_tokens": 0,
+                "call_count": 0,
+                "latency_ms": 0.0,
+            },
         )
         bucket["input_tokens"] += in_tok
         bucket["output_tokens"] += out_tok
         bucket["cached_tokens"] += cached_tok
+        bucket["call_count"] += call_count
+        bucket["latency_ms"] += latency_ms
 
-    task_total = {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
-    item_total = {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
+    task_total = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cached_tokens": 0,
+        "call_count": 0,
+        "latency_ms": 0.0,
+    }
+    item_total = dict(task_total)
     for task in grade.get("tasks", []):
         task_total["input_tokens"] += int(task.get("perception_input_tokens", 0) or 0)
         task_total["output_tokens"] += int(task.get("perception_output_tokens", 0) or 0)
         task_total["cached_tokens"] += int(task.get("perception_cached_tokens", 0) or 0)
+        task_total["call_count"] += int(task.get("perception_call_count", 0) or 0)
+        task_total["latency_ms"] += float(
+            task.get("perception_total_latency_ms", 0) or 0
+        )
         for item in task.get("items", []):
             in_tok = int(item.get("perception_input_tokens", 0) or 0)
             out_tok = int(item.get("perception_output_tokens", 0) or 0)
             cached_tok = int(item.get("perception_cached_tokens", 0) or 0)
-            if not (in_tok or out_tok or cached_tok):
+            call_count = int(item.get("perception_call_count", 0) or 0)
+            latency_ms = float(item.get("perception_total_latency_ms", 0) or 0)
+            if not (in_tok or out_tok or cached_tok or call_count or latency_ms):
                 continue
             modality = str(item.get("routing_modality") or "unknown")
             parent_usage = {
                 "input_tokens": in_tok,
                 "output_tokens": out_tok,
                 "cached_tokens": cached_tok,
+                "call_count": call_count,
+                "latency_ms": latency_ms,
             }
             if modality == "mixed" and isinstance(item.get("child_grades"), list):
-                child_usage = {
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "cached_tokens": 0,
-                }
-                child_buckets: list[tuple[str, dict[str, int]]] = []
+                child_usage = {key: 0 for key in parent_usage}
+                child_buckets: list[
+                    tuple[str, dict[str, int | float]]
+                ] = []
                 for child in item["child_grades"]:
                     if not isinstance(child, dict):
                         continue
@@ -181,6 +212,12 @@ def _perception_usage_by_modality(grade: dict) -> dict[str, dict[str, int]]:
                         ),
                         "cached_tokens": int(
                             child.get("perception_cached_tokens", 0) or 0
+                        ),
+                        "call_count": int(
+                            child.get("perception_call_count", 0) or 0
+                        ),
+                        "latency_ms": float(
+                            child.get("perception_total_latency_ms", 0) or 0
                         ),
                     }
                     if not any(child_values.values()):
@@ -203,6 +240,8 @@ def _perception_usage_by_modality(grade: dict) -> dict[str, dict[str, int]]:
                             values["input_tokens"],
                             values["output_tokens"],
                             values["cached_tokens"],
+                            values["call_count"],
+                            values["latency_ms"],
                         )
                     residual = {
                         key: parent_usage[key] - child_usage[key]
@@ -214,16 +253,31 @@ def _perception_usage_by_modality(grade: dict) -> dict[str, dict[str, int]]:
                             residual["input_tokens"],
                             residual["output_tokens"],
                             residual["cached_tokens"],
+                            residual["call_count"],
+                            residual["latency_ms"],
                         )
                 else:
-                    add("unknown", in_tok, out_tok, cached_tok)
+                    add(
+                        "unknown",
+                        in_tok,
+                        out_tok,
+                        cached_tok,
+                        call_count,
+                        latency_ms,
+                    )
             else:
                 if modality not in {"visual", "audio"}:
                     modality = "unknown"
-                add(modality, in_tok, out_tok, cached_tok)
-            item_total["input_tokens"] += in_tok
-            item_total["output_tokens"] += out_tok
-            item_total["cached_tokens"] += cached_tok
+                add(
+                    modality,
+                    in_tok,
+                    out_tok,
+                    cached_tok,
+                    call_count,
+                    latency_ms,
+                )
+            for key, value in parent_usage.items():
+                item_total[key] += value
 
     remainder = {
         key: max(0, task_total[key] - item_total[key])
@@ -235,8 +289,92 @@ def _perception_usage_by_modality(grade: dict) -> dict[str, dict[str, int]]:
             remainder["input_tokens"],
             remainder["output_tokens"],
             remainder["cached_tokens"],
+            int(remainder["call_count"]),
+            float(remainder["latency_ms"]),
         )
     return usage
+
+
+def _judge_error_type(item: dict) -> str:
+    evidence = str(item.get("evidence") or "").strip()
+    for public_prefix in ("provider_error:", "task_execution_error:"):
+        if evidence.startswith(public_prefix):
+            subtype = evidence[len(public_prefix):].split(":", 1)[0].strip()
+            return subtype or public_prefix.rstrip(":")
+    for prefix in (
+        "final_json_parse_failed",
+        "empty_final_text",
+        "invalid_final_envelope",
+        "RateLimitError",
+        "BadRequestError",
+        "selection_error",
+    ):
+        if evidence.startswith(prefix):
+            return prefix
+    if evidence:
+        return evidence.split(":", 1)[0][:80]
+    return "unknown"
+
+
+def _judge_error_types(item: dict) -> list[str]:
+    child_types = [
+        _judge_error_type(child)
+        for child in (item.get("child_grades") or [])
+        if isinstance(child, dict) and child.get("verdict") == "judge_error"
+    ]
+    return child_types or [_judge_error_type(item)]
+
+
+def _anchor_usage(values: dict[str, int | float] | None) -> dict:
+    values = values or {}
+    return {
+        "call_count": int(values.get("call_count", 0) or 0),
+        "input_tokens": int(values.get("input_tokens", 0) or 0),
+        "output_tokens": int(values.get("output_tokens", 0) or 0),
+        "cached_tokens": int(values.get("cached_tokens", 0) or 0),
+        "latency_sec": round(float(values.get("latency_ms", 0) or 0) / 1000, 2),
+    }
+
+
+def _task_anchor(task: dict) -> dict:
+    modality_usage = _perception_usage_by_modality({"tasks": [task]})
+    error_types = Counter(
+        error_type
+        for item in task.get("items", [])
+        if item.get("verdict") == "judge_error"
+        for error_type in _judge_error_types(item)
+    )
+    wall_time_ms = task.get("grading_wall_time_ms")
+    return {
+        "task_id": task.get("task_id"),
+        "wall_clock_sec": (
+            round(float(wall_time_ms) / 1000, 2)
+            if isinstance(wall_time_ms, (int, float)) else None
+        ),
+        "main": {
+            "call_count": int(task.get("judge_call_count", 0) or 0),
+            "input_tokens": int(task.get("judge_input_tokens", 0) or 0),
+            "output_tokens": int(task.get("judge_output_tokens", 0) or 0),
+            "cached_tokens": int(task.get("judge_cached_tokens", 0) or 0),
+            "latency_sec": round(
+                float(task.get("judge_total_latency_ms", 0) or 0) / 1000,
+                2,
+            ),
+        },
+        "visual": _anchor_usage(modality_usage.get("visual")),
+        "audio": _anchor_usage(modality_usage.get("audio")),
+        "unknown_perception": _anchor_usage(modality_usage.get("unknown")),
+        "render": {
+            "call_count": int(task.get("render_call_count", 0) or 0),
+            "latency_sec": round(
+                float(task.get("render_total_latency_ms", 0) or 0) / 1000,
+                2,
+            ),
+        },
+        "judge_error_types": dict(sorted(error_types.items())),
+        "usage_complete": bool(task.get("usage_complete", True)),
+        "error": task.get("error"),
+    }
 
 
 def _combined_cost_estimate(
@@ -255,9 +393,14 @@ def _combined_cost_estimate(
     unpriced_models = list(main.get("unpriced_models", []))
     perception_total = 0.0
     for modality, token_usage in sorted(perception_usage.items()):
+        if not any(
+            int(token_usage.get(key, 0) or 0)
+            for key in ("input_tokens", "output_tokens", "cached_tokens")
+        ):
+            continue
         model = (
             (perception_cfg.get(modality) or {}).get("model")
-            if modality in {"visual", "audio"} else None
+            if modality in {"visual", "audio"} else "unknown_perception_model"
         ) or main_model
         priced = model in PRICING_USD_PER_M_TOKENS
         estimate = _estimate_cost(
@@ -435,6 +578,25 @@ def analyze(path: Path) -> dict:
     cost = _combined_cost_estimate(
         grade, total_main_in, total_main_out, perception_usage
     )
+    task_anchors = [_task_anchor(task) for task in tasks]
+    judge_error_types = Counter()
+    for anchor in task_anchors:
+        judge_error_types.update(anchor["judge_error_types"])
+    measured_task_wall_times = [
+        anchor["wall_clock_sec"]
+        for anchor in task_anchors
+        if anchor["wall_clock_sec"] is not None
+    ]
+    projected_220_wall_hours = (
+        round(statistics.mean(measured_task_wall_times) * 220 / 3600, 2)
+        if measured_task_wall_times else None
+    )
+    if projected_220_wall_hours is None:
+        projection_status = "unmeasured"
+    elif projected_220_wall_hours >= 44:
+        projection_status = "at_or_above_44h_envelope"
+    else:
+        projection_status = "below_44h_envelope"
 
     # PR3 Step 0 — effective (cache-discounted) cost. Skipped if the run
     # used the legacy v1 path (no cached_tokens captured).
@@ -450,9 +612,15 @@ def analyze(path: Path) -> dict:
         ]
         perception_cfg = grade.get("judge", {}).get("perception", {}) or {}
         for modality, token_usage in sorted(perception_usage.items()):
+            if not any(
+                int(token_usage.get(key, 0) or 0)
+                for key in ("input_tokens", "output_tokens", "cached_tokens")
+            ):
+                continue
             model = (
                 (perception_cfg.get(modality) or {}).get("model")
-                if modality in {"visual", "audio"} else None
+                if modality in {"visual", "audio"}
+                else "unknown_perception_model"
             ) or main_model
             components.append(_effective_component(
                 token_usage["input_tokens"],
@@ -535,6 +703,10 @@ def analyze(path: Path) -> dict:
         "effective_cost": effective_cost,    # cache-discounted, None if no cached_tokens captured
         "cache_hit_ratio": cache_hit_ratio,
         "top5_slowest": enriched[:5],
+        "task_anchors": task_anchors,
+        "judge_error_types": dict(sorted(judge_error_types.items())),
+        "projected_220_wall_hours": projected_220_wall_hours,
+        "projection_status": projection_status,
     }
 
 
@@ -562,6 +734,10 @@ def _fmt_cost(c: dict) -> str:
     return "n/a"
 
 
+def _fmt_headline_score(value) -> str:
+    return "unscored" if value is None else str(value)
+
+
 def render_markdown(a: dict, base: dict | None = None) -> str:
     lines = []
     lines.append(f"# Grade Run Analysis — {a['exp_id']}\n")
@@ -570,7 +746,9 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
     lines.append(f"- tasks: {a['graded_tasks']}/{a['total_tasks']} (errors={a['error_tasks']})")
     lines.append("")
     lines.append("## Quality")
-    lines.append(f"- avg_score_pct: **{a['avg_score_pct']}**")
+    lines.append(
+        f"- avg_score_pct: **{_fmt_headline_score(a['avg_score_pct'])}**"
+    )
     lines.append(f"- critical_item_pass_rate: **{a['critical_item_pass_rate']}**")
     lines.append(f"- judge_pass_rate: {a['judge_pass_rate']}")
     lines.append(f"- judge_error_rate: {a['judge_error_rate']}")
@@ -600,6 +778,56 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
         f"usage_complete={a['usage_complete']}"
     )
     lines.append(f"- per-task avg (in,out): {a['avg_tokens_per_task_io']}")
+    lines.append("")
+    lines.append("## Task anchors")
+    lines.append(
+        "| task_id | wall (s) | main calls/tokens/latency | "
+        "visual calls/tokens/latency | audio calls/tokens/latency | "
+        "unknown perception calls/tokens/latency | judge errors |"
+    )
+    lines.append("|---|--:|---|---|---|---|---|")
+    for anchor in a["task_anchors"]:
+        main = anchor["main"]
+        visual = anchor["visual"]
+        audio = anchor["audio"]
+        unknown = anchor["unknown_perception"]
+        errors = ", ".join(
+            f"{name}:{count}"
+            for name, count in anchor["judge_error_types"].items()
+        ) or "none"
+        wall = anchor["wall_clock_sec"]
+        wall_text = "unmeasured" if wall is None else str(wall)
+        lines.append(
+            f"| `{anchor['task_id']}` | {wall_text} | "
+            f"{main['call_count']} / "
+            f"{main['input_tokens']},{main['output_tokens']},"
+            f"{main['cached_tokens']} / {main['latency_sec']}s | "
+            f"{visual['call_count']} / "
+            f"{visual['input_tokens']},{visual['output_tokens']},"
+            f"{visual['cached_tokens']} / {visual['latency_sec']}s | "
+            f"{audio['call_count']} / "
+            f"{audio['input_tokens']},{audio['output_tokens']},"
+            f"{audio['cached_tokens']} / {audio['latency_sec']}s | "
+            f"{unknown['call_count']} / "
+            f"{unknown['input_tokens']},{unknown['output_tokens']},"
+            f"{unknown['cached_tokens']} / {unknown['latency_sec']}s | "
+            f"{errors} |"
+        )
+    lines.append("")
+    lines.append(
+        "- judge_error_types: "
+        + (
+            ", ".join(
+                f"{name}:{count}"
+                for name, count in a["judge_error_types"].items()
+            )
+            or "none"
+        )
+    )
+    lines.append(
+        "- projected_220_wall_hours: "
+        f"{a['projected_220_wall_hours']} ({a['projection_status']})"
+    )
     lines.append("")
     lines.append("## Cost estimate")
     lines.append(f"- raw: {_fmt_cost(a['cost_estimate'])}")
@@ -636,6 +864,9 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
                 d = round(tv - bv, 3) if (isinstance(bv, (int, float)) and isinstance(tv, (int, float))) else "—"
             except Exception:
                 d = "—"
+            if k == "avg_score_pct":
+                bv = _fmt_headline_score(bv)
+                tv = _fmt_headline_score(tv)
             lines.append(f"| {k} | {bv} | {tv} | {d} |")
     return "\n".join(lines) + "\n"
 

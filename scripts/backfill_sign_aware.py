@@ -124,6 +124,8 @@ def _recompute_summary(payload: dict) -> dict:
 
 def backfill_file(in_path: Path) -> Path:
     raw = json.loads(in_path.read_text(encoding="utf-8"))
+    if raw.get("schema_version") != "1.0":
+        raise ValueError("backfill requires schema 1.0 input")
     out = deepcopy(raw)
     out["schema_version"] = SCHEMA_VERSION_OUT
     out["tasks"] = [_recompute_task(deepcopy(t)) for t in out.get("tasks", [])]

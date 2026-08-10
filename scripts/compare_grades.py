@@ -60,6 +60,23 @@ def _critical_summary(task: dict) -> dict:
     }
 
 
+def _format_score(value) -> str:
+    return "unscored" if value is None else f"{value:.2f}"
+
+
+def _format_score_delta(left, right) -> str:
+    if left is None or right is None:
+        return "—"
+    return f"{left - right:+.2f}"
+
+
+def _task_score(task: dict):
+    if task.get("error"):
+        return None
+    value = task.get("pct")
+    return value if isinstance(value, (int, float)) else None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("hybrid_json", type=Path, help="hybrid (partial or full) grade JSON")
@@ -88,13 +105,19 @@ def main() -> int:
         mt = Mb[tid]
         hc = _critical_summary(ht)
         mc = _critical_summary(mt)
+        hybrid_pct = _task_score(ht)
+        mini_pct = _task_score(mt)
         rows.append({
             "task_id": tid,
-            "hybrid_pct": ht.get("pct"),
-            "mini_pct": mt.get("pct"),
+            "hybrid_pct": hybrid_pct,
+            "mini_pct": mini_pct,
             "hybrid_crit_pass": hc["pass_rate"],
             "mini_crit_pass": mc["pass_rate"],
-            "delta_pct": (ht.get("pct") or 0) - (mt.get("pct") or 0),
+            "delta_pct": (
+                hybrid_pct - mini_pct
+                if hybrid_pct is not None and mini_pct is not None
+                else None
+            ),
             "hybrid_crit_fails": hc["fails"][:3],  # top-3 only for report size
         })
         if (mc["pass_rate"] or 0) == 1.0 and (hc["pass_rate"] or 0) < 1.0:
@@ -138,7 +161,10 @@ def main() -> int:
     md.append("| metric | hybrid | mini | Δ |")
     md.append("|---|--:|--:|--:|")
     md.append(f"| critical_item_pass_rate | {h_cp:.3f} | {m_cp:.3f} | {h_cp - m_cp:+.3f} |")
-    md.append(f"| avg_score_pct | {h_avg:.2f} | {m_avg:.2f} | {h_avg - m_avg:+.2f} |")
+    md.append(
+        f"| avg_score_pct | {_format_score(h_avg)} | "
+        f"{_format_score(m_avg)} | {_format_score_delta(h_avg, m_avg)} |"
+    )
     md.append(f"| hybrid stricter than mini on critical (tasks) | {h_strict_when_mini_pass}/{n_pairs} ({strict_overhead*100:.1f}%) |  |  |")
     md.append(f"| both flagged critical fails (agreement) | {h_agrees_on_fail}/{n_pairs} ({agreement_on_fail*100:.1f}%) |  |  |\n")
 
@@ -147,8 +173,11 @@ def main() -> int:
     md.append("|---|--:|--:|--:|--:|--:|")
     for r in rows:
         md.append(
-            f"| `{r['task_id'][:18]}…` | {r['hybrid_pct']} | {r['mini_pct']} | "
-            f"{r['delta_pct']:+.1f} | {r['hybrid_crit_pass']} | {r['mini_crit_pass']} |"
+            f"| `{r['task_id'][:18]}…` | "
+            f"{_format_score(r['hybrid_pct'])} | "
+            f"{_format_score(r['mini_pct'])} | "
+            f"{_format_score_delta(r['hybrid_pct'], r['mini_pct'])} | "
+            f"{r['hybrid_crit_pass']} | {r['mini_crit_pass']} |"
         )
 
     md.append("\n## Sample hybrid critical FAILs (top 3 per task, first 5 tasks)")

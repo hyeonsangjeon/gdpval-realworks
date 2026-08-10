@@ -98,6 +98,16 @@ class _FakeGrader:
         )
 
 
+def test_task_serialization_persists_measured_wall_time():
+    config = {"_runtime": {"azure_ai_runtime_fingerprint": "f" * 64}}
+    grader = _FakeGrader(config, rubric_loader=None)
+    grade = grader.grade_task(_FakeLoader().load("task-001"), "unused")
+
+    row = s8._task_to_dict(grade, grading_wall_time_ms=1234.5)
+
+    assert row["grading_wall_time_ms"] == 1234.5
+
+
 def test_compute_summary_includes_perception_in_total_cost_volume():
     task = {
         "pct": 50.0,
@@ -462,6 +472,11 @@ def test_force_overwrites(monkeypatch, tmp_path):
     assert code == 0
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "1.3"
+    assert all(
+        isinstance(task["grading_wall_time_ms"], (int, float))
+        and task["grading_wall_time_ms"] >= 0
+        for task in payload["tasks"]
+    )
 
 
 def test_main_preflight_matches_grader_transport_before_calls(

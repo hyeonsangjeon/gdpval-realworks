@@ -163,9 +163,11 @@ def test_perception_usage_is_included_and_reported_separately(tmp_path: Path):
     assert analyzed["top5_slowest"][0]["latency_sec"] == 0.07
     assert analyzed["total_render_calls"] == 3
     assert analyzed["usage_complete"] is True
-    combined_cost = analyzed["cost_estimate"]["cost_usd"]
-    main_only = 100 / 1_000_000 * 1.25 + 20 / 1_000_000 * 5.0
-    assert combined_cost > main_only
+    assert analyzed["cost_estimate"]["cost_usd"] is None
+    assert analyzed["cost_estimate"]["pricing_complete"] is False
+    assert "unknown_perception_model" in (
+        analyzed["cost_estimate"]["unpriced_models"]
+    )
 
 
 def test_visual_perception_uses_its_own_model_price(tmp_path: Path):
@@ -231,6 +233,36 @@ def test_mixed_parent_prices_visual_child_with_visual_model(tmp_path: Path):
     assert cost["perception"][0]["input_usd"] == 1.25
 
 
+def test_unknown_perception_tokens_are_unpriced_and_visible(tmp_path: Path):
+    grade = _grade_json(model="gpt-5.4-mini", n_tasks=1)
+    task = grade["tasks"][0]
+    task.update({
+        "perception_call_count": 1,
+        "perception_input_tokens": 1_000_000,
+        "perception_output_tokens": 100,
+        "perception_cached_tokens": 10,
+        "perception_total_latency_ms": 5_000,
+    })
+    task["items"] = []
+
+    analyzed = _run(tmp_path, grade)["this"]
+    markdown = _run(tmp_path, grade, as_json=False)
+
+    assert analyzed["cost_estimate"]["pricing_complete"] is False
+    assert analyzed["cost_estimate"]["cost_usd"] is None
+    assert "unknown_perception_model" in (
+        analyzed["cost_estimate"]["unpriced_models"]
+    )
+    assert analyzed["effective_cost"]["pricing_complete"] is False
+    assert analyzed["effective_cost"]["total_usd"] is None
+    unknown = analyzed["task_anchors"][0]["unknown_perception"]
+    assert unknown["call_count"] == 1
+    assert unknown["input_tokens"] == 1_000_000
+    assert unknown["latency_sec"] == 5.0
+    assert "unknown perception calls/tokens/latency" in markdown
+    assert "1 / 1000000,100,10 / 5.0s" in markdown
+
+
 def test_routing_emits_blended_estimate(tmp_path: Path):
     routing = {
         "tier_pro": {"model": "gpt-5.4-pro"},
@@ -259,6 +291,116 @@ def test_top5_slowest_sorted_desc(tmp_path: Path):
     assert top[0]["task_id"] == "t02"
     assert top[0]["latency_sec"] == 12.0
     assert top[-1]["latency_sec"] <= top[0]["latency_sec"]
+
+
+def test_null_headline_remains_unscored_in_json_and_markdown(tmp_path: Path):
+    grade = _grade_json(n_tasks=1)
+    grade["summary"]["graded_tasks"] = 0
+    grade["summary"]["error_tasks"] = 1
+    grade["summary"]["openai_compat"]["avg_score_pct"] = None
+    grade["tasks"][0]["error"] = "all_items_score_excluded"
+
+    analyzed = _run(tmp_path, grade)["this"]
+    markdown = _run(tmp_path, grade, as_json=False)
+
+    assert analyzed["avg_score_pct"] is None
+    assert "avg_score_pct: **unscored**" in markdown
+    assert "avg_score_pct: **None**" not in markdown
+
+
+def test_task_anchor_separates_main_visual_audio_and_error_types(tmp_path: Path):
+    grade = _grade_json(model="gpt-5.6-sol", n_tasks=1)
+    grade["judge"]["perception"] = {
+        "visual": {"model": "gpt-5.6-sol"},
+        "audio": {"model": "gpt-audio-1.5"},
+    }
+    task = grade["tasks"][0]
+    task.update({
+        "grading_wall_time_ms": 123_000,
+        "judge_call_count": 2,
+        "judge_input_tokens": 1_000,
+        "judge_output_tokens": 100,
+        "judge_cached_tokens": 400,
+        "judge_total_latency_ms": 50_000,
+        "perception_call_count": 3,
+        "perception_input_tokens": 500,
+        "perception_output_tokens": 50,
+        "perception_cached_tokens": 20,
+        "perception_total_latency_ms": 30_000,
+        "render_call_count": 2,
+        "render_total_latency_ms": 2_000,
+        "usage_complete": True,
+    })
+    task["items"] = [
+        {
+            "routing_modality": "visual",
+            "verdict": "pass",
+            "perception_call_count": 2,
+            "perception_input_tokens": 300,
+            "perception_output_tokens": 30,
+            "perception_cached_tokens": 10,
+            "perception_total_latency_ms": 20_000,
+        },
+        {
+            "routing_modality": "audio",
+            "verdict": "judge_error",
+            "evidence": "provider_error:RateLimitError",
+            "score_excluded": True,
+            "perception_call_count": 1,
+            "perception_input_tokens": 200,
+            "perception_output_tokens": 20,
+            "perception_cached_tokens": 10,
+            "perception_total_latency_ms": 10_000,
+        },
+        {
+            "routing_modality": "mixed",
+            "verdict": "judge_error",
+            "evidence": "split_children: see child_grades",
+            "score_excluded": True,
+            "child_grades": [
+                {
+                    "verdict": "judge_error",
+                    "evidence": "final_json_parse_failed",
+                },
+                {"verdict": "pass", "evidence": "verified"},
+            ],
+        },
+    ]
+    grade["summary"]["wow"]["judge_error_rate"] = 0.5
+
+    analyzed = _run(tmp_path, grade)["this"]
+    markdown = _run(tmp_path, grade, as_json=False)
+    anchor = analyzed["task_anchors"][0]
+
+    assert anchor["wall_clock_sec"] == 123.0
+    assert anchor["main"] == {
+        "call_count": 2,
+        "input_tokens": 1_000,
+        "output_tokens": 100,
+        "cached_tokens": 400,
+        "latency_sec": 50.0,
+    }
+    assert anchor["visual"]["call_count"] == 2
+    assert anchor["visual"]["input_tokens"] == 300
+    assert anchor["audio"]["call_count"] == 1
+    assert anchor["audio"]["input_tokens"] == 200
+    assert anchor["judge_error_types"] == {
+        "RateLimitError": 1,
+        "final_json_parse_failed": 1,
+    }
+    assert analyzed["judge_error_types"] == {
+        "RateLimitError": 1,
+        "final_json_parse_failed": 1,
+    }
+    assert analyzed["projected_220_wall_hours"] == 7.52
+    assert analyzed["projection_status"] == "below_44h_envelope"
+    assert "## Task anchors" in markdown
+    assert "final_json_parse_failed:1" in markdown
+    assert "RateLimitError:1" in markdown
+    assert "50.0s" in markdown
+    assert "20.0s" in markdown
+    assert "10.0s" in markdown
+    assert "projected_220_wall_hours: 7.52" in markdown
 
 
 def test_markdown_contains_key_sections(tmp_path: Path):
