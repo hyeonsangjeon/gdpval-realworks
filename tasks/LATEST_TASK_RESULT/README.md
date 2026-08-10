@@ -1,10 +1,109 @@
 # Latest Task Result
 
-- Updated: 2026-08-08
+- Updated: 2026-08-10
+- Status: Sol Max full-rerun and three-task anchor preparation is reviewed and
+  validated; paid anchor dispatch awaits main integration and separate approval
+
+## Current Task: Sol Max Regrade Preparation
+
+### Task
+
+- Make schema `1.3` nullable headline scores safe in every analysis script that
+  will consume the future rerun.
+- Add a new pinned Sol Max full-220 config without modifying existing comparison
+  identities, and preserve dedicated audio perception and the visual task cap.
+- Prepare a small paid anchor that records task-level main, visual, and audio
+  volume, wall time, errors, and a serial 220-task time projection.
+- Do not run the full 220 tasks, modify historical grades, or dispatch paid work
+  before the new config reaches exact `main` and receives separate approval.
+
+### Result
+
+- `backfill_sign_aware.py` now accepts only schema `1.0`; it refuses schema
+  `1.3` rather than silently replacing a null headline with zero and emitting
+  schema `1.1`.
+- `compare_grades.py` renders null or errored aggregate/task scores as
+  `unscored` and emits no score delta. `analyze_grade_run.py` preserves null in
+  JSON and renders `unscored` in Markdown.
+- Added `regrade_exp003_v2_sol_max_score_excluded.yaml` for the planned full
+  rerun and `validation_exp003_v2_sol_max_anchor3.yaml` for the first paid
+  anchor. Both retain production Sol Max main/visual/finalization settings,
+  exact `gpt-audio-1.5` audio settings, and visual cap 72.
+- Step 8 measures `grading_wall_time_ms` around each `grade_task` call. The
+  analyzer now reports task-level wall time; main, visual, audio, and unknown
+  perception calls/tokens/cache/latency; render volume; usage completeness; and
+  public provider or split-child judge-error subtypes.
+- Unknown perception tokens are explicitly unpriced instead of being attributed
+  to the main model. Zero-token residual calls remain visible in task anchors
+  but do not create a false cost component.
+- The analyzer projects serial 220-task wall time from measured anchor task wall
+  times and labels whether it is below or at/above the 44-hour resume envelope.
+  It does not claim USD cost for unpriced models.
+
+### Fixed Identities
+
+| Purpose | Config hash | Tasks |
+|---|---|---:|
+| Full rerun | `14fc577ea39d98c5` | 220 |
+| Paid anchor | `25653df2d5841c97` | 3 |
+
+- Experiment: `exp003_GPT52Chat_baseline_runner_exec`.
+- Rubric commit: `11e7900cdcac61bc4daf59e65feb238acda98fbf`.
+- Inference revision: `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`.
+- Audio remains `gpt-audio-1.5`, call cap 3, trim 30 seconds. Visual cap remains
+  72. Tests reduce each new config to its baseline plus identity-only changes.
+
+### Anchor Decision
+
+- Chosen size: 3 tasks. Sol Max has no prior grade payload, so the first paid
+  exposure is bounded before considering the 10-task expansion.
+- Mini cohort 3: 532 main calls, 4 visual calls, 0 audio calls; main tokens
+  4,540,399 input / 176,531 output / 1,955,328 cached; visual tokens 4,751 /
+  1,032 / 0; summed judge latency 41.2 minutes; zero judge errors.
+- Mini cohort 10: 1,333 main calls, 26 visual calls, 0 audio calls; main tokens
+  6,833,450 / 369,014 / 3,389,440; visual tokens 30,282 / 6,836 / 0; summed
+  judge latency 88.8 minutes; zero judge errors.
+- Because both mini anchors are already at `judge_error_rate=0`, the Sol Max
+  anchor cannot establish a reduction below that floor. It can establish
+  call/token/time volume and detect a match or regression. Historical mini
+  payloads lack task wall time, so only the new anchor supports wall projection.
+
+### Verification
+
+- Nullable and analyzer scripts: 28 passed.
+- Config, Step 8, schema, tool-calling, audio, and perception: 312 passed.
+- Complete backend: 3,038 passed, 9 skipped, 45 integration tests deselected.
+- The three unchanged host dependency failures passed under exact temporary
+  Python 3.10 dependencies.
+- Self-preparing aggregate suite: 105 passed, 1 expected Ruby skip.
+- `npm run build`: passed with 2,783 transformed modules.
+- `py_compile`, VS Code diagnostics, and `git diff --check`: passed.
+- Existing Sol Max/mini configs, workflows, and `data/grades` are unchanged.
+  No credential, workflow dispatch, model call, or paid operation ran.
+
+### Review Evidence
+
+- Reviewed substantive head:
+  `eee62b8e3fc6cff0ed447781251cde37f10e6b4f`.
+- Independent `grading-engineer` and `first-reviewer` verdicts: `APPROVE`, with
+  no blocking findings.
+
+### Remaining Work
+
+- The owner decides whether and when to merge the reviewed preparation change.
+- After the configs reach exact `main`, a separate owner-approved protected
+  grading dispatch may run the three-task anchor. The result must be inspected
+  for task-level volume, error types, and projected 220-task wall time before
+  any full run or 10-task expansion decision.
+- Do not create a documentation-only PR to record this change's eventual merge
+  metadata.
+
+---
+
+## Preserved Prior Result: Judge Error Score Exclusion (2026-08-08)
+
 - Status: `judge_error` is score-excluded at runtime and remains visible in
   schema 1.3 summaries and the dashboard; no paid regrade was run
-
-## Current Task: Judge Error Score Exclusion
 
 ### Task
 
