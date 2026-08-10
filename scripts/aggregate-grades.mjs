@@ -164,7 +164,141 @@ function processLegacyGradesFile(filePath, raw, taskQaByExperiment = new Map()) 
 // Maps raw item-level grade JSON onto the dashboard's existing legacy shape
 // while preserving the full v1 payload in summary_v1 / tasks_v1 so WOW
 // components can consume rich item-level data.
+function validateScoreExcludedGrade(raw) {
+  if (raw?.schema_version !== '1.3') return;
+
+  if (!Array.isArray(raw.tasks)) {
+    throw new Error('schema 1.3 tasks are missing or invalid');
+  }
+  if (!raw.summary || typeof raw.summary !== 'object' || Array.isArray(raw.summary)) {
+    throw new Error('schema 1.3 summary is missing or invalid');
+  }
+  if (
+    !raw.summary.openai_compat
+    || typeof raw.summary.openai_compat !== 'object'
+    || Array.isArray(raw.summary.openai_compat)
+  ) {
+    throw new Error('schema 1.3 headline summary is missing or invalid');
+  }
+  if (
+    !raw.summary.wow
+    || typeof raw.summary.wow !== 'object'
+    || Array.isArray(raw.summary.wow)
+  ) {
+    throw new Error('schema 1.3 health summary is missing or invalid');
+  }
+
+  const tasks = raw.tasks;
+  let judgeItems = 0;
+  let judgeErrors = 0;
+  let gradedTasks = 0;
+  for (const task of tasks) {
+    if (!task || typeof task !== 'object' || Array.isArray(task)) {
+      throw new Error('schema 1.3 task is missing or invalid');
+    }
+    if (!Array.isArray(task.items)) {
+      throw new Error('schema 1.3 task items are missing or invalid');
+    }
+    const items = task.items;
+    const allExcluded = items.length > 0
+      && items.every((item) => item?.score_excluded === true);
+    if (allExcluded && !task?.error) {
+      throw new Error('schema 1.3 all-excluded task must be unscored');
+    }
+    if (!task?.error) gradedTasks += 1;
+    for (const item of items) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        throw new Error('schema 1.3 item is missing or invalid');
+      }
+      if (item?.decided_by === 'judge') {
+        judgeItems += 1;
+        if (item.verdict === 'judge_error') judgeErrors += 1;
+      }
+      if (item?.verdict === 'judge_error' && item.score_excluded !== true) {
+        throw new Error('schema 1.3 judge_error must be score_excluded');
+      }
+    }
+  }
+
+  const summary = raw?.summary;
+  const errorTasks = tasks.length - gradedTasks;
+  for (const field of ['total_tasks', 'graded_tasks', 'error_tasks']) {
+    if (!Number.isInteger(summary[field]) || summary[field] < 0) {
+      throw new Error(`schema 1.3 ${field} is missing or invalid`);
+    }
+  }
+  if (
+    summary?.total_tasks !== tasks.length
+    || summary?.graded_tasks !== gradedTasks
+    || summary?.error_tasks !== errorTasks
+  ) {
+    throw new Error('schema 1.3 task counts are inconsistent');
+  }
+  const openaiCompat = summary?.openai_compat;
+  for (const field of [
+    'perfect_count',
+    'zero_count',
+    'partial_count',
+    'inconsistent_count',
+  ]) {
+    if (!Number.isInteger(openaiCompat[field]) || openaiCompat[field] < 0) {
+      throw new Error(`schema 1.3 ${field} is missing or invalid`);
+    }
+  }
+  if (
+    openaiCompat.perfect_count
+      + openaiCompat.zero_count
+      + openaiCompat.partial_count
+    !== gradedTasks
+  ) {
+    throw new Error('schema 1.3 headline counts are inconsistent');
+  }
+  if (gradedTasks === 0) {
+    if (
+      openaiCompat?.avg_score_pct !== null
+      || openaiCompat?.ci_pct !== null
+      || openaiCompat?.perfect_count !== 0
+      || openaiCompat?.zero_count !== 0
+      || openaiCompat?.partial_count !== 0
+      || openaiCompat?.inconsistent_count !== 0
+    ) {
+      throw new Error('schema 1.3 unscored grade must not report headline scores');
+    }
+  } else if (
+    !Number.isFinite(openaiCompat?.avg_score_pct)
+    || openaiCompat.avg_score_pct < 0
+    || openaiCompat.avg_score_pct > 100
+    || !Number.isFinite(openaiCompat?.ci_pct)
+    || openaiCompat.ci_pct < 0
+  ) {
+    throw new Error('schema 1.3 scored headline is missing or invalid');
+  }
+
+  const rate = raw?.summary?.wow?.judge_error_rate;
+  const canonicalRate = judgeItems > 0
+    ? Math.floor((2 * judgeErrors * 10_000 + judgeItems) / (2 * judgeItems)) / 10_000
+    : 0;
+  if (
+    !Number.isFinite(rate)
+    || rate < 0
+    || rate > 1
+    || rate !== canonicalRate
+  ) {
+    throw new Error('schema 1.3 judge_error_rate is missing or inconsistent');
+  }
+}
+
+function validateHistoricalHeadline(raw) {
+  if (!['1.0', '1.1', '1.2'].includes(raw?.schema_version)) return;
+  const openaiCompat = raw?.summary?.openai_compat;
+  if (openaiCompat?.avg_score_pct === null || openaiCompat?.ci_pct === null) {
+    throw new Error('schema 1.0-1.2 headline must remain numeric');
+  }
+}
+
 function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
+  validateScoreExcludedGrade(raw);
+  validateHistoricalHeadline(raw);
   const filename = basename(filePath, '.json');
   const rawTasks = Array.isArray(raw.tasks) ? raw.tasks : [];
   const summary = raw.summary || {};
@@ -265,9 +399,11 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
       total_tasks: totalTasks,
       graded_tasks: gradedTasks,
       error_tasks: errorTasks,
-      avg_score_pct: typeof openaiCompat.avg_score_pct === 'number'
-        ? openaiCompat.avg_score_pct
-        : 0,
+      avg_score_pct: openaiCompat.avg_score_pct === null
+        ? null
+        : typeof openaiCompat.avg_score_pct === 'number'
+          ? openaiCompat.avg_score_pct
+          : 0,
       ci_pct: typeof openaiCompat.ci_pct === 'number' ? openaiCompat.ci_pct : null,
       perfect_score: openaiCompat.perfect_count ?? 0,
       partial_score: openaiCompat.partial_count ?? 0,
@@ -290,7 +426,7 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
 export function processGradesFile(filePath, raw, taskQaByExperiment = new Map()) {
   // All item-level 1.x payloads share the rich grade projection. Later minor
   // versions add provenance contracts without changing dashboard score shape.
-  if (raw && ['1.0', '1.1', '1.2'].includes(raw.schema_version)) {
+  if (raw && ['1.0', '1.1', '1.2', '1.3'].includes(raw.schema_version)) {
     return processV1GradesFile(filePath, raw, taskQaByExperiment);
   }
   return processLegacyGradesFile(filePath, raw, taskQaByExperiment);
@@ -389,7 +525,10 @@ async function main() {
   for (const r of results) {
     const dummy = r.is_dummy ? ' [DUMMY]' : '';
     const v1 = r.schema_version ? ` [v${r.schema_version}]` : '';
-    console.log(`   ${r.id}: ${r.summary.avg_score_pct}% avg (${r.summary.graded_tasks}/${r.summary.total_tasks} tasks)${dummy}${v1}`);
+    const headline = r.summary.avg_score_pct == null
+      ? 'unscored'
+      : `${r.summary.avg_score_pct}% avg`;
+    console.log(`   ${r.id}: ${headline} (${r.summary.graded_tasks}/${r.summary.total_tasks} tasks)${dummy}${v1}`);
   }
 }
 

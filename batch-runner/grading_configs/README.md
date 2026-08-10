@@ -6,6 +6,7 @@
 |---|---|---|---|
 | `default_v2_sol_max.yaml` | tool-calling judge | v2 (`ToolCallingJudge` via `judge.tools.read_deliverable`) | **Production default.** GPT-5.6 Sol 1M Max for main, visual, and bounded finalization; gpt-audio-1.5 for audio perception. |
 | `default_v2.yaml` | tool-calling judge | v2 | Historical gpt-5.4 medium comparison identity. Pass explicitly when reproducing that condition. |
+| `regrade_exp003_v2_mini_score_excluded.yaml` | tool-calling judge | v2 | Full-220 exp003 rerun only. Pins score-excluded semantics, the historical mini judge condition, rubric commit, inference revision, and exact task count. |
 | `default_gpt5pro.yaml` | text-extract judge | v1 (`Judge` / `BatchJudge`) | Historical mini/text-extract comparison identity. Pass explicitly only for provenance-compatible analysis. |
 
 `grade-run.yml` defaults to `default_v2_sol_max.yaml`. The 1.05M context window
@@ -33,6 +34,42 @@ saved with `run_status: diagnostic` under
 subset from sharing a cache/resume path with a complete run, and the dashboard
 aggregator only discovers root-level grade JSON. A verified complete run keeps
 the root output path and `run_status: final`.
+
+## Judge-error score boundary
+
+New grade payloads use output schema `1.3`: every `judge_error` item is excluded
+from task score numerators and denominators, while `summary.wow.judge_error_rate`
+remains required and visible in the dashboard. If every item in a task is
+excluded, the task is unscored rather than silently contributing a zero.
+
+Headline scores from schema `1.3` are not directly comparable with schemas
+`1.0`-`1.2`, where some judge failures could contribute score-included zeros.
+Historical payloads remain readable and unchanged; do not backfill or combine
+partial results across this boundary. Compare conditions only after a complete
+rerun under one grader source and one schema identity.
+
+The read-only baseline analysis used tracked payload
+`data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__rubric_v2_tools_mini.json`
+(SHA-256
+`b5cbb6a80c776b458f99f007841a946c1c5f9ec8bf60be052500713dd6f13570`).
+It contains 355 `judge_error` items. Of those, 100 were score-included zeros
+across 53 tasks: 61 `final_json_parse_failed`, 31 `empty_final_text`, five
+`RateLimitError`, and three content-policy `BadRequestError` items. The other
+255 errors were already score-excluded selection failures. This analysis did
+not mutate or partially regrade the payload.
+
+The approved future exp003 full rerun is fixed to:
+
+- config: `regrade_exp003_v2_mini_score_excluded.yaml`
+- config hash: `55a7dc5cfb8023fe`
+- rubric commit: `11e7900cdcac61bc4daf59e65feb238acda98fbf`
+- inference revision: `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`
+- expected task count: `220`
+
+Inside Step 8, the config's `rerun_identity` block is checked before its Azure
+route preflight and before model-client construction, so a partial task set or
+identity drift cannot start model grading. The workflow may authenticate and
+perform its own route checks earlier.
 
 ## Archived (no longer recommended)
 

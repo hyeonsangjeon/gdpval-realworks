@@ -1696,10 +1696,11 @@ class Grader:
         # 'did right' flag so downstream metrics (critical_item_pass_rate
         # in PR1 task 101) treat positive and negative items consistently.
         for it in items:
-            if it.score_excluded:
-                it.model_did_right = True
-            elif it.verdict == "judge_error":
+            if it.verdict == "judge_error":
+                it.score_excluded = True
                 it.model_did_right = False
+            elif it.score_excluded:
+                it.model_did_right = True
             elif (it.max_score or 0) < 0:
                 it.model_did_right = (it.verdict != "pass")
             else:
@@ -1761,6 +1762,7 @@ class Grader:
             judge_total_latency_ms=0.0,
             judge_input_tokens=0,
             judge_output_tokens=0,
+            error=("all_items_score_excluded" if items and not scored_items else None),
             pct_raw=round(pct_raw, 2),
         )
 

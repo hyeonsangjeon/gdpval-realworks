@@ -1,10 +1,99 @@
 # Latest Task Result
 
 - Updated: 2026-08-08
+- Status: `judge_error` is score-excluded at runtime and remains visible in
+  schema 1.3 summaries and the dashboard; no paid regrade was run
+
+## Current Task: Judge Error Score Exclusion
+
+### Task
+
+- Analyze the 100 known score-included `judge_error` zeros without a model call
+  or mutation of the checked-in grade payload.
+- Exclude every judge failure from score numerators and denominators at runtime,
+  including stale or missing producer flags, while keeping the error rate
+  visible.
+- Increment the grade output schema, document the comparison boundary, and pin
+  the exact identity for a later complete 220-task rerun.
+- Do not partially regrade the 53 affected tasks or perform any paid grading in
+  this policy task.
+
+### Result
+
+- `Grader._aggregate` now forces every `judge_error` to
+  `score_excluded=true`, keeps `model_did_right=false`, and excludes the item
+  from score, coverage, and critical metrics.
+- A task whose items are all excluded is unscored rather than zero-scored. Its
+  headline score and confidence interval are null, all headline counts are
+  zero, and dashboard score surfaces render an em dash.
+- Complete score-excluded judge errors no longer abort Track 2. Malformed
+  items, incomplete usage, and any unexcluded judge error still stop the run.
+- Output schema `1.3`, shared Python validation, resume identity, and strict
+  dashboard ingestion enforce the same task-count, exclusion, headline, and
+  canonical four-decimal error-rate invariants. Historical schemas `1.0`-`1.2`
+  remain readable and retain numeric headline requirements.
+- `judge_error_rate` remains visible even at zero in run health and analysis
+  cards; its tooltip explicitly states that errors are excluded from score
+  denominators but not hidden.
+- Headline scores from schema `1.3` are not directly comparable with schemas
+  `1.0`-`1.2`. Resume rejects the old score semantics rather than mixing them.
+
+### Historical Analysis
+
+- Read-only source:
+  `data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__rubric_v2_tools_mini.json`.
+- Payload SHA-256:
+  `b5cbb6a80c776b458f99f007841a946c1c5f9ec8bf60be052500713dd6f13570`.
+- Observed 355 `judge_error` items. Of those, 100 score-included zeros affected
+  53 tasks: 61 `final_json_parse_failed`, 31 `empty_final_text`, five
+  `RateLimitError`, and three content-policy `BadRequestError` items.
+- The other 255 errors were already score-excluded selection failures. The
+  source payload was not edited or partially regraded.
+
+### Fixed Rerun Identity
+
+- Config: `regrade_exp003_v2_mini_score_excluded.yaml`.
+- Config hash: `55a7dc5cfb8023fe`.
+- Rubric commit: `11e7900cdcac61bc4daf59e65feb238acda98fbf`.
+- Inference revision: `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`.
+- Expected task count: 220. Step 8 rejects experiment, task-count, rubric, or
+  inference drift before its Azure route preflight and model construction.
+
+### Verification
+
+- Runtime/schema/config/selector matrix: 382 passed before the final invariant
+  fixes; the complete backend suite then passed 3,033 tests with six skips and
+  45 integration tests deselected.
+- The three unchanged host-environment failures were stale Azure SDK versions
+  and missing `pdfplumber`; all three passed under exact temporary Python 3.10
+  dependencies.
+- Self-preparing aggregate suite: 105 passed, 1 expected Ruby skip.
+- `npm run build`: passed with 2,783 transformed modules.
+- Ruff, `py_compile`, VS Code diagnostics, and `git diff --check`: passed.
+- No grade payload, workflow, or production configuration was rewritten. No
+  partial/full grading run, credential use, workflow dispatch, or paid model
+  operation occurred.
+
+### Review Evidence
+
+- Reviewed substantive head:
+  `3c8ab817916129dff7a33291520a1f4f2db7d048`.
+- Independent `grading-engineer` and `first-reviewer` verdicts: `APPROVE`, with
+  no blocking findings.
+
+### Remaining Work
+
+- The owner decides whether and when to merge the reviewed change.
+- A later paid task may run the complete 220-task pinned config after separate
+  approval. Do not merge a 53-task partial rerun, and do not create a
+  documentation-only PR to record this change's eventual merge metadata.
+
+---
+
+## Preserved Prior Result: Non-Recursive Completion Records (2026-08-08)
+
 - Status: Completion records retain verified task evidence without forcing
   documentation-only PRs that restate their carrying PR's merge status
-
-## Current Task: Non-Recursive Completion Records
 
 ### Task
 

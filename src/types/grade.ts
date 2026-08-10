@@ -51,8 +51,8 @@ export interface CalibrationCounts {
 }
 
 export interface OpenAICompatSummary {
-  avg_score_pct: number
-  ci_pct: number
+  avg_score_pct: number | null
+  ci_pct: number | null
   perfect_count: number
   zero_count: number
   partial_count: number
@@ -88,7 +88,7 @@ export interface WowSummary {
   critical_item_pass_rate: number
   precheck_pass_rate: number
   judge_pass_rate: number
-  judge_error_rate?: number
+  judge_error_rate: number
   by_sector?: Record<string, SectorWowMetric>
   by_rubric_category?: Record<string, RubricCategoryMetric>
   score_density_histogram?: ScoreDensityBucket[]

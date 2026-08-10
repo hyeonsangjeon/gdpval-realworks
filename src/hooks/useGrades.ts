@@ -23,7 +23,7 @@ export interface GradeSummary {
   total_tasks: number
   graded_tasks: number
   error_tasks: number
-  avg_score_pct: number
+  avg_score_pct: number | null
   ci_pct: number | null
   perfect_score: number
   partial_score: number
@@ -68,7 +68,7 @@ export interface GradeResult {
   tasks: TaskGrade[]
 
   // ── Item-level grade schema additions ──
-  schema_version?: '1.0' | '1.1' | '1.2' | null
+  schema_version?: '1.0' | '1.1' | '1.2' | '1.3' | null
   judge?: JudgeProvenance
   rubric?: RubricProvenance
   prompt?: GradePromptInfo

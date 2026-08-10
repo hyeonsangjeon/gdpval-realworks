@@ -11,12 +11,20 @@ from jsonschema import validate
 FULL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
+def canonical_rate(numerator: int, denominator: int) -> float:
+    """Return a nonnegative ratio rounded half-up to four decimal places."""
+    if denominator <= 0:
+        return 0.0
+    scaled = (2 * numerator * 10_000 + denominator) // (2 * denominator)
+    return scaled / 10_000
+
+
 def validate_grade_payload(payload: Any, schema: dict) -> None:
     """Validate one legacy or current grade payload before persistence."""
     validate(instance=payload, schema=schema)
     if not isinstance(payload, dict):
         return
-    current_schema = payload.get("schema_version") == "1.2"
+    current_schema = payload.get("schema_version") in {"1.2", "1.3"}
     if current_schema and "run_status" not in payload:
         raise ValueError("current grade lifecycle identity is missing")
     if "run_status" not in payload:
@@ -58,6 +66,69 @@ def validate_grade_payload(payload: Any, schema: dict) -> None:
         raise ValueError("primary grader route fingerprint mismatch")
     if not current_schema:
         return
+    if payload.get("schema_version") == "1.3":
+        tasks = payload.get("tasks")
+        if not isinstance(tasks, list):
+            raise ValueError("current grade tasks are missing")
+        judge_items = 0
+        judge_errors = 0
+        for task in tasks:
+            if not isinstance(task, dict):
+                raise ValueError("current grade task is invalid")
+            items = task.get("items")
+            if not isinstance(items, list):
+                raise ValueError("current grade task items are invalid")
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("current grade item is invalid")
+                if item.get("decided_by") == "judge":
+                    judge_items += 1
+                    if item.get("verdict") == "judge_error":
+                        judge_errors += 1
+                if (
+                    item.get("verdict") == "judge_error"
+                    and item.get("score_excluded") is not True
+                ):
+                    raise ValueError(
+                        "schema 1.3 judge_error must be score_excluded"
+                    )
+            if items and all(
+                item.get("score_excluded") is True for item in items
+            ) and not task.get("error"):
+                raise ValueError("all-excluded task must be unscored")
+
+        summary = payload.get("summary")
+        if not isinstance(summary, dict):
+            raise ValueError("current grade summary is missing")
+        graded_tasks = sum(1 for task in tasks if not task.get("error"))
+        error_tasks = len(tasks) - graded_tasks
+        if (
+            summary.get("total_tasks") != len(tasks)
+            or summary.get("graded_tasks") != graded_tasks
+            or summary.get("error_tasks") != error_tasks
+        ):
+            raise ValueError("current grade task counts are inconsistent")
+        openai_compat = summary.get("openai_compat")
+        if not isinstance(openai_compat, dict):
+            raise ValueError("current grade headline summary is missing")
+        if graded_tasks == 0:
+            if (
+                openai_compat.get("avg_score_pct") is not None
+                or openai_compat.get("ci_pct") is not None
+                or openai_compat.get("perfect_count") != 0
+                or openai_compat.get("zero_count") != 0
+                or openai_compat.get("partial_count") != 0
+                or openai_compat.get("inconsistent_count") != 0
+            ):
+                raise ValueError("unscored grade must not report headline scores")
+        elif not isinstance(openai_compat.get("avg_score_pct"), (int, float)):
+            raise ValueError("scored grade headline score is missing")
+        wow = summary.get("wow")
+        if not isinstance(wow, dict):
+            raise ValueError("current grade health summary is missing")
+        expected_error_rate = canonical_rate(judge_errors, judge_items)
+        if wow.get("judge_error_rate") != expected_error_rate:
+            raise ValueError("current grade judge_error_rate is inconsistent")
     cost = summary.get("cost") if isinstance(summary, dict) else None
     if not isinstance(cost, dict):
         raise ValueError("grade cost provenance is missing")

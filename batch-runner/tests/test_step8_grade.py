@@ -461,7 +461,7 @@ def test_force_overwrites(monkeypatch, tmp_path):
     code = s8.main()
     assert code == 0
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.2"
+    assert payload["schema_version"] == "1.3"
 
 
 def test_main_preflight_matches_grader_transport_before_calls(
@@ -711,7 +711,7 @@ def test_track2_limit_three_mock_smoke(monkeypatch, tmp_path):
     assert payload["renderer_fingerprint"] == _RENDERER_FINGERPRINT
 
 
-def test_track2_runtime_judge_error_stops_and_persists_diagnostic(
+def test_track2_incomplete_judge_error_stops_and_persists_diagnostic(
     monkeypatch, tmp_path, capsys
 ):
     _setup_workspace(tmp_path)
@@ -773,10 +773,11 @@ def test_track2_runtime_judge_error_stops_and_persists_diagnostic(
         )
     )
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["tasks"][0]["error"] == "judge_error"
+    assert payload["tasks"][0]["error"] == "usage_incomplete"
     assert payload["summary"]["graded_tasks"] == 0
     assert payload["summary"]["error_tasks"] == 1
-    assert payload["summary"]["openai_compat"]["avg_score_pct"] == 0.0
+    assert payload["summary"]["openai_compat"]["avg_score_pct"] is None
+    assert payload["summary"]["openai_compat"]["ci_pct"] is None
     assert payload["summary"]["openai_compat"]["perfect_count"] == 0
     assert payload["summary"]["wow"]["judge_error_rate"] == 1.0
     assert payload["summary"]["cost"]["usage_complete"] is False
@@ -792,6 +793,7 @@ def test_track2_runtime_error_allows_call_free_unscorable_selection():
         "usage_complete": True,
         "items": [{
             "verdict": "judge_error",
+            "score_excluded": True,
             "evidence": "wrong_format_primary: expected PDF",
             "judge_call_count": 0,
             "perception_call_count": 0,
@@ -801,6 +803,231 @@ def test_track2_runtime_error_allows_call_free_unscorable_selection():
     }
 
     assert s8._track2_task_runtime_error(task) is None
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        {
+            "task_id": "task-mixed",
+            "error": None,
+            "usage_complete": True,
+            "items": [
+                {
+                    "verdict": "pass",
+                    "score_excluded": False,
+                    "usage_complete": True,
+                },
+                {
+                    "verdict": "judge_error",
+                    "score_excluded": True,
+                    "judge_call_count": 1,
+                    "usage_complete": True,
+                },
+            ],
+        },
+        {
+            "task_id": "task-unscored",
+            "error": "all_items_score_excluded",
+            "usage_complete": True,
+            "items": [{
+                "verdict": "judge_error",
+                "score_excluded": True,
+                "judge_call_count": 1,
+                "usage_complete": True,
+            }],
+        },
+    ],
+)
+def test_track2_allows_score_excluded_judge_errors(task):
+    assert s8._track2_task_runtime_error(task) is None
+
+
+def test_track2_rejects_unexcluded_judge_error():
+    task = {
+        "task_id": "task-invalid",
+        "error": None,
+        "usage_complete": True,
+        "items": [{
+            "verdict": "judge_error",
+            "score_excluded": False,
+            "usage_complete": True,
+        }],
+    }
+
+    assert s8._track2_task_runtime_error(task) == "invalid_score_exclusion"
+
+
+def test_runtime_score_exclusion_keeps_judge_error_rate_visible():
+    from core.grader import Grader, ItemGrade
+    from core.rubric_loader import TaskRubric
+
+    task = TaskRubric(
+        task_id="task-001",
+        sector="s",
+        occupation="o",
+        prompt="p",
+        rubric_items=[],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+    grade = Grader._aggregate(
+        [
+            ItemGrade(
+                rubric_item_id="pass",
+                criterion="correct",
+                max_score=10,
+                awarded_score=10,
+                verdict="pass",
+                decided_by="judge",
+                required=None,
+                evidence="verified",
+            ),
+            ItemGrade(
+                rubric_item_id="error",
+                criterion="unresolved",
+                max_score=90,
+                awarded_score=0,
+                verdict="judge_error",
+                decided_by="judge",
+                required=None,
+                evidence="final_json_parse_failed",
+                score_excluded=False,
+            ),
+        ],
+        task,
+    )
+
+    summary = s8._compute_summary([s8._task_to_dict(grade)])
+
+    assert grade.pct == 100
+    assert grade.items[1].score_excluded is True
+    assert summary["openai_compat"]["avg_score_pct"] == 100
+    assert summary["wow"]["rubric_item_coverage_avg"] == 1.0
+    assert summary["wow"]["judge_error_rate"] == 0.5
+
+
+def test_judge_error_rate_uses_canonical_half_up_rounding():
+    items = [
+        {
+            "verdict": "judge_error" if index == 0 else "pass",
+            "decided_by": "judge",
+            "score_excluded": index == 0,
+            "model_did_right": index != 0,
+            "max_score": 1,
+        }
+        for index in range(32)
+    ]
+    task = {
+        "pct": 100.0,
+        "error": None,
+        "items": items,
+        "usage_complete": True,
+    }
+
+    summary = s8._compute_summary([task])
+
+    assert summary["wow"]["judge_error_rate"] == 0.0313
+
+
+def test_all_score_excluded_task_has_no_headline_score():
+    from core.grader import Grader, ItemGrade
+    from core.rubric_loader import TaskRubric
+
+    task = TaskRubric(
+        task_id="task-001",
+        sector="s",
+        occupation="o",
+        prompt="p",
+        rubric_items=[],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+    grade = Grader._aggregate(
+        [
+            ItemGrade(
+                rubric_item_id="error",
+                criterion="unresolved",
+                max_score=10,
+                awarded_score=0,
+                verdict="judge_error",
+                decided_by="judge",
+                required=None,
+                evidence="empty_final_text",
+            )
+        ],
+        task,
+    )
+
+    summary = s8._compute_summary([s8._task_to_dict(grade)])
+
+    assert summary["graded_tasks"] == 0
+    assert summary["error_tasks"] == 1
+    assert summary["openai_compat"]["avg_score_pct"] is None
+    assert summary["openai_compat"]["ci_pct"] is None
+    assert summary["openai_compat"]["zero_count"] == 0
+    assert summary["wow"]["judge_error_rate"] == 1.0
+
+
+def test_all_unscored_main_completes_without_formatting_null(
+    monkeypatch, tmp_path, capsys
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8,
+        "get_renderer_fingerprint",
+        lambda: dict(_RENDERER_FINGERPRINT),
+    )
+
+    class _AllUnscoredGrader(_FakeGrader):
+        def grade_task(self, task, deliverable_dir):
+            from core.grader import ItemGrade, TaskGrade
+
+            self.calls += 1
+            return TaskGrade(
+                task_id=task.task_id,
+                sector=task.sector,
+                occupation=task.occupation,
+                items=[ItemGrade(
+                    rubric_item_id="ri-1",
+                    criterion="unresolved",
+                    max_score=2,
+                    awarded_score=0,
+                    verdict="judge_error",
+                    decided_by="judge",
+                    required=None,
+                    evidence="empty_final_text",
+                    score_excluded=True,
+                )],
+                total_awarded=0,
+                total_max=0,
+                pct=0,
+                critical_fail=False,
+                gold_referenced=False,
+                judge_call_count=0,
+                precheck_count=0,
+                judge_total_latency_ms=0,
+                judge_input_tokens=0,
+                judge_output_tokens=0,
+                error="all_items_score_excluded",
+            )
+
+    monkeypatch.setattr(s8, "Grader", _AllUnscoredGrader)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--force",
+    ])
+
+    assert s8.main() == 0
+    assert "avg_pct=unscored" in capsys.readouterr().out
 
 
 def test_track2_incomplete_usage_is_runtime_failure():
@@ -1217,7 +1444,7 @@ def _seed_partial_grade(
         )
     )
     payload = {
-        "schema_version": "1.2",
+        "schema_version": s8.SCHEMA_VERSION,
         "run_status": run_status,
         "expected_task_count": 3,
         "expected_ordered_task_ids_sha256": s8._ordered_task_ids_sha256(
@@ -1272,6 +1499,106 @@ def _seed_partial_grade(
         payload["renderer_fingerprint"] = renderer_fingerprint
     out.write_text(json.dumps(payload), encoding="utf-8")
     return out
+
+
+def test_resume_rejects_previous_score_semantics():
+    with pytest.raises(ValueError, match="schema_version"):
+        s8._validate_grade_resume_identity(
+            {"schema_version": "1.2"},
+            experiment_id="exp003",
+            rubric_commit_sha="a" * 40,
+            prompt_version="v2.2",
+            config_hash="0123456789abcdef",
+            source_inference_repo_id="owner/repo",
+            source_inference_revision="b" * 40,
+            grader_source_hash="c" * 64,
+            renderer_fingerprint=None,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("experiment_id", "other-exp"),
+        ("task_count", 53),
+        ("rubric_commit_sha", "d" * 40),
+        ("inference_revision", "e" * 40),
+    ],
+)
+def test_pinned_rerun_identity_rejects_drift(field, value):
+    config = {
+        "rerun_identity": {
+            "experiment_id": "exp003",
+            "expected_task_count": 220,
+            "rubric_commit_sha": "a" * 40,
+            "inference_revision": "b" * 40,
+        }
+    }
+    actual = {
+        "experiment_id": "exp003",
+        "task_count": 220,
+        "rubric_commit_sha": "a" * 40,
+        "inference_revision": "b" * 40,
+    }
+    actual[field] = value
+
+    with pytest.raises(ValueError, match="pinned rerun identity"):
+        s8._validate_pinned_rerun_identity(config, **actual)
+
+
+def test_pinned_rerun_identity_accepts_exact_full_run():
+    config = {
+        "rerun_identity": {
+            "experiment_id": "exp003",
+            "expected_task_count": 220,
+            "rubric_commit_sha": "a" * 40,
+            "inference_revision": "b" * 40,
+        }
+    }
+
+    s8._validate_pinned_rerun_identity(
+        config,
+        experiment_id="exp003",
+        task_count=220,
+        rubric_commit_sha="a" * 40,
+        inference_revision="b" * 40,
+    )
+
+
+def test_pinned_rerun_identity_fails_before_route_preflight(
+    monkeypatch, tmp_path
+):
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["rubric"]["revision"] = _FakeLoader().rubric_sha
+    config["rerun_identity"] = {
+        "experiment_id": "exp998_smoke_baseline_sample",
+        "expected_task_count": 220,
+        "rubric_commit_sha": _FakeLoader().rubric_sha,
+        "inference_revision": INFERENCE_SHA,
+    }
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    route_calls = []
+
+    def unexpected_preflight(*args, **kwargs):
+        route_calls.append((args, kwargs))
+        raise AssertionError("route preflight must not run")
+
+    monkeypatch.setattr(s8, "preflight_routes", unexpected_preflight)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--dry-run",
+    ])
+
+    assert s8.main() == 1
+    assert route_calls == []
 
 
 def test_github_output_helper_writes_exact_repo_relative_grade_path(
@@ -2035,7 +2362,7 @@ def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path, capsys):
     out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
     assert out.exists()
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.2"
+    assert payload["schema_version"] == "1.3"
     assert [task["task_id"] for task in payload["tasks"]] == ["task-001"]
     stderr = capsys.readouterr().err
     assert "provider_error:OSError" in stderr

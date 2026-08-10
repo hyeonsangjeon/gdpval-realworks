@@ -174,6 +174,7 @@ def test_grade_workflow_defaults_to_v2_sol_max():
         "default_v2_sol_max.yaml",
         "default_v2_mini.yaml",
         "default_v2_tight.yaml",
+        "regrade_exp003_v2_mini_score_excluded.yaml",
         "validation_v2_mini_cohort3.yaml",
         "validation_v2_mini_cohort10.yaml",
     ],
@@ -231,6 +232,34 @@ def test_cohort_configs_only_change_baseline_identity(
         baseline.pop(key)
         candidate.pop(key)
     assert candidate == baseline
+
+
+def test_exp003_score_excluded_rerun_identity_is_pinned():
+    baseline_path = Path("grading_configs/default_v2_mini.yaml")
+    rerun_path = Path(
+        "grading_configs/regrade_exp003_v2_mini_score_excluded.yaml"
+    )
+    baseline = yaml.safe_load(baseline_path.read_text(encoding="utf-8"))
+    rerun = yaml.safe_load(rerun_path.read_text(encoding="utf-8"))
+
+    validate_grading_config(rerun)
+
+    identity = rerun["rerun_identity"]
+    assert identity == {
+        "experiment_id": "exp003_GPT52Chat_baseline_runner_exec",
+        "expected_task_count": 220,
+        "rubric_commit_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "inference_revision": "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f",
+    }
+    assert rerun["rubric"]["revision"] == identity["rubric_commit_sha"]
+    assert hash_config(str(rerun_path)) == "55a7dc5cfb8023fe"
+
+    for key in ("config_name", "description"):
+        baseline.pop(key)
+        rerun.pop(key)
+    rerun.pop("rerun_identity")
+    baseline["rubric"]["revision"] = identity["rubric_commit_sha"]
+    assert rerun == baseline
 
 
 def test_v2_tools_block_requires_ops_list(tmp_path):
