@@ -236,6 +236,7 @@ jobs:
           python scripts/download_inference_from_hf.py \
             --experiment "$GRADE_EXPERIMENT_YAML" \
             --output workspace/step2_inference_results.json \
+            --grading-config "grading_configs/$GRADE_CONFIG" \
             --revision "$GRADE_INFERENCE_REVISION"
 
       - name: Classify grading work only
@@ -474,6 +475,7 @@ jobs:
           python scripts/download_inference_from_hf.py \
             --experiment "$GRADE_EXPERIMENT_YAML" \
             --output workspace/step2_inference_results.json \
+            --grading-config "grading_configs/$GRADE_CONFIG" \
             --revision "$GRADE_INFERENCE_REVISION"
           python - <<'PY'
           import json

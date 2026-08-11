@@ -28,7 +28,15 @@ explicitly `unpriced` until verified FDPO rates are configured.
 The grading downloader requires `inference_provenance.json` by default and
 binds it to the embedded prepared fingerprint, ordered tasks, and Azure AI
 routes. `--allow-legacy-missing-provenance` is an explicit local-analysis
-override, not a publishable grading path.
+override, not a publishable grading path. The four-task Sol Max anchor is the
+only active config that declares `rerun_identity.allow_legacy_missing_provenance`.
+Its source predates the sidecar requirement, so the downloader permits a
+confirmed remote sidecar 404 only when the workflow experiment and both the
+requested and resolved revisions exactly match its pinned lowercase SHA. Any
+embedded routes, sidecar validation error, auth/network/local-file error, or
+other config remains fail-closed. The resulting grade stays diagnostic and
+persists `source_azure_ai_provenance_status: legacy-missing`; the full-220 Sol
+Max config has no allowance.
 
 Runs selected with `--tasks` or `--limit`, plus the legacy override above, are
 saved with `run_status: diagnostic` under
@@ -78,7 +86,7 @@ The pinned Sol Max identities are:
 | purpose | config | config hash | tasks |
 |---|---|---|---:|
 | full rerun | `regrade_exp003_v2_sol_max_score_excluded.yaml` | `14fc577ea39d98c5` | 220 |
-| paid anchor | `validation_exp003_v2_sol_max_anchor4.yaml` | `6dcff620fbe8dbf3` | 4 |
+| paid anchor | `validation_exp003_v2_sol_max_anchor4.yaml` | `7f3c7c2e542cf580` | 4 |
 
 Both pin rubric commit `11e7900cdcac61bc4daf59e65feb238acda98fbf`
 and inference revision `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`.

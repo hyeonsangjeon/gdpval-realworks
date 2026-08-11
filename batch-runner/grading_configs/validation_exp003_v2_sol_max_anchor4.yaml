@@ -9,6 +9,7 @@ rerun_identity:
   expected_task_count: 4
   rubric_commit_sha: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
   inference_revision: "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f"
+  allow_legacy_missing_provenance: true
   task_ids:
     - "99ac6944-4ec6-4848-959c-a460ac705c6f"
     - "4c18ebae-dfaa-4b76-b10c-61fcdf26734c"

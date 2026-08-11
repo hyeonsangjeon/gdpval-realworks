@@ -2735,6 +2735,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     dry_by_name = {
         step.get("name"): step for step in dry_steps if step.get("name")
     }
+    dry_download = dry_by_name["Download inference results anonymously"]
     assert dry_by_name["Checkout exact main revision (read-only)"]["with"] == {
         "ref": "main",
         "persist-credentials": False,
@@ -2807,6 +2808,11 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     )
     assert download["id"] == "inference"
     assert '--revision "$GRADE_INFERENCE_REVISION"' in download["run"]
+    config_argument = '--grading-config "grading_configs/$GRADE_CONFIG"'
+    assert dry_download["run"].count(config_argument) == 1
+    assert download["run"].count(config_argument) == 1
+    assert workflow.count(config_argument) == 2
+    assert "--allow-legacy-missing-provenance" not in workflow
     assert 'payload.get("source_revision")' in download["run"]
     assert 'output.write(f"revision={revision}\\n")' in download["run"]
 
