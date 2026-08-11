@@ -479,10 +479,16 @@ def validate_grading_config(config: dict) -> None:
             "rubric_commit_sha",
             "inference_revision",
         }
-        if set(rerun_identity) != required_identity_fields:
+        allowed_identity_fields = required_identity_fields | {"task_ids"}
+        identity_fields = set(rerun_identity)
+        if (
+            not required_identity_fields.issubset(identity_fields)
+            or not identity_fields.issubset(allowed_identity_fields)
+        ):
             raise ValueError(
-                "rerun_identity must contain exactly experiment_id, "
-                "expected_task_count, rubric_commit_sha, and inference_revision"
+                "rerun_identity must contain experiment_id, "
+                "expected_task_count, rubric_commit_sha, and inference_revision; "
+                "task_ids is the only optional field"
             )
         experiment_id = rerun_identity["experiment_id"]
         if not isinstance(experiment_id, str) or not re.fullmatch(
@@ -503,6 +509,150 @@ def validate_grading_config(config: dict) -> None:
         if rubric["revision"] != rerun_identity["rubric_commit_sha"]:
             raise ValueError(
                 "rubric.revision must match rerun_identity.rubric_commit_sha"
+            )
+        task_ids = rerun_identity.get("task_ids")
+        if task_ids is not None:
+            if not isinstance(task_ids, list) or not task_ids:
+                raise ValueError("rerun_identity.task_ids must be a non-empty list")
+            if any(
+                not isinstance(task_id, str)
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", task_id)
+                for task_id in task_ids
+            ):
+                raise ValueError("rerun_identity.task_ids contains an invalid task ID")
+            if len(task_ids) != len(set(task_ids)):
+                raise ValueError("rerun_identity.task_ids contains duplicate task IDs")
+            if len(task_ids) != expected_task_count:
+                raise ValueError(
+                    "rerun_identity.task_ids count must match expected_task_count"
+                )
+
+    anchor_projection = config.get("anchor_projection")
+    if anchor_projection is not None:
+        if not isinstance(anchor_projection, dict):
+            raise ValueError("anchor_projection must be an object")
+        if not isinstance(rerun_identity, dict) or not rerun_identity.get("task_ids"):
+            raise ValueError("anchor_projection requires pinned rerun task_ids")
+        required_projection_fields = {
+            "method",
+            "anchor_config_name",
+            "anchor_task_count",
+            "anchor_ordered_task_ids_sha256",
+            "anchor_source_inference_repo_id",
+            "baseline_payload_sha256",
+            "baseline_schema_version",
+            "baseline_perception_wired",
+            "baseline_main_calls",
+            "baseline_main_latency_ms",
+            "baseline_final_json_parse_failed",
+            "baseline_empty_final_text",
+            "anchor_visual_criteria",
+            "anchor_audio_criteria",
+            "full_task_count",
+            "full_visual_criteria",
+            "full_audio_criteria",
+            "chunk_envelope_hours",
+        }
+        if set(anchor_projection) != required_projection_fields:
+            raise ValueError(
+                "anchor_projection fields must match the versioned contract"
+            )
+        if anchor_projection["method"] != "modality_normalized_v1":
+            raise ValueError("anchor_projection.method is invalid")
+        if anchor_projection["anchor_config_name"] != config["config_name"]:
+            raise ValueError(
+                "anchor_projection config name must match config_name"
+            )
+        if not FULL_SHA256_RE.fullmatch(
+            str(anchor_projection["anchor_ordered_task_ids_sha256"])
+        ):
+            raise ValueError("anchor_projection task identity SHA is invalid")
+        if not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*",
+            str(anchor_projection["anchor_source_inference_repo_id"]),
+        ):
+            raise ValueError(
+                "anchor_projection source inference repo is invalid"
+            )
+        experiment_path = (
+            _batch_runner_root()
+            / "experiments"
+            / f"{rerun_identity['experiment_id']}.yaml"
+        )
+        try:
+            experiment = yaml.safe_load(
+                experiment_path.read_text(encoding="utf-8")
+            )
+        except (OSError, yaml.YAMLError) as exc:
+            raise ValueError(
+                "anchor_projection experiment source is unavailable"
+            ) from exc
+        experiment_source = str(
+            (experiment or {}).get("data", {}).get("source", "")
+        ).strip()
+        if (
+            anchor_projection["anchor_source_inference_repo_id"]
+            != experiment_source
+        ):
+            raise ValueError(
+                "anchor_projection source repo must match experiment source"
+            )
+        if not FULL_SHA256_RE.fullmatch(
+            str(anchor_projection["baseline_payload_sha256"])
+        ):
+            raise ValueError("anchor_projection baseline payload SHA is invalid")
+        if anchor_projection["baseline_schema_version"] != "1.0":
+            raise ValueError("anchor_projection baseline schema must be 1.0")
+        if anchor_projection["baseline_perception_wired"] is not False:
+            raise ValueError(
+                "anchor_projection baseline perception must remain unwired"
+            )
+        positive_integer_fields = (
+            "anchor_task_count",
+            "baseline_main_calls",
+            "baseline_final_json_parse_failed",
+            "baseline_empty_final_text",
+            "anchor_visual_criteria",
+            "anchor_audio_criteria",
+            "full_task_count",
+            "full_visual_criteria",
+            "full_audio_criteria",
+            "chunk_envelope_hours",
+        )
+        if any(
+            type(anchor_projection[field_name]) is not int
+            or anchor_projection[field_name] <= 0
+            for field_name in positive_integer_fields
+        ):
+            raise ValueError(
+                "anchor_projection count and envelope fields must be positive integers"
+            )
+        baseline_latency = anchor_projection["baseline_main_latency_ms"]
+        if (
+            not isinstance(baseline_latency, (int, float))
+            or not math.isfinite(baseline_latency)
+            or baseline_latency <= 0
+        ):
+            raise ValueError(
+                "anchor_projection baseline main latency must be positive"
+            )
+        if anchor_projection["full_task_count"] < len(
+            rerun_identity["task_ids"]
+        ):
+            raise ValueError(
+                "anchor_projection full task count is smaller than anchor"
+            )
+        if anchor_projection["anchor_task_count"] != len(
+            rerun_identity["task_ids"]
+        ):
+            raise ValueError(
+                "anchor_projection task count must match pinned task_ids"
+            )
+        if anchor_projection["anchor_ordered_task_ids_sha256"] != (
+            _ordered_task_ids_sha256(rerun_identity["task_ids"])
+        ):
+            raise ValueError(
+                "anchor_projection task identity must match pinned task_ids"
             )
 
 
@@ -579,6 +729,7 @@ def _validate_grade_resume_identity(
     source_inference_revision: str,
     grader_source_hash: str,
     renderer_fingerprint: dict[str, str] | None,
+    anchor_projection: dict | None,
 ) -> None:
     checks = (
         ("schema_version", existing.get("schema_version"), SCHEMA_VERSION),
@@ -616,6 +767,11 @@ def _validate_grade_resume_identity(
             existing.get("grader_source_hash"),
             grader_source_hash,
         ),
+        (
+            "anchor_projection",
+            existing.get("anchor_projection"),
+            anchor_projection,
+        ),
     )
     if renderer_fingerprint is not None:
         checks += ((
@@ -636,16 +792,18 @@ def _validate_pinned_rerun_identity(
     config: dict,
     *,
     experiment_id: str,
-    task_count: int,
+    task_ids: list[str] | None = None,
+    task_count: int | None = None,
     rubric_commit_sha: str,
     inference_revision: str | None,
 ) -> None:
     identity = config.get("rerun_identity")
     if identity is None:
         return
+    actual_task_count = len(task_ids) if task_ids is not None else task_count
     checks = (
         ("experiment_id", experiment_id, identity["experiment_id"]),
-        ("task_count", task_count, identity["expected_task_count"]),
+        ("task_count", actual_task_count, identity["expected_task_count"]),
         (
             "rubric_commit_sha",
             rubric_commit_sha,
@@ -663,6 +821,12 @@ def _validate_pinned_rerun_identity(
                 f"pinned rerun identity mismatch for {field_name}: "
                 f"actual={actual!r}, expected={expected!r}"
             )
+    expected_task_ids = identity.get("task_ids")
+    if expected_task_ids is not None and task_ids != expected_task_ids:
+        raise ValueError(
+            "pinned rerun identity mismatch for task_ids: "
+            f"actual={task_ids!r}, expected={expected_task_ids!r}"
+        )
 
 
 def _validate_azure_ai_resume_identity(
@@ -817,6 +981,45 @@ def filter_tasks(inference_results: dict, tasks_csv: str | None, limit: int) -> 
     if limit > 0:
         tasks = tasks[:limit]
     return tasks
+
+
+def filter_tasks_for_config(
+    inference_results: dict,
+    config: dict,
+    *,
+    tasks_csv: str | None,
+    limit: int,
+) -> tuple[list[dict], bool]:
+    identity = config.get("rerun_identity")
+    pinned_ids = identity.get("task_ids") if isinstance(identity, dict) else None
+    if pinned_ids is None:
+        return filter_tasks(inference_results, tasks_csv, limit), False
+
+    pinned_tasks = filter_tasks(
+        inference_results,
+        ",".join(pinned_ids),
+        0,
+    )
+    canonical_pinned_ids = [task["task_id"] for task in pinned_tasks]
+    if canonical_pinned_ids != pinned_ids:
+        raise ValueError(
+            "config pinned task selection must follow canonical source order"
+        )
+
+    if tasks_csv is not None:
+        cli_tasks = filter_tasks(inference_results, tasks_csv, 0)
+        cli_ids = [task["task_id"] for task in cli_tasks]
+        if cli_ids != canonical_pinned_ids:
+            raise ValueError(
+                "CLI --tasks conflicts with config pinned task selection"
+            )
+
+    if limit not in {0, len(canonical_pinned_ids)}:
+        raise ValueError(
+            "--limit conflicts with config pinned task selection: "
+            f"expected 0 or {len(canonical_pinned_ids)}, got {limit}"
+        )
+    return pinned_tasks, True
 
 
 def _track2_task_runtime_error(task: dict) -> str | None:
@@ -1169,6 +1372,7 @@ def _build_grade_payload(
         "azure_ai_runtime_fingerprint": azure_ai_runtime_fingerprint,
         "grader_source_hash": grader_source_hash,
         "renderer_fingerprint": renderer_fingerprint,
+        "anchor_projection": config.get("anchor_projection"),
         "inference_model": _resolve_inference_model(inf_results, exp_config),
         "inference_completed_at": inf_results.get("completed_at"),
         "judge": {
@@ -1280,7 +1484,12 @@ def main() -> int:
     judge_slug = _judge_slug(config["judge"]["model"])
     prompt_v = config["prompt"]["version"]
     try:
-        tasks = filter_tasks(inf_results, args.tasks, args.limit)
+        tasks, config_pinned_task_selection = filter_tasks_for_config(
+            inf_results,
+            config,
+            tasks_csv=args.tasks,
+            limit=args.limit,
+        )
     except ValueError as exc:
         print(f"ERROR: invalid grading task selection: {exc}", file=sys.stderr)
         return 1
@@ -1289,7 +1498,7 @@ def main() -> int:
         _validate_pinned_rerun_identity(
             config,
             experiment_id=args.experiment_yaml_name,
-            task_count=len(tasks),
+            task_ids=[task["task_id"] for task in tasks],
             rubric_commit_sha=rubric_sha,
             inference_revision=inference_revision,
         )
@@ -1302,7 +1511,8 @@ def main() -> int:
         "azure_ai_provenance_status", "local-runtime"
     )
     diagnostic_run = (
-        args.tasks is not None
+        config_pinned_task_selection
+        or args.tasks is not None
         or args.limit > 0
         or source_provenance_status == "legacy-missing"
     )
@@ -1386,6 +1596,7 @@ def main() -> int:
                 renderer_fingerprint=(
                     renderer_fingerprint if renderer_required else None
                 ),
+                anchor_projection=config.get("anchor_projection"),
             )
             _validate_grade_task_set(
                 existing,
@@ -1443,6 +1654,7 @@ def main() -> int:
                 renderer_fingerprint=(
                     renderer_fingerprint if renderer_required else None
                 ),
+                anchor_projection=config.get("anchor_projection"),
             )
             completed_task_ids = _validate_grade_task_set(
                 existing, tasks, require_complete=False

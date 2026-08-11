@@ -8,10 +8,14 @@ top-5-slowest selection.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "analyze_grade_run.py"
@@ -401,6 +405,560 @@ def test_task_anchor_separates_main_visual_audio_and_error_types(tmp_path: Path)
     assert "20.0s" in markdown
     assert "10.0s" in markdown
     assert "projected_220_wall_hours: 7.52" in markdown
+
+
+def _anchor4_projection_grade() -> dict:
+    config_path = (
+        REPO_ROOT
+        / "batch-runner/grading_configs/validation_exp003_v2_sol_max_anchor4.yaml"
+    )
+    config_bytes = config_path.read_bytes()
+    config = yaml.safe_load(config_bytes)
+    identity = config["rerun_identity"]
+    task_ids = identity["task_ids"]
+    source_judge = config["judge"]
+    grade = _grade_json(model="gpt-5.6-sol", n_tasks=4)
+    for task, task_id in zip(grade["tasks"], task_ids, strict=True):
+        task.update({
+            "task_id": task_id,
+            "sector": "test-sector",
+            "occupation": "test-occupation",
+            "total_awarded": 1,
+            "total_max": 1,
+            "pct": 100,
+            "critical_fail": False,
+            "gold_referenced": False,
+            "grading_wall_time_ms": 100_000,
+            "judge_call_count": 5,
+            "precheck_count": 0,
+            "judge_total_latency_ms": 50_000,
+            "perception_call_count": 0,
+            "perception_input_tokens": 0,
+            "perception_output_tokens": 0,
+            "perception_cached_tokens": 0,
+            "perception_total_latency_ms": 0,
+            "usage_complete": True,
+            "error": None,
+            "items": [],
+        })
+    task_hash = hashlib.sha256(
+        json.dumps(task_ids, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    route_fingerprint = "f" * 64
+    grade.update({
+        "schema_version": "1.3",
+        "run_status": "diagnostic",
+        "expected_task_count": 4,
+        "expected_ordered_task_ids_sha256": task_hash,
+        "experiment_id": identity["experiment_id"],
+        "experiment_yaml_name": identity["experiment_id"],
+        "source_inference_experiment_id": identity["experiment_id"],
+        "source_inference_repo_id": config["anchor_projection"][
+            "anchor_source_inference_repo_id"
+        ],
+        "source_inference_revision": identity["inference_revision"],
+        "azure_ai_routes": [{
+            "endpoint_kind": "direct-v1",
+            "profile": "direct-v1",
+            "runtime_fingerprint": route_fingerprint,
+            "workload": "grader",
+        }],
+        "azure_ai_runtime_fingerprint": route_fingerprint,
+        "grader_source_hash": "e" * 64,
+        "anchor_projection": config["anchor_projection"],
+        "rubric": {
+            "source": config["rubric"]["source"],
+            "repo_id": config["rubric"]["repo_id"],
+            "revision": config["rubric"]["revision"],
+            "commit_sha": identity["rubric_commit_sha"],
+            "short_sha": identity["rubric_commit_sha"][:7],
+        },
+        "prompt": {
+            "template": config["prompt"]["template"],
+            "version": config["prompt"]["version"],
+        },
+        "graded_at": "2026-05-27T00:04:00Z",
+        "graded_by": "step8_grade.py",
+    })
+    grade["judge"] = {
+        "provider": source_judge["provider"],
+        "api": source_judge["api"],
+        "model": source_judge["model"],
+        "deployment": source_judge["deployment"],
+        "api_version": source_judge["api_version"],
+        "reasoning_effort": source_judge["reasoning"]["effort"],
+        "temperature": source_judge["generation"]["temperature"],
+        "seed": source_judge["generation"]["seed"],
+        "perception": source_judge["perception"],
+        "config_name": config["config_name"],
+        "config_hash": hashlib.sha256(config_bytes).hexdigest()[:16],
+    }
+    first = grade["tasks"][0]
+    first.update({
+        "perception_call_count": 3,
+        "perception_input_tokens": 1_500,
+        "perception_output_tokens": 150,
+        "perception_cached_tokens": 30,
+        "perception_total_latency_ms": 150_000,
+    })
+    first["items"] = [
+        {
+            "rubric_item_id": "visual-1",
+            "criterion": "visual",
+            "max_score": 1,
+            "awarded_score": 1,
+            "routing_modality": "visual",
+            "verdict": "pass",
+            "decided_by": "judge",
+            "required": None,
+            "evidence": "verified",
+            "precheck_pattern_id": None,
+            "perception_call_count": 2,
+            "perception_input_tokens": 1_000,
+            "perception_output_tokens": 100,
+            "perception_cached_tokens": 20,
+            "perception_total_latency_ms": 100_000,
+            "usage_complete": True,
+        },
+        {
+            "rubric_item_id": "audio-1",
+            "criterion": "audio",
+            "max_score": 1,
+            "awarded_score": 1,
+            "routing_modality": "audio",
+            "verdict": "pass",
+            "decided_by": "judge",
+            "required": None,
+            "evidence": "verified",
+            "precheck_pattern_id": None,
+            "perception_call_count": 1,
+            "perception_input_tokens": 500,
+            "perception_output_tokens": 50,
+            "perception_cached_tokens": 10,
+            "perception_total_latency_ms": 50_000,
+            "usage_complete": True,
+        },
+        {
+            "rubric_item_id": "text-1",
+            "criterion": "text",
+            "max_score": 1,
+            "awarded_score": 0,
+            "routing_modality": "text",
+            "verdict": "judge_error",
+            "decided_by": "judge",
+            "required": None,
+            "evidence": "final_json_parse_failed",
+            "precheck_pattern_id": None,
+            "score_excluded": True,
+            "usage_complete": True,
+        },
+    ]
+    grade["summary"] = {
+        "total_tasks": 4,
+        "graded_tasks": 4,
+        "error_tasks": 0,
+        "openai_compat": {
+            "avg_score_pct": 100,
+            "ci_pct": 0,
+            "perfect_count": 4,
+            "zero_count": 0,
+            "partial_count": 0,
+            "inconsistent_count": 0,
+        },
+        "wow": {
+            "critical_item_pass_rate": 1.0,
+            "judge_pass_rate": 0.6667,
+            "judge_error_rate": 0.3333,
+            "precheck_pass_rate": 0.0,
+        },
+        "cost": {
+            "estimated_cost_usd": None,
+            "pricing_complete": False,
+            "unpriced_models": ["gpt-5.6-sol", "gpt-audio-1.5"],
+            "usage_complete": True,
+        },
+    }
+    return grade
+
+
+def test_anchor4_projection_separates_modalities_and_preregistered_gates(
+    tmp_path: Path,
+):
+    analyzed = _run(tmp_path, _anchor4_projection_grade())["this"]
+    markdown = _run(tmp_path, _anchor4_projection_grade(), as_json=False)
+    projection = analyzed["modality_projection"]
+
+    assert analyzed["projection_method"] == "modality_normalized_v1"
+    assert projection["baseline_is_like_for_like"] is False
+    assert "main-judge-only reference" in projection["baseline_caveat"]
+    assert projection["components"]["main"] == {
+        "anchor_latency_sec": 250.0,
+        "scale": 55.0,
+        "projected_hours": 3.8194,
+        "normalization": "task_count",
+        "measurement": "max(main_latency, measured_wall_minus_perception)",
+    }
+    assert projection["components"]["visual"]["scale"] == pytest.approx(
+        337 / 43,
+        abs=1e-6,
+    )
+    assert projection["components"]["visual"]["projected_hours"] == 0.2177
+    assert projection["components"]["audio"]["scale"] == pytest.approx(
+        58 / 13,
+        abs=1e-6,
+    )
+    assert projection["components"]["audio"]["projected_hours"] == 0.062
+    assert projection["projected_220_hours"] == 4.0991
+    assert projection["envelope_status"] == "below_44h_envelope"
+    assert projection["audio_wiring"] == {"call_count": 1, "status": "passed"}
+    assert projection["visual_budget"] == {
+        "task_visual_budget_exceeded": 0,
+        "status": "passed",
+    }
+    assert projection["diagnostic"] == {
+        "baseline_targetable_errors": 22,
+        "observed_targetable_errors": 1,
+        "targetable_status": "improved",
+        "non_targetable_errors": {},
+        "status": "improved",
+    }
+    assert projection["full_run_gate"] == {
+        "status": "eligible_for_owner_review",
+        "blockers": [],
+    }
+    assert "not a Sol Max multiplier" in markdown
+    assert "| visual | 100.0 |" in markdown
+    assert "| audio | 50.0 |" in markdown
+
+
+def test_anchor4_projection_blocks_dead_audio_and_visual_budget_error(
+    tmp_path: Path,
+):
+    grade = _anchor4_projection_grade()
+    first = grade["tasks"][0]
+    first["perception_call_count"] = 2
+    first["perception_input_tokens"] = 1_000
+    first["perception_output_tokens"] = 100
+    first["perception_cached_tokens"] = 20
+    first["perception_total_latency_ms"] = 100_000
+    first["items"] = [
+        item for item in first["items"]
+        if item.get("routing_modality") != "audio"
+    ]
+    first["items"].append({
+        "rubric_item_id": "visual-budget-1",
+        "criterion": "visual budget",
+        "max_score": 1,
+        "awarded_score": 0,
+        "routing_modality": "visual",
+        "verdict": "judge_error",
+        "decided_by": "judge",
+        "required": None,
+        "evidence": "task_visual_budget_exceeded:required=73,cap=72",
+        "precheck_pattern_id": None,
+        "score_excluded": True,
+        "usage_complete": True,
+    })
+
+    projection = _run(tmp_path, grade)["this"]["modality_projection"]
+
+    assert projection["audio_wiring"] == {
+        "call_count": 0,
+        "status": "failed_no_audio_calls",
+    }
+    assert projection["visual_budget"] == {
+        "task_visual_budget_exceeded": 1,
+        "status": "failed",
+    }
+    assert projection["full_run_gate"] == {
+        "status": "blocked",
+        "blockers": [
+            "non_targetable_judge_errors_present",
+            "audio_wiring_not_exercised",
+            "visual_budget_exceeded",
+        ],
+    }
+
+
+def test_anchor4_projection_blocks_44h_or_unknown_perception(tmp_path: Path):
+    over_time = _anchor4_projection_grade()
+    for task in over_time["tasks"]:
+        task["grading_wall_time_ms"] = 1_000_000
+    projection = _run(tmp_path, over_time)["this"]["modality_projection"]
+    assert projection["envelope_status"] == "at_or_above_44h_envelope"
+    assert "at_or_above_44h_envelope" in projection["full_run_gate"]["blockers"]
+
+    unknown = _anchor4_projection_grade()
+    unknown_task = unknown["tasks"][1]
+    unknown_task.update({
+        "perception_call_count": 1,
+        "perception_input_tokens": 100,
+        "perception_output_tokens": 10,
+        "perception_cached_tokens": 0,
+        "perception_total_latency_ms": 5_000,
+    })
+    projection = _run(tmp_path, unknown)["this"]["modality_projection"]
+    assert projection["envelope_status"] == "incomplete_unknown_perception"
+    assert projection["full_run_gate"]["status"] == "blocked"
+    assert "incomplete_unknown_perception" in projection["full_run_gate"]["blockers"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "blocker"),
+    [
+        (
+            lambda grade: (
+                grade.__setitem__("run_status", "partial"),
+                grade.__setitem__("tasks", grade["tasks"][:2]),
+            ),
+            "anchor_run_not_complete_diagnostic",
+        ),
+        (
+            lambda grade: grade.__setitem__(
+                "expected_ordered_task_ids_sha256", "0" * 64
+            ),
+            "anchor_ordered_task_identity_mismatch",
+        ),
+        (
+            lambda grade: grade["tasks"][1].__setitem__(
+                "usage_complete", False
+            ),
+            "anchor_usage_incomplete",
+        ),
+        (
+            lambda grade: grade["tasks"][1].__setitem__(
+                "error", "provider_error"
+            ),
+            "anchor_task_errors",
+        ),
+        (
+            lambda grade: grade["tasks"][0]["items"][0].__setitem__(
+                "usage_complete", False
+            ),
+            "anchor_item_usage_incomplete",
+        ),
+        (
+            lambda grade: grade["summary"]["cost"].__setitem__(
+                "usage_complete", False
+            ),
+            "anchor_summary_usage_incomplete",
+        ),
+        (
+            lambda grade: grade.pop("rubric"),
+            "anchor_schema_invalid",
+        ),
+        (
+            lambda grade: grade["anchor_projection"].__setitem__(
+                "anchor_task_count", "4"
+            ),
+            "anchor_schema_invalid",
+        ),
+        (
+            lambda grade: grade["anchor_projection"].__setitem__(
+                "anchor_visual_criteria", 0
+            ),
+            "anchor_schema_invalid",
+        ),
+        (
+            lambda grade: grade["anchor_projection"].pop(
+                "anchor_task_count"
+            ),
+            "anchor_schema_invalid",
+        ),
+        (
+            lambda grade: grade["judge"].__setitem__(
+                "model", "gpt-5.4-mini"
+            ),
+            "anchor_runtime_identity_mismatch",
+        ),
+        (
+            lambda grade: grade["judge"].__setitem__(
+                "config_hash", "0" * 16
+            ),
+            "anchor_config_identity_mismatch",
+        ),
+        (
+            lambda grade: grade["rubric"].__setitem__(
+                "source", "local"
+            ),
+            "anchor_source_identity_mismatch",
+        ),
+        (
+            lambda grade: grade["rubric"].__setitem__(
+                "repo_id", "other/rubric"
+            ),
+            "anchor_source_identity_mismatch",
+        ),
+        (
+            lambda grade: grade.__setitem__(
+                "source_inference_experiment_id", "other_experiment"
+            ),
+            "anchor_source_identity_mismatch",
+        ),
+        (
+            lambda grade: grade.__setitem__(
+                "source_inference_repo_id", "other/repo"
+            ),
+            "anchor_source_identity_mismatch",
+        ),
+    ],
+)
+def test_anchor4_projection_requires_complete_clean_identity(
+    tmp_path: Path,
+    mutation,
+    blocker: str,
+):
+    grade = _anchor4_projection_grade()
+    mutation(grade)
+
+    projection = _run(tmp_path, grade)["this"]["modality_projection"]
+
+    assert projection["projected_220_hours"] is None
+    assert projection["envelope_status"] == "incomplete_anchor_payload"
+    assert projection["anchor_integrity"]["status"] == "failed"
+    assert blocker in projection["full_run_gate"]["blockers"]
+    assert projection["full_run_gate"]["status"] == "blocked"
+    assert projection["diagnostic"]["targetable_status"] == (
+        "inconclusive_invalid_anchor_payload"
+    )
+    assert projection["diagnostic"]["status"] == (
+        "inconclusive_invalid_anchor_payload"
+    )
+
+
+def test_anchor4_projection_blocks_non_object_contract(tmp_path: Path):
+    grade = _anchor4_projection_grade()
+    grade["anchor_projection"] = "malformed"
+
+    analyzed = _run(tmp_path, grade)["this"]
+    projection = analyzed["modality_projection"]
+
+    assert analyzed["projected_220_wall_hours"] is None
+    assert analyzed["projection_status"] == "incomplete_anchor_payload"
+    assert analyzed["projection_method"] is None
+    assert projection["anchor_integrity"] == {
+        "status": "failed",
+        "blockers": ["anchor_schema_invalid"],
+    }
+    assert projection["diagnostic"]["status"] == (
+        "inconclusive_invalid_anchor_payload"
+    )
+    assert projection["full_run_gate"] == {
+        "status": "blocked",
+        "blockers": ["anchor_schema_invalid"],
+    }
+
+
+@pytest.mark.parametrize("contract_state", ["missing", "null"])
+def test_anchor4_projection_blocks_missing_or_null_contract(
+    tmp_path: Path,
+    contract_state: str,
+):
+    grade = _anchor4_projection_grade()
+    if contract_state == "missing":
+        grade.pop("anchor_projection")
+    else:
+        grade["anchor_projection"] = None
+
+    analyzed = _run(tmp_path, grade)["this"]
+    projection = analyzed["modality_projection"]
+
+    assert analyzed["projected_220_wall_hours"] is None
+    assert analyzed["projection_status"] == "incomplete_anchor_payload"
+    assert analyzed["projection_method"] == "modality_normalized_v1"
+    assert projection["diagnostic"]["status"] == (
+        "inconclusive_invalid_anchor_payload"
+    )
+    assert "anchor_projection_missing_or_null" in (
+        projection["full_run_gate"]["blockers"]
+    )
+    assert projection["full_run_gate"]["status"] == "blocked"
+
+
+def test_anchor4_projection_hash_identity_blocks_missing_contract(
+    tmp_path: Path,
+):
+    grade = _anchor4_projection_grade()
+    grade.pop("anchor_projection")
+    grade["judge"]["config_name"] = "renamed_anchor"
+
+    projection = _run(tmp_path, grade)["this"]["modality_projection"]
+
+    assert projection["projected_220_hours"] is None
+    assert "anchor_projection_missing_or_null" in (
+        projection["full_run_gate"]["blockers"]
+    )
+    assert "anchor_config_identity_mismatch" in (
+        projection["full_run_gate"]["blockers"]
+    )
+
+
+@pytest.mark.parametrize("contract_state", ["missing", "null"])
+def test_non_anchor_payload_keeps_task_count_fallback(
+    tmp_path: Path,
+    contract_state: str,
+):
+    grade = _grade_json(n_tasks=1)
+    grade["tasks"][0]["grading_wall_time_ms"] = 1_000
+    if contract_state == "null":
+        grade["anchor_projection"] = None
+
+    analyzed = _run(tmp_path, grade)["this"]
+
+    assert analyzed["modality_projection"] is None
+    assert analyzed["projection_method"] == "task_count_fallback"
+    assert analyzed["projected_220_wall_hours"] is not None
+
+
+@pytest.mark.parametrize("error_type", ["RateLimitError", "BadRequestError", "unknown"])
+def test_anchor4_projection_blocks_non_targetable_judge_errors(
+    tmp_path: Path,
+    error_type: str,
+):
+    grade = _anchor4_projection_grade()
+    grade["tasks"][0]["items"][2]["evidence"] = error_type
+
+    projection = _run(tmp_path, grade)["this"]["modality_projection"]
+    markdown = _run(tmp_path, grade, as_json=False)
+
+    assert projection["diagnostic"]["observed_targetable_errors"] == 0
+    assert projection["diagnostic"]["targetable_status"] == (
+        "inconclusive_other_judge_errors"
+    )
+    assert projection["diagnostic"]["status"] == (
+        "inconclusive_other_judge_errors"
+    )
+    assert projection["diagnostic"]["non_targetable_errors"] == {
+        error_type: 1
+    }
+    assert "non_targetable_judge_errors_present" in (
+        projection["full_run_gate"]["blockers"]
+    )
+    assert projection["full_run_gate"]["status"] == "blocked"
+    assert "targetable_status=inconclusive_other_judge_errors" in markdown
+    assert "targetable_status=eliminated" not in markdown
+
+
+def test_anchor4_projection_rejects_reordered_tasks_with_recomputed_hash(
+    tmp_path: Path,
+):
+    grade = _anchor4_projection_grade()
+    grade["tasks"].reverse()
+    grade["expected_ordered_task_ids_sha256"] = hashlib.sha256(
+        json.dumps(
+            [task["task_id"] for task in grade["tasks"]],
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    projection = _run(tmp_path, grade)["this"]["modality_projection"]
+
+    assert projection["projected_220_hours"] is None
+    assert projection["anchor_integrity"]["status"] == "failed"
+    assert "anchor_ordered_task_identity_mismatch" in (
+        projection["full_run_gate"]["blockers"]
+    )
+    assert projection["full_run_gate"]["status"] == "blocked"
 
 
 def test_markdown_contains_key_sections(tmp_path: Path):

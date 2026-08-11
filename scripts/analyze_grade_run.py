@@ -13,12 +13,17 @@ for models present in its reviewed price table.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import statistics
 import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+
+import yaml
+from jsonschema import Draft202012Validator
 
 # input, output per 1M tokens (USD). Edit to keep current. These are
 # Azure OpenAI list prices as of 2025-Q2 (best-effort). For internal/external
@@ -36,6 +41,163 @@ PRICING_USD_PER_M_TOKENS = {
 # (Azure Responses API automatic prompt caching, parity with OpenAI public
 # pricing). Confirm against billing for negotiated tenant rates.
 CACHED_INPUT_DISCOUNT = 0.50
+REPO_ROOT = Path(__file__).resolve().parents[1]
+GRADE_SCHEMA_PATH = REPO_ROOT / "batch-runner/schemas/grade.schema.json"
+ANCHOR_CONFIG_DIR = REPO_ROOT / "batch-runner/grading_configs"
+
+
+def _ordered_task_ids_sha256(task_ids: list[str]) -> str:
+    encoded = json.dumps(
+        task_ids,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _anchor_schema_blockers(grade: dict) -> list[str]:
+    try:
+        schema = json.loads(GRADE_SCHEMA_PATH.read_text(encoding="utf-8"))
+        schema_errors = list(Draft202012Validator(schema).iter_errors(grade))
+    except (OSError, json.JSONDecodeError):
+        schema_errors = ["schema unavailable"]
+    return ["anchor_schema_invalid"] if schema_errors else []
+
+
+def _repository_anchor_contract(grade: dict) -> dict | None:
+    judge = grade.get("judge") if isinstance(grade.get("judge"), dict) else {}
+    config_name = judge.get("config_name")
+    config_hash = judge.get("config_hash")
+    candidate_paths = []
+    if isinstance(config_name, str) and re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", config_name
+    ):
+        candidate_paths.append(ANCHOR_CONFIG_DIR / f"{config_name}.yaml")
+    if isinstance(config_hash, str) and re.fullmatch(r"[0-9a-f]{16}", config_hash):
+        candidate_paths.extend(ANCHOR_CONFIG_DIR.glob("*.yaml"))
+
+    seen = set()
+    for config_path in candidate_paths:
+        if config_path in seen or not config_path.is_file():
+            continue
+        seen.add(config_path)
+        try:
+            config_bytes = config_path.read_bytes()
+            source_config = yaml.safe_load(config_bytes)
+        except (OSError, yaml.YAMLError):
+            continue
+        if not isinstance(source_config, dict):
+            continue
+        source_contract = source_config.get("anchor_projection")
+        if not isinstance(source_contract, dict):
+            continue
+        source_name = source_config.get("config_name")
+        source_hash = hashlib.sha256(config_bytes).hexdigest()[:16]
+        if config_name == source_name or config_hash == source_hash:
+            return source_contract
+    return None
+
+
+def _anchor_config_identity_blockers(
+    grade: dict,
+    contract: dict,
+    task_ids: list[str],
+) -> list[str]:
+    blockers = []
+    config_name = contract.get("anchor_config_name")
+    if not isinstance(config_name, str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", config_name
+    ):
+        blockers.append("anchor_source_config_unavailable")
+        return blockers
+    config_path = ANCHOR_CONFIG_DIR / f"{config_name}.yaml"
+    try:
+        config_bytes = config_path.read_bytes()
+        source_config = yaml.safe_load(config_bytes)
+    except (OSError, yaml.YAMLError):
+        blockers.append("anchor_source_config_unavailable")
+        return blockers
+    if not isinstance(source_config, dict):
+        blockers.append("anchor_source_config_unavailable")
+        return blockers
+
+    if source_config.get("anchor_projection") != contract:
+        blockers.append("anchor_projection_contract_mismatch")
+    source_identity = source_config.get("rerun_identity")
+    source_task_ids = (
+        source_identity.get("task_ids")
+        if isinstance(source_identity, dict) else None
+    )
+    contract_task_hash = contract.get("anchor_ordered_task_ids_sha256")
+    if (
+        not isinstance(source_task_ids, list)
+        or _ordered_task_ids_sha256(source_task_ids) != contract_task_hash
+        or _ordered_task_ids_sha256(task_ids) != contract_task_hash
+    ):
+        blockers.append("anchor_ordered_task_identity_mismatch")
+
+    judge = grade.get("judge") if isinstance(grade.get("judge"), dict) else {}
+    expected_config_hash = hashlib.sha256(config_bytes).hexdigest()[:16]
+    if (
+        judge.get("config_name") != config_name
+        or judge.get("config_hash") != expected_config_hash
+    ):
+        blockers.append("anchor_config_identity_mismatch")
+
+    source_judge = (
+        source_config.get("judge")
+        if isinstance(source_config.get("judge"), dict) else {}
+    )
+    expected_judge = {
+        "provider": source_judge.get("provider"),
+        "api": source_judge.get("api"),
+        "model": source_judge.get("model"),
+        "deployment": source_judge.get("deployment"),
+        "api_version": source_judge.get("api_version", ""),
+        "reasoning_effort": (
+            source_judge.get("reasoning", {}).get("effort", "high")
+        ),
+        "temperature": (
+            source_judge.get("generation", {}).get("temperature", 0)
+        ),
+        "seed": source_judge.get("generation", {}).get("seed", 42),
+        "perception": source_judge.get("perception", {}),
+    }
+    if any(judge.get(key) != value for key, value in expected_judge.items()):
+        blockers.append("anchor_runtime_identity_mismatch")
+
+    rubric = grade.get("rubric") if isinstance(grade.get("rubric"), dict) else {}
+    prompt = grade.get("prompt") if isinstance(grade.get("prompt"), dict) else {}
+    source_rubric = source_config.get("rubric", {})
+    source_prompt = source_config.get("prompt", {})
+    expected_experiment = (
+        source_identity.get("experiment_id")
+        if isinstance(source_identity, dict) else None
+    )
+    expected_rubric = (
+        source_identity.get("rubric_commit_sha")
+        if isinstance(source_identity, dict) else None
+    )
+    expected_inference = (
+        source_identity.get("inference_revision")
+        if isinstance(source_identity, dict) else None
+    )
+    if (
+        grade.get("experiment_id") != expected_experiment
+        or grade.get("experiment_yaml_name") != expected_experiment
+        or grade.get("source_inference_experiment_id") != expected_experiment
+        or grade.get("source_inference_repo_id")
+        != contract.get("anchor_source_inference_repo_id")
+        or grade.get("source_inference_revision") != expected_inference
+        or rubric.get("source") != source_rubric.get("source")
+        or rubric.get("repo_id") != source_rubric.get("repo_id")
+        or rubric.get("revision") != source_rubric.get("revision")
+        or rubric.get("commit_sha") != expected_rubric
+        or prompt.get("template") != source_prompt.get("template")
+        or prompt.get("version") != source_prompt.get("version")
+    ):
+        blockers.append("anchor_source_identity_mismatch")
+    return blockers
 
 
 def _parse_iso(s: str | None) -> datetime | None:
@@ -336,6 +498,125 @@ def _anchor_usage(values: dict[str, int | float] | None) -> dict:
     }
 
 
+def _blocked_modality_projection(
+    contract: dict,
+    task_anchors: list[dict],
+    perception_usage: dict[str, dict[str, int | float]],
+    total_main_latency_sec: float,
+    judge_error_types: Counter,
+    blockers: list[str],
+) -> dict:
+    visual_usage = perception_usage.get("visual") or {}
+    audio_usage = perception_usage.get("audio") or {}
+    unknown_usage = perception_usage.get("unknown") or {}
+    visual_latency_sec = float(visual_usage.get("latency_ms", 0) or 0) / 1000
+    audio_latency_sec = float(audio_usage.get("latency_ms", 0) or 0) / 1000
+    unknown_latency_sec = float(unknown_usage.get("latency_ms", 0) or 0) / 1000
+    unknown_volume = {
+        "call_count": int(unknown_usage.get("call_count", 0) or 0),
+        "input_tokens": int(unknown_usage.get("input_tokens", 0) or 0),
+        "output_tokens": int(unknown_usage.get("output_tokens", 0) or 0),
+        "cached_tokens": int(unknown_usage.get("cached_tokens", 0) or 0),
+        "latency_sec": round(unknown_latency_sec, 5),
+    }
+    observed_targetable_errors = (
+        judge_error_types.get("final_json_parse_failed", 0)
+        + judge_error_types.get("empty_final_text", 0)
+    )
+    non_targetable_errors = {
+        error_type: count
+        for error_type, count in sorted(judge_error_types.items())
+        if error_type not in {"final_json_parse_failed", "empty_final_text"}
+        and count > 0
+    }
+    baseline_parse = contract.get("baseline_final_json_parse_failed")
+    baseline_empty = contract.get("baseline_empty_final_text")
+    baseline_targetable_errors = (
+        baseline_parse + baseline_empty
+        if type(baseline_parse) is int and type(baseline_empty) is int
+        else None
+    )
+    baseline_latency = contract.get("baseline_main_latency_ms")
+    baseline_latency_sec = (
+        round(float(baseline_latency) / 1000, 5)
+        if isinstance(baseline_latency, (int, float)) else None
+    )
+    audio_call_count = int(audio_usage.get("call_count", 0) or 0)
+    visual_budget_errors = judge_error_types.get(
+        "task_visual_budget_exceeded",
+        0,
+    )
+    unique_blockers = list(dict.fromkeys(blockers))
+    return {
+        "method": contract.get("method"),
+        "baseline_is_like_for_like": False,
+        "baseline_caveat": (
+            "schema 1.0 pre-perception payload; mini metrics are a "
+            "main-judge-only reference, not a Sol Max multiplier"
+        ),
+        "anchor_task_count": len(task_anchors),
+        "measured_anchor_wall_sec": None,
+        "anchor_integrity": {
+            "status": "failed",
+            "blockers": unique_blockers,
+        },
+        "components": {
+            "main": {
+                "anchor_latency_sec": round(total_main_latency_sec, 5),
+                "scale": None,
+                "projected_hours": None,
+                "normalization": "task_count",
+                "measurement": "blocked_invalid_anchor_payload",
+            },
+            "visual": {
+                "anchor_latency_sec": round(visual_latency_sec, 5),
+                "scale": None,
+                "projected_hours": None,
+                "normalization": "visual_criteria",
+            },
+            "audio": {
+                "anchor_latency_sec": round(audio_latency_sec, 5),
+                "scale": None,
+                "projected_hours": None,
+                "normalization": "audio_criteria",
+            },
+        },
+        "projected_220_hours": None,
+        "chunk_envelope_hours": contract.get("chunk_envelope_hours"),
+        "envelope_status": "incomplete_anchor_payload",
+        "unknown_perception": unknown_volume,
+        "diagnostic": {
+            "baseline_targetable_errors": baseline_targetable_errors,
+            "observed_targetable_errors": observed_targetable_errors,
+            "targetable_status": "inconclusive_invalid_anchor_payload",
+            "non_targetable_errors": non_targetable_errors,
+            "status": "inconclusive_invalid_anchor_payload",
+        },
+        "audio_wiring": {
+            "call_count": audio_call_count,
+            "status": "passed" if audio_call_count > 0 else "failed_no_audio_calls",
+        },
+        "visual_budget": {
+            "task_visual_budget_exceeded": visual_budget_errors,
+            "status": "passed" if visual_budget_errors == 0 else "failed",
+        },
+        "full_run_gate": {
+            "status": "blocked",
+            "blockers": unique_blockers,
+        },
+        "main_reference": {
+            "calls": contract.get("baseline_main_calls"),
+            "latency_sec": baseline_latency_sec,
+            "observed_calls": sum(
+                anchor["main"]["call_count"] for anchor in task_anchors
+            ),
+            "observed_latency_sec": round(total_main_latency_sec, 5),
+            "calls_ratio": None,
+            "latency_ratio": None,
+        },
+    }
+
+
 def _task_anchor(task: dict) -> dict:
     modality_usage = _perception_usage_by_modality({"tasks": [task]})
     error_types = Counter(
@@ -374,6 +655,319 @@ def _task_anchor(task: dict) -> dict:
         "judge_error_types": dict(sorted(error_types.items())),
         "usage_complete": bool(task.get("usage_complete", True)),
         "error": task.get("error"),
+    }
+
+
+def _modality_normalized_projection(
+    grade: dict,
+    task_anchors: list[dict],
+    perception_usage: dict[str, dict[str, int | float]],
+    total_main_latency_sec: float,
+    judge_error_types: Counter,
+) -> dict | None:
+    contract = grade.get("anchor_projection")
+    if contract is None:
+        expected_contract = _repository_anchor_contract(grade)
+        if expected_contract is None:
+            return None
+        task_ids = [anchor["task_id"] for anchor in task_anchors]
+        blockers = ["anchor_projection_missing_or_null"]
+        blockers.extend(
+            _anchor_config_identity_blockers(
+                grade,
+                expected_contract,
+                task_ids,
+            )
+        )
+        return _blocked_modality_projection(
+            expected_contract,
+            task_anchors,
+            perception_usage,
+            total_main_latency_sec,
+            judge_error_types,
+            blockers,
+        )
+    if not isinstance(contract, dict):
+        return _blocked_modality_projection(
+            {},
+            task_anchors,
+            perception_usage,
+            total_main_latency_sec,
+            judge_error_types,
+            ["anchor_schema_invalid"],
+        )
+
+    schema_blockers = _anchor_schema_blockers(grade)
+    if schema_blockers:
+        return _blocked_modality_projection(
+            contract,
+            task_anchors,
+            perception_usage,
+            total_main_latency_sec,
+            judge_error_types,
+            schema_blockers,
+        )
+
+    task_count = len(task_anchors)
+    anchor_task_count = contract["anchor_task_count"]
+    task_ids = [anchor["task_id"] for anchor in task_anchors]
+    anchor_integrity_blockers = []
+    if grade.get("schema_version") != "1.3":
+        anchor_integrity_blockers.append("anchor_schema_not_1_3")
+    if grade.get("run_status") != "diagnostic":
+        anchor_integrity_blockers.append("anchor_run_not_complete_diagnostic")
+    if grade.get("expected_task_count") != anchor_task_count:
+        anchor_integrity_blockers.append("anchor_expected_task_count_mismatch")
+    if task_count != anchor_task_count:
+        anchor_integrity_blockers.append("anchor_task_count_incomplete")
+    valid_task_ids = (
+        all(isinstance(task_id, str) and task_id for task_id in task_ids)
+        and len(task_ids) == len(set(task_ids))
+    )
+    expected_task_hash = grade.get("expected_ordered_task_ids_sha256")
+    contract_task_hash = contract.get("anchor_ordered_task_ids_sha256")
+    if (
+        not valid_task_ids
+        or not isinstance(expected_task_hash, str)
+        or expected_task_hash != contract_task_hash
+        or _ordered_task_ids_sha256(task_ids) != contract_task_hash
+    ):
+        anchor_integrity_blockers.append("anchor_ordered_task_identity_mismatch")
+    tasks = grade.get("tasks") if isinstance(grade.get("tasks"), list) else []
+    if any(task.get("usage_complete") is not True for task in tasks):
+        anchor_integrity_blockers.append("anchor_usage_incomplete")
+    if any(
+        item.get("usage_complete") is not True
+        for task in tasks
+        for item in task.get("items", [])
+        if isinstance(item, dict)
+    ):
+        anchor_integrity_blockers.append("anchor_item_usage_incomplete")
+    summary = grade.get("summary") if isinstance(grade.get("summary"), dict) else {}
+    summary_cost = (
+        summary.get("cost") if isinstance(summary.get("cost"), dict) else {}
+    )
+    if summary_cost.get("usage_complete") is not True:
+        anchor_integrity_blockers.append("anchor_summary_usage_incomplete")
+    if any(task.get("error") for task in tasks):
+        anchor_integrity_blockers.append("anchor_task_errors")
+    if (
+        summary.get("total_tasks") != anchor_task_count
+        or summary.get("graded_tasks") != anchor_task_count
+        or summary.get("error_tasks") != 0
+    ):
+        anchor_integrity_blockers.append("anchor_summary_task_counts_mismatch")
+    anchor_integrity_blockers.extend(
+        _anchor_config_identity_blockers(grade, contract, task_ids)
+    )
+    anchor_integrity_blockers = list(dict.fromkeys(anchor_integrity_blockers))
+
+    measured_walls = [
+        anchor["wall_clock_sec"]
+        for anchor in task_anchors
+        if anchor["wall_clock_sec"] is not None
+    ]
+    visual_usage = perception_usage.get("visual") or {}
+    audio_usage = perception_usage.get("audio") or {}
+    unknown_usage = perception_usage.get("unknown") or {}
+    visual_latency_sec = float(visual_usage.get("latency_ms", 0) or 0) / 1000
+    audio_latency_sec = float(audio_usage.get("latency_ms", 0) or 0) / 1000
+    unknown_latency_sec = float(unknown_usage.get("latency_ms", 0) or 0) / 1000
+    total_perception_latency_sec = (
+        visual_latency_sec + audio_latency_sec + unknown_latency_sec
+    )
+
+    if len(measured_walls) == task_count and task_count > 0:
+        measured_wall_sec = sum(measured_walls)
+        main_anchor_sec = max(
+            total_main_latency_sec,
+            measured_wall_sec - total_perception_latency_sec,
+        )
+        main_measurement = "max(main_latency, measured_wall_minus_perception)"
+    else:
+        measured_wall_sec = None
+        main_anchor_sec = total_main_latency_sec
+        main_measurement = "main_latency_fallback_missing_task_wall"
+
+    main_scale = contract["full_task_count"] / anchor_task_count
+    visual_scale = (
+        contract["full_visual_criteria"]
+        / contract["anchor_visual_criteria"]
+    )
+    audio_scale = (
+        contract["full_audio_criteria"]
+        / contract["anchor_audio_criteria"]
+    )
+    projection_ready = not anchor_integrity_blockers and measured_wall_sec is not None
+    components = {
+        "main": {
+            "anchor_latency_sec": round(main_anchor_sec, 5),
+            "scale": round(main_scale, 6),
+            "projected_hours": (
+                round(main_anchor_sec * main_scale / 3600, 4)
+                if projection_ready else None
+            ),
+            "normalization": "task_count",
+            "measurement": main_measurement,
+        },
+        "visual": {
+            "anchor_latency_sec": round(visual_latency_sec, 5),
+            "scale": round(visual_scale, 6),
+            "projected_hours": (
+                round(visual_latency_sec * visual_scale / 3600, 4)
+                if projection_ready else None
+            ),
+            "normalization": "visual_criteria",
+        },
+        "audio": {
+            "anchor_latency_sec": round(audio_latency_sec, 5),
+            "scale": round(audio_scale, 6),
+            "projected_hours": (
+                round(audio_latency_sec * audio_scale / 3600, 4)
+                if projection_ready else None
+            ),
+            "normalization": "audio_criteria",
+        },
+    }
+    projected_hours = (
+        round(
+            sum(
+                component["projected_hours"]
+                for component in components.values()
+            ),
+            4,
+        )
+        if projection_ready else None
+    )
+
+    unknown_volume = {
+        "call_count": int(unknown_usage.get("call_count", 0) or 0),
+        "input_tokens": int(unknown_usage.get("input_tokens", 0) or 0),
+        "output_tokens": int(unknown_usage.get("output_tokens", 0) or 0),
+        "cached_tokens": int(unknown_usage.get("cached_tokens", 0) or 0),
+        "latency_sec": round(unknown_latency_sec, 5),
+    }
+    has_unknown = any(unknown_volume.values())
+    envelope_hours = contract["chunk_envelope_hours"]
+    if anchor_integrity_blockers:
+        envelope_status = "incomplete_anchor_payload"
+    elif has_unknown:
+        envelope_status = "incomplete_unknown_perception"
+    elif measured_wall_sec is None:
+        envelope_status = "incomplete_missing_task_wall"
+    elif projected_hours >= envelope_hours:
+        envelope_status = "at_or_above_44h_envelope"
+    else:
+        envelope_status = "below_44h_envelope"
+
+    targetable_errors = (
+        judge_error_types.get("final_json_parse_failed", 0)
+        + judge_error_types.get("empty_final_text", 0)
+    )
+    baseline_targetable_errors = (
+        contract["baseline_final_json_parse_failed"]
+        + contract["baseline_empty_final_text"]
+    )
+    non_targetable_errors = {
+        error_type: count
+        for error_type, count in sorted(judge_error_types.items())
+        if error_type not in {"final_json_parse_failed", "empty_final_text"}
+        and count > 0
+    }
+    if targetable_errors == 0:
+        targetable_status = "eliminated"
+    elif targetable_errors < baseline_targetable_errors:
+        targetable_status = "improved"
+    else:
+        targetable_status = "no_improvement"
+    if anchor_integrity_blockers:
+        targetable_status = "inconclusive_invalid_anchor_payload"
+    elif non_targetable_errors:
+        targetable_status = "inconclusive_other_judge_errors"
+    diagnostic_status = targetable_status
+
+    audio_call_count = int(audio_usage.get("call_count", 0) or 0)
+    visual_budget_errors = judge_error_types.get(
+        "task_visual_budget_exceeded",
+        0,
+    )
+    gate_blockers = list(anchor_integrity_blockers)
+    if targetable_errors >= baseline_targetable_errors:
+        gate_blockers.append("no_finalization_improvement")
+    if non_targetable_errors:
+        gate_blockers.append("non_targetable_judge_errors_present")
+    if audio_call_count == 0:
+        gate_blockers.append("audio_wiring_not_exercised")
+    if visual_budget_errors > 0:
+        gate_blockers.append("visual_budget_exceeded")
+    if (
+        envelope_status != "below_44h_envelope"
+        and envelope_status != "incomplete_anchor_payload"
+    ):
+        gate_blockers.append(envelope_status)
+    return {
+        "method": contract["method"],
+        "baseline_is_like_for_like": False,
+        "baseline_caveat": (
+            "schema 1.0 pre-perception payload; mini metrics are a "
+            "main-judge-only reference, not a Sol Max multiplier"
+        ),
+        "anchor_task_count": task_count,
+        "measured_anchor_wall_sec": (
+            round(measured_wall_sec, 5)
+            if measured_wall_sec is not None else None
+        ),
+        "anchor_integrity": {
+            "status": "passed" if not anchor_integrity_blockers else "failed",
+            "blockers": anchor_integrity_blockers,
+        },
+        "components": components,
+        "projected_220_hours": projected_hours,
+        "chunk_envelope_hours": envelope_hours,
+        "envelope_status": envelope_status,
+        "unknown_perception": unknown_volume,
+        "diagnostic": {
+            "baseline_targetable_errors": baseline_targetable_errors,
+            "observed_targetable_errors": targetable_errors,
+            "targetable_status": targetable_status,
+            "non_targetable_errors": non_targetable_errors,
+            "status": diagnostic_status,
+        },
+        "audio_wiring": {
+            "call_count": audio_call_count,
+            "status": "passed" if audio_call_count > 0 else "failed_no_audio_calls",
+        },
+        "visual_budget": {
+            "task_visual_budget_exceeded": visual_budget_errors,
+            "status": "passed" if visual_budget_errors == 0 else "failed",
+        },
+        "full_run_gate": {
+            "status": (
+                "blocked" if gate_blockers else "eligible_for_owner_review"
+            ),
+            "blockers": gate_blockers,
+        },
+        "main_reference": {
+            "calls": contract["baseline_main_calls"],
+            "latency_sec": round(
+                contract["baseline_main_latency_ms"] / 1000,
+                5,
+            ),
+            "observed_calls": sum(
+                anchor["main"]["call_count"] for anchor in task_anchors
+            ),
+            "observed_latency_sec": round(total_main_latency_sec, 5),
+            "calls_ratio": round(
+                sum(anchor["main"]["call_count"] for anchor in task_anchors)
+                / contract["baseline_main_calls"],
+                6,
+            ),
+            "latency_ratio": round(
+                total_main_latency_sec
+                / (contract["baseline_main_latency_ms"] / 1000),
+                6,
+            ),
+        },
     }
 
 
@@ -582,21 +1176,34 @@ def analyze(path: Path) -> dict:
     judge_error_types = Counter()
     for anchor in task_anchors:
         judge_error_types.update(anchor["judge_error_types"])
-    measured_task_wall_times = [
-        anchor["wall_clock_sec"]
-        for anchor in task_anchors
-        if anchor["wall_clock_sec"] is not None
-    ]
-    projected_220_wall_hours = (
-        round(statistics.mean(measured_task_wall_times) * 220 / 3600, 2)
-        if measured_task_wall_times else None
+    modality_projection = _modality_normalized_projection(
+        grade,
+        task_anchors,
+        perception_usage,
+        total_main_latency_sec,
+        judge_error_types,
     )
-    if projected_220_wall_hours is None:
-        projection_status = "unmeasured"
-    elif projected_220_wall_hours >= 44:
-        projection_status = "at_or_above_44h_envelope"
+    if modality_projection is not None:
+        projected_220_wall_hours = modality_projection["projected_220_hours"]
+        projection_status = modality_projection["envelope_status"]
+        projection_method = modality_projection["method"]
     else:
-        projection_status = "below_44h_envelope"
+        measured_task_wall_times = [
+            anchor["wall_clock_sec"]
+            for anchor in task_anchors
+            if anchor["wall_clock_sec"] is not None
+        ]
+        projected_220_wall_hours = (
+            round(statistics.mean(measured_task_wall_times) * 220 / 3600, 2)
+            if measured_task_wall_times else None
+        )
+        if projected_220_wall_hours is None:
+            projection_status = "unmeasured"
+        elif projected_220_wall_hours >= 44:
+            projection_status = "at_or_above_44h_envelope"
+        else:
+            projection_status = "below_44h_envelope"
+        projection_method = "task_count_fallback"
 
     # PR3 Step 0 — effective (cache-discounted) cost. Skipped if the run
     # used the legacy v1 path (no cached_tokens captured).
@@ -707,6 +1314,8 @@ def analyze(path: Path) -> dict:
         "judge_error_types": dict(sorted(judge_error_types.items())),
         "projected_220_wall_hours": projected_220_wall_hours,
         "projection_status": projection_status,
+        "projection_method": projection_method,
+        "modality_projection": modality_projection,
     }
 
 
@@ -826,8 +1435,68 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
     )
     lines.append(
         "- projected_220_wall_hours: "
-        f"{a['projected_220_wall_hours']} ({a['projection_status']})"
+        f"{a['projected_220_wall_hours']} ({a['projection_status']}; "
+        f"method={a['projection_method']})"
     )
+    projection = a.get("modality_projection")
+    if projection is not None:
+        lines.append("")
+        lines.append("## Preregistered anchor decision")
+        lines.append(f"- baseline caveat: {projection['baseline_caveat']}")
+        lines.append(
+            "- anchor integrity: "
+            f"{projection['anchor_integrity']['status']} "
+            f"(blockers={projection['anchor_integrity']['blockers']})"
+        )
+        diagnostic = projection["diagnostic"]
+        lines.append(
+            "- targetable finalization errors: "
+            f"baseline={diagnostic['baseline_targetable_errors']}, "
+            f"observed={diagnostic['observed_targetable_errors']}, "
+            f"targetable_status={diagnostic['targetable_status']}, "
+            f"other={diagnostic['non_targetable_errors']}, "
+            f"status={diagnostic['status']}"
+        )
+        lines.append(
+            "- audio wiring: "
+            f"calls={projection['audio_wiring']['call_count']}, "
+            f"status={projection['audio_wiring']['status']}"
+        )
+        lines.append(
+            "- visual budget: "
+            f"task_visual_budget_exceeded="
+            f"{projection['visual_budget']['task_visual_budget_exceeded']}, "
+            f"status={projection['visual_budget']['status']}"
+        )
+        lines.append(
+            "- full-run gate: "
+            f"{projection['full_run_gate']['status']} "
+            f"(blockers={projection['full_run_gate']['blockers']})"
+        )
+        main_reference = projection["main_reference"]
+        lines.append(
+            "- mini main-judge-only reference: "
+            f"calls={main_reference['calls']} → "
+            f"{main_reference['observed_calls']} "
+            f"(ratio={main_reference['calls_ratio']}), latency="
+            f"{main_reference['latency_sec']}s → "
+            f"{main_reference['observed_latency_sec']}s "
+            f"(ratio={main_reference['latency_ratio']}); not a Sol Max multiplier"
+        )
+        lines.append("")
+        lines.append("| component | anchor latency (s) | scale | projected hours | normalization |")
+        lines.append("|---|--:|--:|--:|---|")
+        for component_name in ("main", "visual", "audio"):
+            component = projection["components"][component_name]
+            lines.append(
+                f"| {component_name} | {component['anchor_latency_sec']} | "
+                f"{component['scale']} | {component['projected_hours']} | "
+                f"{component['normalization']} |"
+            )
+        lines.append(
+            f"- component total: {projection['projected_220_hours']}h; "
+            f"44h gate={projection['envelope_status']}"
+        )
     lines.append("")
     lines.append("## Cost estimate")
     lines.append(f"- raw: {_fmt_cost(a['cost_estimate'])}")
