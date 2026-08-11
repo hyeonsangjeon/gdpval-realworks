@@ -1,14 +1,39 @@
 schema_version: "2.0"
-config_name: "validation_exp003_v2_sol_max_anchor3"
+config_name: "validation_exp003_v2_sol_max_anchor4"
 description: |
-  Paid three-task Sol Max anchor for exp003. Runtime grading semantics match
-  the pinned full rerun; only the config identity and expected task count differ.
+  Paid four-task Sol Max anchor for exp003. Runtime grading semantics match
+  the pinned full rerun; only the config identity and anchored task set differ.
 
 rerun_identity:
   experiment_id: "exp003_GPT52Chat_baseline_runner_exec"
-  expected_task_count: 3
+  expected_task_count: 4
   rubric_commit_sha: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
   inference_revision: "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f"
+  task_ids:
+    - "99ac6944-4ec6-4848-959c-a460ac705c6f"
+    - "4c18ebae-dfaa-4b76-b10c-61fcdf26734c"
+    - "40a8c4b1-b169-4f92-a38b-7f79685037ec"
+    - "a73fbc98-90d4-4134-a54f-2b1d0c838791"
+
+anchor_projection:
+  method: "modality_normalized_v1"
+  anchor_config_name: "validation_exp003_v2_sol_max_anchor4"
+  anchor_task_count: 4
+  anchor_ordered_task_ids_sha256: "29d5623a5cec85eb38f21fb73a2f3b06c66ed6a5fd6fd95948b979cd70a70bc9"
+  anchor_source_inference_repo_id: "HyeonSang/exp003_GPT52Chat_baseline_runner_exec"
+  baseline_payload_sha256: "b5cbb6a80c776b458f99f007841a946c1c5f9ec8bf60be052500713dd6f13570"
+  baseline_schema_version: "1.0"
+  baseline_perception_wired: false
+  baseline_main_calls: 234
+  baseline_main_latency_ms: 2449199.44
+  baseline_final_json_parse_failed: 13
+  baseline_empty_final_text: 9
+  anchor_visual_criteria: 43
+  anchor_audio_criteria: 13
+  full_task_count: 220
+  full_visual_criteria: 337
+  full_audio_criteria: 58
+  chunk_envelope_hours: 44
 
 judge:
   provider: "azure_openai"

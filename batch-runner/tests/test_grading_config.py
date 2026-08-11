@@ -176,7 +176,7 @@ def test_grade_workflow_defaults_to_v2_sol_max():
         "default_v2_tight.yaml",
         "regrade_exp003_v2_mini_score_excluded.yaml",
         "regrade_exp003_v2_sol_max_score_excluded.yaml",
-        "validation_exp003_v2_sol_max_anchor3.yaml",
+        "validation_exp003_v2_sol_max_anchor4.yaml",
         "validation_v2_mini_cohort3.yaml",
         "validation_v2_mini_cohort10.yaml",
     ],
@@ -273,9 +273,9 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
             "14fc577ea39d98c5",
         ),
         (
-            "validation_exp003_v2_sol_max_anchor3.yaml",
-            3,
-            "25653df2d5841c97",
+            "validation_exp003_v2_sol_max_anchor4.yaml",
+            4,
+            "6dcff620fbe8dbf3",
         ),
     ],
 )
@@ -292,23 +292,62 @@ def test_exp003_sol_max_configs_are_pinned_and_preserve_modalities(
     validate_grading_config(candidate)
 
     identity = candidate["rerun_identity"]
-    assert identity == {
+    expected_identity = {
         "experiment_id": "exp003_GPT52Chat_baseline_runner_exec",
         "expected_task_count": expected_task_count,
         "rubric_commit_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
         "inference_revision": "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f",
     }
+    if expected_task_count == 4:
+        expected_identity["task_ids"] = [
+            "99ac6944-4ec6-4848-959c-a460ac705c6f",
+            "4c18ebae-dfaa-4b76-b10c-61fcdf26734c",
+            "40a8c4b1-b169-4f92-a38b-7f79685037ec",
+            "a73fbc98-90d4-4134-a54f-2b1d0c838791",
+        ]
+    assert identity == expected_identity
     assert candidate["rubric"]["revision"] == identity["rubric_commit_sha"]
     assert hash_config(str(candidate_path)) == expected_hash
     assert candidate["judge"]["perception"]["audio"] == (
         baseline["judge"]["perception"]["audio"]
     )
     assert candidate["judge"]["perception"]["visual"]["call_cap_per_task"] == 72
+    if expected_task_count == 220:
+        assert "task_ids" not in identity
+        assert "anchor_projection" not in candidate
+    else:
+        assert candidate["anchor_projection"] == {
+            "method": "modality_normalized_v1",
+            "anchor_config_name": "validation_exp003_v2_sol_max_anchor4",
+            "anchor_task_count": 4,
+            "anchor_ordered_task_ids_sha256": (
+                "29d5623a5cec85eb38f21fb73a2f3b06c66ed6a5fd6fd95948b979cd70a70bc9"
+            ),
+            "anchor_source_inference_repo_id": (
+                "HyeonSang/exp003_GPT52Chat_baseline_runner_exec"
+            ),
+            "baseline_payload_sha256": (
+                "b5cbb6a80c776b458f99f007841a946c1c5f9ec8bf60be052500713dd6f13570"
+            ),
+            "baseline_schema_version": "1.0",
+            "baseline_perception_wired": False,
+            "baseline_main_calls": 234,
+            "baseline_main_latency_ms": 2449199.44,
+            "baseline_final_json_parse_failed": 13,
+            "baseline_empty_final_text": 9,
+            "anchor_visual_criteria": 43,
+            "anchor_audio_criteria": 13,
+            "full_task_count": 220,
+            "full_visual_criteria": 337,
+            "full_audio_criteria": 58,
+            "chunk_envelope_hours": 44,
+        }
 
     for key in ("config_name", "description"):
         baseline.pop(key)
         candidate.pop(key)
     candidate.pop("rerun_identity")
+    candidate.pop("anchor_projection", None)
     baseline["rubric"]["revision"] = identity["rubric_commit_sha"]
     assert candidate == baseline
 
@@ -329,6 +368,130 @@ def test_sol_max_rerun_identity_rejects_invalid_values(
     path = Path("grading_configs/regrade_exp003_v2_sol_max_score_excluded.yaml")
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
     config["rerun_identity"][field] = value
+
+    with pytest.raises(ValueError, match=message):
+        validate_grading_config(config)
+
+
+def test_sol_max_anchor_acceptance_is_preregistered():
+    readme = Path("grading_configs/README.md").read_text(encoding="utf-8")
+
+    for task_id in (
+        "99ac6944-4ec6-4848-959c-a460ac705c6f",
+        "40a8c4b1-b169-4f92-a38b-7f79685037ec",
+        "4c18ebae-dfaa-4b76-b10c-61fcdf26734c",
+        "a73fbc98-90d4-4134-a54f-2b1d0c838791",
+    ):
+        assert task_id in readme
+    for expected in (
+        "final_json_parse_failed",
+        "empty_final_text",
+        "2,449.19944",
+        "6dcff620fbe8dbf3",
+        "337 / 43",
+        "58 / 13",
+        "44-hour",
+        "main-judge-only reference",
+        "task_visual_budget_exceeded",
+    ):
+        assert expected in readme
+
+
+def test_anchor_task_ids_are_unique_and_match_expected_count():
+    path = Path("grading_configs/validation_exp003_v2_sol_max_anchor4.yaml")
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    identity = config["rerun_identity"]
+
+    assert identity["task_ids"] == [
+        "99ac6944-4ec6-4848-959c-a460ac705c6f",
+        "4c18ebae-dfaa-4b76-b10c-61fcdf26734c",
+        "40a8c4b1-b169-4f92-a38b-7f79685037ec",
+        "a73fbc98-90d4-4134-a54f-2b1d0c838791",
+    ]
+    assert len(identity["task_ids"]) == identity["expected_task_count"] == 4
+    assert len(set(identity["task_ids"])) == 4
+
+
+@pytest.mark.parametrize(
+    ("task_ids", "expected_task_count", "message"),
+    [
+        (["task-a", "task-a"], 2, "duplicate"),
+        (["task-a", "task-b"], 3, "expected_task_count"),
+        (["task-a,b", "task-c"], 2, "task_ids"),
+    ],
+)
+def test_rerun_identity_rejects_invalid_task_ids(
+    task_ids: list[str],
+    expected_task_count: int,
+    message: str,
+):
+    path = Path("grading_configs/validation_exp003_v2_sol_max_anchor4.yaml")
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["rerun_identity"]["task_ids"] = task_ids
+    config["rerun_identity"]["expected_task_count"] = expected_task_count
+
+    with pytest.raises(ValueError, match=message):
+        validate_grading_config(config)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda config: config.pop("rerun_identity"), "requires pinned"),
+        (
+            lambda config: config["anchor_projection"].__setitem__(
+                "baseline_perception_wired",
+                True,
+            ),
+            "perception",
+        ),
+        (
+            lambda config: config["anchor_projection"].__setitem__(
+                "anchor_audio_criteria",
+                0,
+            ),
+            "positive integers",
+        ),
+        (
+            lambda config: config["anchor_projection"].__setitem__(
+                "anchor_task_count",
+                3,
+            ),
+            "must match pinned task_ids",
+        ),
+        (
+            lambda config: config["anchor_projection"].__setitem__(
+                "anchor_config_name",
+                "wrong_config",
+            ),
+            "must match config_name",
+        ),
+        (
+            lambda config: config["anchor_projection"].__setitem__(
+                "anchor_ordered_task_ids_sha256",
+                "0" * 64,
+            ),
+            "must match pinned task_ids",
+        ),
+        (
+            lambda config: config["anchor_projection"].__setitem__(
+                "anchor_source_inference_repo_id",
+                "other/repo",
+            ),
+            "must match experiment source",
+        ),
+        (
+            lambda config: config["anchor_projection"].pop(
+                "full_visual_criteria"
+            ),
+            "versioned contract",
+        ),
+    ],
+)
+def test_anchor_projection_rejects_invalid_contract(mutation, message):
+    path = Path("grading_configs/validation_exp003_v2_sol_max_anchor4.yaml")
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    mutation(config)
 
     with pytest.raises(ValueError, match=message):
         validate_grading_config(config)

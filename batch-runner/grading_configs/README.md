@@ -8,7 +8,7 @@
 | `default_v2.yaml` | tool-calling judge | v2 | Historical gpt-5.4 medium comparison identity. Pass explicitly when reproducing that condition. |
 | `regrade_exp003_v2_mini_score_excluded.yaml` | tool-calling judge | v2 | Full-220 exp003 rerun only. Pins score-excluded semantics, the historical mini judge condition, rubric commit, inference revision, and exact task count. |
 | `regrade_exp003_v2_sol_max_score_excluded.yaml` | tool-calling judge | v2 | Planned full-220 exp003 Sol Max rerun. Pins score-excluded semantics, production judge/perception settings, rubric commit, inference revision, and exact task count. |
-| `validation_exp003_v2_sol_max_anchor3.yaml` | tool-calling judge | v2 | Paid three-task Sol Max anchor with the same runtime semantics and pinned source identities as the planned full rerun. |
+| `validation_exp003_v2_sol_max_anchor4.yaml` | tool-calling judge | v2 | Paid four-task Sol Max anchor with pinned diagnostic-error and visual/audio coverage, plus the same runtime semantics and source identities as the planned full rerun. |
 | `default_gpt5pro.yaml` | text-extract judge | v1 (`Judge` / `BatchJudge`) | Historical mini/text-extract comparison identity. Pass explicitly only for provenance-compatible analysis. |
 
 `grade-run.yml` defaults to `default_v2_sol_max.yaml`. The 1.05M context window
@@ -78,31 +78,107 @@ The pinned Sol Max identities are:
 | purpose | config | config hash | tasks |
 |---|---|---|---:|
 | full rerun | `regrade_exp003_v2_sol_max_score_excluded.yaml` | `14fc577ea39d98c5` | 220 |
-| paid anchor | `validation_exp003_v2_sol_max_anchor3.yaml` | `25653df2d5841c97` | 3 |
+| paid anchor | `validation_exp003_v2_sol_max_anchor4.yaml` | `6dcff620fbe8dbf3` | 4 |
 
 Both pin rubric commit `11e7900cdcac61bc4daf59e65feb238acda98fbf`
 and inference revision `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`.
 Their audio block remains the production `gpt-audio-1.5` configuration with a
 three-call task cap and 30-second trim, and their visual task cap remains 72.
 
-The first paid anchor is deliberately three tasks, not ten. There is no prior
-Sol Max grade payload, while the matching mini cohorts already report zero
-judge errors at both sizes. Three tasks bound the first exposure while still
-covering 536 mini baseline calls and four visual-perception calls. Consequently,
-the anchor can establish token/latency volume and detect an error-rate
-regression, but it cannot prove an error-rate reduction below the mini floor of
-zero. The ten-task mini baseline remains available for a later owner-approved
-expansion if the three-task anchor is operationally acceptable.
+The mini reference below is not like-for-like. Its tracked payload uses schema
+`1.0`, has no top-level `config_name` or `grader_source_hash`, and all 220 tasks
+have `perception_call_count=0`. Although its items are labelled with 337 visual
+and 58 audio routing decisions, those criteria predate perception wiring and
+were silently handled by the text judge. Therefore its calls and latency are a
+main-judge-only historical reference, not a "Sol Max multiplier" and not a
+basis for scaling newly active visual or audio work.
 
-| mini baseline | main calls | visual calls | audio calls | main tokens (in/out/cached) | visual tokens (in/out/cached) | audio tokens | summed judge latency | judge errors |
-|---|---:|---:|---:|---|---|---|---:|---:|
-| cohort3 | 532 | 4 | 0 | 4,540,399 / 176,531 / 1,955,328 | 4,751 / 1,032 / 0 | 0 / 0 / 0 | 41.2 min | 0 |
-| cohort10 | 1,333 | 26 | 0 | 6,833,450 / 369,014 / 3,389,440 | 30,282 / 6,836 / 0 | 0 / 0 / 0 | 88.8 min | 0 |
+### Pinned anchor tasks and selection rules
 
-These historical payloads predate task-level `grading_wall_time_ms`, so their
-true task wall-clock values cannot be reconstructed. The Sol Max anchor records
-that field prospectively and the analyzer projects serial 220-task wall time
-against the 44-hour resume envelope without inventing a USD estimate.
+The paid anchor pins these tasks in canonical inference-source order (the
+tracked payload array indices are authoritative):
+
+1. index 10 — `99ac6944-4ec6-4848-959c-a460ac705c6f`
+2. index 29 — `4c18ebae-dfaa-4b76-b10c-61fcdf26734c`
+3. index 78 — `40a8c4b1-b169-4f92-a38b-7f79685037ec`
+4. index 179 — `a73fbc98-90d4-4134-a54f-2b1d0c838791`
+
+The tasks were selected by targetable score-included mini errors, not by score.
+The baseline payload is
+`data/grades/exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__rubric_v2_tools_mini.json`
+(SHA-256
+`b5cbb6a80c776b458f99f007841a946c1c5f9ec8bf60be052500713dd6f13570`).
+
+| task | final JSON parse | empty final text | targetable | visual | audio | main calls | main latency |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `99ac6944-4ec6-4848-959c-a460ac705c6f` | 2 | 1 | 3 | 10 | 13 | 52 | 679.03787 s |
+| `4c18ebae-dfaa-4b76-b10c-61fcdf26734c` | 5 | 1 | 6 | 1 | 0 | 50 | 387.76369 s |
+| `40a8c4b1-b169-4f92-a38b-7f79685037ec` | 3 | 5 | 8 | 0 | 0 | 72 | 635.26040 s |
+| `a73fbc98-90d4-4134-a54f-2b1d0c838791` | 3 | 2 | 5 | 32 | 0 | 60 | 747.13748 s |
+| **Total** | **13** | **9** | **22** | **43** | **13** | **234** | **2,449.19944 s** |
+
+These 22 errors are all `final_json_parse_failed` or `empty_final_text`; none is
+wrong-format, rate-limit, content-policy, or selection failure. They cover 22%
+of the 100 historical score-included judge errors while adding 43 visual and 13
+audio criteria. Every latency value and the
+2,449.19944-second total above are derived from raw `judge_total_latency_ms`;
+display precision is decimal formatting, not per-task truncation.
+
+When config `rerun_identity.task_ids` is present, Step 8 resolves it through the
+existing `filter_tasks` validation path. Canonical source order is authoritative.
+CLI `--tasks` is accepted only when it resolves to the same ordered task set;
+otherwise the run fails. `--limit` must be either `0` or the pinned count (`4`),
+so the protected workflow may continue to pass `tasks_limit=4` without adding a
+new workflow input. Any pinned subset is emitted as a diagnostic grade.
+
+### Preregistered anchor decision
+
+The paid result is judged against the same four mini task rows above:
+
+1. **Diagnostic outcome.** Count `final_json_parse_failed` and
+   `empty_final_text` by task. Fewer than the mini baseline total of 22 is an
+   improvement; zero is elimination. A total of 22 or more is **no improvement**
+   and means the model-switch rationale has no diagnostic support. Other judge
+   errors make the diagnostic inconclusive and block the full run; they cannot
+   be credited as finalization improvement. The
+   baseline is the four selected rows in the 220-task payload above, not a
+   different cohort payload.
+2. **Operational reference.** Report observed main calls and main latency
+   against 234 calls and 2,449.19944 seconds. Label those ratios
+   **main-judge-only references**, never Sol Max multipliers, because the mini
+   baseline had no active perception. Also report main, visual, audio, and
+   unknown token/cache/call/latency planes. No USD amount is inferred.
+3. **Modality-normalized projection.** Never extrapolate the whole anchor by
+   task count alone. Project and sum these components independently:
+   - main plane: scale the measured non-perception wall/main component by
+     `220 / 4 = 55`;
+   - visual: scale measured visual latency by `337 / 43 ≈ 7.837209`;
+   - audio: scale measured audio latency by `58 / 13 ≈ 4.461538`.
+   Unknown perception makes the projection incomplete. Compare the known
+   component total with the 44-hour envelope.
+4. **Wiring and cap gates.** `audio.call_count` must be greater than zero;
+   otherwise report dead audio wiring and stop before 220. The count of
+   `task_visual_budget_exceeded` must be zero; any occurrence means visual work
+   was silently excluded at cap 72 and blocks the full run.
+
+   At or above 44 hours, stop before a full run and return to the owner with the
+   existing choices: expand the chunk range, reduce the visual cap, or approve
+   an explicit split/resume plan. This preparation authorizes none of them.
+
+The analyzer only projects a JSON-Schema-valid `1.3` diagnostic payload whose
+current repository config file matches the persisted config name and hash, and
+whose judge/perception, rubric, inference, prompt, and four source-ordered task
+identities match that preregistered config. Partial/resume payloads, missing,
+duplicate, or reordered tasks, incomplete task/item/summary usage, and any
+task-level error make the projection incomplete and block owner review.
+For an anchor config identity, a missing or `null` `anchor_projection` is also
+blocked rather than falling back to task-count extrapolation. Step 8 requires
+the persisted projection contract to exactly match the current config before
+accepting either a completed cache entry or a partial `--resume` payload.
+
+All diagnostic, operational, modality, audio, visual-budget, and envelope
+results must be reported numerically. Improvement alone does not justify the
+full run if any wiring, cap, unknown-attribution, or time gate fails.
 
 ## Archived (no longer recommended)
 

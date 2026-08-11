@@ -1528,7 +1528,58 @@ def test_resume_rejects_previous_score_semantics():
             source_inference_revision="b" * 40,
             grader_source_hash="c" * 64,
             renderer_fingerprint=None,
+            anchor_projection=None,
         )
+
+
+def _validate_resume_anchor_projection(
+    existing: dict,
+    expected: dict | None,
+) -> None:
+    s8._validate_grade_resume_identity(
+        existing,
+        experiment_id="exp003",
+        rubric_commit_sha="a" * 40,
+        prompt_version="v2.2",
+        config_hash="0123456789abcdef",
+        source_inference_repo_id="owner/repo",
+        source_inference_revision="b" * 40,
+        grader_source_hash="c" * 64,
+        renderer_fingerprint=None,
+        anchor_projection=expected,
+    )
+
+
+def _matching_resume_identity() -> dict:
+    return {
+        "schema_version": "1.3",
+        "experiment_id": "exp003",
+        "rubric": {"commit_sha": "a" * 40},
+        "prompt": {"version": "v2.2"},
+        "judge": {"config_hash": "0123456789abcdef"},
+        "source_inference_repo_id": "owner/repo",
+        "source_inference_revision": "b" * 40,
+        "grader_source_hash": "c" * 64,
+    }
+
+
+def test_resume_accepts_exact_anchor_projection_contract():
+    contract = {"method": "modality_normalized_v1"}
+    existing = _matching_resume_identity()
+    existing["anchor_projection"] = contract
+
+    _validate_resume_anchor_projection(existing, contract)
+
+
+@pytest.mark.parametrize("persisted", ["missing", None, {"method": "other"}])
+def test_resume_rejects_anchor_projection_contract_drift(persisted):
+    contract = {"method": "modality_normalized_v1"}
+    existing = _matching_resume_identity()
+    if persisted != "missing":
+        existing["anchor_projection"] = persisted
+
+    with pytest.raises(ValueError, match="anchor_projection"):
+        _validate_resume_anchor_projection(existing, contract)
 
 
 @pytest.mark.parametrize(
@@ -1578,6 +1629,179 @@ def test_pinned_rerun_identity_accepts_exact_full_run():
         rubric_commit_sha="a" * 40,
         inference_revision="b" * 40,
     )
+
+
+def _pinned_task_config() -> dict:
+    return {
+        "rerun_identity": {
+            "experiment_id": "exp003",
+            "expected_task_count": 2,
+            "rubric_commit_sha": "a" * 40,
+            "inference_revision": "b" * 40,
+            "task_ids": ["task-002", "task-003"],
+        }
+    }
+
+
+def _selection_inference() -> dict:
+    return {
+        "results": [
+            {"task_id": "task-001"},
+            {"task_id": "task-002"},
+            {"task_id": "task-003"},
+        ]
+    }
+
+
+def test_config_pinned_tasks_apply_without_cli_selection():
+    selected, pinned = s8.filter_tasks_for_config(
+        _selection_inference(),
+        _pinned_task_config(),
+        tasks_csv=None,
+        limit=0,
+    )
+
+    assert [task["task_id"] for task in selected] == ["task-002", "task-003"]
+    assert pinned is True
+
+
+def test_matching_cli_tasks_are_accepted_in_canonical_source_order():
+    selected, pinned = s8.filter_tasks_for_config(
+        _selection_inference(),
+        _pinned_task_config(),
+        tasks_csv="task-003,task-002",
+        limit=2,
+    )
+
+    assert [task["task_id"] for task in selected] == ["task-002", "task-003"]
+    assert pinned is True
+
+
+@pytest.mark.parametrize(
+    ("tasks_csv", "limit"),
+    [
+        ("task-001,task-002", 2),
+        (None, 1),
+        (None, 3),
+    ],
+)
+def test_pinned_selection_rejects_cli_or_limit_mismatch(tasks_csv, limit):
+    with pytest.raises(ValueError, match="pinned task selection"):
+        s8.filter_tasks_for_config(
+            _selection_inference(),
+            _pinned_task_config(),
+            tasks_csv=tasks_csv,
+            limit=limit,
+        )
+
+
+def test_pinned_runtime_identity_requires_exact_ordered_task_ids():
+    config = _pinned_task_config()
+
+    s8._validate_pinned_rerun_identity(
+        config,
+        experiment_id="exp003",
+        task_ids=["task-002", "task-003"],
+        rubric_commit_sha="a" * 40,
+        inference_revision="b" * 40,
+    )
+    with pytest.raises(ValueError, match="task_ids"):
+        s8._validate_pinned_rerun_identity(
+            config,
+            experiment_id="exp003",
+            task_ids=["task-003", "task-002"],
+            rubric_commit_sha="a" * 40,
+            inference_revision="b" * 40,
+        )
+
+
+def test_main_applies_config_pinned_tasks_as_diagnostic_without_cli(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    _setup_workspace(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["schema_version"] = "2.0"
+    config["rubric"]["revision"] = _FakeLoader().rubric_sha
+    config["rerun_identity"] = {
+        "experiment_id": "exp998_smoke_baseline_sample",
+        "expected_task_count": 2,
+        "rubric_commit_sha": _FakeLoader().rubric_sha,
+        "inference_revision": INFERENCE_SHA,
+        "task_ids": ["task-002", "task-003"],
+    }
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    github_output = tmp_path / "github-output.txt"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--dry-run",
+    ])
+
+    assert s8.main() == 0
+    assert "Dry-run tasks=2" in capsys.readouterr().out
+    output = github_output.read_text(encoding="utf-8")
+    assert "grade_status=diagnostic" in output
+
+
+def test_grade_payload_binds_anchor_projection_contract(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["anchor_projection"] = {
+        "method": "modality_normalized_v1",
+        "anchor_config_name": config["config_name"],
+        "anchor_task_count": 2,
+        "anchor_ordered_task_ids_sha256": s8._ordered_task_ids_sha256(
+            ["task-002", "task-003"]
+        ),
+        "anchor_source_inference_repo_id": "owner/repo",
+        "baseline_payload_sha256": "b" * 64,
+        "baseline_schema_version": "1.0",
+        "baseline_perception_wired": False,
+        "baseline_main_calls": 234,
+        "baseline_main_latency_ms": 2_449_199.44,
+        "baseline_final_json_parse_failed": 13,
+        "baseline_empty_final_text": 9,
+        "anchor_visual_criteria": 43,
+        "anchor_audio_criteria": 13,
+        "full_task_count": 220,
+        "full_visual_criteria": 337,
+        "full_audio_criteria": 58,
+        "chunk_envelope_hours": 44,
+    }
+    routes = s8.preflight_routes(
+        s8.grader_route_workloads(config),
+        **s8.grader_transport_options(config),
+    )
+
+    payload = s8._build_grade_payload(
+        "exp998_smoke_baseline_sample",
+        {},
+        config,
+        "0123456789abcdef",
+        _FakeLoader(),
+        "v2.2",
+        [],
+        "c" * 64,
+        "owner/repo",
+        INFERENCE_SHA,
+        azure_ai_runtime_fingerprint=routes[0]["runtime_fingerprint"],
+        azure_ai_routes=routes,
+        run_status="diagnostic",
+        expected_task_ids=["task-002", "task-003"],
+    )
+
+    assert payload["anchor_projection"] == config["anchor_projection"]
+    s8._validate_schema(payload)
 
 
 def test_pinned_rerun_identity_fails_before_route_preflight(

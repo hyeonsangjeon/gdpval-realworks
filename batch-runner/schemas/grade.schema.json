@@ -235,6 +235,50 @@
       "type": ["string", "null"],
       "pattern": "^[0-9a-f]{40}$"
     },
+    "anchor_projection": {
+      "type": ["object", "null"],
+      "required": [
+        "method",
+        "anchor_config_name",
+        "anchor_task_count",
+        "anchor_ordered_task_ids_sha256",
+        "anchor_source_inference_repo_id",
+        "baseline_payload_sha256",
+        "baseline_schema_version",
+        "baseline_perception_wired",
+        "baseline_main_calls",
+        "baseline_main_latency_ms",
+        "baseline_final_json_parse_failed",
+        "baseline_empty_final_text",
+        "anchor_visual_criteria",
+        "anchor_audio_criteria",
+        "full_task_count",
+        "full_visual_criteria",
+        "full_audio_criteria",
+        "chunk_envelope_hours"
+      ],
+      "properties": {
+        "method": {"const": "modality_normalized_v1"},
+        "anchor_config_name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "anchor_task_count": {"type": "integer", "minimum": 1},
+        "anchor_ordered_task_ids_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "anchor_source_inference_repo_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "baseline_payload_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "baseline_schema_version": {"const": "1.0"},
+        "baseline_perception_wired": {"const": false},
+        "baseline_main_calls": {"type": "integer", "minimum": 1},
+        "baseline_main_latency_ms": {"type": "number", "exclusiveMinimum": 0},
+        "baseline_final_json_parse_failed": {"type": "integer", "minimum": 1},
+        "baseline_empty_final_text": {"type": "integer", "minimum": 1},
+        "anchor_visual_criteria": {"type": "integer", "minimum": 1},
+        "anchor_audio_criteria": {"type": "integer", "minimum": 1},
+        "full_task_count": {"type": "integer", "minimum": 1},
+        "full_visual_criteria": {"type": "integer", "minimum": 1},
+        "full_audio_criteria": {"type": "integer", "minimum": 1},
+        "chunk_envelope_hours": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
     "source_azure_ai_routes": {
       "type": "array",
       "items": {
