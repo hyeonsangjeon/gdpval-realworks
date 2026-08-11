@@ -275,7 +275,7 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
         (
             "validation_exp003_v2_sol_max_anchor4.yaml",
             4,
-            "6dcff620fbe8dbf3",
+            "7f3c7c2e542cf580",
         ),
     ],
 )
@@ -299,6 +299,7 @@ def test_exp003_sol_max_configs_are_pinned_and_preserve_modalities(
         "inference_revision": "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f",
     }
     if expected_task_count == 4:
+        expected_identity["allow_legacy_missing_provenance"] = True
         expected_identity["task_ids"] = [
             "99ac6944-4ec6-4848-959c-a460ac705c6f",
             "4c18ebae-dfaa-4b76-b10c-61fcdf26734c",
@@ -314,6 +315,7 @@ def test_exp003_sol_max_configs_are_pinned_and_preserve_modalities(
     assert candidate["judge"]["perception"]["visual"]["call_cap_per_task"] == 72
     if expected_task_count == 220:
         assert "task_ids" not in identity
+        assert "allow_legacy_missing_provenance" not in identity
         assert "anchor_projection" not in candidate
     else:
         assert candidate["anchor_projection"] == {
@@ -387,7 +389,7 @@ def test_sol_max_anchor_acceptance_is_preregistered():
         "final_json_parse_failed",
         "empty_final_text",
         "2,449.19944",
-        "6dcff620fbe8dbf3",
+        "7f3c7c2e542cf580",
         "337 / 43",
         "58 / 13",
         "44-hour",
@@ -431,6 +433,25 @@ def test_rerun_identity_rejects_invalid_task_ids(
     config["rerun_identity"]["expected_task_count"] = expected_task_count
 
     with pytest.raises(ValueError, match=message):
+        validate_grading_config(config)
+
+
+@pytest.mark.parametrize("value", ["true", 1, [], {}])
+def test_rerun_identity_rejects_non_boolean_legacy_allowance(value):
+    path = Path("grading_configs/validation_exp003_v2_sol_max_anchor4.yaml")
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["rerun_identity"]["allow_legacy_missing_provenance"] = value
+
+    with pytest.raises(ValueError, match="must be boolean"):
+        validate_grading_config(config)
+
+
+def test_legacy_allowance_requires_pinned_task_subset():
+    path = Path("grading_configs/regrade_exp003_v2_sol_max_score_excluded.yaml")
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["rerun_identity"]["allow_legacy_missing_provenance"] = True
+
+    with pytest.raises(ValueError, match="requires pinned task_ids"):
         validate_grading_config(config)
 
 

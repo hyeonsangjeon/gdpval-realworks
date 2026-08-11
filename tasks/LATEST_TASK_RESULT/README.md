@@ -1,50 +1,47 @@
 # Latest Task Result
 
 - Updated: 2026-08-11
-- Status: Sol Max anchor4 selection and modality-normalized projection are
-  reviewed and validated; no paid grading was dispatched
+- Status: exact-revision legacy provenance wiring is reviewed and validated;
+  no paid grading was dispatched
 
-## Current Task: Sol Max Anchor4 Finalization
+## Current Task: Sol Max Anchor Legacy Provenance Wiring
 
 ### Task
 
-- Replace the targetable-error-heavy three-task anchor with four source-ordered
-  tasks that also exercise visual and audio perception.
-- Pin exact task selection and projection identity without changing the grading
-  workflow, historical grades, or the full-220 Sol Max config.
-- Extrapolate main, visual, and audio latency independently and fail closed on
-  incomplete identity, usage, perception attribution, or acceptance gates.
-- Do not dispatch the paid anchor or full 220-task run.
+- Permit the fixed four-task anchor revision, which predates inference
+  provenance sidecars, to use the existing parquet fallback.
+- Bind the exception to the anchor config identity and exact inference SHA;
+  preserve strict sidecar validation and fail-closed defaults everywhere else.
+- Apply one Python-tested policy to both protected workflow download paths
+  without changing Environment approval, OIDC, resume, or time-budget gates.
+- Do not dispatch paid grading, upload a sidecar, or modify historical grades.
 
 ### Result
 
-- Replaced `validation_exp003_v2_sol_max_anchor3.yaml` with
-  `validation_exp003_v2_sol_max_anchor4.yaml`, preserving production Sol Max
-  main/visual/finalization settings, `gpt-audio-1.5` with call cap 3 and
-  30-second trim, and visual task cap 72.
-- `rerun_identity.task_ids` pins four IDs in canonical source order. Step 8
-  reuses the existing task filter, rejects config/CLI/limit conflicts, emits a
-  diagnostic grade, and requires an exact projection-contract match for cached
-  or resumed payloads.
-- The versioned `anchor_projection` binds the config name/hash, ordered-task
-  digest, source repository, baseline payload, counts, and 44-hour envelope
-  into both config validation and the grade payload schema.
-- The analyzer reloads the exact repository config and verifies schema,
-  config/runtime, rubric, prompt, inference, task-order, usage, and task-error
-  identity before producing a numeric projection.
-- Main latency scales by `220/4 = 55`, visual by `337/43`, and audio by `58/13`.
-  Unknown perception attribution makes the projection incomplete.
-- The full-run gate blocks non-targetable judge errors, no finalization
-  improvement, zero audio calls, `task_visual_budget_exceeded`, incomplete
-  identity/usage, and projected duration at or above 44 hours. A clean anchor
-  is only `eligible_for_owner_review`; it never authorizes a full run.
+- Added `rerun_identity.allow_legacy_missing_provenance: true` only to
+  `validation_exp003_v2_sol_max_anchor4.yaml`. Step 8 requires a strict boolean
+  and pinned task IDs, so the declaration participates in config and grader
+  source identity.
+- The downloader requires the exact experiment plus requested and resolved
+  lowercase inference SHA before honoring the declaration. Blank revisions,
+  aliases, uppercase SHA text, identity drift, and unpinned configs are denied.
+- Only `RemoteEntryNotFoundError` for the sidecar is accepted. Embedded source
+  routes, local cache misses, file errors, timeout, HTTP 401/403, malformed
+  JSON, and sidecar identity mismatch still fail.
+- Both dry-run validation and paid grading pass the same quoted config path to
+  the downloader. No raw legacy override or workflow input was added.
+- Step 8 preserves `source_azure_ai_provenance_status: legacy-missing` and
+  forces these results into the diagnostic output scope.
+- A model-free download of the pinned HF revision reconstructed 220 rows from
+  parquet and produced the exact revision, empty source routes, and
+  `legacy-missing` status. No deliverables, grade payloads, or HF files changed.
 
 ### Fixed Identities
 
 | Purpose | Config hash | Tasks |
 |---|---|---:|
 | Full rerun | `14fc577ea39d98c5` | 220 |
-| Paid anchor | `6dcff620fbe8dbf3` | 4 |
+| Paid anchor | `7f3c7c2e542cf580` | 4 |
 
 - Experiment: `exp003_GPT52Chat_baseline_runner_exec`.
 - Rubric commit: `11e7900cdcac61bc4daf59e65feb238acda98fbf`.
@@ -53,47 +50,49 @@
   `29d5623a5cec85eb38f21fb73a2f3b06c66ed6a5fd6fd95948b979cd70a70bc9`.
 - Baseline payload SHA-256:
   `b5cbb6a80c776b458f99f007841a946c1c5f9ec8bf60be052500713dd6f13570`.
+- Anchor grader source hash:
+  `b00e83209ab6ca93a147da5bcfd02facce922e381fa01b2f73559b0d14631ab9`.
 
-### Anchor Decision
+### Provenance Boundary
 
-- Source indices: `10`, `29`, `78`, and `179`.
-- Task IDs: `99ac6944-4ec6-4848-959c-a460ac705c6f`,
-  `4c18ebae-dfaa-4b76-b10c-61fcdf26734c`,
-  `40a8c4b1-b169-4f92-a38b-7f79685037ec`, and
-  `a73fbc98-90d4-4134-a54f-2b1d0c838791`.
-- Baseline totals: 13 final-JSON parse failures, nine empty finals, 43 visual
-  criteria, 13 audio criteria, 234 main calls, and 2,449.19944 seconds of main
-  latency. The full baseline contains 337 visual and 58 audio criteria.
-- The schema `1.0` mini baseline has zero perception calls across all 220 tasks;
-  it is a main-judge-only reference, not a Sol Max multiplier.
+- The fixed inference revision has parquet data but no
+  `step2_inference_results.json` or `inference_provenance.json`; it was produced
+  before sidecars became mandatory.
+- The allowance does not synthesize provenance. It records the degradation as
+  `legacy-missing`, keeps source routes empty, and preserves diagnostic scope.
+- `regrade_exp003_v2_sol_max_score_excluded.yaml` has no declaration. A future
+  full-220 run therefore remains blocked on missing sidecar provenance unless
+  the owner separately reviews a new identity-bound exception.
 
 ### Verification
 
-- Analyzer and tracked baseline contracts: 42 passed.
-- Config, Step 8, and grade schema: 267 passed.
-- Complete backend: 3,069 passed, 6 skipped, 45 integration tests deselected.
+- Downloader contracts: 56 passed.
+- Grading config: 74 passed; Step 8: 161 passed.
+- Complete backend: 3,099 passed, 9 skipped, 45 integration tests deselected.
 - Self-preparing aggregate suite: 105 passed, 1 expected Ruby skip.
 - `npm run build`: passed with 2,783 transformed modules.
-- `py_compile`, focused Ruff, VS Code diagnostics, and `git diff --check`:
-  passed.
-- The full Sol Max and mini comparison configs, workflows, and `data/grades`
-  are unchanged. No credential, workflow dispatch, model call, or paid
-  operation ran.
+- Model-free pinned-revision download: 220 rows, exact SHA, empty routes,
+  `legacy-missing` status.
+- `py_compile`, focused Ruff, workflow YAML parsing, VS Code diagnostics, and
+  `git diff --check`: passed.
+- Historical grades, HF data, full/mini configs, Environment approval, OIDC,
+  resume, and time-budget behavior are unchanged. No credentialed workflow
+  dispatch, model call, or paid operation ran.
 
 ### Review Evidence
 
 - Reviewed substantive head:
-  `ba7b1661fa7aadaa77192ec7b547826e123de5a7`.
-- Independent `grading-engineer` and `first-reviewer` verdicts: `APPROVE`, with
-  no blocking findings.
+  `70de50f829f928f88f3bc6b4f6a71b01a8a820bf`.
+- Independent `llm-systems-engineer`, `grading-engineer`, `extreme-reasoner`,
+  and `first-reviewer` verdicts: `APPROVE`, with no blocking findings.
 
 ### Remaining Work
 
-- The owner decides whether and when to merge the reviewed preparation change.
-- After the configs reach exact `main`, a separate owner-approved protected
-  grading dispatch may run the four-task anchor. Its artifact must pass every
-  preregistered diagnostic, identity, usage, audio, visual-budget, attribution,
-  and 44-hour gate before the owner considers a full run.
+- The owner decides whether and when to merge this protected workflow change.
+- After it reaches exact `main`, a separate owner-approved protected dispatch
+  may run only the four-task anchor with explicit config and pinned revision.
+- The resulting artifact must still pass every preregistered identity, usage,
+  diagnostic, audio, visual-budget, attribution, and 44-hour gate.
 - This preparation neither dispatches nor authorizes the full 220-task run.
 - Do not create a documentation-only PR to record this change's eventual merge
   metadata.

@@ -479,7 +479,10 @@ def validate_grading_config(config: dict) -> None:
             "rubric_commit_sha",
             "inference_revision",
         }
-        allowed_identity_fields = required_identity_fields | {"task_ids"}
+        allowed_identity_fields = required_identity_fields | {
+            "task_ids",
+            "allow_legacy_missing_provenance",
+        }
         identity_fields = set(rerun_identity)
         if (
             not required_identity_fields.issubset(identity_fields)
@@ -488,7 +491,7 @@ def validate_grading_config(config: dict) -> None:
             raise ValueError(
                 "rerun_identity must contain experiment_id, "
                 "expected_task_count, rubric_commit_sha, and inference_revision; "
-                "task_ids is the only optional field"
+                "task_ids and allow_legacy_missing_provenance are optional"
             )
         experiment_id = rerun_identity["experiment_id"]
         if not isinstance(experiment_id, str) or not re.fullmatch(
@@ -526,6 +529,21 @@ def validate_grading_config(config: dict) -> None:
                 raise ValueError(
                     "rerun_identity.task_ids count must match expected_task_count"
                 )
+        allow_legacy_provenance = rerun_identity.get(
+            "allow_legacy_missing_provenance"
+        )
+        if (
+            allow_legacy_provenance is not None
+            and type(allow_legacy_provenance) is not bool
+        ):
+            raise ValueError(
+                "rerun_identity.allow_legacy_missing_provenance must be boolean"
+            )
+        if allow_legacy_provenance is True and not task_ids:
+            raise ValueError(
+                "rerun_identity.allow_legacy_missing_provenance requires "
+                "pinned task_ids"
+            )
 
     anchor_projection = config.get("anchor_projection")
     if anchor_projection is not None:

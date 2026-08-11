@@ -12,32 +12,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
-- **Sol Max anchor4 task selection and modality-normalized projection** -
-  replace the three-task anchor with a four-task diagnostic/perception anchor
-  pinned to canonical inference-source order. The selected mini rows contain
-  13 `final_json_parse_failed` and nine `empty_final_text` outcomes, 234 main
-  calls, 2,449.19944 seconds of main latency, 43 visual criteria, and 13 audio
-  criteria. The tracked schema `1.0` baseline has no active perception, so it is
-  explicitly a main-judge-only reference rather than a Sol Max multiplier.
-  Step 8 now binds exact task IDs and an `anchor_projection` contract into the
-  config and grade payload, rejects CLI/limit conflicts, persists the subset as
-  diagnostic, and requires cache/resume contracts to match exactly. The
-  analyzer validates the current grade schema and repository config identity,
-  then projects main by `220/4`, visual by `337/43`, and audio by `58/13`.
-  Partial, reordered, malformed, identity-drifted, usage-incomplete, or
-  task-error payloads cannot emit a numeric projection. Non-targetable judge
-  errors, dead audio wiring, visual-budget overflow, unknown perception, no
-  finalization improvement, and a projected duration at or above 44 hours all
-  block the full-run gate; a clean result is only eligible for owner review.
-  The anchor config hash is `6dcff620fbe8dbf3`; the unchanged full-220 config
-  remains `14fc577ea39d98c5`. Validation passes 3,069 backend tests with six
-  skips and 45 integration deselections, 42 analyzer/baseline tests, 267
-  config/Step 8/schema tests, and 105 aggregate tests with one expected skip.
-  The production build transforms 2,783 modules, and `py_compile`, focused
-  Ruff, diagnostics, and diff checks pass. No workflow, historical grade,
-  protected comparison config, credential, model call, or paid dispatch was
-  changed or executed. Independent grading and code reviews approved
-  substantive head `ba7b1661fa7aadaa77192ec7b547826e123de5a7`.
+- **Sol Max anchor4 and revision-scoped legacy provenance wiring** - keep the
+  four source-ordered diagnostic/perception tasks and modality-normalized
+  projection while allowing their fixed inference revision to use the parquet
+  fallback without an `inference_provenance.json` sidecar. That revision,
+  `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`, predates the sidecar requirement.
+  The exception is a strict boolean in the anchor config identity and requires
+  the exact experiment, requested and resolved lowercase SHA, and pinned task
+  subset. It accepts only a confirmed remote sidecar 404; embedded routes,
+  local cache misses, file errors, timeouts, HTTP 401/403, and malformed or
+  mismatched sidecars remain fail-closed. Both protected workflow download
+  paths pass the same config to this Python policy without exposing a global
+  workflow switch. Results retain an empty source route list,
+  `source_azure_ai_provenance_status: legacy-missing`, and diagnostic status.
+  The full-220 Sol Max config has no allowance and remains hash
+  `14fc577ea39d98c5`; the anchor config hash is now `7f3c7c2e542cf580`
+  and its grader source hash is
+  `b00e83209ab6ca93a147da5bcfd02facce922e381fa01b2f73559b0d14631ab9`.
+  A model-free download of the pinned HF revision reconstructed all 220 source
+  rows and confirmed the exact revision, empty routes, and `legacy-missing`
+  status. Validation passes 3,099 backend tests with nine skips and 45
+  integration deselections, 56 downloader tests, 74 grading-config tests, 161
+  Step 8 tests, and 105 aggregate tests with one expected skip. The production
+  build transforms 2,783 modules; `py_compile`, focused Ruff, workflow YAML,
+  diagnostics, and diff checks pass. Environment approval, OIDC, resume relay,
+  time budget, historical grades, protected comparison configs, and HF data
+  are unchanged. No workflow dispatch, model call, or paid operation ran.
+  Independent systems, grading, security, and code reviews approved substantive
+  head `70de50f829f928f88f3bc6b4f6a71b01a8a820bf`.
 - **Judge errors excluded from score denominators** - make `judge_error` a
   visible unscored outcome rather than a model failure. Runtime aggregation now
   overrides stale producer flags, excludes judge failures from task numerators,

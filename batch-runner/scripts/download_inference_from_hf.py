@@ -25,7 +25,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 from huggingface_hub import HfApi, hf_hub_download, snapshot_download
-from huggingface_hub.errors import EntryNotFoundError
+from huggingface_hub.errors import EntryNotFoundError, RemoteEntryNotFoundError
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parent.parent
 if str(BATCH_RUNNER_ROOT) not in sys.path:
@@ -44,6 +44,7 @@ from core.inference_manifest import (  # noqa: E402
 
 
 FULL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+FULL_LOWER_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _hf_token() -> str | None:
@@ -75,7 +76,15 @@ def parse_args() -> argparse.Namespace:
             "an exact leading cohort"
         ),
     )
-    parser.add_argument(
+    legacy_group = parser.add_mutually_exclusive_group()
+    legacy_group.add_argument(
+        "--grading-config",
+        help=(
+            "Grading config under grading_configs/ whose pinned identity may "
+            "authorize one legacy revision without a provenance sidecar"
+        ),
+    )
+    legacy_group.add_argument(
         "--allow-legacy-missing-provenance",
         action="store_true",
         help="Allow non-publishable analysis of revisions without a provenance sidecar",
@@ -103,6 +112,87 @@ def resolve_immutable_revision(repo_id: str, revision: str = "") -> str:
     if not isinstance(resolved, str) or not FULL_SHA_RE.fullmatch(resolved):
         raise ValueError(f"HF dataset revision did not resolve to a full commit SHA: {repo_id}")
     return resolved.lower()
+
+
+def _load_repository_grading_config(path_value: str) -> dict:
+    relative = Path(path_value)
+    if (
+        relative.is_absolute()
+        or relative.parent != Path("grading_configs")
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml", relative.name)
+    ):
+        raise ValueError(
+            "--grading-config must name one YAML file under grading_configs/"
+        )
+    config_root = (BATCH_RUNNER_ROOT / "grading_configs").resolve()
+    candidate = BATCH_RUNNER_ROOT / relative
+    if candidate.is_symlink() or not candidate.is_file():
+        raise ValueError("--grading-config must be a regular non-symlink file")
+    resolved = candidate.resolve()
+    if resolved.parent != config_root or resolved != candidate.absolute():
+        raise ValueError("--grading-config must remain inside grading_configs/")
+    try:
+        config = yaml.safe_load(candidate.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError("--grading-config could not be loaded") from exc
+    if not isinstance(config, dict):
+        raise ValueError("--grading-config must contain a YAML object")
+    return config
+
+
+def resolve_legacy_missing_provenance_allowance(
+    config: dict,
+    *,
+    experiment: str,
+    requested_revision: str,
+    resolved_revision: str,
+) -> bool:
+    identity = config.get("rerun_identity")
+    if not isinstance(identity, dict):
+        return False
+    declaration = identity.get("allow_legacy_missing_provenance")
+    if declaration is None:
+        return False
+    if type(declaration) is not bool:
+        raise ValueError(
+            "rerun_identity.allow_legacy_missing_provenance must be boolean"
+        )
+    if declaration is False:
+        return False
+
+    task_ids = identity.get("task_ids")
+    expected_count = identity.get("expected_task_count")
+    if (
+        not isinstance(task_ids, list)
+        or not task_ids
+        or len(task_ids) != len(set(task_ids))
+        or type(expected_count) is not int
+        or expected_count != len(task_ids)
+    ):
+        raise ValueError(
+            "legacy missing provenance allowance requires pinned task_ids"
+        )
+    if identity.get("experiment_id") != experiment:
+        raise ValueError(
+            "legacy missing provenance allowance experiment mismatch"
+        )
+    pinned_revision = identity.get("inference_revision")
+    if (
+        not isinstance(pinned_revision, str)
+        or not FULL_LOWER_SHA_RE.fullmatch(pinned_revision)
+    ):
+        raise ValueError(
+            "legacy missing provenance allowance requires a pinned lowercase SHA"
+        )
+    if requested_revision != pinned_revision:
+        raise ValueError(
+            "legacy missing provenance allowance requested revision mismatch"
+        )
+    if resolved_revision != pinned_revision:
+        raise ValueError(
+            "legacy missing provenance allowance resolved revision mismatch"
+        )
+    return True
 
 
 def _coerce_list(value: object) -> list[str]:
@@ -175,7 +265,7 @@ def _attach_inference_provenance(
             revision=revision,
             token=_hf_token(),
         )
-    except (EntryNotFoundError, FileNotFoundError) as exc:
+    except RemoteEntryNotFoundError as exc:
         if had_embedded_routes or not allow_legacy_missing_provenance:
             raise ValueError(
                 "inference route provenance sidecar is missing"
@@ -340,6 +430,16 @@ def main() -> int:
     revision = resolve_immutable_revision(repo_id, args.revision)
     print(f"Resolved inference revision: {revision}")
 
+    config_allowance = False
+    if args.grading_config:
+        grading_config = _load_repository_grading_config(args.grading_config)
+        config_allowance = resolve_legacy_missing_provenance_allowance(
+            grading_config,
+            experiment=args.experiment,
+            requested_revision=args.revision,
+            resolved_revision=revision,
+        )
+
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -349,7 +449,7 @@ def main() -> int:
         revision,
         out,
         allow_legacy_missing_provenance=(
-            args.allow_legacy_missing_provenance
+            args.allow_legacy_missing_provenance or config_allowance
         ),
     )
     payload = json.loads(out.read_text(encoding="utf-8"))

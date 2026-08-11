@@ -6,11 +6,42 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pandas as pd
 import pytest
+from huggingface_hub.errors import (
+    HfHubHTTPError,
+    LocalEntryNotFoundError,
+    RemoteEntryNotFoundError,
+)
 
 
 FULL_SHA = "a" * 40
+
+
+def _legacy_config(*, declaration=True, experiment="exp", revision=FULL_SHA):
+    return {
+        "rerun_identity": {
+            "experiment_id": experiment,
+            "expected_task_count": 1,
+            "rubric_commit_sha": "b" * 40,
+            "inference_revision": revision,
+            "allow_legacy_missing_provenance": declaration,
+            "task_ids": ["task-1"],
+        }
+    }
+
+
+def _remote_missing(message="missing"):
+    return RemoteEntryNotFoundError(
+        message,
+        response=httpx.Response(
+            404,
+            request=httpx.Request(
+                "GET", "https://huggingface.invalid/sidecar"
+            ),
+        ),
+    )
 
 
 def test_direct_script_entrypoint_resolves_core_import():
@@ -28,6 +59,7 @@ def test_direct_script_entrypoint_resolves_core_import():
 
     assert completed.returncode == 0
     assert "--revision" in completed.stdout
+    assert "--grading-config" in completed.stdout
     assert "--allow-legacy-missing-provenance" in completed.stdout
     assert completed.stderr == ""
     assert "No module named 'core'" not in completed.stdout
@@ -135,6 +167,198 @@ def test_revision_resolution_error_propagates(monkeypatch):
         module.resolve_immutable_revision("owner/repo", "main")
 
 
+@pytest.mark.parametrize(
+    "config",
+    [
+        {},
+        {"rerun_identity": {}},
+        _legacy_config(declaration=False),
+    ],
+)
+def test_legacy_allowance_defaults_to_fail_closed(config):
+    module = _load_module()
+
+    assert module.resolve_legacy_missing_provenance_allowance(
+        config,
+        experiment="exp",
+        requested_revision=FULL_SHA,
+        resolved_revision=FULL_SHA,
+    ) is False
+
+
+@pytest.mark.parametrize("declaration", ["true", 1, [], {}])
+def test_legacy_allowance_rejects_non_boolean_declaration(declaration):
+    module = _load_module()
+
+    with pytest.raises(ValueError, match="must be boolean"):
+        module.resolve_legacy_missing_provenance_allowance(
+            _legacy_config(declaration=declaration),
+            experiment="exp",
+            requested_revision=FULL_SHA,
+            resolved_revision=FULL_SHA,
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda config: config["rerun_identity"].pop("task_ids"),
+            "requires pinned task_ids",
+        ),
+        (
+            lambda config: config["rerun_identity"].__setitem__(
+                "expected_task_count", 2
+            ),
+            "requires pinned task_ids",
+        ),
+        (
+            lambda config: config["rerun_identity"].__setitem__(
+                "experiment_id", "other"
+            ),
+            "experiment mismatch",
+        ),
+        (
+            lambda config: config["rerun_identity"].__setitem__(
+                "inference_revision", "main"
+            ),
+            "pinned lowercase SHA",
+        ),
+    ],
+)
+def test_legacy_allowance_rejects_unscoped_identity(mutation, message):
+    module = _load_module()
+    config = _legacy_config()
+    mutation(config)
+
+    with pytest.raises(ValueError, match=message):
+        module.resolve_legacy_missing_provenance_allowance(
+            config,
+            experiment="exp",
+            requested_revision=FULL_SHA,
+            resolved_revision=FULL_SHA,
+        )
+
+
+@pytest.mark.parametrize("requested", ["", "main", "release", FULL_SHA.upper()])
+def test_legacy_allowance_rejects_noncanonical_requested_revision(requested):
+    module = _load_module()
+
+    with pytest.raises(ValueError, match="requested revision mismatch"):
+        module.resolve_legacy_missing_provenance_allowance(
+            _legacy_config(),
+            experiment="exp",
+            requested_revision=requested,
+            resolved_revision=FULL_SHA,
+        )
+
+
+@pytest.mark.parametrize("resolved", ["b" * 40, FULL_SHA.upper()])
+def test_legacy_allowance_rejects_resolved_revision_mismatch(resolved):
+    module = _load_module()
+
+    with pytest.raises(ValueError, match="resolved revision mismatch"):
+        module.resolve_legacy_missing_provenance_allowance(
+            _legacy_config(),
+            experiment="exp",
+            requested_revision=FULL_SHA,
+            resolved_revision=resolved,
+        )
+
+
+def test_legacy_allowance_accepts_only_exact_pinned_identity():
+    module = _load_module()
+
+    assert module.resolve_legacy_missing_provenance_allowance(
+        _legacy_config(),
+        experiment="exp",
+        requested_revision=FULL_SHA,
+        resolved_revision=FULL_SHA,
+    ) is True
+
+
+def test_main_resolves_anchor_config_allowance(monkeypatch, tmp_path):
+    module = _load_module()
+    revision = "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f"
+    experiment = "exp003_GPT52Chat_baseline_runner_exec"
+    observed = {}
+
+    monkeypatch.setattr(module, "resolve_repo_id", lambda value: "owner/repo")
+    monkeypatch.setattr(
+        module,
+        "resolve_immutable_revision",
+        lambda repo_id, requested: revision,
+    )
+
+    def fake_reconstruct(
+        experiment_value,
+        repo_id,
+        resolved_revision,
+        out,
+        *,
+        allow_legacy_missing_provenance,
+    ):
+        observed.update({
+            "experiment": experiment_value,
+            "repo_id": repo_id,
+            "revision": resolved_revision,
+            "allowance": allow_legacy_missing_provenance,
+        })
+        out.write_text(json.dumps({"results": []}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        module, "_download_or_reconstruct_inference", fake_reconstruct
+    )
+    monkeypatch.setattr(
+        module,
+        "_download_and_replace_deliverables",
+        lambda repo_id, resolved_revision, results: None,
+    )
+    output = tmp_path / "inference.json"
+    monkeypatch.setattr(
+        module,
+        "parse_args",
+        lambda: SimpleNamespace(
+            experiment=experiment,
+            output=str(output),
+            revision=revision,
+            expected_leading_task_id=[],
+            grading_config=(
+                "grading_configs/validation_exp003_v2_sol_max_anchor4.yaml"
+            ),
+            allow_legacy_missing_provenance=False,
+        ),
+    )
+
+    assert module.main() == 0
+    assert observed == {
+        "experiment": experiment,
+        "repo_id": "owner/repo",
+        "revision": revision,
+        "allowance": True,
+    }
+
+
+def test_grading_config_loader_rejects_external_and_symlink_paths(
+    monkeypatch, tmp_path
+):
+    module = _load_module()
+    config_root = tmp_path / "grading_configs"
+    config_root.mkdir()
+    config = config_root / "anchor.yaml"
+    config.write_text("rerun_identity: {}\n", encoding="utf-8")
+    link = config_root / "link.yaml"
+    link.symlink_to(config)
+    monkeypatch.setattr(module, "BATCH_RUNNER_ROOT", tmp_path)
+
+    assert module._load_repository_grading_config(
+        "grading_configs/anchor.yaml"
+    ) == {"rerun_identity": {}}
+    for path in ("anchor.yaml", "../anchor.yaml", "grading_configs/link.yaml"):
+        with pytest.raises(ValueError, match="grading-config"):
+            module._load_repository_grading_config(path)
+
+
 def test_downloaded_json_metadata_overrides_stale_values(monkeypatch, tmp_path):
     module = _load_module()
     downloaded = tmp_path / "downloaded.json"
@@ -154,19 +378,25 @@ def test_downloaded_json_metadata_overrides_stale_values(monkeypatch, tmp_path):
     def fake_hf_hub_download(**kwargs):
         calls.append(kwargs)
         if kwargs["filename"] == "inference_provenance.json":
-            raise module.EntryNotFoundError("legacy revision")
+            raise _remote_missing("legacy revision")
         return str(downloaded)
 
     monkeypatch.setenv("HF_TOKEN", "secret-token")
     monkeypatch.setattr(module, "hf_hub_download", fake_hf_hub_download)
     out = tmp_path / "step2_inference_results.json"
 
+    allowance = module.resolve_legacy_missing_provenance_allowance(
+        _legacy_config(),
+        experiment="exp",
+        requested_revision=FULL_SHA,
+        resolved_revision=FULL_SHA,
+    )
     module._download_or_reconstruct_inference(
         "exp",
         "owner/repo",
         FULL_SHA,
         out,
-        allow_legacy_missing_provenance=True,
+        allow_legacy_missing_provenance=allowance,
     )
 
     payload = json.loads(out.read_text(encoding="utf-8"))
@@ -192,7 +422,10 @@ def test_downloaded_json_metadata_overrides_stale_values(monkeypatch, tmp_path):
     ]
 
 
-def test_verified_sidecar_restores_endpoint_free_routes(monkeypatch, tmp_path):
+@pytest.mark.parametrize("allow_legacy", [False, True])
+def test_verified_sidecar_restores_endpoint_free_routes(
+    monkeypatch, tmp_path, allow_legacy
+):
     module = _load_module()
     route = {
         "endpoint_kind": "direct-v1",
@@ -239,7 +472,11 @@ def test_verified_sidecar_restores_endpoint_free_routes(monkeypatch, tmp_path):
     out = tmp_path / "output.json"
 
     module._download_or_reconstruct_inference(
-        "exp", "owner/repo", FULL_SHA, out
+        "exp",
+        "owner/repo",
+        FULL_SHA,
+        out,
+        allow_legacy_missing_provenance=allow_legacy,
     )
 
     payload = json.loads(out.read_text(encoding="utf-8"))
@@ -256,7 +493,7 @@ def test_missing_sidecar_is_rejected_without_explicit_legacy_override(
         module,
         "hf_hub_download",
         lambda **kwargs: (_ for _ in ()).throw(
-            module.EntryNotFoundError("missing")
+            _remote_missing()
         ),
     )
 
@@ -266,6 +503,116 @@ def test_missing_sidecar_is_rejected_without_explicit_legacy_override(
             experiment="exp",
             repo_id="owner/repo",
             revision=FULL_SHA,
+        )
+
+
+def test_missing_sidecar_with_embedded_routes_is_always_rejected(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(
+        module,
+        "hf_hub_download",
+        lambda **kwargs: (_ for _ in ()).throw(
+            _remote_missing()
+        ),
+    )
+
+    with pytest.raises(ValueError, match="provenance sidecar is missing"):
+        module._attach_inference_provenance(
+            {
+                "azure_ai_routes": [{"workload": "inference"}],
+                "results": [{"task_id": "task-1", "deliverable_files": []}],
+            },
+            experiment="exp",
+            repo_id="owner/repo",
+            revision=FULL_SHA,
+            allow_legacy_missing_provenance=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [FileNotFoundError("local cache missing"), TimeoutError("timed out")],
+)
+def test_non_remote_missing_sidecar_errors_are_not_downgraded(
+    monkeypatch, error
+):
+    module = _load_module()
+    monkeypatch.setattr(
+        module,
+        "hf_hub_download",
+        lambda **kwargs: (_ for _ in ()).throw(error),
+    )
+
+    with pytest.raises(type(error), match=str(error)):
+        module._attach_inference_provenance(
+            {"results": [{"task_id": "task-1", "deliverable_files": []}]},
+            experiment="exp",
+            repo_id="owner/repo",
+            revision=FULL_SHA,
+            allow_legacy_missing_provenance=True,
+        )
+
+
+def test_local_entry_not_found_is_not_downgraded(monkeypatch):
+    module = _load_module()
+    error = LocalEntryNotFoundError("local cache missing")
+    monkeypatch.setattr(
+        module,
+        "hf_hub_download",
+        lambda **kwargs: (_ for _ in ()).throw(error),
+    )
+
+    with pytest.raises(LocalEntryNotFoundError, match="local cache missing"):
+        module._attach_inference_provenance(
+            {"results": [{"task_id": "task-1", "deliverable_files": []}]},
+            experiment="exp",
+            repo_id="owner/repo",
+            revision=FULL_SHA,
+            allow_legacy_missing_provenance=True,
+        )
+
+
+def test_malformed_sidecar_is_not_downgraded(monkeypatch, tmp_path):
+    module = _load_module()
+    malformed = tmp_path / "inference_provenance.json"
+    malformed.write_text("{not-json", encoding="utf-8")
+    monkeypatch.setattr(
+        module,
+        "hf_hub_download",
+        lambda **kwargs: str(malformed),
+    )
+
+    with pytest.raises(json.JSONDecodeError):
+        module._attach_inference_provenance(
+            {"results": [{"task_id": "task-1", "deliverable_files": []}]},
+            experiment="exp",
+            repo_id="owner/repo",
+            revision=FULL_SHA,
+            allow_legacy_missing_provenance=True,
+        )
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+def test_http_auth_errors_are_not_downgraded(monkeypatch, status_code):
+    module = _load_module()
+    response = httpx.Response(
+        status_code,
+        request=httpx.Request("GET", "https://huggingface.invalid/sidecar"),
+    )
+    error = HfHubHTTPError("authorization failed", response=response)
+    monkeypatch.setattr(
+        module,
+        "hf_hub_download",
+        lambda **kwargs: (_ for _ in ()).throw(error),
+    )
+
+    with pytest.raises(HfHubHTTPError, match="authorization failed"):
+        module._attach_inference_provenance(
+            {"results": [{"task_id": "task-1", "deliverable_files": []}]},
+            experiment="exp",
+            repo_id="owner/repo",
+            revision=FULL_SHA,
+            allow_legacy_missing_provenance=True,
         )
 
 
@@ -325,6 +672,7 @@ def test_verified_sidecar_rejects_embedded_identity_mismatch(
             experiment="exp",
             repo_id="owner/repo",
             revision=FULL_SHA,
+            allow_legacy_missing_provenance=True,
         )
 
 
@@ -399,9 +747,9 @@ def test_main_pins_all_downloads_and_removes_stale_deliverables(monkeypatch, tmp
     def fake_hf_hub_download(**kwargs):
         calls.append(("file", kwargs))
         if kwargs["filename"] == "step2_inference_results.json":
-            raise module.EntryNotFoundError("missing")
+            raise _remote_missing()
         if kwargs["filename"] == "inference_provenance.json":
-            raise module.EntryNotFoundError("legacy revision")
+            raise _remote_missing("legacy revision")
         return "unused.parquet"
 
     def fake_snapshot_download(**kwargs):
@@ -424,6 +772,7 @@ def test_main_pins_all_downloads_and_removes_stale_deliverables(monkeypatch, tmp
             output="workspace/inference.json",
             revision="",
             expected_leading_task_id=[],
+            grading_config=None,
             allow_legacy_missing_provenance=True,
         ),
     )
@@ -470,7 +819,7 @@ def test_main_filters_manifest_and_snapshot_to_expected_leading_tasks(
     monkeypatch.setattr(module, "resolve_immutable_revision", lambda *args: FULL_SHA)
     def fake_download(**kwargs):
         if kwargs["filename"] == "inference_provenance.json":
-            raise module.EntryNotFoundError("legacy revision")
+            raise _remote_missing("legacy revision")
         return str(downloaded)
 
     monkeypatch.setattr(module, "hf_hub_download", fake_download)
@@ -492,6 +841,7 @@ def test_main_filters_manifest_and_snapshot_to_expected_leading_tasks(
             output="workspace/inference.json",
             revision=FULL_SHA,
             expected_leading_task_id=["task-1", "task-2"],
+            grading_config=None,
             allow_legacy_missing_provenance=True,
         ),
     )
