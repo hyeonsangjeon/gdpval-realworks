@@ -113,10 +113,10 @@ dated Azure OpenAI client and its required
 `https://cognitiveservices.azure.com/.default` audience; token preflight checks
 the audience selected by each typed route.
 
-GitHub Actions retains the old repository secret name
-`AZURE_OPENAI_ENDPOINT` only as an onboarding input and maps it to the typed
-runtime variable `FOUNDRY_PROJECT_ENDPOINT`; it never injects the old runtime
-environment variable.
+GitHub Actions supplies the endpoint through the `FOUNDRY_PROJECT_ENDPOINT`
+repository secret and maps it to the identically named typed runtime variable;
+it never injects the deprecated `AZURE_OPENAI_ENDPOINT` runtime environment
+variable.
 
 CI always requires `AZURE_AI_EXPECTED_CLIENT_ID`,
 `AZURE_AI_EXPECTED_TENANT_ID`, `AZURE_AI_EXPECTED_SUBSCRIPTION_ID`, and

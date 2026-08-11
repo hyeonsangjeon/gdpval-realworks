@@ -164,7 +164,7 @@ repository secret** and add:
 | `AZURE_CLIENT_ID` | Entra application client ID |
 | `AZURE_TENANT_ID` | Entra directory tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
-| `AZURE_OPENAI_ENDPOINT` | Foundry project endpoint ending in `/api/projects/<project-name>`; retained as the GitHub secret name during migration |
+| `FOUNDRY_PROJECT_ENDPOINT` | Foundry project endpoint ending in `/api/projects/<project-name>` |
 | `HF_TOKEN` | Dedicated Hugging Face write token |
 
 Under **Settings > Secrets and variables > Actions > Variables**, add the
@@ -189,11 +189,14 @@ tenant/client claims to those independent variables. The supported workflows
 do not select `legacy-rollback`; an explicit local strict rollback requires the
 legacy account variable instead of direct/project account variables.
 
-The workflow maps the `AZURE_OPENAI_ENDPOINT` secret into the typed
-`FOUNDRY_PROJECT_ENDPOINT` runtime variable; Python never receives the
-deprecated name. Do not add `AZURE_OPENAI_API_KEY`, `AZURE_API_KEY`,
-`AZURE_OPENAI_AD_TOKEN`, or `AZURE_CLIENT_SECRET`. `GITHUB_TOKEN` is supplied by
-GitHub automatically.
+The workflow maps the `FOUNDRY_PROJECT_ENDPOINT` secret into the identically
+named typed runtime variable; Python never receives the deprecated
+`AZURE_OPENAI_ENDPOINT` name. A fork created before this rename must add
+`FOUNDRY_PROJECT_ENDPOINT`, because the workflows no longer read the former
+`AZURE_OPENAI_ENDPOINT` secret and a missing value fails the route preflight
+before any model call. Do not add `AZURE_OPENAI_API_KEY`, `AZURE_API_KEY`,
+`AZURE_OPENAI_AD_TOKEN`, or `AZURE_CLIENT_SECRET`. `GITHUB_TOKEN` is supplied
+by GitHub automatically.
 
 The route fingerprint binds endpoint kind, endpoint hash, deployment name, SDK
 version, and workload. It does **not** prove the Azure deployment SKU, PTU

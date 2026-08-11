@@ -589,7 +589,7 @@ test('documented authentication uses typed Foundry routes and OIDC-only credenti
     'AZURE_CLIENT_ID',
     'AZURE_TENANT_ID',
     'AZURE_SUBSCRIPTION_ID',
-    'AZURE_OPENAI_ENDPOINT',
+    'FOUNDRY_PROJECT_ENDPOINT',
     'HF_TOKEN',
   ]
   const expectedVariables = [
@@ -613,7 +613,7 @@ test('documented authentication uses typed Foundry routes and OIDC-only credenti
     assert.deepEqual(dataRows(variableTable).map((row) => cleanCode(row[0])), expectedVariables)
     assert.match(guide, /`\/openai\/v1\/`/)
     assert.match(guide, /`\/api\/projects\/<project-name>`/)
-    assert.match(guide, /maps the `AZURE_OPENAI_ENDPOINT` secret|secret을 typed runtime 변수/)
+    assert.match(guide, /maps the `FOUNDRY_PROJECT_ENDPOINT` secret|secret을 동일한 이름의 typed runtime/)
     assert.match(guide, /`https:\/\/ai\.azure\.com\/\.default`|`ai\.azure\.com` token/)
   }
 

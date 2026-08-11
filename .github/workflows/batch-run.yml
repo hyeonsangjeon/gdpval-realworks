@@ -425,7 +425,7 @@ jobs:
       - name: Validate Azure AI routes before remote writes
         env:
           AZURE_AI_ROUTE_PROFILE: ${{ steps.read_config.outputs.uses_code_interpreter == 'true' && 'project-ci' || 'direct-v1' }}
-          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
           AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
@@ -539,7 +539,7 @@ jobs:
         env:
           GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
           AZURE_AI_ROUTE_PROFILE: ${{ steps.read_config.outputs.uses_code_interpreter == 'true' && 'project-ci' || 'direct-v1' }}
-          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
           AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
@@ -632,7 +632,7 @@ jobs:
       - name: Verify Azure AI token before model calls
         env:
           AZURE_AI_ROUTE_PROFILE: ${{ steps.read_config.outputs.uses_code_interpreter == 'true' && 'project-ci' || 'direct-v1' }}
-          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
           AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
@@ -655,7 +655,7 @@ jobs:
           OPENAI_API_KEY: ${{ steps.read_config.outputs.requires_openai_key == 'true' && secrets.OPENAI_API_KEY || '' }}
           ANTHROPIC_API_KEY: ${{ steps.read_config.outputs.requires_anthropic_key == 'true' && secrets.ANTHROPIC_API_KEY || '' }}
           AZURE_AI_ROUTE_PROFILE: ${{ steps.read_config.outputs.uses_code_interpreter == 'true' && 'project-ci' || 'direct-v1' }}
-          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
           AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
@@ -802,7 +802,7 @@ jobs:
         if: steps.check_relay.outputs.needs_relay != 'true' && steps.step2a.outcome == 'success'
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
-          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
         run: |
@@ -937,7 +937,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           EXPECTED_TARGET_HEAD: ${{ steps.step0.outputs.target_head }}
           AZURE_AI_ROUTE_PROFILE: direct-v1
-          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
         run: |
@@ -968,7 +968,7 @@ jobs:
           SOURCE_REPO: ${{ steps.read_config.outputs.source_repo }}
           EXPECTED_GENERATION: ${{ inputs.relay_run > 0 && steps.restore_checkpoint.outputs.generation || '' }}
           AZURE_AI_ROUTE_PROFILE: direct-v1
-          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
         run: |

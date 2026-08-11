@@ -12,6 +12,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **Foundry endpoint secret rename** - read the Foundry project endpoint from a
+  `FOUNDRY_PROJECT_ENDPOINT` repository secret instead of the legacy
+  `AZURE_OPENAI_ENDPOINT` name across all ten workflow sites, seven in
+  `batch-run.yml` and three in `grade-run.yml`. Every site already assigned the
+  value to a runtime variable of the same new name, so the mapping is now
+  one-to-one and the surrounding route profile, expected-identity, workload,
+  and `dry_run` gating expressions are untouched. `AZURE_OPENAI_ENDPOINT`
+  remains a rejected runtime environment variable: the deprecation error and
+  check in `core/azure_ai_clients.py`, the forbidden-name list in
+  `scripts/azure_ai_route_preflight.py`, the legacy native path in
+  `step2_run_inference.py`, and the two contract assertions requiring that name
+  to be absent from step environments are all unchanged. Both onboarding guides
+  and both Batch Runner references now list the new secret, state that the
+  deprecated runtime variable is still never injected, and tell operators of a
+  fork created before this rename to add the new secret. The onboarding contract
+  test pins the new name in the required-secret list and matches the rewritten
+  mapping sentence in the English and Korean guides independently. A missing
+  value fails the route preflight before any model call, so the failure mode
+  stays fail-closed. This change is deliberately name-only: no Python source,
+  grading config, schema, archived config, or historical task record moved.
+  Validation passes 12 onboarding contract tests and 733 workflow and Azure
+  route Python tests; both workflow files parse as YAML, and
+  `secrets.AZURE_OPENAI_ENDPOINT` no longer appears under `.github/workflows`.
+  The five root aggregate note suites fail three cases each on unmodified
+  `origin/main` and after this change alike, because they need the generated
+  `public/generated/reports-index.json`. `actionlint` is unavailable on the
+  validation host, so GitHub Actions expression schema remains unverified. No
+  workflow dispatch, model call, paid operation, or secret deletion occurred.
 - **Sol Max anchor4 and revision-scoped legacy provenance wiring** - keep the
   four source-ordered diagnostic/perception tasks and modality-normalized
   projection while allowing their fixed inference revision to use the parquet

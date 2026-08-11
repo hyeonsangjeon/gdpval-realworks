@@ -107,10 +107,9 @@ v1 route를 사용하고 `project-ci`에서도 Code Interpreter만 project route
 client와 필수 audience인 `https://cognitiveservices.azure.com/.default`를
 사용하며 token preflight는 typed route가 선택한 audience를 검증합니다.
 
-GitHub Actions는 기존 repository secret 이름 `AZURE_OPENAI_ENDPOINT`를
-onboarding 입력으로만 유지하고 typed runtime 변수
-`FOUNDRY_PROJECT_ENDPOINT`로 매핑합니다. 기존 runtime 환경 변수는 주입하지
-않습니다.
+GitHub Actions는 `FOUNDRY_PROJECT_ENDPOINT` repository secret으로 endpoint를
+받아 동일한 이름의 typed runtime 변수로 매핑합니다. deprecated runtime 환경
+변수 `AZURE_OPENAI_ENDPOINT`는 주입하지 않습니다.
 
 CI에는 `AZURE_AI_EXPECTED_CLIENT_ID`, `AZURE_AI_EXPECTED_TENANT_ID`,
 `AZURE_AI_EXPECTED_SUBSCRIPTION_ID`, `AZURE_AI_EXPECTED_DIRECT_ACCOUNT`가 항상

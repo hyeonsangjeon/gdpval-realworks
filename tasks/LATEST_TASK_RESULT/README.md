@@ -1,10 +1,109 @@
 # Latest Task Result
 
-- Updated: 2026-08-11
+- Updated: 2026-08-12
+- Status: the Foundry endpoint secret rename is implemented and reviewed; no
+  workflow was dispatched and the legacy secret still exists
+
+## Current Task: Foundry Endpoint Secret Rename
+
+### Task
+
+- Read the Foundry project endpoint from a `FOUNDRY_PROJECT_ENDPOINT`
+  repository secret instead of the legacy `AZURE_OPENAI_ENDPOINT` name, so the
+  secret matches the typed runtime variable it feeds.
+- Keep `AZURE_OPENAI_ENDPOINT` rejected as a runtime environment variable; the
+  deprecation guard, forbidden-name list, and absence assertions must survive.
+- Update both onboarding guides, both Batch Runner references, and the contract
+  test that pins the required secret list.
+- Do not dispatch a workflow, delete the legacy secret, or touch grading
+  configs, historical grades, archived configs, or Azure resources.
+
+### Result
+
+- `.github/workflows/batch-run.yml` reads `secrets.FOUNDRY_PROJECT_ENDPOINT` at
+  seven sites and `.github/workflows/grade-run.yml` at three. Each site already
+  assigned the value to a `FOUNDRY_PROJECT_ENDPOINT` runtime variable, so the
+  mapping is now one-to-one.
+- The route profile, `AZURE_AI_REQUIRE_EXPECTED_IDENTITIES`,
+  `AZURE_AI_EXPECTED_*`, and `AZURE_AI_WORKLOADS_JSON` lines around each site
+  are unchanged, including the `${{ !inputs.dry_run && ... || '' }}` gating in
+  `grade-run.yml` and the conditional `project-ci`/`direct-v1` expression in
+  `batch-run.yml`. Step order is unchanged.
+- `docs/first-experiment.md`, `docs/first-experiment_KR.md`,
+  `batch-runner/README.md`, and `batch-runner/README_KR.md` list the new secret,
+  state that the deprecated runtime variable is still never injected, and tell
+  operators of a fork created before this rename to add the new secret.
+- `scripts/__tests__/onboarding-contract.test.mjs` pins
+  `FOUNDRY_PROJECT_ENDPOINT` in the required-secret list at the same table
+  position used by both guides, and its mapping-sentence assertion matches the
+  English and Korean prose independently on a single line each.
+- Every remaining `AZURE_OPENAI_ENDPOINT` occurrence is environment-variable
+  scoped: `core/azure_ai_clients.py` lines 265, 274, and 299; the forbidden-name
+  list in `scripts/azure_ai_route_preflight.py`; the legacy native path in
+  `step2_run_inference.py`; the `llm_client.py` docstring; the two contract
+  assertions requiring absence from step environments; and the "rejects"
+  sentences in both Batch Runner references.
+- No Python source, grading config, schema, archived config, or historical task
+  record changed.
+
+### Cutover Order
+
+1. The owner created secret `FOUNDRY_PROJECT_ENDPOINT` and set
+   `AZURE_OPENAI_ENDPOINT` to the same Foundry project endpoint, so both names
+   resolve identically while this change is in review.
+2. This change switches every workflow reference to the new name.
+3. Only after it reaches exact `main` and a run confirms the new name resolves
+   may the owner delete `AZURE_OPENAI_ENDPOINT`.
+
+Deleting the legacy secret before step 3 breaks any ref that still reads it,
+because a workflow run resolves secrets against its own ref. A fork that never
+adds the new secret fails the route preflight before any model call, so the
+failure mode stays fail-closed rather than silently misrouting.
+
+### Verification
+
+- `scripts/__tests__/onboarding-contract.test.mjs`: 12 passed, 0 failed.
+- Workflow and Azure route Python suites: 733 passed across
+  `test_agentic_runtime_identity`, `test_agentic_v2_package_broker`,
+  `test_grading_config`, `test_grading_renderer_preflight_workflow`,
+  `test_relay_checkpoint`, `test_step8_grade`, `test_track2_preflight_workflow`,
+  `test_azure_ai_clients`, `test_azure_ai_route_preflight`, and
+  `test_azure_ai_step2_wiring`.
+- Both workflow files parse under `yaml.safe_load`.
+- `secrets.AZURE_OPENAI_ENDPOINT` occurrences under `.github/workflows`: 0.
+- The five root aggregate note suites fail three cases each both on unmodified
+  `origin/main` and after this change; they require the generated
+  `public/generated/reports-index.json`. Counts are identical, so this change
+  introduces no regression.
+
+### Unmeasured
+
+- `actionlint` is not installed on the validation host, so GitHub Actions
+  expression and `if:` schema validity is unverified. The change alters only
+  `secrets.*` identifiers and leaves every expression structure intact.
+
+### Review Evidence
+
+- Independent `first-reviewer` verdict: `APPROVE`, no blocking findings; the
+  env-var invariant table was confirmed intact at every listed site.
+- The reviewer's fork-migration observation was adopted in both onboarding
+  guides before this record was written.
+
+### Remaining Work
+
+- The owner decides whether and when to merge.
+- After merge, confirm a run resolves the new secret, then delete
+  `AZURE_OPENAI_ENDPOINT`.
+- The paid four-task Sol Max anchor remains unrun and separately approved.
+- Do not create a documentation-only PR to record this change's eventual merge
+  metadata.
+
+---
+
+## Preserved Prior Result: Sol Max Anchor Legacy Provenance Wiring (2026-08-11)
+
 - Status: exact-revision legacy provenance wiring is reviewed and validated;
   no paid grading was dispatched
-
-## Current Task: Sol Max Anchor Legacy Provenance Wiring
 
 ### Task
 
