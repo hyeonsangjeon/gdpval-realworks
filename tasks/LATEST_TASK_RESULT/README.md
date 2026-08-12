@@ -1,100 +1,130 @@
 # Latest Task Result
 
 - Updated: 2026-08-12
-- Status: the Foundry endpoint secret rename is implemented and reviewed; no
-  workflow was dispatched and the legacy secret still exists
+- Status: the four-task Sol Max anchor completed, but the 220-task run is
+  blocked by audio routing and the 44-hour envelope
 
-## Current Task: Foundry Endpoint Secret Rename
+## Current Task: First Sol Max Four-Task Anchor
 
 ### Task
 
-- Read the Foundry project endpoint from a `FOUNDRY_PROJECT_ENDPOINT`
-  repository secret instead of the legacy `AZURE_OPENAI_ENDPOINT` name, so the
-  secret matches the typed runtime variable it feeds.
-- Keep `AZURE_OPENAI_ENDPOINT` rejected as a runtime environment variable; the
-  deprecation guard, forbidden-name list, and absence assertions must survive.
-- Update both onboarding guides, both Batch Runner references, and the contract
-  test that pins the required secret list.
-- Do not dispatch a workflow, delete the legacy secret, or touch grading
-  configs, historical grades, archived configs, or Azure resources.
+- Dispatch exactly one owner-approved paid run of the four pinned anchor tasks
+  from exact `main`, through the protected `grading` Environment.
+- Read the existing preregistered modality projection and gates without
+  changing config, scoring, routing, schema, or acceptance criteria afterward.
+- Record exact run, payload, identity, usage, and gate values. Do not run the
+  full 220 tasks or manually dispatch a continuation.
+- Repair the post-grading analysis filename failure without rerunning models or
+  modifying the committed grade JSON.
 
 ### Result
 
-- `.github/workflows/batch-run.yml` reads `secrets.FOUNDRY_PROJECT_ENDPOINT` at
-  seven sites and `.github/workflows/grade-run.yml` at three. Each site already
-  assigned the value to a `FOUNDRY_PROJECT_ENDPOINT` runtime variable, so the
-  mapping is now one-to-one.
-- The route profile, `AZURE_AI_REQUIRE_EXPECTED_IDENTITIES`,
-  `AZURE_AI_EXPECTED_*`, and `AZURE_AI_WORKLOADS_JSON` lines around each site
-  are unchanged, including the `${{ !inputs.dry_run && ... || '' }}` gating in
-  `grade-run.yml` and the conditional `project-ci`/`direct-v1` expression in
-  `batch-run.yml`. Step order is unchanged.
-- `docs/first-experiment.md`, `docs/first-experiment_KR.md`,
-  `batch-runner/README.md`, and `batch-runner/README_KR.md` list the new secret,
-  state that the deprecated runtime variable is still never injected, and tell
-  operators of a fork created before this rename to add the new secret.
-- `scripts/__tests__/onboarding-contract.test.mjs` pins
-  `FOUNDRY_PROJECT_ENDPOINT` in the required-secret list at the same table
-  position used by both guides, and its mapping-sentence assertion matches the
-  English and Korean prose independently on a single line each.
-- Every remaining `AZURE_OPENAI_ENDPOINT` occurrence is environment-variable
-  scoped: `core/azure_ai_clients.py` lines 265, 274, and 299; the forbidden-name
-  list in `scripts/azure_ai_route_preflight.py`; the legacy native path in
-  `step2_run_inference.py`; the `llm_client.py` docstring; the two contract
-  assertions requiring absence from step environments; and the "rejects"
-  sentences in both Batch Runner references.
-- No Python source, grading config, schema, archived config, or historical task
-  record changed.
+- Run `31582293672` executed from
+  `c9492645496e176c8e6a3510809585f9542a5bf1` after the exact inputs were printed
+  and the protected Environment received its required owner approval.
+- `validate-request`, OIDC identity, route/token, renderer, inference download,
+  grading, grade schema validation, grade commit, and artifact upload all
+  succeeded. No rc=7 relay or additional dispatch occurred.
+- The overall run conclusion is `failure` only because Auto-analyze attempted a
+  257-byte `.analysis.md` basename after the grade was safely committed. This
+  is not a grading or payload failure.
+- The grade commit added exactly one diagnostic JSON. The artifact contains the
+  same bytes; schema `1.3` and cross-field validation pass, all four tasks and
+  all usage planes are complete, and task errors are zero.
+- `source_azure_ai_provenance_status` is the expected `legacy-missing`: this
+  inference predates sidecars and the exception remains bound to this exact
+  revision and four-task config.
+- The 13 criteria historically labelled audio were target-aware routed to text
+  against a PDF, so `gpt-audio-1.5` was never exercised. This is a routing
+  discovery, not a provider deployment failure.
+- Auto-analysis now uses a deterministic bounded sibling filename. Writes use a
+  no-follow directory FD, UTF-8 byte limits, atomic replacement, mode
+  preservation, parent/target race checks, and rollback. The missing Markdown
+  was generated from the committed JSON with no model call.
 
-### Cutover Order
+### Fixed Identities
 
-1. The owner created secret `FOUNDRY_PROJECT_ENDPOINT` and set
-   `AZURE_OPENAI_ENDPOINT` to the same Foundry project endpoint, so both names
-   resolve identically while this change is in review.
-2. This change switches every workflow reference to the new name.
-3. Only after it reaches exact `main` and a run confirms the new name resolves
-   may the owner delete `AZURE_OPENAI_ENDPOINT`.
+- Run ID: `31582293672`.
+- Execution main SHA: `c9492645496e176c8e6a3510809585f9542a5bf1`.
+- Grade result commit: `7eb71b52004e611202d396cbaaa636aa317f1000`.
+- Config: `validation_exp003_v2_sol_max_anchor4.yaml`, hash
+  `7f3c7c2e542cf580`.
+- Grader source hash:
+  `b00e83209ab6ca93a147da5bcfd02facce922e381fa01b2f73559b0d14631ab9`.
+- Payload:
+  `exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__validation_exp003_v2_sol_max_anchor4__cfg_7f3c7c2e542cf580__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_b00e83209ab6ca93__v2.2.json`.
+- Payload SHA-256:
+  `303a5e763e28bf06339877df62c8e2d0d022bc605aeeb3aee77e63ab411a41fb`.
+- Generated analysis:
+  `grade__233124fc9c26e453b906d82429fc0f6387a14c70586639ad428685146e5b4da0.analysis.md`.
+- Analysis SHA-256:
+  `90252c360f2603ec692d163c02736418c32f8eb9d4ca2779cd64efecf51936ec`.
 
-Deleting the legacy secret before step 3 breaks any ref that still reads it,
-because a workflow run resolves secrets against its own ref. A fork that never
-adds the new secret fails the route preflight before any model call, so the
-failure mode stays fail-closed rather than silently misrouting.
+### Preregistered Decision
+
+- `(a) full_run_gate.status`: `blocked`.
+- Blockers: `audio_wiring_not_exercised`,
+  `at_or_above_44h_envelope`.
+- `(b) projected_220_hours`: `71.5934`; envelope: `44`; status:
+  `at_or_above_44h_envelope`.
+- Components: main `70.4184h`, visual `1.1750h`, audio `0h`.
+- `(c) diagnostic.targetable_status`: `improved`; targetable errors fell from
+  22 to one `empty_final_text` (`95.45%` reduction).
+- `(d) audio call_count`: `0`; status `failed_no_audio_calls`.
+- Anchor integrity: passed. Visual budget errors: `0`. Unknown perception
+  calls: `0`. Non-targetable judge errors: none.
+- Interpretation: the Sol Max finalization transition has diagnostic support,
+  but the full 220-task run remains blocked by unexercised audio routing and
+  projected duration. This is not approval to run 220 tasks.
+
+### Token And Runtime Accounting
+
+| Plane | Calls | Input | Output | Cached | Latency |
+|---|---:|---:|---:|---:|---:|
+| Main | 657 | 3,429,050 | 289,976 | 1,746,790 | 4,568.33923s |
+| Perception/visual | 81 | 97,508 | 32,096 | 0 | 539.74591s |
+| Perception/audio | 0 | 0 | 0 | 0 | 0s |
+| **Total model** | **738** | **3,526,558** | **322,072** | **1,746,790** | **5,108.08514s** |
+
+- Render: 81 calls, 28.12545 seconds.
+- Task wall-clock sum: 5,148.95162 seconds; grading step: approximately 5,152
+  seconds. Usage is complete.
+- Mini calls and latency remain a pre-perception main-judge-only reference, not
+  a Sol Max multiplier.
+- `estimated_cost_usd=null`, `pricing_complete=false`, with both Sol and audio
+  models unpriced. Actual Azure cost is **not confirmed** and is not recorded as
+  zero. The local Azure session does not match the workflow tenant/subscription
+  and lacks the required Cost Management query command.
 
 ### Verification
 
-- `scripts/__tests__/onboarding-contract.test.mjs`: 12 passed, 0 failed.
-- Workflow and Azure route Python suites: 733 passed across
-  `test_agentic_runtime_identity`, `test_agentic_v2_package_broker`,
-  `test_grading_config`, `test_grading_renderer_preflight_workflow`,
-  `test_relay_checkpoint`, `test_step8_grade`, `test_track2_preflight_workflow`,
-  `test_azure_ai_clients`, `test_azure_ai_route_preflight`, and
-  `test_azure_ai_step2_wiring`.
-- Both workflow files parse under `yaml.safe_load`.
-- `secrets.AZURE_OPENAI_ENDPOINT` occurrences under `.github/workflows`: 0.
-- The five root aggregate note suites fail three cases each both on unmodified
-  `origin/main` and after this change; they require the generated
-  `public/generated/reports-index.json`. Counts are identical, so this change
-  introduces no regression.
-
-### Unmeasured
-
-- `actionlint` is not installed on the validation host, so GitHub Actions
-  expression and `if:` schema validity is unverified. The change alters only
-  `secrets.*` identifiers and leaves every expression structure intact.
+- Analyzer/path-security tests: 65 passed; Step 8: 161 passed.
+- Complete backend: 3,102 passed, 6 skipped, 45 integration tests deselected.
+- Self-preparing aggregate suite: 105 passed, 1 expected skip.
+- `npm run build`: passed with 2,783 transformed modules.
+- `py_compile`, focused Ruff, workflow YAML, VS Code diagnostics, and
+  `git diff --check`: passed.
+- Grade payload SHA and content are unchanged by the fix; generated Markdown is
+  byte-for-byte reproducible and mode `0644`.
 
 ### Review Evidence
 
-- Independent `first-reviewer` verdict: `APPROVE`, no blocking findings; the
-  env-var invariant table was confirmed intact at every listed site.
-- The reviewer's fork-migration observation was adopted in both onboarding
-  guides before this record was written.
+- Reviewed substantive head:
+  `d3c370ce32bcf2f1fc11fa9306460848c87b9d93`.
+- Independent `llm-systems-engineer`, `grading-engineer`, `extreme-reasoner`,
+  and `first-reviewer` verdicts: `APPROVE`, no blocking findings.
 
 ### Remaining Work
 
-- The owner decides whether and when to merge.
-- After merge, confirm a run resolves the new secret, then delete
-  `AZURE_OPENAI_ENDPOINT`.
-- The paid four-task Sol Max anchor remains unrun and separately approved.
+- The owner decides whether and when to merge this analysis filename fix and
+  generated Markdown. Do not rerun the paid anchor to repair analysis.
+- Query Azure Cost Management with the workflow tenant/subscription and attach
+  actual run-attributed cost to the operational record before treating this as
+  a monetary anchor.
+- Investigate why the selected PDF criteria do not exercise audio routing and
+  decide how to handle a projected 71.5934-hour serial run. Do not change the
+  preregistered gates after observing this result.
+- The full-220 config remains provenance-blocked as well as gate-blocked.
 - Do not create a documentation-only PR to record this change's eventual merge
   metadata.
 

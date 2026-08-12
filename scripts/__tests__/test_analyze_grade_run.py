@@ -9,7 +9,9 @@ top-5-slowest selection.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +21,28 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "analyze_grade_run.py"
+ANCHOR_PAYLOAD = (
+    REPO_ROOT
+    / "data/grades/_diagnostic/"
+    "29d5623a5cec85eb38f21fb73a2f3b06c66ed6a5fd6fd95948b979cd70a70bc9/"
+    "exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__"
+    "validation_exp003_v2_sol_max_anchor4__cfg_7f3c7c2e542cf580__rubric_"
+    "11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_"
+    "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_"
+    "b00e83209ab6ca93__v2.2.json"
+)
+ANCHOR_ANALYSIS = ANCHOR_PAYLOAD.with_name(
+    "grade__233124fc9c26e453b906d82429fc0f6387a14c70586639ad428685146e5b4da0."
+    "analysis.md"
+)
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("analyze_grade_run", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def _task(tid: str, lat_ms: int, in_tok: int, out_tok: int, calls: int = 5, pct: float = 80.0):
@@ -967,3 +991,417 @@ def test_markdown_contains_key_sections(tmp_path: Path):
     assert "## Wall-clock & latency" in text
     assert "## Cost estimate" in text
     assert "## Top-5 slowest tasks" in text
+
+
+def test_analysis_output_path_preserves_legacy_name_at_255_bytes():
+    module = _load_module()
+    grade_path = Path(f"{'a' * 243}.json")
+
+    output = module.resolve_analysis_output_path(grade_path)
+
+    assert output.name == f"{'a' * 243}.analysis.md"
+    assert len(output.name.encode("utf-8")) == 255
+
+
+def test_analysis_output_path_falls_back_above_name_max_by_utf8_bytes():
+    module = _load_module()
+    grade_path = Path(f"{'é' * 122}.json")
+    legacy_name = f"{'é' * 122}.analysis.md"
+    assert len(legacy_name.encode("utf-8")) == 256
+
+    output = module.resolve_analysis_output_path(grade_path)
+    digest = hashlib.sha256(grade_path.name.encode("utf-8")).hexdigest()
+
+    assert output.name == f"grade__{digest}.analysis.md"
+    assert len(output.name.encode("utf-8")) == 83
+
+
+def test_analysis_output_path_is_stable_and_distinct_for_long_basenames():
+    module = _load_module()
+    first = Path(f"{'a' * 244}.json")
+    second = Path(f"{'a' * 243}b.json")
+
+    first_output = module.resolve_analysis_output_path(first)
+
+    assert first_output == module.resolve_analysis_output_path(first)
+    assert first_output != module.resolve_analysis_output_path(second)
+    assert first_output.parent == first.parent
+
+
+def test_analysis_output_path_rejects_too_small_limit_and_controls():
+    module = _load_module()
+    with pytest.raises(ValueError, match="smaller than the bounded fallback"):
+        module.resolve_analysis_output_path(
+            Path(f"{'a' * 244}.json"),
+            name_max=82,
+        )
+    with pytest.raises(ValueError, match="control characters"):
+        module.resolve_analysis_output_path(Path("bad\nname.json"))
+
+
+def test_auto_out_handles_exact_anchor_name_deterministically(tmp_path: Path):
+    stem = "a" * 245
+    grade_path = tmp_path / f"{stem}.json"
+    grade_path.write_text(json.dumps(_grade_json(n_tasks=1)), encoding="utf-8")
+    expected_digest = hashlib.sha256(
+        grade_path.name.encode("utf-8")
+    ).hexdigest()
+    expected = tmp_path / f"grade__{expected_digest}.analysis.md"
+
+    first = subprocess.run(
+        [sys.executable, str(SCRIPT), str(grade_path), "--auto-out"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    first_bytes = expected.read_bytes()
+    second = subprocess.run(
+        [sys.executable, str(SCRIPT), str(grade_path), "--auto-out"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert first.returncode == second.returncode == 0
+    assert first.stdout == second.stdout == f"{expected}\n"
+    assert first.stderr == second.stderr == ""
+    assert expected.read_bytes() == first_bytes
+    assert grade_path.read_text(encoding="utf-8") == json.dumps(
+        _grade_json(n_tasks=1)
+    )
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--auto-out", "--json"],
+        ["--auto-out", "--out", "out.md"],
+    ],
+)
+def test_auto_out_rejects_incompatible_cli_modes(tmp_path: Path, arguments):
+    grade_path = tmp_path / "grade.json"
+    grade_path.write_text(json.dumps(_grade_json(n_tasks=1)), encoding="utf-8")
+
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), str(grade_path), *arguments],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+
+
+def test_explicit_overlong_out_fails_without_hash_fallback(tmp_path: Path):
+    grade_path = tmp_path / "grade.json"
+    grade_path.write_text(json.dumps(_grade_json(n_tasks=1)), encoding="utf-8")
+    output = tmp_path / ("x" * 256)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(grade_path),
+            "--out",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert "exceeds 255 UTF-8 bytes" in completed.stderr
+
+
+@pytest.mark.parametrize("dangling", [False, True])
+def test_analysis_output_rejects_symlink_without_mutating_target(
+    tmp_path: Path,
+    dangling: bool,
+):
+    grade_path = tmp_path / "grade.json"
+    grade_path.write_text(json.dumps(_grade_json(n_tasks=1)), encoding="utf-8")
+    target = tmp_path / "target.md"
+    if not dangling:
+        target.write_text("sentinel", encoding="utf-8")
+    output = tmp_path / "output.md"
+    output.symlink_to(target)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(grade_path),
+            "--out",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert "must not be a symlink" in completed.stderr
+    if dangling:
+        assert not target.exists()
+    else:
+        assert target.read_text(encoding="utf-8") == "sentinel"
+
+
+def test_analysis_output_rejects_symlink_parent(tmp_path: Path):
+    module = _load_module()
+    real_parent = tmp_path / "real"
+    real_parent.mkdir()
+    linked_parent = tmp_path / "linked"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="non-symlink directory"):
+        module._write_analysis_output(linked_parent / "output.md", "content")
+
+    assert list(real_parent.iterdir()) == []
+
+
+def test_control_character_out_fails_without_stdout(tmp_path: Path):
+    grade_path = tmp_path / "grade.json"
+    grade_path.write_text(json.dumps(_grade_json(n_tasks=1)), encoding="utf-8")
+    output = tmp_path / "bad\noutput.md"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(grade_path),
+            "--out",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert "must not contain control characters" in completed.stderr
+    assert not output.exists()
+
+
+def test_atomic_output_failure_preserves_existing_file_and_cleans_temp(
+    monkeypatch,
+    tmp_path: Path,
+):
+    module = _load_module()
+    output = tmp_path / "output.md"
+    output.write_text("sentinel", encoding="utf-8")
+
+    def fail_replace(source, target, **kwargs):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(module.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        module._write_analysis_output(output, "replacement")
+
+    assert output.read_text(encoding="utf-8") == "sentinel"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["output.md"]
+
+
+def test_pathconf_unlimited_uses_policy_limit(monkeypatch, tmp_path: Path):
+    module = _load_module()
+    output = tmp_path / "output.md"
+    monkeypatch.setattr(module.os, "fpathconf", lambda fd, name: -1)
+
+    module._write_analysis_output(output, "content")
+
+    assert output.read_text(encoding="utf-8") == "content"
+
+
+def test_small_name_limit_uses_short_temp_name(monkeypatch, tmp_path: Path):
+    module = _load_module()
+    output = tmp_path / "x.md"
+    monkeypatch.setattr(module.os, "fpathconf", lambda fd, name: 8)
+
+    module._write_analysis_output(output, "content")
+
+    assert output.read_text(encoding="utf-8") == "content"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["x.md"]
+
+
+def test_atomic_output_preserves_existing_mode(tmp_path: Path):
+    module = _load_module()
+    output = tmp_path / "output.md"
+    output.write_text("sentinel", encoding="utf-8")
+    output.chmod(0o644)
+
+    module._write_analysis_output(output, "replacement")
+
+    assert output.read_text(encoding="utf-8") == "replacement"
+    assert stat.S_IMODE(output.stat().st_mode) == 0o644
+
+
+def test_parent_swap_cannot_redirect_output(monkeypatch, tmp_path: Path):
+    module = _load_module()
+    monkeypatch.chdir(tmp_path)
+    parent = Path("parent")
+    parent.mkdir()
+    moved = Path("moved")
+    attacker = Path("attacker")
+    attacker.mkdir()
+    real_open = module.os.open
+    swapped = False
+
+    def swap_after_open(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal swapped
+        fd = real_open(path, flags, mode, dir_fd=dir_fd)
+        if path == "parent" and flags & module.os.O_DIRECTORY and not swapped:
+            parent.rename(moved)
+            parent.symlink_to(attacker, target_is_directory=True)
+            swapped = True
+        return fd
+
+    monkeypatch.setattr(module.os, "open", swap_after_open)
+
+    with pytest.raises(ValueError, match="parent"):
+        module._write_analysis_output(parent / "output.md", "content")
+
+    assert list(moved.iterdir()) == []
+    assert list(attacker.iterdir()) == []
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_post_replace_parent_swap_rolls_back_output(
+    monkeypatch,
+    tmp_path: Path,
+    existing: bool,
+):
+    module = _load_module()
+    monkeypatch.chdir(tmp_path)
+    parent = Path("parent")
+    parent.mkdir()
+    output = parent / "output.md"
+    if existing:
+        output.write_text("sentinel", encoding="utf-8")
+    moved = Path("moved")
+    attacker = Path("attacker")
+    attacker.mkdir()
+    real_replace = module.os.replace
+    swapped = False
+
+    def swap_after_replace(source, target, **kwargs):
+        nonlocal swapped
+        real_replace(source, target, **kwargs)
+        if target == "output.md" and not swapped:
+            parent.rename(moved)
+            parent.symlink_to(attacker, target_is_directory=True)
+            swapped = True
+
+    monkeypatch.setattr(module.os, "replace", swap_after_replace)
+
+    with pytest.raises(ValueError, match="parent"):
+        module._write_analysis_output(output, "replacement")
+
+    assert list(attacker.iterdir()) == []
+    if existing:
+        assert (moved / "output.md").read_text(encoding="utf-8") == "sentinel"
+    else:
+        assert list(moved.iterdir()) == []
+
+
+def test_parent_directory_traversal_is_rejected_before_open(tmp_path: Path):
+    module = _load_module()
+    safe = tmp_path / "safe"
+    pivot = safe / "pivot"
+    destination = safe / "destination"
+    pivot.mkdir(parents=True)
+    destination.mkdir()
+    output = pivot / ".." / "destination" / "output.md"
+
+    with pytest.raises(ValueError, match="must not traverse parent"):
+        module._write_analysis_output(output, "content")
+
+    assert list(destination.iterdir()) == []
+
+
+def test_dirfd_target_check_ignores_cwd_name_collision(
+    monkeypatch,
+    tmp_path: Path,
+):
+    module = _load_module()
+    cwd = tmp_path / "cwd"
+    destination = tmp_path / "destination"
+    cwd.mkdir()
+    destination.mkdir()
+    sentinel = cwd / "sentinel.md"
+    sentinel.write_text("sentinel", encoding="utf-8")
+    (cwd / "output.md").symlink_to(sentinel)
+    monkeypatch.chdir(cwd)
+
+    module._write_analysis_output(destination / "output.md", "content")
+
+    assert (destination / "output.md").read_text(encoding="utf-8") == "content"
+    assert sentinel.read_text(encoding="utf-8") == "sentinel"
+
+
+def test_auto_out_os_error_has_no_stdout(monkeypatch, tmp_path: Path, capsys):
+    module = _load_module()
+    grade_path = tmp_path / "grade.json"
+    grade_path.write_text(json.dumps(_grade_json(n_tasks=1)), encoding="utf-8")
+    monkeypatch.setattr(
+        module,
+        "_write_auto_analysis_output",
+        lambda grade, text: (_ for _ in ()).throw(OSError("write failed")),
+    )
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT), str(grade_path), "--auto-out"])
+
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+
+    captured = capsys.readouterr()
+    assert exc.value.code == 2
+    assert captured.out == ""
+    assert "write failed" in captured.err
+
+
+def test_json_with_explicit_out_remains_supported(tmp_path: Path):
+    grade_path = tmp_path / "grade.json"
+    output = tmp_path / "analysis.json"
+    grade_path.write_text(json.dumps(_grade_json(n_tasks=1)), encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(grade_path),
+            "--json",
+            "--out",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == ""
+    assert json.loads(output.read_text(encoding="utf-8"))["this"][
+        "graded_tasks"
+    ] == 1
+
+
+def test_committed_anchor_analysis_is_exactly_reproducible(monkeypatch):
+    module = _load_module()
+    relative_payload = ANCHOR_PAYLOAD.relative_to(REPO_ROOT)
+    monkeypatch.chdir(REPO_ROOT)
+
+    assert hashlib.sha256(ANCHOR_PAYLOAD.read_bytes()).hexdigest() == (
+        "303a5e763e28bf06339877df62c8e2d0d022bc605aeeb3aee77e63ab411a41fb"
+    )
+    assert module.resolve_analysis_output_path(ANCHOR_PAYLOAD) == ANCHOR_ANALYSIS
+    expected = module.render_markdown(module.analyze(relative_payload), None)
+
+    assert ANCHOR_ANALYSIS.read_text(encoding="utf-8") == expected
+    assert "tasks: 4/4 (errors=0)" in expected
+    assert "full-run gate: blocked" in expected
+    assert str(relative_payload) in expected

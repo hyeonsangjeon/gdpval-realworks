@@ -682,8 +682,7 @@ jobs:
             echo "::error::resolved grade file is missing for $GRADE_EXPERIMENT_YAML: $GRADE_FILE"
             exit 1
           fi
-          OUT="${GRADE_FILE%.json}.analysis.md"
-          python scripts/analyze_grade_run.py "$GRADE_FILE" --out "$OUT"
+          OUT="$(python scripts/analyze_grade_run.py "$GRADE_FILE" --auto-out)"
           if [[ "$OUT" == /* || "$OUT" == *$'\n'* || ! -f "$OUT" || -L "$OUT" ]]; then
             echo "::error::analysis output is not a safe regular file"
             exit 1
