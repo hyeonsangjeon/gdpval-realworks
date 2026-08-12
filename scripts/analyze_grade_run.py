@@ -15,7 +15,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import statistics
 import sys
 from collections import Counter
@@ -44,6 +46,9 @@ CACHED_INPUT_DISCOUNT = 0.50
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GRADE_SCHEMA_PATH = REPO_ROOT / "batch-runner/schemas/grade.schema.json"
 ANCHOR_CONFIG_DIR = REPO_ROOT / "batch-runner/grading_configs"
+ANALYSIS_NAME_MAX_BYTES = 255
+ANALYSIS_FALLBACK_PREFIX = "grade__"
+ANALYSIS_SUFFIX = ".analysis.md"
 
 
 def _ordered_task_ids_sha256(task_ids: list[str]) -> str:
@@ -53,6 +58,320 @@ def _ordered_task_ids_sha256(task_ids: list[str]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _strict_path_bytes(path: Path, label: str) -> bytes:
+    value = str(path)
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError(f"{label} must not contain control characters")
+    try:
+        return value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise ValueError(f"{label} must be valid UTF-8") from exc
+
+
+def resolve_analysis_output_path(
+    grade_path: Path,
+    *,
+    name_max: int = ANALYSIS_NAME_MAX_BYTES,
+) -> Path:
+    grade_name_bytes = _strict_path_bytes(grade_path.name, "grade filename")
+    legacy_name = f"{grade_path.stem}{ANALYSIS_SUFFIX}"
+    legacy_name_bytes = _strict_path_bytes(
+        Path(legacy_name),
+        "analysis filename",
+    )
+    if len(legacy_name_bytes) <= name_max:
+        return grade_path.with_name(legacy_name)
+
+    digest = hashlib.sha256(grade_name_bytes).hexdigest()
+    fallback_name = f"{ANALYSIS_FALLBACK_PREFIX}{digest}{ANALYSIS_SUFFIX}"
+    fallback_bytes = _strict_path_bytes(
+        Path(fallback_name),
+        "analysis filename",
+    )
+    if len(fallback_bytes) > name_max:
+        raise ValueError(
+            "analysis filename limit is smaller than the bounded fallback"
+        )
+    return grade_path.with_name(fallback_name)
+
+
+def _validate_analysis_output_path(
+    path: Path,
+    *,
+    name_max: int = ANALYSIS_NAME_MAX_BYTES,
+) -> None:
+    _strict_path_bytes(path, "analysis output path")
+    name_bytes = _strict_path_bytes(path.name, "analysis filename")
+    if len(name_bytes) > name_max:
+        raise ValueError(
+            f"analysis filename exceeds {name_max} UTF-8 bytes"
+        )
+
+
+def _open_analysis_directory(directory: Path) -> int:
+    _strict_path_bytes(directory, "analysis output parent")
+    if ".." in directory.parts:
+        raise ValueError(
+            "analysis output parent must not traverse parent directories"
+        )
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    current_fd = os.open(directory.anchor or ".", flags)
+    try:
+        for part in directory.parts:
+            if part in {"", ".", directory.anchor}:
+                continue
+            next_fd = os.open(part, flags, dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+        return current_fd
+    except OSError as exc:
+        os.close(current_fd)
+        raise ValueError(
+            "analysis output parent must be an existing non-symlink directory"
+        ) from exc
+
+
+def _verify_analysis_directory_binding(
+    directory: Path,
+    directory_fd: int,
+) -> None:
+    reopened_fd = _open_analysis_directory(directory)
+    try:
+        expected = os.fstat(directory_fd)
+        actual = os.fstat(reopened_fd)
+        if (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+            raise ValueError("analysis output parent changed during write")
+    finally:
+        os.close(reopened_fd)
+
+
+def _analysis_name_limit(directory_fd: int) -> int:
+    try:
+        filesystem_limit = int(os.fpathconf(directory_fd, "PC_NAME_MAX"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            "analysis output filename limit could not be determined"
+        ) from exc
+    if filesystem_limit == -1:
+        return ANALYSIS_NAME_MAX_BYTES
+    if filesystem_limit < 1:
+        raise ValueError("analysis output filename limit is invalid")
+    return min(ANALYSIS_NAME_MAX_BYTES, filesystem_limit)
+
+
+def _target_stat(directory_fd: int, target_name: str) -> os.stat_result | None:
+    try:
+        result = os.stat(
+            target_name,
+            dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        return None
+    if stat.S_ISLNK(result.st_mode):
+        raise ValueError("analysis output path must not be a symlink")
+    if not stat.S_ISREG(result.st_mode):
+        raise ValueError("analysis output path must be a regular file")
+    return result
+
+
+def _open_analysis_temp(
+    directory_fd: int,
+    *,
+    target_name: str,
+    name_max: int,
+    mode: int,
+) -> tuple[int, str]:
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | os.O_NOFOLLOW
+        | os.O_CLOEXEC
+    )
+    for _attempt in range(128):
+        token = hashlib.sha256(os.urandom(32)).hexdigest()
+        temp_name = (
+            token[:name_max]
+            if name_max == 1
+            else f".{token[:name_max - 1]}"
+        )
+        if temp_name == target_name:
+            continue
+        try:
+            return (
+                os.open(
+                    temp_name,
+                    flags,
+                    mode,
+                    dir_fd=directory_fd,
+                ),
+                temp_name,
+            )
+        except FileExistsError:
+            continue
+    raise ValueError("analysis output temporary file could not be created")
+
+
+def _link_analysis_backup(
+    directory_fd: int,
+    *,
+    target_name: str,
+    name_max: int,
+) -> str:
+    for _attempt in range(128):
+        token = hashlib.sha256(os.urandom(32)).hexdigest()
+        backup_name = (
+            token[:name_max]
+            if name_max == 1
+            else f".{token[:name_max - 1]}"
+        )
+        if backup_name == target_name:
+            continue
+        try:
+            os.link(
+                target_name,
+                backup_name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+            return backup_name
+        except FileExistsError:
+            continue
+    raise ValueError("analysis output backup could not be created")
+
+
+def _write_analysis_output_at(
+    directory_fd: int,
+    *,
+    directory: Path,
+    target_name: str,
+    text: str,
+    name_max: int,
+) -> None:
+    _validate_analysis_output_path(Path(target_name), name_max=name_max)
+    before = _target_stat(directory_fd, target_name)
+    target_mode = stat.S_IMODE(before.st_mode) if before is not None else 0o666
+    temp_fd: int | None = None
+    temp_name: str | None = None
+    temp_identity: tuple[int, int] | None = None
+    backup_name: str | None = None
+    try:
+        if before is not None:
+            backup_name = _link_analysis_backup(
+                directory_fd,
+                target_name=target_name,
+                name_max=name_max,
+            )
+        temp_fd, temp_name = _open_analysis_temp(
+            directory_fd,
+            target_name=target_name,
+            name_max=name_max,
+            mode=target_mode,
+        )
+        if before is not None:
+            os.fchmod(temp_fd, target_mode)
+        temp_stat = os.fstat(temp_fd)
+        temp_identity = (temp_stat.st_dev, temp_stat.st_ino)
+        with os.fdopen(temp_fd, "w", encoding="utf-8") as handle:
+            temp_fd = None
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+        current = _target_stat(directory_fd, target_name)
+        if (before is None) != (current is None) or (
+            before is not None
+            and current is not None
+            and (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino)
+        ):
+            raise ValueError("analysis output path changed during write")
+        _verify_analysis_directory_binding(directory, directory_fd)
+        os.replace(
+            temp_name,
+            target_name,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        temp_name = None
+        os.fsync(directory_fd)
+        try:
+            _verify_analysis_directory_binding(directory, directory_fd)
+        except ValueError:
+            replaced = _target_stat(directory_fd, target_name)
+            if (
+                replaced is not None
+                and temp_identity is not None
+                and (replaced.st_dev, replaced.st_ino) == temp_identity
+            ):
+                if backup_name is None:
+                    os.unlink(target_name, dir_fd=directory_fd)
+                else:
+                    os.replace(
+                        backup_name,
+                        target_name,
+                        src_dir_fd=directory_fd,
+                        dst_dir_fd=directory_fd,
+                    )
+                    backup_name = None
+                os.fsync(directory_fd)
+            raise
+        if backup_name is not None:
+            os.unlink(backup_name, dir_fd=directory_fd)
+            backup_name = None
+            os.fsync(directory_fd)
+    finally:
+        if temp_fd is not None:
+            os.close(temp_fd)
+        if temp_name is not None:
+            try:
+                os.unlink(temp_name, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
+        if backup_name is not None:
+            try:
+                os.unlink(backup_name, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
+
+
+def _write_analysis_output(path: Path, text: str) -> None:
+    _strict_path_bytes(path, "analysis output path")
+    directory_fd = _open_analysis_directory(path.parent)
+    try:
+        _write_analysis_output_at(
+            directory_fd,
+            directory=path.parent,
+            target_name=path.name,
+            text=text,
+            name_max=_analysis_name_limit(directory_fd),
+        )
+    finally:
+        os.close(directory_fd)
+
+
+def _write_auto_analysis_output(grade_path: Path, text: str) -> Path:
+    _strict_path_bytes(grade_path, "grade path")
+    directory_fd = _open_analysis_directory(grade_path.parent)
+    try:
+        name_max = _analysis_name_limit(directory_fd)
+        output_path = resolve_analysis_output_path(
+            grade_path,
+            name_max=name_max,
+        )
+        _write_analysis_output_at(
+            directory_fd,
+            directory=grade_path.parent,
+            target_name=output_path.name,
+            text=text,
+            name_max=name_max,
+        )
+        return output_path
+    finally:
+        os.close(directory_fd)
 
 
 def _anchor_schema_blockers(grade: dict) -> list[str]:
@@ -1544,9 +1863,17 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("grade_json", type=Path)
     ap.add_argument("--compare", type=Path, default=None, help="Baseline grade JSON for Δ table")
-    ap.add_argument("--out", type=Path, default=None, help="Write markdown to this path (default: stdout)")
+    output_group = ap.add_mutually_exclusive_group()
+    output_group.add_argument("--out", type=Path, default=None, help="Write markdown to this path (default: stdout)")
+    output_group.add_argument(
+        "--auto-out",
+        action="store_true",
+        help="Write markdown to a bounded sibling path and print that path",
+    )
     ap.add_argument("--json", action="store_true", help="Emit machine-readable JSON instead of markdown")
     args = ap.parse_args()
+    if args.auto_out and args.json:
+        ap.error("--auto-out cannot be combined with --json")
 
     a = analyze(args.grade_json)
     base = analyze(args.compare) if args.compare else None
@@ -1557,8 +1884,17 @@ def main() -> int:
     else:
         text = render_markdown(a, base)
 
-    if args.out:
-        args.out.write_text(text)
+    if args.auto_out:
+        try:
+            output_path = _write_auto_analysis_output(args.grade_json, text)
+        except (OSError, ValueError) as exc:
+            ap.error(str(exc))
+        print(output_path)
+    elif args.out:
+        try:
+            _write_analysis_output(args.out, text)
+        except (OSError, ValueError) as exc:
+            ap.error(str(exc))
         print(f"wrote {args.out}", file=sys.stderr)
     else:
         sys.stdout.write(text)

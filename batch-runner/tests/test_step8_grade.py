@@ -2842,6 +2842,9 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     )
 
     assert analysis["id"] == "analysis"
+    assert 'OUT="$(python scripts/analyze_grade_run.py ' in analysis["run"]
+    assert '"$GRADE_FILE" --auto-out)"' in analysis["run"]
+    assert '${GRADE_FILE%.json}.analysis.md' not in analysis["run"]
     assert 'echo "analysis_file=$OUT" >> "$GITHUB_OUTPUT"' in analysis["run"]
     assert "! -f \"$OUT\" || -L \"$OUT\"" in analysis["run"]
     assert commit_analysis["env"]["ANALYSIS_FILE"] == (
