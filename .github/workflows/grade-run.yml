@@ -395,7 +395,7 @@ jobs:
         if: inputs.dry_run != true
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
-          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
           AZURE_AI_WORKLOADS_JSON: ${{ steps.renderer.outputs.azure_ai_workloads_json }}
@@ -457,7 +457,7 @@ jobs:
         if: inputs.dry_run != true
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
-          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
           AZURE_AI_WORKLOADS_JSON: ${{ steps.renderer.outputs.azure_ai_workloads_json }}
@@ -497,7 +497,7 @@ jobs:
         id: grade
         env:
           AZURE_AI_ROUTE_PROFILE: ${{ !inputs.dry_run && 'direct-v1' || '' }}
-          FOUNDRY_PROJECT_ENDPOINT: ${{ !inputs.dry_run && secrets.AZURE_OPENAI_ENDPOINT || '' }}
+          FOUNDRY_PROJECT_ENDPOINT: ${{ !inputs.dry_run && secrets.FOUNDRY_PROJECT_ENDPOINT || '' }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: ${{ !inputs.dry_run && '1' || '0' }}
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ !inputs.dry_run && vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT || '' }}
           # Force unbuffered Python stdout so per-task progress prints

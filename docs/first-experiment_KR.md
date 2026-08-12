@@ -161,7 +161,7 @@ secret**에서 다음을 추가합니다.
 | `AZURE_CLIENT_ID` | Entra 앱의 client ID |
 | `AZURE_TENANT_ID` | Entra directory tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
-| `AZURE_OPENAI_ENDPOINT` | `/api/projects/<project-name>` Foundry project endpoint. migration 동안 GitHub secret 이름만 유지 |
+| `FOUNDRY_PROJECT_ENDPOINT` | `/api/projects/<project-name>` Foundry project endpoint |
 | `HF_TOKEN` | Hugging Face 전용 write token |
 
 **Settings > Secrets and variables > Actions > Variables**에는 fail-closed
@@ -185,9 +185,12 @@ route preflight가 사용할 identity를 등록합니다.
 지원 workflow는 `legacy-rollback`을 선택하지 않으며, 명시적인 local strict
 rollback에서는 direct/project account 변수 대신 legacy account 변수가 필요합니다.
 
-workflow는 `AZURE_OPENAI_ENDPOINT` secret을 typed runtime 변수
-`FOUNDRY_PROJECT_ENDPOINT`로 mapping하며 Python에는 deprecated 이름을 전달하지
-않습니다. `AZURE_OPENAI_API_KEY`, `AZURE_API_KEY`, `AZURE_OPENAI_AD_TOKEN`,
+workflow는 `FOUNDRY_PROJECT_ENDPOINT` secret을 동일한 이름의 typed runtime
+변수로 mapping하며 deprecated 이름 `AZURE_OPENAI_ENDPOINT`는 Python에 전달하지
+않습니다. 이 rename 이전에 만든 fork는 `FOUNDRY_PROJECT_ENDPOINT`를 추가해야
+합니다. workflow가 기존 `AZURE_OPENAI_ENDPOINT` secret을 더 이상 읽지 않으며,
+값이 없으면 모델 호출 전에 route preflight가 실패합니다.
+`AZURE_OPENAI_API_KEY`, `AZURE_API_KEY`, `AZURE_OPENAI_AD_TOKEN`,
 `AZURE_CLIENT_SECRET`은 추가하지 마세요. `GITHUB_TOKEN`은 GitHub가 자동으로
 제공합니다.
 
