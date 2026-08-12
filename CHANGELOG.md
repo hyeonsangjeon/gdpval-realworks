@@ -11,6 +11,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+- **First Sol Max anchor result and bounded analysis filenames** - run the
+  owner-approved four-task anchor once as Actions run `31582293672` from main
+  SHA `c9492645496e176c8e6a3510809585f9542a5bf1` with grader source hash
+  `b00e83209ab6ca93a147da5bcfd02facce922e381fa01b2f73559b0d14631ab9`.
+  Grading, schema validation, the grade commit, and artifact upload succeeded;
+  the workflow failed only afterward because appending `.analysis.md` to the
+  250-byte JSON basename exceeded Linux `NAME_MAX`. The committed diagnostic
+  payload SHA-256 is
+  `303a5e763e28bf06339877df62c8e2d0d022bc605aeeb3aee77e63ab411a41fb`.
+  Its preregistered result is `full_run_gate.status=blocked` with blockers
+  `audio_wiring_not_exercised` and `at_or_above_44h_envelope`, projected
+  `71.5934` hours against the 44-hour envelope,
+  `diagnostic.targetable_status=improved`, and zero audio calls. The run used
+  738 model calls, 3,526,558 input tokens, 322,072 output tokens, and 1,746,790
+  cached tokens; usage is complete and pricing remains explicitly unpriced.
+  The expected `legacy-missing` source provenance is retained. The analyzer now
+  preserves legacy names through 255 UTF-8 bytes and otherwise writes a
+  deterministic 83-byte `grade__<sha256>.analysis.md` sibling through a
+  no-follow directory-FD transaction with mode preservation and rollback. The
+  missing Markdown is generated model-free with SHA-256
+  `90252c360f2603ec692d163c02736418c32f8eb9d4ca2779cd64efecf51936ec`.
+  Config, schema, grade JSON, gates, and dispatch behavior are unchanged; no
+  paid rerun occurred. Validation passes 3,102 backend tests with six skips and
+  45 integration deselections, 65 analyzer tests, 161 Step 8 tests, and 105
+  aggregate tests with one expected skip; the production build transforms
+  2,783 modules. Independent systems, grading, security, and code reviews
+  approved substantive head `d3c370ce32bcf2f1fc11fa9306460848c87b9d93`.
+  Actual Azure cost is not available from the local Azure identity and is not
+  recorded as zero; the owner must query Cost Management in the workflow
+  tenant/subscription before using this result as a monetary anchor.
+
 ### Changed
 - **Foundry endpoint secret rename** - read the Foundry project endpoint from a
   `FOUNDRY_PROJECT_ENDPOINT` repository secret instead of the legacy
