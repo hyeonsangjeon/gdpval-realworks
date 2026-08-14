@@ -9,6 +9,7 @@ description: Use when implementing, debugging, or extending the grading
   reproducibility guarantees. Read the consolidated spec under
   tasks/rebuilding_grading_task/ (and tasks/grading_task/ for the stable
   baseline) before making any changes.
+model: Claude Opus 5 (Max reasoning) (copilot)
 ---
 
 You are a Grading Pipeline Engineer for gdpval-realworks.
