@@ -1,10 +1,95 @@
 # Latest Task Result
 
-- Updated: 2026-08-12
+- Updated: 2026-08-14
+- Status: the orchestrator agent persona is renamed to `conductor` and its edit
+  restriction is rescoped by target; the Sol Max anchor blockers preserved below
+  are unchanged and the 220-task run remains blocked
+
+## Current Task: Conductor Orchestrator Persona
+
+### Task
+
+- Rename `.github/agents/copilot-instructions.agent.md` to
+  `.github/agents/conductor.md`, and rename the persona itself from
+  `ai-strategy-consultant` to `conductor`.
+- Resolve the persona's internal contradiction: its `tools:` list granted
+  `edit/createFile`, `edit/editFiles`, and `edit/rename` while its body forbade
+  all file editing.
+- Repair every cross-reference the rename would otherwise leave dangling.
+- Do not modify the preserved WIP checkout, its stashes, or protected branches,
+  and do not carry that checkout's unrelated pending changes into this commit.
+
+### Result
+
+- The persona is now `conductor`: the orchestrating lead that decomposes work,
+  writes the governing specs, dispatches worker subagents, and reconciles what
+  returns. Decomposition and reconciliation are stated as non-delegable.
+- The edit restriction is scoped by **target** rather than by tool. The persona
+  may write `tasks/**`, `docs/**`, and `.github/agents/*.md`. It must not write
+  `batch-runner/**`, `src/**`, `scripts/**`, `.github/workflows/**`,
+  `grading_configs/**`, `schemas/**`, or `data/**`, and `git commit`, `push`,
+  PR, and tag remain owner decisions routed to `git-committer`.
+- An Orchestration section records three dispatch rules, including that a
+  subagent inherits none of the orchestrator's conversation and that
+  job-specific boundaries belong in the call prompt rather than in a worker's
+  reusable persona file.
+- A further dispatch rule requires workers to receive a clean worktree cut from
+  the merged SHA and to abort on a non-empty `git status --porcelain`, because a
+  harness run against a mixed tree does not measure the merged state and the
+  repo-wide instruction files on disk there may be stale.
+- `grading-engineer.md` had no `model:` key at all; one is added.
+- `llm-systems-engineer.md` line 207 pointed at the old persona name and now
+  points at `conductor`.
+- The extension is normalized from `.agent.md` to `.md`, matching the other ten
+  personas.
+
+### Verification
+
+- Repository-wide search for `ai-strategy-consultant` and
+  `copilot-instructions.agent`: zero remaining matches.
+- Changed paths are exactly four: the rename pair plus the two edited personas.
+- The commit was prepared in a clean worktree cut from `origin/main`
+  `f6030e9fb276f7536e913fb0630db0d1818def6a` whose `git status --porcelain` was
+  empty at start, so none of the preserved WIP checkout's 211 staged, 59
+  unstaged, or 1,013 untracked entries are included.
+- The preserved WIP checkout, its three stashes, and
+  `hyeonsangjeon-review-handoff-context` are unchanged.
+- No model, grading, cloud credential, workflow dispatch, Hugging Face write, or
+  paid operation ran.
+
+### Review Evidence
+
+- No independent reviewer agent was run for this change. The owner reviewed the
+  complete diff in session before authorizing the commit.
+
+### Remaining Work
+
+- `conductor` and `grading-engineer` now carry
+  `Claude Opus 5 (Max reasoning) (copilot)`. No other persona on `main` uses that
+  string and it has not been confirmed to resolve at agent invocation —
+  appearing in an agent listing proves registration, not invocation. Confirm it
+  resolves before relying on either persona. The attested values already on
+  `main` are `Claude Opus 4.8 (copilot)` and
+  `Claude Opus 4.7 (1M context) (Xhigh reasoning) (Preview) (copilot)`.
+- Eight worker personas (`analyzer`, `azure-infra-engineer`, `coder`,
+  `extreme-reasoner`, `first-reviewer`, `frontend-developer`, `git-committer`,
+  `ui-designer`) carry an uncommitted `model:` change dated 2026-07-17 in the
+  preserved WIP checkout that sets a value which fails at invocation. That
+  change is deliberately excluded here and remains an owner decision.
+- `llm-systems-engineer.md` keeps its existing `model:` value; only its
+  cross-reference changed.
+- The completion-record mandate lives only in `.github/copilot-instructions.md`,
+  which Claude Code does not load, and `CLAUDE.md` does not mention it. Where
+  that rule should live is open.
+- Do not create a documentation-only PR to record this change's eventual merge
+  metadata.
+
+---
+
+## Preserved Prior Result: First Sol Max Four-Task Anchor (2026-08-12)
+
 - Status: the four-task Sol Max anchor completed, but the 220-task run is
   blocked by audio routing and the 44-hour envelope
-
-## Current Task: First Sol Max Four-Task Anchor
 
 ### Task
 

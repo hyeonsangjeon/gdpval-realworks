@@ -11,6 +11,27 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+- **Conductor orchestrator persona** - rename
+  `.github/agents/copilot-instructions.agent.md` to
+  `.github/agents/conductor.md`, and the persona itself from
+  `ai-strategy-consultant` to `conductor`, normalizing the extension to match
+  the other ten agent files. The persona previously forbade all file editing in
+  its body while its `tools:` list granted `edit/createFile`, `edit/editFiles`,
+  and `edit/rename`; the restriction is now scoped by target instead. It may
+  write `tasks/**`, `docs/**`, and `.github/agents/*.md`, and must not write
+  `batch-runner/**`, `src/**`, `scripts/**`, `.github/workflows/**`,
+  `grading_configs/**`, `schemas/**`, or `data/**`, with `git commit`, `push`,
+  PR, and tag remaining owner decisions routed to `git-committer`. Adds an
+  Orchestration section covering subagent dispatch — that a subagent inherits
+  none of the orchestrator's conversation, that job-specific boundaries belong
+  in the call prompt rather than in a worker's reusable persona file, and that
+  workers must be given a clean worktree cut from the merged SHA rather than a
+  dirty checkout. Adds the missing `model:` key to `grading-engineer`, which had
+  none, and repoints `llm-systems-engineer`'s cross-reference at the new persona
+  name so no dangling reference remains. Source, workflows, configs, schemas,
+  and grade data are unchanged.
+
 ### Fixed
 - **First Sol Max anchor result and bounded analysis filenames** - run the
   owner-approved four-task anchor once as Actions run `31582293672` from main
