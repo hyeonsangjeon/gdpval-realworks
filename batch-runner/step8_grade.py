@@ -212,6 +212,8 @@ def resolve_grade_output_path(
     inference_sha: str | None = None,
     grader_source_hash: str | None = None,
     diagnostic_task_scope_sha: str | None = None,
+    shard_index: int = 0,
+    shard_count: int = 1,
 ) -> Path:
     if not FULL_HF_SHA_RE.fullmatch(rubric_sha):
         raise ValueError(
@@ -236,6 +238,10 @@ def resolve_grade_output_path(
         raise ValueError(
             "diagnostic_task_scope_sha must be a full lowercase SHA-256"
         )
+    if shard_count < 1 or not 0 <= shard_index < shard_count:
+        raise ValueError(
+            "shard_index must satisfy 0 <= index < shard_count (count >= 1)"
+        )
     out_name = config["output"]["filename_template"].format(
         exp_id=experiment_id,
         judge_slug=judge_slug,
@@ -253,11 +259,26 @@ def resolve_grade_output_path(
         raise ValueError("formatted grade filename must be a single safe path component")
     output_root = Path(config["output"]["directory"])
     if diagnostic_task_scope_sha is not None:
+        output_root = output_root / "_diagnostic" / diagnostic_task_scope_sha
+    if shard_count > 1:
+        # Every shard of a run resolves to the same `out_name`, because their
+        # identity inputs (config_hash, rubric_sha, grader_source_hash, ...) are
+        # identical by construction — that sameness is the whole point, it is
+        # what lets step9 prove the shards belong together. So the *path* has to
+        # fork or N concurrent jobs would write and commit the same file.
+        #
+        # Fork it exactly the way `_diagnostic/<scope_sha>/` already does: below
+        # the canonical name, never inside it. No identity input is touched, so
+        # the cache key is unchanged and each shard's path is stable across its
+        # own rc=7 resume chunks. The `_shards/` directory also keeps these
+        # partials out of `scripts/aggregate-grades.mjs`, which globs
+        # `data/grades/*.json` non-recursively and would otherwise publish an
+        # unfinished slice to the dashboard as if it were a graded run.
         return (
             output_root
-            / "_diagnostic"
-            / diagnostic_task_scope_sha
-            / out_name
+            / "_shards"
+            / Path(out_name).stem
+            / f"shard-{shard_index:03d}-of-{shard_count:03d}.json"
         )
     return output_root / out_name
 
@@ -311,6 +332,28 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--shard-count",
+        type=int,
+        default=1,
+        help=(
+            "Split the run across N workers. Each shard grades a stride slice "
+            "(tasks[i::N]) of the SAME canonical task order, so the corpus "
+            "identity fields (expected_task_count, "
+            "expected_ordered_task_ids_sha256) still describe the full corpus "
+            "and every shard resolves to the same cache key. A shard emits "
+            "run_status 'partial'; step9_merge_shards.py reassembles the "
+            "shards into the final payload. Default 1 = serial, unsharded. "
+            "Sharding is NOT a diagnostic selection: it changes who grades "
+            "what, not which tasks are in scope."
+        ),
+    )
+    parser.add_argument(
+        "--shard-index",
+        type=int,
+        default=0,
+        help="0-based index of this shard; must satisfy 0 <= index < count.",
+    )
+    parser.add_argument(
         "--source-experiment-id",
         default=None,
         help=(
@@ -320,7 +363,15 @@ def parse_args() -> argparse.Namespace:
             "from the inference run directory (e.g. re-grading a renamed run)."
         ),
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.shard_count < 1:
+        parser.error("--shard-count must be >= 1")
+    if not 0 <= args.shard_index < args.shard_count:
+        parser.error(
+            "--shard-index must satisfy 0 <= index < --shard-count "
+            f"(got index={args.shard_index}, count={args.shard_count})"
+        )
+    return args
 
 
 def validate_grading_config(config: dict) -> None:
@@ -907,6 +958,36 @@ def _task_ids(rows: list[dict], *, label: str) -> list[str]:
     return task_ids
 
 
+def _is_ordered_subsequence(candidate: list[str], universe: list[str]) -> bool:
+    """True when ``candidate`` occurs inside ``universe`` in the same order.
+
+    A serial ``--resume`` produces a prefix of the canonical order, but a shard
+    (``--shard-count``) grades a stride slice, so its partial payload is an
+    ordered *subsequence* instead. Every prefix is a subsequence, so accepting
+    subsequences only widens what already validated.
+    """
+    remaining = iter(universe)
+    return all(task_id in remaining for task_id in candidate)
+
+
+def _shard_slice(
+    tasks: list[dict], *, shard_index: int, shard_count: int
+) -> list[dict]:
+    """Return the stride slice of ``tasks`` this shard is responsible for.
+
+    Stride (``tasks[i::n]``) rather than contiguous blocks: the corpus carries
+    whatever ordering bias the source dataset had (sector runs, difficulty
+    drift), and contiguous blocks would concentrate that bias into individual
+    shards, making per-shard cost and wall-clock wildly uneven. A stride spreads
+    it. The union of all shards is exactly ``tasks``, and each shard preserves
+    the canonical relative order, so each partial payload is an ordered
+    subsequence of the expected ids.
+    """
+    if shard_count <= 1:
+        return list(tasks)
+    return tasks[shard_index::shard_count]
+
+
 def _validate_grade_task_set(
     existing: dict,
     expected_tasks: list[dict],
@@ -939,8 +1020,10 @@ def _validate_grade_task_set(
     if require_complete:
         if existing_ids != expected_ids:
             raise ValueError("existing final grade task order is incomplete or mismatched")
-    elif existing_ids != expected_ids[: len(existing_ids)]:
-        raise ValueError("existing partial grade tasks are not an ordered prefix")
+    elif not _is_ordered_subsequence(existing_ids, expected_ids):
+        raise ValueError(
+            "existing partial grade tasks are not an ordered subsequence"
+        )
     runtime_errors = [
         (task["task_id"], error)
         for task in existing["tasks"]
@@ -1535,6 +1618,17 @@ def main() -> int:
         or source_provenance_status == "legacy-missing"
     )
     completed_run_status = "diagnostic" if diagnostic_run else "final"
+    # Sharding deliberately does NOT feed `diagnostic_run` above. A diagnostic
+    # run is one whose *scope* was narrowed (--tasks/--limit/pinned selection),
+    # which forks the output into _diagnostic/<scope_sha>/. A shard's scope is
+    # still the full corpus; only the division of labour changed. Keeping them
+    # separate is what lets every shard resolve to the same canonical
+    # out_path and merge back into one final payload.
+    sharded_run = args.shard_count > 1
+    # `completed_run_status` keeps meaning "what a COMPLETE run of this config
+    # looks like" — the cache/resume guards compare against it. What this
+    # process actually writes is a partial when it is one shard of many.
+    emitted_run_status = "partial" if sharded_run else completed_run_status
     diagnostic_task_scope_sha = (
         _ordered_task_ids_sha256(expected_task_ids)
         if diagnostic_run
@@ -1552,15 +1646,24 @@ def main() -> int:
             inference_sha=inference_revision,
             grader_source_hash=grader_source_hash,
             diagnostic_task_scope_sha=diagnostic_task_scope_sha,
+            shard_index=args.shard_index,
+            shard_count=args.shard_count,
         )
         _write_github_output("grade_file", _repo_relative_grade_file(out_path))
-        _write_github_output("grade_status", completed_run_status)
+        _write_github_output("grade_status", emitted_run_status)
     except (KeyError, ValueError) as exc:
         print(f"ERROR: grade output path resolution failed: {exc}", file=sys.stderr)
         return 1
 
     if args.dry_run:
-        _print_dry_run_stats(tasks, loader)
+        _print_dry_run_stats(
+            _shard_slice(
+                tasks,
+                shard_index=args.shard_index,
+                shard_count=args.shard_count,
+            ),
+            loader,
+        )
         return 0
 
     try:
@@ -1581,6 +1684,19 @@ def main() -> int:
     except ValueError as exc:
         print(f"ERROR: deliverable tree validation failed: {exc}", file=sys.stderr)
         return 1
+
+    # From here `tasks` is the corpus *identity* — it drives expected_task_count,
+    # expected_ordered_task_ids_sha256 and every resume/cache guard, and stays
+    # the full corpus even when this process only grades a slice of it.
+    # `shard_tasks` is this process's *workload*. Identical when unsharded.
+    shard_tasks = _shard_slice(
+        tasks, shard_index=args.shard_index, shard_count=args.shard_count
+    )
+    if sharded_run:
+        print(
+            f"SHARD {args.shard_index + 1}/{args.shard_count}: grading "
+            f"{len(shard_tasks)} of {len(tasks)} tasks"
+        )
 
     renderer_fingerprint: dict[str, str] | None = None
     renderer_required = requires_track2_office_renderer(config)
@@ -1616,12 +1732,28 @@ def main() -> int:
                 ),
                 anchor_projection=config.get("anchor_projection"),
             )
-            _validate_grade_task_set(
-                existing,
-                tasks,
-                require_complete=True,
-                complete_status=completed_run_status,
-            )
+            if sharded_run:
+                # A completed shard leaves a partial, not a final, and that
+                # partial must be THIS shard's slice — otherwise we would skip
+                # on a sibling shard's output and silently never grade our own.
+                existing_ids = _validate_grade_task_set(
+                    existing, tasks, require_complete=False
+                )
+                shard_ids = set(_task_ids(shard_tasks, label="current shard"))
+                if existing_ids != shard_ids:
+                    raise ValueError(
+                        "existing partial at this path belongs to a different "
+                        f"shard: expected {len(shard_ids)} ids for "
+                        f"--shard-index {args.shard_index}, found "
+                        f"{len(existing_ids)}"
+                    )
+            else:
+                _validate_grade_task_set(
+                    existing,
+                    tasks,
+                    require_complete=True,
+                    complete_status=completed_run_status,
+                )
         except ValueError as exc:
             print(f"ERROR: grade cache identity validation failed: {exc}", file=sys.stderr)
             return 1
@@ -1677,6 +1809,18 @@ def main() -> int:
             completed_task_ids = _validate_grade_task_set(
                 existing, tasks, require_complete=False
             )
+            if sharded_run:
+                # The partial may be short (that is what resuming means), but
+                # every id in it must belong to this shard's slice. Anything
+                # else means we picked up a sibling shard's file and would
+                # re-emit its tasks under our index, double-counting on merge.
+                shard_ids = set(_task_ids(shard_tasks, label="current shard"))
+                foreign = sorted(completed_task_ids - shard_ids)
+                if foreign:
+                    raise ValueError(
+                        "partial contains tasks outside --shard-index "
+                        f"{args.shard_index} of {args.shard_count}: {foreign}"
+                    )
         except ValueError as exc:
             print(f"ERROR: --resume {exc}", file=sys.stderr)
             return 1
@@ -1768,7 +1912,7 @@ def main() -> int:
             atexit.unregister(grader_exit_cleanup)
         return code
 
-    for idx, task_result in enumerate(tasks, start=1):
+    for idx, task_result in enumerate(shard_tasks, start=1):
         # Resume skip
         if task_result["task_id"] in completed_task_ids:
             continue
@@ -1777,7 +1921,7 @@ def main() -> int:
         elapsed_sec = time.monotonic() - grade_loop_start
         if time_budget_sec > 0 and elapsed_sec > time_budget_sec:
             graded_count = len(task_payloads)
-            remaining = len(tasks) - graded_count
+            remaining = len(shard_tasks) - graded_count
             if graded_count <= initial_completed_count:
                 print(
                     "[time-guard] no new task completed in this chunk; "
@@ -1787,7 +1931,7 @@ def main() -> int:
                 return finish(GRADE_EXIT_PERSISTENCE_FAILURE)
             print(
                 f"\n[time-guard] elapsed {elapsed_sec/60:.1f}min > budget "
-                f"{time_budget_sec/60:.0f}min; graded={graded_count}/{len(tasks)} "
+                f"{time_budget_sec/60:.0f}min; graded={graded_count}/{len(shard_tasks)} "
                 f"remaining={remaining}. Saving partial and requesting resume.",
                 file=sys.stderr,
             )
@@ -1842,7 +1986,7 @@ def main() -> int:
         task_payloads.append(row)
 
         print(
-            f"[{idx}/{len(tasks)}] {task.task_id[:8]} -> {grade.pct:.1f}% "
+            f"[{idx}/{len(shard_tasks)}] {task.task_id[:8]} -> {grade.pct:.1f}% "
             f"({grade.total_awarded:.1f}/{grade.total_max})"
         )
 
@@ -1935,7 +2079,7 @@ def main() -> int:
         inference_revision,
         azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
         azure_ai_routes=azure_ai_routes,
-        run_status=completed_run_status,
+        run_status=emitted_run_status,
         expected_task_ids=expected_task_ids,
         exp_config=exp_config,
         source_experiment_id=args.source_experiment_id,

@@ -463,6 +463,9 @@ def _anchor4_projection_grade() -> dict:
             "perception_total_latency_ms": 0,
             "usage_complete": True,
             "error": None,
+            # Audio evidence in the corpus, so applicability is "applicable"
+            # and these anchor cases keep testing wiring, not corpus content.
+            "reference_files_excluded": ["briefing-call.m4a"],
             "items": [],
         })
     task_hash = hashlib.sha256(
@@ -634,7 +637,14 @@ def test_anchor4_projection_separates_modalities_and_preregistered_gates(
     assert projection["components"]["audio"]["projected_hours"] == 0.062
     assert projection["projected_220_hours"] == 4.0991
     assert projection["envelope_status"] == "below_44h_envelope"
-    assert projection["audio_wiring"] == {"call_count": 1, "status": "passed"}
+    assert projection["audio_wiring"] == {
+        "call_count": 1,
+        "output_tokens": 50,
+        "status": "passed",
+        "applicability": "applicable",
+        "audio_file_count": 4,
+        "path_bearing_items": 0,
+    }
     assert projection["visual_budget"] == {
         "task_visual_budget_exceeded": 0,
         "status": "passed",
@@ -688,7 +698,11 @@ def test_anchor4_projection_blocks_dead_audio_and_visual_budget_error(
 
     assert projection["audio_wiring"] == {
         "call_count": 0,
+        "output_tokens": 0,
         "status": "failed_no_audio_calls",
+        "applicability": "applicable",
+        "audio_file_count": 4,
+        "path_bearing_items": 0,
     }
     assert projection["visual_budget"] == {
         "task_visual_budget_exceeded": 1,
@@ -983,6 +997,203 @@ def test_anchor4_projection_rejects_reordered_tasks_with_recomputed_hash(
         projection["full_run_gate"]["blockers"]
     )
     assert projection["full_run_gate"]["status"] == "blocked"
+
+
+def test_audio_extension_mirror_matches_core_media_types():
+    """G-A A-4: the mirrored extension set is identical to core's own set."""
+    module = _load_module()
+    batch_runner = REPO_ROOT / "batch-runner"
+    sys.path.insert(0, str(batch_runner))
+    try:
+        from core.media_types import GRADER_AUDIO_EXTENSIONS
+    finally:
+        sys.path.remove(str(batch_runner))
+
+    assert module.GRADER_AUDIO_EXTENSIONS == GRADER_AUDIO_EXTENSIONS
+
+
+def test_audio_applicability_is_unknown_without_path_fields(tmp_path: Path):
+    """G-A A-2: no path evidence stays undecided and keeps a gate blocker."""
+    grade = _anchor4_projection_grade()
+    for task in grade["tasks"]:
+        task.pop("reference_files_excluded", None)
+
+    projection = _run(tmp_path, grade)["this"]["modality_projection"]
+
+    assert projection["audio_wiring"] == {
+        "call_count": 1,
+        "output_tokens": 50,
+        "status": "indeterminate",
+        "applicability": "unknown",
+        "audio_file_count": 0,
+        "path_bearing_items": 0,
+    }
+    assert "audio_wiring_indeterminate" in projection["full_run_gate"]["blockers"]
+    assert projection["full_run_gate"]["status"] == "blocked"
+
+
+def test_audio_applicability_is_not_applicable_when_paths_carry_no_audio(
+    tmp_path: Path,
+):
+    """G-A A-2: paths present but silent means no blocker, only a note."""
+    grade = _anchor4_projection_grade()
+    for task in grade["tasks"]:
+        task.pop("reference_files_excluded", None)
+    first = grade["tasks"][0]
+    first["items"] = [
+        item for item in first["items"]
+        if item.get("routing_modality") != "audio"
+    ]
+    first["items"][0]["selected_paths"] = ["report.xlsx", "chart.png"]
+
+    projection = _run(tmp_path, grade)["this"]["modality_projection"]
+
+    assert projection["audio_wiring"]["applicability"] == "not_applicable"
+    assert projection["audio_wiring"]["audio_file_count"] == 0
+    assert projection["audio_wiring"]["path_bearing_items"] == 1
+    assert projection["audio_wiring"]["status"] == "not_applicable"
+    assert "audio_wiring_not_exercised" not in (
+        projection["full_run_gate"]["blockers"]
+    )
+    assert "audio_wiring_indeterminate" not in (
+        projection["full_run_gate"]["blockers"]
+    )
+
+
+def test_both_projection_paths_report_the_same_audio_state(tmp_path: Path):
+    """G-A A-5: normalized and blocked projections agree on audio state."""
+    normalized = _run(tmp_path, _anchor4_projection_grade())["this"]
+
+    blocked_grade = _anchor4_projection_grade()
+    blocked_grade["tasks"].reverse()
+    blocked_grade["expected_ordered_task_ids_sha256"] = hashlib.sha256(
+        json.dumps(
+            [task["task_id"] for task in blocked_grade["tasks"]],
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    blocked = _run(tmp_path, blocked_grade)["this"]
+
+    assert blocked["modality_projection"]["anchor_integrity"]["status"] == "failed"
+    assert blocked["modality_projection"]["projected_220_hours"] is None
+    assert (
+        blocked["modality_projection"]["audio_wiring"]
+        == normalized["modality_projection"]["audio_wiring"]
+    )
+    assert (
+        blocked["modality_projection"]["audio_wiring"]["applicability"]
+        == "applicable"
+    )
+
+
+def test_audio_calls_that_all_errored_are_blocked_separately(tmp_path: Path):
+    """G-B B-1/B-2: calls with zero output tokens block as audio_calls_all_failed."""
+    grade = _anchor4_projection_grade()
+    audio_item = next(
+        item for item in grade["tasks"][0]["items"]
+        if item.get("routing_modality") == "audio"
+    )
+    audio_item["perception_output_tokens"] = 0
+
+    projection = _run(tmp_path, grade)["this"]["modality_projection"]
+
+    assert projection["audio_wiring"]["applicability"] == "applicable"
+    assert projection["audio_wiring"]["call_count"] == 1
+    assert projection["audio_wiring"]["output_tokens"] == 0
+    assert projection["audio_wiring"]["status"] == "failed_all_calls_errored"
+    assert "audio_calls_all_failed" in projection["full_run_gate"]["blockers"]
+    assert "audio_wiring_not_exercised" not in (
+        projection["full_run_gate"]["blockers"]
+    )
+    assert projection["full_run_gate"]["status"] == "blocked"
+
+
+def test_envelope_status_strings_match_legacy_literals_at_44h():
+    """G-C C-2: derived envelope labels equal the pre-existing 44h literals."""
+    module = _load_module()
+    hours = module.DEFAULT_CHUNK_ENVELOPE_HOURS
+
+    assert hours == 44
+    assert module._envelope_status_at_or_above(hours) == "at_or_above_44h_envelope"
+    assert module._envelope_status_below(hours) == "below_44h_envelope"
+    assert module._envelope_status_sharded_below(hours) == (
+        "sharded_below_44h_envelope"
+    )
+
+
+def test_normalized_and_fallback_paths_share_one_envelope_value(tmp_path: Path):
+    """G-C C-1/C-3: both projection routes read the same envelope, not a literal."""
+    module = _load_module()
+    normalized = _run(tmp_path, _anchor4_projection_grade())["this"]
+
+    fallback_grade = _grade_json(n_tasks=1)
+    fallback_grade["tasks"][0]["grading_wall_time_ms"] = 3_600_000
+    fallback = _run(tmp_path, fallback_grade)["this"]
+
+    assert normalized["projection_method"] == "modality_normalized_v1"
+    assert fallback["projection_method"] == "task_count_fallback"
+    assert fallback["modality_projection"] is None
+    assert (
+        fallback["shard_projection"]["chunk_envelope_hours"]
+        == normalized["modality_projection"]["chunk_envelope_hours"]
+        == module.DEFAULT_CHUNK_ENVELOPE_HOURS
+    )
+    assert fallback["projected_220_wall_hours"] >= 44
+    assert fallback["projection_status"] == "at_or_above_44h_envelope"
+
+
+def test_shard_count_one_leaves_gate_output_unchanged(tmp_path: Path):
+    """G-D D-2: the default shard count reproduces the unsharded run exactly."""
+    grade = _anchor4_projection_grade()
+    payload = tmp_path / "default_shard.json"
+    payload.write_text(json.dumps(grade))
+
+    def _analysis(*extra: str) -> str:
+        out = tmp_path / f"out{len(extra)}.md"
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), str(payload), "--out", str(out), *extra],
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
+        return out.read_text(encoding="utf-8")
+
+    assert _analysis() == _analysis("--shard-count", "1")
+    assert "shard_count=" not in _analysis()
+    assert "per_shard" not in _analysis()
+
+
+def test_declared_shard_count_records_total_and_per_shard_hours(tmp_path: Path):
+    """G-D D-3/D-4/D-5: declared shards report both hours and the cost caveat."""
+    grade = _anchor4_projection_grade()
+    for task in grade["tasks"]:
+        task["grading_wall_time_ms"] = 1_000_000
+    payload = tmp_path / "sharded.json"
+    payload.write_text(json.dumps(grade))
+    out = tmp_path / "sharded.md"
+    shard_args = [sys.executable, str(SCRIPT), str(payload), "--shard-count", "9"]
+    emitted = subprocess.run([*shard_args, "--json"], capture_output=True, text=True)
+    rendered = subprocess.run(
+        [*shard_args, "--out", str(out)], capture_output=True, text=True
+    )
+    assert emitted.returncode == 0, emitted.stderr
+    assert rendered.returncode == 0, rendered.stderr
+    projection = json.loads(emitted.stdout)["this"]["modality_projection"]
+    shard = projection["shard_projection"]
+    markdown = out.read_text(encoding="utf-8")
+
+    assert shard["shard_count"] == 9
+    assert shard["max_shard_task_count"] == 25
+    assert shard["projected_total_hours"] == projection["projected_220_hours"]
+    assert shard["projected_per_shard_hours"] < shard["projected_total_hours"]
+    assert shard["per_shard_method"] == "uniform_task_cost_assumption"
+    assert "not an upper bound" in shard["per_shard_caveat"]
+    assert projection["envelope_status"] == "sharded_below_44h_envelope"
+    assert "at_or_above_44h_envelope" not in projection["full_run_gate"]["blockers"]
+    assert f"{shard['projected_total_hours']}" in markdown
+    assert f"{shard['projected_per_shard_hours']}" in markdown
+    assert "shard_count=9" in markdown
+    assert "uniform_task_cost_assumption" in markdown
 
 
 def test_markdown_contains_key_sections(tmp_path: Path):

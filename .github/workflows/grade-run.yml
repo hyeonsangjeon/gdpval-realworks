@@ -47,12 +47,28 @@ on:
         required: false
         type: number
         default: 0
+      shard_count:
+        description: "Split the corpus across N parallel dispatches (1 = serial). Each shard commits its own partial under data/grades/_shards/; the shard that finishes last merges them into the canonical final."
+        required: false
+        type: number
+        default: 1
+      shard_index:
+        description: "0-based index of this shard. Must be less than shard_count."
+        required: false
+        type: number
+        default: 0
 
 permissions:
   contents: read
 
 concurrency:
-  group: grade-${{ inputs.experiment_yaml }}-${{ inputs.grading_config }}
+  # Chunks of the SAME shard must never overlap -- they resume from one partial
+  # file and would race each other. Different shards MUST overlap or sharding
+  # buys nothing. So the key carries shard_index but deliberately NOT
+  # shard_count: re-dispatching the same index under a different N still
+  # serializes, which is what stops two overlapping slices from being graded
+  # (and paid for) simultaneously.
+  group: grade-${{ inputs.experiment_yaml }}-${{ inputs.grading_config }}-shard${{ inputs.shard_index }}
   cancel-in-progress: false
 
 jobs:
@@ -68,6 +84,8 @@ jobs:
       GRADE_PAID_APPROVAL: ${{ inputs.paid_approval }}
       GRADE_RESUME: ${{ inputs.resume }}
       GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
+      GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
+      GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
     steps:
       - name: Validate workflow context and inputs
         shell: bash
@@ -145,8 +163,35 @@ jobs:
             exit 1
           fi
 
+          # Cap at 11 concurrent shards. This is a blast-radius bound, not a
+          # derived optimum: each shard is an independent paid relay, so N is
+          # also the number of judge workloads billing at once. 11 puts the
+          # 220-task corpus at 20 tasks per shard and the ~71.6h serial
+          # projection at ~6.5h -- two 4h chunks, comfortably inside the relay
+          # envelope -- with room to dial N down if quota bites.
+          if [[ ! "$GRADE_SHARD_COUNT" =~ ^([1-9]|1[01])$ ]]; then
+            echo "::error::shard_count must be an integer between 1 and 11"
+            exit 1
+          fi
+          if [[ ! "$GRADE_SHARD_INDEX" =~ ^(0|[1-9]|10)$ ]]; then
+            echo "::error::shard_index must be an integer between 0 and 10"
+            exit 1
+          fi
+          if (( 10#$GRADE_SHARD_INDEX >= 10#$GRADE_SHARD_COUNT )); then
+            echo "::error::shard_index ($GRADE_SHARD_INDEX) must be less than shard_count ($GRADE_SHARD_COUNT)"
+            exit 1
+          fi
+          # --limit forks the output into _diagnostic/<scope_sha>/ because it
+          # narrows the graded corpus. Sharding does not narrow the corpus, and
+          # combining the two would scatter the shard set across a diagnostic
+          # subtree that nothing merges. Refuse the combination outright.
+          if [[ "$GRADE_SHARD_COUNT" != "1" && "$GRADE_TASKS_LIMIT" != "0" ]]; then
+            echo "::error::shard_count > 1 cannot be combined with tasks_limit"
+            exit 1
+          fi
+
   approve-paid:
-    name: Approve paid Sol Max grading (${{ inputs.experiment_yaml }}, ${{ inputs.grading_config }}, chunk ${{ inputs.resume_chunk }})
+    name: Approve paid Sol Max grading (${{ inputs.experiment_yaml }}, ${{ inputs.grading_config }}, chunk ${{ inputs.resume_chunk }}, shard ${{ inputs.shard_index }}/${{ inputs.shard_count }})
     needs: validate-request
     if: inputs.dry_run == false && inputs.paid_approval == true
     runs-on: ubuntu-24.04
@@ -160,6 +205,8 @@ jobs:
           GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
           GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
           GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
+          GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
+          GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
         run: |
           printf '%s\n' \
             "Approved paid grading request:" \
@@ -167,7 +214,8 @@ jobs:
             "  config=$GRADE_CONFIG" \
             "  inference_revision=${GRADE_INFERENCE_REVISION:-initial-main-resolution}" \
             "  tasks_limit=$GRADE_TASKS_LIMIT" \
-            "  resume_chunk=$GRADE_RESUME_CHUNK"
+            "  resume_chunk=$GRADE_RESUME_CHUNK" \
+            "  shard=$GRADE_SHARD_INDEX/$GRADE_SHARD_COUNT"
 
   grade-dry-run:
     needs: validate-request
@@ -181,6 +229,8 @@ jobs:
       GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
       HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
+      GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
+      GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
     steps:
       - name: Checkout exact main revision (read-only)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -251,6 +301,11 @@ jobs:
           if [[ "$GRADE_TASKS_LIMIT" != "0" ]]; then
             ARGS+=(--limit "$GRADE_TASKS_LIMIT")
           fi
+          # Preview this shard's slice, not the whole corpus -- otherwise the
+          # dry run's task count says nothing about what the paid run will do.
+          if [[ "$GRADE_SHARD_COUNT" != "1" ]]; then
+            ARGS+=(--shard-count "$GRADE_SHARD_COUNT" --shard-index "$GRADE_SHARD_INDEX")
+          fi
           python step8_grade.py "${ARGS[@]}"
 
   grade:
@@ -277,6 +332,8 @@ jobs:
       GRADE_PAID_APPROVAL: ${{ inputs.paid_approval }}
       GRADE_RESUME: ${{ inputs.resume }}
       GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
+      GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
+      GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
     # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
     # extended. We set 320min so step8_grade.py's internal 4h time guard (env
     # GRADER_TIME_BUDGET_SEC=14400) trips first, partial-saves, and exits 7,
@@ -531,6 +588,14 @@ jobs:
           if [[ "$GRADE_TASKS_LIMIT" != "0" ]]; then
             ARGS+=(--limit "$GRADE_TASKS_LIMIT")
           fi
+          # Shard flags change WHO grades WHAT, never what is in scope: the
+          # payload still declares the full 220-task identity, so every shard
+          # shares one cache key and step9 can prove the set is complete. The
+          # slice only forks the output path (data/grades/_shards/...), which
+          # is what lets N jobs commit without contending for one file.
+          if [[ "$GRADE_SHARD_COUNT" != "1" ]]; then
+            ARGS+=(--shard-count "$GRADE_SHARD_COUNT" --shard-index "$GRADE_SHARD_INDEX")
+          fi
 
           set +e
           python step8_grade.py "${ARGS[@]}"
@@ -604,6 +669,12 @@ jobs:
           else
             MSG="chore(grades): grade $GRADE_EXPERIMENT_YAML via $GRADE_CONFIG"
           fi
+          if [[ "$GRADE_SHARD_COUNT" != "1" ]]; then
+            # Every sharded commit is a partial by construction, so say which
+            # slice it is -- the log is the only place that distinguishes N
+            # simultaneous commits touching sibling files.
+            MSG="$MSG [shard $GRADE_SHARD_INDEX of $GRADE_SHARD_COUNT]"
+          fi
           git commit -m "$MSG"
           git pull --rebase origin "${GITHUB_REF_NAME}"
           if [[ ! -f "$GRADE_FILE" ]]; then
@@ -655,7 +726,7 @@ jobs:
             echo "::error::resume_chunk=$NEXT_CHUNK exceeds safety cap (10). Aborting auto-resume; investigate manually."
             exit 1
           fi
-          echo "[auto-resume] triggering chunk $NEXT_CHUNK for $GRADE_EXPERIMENT_YAML / $GRADE_CONFIG"
+          echo "[auto-resume] triggering chunk $NEXT_CHUNK for $GRADE_EXPERIMENT_YAML / $GRADE_CONFIG (shard $GRADE_SHARD_INDEX/$GRADE_SHARD_COUNT)"
           gh workflow run grade-run.yml \
             --ref "${GITHUB_REF_NAME}" \
             -f experiment_yaml="$GRADE_EXPERIMENT_YAML" \
@@ -666,18 +737,134 @@ jobs:
             -f dry_run=false \
             -f paid_approval="$GRADE_PAID_APPROVAL" \
             -f resume=true \
-            -f resume_chunk=$NEXT_CHUNK
+            -f resume_chunk=$NEXT_CHUNK \
+            -f shard_count="$GRADE_SHARD_COUNT" \
+            -f shard_index="$GRADE_SHARD_INDEX"
           echo "[auto-resume] chunk $NEXT_CHUNK dispatched"
+
+      - name: Merge shards into the final grade
+        id: merge_shards
+        if: steps.grade.outputs.rc == '0' && inputs.dry_run == false && inputs.shard_count > 1
+        env:
+          SHARD_GRADE_FILE: ${{ steps.grade.outputs.grade_file }}
+        run: |
+          set -euo pipefail
+          # This shard has graded its whole slice. It is the LAST shard only if
+          # every sibling partial is already on main, so pull before looking.
+          #
+          # Whichever shard sees a complete set performs the merge. If two race,
+          # step9 is deterministic and order-independent, so both produce
+          # byte-identical output and the loser's `git diff --staged --quiet`
+          # turns its commit into a no-op. That is why no lock is needed. And
+          # the last shard to push its own partial is guaranteed to see all N,
+          # so at least one merger always exists.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+
+          SHARD_DIR="$(dirname -- "$SHARD_GRADE_FILE")"
+          # Expected shape: <output_root>/_shards/<canonical_stem>/shard-NNN-of-NNN.json
+          # Derive the final from the _shards/ parent instead of hardcoding
+          # data/grades/. A run that also forks into _diagnostic/<scope_sha>/
+          # then merges into ITS root rather than hard-failing here, after the
+          # money is already spent. Still pinned under data/grades/, still
+          # rejecting traversal, newlines and symlinked directories.
+          if [[ "$SHARD_GRADE_FILE" == *$'\n'* || "$SHARD_GRADE_FILE" == *..* ]]; then
+            echo "::error::shard grade path is not a safe relative path"
+            exit 1
+          fi
+          if [[ "$SHARD_DIR" != data/grades/* || "$SHARD_DIR" != */_shards/* ]]; then
+            echo "::error::sharded run resolved an unexpected output directory: $SHARD_DIR"
+            exit 1
+          fi
+          if [[ ! -d "$SHARD_DIR" || -L "$SHARD_DIR" ]]; then
+            echo "::error::shard directory is not a real directory: $SHARD_DIR"
+            exit 1
+          fi
+          STEM="$(basename -- "$SHARD_DIR")"
+          FINAL_FILE="${SHARD_DIR%/_shards/*}/${STEM}.json"
+          if [[ -L "$FINAL_FILE" ]]; then
+            echo "::error::refusing to merge through a symlinked output: $FINAL_FILE"
+            exit 1
+          fi
+          COUNT=$(( 10#$GRADE_SHARD_COUNT ))
+
+          SHARDS=()
+          for index in $(seq 0 $(( COUNT - 1 ))); do
+            candidate="$(printf '%s/shard-%03d-of-%03d.json' "$SHARD_DIR" "$index" "$COUNT")"
+            if [[ ! -f "$candidate" || -L "$candidate" ]]; then
+              echo "[merge] shard $index of $COUNT is not published yet; a later shard will merge"
+              echo "merged=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            SHARDS+=("$candidate")
+          done
+
+          echo "[merge] all $COUNT shards present; merging into $FINAL_FILE"
+          # --force: a shard that loses the race re-merges over a byte-identical
+          # file. step9 refuses an existing output otherwise, which would fail
+          # the loser for doing exactly the right thing.
+          python batch-runner/step9_merge_shards.py "${SHARDS[@]}" \
+            --output "$FINAL_FILE" --force
+
+          python - "$FINAL_FILE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, "batch-runner")
+          from core.grade_payload import validate_grade_payload
+
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          schema = json.loads(
+              Path("batch-runner/schemas/grade.schema.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          validate_grade_payload(payload, schema)
+          if payload.get("run_status") != "final":
+              raise SystemExit("merged payload must be final")
+          tasks = payload.get("tasks")
+          expected = payload.get("expected_task_count")
+          if not isinstance(tasks, list) or len(tasks) != expected:
+              raise SystemExit(
+                  f"merged payload holds {len(tasks or [])} of {expected} tasks"
+              )
+          PY
+
+          git add -- "$FINAL_FILE"
+          if git diff --staged --quiet; then
+            echo "[merge] identical merge is already on main (another shard won the race)"
+          else
+            git commit -m "chore(grades): merge $COUNT shards for $GRADE_EXPERIMENT_YAML via $GRADE_CONFIG"
+            # A sibling can still push its own merge in the window between the
+            # pull above and this push. That is safe at the git level too: the
+            # rebase drops our commit by patch-id, and even if it did not, an
+            # add/add of byte-identical content resolves without conflict.
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push
+          fi
+          echo "merged=true" >> "$GITHUB_OUTPUT"
+          echo "grade_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Auto-analyze (final chunk only)
         id: analysis
-        if: steps.grade.outputs.rc == '0' && inputs.dry_run == false
+        # Serial: rc=0 means the run finished. Sharded: rc=0 means only THIS
+        # slice finished, so analysing here would publish an analysis of 1/N of
+        # the corpus. Wait for the merge to declare the whole run complete.
+        if: >-
+          inputs.dry_run == false &&
+          ((inputs.shard_count == 1 && steps.grade.outputs.rc == '0') ||
+          steps.merge_shards.outputs.merged == 'true')
+        env:
+          ANALYSIS_GRADE_FILE: ${{ steps.merge_shards.outputs.grade_file || steps.grade.outputs.grade_file }}
         run: |
-          # rc=0 means step8 completed all tasks (either single-shot or last
-          # resume chunk). Analyze the exact resolved grade JSON and emit a
-          # markdown analysis (wall-clock, latency, tokens, cost estimate,
-          # top-5 slowest, quality summary).
-          GRADE_FILE="${{ steps.grade.outputs.grade_file }}"
+          # Serial: rc=0 means step8 completed every task (single-shot or last
+          # resume chunk). Sharded: the merge step above just proved the whole
+          # corpus is assembled, and hands over the merged final's path.
+          # Analyze that exact JSON and emit a markdown analysis (wall-clock,
+          # latency, tokens, cost estimate, top-5 slowest, quality summary).
+          GRADE_FILE="$ANALYSIS_GRADE_FILE"
           if [[ -z "$GRADE_FILE" || ! -f "$GRADE_FILE" ]]; then
             echo "::error::resolved grade file is missing for $GRADE_EXPERIMENT_YAML: $GRADE_FILE"
             exit 1
@@ -693,7 +880,10 @@ jobs:
           head -40 "$OUT"
 
       - name: Commit analysis
-        if: steps.grade.outputs.rc == '0' && inputs.dry_run == false
+        # Follow the analyze step exactly. Gating on rc alone would fire on a
+        # shard that produced no analysis, and the emptiness guard below would
+        # then fail the job for correctly declining to analyze 1/N of a corpus.
+        if: steps.analysis.outcome == 'success' && inputs.dry_run == false
         env:
           ANALYSIS_FILE: ${{ steps.analysis.outputs.analysis_file }}
         run: |
@@ -716,8 +906,12 @@ jobs:
         if: always() && inputs.dry_run == false && steps.grade.outputs.grade_file != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: grade-${{ env.GRADE_EXPERIMENT_YAML }}
+          # Shards are separate workflow runs, so the names cannot collide --
+          # but a downloaded bundle is unreadable without knowing which slice it
+          # holds, and the merging shard carries the final on top of its own.
+          name: grade-${{ env.GRADE_EXPERIMENT_YAML }}${{ inputs.shard_count > 1 && format('-shard{0}of{1}', inputs.shard_index, inputs.shard_count) || '' }}
           path: |
             ${{ steps.grade.outputs.grade_file }}
+            ${{ steps.merge_shards.outputs.grade_file }}
             ${{ steps.analysis.outputs.analysis_file }}
           retention-days: 30
