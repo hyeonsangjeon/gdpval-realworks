@@ -1427,9 +1427,17 @@ def _seed_partial_grade(
     task_ids: list[str],
     renderer_fingerprint: dict[str, str] | None = None,
     run_status: str = "partial",
+    out: Path | None = None,
 ) -> Path:
-    """Drop a valid partial grade JSON at the templated output path."""
-    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    """Drop a valid partial grade JSON at the templated output path.
+
+    `out` overrides the destination for shard tests, whose payload lands under
+    `data/grades/_shards/<stem>/` rather than on the canonical name.
+    """
+    out = out or (
+        tmp_path
+        / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     task_rows = [
         {
@@ -2905,6 +2913,8 @@ def _run_grade_workflow_input_preflight(**overrides):
         "GRADE_PAID_APPROVAL": "false",
         "GRADE_RESUME": "false",
         "GRADE_RESUME_CHUNK": "0",
+        "GRADE_SHARD_COUNT": "1",
+        "GRADE_SHARD_INDEX": "0",
         **overrides,
     }
     return subprocess.run(
@@ -2926,6 +2936,17 @@ def _run_grade_workflow_input_preflight(**overrides):
             "GRADE_PAID_APPROVAL": "true",
             "GRADE_RESUME": "true",
             "GRADE_RESUME_CHUNK": "1",
+        },
+        # A shard at the top of the allowed range, mid-relay: the two features
+        # have to compose, because an 11-way split still needs rc=7 chunking.
+        {
+            "GRADE_INFERENCE_REVISION": "b" * 40,
+            "GRADE_DRY_RUN": "false",
+            "GRADE_PAID_APPROVAL": "true",
+            "GRADE_RESUME": "true",
+            "GRADE_RESUME_CHUNK": "1",
+            "GRADE_SHARD_COUNT": "11",
+            "GRADE_SHARD_INDEX": "10",
         },
     ],
 )
@@ -2961,6 +2982,21 @@ def test_grade_workflow_input_preflight_accepts_valid_dispatch(overrides):
         ),
         ({"GRADE_RESUME": "true"}, "resume requires"),
         ({"GRADE_RESUME_CHUNK": "1"}, "resume_chunk must be 0"),
+        ({"GRADE_SHARD_COUNT": "0"}, "shard_count"),
+        ({"GRADE_SHARD_COUNT": "12"}, "shard_count"),
+        ({"GRADE_SHARD_COUNT": "01"}, "shard_count"),
+        ({"GRADE_SHARD_INDEX": "11"}, "shard_index"),
+        ({"GRADE_SHARD_INDEX": "-1"}, "shard_index"),
+        # An index at or past the count would grade a slice nothing else covers,
+        # or none at all -- either way the merged set is silently incomplete.
+        ({"GRADE_SHARD_COUNT": "3", "GRADE_SHARD_INDEX": "3"}, "must be less than"),
+        ({"GRADE_SHARD_INDEX": "1"}, "must be less than"),
+        # Sharding splits the corpus; --limit narrows it into a _diagnostic/
+        # subtree nothing merges. Combining them loses tasks with no error.
+        (
+            {"GRADE_SHARD_COUNT": "2", "GRADE_TASKS_LIMIT": "5"},
+            "cannot be combined with tasks_limit",
+        ),
     ],
 )
 def test_grade_workflow_input_preflight_rejects_invalid_dispatch(overrides, error):
@@ -3007,3 +3043,582 @@ def test_time_budget_zero_disables_guard(monkeypatch, tmp_path):
     ])
     rc = s8.main()
     assert rc == 0
+
+
+# ---------------------------------------------------------------------------
+# Sharded grading (--shard-count / --shard-index)
+#
+# The 220-task corpus projects to ~71.6h of serial judge latency against a 44h
+# relay envelope. Sharding splits the *workload* across N workers while every
+# shard keeps declaring the *full* corpus identity, so step9_merge_shards.py
+# can fold the partials back into one final payload. The tests below pin the
+# two halves of that contract: identity must never shrink to the slice, and
+# the slice must never leak into the diagnostic-isolation decision.
+# ---------------------------------------------------------------------------
+
+_CORPUS = ["task-001", "task-002", "task-003"]
+_CANONICAL_STEM = "exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1"
+_CANONICAL_GRADE = f"data/grades/{_CANONICAL_STEM}.json"
+
+
+def _shard_grade_path(root: Path, index: int, count: int) -> Path:
+    """Where a shard's partial lands.
+
+    Shards share every identity input, so they would all resolve to the same
+    canonical filename. The path -- and only the path -- forks below it, so that
+    N concurrent jobs can each commit their own file and so the dashboard's
+    non-recursive `data/grades/*.json` glob never sees an unfinished slice.
+    """
+    return (
+        root
+        / "data"
+        / "grades"
+        / "_shards"
+        / _CANONICAL_STEM
+        / f"shard-{index:03d}-of-{count:03d}.json"
+    )
+
+
+def _shard_argv(index: int, count: int, *extra: str) -> list[str]:
+    return [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+        "--shard-index", str(index),
+        "--shard-count", str(count),
+        *extra,
+    ]
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        [],                                  # nothing graded yet
+        ["task-001"],                        # prefix (serial resume)
+        ["task-001", "task-002"],            # longer prefix
+        ["task-001", "task-002", "task-003"],  # complete
+        ["task-001", "task-003"],            # stride slice, shard 0 of 2
+        ["task-002"],                        # stride slice, shard 1 of 2
+        ["task-003"],                        # suffix
+    ],
+)
+def test_is_ordered_subsequence_accepts_prefixes_and_stride_slices(candidate):
+    """Serial resume produces a prefix; a shard produces a stride slice. Both
+    are ordered subsequences, and widening prefix->subsequence must not
+    regress any prefix that already validated."""
+    assert s8._is_ordered_subsequence(candidate, _CORPUS) is True
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        ["task-002", "task-001"],            # reordered
+        ["task-003", "task-001"],            # reversed stride
+        ["task-001", "task-004"],            # foreign id
+        ["task-001", "task-001"],            # repeat beyond one occurrence
+        ["task-001", "task-002", "task-003", "task-001"],  # wraparound
+    ],
+)
+def test_is_ordered_subsequence_rejects_reordered_or_foreign(candidate):
+    assert s8._is_ordered_subsequence(candidate, _CORPUS) is False
+
+
+def test_shard_slice_partitions_the_corpus_without_loss_or_overlap():
+    """Union of all shards == corpus, shards are disjoint, and each shard
+    preserves canonical relative order (which is what makes each partial an
+    ordered subsequence)."""
+    tasks = [{"task_id": f"task-{i:03d}"} for i in range(220)]
+    for count in (1, 2, 3, 7, 9, 11, 220):
+        shards = [
+            s8._shard_slice(tasks, shard_index=i, shard_count=count)
+            for i in range(count)
+        ]
+        seen: list[dict] = []
+        for shard in shards:
+            positions = [tasks.index(task) for task in shard]
+            assert positions == sorted(positions), "shard lost canonical order"
+            seen.extend(shard)
+        ids = [task["task_id"] for task in seen]
+        assert sorted(ids) == sorted(t["task_id"] for t in tasks)
+        assert len(ids) == len(set(ids)), "shards overlap"
+        # Stride keeps sizes within one of each other; contiguous blocks would
+        # not, which is the whole reason stride was chosen.
+        sizes = [len(shard) for shard in shards]
+        assert max(sizes) - min(sizes) <= 1
+
+
+def test_shard_slice_unsharded_returns_a_copy_not_the_original():
+    tasks = [{"task_id": "task-001"}]
+    result = s8._shard_slice(tasks, shard_index=0, shard_count=1)
+    assert result == tasks
+    assert result is not tasks
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ["--shard-count", "0"],
+        ["--shard-count", "-1"],
+        ["--shard-index", "-1"],
+        ["--shard-index", "2", "--shard-count", "2"],
+        ["--shard-index", "9", "--shard-count", "9"],
+    ],
+)
+def test_parse_args_rejects_out_of_range_shard_flags(monkeypatch, flags):
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", *flags,
+    ])
+    with pytest.raises(SystemExit) as excinfo:
+        s8.parse_args()
+    assert excinfo.value.code == 2
+
+
+def test_parse_args_shard_defaults_are_serial(monkeypatch):
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml",
+    ])
+    args = s8.parse_args()
+    assert args.shard_count == 1
+    assert args.shard_index == 0
+
+
+@pytest.mark.parametrize(
+    "index,expected",
+    [(0, ["task-001", "task-003"]), (1, ["task-002"])],
+)
+def test_shard_grades_only_its_stride_slice(monkeypatch, tmp_path, index, expected):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr("sys.argv", _shard_argv(index, 2, "--force"))
+
+    assert s8.main() == 0
+    payload = json.loads(
+        _shard_grade_path(tmp_path, index, 2).read_text(encoding="utf-8")
+    )
+    assert [task["task_id"] for task in payload["tasks"]] == expected
+
+
+def test_shard_payload_declares_full_corpus_identity(monkeypatch, tmp_path):
+    """The identity fields describe the corpus, not the slice -- this is what
+    lets step9 verify it merged every shard, and what keeps all shards on one
+    cache key."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr("sys.argv", _shard_argv(0, 2, "--force"))
+
+    assert s8.main() == 0
+    payload = json.loads(
+        _shard_grade_path(tmp_path, 0, 2).read_text(encoding="utf-8")
+    )
+    assert payload["run_status"] == "partial"
+    assert payload["expected_task_count"] == len(_CORPUS)
+    assert payload["expected_ordered_task_ids_sha256"] == (
+        s8._ordered_task_ids_sha256(_CORPUS)
+    )
+    assert len(payload["tasks"]) < payload["expected_task_count"]
+
+
+def test_sharding_is_not_a_diagnostic_task_selection(monkeypatch, tmp_path):
+    """--shard-* narrows who grades what, not what is in scope. It must never
+    fork the output into _diagnostic/<scope_sha>/ the way --tasks/--limit do:
+    that directory means "this run graded a narrowed corpus and its scores are
+    not comparable", which is exactly the claim sharding must not make."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr("sys.argv", _shard_argv(0, 2, "--force"))
+
+    assert s8.main() == 0
+    assert _shard_grade_path(tmp_path, 0, 2).exists()
+    assert not (tmp_path / "data/grades/_diagnostic").exists()
+    assert not _diagnostic_grade_path(tmp_path, ["task-001", "task-003"]).exists()
+    # The canonical name stays free -- it belongs to the merged final, and the
+    # dashboard aggregator globs exactly that level.
+    assert not (tmp_path / _CANONICAL_GRADE).exists()
+
+
+def test_shard_path_forks_below_the_canonical_name(monkeypatch, tmp_path):
+    """The shard filename must stay derivable from the canonical one. step9's
+    output is named by the caller, but a human reading data/grades/_shards/ has
+    to be able to tell which run these partials belong to."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    github_output = tmp_path / "github-output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+    monkeypatch.setattr("sys.argv", _shard_argv(2, 11, "--force"))
+
+    assert s8.main() == 0
+    out = _shard_grade_path(tmp_path, 2, 11)
+    assert out.exists()
+    assert out.parent.name == _CANONICAL_STEM
+    assert out.name == "shard-002-of-011.json"
+    # grade-run.yml commits whatever path this reports, so it has to be the
+    # shard's file and repo-relative.
+    assert (
+        f"grade_file=data/grades/_shards/{_CANONICAL_STEM}/shard-002-of-011.json"
+        in github_output.read_text(encoding="utf-8")
+    )
+
+
+def test_shard_paths_are_unique_per_index():
+    """The collision this fork exists to prevent: N jobs, one file.
+
+    Every shard shares its identity inputs by construction -- that sameness is
+    what step9 verifies before merging -- so `resolve_grade_output_path` is the
+    only place the paths can diverge.
+    """
+    config = {
+        "config_name": "default_gpt5pro",
+        "output": {
+            "directory": "data/grades",
+            "filename_template": "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json",
+        },
+    }
+    identity = dict(
+        experiment_id="exp998_smoke_baseline_sample",
+        judge_slug="gpt-5_4-pro",
+        config_hash="c" * 64,
+        rubric_sha="1" * 40,
+        rubric_short_sha="11e7900",
+        prompt_version="v1",
+        inference_sha="2" * 40,
+        grader_source_hash="3" * 64,
+    )
+
+    paths = [
+        s8.resolve_grade_output_path(
+            config, **identity, shard_index=index, shard_count=11
+        )
+        for index in range(11)
+    ]
+    assert len(set(paths)) == 11
+    assert len({path.parent for path in paths}) == 1
+    serial = s8.resolve_grade_output_path(config, **identity)
+    assert serial not in paths
+    assert paths[0].parent.parent.name == "_shards"
+    # Zero-padded so `ls` sorts them in shard order rather than 0, 1, 10, 2.
+    assert [path.name for path in paths][:3] == [
+        "shard-000-of-011.json",
+        "shard-001-of-011.json",
+        "shard-002-of-011.json",
+    ]
+
+
+@pytest.mark.parametrize(
+    "index,count",
+    [(-1, 2), (2, 2), (5, 2), (0, 0), (0, -1)],
+)
+def test_resolve_grade_output_path_rejects_impossible_shards(index, count):
+    """Defence in depth: parse_args already rejects these, but the path helper
+    is public and a bad pair here would silently overwrite a sibling's file."""
+    config = {
+        "config_name": "default_gpt5pro",
+        "output": {
+            "directory": "data/grades",
+            "filename_template": "{exp_id}__{judge_slug}__{rubric_short_sha}__{prompt_v}.json",
+        },
+    }
+    with pytest.raises(ValueError, match="shard_index must satisfy"):
+        s8.resolve_grade_output_path(
+            config,
+            experiment_id="exp998_smoke_baseline_sample",
+            judge_slug="gpt-5_4-pro",
+            config_hash="c" * 64,
+            rubric_sha="1" * 40,
+            rubric_short_sha="11e7900",
+            prompt_version="v1",
+            inference_sha="2" * 40,
+            grader_source_hash="3" * 64,
+            shard_index=index,
+            shard_count=count,
+        )
+
+
+def test_shard_reports_partial_grade_status_to_github_output(monkeypatch, tmp_path):
+    """grade-run.yml gates the committed artifact on this value; a shard's
+    file is a partial even when the process exits 0."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    github_output = tmp_path / "github-output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr("sys.argv", _shard_argv(0, 2, "--force"))
+
+    assert s8.main() == 0
+    assert "grade_status=partial" in github_output.read_text(encoding="utf-8")
+
+
+def test_unsharded_run_still_emits_final(monkeypatch, tmp_path):
+    """Regression guard: the shard flags default to serial, and serial must be
+    byte-for-byte the behaviour that existed before sharding."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    github_output = tmp_path / "github-output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() == 0
+    payload = json.loads((tmp_path / _CANONICAL_GRADE).read_text(encoding="utf-8"))
+    assert payload["run_status"] == "final"
+    assert [task["task_id"] for task in payload["tasks"]] == _CORPUS
+    assert "grade_status=final" in github_output.read_text(encoding="utf-8")
+
+
+def test_shard_dry_run_counts_only_its_slice(monkeypatch, tmp_path, capsys):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr("sys.argv", _shard_argv(0, 2, "--dry-run"))
+
+    assert s8.main() == 0
+    assert "Dry-run tasks=2" in capsys.readouterr().out
+
+
+def test_shard_cache_hit_skips_when_partial_is_its_own_slice(monkeypatch, tmp_path, capsys):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    _seed_partial_grade(
+        tmp_path, ["task-001", "task-003"], out=_shard_grade_path(tmp_path, 0, 2)
+    )
+    monkeypatch.setattr("sys.argv", _shard_argv(0, 2))
+
+    assert s8.main() == 0
+    assert "SKIP - exists" in capsys.readouterr().out
+
+
+def test_shard_cache_hit_refuses_a_sibling_shards_partial(monkeypatch, tmp_path, capsys):
+    """Belt and braces. The `_shards/shard-i-of-n.json` fork should make this
+    unreachable in practice, but a stale or hand-copied file at shard 0's path
+    must never be mistaken for shard 0's own work -- that would silently drop
+    1/N of the corpus while reporting success."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    # shard 1's slice, planted at shard 0's path
+    _seed_partial_grade(
+        tmp_path, ["task-002"], out=_shard_grade_path(tmp_path, 0, 2)
+    )
+    monkeypatch.setattr("sys.argv", _shard_argv(0, 2))
+
+    assert s8.main() == 1
+    assert "belongs to a different shard" in capsys.readouterr().err
+
+
+def test_shard_resume_refuses_a_partial_holding_foreign_tasks(monkeypatch, tmp_path, capsys):
+    """A short partial is normal when resuming; one containing tasks outside
+    this shard's slice means we picked up the wrong file and would double-count
+    on merge."""
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    _seed_partial_grade(
+        tmp_path, ["task-001", "task-002"], out=_shard_grade_path(tmp_path, 0, 2)
+    )
+    monkeypatch.setattr("sys.argv", _shard_argv(0, 2, "--resume"))
+
+    assert s8.main() == 1
+    assert "outside --shard-index 0" in capsys.readouterr().err
+
+
+def test_shard_resume_continues_from_its_own_short_partial(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    grader_instance = {}
+
+    class _TrackGrader(_FakeGrader):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            grader_instance["g"] = self
+
+    monkeypatch.setattr(s8, "Grader", _TrackGrader)
+    _seed_partial_grade(
+        tmp_path, ["task-001"], out=_shard_grade_path(tmp_path, 0, 2)
+    )
+    monkeypatch.setattr("sys.argv", _shard_argv(0, 2, "--resume"))
+
+    assert s8.main() == 0
+    assert grader_instance["g"].calls == 1  # only task-003 remains for shard 0
+    payload = json.loads(
+        _shard_grade_path(tmp_path, 0, 2).read_text(encoding="utf-8")
+    )
+    assert [task["task_id"] for task in payload["tasks"]] == ["task-001", "task-003"]
+    assert payload["run_status"] == "partial"
+
+
+def test_all_shards_together_cover_the_corpus_exactly(monkeypatch, tmp_path):
+    """End-to-end partition check through main(): run every shard of a 3-way
+    split into its own directory and confirm the union is the whole corpus."""
+    graded: list[str] = []
+    for index in range(3):
+        shard_dir = tmp_path / f"shard{index}"
+        shard_dir.mkdir()
+        _setup_workspace(shard_dir)
+        monkeypatch.chdir(shard_dir)
+        monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+        monkeypatch.setattr(s8, "Grader", _FakeGrader)
+        monkeypatch.setattr("sys.argv", _shard_argv(index, 3, "--force"))
+
+        assert s8.main() == 0
+        payload = json.loads(
+            _shard_grade_path(shard_dir, index, 3).read_text(encoding="utf-8")
+        )
+        assert payload["run_status"] == "partial"
+        assert payload["expected_task_count"] == len(_CORPUS)
+        graded.extend(task["task_id"] for task in payload["tasks"])
+
+    assert sorted(graded) == _CORPUS
+    assert len(graded) == len(set(graded))
+
+
+def test_grade_workflow_wires_shards_end_to_end():
+    """Pin the dispatch surface that turns step8's `--shard-*` flags into N
+    parallel paid relays.
+
+    step8 can slice and step9 can merge, but neither is reachable unless the
+    workflow passes the flags through, keeps concurrent shards from serialising
+    each other, and arranges for exactly one of them to assemble the final. This
+    test guards that wiring, because every failure mode here is expensive: a
+    dropped flag double-grades the corpus, a wrong concurrency key silently
+    turns N shards back into a queue, and a mis-gated analysis publishes a
+    reading of 1/N of the corpus as if it were the whole run.
+    """
+    workflow = Path("../.github/workflows/grade-run.yml").read_text(
+        encoding="utf-8"
+    )
+    parsed = yaml.safe_load(workflow)
+    # YAML 1.1 parses a bare `on:` key as the boolean True.
+    trigger = parsed.get("on", parsed.get(True))
+    inputs = trigger["workflow_dispatch"]["inputs"]
+
+    assert inputs["shard_count"]["default"] == 1
+    assert inputs["shard_index"]["default"] == 0
+    assert inputs["shard_count"]["required"] is False
+    assert inputs["shard_index"]["required"] is False
+
+    # Chunks of the SAME shard must serialise -- they resume from one partial
+    # file. Different shards must NOT, or sharding buys nothing. Hence the key
+    # carries shard_index and deliberately not shard_count.
+    concurrency = parsed["concurrency"]["group"]
+    assert "inputs.shard_index" in concurrency
+    assert "inputs.shard_count" not in concurrency
+    assert parsed["concurrency"]["cancel-in-progress"] is False
+
+    validate = next(
+        step
+        for step in parsed["jobs"]["validate-request"]["steps"]
+        if step.get("name") == "Validate workflow context and inputs"
+    )
+    assert "shard_count must be an integer between 1 and 11" in validate["run"]
+    assert "shard_index must be an integer between 0 and 10" in validate["run"]
+    assert "must be less than shard_count" in validate["run"]
+    # --limit forks the output into _diagnostic/<scope_sha>/, where nothing
+    # merges. The two features must never combine.
+    assert "shard_count > 1 cannot be combined with tasks_limit" in (
+        validate["run"]
+    )
+
+    steps = parsed["jobs"]["grade"]["steps"]
+    by_name = {step.get("name"): step for step in steps if step.get("name")}
+    order = [step.get("name") for step in steps]
+
+    shard_args = (
+        'ARGS+=(--shard-count "$GRADE_SHARD_COUNT" '
+        '--shard-index "$GRADE_SHARD_INDEX")'
+    )
+    grade_job = parsed["jobs"]["grade"]
+    assert grade_job["env"]["GRADE_SHARD_COUNT"] == "${{ inputs.shard_count }}"
+    assert grade_job["env"]["GRADE_SHARD_INDEX"] == "${{ inputs.shard_index }}"
+    assert shard_args in by_name["Run grading"]["run"]
+    # The dry run must preview this shard's slice too, or its task count says
+    # nothing about the paid run it is meant to authorise.
+    dry_classify = next(
+        step
+        for step in parsed["jobs"]["grade-dry-run"]["steps"]
+        if step.get("name") == "Classify grading work only"
+    )
+    assert shard_args in dry_classify["run"]
+
+    # An rc=7 chunk hands off to the next chunk OF THE SAME SHARD. Losing the
+    # shard flags here would resume the remainder as an unsharded run.
+    retrigger = by_name["Auto-retrigger next chunk (time budget hit)"]
+    assert '-f shard_count="$GRADE_SHARD_COUNT"' in retrigger["run"]
+    assert '-f shard_index="$GRADE_SHARD_INDEX"' in retrigger["run"]
+
+    merge = by_name["Merge shards into the final grade"]
+    assert merge["id"] == "merge_shards"
+    assert "inputs.shard_count > 1" in merge["if"]
+    assert "steps.grade.outputs.rc == '0'" in merge["if"]
+    # Merge only after pulling, or "is every sibling published?" is answered
+    # against a stale checkout and no shard ever sees a complete set.
+    assert merge["run"].index(
+        'git pull --rebase origin "${GITHUB_REF_NAME}"'
+    ) < merge["run"].index("step9_merge_shards.py")
+    assert "data/grades/" in merge["run"]
+    assert "*/_shards/*" in merge["run"]
+    assert "shard-%03d-of-%03d.json" in merge["run"]
+    # Path guards: no traversal, no newline injection, no symlinked directory
+    # or output. The shard path comes from step8, but the merge step is what
+    # decides where a `final` grade gets written and committed.
+    assert '== *..*' in merge["run"]
+    assert "-L \"$SHARD_DIR\"" in merge["run"]
+    assert '-L "$FINAL_FILE"' in merge["run"]
+    assert '-L "$candidate"' in merge["run"]
+    assert 'echo "merged=false"' in merge["run"]
+    assert 'echo "merged=true"' in merge["run"]
+    # A partial slice must never be published as a final grade.
+    assert "from core.grade_payload import validate_grade_payload" in (
+        merge["run"]
+    )
+    assert 'payload.get("run_status") != "final"' in merge["run"]
+    assert 'payload.get("expected_task_count")' in merge["run"]
+    # Two shards can reach the merge concurrently; step9 is deterministic, so
+    # the loser rewrites an identical file and --force keeps it from erroring.
+    assert "--force" in merge["run"]
+    assert "git diff --staged --quiet" in merge["run"]
+    assert order.index("Commit grade result") < order.index(
+        "Merge shards into the final grade"
+    )
+
+    analysis = by_name["Auto-analyze (final chunk only)"]
+    assert order.index("Merge shards into the final grade") < order.index(
+        "Auto-analyze (final chunk only)"
+    )
+    assert "steps.merge_shards.outputs.merged == 'true'" in analysis["if"]
+    assert "inputs.shard_count == 1 && steps.grade.outputs.rc == '0'" in (
+        analysis["if"]
+    )
+    assert analysis["env"]["ANALYSIS_GRADE_FILE"] == (
+        "${{ steps.merge_shards.outputs.grade_file || "
+        "steps.grade.outputs.grade_file }}"
+    )
+    # Committing has to follow the analyze step exactly. Gating on rc alone
+    # would fire on a shard that produced no analysis, and the emptiness guard
+    # would then fail the job for correctly declining to analyse a fragment.
+    assert by_name["Commit analysis"]["if"] == (
+        "steps.analysis.outcome == 'success' && inputs.dry_run == false"
+    )
+
+    upload = by_name["Upload grade artifact"]
+    assert "inputs.shard_index" in upload["with"]["name"]
+    assert "${{ steps.merge_shards.outputs.grade_file }}" in (
+        upload["with"]["path"]
+    )

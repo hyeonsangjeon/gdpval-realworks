@@ -50,6 +50,30 @@ ANALYSIS_NAME_MAX_BYTES = 255
 ANALYSIS_FALLBACK_PREFIX = "grade__"
 ANALYSIS_SUFFIX = ".analysis.md"
 
+# G-C — single source for the chunk envelope. The contract value wins; this
+# constant is the fallback for payloads that carry no anchor contract, so the
+# projection path and the task-count fallback path can never disagree.
+DEFAULT_CHUNK_ENVELOPE_HOURS = 44
+FULL_RUN_TASK_COUNT = 220
+
+# G-A — Mirror core.media_types.GRADER_AUDIO_EXTENSIONS so this script stays
+# self-contained and can analyze payloads produced by a revision whose `core`
+# package is not importable here. Precedent: scripts/backfill_sign_aware.py.
+# scripts/__tests__/test_analyze_grade_run.py asserts this mirror against the
+# real constant; that test is the only guarantee against drift.
+GRADER_AUDIO_EXTENSIONS = frozenset({
+    ".wav",
+    ".mp3",
+    ".flac",
+    ".ogg",
+    ".m4a",
+    ".aac",
+})
+# Path-bearing fields. Judged and excluded files both answer "does the corpus
+# contain audio at all", so excluded reference files are scanned too.
+AUDIO_ITEM_PATH_FIELDS = ("selected_paths", "support_paths_visible")
+AUDIO_TASK_PATH_FIELDS = ("reference_files_excluded",)
+
 
 def _ordered_task_ids_sha256(task_ids: list[str]) -> str:
     encoded = json.dumps(
@@ -817,6 +841,186 @@ def _anchor_usage(values: dict[str, int | float] | None) -> dict:
     }
 
 
+def _is_audio_path(path: object) -> bool:
+    """True when `path` ends in a mirrored grader audio extension."""
+    if not isinstance(path, str):
+        return False
+    return os.path.splitext(path)[1].lower() in GRADER_AUDIO_EXTENSIONS
+
+
+def _corpus_audio_applicability(grade: dict) -> dict:
+    """G-A — decide whether the corpus can answer the audio-wiring question.
+
+    Separates "the wiring is broken" from "there is no audio to judge". The
+    three states are deliberately asymmetric: absence of path evidence yields
+    ``unknown`` (blocker kept), never ``not_applicable``, because a payload
+    that simply omits path fields tells us nothing about the corpus.
+    """
+    audio_file_count = 0
+    path_bearing_items = 0
+    scanned_path_count = 0
+    tasks = grade.get("tasks") if isinstance(grade.get("tasks"), list) else []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        for field in AUDIO_TASK_PATH_FIELDS:
+            values = task.get(field)
+            if not isinstance(values, list):
+                continue
+            for path in values:
+                scanned_path_count += 1
+                audio_file_count += _is_audio_path(path)
+        items = task.get("items") if isinstance(task.get("items"), list) else []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            children = [
+                child for child in (item.get("child_grades") or [])
+                if isinstance(child, dict)
+            ]
+            item_has_path_field = False
+            for holder in (item, *children):
+                for field in AUDIO_ITEM_PATH_FIELDS:
+                    values = holder.get(field)
+                    if not isinstance(values, list):
+                        continue
+                    item_has_path_field = True
+                    for path in values:
+                        scanned_path_count += 1
+                        audio_file_count += _is_audio_path(path)
+            path_bearing_items += item_has_path_field
+
+    if audio_file_count > 0:
+        applicability = "applicable"
+    elif path_bearing_items == 0:
+        applicability = "unknown"
+    else:
+        applicability = "not_applicable"
+    return {
+        "audio_file_count": audio_file_count,
+        "path_bearing_items": path_bearing_items,
+        "scanned_path_count": scanned_path_count,
+        "applicability": applicability,
+    }
+
+
+def _audio_wiring_report(
+    audio_applicability: dict,
+    audio_call_count: int,
+    audio_output_tokens: int,
+) -> tuple[dict, list[str]]:
+    """G-A/G-B — map corpus applicability plus usage onto status and blockers.
+
+    ``applicable`` additionally requires ``output_tokens > 0``: a provider call
+    that raised returns ``api_call_count=1`` with ``output_tokens`` still at its
+    initial 0, so counting calls alone lets an all-failed run open the gate.
+    """
+    state = audio_applicability["applicability"]
+    if state == "applicable":
+        if audio_call_count == 0:
+            status = "failed_no_audio_calls"
+            blockers = ["audio_wiring_not_exercised"]
+        elif audio_output_tokens <= 0:
+            status = "failed_all_calls_errored"
+            blockers = ["audio_calls_all_failed"]
+        else:
+            status = "passed"
+            blockers = []
+    elif state == "unknown":
+        status = "indeterminate"
+        blockers = ["audio_wiring_indeterminate"]
+    else:
+        status = "not_applicable"
+        blockers = []
+    return (
+        {
+            "call_count": audio_call_count,
+            "output_tokens": audio_output_tokens,
+            "status": status,
+            "applicability": state,
+            "audio_file_count": audio_applicability["audio_file_count"],
+            "path_bearing_items": audio_applicability["path_bearing_items"],
+        },
+        blockers,
+    )
+
+
+def _envelope_hours(contract: object) -> int | float:
+    """G-C — the contract envelope, falling back to the module constant."""
+    if isinstance(contract, dict):
+        hours = contract.get("chunk_envelope_hours")
+        if isinstance(hours, (int, float)) and not isinstance(hours, bool):
+            return hours
+    return DEFAULT_CHUNK_ENVELOPE_HOURS
+
+
+def _envelope_status_at_or_above(envelope_hours: int | float) -> str:
+    """G-C — derive the at-or-above label from the envelope value."""
+    return f"at_or_above_{envelope_hours:g}h_envelope"
+
+
+def _envelope_status_below(envelope_hours: int | float) -> str:
+    """G-C — derive the below label from the envelope value."""
+    return f"below_{envelope_hours:g}h_envelope"
+
+
+def _envelope_status_sharded_below(envelope_hours: int | float) -> str:
+    """G-D — derive the sharded-below label from the envelope value."""
+    return f"sharded_below_{envelope_hours:g}h_envelope"
+
+
+def _shard_projection(
+    projected_total_hours: float | None,
+    shard_count: int,
+    envelope_hours: int | float,
+) -> dict:
+    """G-D — record total and per-shard hours for a declared shard count.
+
+    ``max_shard_task_count`` uses ceil because stride sharding gives the
+    leading shards the remainder, so the largest shard is what must fit.
+    """
+    max_shard_task_count = -(-FULL_RUN_TASK_COUNT // shard_count)
+    projected_per_shard_hours = (
+        round(
+            projected_total_hours * max_shard_task_count / FULL_RUN_TASK_COUNT,
+            4,
+        )
+        if projected_total_hours is not None else None
+    )
+    return {
+        "shard_count": shard_count,
+        "max_shard_task_count": max_shard_task_count,
+        "projected_total_hours": projected_total_hours,
+        "projected_per_shard_hours": projected_per_shard_hours,
+        "chunk_envelope_hours": envelope_hours,
+        "per_shard_method": (
+            "uniform_task_cost_assumption" if shard_count > 1 else "not_sharded"
+        ),
+        "per_shard_caveat": (
+            "average-based estimate, not an upper bound: per-task cost is not "
+            "uniform (that is why modality normalization exists), so one shard "
+            "can receive a costlier subset than this figure implies"
+        ),
+    }
+
+
+def _envelope_status_for(
+    projected_total_hours: float,
+    envelope_hours: int | float,
+    shard_projection: dict,
+) -> str:
+    """G-C/G-D — envelope verdict; shard-aware only when shard_count > 1."""
+    if shard_projection["shard_count"] <= 1:
+        return (
+            _envelope_status_at_or_above(envelope_hours)
+            if projected_total_hours >= envelope_hours
+            else _envelope_status_below(envelope_hours)
+        )
+    if shard_projection["projected_per_shard_hours"] >= envelope_hours:
+        return _envelope_status_at_or_above(envelope_hours)
+    return _envelope_status_sharded_below(envelope_hours)
+
+
 def _blocked_modality_projection(
     contract: dict,
     task_anchors: list[dict],
@@ -824,6 +1028,8 @@ def _blocked_modality_projection(
     total_main_latency_sec: float,
     judge_error_types: Counter,
     blockers: list[str],
+    audio_applicability: dict,
+    shard_count: int = 1,
 ) -> dict:
     visual_usage = perception_usage.get("visual") or {}
     audio_usage = perception_usage.get("audio") or {}
@@ -861,6 +1067,14 @@ def _blocked_modality_projection(
         if isinstance(baseline_latency, (int, float)) else None
     )
     audio_call_count = int(audio_usage.get("call_count", 0) or 0)
+    audio_output_tokens = int(audio_usage.get("output_tokens", 0) or 0)
+    audio_wiring, _audio_blockers = _audio_wiring_report(
+        audio_applicability,
+        audio_call_count,
+        audio_output_tokens,
+    )
+    envelope_hours = _envelope_hours(contract)
+    shard_projection = _shard_projection(None, shard_count, envelope_hours)
     visual_budget_errors = judge_error_types.get(
         "task_visual_budget_exceeded",
         0,
@@ -901,8 +1115,9 @@ def _blocked_modality_projection(
             },
         },
         "projected_220_hours": None,
-        "chunk_envelope_hours": contract.get("chunk_envelope_hours"),
+        "chunk_envelope_hours": envelope_hours,
         "envelope_status": "incomplete_anchor_payload",
+        "shard_projection": shard_projection,
         "unknown_perception": unknown_volume,
         "diagnostic": {
             "baseline_targetable_errors": baseline_targetable_errors,
@@ -911,10 +1126,7 @@ def _blocked_modality_projection(
             "non_targetable_errors": non_targetable_errors,
             "status": "inconclusive_invalid_anchor_payload",
         },
-        "audio_wiring": {
-            "call_count": audio_call_count,
-            "status": "passed" if audio_call_count > 0 else "failed_no_audio_calls",
-        },
+        "audio_wiring": audio_wiring,
         "visual_budget": {
             "task_visual_budget_exceeded": visual_budget_errors,
             "status": "passed" if visual_budget_errors == 0 else "failed",
@@ -983,6 +1195,8 @@ def _modality_normalized_projection(
     perception_usage: dict[str, dict[str, int | float]],
     total_main_latency_sec: float,
     judge_error_types: Counter,
+    audio_applicability: dict,
+    shard_count: int = 1,
 ) -> dict | None:
     contract = grade.get("anchor_projection")
     if contract is None:
@@ -1005,6 +1219,8 @@ def _modality_normalized_projection(
             total_main_latency_sec,
             judge_error_types,
             blockers,
+            audio_applicability,
+            shard_count,
         )
     if not isinstance(contract, dict):
         return _blocked_modality_projection(
@@ -1014,6 +1230,8 @@ def _modality_normalized_projection(
             total_main_latency_sec,
             judge_error_types,
             ["anchor_schema_invalid"],
+            audio_applicability,
+            shard_count,
         )
 
     schema_blockers = _anchor_schema_blockers(grade)
@@ -1025,6 +1243,8 @@ def _modality_normalized_projection(
             total_main_latency_sec,
             judge_error_types,
             schema_blockers,
+            audio_applicability,
+            shard_count,
         )
 
     task_count = len(task_anchors)
@@ -1167,17 +1387,24 @@ def _modality_normalized_projection(
         "latency_sec": round(unknown_latency_sec, 5),
     }
     has_unknown = any(unknown_volume.values())
-    envelope_hours = contract["chunk_envelope_hours"]
+    envelope_hours = _envelope_hours(contract)
+    shard_projection = _shard_projection(
+        projected_hours,
+        shard_count,
+        envelope_hours,
+    )
     if anchor_integrity_blockers:
         envelope_status = "incomplete_anchor_payload"
     elif has_unknown:
         envelope_status = "incomplete_unknown_perception"
     elif measured_wall_sec is None:
         envelope_status = "incomplete_missing_task_wall"
-    elif projected_hours >= envelope_hours:
-        envelope_status = "at_or_above_44h_envelope"
     else:
-        envelope_status = "below_44h_envelope"
+        envelope_status = _envelope_status_for(
+            projected_hours,
+            envelope_hours,
+            shard_projection,
+        )
 
     targetable_errors = (
         judge_error_types.get("final_json_parse_failed", 0)
@@ -1206,6 +1433,12 @@ def _modality_normalized_projection(
     diagnostic_status = targetable_status
 
     audio_call_count = int(audio_usage.get("call_count", 0) or 0)
+    audio_output_tokens = int(audio_usage.get("output_tokens", 0) or 0)
+    audio_wiring, audio_blockers = _audio_wiring_report(
+        audio_applicability,
+        audio_call_count,
+        audio_output_tokens,
+    )
     visual_budget_errors = judge_error_types.get(
         "task_visual_budget_exceeded",
         0,
@@ -1215,14 +1448,14 @@ def _modality_normalized_projection(
         gate_blockers.append("no_finalization_improvement")
     if non_targetable_errors:
         gate_blockers.append("non_targetable_judge_errors_present")
-    if audio_call_count == 0:
-        gate_blockers.append("audio_wiring_not_exercised")
+    gate_blockers.extend(audio_blockers)
     if visual_budget_errors > 0:
         gate_blockers.append("visual_budget_exceeded")
-    if (
-        envelope_status != "below_44h_envelope"
-        and envelope_status != "incomplete_anchor_payload"
-    ):
+    if envelope_status not in {
+        _envelope_status_below(envelope_hours),
+        _envelope_status_sharded_below(envelope_hours),
+        "incomplete_anchor_payload",
+    }:
         gate_blockers.append(envelope_status)
     return {
         "method": contract["method"],
@@ -1244,6 +1477,7 @@ def _modality_normalized_projection(
         "projected_220_hours": projected_hours,
         "chunk_envelope_hours": envelope_hours,
         "envelope_status": envelope_status,
+        "shard_projection": shard_projection,
         "unknown_perception": unknown_volume,
         "diagnostic": {
             "baseline_targetable_errors": baseline_targetable_errors,
@@ -1252,10 +1486,7 @@ def _modality_normalized_projection(
             "non_targetable_errors": non_targetable_errors,
             "status": diagnostic_status,
         },
-        "audio_wiring": {
-            "call_count": audio_call_count,
-            "status": "passed" if audio_call_count > 0 else "failed_no_audio_calls",
-        },
+        "audio_wiring": audio_wiring,
         "visual_budget": {
             "task_visual_budget_exceeded": visual_budget_errors,
             "status": "passed" if visual_budget_errors == 0 else "failed",
@@ -1382,7 +1613,7 @@ def _effective_component(
     }
 
 
-def analyze(path: Path) -> dict:
+def analyze(path: Path, shard_count: int = 1) -> dict:
     grade = json.loads(path.read_text())
     tasks = grade.get("tasks", [])
     summary = grade.get("summary", {})
@@ -1495,17 +1726,21 @@ def analyze(path: Path) -> dict:
     judge_error_types = Counter()
     for anchor in task_anchors:
         judge_error_types.update(anchor["judge_error_types"])
+    audio_applicability = _corpus_audio_applicability(grade)
     modality_projection = _modality_normalized_projection(
         grade,
         task_anchors,
         perception_usage,
         total_main_latency_sec,
         judge_error_types,
+        audio_applicability,
+        shard_count,
     )
     if modality_projection is not None:
         projected_220_wall_hours = modality_projection["projected_220_hours"]
         projection_status = modality_projection["envelope_status"]
         projection_method = modality_projection["method"]
+        shard_projection = modality_projection["shard_projection"]
     else:
         measured_task_wall_times = [
             anchor["wall_clock_sec"]
@@ -1516,12 +1751,22 @@ def analyze(path: Path) -> dict:
             round(statistics.mean(measured_task_wall_times) * 220 / 3600, 2)
             if measured_task_wall_times else None
         )
+        # G-C — same envelope source as the projection path, so changing the
+        # contract value can never leave this branch behind.
+        envelope_hours = _envelope_hours(grade.get("anchor_projection"))
+        shard_projection = _shard_projection(
+            projected_220_wall_hours,
+            shard_count,
+            envelope_hours,
+        )
         if projected_220_wall_hours is None:
             projection_status = "unmeasured"
-        elif projected_220_wall_hours >= 44:
-            projection_status = "at_or_above_44h_envelope"
         else:
-            projection_status = "below_44h_envelope"
+            projection_status = _envelope_status_for(
+                projected_220_wall_hours,
+                envelope_hours,
+                shard_projection,
+            )
         projection_method = "task_count_fallback"
 
     # PR3 Step 0 — effective (cache-discounted) cost. Skipped if the run
@@ -1634,6 +1879,8 @@ def analyze(path: Path) -> dict:
         "projected_220_wall_hours": projected_220_wall_hours,
         "projection_status": projection_status,
         "projection_method": projection_method,
+        "shard_projection": shard_projection,
+        "audio_applicability": audio_applicability,
         "modality_projection": modality_projection,
     }
 
@@ -1757,6 +2004,18 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
         f"{a['projected_220_wall_hours']} ({a['projection_status']}; "
         f"method={a['projection_method']})"
     )
+    shard = a.get("shard_projection")
+    if shard is not None and shard["shard_count"] > 1:
+        lines.append(
+            "- shard-aware projection: "
+            f"shard_count={shard['shard_count']}, "
+            f"max_shard_task_count={shard['max_shard_task_count']}, "
+            f"projected_total_hours={shard['projected_total_hours']}h, "
+            f"projected_per_shard_hours="
+            f"{shard['projected_per_shard_hours']}h "
+            f"(per_shard_method={shard['per_shard_method']})"
+        )
+        lines.append(f"- per-shard caveat: {shard['per_shard_caveat']}")
     projection = a.get("modality_projection")
     if projection is not None:
         lines.append("")
@@ -1776,10 +2035,15 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
             f"other={diagnostic['non_targetable_errors']}, "
             f"status={diagnostic['status']}"
         )
+        audio_wiring = projection["audio_wiring"]
         lines.append(
             "- audio wiring: "
-            f"calls={projection['audio_wiring']['call_count']}, "
-            f"status={projection['audio_wiring']['status']}"
+            f"calls={audio_wiring['call_count']}, "
+            f"output_tokens={audio_wiring['output_tokens']}, "
+            f"applicability={audio_wiring['applicability']} "
+            f"(audio_files={audio_wiring['audio_file_count']}, "
+            f"path_bearing_items={audio_wiring['path_bearing_items']}), "
+            f"status={audio_wiring['status']}"
         )
         lines.append(
             "- visual budget: "
@@ -1814,8 +2078,22 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
             )
         lines.append(
             f"- component total: {projection['projected_220_hours']}h; "
-            f"44h gate={projection['envelope_status']}"
+            f"{projection['chunk_envelope_hours']:g}h gate="
+            f"{projection['envelope_status']}"
         )
+        projection_shard = projection["shard_projection"]
+        if projection_shard["shard_count"] > 1:
+            lines.append(
+                "- shard-aware envelope: "
+                f"projected_total_hours="
+                f"{projection_shard['projected_total_hours']}h, "
+                f"projected_per_shard_hours="
+                f"{projection_shard['projected_per_shard_hours']}h "
+                f"over shard_count={projection_shard['shard_count']} "
+                f"(max_shard_task_count="
+                f"{projection_shard['max_shard_task_count']}, "
+                f"per_shard_method={projection_shard['per_shard_method']})"
+            )
     lines.append("")
     lines.append("## Cost estimate")
     lines.append(f"- raw: {_fmt_cost(a['cost_estimate'])}")
@@ -1859,10 +2137,32 @@ def render_markdown(a: dict, base: dict | None = None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _positive_shard_count(value: str) -> int:
+    """Parse --shard-count as an integer >= 1."""
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            "--shard-count must be an integer >= 1"
+        ) from None
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("--shard-count must be an integer >= 1")
+    return parsed
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("grade_json", type=Path)
     ap.add_argument("--compare", type=Path, default=None, help="Baseline grade JSON for Δ table")
+    ap.add_argument(
+        "--shard-count",
+        type=_positive_shard_count,
+        default=1,
+        help=(
+            "Declared shard count for the full run (default 1). Never inferred "
+            "from the payload: sharding must be declared to be recorded."
+        ),
+    )
     output_group = ap.add_mutually_exclusive_group()
     output_group.add_argument("--out", type=Path, default=None, help="Write markdown to this path (default: stdout)")
     output_group.add_argument(
@@ -1875,8 +2175,8 @@ def main() -> int:
     if args.auto_out and args.json:
         ap.error("--auto-out cannot be combined with --json")
 
-    a = analyze(args.grade_json)
-    base = analyze(args.compare) if args.compare else None
+    a = analyze(args.grade_json, args.shard_count)
+    base = analyze(args.compare, args.shard_count) if args.compare else None
 
     if args.json:
         out = {"this": a, "baseline": base}
