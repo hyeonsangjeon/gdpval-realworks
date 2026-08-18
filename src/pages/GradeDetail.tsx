@@ -15,6 +15,7 @@ import {
   TrendingDown,
   TrendingUp,
   AlertTriangle,
+  ShieldAlert,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import {
@@ -43,6 +44,10 @@ import {
 } from '../components/wow'
 import InfoTooltip from '../components/common/InfoTooltip'
 import { tooltipTexts } from '../data/tooltipTexts'
+import {
+  hasUnverifiedRouteProvenance,
+  UNVERIFIED_PROVENANCE_DESCRIPTION,
+} from '../lib/gradeProvenance.js'
 
 type TaskFilter =
   | 'all'
@@ -278,6 +283,14 @@ function GradeDetail() {
             <div className="mb-3 inline-flex items-center gap-2 bg-zinc-500/10 text-zinc-300 border border-zinc-500/30 px-3 py-1.5 rounded-md text-sm font-medium">
               <BookOpen className="h-4 w-4" />
               Legacy demo grades — this card shows demonstration data, not a real LLM-judge run.
+            </div>
+          )}
+          {hasUnverifiedRouteProvenance(
+            grade.source_azure_ai_provenance_status,
+          ) && (
+            <div className="mb-3 flex items-start gap-2 bg-amber-500/10 text-amber-700 dark:text-amber-200 border border-amber-500/30 px-3 py-1.5 rounded-md text-sm font-medium">
+              <ShieldAlert className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>{UNVERIFIED_PROVENANCE_DESCRIPTION}</span>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-3 mb-1">
