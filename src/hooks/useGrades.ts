@@ -67,6 +67,13 @@ export interface GradeResult {
   summary: GradeSummary
   tasks: TaskGrade[]
 
+  /** How the scored inference run proved its Azure AI routes. `legacy-missing`
+   *  means the run predates `inference_provenance.json`, so the routes cannot
+   *  be verified even though the corpus was graded complete — the dashboard
+   *  badges it rather than publishing it silently. `null` for every grade
+   *  produced before the field existed. See `src/lib/gradeProvenance.js`. */
+  source_azure_ai_provenance_status?: string | null
+
   // ── Item-level grade schema additions ──
   schema_version?: '1.0' | '1.1' | '1.2' | '1.3' | null
   judge?: JudgeProvenance

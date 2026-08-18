@@ -16,6 +16,7 @@ import SectionHint from '../common/SectionHint'
 import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
 import { fmtPct } from '../../lib/format'
 import { isHiddenGrade, isOfficialGrade } from '../../lib/officialFilter'
+import ProvenanceBadge from '../ProvenanceBadge'
 
 /* ─── palette ─── */
 const SCORE_COLORS = {
@@ -386,6 +387,10 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
                   DEMO
                 </span>
               )}
+              <ProvenanceBadge
+                status={grade.source_azure_ai_provenance_status}
+                size="xs"
+              />
             </div>
             <div className="text-[10px] text-dash-text-faint space-y-0.5">
               <div className="flex items-center gap-1">

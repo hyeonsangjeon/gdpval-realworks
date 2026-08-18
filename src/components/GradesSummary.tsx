@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Card, CardContent } from './ui/card'
 import { AlertTriangle, Award, Target, XCircle, BarChart3, AlertCircle, HelpCircle, Sparkles, BookOpen } from 'lucide-react'
 import { GradeResult } from '../hooks/useGrades'
+import ProvenanceBadge from './ProvenanceBadge'
 
 const STAT_TOOLTIPS: Record<string, string> = {
   Graded: 'Tasks that received a score — excludes any that errored out.',
@@ -143,6 +144,9 @@ function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
                     DEMO
                   </span>
                 )}
+                <ProvenanceBadge
+                  status={grade.source_azure_ai_provenance_status}
+                />
               </div>
               <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
                 <div className="flex items-center gap-1">
