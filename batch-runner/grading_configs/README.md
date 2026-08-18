@@ -6,8 +6,8 @@
 |---|---|---|---|
 | `default_v2_sol_max.yaml` | tool-calling judge | v2 (`ToolCallingJudge` via `judge.tools.read_deliverable`) | **Production default.** GPT-5.6 Sol 1M Max for main, visual, and bounded finalization; gpt-audio-1.5 for audio perception. |
 | `default_v2.yaml` | tool-calling judge | v2 | Historical gpt-5.4 medium comparison identity. Pass explicitly when reproducing that condition. |
-| `regrade_exp003_v2_mini_score_excluded.yaml` | tool-calling judge | v2 | Full-220 exp003 rerun only. Pins score-excluded semantics, the historical mini judge condition, rubric commit, inference revision, and exact task count. |
-| `regrade_exp003_v2_sol_max_score_excluded.yaml` | tool-calling judge | v2 | Planned full-220 exp003 Sol Max rerun. Pins score-excluded semantics, production judge/perception settings, rubric commit, inference revision, and exact task count. |
+| `regrade_exp003_v2_mini_score_excluded.yaml` | tool-calling judge | v2 | Full-220 exp003 rerun only. Pins score-excluded semantics, the historical mini judge condition, rubric commit, inference revision, and all 220 task IDs in canonical order. Its source predates the provenance sidecar, so it declares the legacy allowance; the complete pin keeps it publishable. |
+| `regrade_exp003_v2_sol_max_score_excluded.yaml` | tool-calling judge | v2 | Planned full-220 exp003 Sol Max rerun. Pins score-excluded semantics, production judge/perception settings, rubric commit, inference revision, and all 220 task IDs in canonical order. Its source predates the provenance sidecar, so it declares the legacy allowance; the complete pin keeps it publishable. |
 | `validation_exp003_v2_sol_max_anchor4.yaml` | tool-calling judge | v2 | Paid four-task Sol Max anchor with pinned diagnostic-error and visual/audio coverage, plus the same runtime semantics and source identities as the planned full rerun. |
 | `default_gpt5pro.yaml` | text-extract judge | v1 (`Judge` / `BatchJudge`) | Historical mini/text-extract comparison identity. Pass explicitly only for provenance-compatible analysis. |
 
@@ -27,23 +27,39 @@ explicitly `unpriced` until verified FDPO rates are configured.
 
 The grading downloader requires `inference_provenance.json` by default and
 binds it to the embedded prepared fingerprint, ordered tasks, and Azure AI
-routes. `--allow-legacy-missing-provenance` is an explicit local-analysis
-override, not a publishable grading path. The four-task Sol Max anchor is the
-only active config that declares `rerun_identity.allow_legacy_missing_provenance`.
-Its source predates the sidecar requirement, so the downloader permits a
-confirmed remote sidecar 404 only when the workflow experiment and both the
-requested and resolved revisions exactly match its pinned lowercase SHA. Any
-embedded routes, sidecar validation error, auth/network/local-file error, or
-other config remains fail-closed. The resulting grade stays diagnostic and
-persists `source_azure_ai_provenance_status: legacy-missing`; the full-220 Sol
-Max config has no allowance.
+routes. Inference runs that predate the sidecar cannot satisfy that binding:
+their payloads carry neither `prepared_fingerprint` nor `azure_ai_routes`, so
+the file cannot be written after the fact without inventing both. They declare
+`rerun_identity.allow_legacy_missing_provenance` instead, and the downloader
+permits a confirmed remote sidecar 404 only when the workflow experiment and
+both the requested and resolved revisions exactly match the config's pinned
+lowercase SHA. Any embedded routes, sidecar validation error,
+auth/network/local-file error, or other config remains fail-closed. The
+allowance always requires pinned `task_ids` whose count equals
+`expected_task_count`, and the grade always persists
+`source_azure_ai_provenance_status: legacy-missing`.
 
-Runs selected with `--tasks` or `--limit`, plus the legacy override above, are
-saved with `run_status: diagnostic` under
-`data/grades/_diagnostic/<ordered-task-sha256>/`. The full task hash prevents a
-subset from sharing a cache/resume path with a complete run, and the dashboard
-aggregator only discovers root-level grade JSON. A verified complete run keeps
-the root output path and `run_status: final`.
+What the allowance costs depends on **scope**, because the missing sidecar is a
+gap in the audit trail rather than in the graded corpus — the judge reads
+deliverables, rubric, and prompts, never the inference routes. A config that
+pins a *proper subset* of the source corpus has narrowed what was graded, so it
+stays diagnostic; the four-task Sol Max anchor is that case. A config that pins
+the *complete* corpus in canonical source order has dropped nothing, so it keeps
+the root output path and `run_status: final`; the 220-task Sol Max regrade is
+that case, pinning all 220 IDs with ordered SHA-256
+`df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c`. The
+`--allow-legacy-missing-provenance` CLI flag on the downloader pins nothing, so
+a bare local override still lands in the diagnostic tree.
+
+Runs selected with `--tasks` or `--limit`, plus any legacy-provenance run whose
+scope is not a config-pinned complete corpus, are saved with
+`run_status: diagnostic` under `data/grades/_diagnostic/<ordered-task-sha256>/`.
+The full task hash prevents a subset from sharing a cache/resume path with a
+complete run, and the dashboard aggregator only discovers root-level grade JSON.
+A complete run keeps the root output path and `run_status: final`; when it was
+graded from a pre-sidecar source, the aggregator carries
+`source_azure_ai_provenance_status` into the dashboard projection so the
+unverified route provenance is labelled rather than silently published.
 
 ## Judge-error score boundary
 
@@ -71,7 +87,7 @@ not mutate or partially regrade the payload.
 The approved future exp003 full rerun is fixed to:
 
 - config: `regrade_exp003_v2_mini_score_excluded.yaml`
-- config hash: `55a7dc5cfb8023fe`
+- config hash: `0aebaaa2d0e51d74`
 - rubric commit: `11e7900cdcac61bc4daf59e65feb238acda98fbf`
 - inference revision: `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`
 - expected task count: `220`
@@ -85,7 +101,7 @@ The pinned Sol Max identities are:
 
 | purpose | config | config hash | tasks |
 |---|---|---|---:|
-| full rerun | `regrade_exp003_v2_sol_max_score_excluded.yaml` | `14fc577ea39d98c5` | 220 |
+| full rerun | `regrade_exp003_v2_sol_max_score_excluded.yaml` | `71c325eee0e48c13` | 220 |
 | paid anchor | `validation_exp003_v2_sol_max_anchor4.yaml` | `7f3c7c2e542cf580` | 4 |
 
 Both pin rubric commit `11e7900cdcac61bc4daf59e65feb238acda98fbf`

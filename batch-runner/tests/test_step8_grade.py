@@ -686,6 +686,60 @@ def test_legacy_missing_provenance_full_run_stays_diagnostic(
     assert payload["source_azure_ai_provenance_status"] == "legacy-missing"
 
 
+def test_legacy_missing_provenance_publishes_when_corpus_is_pinned_complete(
+    monkeypatch, tmp_path
+):
+    """A pre-sidecar inference is publishable once the whole corpus is pinned.
+
+    The sidecar records how the inference was routed. The judge never reads it —
+    only deliverables, rubric, and prompts reach the model — so losing it costs
+    an audit trail, not a graded task. What the run still has to prove is that
+    nothing was quietly dropped, and a complete pin in canonical order proves
+    exactly that. The gap stays on the record either way.
+    """
+    _setup_workspace(tmp_path)
+    inference_path = tmp_path / "workspace/step2_inference_results.json"
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    inference["azure_ai_provenance_status"] = "legacy-missing"
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+
+    task_ids = ["task-001", "task-002", "task-003"]
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["schema_version"] = "2.0"
+    config["rubric"]["revision"] = _FakeLoader().rubric_sha
+    config["rerun_identity"] = {
+        "experiment_id": "exp998_smoke_baseline_sample",
+        "expected_task_count": len(task_ids),
+        "rubric_commit_sha": _FakeLoader().rubric_sha,
+        "inference_revision": INFERENCE_SHA,
+        "task_ids": task_ids,
+        "allow_legacy_missing_provenance": True,
+    }
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py",
+        "exp998_smoke_baseline_sample",
+        "--config",
+        "grading_configs/default.yaml",
+        "--force",
+    ])
+
+    assert s8.main() == 0
+
+    assert not (tmp_path / "data/grades/_diagnostic").exists()
+    written = sorted((tmp_path / "data/grades").glob("*.json"))
+    assert len(written) == 1
+    payload = json.loads(written[0].read_text(encoding="utf-8"))
+    assert payload["run_status"] == "final"
+    assert payload["source_azure_ai_provenance_status"] == "legacy-missing"
+    assert [task["task_id"] for task in payload["tasks"]] == task_ids
+
+
 def test_track2_limit_three_mock_smoke(monkeypatch, tmp_path):
     _setup_workspace(tmp_path)
     _configure_track2(tmp_path)
@@ -1662,7 +1716,7 @@ def _selection_inference() -> dict:
 
 
 def test_config_pinned_tasks_apply_without_cli_selection():
-    selected, pinned = s8.filter_tasks_for_config(
+    selected, scope = s8.filter_tasks_for_config(
         _selection_inference(),
         _pinned_task_config(),
         tasks_csv=None,
@@ -1670,11 +1724,44 @@ def test_config_pinned_tasks_apply_without_cli_selection():
     )
 
     assert [task["task_id"] for task in selected] == ["task-002", "task-003"]
-    assert pinned is True
+    assert scope == "subset"
+
+
+def test_pinning_every_source_task_is_a_complete_scope():
+    """Pinning the whole corpus asserts its identity; it narrows nothing."""
+    config = _pinned_task_config()
+    config["rerun_identity"]["task_ids"] = ["task-001", "task-002", "task-003"]
+    config["rerun_identity"]["expected_task_count"] = 3
+
+    selected, scope = s8.filter_tasks_for_config(
+        _selection_inference(),
+        config,
+        tasks_csv=None,
+        limit=0,
+    )
+
+    assert [task["task_id"] for task in selected] == [
+        "task-001",
+        "task-002",
+        "task-003",
+    ]
+    assert scope == "complete"
+
+
+def test_unpinned_config_has_no_scope():
+    selected, scope = s8.filter_tasks_for_config(
+        _selection_inference(),
+        {},
+        tasks_csv=None,
+        limit=0,
+    )
+
+    assert len(selected) == 3
+    assert scope is None
 
 
 def test_matching_cli_tasks_are_accepted_in_canonical_source_order():
-    selected, pinned = s8.filter_tasks_for_config(
+    selected, scope = s8.filter_tasks_for_config(
         _selection_inference(),
         _pinned_task_config(),
         tasks_csv="task-003,task-002",
@@ -1682,7 +1769,7 @@ def test_matching_cli_tasks_are_accepted_in_canonical_source_order():
     )
 
     assert [task["task_id"] for task in selected] == ["task-002", "task-003"]
-    assert pinned is True
+    assert scope == "subset"
 
 
 @pytest.mark.parametrize(
@@ -3241,6 +3328,59 @@ def test_sharding_is_not_a_diagnostic_task_selection(monkeypatch, tmp_path):
     # The canonical name stays free -- it belongs to the merged final, and the
     # dashboard aggregator globs exactly that level.
     assert not (tmp_path / _CANONICAL_GRADE).exists()
+
+
+def test_sharded_legacy_provenance_run_with_complete_pin_stays_publishable(
+    monkeypatch, tmp_path
+):
+    """The exp003 production path: pre-sidecar source, complete pin, N shards.
+
+    Three things have to hold at once here, and each one is a separate reason a
+    run could get demoted to `_diagnostic/`: the missing sidecar, the pinned
+    task list, and the shard slice. None of them narrowed the graded corpus, so
+    the shards stay on the canonical `_shards/` path that step9 merges into a
+    final grade.
+    """
+    _setup_workspace(tmp_path)
+    inference_path = tmp_path / "workspace/step2_inference_results.json"
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    inference["azure_ai_provenance_status"] = "legacy-missing"
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["schema_version"] = "2.0"
+    config["rubric"]["revision"] = _FakeLoader().rubric_sha
+    config["rerun_identity"] = {
+        "experiment_id": "exp998_smoke_baseline_sample",
+        "expected_task_count": len(_CORPUS),
+        "rubric_commit_sha": _FakeLoader().rubric_sha,
+        "inference_revision": INFERENCE_SHA,
+        "task_ids": list(_CORPUS),
+        "allow_legacy_missing_provenance": True,
+    }
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    for index in (0, 1):
+        monkeypatch.setattr("sys.argv", _shard_argv(index, 2, "--force"))
+        assert s8.main() == 0
+
+    assert not (tmp_path / "data/grades/_diagnostic").exists()
+    graded: list[str] = []
+    for index in (0, 1):
+        payload = json.loads(
+            _shard_grade_path(tmp_path, index, 2).read_text(encoding="utf-8")
+        )
+        assert payload["run_status"] == "partial"
+        assert payload["expected_task_count"] == len(_CORPUS)
+        assert payload["source_azure_ai_provenance_status"] == "legacy-missing"
+        graded.extend(task["task_id"] for task in payload["tasks"])
+
+    assert sorted(graded) == sorted(_CORPUS)
 
 
 def test_shard_path_forks_below_the_canonical_name(monkeypatch, tmp_path):

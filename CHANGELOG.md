@@ -12,6 +12,31 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **Legacy provenance: a complete pinned corpus is publishable** - inference
+  runs that predate `inference_provenance.json` previously forced every grade
+  built from them into `data/grades/_diagnostic/`, which the dashboard
+  aggregator does not read. That rule conflated two different gaps. The sidecar
+  records the Azure AI routes that produced the *deliverables*; neither
+  `core/grader.py` nor `core/tool_calling_judge.py` ever reads those routes, so
+  a missing sidecar leaves the audit trail incomplete without leaving the graded
+  corpus incomplete. `filter_tasks_for_config` in `step8_grade.py` now returns
+  the pinned *scope* (`None`, `"subset"`, or `"complete"`) instead of a boolean,
+  and the legacy allowance blocks publication only while that scope is not
+  `"complete"`. A config pinning a proper subset — the four-task Sol Max anchor
+  — still emits a diagnostic grade; a config pinning every task in canonical
+  source order keeps the root path and `run_status: final`.
+  `--allow-legacy-missing-provenance` on the downloader pins nothing, so a bare
+  CLI override still lands in the diagnostic tree. The grade payload continues
+  to persist `source_azure_ai_provenance_status: legacy-missing`, and
+  `scripts/aggregate-grades.mjs` now carries that field into the dashboard
+  projection so a published legacy grade is labelled rather than silently
+  normalized. Both exp003 full-rerun configs gained all 220 task IDs in
+  canonical order (ordered SHA-256
+  `df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c`), changing
+  the Sol Max config hash from `14fc577ea39d98c5` to `71c325eee0e48c13` and the
+  mini config hash from `55a7dc5cfb8023fe` to `0aebaaa2d0e51d74`. The anchor
+  config and its hash `7f3c7c2e542cf580` are unchanged. No grade payload,
+  deliverable, or HF file was modified, and no run was dispatched.
 - **Conductor orchestrator persona** - rename
   `.github/agents/copilot-instructions.agent.md` to
   `.github/agents/conductor.md`, and the persona itself from

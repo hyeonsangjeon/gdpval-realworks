@@ -388,6 +388,13 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
         ? 'grading_diagnostic'
         : 'graded_v1',
     run_status: raw.run_status || 'legacy_final',
+    // A pre-sidecar inference can still publish a final grade when its config
+    // pins the complete corpus, so the gap has to travel with the grade: the
+    // graded tasks are fully accounted for, the Azure AI routes behind them are
+    // not. Surfacing it here is what keeps that trade-off visible on the
+    // dashboard instead of buried in the payload.
+    source_azure_ai_provenance_status:
+      raw.source_azure_ai_provenance_status || null,
     schema_version: raw.schema_version || '1.0',
     is_dummy: false,
     label,

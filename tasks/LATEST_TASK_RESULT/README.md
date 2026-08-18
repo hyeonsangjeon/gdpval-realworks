@@ -1,11 +1,112 @@
 # Latest Task Result
 
-- Updated: 2026-08-14
-- Status: the orchestrator agent persona is renamed to `conductor` and its edit
-  restriction is rescoped by target; the Sol Max anchor blockers preserved below
-  are unchanged and the 220-task run remains blocked
+- Updated: 2026-08-18
+- Status: a pre-sidecar inference is now publishable when its config pins the
+  complete corpus, which removes the provenance blocker from the 220-task
+  exp003 rerun; the anchor's audio-wiring and visual-cap gates preserved below
+  are unchanged, and no run was dispatched
 
-## Current Task: Conductor Orchestrator Persona
+## Current Task: Legacy Provenance Complete-Corpus Policy
+
+### Task
+
+Remove the provenance rule that made the 220-task exp003 Sol Max regrade
+unpublishable, without weakening what that rule was actually protecting.
+
+exp003 ran in 2026-02, before `step3_format_results.py` began emitting
+`inference_provenance.json`. Its payloads carry neither `prepared_fingerprint`
+nor `azure_ai_routes`, so the sidecar cannot be written after the fact without
+inventing both. Under the prior rule any grade built from it was forced to
+`run_status: diagnostic` and written under `data/grades/_diagnostic/`, which
+`scripts/aggregate-grades.mjs` does not read — so a completed paid 220-task run
+would have produced a grade the dashboard never shows.
+
+### Result
+
+- The sidecar is an audit receipt, not a grading input. `core/grader.py` and
+  `core/tool_calling_judge.py` never read `azure_ai_routes`; their only
+  `*_provenance` field is `visual_provenance`, which is image evidence paths.
+  The `routes` validated in `core/grade_payload.py` are the *grader's* own
+  routes checked against `azure_ai_runtime_fingerprint`. A missing sidecar
+  therefore leaves the audit trail incomplete without leaving the graded corpus
+  incomplete.
+- `filter_tasks_for_config` in `step8_grade.py` now returns the pinned scope —
+  `None` when the config pins nothing, `"subset"` for a proper subset of the
+  source corpus, `"complete"` when the pinned list covers all of it — instead of
+  a boolean. Equal counts mean equal sets here because canonical order is
+  already proven upstream.
+- The legacy allowance blocks publication only while that scope is not
+  `"complete"`. The four-task anchor pins a subset and stays diagnostic. A
+  config pinning every task in canonical source order keeps the root output path
+  and `run_status: final`.
+- `--allow-legacy-missing-provenance` on `download_inference_from_hf.py` pins
+  nothing, so gating on scope rather than on the `legacy-missing` label keeps a
+  bare CLI override in the diagnostic tree. That bypass was closed by the same
+  condition that opened the intended path.
+- The grade payload still persists
+  `source_azure_ai_provenance_status: legacy-missing`; no euphemistic status was
+  introduced. `scripts/aggregate-grades.mjs` now carries that field into the
+  dashboard projection, so a published legacy grade is labelled rather than
+  silently normalized.
+- Both exp003 full-rerun configs gained all 220 task IDs in canonical source
+  order. The mini config had the identical defect and was fixed alongside the
+  Sol Max one rather than left as a known-broken path the README advertises.
+- No grade payload, deliverable, or HF file was modified. No workflow was
+  dispatched.
+
+### Fixed Identities
+
+| Purpose | Config | Config hash | Tasks |
+|---|---|---|---:|
+| Full rerun (Sol Max) | `regrade_exp003_v2_sol_max_score_excluded.yaml` | `71c325eee0e48c13` | 220 |
+| Full rerun (mini) | `regrade_exp003_v2_mini_score_excluded.yaml` | `0aebaaa2d0e51d74` | 220 |
+| Paid anchor | `validation_exp003_v2_sol_max_anchor4.yaml` | `7f3c7c2e542cf580` | 4 |
+
+- Sol Max and mini hashes changed from `14fc577ea39d98c5` and
+  `55a7dc5cfb8023fe` because each config gained its pinned `task_ids` list. The
+  anchor config is untouched.
+- Ordered task-ID SHA-256, 220 tasks:
+  `df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c`.
+- Ordered task-ID SHA-256, 4-task anchor:
+  `29d5623a5cec85eb38f21fb73a2f3b06c66ed6a5fd6fd95948b979cd70a70bc9`.
+- Rubric commit `11e7900cdcac61bc4daf59e65feb238acda98fbf` and inference
+  revision `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f` are unchanged.
+
+### Verification
+
+- Both new Python tests were confirmed to fail against an emulated pre-change
+  policy and pass after it, so neither is tautological. The JS test was
+  confirmed the same way against the aggregator field.
+- `test_step8_grade.py` adds `test_legacy_missing_provenance_publishes_when_
+  corpus_is_pinned_complete` and `test_sharded_legacy_provenance_run_with_
+  complete_pin_stays_publishable`. The second covers the paid production shape
+  specifically: missing sidecar, complete pin, and shard slicing at once.
+  `test_legacy_missing_provenance_full_run_stays_diagnostic` passes unchanged,
+  which is the case that must keep failing closed.
+- `scripts/__tests__/aggregate-grades.test.mjs`: 26 passed.
+- mypy on `step8_grade.py`: 50 errors before the change and 50 after, none on
+  changed lines.
+
+### Review Evidence
+
+- No independent reviewer agent was run. The owner authorized the policy change
+  directly after reviewing why the block was a rule rather than a capability
+  limit.
+
+### Remaining Work
+
+- The 220-task paid run is still not dispatched and still requires fresh owner
+  approval plus the protected `grading` Environment approval per chunk. This
+  change removes one blocker; it authorizes nothing.
+- The anchor's own gates are untouched and still stand: `audio.call_count` must
+  exceed zero, `task_visual_budget_exceeded` must be zero, and the projected
+  runtime must clear the 44-hour envelope.
+- Credential rotation for the values in the untracked local scratch file remains
+  outstanding and owner-only.
+
+---
+
+## Preserved Prior Result: Conductor Orchestrator Persona (2026-08-14)
 
 ### Task
 

@@ -448,6 +448,41 @@ for (const [runStatus, gradeStatus] of [
   });
 }
 
+test('processGradesFile carries the source provenance gap onto a publishable grade', () => {
+  // A grade from a pre-sidecar inference publishes when its config pinned the
+  // complete corpus, so the dashboard is the only place left that can show the
+  // Azure AI routes were never verified. Absent the field, it stays null rather
+  // than being invented as "verified".
+  const base = {
+    schema_version: '1.0',
+    run_status: 'final',
+    experiment_id: 'exp-legacy',
+    inference_model: 'gpt-5.2-chat',
+    judge: { model: 'gpt-5.6-sol' },
+    summary: {
+      total_tasks: 1,
+      graded_tasks: 1,
+      error_tasks: 0,
+      openai_compat: {},
+      wow: {},
+    },
+    tasks: [{ task_id: 't1', pct: 50, error: null }],
+  };
+
+  const legacy = processGradesFile('legacy.json', {
+    ...base,
+    source_azure_ai_provenance_status: 'legacy-missing',
+  });
+
+  assert.equal(legacy.source_azure_ai_provenance_status, 'legacy-missing');
+  assert.equal(isPublishableGrade(legacy), true);
+
+  assert.equal(
+    processGradesFile('sidecar.json', base).source_azure_ai_provenance_status,
+    null,
+  );
+});
+
 // ── Fixture C — legacy dummy with _meta.is_dummy ────────────────────────────
 test('processGradesFile: legacy dummy sets grade_status=legacy_dummy and judge_model=null', () => {
   const raw = {
