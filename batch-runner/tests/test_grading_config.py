@@ -10,6 +10,7 @@ from step8_grade import (
     validate_grading_config,
 )
 from core.azure_ai_clients import AzureAIWorkload, grader_route_workloads
+from core.inference_manifest import _ordered_task_ids_sha256
 
 
 INFERENCE_SHA = "a" * 40
@@ -247,14 +248,21 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
     validate_grading_config(rerun)
 
     identity = rerun["rerun_identity"]
-    assert identity == {
+    task_ids = identity["task_ids"]
+    assert {key: value for key, value in identity.items() if key != "task_ids"} == {
         "experiment_id": "exp003_GPT52Chat_baseline_runner_exec",
         "expected_task_count": 220,
         "rubric_commit_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
         "inference_revision": "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f",
+        "allow_legacy_missing_provenance": True,
     }
+    assert len(task_ids) == 220
+    assert len(set(task_ids)) == 220
+    assert _ordered_task_ids_sha256(task_ids) == (
+        "df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c"
+    )
     assert rerun["rubric"]["revision"] == identity["rubric_commit_sha"]
-    assert hash_config(str(rerun_path)) == "55a7dc5cfb8023fe"
+    assert hash_config(str(rerun_path)) == "0aebaaa2d0e51d74"
 
     for key in ("config_name", "description"):
         baseline.pop(key)
@@ -265,17 +273,19 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
 
 
 @pytest.mark.parametrize(
-    ("filename", "expected_task_count", "expected_hash"),
+    ("filename", "expected_task_count", "expected_hash", "expected_task_ids_sha256"),
     [
         (
             "regrade_exp003_v2_sol_max_score_excluded.yaml",
             220,
-            "14fc577ea39d98c5",
+            "71c325eee0e48c13",
+            "df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c",
         ),
         (
             "validation_exp003_v2_sol_max_anchor4.yaml",
             4,
             "7f3c7c2e542cf580",
+            "29d5623a5cec85eb38f21fb73a2f3b06c66ed6a5fd6fd95948b979cd70a70bc9",
         ),
     ],
 )
@@ -283,6 +293,7 @@ def test_exp003_sol_max_configs_are_pinned_and_preserve_modalities(
     filename: str,
     expected_task_count: int,
     expected_hash: str,
+    expected_task_ids_sha256: str,
 ):
     baseline_path = Path("grading_configs/default_v2_sol_max.yaml")
     candidate_path = Path("grading_configs") / filename
@@ -292,21 +303,22 @@ def test_exp003_sol_max_configs_are_pinned_and_preserve_modalities(
     validate_grading_config(candidate)
 
     identity = candidate["rerun_identity"]
-    expected_identity = {
+    # Both exp003 Sol Max configs grade a pre-sidecar inference, so both declare
+    # the legacy allowance and pin their corpus. What separates them is scope:
+    # the 220 pins the complete corpus (publishable), the anchor pins 4 of 220
+    # (a narrowed, diagnostic scope). The pinned list is asserted by its ordered
+    # SHA-256 so the corpus identity is exact without inlining 220 UUIDs here.
+    task_ids = identity["task_ids"]
+    assert {key: value for key, value in identity.items() if key != "task_ids"} == {
         "experiment_id": "exp003_GPT52Chat_baseline_runner_exec",
         "expected_task_count": expected_task_count,
         "rubric_commit_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
         "inference_revision": "9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f",
+        "allow_legacy_missing_provenance": True,
     }
-    if expected_task_count == 4:
-        expected_identity["allow_legacy_missing_provenance"] = True
-        expected_identity["task_ids"] = [
-            "99ac6944-4ec6-4848-959c-a460ac705c6f",
-            "4c18ebae-dfaa-4b76-b10c-61fcdf26734c",
-            "40a8c4b1-b169-4f92-a38b-7f79685037ec",
-            "a73fbc98-90d4-4134-a54f-2b1d0c838791",
-        ]
-    assert identity == expected_identity
+    assert len(task_ids) == expected_task_count
+    assert len(set(task_ids)) == expected_task_count
+    assert _ordered_task_ids_sha256(task_ids) == expected_task_ids_sha256
     assert candidate["rubric"]["revision"] == identity["rubric_commit_sha"]
     assert hash_config(str(candidate_path)) == expected_hash
     assert candidate["judge"]["perception"]["audio"] == (
@@ -314,8 +326,6 @@ def test_exp003_sol_max_configs_are_pinned_and_preserve_modalities(
     )
     assert candidate["judge"]["perception"]["visual"]["call_cap_per_task"] == 72
     if expected_task_count == 220:
-        assert "task_ids" not in identity
-        assert "allow_legacy_missing_provenance" not in identity
         assert "anchor_projection" not in candidate
     else:
         assert candidate["anchor_projection"] == {
@@ -446,9 +456,12 @@ def test_rerun_identity_rejects_non_boolean_legacy_allowance(value):
         validate_grading_config(config)
 
 
-def test_legacy_allowance_requires_pinned_task_subset():
+def test_legacy_allowance_requires_pinned_task_ids():
+    # The allowance is only ever as trustworthy as the corpus it names, so a
+    # bare declaration with nothing pinned stays fail-closed.
     path = Path("grading_configs/regrade_exp003_v2_sol_max_score_excluded.yaml")
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["rerun_identity"].pop("task_ids")
     config["rerun_identity"]["allow_legacy_missing_provenance"] = True
 
     with pytest.raises(ValueError, match="requires pinned task_ids"):

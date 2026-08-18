@@ -1090,11 +1090,21 @@ def filter_tasks_for_config(
     *,
     tasks_csv: str | None,
     limit: int,
-) -> tuple[list[dict], bool]:
+) -> tuple[list[dict], str | None]:
+    """Resolve the graded task selection and classify how narrow it is.
+
+    The second element is the pinned scope: ``None`` when the config pins
+    nothing, ``"subset"`` when it pins a proper subset of the source corpus,
+    and ``"complete"`` when the pinned list covers every task in it.
+
+    Only ``"subset"`` is a *narrowed* scope. Pinning the whole corpus drops
+    nothing — it asserts the corpus identity — so it is not a reason to fork
+    the output into the diagnostic tree.
+    """
     identity = config.get("rerun_identity")
     pinned_ids = identity.get("task_ids") if isinstance(identity, dict) else None
     if pinned_ids is None:
-        return filter_tasks(inference_results, tasks_csv, limit), False
+        return filter_tasks(inference_results, tasks_csv, limit), None
 
     pinned_tasks = filter_tasks(
         inference_results,
@@ -1120,7 +1130,11 @@ def filter_tasks_for_config(
             "--limit conflicts with config pinned task selection: "
             f"expected 0 or {len(canonical_pinned_ids)}, got {limit}"
         )
-    return pinned_tasks, True
+    source_task_count = len(filter_tasks(inference_results, None, 0))
+    # Canonical order was proven above, so equal counts mean the pinned list is
+    # the source corpus rather than merely the same size as it.
+    scope = "complete" if len(canonical_pinned_ids) == source_task_count else "subset"
+    return pinned_tasks, scope
 
 
 def _track2_task_runtime_error(task: dict) -> str | None:
@@ -1585,7 +1599,7 @@ def main() -> int:
     judge_slug = _judge_slug(config["judge"]["model"])
     prompt_v = config["prompt"]["version"]
     try:
-        tasks, config_pinned_task_selection = filter_tasks_for_config(
+        tasks, config_pinned_scope = filter_tasks_for_config(
             inf_results,
             config,
             tasks_csv=args.tasks,
@@ -1611,11 +1625,22 @@ def main() -> int:
     source_provenance_status = inf_results.get(
         "azure_ai_provenance_status", "local-runtime"
     )
+    # A pre-sidecar inference carries no Azure AI route provenance. That is a
+    # gap in the audit trail, not in the graded corpus — the judge never reads
+    # those routes; only the deliverables, rubric, and prompts reach it. So the
+    # gap blocks publication when the *scope* is unproven too, and stops
+    # blocking once the config pins the complete corpus in canonical order.
+    # `--allow-legacy-missing-provenance` on the downloader pins nothing, so a
+    # bare CLI override still lands in the diagnostic tree.
+    legacy_provenance_unbounded = (
+        source_provenance_status == "legacy-missing"
+        and config_pinned_scope != "complete"
+    )
     diagnostic_run = (
-        config_pinned_task_selection
+        config_pinned_scope == "subset"
         or args.tasks is not None
         or args.limit > 0
-        or source_provenance_status == "legacy-missing"
+        or legacy_provenance_unbounded
     )
     completed_run_status = "diagnostic" if diagnostic_run else "final"
     # Sharding deliberately does NOT feed `diagnostic_run` above. A diagnostic
