@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 1200 700" role="img" aria-labelledby="gsw-title gsw-desc">
+  <title id="gsw-title">Why the grade run needs sharding</title>
+  <desc id="gsw-desc">A serial grade run takes 71.6 hours and overshoots the workflow's 44-hour envelope by 27.6 hours. Split across nine shards, the largest slice is 8.1 hours and fits well inside the envelope.</desc>
+  <defs>
+    <marker id="gsw-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#274f55"/>
+    </marker>
+  </defs>
+  <style>
+    .gsw-bg { fill: #f3f5f1; }
+    .gsw-ink { fill: #17343d; }
+    .gsw-muted { fill: #53666b; }
+    .gsw-teal { fill: #0f6762; }
+    .gsw-amber { fill: #7a4f00; }
+    .gsw-coral { fill: #9f3b2e; }
+    .gsw-ok { fill: #e3efeb; stroke: #6f928d; stroke-width: 1.5; }
+    .gsw-over { fill: #f6dcd6; stroke: #9f3b2e; stroke-width: 1.5; }
+    .gsw-limit { fill: none; stroke: #7a4f00; stroke-width: 2.5; stroke-dasharray: 9 7; }
+    .gsw-kicker { font: 700 17px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsw-title { font: 700 34px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsw-heading { font: 700 20px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsw-body { font: 500 16px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsw-small { font: 600 15px 'IBM Plex Mono', 'SFMono-Regular', monospace; }
+  </style>
+  <rect class="gsw-bg" width="1200" height="700"/>
+
+  <text x="60" y="55" class="gsw-kicker gsw-teal">WHY SHARD</text>
+  <text x="60" y="99" class="gsw-title gsw-ink">One truck cannot finish this move.</text>
+  <text x="60" y="132" class="gsw-body gsw-muted">Cargo to grade: 220 tasks, 71.6 hours. What one truck survives: 44 hours.</text>
+
+  <!-- 44h envelope line -->
+  <path d="M 610 176 V 636" class="gsw-limit"/>
+  <text x="620" y="170" class="gsw-small gsw-amber">44-hour envelope</text>
+
+  <!-- Section A: serial -->
+  <text x="60" y="205" class="gsw-kicker gsw-muted">UNTIL NOW — ONE TRUCK (shard_count=1)</text>
+  <rect x="60" y="222" width="550" height="58" rx="8" class="gsw-ok"/>
+  <rect x="610" y="222" width="345" height="58" rx="8" class="gsw-over"/>
+  <text x="84" y="258" class="gsw-small gsw-teal">graded inside 44 hours</text>
+  <text x="634" y="258" class="gsw-small gsw-coral">27.6 hours over — never finishes</text>
+  <text x="60" y="312" class="gsw-body gsw-muted">Eleven relay legs of 4 hours each still cap out at 44. Unless the cargo shrinks, nothing else helps.</text>
+
+  <!-- Section B: sharded -->
+  <text x="60" y="362" class="gsw-kicker gsw-muted">FROM NOW ON — NINE TRUCKS (shard_count=9)</text>
+
+  <rect x="60" y="382" width="101" height="22" rx="5" class="gsw-ok"/>
+  <text x="180" y="398" class="gsw-body gsw-ink">shard 0 · 25 tasks · 8.1 hours</text>
+  <rect x="60" y="412" width="101" height="22" rx="5" class="gsw-ok"/>
+  <text x="180" y="428" class="gsw-body gsw-ink">shard 1 · 25 tasks · 8.1 hours</text>
+  <rect x="60" y="442" width="101" height="22" rx="5" class="gsw-ok"/>
+  <text x="180" y="458" class="gsw-body gsw-ink">shard 2 · 25 tasks · 8.1 hours</text>
+  <rect x="60" y="472" width="101" height="22" rx="5" class="gsw-ok"/>
+  <text x="180" y="488" class="gsw-body gsw-ink">shard 3 · 25 tasks · 8.1 hours</text>
+  <rect x="60" y="502" width="98" height="22" rx="5" class="gsw-ok"/>
+  <text x="180" y="518" class="gsw-body gsw-ink">shard 4 · 24 tasks · 7.8 hours</text>
+  <rect x="60" y="532" width="98" height="22" rx="5" class="gsw-ok"/>
+  <text x="180" y="548" class="gsw-body gsw-ink">shard 5 · 24 tasks · 7.8 hours</text>
+  <rect x="60" y="562" width="98" height="22" rx="5" class="gsw-ok"/>
+  <text x="180" y="578" class="gsw-body gsw-ink">shard 6 · 24 tasks · 7.8 hours</text>
+  <rect x="60" y="592" width="98" height="22" rx="5" class="gsw-ok"/>
+  <text x="180" y="608" class="gsw-body gsw-ink">shard 7 · 24 tasks · 7.8 hours</text>
+  <rect x="60" y="622" width="98" height="22" rx="5" class="gsw-ok"/>
+  <text x="180" y="638" class="gsw-body gsw-ink">shard 8 · 24 tasks · 7.8 hours</text>
+
+  <text x="712" y="452" class="gsw-heading gsw-teal">All nine clear it</text>
+  <text x="712" y="482" class="gsw-body gsw-muted">The largest slice is 8.1 hours.</text>
+  <text x="712" y="508" class="gsw-body gsw-muted">That leaves 35.9 hours of headroom.</text>
+  <text x="712" y="546" class="gsw-body gsw-muted">Because the nine start together,</text>
+  <text x="712" y="572" class="gsw-body gsw-muted">the whole run lands within a day.</text>
+
+  <text x="60" y="672" class="gsw-body gsw-muted">The total cargo has not changed. Only the load carried by one truck has.</text>
+</svg>

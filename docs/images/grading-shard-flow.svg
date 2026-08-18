@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 1200 700" role="img" aria-labelledby="gsf-title gsf-desc">
+  <title id="gsf-title">The grading shard flow end to end</title>
+  <desc id="gsf-desc">220 tasks are stride-sliced into nine shards, each shard grades its own share and writes a partial file under _shards, and step9 merges all nine into a single final grade file that the dashboard then shows as one entry.</desc>
+  <defs>
+    <marker id="gsf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#274f55"/>
+    </marker>
+  </defs>
+  <style>
+    .gsf-bg { fill: #f3f5f1; }
+    .gsf-ink { fill: #17343d; }
+    .gsf-muted { fill: #53666b; }
+    .gsf-teal { fill: #0f6762; }
+    .gsf-amber { fill: #7a4f00; }
+    .gsf-coral { fill: #9f3b2e; }
+    .gsf-stage { fill: #fffefa; stroke: #214c4a; stroke-width: 2; }
+    .gsf-backend { fill: #e3efeb; stroke: #6f928d; stroke-width: 1.5; }
+    .gsf-output { fill: #f7e9c9; stroke: #7a4f00; stroke-width: 1.5; }
+    .gsf-arrow { fill: none; stroke: #274f55; stroke-width: 3; marker-end: url(#gsf-arrow); }
+    .gsf-kicker { font: 700 17px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsf-title { font: 700 34px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsf-heading { font: 700 20px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsf-body { font: 500 16px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsf-small { font: 600 15px 'IBM Plex Mono', 'SFMono-Regular', monospace; }
+    .gsf-tiny { font: 500 13px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+  </style>
+  <rect class="gsf-bg" width="1200" height="700"/>
+
+  <text x="60" y="55" class="gsf-kicker gsf-teal">END TO END</text>
+  <text x="60" y="99" class="gsf-title gsf-ink">Split it, grade it apart, put it back together.</text>
+  <text x="60" y="132" class="gsf-body gsf-muted">The way in and the way out are unchanged. Only the middle fans out into nine.</text>
+
+  <!-- Stage 1 -->
+  <text x="60" y="182" class="gsf-kicker gsf-muted">STAGE 1 — SPLIT</text>
+  <rect x="60" y="200" width="210" height="104" rx="8" class="gsf-stage"/><rect x="60" y="200" width="210" height="7" rx="3" class="gsf-teal"/>
+  <text x="80" y="238" class="gsf-small gsf-teal">INPUT</text>
+  <text x="80" y="266" class="gsf-heading gsf-ink">220 tasks</text>
+  <text x="80" y="290" class="gsf-tiny gsf-muted">the whole corpus</text>
+  <path d="M 276 252 H 304" class="gsf-arrow"/>
+
+  <rect x="310" y="200" width="250" height="104" rx="8" class="gsf-backend"/>
+  <text x="330" y="238" class="gsf-small gsf-teal">tasks[i::9]</text>
+  <text x="330" y="266" class="gsf-heading gsf-ink">stride slicing</text>
+  <text x="330" y="290" class="gsf-tiny gsf-muted">dealt out, not cut in blocks</text>
+  <path d="M 566 252 H 594" class="gsf-arrow"/>
+
+  <rect x="600" y="200" width="210" height="104" rx="8" class="gsf-stage"/><rect x="600" y="200" width="210" height="7" rx="3" class="gsf-teal"/>
+  <text x="620" y="238" class="gsf-small gsf-teal">OUTPUT</text>
+  <text x="620" y="266" class="gsf-heading gsf-ink">9 slices</text>
+  <text x="620" y="290" class="gsf-tiny gsf-muted">25 / 25 / 25 / 25 / 24 …</text>
+
+  <text x="855" y="212" class="gsf-small gsf-teal">one card at a time</text>
+  <text x="855" y="244" class="gsf-small gsf-ink">shard 0 → 1, 10, 19, …</text>
+  <text x="855" y="270" class="gsf-small gsf-ink">shard 1 → 2, 11, 20, …</text>
+  <text x="855" y="294" class="gsf-small gsf-muted">          ⋮</text>
+  <text x="855" y="318" class="gsf-small gsf-ink">shard 8 → 9, 18, 27, …</text>
+
+  <!-- Stage 2 -->
+  <text x="60" y="352" class="gsf-kicker gsf-muted">STAGE 2 — NINE GRADE AT ONCE (EACH AN INDEPENDENT RUN)</text>
+  <rect x="60"   y="368" width="116" height="88" rx="8" class="gsf-backend"/><text x="76" y="400" class="gsf-small gsf-teal">shard 0</text><text x="76" y="424" class="gsf-tiny gsf-muted">25 tasks</text><text x="76" y="446" class="gsf-tiny gsf-muted">8.1 hours</text>
+  <rect x="180"  y="368" width="116" height="88" rx="8" class="gsf-backend"/><text x="196" y="400" class="gsf-small gsf-teal">shard 1</text><text x="196" y="424" class="gsf-tiny gsf-muted">25 tasks</text><text x="196" y="446" class="gsf-tiny gsf-muted">8.1 hours</text>
+  <rect x="300"  y="368" width="116" height="88" rx="8" class="gsf-backend"/><text x="316" y="400" class="gsf-small gsf-teal">shard 2</text><text x="316" y="424" class="gsf-tiny gsf-muted">25 tasks</text><text x="316" y="446" class="gsf-tiny gsf-muted">8.1 hours</text>
+  <rect x="420"  y="368" width="116" height="88" rx="8" class="gsf-backend"/><text x="436" y="400" class="gsf-small gsf-teal">shard 3</text><text x="436" y="424" class="gsf-tiny gsf-muted">25 tasks</text><text x="436" y="446" class="gsf-tiny gsf-muted">8.1 hours</text>
+  <rect x="540"  y="368" width="116" height="88" rx="8" class="gsf-backend"/><text x="556" y="400" class="gsf-small gsf-teal">shard 4</text><text x="556" y="424" class="gsf-tiny gsf-muted">24 tasks</text><text x="556" y="446" class="gsf-tiny gsf-muted">7.8 hours</text>
+  <rect x="660"  y="368" width="116" height="88" rx="8" class="gsf-backend"/><text x="676" y="400" class="gsf-small gsf-teal">shard 5</text><text x="676" y="424" class="gsf-tiny gsf-muted">24 tasks</text><text x="676" y="446" class="gsf-tiny gsf-muted">7.8 hours</text>
+  <rect x="780"  y="368" width="116" height="88" rx="8" class="gsf-backend"/><text x="796" y="400" class="gsf-small gsf-teal">shard 6</text><text x="796" y="424" class="gsf-tiny gsf-muted">24 tasks</text><text x="796" y="446" class="gsf-tiny gsf-muted">7.8 hours</text>
+  <rect x="900"  y="368" width="116" height="88" rx="8" class="gsf-backend"/><text x="916" y="400" class="gsf-small gsf-teal">shard 7</text><text x="916" y="424" class="gsf-tiny gsf-muted">24 tasks</text><text x="916" y="446" class="gsf-tiny gsf-muted">7.8 hours</text>
+  <rect x="1020" y="368" width="116" height="88" rx="8" class="gsf-backend"/><text x="1036" y="400" class="gsf-small gsf-teal">shard 8</text><text x="1036" y="424" class="gsf-tiny gsf-muted">24 tasks</text><text x="1036" y="446" class="gsf-tiny gsf-muted">7.8 hours</text>
+
+  <text x="60" y="490" class="gsf-body gsf-muted">Each shard grades only its own share and writes it to <tspan class="gsf-small gsf-ink">_shards/…/shard-00N-of-009.json</tspan> as <tspan class="gsf-small gsf-coral">partial</tspan>.</text>
+
+  <!-- Stage 3 -->
+  <text x="60" y="524" class="gsf-kicker gsf-muted">STAGE 3 — MERGE</text>
+  <rect x="60" y="540" width="228" height="88" rx="8" class="gsf-output"/>
+  <text x="80" y="574" class="gsf-small gsf-amber">_shards/ warehouse</text>
+  <text x="80" y="602" class="gsf-heading gsf-ink">9 partials</text>
+  <path d="M 294 584 H 322" class="gsf-arrow"/>
+
+  <rect x="328" y="540" width="222" height="88" rx="8" class="gsf-backend"/>
+  <text x="348" y="574" class="gsf-small gsf-teal">step9</text>
+  <text x="348" y="602" class="gsf-heading gsf-ink">merge</text>
+  <path d="M 556 584 H 584" class="gsf-arrow"/>
+
+  <rect x="590" y="540" width="240" height="88" rx="8" class="gsf-stage"/><rect x="590" y="540" width="240" height="7" rx="3" class="gsf-teal"/>
+  <text x="610" y="576" class="gsf-small gsf-teal">final · 220 tasks</text>
+  <text x="610" y="604" class="gsf-heading gsf-ink">grade file</text>
+  <path d="M 836 584 H 864" class="gsf-arrow"/>
+
+  <rect x="870" y="540" width="210" height="88" rx="8" class="gsf-stage"/><rect x="870" y="540" width="210" height="7" rx="3" class="gsf-teal"/>
+  <text x="890" y="576" class="gsf-small gsf-teal">one entry shown</text>
+  <text x="890" y="604" class="gsf-heading gsf-ink">dashboard</text>
+
+  <text x="60" y="676" class="gsf-body gsf-muted">The merge runs only once <tspan class="gsf-coral">all nine</tspan> have arrived. With eight it refuses, and writes nothing.</text>
+</svg>

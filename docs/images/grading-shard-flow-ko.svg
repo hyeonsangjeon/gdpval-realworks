@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 1200 700" role="img" aria-labelledby="gsf-title gsf-desc">
+  <title id="gsf-title">채점 샤딩 전체 흐름</title>
+  <desc id="gsf-desc">220개 과제를 줄무늬로 9조각으로 나누고, 각 샤드가 _shards 폴더에 미완성 결과를 저장한 뒤, step9가 9개를 모두 모아 하나의 최종 채점 파일로 병합해 대시보드에 노출합니다.</desc>
+  <defs>
+    <marker id="gsf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#274f55"/>
+    </marker>
+  </defs>
+  <style>
+    .bg { fill: #f3f5f1; }
+    .ink { fill: #17343d; }
+    .muted { fill: #53666b; }
+    .teal { fill: #0f6762; }
+    .amber { fill: #7a4f00; }
+    .coral { fill: #9f3b2e; }
+    .stage { fill: #fffefa; stroke: #214c4a; stroke-width: 2; }
+    .backend { fill: #e3efeb; stroke: #6f928d; stroke-width: 1.5; }
+    .output { fill: #f7e9c9; stroke: #7a4f00; stroke-width: 1.5; }
+    .arrow { fill: none; stroke: #274f55; stroke-width: 3; marker-end: url(#gsf-arrow); }
+    .kicker { font: 700 17px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .title { font: 700 34px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .heading { font: 700 20px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .body { font: 500 16px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .small { font: 600 15px 'IBM Plex Mono', 'Noto Sans KR', monospace; }
+    .tiny { font: 500 14px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+  </style>
+  <rect class="bg" width="1200" height="700"/>
+
+  <text x="60" y="55" class="kicker teal">전체 흐름</text>
+  <text x="60" y="99" class="title ink">나누고, 각자 채점하고, 다시 하나로 합칩니다.</text>
+  <text x="60" y="132" class="body muted">나가는 문과 들어오는 문은 그대로입니다. 가운데만 아홉 갈래로 벌어집니다.</text>
+
+  <!-- Stage 1 -->
+  <text x="60" y="182" class="kicker muted">1단계 — 나누기</text>
+  <rect x="60" y="200" width="210" height="104" rx="8" class="stage"/><rect x="60" y="200" width="210" height="7" rx="3" class="teal"/>
+  <text x="80" y="238" class="small teal">입력</text>
+  <text x="80" y="266" class="heading ink">과제 220개</text>
+  <text x="80" y="290" class="tiny muted">전체 corpus</text>
+  <path d="M 276 252 H 304" class="arrow"/>
+
+  <rect x="310" y="200" width="250" height="104" rx="8" class="backend"/>
+  <text x="330" y="238" class="small teal">tasks[i::9]</text>
+  <text x="330" y="266" class="heading ink">줄무늬로 자르기</text>
+  <text x="330" y="290" class="tiny muted">덩어리가 아니라 번갈아</text>
+  <path d="M 566 252 H 594" class="arrow"/>
+
+  <rect x="600" y="200" width="210" height="104" rx="8" class="stage"/><rect x="600" y="200" width="210" height="7" rx="3" class="teal"/>
+  <text x="620" y="238" class="small teal">출력</text>
+  <text x="620" y="266" class="heading ink">9조각</text>
+  <text x="620" y="290" class="tiny muted">25 / 25 / 25 / 25 / 24 …</text>
+
+  <text x="855" y="212" class="small teal">번갈아 한 장씩</text>
+  <text x="855" y="244" class="small ink">shard 0 → 1, 10, 19, …</text>
+  <text x="855" y="270" class="small ink">shard 1 → 2, 11, 20, …</text>
+  <text x="855" y="294" class="small muted">          ⋮</text>
+  <text x="855" y="318" class="small ink">shard 8 → 9, 18, 27, …</text>
+
+  <!-- Stage 2 -->
+  <text x="60" y="366" class="kicker muted">2단계 — 아홉이 동시에 채점 (각자 독립 실행)</text>
+  <rect x="60"   y="384" width="112" height="74" rx="8" class="backend"/><text x="76" y="416" class="small teal">shard 0</text><text x="76" y="442" class="tiny muted">25개 · 8.1h</text>
+  <rect x="180"  y="384" width="112" height="74" rx="8" class="backend"/><text x="196" y="416" class="small teal">shard 1</text><text x="196" y="442" class="tiny muted">25개 · 8.1h</text>
+  <rect x="300"  y="384" width="112" height="74" rx="8" class="backend"/><text x="316" y="416" class="small teal">shard 2</text><text x="316" y="442" class="tiny muted">25개 · 8.1h</text>
+  <rect x="420"  y="384" width="112" height="74" rx="8" class="backend"/><text x="436" y="416" class="small teal">shard 3</text><text x="436" y="442" class="tiny muted">25개 · 8.1h</text>
+  <rect x="540"  y="384" width="112" height="74" rx="8" class="backend"/><text x="556" y="416" class="small teal">shard 4</text><text x="556" y="442" class="tiny muted">24개 · 7.8h</text>
+  <rect x="660"  y="384" width="112" height="74" rx="8" class="backend"/><text x="676" y="416" class="small teal">shard 5</text><text x="676" y="442" class="tiny muted">24개 · 7.8h</text>
+  <rect x="780"  y="384" width="112" height="74" rx="8" class="backend"/><text x="796" y="416" class="small teal">shard 6</text><text x="796" y="442" class="tiny muted">24개 · 7.8h</text>
+  <rect x="900"  y="384" width="112" height="74" rx="8" class="backend"/><text x="916" y="416" class="small teal">shard 7</text><text x="916" y="442" class="tiny muted">24개 · 7.8h</text>
+  <rect x="1020" y="384" width="112" height="74" rx="8" class="backend"/><text x="1036" y="416" class="small teal">shard 8</text><text x="1036" y="442" class="tiny muted">24개 · 7.8h</text>
+
+  <text x="60" y="490" class="body muted">각 샤드는 자기 몫만 채점해 <tspan class="small ink">_shards/…/shard-00N-of-009.json</tspan> 에 <tspan class="small coral">미완성(partial)</tspan> 으로 저장합니다.</text>
+
+  <!-- Stage 3 -->
+  <text x="60" y="536" class="kicker muted">3단계 — 합치기</text>
+  <rect x="60" y="554" width="228" height="88" rx="8" class="output"/>
+  <text x="80" y="588" class="small amber">_shards/ 창고</text>
+  <text x="80" y="616" class="heading ink">미완성 9개</text>
+  <path d="M 294 598 H 322" class="arrow"/>
+
+  <rect x="328" y="554" width="222" height="88" rx="8" class="backend"/>
+  <text x="348" y="588" class="small teal">step9</text>
+  <text x="348" y="616" class="heading ink">병합</text>
+  <path d="M 556 598 H 584" class="arrow"/>
+
+  <rect x="590" y="554" width="240" height="88" rx="8" class="stage"/><rect x="590" y="554" width="240" height="7" rx="3" class="teal"/>
+  <text x="610" y="590" class="small teal">final · 220개</text>
+  <text x="610" y="618" class="heading ink">최종 채점 파일</text>
+  <path d="M 836 598 H 864" class="arrow"/>
+
+  <rect x="870" y="554" width="210" height="88" rx="8" class="stage"/><rect x="870" y="554" width="210" height="7" rx="3" class="teal"/>
+  <text x="890" y="590" class="small teal">1개만 보임</text>
+  <text x="890" y="618" class="heading ink">대시보드</text>
+
+  <text x="60" y="678" class="body muted">아홉이 <tspan class="coral">전부</tspan> 도착해야만 병합합니다. 여덟 개뿐이면 거부하고 아무것도 만들지 않습니다.</text>
+</svg>
