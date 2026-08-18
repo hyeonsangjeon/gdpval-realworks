@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 1200 700" role="img" aria-labelledby="gsi-title gsi-desc">
+  <title id="gsi-title">The core idea — a manifest of 220, a workload of 25</title>
+  <desc id="gsi-desc">Every shard carries the full 220-task identity while grading only its own 25 tasks and saving them as partial. Only after the merge does one file hold all 220 tasks and the final status.</desc>
+  <defs>
+    <marker id="gsi-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#274f55"/>
+    </marker>
+  </defs>
+  <style>
+    .gsi-bg { fill: #f3f5f1; }
+    .gsi-ink { fill: #17343d; }
+    .gsi-muted { fill: #53666b; }
+    .gsi-teal { fill: #0f6762; }
+    .gsi-amber { fill: #7a4f00; }
+    .gsi-coral { fill: #9f3b2e; }
+    .gsi-stage { fill: #fffefa; stroke: #214c4a; stroke-width: 2; }
+    .gsi-backend { fill: #e3efeb; stroke: #6f928d; stroke-width: 1.5; }
+    .gsi-arrow { fill: none; stroke: #274f55; stroke-width: 3; marker-end: url(#gsi-arrow); }
+    .gsi-kicker { font: 700 17px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsi-title { font: 700 34px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsi-heading { font: 700 20px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsi-body { font: 500 16px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+    .gsi-small { font: 600 16px 'IBM Plex Mono', 'SFMono-Regular', monospace; }
+    .gsi-note { font: 500 15px 'IBM Plex Sans', 'Segoe UI', sans-serif; }
+  </style>
+  <rect class="gsi-bg" width="1200" height="700"/>
+
+  <text x="60" y="55" class="gsi-kicker gsi-teal">THE CORE IDEA</text>
+  <text x="60" y="99" class="gsi-title gsi-ink">A manifest of 220, a workload of 25.</text>
+  <text x="60" y="132" class="gsi-body gsi-muted">A shard never forgets that it is one part of a larger whole. That is what makes the merge possible.</text>
+
+  <text x="60" y="182" class="gsi-kicker gsi-muted">BEFORE THE MERGE — WHAT EACH SHARD WRITES</text>
+  <text x="650" y="182" class="gsi-kicker gsi-muted">AFTER THE MERGE — THE FINAL GRADE FILE</text>
+
+  <!-- Left: a shard -->
+  <rect x="60" y="200" width="490" height="300" rx="8" class="gsi-stage"/><rect x="60" y="200" width="490" height="7" rx="3" class="gsi-coral"/>
+  <text x="84" y="240" class="gsi-small gsi-coral">under _shards/ · hidden from the dashboard</text>
+  <text x="84" y="272" class="gsi-heading gsi-ink">shard-003-of-009.json</text>
+  <text x="84" y="322" class="gsi-small gsi-ink">expected_task_count: 220</text>
+  <text x="84" y="346" class="gsi-note gsi-muted">The manifest. All nine shards carry this same value.</text>
+  <text x="84" y="390" class="gsi-small gsi-ink">tasks: [ 25 items ]</text>
+  <text x="84" y="414" class="gsi-note gsi-muted">The actual work. Only this shard's own share.</text>
+  <text x="84" y="458" class="gsi-small gsi-coral">run_status: "partial"</text>
+  <text x="84" y="482" class="gsi-note gsi-muted">An admission: on its own, this file is incomplete.</text>
+
+  <path d="M 560 350 H 640" class="gsi-arrow"/>
+  <text x="560" y="332" class="gsi-note gsi-teal">step9 merge</text>
+
+  <!-- Right: merged final -->
+  <rect x="650" y="200" width="490" height="300" rx="8" class="gsi-stage"/><rect x="650" y="200" width="490" height="7" rx="3" class="gsi-teal"/>
+  <text x="674" y="240" class="gsi-small gsi-teal">under data/grades/ · visible on the dashboard</text>
+  <text x="674" y="272" class="gsi-heading gsi-ink">exp003_….json</text>
+  <text x="674" y="322" class="gsi-small gsi-ink">expected_task_count: 220</text>
+  <text x="674" y="346" class="gsi-note gsi-muted">Never changed at any point.</text>
+  <text x="674" y="390" class="gsi-small gsi-ink">tasks: [ 220 items ]</text>
+  <text x="674" y="414" class="gsi-note gsi-muted">Nine shares, reassembled in the original order.</text>
+  <text x="674" y="458" class="gsi-small gsi-teal">run_status: "final"</text>
+  <text x="674" y="482" class="gsi-note gsi-muted">Manifest and contents agree at 220. Complete.</text>
+
+  <!-- Bottom: why -->
+  <text x="60" y="540" class="gsi-kicker gsi-muted">WHY SEPARATE THE TWO AT ALL?</text>
+  <rect x="60" y="556" width="530" height="100" rx="8" class="gsi-backend"/>
+  <text x="84" y="590" class="gsi-heading gsi-ink">Why carry 220 everywhere</text>
+  <text x="84" y="616" class="gsi-body gsi-muted">A shard that knows only its own 25 will call itself</text>
+  <text x="84" y="640" class="gsi-body gsi-muted">done at 25. Knowing 220 tells it 195 are still out.</text>
+
+  <rect x="610" y="556" width="530" height="100" rx="8" class="gsi-backend"/>
+  <text x="634" y="590" class="gsi-heading gsi-ink">Why label it partial</text>
+  <text x="634" y="616" class="gsi-body gsi-muted">It stops the dashboard from mistaking a 25-task</text>
+  <text x="634" y="640" class="gsi-body gsi-muted">fragment for the experiment's published score.</text>
+</svg>

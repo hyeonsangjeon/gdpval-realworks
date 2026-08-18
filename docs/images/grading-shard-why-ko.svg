@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 1200 700" role="img" aria-labelledby="gsw-title gsw-desc">
+  <title id="gsw-title">채점 샤딩이 필요한 이유</title>
+  <desc id="gsw-desc">직렬 채점은 71.6시간이 걸려 워크플로의 44시간 한계를 27.6시간 초과합니다. 9개 샤드로 나누면 가장 큰 조각도 8.1시간이라 한계 안에 들어옵니다.</desc>
+  <defs>
+    <marker id="gsw-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#274f55"/>
+    </marker>
+  </defs>
+  <style>
+    .bg { fill: #f3f5f1; }
+    .ink { fill: #17343d; }
+    .muted { fill: #53666b; }
+    .teal { fill: #0f6762; }
+    .amber { fill: #7a4f00; }
+    .coral { fill: #9f3b2e; }
+    .ok { fill: #e3efeb; stroke: #6f928d; stroke-width: 1.5; }
+    .over { fill: #f6dcd6; stroke: #9f3b2e; stroke-width: 1.5; }
+    .limit { fill: none; stroke: #7a4f00; stroke-width: 2.5; stroke-dasharray: 9 7; }
+    .kicker { font: 700 17px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .title { font: 700 34px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .heading { font: 700 20px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .body { font: 500 16px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .small { font: 600 15px 'IBM Plex Mono', 'Noto Sans KR', monospace; }
+  </style>
+  <rect class="bg" width="1200" height="700"/>
+
+  <text x="60" y="55" class="kicker teal">왜 샤딩인가</text>
+  <text x="60" y="99" class="title ink">트럭 한 대로는 못 끝내는 이사입니다.</text>
+  <text x="60" y="132" class="body muted">채점해야 할 짐 = 220개 과제 = 71.6시간. 트럭이 버티는 시간 = 44시간.</text>
+
+  <!-- 44h envelope line -->
+  <path d="M 610 176 V 636" class="limit"/>
+  <text x="620" y="170" class="small amber">44시간 한계</text>
+
+  <!-- Section A: serial -->
+  <text x="60" y="205" class="kicker muted">지금까지 — 트럭 한 대 (shard_count=1)</text>
+  <rect x="60" y="222" width="550" height="58" rx="8" class="ok"/>
+  <rect x="610" y="222" width="345" height="58" rx="8" class="over"/>
+  <text x="84" y="258" class="small teal">44시간 안에 끝낸 몫</text>
+  <text x="634" y="258" class="small coral">27.6시간 초과 — 영원히 못 끝냄</text>
+  <text x="60" y="312" class="body muted">4시간씩 11번 이어달리기(relay)를 해도 천장은 44시간입니다. 짐이 줄지 않으면 방법이 없습니다.</text>
+
+  <!-- Section B: sharded -->
+  <text x="60" y="362" class="kicker muted">이제부터 — 트럭 아홉 대 (shard_count=9)</text>
+
+  <rect x="60" y="382" width="101" height="22" rx="5" class="ok"/>
+  <text x="180" y="398" class="body ink">shard 0 · 과제 25개 · 8.1시간</text>
+  <rect x="60" y="412" width="101" height="22" rx="5" class="ok"/>
+  <text x="180" y="428" class="body ink">shard 1 · 과제 25개 · 8.1시간</text>
+  <rect x="60" y="442" width="101" height="22" rx="5" class="ok"/>
+  <text x="180" y="458" class="body ink">shard 2 · 과제 25개 · 8.1시간</text>
+  <rect x="60" y="472" width="101" height="22" rx="5" class="ok"/>
+  <text x="180" y="488" class="body ink">shard 3 · 과제 25개 · 8.1시간</text>
+  <rect x="60" y="502" width="98" height="22" rx="5" class="ok"/>
+  <text x="180" y="518" class="body ink">shard 4 · 과제 24개 · 7.8시간</text>
+  <rect x="60" y="532" width="98" height="22" rx="5" class="ok"/>
+  <text x="180" y="548" class="body ink">shard 5 · 과제 24개 · 7.8시간</text>
+  <rect x="60" y="562" width="98" height="22" rx="5" class="ok"/>
+  <text x="180" y="578" class="body ink">shard 6 · 과제 24개 · 7.8시간</text>
+  <rect x="60" y="592" width="98" height="22" rx="5" class="ok"/>
+  <text x="180" y="608" class="body ink">shard 7 · 과제 24개 · 7.8시간</text>
+  <rect x="60" y="622" width="98" height="22" rx="5" class="ok"/>
+  <text x="180" y="638" class="body ink">shard 8 · 과제 24개 · 7.8시간</text>
+
+  <text x="712" y="452" class="heading teal">전부 한계 왼쪽</text>
+  <text x="712" y="482" class="body muted">가장 큰 조각도 8.1시간.</text>
+  <text x="712" y="508" class="body muted">44시간까지 35.9시간 여유.</text>
+  <text x="712" y="546" class="body muted">아홉 대가 동시에 출발하므로</text>
+  <text x="712" y="572" class="body muted">전체도 하루 안에 끝납니다.</text>
+
+  <text x="60" y="672" class="body muted">짐 총량은 그대로입니다. 한 대가 지는 짐만 줄였습니다.</text>
+</svg>

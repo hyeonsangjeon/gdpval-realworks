@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 1200 700" role="img" aria-labelledby="gsi-title gsi-desc">
+  <title id="gsi-title">샤딩의 핵심 개념 — 서류는 220, 작업은 25</title>
+  <desc id="gsi-desc">각 샤드는 전체 220개라는 신원 정보를 그대로 들고 다니면서 자기 몫 25개만 채점하고 미완성 상태로 저장합니다. 병합 후에야 220개 전부와 완성 상태를 갖춘 최종 파일이 됩니다.</desc>
+  <defs>
+    <marker id="gsi-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#274f55"/>
+    </marker>
+  </defs>
+  <style>
+    .bg { fill: #f3f5f1; }
+    .ink { fill: #17343d; }
+    .muted { fill: #53666b; }
+    .teal { fill: #0f6762; }
+    .amber { fill: #7a4f00; }
+    .coral { fill: #9f3b2e; }
+    .stage { fill: #fffefa; stroke: #214c4a; stroke-width: 2; }
+    .backend { fill: #e3efeb; stroke: #6f928d; stroke-width: 1.5; }
+    .arrow { fill: none; stroke: #274f55; stroke-width: 3; marker-end: url(#gsi-arrow); }
+    .kicker { font: 700 17px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .title { font: 700 34px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .heading { font: 700 20px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .body { font: 500 16px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .small { font: 600 16px 'IBM Plex Mono', 'Noto Sans KR', monospace; }
+    .note { font: 500 15px 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+  </style>
+  <rect class="bg" width="1200" height="700"/>
+
+  <text x="60" y="55" class="kicker teal">핵심 개념</text>
+  <text x="60" y="99" class="title ink">서류는 220장, 손에 든 짐은 25개.</text>
+  <text x="60" y="132" class="body muted">샤드는 “내가 전체의 일부”라는 사실을 절대 잊지 않습니다. 그래서 나중에 합쳐집니다.</text>
+
+  <text x="60" y="182" class="kicker muted">병합 전 — 각 샤드가 저장하는 파일</text>
+  <text x="650" y="182" class="kicker muted">병합 후 — 최종 채점 파일</text>
+
+  <!-- Left: a shard -->
+  <rect x="60" y="200" width="490" height="300" rx="8" class="stage"/><rect x="60" y="200" width="490" height="7" rx="3" class="coral"/>
+  <text x="84" y="240" class="small coral">_shards/ 안 · 대시보드에 안 보임</text>
+  <text x="84" y="272" class="heading ink">shard-003-of-009.json</text>
+  <text x="84" y="322" class="small ink">expected_task_count: 220</text>
+  <text x="84" y="346" class="note muted">← 서류. 아홉 샤드 전부 같은 값입니다.</text>
+  <text x="84" y="390" class="small ink">tasks: [ 25개 ]</text>
+  <text x="84" y="414" class="note muted">← 실제 작업. 내 몫만 들어 있습니다.</text>
+  <text x="84" y="458" class="small coral">run_status: "partial"</text>
+  <text x="84" y="482" class="note muted">← “나 혼자로는 미완성”이라는 자백.</text>
+
+  <path d="M 560 350 H 640" class="arrow"/>
+  <text x="566" y="332" class="note teal">step9 병합</text>
+
+  <!-- Right: merged final -->
+  <rect x="650" y="200" width="490" height="300" rx="8" class="stage"/><rect x="650" y="200" width="490" height="7" rx="3" class="teal"/>
+  <text x="674" y="240" class="small teal">data/grades/ 안 · 대시보드에 보임</text>
+  <text x="674" y="272" class="heading ink">exp003_…__v1.json</text>
+  <text x="674" y="322" class="small ink">expected_task_count: 220</text>
+  <text x="674" y="346" class="note muted">← 한 번도 바뀌지 않았습니다.</text>
+  <text x="674" y="390" class="small ink">tasks: [ 220개 ]</text>
+  <text x="674" y="414" class="note muted">← 아홉 몫이 원래 순서대로 모였습니다.</text>
+  <text x="674" y="458" class="small teal">run_status: "final"</text>
+  <text x="674" y="482" class="note muted">← 서류의 220과 실제 220이 일치. 완성.</text>
+
+  <!-- Bottom: why -->
+  <text x="60" y="540" class="kicker muted">이 두 칸을 왜 굳이 갈라놨나요?</text>
+  <rect x="60" y="556" width="530" height="100" rx="8" class="backend"/>
+  <text x="84" y="590" class="heading ink">220을 계속 들고 다니는 이유</text>
+  <text x="84" y="616" class="body muted">자기 몫 25개만 알면 “25개 다 했으니 끝”이라고</text>
+  <text x="84" y="640" class="body muted">착각합니다. 220을 알아야 “아직 195개 남았다”를 압니다.</text>
+
+  <rect x="610" y="556" width="530" height="100" rx="8" class="backend"/>
+  <text x="634" y="590" class="heading ink">partial 딱지를 붙이는 이유</text>
+  <text x="634" y="616" class="body muted">대시보드가 25개짜리 조각을 성적표로 오해하고</text>
+  <text x="634" y="640" class="body muted">발표해 버리는 사고를 원천 차단합니다.</text>
+</svg>
