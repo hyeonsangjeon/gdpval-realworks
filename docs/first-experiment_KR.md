@@ -311,9 +311,13 @@ Self-QA는 산출물을 만든 같은 모델의 재시도 신호입니다. 독�
 전체 실행은 큰 모델 쿼터를 사용할 수 있고 여러 relay job이 필요할 수
 있습니다. 외부 채점은 별도 pipeline입니다. `grade-run.yml`은 model-free
 dry run으로 시작하며, 유료 채점은 `paid_approval: true`와 보호된 `grading`
-GitHub Environment 승인이 모두 필요합니다. 자동 grading continuation은
-approval input과 exact config, inference revision, task limit을 전달하지만,
-새로 dispatch되는 각 chunk는 보호된 Environment 승인을 다시 받아야 합니다.
+GitHub Environment 승인이 모두 필요합니다. 이 승인은 4시간짜리 job 하나가
+아니라 shard 전체를 덮습니다. shard가 chunk로 쪼개지는 이유는 hosted runner가
+6시간에서 멈추기 때문이고, 채점 대상 corpus는 첫 chunk 전에 이미 고정되므로,
+자동 continuation은 승인을 다시 받는 대신 상속합니다. 상속은 continuation을
+workflow 자신이 dispatch했고 직전 chunk의 partial이 동일한 채점 identity로
+`main`에 올라와 있을 때만 적용되며, 그 밖의 경우는 모두 Environment 승인을
+다시 받습니다.
 실행 모드를 바꾸거나 220개로 확대하기 전에 [Batch Runner 문서](../batch-runner/README_KR.md)와
 [sandbox 문서](../batch-runner/sandbox/README.md)를 읽으세요.
 

@@ -319,9 +319,13 @@ does not turn a three-task config into a 220-task run.
 Full runs can use substantial model quota and take multiple relay jobs. External
 grading is a separate pipeline. `grade-run.yml` starts as a model-free dry run;
 paid grading requires `paid_approval: true` plus approval in the protected
-`grading` GitHub Environment. Automatic grading continuations preserve the
-approval input, exact config, inference revision, and task limit, but each new
-chunk requires a fresh protected Environment approval. Read the
+`grading` GitHub Environment. That approval covers the whole shard, not one
+four-hour job: a shard is split into chunks only because hosted runners stop at
+six hours, and the graded corpus is pinned before the first chunk starts, so the
+automatic continuation inherits the approval instead of asking again. It inherits
+only when the continuation was dispatched by the workflow itself and the previous
+chunk's partial is on `main` under the same grading identity; anything else falls
+back to a fresh Environment approval. Read the
 [Batch Runner documentation](../batch-runner/README.md) and the
 [sandbox documentation](../batch-runner/sandbox/README.md) before changing the
 execution mode or scaling to all 220 tasks.
