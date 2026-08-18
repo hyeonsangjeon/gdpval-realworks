@@ -1000,6 +1000,222 @@ def test_judge_error_rate_uses_canonical_half_up_rounding():
     assert summary["wow"]["judge_error_rate"] == 0.0313
 
 
+def _analytics_task(pct, sector, items, error=None):
+    """Minimal task dict shaped the way ``_task_to_dict`` emits one."""
+    return {
+        "pct": pct,
+        "error": error,
+        "sector": sector,
+        "items": items,
+        "usage_complete": True,
+    }
+
+
+def _item(max_score=1, verdict="pass", did_right=True, **overrides):
+    item = {
+        "max_score": max_score,
+        "verdict": verdict,
+        "decided_by": "judge",
+        "score_excluded": False,
+        "model_did_right": did_right,
+    }
+    item.update(overrides)
+    return item
+
+
+def test_by_sector_task_counts_sum_to_graded_tasks():
+    """The sector breakdown must account for every graded task.
+
+    A dashboard that shows per-sector counts under a `graded_tasks` header is
+    making an arithmetic promise. An errored task carries no rubric items, so
+    it is excluded from the breakdown and from `graded_tasks` alike.
+    """
+    summary = s8._compute_summary(
+        [
+            _analytics_task(90.0, "Government", [_item()]),
+            _analytics_task(40.0, "Government", [_item(verdict="fail")]),
+            _analytics_task(60.0, "Finance and Insurance", [_item()]),
+            _analytics_task(0.0, "Government", [], error="boom"),
+        ]
+    )
+
+    by_sector = summary["wow"]["by_sector"]
+    assert summary["total_tasks"] == 4
+    assert summary["graded_tasks"] == 3
+    assert sum(m["task_count"] for m in by_sector.values()) == 3
+    assert by_sector["Government"]["task_count"] == 2
+    assert by_sector["Government"]["avg_pct"] == 65.0
+    assert by_sector["Finance and Insurance"]["task_count"] == 1
+
+
+def test_by_sector_rates_roll_up_to_the_run_wide_rates():
+    """One sector means the sector rates and the header rates are the same
+    numbers. They are computed by the same ``_tally_item``; this pins that."""
+    summary = s8._compute_summary(
+        [
+            _analytics_task(
+                50.0,
+                "Government",
+                [
+                    _item(max_score=10, verdict="pass", did_right=True),
+                    _item(max_score=10, verdict="fail", did_right=False),
+                    _item(max_score=1, verdict="pass", decided_by="precheck"),
+                ],
+            )
+        ]
+    )
+
+    wow = summary["wow"]
+    sector = wow["by_sector"]["Government"]
+    for key in (
+        "critical_item_pass_rate",
+        "precheck_pass_rate",
+        "judge_pass_rate",
+    ):
+        assert sector[key] == wow[key], key
+    assert sector["critical_item_pass_rate"] == 0.5
+
+
+def test_blank_sector_is_bucketed_rather_than_dropped():
+    summary = s8._compute_summary(
+        [
+            _analytics_task(80.0, "   ", [_item()]),
+            _analytics_task(20.0, None, [_item(verdict="fail")]),
+        ]
+    )
+
+    by_sector = summary["wow"]["by_sector"]
+    assert set(by_sector) == {"Unknown"}
+    assert by_sector["Unknown"]["task_count"] == 2
+
+
+def test_score_density_histogram_emits_every_bucket_in_frontend_order():
+    """The labels and their order are a contract with ``bucketFromPct`` in
+    ``src/components/wow/ScoreDensityHistogram.tsx``."""
+    summary = s8._compute_summary(
+        [_analytics_task(55.0, "Government", [_item()])]
+    )
+
+    histogram = summary["wow"]["score_density_histogram"]
+    assert [bar["bucket"] for bar in histogram] == [
+        "0-10%",
+        "10-20%",
+        "20-30%",
+        "30-40%",
+        "40-50%",
+        "50-60%",
+        "60-70%",
+        "70-80%",
+        "80-90%",
+        "90-100%",
+    ]
+    assert sum(bar["count"] for bar in histogram) == summary["graded_tasks"]
+    assert histogram[5] == {"bucket": "50-60%", "count": 1}
+
+
+@pytest.mark.parametrize(
+    "pct,bucket",
+    [
+        (0.0, "0-10%"),
+        (9.999, "0-10%"),
+        (10.0, "10-20%"),
+        (80.0, "80-90%"),
+        (89.999, "80-90%"),
+        (90.0, "90-100%"),
+        # 100 is the one closed edge: it belongs to the last bar rather than
+        # falling off the end into an eleventh bucket.
+        (100.0, "90-100%"),
+    ],
+)
+def test_score_bucket_edges(pct, bucket):
+    assert s8._score_bucket(pct) == bucket
+
+
+def test_rubric_severity_curve_counts_model_did_right_not_verdict():
+    """GDPVal rubrics carry negative-weight anti-criteria where a 'pass'
+    verdict means the model *did* the prohibited thing. Counting raw verdicts
+    would invert exactly the points this curve exists to show."""
+    summary = s8._compute_summary(
+        [
+            _analytics_task(
+                50.0,
+                "Government",
+                [
+                    _item(max_score=-10, verdict="pass", did_right=False),
+                    _item(max_score=-10, verdict="fail", did_right=True),
+                    _item(max_score=5, verdict="pass", did_right=True),
+                ],
+            )
+        ]
+    )
+
+    curve = summary["wow"]["rubric_severity_curve"]
+    assert curve == [
+        {"weight": -10, "n_items": 2, "pass_rate": 0.5},
+        {"weight": 5, "n_items": 1, "pass_rate": 1.0},
+    ]
+
+
+def test_rubric_severity_curve_skips_score_excluded_items():
+    summary = s8._compute_summary(
+        [
+            _analytics_task(
+                50.0,
+                "Government",
+                [
+                    _item(max_score=3, score_excluded=True, did_right=False),
+                    _item(max_score=3),
+                ],
+            )
+        ]
+    )
+
+    assert summary["wow"]["rubric_severity_curve"] == [
+        {"weight": 3, "n_items": 1, "pass_rate": 1.0}
+    ]
+
+
+def test_rubric_severity_curve_omitted_when_payload_predates_sign_awareness():
+    """Grades written before ``model_did_right`` existed would otherwise plot a
+    flat zero line across every weight — a chart asserting a total failure that
+    never happened. Emit nothing instead."""
+    legacy_item = {
+        "max_score": 10,
+        "verdict": "pass",
+        "decided_by": "judge",
+        "score_excluded": False,
+    }
+    summary = s8._compute_summary(
+        [_analytics_task(100.0, "Government", [legacy_item])]
+    )
+
+    assert summary["wow"]["rubric_severity_curve"] == []
+    # The rest of the analytics still populate for a legacy payload.
+    assert summary["wow"]["by_sector"]["Government"]["task_count"] == 1
+    assert len(summary["wow"]["score_density_histogram"]) == 10
+
+
+def test_severity_curve_ignores_unusable_weights():
+    summary = s8._compute_summary(
+        [
+            _analytics_task(
+                50.0,
+                "Government",
+                [
+                    _item(max_score=None),
+                    _item(max_score="not-a-number"),
+                    _item(max_score=float("nan")),
+                    _item(max_score=2.5),
+                ],
+            )
+        ]
+    )
+
+    assert summary["wow"]["rubric_severity_curve"] == [
+        {"weight": 2.5, "n_items": 1, "pass_rate": 1.0}
+    ]
+
+
 def test_all_score_excluded_task_has_no_headline_score():
     from core.grader import Grader, ItemGrade
     from core.rubric_loader import TaskRubric
@@ -2798,6 +3014,17 @@ def test_atomic_save_supports_stage_b_output_basename(tmp_path):
     assert list(tmp_path.glob(".grade-*.tmp")) == []
 
 
+def _gh_expr(raw):
+    """Collapse a GitHub Actions `if:` to one comparable line.
+
+    The conditions guarding paid grading are written as multi-line YAML block
+    scalars for readability, so an exact string compare would break on a
+    reflow that changed nothing. Normalizing whitespace keeps these assertions
+    strict about the condition itself and indifferent to its formatting.
+    """
+    return " ".join(str(raw).strip().removeprefix("${{").removesuffix("}}").split())
+
+
 def test_grade_workflow_rc7_requires_valid_committed_partial():
     workflow_path = Path("../.github/workflows/grade-run.yml")
     workflow = workflow_path.read_text(
@@ -2817,8 +3044,12 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     dry_run_job = parsed["jobs"]["grade-dry-run"]
     grade_job = parsed["jobs"]["grade"]
     assert approval_job["needs"] == "validate-request"
-    assert approval_job["if"] == (
-        "inputs.dry_run == false && inputs.paid_approval == true"
+    # A paid request goes to the protected environment unless validate-request
+    # proved the run inherits the approval already given for this shard.
+    assert _gh_expr(approval_job["if"]) == (
+        "inputs.dry_run == false && "
+        "inputs.paid_approval == true && "
+        "needs.validate-request.outputs.approval_inherited != 'true'"
     )
     assert approval_job["environment"] == {"name": "grading"}
     assert "permissions" not in approval_job
@@ -2843,10 +3074,20 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert "id-token" not in yaml.safe_dump(dry_run_job)
     assert "actions" not in dry_run_job["permissions"]
     assert grade_job["needs"] == ["validate-request", "approve-paid"]
-    assert "inputs.dry_run == false" in grade_job["if"]
-    assert "inputs.paid_approval == true" in grade_job["if"]
-    assert "needs.validate-request.result == 'success'" in grade_job["if"]
-    assert "needs.approve-paid.result == 'success'" in grade_job["if"]
+    # Paid grading runs on a successful approval, or on a *skipped* approval
+    # only when validate-request certified the inheritance. Pinned exactly:
+    # any looser condition here (a bare `!= 'failure'`, dropping the
+    # approval_inherited conjunct) would let a paid run start with neither a
+    # click nor a proof, which is the whole thing this gate exists to prevent.
+    assert _gh_expr(grade_job["if"]) == (
+        "!cancelled() && "
+        "inputs.dry_run == false && "
+        "inputs.paid_approval == true && "
+        "needs.validate-request.result == 'success' && "
+        "( needs.approve-paid.result == 'success' || "
+        "( needs.approve-paid.result == 'skipped' && "
+        "needs.validate-request.outputs.approval_inherited == 'true' ) )"
+    )
     assert "environment" not in grade_job
     assert grade_job["permissions"] == {
         "contents": "write",

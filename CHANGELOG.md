@@ -11,6 +11,66 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **`summary.wow` analytics now carry data** - `src/types/grade.ts` has declared
+  `by_sector`, `by_rubric_category`, `score_density_histogram` and
+  `rubric_severity_curve` since the WOW dashboard landed, and
+  `SectorHeatmap.tsx`, `ScoreDensityHistogram.tsx` and `RubricSeverityCurve.tsx`
+  have rendered their empty states ever since, because `_compute_summary` in
+  `step8_grade.py` never emitted the four fields. It now emits three of them.
+  - `by_sector` reports `task_count`, `avg_pct`, `critical_item_pass_rate`,
+    `precheck_pass_rate` and `judge_pass_rate` per sector. The run-wide rates
+    and the per-sector rates are folded by one shared `_tally_item`, so a
+    sector row cannot drift from the header it sits under. The breakdown is
+    scoped to graded tasks, so its `task_count` values sum to `graded_tasks`;
+    a task with a blank or absent sector lands in `Unknown` rather than
+    vanishing from a total that is expected to add up.
+  - `score_density_histogram` emits all ten decile buckets including empty
+    ones, so the chart draws a full axis instead of collapsing to whichever
+    scores happened to occur. The labels and their order are a contract with
+    `bucketFromPct` in `ScoreDensityHistogram.tsx`, which buckets `pct`
+    client-side when a grade predates the field; a run that emits it and one
+    that does not must land in the same bars. `100.0` closes into the last
+    bucket rather than falling off the end.
+  - `rubric_severity_curve` groups scored items by rubric weight and counts
+    `ItemGrade.model_did_right`, not `verdict == 'pass'`. GDPVal rubrics carry
+    negative-weight anti-criteria where a `pass` verdict means the model *did*
+    the prohibited thing, and this curve deliberately spans both signs, so a
+    raw verdict count would invert exactly the points the chart exists to
+    show. Grades written before `core/grader.py` began emitting
+    `model_did_right` carry no sign-aware verdict, so the curve is omitted
+    entirely for them: every point would read `0.0` and a flat-zero chart
+    asserts a total failure that never happened. A single rate can absorb that
+    gap; a curve cannot, because its shape is the claim.
+  - `by_rubric_category` stays `{}`. The GDPVal rubrics carry no category
+    taxonomy — a rubric item has an id, a criterion string and a weight, and
+    nothing that groups items into categories — so there is no source for this
+    breakdown, and populating it would mean inventing a taxonomy and
+    presenting it as measurement. `SectorHeatmap.tsx` already treats it as
+    absent and falls back to the per-sector rates above.
+
+  `judge_error_rate` keeps using `canonical_rate`, which
+  `grade_payload.py` validates and `step9_merge_shards.py` cross-checks; only
+  the new fields use the plain rounding helper. `step9_merge_shards.py`
+  recomputes the merged summary rather than combining shard summaries, so a
+  sharded 220-task run gains these fields with no merge-side change.
+
+  Verified behavior-identical on the pre-existing fields: `_compute_summary`
+  from `origin/main` and from this branch were run over the same 16
+  checked-in grade payloads, and every previously-emitted field matched on all
+  16. `mypy core/ step8_grade.py --ignore-missing-imports` reports the same
+  error set before and after. No grade payload was rewritten and no run was
+  dispatched.
+
+  **Operational note:** `step8_grade.py` is inside the
+  `compute_grader_source_hash` source set, so merging this changes
+  `grader_source_hash` and therefore the shard partial path
+  `data/grades/_shards/<stem>/`. A chunk relay that is mid-flight when this
+  merges will not find its own previous partial, will fail the
+  `approval_inherited` check and fall back to a fresh Environment approval, and
+  its shard set will fail the cross-shard `grader_source_hash` invariant at
+  `step9_merge_shards.py`. This must merge between runs, not during one.
+
 ### Changed
 - **One paid approval now carries a whole shard, not one 4h chunk** - a shard of
   the 220-task corpus takes ~6.5h of strictly serial judge calls
@@ -101,6 +161,26 @@ entries land under a fresh dated heading the day they merge to `main`.
   and grade data are unchanged.
 
 ### Fixed
+- **Paid-gate workflow test left stale by the approval-inheritance change** -
+  `test_grade_workflow_rc7_requires_valid_committed_partial` asserted the
+  `approve-paid` job's `if` as the exact literal
+  `inputs.dry_run == false && inputs.paid_approval == true`. The
+  approval-inheritance change added the
+  `needs.validate-request.outputs.approval_inherited != 'true'` conjunct and a
+  YAML block scalar, so the assertion has been failing on `main` since it
+  merged. Nothing caught it: no workflow runs the `batch-runner` pytest suite
+  on pull requests — `agentic-sandbox-preflight.yml` is the only workflow that
+  invokes `pytest` at all, and it exercises the sandbox preflight rather than
+  this suite. The assertion now compares whitespace-normalized expressions, so
+  it stays strict about the condition and indifferent to YAML reflow, and it
+  pins the `grade` job's condition exactly rather than probing it with four
+  substring checks that a weakened gate would still satisfy. Confirmed
+  load-bearing by mutation: dropping the `approval_inherited` conjunct from the
+  `grade` job's skip-escape — which would let a paid run start with neither a
+  click nor a proof — fails the test. `grade-run.yml` itself is correct and
+  unchanged; only the test moved. The absence of PR-time backend test coverage
+  is left as-is here rather than fixed in passing, because adding a CI job is a
+  separate change with its own review surface.
 - **First Sol Max anchor result and bounded analysis filenames** - run the
   owner-approved four-task anchor once as Actions run `31582293672` from main
   SHA `c9492645496e176c8e6a3510809585f9542a5bf1` with grader source hash

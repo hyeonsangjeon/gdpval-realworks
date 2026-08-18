@@ -1243,6 +1243,121 @@ def _unpriced_models(config: dict) -> list[str]:
     return sorted(set(models))
 
 
+#: Score buckets for ``summary.wow.score_density_histogram``. These labels are
+#: a contract with ``bucketFromPct`` in
+#: ``src/components/wow/ScoreDensityHistogram.tsx``: the dashboard falls back to
+#: bucketing ``pct`` client-side when a grade predates this field, so a run that
+#: emits the field and one that does not must land in the same bars.
+_HISTOGRAM_BUCKETS: tuple[str, ...] = (
+    "0-10%", "10-20%", "20-30%", "30-40%", "40-50%",
+    "50-60%", "60-70%", "70-80%", "80-90%", "90-100%",
+)
+
+#: Bucket for tasks whose payload carries no sector. GDPVal tasks always do,
+#: but a blank must not silently vanish from a breakdown whose task counts are
+#: expected to sum to ``graded_tasks``.
+_UNKNOWN_SECTOR = "Unknown"
+
+
+def _score_bucket(pct: float) -> str:
+    """Return the histogram bucket for a 0-100 task score."""
+    if pct >= 100.0:
+        return _HISTOGRAM_BUCKETS[-1]
+    if pct < 0.0:
+        return _HISTOGRAM_BUCKETS[0]
+    return _HISTOGRAM_BUCKETS[min(9, int(pct // 10))]
+
+
+def _rate(numerator: int, denominator: int) -> float:
+    """Rounded pass rate as a 0-1 fraction, 0.0 when nothing was counted."""
+    return round((numerator / denominator) if denominator else 0.0, 4)
+
+
+def _new_item_counters() -> dict[str, int]:
+    return {
+        "all_items": 0,
+        "all_pass": 0,
+        "pre_items": 0,
+        "pre_pass": 0,
+        "judge_items": 0,
+        "judge_pass": 0,
+        "judge_errors": 0,
+        "critical_items": 0,
+        "critical_pass": 0,
+    }
+
+
+def _tally_item(counters: dict[str, int], item: dict) -> None:
+    """Fold one rubric item into a counter bag.
+
+    The run-wide summary and every per-sector breakdown call this one
+    function. A second copy of these rules for the sector view would drift the
+    first time someone edited one of them, and the dashboard would then show
+    sector rates that do not roll up to the header they sit under.
+    """
+    score_excluded = bool(item.get("score_excluded", False))
+    if not score_excluded:
+        counters["all_items"] += 1
+        if item.get("verdict") == "pass":
+            counters["all_pass"] += 1
+    if item.get("decided_by") == "precheck":
+        if not score_excluded:
+            counters["pre_items"] += 1
+            if item.get("verdict") == "pass":
+                counters["pre_pass"] += 1
+    if item.get("decided_by") == "judge":
+        counters["judge_items"] += 1
+        if item.get("verdict") == "pass" and not score_excluded:
+            counters["judge_pass"] += 1
+        if item.get("verdict") == "judge_error":
+            counters["judge_errors"] += 1
+    # PR1 task 101 — critical_item_pass_rate uses sign-aware
+    # MAGNITUDE_THRESHOLD (|max_score| >= 4) and ItemGrade
+    # .model_did_right (filled by core.grader._aggregate in
+    # PR1 task 100), NOT raw `verdict == 'pass'`.
+    #
+    # The legacy `(max_score or 0) >= 3` here was both
+    # wrong-threshold (project convention is 4) and wrong-sign
+    # (negative penalty items were excluded entirely, and
+    # 'pass' on a negative item meant the model violated).
+    # See data/grades/_validation/SCORE_MATH_AUDIT.md.
+    if not score_excluded and _is_critical_item(item.get("max_score")):
+        counters["critical_items"] += 1
+        if bool(item.get("model_did_right", False)):
+            counters["critical_pass"] += 1
+
+
+def _severity_weight(max_score: Any) -> int | float | None:
+    """Normalize a rubric ``max_score`` into a groupable curve weight."""
+    try:
+        weight = float(max_score)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(weight):
+        return None
+    return int(weight) if weight.is_integer() else weight
+
+
+def _tally_severity(totals: dict[int | float, list[int]], item: dict) -> None:
+    """Group one scored item by rubric weight for the severity curve.
+
+    Counts ``model_did_right`` rather than ``verdict == 'pass'``. GDPVal
+    rubrics carry negative-weight anti-criteria where a 'pass' verdict means
+    the model *did* the prohibited thing, and this curve deliberately spans
+    both signs — a raw verdict count would invert exactly the points the chart
+    exists to show.
+    """
+    if bool(item.get("score_excluded", False)):
+        return
+    weight = _severity_weight(item.get("max_score"))
+    if weight is None:
+        return
+    bucket = totals.setdefault(weight, [0, 0])
+    bucket[0] += 1
+    if bool(item.get("model_did_right", False)):
+        bucket[1] += 1
+
+
 def _compute_summary(
     task_dicts: list[dict],
     *,
@@ -1259,15 +1374,11 @@ def _compute_summary(
     zero = sum(1 for x in pcts if x <= 1.0)
     partial = graded_tasks - perfect - zero
 
-    pre_items = 0
-    pre_pass = 0
-    judge_items = 0
-    judge_pass = 0
-    judge_errors = 0
-    critical_items = 0
-    critical_pass = 0
-    all_items = 0
-    all_pass = 0
+    counters = _new_item_counters()
+    sector_counters: dict[str, dict[str, int]] = {}
+    sector_pcts: dict[str, list[float]] = {}
+    severity_totals: dict[int | float, list[int]] = {}
+    sign_aware_verdicts = False
 
     main_calls = 0
     main_in_tok = 0
@@ -1302,40 +1413,68 @@ def _compute_summary(
             task.get("usage_complete", True)
         )
 
+        # The sector breakdown is defined over graded tasks, so its task counts
+        # sum to `graded_tasks`. An errored task carries no rubric items, so
+        # nothing is lost from the item rates by scoping it this way.
+        sector_bag: dict[str, int] | None = None
+        if not task.get("error"):
+            sector = str(task.get("sector") or "").strip() or _UNKNOWN_SECTOR
+            sector_pcts.setdefault(sector, []).append(float(task["pct"]))
+            sector_bag = sector_counters.setdefault(
+                sector, _new_item_counters()
+            )
+
         for item in task.get("items", []):
-            score_excluded = bool(item.get("score_excluded", False))
-            if not score_excluded:
-                all_items += 1
-                if item.get("verdict") == "pass":
-                    all_pass += 1
-            if item.get("decided_by") == "precheck":
-                if not score_excluded:
-                    pre_items += 1
-                    if item.get("verdict") == "pass":
-                        pre_pass += 1
-            if item.get("decided_by") == "judge":
-                judge_items += 1
-                if item.get("verdict") == "pass" and not score_excluded:
-                    judge_pass += 1
-                if item.get("verdict") == "judge_error":
-                    judge_errors += 1
-            # PR1 task 101 — critical_item_pass_rate uses sign-aware
-            # MAGNITUDE_THRESHOLD (|max_score| >= 4) and ItemGrade
-            # .model_did_right (filled by core.grader._aggregate in
-            # PR1 task 100), NOT raw `verdict == 'pass'`.
-            #
-            # The legacy `(max_score or 0) >= 3` here was both
-            # wrong-threshold (project convention is 4) and wrong-sign
-            # (negative penalty items were excluded entirely, and
-            # 'pass' on a negative item meant the model violated).
-            # See data/grades/_validation/SCORE_MATH_AUDIT.md.
-            if (
-                not score_excluded
-                and _is_critical_item(item.get("max_score"))
-            ):
-                critical_items += 1
-                if bool(item.get("model_did_right", False)):
-                    critical_pass += 1
+            _tally_item(counters, item)
+            _tally_severity(severity_totals, item)
+            if sector_bag is not None:
+                _tally_item(sector_bag, item)
+            if "model_did_right" in item:
+                sign_aware_verdicts = True
+
+    by_sector = {
+        sector: {
+            "task_count": len(sector_pcts[sector]),
+            "avg_pct": round(
+                sum(sector_pcts[sector]) / len(sector_pcts[sector]), 2
+            ),
+            "critical_item_pass_rate": _rate(
+                bag["critical_pass"], bag["critical_items"]
+            ),
+            "precheck_pass_rate": _rate(bag["pre_pass"], bag["pre_items"]),
+            "judge_pass_rate": _rate(bag["judge_pass"], bag["judge_items"]),
+        }
+        for sector, bag in sorted(sector_counters.items())
+    }
+
+    histogram_counts = dict.fromkeys(_HISTOGRAM_BUCKETS, 0)
+    for pct in pcts:
+        histogram_counts[_score_bucket(pct)] += 1
+    # Every bucket is emitted, including empty ones, so the chart draws a full
+    # axis instead of collapsing to whichever scores happened to occur.
+    score_density_histogram = [
+        {"bucket": bucket, "count": histogram_counts[bucket]}
+        for bucket in _HISTOGRAM_BUCKETS
+    ]
+
+    # Grades written before ``core.grader`` began emitting ``model_did_right``
+    # (PR1 task 100) carry no sign-aware verdict, so every point on the curve
+    # would read 0.0 and the chart would assert a total failure that never
+    # happened. A single rate can absorb that; a curve cannot, because its
+    # shape is the claim. Publish nothing rather than a false shape — the
+    # component already renders an empty state for a missing field.
+    rubric_severity_curve = (
+        [
+            {
+                "weight": weight,
+                "n_items": n_items,
+                "pass_rate": _rate(n_did_right, n_items),
+            }
+            for weight, (n_items, n_did_right) in sorted(severity_totals.items())
+        ]
+        if sign_aware_verdicts
+        else []
+    )
 
     return {
         "total_tasks": total,
@@ -1350,15 +1489,32 @@ def _compute_summary(
             "inconsistent_count": 0,
         },
         "wow": {
-            "rubric_item_coverage_avg": round((all_pass / all_items) if all_items else 0.0, 4),
-            "critical_item_pass_rate": round((critical_pass / critical_items) if critical_items else 0.0, 4),
-            "precheck_pass_rate": round((pre_pass / pre_items) if pre_items else 0.0, 4),
-            "judge_pass_rate": round((judge_pass / judge_items) if judge_items else 0.0, 4),
-            "judge_error_rate": canonical_rate(judge_errors, judge_items),
-            "by_sector": {},
+            "rubric_item_coverage_avg": _rate(
+                counters["all_pass"], counters["all_items"]
+            ),
+            "critical_item_pass_rate": _rate(
+                counters["critical_pass"], counters["critical_items"]
+            ),
+            "precheck_pass_rate": _rate(
+                counters["pre_pass"], counters["pre_items"]
+            ),
+            "judge_pass_rate": _rate(
+                counters["judge_pass"], counters["judge_items"]
+            ),
+            "judge_error_rate": canonical_rate(
+                counters["judge_errors"], counters["judge_items"]
+            ),
+            "by_sector": by_sector,
+            # Left empty deliberately. The GDPVal rubrics carry no category
+            # taxonomy — rubric items have an id, a criterion string and a
+            # weight, and nothing that groups them into categories — so there
+            # is no source for this breakdown. Populating it would mean
+            # inventing a taxonomy and presenting it as measurement.
+            # SectorHeatmap.tsx already treats it as absent and falls back to
+            # the per-sector rates above.
             "by_rubric_category": {},
-            "score_density_histogram": [],
-            "rubric_severity_curve": [],
+            "score_density_histogram": score_density_histogram,
+            "rubric_severity_curve": rubric_severity_curve,
         },
         "cost": {
             "total_judge_calls": main_calls + perception_calls,
