@@ -74,6 +74,8 @@ concurrency:
 jobs:
   validate-request:
     runs-on: ubuntu-24.04
+    outputs:
+      approval_inherited: ${{ steps.inherit.outputs.approval_inherited }}
     env:
       GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
@@ -190,10 +192,128 @@ jobs:
             exit 1
           fi
 
+      # A resume chunk is not a new spending decision. `rerun_identity` pins the
+      # corpus (task_ids + expected_task_count), so the bill is bounded the
+      # moment chunk 0 is approved. The 4h boundary that splits a shard is an
+      # artifact of the hosted-runner 6h ceiling, not a fresh authorization --
+      # and shard_count is capped at 11 against a ~71.6h serial projection, so
+      # no sharding choice makes a 220-task run fit in one chunk. Demanding a
+      # human click per chunk therefore buys no safety while making the run
+      # depend on somebody being awake every four hours.
+      #
+      # Inheritance is granted only to a chunk that can PROVE it continues an
+      # already-approved lineage. Every check below must pass; any doubt at all
+      # falls back to the Environment gate.
+      - name: Resolve inherited paid approval
+        id: inherit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The identity the grade job commits partials under. Kept in lockstep
+          # with the `git config user.email` in the commit step below.
+          GRADE_BOT_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+        run: |
+          set -uo pipefail
+
+          emit() {
+            echo "approval_inherited=$1" >> "$GITHUB_OUTPUT"
+            echo "[inherit] approval_inherited=$1"
+          }
+          deny() {
+            echo "[inherit] $1 -- requiring the Environment approval"
+            emit false
+            exit 0
+          }
+
+          # This step is an optimisation for chunk >= 1. It must never be able
+          # to fail the job, or a bug here would block chunk 0 -- the path that
+          # does not use inheritance at all. Any unexpected error denies.
+          trap 'deny "unexpected failure near line $LINENO"' ERR
+          set -e
+
+          if [[ "$GRADE_DRY_RUN" != "false" || "$GRADE_PAID_APPROVAL" != "true" ]]; then
+            deny "not a paid request"
+          fi
+          if [[ "$GRADE_RESUME" != "true" ]] || (( 10#$GRADE_RESUME_CHUNK < 1 )); then
+            deny "chunk 0 is the click that authorizes the corpus"
+          fi
+          # Only the in-workflow auto-retrigger dispatches under the bot
+          # identity. A person hand-passing resume=true carries their own login,
+          # and minting a bot dispatch requires merging a workflow to main --
+          # already owner-gated.
+          if [[ "$GITHUB_ACTOR" != "github-actions[bot]" ||
+                "$GITHUB_TRIGGERING_ACTOR" != "github-actions[bot]" ]]; then
+            deny "resume dispatched by '$GITHUB_ACTOR'/'$GITHUB_TRIGGERING_ACTOR', not the auto-retrigger"
+          fi
+
+          CONFIG_B64="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/contents/batch-runner/grading_configs/${GRADE_CONFIG}?ref=${GITHUB_SHA}" \
+            --jq '.content // ""' || true)"
+          if [[ -z "$CONFIG_B64" ]]; then
+            deny "grading config ${GRADE_CONFIG} not readable at ${GITHUB_SHA}"
+          fi
+          if ! printf '%s' "$CONFIG_B64" | base64 -d > "${RUNNER_TEMP}/grading_config.yaml"; then
+            deny "grading config ${GRADE_CONFIG} did not decode"
+          fi
+          CONFIG_NAME="$(awk '
+            /^config_name:[[:space:]]/ {
+              sub(/^config_name:[[:space:]]*/, "")
+              gsub(/^"|"$/, "")
+              print
+              exit
+            }' "${RUNNER_TEMP}/grading_config.yaml")"
+          if [[ ! "$CONFIG_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+            deny "config_name in ${GRADE_CONFIG} is missing or unsafe"
+          fi
+
+          SHARD_FILE="$(printf 'shard-%03d-of-%03d.json' \
+            "$((10#$GRADE_SHARD_INDEX))" "$((10#$GRADE_SHARD_COUNT))")"
+
+          # The partial's own path is the receipt. Its parent stem encodes the
+          # experiment, config name, config hash, rubric SHA, inference SHA and
+          # grader source hash -- so a path match is a full identity match, and
+          # the file can only exist because an approved chunk wrote it.
+          STEMS="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/contents/data/grades/_shards?ref=main" \
+            --jq '.[] | select(.type == "dir") | .name' 2>/dev/null || true)"
+          MATCH=""
+          while IFS= read -r stem; do
+            [[ -n "$stem" ]] || continue
+            [[ "$stem" == "${GRADE_EXPERIMENT_YAML}__"* ]] || continue
+            [[ "$stem" == *"__${CONFIG_NAME}__"* ]] || continue
+            [[ "$stem" == *"__inference_${GRADE_INFERENCE_REVISION}__"* ]] || continue
+            candidate="data/grades/_shards/${stem}/${SHARD_FILE}"
+            if gh api "repos/${GITHUB_REPOSITORY}/contents/${candidate}?ref=main" \
+                 --jq '.sha' >/dev/null 2>&1; then
+              MATCH="$candidate"
+              break
+            fi
+          done <<< "$STEMS"
+          if [[ -z "$MATCH" ]]; then
+            deny "no committed ${SHARD_FILE} for ${GRADE_EXPERIMENT_YAML}/${CONFIG_NAME} at inference ${GRADE_INFERENCE_REVISION}"
+          fi
+
+          AUTHOR_EMAIL="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/commits?path=${MATCH}&sha=main&per_page=1" \
+            --jq '.[0].commit.author.email // ""' || true)"
+          if [[ "$AUTHOR_EMAIL" != "$GRADE_BOT_EMAIL" ]]; then
+            deny "partial ${MATCH} was last written by '${AUTHOR_EMAIL:-unknown}', not the grading job"
+          fi
+
+          echo "[inherit] continuing approved lineage via ${MATCH}"
+          emit true
+
   approve-paid:
     name: Approve paid Sol Max grading (${{ inputs.experiment_yaml }}, ${{ inputs.grading_config }}, chunk ${{ inputs.resume_chunk }}, shard ${{ inputs.shard_index }}/${{ inputs.shard_count }})
     needs: validate-request
-    if: inputs.dry_run == false && inputs.paid_approval == true
+    # Skipped only for a bot-dispatched resume chunk that proved it continues an
+    # already-approved lineage (see "Resolve inherited paid approval").
+    if: >-
+      ${{
+        inputs.dry_run == false &&
+        inputs.paid_approval == true &&
+        needs.validate-request.outputs.approval_inherited != 'true'
+      }}
     runs-on: ubuntu-24.04
     environment:
       name: grading
@@ -310,12 +430,27 @@ jobs:
 
   grade:
     needs: [validate-request, approve-paid]
+    # approve-paid is allowed to be 'skipped' ONLY when validate-request itself
+    # certified the inheritance. Reading the output rather than trusting the
+    # skip means a skip from any other cause still blocks the paid job.
+    #
+    # `!cancelled()` is load-bearing, not decoration: a job whose `needs` was
+    # skipped is skipped too unless its `if` contains a status check function,
+    # so without it this job would never run in exactly the inherited case.
+    # It also keeps a cancelled run from proceeding to spend money.
     if: >-
       ${{
+        !cancelled() &&
         inputs.dry_run == false &&
         inputs.paid_approval == true &&
         needs.validate-request.result == 'success' &&
-        needs.approve-paid.result == 'success'
+        (
+          needs.approve-paid.result == 'success' ||
+          (
+            needs.approve-paid.result == 'skipped' &&
+            needs.validate-request.outputs.approval_inherited == 'true'
+          )
+        )
       }}
     runs-on: ubuntu-24.04
     permissions:

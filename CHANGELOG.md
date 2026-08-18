@@ -12,6 +12,49 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **One paid approval now carries a whole shard, not one 4h chunk** - a shard of
+  the 220-task corpus takes ~6.5h of strictly serial judge calls
+  (`tpm_guard.max_concurrent: 1`), but GitHub's hosted runners cap a job at 6h
+  and cannot be extended. `step8_grade.py` therefore stops at its 4h internal
+  budget, saves a partial, exits 7, and re-dispatches itself for the next chunk.
+  Every one of those re-dispatches landed back on the `grading` Environment and
+  waited for a human to click approve - so finishing a shard meant somebody
+  being awake at the four-hour boundary, and finishing nine shards meant that
+  eighteen times. Re-sharding cannot avoid it: `shard_count` is capped at 11,
+  which still leaves two chunks per shard.
+
+  `validate-request` now resolves an `approval_inherited` output, and
+  `approve-paid` is skipped when it is `true`. This is not a relaxation of the
+  spending control. `rerun_identity` pins the corpus (`task_ids` plus
+  `expected_task_count`) before chunk 0 runs, so approving chunk 0 already
+  bounds the bill for the entire shard; the 4h split is an artifact of the
+  runner ceiling, not a second spending decision. Inheritance is granted only
+  when *all* of the following hold, and any error or ambiguity falls back to
+  requiring the click:
+  - the request is paid (`dry_run == false`, `paid_approval == true`) and is a
+    resume with `resume_chunk >= 1` - chunk 0 is always the human click;
+  - both `actor` and `triggering_actor` are `github-actions[bot]`, which only
+    the in-workflow auto-retrigger produces (a person passing `resume=true` by
+    hand carries their own login);
+  - a partial for this exact shard slot exists on `main` under
+    `data/grades/_shards/<stem>/shard-NNN-of-MMM.json`, where the stem encodes
+    experiment, config name, config hash, rubric SHA, inference SHA and grader
+    source hash - so a path match is a full identity match;
+  - that partial's last commit was authored by the grading job's bot identity.
+
+  Minting a bot dispatch or a bot-authored partial requires merging a workflow
+  change to `main`, which is already owner-gated, so the bypass cannot be
+  reached from a feature branch. `grade` reads
+  `needs.validate-request.outputs.approval_inherited` rather than trusting a
+  bare `skipped` result, so an `approve-paid` skip from any other cause still
+  blocks the paid job, and its `if` now carries `!cancelled()` because a job
+  whose `needs` was skipped is otherwise skipped before its condition is even
+  evaluated. The inheritance step itself denies rather than throws on any
+  unexpected error, so a bug in it can never block chunk 0. Chunk 0 of every
+  shard, and every non-resume paid request, is unaffected.
+  `docs/first-experiment.md` and `docs/first-experiment_KR.md` no longer state
+  that each continuation needs a fresh approval. No workflow was dispatched by
+  this change.
 - **Legacy provenance: a complete pinned corpus is publishable** - inference
   runs that predate `inference_provenance.json` previously forced every grade
   built from them into `data/grades/_diagnostic/`, which the dashboard
