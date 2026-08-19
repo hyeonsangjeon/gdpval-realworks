@@ -11,6 +11,65 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **Backend test workflow (`backend-tests.yml`)** - the batch-runner suite had
+  no pull-request gate at all, so a change could land on `main` with a red test
+  and nothing would report it. That is exactly how the paid-gate assertion
+  stayed broken through a merge. The workflow runs `pytest` on pull requests
+  and pushes to `main` that touch `batch-runner/**`.
+
+  Pinned to Python **3.10.12** exactly, not `3.11` like the other workflows
+  here. `core/agentic_v2_license.py` pins
+  `LICENSE_EVALUATOR_PYTHON_VERSION = "3.10.12"` and compares it against
+  `sys.version_info[:3]`; on 3.11 the identity check raises and takes ~93
+  supply-chain and license tests with it. The pin is a deliberate
+  reproducibility control, so CI matches it rather than relaxing it.
+
+  Checks out with `fetch-depth: 0`, because
+  `test_verifier_ignores_hostile_path_for_repository_git` resolves a hardcoded
+  commit through `git cat-file` and a shallow clone does not contain it.
+
+  Two real defects surfaced on the workflow's own first runs, which is the gate
+  earning its place before anyone had to trust it:
+
+  - **`patched_run_inference` was not hermetic.** It left `GITHUB_RUN_ID` and
+    `GITHUB_RUN_ATTEMPT` in the environment, so `_resolve_run_identity()`
+    returned `exp_test:<runner id>:1` while the checkpoint the fixture writes
+    hardcodes `exp_test:local:1`. Every run inside Actions rejected the
+    checkpoint with `progress checkpoint identity mismatch` and exited 1
+    instead of `EXIT_CHECKPOINT`. The test could only ever pass off-CI. The
+    fixture now clears those variables plus `GDPVAL_RELAY_LINEAGE_ID`, matching
+    what `test_relay_duration.py` already does per-test. Confirmed by
+    reproducing the failure locally with the variables set, and by mutation.
+  - **One security test is deselected in CI, and it is an open question, not a
+    nuisance.** `test_generated_python_launcher_denies_exec_and_network`
+    asserts both `os.system()` and `socket.socket()` raise `OSError` under the
+    launcher's seccomp filter. On the runner only `socket()` does.
+    `execve`/`execveat` are still in `DENIED_SYSCALLS` and the filter still
+    loads, so the sandbox is not weaker there - what differs is whether glibc's
+    `system()` surfaces the blocked exec as a Python `OSError`, which it does
+    on the dev box's 3.10 kernel and does not on the runner's. That makes the
+    assertion a probe of libc error reporting rather than of the filter. It
+    stays deselected until it is rewritten to check exec denial directly; the
+    Docker gate remains the enforcing control regardless.
+
+  It holds `contents: read`, references no secrets, and checks out with
+  `persist-credentials: false`, so it stays runnable from a fork. Integration
+  tests reach paid judge endpoints, and `pytest.ini` deselects them via
+  `addopts` - but a pull request can edit `pytest.ini`, so the job asserts the
+  marker filter is still there before running, and repeats `-m "not
+  integration"` on the command line regardless. Both were mutation-checked
+  against a `pytest.ini` with the filter stripped.
+
+  Deliberately not gated: mypy (189 findings on `main`) and ruff (20). Gating
+  either today would freeze a pre-existing backlog into permanent red and teach
+  everyone to ignore the check.
+
+  Known gap, left alone on purpose: two tests carry `@pytest.mark.timeout(2)`
+  but `pytest-timeout` is absent from `requirements.txt`, so pytest warns and
+  enforces no timeout. Adding it changes `grader_source_hash` and would break
+  the in-flight 220-task relay, so it waits for the shard merge.
+
 ### Changed
 - **One paid approval now carries a whole shard, not one 4h chunk** - a shard of
   the 220-task corpus takes ~6.5h of strictly serial judge calls
