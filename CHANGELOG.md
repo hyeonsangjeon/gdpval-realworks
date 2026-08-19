@@ -11,6 +11,32 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **Backend test workflow (`backend-tests.yml`)** - the batch-runner suite had
+  no pull-request gate at all, so a change could land on `main` with a red test
+  and nothing would report it. That is exactly how the paid-gate assertion
+  stayed broken through a merge. The workflow runs `pytest` on pull requests
+  and pushes to `main` that touch `batch-runner/**`, on Python 3.11 to match
+  every other workflow in the repo. Baseline on `main` at the time of writing:
+  3277 passed, 6 skipped, 45 deselected in 9m14s.
+
+  It holds `contents: read`, references no secrets, and checks out with
+  `persist-credentials: false`, so it stays runnable from a fork. Integration
+  tests reach paid judge endpoints, and `pytest.ini` deselects them via
+  `addopts` - but a pull request can edit `pytest.ini`, so the job asserts the
+  marker filter is still there before running, and repeats `-m "not
+  integration"` on the command line regardless. Both were mutation-checked
+  against a `pytest.ini` with the filter stripped.
+
+  Deliberately not gated: mypy (189 findings on `main`) and ruff (20). Gating
+  either today would freeze a pre-existing backlog into permanent red and teach
+  everyone to ignore the check.
+
+  Known gap, left alone on purpose: two tests carry `@pytest.mark.timeout(2)`
+  but `pytest-timeout` is absent from `requirements.txt`, so pytest warns and
+  enforces no timeout. Adding it changes `grader_source_hash` and would break
+  the in-flight 220-task relay, so it waits for the shard merge.
+
 ### Changed
 - **One paid approval now carries a whole shard, not one 4h chunk** - a shard of
   the 220-task corpus takes ~6.5h of strictly serial judge calls
