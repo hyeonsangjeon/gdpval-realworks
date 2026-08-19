@@ -22,10 +22,36 @@ entries land under a fresh dated heading the day they merge to `main`.
   here. `core/agentic_v2_license.py` pins
   `LICENSE_EVALUATOR_PYTHON_VERSION = "3.10.12"` and compares it against
   `sys.version_info[:3]`; on 3.11 the identity check raises and takes ~93
-  supply-chain and license tests with it. The first run of this workflow found
-  that on 3.11 - 94 failed, 3180 passed - which is the gate doing its job
-  before a human had to. The pin is a deliberate reproducibility control, so
-  CI matches it rather than relaxing it.
+  supply-chain and license tests with it. The pin is a deliberate
+  reproducibility control, so CI matches it rather than relaxing it.
+
+  Checks out with `fetch-depth: 0`, because
+  `test_verifier_ignores_hostile_path_for_repository_git` resolves a hardcoded
+  commit through `git cat-file` and a shallow clone does not contain it.
+
+  Two real defects surfaced on the workflow's own first runs, which is the gate
+  earning its place before anyone had to trust it:
+
+  - **`patched_run_inference` was not hermetic.** It left `GITHUB_RUN_ID` and
+    `GITHUB_RUN_ATTEMPT` in the environment, so `_resolve_run_identity()`
+    returned `exp_test:<runner id>:1` while the checkpoint the fixture writes
+    hardcodes `exp_test:local:1`. Every run inside Actions rejected the
+    checkpoint with `progress checkpoint identity mismatch` and exited 1
+    instead of `EXIT_CHECKPOINT`. The test could only ever pass off-CI. The
+    fixture now clears those variables plus `GDPVAL_RELAY_LINEAGE_ID`, matching
+    what `test_relay_duration.py` already does per-test. Confirmed by
+    reproducing the failure locally with the variables set, and by mutation.
+  - **One security test is deselected in CI, and it is an open question, not a
+    nuisance.** `test_generated_python_launcher_denies_exec_and_network`
+    asserts both `os.system()` and `socket.socket()` raise `OSError` under the
+    launcher's seccomp filter. On the runner only `socket()` does.
+    `execve`/`execveat` are still in `DENIED_SYSCALLS` and the filter still
+    loads, so the sandbox is not weaker there - what differs is whether glibc's
+    `system()` surfaces the blocked exec as a Python `OSError`, which it does
+    on the dev box's 3.10 kernel and does not on the runner's. That makes the
+    assertion a probe of libc error reporting rather than of the filter. It
+    stays deselected until it is rewritten to check exec denial directly; the
+    Docker gate remains the enforcing control regardless.
 
   It holds `contents: read`, references no secrets, and checks out with
   `persist-credentials: false`, so it stays runnable from a fork. Integration
