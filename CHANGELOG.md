@@ -16,9 +16,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   no pull-request gate at all, so a change could land on `main` with a red test
   and nothing would report it. That is exactly how the paid-gate assertion
   stayed broken through a merge. The workflow runs `pytest` on pull requests
-  and pushes to `main` that touch `batch-runner/**`, on Python 3.11 to match
-  every other workflow in the repo. Baseline on `main` at the time of writing:
-  3277 passed, 6 skipped, 45 deselected in 9m14s.
+  and pushes to `main` that touch `batch-runner/**`.
+
+  Pinned to Python **3.10.12** exactly, not `3.11` like the other workflows
+  here. `core/agentic_v2_license.py` pins
+  `LICENSE_EVALUATOR_PYTHON_VERSION = "3.10.12"` and compares it against
+  `sys.version_info[:3]`; on 3.11 the identity check raises and takes ~93
+  supply-chain and license tests with it. The first run of this workflow found
+  that on 3.11 - 94 failed, 3180 passed - which is the gate doing its job
+  before a human had to. The pin is a deliberate reproducibility control, so
+  CI matches it rather than relaxing it.
 
   It holds `contents: read`, references no secrets, and checks out with
   `persist-credentials: false`, so it stays runnable from a fork. Integration
