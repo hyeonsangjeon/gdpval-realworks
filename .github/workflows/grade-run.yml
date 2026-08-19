@@ -596,17 +596,75 @@ jobs:
           cd batch-runner
           python scripts/azure_ai_route_preflight.py
 
+      # The renderer is a host binary, not a library: core/artifact_renderer.py
+      # and core/tools/read_deliverable.py both shell out to `soffice`, so it
+      # has to exist on the runner before grading starts.
+      #
+      # On 2026-08-19 that made this step the single point of failure for the
+      # 220-task run. Between 08:11 and 08:35 UTC azure.archive.ubuntu.com
+      # returned Ign: for every index, apt fell back to archive.ubuntu.com, and
+      # that connection stalled mid-transfer. apt imposes no wall-clock ceiling
+      # on itself, so five grade jobs sat here for 5h18m until timeout-minutes
+      # killed them -- taking 63 of the 220 tasks with them and reporting
+      # nothing until the job died. The same 25-minute window cost nothing to
+      # the shards that reached this step at 08:41 and 08:44, where apt
+      # completed in under two and a half minutes.
+      #
+      # Three guards, in order of what they catch:
+      #   Acquire::*::Timeout  -- a stalled socket errors out instead of
+      #                           blocking forever, which is what actually
+      #                           happened here.
+      #   sudo timeout         -- a hard ceiling on apt regardless of why it is
+      #                           stuck. Run under sudo, not around it, so the
+      #                           signal reaches apt rather than sudo.
+      #   DPkg::Lock::Timeout  -- after a TERM'd attempt, the next one waits for
+      #                           the dpkg lock instead of failing on contact
+      #                           with a lock the dying process still holds.
+      #   the retry loop       -- a transient mirror outage becomes recoverable
+      #                           inside the job. Worst case is 36 minutes
+      #                           (3 x 11min ceiling + 60s and 120s backoff),
+      #                           which outlasts the ~25-minute outage actually
+      #                           observed and still leaves the 240-minute
+      #                           grading budget inside the 320-minute job
+      #                           timeout.
+      #
+      # This does not make apt succeed while a mirror is down; nothing here
+      # can. It converts a silent five-hour hang into either a recovery or a
+      # fast, legible failure. Removing the apt dependency altogether means
+      # running this job in ghcr.io/hyeonsangjeon/gdpval-sandbox, which already
+      # ships LibreOffice -- tracked separately, deliberately not on the
+      # critical path for finishing the current run.
       - name: Install grading render dependencies
         if: steps.renderer.outputs.required == 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            libreoffice-core \
-            libreoffice-calc \
-            libreoffice-impress \
-            fonts-dejavu-core \
-            fonts-liberation2 \
-            fontconfig
+          APT_OPTS=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+            -o DPkg::Lock::Timeout=60
+          )
+          install_render_deps() {
+            sudo timeout 240 apt-get "${APT_OPTS[@]}" update || return 1
+            sudo timeout 420 apt-get "${APT_OPTS[@]}" install \
+              --yes --no-install-recommends \
+              libreoffice-core \
+              libreoffice-calc \
+              libreoffice-impress \
+              fonts-dejavu-core \
+              fonts-liberation2 \
+              fontconfig || return 1
+          }
+          for attempt in 1 2 3; do
+            if install_render_deps; then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::apt could not install the grading renderer after 3 attempts"
+              exit 1
+            fi
+            echo "::warning::apt attempt $attempt failed; retrying in $((attempt * 60))s"
+            sleep "$((attempt * 60))"
+          done
           libreoffice --headless --version
           FONT_FAMILIES="$(fc-match --format '%{family}\n' 'Liberation Sans')"
           if ! printf '%s\n' "$FONT_FAMILIES" | tr ',' '\n' | awk '

@@ -31,16 +31,40 @@ jobs:
           cache: pip
           cache-dependency-path: batch-runner/requirements-renderer.txt
 
+      # Same stall guard as grade-run.yml's renderer install -- see the comment
+      # there for the 2026-08-19 mirror outage this exists to survive. A
+      # preflight that hangs for five hours is worse than one that fails in
+      # ten minutes, because nobody reads a job that is still "running".
       - name: Install document renderer
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            libreoffice-core \
-            libreoffice-calc \
-            libreoffice-impress \
-            fonts-dejavu-core \
-            fonts-liberation2 \
-            fontconfig
+          APT_OPTS=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+            -o DPkg::Lock::Timeout=60
+          )
+          install_render_deps() {
+            sudo timeout 240 apt-get "${APT_OPTS[@]}" update || return 1
+            sudo timeout 420 apt-get "${APT_OPTS[@]}" install \
+              --yes --no-install-recommends \
+              libreoffice-core \
+              libreoffice-calc \
+              libreoffice-impress \
+              fonts-dejavu-core \
+              fonts-liberation2 \
+              fontconfig || return 1
+          }
+          for attempt in 1 2 3; do
+            if install_render_deps; then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::apt could not install the document renderer after 3 attempts"
+              exit 1
+            fi
+            echo "::warning::apt attempt $attempt failed; retrying in $((attempt * 60))s"
+            sleep "$((attempt * 60))"
+          done
           libreoffice --headless --version
           FONT_FAMILIES="$(fc-match --format '%{family}\n' 'Liberation Sans')"
           if ! printf '%s\n' "$FONT_FAMILIES" | tr ',' '\n' | awk '
