@@ -184,15 +184,38 @@ jobs:
           cache: pip
 
       # ── System deps for native Python packages (pycairo/pygraphviz, etc.) ──
+      # Stall-guarded: see grade-run.yml's renderer install for the 2026-08-19
+      # mirror outage that hung five jobs for 5h18m apiece. Same defect lives
+      # in every bare apt-get call in this repo, so it gets the same guard.
       - name: Install system dependencies
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            pkg-config \
-            libcairo2-dev \
-            libffi-dev \
-            graphviz \
-            libgraphviz-dev
+          APT_OPTS=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+            -o DPkg::Lock::Timeout=60
+          )
+          install_system_deps() {
+            sudo timeout 240 apt-get "${APT_OPTS[@]}" update -qq || return 1
+            sudo timeout 420 apt-get "${APT_OPTS[@]}" install -y \
+              --no-install-recommends \
+              pkg-config \
+              libcairo2-dev \
+              libffi-dev \
+              graphviz \
+              libgraphviz-dev || return 1
+          }
+          for attempt in 1 2 3; do
+            if install_system_deps; then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::apt could not install system dependencies after 3 attempts"
+              exit 1
+            fi
+            echo "::warning::apt attempt $attempt failed; retrying in $((attempt * 60))s"
+            sleep "$((attempt * 60))"
+          done
 
       - name: Install dependencies
         run: |
@@ -436,29 +459,51 @@ jobs:
           cd batch-runner
           python3 scripts/azure_ai_route_preflight.py
 
+      # Stall-guarded like the other apt calls here. This one installs the
+      # largest package set in the repo, so it gets a longer install ceiling.
       - name: Install LibreOffice & Noto Sans fonts
         if: steps.read_config.outputs.install_libreoffice == 'True'
         run: |
           echo "📦 Installing LibreOffice (headless) + Noto Sans fonts + system deps..."
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            libreoffice-core \
-            libreoffice-calc \
-            libreoffice-impress \
-            libreoffice-writer \
-            fonts-noto-core \
-            fonts-noto-cjk \
-            ffmpeg \
-            libsndfile1 \
-            tesseract-ocr \
-            poppler-utils \
-            wkhtmltopdf \
-            ghostscript \
-            graphviz libgraphviz-dev \
-            libzbar0 \
-            libcairo2 libpango-1.0-0 libpangocairo-1.0-0 \
-            libgdk-pixbuf-2.0-0 libffi-dev \
-            libgl1 libglib2.0-0
+          APT_OPTS=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+            -o DPkg::Lock::Timeout=60
+          )
+          install_office_deps() {
+            sudo timeout 240 apt-get "${APT_OPTS[@]}" update -qq || return 1
+            sudo timeout 900 apt-get "${APT_OPTS[@]}" install -y \
+              --no-install-recommends \
+              libreoffice-core \
+              libreoffice-calc \
+              libreoffice-impress \
+              libreoffice-writer \
+              fonts-noto-core \
+              fonts-noto-cjk \
+              ffmpeg \
+              libsndfile1 \
+              tesseract-ocr \
+              poppler-utils \
+              wkhtmltopdf \
+              ghostscript \
+              graphviz libgraphviz-dev \
+              libzbar0 \
+              libcairo2 libpango-1.0-0 libpangocairo-1.0-0 \
+              libgdk-pixbuf-2.0-0 libffi-dev \
+              libgl1 libglib2.0-0 || return 1
+          }
+          for attempt in 1 2 3; do
+            if install_office_deps; then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::apt could not install LibreOffice after 3 attempts"
+              exit 1
+            fi
+            echo "::warning::apt attempt $attempt failed; retrying in $((attempt * 60))s"
+            sleep "$((attempt * 60))"
+          done
           fc-cache -fv
           echo "✅ LibreOffice version:"
           libreoffice --version
