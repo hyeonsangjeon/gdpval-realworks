@@ -101,6 +101,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   and grade data are unchanged.
 
 ### Fixed
+- **Paid-gate workflow test pinned to the post-inheritance conditions** - the
+  approval-inheritance change left `test_grade_workflow_rc7_requires_valid_
+  committed_partial` comparing `approve-paid`'s `if:` against the old literal
+  `inputs.dry_run == false && inputs.paid_approval == true`, so `main` has been
+  red since that merge. Nothing caught it because no workflow runs the
+  batch-runner pytest suite on pull requests. The assertions now normalize the
+  YAML block scalar through a `_gh_expr` helper and pin both the `approve-paid`
+  and `grade` conditions exactly, replacing four substring probes that would
+  have passed against a gate weakened to `!= 'failure'` or one that dropped the
+  `approval_inherited` conjunct. Verified by mutation: removing the inheritance
+  conjunct from the workflow makes the test fail.
 - **First Sol Max anchor result and bounded analysis filenames** - run the
   owner-approved four-task anchor once as Actions run `31582293672` from main
   SHA `c9492645496e176c8e6a3510809585f9542a5bf1` with grader source hash
