@@ -2798,6 +2798,17 @@ def test_atomic_save_supports_stage_b_output_basename(tmp_path):
     assert list(tmp_path.glob(".grade-*.tmp")) == []
 
 
+def _gh_expr(raw):
+    """Collapse a GitHub Actions `if:` to one comparable line.
+
+    The conditions guarding paid grading are written as multi-line YAML block
+    scalars for readability, so an exact string compare would break on a
+    reflow that changed nothing. Normalizing whitespace keeps these assertions
+    strict about the condition itself and indifferent to its formatting.
+    """
+    return " ".join(str(raw).strip().removeprefix("${{").removesuffix("}}").split())
+
+
 def test_grade_workflow_rc7_requires_valid_committed_partial():
     workflow_path = Path("../.github/workflows/grade-run.yml")
     workflow = workflow_path.read_text(
@@ -2817,8 +2828,12 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     dry_run_job = parsed["jobs"]["grade-dry-run"]
     grade_job = parsed["jobs"]["grade"]
     assert approval_job["needs"] == "validate-request"
-    assert approval_job["if"] == (
-        "inputs.dry_run == false && inputs.paid_approval == true"
+    # A paid request goes to the protected environment unless validate-request
+    # proved the run inherits the approval already given for this shard.
+    assert _gh_expr(approval_job["if"]) == (
+        "inputs.dry_run == false && "
+        "inputs.paid_approval == true && "
+        "needs.validate-request.outputs.approval_inherited != 'true'"
     )
     assert approval_job["environment"] == {"name": "grading"}
     assert "permissions" not in approval_job
@@ -2843,10 +2858,20 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert "id-token" not in yaml.safe_dump(dry_run_job)
     assert "actions" not in dry_run_job["permissions"]
     assert grade_job["needs"] == ["validate-request", "approve-paid"]
-    assert "inputs.dry_run == false" in grade_job["if"]
-    assert "inputs.paid_approval == true" in grade_job["if"]
-    assert "needs.validate-request.result == 'success'" in grade_job["if"]
-    assert "needs.approve-paid.result == 'success'" in grade_job["if"]
+    # Paid grading runs on a successful approval, or on a *skipped* approval
+    # only when validate-request certified the inheritance. Pinned exactly:
+    # any looser condition here (a bare `!= 'failure'`, dropping the
+    # approval_inherited conjunct) would let a paid run start with neither a
+    # click nor a proof, which is the whole thing this gate exists to prevent.
+    assert _gh_expr(grade_job["if"]) == (
+        "!cancelled() && "
+        "inputs.dry_run == false && "
+        "inputs.paid_approval == true && "
+        "needs.validate-request.result == 'success' && "
+        "( needs.approve-paid.result == 'success' || "
+        "( needs.approve-paid.result == 'skipped' && "
+        "needs.validate-request.outputs.approval_inherited == 'true' ) )"
+    )
     assert "environment" not in grade_job
     assert grade_job["permissions"] == {
         "contents": "write",
