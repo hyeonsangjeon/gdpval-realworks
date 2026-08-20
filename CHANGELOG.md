@@ -45,6 +45,32 @@ entries land under a fresh dated heading the day they merge to `main`.
   that had been showing up as a grading outcome. Two of those the selector
   passed through with `selection_status: 'ok'`.
 
+- **Curated the published baseline set down to a result and one comparator
+  (`src/lib/officialExperimentScope.js`)** - the 220-task `gpt-5.6-sol` regrade,
+  the run this month of work existed to produce, was rendering without the
+  OFFICIAL badge beside two older badged runs. A reader scanning the page would
+  take the badged, older, lower numbers as the benchmark's answer. It is now
+  promoted, and the older runs are cut to a single A/B comparator.
+
+  `gpt-5.4-mini` is the one retired. Against a `gpt-5.6-sol` judge it differs in
+  judge size and judge version simultaneously, so a gap measured across it
+  cannot be attributed to either; the full-size `gpt-5.4` run is the
+  like-for-like comparator and stays. Every other rule in the module decides
+  from a measured property, but which finished run represents the benchmark is
+  a publication decision, so both lists are hand-written and sit together with
+  the reasoning attached.
+
+  Retirement is not the partial-corpus rule and does not imply the numbers are
+  wrong - the retired run graded all 220 tasks and its figures stand. It is
+  display-only: no grade JSON changes, the card is one `?debug=1` away, and its
+  own page still resolves by direct URL. Visible cards go from 3 to 2, both
+  badged OFFICIAL.
+
+  `OFFICIAL_GRADE_IDS` moved from `officialFilter.ts` into
+  `officialExperimentScope.js` so the curation is covered by the node test
+  suite, including a guard that the official and retired sets can never
+  overlap.
+
 - **Partial-corpus grading runs hidden from the default dashboard view
   (`scripts/aggregate-grades.mjs`, `src/lib/officialExperimentScope.js`)** - the
   Grading Analysis tab listed six cards for the same experiment, three of which

@@ -8,8 +8,12 @@ import {
   HIDDEN_DIAGNOSTIC_EXPERIMENT_IDS,
   isHiddenDiagnosticExperimentId,
   isHiddenOfficialExperiment,
+  isOfficialGradeId,
   isPartialCorpusGrade,
+  isSupersededGradeId,
+  OFFICIAL_GRADE_IDS,
   OFFICIAL_TASK_COUNT,
+  SUPERSEDED_GRADE_IDS,
 } from '../../src/lib/officialExperimentScope.js'
 
 test('official 220-task experiments remain visible', () => {
@@ -141,4 +145,50 @@ test('unknown coverage is never treated as partial', () => {
   assert.equal(isPartialCorpusGrade({ coverage: null }), false)
   assert.equal(isPartialCorpusGrade(null), false)
   assert.equal(isPartialCorpusGrade(undefined), false)
+})
+
+// ── Phase 4: curated baselines ──────────────────────────────────────────────
+
+const SOL_220 =
+  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__regrade_exp003_v2_sol_max_score_excluded__cfg_71c325eee0e48c13__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_1c967673eb8081a6__v2.2'
+const GPT54_220 = 'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4__rubric_v2_tools'
+const GPT54_MINI_220 =
+  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__rubric_v2_tools_mini'
+
+test('the sol 220 regrade is the current official result', () => {
+  assert.equal(isOfficialGradeId(SOL_220), true)
+})
+
+test('exactly one older run is retained as an A/B comparator', () => {
+  assert.equal(isOfficialGradeId(GPT54_220), true)
+  assert.equal(isSupersededGradeId(GPT54_220), false)
+  // Two official ids total: the current result and its single comparator.
+  assert.equal(OFFICIAL_GRADE_IDS.size, 2)
+})
+
+test('the mini-judge run is retired, not deleted', () => {
+  assert.equal(isSupersededGradeId(GPT54_MINI_220), true)
+  assert.equal(isOfficialGradeId(GPT54_MINI_220), false)
+})
+
+test('no id can be both official and superseded', () => {
+  // The official guard runs first in isHiddenGrade, so an id in both sets would
+  // stay visible while reading as retired — a silent contradiction. Assert the
+  // sets are disjoint rather than relying on evaluation order.
+  const overlap = [...OFFICIAL_GRADE_IDS].filter((id) => SUPERSEDED_GRADE_IDS.has(id))
+  assert.deepEqual(overlap, [])
+})
+
+test('curation predicates reject non-string input', () => {
+  for (const bad of [null, undefined, 0, {}, []]) {
+    assert.equal(isOfficialGradeId(bad), false)
+    assert.equal(isSupersededGradeId(bad), false)
+  }
+})
+
+test('retirement is curated, never inferred from the judge name', () => {
+  // A future gpt-5.4 run must not be swept up by a pattern match on the model
+  // name; retirement is a hand-written decision about one specific run.
+  assert.equal(isSupersededGradeId('exp042_something__judge_gpt-5_4-mini__rubric_v3'), false)
+  assert.equal(isSupersededGradeId('exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini'), false)
 })

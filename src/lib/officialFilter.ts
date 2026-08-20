@@ -17,18 +17,32 @@
  * grade covering fewer tasks than the inference run it graded is a preflight
  * and is hidden. `_tight` was always an instance of this rule written by hand;
  * the pattern stays as a fallback for grades whose experiment has no report.
+ *
+ * Phase 4 curates what survives. The 220-task `gpt-5.6-sol` regrade is promoted
+ * to OFFICIAL as the current result, and the older full-corpus runs are retired
+ * down to a single A/B comparator — every rule up to here removes things that
+ * are not results, this one decides which results still earn screen space.
  */
 import type { GradeResult } from '../hooks/useGrades'
 import type { ExperimentEntry } from '../types/report'
 import {
   isHiddenDiagnosticExperimentId,
   isHiddenOfficialExperiment,
+  isOfficialGradeId,
   isPartialCorpusGrade,
   isSmokeExperimentId,
+  isSupersededGradeId,
+  OFFICIAL_GRADE_IDS,
   OFFICIAL_TASK_COUNT,
+  SUPERSEDED_GRADE_IDS,
 } from './officialExperimentScope.js'
 
-export { OFFICIAL_TASK_COUNT, isPartialCorpusGrade }
+export {
+  OFFICIAL_GRADE_IDS,
+  OFFICIAL_TASK_COUNT,
+  SUPERSEDED_GRADE_IDS,
+  isPartialCorpusGrade,
+}
 
 /**
  * Smoke / test identifier. `exp99x` is the reserved smoke namespace
@@ -47,20 +61,25 @@ export function isDemoGrade(
 }
 
 /**
- * Curated OFFICIAL grade ids (phase 2). "Official" is a hand-picked status,
- * NOT a pattern — when a new official run is promoted, add its id here.
+ * Curated OFFICIAL grade ids (phase 2, recurated in phase 4). "Official" is a
+ * hand-picked status, NOT a pattern — when a new official run is promoted, add
+ * its id to `OFFICIAL_GRADE_IDS` in `officialExperimentScope.js`, where it sits
+ * next to the retirement list and is covered by the node test suite.
  * These are pinned visible (badged) and never hidden by any rule.
  */
-export const OFFICIAL_GRADE_IDS: ReadonlySet<string> = new Set([
-  // clean gpt-5.4 judge, 220 tasks — final baseline
-  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4__rubric_v2_tools',
-  // clean gpt-5.4-mini judge, 220 tasks — comparison baseline
-  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__rubric_v2_tools_mini',
-])
 
 /** Curated official baseline (gets the OFFICIAL badge; never hidden). */
 export function isOfficialGrade(g: Pick<GradeResult, 'id'>): boolean {
-  return OFFICIAL_GRADE_IDS.has(g.id)
+  return isOfficialGradeId(g.id)
+}
+
+/**
+ * A complete run retired in favour of a newer judge (phase 4). Distinct from
+ * `isPartialCorpusGrade`: nothing is wrong with these numbers, they are simply
+ * no longer the comparison the page is making.
+ */
+export function isSupersededGrade(g: Pick<GradeResult, 'id'>): boolean {
+  return isSupersededGradeId(g.id)
 }
 
 /**
@@ -76,8 +95,9 @@ export function isLegacyExp003(g: Pick<GradeResult, 'id'>): boolean {
 
 /**
  * True when a grade card should be hidden from the default (non-debug) view:
- * legacy demo, smoke/test run, a superseded/partial exp003 card, or a grading
- * run that covered only part of its inference corpus.
+ * legacy demo, smoke/test run, a superseded/partial exp003 card, a grading run
+ * that covered only part of its inference corpus, or a complete run retired in
+ * favour of a newer judge.
  * Curated OFFICIAL ids are never hidden (reverse protection).
  */
 export function isHiddenGrade(g: GradeResult): boolean {
@@ -88,6 +108,7 @@ export function isHiddenGrade(g: GradeResult): boolean {
     isSmokeId(g.id) ||
     isHiddenDiagnosticExperimentId(g.experiment_id) ||
     isHiddenDiagnosticExperimentId(g.id) ||
+    isSupersededGrade(g) ||
     isPartialCorpusGrade(g) ||
     isLegacyExp003(g)
   )
