@@ -1,0 +1,103 @@
+name: Backend Tests
+
+# The batch-runner suite had no pull-request gate, so a change could land on
+# main with a red test and nothing would say so. That is not hypothetical:
+# #179 rewrote the paid-approval conditions in grade-run.yml and left the
+# assertion that pins them comparing against the old literal, and main stayed
+# red until a human happened to run pytest locally. This workflow closes that
+# gap and nothing else -- it does not gate on mypy or ruff, which both carry a
+# pre-existing backlog (189 and 20 findings on main) that a gate would freeze
+# into permanent red.
+
+on:
+  pull_request:
+    paths:
+      - "batch-runner/**"
+      - ".github/workflows/backend-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "batch-runner/**"
+      - ".github/workflows/backend-tests.yml"
+
+# Read-only, and no secrets are referenced anywhere below. The suite must stay
+# runnable from a fork PR, where neither is available.
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Full history, not the default shallow clone.
+      # test_verifier_ignores_hostile_path_for_repository_git resolves a
+      # hardcoded commit (3ecb8ded, "docs(sandbox): finalize evidence isolation
+      # shipment") through `git cat-file`, which exits 128 when that object is
+      # not in the clone. The pack is ~41 MiB, so full history is cheap here.
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Exact patch, not "3.11" like the other workflows here. core/agentic_v2_
+      # license.py pins LICENSE_EVALUATOR_PYTHON_VERSION = "3.10.12" and
+      # compares it against sys.version_info[:3] at import; anything else makes
+      # license_evaluator_runtime_identity() raise and takes ~93 supply-chain
+      # tests down with it. That pin is a deliberate reproducibility control
+      # for the license evaluator, so CI matches it rather than relaxing it.
+      # The dev venv is 3.10.12 for the same reason. If actions/python-versions
+      # ever stops shipping a 3.10.12 build for the runner image, re-pin the
+      # constant and this together -- not this alone.
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.10.12"
+          cache: pip
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd batch-runner
+          pip install -r requirements.txt
+
+      # `-m "not integration"` is already in pytest.ini's addopts, but this job
+      # runs on untrusted pull-request branches that can edit pytest.ini. A PR
+      # that dropped the marker filter would turn every CI run into a billed
+      # call against the real judge endpoints. Assert the filter is present
+      # rather than trusting the file the PR is allowed to rewrite.
+      - name: Verify integration tests stay deselected
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          if ! grep -qE '^addopts = .*-m "not integration"' pytest.ini; then
+            echo "::error::pytest.ini no longer deselects integration tests"
+            exit 1
+          fi
+          echo "pytest.ini deselects integration tests"
+
+      # The marker filter is repeated on the command line so the run stays free
+      # even if the addopts guard above is ever relaxed. Integration tests reach
+      # paid APIs; CI must never pay.
+      #
+      # One deselection, and it is a real open question rather than a nuisance:
+      # test_generated_python_launcher_denies_exec_and_network asserts that both
+      # os.system() and socket.socket() raise OSError under the launcher's
+      # seccomp filter. On the runner only socket() raises. execve/execveat are
+      # still in DENIED_SYSCALLS and the filter still loads, so the sandbox is
+      # not weaker here -- what differs is whether glibc's system() surfaces the
+      # blocked exec as a Python OSError, which it does on the dev box's 3.10
+      # kernel and does not on the runner's. That makes the assertion a probe of
+      # libc error reporting, not of the filter. Deselected until the test is
+      # rewritten to check exec denial directly (os.execv, or system()'s return
+      # code); the Docker gate remains the enforcing control either way.
+      - name: Run tests
+        run: |
+          cd batch-runner
+          python -m pytest -m "not integration" --tb=short -q \
+            --deselect "tests/test_agentic_sandbox_security.py::test_generated_python_launcher_denies_exec_and_network"

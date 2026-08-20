@@ -408,6 +408,18 @@ def patched_run_inference(tmp_path, monkeypatch):
         classmethod(lambda cls: manifest),
     )
 
+    # _resolve_run_identity() reads GITHUB_RUN_ID / GITHUB_RUN_ATTEMPT, so a
+    # progress checkpoint written with a hardcoded "exp_test:local:1" run_id
+    # fails its identity check the moment the suite runs inside Actions. Clear
+    # the CI variables so the fixture behaves the same way on a developer box
+    # and on a runner; test_relay_duration.py already does this per-test.
+    for variable in (
+        "GDPVAL_RELAY_LINEAGE_ID",
+        "GITHUB_RUN_ID",
+        "GITHUB_RUN_ATTEMPT",
+    ):
+        monkeypatch.delenv(variable, raising=False)
+
     return s2, workspace
 
 

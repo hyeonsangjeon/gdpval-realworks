@@ -37,6 +37,80 @@ export interface TaskGradeV1 {
   graded_at?: string
   /** Inference-time Self-QA score (0–10). Phase 1: enriched from reports-index task_qa map. */
   qa_score?: number | null
+  /** Raw selector verdict: 'ok' | 'wrong_format_primary' | 'no_generated_candidate' | 'selection_error'. */
+  selection_status?: string | null
+  /** Human-readable reason the selector gave up, straight from the grader. */
+  selection_error?: string | null
+  /** Which cascade branch decided this task, e.g. 'set_diff_single'. */
+  selection_rule?: string
+  /** Full selector payload: primary targets, support artifacts, excluded references. */
+  selected_deliverables?: DeliverableSelection | null
+  reference_files_excluded?: string[]
+  /** ── Derived by scripts/selection-outcome.mjs, not present in the grade JSON ── */
+  outcome?: SelectionOutcome
+  outcome_detail?: string
+  /** False when no deliverable ever reached a judge — the zero is plumbing, not a verdict. */
+  reached_judge?: boolean
+  /** Extensions the task demanded, parsed from the selector's message. */
+  required_formats?: string[]
+  format_demand?: 'unproducible_media' | 'producible' | null
+  candidate_files?: string[]
+}
+
+export interface DeliverableTarget {
+  target_id?: string | null
+  paths: string[]
+  kind?: string
+  role?: string
+  evidence_rule?: string
+}
+
+export interface DeliverableSelection {
+  selection_status: string
+  task_id?: string
+  task_class?: string
+  primary_targets?: DeliverableTarget[]
+  support_artifacts?: string[]
+  reference_files_excluded?: string[]
+  selection_rule?: string
+  selection_error?: string | null
+}
+
+/**
+ * Where a task landed, and whether a judge was ever in a position to say so.
+ *
+ * `content_zero` is the only zero that is a verdict on the work. The rest are
+ * recorded as zero because nothing gradeable reached the judge, which is a
+ * different finding and belongs in a different bucket on screen.
+ */
+export type SelectionOutcome =
+  | 'scored'
+  | 'content_zero'
+  | 'inference_failed'
+  | 'format_unmet'
+  | 'no_deliverable'
+  | 'not_selected'
+  | 'grading_error'
+  | 'unclassified'
+
+export interface ZeroReason {
+  outcome: SelectionOutcome
+  label: string
+  count: number
+  reached_judge: boolean
+}
+
+export interface SelectionSummary {
+  /** False when this grade carries no selector metadata; the UI must stay hidden. */
+  covered: boolean
+  covered_tasks: number
+  total_tasks: number
+  outcomes: Record<SelectionOutcome, number>
+  zero_reasons: ZeroReason[]
+  /** Zeros a judge handed down after reading a deliverable. */
+  judged_zero: number
+  /** Zeros recorded because no deliverable reached a judge. */
+  unjudged_zero: number
 }
 
 export interface CalibrationCounts {
@@ -122,6 +196,13 @@ export interface GradeSummaryV1 {
   calibration_mae?: number | null
   /** Distribution of calibration categories. null when no samples. */
   calibration_counts?: CalibrationCounts | null
+  /**
+   * Why the zeros are zeros. Derived by scripts/selection-outcome.mjs from the
+   * selector metadata the grader already writes; it never restates a published
+   * count. Absent on grade files written before the selector recorded its
+   * reasoning — check `covered` before rendering.
+   */
+  selection?: SelectionSummary
 }
 
 export interface JudgeTierConfig {

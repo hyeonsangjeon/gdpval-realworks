@@ -3,6 +3,21 @@ export const HIDDEN_DIAGNOSTIC_EXPERIMENT_IDS: ReadonlySet<string>
 export function isHiddenDiagnosticExperimentId(value: string | null | undefined): boolean
 export function isSmokeExperimentId(value: string | null | undefined): boolean
 
+interface GradeCoverageScope {
+	coverage?: {
+		grade_tasks?: number
+		corpus_tasks?: number | null
+		is_partial_corpus?: boolean
+	} | null
+}
+
+export function isPartialCorpusGrade(grade: GradeCoverageScope | null | undefined): boolean
+
+export const OFFICIAL_GRADE_IDS: ReadonlySet<string>
+export const SUPERSEDED_GRADE_IDS: ReadonlySet<string>
+export function isOfficialGradeId(id: string | null | undefined): boolean
+export function isSupersededGradeId(id: string | null | undefined): boolean
+
 interface DashboardExperimentScope {
 	short_id: string
 	experiment_name: string

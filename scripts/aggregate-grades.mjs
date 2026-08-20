@@ -13,6 +13,7 @@
 import { readdir, readFile, writeFile, mkdir, access } from 'fs/promises';
 import { join, extname, basename } from 'path';
 import { gradeIdentityFromRaw } from './grade-identity.mjs';
+import { classifyTaskOutcome, summarizeOutcomes } from './selection-outcome.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const GRADES_DIR = join(ROOT, 'data', 'grades');
@@ -56,6 +57,24 @@ function buildCalibration(tasks) {
   return { calibration_mae, calibration_counts };
 }
 
+// ── corpus coverage ───────────────────────────────────────────────────────
+// How much of an inference run a grading run actually covered.
+//
+// A grade over 3 of an experiment's 220 tasks is a preflight, not a result.
+// Put on the same axis as a full run it reads as a comparison, and the numbers
+// cannot support one. The denominator is the inference run's own published
+// total from reports-index.json, so this never guesses: an experiment with no
+// report yields corpus_tasks: null and is left alone.
+function buildCoverage(experimentId, gradeTasks, corpusByExperiment) {
+  const corpus = corpusByExperiment.get(experimentId);
+  const corpus_tasks = Number.isInteger(corpus) && corpus > 0 ? corpus : null;
+  return {
+    grade_tasks: gradeTasks,
+    corpus_tasks,
+    is_partial_corpus: corpus_tasks !== null && gradeTasks < corpus_tasks,
+  };
+}
+
 // ── qa_score resolution (strict per-experiment) ───────────────────────────
 // Returns a function (taskId) → qa_score|null for a given grade.
 // Strict rules:
@@ -83,7 +102,12 @@ function makeQaResolver(experiment_id, is_dummy, taskQaByExperiment, source_expe
 }
 
 // ── Legacy (dummy / _meta-based) format ────────────────────────────────────
-function processLegacyGradesFile(filePath, raw, taskQaByExperiment = new Map()) {
+function processLegacyGradesFile(
+  filePath,
+  raw,
+  taskQaByExperiment = new Map(),
+  corpusByExperiment = new Map(),
+) {
   const filename = basename(filePath, '.json');
   const meta = raw._meta || {};
   const rawTasks = raw.tasks || raw; // support both { _meta, tasks } and bare array
@@ -155,6 +179,7 @@ function processLegacyGradesFile(filePath, raw, taskQaByExperiment = new Map()) 
       calibration_mae,
       calibration_counts,
     },
+    coverage: buildCoverage(experiment_id, tasks.length, corpusByExperiment),
     tasks,
   };
 }
@@ -296,7 +321,12 @@ function validateHistoricalHeadline(raw) {
   }
 }
 
-function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
+function processV1GradesFile(
+  filePath,
+  raw,
+  taskQaByExperiment = new Map(),
+  corpusByExperiment = new Map(),
+) {
   validateScoreExcludedGrade(raw);
   validateHistoricalHeadline(raw);
   const filename = basename(filePath, '.json');
@@ -324,6 +354,10 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
   const tasks = rawTasks.map((t) => {
     const qa_score = qaFor(t.task_id);
     const hasError = t.error !== null && t.error !== undefined && t.error !== '';
+    // Additive: the legacy row keeps every field it had, and gains only the
+    // reason it ended where it did. error_messages still carries the raw token
+    // so anything already reading it sees no change.
+    const { outcome, detail, reached_judge } = classifyTaskOutcome(t);
     if (hasError) {
       return {
         task_id: t.task_id,
@@ -332,6 +366,9 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
         avg_score: null,
         error: true,
         error_messages: [String(t.error)],
+        outcome,
+        outcome_detail: detail,
+        reached_judge,
         qa_score,
       };
     }
@@ -347,12 +384,33 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
       avg_score: avgScore,
       error: false,
       error_messages: [],
+      outcome,
+      outcome_detail: detail,
+      reached_judge,
       qa_score,
     };
   });
 
   // Decorate raw v1 tasks too — GradeDetail page reads from tasks_v1 directly.
-  const tasks_v1 = rawTasks.map((t) => ({ ...t, qa_score: qaFor(t.task_id) }));
+  const tasks_v1 = rawTasks.map((t) => {
+    const { outcome, detail, reached_judge, required_formats, format_demand, files } =
+      classifyTaskOutcome(t);
+    return {
+      ...t,
+      qa_score: qaFor(t.task_id),
+      outcome,
+      outcome_detail: detail,
+      reached_judge,
+      required_formats,
+      format_demand,
+      candidate_files: files,
+    };
+  });
+
+  // Why the zeros are zeros. Derived, never authoritative: every count the
+  // grade JSON publishes is passed through untouched below, so this block can
+  // only add an explanation, never move a number.
+  const selection = summarizeOutcomes(rawTasks);
 
   const totalTasks = typeof summary.total_tasks === 'number'
     ? summary.total_tasks
@@ -419,24 +477,37 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
       calibration_mae,
       calibration_counts,
     },
+    coverage: buildCoverage(experiment_id, totalTasks, corpusByExperiment),
     tasks,
     // v1.0 provenance + full payload (for WOW dashboard components)
     judge: raw.judge,
     rubric: raw.rubric,
     prompt: raw.prompt,
     graded_at: raw.graded_at,
-    summary_v1: { ...summary, wow, openai_compat: openaiCompat, calibration_mae, calibration_counts },
+    summary_v1: {
+      ...summary,
+      wow,
+      openai_compat: openaiCompat,
+      calibration_mae,
+      calibration_counts,
+      selection,
+    },
     tasks_v1,
   };
 }
 
-export function processGradesFile(filePath, raw, taskQaByExperiment = new Map()) {
+export function processGradesFile(
+  filePath,
+  raw,
+  taskQaByExperiment = new Map(),
+  corpusByExperiment = new Map(),
+) {
   // All item-level 1.x payloads share the rich grade projection. Later minor
   // versions add provenance contracts without changing dashboard score shape.
   if (raw && ['1.0', '1.1', '1.2', '1.3'].includes(raw.schema_version)) {
-    return processV1GradesFile(filePath, raw, taskQaByExperiment);
+    return processV1GradesFile(filePath, raw, taskQaByExperiment, corpusByExperiment);
   }
-  return processLegacyGradesFile(filePath, raw, taskQaByExperiment);
+  return processLegacyGradesFile(filePath, raw, taskQaByExperiment, corpusByExperiment);
 }
 
 export function isPublishableGrade(result) {
@@ -445,18 +516,14 @@ export function isPublishableGrade(result) {
   );
 }
 
-// ── taskQaByExperiment lookup ─────────────────────────────────────────────
-// Build Map<experiment_id, Record<task_id, qa_score>> from reports-index.json.
-// STRICT: reports-index is the only source. No fallback to batch-runner/results/
-// — the previous global-task_id map produced incorrect cross-experiment matches
-// because GDPVal task_ids are shared across all experiments running the same
-// dataset. Missing reports-index ⇒ empty Map ⇒ all qa_score = null.
-async function buildTaskQaByExperiment() {
-  const map = new Map();
+// ── reports-index lookups ─────────────────────────────────────────────────
+// Both maps below are derived from the same file. Missing or unreadable ⇒
+// empty maps, which degrade to "no qa_score" and "coverage unknown" rather
+// than to a guess.
+async function readReportsIndex() {
   const indexPath = join(OUTPUT_DIR, 'reports-index.json');
-  let raw;
   try {
-    raw = JSON.parse(await readFile(indexPath, 'utf-8'));
+    return JSON.parse(await readFile(indexPath, 'utf-8'));
   } catch (err) {
     // ENOENT = file not yet generated (first build, fresh repo) — silent fallback.
     // Other errors (parse failure, permission, etc.) deserve a warning so they
@@ -464,12 +531,36 @@ async function buildTaskQaByExperiment() {
     if (err && err.code !== 'ENOENT') {
       console.warn(`⚠️  reports-index.json unreadable (${err.message}); all qa_score will be null.`);
     }
-    return map;
+    return null;
   }
-  for (const report of raw.reports ?? []) {
+}
+
+// Build Map<experiment_id, Record<task_id, qa_score>> from reports-index.json.
+// STRICT: reports-index is the only source. No fallback to batch-runner/results/
+// — the previous global-task_id map produced incorrect cross-experiment matches
+// because GDPVal task_ids are shared across all experiments running the same
+// dataset. Missing reports-index ⇒ empty Map ⇒ all qa_score = null.
+function buildTaskQaByExperiment(rawIndex) {
+  const map = new Map();
+  for (const report of rawIndex?.reports ?? []) {
     const expId = report?.meta?.experiment_id;
     if (expId && report.task_qa && typeof report.task_qa === 'object') {
       map.set(expId, report.task_qa);
+    }
+  }
+  return map;
+}
+
+// Build Map<experiment_id, corpus size> — the task count the inference run
+// itself published. This is the denominator a grade's coverage is measured
+// against, so it is read from the report and never inferred from the grade.
+function buildCorpusByExperiment(rawIndex) {
+  const map = new Map();
+  for (const report of rawIndex?.reports ?? []) {
+    const expId = report?.meta?.experiment_id;
+    const total = report?.summary?.total_tasks;
+    if (expId && Number.isInteger(total) && total > 0) {
+      map.set(expId, total);
     }
   }
   return map;
@@ -490,19 +581,23 @@ async function main() {
     return;
   }
 
-  // Build experiment_id → task_qa lookup once for all grade files.
-  // Strict per-experiment matching; reports-index.json is the sole source.
-  const taskQaByExperiment = await buildTaskQaByExperiment();
+  // Build experiment_id → task_qa and experiment_id → corpus size lookups once
+  // for all grade files. Strict per-experiment matching; reports-index.json is
+  // the sole source.
+  const reportsIndex = await readReportsIndex();
+  const taskQaByExperiment = buildTaskQaByExperiment(reportsIndex);
+  const corpusByExperiment = buildCorpusByExperiment(reportsIndex);
   const totalQaTasks = Array.from(taskQaByExperiment.values())
     .reduce((n, m) => n + Object.keys(m).length, 0);
   console.log(`ℹ️  task_qa lookup built: ${taskQaByExperiment.size} experiment(s), ${totalQaTasks} task(s)`);
+  console.log(`ℹ️  corpus lookup built: ${corpusByExperiment.size} experiment(s)`);
 
   const results = [];
   for (const file of jsonFiles) {
     const content = await readFile(join(GRADES_DIR, file), 'utf-8');
     try {
       const data = JSON.parse(content);
-      const processed = processGradesFile(file, data, taskQaByExperiment);
+      const processed = processGradesFile(file, data, taskQaByExperiment, corpusByExperiment);
       if (!isPublishableGrade(processed)) {
         console.warn(`⚠️  ${file} is ${processed.grade_status}; excluded from dashboard`);
         continue;
@@ -532,10 +627,15 @@ async function main() {
   for (const r of results) {
     const dummy = r.is_dummy ? ' [DUMMY]' : '';
     const v1 = r.schema_version ? ` [v${r.schema_version}]` : '';
+    // Naming a partial run in the build log is the only place the exclusion is
+    // visible to whoever ran the aggregation; the card itself just vanishes.
+    const partial = r.coverage?.is_partial_corpus
+      ? ` [PARTIAL ${r.coverage.grade_tasks}/${r.coverage.corpus_tasks} corpus]`
+      : '';
     const headline = r.summary.avg_score_pct == null
       ? 'unscored'
       : `${r.summary.avg_score_pct}% avg`;
-    console.log(`   ${r.id}: ${headline} (${r.summary.graded_tasks}/${r.summary.total_tasks} tasks)${dummy}${v1}`);
+    console.log(`   ${r.id}: ${headline} (${r.summary.graded_tasks}/${r.summary.total_tasks} tasks)${dummy}${v1}${partial}`);
   }
 }
 

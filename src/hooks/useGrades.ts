@@ -6,6 +6,7 @@ import type {
   RubricProvenance,
   GradePromptInfo,
   CalibrationCounts,
+  SelectionOutcome,
 } from '../types/grade'
 
 export interface TaskGrade {
@@ -17,6 +18,15 @@ export interface TaskGrade {
   error_messages: string[]
   /** Inference-time Self-QA score (0–10). Enriched from reports-index task_qa map. */
   qa_score?: number | null
+  /**
+   * Why this task landed where it did. Derived in the aggregator; absent for
+   * grades written before the selector recorded its reasoning, in which case
+   * the row renders exactly as it always has.
+   */
+  outcome?: SelectionOutcome
+  outcome_detail?: string
+  /** False when no deliverable reached a judge — the zero is plumbing, not a verdict. */
+  reached_judge?: boolean
 }
 
 export interface GradeSummary {
@@ -73,6 +83,17 @@ export interface GradeResult {
    *  badges it rather than publishing it silently. `null` for every grade
    *  produced before the field existed. See `src/lib/gradeProvenance.js`. */
   source_azure_ai_provenance_status?: string | null
+
+  /** How much of the inference corpus this grading run covered, measured in
+   *  aggregate-grades.mjs against the inference run's own published task count.
+   *  `corpus_tasks` is null when the source experiment has no report, in which
+   *  case coverage is unknown and `is_partial_corpus` stays false. Partial runs
+   *  are preflights and are hidden from the default dashboard view. */
+  coverage?: {
+    grade_tasks: number
+    corpus_tasks: number | null
+    is_partial_corpus: boolean
+  }
 
   // ── Item-level grade schema additions ──
   schema_version?: '1.0' | '1.1' | '1.2' | '1.3' | null

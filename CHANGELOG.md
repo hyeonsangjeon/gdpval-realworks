@@ -69,7 +69,159 @@ entries land under a fresh dated heading the day they merge to `main`.
   merges will not find its own previous partial, will fail the
   `approval_inherited` check and fall back to a fresh Environment approval, and
   its shard set will fail the cross-shard `grader_source_hash` invariant at
-  `step9_merge_shards.py`. This must merge between runs, not during one.
+  `step9_merge_shards.py`. This must merge between runs, not during one — and
+  did: the 220-task relay had finished and no grading run was in flight when
+  this landed.
+
+- **Zero-reason breakdown on the grade page (`scripts/selection-outcome.mjs`,
+  `src/components/ZeroReasonBreakdown.tsx`)** - a zero on this benchmark meant
+  two unrelated things and the dashboard painted both the same red. Either a
+  judge read the deliverable and awarded nothing, or nothing gradeable ever
+  reached a judge and the pipeline recorded the absence as a score. On the
+  220-task Sol Max run those are **1** task and **23** tasks respectively, so
+  the reading most people take from the headline number was close to backwards.
+
+  The classifier derives the reason from the `selection_status`,
+  `selection_error` and `selected_deliverables` fields the grader already
+  writes, and splits the outcomes into `content_zero`, `format_unmet`,
+  `inference_failed`, `no_deliverable`, `not_selected`, `grading_error` and
+  `unclassified`. The grade page gains a card separating zeros that count
+  toward the average from tasks excluded from it entirely, and each row in the
+  task table now carries a badge naming its reason rather than a generic
+  "Zero" or "Error".
+
+  Two things this deliberately does not do. It does not recompute any
+  published figure - `avg_score_pct`, `graded_tasks`, `error_tasks`,
+  `zero_score`, `perfect_score` and `partial_score` are still passed straight
+  through from the grade JSON, verified by diffing every generated file
+  against the pre-change aggregator (0 changed values, 28,474 added keys, all
+  of them the new fields). And it does not touch `batch-runner/core/`, which
+  is inside `grader_source_hash`; changing the selector would invalidate the
+  finished run's reproducibility. Grades written before the selector recorded
+  its reasoning report `covered: false` and render exactly as they did before,
+  so no existing experiment changes.
+
+  One finding worth recording separately: **8** of the 220 tasks produced only
+  a `failed_to_generate.txt` placeholder, which is an inference-stage failure
+  that had been showing up as a grading outcome. Two of those the selector
+  passed through with `selection_status: 'ok'`.
+
+- **Curated the published baseline set down to a result and one comparator
+  (`src/lib/officialExperimentScope.js`)** - the 220-task `gpt-5.6-sol` regrade,
+  the run this month of work existed to produce, was rendering without the
+  OFFICIAL badge beside two older badged runs. A reader scanning the page would
+  take the badged, older, lower numbers as the benchmark's answer. It is now
+  promoted, and the older runs are cut to a single A/B comparator.
+
+  `gpt-5.4-mini` is the one retired. Against a `gpt-5.6-sol` judge it differs in
+  judge size and judge version simultaneously, so a gap measured across it
+  cannot be attributed to either; the full-size `gpt-5.4` run is the
+  like-for-like comparator and stays. Every other rule in the module decides
+  from a measured property, but which finished run represents the benchmark is
+  a publication decision, so both lists are hand-written and sit together with
+  the reasoning attached.
+
+  Retirement is not the partial-corpus rule and does not imply the numbers are
+  wrong - the retired run graded all 220 tasks and its figures stand. It is
+  display-only: no grade JSON changes, the card is one `?debug=1` away, and its
+  own page still resolves by direct URL. Visible cards go from 3 to 2, both
+  badged OFFICIAL.
+
+  `OFFICIAL_GRADE_IDS` moved from `officialFilter.ts` into
+  `officialExperimentScope.js` so the curation is covered by the node test
+  suite, including a guard that the official and retired sets can never
+  overlap.
+
+- **Partial-corpus grading runs hidden from the default dashboard view
+  (`scripts/aggregate-grades.mjs`, `src/lib/officialExperimentScope.js`)** - the
+  Grading Analysis tab listed six cards for the same experiment, three of which
+  were preflights: a 1-task config check, a 3-task cohort trial and a 10-task
+  cohort trial. Sitting on the same axis as a finished 220-task run they read as
+  comparisons, and the numbers cannot support that - the 3-task trial scored
+  36.14% and the 10-task trial 57.74% against 53.30% for a full run, spread that
+  is mostly sampling noise. Both aggregate charts, the Score Distribution
+  Comparison and the Overall Score Breakdown, were mixing them into the same
+  totals.
+
+  The rule is measured rather than name-matched. The aggregator now records a
+  `coverage` block per grade - `grade_tasks`, `corpus_tasks`,
+  `is_partial_corpus` - where the denominator is the inference run's own
+  published `summary.total_tasks` read from `reports-index.json`. A grade that
+  covered fewer tasks than the run it graded is a preflight and is hidden.
+  This subsumes the hand-written `_tight` pattern from the previous phase,
+  which was always an instance of the same rule; the pattern stays as a
+  fallback for grades whose experiment has no report.
+
+  Two properties make the failure modes safe. Unknown coverage is never
+  partial - an experiment with no report yields `corpus_tasks: null` and the
+  grade stays visible, so ignorance leaves an early experiment alone rather
+  than silently deleting it. And a small experiment graded end to end (17 of
+  17) is complete, so the rule cannot mistake "small" for "unfinished". The
+  curated `OFFICIAL_GRADE_IDS` allowlist is still checked first and is never
+  hidden by any rule.
+
+  This is a display filter and nothing else. No file under `data/grades/` is
+  modified, `coverage` is additive metadata that changes no published figure,
+  every grade remains reachable by direct URL, and `?debug=1` restores the full
+  list. Visible cards go from 6 to 3, all three full-corpus runs.
+
+- **Backend test workflow (`backend-tests.yml`)** - the batch-runner suite had
+  no pull-request gate at all, so a change could land on `main` with a red test
+  and nothing would report it. That is exactly how the paid-gate assertion
+  stayed broken through a merge. The workflow runs `pytest` on pull requests
+  and pushes to `main` that touch `batch-runner/**`.
+
+  Pinned to Python **3.10.12** exactly, not `3.11` like the other workflows
+  here. `core/agentic_v2_license.py` pins
+  `LICENSE_EVALUATOR_PYTHON_VERSION = "3.10.12"` and compares it against
+  `sys.version_info[:3]`; on 3.11 the identity check raises and takes ~93
+  supply-chain and license tests with it. The pin is a deliberate
+  reproducibility control, so CI matches it rather than relaxing it.
+
+  Checks out with `fetch-depth: 0`, because
+  `test_verifier_ignores_hostile_path_for_repository_git` resolves a hardcoded
+  commit through `git cat-file` and a shallow clone does not contain it.
+
+  Two real defects surfaced on the workflow's own first runs, which is the gate
+  earning its place before anyone had to trust it:
+
+  - **`patched_run_inference` was not hermetic.** It left `GITHUB_RUN_ID` and
+    `GITHUB_RUN_ATTEMPT` in the environment, so `_resolve_run_identity()`
+    returned `exp_test:<runner id>:1` while the checkpoint the fixture writes
+    hardcodes `exp_test:local:1`. Every run inside Actions rejected the
+    checkpoint with `progress checkpoint identity mismatch` and exited 1
+    instead of `EXIT_CHECKPOINT`. The test could only ever pass off-CI. The
+    fixture now clears those variables plus `GDPVAL_RELAY_LINEAGE_ID`, matching
+    what `test_relay_duration.py` already does per-test. Confirmed by
+    reproducing the failure locally with the variables set, and by mutation.
+  - **One security test is deselected in CI, and it is an open question, not a
+    nuisance.** `test_generated_python_launcher_denies_exec_and_network`
+    asserts both `os.system()` and `socket.socket()` raise `OSError` under the
+    launcher's seccomp filter. On the runner only `socket()` does.
+    `execve`/`execveat` are still in `DENIED_SYSCALLS` and the filter still
+    loads, so the sandbox is not weaker there - what differs is whether glibc's
+    `system()` surfaces the blocked exec as a Python `OSError`, which it does
+    on the dev box's 3.10 kernel and does not on the runner's. That makes the
+    assertion a probe of libc error reporting rather than of the filter. It
+    stays deselected until it is rewritten to check exec denial directly; the
+    Docker gate remains the enforcing control regardless.
+
+  It holds `contents: read`, references no secrets, and checks out with
+  `persist-credentials: false`, so it stays runnable from a fork. Integration
+  tests reach paid judge endpoints, and `pytest.ini` deselects them via
+  `addopts` - but a pull request can edit `pytest.ini`, so the job asserts the
+  marker filter is still there before running, and repeats `-m "not
+  integration"` on the command line regardless. Both were mutation-checked
+  against a `pytest.ini` with the filter stripped.
+
+  Deliberately not gated: mypy (189 findings on `main`) and ruff (20). Gating
+  either today would freeze a pre-existing backlog into permanent red and teach
+  everyone to ignore the check.
+
+  Known gap, left alone on purpose: two tests carry `@pytest.mark.timeout(2)`
+  but `pytest-timeout` is absent from `requirements.txt`, so pytest warns and
+  enforces no timeout. Adding it changes `grader_source_hash` and would break
+  the in-flight 220-task relay, so it waits for the shard merge.
 
 ### Changed
 - **One paid approval now carries a whole shard, not one 4h chunk** - a shard of
@@ -161,26 +313,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   and grade data are unchanged.
 
 ### Fixed
-- **Paid-gate workflow test left stale by the approval-inheritance change** -
-  `test_grade_workflow_rc7_requires_valid_committed_partial` asserted the
-  `approve-paid` job's `if` as the exact literal
-  `inputs.dry_run == false && inputs.paid_approval == true`. The
-  approval-inheritance change added the
-  `needs.validate-request.outputs.approval_inherited != 'true'` conjunct and a
-  YAML block scalar, so the assertion has been failing on `main` since it
-  merged. Nothing caught it: no workflow runs the `batch-runner` pytest suite
-  on pull requests — `agentic-sandbox-preflight.yml` is the only workflow that
-  invokes `pytest` at all, and it exercises the sandbox preflight rather than
-  this suite. The assertion now compares whitespace-normalized expressions, so
-  it stays strict about the condition and indifferent to YAML reflow, and it
-  pins the `grade` job's condition exactly rather than probing it with four
-  substring checks that a weakened gate would still satisfy. Confirmed
-  load-bearing by mutation: dropping the `approval_inherited` conjunct from the
-  `grade` job's skip-escape — which would let a paid run start with neither a
-  click nor a proof — fails the test. `grade-run.yml` itself is correct and
-  unchanged; only the test moved. The absence of PR-time backend test coverage
-  is left as-is here rather than fixed in passing, because adding a CI job is a
-  separate change with its own review surface.
+- **Paid-gate workflow test pinned to the post-inheritance conditions** - the
+  approval-inheritance change left `test_grade_workflow_rc7_requires_valid_
+  committed_partial` comparing `approve-paid`'s `if:` against the old literal
+  `inputs.dry_run == false && inputs.paid_approval == true`, so `main` has been
+  red since that merge. Nothing caught it because no workflow runs the
+  batch-runner pytest suite on pull requests. The assertions now normalize the
+  YAML block scalar through a `_gh_expr` helper and pin both the `approve-paid`
+  and `grade` conditions exactly, replacing four substring probes that would
+  have passed against a gate weakened to `!= 'failure'` or one that dropped the
+  `approval_inherited` conjunct. Verified by mutation: removing the inheritance
+  conjunct from the workflow makes the test fail.
 - **First Sol Max anchor result and bounded analysis filenames** - run the
   owner-approved four-task anchor once as Actions run `31582293672` from main
   SHA `c9492645496e176c8e6a3510809585f9542a5bf1` with grader source hash
