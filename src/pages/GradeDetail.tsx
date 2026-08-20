@@ -31,8 +31,9 @@ import {
   Pie,
 } from 'recharts'
 import Header from '../components/Header'
+import ZeroReasonBreakdown from '../components/ZeroReasonBreakdown'
 import { useGrades, TaskGrade } from '../hooks/useGrades'
-import type { GradeSummaryV1, TaskGradeV1 } from '../types/grade'
+import type { GradeSummaryV1, TaskGradeV1, SelectionOutcome } from '../types/grade'
 import {
   RubricCoverageCard,
   CriticalItemCard,
@@ -592,7 +593,14 @@ function GradeDetail() {
                 <strong className="text-amber-500">{s.partial_score}</strong> received partial credit,
                 and <strong className="text-red-500">{s.zero_score}</strong> got zero.
                 {s.error_tasks > 0 && (
-                  <> <strong className="text-orange-500">{s.error_tasks}</strong> task{s.error_tasks > 1 ? 's' : ''} could not be evaluated.</>
+                  <> <strong className="text-orange-500">{s.error_tasks}</strong> task{s.error_tasks > 1 ? 's' : ''} could not be evaluated
+                    {/* "could not be evaluated" reads as a model failure unless
+                        the cause is named. When the selector recorded one, say it. */}
+                    {grade.summary_v1?.selection?.covered
+                      && (grade.summary_v1.selection.outcomes?.not_selected ?? 0) > 0
+                      ? <> &mdash; the deliverables exist, but the selector could not choose a primary one without guessing, so {s.error_tasks > 1 ? 'they are' : 'it is'} excluded from the average rather than scored zero.</>
+                      : <>.</>}
+                  </>
                 )}
                 {s.avg_score_pct == null
                   ? <> No headline score is available.</>
@@ -605,6 +613,10 @@ function GradeDetail() {
             </CardContent>
           </Card>
         </motion.div>
+
+        {/* What the zeros were actually made of. Renders only when the grade
+            carries selector metadata, so older experiments are untouched. */}
+        <ZeroReasonBreakdown selection={grade.summary_v1?.selection} delay={0.32} />
 
         {/* Task Details Table */}
         <motion.div
@@ -741,8 +753,32 @@ function OverviewStat({
   )
 }
 
+// A zero row and a never-graded row used to carry the same badge, which made
+// "the model scored nothing" indistinguishable from "nothing reached a judge".
+// The badge now names the reason, and the full sentence rides along as the
+// title so the table stays narrow.
+const OUTCOME_BADGES: Partial<Record<SelectionOutcome, { text: string; className: string }>> = {
+  content_zero: { text: 'Zero', className: 'bg-red-500/10 text-red-500' },
+  format_unmet: { text: 'Format unmet', className: 'bg-amber-500/10 text-amber-500' },
+  inference_failed: { text: 'No output', className: 'bg-orange-500/10 text-orange-500' },
+  no_deliverable: { text: 'No deliverable', className: 'bg-orange-400/10 text-orange-400' },
+  not_selected: { text: 'Not scored', className: 'bg-violet-400/10 text-violet-400' },
+  grading_error: { text: 'Error', className: 'bg-orange-500/10 text-orange-500' },
+}
+
 function TaskRow({ task, index }: { task: TaskGrade; index: number }) {
   const getStatusBadge = () => {
+    const badge = task.outcome ? OUTCOME_BADGES[task.outcome] : undefined
+    if (badge) {
+      return (
+        <span
+          className={`px-2 py-0.5 rounded-full text-xs ${badge.className}`}
+          title={task.outcome_detail || undefined}
+        >
+          {badge.text}
+        </span>
+      )
+    }
     if (task.error) {
       return <span className="px-2 py-0.5 rounded-full text-xs bg-orange-500/10 text-orange-500">Error</span>
     }

@@ -12,6 +12,39 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Zero-reason breakdown on the grade page (`scripts/selection-outcome.mjs`,
+  `src/components/ZeroReasonBreakdown.tsx`)** - a zero on this benchmark meant
+  two unrelated things and the dashboard painted both the same red. Either a
+  judge read the deliverable and awarded nothing, or nothing gradeable ever
+  reached a judge and the pipeline recorded the absence as a score. On the
+  220-task Sol Max run those are **1** task and **23** tasks respectively, so
+  the reading most people take from the headline number was close to backwards.
+
+  The classifier derives the reason from the `selection_status`,
+  `selection_error` and `selected_deliverables` fields the grader already
+  writes, and splits the outcomes into `content_zero`, `format_unmet`,
+  `inference_failed`, `no_deliverable`, `not_selected`, `grading_error` and
+  `unclassified`. The grade page gains a card separating zeros that count
+  toward the average from tasks excluded from it entirely, and each row in the
+  task table now carries a badge naming its reason rather than a generic
+  "Zero" or "Error".
+
+  Two things this deliberately does not do. It does not recompute any
+  published figure - `avg_score_pct`, `graded_tasks`, `error_tasks`,
+  `zero_score`, `perfect_score` and `partial_score` are still passed straight
+  through from the grade JSON, verified by diffing every generated file
+  against the pre-change aggregator (0 changed values, 28,474 added keys, all
+  of them the new fields). And it does not touch `batch-runner/core/`, which
+  is inside `grader_source_hash`; changing the selector would invalidate the
+  finished run's reproducibility. Grades written before the selector recorded
+  its reasoning report `covered: false` and render exactly as they did before,
+  so no existing experiment changes.
+
+  One finding worth recording separately: **8** of the 220 tasks produced only
+  a `failed_to_generate.txt` placeholder, which is an inference-stage failure
+  that had been showing up as a grading outcome. Two of those the selector
+  passed through with `selection_status: 'ok'`.
+
 - **Backend test workflow (`backend-tests.yml`)** - the batch-runner suite had
   no pull-request gate at all, so a change could land on `main` with a red test
   and nothing would report it. That is exactly how the paid-gate assertion

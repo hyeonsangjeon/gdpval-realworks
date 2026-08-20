@@ -13,6 +13,7 @@
 import { readdir, readFile, writeFile, mkdir, access } from 'fs/promises';
 import { join, extname, basename } from 'path';
 import { gradeIdentityFromRaw } from './grade-identity.mjs';
+import { classifyTaskOutcome, summarizeOutcomes } from './selection-outcome.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const GRADES_DIR = join(ROOT, 'data', 'grades');
@@ -324,6 +325,10 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
   const tasks = rawTasks.map((t) => {
     const qa_score = qaFor(t.task_id);
     const hasError = t.error !== null && t.error !== undefined && t.error !== '';
+    // Additive: the legacy row keeps every field it had, and gains only the
+    // reason it ended where it did. error_messages still carries the raw token
+    // so anything already reading it sees no change.
+    const { outcome, detail, reached_judge } = classifyTaskOutcome(t);
     if (hasError) {
       return {
         task_id: t.task_id,
@@ -332,6 +337,9 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
         avg_score: null,
         error: true,
         error_messages: [String(t.error)],
+        outcome,
+        outcome_detail: detail,
+        reached_judge,
         qa_score,
       };
     }
@@ -347,12 +355,33 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
       avg_score: avgScore,
       error: false,
       error_messages: [],
+      outcome,
+      outcome_detail: detail,
+      reached_judge,
       qa_score,
     };
   });
 
   // Decorate raw v1 tasks too — GradeDetail page reads from tasks_v1 directly.
-  const tasks_v1 = rawTasks.map((t) => ({ ...t, qa_score: qaFor(t.task_id) }));
+  const tasks_v1 = rawTasks.map((t) => {
+    const { outcome, detail, reached_judge, required_formats, format_demand, files } =
+      classifyTaskOutcome(t);
+    return {
+      ...t,
+      qa_score: qaFor(t.task_id),
+      outcome,
+      outcome_detail: detail,
+      reached_judge,
+      required_formats,
+      format_demand,
+      candidate_files: files,
+    };
+  });
+
+  // Why the zeros are zeros. Derived, never authoritative: every count the
+  // grade JSON publishes is passed through untouched below, so this block can
+  // only add an explanation, never move a number.
+  const selection = summarizeOutcomes(rawTasks);
 
   const totalTasks = typeof summary.total_tasks === 'number'
     ? summary.total_tasks
@@ -425,7 +454,14 @@ function processV1GradesFile(filePath, raw, taskQaByExperiment = new Map()) {
     rubric: raw.rubric,
     prompt: raw.prompt,
     graded_at: raw.graded_at,
-    summary_v1: { ...summary, wow, openai_compat: openaiCompat, calibration_mae, calibration_counts },
+    summary_v1: {
+      ...summary,
+      wow,
+      openai_compat: openaiCompat,
+      calibration_mae,
+      calibration_counts,
+      selection,
+    },
     tasks_v1,
   };
 }

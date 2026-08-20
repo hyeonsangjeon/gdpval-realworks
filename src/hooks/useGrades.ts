@@ -6,6 +6,7 @@ import type {
   RubricProvenance,
   GradePromptInfo,
   CalibrationCounts,
+  SelectionOutcome,
 } from '../types/grade'
 
 export interface TaskGrade {
@@ -17,6 +18,15 @@ export interface TaskGrade {
   error_messages: string[]
   /** Inference-time Self-QA score (0–10). Enriched from reports-index task_qa map. */
   qa_score?: number | null
+  /**
+   * Why this task landed where it did. Derived in the aggregator; absent for
+   * grades written before the selector recorded its reasoning, in which case
+   * the row renders exactly as it always has.
+   */
+  outcome?: SelectionOutcome
+  outcome_detail?: string
+  /** False when no deliverable reached a judge — the zero is plumbing, not a verdict. */
+  reached_judge?: boolean
 }
 
 export interface GradeSummary {
