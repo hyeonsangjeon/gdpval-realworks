@@ -13,6 +13,11 @@ interface GradeCoverageScope {
 
 export function isPartialCorpusGrade(grade: GradeCoverageScope | null | undefined): boolean
 
+export const OFFICIAL_GRADE_IDS: ReadonlySet<string>
+export const SUPERSEDED_GRADE_IDS: ReadonlySet<string>
+export function isOfficialGradeId(id: string | null | undefined): boolean
+export function isSupersededGradeId(id: string | null | undefined): boolean
+
 interface DashboardExperimentScope {
 	short_id: string
 	experiment_name: string

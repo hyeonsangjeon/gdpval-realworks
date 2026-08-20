@@ -39,6 +39,53 @@ export function isPartialCorpusGrade(grade) {
   return grade?.coverage?.is_partial_corpus === true
 }
 
+// ── curated baselines ───────────────────────────────────────────────────────
+// The two sets below are hand-picked, not patterns. Every other rule in this
+// file decides from measured properties; which finished run represents the
+// benchmark is a publication decision and has to be written down by a person.
+
+/**
+ * Grade ids published as official baselines — badged, and never hidden by any
+ * rule. Add an id here when a run is promoted.
+ */
+export const OFFICIAL_GRADE_IDS = new Set([
+  // gpt-5.6-sol judge, 220 tasks — current primary result
+  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__regrade_exp003_v2_sol_max_score_excluded__cfg_71c325eee0e48c13__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_1c967673eb8081a6__v2.2',
+  // gpt-5.4 judge, 220 tasks — retained A/B comparator for the run above
+  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4__rubric_v2_tools',
+])
+
+/**
+ * Full-corpus runs retired in favour of a newer judge. Their numbers are
+ * sound — this is not the partial-corpus rule — but a results page that keeps
+ * every generation of judge becomes a changelog, and readers compare whatever
+ * is on screen. The dashboard therefore shows the current result plus exactly
+ * one older run as an A/B comparator, and retires the rest.
+ *
+ * `gpt-5.4-mini` is the one retired: against a `gpt-5.6-sol` judge it varies
+ * in both judge size and judge version at once, so a gap measured across it
+ * cannot be attributed to either. The full-size `gpt-5.4` run is the
+ * like-for-like comparator and stays.
+ *
+ * Retirement is display-only. The grade JSON is untouched, the card is one
+ * `?debug=1` away, and its own page still resolves by direct URL.
+ */
+export const SUPERSEDED_GRADE_IDS = new Set([
+  // gpt-5.4-mini judge, 220 tasks — superseded; see above for why this one
+  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__rubric_v2_tools_mini',
+])
+
+/** Curated official baseline: badged, and exempt from every hide rule. */
+export function isOfficialGradeId(id) {
+  return typeof id === 'string' && OFFICIAL_GRADE_IDS.has(id)
+}
+
+/** Curated retirement: a complete run kept out of the default comparison set. */
+export function isSupersededGradeId(id) {
+  return typeof id === 'string' && SUPERSEDED_GRADE_IDS.has(id)
+}
+
+
 /** Default dashboard exclusion rule for inference reports. */
 export function isHiddenOfficialExperiment(experiment) {
   return (
