@@ -899,3 +899,79 @@ test('T6: v1 grade with source_inference_experiment_id resolves qa via the sourc
   assert.equal(out.source_inference_experiment_id, 'expB');
   assert.equal(out.experiment_id, 'expA', 'experiment_id field must be preserved unchanged');
 });
+
+// ── corpus coverage ───────────────────────────────────────────────────────
+// The denominator is the inference run's own published task count, taken from
+// reports-index.json. A grade never supplies its own denominator, because a
+// preflight that graded 3 tasks would then report 3/3 and look complete.
+
+test('processGradesFile measures coverage against the inference corpus', () => {
+  const raw = {
+    schema_version: '1.0',
+    experiment_id: 'exp-corpus',
+    inference_model: 'gpt-5.2-chat',
+    judge: { model: 'gpt-5.4-mini' },
+    summary: { total_tasks: 3, graded_tasks: 3, error_tasks: 0, openai_compat: {}, wow: {} },
+    tasks: [],
+  };
+  const corpus = new Map([['exp-corpus', 220]]);
+
+  const out = processGradesFile('preflight.json', raw, new Map(), corpus);
+
+  assert.deepEqual(out.coverage, {
+    grade_tasks: 3,
+    corpus_tasks: 220,
+    is_partial_corpus: true,
+  });
+  // The published counts are untouched — coverage explains them, never edits.
+  assert.equal(out.summary.total_tasks, 3);
+  assert.equal(out.summary.graded_tasks, 3);
+});
+
+test('processGradesFile marks a full-corpus grade complete', () => {
+  const raw = {
+    schema_version: '1.0',
+    experiment_id: 'exp-corpus',
+    inference_model: 'gpt-5.2-chat',
+    judge: { model: 'gpt-5.6-sol' },
+    summary: { total_tasks: 220, graded_tasks: 215, error_tasks: 5, openai_compat: {}, wow: {} },
+    tasks: [],
+  };
+  const corpus = new Map([['exp-corpus', 220]]);
+
+  const out = processGradesFile('full.json', raw, new Map(), corpus);
+
+  assert.equal(out.coverage.is_partial_corpus, false);
+  // 5 tasks the grader could not score are still 5 tasks it was handed. An
+  // error is not a coverage gap, so graded_tasks is deliberately not the
+  // numerator here — total_tasks is.
+  assert.equal(out.coverage.grade_tasks, 220);
+});
+
+test('processGradesFile leaves coverage unknown when the experiment has no report', () => {
+  const raw = {
+    schema_version: '1.0',
+    experiment_id: 'exp-unreported',
+    inference_model: 'gpt-5.2-chat',
+    judge: { model: 'gpt-5.4' },
+    summary: { total_tasks: 10, graded_tasks: 10, error_tasks: 0, openai_compat: {}, wow: {} },
+    tasks: [],
+  };
+
+  const out = processGradesFile('unreported.json', raw, new Map(), new Map());
+
+  assert.equal(out.coverage.corpus_tasks, null);
+  assert.equal(out.coverage.is_partial_corpus, false);
+});
+
+test('processGradesFile emits coverage on legacy grades too', () => {
+  const out = processGradesFile('dummy_gpt5_baseline.json', {
+    _meta: { is_dummy: true, experiment_id: 'dummy_gpt5_baseline' },
+    tasks: [
+      { task_id: 't1', num_grades: 3, scores: [1, 1, 1], avg_score: 1.0, error: false, error_messages: [] },
+    ],
+  }, new Map(), new Map([['dummy_gpt5_baseline', 220]]));
+
+  assert.equal(out.coverage.corpus_tasks, 220);
+  assert.equal(out.coverage.is_partial_corpus, true);
+});

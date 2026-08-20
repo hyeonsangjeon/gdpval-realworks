@@ -8,6 +8,7 @@ import {
   HIDDEN_DIAGNOSTIC_EXPERIMENT_IDS,
   isHiddenDiagnosticExperimentId,
   isHiddenOfficialExperiment,
+  isPartialCorpusGrade,
   OFFICIAL_TASK_COUNT,
 } from '../../src/lib/officialExperimentScope.js'
 
@@ -103,4 +104,41 @@ test('Dashboard display data keeps default and debug reports aligned', () => {
     experiments,
     reports,
   })
+})
+// ── Phase 3: partial-corpus grades ────────────────────────────────────────
+// The dashboard used to hide preflight grades by name (`_tight`), which only
+// worked for the one that happened to be named that way. Coverage is measured
+// instead: a grade over 3 of an experiment's 220 tasks is a preflight whatever
+// its config was called.
+
+test('a grade covering part of its corpus is a preflight, not a result', () => {
+  assert.equal(isPartialCorpusGrade({
+    coverage: { grade_tasks: 3, corpus_tasks: 220, is_partial_corpus: true },
+  }), true)
+})
+
+test('a grade covering the whole corpus is kept', () => {
+  assert.equal(isPartialCorpusGrade({
+    coverage: { grade_tasks: 220, corpus_tasks: 220, is_partial_corpus: false },
+  }), false)
+})
+
+test('a small experiment graded end to end is complete, not partial', () => {
+  // 17 of 17 is the entire corpus. Hiding it would confuse "small" with
+  // "unfinished" and drop a legitimate result.
+  assert.equal(isPartialCorpusGrade({
+    coverage: { grade_tasks: 17, corpus_tasks: 17, is_partial_corpus: false },
+  }), false)
+})
+
+test('unknown coverage is never treated as partial', () => {
+  // No report for the source experiment ⇒ no denominator. Staying visible on
+  // ignorance is the safer failure: the alternative silently drops real runs.
+  assert.equal(isPartialCorpusGrade({
+    coverage: { grade_tasks: 220, corpus_tasks: null, is_partial_corpus: false },
+  }), false)
+  assert.equal(isPartialCorpusGrade({}), false)
+  assert.equal(isPartialCorpusGrade({ coverage: null }), false)
+  assert.equal(isPartialCorpusGrade(null), false)
+  assert.equal(isPartialCorpusGrade(undefined), false)
 })

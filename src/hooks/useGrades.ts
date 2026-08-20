@@ -84,6 +84,17 @@ export interface GradeResult {
    *  produced before the field existed. See `src/lib/gradeProvenance.js`. */
   source_azure_ai_provenance_status?: string | null
 
+  /** How much of the inference corpus this grading run covered, measured in
+   *  aggregate-grades.mjs against the inference run's own published task count.
+   *  `corpus_tasks` is null when the source experiment has no report, in which
+   *  case coverage is unknown and `is_partial_corpus` stays false. Partial runs
+   *  are preflights and are hidden from the default dashboard view. */
+  coverage?: {
+    grade_tasks: number
+    corpus_tasks: number | null
+    is_partial_corpus: boolean
+  }
+
   // ── Item-level grade schema additions ──
   schema_version?: '1.0' | '1.1' | '1.2' | '1.3' | null
   judge?: JudgeProvenance

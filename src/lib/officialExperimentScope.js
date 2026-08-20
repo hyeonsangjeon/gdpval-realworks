@@ -25,6 +25,20 @@ export function isSmokeExperimentId(value) {
   return /(^|[_-])exp99\d/i.test(value) || /smoke/i.test(value)
 }
 
+/**
+ * A grading run that covered only part of the inference corpus it graded —
+ * a preflight or cohort trial, not a result. `coverage` is computed in
+ * aggregate-grades.mjs against the inference run's own published task count.
+ *
+ * Unknown coverage is never treated as partial: a grade whose experiment has
+ * no report yields `corpus_tasks: null`, and staying visible on ignorance is
+ * the safer failure. A small experiment graded end to end (17 of 17) is
+ * complete, so this rule cannot mistake "small" for "unfinished".
+ */
+export function isPartialCorpusGrade(grade) {
+  return grade?.coverage?.is_partial_corpus === true
+}
+
 /** Default dashboard exclusion rule for inference reports. */
 export function isHiddenOfficialExperiment(experiment) {
   return (
