@@ -12,6 +12,67 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **`summary.wow` analytics now carry data** - `src/types/grade.ts` has declared
+  `by_sector`, `by_rubric_category`, `score_density_histogram` and
+  `rubric_severity_curve` since the WOW dashboard landed, and
+  `SectorHeatmap.tsx`, `ScoreDensityHistogram.tsx` and `RubricSeverityCurve.tsx`
+  have rendered their empty states ever since, because `_compute_summary` in
+  `step8_grade.py` never emitted the four fields. It now emits three of them.
+  - `by_sector` reports `task_count`, `avg_pct`, `critical_item_pass_rate`,
+    `precheck_pass_rate` and `judge_pass_rate` per sector. The run-wide rates
+    and the per-sector rates are folded by one shared `_tally_item`, so a
+    sector row cannot drift from the header it sits under. The breakdown is
+    scoped to graded tasks, so its `task_count` values sum to `graded_tasks`;
+    a task with a blank or absent sector lands in `Unknown` rather than
+    vanishing from a total that is expected to add up.
+  - `score_density_histogram` emits all ten decile buckets including empty
+    ones, so the chart draws a full axis instead of collapsing to whichever
+    scores happened to occur. The labels and their order are a contract with
+    `bucketFromPct` in `ScoreDensityHistogram.tsx`, which buckets `pct`
+    client-side when a grade predates the field; a run that emits it and one
+    that does not must land in the same bars. `100.0` closes into the last
+    bucket rather than falling off the end.
+  - `rubric_severity_curve` groups scored items by rubric weight and counts
+    `ItemGrade.model_did_right`, not `verdict == 'pass'`. GDPVal rubrics carry
+    negative-weight anti-criteria where a `pass` verdict means the model *did*
+    the prohibited thing, and this curve deliberately spans both signs, so a
+    raw verdict count would invert exactly the points the chart exists to
+    show. Grades written before `core/grader.py` began emitting
+    `model_did_right` carry no sign-aware verdict, so the curve is omitted
+    entirely for them: every point would read `0.0` and a flat-zero chart
+    asserts a total failure that never happened. A single rate can absorb that
+    gap; a curve cannot, because its shape is the claim.
+  - `by_rubric_category` stays `{}`. The GDPVal rubrics carry no category
+    taxonomy — a rubric item has an id, a criterion string and a weight, and
+    nothing that groups items into categories — so there is no source for this
+    breakdown, and populating it would mean inventing a taxonomy and
+    presenting it as measurement. `SectorHeatmap.tsx` already treats it as
+    absent and falls back to the per-sector rates above.
+
+  `judge_error_rate` keeps using `canonical_rate`, which
+  `grade_payload.py` validates and `step9_merge_shards.py` cross-checks; only
+  the new fields use the plain rounding helper. `step9_merge_shards.py`
+  recomputes the merged summary rather than combining shard summaries, so a
+  sharded 220-task run gains these fields with no merge-side change.
+
+  Verified behavior-identical on the pre-existing fields: `_compute_summary`
+  from `origin/main` and from this branch were run over the same 16
+  checked-in grade payloads, and every previously-emitted field matched on all
+  16. `mypy core/ step8_grade.py --ignore-missing-imports` reports the same
+  error set before and after. No grade payload was rewritten and no run was
+  dispatched.
+
+  **Operational note:** `step8_grade.py` is inside the
+  `compute_grader_source_hash` source set, so merging this changes
+  `grader_source_hash` and therefore the shard partial path
+  `data/grades/_shards/<stem>/`. A chunk relay that is mid-flight when this
+  merges will not find its own previous partial, will fail the
+  `approval_inherited` check and fall back to a fresh Environment approval, and
+  its shard set will fail the cross-shard `grader_source_hash` invariant at
+  `step9_merge_shards.py`. This must merge between runs, not during one — and
+  did: the 220-task relay had finished and no grading run was in flight when
+  this landed.
+
 - **Zero-reason breakdown on the grade page (`scripts/selection-outcome.mjs`,
   `src/components/ZeroReasonBreakdown.tsx`)** - a zero on this benchmark meant
   two unrelated things and the dashboard painted both the same red. Either a
