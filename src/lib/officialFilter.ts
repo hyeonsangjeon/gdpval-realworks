@@ -12,17 +12,23 @@
  * Phase 2 extends this: superseded / partial exp003 cards (old `__<sha>__v*`
  * naming + the 10-task `_tight` subset) are also hidden by default, while the
  * two curated clean-220 runs are pinned OFFICIAL (allowlist) and never hidden.
+ *
+ * Phase 3 replaces the name-matching half of that with a measured one: any
+ * grade covering fewer tasks than the inference run it graded is a preflight
+ * and is hidden. `_tight` was always an instance of this rule written by hand;
+ * the pattern stays as a fallback for grades whose experiment has no report.
  */
 import type { GradeResult } from '../hooks/useGrades'
 import type { ExperimentEntry } from '../types/report'
 import {
   isHiddenDiagnosticExperimentId,
   isHiddenOfficialExperiment,
+  isPartialCorpusGrade,
   isSmokeExperimentId,
   OFFICIAL_TASK_COUNT,
 } from './officialExperimentScope.js'
 
-export { OFFICIAL_TASK_COUNT }
+export { OFFICIAL_TASK_COUNT, isPartialCorpusGrade }
 
 /**
  * Smoke / test identifier. `exp99x` is the reserved smoke namespace
@@ -70,7 +76,8 @@ export function isLegacyExp003(g: Pick<GradeResult, 'id'>): boolean {
 
 /**
  * True when a grade card should be hidden from the default (non-debug) view:
- * legacy demo, smoke/test run, or a superseded/partial exp003 card.
+ * legacy demo, smoke/test run, a superseded/partial exp003 card, or a grading
+ * run that covered only part of its inference corpus.
  * Curated OFFICIAL ids are never hidden (reverse protection).
  */
 export function isHiddenGrade(g: GradeResult): boolean {
@@ -81,6 +88,7 @@ export function isHiddenGrade(g: GradeResult): boolean {
     isSmokeId(g.id) ||
     isHiddenDiagnosticExperimentId(g.experiment_id) ||
     isHiddenDiagnosticExperimentId(g.id) ||
+    isPartialCorpusGrade(g) ||
     isLegacyExp003(g)
   )
 }

@@ -45,6 +45,39 @@ entries land under a fresh dated heading the day they merge to `main`.
   that had been showing up as a grading outcome. Two of those the selector
   passed through with `selection_status: 'ok'`.
 
+- **Partial-corpus grading runs hidden from the default dashboard view
+  (`scripts/aggregate-grades.mjs`, `src/lib/officialExperimentScope.js`)** - the
+  Grading Analysis tab listed six cards for the same experiment, three of which
+  were preflights: a 1-task config check, a 3-task cohort trial and a 10-task
+  cohort trial. Sitting on the same axis as a finished 220-task run they read as
+  comparisons, and the numbers cannot support that - the 3-task trial scored
+  36.14% and the 10-task trial 57.74% against 53.30% for a full run, spread that
+  is mostly sampling noise. Both aggregate charts, the Score Distribution
+  Comparison and the Overall Score Breakdown, were mixing them into the same
+  totals.
+
+  The rule is measured rather than name-matched. The aggregator now records a
+  `coverage` block per grade - `grade_tasks`, `corpus_tasks`,
+  `is_partial_corpus` - where the denominator is the inference run's own
+  published `summary.total_tasks` read from `reports-index.json`. A grade that
+  covered fewer tasks than the run it graded is a preflight and is hidden.
+  This subsumes the hand-written `_tight` pattern from the previous phase,
+  which was always an instance of the same rule; the pattern stays as a
+  fallback for grades whose experiment has no report.
+
+  Two properties make the failure modes safe. Unknown coverage is never
+  partial - an experiment with no report yields `corpus_tasks: null` and the
+  grade stays visible, so ignorance leaves an early experiment alone rather
+  than silently deleting it. And a small experiment graded end to end (17 of
+  17) is complete, so the rule cannot mistake "small" for "unfinished". The
+  curated `OFFICIAL_GRADE_IDS` allowlist is still checked first and is never
+  hidden by any rule.
+
+  This is a display filter and nothing else. No file under `data/grades/` is
+  modified, `coverage` is additive metadata that changes no published figure,
+  every grade remains reachable by direct URL, and `?debug=1` restores the full
+  list. Visible cards go from 6 to 3, all three full-corpus runs.
+
 - **Backend test workflow (`backend-tests.yml`)** - the batch-runner suite had
   no pull-request gate at all, so a change could land on `main` with a red test
   and nothing would report it. That is exactly how the paid-gate assertion
