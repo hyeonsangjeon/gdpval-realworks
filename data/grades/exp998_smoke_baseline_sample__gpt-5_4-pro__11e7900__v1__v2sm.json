@@ -1521,10 +1521,82 @@
       "precheck_pass_rate": 0.8,
       "judge_pass_rate": 0.5952,
       "judge_error_rate": 0.0595,
-      "by_sector": {},
+      "by_sector": {
+        "Government": {
+          "task_count": 2,
+          "avg_pct": 77.88,
+          "critical_item_pass_rate": 0.0,
+          "precheck_pass_rate": 1.0,
+          "judge_pass_rate": 0.6286
+        },
+        "Real Estate and Rental and Leasing": {
+          "task_count": 1,
+          "avg_pct": 77.72,
+          "critical_item_pass_rate": 1.0,
+          "precheck_pass_rate": 0.3333,
+          "judge_pass_rate": 0.5714
+        }
+      },
       "by_rubric_category": {},
-      "score_density_histogram": [],
-      "rubric_severity_curve": [],
+      "score_density_histogram": [
+        {
+          "bucket": "0-10%",
+          "count": 0
+        },
+        {
+          "bucket": "10-20%",
+          "count": 0
+        },
+        {
+          "bucket": "20-30%",
+          "count": 0
+        },
+        {
+          "bucket": "30-40%",
+          "count": 0
+        },
+        {
+          "bucket": "40-50%",
+          "count": 0
+        },
+        {
+          "bucket": "50-60%",
+          "count": 0
+        },
+        {
+          "bucket": "60-70%",
+          "count": 1
+        },
+        {
+          "bucket": "70-80%",
+          "count": 1
+        },
+        {
+          "bucket": "80-90%",
+          "count": 1
+        },
+        {
+          "bucket": "90-100%",
+          "count": 0
+        }
+      ],
+      "rubric_severity_curve": [
+        {
+          "weight": 1,
+          "n_items": 39,
+          "pass_rate": 0.5128
+        },
+        {
+          "weight": 2,
+          "n_items": 54,
+          "pass_rate": 0.6852
+        },
+        {
+          "weight": 5,
+          "n_items": 1,
+          "pass_rate": 1.0
+        }
+      ],
       "_v2sm_critical_items": 1,
       "_v2sm_critical_right": 1
     },

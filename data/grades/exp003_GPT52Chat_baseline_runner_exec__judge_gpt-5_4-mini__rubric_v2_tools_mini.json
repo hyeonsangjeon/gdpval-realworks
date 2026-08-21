@@ -360785,7 +360785,48 @@
       "judge_error_rate": 0.0356,
       "by_sector": {},
       "by_rubric_category": {},
-      "score_density_histogram": [],
+      "score_density_histogram": [
+        {
+          "bucket": "0-10%",
+          "count": 25
+        },
+        {
+          "bucket": "10-20%",
+          "count": 7
+        },
+        {
+          "bucket": "20-30%",
+          "count": 2
+        },
+        {
+          "bucket": "30-40%",
+          "count": 12
+        },
+        {
+          "bucket": "40-50%",
+          "count": 26
+        },
+        {
+          "bucket": "50-60%",
+          "count": 38
+        },
+        {
+          "bucket": "60-70%",
+          "count": 32
+        },
+        {
+          "bucket": "70-80%",
+          "count": 32
+        },
+        {
+          "bucket": "80-90%",
+          "count": 29
+        },
+        {
+          "bucket": "90-100%",
+          "count": 12
+        }
+      ],
       "rubric_severity_curve": []
     },
     "cost": {
