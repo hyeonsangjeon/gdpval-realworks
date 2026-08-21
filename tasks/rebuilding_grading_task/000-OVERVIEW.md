@@ -45,9 +45,9 @@
 | # | task | 상태 |
 |---|---|---|
 | 300 | [gold-ceiling test](./300-gold-ceiling.md) | ⚠️ PARTIAL — v2 path live-verified on 3-task smoke (run `26677864500`, judge_error 1.19%, evidence tool-grounded). Gold-subset run pending. See [PR3_SMOKE_FINDINGS.md](./PR3_SMOKE_FINDINGS.md). |
-| 301 | [exp003 재채점 + formatting 격차 붕괴 + bare-CSV evidence](./301-exp003-revalidation.md) | 🚫 BLOCKED on 302 cost decision (smoke projects $52/run, over $50 ceiling) |
-| 302 | [cost budget 재추정](./302-cost-budget-recheck.md) | ⚠️ STOP+ALERT triggered — $52/run projection at N=3 over user $50 ceiling. User pick A/B/C in PR3_SMOKE_FINDINGS.md. |
-| 303 | [variance + bootstrap CI + judge_error rate](./303-variance-and-error.md) | ⏸ deferred until 301 produces a stable per-task baseline |
+| 301 | [exp003 재채점 + formatting 격차 붕괴 + bare-CSV evidence](./301-exp003-revalidation.md) | ✅ DONE — 220 재채점 완료 + 분석 완료. **formatting 격차는 붕괴하지 않고 -25.5pp → -46.0pp로 확대**; v1의 "hybrid over-rejects" 진단이 뒤집힘 (mini가 못 봐서 관대했던 것). bare-CSV 판별은 통과. 보고서는 `tasks/**` privacy 규칙(`5349cbf`) 때문에 [data/grades/_validation/PR3_EXP003_REVALIDATION.md](../../data/grades/_validation/PR3_EXP003_REVALIDATION.md)에 위치. |
+| 302 | [cost budget 재추정](./302-cost-budget-recheck.md) | ⚠️ 미해결이지만 **전제가 낡음** — 당시 projection은 N=3 smoke 기준이었고, 그 뒤 220-task 실주행이 이미 끝났다. PR3_SMOKE_FINDINGS.md의 A/B/C는 그 낡은 projection 위에 서 있으므로 그대로 답할 수 없음. 실측 기준으로 다시 세워야 함 (owner gate). |
+| 303 | [variance + bootstrap CI + judge_error rate](./303-variance-and-error.md) | ⏸ 301이 220-task baseline을 냈으므로 spec상 선행 조건은 해소. 유료 dispatch 3회 필요 → owner 승인 대기. |
 
 ## 자율 판단 결정 기록 (working memo)
 
