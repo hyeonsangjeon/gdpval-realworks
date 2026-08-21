@@ -224,6 +224,45 @@ entries land under a fresh dated heading the day they merge to `main`.
   the in-flight 220-task relay, so it waits for the shard merge.
 
 ### Changed
+- **Existing grade payloads backfilled with the `summary.wow` analytics** - the
+  entry above taught `_compute_summary` to emit the four analytic fields, but
+  only for runs graded after it merged. All 17 real grade payloads already on
+  disk still carried `by_sector: {}`, `score_density_histogram: []` and
+  `rubric_severity_curve: []`, including the newest sol-220 run, so the sector
+  heatmap, the score histogram and the severity curve rendered empty states
+  across the whole dashboard. Nothing needed re-grading and nothing was
+  dispatched: each field is a pure function of the `tasks` array already in the
+  file, and `scripts/backfill_summary_wow.py` recomputes it from that array.
+
+  What the script does *not* do is the reason it exists in this form. Six of the
+  seventeen payloads were graded under semantics the current summariser no
+  longer reproduces — the four pre-sign-aware `__v1.json` files carry no
+  `model_did_right`, so their `critical_item_pass_rate` recomputes to `0.0`
+  against a published `0.42`/`0.52`/`1.0`, and the two `rubric_v2_tools` files
+  drift by about a point (`0.501 → 0.485`, `0.4232 → 0.4338`). Republishing
+  those would let a later grading standard rewrite the record of an earlier
+  experiment, which is exactly the thing a benchmark must not do. So the rule is
+  per-file rather than global: a payload's semantics-dependent breakdowns
+  (`by_sector`, `rubric_severity_curve`) are written only when the current
+  summariser reproduces that payload's five published scalar rates exactly, and
+  that agreement is the evidence the same code understands the same file. It
+  holds for 11 of 17. The remaining 6 get `score_density_histogram` only — a
+  bucket count over the per-task `pct` values already published in the file,
+  carrying no semantic assumption that a change in grading criteria could move.
+
+  `by_rubric_category` stays `{}` everywhere for the reason given above: there
+  is no category taxonomy in a GDPVal rubric to build it from.
+
+  The script is dry-run by default and refuses to write a file if anything
+  outside `summary.wow`, or any of the five published rates inside it, would
+  change. That guard is not decoration — the first cut of this change lacked the
+  inside-`wow` half of it and would have republished four payloads'
+  `critical_item_pass_rate` as `0.0`. Verified after applying by re-parsing every
+  payload against `git show HEAD:` and confirming that the only values that moved
+  anywhere are the three analytic fields, that no `_v2sm_*` key was dropped, and
+  that every histogram and sector breakdown sums to that file's own
+  `graded_tasks` (the shortfall against `total_tasks` is exactly `error_tasks`,
+  which carry no `pct`).
 - **One paid approval now carries a whole shard, not one 4h chunk** - a shard of
   the 220-task corpus takes ~6.5h of strictly serial judge calls
   (`tpm_guard.max_concurrent: 1`), but GitHub's hosted runners cap a job at 6h

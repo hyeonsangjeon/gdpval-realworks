@@ -161247,10 +161247,226 @@
       "precheck_pass_rate": 0.8384,
       "judge_pass_rate": 0.3329,
       "judge_error_rate": 0.006,
-      "by_sector": {},
+      "by_sector": {
+        "Finance and Insurance": {
+          "task_count": 24,
+          "avg_pct": 45.86,
+          "critical_item_pass_rate": 0.3478,
+          "precheck_pass_rate": 0.9524,
+          "judge_pass_rate": 0.2912
+        },
+        "Government": {
+          "task_count": 25,
+          "avg_pct": 52.32,
+          "critical_item_pass_rate": 0.5161,
+          "precheck_pass_rate": 1.0,
+          "judge_pass_rate": 0.3575
+        },
+        "Health Care and Social Assistance": {
+          "task_count": 25,
+          "avg_pct": 52.56,
+          "critical_item_pass_rate": 0.3056,
+          "precheck_pass_rate": 0.9231,
+          "judge_pass_rate": 0.35
+        },
+        "Information": {
+          "task_count": 25,
+          "avg_pct": 40.56,
+          "critical_item_pass_rate": 0.4235,
+          "precheck_pass_rate": 0.5373,
+          "judge_pass_rate": 0.2812
+        },
+        "Manufacturing": {
+          "task_count": 25,
+          "avg_pct": 46.59,
+          "critical_item_pass_rate": 0.6078,
+          "precheck_pass_rate": 0.7639,
+          "judge_pass_rate": 0.3174
+        },
+        "Professional, Scientific, and Technical Services": {
+          "task_count": 25,
+          "avg_pct": 34.24,
+          "critical_item_pass_rate": 0.3208,
+          "precheck_pass_rate": 0.86,
+          "judge_pass_rate": 0.2225
+        },
+        "Real Estate and Rental and Leasing": {
+          "task_count": 25,
+          "avg_pct": 53.19,
+          "critical_item_pass_rate": 0.4957,
+          "precheck_pass_rate": 1.0,
+          "judge_pass_rate": 0.4534
+        },
+        "Retail Trade": {
+          "task_count": 20,
+          "avg_pct": 59.99,
+          "critical_item_pass_rate": 0.8182,
+          "precheck_pass_rate": 1.0,
+          "judge_pass_rate": 0.4489
+        },
+        "Wholesale Trade": {
+          "task_count": 25,
+          "avg_pct": 50.56,
+          "critical_item_pass_rate": 0.4118,
+          "precheck_pass_rate": 0.7727,
+          "judge_pass_rate": 0.3755
+        }
+      },
       "by_rubric_category": {},
-      "score_density_histogram": [],
-      "rubric_severity_curve": [],
+      "score_density_histogram": [
+        {
+          "bucket": "0-10%",
+          "count": 13
+        },
+        {
+          "bucket": "10-20%",
+          "count": 13
+        },
+        {
+          "bucket": "20-30%",
+          "count": 18
+        },
+        {
+          "bucket": "30-40%",
+          "count": 30
+        },
+        {
+          "bucket": "40-50%",
+          "count": 41
+        },
+        {
+          "bucket": "50-60%",
+          "count": 30
+        },
+        {
+          "bucket": "60-70%",
+          "count": 37
+        },
+        {
+          "bucket": "70-80%",
+          "count": 20
+        },
+        {
+          "bucket": "80-90%",
+          "count": 15
+        },
+        {
+          "bucket": "90-100%",
+          "count": 2
+        }
+      ],
+      "rubric_severity_curve": [
+        {
+          "weight": -85,
+          "n_items": 1,
+          "pass_rate": 0.0
+        },
+        {
+          "weight": -60,
+          "n_items": 1,
+          "pass_rate": 1.0
+        },
+        {
+          "weight": -20,
+          "n_items": 2,
+          "pass_rate": 0.0
+        },
+        {
+          "weight": -10,
+          "n_items": 64,
+          "pass_rate": 0.5625
+        },
+        {
+          "weight": -6,
+          "n_items": 1,
+          "pass_rate": 0.0
+        },
+        {
+          "weight": -5,
+          "n_items": 15,
+          "pass_rate": 0.6
+        },
+        {
+          "weight": -4,
+          "n_items": 2,
+          "pass_rate": 1.0
+        },
+        {
+          "weight": -2,
+          "n_items": 6,
+          "pass_rate": 0.6667
+        },
+        {
+          "weight": -1,
+          "n_items": 2,
+          "pass_rate": 1.0
+        },
+        {
+          "weight": 1,
+          "n_items": 5369,
+          "pass_rate": 0.3366
+        },
+        {
+          "weight": 2,
+          "n_items": 4341,
+          "pass_rate": 0.3711
+        },
+        {
+          "weight": 3,
+          "n_items": 252,
+          "pass_rate": 0.381
+        },
+        {
+          "weight": 4,
+          "n_items": 61,
+          "pass_rate": 0.2787
+        },
+        {
+          "weight": 5,
+          "n_items": 274,
+          "pass_rate": 0.4818
+        },
+        {
+          "weight": 6,
+          "n_items": 26,
+          "pass_rate": 0.3846
+        },
+        {
+          "weight": 7,
+          "n_items": 6,
+          "pass_rate": 0.1667
+        },
+        {
+          "weight": 8,
+          "n_items": 7,
+          "pass_rate": 0.2857
+        },
+        {
+          "weight": 10,
+          "n_items": 19,
+          "pass_rate": 0.6316
+        },
+        {
+          "weight": 12,
+          "n_items": 1,
+          "pass_rate": 1.0
+        },
+        {
+          "weight": 15,
+          "n_items": 1,
+          "pass_rate": 0.0
+        },
+        {
+          "weight": 16,
+          "n_items": 1,
+          "pass_rate": 1.0
+        },
+        {
+          "weight": 20,
+          "n_items": 1,
+          "pass_rate": 1.0
+        }
+      ],
       "_v2sm_critical_items": 483,
       "_v2sm_critical_right": 225
     },
