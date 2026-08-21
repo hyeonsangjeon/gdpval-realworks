@@ -29,6 +29,7 @@ PyPDF2>=3.0.0                 # PDF validation
 # Testing
 pytest>=8.0.0
 pytest-cov>=4.1.0
+pytest-timeout>=2.3.0         # @pytest.mark.timeout is a no-op without it
 
 # Type checking
 mypy>=1.8.0
