@@ -92,7 +92,14 @@ jobs:
       # measured libc error reporting rather than the filter. It now probes
       # execve directly through os.execv, which raises the filter's own EPERM
       # wherever the filter loads, so it runs on every host the suite runs on.
+      #
+      # -rs names every skipped test and its reason. Without it, `-q` prints
+      # only a count, and a test that stops running is indistinguishable from
+      # one that passes -- which is how the launcher test above went unnoticed.
+      # Several tests here skip on a legitimately absent host capability
+      # (seccomp TSYNC, a Docker image), so the count alone cannot tell an
+      # expected skip from a newly silent one. Keep the reasons in the log.
       - name: Run tests
         run: |
           cd batch-runner
-          python -m pytest -m "not integration" --tb=short -q
+          python -m pytest -m "not integration" --tb=short -q -rs
