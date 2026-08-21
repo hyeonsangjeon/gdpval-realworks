@@ -458,3 +458,129 @@ def test_selection_object_and_audit_schema_are_structured_not_bare_paths():
         "selected_paths",
         "support_paths_visible",
     }
+
+
+# The four tests below cover the fall-through that used to return
+# "ambiguous_candidates": several same-format outputs and an instruction that
+# never says how many files it wants. On the sol-220 run that fall-through was
+# 243 of 333 judge errors across 5 tasks, every one of which scored zero with
+# the judge never called, on tasks where the model had in fact delivered.
+#
+# The shapes here are taken from those tasks: a checklist plus a fax cover
+# sheet, five parallel school reports, a guide plus its application form.
+
+
+def _uniform_selection(names: list[str], criteria: list[str], instruction: str = ""):
+    return select_deliverables(
+        task_id="uniform",
+        deliverable_files=[_path("uniform", name) for name in names],
+        instruction=instruction,
+        rubric_items=[{"criterion": c, "score": 1} for c in criteria],
+    )
+
+
+def test_uniform_same_format_outputs_are_recovered_as_separate_primaries():
+    selection = _uniform_selection(
+        ["Fax_Cover_Sheet.docx", "Admission_Pre_Screening_Checklist.docx"],
+        [
+            "Includes a title at the top of the fax cover sheet.",
+            "Includes a labeled, writable field for the sender's name.",
+            "Lists the required pre-admission documents.",
+        ],
+    )
+
+    assert selection.selection_status == "ok"
+    assert selection.task_class == "separate_equivalent"
+    # A distinct rule, not the one explicit language earns. Both reach the same
+    # routing, but an audit has to be able to tell which tasks rest on the
+    # weaker inference.
+    assert selection.selection_rule == "set_diff_then_uniform_primaries"
+    assert _selected_names(selection) == {
+        "Fax_Cover_Sheet.docx",
+        "Admission_Pre_Screening_Checklist.docx",
+    }
+
+
+def test_uniform_recovery_scales_past_two_equivalent_outputs():
+    names = [
+        "Floral_Park_Bellerose_School_Report.pdf",
+        "Garden_City_Park_School_Report.pdf",
+        "Hillside_Grade_School_Report.pdf",
+        "John_Lewis_Childs_School_Report.pdf",
+        "Manor_Oaks_School_Report.pdf",
+    ]
+    selection = _uniform_selection(
+        names,
+        [
+            "The report includes the overall Niche.com grade for Hillside Grade School.",
+            "The report includes the overall Niche.com grade for Manor Oaks School.",
+        ],
+    )
+
+    assert selection.selection_status == "ok"
+    assert selection.selection_rule == "set_diff_then_uniform_primaries"
+    assert _selected_names(selection) == set(names)
+
+
+def test_uniform_recovery_shows_the_judge_every_file_by_default():
+    # This is what makes equal primaries safe where choosing one would not be.
+    # "fax cover sheet" does not match the filename Fax_Cover_Sheet, so the
+    # criterion routes to the bundle rather than to one file -- and that is the
+    # common case, not the exception. The judge gets both files plus the
+    # criterion text and resolves which one it is about. Nothing is demoted and
+    # nothing is hidden, which is exactly what picking a single primary here
+    # would have done.
+    selection = _uniform_selection(
+        ["Fax_Cover_Sheet.docx", "Admission_Pre_Screening_Checklist.docx"],
+        ["Limits the fax cover sheet length to one page."],
+    )
+
+    plan = plan_targets_for_criterion(
+        selection, "Limits the fax cover sheet length to one page."
+    )
+
+    assert plan.target_scope == "primary_bundle"
+    assert plan.selected_paths == [
+        _path("uniform", "Fax_Cover_Sheet.docx"),
+        _path("uniform", "Admission_Pre_Screening_Checklist.docx"),
+    ]
+
+
+def test_uniform_recovery_still_narrows_when_a_criterion_names_the_file():
+    selection = _uniform_selection(
+        ["Fax_Cover_Sheet.docx", "Admission_Pre_Screening_Checklist.docx"],
+        ["Limits Fax_Cover_Sheet to one page."],
+    )
+
+    plan = plan_targets_for_criterion(selection, "Limits Fax_Cover_Sheet to one page.")
+
+    assert plan.target_scope == "file_target"
+    assert plan.selected_paths == [_path("uniform", "Fax_Cover_Sheet.docx")]
+
+
+def test_explicit_separate_language_keeps_its_own_stronger_rule():
+    # The recovery is a fall-through and must stay one: a task whose
+    # instruction does say how many files it wants is still classified by that
+    # statement, not by counting outputs.
+    selection = _uniform_selection(
+        ["Session_13.pptx", "Session_14.pptx"],
+        ["Provides two separate presentations, one per session."],
+    )
+
+    assert selection.selection_status == "ok"
+    assert selection.selection_rule == "set_diff_then_separate_primaries"
+
+
+def test_candidates_with_no_document_still_decline_to_choose():
+    # The point of the change is not that the selector now always answers. With
+    # nothing document-like to grade there is still no defensible choice, and
+    # saying so remains better than inventing one.
+    selection = _uniform_selection(
+        ["convergence_binomial.png", "pricing_comparison.png"],
+        ["The chart is readable."],
+    )
+
+    assert selection.selection_status == "selection_error"
+    assert selection.task_class == "ambiguous"
+    assert selection.selection_rule == "ambiguous_candidates"
+    assert selection.primary_targets == []
