@@ -101,6 +101,10 @@ _VISUAL_RENDER_SCOPES: Dict[str, Dict[str, int]] = {
     ".xlsx": {"workbook_page": 1},
     ".xlsm": {"workbook_page": 1},
     ".pptx": {"slide": 1},
+    # A .docx stores no pagination, so "page 1" is page 1 of the LibreOffice
+    # conversion rather than a property of the file. That is fine at the only
+    # index used here -- the first page is the first page under any engine.
+    ".docx": {"page": 1},
     ".png": {},
     ".jpg": {},
     ".jpeg": {},

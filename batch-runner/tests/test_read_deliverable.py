@@ -611,13 +611,128 @@ def test_render_to_image_still_rejects_unsupported_text(base_dir, txt_file):
     assert "not supported for kind=txt" in r["error"]
 
 
-def test_render_to_image_still_rejects_docx(base_dir, docx_file):
+def test_render_to_image_docx_page(base_dir, docx_file, monkeypatch):
+    """docx renders through the same LibreOffice->PDF->PyMuPDF path.
+
+    This used to assert the opposite. The judge's visual route could not
+    render a document deliverable at all, so every visual rubric item on a
+    docx-only task failed the run with
+    `required_visual_render_target_unavailable` -- 73 items across 24 tasks of
+    the sol-220 grading run, none of which ever reached a model.
+    """
+    source_before = docx_file.read_bytes()
+    observed = {}
+
+    def fake_convert(source: Path, out_dir: Path) -> Path:
+        observed["source"] = source
+        observed["bytes"] = source.read_bytes()
+        return _fake_convert_to_pdf(source, out_dir, pages=2)
+
+    monkeypatch.setattr(
+        read_deliverable_module, "_convert_office_to_pdf", fake_convert
+    )
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "get_renderer_fingerprint",
+        lambda: {
+            "libreoffice_binary": "soffice",
+            "libreoffice_version": "LibreOffice 24.2.7.2",
+            "pymupdf_version": "1.26.3",
+        },
+    )
+    r = read_deliverable(
+        "render_to_image", docx_file.name,
+        base_dir=str(base_dir), scope={"page": 2},
+    )
+    assert r["ok"] is True
+    payload = r["data"]
+    assert payload["source_kind"] == "docx"
+    assert payload["scope"] == {"page": 2}
+    assert payload["converted_page_count"] == 2
+    # A .docx carries no pagination of its own, so there is no source page
+    # count to report -- only what the conversion produced.
+    assert "source_page_count" not in payload
+    assert payload["renderer"]["converter"] == "libreoffice"
+    assert payload["renderer"]["rasterizer"] == "pymupdf"
+    assert payload["renderer"]["libreoffice_binary"] == "soffice"
+    assert payload["renderer"]["libreoffice_version"] == "LibreOffice 24.2.7.2"
+    assert payload["renderer"]["pymupdf_version"] == "1.26.3"
+    assert base64.b64decode(payload["base64"]).startswith(b"\x89PNG")
+    # The original is handed to the converter untouched, as for xlsx.
+    assert observed["source"] == docx_file
+    assert observed["bytes"] == source_before
+    assert docx_file.read_bytes() == source_before
+
+
+def test_render_to_image_docx_defaults_to_first_page(
+    base_dir, docx_file, monkeypatch
+):
+    monkeypatch.setattr(
+        read_deliverable_module, "_convert_office_to_pdf", _fake_convert_to_pdf
+    )
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "get_renderer_fingerprint",
+        lambda: {
+            "libreoffice_binary": "soffice",
+            "libreoffice_version": "LibreOffice 24.2.7.2",
+            "pymupdf_version": "1.26.3",
+        },
+    )
     r = read_deliverable(
         "render_to_image", docx_file.name, base_dir=str(base_dir),
     )
+    assert r["ok"] is True
+    assert r["data"]["scope"] == {"page": 1}
+
+
+def test_render_docx_out_of_range_page_is_invalid_scope(
+    base_dir, docx_file, monkeypatch
+):
+    """Range is checked against the conversion, the only page count there is."""
+    monkeypatch.setattr(
+        read_deliverable_module, "_convert_office_to_pdf", _fake_convert_to_pdf
+    )
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "get_renderer_fingerprint",
+        lambda: {
+            "libreoffice_binary": "soffice",
+            "libreoffice_version": "LibreOffice 24.2.7.2",
+            "pymupdf_version": "1.26.3",
+        },
+    )
+    r = read_deliverable(
+        "render_to_image", docx_file.name,
+        base_dir=str(base_dir), scope={"page": 9},
+    )
     assert r["ok"] is False
-    assert r["error_type"] == "unsupported_scope"
-    assert "not supported for kind=docx" in r["error"]
+    assert r["error_type"] == "bad_scope"
+    assert "page 9 out of range 1..2" in r["error"]
+
+
+def test_render_docx_rejects_unknown_scope_keys(base_dir, docx_file):
+    r = read_deliverable(
+        "render_to_image", docx_file.name,
+        base_dir=str(base_dir), scope={"slide": 1},
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "bad_scope"
+    assert "unknown scope keys for docx" in r["error"]
+
+
+def test_render_docx_missing_libreoffice_is_actionable(
+    base_dir, docx_file, monkeypatch
+):
+    """The exact shape of the gap this fix closes: no Writer, clear error."""
+    monkeypatch.setattr(read_deliverable_module, "_find_soffice", lambda: None)
+    r = read_deliverable(
+        "render_to_image", docx_file.name,
+        base_dir=str(base_dir), scope={"page": 1},
+    )
+    assert r["ok"] is False
+    assert r["error_type"] == "dependency_missing"
+    assert "LibreOffice" in r["error"]
 
 
 def test_libreoffice_conversion_uses_isolated_profile_and_allowlisted_env(

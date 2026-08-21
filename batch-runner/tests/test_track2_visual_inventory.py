@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from core.grader_routing import Modality, resolve_runtime_routing
+from core.tool_calling_judge import ToolCallingJudge
 
 
 INVENTORY_SOURCE = Path(
@@ -13,19 +14,17 @@ INVENTORY_SOURCE = Path(
     "exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini"
     "__rubric_v2_tools_mini.json"
 )
-SUPPORTED_VISUAL_EXTENSIONS = {
-    ".pdf",
-    ".xlsx",
-    ".xlsm",
-    ".pptx",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".bmp",
-    ".webp",
-}
-EXPECTED_SUPPORTED_CALL_TOTAL = 466
+# Derived from the runtime, never restated. This file used to keep its own
+# copy of the supported-extension set, and the copy is how a drift hides: when
+# .docx rendering was added, a hardcoded list here would have kept reporting
+# the old call volume against the cap and nothing would have said so.
+#
+# The totals below are a forward projection -- what a run over these 220 tasks
+# would plan today -- not a record of what the checked-in run did. Adding a
+# format moves them, which is the point: it forces a fresh look at the cap.
+# .docx took the total from 466 to 574 and left the per-task max at 68,
+# because the task holding the max carries no document deliverable.
+EXPECTED_SUPPORTED_CALL_TOTAL = 574
 EXPECTED_SUPPORTED_CALL_MAX = 68
 CONFIGURED_TASK_CAP = 72
 
@@ -34,13 +33,7 @@ def _supported_calls(criterion: str, selected_paths: list[str]) -> int:
     decision = resolve_runtime_routing(criterion, selected_paths)
     if decision.modality is not Modality.VISUAL:
         return 0
-    stable_paths = sorted(
-        dict.fromkeys(selected_paths), key=lambda path: (path.casefold(), path)
-    )
-    return sum(
-        Path(path).suffix.lower() in SUPPORTED_VISUAL_EXTENSIONS
-        for path in stable_paths
-    )
+    return len(ToolCallingJudge.planned_supported_visual_names(selected_paths))
 
 
 def _item_supported_calls(item: dict) -> int:

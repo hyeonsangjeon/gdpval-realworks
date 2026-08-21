@@ -203,7 +203,9 @@ def test_plan_enforces_runtime_visual_file_cap(monkeypatch, tmp_path: Path):
 def test_plan_filters_unsupported_paths_from_visual_bundle(
     monkeypatch, tmp_path: Path
 ):
-    paths = ["Brief.docx", "Chart.pdf", "Report.xlsx"]
+    # Brief.docx is here to prove the opposite of what it used to prove: a
+    # document is now a render target, so only Notes.csv is filtered out.
+    paths = ["Brief.docx", "Chart.pdf", "Notes.csv"]
     for path in paths:
         (tmp_path / path).write_bytes(path.encode("utf-8"))
     selection = DeliverableSelection(
@@ -233,10 +235,10 @@ def test_plan_filters_unsupported_paths_from_visual_bundle(
     assert plan["planned_render_calls"] == 2
     assert plan["planned_perception_calls"] == 2
     assert plan["items"][0]["planned_visual_paths"] == [
+        "Brief.docx",
         "Chart.pdf",
-        "Report.xlsx",
     ]
-    assert plan["unsupported_visual_paths"] == ["Brief.docx"]
+    assert plan["unsupported_visual_paths"] == ["Notes.csv"]
     assert plan["errors"] == []
 
 

@@ -94,7 +94,7 @@ def _mock_boundaries(monkeypatch, *, mutate_source=False):
             finally:
                 workbook.close()
             source_kind = "xlsx"
-        else:
+        elif path.endswith(".pptx"):
             from pptx import Presentation
 
             presentation = Presentation(str(source_path))
@@ -111,6 +111,19 @@ def _mock_boundaries(monkeypatch, *, mutate_source=False):
                     run.font.name == preflight.FONT_FAMILY for run in runs
                 )
             source_kind = "pptx"
+        else:
+            from docx import Document
+
+            document = Document(str(source_path))
+            runs = [
+                run
+                for paragraph in document.paragraphs
+                for run in paragraph.runs
+            ]
+            assert runs and all(
+                run.font.name == preflight.FONT_FAMILY for run in runs
+            )
+            source_kind = "docx"
         if mutate_source:
             source_path.write_bytes(source_path.read_bytes() + b"mutated")
         return _successful_render(source_kind, scope)
@@ -131,10 +144,10 @@ def test_run_preflight_mocks_version_conversion_and_fc_match_boundaries(
     assert result["renderer_fingerprint"] == FINGERPRINT
     assert result["font_family"] == "Liberation Sans"
     assert [render["source_kind"] for render in result["renders"]] == [
-        "xlsx", "pptx"
+        "xlsx", "pptx", "docx"
     ]
     assert [call[3] for call in observed["renders"]] == [
-        {"workbook_page": 1}, {"slide": 1}
+        {"workbook_page": 1}, {"slide": 1}, {"page": 1}
     ]
     assert len(observed["fc_match"]) == 1
     command, kwargs = observed["fc_match"][0]

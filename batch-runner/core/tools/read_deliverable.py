@@ -944,6 +944,42 @@ def _op_render_to_image(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
             "base64": base64.b64encode(png).decode("ascii"),
             "byte_size": len(png),
         }
+    if kind == "docx":
+        # Unlike the two branches above there is no pre-conversion count to
+        # validate `page` against: a .docx stores no pagination, so its page
+        # count does not exist until a layout engine computes one. Nothing
+        # here opens the file with python-docx for that reason -- it could
+        # only add a way to fail on a document LibreOffice would still
+        # render. `_render_pdf_page` range-checks against the converted PDF,
+        # which is the only authoritative page count there is.
+        #
+        # The corollary, which the returned key name is careful about: page N
+        # is page N *of this conversion*. LibreOffice's line breaking is not
+        # guaranteed to match Word's, so a page index is only as stable as
+        # the converter. Page 1 -- the only page the judge asks for -- is
+        # stable under any engine.
+        _validate_scope_keys(scope, allowed={"page"}, source_kind="docx")
+        page = _positive_int(scope.get("page", 1), "page")
+        renderer_fingerprint = get_renderer_fingerprint()
+        with tempfile.TemporaryDirectory(prefix="gdpval-grade-render-") as temp:
+            out_dir = Path(temp)
+            converted = _convert_office_to_pdf(p, out_dir)
+            png, converted_page_count = _render_pdf_page(converted, page)
+        png = _downsample_to_cap(png)
+        return {
+            "kind": "image_png_base64",
+            "source_kind": "docx",
+            "scope": {"page": page},
+            "converted_page_count": converted_page_count,
+            "renderer": {
+                "converter": "libreoffice",
+                "rasterizer": "pymupdf",
+                "dpi": 150,
+                **renderer_fingerprint,
+            },
+            "base64": base64.b64encode(png).decode("ascii"),
+            "byte_size": len(png),
+        }
     if kind == "image":
         _validate_scope_keys(scope, allowed=set(), source_kind="image")
         png = _downsample_to_cap(_render_image(p))
@@ -957,7 +993,7 @@ def _op_render_to_image(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
         }
     raise UnsupportedScope(
         f"render_to_image not supported for kind={kind}; "
-        "supported: pdf, xlsx, pptx, image. "
+        "supported: pdf, xlsx, pptx, docx, image. "
         "Use inspect_structure/read_content instead."
     )
 

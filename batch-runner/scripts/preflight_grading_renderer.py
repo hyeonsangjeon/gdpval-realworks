@@ -121,6 +121,28 @@ def _write_pptx_fixture(path: Path) -> None:
     presentation.save(path)
 
 
+def _write_docx_fixture(path: Path) -> None:
+    from docx import Document  # type: ignore
+    from docx.shared import Pt  # type: ignore
+
+    document = Document()
+    # A plain bold run rather than add_heading(): heading styles come from the
+    # template and a missing one raises, which would report a python-docx
+    # template gap as a LibreOffice failure.
+    title = document.add_paragraph()
+    title_run = title.add_run("GDPVal grading renderer preflight")
+    title_run.font.name = FONT_FAMILY
+    title_run.font.size = Pt(20)
+    title_run.font.bold = True
+    body = document.add_paragraph()
+    body_run = body.add_run(
+        "Document body paragraph rendered through LibreOffice Writer."
+    )
+    body_run.font.name = FONT_FAMILY
+    body_run.font.size = Pt(12)
+    document.save(path)
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -237,11 +259,18 @@ def run_preflight() -> dict[str, Any]:
 
         xlsx_path = work_dir / "renderer_preflight.xlsx"
         pptx_path = work_dir / "renderer_preflight.pptx"
+        docx_path = work_dir / "renderer_preflight.docx"
         _write_xlsx_fixture(xlsx_path)
         _write_pptx_fixture(pptx_path)
+        _write_docx_fixture(docx_path)
+        # docx is here because it is the format this preflight was blind to:
+        # the grading runners installed libreoffice-core/-calc/-impress and no
+        # -writer, so a Writer-shaped gap could not fail anything. xlsx and
+        # pptx render through Calc and Impress and would keep passing.
         fixtures = (
             (xlsx_path, "xlsx", {"workbook_page": 1}),
             (pptx_path, "pptx", {"slide": 1}),
+            (docx_path, "docx", {"page": 1}),
         )
         before_hashes = {path.name: _sha256_file(path) for path, _, _ in fixtures}
         renders: list[dict[str, Any]] = []

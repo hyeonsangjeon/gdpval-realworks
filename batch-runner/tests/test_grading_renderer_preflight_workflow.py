@@ -64,6 +64,9 @@ def test_workflow_installs_only_renderer_surface_and_validates_json():
         "libreoffice-core",
         "libreoffice-calc",
         "libreoffice-impress",
+        # Writer is what renders .docx. Its absence is why the preflight could
+        # pass while the judge could not render a document deliverable.
+        "libreoffice-writer",
         "fonts-dejavu-core",
         "fonts-liberation2",
         "fontconfig",
