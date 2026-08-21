@@ -24,6 +24,15 @@ INVENTORY_SOURCE = Path(
 # format moves them, which is the point: it forces a fresh look at the cap.
 # .docx took the total from 466 to 574 and left the per-task max at 68,
 # because the task holding the max carries no document deliverable.
+#
+# One limit worth stating, because the number looks more complete than it is:
+# the projection reads the selected_paths this run recorded, so the 5 tasks it
+# recorded as selection_error contribute nothing -- they have no paths. The
+# selector now resolves those (set_diff_then_uniform_primaries), and a fresh
+# run would plan roughly 18 more calls than the figure below, peaking at 5 on
+# any one of them. That does not move the max or threaten the cap, which is
+# why this stays a fixed expectation rather than a re-derived one: deriving it
+# would need the task instructions, which this file deliberately does not read.
 EXPECTED_SUPPORTED_CALL_TOTAL = 574
 EXPECTED_SUPPORTED_CALL_MAX = 68
 CONFIGURED_TASK_CAP = 72

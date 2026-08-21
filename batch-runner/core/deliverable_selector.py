@@ -251,7 +251,7 @@ def select_deliverables(
             selection_rule="set_diff_then_primary_support_split",
         )
 
-    if task_class == "separate_equivalent":
+    if task_class in ("separate_equivalent", "uniform_primaries"):
         primary_paths = _choose_separate_primaries(generated, items, required_exts)
         if not primary_paths:
             return _selection_error(
@@ -263,17 +263,28 @@ def select_deliverables(
                 "separate_equivalent_no_primary",
             )
         support = [p for p in generated if p not in primary_paths]
+        # The emitted task_class is the same either way, because downstream
+        # routing should not care how the classification was reached. The rule
+        # is not: "separate_primaries" means the instruction said so, and
+        # "uniform_primaries" means it did not and the selector inferred it
+        # from several same-format outputs. That is a weaker inference and an
+        # audit should be able to see which tasks rest on it.
+        rule = (
+            "set_diff_then_separate_primaries"
+            if task_class == "separate_equivalent"
+            else "set_diff_then_uniform_primaries"
+        )
         return DeliverableSelection(
             selection_status="ok",
             task_id=task_id,
-            task_class=task_class,
+            task_class="separate_equivalent",
             primary_targets=[
                 _target_for_path(path, "separate_primary", target_id=None)
                 for path in primary_paths
             ],
             support_artifacts=support,
             reference_files_excluded=reference_echo,
-            selection_rule="set_diff_then_separate_primaries",
+            selection_rule=rule,
         )
 
     return _selection_error(
@@ -468,7 +479,39 @@ def _classify_task(
         if _multiple_file_types_requested(text) or len(doc_ext_groups) > 1:
             return "separate_equivalent"
 
+    # Everything above needs positive evidence -- "two separate files", two
+    # requested formats, a single named primary. What is left is the case with
+    # no such evidence: several document-like outputs sharing one format, and
+    # an instruction that never says how many files it wants. Five school
+    # reports. A plan and a deck. A guide, an application, a template.
+    #
+    # Declining to choose used to be the answer here, and it is the wrong one,
+    # because declining is not neutral: every rubric item on the task becomes a
+    # judge error and the task scores zero even though the model delivered. On
+    # the sol-220 run that was 243 of 333 judge errors from 5 tasks -- more
+    # than every other cause combined.
+    #
+    # Treating them as equal primaries is safe in a way choosing one is not.
+    # No file is demoted, and nothing downstream has to be told which one
+    # mattered: a criterion whose text matches a filename routes to that file,
+    # and every other criterion routes to the bundle, where the judge sees all
+    # of them and resolves "the fax cover sheet ..." from the criterion itself.
+    # Most land in the bundle, which is the case this relies on. So the
+    # selector no longer has to answer a question it cannot answer -- which of
+    # these is THE deliverable -- to let grading proceed.
+    if len(_document_like(generated)) >= 2:
+        return "uniform_primaries"
+
     return "ambiguous"
+
+
+def _document_like(generated: list[str]) -> list[str]:
+    return [
+        p
+        for p in generated
+        if _extension(p) in DOCUMENT_EXTENSIONS
+        and _extension(p) not in IMAGE_EXTENSIONS
+    ]
 
 
 def _has_single_primary_with_support(
