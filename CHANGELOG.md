@@ -313,7 +313,33 @@ entries land under a fresh dated heading the day they merge to `main`.
   and grade data are unchanged.
 
 ### Fixed
-- **Paid-gate workflow test pinned to the post-inheritance conditions** - the
+- **Sandbox launcher test now probes exec denial rather than libc error
+  reporting** - `test_generated_python_launcher_denies_exec_and_network`
+  asserted that `os.system('/bin/true')` and `socket.socket()` both raise
+  `OSError` under the launcher's seccomp filter. Both `execve` and `fork` sit
+  in `DENIED_SYSCALLS`, so `os.system` is blocked either way, but glibc's
+  `system()` reports that block through its return value on some libc and
+  kernel pairs and as an `OSError` on others: the assertion measured error
+  reporting, not the filter. CI deselected the test for exactly that reason,
+  and the dev box skips it because its 3.10 kernel predates seccomp TSYNC, so
+  the test ran nowhere at all. It now calls `os.execv`, a thin `execve` wrapper
+  whose denial surfaces as the filter's own `SCMP_ACT_ERRNO` `EPERM` wherever
+  the filter loads, and asserts that errno rather than merely that something
+  raised. A successful `execv` replaces the process image and would exit 0 with
+  empty output, so the `blocked` marker assertion is what keeps that failure
+  visible instead of silent. The `--deselect` argument is gone from
+  `.github/workflows/backend-tests.yml`, whose comment no longer describes a
+  deselection it does not make.
+- **`@pytest.mark.timeout` restored to a working guard** - `pytest-timeout` was
+  absent from `batch-runner/requirements.txt` while
+  `test_snapshot_manifest_fifo_fails_without_blocking` and
+  `test_snapshot_artifact_fifo_fails_without_blocking` both carry
+  `@pytest.mark.timeout(2)`. pytest treats an unregistered marker as a no-op
+  with a warning, so the two tests that exist to prove `PackageSnapshot.load`
+  fails fast on a FIFO rather than blocking forever had no mechanism left to
+  detect blocking; a regression that hung the loader would have hung the job to
+  its own ceiling instead of failing the test. The dependency is now pinned and
+  both tests pass in 0.13s with the marker active.
   approval-inheritance change left `test_grade_workflow_rc7_requires_valid_
   committed_partial` comparing `approve-paid`'s `if:` against the old literal
   `inputs.dry_run == false && inputs.paid_approval == true`, so `main` has been

@@ -801,20 +801,40 @@ def test_close_removes_may_exist_resources_without_creation_flags(tmp_path):
 
 @pytest.mark.skipif(sys.platform != "linux", reason="libseccomp launcher is Linux-only")
 def test_generated_python_launcher_denies_exec_and_network():
+    """Exec and socket creation must both fail with the filter's own EPERM.
+
+    Exec is probed through os.execv rather than os.system. os.system goes
+    through glibc's system(), which reports the blocked fork and exec in its
+    return value on some libc and kernel pairs and as an OSError on others, so
+    asserting on the exception measured libc's error reporting rather than the
+    filter itself. os.execv is a thin execve wrapper, so the SCMP_ACT_ERRNO
+    deny action surfaces as PermissionError wherever the filter loads.
+
+    A successful execv replaces the process image, so a filter that failed to
+    block it would run /bin/true and exit 0 with empty output. The 'blocked'
+    marker is what makes that failure visible instead of silent.
+    """
     source = b"""
+import errno
 import os
 import socket
 
-denied = []
-for action in (
-    lambda: os.system('/bin/true'),
-    lambda: socket.socket(socket.AF_INET, socket.SOCK_STREAM),
-):
-    try:
-        action()
-    except OSError as exc:
-        denied.append(exc.errno)
-assert len(denied) == 2, denied
+denied = {}
+
+try:
+    os.execv('/bin/true', ['/bin/true'])
+except OSError as exc:
+    denied['execve'] = exc.errno
+
+try:
+    socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+except OSError as exc:
+    denied['socket'] = exc.errno
+else:
+    raise AssertionError('socket() was permitted')
+
+assert sorted(denied) == ['execve', 'socket'], denied
+assert set(denied.values()) == {errno.EPERM}, denied
 print('blocked')
 """
     harness = (
@@ -835,7 +855,11 @@ print('blocked')
     if b"seccomp TSYNC unavailable" in result.stderr:
         pytest.skip("host runtime does not expose seccomp TSYNC; Docker gate remains required")
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
-    assert result.stdout.strip() == b"blocked"
+    assert result.stdout.strip() == b"blocked", (
+        "launcher did not deny exec and socket; an empty stdout with a zero "
+        "exit status means execv succeeded and replaced the process. "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
 
 
 @pytest.mark.integration

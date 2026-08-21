@@ -85,19 +85,14 @@ jobs:
       # even if the addopts guard above is ever relaxed. Integration tests reach
       # paid APIs; CI must never pay.
       #
-      # One deselection, and it is a real open question rather than a nuisance:
-      # test_generated_python_launcher_denies_exec_and_network asserts that both
-      # os.system() and socket.socket() raise OSError under the launcher's
-      # seccomp filter. On the runner only socket() raises. execve/execveat are
-      # still in DENIED_SYSCALLS and the filter still loads, so the sandbox is
-      # not weaker here -- what differs is whether glibc's system() surfaces the
-      # blocked exec as a Python OSError, which it does on the dev box's 3.10
-      # kernel and does not on the runner's. That makes the assertion a probe of
-      # libc error reporting, not of the filter. Deselected until the test is
-      # rewritten to check exec denial directly (os.execv, or system()'s return
-      # code); the Docker gate remains the enforcing control either way.
+      # Nothing is deselected here, and that is the point. The sandbox launcher
+      # test used to be, because it probed exec denial through os.system(): the
+      # blocked fork and exec reach Python as an OSError on the dev box's 3.10
+      # kernel and as a plain return value on the runner's, so the assertion
+      # measured libc error reporting rather than the filter. It now probes
+      # execve directly through os.execv, which raises the filter's own EPERM
+      # wherever the filter loads, so it runs on every host the suite runs on.
       - name: Run tests
         run: |
           cd batch-runner
-          python -m pytest -m "not integration" --tb=short -q \
-            --deselect "tests/test_agentic_sandbox_security.py::test_generated_python_launcher_denies_exec_and_network"
+          python -m pytest -m "not integration" --tb=short -q
