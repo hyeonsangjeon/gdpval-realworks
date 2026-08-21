@@ -767,9 +767,15 @@ def test_split_preflight_failure_records_prior_perception_call(
     assert style.perception_called is True
 
 
-def test_explicit_visual_docx_remains_fail_closed_without_render_target(
+def test_explicit_visual_item_fails_closed_without_render_target(
     monkeypatch, tmp_path
 ):
+    """A visual item with nothing renderable must error, not text-judge.
+
+    This used to be spelled with a .docx deliverable. Documents render now, so
+    the unrenderable case needs a format that genuinely has no render target;
+    the property under test -- fail closed, touch no model -- is unchanged.
+    """
     from core.rubric_loader import RubricItem, TaskRubric
     import core.tool_calling_judge as tool_judge_mod
 
@@ -780,8 +786,79 @@ def test_explicit_visual_docx_remains_fail_closed_without_render_target(
     monkeypatch.setattr(
         tool_judge_mod,
         "read_deliverable",
-        lambda *args, **kwargs: pytest.fail("unsupported DOCX must fail before render"),
+        lambda *args, **kwargs: pytest.fail("unrenderable file must fail before render"),
     )
+    deliverable_dir = tmp_path / "task"
+    deliverable_dir.mkdir()
+    (deliverable_dir / "Summary.csv").write_bytes(b"header_a,header_b\n1,2\n")
+    task = TaskRubric(
+        task_id="t-csv-visual",
+        sector="Information",
+        occupation="Analyst",
+        prompt="Create a CSV export of the summary table.",
+        rubric_items=[RubricItem(
+            "visual", "Document color and page layout are visually polished", 4, None
+        )],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+
+    grade = grader.grade_task(task, str(deliverable_dir))
+    item = grade.items[0]
+
+    assert item.routing_modality == "visual"
+    assert item.verdict == "judge_error"
+    assert item.score_excluded is True
+    assert item.evidence == "required_visual_render_target_unavailable"
+    assert item.render_call_count == 0
+    assert vision.calls == []
+    assert responses.calls == []
+
+
+def test_explicit_visual_docx_renders_instead_of_failing_closed(
+    monkeypatch, tmp_path
+):
+    """The inverse of the test above, on the same criterion and deliverable.
+
+    This exact shape -- a visual rubric item whose only deliverable is a
+    document -- is what produced 73 `required_visual_render_target_unavailable`
+    items across 24 tasks in the sol-220 run, none of which reached a model.
+    """
+    from core.rubric_loader import RubricItem, TaskRubric
+    import core.tool_calling_judge as tool_judge_mod
+
+    responses = ScriptedResponses([
+        _response(output=[_final(_payload("pass", 1.0, "page layout is polished"))]),
+    ])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision()
+    grader._tool_judge.vision_perception = vision
+    rendered = []
+
+    def fake_render(op, path, **kwargs):
+        rendered.append((path, kwargs.get("scope")))
+        return {
+            "ok": True,
+            "data": {
+                "kind": "image_png_base64",
+                "base64": "aW1hZ2U=",
+                "byte_size": 5,
+                "scope": {"page": 1},
+                "source_kind": "docx",
+                "converted_page_count": 3,
+                "renderer": {
+                    "converter": "libreoffice",
+                    "rasterizer": "pymupdf",
+                    "libreoffice_binary": "soffice",
+                    "libreoffice_version": "LibreOffice 24.2.7.2",
+                    "pymupdf_version": "1.26.3",
+                    "dpi": 150,
+                },
+            },
+        }
+
+    monkeypatch.setattr(tool_judge_mod, "read_deliverable", fake_render)
     deliverable_dir = tmp_path / "task"
     deliverable_dir.mkdir()
     (deliverable_dir / "Brief.docx").write_bytes(b"docx")
@@ -802,12 +879,16 @@ def test_explicit_visual_docx_remains_fail_closed_without_render_target(
     item = grade.items[0]
 
     assert item.routing_modality == "visual"
-    assert item.verdict == "judge_error"
-    assert item.score_excluded is True
-    assert item.evidence == "required_visual_render_target_unavailable"
-    assert item.render_call_count == 0
-    assert vision.calls == []
-    assert responses.calls == []
+    assert item.verdict == "pass"
+    assert item.score_excluded is False
+    assert item.evidence != "required_visual_render_target_unavailable"
+    assert rendered == [("Brief.docx", {"page": 1})]
+    assert item.render_call_count == 1
+    assert len(vision.calls) == 1
+    assert item.visual_provenance[0]["path"] == "Brief.docx"
+    assert (
+        item.visual_provenance[0]["renderer_metadata"]["source_kind"] == "docx"
+    )
 
 
 def test_split_visual_child_validation_precedes_task_budget_and_render(

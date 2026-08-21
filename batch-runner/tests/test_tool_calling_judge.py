@@ -1544,7 +1544,9 @@ def test_visual_preflight_filters_unsupported_bundle_paths(
         score=4,
         required=None,
     )
-    (deliverable_dir / "Brief.docx").write_bytes(b"docx")
+    # .csv, not .docx: documents render now, so a docx here would no longer
+    # be the unsupported case this test exists to cover.
+    (deliverable_dir / "Notes.csv").write_bytes(b"header_a,header_b\n1,2\n")
     (deliverable_dir / "Chart.pdf").write_bytes(b"pdf")
 
     pytest.importorskip("PIL")
@@ -1602,7 +1604,7 @@ def test_visual_preflight_filters_unsupported_bundle_paths(
         task=task,
         item=visual_item,
         deliverable_dir=str(deliverable_dir),
-        file_names=["Brief.docx", "Chart.pdf", "report.xlsx"],
+        file_names=["Notes.csv", "Chart.pdf", "report.xlsx"],
     )
 
     assert result.verdict == "pass"
@@ -1612,7 +1614,8 @@ def test_visual_preflight_filters_unsupported_bundle_paths(
         "Chart.pdf",
         "report.xlsx",
     ]
-    assert "Brief.docx" in client.responses.calls[0]["input"][0]["content"]
+    # Unrenderable, but still named to the model so it knows what was there.
+    assert "Notes.csv" in client.responses.calls[0]["input"][0]["content"]
 
 
 def test_visual_file_cap_fails_before_render_vision_or_main(

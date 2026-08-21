@@ -50,6 +50,7 @@ jobs:
               libreoffice-core \
               libreoffice-calc \
               libreoffice-impress \
+              libreoffice-writer \
               fonts-dejavu-core \
               fonts-liberation2 \
               fontconfig || return 1
