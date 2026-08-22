@@ -209,6 +209,31 @@ judge-error 비율을 먼저 읽고 나머지 8개를 푸는 게 유료 run에�
 만에 죽었다. 9개를 한꺼번에 풀었다면 같은 지점에서 9번 죽었을 것이다.
 저장된 결과가 없으므로 재발주는 처음부터 다시 돈다.
 
+**run이 도는 동안 main은 얼려 둔다.** shard 9개는 `grader_source_hash`와
+`renderer_fingerprint`가 전부 같아야 병합된다(`step9_merge_shards.py:119`
+`CONTRACT_IDENTITY_FIELDS`). 해시는 출력 파일명에도 `src_<16 hex>`로 박히므로
+갈라진 shard는 애초에 다른 경로로 떨어져 영영 만나지 못한다. 그리고
+`compute_grader_source_hash`는 `step8_grade.py` · `batch-runner/core/` 아래
+**모든** `.py`(rglob) · `schemas/grade.schema.json` · `requirements.txt` ·
+`scripts/download_inference_from_hf.py` · judge/tool 프롬프트 템플릿 ·
+**채점 config YAML 자체**를 해싱한다. 이 중 하나라도 run 도중에 main에 들어가면
+그 뒤 dispatch되는 shard는 다른 해시를 갖는다.
+
+이게 위험한 이유는 **언제 걸리는가**에 있다. 해시 불일치는 dispatch 때도,
+채점 때도 조용하다. 마지막 병합 단계에서야 거부된다 — 즉 **돈을 다 쓴 뒤에**.
+C1이 apt 미러 drift를 막으려던 바로 그 실패 양식이고, 이번엔 미러가 아니라
+우리 자신의 머지가 원인이 될 수 있다.
+
+`grade-run.yml`은 해싱 대상이 아니지만 똑같이 건드리면 안 된다. auto-retrigger
+resume 청크가 main에서 그 파일을 **다시 읽기** 때문이다. 러너 이미지 교체는
+세 번째 이유로 더 위험하다 — LibreOffice 버전이 움직이면
+`renderer_fingerprint`가 함께 움직인다.
+
+**안전한 것:** 문서(`tasks/**`, `CHANGELOG.md`, `README*`), 대시보드
+(`src/`, 루트 `scripts/`), 그리고 `batch-runner/tests/`. 셋 다 해시 목록 밖이다.
+해시를 건드리는 작업은 브랜치에 준비만 해 두고 220-task `final`이 발행될 때까지
+머지를 미룬다.
+
 **푸는 것:** `< 2%` 게이트를 처음으로 정당하게 통과 · 303의 3회 중 1회를 겸함
 (303의 추가 비용이 2회로 감소) · 300에 corpus 전체 비교 대상 제공.
 
