@@ -48,7 +48,7 @@ PUBLISHED_TOTALS = {
     "selector_ambiguous": 243,
     "render_target_missing": 74,
     "wrong_format": 12,
-    "empty_output": 4,
+    "judge_no_verdict": 4,
     "unclassified": 0,
 }
 
@@ -172,7 +172,11 @@ def test_the_tool_reproduces_the_published_run_exactly():
     assert total.rate == 0.0319
     assert sum(total.buckets.values()) == total.errors
     assert total.harness_errors == 243 + 74
-    assert total.model_errors == 12 + 4
+    assert total.judge_side_errors == 4
+    assert total.model_errors == 12
+    # 317 of the 333 are ours. The published run's headline 3.19% is very
+    # nearly a measure of this harness, not of the model under test.
+    assert total.harness_errors + total.judge_side_errors + total.model_errors == 333
 
 
 @pytest.mark.skipif(
@@ -212,6 +216,51 @@ def test_every_published_shard_rate_recomputes():
     assert rates[0] < 0.01 < 0.09 < rates[-1]
 
 
+@pytest.mark.skipif(
+    _published_corpus() is None,
+    reason=(
+        f"the published sol-220 shards (data/grades/_shards/*{PUBLISHED_SRC}*) "
+        "are not in this checkout"
+    ),
+)
+def test_the_judge_bucket_holds_only_judge_side_failures():
+    """Cross-check the structural rule against the prose it refuses to read.
+
+    ``classify_error`` decides from structured fields on purpose, so nothing
+    rebuckets when a message is reworded. The cost of that is no feedback if
+    the rule is aimed at the wrong thing -- which it was: this bucket was
+    called ``empty_output`` and filed under the model under test, and the
+    rerun showed ``final_json_parse_failed`` in it. That string comes from
+    ``core.tool_calling_judge._finalization_retry_reason``, and it describes
+    the *judge's* answer failing to parse, not a submission.
+
+    So read the evidence here and nowhere else, as an assertion rather than as
+    a classifier: everything the structural rule puts in this bucket must be
+    one of the reasons that function emits. A new shape appearing here means
+    the rule is catching something it was not aimed at, and the bucket name is
+    lying about the cause.
+    """
+    judge_side = ("empty_final_text", "final_json_parse_failed", "invalid_final_envelope")
+    found = set()
+    for part_path in sorted(_published_corpus().glob("shard-*.json")):
+        payload = json.loads(part_path.read_text(encoding="utf-8"))
+        for task in payload["tasks"]:
+            for item in task.get("items") or []:
+                if item.get("decided_by") != "judge":
+                    continue
+                if item.get("verdict") != "judge_error":
+                    continue
+                if jeb.classify_error(item) != "judge_no_verdict":
+                    continue
+                evidence = str(item.get("evidence") or "")
+                # ``empty_final_text`` carries a ``:finish_reason`` suffix.
+                assert evidence.startswith(judge_side), evidence
+                found.add(evidence.split(":")[0])
+
+    # If the corpus ever stops containing any, this test would pass vacuously.
+    assert found == {"empty_final_text"}
+
+
 # --------------------------------------------------------------------------
 # classification
 # --------------------------------------------------------------------------
@@ -246,9 +295,10 @@ def test_every_published_shard_rate_recomputes():
             {"selection_status": "ok", "routing_modality": "mixed"},
             "render_target_missing",
         ),
-        # Selection was fine and the route was text, so the deliverable held
-        # no gradeable text.
-        ({"selection_status": "ok", "routing_modality": "text"}, "empty_output"),
+        # Selection was fine and the route was text, so the work reached the
+        # judge and the judge is what failed -- empty final text, unparseable
+        # output, or an envelope that would not validate.
+        ({"selection_status": "ok", "routing_modality": "text"}, "judge_no_verdict"),
     ],
 )
 def test_each_failure_shape_lands_in_its_own_bucket(item, expected):
@@ -416,32 +466,43 @@ def test_the_gate_passes_and_fails_on_the_threshold(tmp_path, capsys):
     assert jeb.main([str(path)]) == 0
 
 
-def test_a_paired_comparison_keeps_the_two_causes_apart(tmp_path, capsys):
-    """A fix should be read off the harness line, not the headline rate."""
+def test_a_paired_comparison_keeps_the_three_causes_apart(tmp_path, capsys):
+    """A fix should be read off the harness line, not the headline rate.
+
+    The other two lines are what makes that reading safe. Here the harness
+    errors go away while a judge flake and a model failure stay exactly where
+    they were, so the rate move is attributable to the fix and to nothing
+    else. Collapsing judge-side into the model line -- which this tool did
+    until the rerun showed ``final_json_parse_failed`` sitting in it -- would
+    report grading flakiness as a finding about the submissions.
+    """
     old = _write(
         tmp_path / "old",
         "grade.json",
         _payload(
             [_item(selection_status="selection_error")] * 6
             + [_item(selection_status="wrong_format_primary")] * 2
-            + [_item(verdict="pass")] * 92
+            + [_item(selection_status="ok", routing_modality="text")] * 1
+            + [_item(verdict="pass")] * 91
         ),
     )
-    # Same denominator, harness errors fixed, model errors untouched.
+    # Same denominator, harness errors fixed, the other two untouched.
     new = _write(
         tmp_path / "new",
         "grade.json",
         _payload(
             [_item(selection_status="wrong_format_primary")] * 2
-            + [_item(verdict="pass")] * 98
+            + [_item(selection_status="ok", routing_modality="text")] * 1
+            + [_item(verdict="pass")] * 97
         ),
     )
 
     assert jeb.main([str(new), "--baseline", str(old)]) == 0
     out = capsys.readouterr().out
     assert "harness-caused          6 ->       0" in out
+    assert "judge-side              1 ->       1" in out
     assert "model-caused            2 ->       2" in out
-    assert "rate                8.00% ->   2.00%" in out
+    assert "rate                9.00% ->   3.00%" in out
     assert "NOTE" not in out
 
 

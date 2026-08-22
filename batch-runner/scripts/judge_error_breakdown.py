@@ -4,21 +4,25 @@
 ``judge_error_rate`` is already published in every grade file's
 ``summary.wow``, and every downstream card carries a ``< 2%`` gate on it. The
 rate alone is not enough to decide anything, because the errors it counts come
-from two unlike places:
+from three unlike places:
 
 * the harness could not put the deliverable in front of the judge -- the
   selector refused to choose between same-format files (``#190``), or a
   document had no render target (``#189``). These are our defects, and fixing
   them is what makes the number move.
-* the model did not submit gradeable work -- wrong format, or nothing at all.
-  These are findings about the model under test. They are supposed to be
-  there, and driving them to zero would mean grading something the model never
-  produced.
+* the judge was shown the work and did not answer -- empty final text, output
+  that would not parse, an envelope that would not validate. That is the
+  grading model misbehaving, usually against a token cap. It is noise: it
+  varies run to run over identical input, so a change in it is not a result.
+* the model under test did not submit gradeable work -- wrong format. This is
+  a finding about the model. It is supposed to be there, and driving it to
+  zero would mean grading something the model never produced.
 
 A run whose rate falls because we fixed the first kind has genuinely improved.
-A run whose rate falls because the corpus happened to contain fewer of the
-second kind has not. Reading only the headline rate cannot tell those apart,
-so this prints the split.
+A run whose rate moves because the judge flaked a different number of times,
+or because the corpus happened to contain fewer of the third kind, has not.
+Reading only the headline rate cannot tell those apart, so this prints the
+split.
 
 The second reason to have this is that **a shard's rate is not the run's
 rate**, and they differ by a lot. On the published sol-220 run the whole-run
@@ -55,17 +59,19 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 
-# Ordered worst-first for display. The two ``harness`` buckets are ours to fix;
-# the two ``model`` ones are results, not defects.
+# Ordered worst-first for display. The ``harness`` buckets are ours to fix; the
+# ``judge`` one is the grading LLM failing to answer; the ``model`` one is a
+# result, not a defect.
 HARNESS_BUCKETS = ("selector_ambiguous", "render_target_missing")
-MODEL_BUCKETS = ("wrong_format", "empty_output")
-BUCKETS = HARNESS_BUCKETS + MODEL_BUCKETS + ("unclassified",)
+JUDGE_BUCKETS = ("judge_no_verdict",)
+MODEL_BUCKETS = ("wrong_format",)
+BUCKETS = HARNESS_BUCKETS + JUDGE_BUCKETS + MODEL_BUCKETS + ("unclassified",)
 
 BUCKET_HELP = {
     "selector_ambiguous": "harness: selector could not choose between candidates",
     "render_target_missing": "harness: nothing could be rendered for the judge to see",
+    "judge_no_verdict": "judge: the grading model returned no usable verdict",
     "wrong_format": "model: submitted files, none in a requested format",
-    "empty_output": "model: submitted no gradeable text",
     "unclassified": "UNKNOWN -- a failure shape this tool does not recognise",
 }
 
@@ -117,7 +123,15 @@ def classify_error(item: dict) -> str:
     if modality in ("visual", "mixed") and not rendered:
         return "render_target_missing"
     if modality == "text":
-        return "empty_output"
+        # Selection succeeded and the text was put in front of the judge, so
+        # what failed is the judge's own answer: it returned empty text, or
+        # text that would not parse, or an envelope that did not validate
+        # (``core.tool_calling_judge._finalization_retry_reason``). Every
+        # instance in both the published run and the rerun is one of those.
+        # This was originally called ``empty_output`` and filed under the
+        # model, which read as a finding about the submission when it is
+        # really grading-side flakiness -- mostly a token cap.
+        return "judge_no_verdict"
     return "unclassified"
 
 
@@ -144,6 +158,10 @@ class Breakdown:
     @property
     def harness_errors(self) -> int:
         return sum(self.buckets[name] for name in HARNESS_BUCKETS)
+
+    @property
+    def judge_side_errors(self) -> int:
+        return sum(self.buckets[name] for name in JUDGE_BUCKETS)
 
     @property
     def model_errors(self) -> int:
@@ -300,6 +318,8 @@ def compare(new: Breakdown, old: Breakdown) -> list[str]:
         f"  rate              {old.rate * 100:>6.2f}% -> {new.rate * 100:>6.2f}%",
         f"  harness-caused    {old.harness_errors:>7} -> {new.harness_errors:>7}"
         f"   <- ours to fix; this is the number a fix should move",
+        f"  judge-side        {old.judge_side_errors:>7} -> {new.judge_side_errors:>7}"
+        f"   <- the grading model not answering; noise, not signal",
         f"  model-caused      {old.model_errors:>7} -> {new.model_errors:>7}"
         f"   <- a property of the submissions, not a defect",
     ]
