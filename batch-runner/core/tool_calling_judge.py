@@ -113,6 +113,23 @@ _VISUAL_RENDER_SCOPES: Dict[str, Dict[str, int]] = {
     ".webp": {},
 }
 _VISUAL_FILE_CAP = 3
+#: Where each rendered kind's surface count comes from. "Surface" is the
+#: unit the judge sampled one of -- a page, a slide, a converted workbook
+#: page -- and the count is what makes ``sampled_first_surface`` legible:
+#: page 1 of a one-page memo is the whole deliverable, page 1 of a
+#: forty-page report is not. ``image`` has no key because a single image is
+#: its own only surface. A kind missing from this map reports ``None``,
+#: which reads to the judge as "length unknown", so every kind
+#: ``_op_render_to_image`` can emit belongs here.
+_TOTAL_SURFACE_KEYS: Dict[str, Optional[str]] = {
+    "pdf": "source_page_count",
+    "pptx": "source_slide_count",
+    # A workbook and a document both take their count from the conversion
+    # rather than the file, because neither stores one.
+    "xlsx": "converted_page_count",
+    "docx": "converted_page_count",
+    "image": None,
+}
 _RENDERER_METADATA_KEYS = (
     "kind",
     "source_kind",
@@ -1308,12 +1325,7 @@ class ToolCallingJudge:
         item: RubricItem, render_data: Mapping[str, Any]
     ) -> Dict[str, Any]:
         source_kind = str(render_data.get("source_kind") or "")
-        total_key = {
-            "pdf": "source_page_count",
-            "pptx": "source_slide_count",
-            "xlsx": "converted_page_count",
-            "image": None,
-        }.get(source_kind)
+        total_key = _TOTAL_SURFACE_KEYS.get(source_kind)
         total_surfaces = 1 if source_kind == "image" else (
             render_data.get(total_key) if total_key else None
         )

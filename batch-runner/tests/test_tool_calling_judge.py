@@ -1658,6 +1658,63 @@ def test_visual_file_cap_fails_before_render_vision_or_main(
     assert client.responses.calls == []
 
 
+@pytest.mark.parametrize(
+    ("source_kind", "render_data", "expected_total"),
+    [
+        ("pdf", {"source_page_count": 9}, 9),
+        ("pptx", {"source_slide_count": 12}, 12),
+        ("xlsx", {"converted_page_count": 4}, 4),
+        ("docx", {"converted_page_count": 3}, 3),
+        ("image", {}, 1),
+    ],
+)
+def test_coverage_reports_how_many_surfaces_the_sample_came_from(
+    source_kind, render_data, expected_total
+):
+    """``sampled_first_surface`` only means something beside a total.
+
+    Page 1 of a one-page memo is the whole deliverable; page 1 of a
+    forty-page report is 2.5% of it, and an "overall style" verdict drawn
+    from it deserves to be read differently. The judge is shown this
+    metadata, so a missing total is not merely unrecorded -- it tells the
+    model the length is unknown.
+
+    `#189` added the .docx branch without adding it here, so every rendered
+    document claimed an unknown length while a workbook, whose count comes
+    from the very same LibreOffice conversion, reported one.
+    """
+    coverage = ToolCallingJudge._coverage_metadata(
+        RubricItem("r-coverage", "Overall Style", 4, None),
+        {"source_kind": source_kind, **render_data},
+    )
+
+    assert coverage["coverage_mode"] == "sampled_first_surface"
+    assert coverage["sampled_surface_count"] == 1
+    assert coverage["total_surface_count"] == expected_total
+
+
+def test_every_rendered_kind_says_where_its_surface_count_comes_from():
+    """Two hand-kept lists, one owner: whatever the renderer can emit.
+
+    An absent kind degrades silently -- ``.get`` returns None and the judge
+    is told the deliverable's length is unknown -- so nothing fails and the
+    loss only surfaces in the grades. Deriving the expectation from the
+    renderer is what makes the next added kind fail here instead.
+    """
+    from core.tools.read_deliverable import _EXT_KIND
+
+    renderable = {
+        _EXT_KIND[suffix]
+        for suffix in tool_calling_judge_module._VISUAL_RENDER_SCOPES
+    }
+    declared = set(tool_calling_judge_module._TOTAL_SURFACE_KEYS)
+
+    assert renderable <= declared, (
+        f"rendered {sorted(renderable - declared)} would report an unknown "
+        "surface count"
+    )
+
+
 def test_visual_cap_preflight_fails_before_render_vision_or_main(
     deliverable_dir, task_and_item, monkeypatch
 ):
