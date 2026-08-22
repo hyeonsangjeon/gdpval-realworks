@@ -55,28 +55,43 @@ PR3의 남은 항목(300 · 302 · 303)은 전부 유료 dispatch나 비용 결�
 그래서 순서를 "무료로 먼저 확정할 수 있는 것 → 유료 중 가장 값어치 있는 것"으로
 잡는다. 아래 두 건이 그 순서다.
 
-### C1 — grade job을 prebuilt container로 이전 (무료, 선행)
+### C1 — 렌더러 버전 고정 (무료, 선행) ✅ **DONE — `#193`**
 
-`ghcr.io/hyeonsangjeon/gdpval-sandbox`는 이미 `libreoffice` 메타패키지를 담고
-있다 (`batch-runner/sandbox/Dockerfile:39`). grade job은 아직 shard마다 apt로
-설치한다.
+**원래 계획은 틀렸다.** 이 항목은 "grade job을 `ghcr.io/hyeonsangjeon/gdpval-sandbox`로
+옮긴다"였다. Dockerfile이 아니라 실제 이미지를 받아서 열어보니 성립하지 않는다.
 
-**이건 더 이상 장애 수정이 아니다.** shard 5개를 죽였던 apt 정지는 `#26`에서
-retry·timeout·dpkg lock timeout으로 이미 처리됐다 (`grade-run.yml:637-668`).
-지금 남은 이유는 다르고, 중요한 순서대로:
+| | sandbox 이미지 | 지금 grade 러너 | 발행된 grade 파일 |
+|---|---|---|---|
+| LibreOffice | **7.4.7.2** | **24.2.7.2** | **24.2.7.2** (4개 전부) |
+| `git` | 없음 | 있음 | — |
+| `az` | 없음 | 있음 | — |
 
-1. **렌더러가 버전 고정이 안 돼 있는데, 렌더러가 점수를 움직인다.** 설치는
-   `libreoffice-core` / `-calc` / `-impress` / `-writer`를 버전 없이 요청한다.
-   그날 미러가 주는 게 곧 judge가 보는 이미지를 만든다. 301은 v2의 formatting
-   판정이 "본 것"에서 나온다는 걸 확인했다 — 즉 렌더러가 고정 안 되면 점수도
-   고정이 안 된다. grader source hash가 같아도 한 달 차이 나는 두 run은 엄밀히
-   비교 대상이 아니다. **baseline으로 발행할 run을 만들기 *전에* 해야 하는
-   이유가 이것이다.**
-2. retry는 미러 장애를 복구 가능하게 만들 뿐 없애지 못한다. container는 미러가
-   필요 없다.
-3. 같은 패키지를 shard 수만큼 반복 설치한다.
-4. `#189`의 .docx 렌더링은 Writer 존재에 의존한다. container에서는 빌드 시점의
-   사실이고, apt에서는 런타임의 기대다.
+즉 그 이미지로 옮기면 (1) 채점기의 눈을 17세대 낡은 렌더러로 **바꿔서 점수를
+움직이고** — 이 항목이 막으려던 바로 그 일이다 — (2) `git`이 없어
+`actions/checkout`이 `.git` 없는 tarball로 떨어져 shard merge의 commit·push가
+깨지고 (3) `az`가 없어 `azure/login` + `DefaultAzureCredential`이 인증하지
+못한다. sandbox 이미지에 `az`를 넣는 선택지는 보안상 기각했다 — 그 이미지는 LLM이
+쓴 코드를 실행한다.
+
+**목적은 다른 방법으로 달성했다.** 진짜 문제는 컨테이너 유무가 아니라 apt가
+`libreoffice-core`/`-calc`/`-impress`/`-writer`를 버전 없이 요청하고, 결과를
+출력만 하고 **아무것도 검증하지 않는다**는 것이었다. 그날 미러가 주는 게 곧
+judge의 눈이 된다. 301은 formatting 판정이 "본 것"에서 나온다는 걸 확인했으므로
+(v2 61.8% vs v1 87.7%) 렌더러 세대가 다른 두 run은 model·prompt·
+`grader_source_hash`가 같아도 비교 대상이 아니다.
+
+`#193`은 `scripts/preflight_grading_renderer.py`가 설치된 버전을 발행 corpus의
+값(`LibreOffice 24.2.7.2 420(Build:2)`)과 대조하게 했다. shard마다,
+`azure/login` **앞에서** 돈다 — drift는 무료 스텝에서 실패한다.
+
+여기에 더 날카로운 구멍 하나가 같이 막혔다. `step9_merge_shards.py:124`는
+`renderer_fingerprint`를 contract identity 필드로 요구한다. 즉 shard 9개가 같은
+버전을 기록해야 병합된다. 며칠에 걸쳐 resume하는 9-shard run이 중간에 미러 bump를
+맞으면 **돈을 다 쓴 뒤에** 병합이 거부된다.
+
+남은 일(무료, P2): `FROM ubuntu:24.04` 기반 전용 grading 이미지. 버전이 구조적으로
+일치하고, 미러 의존과 shard당 중복 설치가 사라지고, Ubuntu가 패키지를 올릴 때
+사람이 pin을 고칠 필요가 없어진다. board 카드 참조.
 
 ### R1 — 220 task 전체 재채점 (유료, owner gate) ⭐
 
@@ -111,8 +126,15 @@ run 안에 서로 다른 두 채점 파이프라인이 섞인다. "새로운 기
 `.py`를 해싱하므로 `#189`·`#190` 둘 다 포함된다). 새 run은 새 파일로 떨어지고
 **아무것도 덮어쓰지 않는다. 따라서 `force`는 반드시 `false`.**
 
-**선행 조건: C1.** 이 run의 formatting 판정은 LibreOffice 렌더에서 나오는데 지금
-설치는 버전을 고정하지 않는다.
+**선행 조건: 해소됨.** 이 run의 formatting 판정은 LibreOffice 렌더에서 나오는데,
+`#193`이 그 버전을 발행 corpus와 동일하게 고정하고 shard 9개가 같은 버전을
+기록하도록 보장한다.
+
+**한 가지 운영 리스크가 남아 있다.** 직전 시도 3건은 apt도 렌더러도 아닌 이유로
+죽었다: `union has 214 task(s) but expected_task_count is 220 (6 missing).
+Refusing to promote an incomplete merge to run_status='final'.` 완결성 가드가
+제대로 작동한 것이지만, R1도 같은 자리에서 멈출 수 있다는 뜻이다. dispatch 전에
+shard 0 canary로 확인한다.
 
 **푸는 것:** `< 2%` 게이트를 처음으로 정당하게 통과 · 303의 3회 중 1회를 겸함
 (303의 추가 비용이 2회로 감소) · 300에 corpus 전체 비교 대상 제공.

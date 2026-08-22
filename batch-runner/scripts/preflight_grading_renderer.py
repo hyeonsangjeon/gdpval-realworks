@@ -34,6 +34,40 @@ FONT_FAMILY = "Liberation Sans"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 SUBPROCESS_TIMEOUT_SEC = 10
 
+#: The LibreOffice build every published grade file was rendered by, verbatim
+#: as ``renderer_fingerprint.libreoffice_version`` records it.
+#:
+#: The renderer is not a detail of how a grade is produced -- on formatting
+#: criteria it *is* the evidence. ``PR3_EXP003_REVALIDATION.md`` measured the
+#: v2 judge awarding 61.8% of available formatting points against v1's 87.7%,
+#: and traced the whole gap to what each judge could see. A grader that reads
+#: a rendered page inherits that renderer's layout decisions, so two runs on
+#: two LibreOffice generations are not comparable no matter how identical the
+#: model, prompt, and ``grader_source_hash`` are.
+#:
+#: Nothing pinned it. The workflow asks apt for ``libreoffice-core`` and
+#: friends with no version, printed the result, and checked nothing; whatever
+#: the mirror served that day became the judge's eyes. This constant closes
+#: that: a mismatch fails here, before Azure login, so drift costs a free
+#: preflight instead of a paid corpus run that lands incomparable numbers in
+#: ``data/grades/``.
+#:
+#: Deliberately the full version line rather than the ``24.2.7.2`` prefix. The
+#: distribution build suffix moves only when the binary does, and the binary
+#: is the thing under test.
+EXPECTED_LIBREOFFICE_VERSION = "LibreOffice 24.2.7.2 420(Build:2)"
+
+#: Repoint the pin without editing this file -- for a deliberate, announced
+#: renderer upgrade, where the new value is chosen rather than discovered.
+EXPECTED_VERSION_ENV = "GDPVAL_EXPECTED_LIBREOFFICE_VERSION"
+
+#: Escape hatch for the case the pin exists to catch: the run must go out
+#: today and the operator accepts that its scores stand alone. Set to ``1``
+#: and the mismatch degrades to a warning. It cannot hide the drift -- the
+#: actual version still lands in ``renderer_fingerprint`` in every grade file
+#: and in ``renderer_version_drift_accepted`` in this preflight's own output.
+ALLOW_VERSION_DRIFT_ENV = "GDPVAL_ALLOW_RENDERER_VERSION_DRIFT"
+
 
 class RendererPreflightError(RuntimeError):
     """Raised when a renderer preflight invariant is not satisfied."""
@@ -176,6 +210,31 @@ def _validate_fingerprint(fingerprint: Any) -> dict[str, str]:
     return normalized
 
 
+def _expected_libreoffice_version() -> str:
+    override = os.environ.get(EXPECTED_VERSION_ENV, "").strip()
+    return override or EXPECTED_LIBREOFFICE_VERSION
+
+
+def _validate_pinned_version(fingerprint: Mapping[str, str]) -> bool:
+    """Return whether an accepted drift occurred; raise on an unaccepted one."""
+    expected = _expected_libreoffice_version()
+    actual = fingerprint["libreoffice_version"]
+    if actual == expected:
+        return False
+    detail = (
+        f"grading renderer is {actual!r} but this repository is pinned to "
+        f"{expected!r}. Formatting verdicts are read off LibreOffice renders, "
+        "so grades produced here would not be comparable with the published "
+        "corpus. Upgrade deliberately by setting "
+        f"{EXPECTED_VERSION_ENV} to the new version, or accept a one-off "
+        f"incomparable run with {ALLOW_VERSION_DRIFT_ENV}=1."
+    )
+    if os.environ.get(ALLOW_VERSION_DRIFT_ENV, "").strip() != "1":
+        raise RendererPreflightError(detail)
+    print(f"::warning::{detail}", file=sys.stderr)
+    return True
+
+
 def _validate_render_result(
     result: Any,
     *,
@@ -256,6 +315,7 @@ def run_preflight() -> dict[str, Any]:
         work_dir = Path(temp)
         font_match = _validate_liberation_sans(work_dir)
         fingerprint = _validate_fingerprint(get_renderer_fingerprint())
+        version_drift_accepted = _validate_pinned_version(fingerprint)
 
         xlsx_path = work_dir / "renderer_preflight.xlsx"
         pptx_path = work_dir / "renderer_preflight.pptx"
@@ -297,6 +357,8 @@ def run_preflight() -> dict[str, Any]:
         "ok": True,
         "font_family": font_match,
         "renderer_fingerprint": fingerprint,
+        "expected_libreoffice_version": _expected_libreoffice_version(),
+        "renderer_version_drift_accepted": version_drift_accepted,
         "renders": renders,
     }
 
