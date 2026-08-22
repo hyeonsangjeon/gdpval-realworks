@@ -68,9 +68,12 @@ def _item(verdict="judge_error", decided_by="judge", **fields):
     return item
 
 
-def _payload(items, *, published_rate=None, task_count=1):
+def _payload(items, *, published_rate=None, task_count=1, task_prefix="t"):
     """One grade payload holding ``items``, spread over ``task_count`` tasks."""
-    tasks = [{"task_id": f"t-{index}", "items": []} for index in range(task_count)]
+    tasks = [
+        {"task_id": f"{task_prefix}-{index}", "items": []}
+        for index in range(task_count)
+    ]
     for offset, item in enumerate(items):
         tasks[offset % task_count]["items"].append(item)
     payload = {"tasks": tasks}
@@ -443,10 +446,12 @@ def test_a_paired_comparison_keeps_the_two_causes_apart(tmp_path, capsys):
 
 
 def test_a_denominator_change_is_called_out_in_the_pairing(tmp_path, capsys):
-    """Different item counts mean it is not the same comparison.
+    """Same tasks, different item counts, means the rubric moved.
 
-    This is the mistake the tool exists to prevent: reading a 25-task canary
-    shard against a 220-task baseline and calling the difference a result.
+    Pairing on task id removes the "different tasks" explanation for a
+    denominator gap, so what is left is a real one: the rubric under which
+    those tasks were judged is not the same. A rate change then is not only
+    about judge errors, and the reader has to be told.
     """
     old = _write(tmp_path / "old", "grade.json", _payload(_hundred_items(3)))
     new = _write(
@@ -458,7 +463,102 @@ def test_a_denominator_change_is_called_out_in_the_pairing(tmp_path, capsys):
     jeb.main([str(new), "--baseline", str(old)])
     out = capsys.readouterr().out
     assert "NOTE: the denominators differ (100 vs 10)" in out
-    assert "same shard index of the same corpus" in out
+    assert "the rubric itself moved" in out
+
+
+def test_a_partial_run_is_paired_only_on_what_it_has_published(tmp_path, capsys):
+    """The case this exists for: reading a shard while the run is in flight.
+
+    The baseline holds every task; the new run has finished two of them.
+    Comparing the totals would measure how far along it is, not whether it is
+    better. Both sides are cut to the tasks they share before anything is
+    counted.
+    """
+    baseline = _write(
+        tmp_path / "old",
+        "grade.json",
+        _payload(
+            # 10 items per task; the two shared tasks carry one harness error
+            # each, the three the new run has not reached carry three more.
+            [_item(selection_status="selection_error")] * 5
+            + [_item(verdict="pass")] * 45,
+            task_count=5,
+        ),
+    )
+    # Same two tasks, now clean.
+    new = _write(
+        tmp_path / "new", "grade.json", _payload([_item(verdict="pass")] * 20, task_count=2)
+    )
+
+    assert jeb.main([str(new), "--baseline", str(baseline)]) == 0
+    out = capsys.readouterr().out
+    assert "paired on the 2 task(s) both runs have published" in out
+    assert "Set aside: 0 here, 3 in the baseline" in out
+    assert "will not match either run's own published totals" in out
+    # 2 of the 5 tasks, so 20 of the 50 items -- not the baseline's own 50.
+    assert "tasks in both           2" in out
+    assert "judged items           20 ->      20" in out
+    assert "judge errors            2 ->       0" in out
+
+
+def test_two_runs_with_no_shared_tasks_refuse_to_compare(tmp_path, capsys):
+    """An empty intersection is a mistake, not a 0.00% -> 0.00% result."""
+    old = _write(
+        tmp_path / "old", "grade.json", _payload(_hundred_items(3), task_prefix="old")
+    )
+    new = _write(
+        tmp_path / "new", "grade.json", _payload(_hundred_items(0), task_prefix="new")
+    )
+
+    assert jeb.main([str(new), "--baseline", str(old)]) == 2
+    err = capsys.readouterr().err
+    assert "share no task ids" in err
+    assert "same corpus" in err
+
+
+def test_restricting_drops_the_published_rate():
+    """A file's published rate belongs to all of its tasks, not to a subset."""
+    payload = _payload(
+        [_item(selection_status="selection_error")] + [_item(verdict="pass")] * 9,
+        published_rate=0.1,
+        task_count=2,
+    )
+    whole = jeb.breakdown_payload(payload, "L")
+    assert whole.published_rate == 0.1
+
+    part = whole.restrict({"t-0"})
+    assert part.published_rate is None
+    assert part.tasks == 1
+
+
+def test_a_task_counted_twice_is_refused_not_summed(tmp_path):
+    """Reading the shards and their merged final would double every number.
+
+    Shard slices are disjoint by construction, so an id appearing twice means
+    either the slicing broke or someone pointed this at a directory holding
+    both halves of the same data. Summing them silently would report every
+    figure at twice its true value, and the totals would still look plausible.
+    """
+    with pytest.raises(ValueError, match="more than once"):
+        jeb.breakdown_payload(
+            {"tasks": [{"task_id": "t-0", "items": []}] * 2}, "L"
+        )
+
+    stem = tmp_path / "stem"
+    _write(stem, "shard-000-of-001.json", _payload([_item(verdict="pass")]))
+    _write(stem, "final.json", _payload([_item(verdict="pass")]))
+    with pytest.raises(ValueError, match="repeats 1 task"):
+        jeb.total_of(jeb.read_breakdowns([stem]))
+
+
+def test_a_task_without_an_id_is_read_but_cannot_pair():
+    """Legacy files predate ``task_id``; refusing to read them helps nobody."""
+    payload = {"tasks": [{"items": [_item(selection_status="selection_error")]}] * 2}
+    result = jeb.breakdown_payload(payload, "legacy.json")
+
+    assert (result.tasks, result.errors) == (2, 2)
+    assert sorted(result.per_task) == ["legacy.json#0", "legacy.json#1"]
+    assert result.restrict({"t-0"}).tasks == 0
 
 
 # --------------------------------------------------------------------------
