@@ -3975,6 +3975,28 @@ def test_grade_workflow_wires_shards_end_to_end():
     # the loser rewrites an identical file and --force keeps it from erroring.
     assert "--force" in merge["run"]
     assert "git diff --staged --quiet" in merge["run"]
+    # Shard files exist from the first resume chunk onward, so "all N files
+    # present" does not mean "all N slices complete". Every shard that
+    # finishes a chunk reaches this step and all but the last find a short
+    # union -- a routine state that must not fail the job, or a healthy run
+    # goes red and a genuine stall becomes indistinguishable from the noise.
+    import step9_merge_shards
+
+    assert "--defer-if-incomplete" in merge["run"]
+    assert f'"$merge_rc" -eq {step9_merge_shards.DEFER_EXIT_CODE}' in (
+        merge["run"]
+    )
+    # ...and the deferring shard must stand down without claiming it merged,
+    # or the analysis step would run against a non-existent final grade.
+    defer_branch = merge["run"].index(
+        f'"$merge_rc" -eq {step9_merge_shards.DEFER_EXIT_CODE}'
+    )
+    assert merge["run"].index('echo "merged=false"', defer_branch) < merge[
+        "run"
+    ].index('echo "merged=true"')
+    # Any other non-zero exit is still a failure. Deferral is the exception,
+    # not a blanket softening of the merge guards.
+    assert '"$merge_rc" -ne 0' in merge["run"]
     assert order.index("Commit grade result") < order.index(
         "Merge shards into the final grade"
     )

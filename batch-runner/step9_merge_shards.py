@@ -108,6 +108,11 @@ MAX_CANDIDATE_LAYOUTS = 200_000
 #: Sentinel distinguishing "key absent" from "key present with value None".
 _MISSING = object()
 
+#: Exit code for "the union is short, so a sibling shard is still working and
+#: will merge later". Distinct from 1 so the caller can tell "stand down" from
+#: "this merge is broken". 75 is EX_TEMPFAIL: try again later, nothing wrong.
+DEFER_EXIT_CODE = 75
+
 #: Shard-merge spec section C invariants 1-10: the fields
 #: ``step8_grade._validate_grade_resume_identity`` requires to be identical
 #: when two grade payloads are accumulated. Order here is the order reported.
@@ -207,6 +212,35 @@ LATENCY_TOLERANCE_SEC_PER_SHARD = 0.01
 
 class ShardMergeError(ValueError):
     """A shard set cannot be merged into a single final grade payload."""
+
+
+class ShardMergeIncomplete(ShardMergeError):
+    """The shard union does not yet cover the corpus.
+
+    Split out from its parent because under ``resume`` this is the normal
+    intermediate state, not a defect. Shards publish their slice after every
+    chunk, so a file on disk means "this shard has graded *something*", not
+    "this shard is done". Every shard that finishes a chunk then pulls, sees
+    N files, and tries to merge -- and all but the last one legitimately find
+    a short union.
+
+    Treated as a hard error, that turns a healthy sharded run into a wall of
+    red: the sol-220 run merged correctly and published 220 tasks, yet three
+    of its shards reported failure for observing a state that was true and
+    temporary. Worse than the noise, it left a real stall indistinguishable
+    from a routine one.
+
+    ``--defer-if-incomplete`` lets the caller say it is one of several racing
+    mergers and should stand down rather than fail. Nothing else is relaxed:
+    a union that is complete but unmergeable still raises ShardMergeError.
+    """
+
+    def __init__(
+        self, message: str, *, union_size: int, expected_count: int
+    ) -> None:
+        super().__init__(message)
+        self.union_size = union_size
+        self.expected_count = expected_count
 
 
 # --------------------------------------------------------------------------
@@ -794,11 +828,13 @@ def merge_shard_payloads(
     union = set(owner)
     if len(union) != expected_count:
         missing = expected_count - len(union)
-        raise ShardMergeError(
+        raise ShardMergeIncomplete(
             "merged task set is incomplete: union has "
             f"{len(union)} task(s) but expected_task_count is "
             f"{expected_count} ({missing} missing). Refusing to promote an "
-            "incomplete merge to run_status='final'."
+            "incomplete merge to run_status='final'.",
+            union_size=len(union),
+            expected_count=expected_count,
         )
 
     canonical_order = _resolve_canonical_order(
@@ -1049,6 +1085,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Overwrite --output if it already exists",
     )
+    parser.add_argument(
+        "--defer-if-incomplete",
+        action="store_true",
+        help=(
+            "Exit "
+            f"{DEFER_EXIT_CODE} instead of 1 when the shard union does not "
+            "yet cover expected_task_count. For concurrent shard mergers: "
+            "all but the last legitimately observe a short union, and only "
+            "the last should merge. Every other failure still exits 1."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -1099,6 +1146,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_task_ids=explicit_ids,
             strict_routes=args.strict_routes,
         )
+    except ShardMergeIncomplete as exc:
+        if args.defer_if_incomplete:
+            print(
+                f"[merge] deferring: {exc.union_size} of "
+                f"{exc.expected_count} task(s) graded so far; a sibling shard "
+                "is still working and will merge once the corpus is complete.",
+                file=sys.stderr,
+            )
+            return DEFER_EXIT_CODE
+        print(f"ERROR: shard merge failed: {exc}", file=sys.stderr)
+        return 1
     except ShardMergeError as exc:
         print(f"ERROR: shard merge failed: {exc}", file=sys.stderr)
         return 1
