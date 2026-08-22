@@ -47,6 +47,12 @@ PUBLISHED_TOTALS = {
     "errors": 333,
     "selector_ambiguous": 243,
     "render_target_missing": 68,
+    # Zero, and that is the point: `render_target_partial` was added while
+    # reading the rerun, where it named 2 errors this classifier had been
+    # returning as `unclassified`. A new bucket that reached back and moved
+    # counts in the published run would silently restate a finished experiment,
+    # so this pins that it does not.
+    "render_target_partial": 0,
     "wrong_format": 12,
     "nothing_submitted": 6,
     "judge_no_verdict": 4,
@@ -459,6 +465,67 @@ def test_an_item_naming_no_target_at_all_is_not_a_blank_submission():
             "selected_paths": [],
         }
     ) == "render_target_missing"
+
+
+def _visual(selected, covered, modality="visual"):
+    return {
+        "selection_status": "ok",
+        "routing_modality": modality,
+        "selected_paths": list(selected),
+        "visual_provenance": [{"path": path} for path in covered],
+    }
+
+
+@pytest.mark.parametrize("modality", ["visual", "mixed"])
+def test_half_a_bundle_reaching_the_judge_is_a_harness_failure(modality):
+    """The shape that was coming back `unclassified` from the rerun.
+
+    Task a73fbc98 selected a PDF and an XLSX under `target_scope:
+    primary_bundle`. The PDF rendered; the XLSX did not, and the rubric line
+    asks about *both* ("in both the spreadsheet deliverable and the arena
+    layout deliverable"). Provenance is non-empty, so the existing
+    `render_target_missing` check -- which requires it to be empty -- did not
+    fire, and the item fell off the end of the classifier.
+    """
+    item = _visual(
+        ["Spring_Bazaar_2025_Table_Assignment_Summary.pdf", "Spring_Bazaar_2025_Vendor_Assignments.xlsx"],
+        ["Spring_Bazaar_2025_Table_Assignment_Summary.pdf"],
+        modality=modality,
+    )
+    assert jeb.classify_error(item) == "render_target_partial"
+    assert "render_target_partial" in jeb.HARNESS_BUCKETS
+
+
+def test_a_fully_rendered_bundle_is_not_a_partial_render():
+    """Everything selected reached the judge, so whatever failed is not this."""
+    item = _visual(["a.pdf", "b.xlsx"], ["a.pdf", "b.xlsx"])
+    assert jeb.classify_error(item) != "render_target_partial"
+
+
+def test_nothing_rendered_is_still_reported_as_missing_not_partial():
+    """Empty provenance keeps its own bucket. Folding "none" into "some" would
+    hide the difference between a renderer that produced nothing and one that
+    produced half, which are different bugs with different fixes."""
+    assert jeb.classify_error(_visual(["a.pdf", "b.xlsx"], [])) == "render_target_missing"
+
+
+def test_a_blank_submission_still_outranks_a_partial_render():
+    """Ordering: nothing submitted is the deeper cause, so it wins. A
+    placeholder-only item can also look partially rendered, and reporting that
+    as a renderer defect is the exact mistake `nothing_submitted` exists to
+    prevent."""
+    item = _visual(["failed_to_generate.txt", "failed_to_generate.txt"], ["failed_to_generate.txt"])
+    assert jeb.classify_error(item) == "nothing_submitted"
+
+
+def test_every_bucket_has_a_column_heading_and_they_are_distinct():
+    """Two buckets abbreviated to the same five characters once
+    `render_target_partial` arrived, which put two columns headed `rende` in
+    the table."""
+    assert set(jeb.BUCKET_ABBREV) == set(jeb.BUCKETS)
+    assert set(jeb.BUCKET_HELP) == set(jeb.BUCKETS)
+    assert len(set(jeb.BUCKET_ABBREV.values())) == len(jeb.BUCKETS)
+    assert all(len(short) == 5 for short in jeb.BUCKET_ABBREV.values())
 
 
 @pytest.mark.parametrize(

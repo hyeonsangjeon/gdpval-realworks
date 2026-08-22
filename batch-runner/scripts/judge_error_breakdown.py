@@ -65,14 +65,32 @@ from typing import Iterable, Sequence
 # Ordered worst-first for display. The ``harness`` buckets are ours to fix; the
 # ``judge`` one is the grading LLM failing to answer; the ``model`` one is a
 # result, not a defect.
-HARNESS_BUCKETS = ("selector_ambiguous", "render_target_missing")
+HARNESS_BUCKETS = (
+    "selector_ambiguous",
+    "render_target_missing",
+    "render_target_partial",
+)
 JUDGE_BUCKETS = ("judge_no_verdict",)
 MODEL_BUCKETS = ("wrong_format", "nothing_submitted")
 BUCKETS = HARNESS_BUCKETS + JUDGE_BUCKETS + MODEL_BUCKETS + ("unclassified",)
 
+# Column headings for the table. Taking the first five characters collides
+# once ``render_target_missing`` and ``render_target_partial`` are both
+# present, and two columns headed ``rende`` are worse than no heading at all.
+BUCKET_ABBREV = {
+    "selector_ambiguous": "selec",
+    "render_target_missing": "rmiss",
+    "render_target_partial": "rpart",
+    "judge_no_verdict": "judge",
+    "wrong_format": "wrong",
+    "nothing_submitted": "nothi",
+    "unclassified": "uncla",
+}
+
 BUCKET_HELP = {
     "selector_ambiguous": "harness: selector could not choose between candidates",
     "render_target_missing": "harness: nothing could be rendered for the judge to see",
+    "render_target_partial": "harness: only some of the selected files reached the judge",
     "judge_no_verdict": "judge: the grading model returned no usable verdict",
     "wrong_format": "model: submitted files, none in a requested format",
     "nothing_submitted": "model: produced nothing; a placeholder stands in",
@@ -134,6 +152,36 @@ def _submitted_nothing(item: dict) -> bool:
     return bool(names) and all(_is_placeholder_name(name) for name in names)
 
 
+def _render_is_partial(item: dict) -> bool:
+    """True when some, but not all, of the selected files reached the judge.
+
+    Only meaningful for an item that already failed. Partial rendering on its
+    own is ordinary and harmless -- across the two runs, 42 items rendered a
+    subset of what they selected and the judge answered them all without
+    complaint, because the rubric line only needed the file it got. So this is
+    never a defect by itself; it is only the explanation for an item that has
+    already been recorded as a ``judge_error``.
+
+    Judged on path coverage rather than on the evidence prose, which for these
+    reads ``required_visual_perception_failed:<file>:invalid_vision_envelope``.
+    An item that selected two files and has provenance for one of them was
+    shown half of what the rubric asked about, and a rubric line phrased "in
+    both the spreadsheet and the layout" cannot be answered from half.
+    """
+    selected = item.get("selected_paths")
+    provenance = item.get("visual_provenance")
+    if not isinstance(selected, list) or not isinstance(provenance, list):
+        return False
+    covered = {
+        str(entry.get("path"))
+        for entry in provenance
+        if isinstance(entry, dict) and entry.get("path")
+    }
+    if not covered:
+        return False
+    return any(str(path) not in covered for path in selected)
+
+
 def classify_error(item: dict) -> str:
     """Return which bucket one ``judge_error`` item belongs to.
 
@@ -176,6 +224,8 @@ def classify_error(item: dict) -> str:
     rendered = bool(provenance) if isinstance(provenance, list) else provenance is not None
     if modality in ("visual", "mixed") and not rendered:
         return "render_target_missing"
+    if modality in ("visual", "mixed") and _render_is_partial(item):
+        return "render_target_partial"
     if modality == "text":
         # Selection succeeded and the text was put in front of the judge, so
         # what failed is the judge's own answer: it returned empty text, or
@@ -347,7 +397,7 @@ def _row(entry: Breakdown, width: int) -> str:
 def render(parts: list[Breakdown], total: Breakdown, width: int) -> list[str]:
     header = (
         f"{'file':<{width}} {'tasks':>5} {'judged':>7} {'errs':>5} {'rate':>7}"
-        + "".join(f" {name[:5]:>5}" for name in BUCKETS)
+        + "".join(f" {BUCKET_ABBREV[name]:>5}" for name in BUCKETS)
     )
     lines = [header, "-" * len(header)]
     lines += [_row(part, width) for part in parts]
@@ -356,7 +406,7 @@ def render(parts: list[Breakdown], total: Breakdown, width: int) -> list[str]:
     lines.append("")
     lines.append("buckets:")
     for name in BUCKETS:
-        lines.append(f"  {name[:5]:<5}  {name:<22}  {BUCKET_HELP[name]}")
+        lines.append(f"  {BUCKET_ABBREV[name]:<5}  {name:<22}  {BUCKET_HELP[name]}")
     return lines
 
 
