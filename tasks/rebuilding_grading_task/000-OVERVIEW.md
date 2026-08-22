@@ -47,7 +47,79 @@
 | 300 | [gold-ceiling test](./300-gold-ceiling.md) | ⚠️ PARTIAL — v2 path live-verified on 3-task smoke (run `26677864500`, judge_error 1.19%, evidence tool-grounded). Gold-subset run pending. See [PR3_SMOKE_FINDINGS.md](./PR3_SMOKE_FINDINGS.md). |
 | 301 | [exp003 재채점 + formatting 격차 붕괴 + bare-CSV evidence](./301-exp003-revalidation.md) | ✅ DONE — 220 재채점 완료 + 분석 완료. **formatting 격차는 붕괴하지 않고 -25.5pp → -46.0pp로 확대**; v1의 "hybrid over-rejects" 진단이 뒤집힘 (mini가 못 봐서 관대했던 것). bare-CSV 판별은 통과. 보고서는 `tasks/**` privacy 규칙(`5349cbf`) 때문에 [data/grades/_validation/PR3_EXP003_REVALIDATION.md](../../data/grades/_validation/PR3_EXP003_REVALIDATION.md)에 위치. |
 | 302 | [cost budget 재추정](./302-cost-budget-recheck.md) | ⚠️ 미해결이지만 **전제가 낡음** — 당시 projection은 N=3 smoke 기준이었고, 그 뒤 220-task 실주행이 이미 끝났다. PR3_SMOKE_FINDINGS.md의 A/B/C는 그 낡은 projection 위에 서 있으므로 그대로 답할 수 없음. 실측 기준으로 다시 세워야 함 (owner gate). |
-| 303 | [variance + bootstrap CI + judge_error rate](./303-variance-and-error.md) | ⏸ 301이 220-task baseline을 냈으므로 spec상 선행 조건은 해소. 유료 dispatch 3회 필요 → owner 승인 대기. |
+| 303 | [variance + bootstrap CI + judge_error rate](./303-variance-and-error.md) | ⏸ 301이 220-task baseline을 냈으므로 spec상 선행 조건은 해소. 아래 R1이 3회 중 1회를 겸하므로 실제 추가 dispatch는 2회 → owner 승인 대기. |
+
+## 다음 순서 (PR3 이후)
+
+PR3의 남은 항목(300 · 302 · 303)은 전부 유료 dispatch나 비용 결정에 걸려 있다.
+그래서 순서를 "무료로 먼저 확정할 수 있는 것 → 유료 중 가장 값어치 있는 것"으로
+잡는다. 아래 두 건이 그 순서다.
+
+### C1 — grade job을 prebuilt container로 이전 (무료, 선행)
+
+`ghcr.io/hyeonsangjeon/gdpval-sandbox`는 이미 `libreoffice` 메타패키지를 담고
+있다 (`batch-runner/sandbox/Dockerfile:39`). grade job은 아직 shard마다 apt로
+설치한다.
+
+**이건 더 이상 장애 수정이 아니다.** shard 5개를 죽였던 apt 정지는 `#26`에서
+retry·timeout·dpkg lock timeout으로 이미 처리됐다 (`grade-run.yml:637-668`).
+지금 남은 이유는 다르고, 중요한 순서대로:
+
+1. **렌더러가 버전 고정이 안 돼 있는데, 렌더러가 점수를 움직인다.** 설치는
+   `libreoffice-core` / `-calc` / `-impress` / `-writer`를 버전 없이 요청한다.
+   그날 미러가 주는 게 곧 judge가 보는 이미지를 만든다. 301은 v2의 formatting
+   판정이 "본 것"에서 나온다는 걸 확인했다 — 즉 렌더러가 고정 안 되면 점수도
+   고정이 안 된다. grader source hash가 같아도 한 달 차이 나는 두 run은 엄밀히
+   비교 대상이 아니다. **baseline으로 발행할 run을 만들기 *전에* 해야 하는
+   이유가 이것이다.**
+2. retry는 미러 장애를 복구 가능하게 만들 뿐 없애지 못한다. container는 미러가
+   필요 없다.
+3. 같은 패키지를 shard 수만큼 반복 설치한다.
+4. `#189`의 .docx 렌더링은 Writer 존재에 의존한다. container에서는 빌드 시점의
+   사실이고, apt에서는 런타임의 기대다.
+
+### R1 — 220 task 전체 재채점 (유료, owner gate) ⭐
+
+**유료 중 가장 먼저 할 값어치가 있는 한 건.**
+
+발행된 sol-220 run은 judge error **333 / 10,453 items = 3.19%** 로, 모든 후속
+카드가 달고 있는 `< 2%` 게이트를 넘겼다. 원인은 코드에서는 이미 고쳐졌고, 아직
+어떤 run에도 반영되지 않았다.
+
+| 원인 | items | 처리 |
+|---|---:|---|
+| 같은 형식 파일이 여러 개일 때 selector가 선택을 포기 | **243** | `#190` |
+| `required_visual_render_target_unavailable` 중 .docx | **65** | `#189` |
+| 요청 형식(.xlsx/.pdf/.mp4/.docx)을 모델이 하나도 못 냄 | 12 | harness 결함 아님 — 모델 미제출 |
+| `empty_final_text` | 4 | 위와 같음 |
+| .docx 아닌 render target 부재 | 8 | 미해결 |
+| visual file cap 초과 | 1 (+`#190` 이후 1) | 미해결, 소규모 |
+
+333 중 308이 이미 고쳐졌다. 재실행하면 **~26 / 10,453 = 0.25%** 로 떨어진다 —
+기준선을 내려서가 아니라 원인을 없애서 통과한다. 남는 26은 대부분 모델이 채점할
+것을 실제로 안 낸 경우다.
+
+게이트와 별개로, **모델이 실제로 제출한 결과물에 0점이 매겨진 rubric item 243개**
+(과제 5건)가 복구된다. 그 0점은 지금 발행된 숫자 안에 들어 있다.
+
+**왜 5과제 부분 재채점이 아니라 전체 재실행인가.** 5건만 기존 파일에 덧붙이면 한
+run 안에 서로 다른 두 채점 파이프라인이 섞인다. "새로운 기준이 기존 실험에 영향을
+주면 안 된다"는 규칙이 막으려는 게 정확히 이 경우다. 전체 재실행에는 그 문제가
+없다 — 출력 파일명이 grader source hash를 달고 있고 **그 해시는 이미 바뀌었다**:
+발행본 `src_1c967673eb8081a6`, 현재 `src_c8144d680d028d88`
+(`compute_grader_source_hash`, `step8_grade.py:136` 이 `batch-runner/core/` 의 모든
+`.py`를 해싱하므로 `#189`·`#190` 둘 다 포함된다). 새 run은 새 파일로 떨어지고
+**아무것도 덮어쓰지 않는다. 따라서 `force`는 반드시 `false`.**
+
+**선행 조건: C1.** 이 run의 formatting 판정은 LibreOffice 렌더에서 나오는데 지금
+설치는 버전을 고정하지 않는다.
+
+**푸는 것:** `< 2%` 게이트를 처음으로 정당하게 통과 · 303의 3회 중 1회를 겸함
+(303의 추가 비용이 2회로 감소) · 300에 corpus 전체 비교 대상 제공.
+
+dispatch 명령·canary 절차·acceptance는 board 카드
+*"Re-grade all 220 tasks on the fixed pipeline (paid — owner gate)"* 에 있다.
+**owner 승인 없이는 dispatch하지 않는다.**
 
 ## 자율 판단 결정 기록 (working memo)
 
