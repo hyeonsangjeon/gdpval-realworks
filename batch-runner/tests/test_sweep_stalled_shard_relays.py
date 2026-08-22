@@ -343,6 +343,35 @@ def test_the_shipped_config_pins_a_corpus_the_sweep_can_recover():
     assert len(found) == 220
 
 
+def _explain_liveness(repo_root: Path, path: Path) -> str:
+    """Re-run what ``last_commit_at`` runs and report all of it.
+
+    This function depends on the behaviour of an external tool, so when it
+    disagrees with the host the bare `assert None == datetime(...)` says
+    nothing about which step went wrong. Evaluated only on failure.
+    """
+    root = repo_root.resolve()
+    relative = os.path.relpath(path.resolve(), root)
+    argv = [
+        "git", "-c", "log.showSignature=false",
+        "log", "-1", "--format=%cI", "--", relative,
+    ]
+
+    def run(*args):
+        return subprocess.run(
+            list(args), cwd=root, capture_output=True, text=True, check=False
+        )
+
+    got = subprocess.run(argv, cwd=root, capture_output=True, text=True, check=False)
+    return (
+        f"argv={argv!r} cwd={str(root)!r} "
+        f"raw_root={str(repo_root)!r} raw_path={str(path)!r} relative={relative!r} "
+        f"rc={got.returncode} out={got.stdout!r} err={got.stderr!r} "
+        f"tracked={run('git', 'ls-files').stdout.split()!r} "
+        f"version={run('git', '--version').stdout.strip()!r}"
+    )
+
+
 def test_git_liveness_reads_the_newest_commit_touching_the_stem(tmp_path):
     stem_dir = tmp_path / "grades" / "_shards" / "run-stem"
     stem_dir.mkdir(parents=True)
@@ -350,7 +379,9 @@ def test_git_liveness_reads_the_newest_commit_touching_the_stem(tmp_path):
     _git_init_with_old_commit(tmp_path, when="2026-08-20T09:00:00+00:00")
 
     seen = sweep.last_commit_at(tmp_path, stem_dir)
-    assert seen == datetime(2026, 8, 20, 9, 0, tzinfo=timezone.utc)
+    assert seen == datetime(2026, 8, 20, 9, 0, tzinfo=timezone.utc), (
+        _explain_liveness(tmp_path, stem_dir)
+    )
     assert sweep.last_commit_at(tmp_path, tmp_path / "nope") is None
 
 
