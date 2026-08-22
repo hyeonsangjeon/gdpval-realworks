@@ -46,8 +46,9 @@ PUBLISHED_TOTALS = {
     "judge_items": 10453,
     "errors": 333,
     "selector_ambiguous": 243,
-    "render_target_missing": 74,
+    "render_target_missing": 68,
     "wrong_format": 12,
+    "nothing_submitted": 6,
     "judge_no_verdict": 4,
     "unclassified": 0,
 }
@@ -171,10 +172,10 @@ def test_the_tool_reproduces_the_published_run_exactly():
     assert got == PUBLISHED_TOTALS
     assert total.rate == 0.0319
     assert sum(total.buckets.values()) == total.errors
-    assert total.harness_errors == 243 + 74
+    assert total.harness_errors == 243 + 68
     assert total.judge_side_errors == 4
-    assert total.model_errors == 12
-    # 317 of the 333 are ours. The published run's headline 3.19% is very
+    assert total.model_errors == 12 + 6
+    # 311 of the 333 are ours. The published run's headline 3.19% is very
     # nearly a measure of this harness, not of the model under test.
     assert total.harness_errors + total.judge_side_errors + total.model_errors == 333
 
@@ -261,6 +262,59 @@ def test_the_judge_bucket_holds_only_judge_side_failures():
     assert found == {"empty_final_text"}
 
 
+@pytest.mark.skipif(
+    _published_corpus() is None,
+    reason=(
+        f"the published sol-220 shards (data/grades/_shards/*{PUBLISHED_SRC}*) "
+        "are not in this checkout"
+    ),
+)
+def test_the_placeholder_bucket_is_drawn_from_the_render_failures():
+    """Show that this bucket took its members from the harness, not the judge.
+
+    Asserting that these items carry the placeholder would be circular -- that
+    is the rule. What is worth asserting is where they came from, so read the
+    evidence prose here, as an assertion and not as a classifier: every one of
+    them reports a missing render target. That is what makes the split a
+    correction rather than a new category. Before this, all six counted as
+    ``render_target_missing`` and were reported as our defect, which put the
+    remaining harness residue at seven when it is one.
+
+    The task-level check is the other half: a placeholder means inference
+    produced no file, so the task cannot have scored. If one of these ever sits
+    on a task that scored, the rule is catching something other than a blank.
+    """
+    tasks_seen = {}
+    evidence_shapes = set()
+    for part_path in sorted(_published_corpus().glob("shard-*.json")):
+        payload = json.loads(part_path.read_text(encoding="utf-8"))
+        for task in payload["tasks"]:
+            for item in task.get("items") or []:
+                if item.get("decided_by") != "judge":
+                    continue
+                if item.get("verdict") != "judge_error":
+                    continue
+                if jeb.classify_error(item) != "nothing_submitted":
+                    continue
+                evidence = str(item.get("evidence") or "")
+                assert "render_target_unavailable" in evidence, evidence
+                evidence_shapes.add(evidence)
+                tasks_seen[task["task_id"]] = task
+
+    # Non-vacuous, and the whole bucket is one blank submission.
+    assert len(tasks_seen) == 1
+    assert evidence_shapes == {"required_visual_render_target_unavailable"}
+    task = next(iter(tasks_seen.values()))
+    assert task["total_awarded"] == 0.0
+    assert task["total_max"] > 0
+
+    # And the counts move as a correction: what left the harness is exactly
+    # what arrived at the model.
+    total = jeb.total_of(jeb.read_breakdowns([_published_corpus()]))
+    assert total.buckets["nothing_submitted"] == 6
+    assert total.buckets["render_target_missing"] == 74 - 6
+
+
 # --------------------------------------------------------------------------
 # classification
 # --------------------------------------------------------------------------
@@ -299,9 +353,86 @@ def test_the_judge_bucket_holds_only_judge_side_failures():
         # judge and the judge is what failed -- empty final text, unparseable
         # output, or an envelope that would not validate.
         ({"selection_status": "ok", "routing_modality": "text"}, "judge_no_verdict"),
+        # Nothing was submitted. Named by target, by path, and by both --
+        # whichever the grader wrote, the answer is the same. Each of these
+        # would otherwise have been read as a render-target miss, blaming the
+        # renderer for a file that was never produced.
+        (
+            {
+                "selection_status": "ok",
+                "routing_modality": "visual",
+                "visual_provenance": [],
+                "target_ids": ["failed_to_generate"],
+            },
+            "nothing_submitted",
+        ),
+        (
+            {
+                "selection_status": "ok",
+                "routing_modality": "visual",
+                "visual_provenance": [],
+                "selected_paths": ["failed_to_generate.txt"],
+            },
+            "nothing_submitted",
+        ),
+        (
+            {
+                "selection_status": "ok",
+                "routing_modality": "visual",
+                "visual_provenance": [],
+                "target_ids": ["failed_to_generate"],
+                "selected_paths": ["failed_to_generate.txt"],
+            },
+            "nothing_submitted",
+        ),
+        # And it outranks the text route too: a placeholder graded as text is
+        # still nothing submitted, not the judge declining to answer.
+        (
+            {
+                "selection_status": "ok",
+                "routing_modality": "text",
+                "target_ids": ["failed_to_generate"],
+            },
+            "nothing_submitted",
+        ),
     ],
 )
 def test_each_failure_shape_lands_in_its_own_bucket(item, expected):
+    assert jeb.classify_error(item) == expected
+
+
+@pytest.mark.parametrize(
+    "item, expected",
+    [
+        # The selector's own failures are decided before anything is looked at,
+        # so they keep their bucket even when a placeholder is what it landed
+        # on. Which of the two is reported matters: `#190` is measured by the
+        # selector count, and letting a placeholder silently drain it would
+        # make an unfixed selector look fixed.
+        (
+            {
+                "selection_status": "selection_error",
+                "target_ids": ["failed_to_generate"],
+            },
+            "selector_ambiguous",
+        ),
+        (
+            {
+                "selection_status": "wrong_format_primary",
+                "selected_paths": ["failed_to_generate.txt"],
+            },
+            "wrong_format",
+        ),
+    ],
+)
+def test_a_placeholder_does_not_override_a_selection_failure(item, expected):
+    """Ordering is a decision, not an accident, so pin it.
+
+    Neither combination occurs in either run -- every placeholder-carrying
+    error in both the published corpus and the rerun is ``(ok, visual)``. That
+    is exactly why it is worth a test: nothing in the data would catch it if
+    the check moved above the status guards.
+    """
     assert jeb.classify_error(item) == expected
 
 

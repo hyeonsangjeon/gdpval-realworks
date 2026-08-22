@@ -14,9 +14,12 @@ from three unlike places:
   that would not parse, an envelope that would not validate. That is the
   grading model misbehaving, usually against a token cap. It is noise: it
   varies run to run over identical input, so a change in it is not a result.
-* the model under test did not submit gradeable work -- wrong format. This is
-  a finding about the model. It is supposed to be there, and driving it to
-  zero would mean grading something the model never produced.
+* the model under test did not submit gradeable work -- it wrote files but
+  none in a requested format, or it produced nothing at all and the pipeline
+  left a ``failed_to_generate.txt`` placeholder where the deliverable should
+  have been. This is a finding about the model. It is supposed to be there,
+  and driving it to zero would mean grading something the model never
+  produced.
 
 A run whose rate falls because we fixed the first kind has genuinely improved.
 A run whose rate moves because the judge flaked a different number of times,
@@ -64,7 +67,7 @@ from typing import Iterable, Sequence
 # result, not a defect.
 HARNESS_BUCKETS = ("selector_ambiguous", "render_target_missing")
 JUDGE_BUCKETS = ("judge_no_verdict",)
-MODEL_BUCKETS = ("wrong_format",)
+MODEL_BUCKETS = ("wrong_format", "nothing_submitted")
 BUCKETS = HARNESS_BUCKETS + JUDGE_BUCKETS + MODEL_BUCKETS + ("unclassified",)
 
 BUCKET_HELP = {
@@ -72,8 +75,14 @@ BUCKET_HELP = {
     "render_target_missing": "harness: nothing could be rendered for the judge to see",
     "judge_no_verdict": "judge: the grading model returned no usable verdict",
     "wrong_format": "model: submitted files, none in a requested format",
+    "nothing_submitted": "model: produced nothing; a placeholder stands in",
     "unclassified": "UNKNOWN -- a failure shape this tool does not recognise",
 }
+
+# What the pipeline writes in place of a deliverable when inference produced no
+# file at all. Named here rather than matched loosely, because the string also
+# appears as a ``target_id`` and both spellings have to mean the same thing.
+PLACEHOLDER_TARGET = "failed_to_generate"
 
 
 def canonical_rate(numerator: int, denominator: int) -> float:
@@ -90,6 +99,23 @@ def canonical_rate(numerator: int, denominator: int) -> float:
         return 0.0
     scaled = (2 * numerator * 10_000 + denominator) // (2 * denominator)
     return scaled / 10_000
+
+
+def _submitted_nothing(item: dict) -> bool:
+    """True when what was selected for grading is the no-output placeholder.
+
+    Checked on both ``target_ids`` and ``selected_paths``: the selector names
+    the target ``failed_to_generate`` and the path ``failed_to_generate.txt``,
+    and a file list without a target list (or the reverse) still has to be
+    recognised.
+    """
+    targets = item.get("target_ids")
+    if isinstance(targets, list) and PLACEHOLDER_TARGET in targets:
+        return True
+    paths = item.get("selected_paths")
+    if isinstance(paths, list):
+        return any(PLACEHOLDER_TARGET in str(path) for path in paths)
+    return False
 
 
 def classify_error(item: dict) -> str:
@@ -114,6 +140,18 @@ def classify_error(item: dict) -> str:
         return "wrong_format"
     if status != "ok":
         return "unclassified"
+
+    # Before asking what the judge was shown, ask whether there was anything to
+    # show. When inference produces no file, the pipeline leaves a
+    # ``failed_to_generate.txt`` placeholder, and the selector passes some of
+    # those through as ``ok`` -- 8 of the published 220 tasks are placeholders,
+    # 2 of them selected cleanly. A visual rubric item then finds a text stub
+    # where a document should be and reports no render target, which reads as a
+    # renderer defect. It is not: nothing was submitted. Blaming the harness for
+    # a file the model never wrote is the same mistake as the old
+    # ``empty_output`` bucket, one step earlier in the pipeline.
+    if _submitted_nothing(item):
+        return "nothing_submitted"
 
     # Selection succeeded, so the failure is downstream of it. What separates
     # the two remaining causes is what the judge was routed to look at.
