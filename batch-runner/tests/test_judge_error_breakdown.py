@@ -1,0 +1,497 @@
+"""Tests for the judge-error breakdown tool.
+
+Two things here are worth more than the rest.
+
+The first is ``test_the_tool_reproduces_the_published_run_exactly``. The whole
+value of the tool is that its split adds up: 243 + 74 + 12 + 4 = 333, the
+number the sol-220 run already published, with nothing left over. A split that
+loses or invents an error is worse than no split, because it would be read as
+evidence about which fixes worked. The corpus is checked in, so this is a real
+regression test rather than a mock.
+
+The second is ``test_the_borrowed_rate_still_matches_grade_payload``. The
+script copies ``canonical_rate`` instead of importing it, to stay free of the
+grading stack, and a copy can drift. It is held to the original over a grid
+that includes exact ties -- and a companion test proves the grid actually has
+teeth by showing a ``round()``-based rate disagrees on some of them.
+
+The rest are constructed cases, one per branch of ``classify_error``, plus the
+properties that make the output trustworthy: an unrecognised failure shape is
+reported rather than absorbed, precheck items stay out of the denominator, and
+a paired comparison says so when the two sides are not the same items.
+"""
+
+import ast
+import json
+from pathlib import Path
+
+import pytest
+
+from scripts import judge_error_breakdown as jeb
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# The sol-220 run that is badged OFFICIAL on the dashboard. Matched by its
+# source-hash segment rather than the full stem, which also carries the config,
+# rubric and inference hashes and is 200 characters long.
+PUBLISHED_SRC = "src_1c967673eb8081a6"
+
+# What that run's 333 judge errors are, once split by cause. Transcribed on
+# purpose: unlike the rate, there is no published field to check the split
+# against, so these numbers are the record of what the corpus contained when
+# the classifier was written.
+PUBLISHED_TOTALS = {
+    "tasks": 220,
+    "judge_items": 10453,
+    "errors": 333,
+    "selector_ambiguous": 243,
+    "render_target_missing": 74,
+    "wrong_format": 12,
+    "empty_output": 4,
+    "unclassified": 0,
+}
+
+
+def _published_corpus():
+    """Return the published shard directory, or ``None`` if it is not here."""
+    root = REPO_ROOT / "data" / "grades" / "_shards"
+    if not root.is_dir():
+        return None
+    matches = [p for p in root.iterdir() if p.is_dir() and PUBLISHED_SRC in p.name]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _item(verdict="judge_error", decided_by="judge", **fields):
+    item = {"decided_by": decided_by, "verdict": verdict}
+    item.update(fields)
+    return item
+
+
+def _payload(items, *, published_rate=None, task_count=1):
+    """One grade payload holding ``items``, spread over ``task_count`` tasks."""
+    tasks = [{"task_id": f"t-{index}", "items": []} for index in range(task_count)]
+    for offset, item in enumerate(items):
+        tasks[offset % task_count]["items"].append(item)
+    payload = {"tasks": tasks}
+    if published_rate is not None:
+        payload["summary"] = {"wow": {"judge_error_rate": published_rate}}
+    return payload
+
+
+def _write(directory: Path, name: str, payload) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / name
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+# --------------------------------------------------------------------------
+# the borrowed arithmetic
+# --------------------------------------------------------------------------
+
+
+RATE_GRID = [
+    (num, den)
+    for den in (1, 3, 6, 7, 16, 1081, 10453, 20000, 40000)
+    for num in range(0, min(den, 60) + 1)
+]
+
+
+def test_the_borrowed_rate_still_matches_grade_payload():
+    """The copy must agree with the function the grader publishes with.
+
+    Checked against the real implementation rather than a table of expected
+    values, so that a change to how the grader rounds fails here instead of
+    letting this tool quietly report a rate nobody else would get.
+    """
+    from core.grade_payload import canonical_rate as original
+
+    mismatches = [
+        (num, den, jeb.canonical_rate(num, den), original(num, den))
+        for num, den in RATE_GRID
+        if jeb.canonical_rate(num, den) != original(num, den)
+    ]
+    assert mismatches == []
+
+    # Degenerate denominators are defined, not crashes: a shard with no
+    # judge-decided items has a rate of zero, not a ZeroDivisionError.
+    for den in (0, -1):
+        assert jeb.canonical_rate(5, den) == original(5, den) == 0.0
+
+
+def test_a_round_based_rate_would_disagree_on_ties():
+    """Proof that the grid above is not vacuous.
+
+    ``canonical_rate`` rounds half-*up* with integer arithmetic. The obvious
+    reimplementation, ``round(num / den, 4)``, rounds half-to-even, and the
+    difference only shows on exact ties. If the grid contained no ties, the
+    equivalence test would pass for a wrong copy, so this pins down that it
+    does contain them.
+    """
+    disagreements = [
+        (num, den)
+        for num, den in RATE_GRID
+        if jeb.canonical_rate(num, den) != round(num / den, 4) if den > 0
+    ]
+    assert disagreements, "the rate grid no longer exercises half-up rounding"
+
+
+# --------------------------------------------------------------------------
+# the published corpus
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    _published_corpus() is None,
+    reason=(
+        f"the published sol-220 shards (data/grades/_shards/*{PUBLISHED_SRC}*) "
+        "are not in this checkout"
+    ),
+)
+def test_the_tool_reproduces_the_published_run_exactly():
+    """The split must account for all 333 errors and invent none.
+
+    ``unclassified == 0`` is the assertion that carries the weight. The
+    headline rate has been quoted in the roadmap and on the dashboard, and the
+    reason to split it was to say which part of it we caused. A split with
+    leftovers cannot answer that.
+    """
+    total = jeb.total_of(jeb.read_breakdowns([_published_corpus()]))
+
+    got = {
+        "tasks": total.tasks,
+        "judge_items": total.judge_items,
+        "errors": total.errors,
+        **{name: total.buckets[name] for name in jeb.BUCKETS},
+    }
+    assert got == PUBLISHED_TOTALS
+    assert total.rate == 0.0319
+    assert sum(total.buckets.values()) == total.errors
+    assert total.harness_errors == 243 + 74
+    assert total.model_errors == 12 + 4
+
+
+@pytest.mark.skipif(
+    _published_corpus() is None,
+    reason=(
+        f"the published sol-220 shards (data/grades/_shards/*{PUBLISHED_SRC}*) "
+        "are not in this checkout"
+    ),
+)
+def test_every_published_shard_rate_recomputes():
+    """Per shard, this tool's numerator must be the grader's numerator.
+
+    Recomputing each of the nine shards and getting the published number back
+    is stronger than checking the totals, which could match by two errors
+    cancelling.
+
+    It does *not* check the denominator filter. Every one of the 10453 items
+    in this corpus is ``decided_by == "judge"``, so dropping the filter
+    entirely would not move a single shard's rate. That branch is only
+    exercised by ``test_precheck_items_are_not_in_the_denominator``, and if
+    this corpus is ever replaced by one containing precheck decisions, this
+    test gets stronger rather than weaker.
+    """
+    parts = jeb.read_breakdowns([_published_corpus()])
+    assert len(parts) == 9
+
+    disagreements = [
+        (part.label, part.published_rate, part.rate)
+        for part in parts
+        if part.published_rate is None or part.published_rate != part.rate
+    ]
+    assert disagreements == []
+
+    # And the spread is the reason ``--baseline`` exists at all: judging a fix
+    # by comparing one shard against the whole-run rate would be meaningless.
+    rates = sorted(part.rate for part in parts)
+    assert rates[0] < 0.01 < 0.09 < rates[-1]
+
+
+# --------------------------------------------------------------------------
+# classification
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "item, expected",
+    [
+        # The selector declined to choose between same-format candidates.
+        ({"selection_status": "selection_error"}, "selector_ambiguous"),
+        # It chose, but nothing it could choose was in a requested format.
+        ({"selection_status": "wrong_format_primary"}, "wrong_format"),
+        # Selection was fine; the judge was routed to look at something and
+        # there was nothing rendered to look at.
+        (
+            {
+                "selection_status": "ok",
+                "routing_modality": "visual",
+                "visual_provenance": [],
+            },
+            "render_target_missing",
+        ),
+        (
+            {
+                "selection_status": "ok",
+                "routing_modality": "mixed",
+                "visual_provenance": None,
+            },
+            "render_target_missing",
+        ),
+        (
+            {"selection_status": "ok", "routing_modality": "mixed"},
+            "render_target_missing",
+        ),
+        # Selection was fine and the route was text, so the deliverable held
+        # no gradeable text.
+        ({"selection_status": "ok", "routing_modality": "text"}, "empty_output"),
+    ],
+)
+def test_each_failure_shape_lands_in_its_own_bucket(item, expected):
+    assert jeb.classify_error(item) == expected
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        # A status the grader does not currently emit.
+        {"selection_status": "quarantined"},
+        # No status at all.
+        {},
+        # Selection fine, but a routing modality nobody has seen.
+        {"selection_status": "ok", "routing_modality": "haptic"},
+        # The subtle one: routed to a visual judge, something *was* rendered,
+        # and it still failed. That is not a render-target miss, and calling
+        # it one would credit `#189` with a fix it did not make.
+        {
+            "selection_status": "ok",
+            "routing_modality": "visual",
+            "visual_provenance": [{"page": 1}],
+        },
+    ],
+)
+def test_an_unknown_shape_is_reported_not_absorbed(item):
+    """Unrecognised failures must surface, not join the nearest bucket.
+
+    Absorbing them is how a regression gets published as an improvement: a new
+    harness defect would land in ``model:`` and read as the model getting
+    worse while we got better.
+    """
+    assert jeb.classify_error(item) == "unclassified"
+
+
+def test_unclassified_items_fail_the_run_and_say_so(tmp_path, capsys):
+    payload = _payload([_item(selection_status="quarantined")] * 2)
+    path = _write(tmp_path, "grade.json", payload)
+
+    assert jeb.main([str(path)]) == 1
+    out = capsys.readouterr().out
+    assert "2 item(s) matched no known failure shape" in out
+    assert "Do not read the split as complete" in out
+
+
+# --------------------------------------------------------------------------
+# the denominator
+# --------------------------------------------------------------------------
+
+
+def test_precheck_items_are_not_in_the_denominator():
+    """Only judge-decided items count, on both sides of the fraction.
+
+    A deterministic precheck can fail an item without a judge ever seeing it.
+    Counting those would inflate the denominator and make every fix look
+    smaller than it was.
+    """
+    items = [
+        _item(selection_status="selection_error"),
+        _item(verdict="pass"),
+        _item(verdict="pass"),
+        # Precheck-decided, including one that carries the same verdict string.
+        _item(decided_by="precheck", selection_status="selection_error"),
+        _item(decided_by="precheck", verdict="fail"),
+    ]
+    result = jeb.breakdown_payload(_payload(items), "L")
+
+    assert (result.judge_items, result.errors) == (3, 1)
+    assert result.rate == jeb.canonical_rate(1, 3)
+    assert result.buckets["selector_ambiguous"] == 1
+
+
+def test_a_payload_without_a_tasks_array_is_rejected():
+    with pytest.raises(ValueError, match="no tasks array"):
+        jeb.breakdown_payload({"summary": {}}, "L")
+    with pytest.raises(ValueError, match="task that is not an object"):
+        jeb.breakdown_payload({"tasks": ["t-1"]}, "L")
+
+
+# --------------------------------------------------------------------------
+# reading input
+# --------------------------------------------------------------------------
+
+
+def test_a_directory_reads_shards_in_order_then_finals(tmp_path):
+    stem = tmp_path / "stem"
+    for name in ("shard-002-of-003.json", "shard-000-of-003.json"):
+        _write(stem, name, _payload([]))
+    _write(stem, "shard-001-of-003.json", _payload([]))
+    _write(stem, "final.json", _payload([]))
+
+    assert [p.name for p in jeb.grade_files(stem)] == [
+        "shard-000-of-003.json",
+        "shard-001-of-003.json",
+        "shard-002-of-003.json",
+        "final.json",
+    ]
+    assert jeb.grade_files(stem / "final.json") == [stem / "final.json"]
+
+
+def test_an_empty_or_missing_directory_is_an_error(tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(ValueError, match="no grade files"):
+        jeb.grade_files(empty)
+    with pytest.raises(ValueError, match="not a grade file or directory"):
+        jeb.grade_files(tmp_path / "nope")
+
+
+def test_unreadable_input_exits_two_not_one(tmp_path, capsys):
+    """A read failure and a gate failure must not share an exit code.
+
+    Anything wiring this into CI has to be able to tell "the rate is too high"
+    from "I could not read the run", because only one of those is a finding.
+    """
+    (tmp_path / "broken.json").write_text("{[", encoding="utf-8")
+    assert jeb.main([str(tmp_path / "broken.json")]) == 2
+    assert "error:" in capsys.readouterr().err
+
+    assert jeb.main([str(tmp_path / "absent.json")]) == 2
+
+    good = _write(tmp_path / "ok", "grade.json", _payload([]))
+    assert jeb.main([str(good), "--baseline", str(tmp_path / "absent")]) == 2
+    assert "error reading baseline:" in capsys.readouterr().err
+
+
+def test_a_published_rate_that_disagrees_is_flagged(tmp_path, capsys):
+    """If the file and the tool count differently, say so rather than pick one."""
+    payload = _payload(
+        [_item(selection_status="selection_error")] + [_item(verdict="pass")] * 9,
+        published_rate=0.5,
+    )
+    path = _write(tmp_path, "grade.json", payload)
+
+    jeb.main([str(path)])
+    out = capsys.readouterr().out
+    assert "WARNING" in out
+    assert "publishes judge_error_rate=0.5 but recomputes to 0.1" in out
+
+
+# --------------------------------------------------------------------------
+# the gate and the pairing
+# --------------------------------------------------------------------------
+
+
+def _hundred_items(errors: int):
+    return [_item(selection_status="selection_error")] * errors + [
+        _item(verdict="pass")
+    ] * (100 - errors)
+
+
+def test_the_gate_passes_and_fails_on_the_threshold(tmp_path, capsys):
+    path = _write(tmp_path, "grade.json", _payload(_hundred_items(3)))
+
+    assert jeb.main([str(path), "--max-rate", "0.02"]) == 1
+    assert "gate: 3.00% vs 2.00% -> OVER" in capsys.readouterr().out
+
+    assert jeb.main([str(path), "--max-rate", "0.05"]) == 0
+    assert "gate: 3.00% vs 5.00% -> OK" in capsys.readouterr().out
+
+    # Exactly on the threshold passes; the gate is documented as "above this".
+    assert jeb.main([str(path), "--max-rate", "0.03"]) == 0
+
+    # And with no gate asked for, a high rate is reported, not enforced.
+    assert jeb.main([str(path)]) == 0
+
+
+def test_a_paired_comparison_keeps_the_two_causes_apart(tmp_path, capsys):
+    """A fix should be read off the harness line, not the headline rate."""
+    old = _write(
+        tmp_path / "old",
+        "grade.json",
+        _payload(
+            [_item(selection_status="selection_error")] * 6
+            + [_item(selection_status="wrong_format_primary")] * 2
+            + [_item(verdict="pass")] * 92
+        ),
+    )
+    # Same denominator, harness errors fixed, model errors untouched.
+    new = _write(
+        tmp_path / "new",
+        "grade.json",
+        _payload(
+            [_item(selection_status="wrong_format_primary")] * 2
+            + [_item(verdict="pass")] * 98
+        ),
+    )
+
+    assert jeb.main([str(new), "--baseline", str(old)]) == 0
+    out = capsys.readouterr().out
+    assert "harness-caused          6 ->       0" in out
+    assert "model-caused            2 ->       2" in out
+    assert "rate                8.00% ->   2.00%" in out
+    assert "NOTE" not in out
+
+
+def test_a_denominator_change_is_called_out_in_the_pairing(tmp_path, capsys):
+    """Different item counts mean it is not the same comparison.
+
+    This is the mistake the tool exists to prevent: reading a 25-task canary
+    shard against a 220-task baseline and calling the difference a result.
+    """
+    old = _write(tmp_path / "old", "grade.json", _payload(_hundred_items(3)))
+    new = _write(
+        tmp_path / "new",
+        "grade.json",
+        _payload([_item(selection_status="selection_error")] + [_item(verdict="pass")] * 9),
+    )
+
+    jeb.main([str(new), "--baseline", str(old)])
+    out = capsys.readouterr().out
+    assert "NOTE: the denominators differ (100 vs 10)" in out
+    assert "same shard index of the same corpus" in out
+
+
+# --------------------------------------------------------------------------
+# independence from the grading stack
+# --------------------------------------------------------------------------
+
+
+def test_the_tool_imports_without_the_grading_stack():
+    """The breakdown must run wherever a grade file can be copied to.
+
+    Same guarantee the relay sweep has, for the same reason: reading how a
+    paid run went should not require the stack that ran it -- azure, openai
+    and jsonschema, none of which a laptop or a minimal runner will have.
+
+    Parsed rather than prefix-matched, because this module's own docstring
+    contains a line beginning "from two unlike places:" and a string check
+    would call that an import.
+    """
+    tree = ast.parse(Path(jeb.__file__).read_text(encoding="utf-8"))
+
+    imported = []
+    for node in tree.body:  # module scope only
+        if isinstance(node, ast.Import):
+            imported += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            imported.append(node.module or "")
+
+    forbidden = ("step8_grade", "step9_merge_shards", "core", "jsonschema")
+    offenders = [
+        name
+        for name in imported
+        if name.split(".")[0] in forbidden
+    ]
+    assert offenders == [], (
+        f"the breakdown must not import the grading stack: {offenders}"
+    )
