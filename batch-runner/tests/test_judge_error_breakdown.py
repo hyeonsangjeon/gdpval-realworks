@@ -402,6 +402,66 @@ def test_each_failure_shape_lands_in_its_own_bucket(item, expected):
 
 
 @pytest.mark.parametrize(
+    "item",
+    [
+        # A `split_children` task grades each child as its own target. One child
+        # produced a real workbook and the other did not: something was
+        # submitted, so "nothing submitted" is the wrong answer, and what is
+        # left -- a visual item with no render target -- is the honest one.
+        {
+            "selection_status": "ok",
+            "routing_modality": "visual",
+            "visual_provenance": [],
+            "target_ids": ["mig_welding_catch_up_plan", "failed_to_generate"],
+        },
+        {
+            "selection_status": "ok",
+            "routing_modality": "visual",
+            "visual_provenance": [],
+            "selected_paths": ["out/plan.xlsx", "out/failed_to_generate.txt"],
+        },
+        # Split across the two lists, which is how the grader writes an item
+        # that carries both a target list and the paths they resolved to.
+        {
+            "selection_status": "ok",
+            "routing_modality": "visual",
+            "visual_provenance": [],
+            "target_ids": ["mig_welding_catch_up_plan"],
+            "selected_paths": ["out/failed_to_generate.txt"],
+        },
+    ],
+)
+def test_one_real_file_among_placeholders_is_not_a_blank_submission(item):
+    """The rule is all-match, not any-match.
+
+    ``scripts/selection-outcome.mjs`` reached the same conclusion for the
+    dashboard's task-level split, where ``isInferencePlaceholder`` requires
+    every file to be a placeholder. Two modules answering "was anything
+    submitted?" differently would put two different numbers in front of a
+    reader, so the item-level rule here is held to the same standard.
+
+    No mixed item exists in either run today -- all 6 placeholder-carrying
+    errors in each are placeholder-only. This pins the behaviour before a run
+    produces one.
+    """
+    assert jeb.classify_error(item) == "render_target_missing"
+
+
+def test_an_item_naming_no_target_at_all_is_not_a_blank_submission():
+    """Absent lists mean we cannot speak for the item, which is not the same
+    as knowing it was blank. It falls through to the other rules."""
+    assert jeb.classify_error(
+        {
+            "selection_status": "ok",
+            "routing_modality": "visual",
+            "visual_provenance": [],
+            "target_ids": [],
+            "selected_paths": [],
+        }
+    ) == "render_target_missing"
+
+
+@pytest.mark.parametrize(
     "item, expected",
     [
         # The selector's own failures are decided before anything is looked at,
