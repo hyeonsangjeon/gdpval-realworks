@@ -140,11 +140,39 @@ def last_commit_at(repo_root: Path, path: Path) -> datetime | None:
     shallow-cloned directory. The caller treats that as "cannot tell" and
     stays quiet rather than guessing, because file mtimes after a CI checkout
     are checkout time and would make every stem look brand new.
+
+    The pathspec is made relative to the resolved work tree before it is handed
+    to git. That is not tidying: the shipped defaults are ``--repo-root ..`` and
+    ``--grades-root ../data/grades``, so passing the stem through unchanged
+    hands git a pathspec starting with ``..`` from a cwd inside the repository,
+    which it refuses as outside the work tree. Resolving both ends also makes
+    the answer independent of which side happens to carry a symlink.
     """
     try:
+        root = repo_root.resolve()
+        relative = os.path.relpath(path.resolve(), root)
+    except OSError:
+        return None
+    if relative == os.pardir or relative.startswith(os.pardir + os.sep):
+        # Genuinely outside the work tree. Nothing git can say about it.
+        return None
+
+    try:
         completed = subprocess.run(
-            ["git", "log", "-1", "--format=%cI", "--", str(path)],
-            cwd=repo_root,
+            # `log.showSignature` is a global-config footgun: with it on, every
+            # `git log` interleaves verification output, and a monitoring script
+            # that parsed the first line would read noise as "cannot tell".
+            [
+                "git",
+                "-c",
+                "log.showSignature=false",
+                "log",
+                "-1",
+                "--format=%cI",
+                "--",
+                Path(relative).as_posix(),
+            ],
+            cwd=root,
             capture_output=True,
             text=True,
             timeout=60,
@@ -154,16 +182,16 @@ def last_commit_at(repo_root: Path, path: Path) -> datetime | None:
         return None
     if completed.returncode != 0:
         return None
-    stamp = completed.stdout.strip()
-    if not stamp:
-        return None
-    try:
-        parsed = datetime.fromisoformat(stamp)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+
+    for line in completed.stdout.splitlines():
+        try:
+            parsed = datetime.fromisoformat(line.strip())
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    return None
 
 
 def canonical_ids_from_configs(

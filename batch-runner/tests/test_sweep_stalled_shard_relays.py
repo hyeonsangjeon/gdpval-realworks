@@ -105,6 +105,22 @@ def _git_init_with_old_commit(root: Path, *, when="2026-01-02T03:04:05+00:00"):
     git("config", "user.name", "sweep")
     git("add", "-A")
     git("commit", "-q", "-m", "shards")
+
+    # The fixture checks its own contract. Without this, a git that cannot make
+    # or read a commit here surfaces later as a bare `assert None == datetime`
+    # in whichever test happened to run, with nothing saying why.
+    proof = subprocess.run(
+        ["git", "log", "-1", "--format=%cI"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert proof.returncode == 0 and proof.stdout.strip(), (
+        "the fixture repo has no readable commit: "
+        f"rc={proof.returncode} out={proof.stdout!r} err={proof.stderr!r}"
+    )
     return root
 
 
@@ -323,6 +339,32 @@ def test_git_liveness_reads_the_newest_commit_touching_the_stem(tmp_path):
 
 def test_git_liveness_is_none_outside_a_repository(tmp_path):
     assert sweep.last_commit_at(tmp_path, tmp_path) is None
+
+
+def test_liveness_survives_the_relative_roots_the_workflow_passes(
+    tmp_path, monkeypatch
+):
+    """The shipped defaults are ``--repo-root ..`` and ``--grades-root
+    ../data/grades``, both relative to ``batch-runner/``.
+
+    Handed through unchanged, the stem pathspec begins with ``..`` and git
+    refuses it as outside the work tree: every stem reports ``unknown`` and the
+    sweep is silently useless in the one workflow it exists for. No other test
+    here would catch that, and neither does running it against the real
+    repository -- a published final short-circuits before liveness is ever
+    read.
+    """
+    repo = tmp_path / "repo"
+    (repo / "batch-runner").mkdir(parents=True)
+    _write_relay(repo / "data", shard_count=1, total=4, drop={"task-0002"})
+    _git_init_with_old_commit(repo)
+    monkeypatch.chdir(repo / "batch-runner")
+
+    rc = sweep.main(
+        ["--grades-root", "../data/grades", "--repo-root", "..",
+         "--config-dir", "grading_configs"]
+    )
+    assert rc == 1
 
 
 def test_the_report_names_the_shard_and_annotates_only_failures():
