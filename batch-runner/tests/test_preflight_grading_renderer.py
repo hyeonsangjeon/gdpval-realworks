@@ -13,7 +13,11 @@ from scripts import preflight_grading_renderer as preflight
 
 FINGERPRINT = {
     "libreoffice_binary": "soffice",
-    "libreoffice_version": "LibreOffice 24.2.7.2",
+    # The full line the probe actually returns, build suffix included, and the
+    # value every published grade file carries. A fixture trimmed to the bare
+    # version number would silently satisfy a prefix check and stop testing
+    # the pin the moment the pin got stricter.
+    "libreoffice_version": preflight.EXPECTED_LIBREOFFICE_VERSION,
     "pymupdf_version": "1.26.3",
 }
 PNG = preflight.PNG_SIGNATURE + b"mock-rendered-png"
@@ -165,6 +169,108 @@ def test_run_preflight_rejects_source_mutation(monkeypatch):
 
     with pytest.raises(preflight.RendererPreflightError, match="mutated"):
         preflight.run_preflight()
+
+
+def test_pin_matches_every_published_grade_file():
+    """The pin is only meaningful if it is the corpus's actual renderer.
+
+    Read from the published artifacts rather than restated, because a pin
+    typed by hand can drift from the thing it claims to pin and nothing
+    would say so.
+    """
+    grades_dir = Path(__file__).resolve().parents[2] / "data" / "grades"
+    observed = set()
+    for path in sorted(grades_dir.glob("*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        fingerprint = payload.get("renderer_fingerprint")
+        if isinstance(fingerprint, dict) and fingerprint.get(
+            "libreoffice_version"
+        ):
+            observed.add(fingerprint["libreoffice_version"])
+
+    assert observed, "no published grade file records a renderer fingerprint"
+    assert observed == {preflight.EXPECTED_LIBREOFFICE_VERSION}
+
+
+def test_version_drift_fails_closed_before_any_paid_work(monkeypatch):
+    monkeypatch.delenv(preflight.ALLOW_VERSION_DRIFT_ENV, raising=False)
+    monkeypatch.delenv(preflight.EXPECTED_VERSION_ENV, raising=False)
+
+    with pytest.raises(
+        preflight.RendererPreflightError, match="not be comparable"
+    ):
+        preflight._validate_pinned_version(
+            {**FINGERPRINT, "libreoffice_version": "LibreOffice 7.4.7.2 40"}
+        )
+
+
+def test_version_drift_is_not_satisfied_by_a_prefix(monkeypatch):
+    """``24.2.7.2`` alone is a different build, not a looser spelling."""
+    monkeypatch.delenv(preflight.ALLOW_VERSION_DRIFT_ENV, raising=False)
+    monkeypatch.delenv(preflight.EXPECTED_VERSION_ENV, raising=False)
+
+    with pytest.raises(preflight.RendererPreflightError):
+        preflight._validate_pinned_version(
+            {**FINGERPRINT, "libreoffice_version": "LibreOffice 24.2.7.2"}
+        )
+
+
+def test_expected_version_env_repoints_the_pin(monkeypatch):
+    monkeypatch.delenv(preflight.ALLOW_VERSION_DRIFT_ENV, raising=False)
+    monkeypatch.setenv(preflight.EXPECTED_VERSION_ENV, "LibreOffice 25.8.1.2")
+
+    assert (
+        preflight._validate_pinned_version(
+            {**FINGERPRINT, "libreoffice_version": "LibreOffice 25.8.1.2"}
+        )
+        is False
+    )
+
+
+def test_accepted_drift_warns_and_is_recorded_rather_than_hidden(
+    monkeypatch, capsys
+):
+    monkeypatch.delenv(preflight.EXPECTED_VERSION_ENV, raising=False)
+    monkeypatch.setenv(preflight.ALLOW_VERSION_DRIFT_ENV, "1")
+
+    accepted = preflight._validate_pinned_version(
+        {**FINGERPRINT, "libreoffice_version": "LibreOffice 7.4.7.2 40"}
+    )
+
+    assert accepted is True
+    assert "::warning::" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["", "0", "true", "yes", " 1 x"])
+def test_only_exactly_1_accepts_drift(monkeypatch, value):
+    monkeypatch.delenv(preflight.EXPECTED_VERSION_ENV, raising=False)
+    monkeypatch.setenv(preflight.ALLOW_VERSION_DRIFT_ENV, value)
+
+    with pytest.raises(preflight.RendererPreflightError):
+        preflight._validate_pinned_version(
+            {**FINGERPRINT, "libreoffice_version": "LibreOffice 7.4.7.2 40"}
+        )
+
+
+def test_matching_version_reports_no_drift(monkeypatch):
+    monkeypatch.delenv(preflight.ALLOW_VERSION_DRIFT_ENV, raising=False)
+    monkeypatch.delenv(preflight.EXPECTED_VERSION_ENV, raising=False)
+
+    assert preflight._validate_pinned_version(FINGERPRINT) is False
+
+
+def test_successful_preflight_publishes_the_pin_it_enforced(monkeypatch):
+    monkeypatch.delenv(preflight.ALLOW_VERSION_DRIFT_ENV, raising=False)
+    monkeypatch.delenv(preflight.EXPECTED_VERSION_ENV, raising=False)
+    _mock_boundaries(monkeypatch)
+
+    result = preflight.run_preflight()
+
+    assert (
+        result["expected_libreoffice_version"]
+        == preflight.EXPECTED_LIBREOFFICE_VERSION
+    )
+    assert result["renderer_version_drift_accepted"] is False
 
 
 @pytest.mark.parametrize("family", ["DejaVu Sans", "Liberation Sans Narrow"])

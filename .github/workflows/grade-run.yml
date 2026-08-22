@@ -630,10 +630,24 @@ jobs:
       #
       # This does not make apt succeed while a mirror is down; nothing here
       # can. It converts a silent five-hour hang into either a recovery or a
-      # fast, legible failure. Removing the apt dependency altogether means
-      # running this job in ghcr.io/hyeonsangjeon/gdpval-sandbox, which already
-      # ships LibreOffice -- tracked separately, deliberately not on the
-      # critical path for finishing the current run.
+      # fast, legible failure.
+      #
+      # What apt cannot give is a *fixed* renderer: these packages carry no
+      # version, so whichever LibreOffice the mirror serves that day becomes
+      # the judge's eyes, and on formatting criteria the renderer is the
+      # evidence. Two runs a generation apart are not comparable however
+      # identical their model, prompt, and grader_source_hash. The preflight
+      # below closes that by asserting the installed version against
+      # EXPECTED_LIBREOFFICE_VERSION before Azure login, so drift costs a free
+      # step rather than a paid corpus run.
+      #
+      # Pinning a version here instead was considered and rejected: Ubuntu
+      # drops superseded builds from the pocket, so the pin would fail as an
+      # opaque apt error some months from now rather than as a statement about
+      # comparability. A purpose-built image is the durable answer -- and it
+      # must be ubuntu:24.04-based, since ghcr.io/hyeonsangjeon/gdpval-sandbox
+      # ships LibreOffice 7.4.7.2 against this runner's 24.2.7.2 and would
+      # move the very scores it was meant to stabilise.
       - name: Install grading render dependencies
         if: steps.renderer.outputs.required == 'true'
         run: |
