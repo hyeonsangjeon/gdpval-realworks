@@ -957,15 +957,22 @@ jobs:
           SHARD_GRADE_FILE: ${{ steps.grade.outputs.grade_file }}
         run: |
           set -euo pipefail
-          # This shard has graded its whole slice. It is the LAST shard only if
-          # every sibling partial is already on main, so pull before looking.
+          # This shard has finished a chunk of its slice. Sibling partials
+          # only become visible after a pull, so pull before looking.
           #
-          # Whichever shard sees a complete set performs the merge. If two race,
-          # step9 is deterministic and order-independent, so both produce
+          # Whichever shard sees a complete corpus performs the merge. If two
+          # race, step9 is deterministic and order-independent, so both produce
           # byte-identical output and the loser's `git diff --staged --quiet`
-          # turns its commit into a no-op. That is why no lock is needed. And
-          # the last shard to push its own partial is guaranteed to see all N,
-          # so at least one merger always exists.
+          # turns its commit into a no-op. That is why no lock is needed.
+          #
+          # Who merges is decided by the union of graded tasks, not by file
+          # count. A shard holds a fraction of the corpus, so its file is
+          # always run_status=partial and republished after every resume
+          # chunk. On a multi-chunk run all N files therefore exist long
+          # before all N slices are complete, and each shard that arrives
+          # here early finds a short union. The shard that completes the
+          # corpus is the one that sees a full union, and it always exists
+          # because some shard grades the last task.
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase origin "${GITHUB_REF_NAME}"
@@ -1008,12 +1015,29 @@ jobs:
             SHARDS+=("$candidate")
           done
 
-          echo "[merge] all $COUNT shards present; merging into $FINAL_FILE"
+          echo "[merge] all $COUNT shard file(s) published; checking whether the corpus is complete"
+          # A shard file on disk means "this shard graded something", not
+          # "this shard is done": under resume, each chunk publishes its
+          # slice-so-far. So presence alone cannot identify the last shard,
+          # and every shard that finishes a chunk arrives here to find a union
+          # that may still be short. That is the normal state, not a fault --
+          # --defer-if-incomplete exits 75 so this shard stands down instead
+          # of painting a healthy run red. Only a union that is complete but
+          # unmergeable is still a failure.
+          #
           # --force: a shard that loses the race re-merges over a byte-identical
           # file. step9 refuses an existing output otherwise, which would fail
           # the loser for doing exactly the right thing.
+          merge_rc=0
           python batch-runner/step9_merge_shards.py "${SHARDS[@]}" \
-            --output "$FINAL_FILE" --force
+            --output "$FINAL_FILE" --force --defer-if-incomplete || merge_rc=$?
+          if [[ "$merge_rc" -eq 75 ]]; then
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$merge_rc" -ne 0 ]]; then
+            exit "$merge_rc"
+          fi
 
           python - "$FINAL_FILE" <<'PY'
           import json

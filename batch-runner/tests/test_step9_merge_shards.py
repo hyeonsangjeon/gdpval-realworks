@@ -1517,3 +1517,148 @@ def test_parse_args_accepts_the_documented_flags() -> None:
     assert args.output == "out.json"
     assert args.strict_routes is True
     assert args.force is True
+    assert args.defer_if_incomplete is False
+
+
+def test_parse_args_accepts_defer_if_incomplete() -> None:
+    args = s9.parse_args(
+        ["a.json", "--output", "out.json", "--defer-if-incomplete"]
+    )
+    assert args.defer_if_incomplete is True
+
+
+# ---------------------------------------------------------------------------
+# concurrent mergers: an incomplete union is routine, not a fault
+#
+# Under ``resume`` a shard republishes its slice after every chunk, so all N
+# shard files exist long before all N slices are complete. Every shard that
+# finishes a chunk then pulls, sees N files, and arrives at the merge. All but
+# the last legitimately observe a short union. Failing them turns a healthy
+# run red and hides a real stall among the noise.
+# ---------------------------------------------------------------------------
+
+
+def test_defer_exit_code_is_distinguishable_from_success_and_failure() -> None:
+    """The caller must be able to tell "stand down" from "this is broken"."""
+    assert s9.DEFER_EXIT_CODE not in {0, 1}
+
+
+def test_incomplete_is_a_shard_merge_error(small_reference_payload: dict) -> None:
+    """Callers catching the parent must keep catching the short union."""
+    assert issubclass(s9.ShardMergeIncomplete, s9.ShardMergeError)
+    with pytest.raises(s9.ShardMergeError):
+        merge(make_shards(small_reference_payload, 3)[:2])
+
+
+def test_incomplete_carries_the_counts_the_caller_reports(
+    small_reference_payload: dict,
+) -> None:
+    shards = make_shards(small_reference_payload, 3)
+    with pytest.raises(s9.ShardMergeIncomplete) as excinfo:
+        merge(shards[:2])
+    assert excinfo.value.expected_count == SMALL_TASK_COUNT
+    assert excinfo.value.union_size == sum(
+        len(shard["tasks"]) for shard in shards[:2]
+    )
+
+
+def test_cli_defers_on_an_incomplete_union(
+    small_reference_payload: dict, tmp_path: Path
+) -> None:
+    """The case that painted three healthy shards red on the sol-220 run."""
+    paths = _write_shards(tmp_path, make_shards(small_reference_payload, 3)[:2])
+    out = tmp_path / "merged.json"
+
+    code = s9.main(
+        [*[str(p) for p in paths], "--output", str(out), "--defer-if-incomplete"]
+    )
+
+    assert code == s9.DEFER_EXIT_CODE
+    assert not out.exists()
+
+
+def test_cli_still_fails_on_an_incomplete_union_by_default(
+    small_reference_payload: dict, tmp_path: Path
+) -> None:
+    """§E-6 stands: without an explicit opt-in a short union is an error."""
+    paths = _write_shards(tmp_path, make_shards(small_reference_payload, 3)[:2])
+    out = tmp_path / "merged.json"
+
+    assert s9.main([*[str(p) for p in paths], "--output", str(out)]) == 1
+    assert not out.exists()
+
+
+def test_deferral_does_not_soften_a_complete_but_unmergeable_union(
+    small_reference_payload: dict, tmp_path: Path
+) -> None:
+    """The corpus is all there, so nobody is coming to merge it later.
+
+    A contract-identity violation here means the shards disagree about what
+    run they belong to. Deferring would leave that unreported forever.
+    """
+    shards = make_shards(small_reference_payload, 3)
+    shards[1]["grader_source_hash"] = "src_0000000000000000"
+    paths = _write_shards(tmp_path, shards)
+    out = tmp_path / "merged.json"
+
+    code = s9.main(
+        [*[str(p) for p in paths], "--output", str(out), "--defer-if-incomplete"]
+    )
+
+    assert code == 1
+    assert not out.exists()
+
+
+def test_deferral_does_not_suppress_a_duplicated_task(
+    small_reference_payload: dict, tmp_path: Path
+) -> None:
+    """Overlapping slices are a slicing bug, and the union check runs after."""
+    shards = make_shards(small_reference_payload, 3)
+    shards[0]["tasks"].append(copy.deepcopy(shards[1]["tasks"][0]))
+    shards[0]["summary"] = _compute_summary(
+        shards[0]["tasks"], unpriced_models=UNPRICED_MODELS
+    )
+    paths = _write_shards(tmp_path, shards)
+    out = tmp_path / "merged.json"
+
+    code = s9.main(
+        [*[str(p) for p in paths], "--output", str(out), "--defer-if-incomplete"]
+    )
+
+    assert code == 1
+
+
+def test_the_last_merger_still_publishes_with_the_flag_set(
+    small_reference_payload: dict, grade_schema: dict, tmp_path: Path
+) -> None:
+    """Deferral must not become a way for a run to never publish at all."""
+    paths = _write_shards(tmp_path, make_shards(small_reference_payload, 3))
+    out = tmp_path / "merged.json"
+
+    code = s9.main(
+        [*[str(p) for p in paths], "--output", str(out), "--defer-if-incomplete"]
+    )
+
+    assert code == 0
+    written = json.loads(out.read_text(encoding="utf-8"))
+    validate_grade_payload(written, grade_schema)
+    assert written["run_status"] == "final"
+    assert len(written["tasks"]) == SMALL_TASK_COUNT
+
+
+def test_deferral_reports_progress_rather_than_an_error(
+    small_reference_payload: dict, tmp_path: Path, capsys
+) -> None:
+    """An operator reading the log should see how far along the run is."""
+    shards = make_shards(small_reference_payload, 3)
+    paths = _write_shards(tmp_path, shards[:2])
+    graded = sum(len(shard["tasks"]) for shard in shards[:2])
+
+    s9.main(
+        [*[str(p) for p in paths], "--output", str(tmp_path / "m.json"),
+         "--defer-if-incomplete"]
+    )
+
+    message = capsys.readouterr().err
+    assert "ERROR" not in message
+    assert f"{graded} of {SMALL_TASK_COUNT}" in message
