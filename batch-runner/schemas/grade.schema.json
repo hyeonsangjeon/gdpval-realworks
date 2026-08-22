@@ -30,7 +30,7 @@
       "required": ["kind", "source_kind", "renderer", "byte_size"],
       "properties": {
         "kind": {"const": "image_png_base64"},
-        "source_kind": {"type": "string", "enum": ["pdf", "xlsx", "pptx", "image"]},
+        "source_kind": {"type": "string", "enum": ["pdf", "xlsx", "pptx", "docx", "image"]},
         "source_page_count": {"type": "integer", "minimum": 1},
         "source_sheet_count": {"type": "integer", "minimum": 1},
         "source_slide_count": {"type": "integer", "minimum": 1},

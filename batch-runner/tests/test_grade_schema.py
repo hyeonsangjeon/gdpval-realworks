@@ -459,6 +459,103 @@ def test_track2_renderer_fingerprint_and_visual_provenance_pass_schema():
     validate(instance=payload, schema=_load_schema())
 
 
+def test_rendered_docx_provenance_passes_schema():
+    payload = _minimal_payload()
+    payload["tasks"][0]["items"][0]["visual_provenance"] = [{
+        "path": "report.docx",
+        "source_sha256": "b" * 64,
+        "scope": {"page": 1},
+        "renderer_metadata": {
+            "kind": "image_png_base64",
+            "source_kind": "docx",
+            "converted_page_count": 3,
+            "renderer": {
+                "converter": "libreoffice",
+                "rasterizer": "pymupdf",
+                "dpi": 150,
+                "libreoffice_binary": "soffice",
+                "libreoffice_version": "LibreOffice 24.2.7.2",
+                "pymupdf_version": "1.26.3",
+            },
+            "byte_size": 2048,
+        },
+        "coverage_metadata": {
+            "coverage_mode": "sampled_first_surface",
+            "criterion_scope": "overall_style",
+            "sampled_surface_count": 1,
+            "total_surface_count": 3,
+        },
+        "vision": {
+            "verdict": "pass",
+            "evidence": "headings are styled",
+            "confidence": 0.8,
+            "reasoning": "render inspected",
+            "judge_error": None,
+        },
+    }]
+
+    validate(instance=payload, schema=_load_schema())
+
+
+def test_schema_accepts_every_source_kind_the_renderer_can_emit():
+    """The enum is a hand-kept copy of a set the code owns.
+
+    `#189` gave `_op_render_to_image` a .docx branch and left this enum at
+    its four original values. Nothing failed until a paid re-grade reached
+    its first .docx three hours in, wrote ``source_kind: "docx"`` into a
+    partial save, and had the whole run rejected by its own schema. The
+    free rehearsal could not have caught it: a dry run calls no model, so
+    it renders nothing, so it writes no provenance.
+
+    Deriving the expectation from the code is what makes the next added
+    kind fail here, for nothing, instead of there.
+
+    The relation is containment rather than equality on purpose -- the
+    schema must keep reading grades that are already published, so
+    retiring a kind from the judge may not retire it from the enum.
+    """
+    from core.tool_calling_judge import _VISUAL_RENDER_SCOPES
+    from core.tools.read_deliverable import _EXT_KIND
+
+    unclassified = sorted(set(_VISUAL_RENDER_SCOPES) - set(_EXT_KIND))
+    assert not unclassified, (
+        f"the judge plans a visual render for {unclassified}, which "
+        "read_deliverable does not classify"
+    )
+    renderable = {_EXT_KIND[suffix] for suffix in _VISUAL_RENDER_SCOPES}
+    allowed = set(
+        _load_schema()["$defs"]["visualRendererMetadata"]
+        ["properties"]["source_kind"]["enum"]
+    )
+
+    assert renderable <= allowed, (
+        f"grade.schema.json rejects rendered {sorted(renderable - allowed)}"
+    )
+
+
+def test_schema_knows_every_renderer_metadata_key_the_judge_persists():
+    """``additionalProperties: false`` meets a fixed allowlist.
+
+    ``renderer_metadata`` is built by filtering the raw render payload
+    through ``_RENDERER_METADATA_KEYS``, so that tuple is the complete set
+    of keys that can ever reach this schema. Checking it against the
+    declared properties makes the unknown-key rejection unreachable in
+    production rather than merely unobserved -- which is the guarantee a
+    hand-written fixture cannot give, since a fixture only proves the
+    shape someone remembered to write down.
+    """
+    from core.tool_calling_judge import _RENDERER_METADATA_KEYS
+
+    declared = set(
+        _load_schema()["$defs"]["visualRendererMetadata"]["properties"]
+    )
+
+    assert set(_RENDERER_METADATA_KEYS) <= declared, (
+        "persisted renderer_metadata keys the schema does not declare: "
+        f"{sorted(set(_RENDERER_METADATA_KEYS) - declared)}"
+    )
+
+
 def test_visual_provenance_rejects_base64_field():
     payload = _minimal_payload()
     provenance = _valid_visual_provenance()
