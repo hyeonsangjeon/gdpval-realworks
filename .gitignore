@@ -42,6 +42,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/build_agentic_input_manifest.py
 !batch-runner/scripts/compare_agentic_conditions.py
 !batch-runner/scripts/select_agentic_tasks.py
+!batch-runner/scripts/sweep_stalled_shard_relays.py
 
 
 # Experiment report HTML (skews GitHub language stats)
