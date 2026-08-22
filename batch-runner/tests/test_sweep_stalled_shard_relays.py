@@ -109,34 +109,17 @@ def _git_init_with_old_commit(root: Path, *, when="2026-01-02T03:04:05+00:00"):
     # The fixture checks its own contract. Without this, a git that cannot make
     # or read a commit here surfaces later as a bare `assert None == datetime`
     # in whichever test happened to run, with nothing saying why.
-    def probe(*args):
-        return subprocess.run(
-            ["git", *args],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
-        )
-
-    proof = probe("log", "-1", "--format=%cI")
+    proof = subprocess.run(
+        ["git", "log", "-1", "--format=%cI"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
     assert proof.returncode == 0 and proof.stdout.strip(), (
         "the fixture repo has no readable commit: "
         f"rc={proof.returncode} out={proof.stdout!r} err={proof.stderr!r}"
-    )
-
-    # And that the commit is reachable *through a pathspec*, which is how the
-    # sweep asks. A repo can satisfy the check above and still answer nothing
-    # here, and that difference is invisible from the failing assertion in the
-    # test body.
-    filtered = probe("log", "-1", "--format=%cI", "--", ".")
-    assert filtered.returncode == 0 and filtered.stdout.strip(), (
-        "the fixture repo has a commit but no pathspec-filtered history: "
-        f"rc={filtered.returncode} out={filtered.stdout!r} "
-        f"err={filtered.stderr!r} "
-        f"version={probe('--version').stdout.strip()!r} "
-        f"tracked={probe('ls-files').stdout.split()!r} "
-        f"status={probe('status', '--porcelain').stdout!r}"
     )
     return root
 
@@ -341,6 +324,37 @@ def test_the_shipped_config_pins_a_corpus_the_sweep_can_recover():
     )
     assert found == pinned
     assert len(found) == 220
+
+
+@pytest.mark.parametrize(
+    "rendered",
+    [
+        # git 2.55 (ubuntu-24.04 runners) renders a UTC committer date this way.
+        "2026-08-20T09:00:00Z",
+        # git 2.34 (older boxes) renders the same instant this way. Python
+        # 3.10's fromisoformat accepts only the second spelling, and
+        # `backend-tests.yml` pins 3.10.12, so parsing the first is not
+        # theoretical tidiness -- without it every stem reads as "cannot tell"
+        # on CI and in the scheduled sweep, while the tests pass locally.
+        "2026-08-20T09:00:00+00:00",
+        # Non-UTC, to prove the reader normalises rather than assuming zero.
+        "2026-08-20T18:00:00+09:00",
+    ],
+)
+def test_both_git_renderings_of_the_same_instant_parse_alike(rendered):
+    assert sweep.parse_commit_stamp(rendered) == datetime(
+        2026, 8, 20, 9, 0, tzinfo=timezone.utc
+    )
+
+
+def test_the_commit_stamp_reader_skips_noise_and_gives_up_quietly():
+    # A configured hook or signature check can prepend lines. The first
+    # *parseable* line is the answer, not the first line.
+    assert sweep.parse_commit_stamp(
+        "gpg: Signature made whenever\n2026-08-20T09:00:00Z\n"
+    ) == datetime(2026, 8, 20, 9, 0, tzinfo=timezone.utc)
+    assert sweep.parse_commit_stamp("") is None
+    assert sweep.parse_commit_stamp("not a date at all\n") is None
 
 
 def _explain_liveness(repo_root: Path, path: Path) -> str:

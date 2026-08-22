@@ -133,6 +133,35 @@ def stride_size(shard_index: int, total: int, shard_count: int) -> int:
     return len(range(shard_index, total, shard_count))
 
 
+def parse_commit_stamp(text: str) -> datetime | None:
+    """Read the first parseable ``%cI`` timestamp out of ``git log`` output.
+
+    Two renderings have to be accepted. git through ~2.4x writes UTC as
+    ``2026-08-20T09:00:00+00:00``; git 2.55 writes the same instant as
+    ``2026-08-20T09:00:00Z``. Python 3.10's ``fromisoformat`` accepts only the
+    first, so a sweep that parsed naively would read every stem as "cannot
+    tell" on a current runner while passing on an older developer box -- silent
+    and total, since `unknown` is a quiet state by design.
+
+    Scanning lines rather than taking the whole stream keeps stray output from
+    a configured hook or signature check from masking a real answer.
+    """
+    for line in text.splitlines():
+        stamp = line.strip()
+        if not stamp:
+            continue
+        if stamp.endswith(("Z", "z")):
+            stamp = f"{stamp[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(stamp)
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    return None
+
+
 def last_commit_at(repo_root: Path, path: Path) -> datetime | None:
     """Return the commit time of the newest commit touching ``path``.
 
@@ -182,16 +211,7 @@ def last_commit_at(repo_root: Path, path: Path) -> datetime | None:
         return None
     if completed.returncode != 0:
         return None
-
-    for line in completed.stdout.splitlines():
-        try:
-            parsed = datetime.fromisoformat(line.strip())
-        except ValueError:
-            continue
-        if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
-    return None
+    return parse_commit_stamp(completed.stdout)
 
 
 def canonical_ids_from_configs(
