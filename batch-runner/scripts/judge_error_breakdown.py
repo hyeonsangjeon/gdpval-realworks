@@ -58,7 +58,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
 
 
@@ -101,21 +101,37 @@ def canonical_rate(numerator: int, denominator: int) -> float:
     return scaled / 10_000
 
 
-def _submitted_nothing(item: dict) -> bool:
-    """True when what was selected for grading is the no-output placeholder.
+def _is_placeholder_name(name: str) -> bool:
+    """True for a target or path that names the no-output placeholder.
 
-    Checked on both ``target_ids`` and ``selected_paths``: the selector names
-    the target ``failed_to_generate`` and the path ``failed_to_generate.txt``,
-    and a file list without a target list (or the reverse) still has to be
-    recognised.
+    One predicate covers both spellings: the selector names the target
+    ``failed_to_generate`` and the path ``.../failed_to_generate.txt``.
     """
-    targets = item.get("target_ids")
-    if isinstance(targets, list) and PLACEHOLDER_TARGET in targets:
-        return True
-    paths = item.get("selected_paths")
-    if isinstance(paths, list):
-        return any(PLACEHOLDER_TARGET in str(path) for path in paths)
-    return False
+    return PurePosixPath(str(name)).name.lower().startswith(PLACEHOLDER_TARGET)
+
+
+def _submitted_nothing(item: dict) -> bool:
+    """True when *everything* selected for grading is the no-output placeholder.
+
+    Every name has to be a placeholder, not merely one of them. A task graded
+    with ``target_scope: split_children`` puts each child in this list, so a
+    two-child task that produced one real file and one placeholder would, under
+    an any-match rule, be reported as having submitted nothing -- when in fact
+    half of it arrived and deserves to be judged. ``scripts/selection-outcome.mjs``
+    settled on the same all-match rule for the dashboard's task-level split; the
+    two answers to "was anything submitted?" should not be allowed to disagree.
+
+    Read across ``target_ids`` and ``selected_paths`` together, since an item
+    may carry either list alone. No names at all is not a blank submission --
+    it is an item we cannot speak for, and it falls through to the other rules.
+    """
+    names = [
+        name
+        for key in ("target_ids", "selected_paths")
+        if isinstance(item.get(key), list)
+        for name in item[key]
+    ]
+    return bool(names) and all(_is_placeholder_name(name) for name in names)
 
 
 def classify_error(item: dict) -> str:
