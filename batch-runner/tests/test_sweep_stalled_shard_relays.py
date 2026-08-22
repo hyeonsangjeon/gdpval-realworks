@@ -357,6 +357,107 @@ def test_the_commit_stamp_reader_skips_noise_and_gives_up_quietly():
     assert sweep.parse_commit_stamp("not a date at all\n") is None
 
 
+def test_the_borrowed_shard_reader_still_matches_step9(tmp_path):
+    """The sweep copies step9's shard reader; this holds the copy to it.
+
+    The copy exists so the watchdog does not import ``step9_merge_shards`` ->
+    ``step8_grade`` -> the azure/openai/jsonschema stack just to read JSON. It
+    shipped without this guard and the scheduled run died on
+    ``ModuleNotFoundError`` before printing a line.
+
+    Every case is compared against the real implementation rather than against
+    a transcribed expectation, so a change to how the merger reads a shard
+    fails here instead of quietly letting the sweep disagree with the thing it
+    is watching -- calling a stem ``malformed`` the merger accepts, or worse,
+    accepting one the merger will reject at the end of a paid run.
+    """
+    import step9_merge_shards
+
+    cases = {
+        "valid": {"tasks": [{"task_id": "task-0001"}, {"task_id": "task-0002"}]},
+        "no tasks array": {"tasks": "nope"},
+        "missing tasks key": {"expected_task_count": 4},
+        "empty tasks": {"tasks": []},
+        "row is not an object": {"tasks": ["task-0001"]},
+        "blank task_id": {"tasks": [{"task_id": "   "}]},
+        "non-string task_id": {"tasks": [{"task_id": 7}]},
+        "duplicates": {
+            "tasks": [{"task_id": "a"}, {"task_id": "b"}, {"task_id": "a"}]
+        },
+    }
+    for name, payload in cases.items():
+        def call(fn):
+            try:
+                return ("ok", fn(payload, "L"))
+            except ValueError as exc:  # both raise a ValueError subclass
+                return ("raised", str(exc))
+
+        assert call(sweep.shard_task_ids) == call(
+            step9_merge_shards._shard_task_ids
+        ), f"shard_task_ids disagrees with step9 on: {name}"
+
+    # ...and the file reader, over the same kinds of input.
+    good = tmp_path / "shard-000-of-001.json"
+    good.write_text(json.dumps({"tasks": [{"task_id": "a"}]}), encoding="utf-8")
+    assert sweep.load_shard_file(good) == step9_merge_shards.load_shard_file(good)
+
+    for name, raw in {
+        "not json": b"{[",
+        "json but not an object": b"[1, 2]",
+        "invalid utf-8": b"\xff\xfe\x00",
+    }.items():
+        bad = tmp_path / f"bad-{abs(hash(name))}.json"
+        bad.write_bytes(raw)
+
+        def read(fn):
+            try:
+                return ("ok", fn(bad))
+            except ValueError as exc:
+                return ("raised", str(exc))
+
+        assert read(sweep.load_shard_file) == read(
+            step9_merge_shards.load_shard_file
+        ), f"load_shard_file disagrees with step9 on: {name}"
+
+    missing = tmp_path / "does-not-exist.json"
+
+    def read_missing(fn):
+        try:
+            return ("ok", fn(missing))
+        except ValueError as exc:
+            return ("raised", str(exc))
+
+    assert read_missing(sweep.load_shard_file) == read_missing(
+        step9_merge_shards.load_shard_file
+    )
+
+
+def test_the_sweep_imports_without_the_grading_stack():
+    """The watchdog must start on a runner that installed only PyYAML.
+
+    Asserted against the module's own imports rather than by installing
+    nothing, because the test process necessarily has the full requirements.
+    `step8_grade`/`step9_merge_shards` reach azure, openai and jsonschema; the
+    scheduled workflow installs none of them.
+    """
+    source = (
+        Path(sweep.__file__).read_text(encoding="utf-8")
+    )
+    imported = {
+        line.strip()
+        for line in source.splitlines()
+        if line.startswith(("import ", "from "))
+    }
+    forbidden = ("step8_grade", "step9_merge_shards", "core.", "jsonschema")
+    offenders = [
+        line for line in imported if any(name in line for name in forbidden)
+    ]
+    assert offenders == [], (
+        "the sweep must not import the grading stack at module scope: "
+        f"{offenders}"
+    )
+
+
 def _explain_liveness(repo_root: Path, path: Path) -> str:
     """Re-run what ``last_commit_at`` runs and report all of it.
 

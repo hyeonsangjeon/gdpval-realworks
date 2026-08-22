@@ -50,15 +50,69 @@ from typing import Callable, Iterable, Sequence
 
 import yaml
 
-BATCH_RUNNER_ROOT = Path(__file__).resolve().parent.parent
-if str(BATCH_RUNNER_ROOT) not in sys.path:
-    sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
-from step9_merge_shards import (  # noqa: E402  (needs the path insert above)
-    ShardMergeError,
-    _shard_task_ids,
-    load_shard_file,
-)
+class ShardReadError(ValueError):
+    """A shard file cannot be read as a shard."""
+
+
+def load_shard_file(path: Path) -> tuple[dict, str]:
+    """Return ``(payload, sha256_of_file_bytes)`` for one shard file.
+
+    A deliberate copy of ``step9_merge_shards.load_shard_file`` rather than an
+    import of it. Importing reaches ``step9_merge_shards`` ->
+    ``core.grade_payload`` -> ``jsonschema``, and ``step9_merge_shards`` ->
+    ``step8_grade`` -> ``core.azure_ai_clients`` and the rest of the judging
+    stack. A watchdog that needs the whole grading dependency set installed
+    before it can report anything is a watchdog that stops watching every time
+    that set moves -- and this one runs on a schedule where nobody is looking.
+    The copy is held to the original by
+    ``test_the_borrowed_shard_reader_still_matches_step9``.
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ShardReadError(f"could not read shard {path}: {exc}") from exc
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ShardReadError(f"could not parse shard {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ShardReadError(f"shard {path} top-level JSON must be an object")
+    return payload, hashlib.sha256(raw).hexdigest()
+
+
+def shard_task_ids(payload: dict, label: str) -> list[str]:
+    """Return the task ids a shard payload claims, rejecting a malformed one.
+
+    Copied from ``step9_merge_shards._shard_task_ids`` for the reason above.
+    Kept behaviourally identical, error messages included, so a stem the
+    merger would refuse reads as ``malformed`` here with the same explanation.
+    """
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, list):
+        raise ShardReadError(f"{label} has no tasks array")
+    if not tasks:
+        raise ShardReadError(f"{label} contains zero graded tasks")
+    task_ids: list[str] = []
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for index, row in enumerate(tasks):
+        if not isinstance(row, dict):
+            raise ShardReadError(f"{label} task at index {index} is not an object")
+        task_id = row.get("task_id")
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ShardReadError(
+                f"{label} task at index {index} has no non-empty task_id"
+            )
+        if task_id in seen:
+            duplicates.add(task_id)
+        seen.add(task_id)
+        task_ids.append(task_id)
+    if duplicates:
+        raise ShardReadError(
+            f"{label} contains duplicate task_ids: {sorted(duplicates)}"
+        )
+    return task_ids
 
 
 #: How long a stem may go without a new commit before the relay is called
@@ -251,7 +305,7 @@ def _agreed(payloads: Sequence[dict], key: str):
     """Return the value all payloads carry for ``key``, or raise on a split."""
     values = {json.dumps(payload.get(key), sort_keys=True) for payload in payloads}
     if len(values) != 1:
-        raise ShardMergeError(f"shards disagree on {key}")
+        raise ShardReadError(f"shards disagree on {key}")
     return payloads[0].get(key)
 
 
@@ -313,8 +367,8 @@ def inspect_stem(
     for index, path in sorted(shard_files.items()):
         try:
             payload, _ = load_shard_file(path)
-            ids = _shard_task_ids(payload, f"{stem} shard {index}")
-        except ShardMergeError as exc:
+            ids = shard_task_ids(payload, f"{stem} shard {index}")
+        except ShardReadError as exc:
             return RelayVerdict(stem, "malformed", str(exc))
         payloads[index] = payload
         holdings[index] = len(ids)
@@ -324,7 +378,7 @@ def inspect_stem(
     try:
         expected_total = _agreed(ordered, "expected_task_count")
         expected_sha = _agreed(ordered, "expected_ordered_task_ids_sha256")
-    except ShardMergeError as exc:
+    except ShardReadError as exc:
         return RelayVerdict(stem, "malformed", str(exc))
     if not isinstance(expected_total, int) or expected_total <= 0:
         return RelayVerdict(
