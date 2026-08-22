@@ -109,17 +109,34 @@ def _git_init_with_old_commit(root: Path, *, when="2026-01-02T03:04:05+00:00"):
     # The fixture checks its own contract. Without this, a git that cannot make
     # or read a commit here surfaces later as a bare `assert None == datetime`
     # in whichever test happened to run, with nothing saying why.
-    proof = subprocess.run(
-        ["git", "log", "-1", "--format=%cI"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
+    def probe(*args):
+        return subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+
+    proof = probe("log", "-1", "--format=%cI")
     assert proof.returncode == 0 and proof.stdout.strip(), (
         "the fixture repo has no readable commit: "
         f"rc={proof.returncode} out={proof.stdout!r} err={proof.stderr!r}"
+    )
+
+    # And that the commit is reachable *through a pathspec*, which is how the
+    # sweep asks. A repo can satisfy the check above and still answer nothing
+    # here, and that difference is invisible from the failing assertion in the
+    # test body.
+    filtered = probe("log", "-1", "--format=%cI", "--", ".")
+    assert filtered.returncode == 0 and filtered.stdout.strip(), (
+        "the fixture repo has a commit but no pathspec-filtered history: "
+        f"rc={filtered.returncode} out={filtered.stdout!r} "
+        f"err={filtered.stderr!r} "
+        f"version={probe('--version').stdout.strip()!r} "
+        f"tracked={probe('ls-files').stdout.split()!r} "
+        f"status={probe('status', '--porcelain').stdout!r}"
     )
     return root
 
