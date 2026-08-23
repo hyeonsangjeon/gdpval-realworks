@@ -3255,6 +3255,99 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert '--revision "${{ inputs.inference_revision }}"' not in workflow
 
 
+def _retry_loop_body(script: str) -> str:
+    """Return the text between ``for attempt ...; do`` and its matching ``done``.
+
+    Slicing on the loop rather than searching the whole script is the point:
+    a guard that sits above the loop runs once and then the job pushes up to
+    six times against trees it never looked at.
+    """
+    header = "for attempt in 1 2 3 4 5 6; do"
+    start = script.index(header)
+    indent = " " * (start - script.rindex("\n", 0, start) - 1)
+    return script[start : script.index(f"\n{indent}done\n", start)]
+
+
+def test_every_grade_push_retries_instead_of_dying_on_a_shard_race():
+    """Nine shards push to one branch on purpose, so a rejection is traffic.
+
+    Before the loop, the first rejection ended the job -- after the grading
+    was already paid for -- and the auto-resume step gates on committed=true,
+    so a multi-chunk shard stopped handing off as well. A few seconds of
+    contention could cost a slice.
+
+    What the loop must not do is turn a genuine disagreement into a retry.
+    Two shards writing different bytes into one grade file conflict on
+    rebase, and that stays fatal: only the push is retried, and the rebase
+    runs bare so ``set -e`` still ends the step.
+    """
+    text = Path("../.github/workflows/grade-run.yml").read_text(encoding="utf-8")
+    steps = {
+        step["name"]: step
+        for step in yaml.safe_load(text)["jobs"]["grade"]["steps"]
+        if step.get("name")
+    }
+    pull = 'git pull --rebase origin "${GITHUB_REF_NAME}"'
+    sites = {
+        "Commit grade result": "could not push the grade file",
+        "Merge shards into the final grade": "could not push the merged grade",
+        "Commit analysis": "could not push the analysis",
+    }
+
+    for name, exhausted in sites.items():
+        script = steps[name]["run"]
+        body = _retry_loop_body(script)
+
+        # Rebase then push, both inside the loop. A pull left outside it
+        # would retry the same rejected push six times.
+        assert pull in body, name
+        assert "if git push; then" in body, name
+        assert body.index(pull) < body.index("if git push; then"), name
+
+        # Bare, so a conflicting rebase still ends the step.
+        assert f"{pull} ||" not in script, name
+        assert "rebase --abort" not in script, name
+
+        # Nine shards that collide once will collide again on the same
+        # schedule unless the wait is jittered.
+        assert "RANDOM" in body, name
+        assert "::warning::" in body, name
+
+        # Exhausting the attempts is a failure, not a quiet success.
+        assert f"::error::{exhausted}" in script, name
+        assert script.index("done\n") < script.index(f"::error::{exhausted}"), name
+
+    # The grade file is the one that carries paid work, so its post-rebase
+    # guards -- the blob it committed is still the blob it is pushing, and
+    # that blob still satisfies the schema -- belong to each attempt.
+    commit = _retry_loop_body(steps["Commit grade result"]["run"])
+    assert '[[ "$POST_REBASE_GRADE_BLOB_SHA" != "$GRADE_BLOB_SHA" ]]' in commit
+    assert "validate_grade_payload(payload, schema)" in commit
+    assert commit.index(pull) < commit.index("$POST_REBASE_GRADE_BLOB_SHA")
+    assert commit.index("validate_grade_payload(payload, schema)") < commit.index(
+        "if git push; then"
+    )
+
+    # committed=true drives the auto-resume dispatch. Emitting it on a push
+    # that never landed would hand the next chunk a branch without its
+    # predecessor's partial on it.
+    grade_script = steps["Commit grade result"]["run"]
+    assert grade_script.index('if [[ "$PUSHED" != "true" ]]') < grade_script.index(
+        'echo "committed=true"'
+    )
+
+    # Nothing here may overwrite a sibling's work to get its own push through.
+    # Scoped to the push lines: bare --force is step8_grade.py's own CLI flag
+    # and appears legitimately elsewhere in this file.
+    push_lines = [line.strip() for line in text.splitlines() if "git push" in line]
+    assert len(push_lines) == len(sites)
+    for line in push_lines:
+        assert "--force" not in line, line
+        assert " -f " not in line, line
+    for forbidden in ("--force-with-lease", "--no-verify"):
+        assert forbidden not in text, forbidden
+
+
 def test_grade_checkout_stays_on_the_major_that_writes_extraheader_to_git_config():
     """The credentialed checkout and the extraheader guard have to move together.
 
