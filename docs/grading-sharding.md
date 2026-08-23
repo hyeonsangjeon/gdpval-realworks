@@ -453,6 +453,23 @@ is hit, retries go up, and each slice can take longer than projected.
 
 > 8.1 hours is **an average projection, not a guarantee.**
 
+**The judge model is not the only shared quota.** Before any of the nine reaches
+the judge, all nine download the same 629-file dataset from HuggingFace. On the
+R1 fan-out five of them died right there, with HTTP 429 from the hub — the token
+was present, so this was the hub throttling concurrent reads of one dataset, not
+the anonymous rate limit. Nothing had been spent, because the download runs
+before the first model call, but five paid shards had to be re-dispatched by
+hand.
+
+The download now defends itself, and needs nothing from the operator: each shard
+waits `20s × shard_index` before its first hub request, and every hub call
+retries through a 429 or a hub 5xx with exponential backoff. Shard 0 waits for
+nothing, so the canary is exactly as fast as it was. This is separate from the
+`sleep 20` in the dispatch script in 3-3, and it has to be — an auto-resumed
+relay leg re-triggers itself, so it never goes through that script at all. Set
+`HF_DOWNLOAD_SHARD_STAGGER_SEC` to change the stride, or `0` to turn the stagger
+off.
+
 ### ⚠️ 2. Commits can pile up
 
 Each shard commits its result to `main`. 9 trucks × up to 11 relay legs =

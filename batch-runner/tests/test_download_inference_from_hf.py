@@ -13,6 +13,7 @@ from huggingface_hub.errors import (
     HfHubHTTPError,
     LocalEntryNotFoundError,
     RemoteEntryNotFoundError,
+    XetDownloadError,
 )
 
 
@@ -106,7 +107,7 @@ def test_full_sha_is_normalized_without_hf_api(monkeypatch):
     module = _load_module()
 
     class UnexpectedApi:
-        def __init__(self):
+        def __init__(self, *args, **kwargs):
             raise AssertionError("HfApi must not be constructed for a full SHA")
 
     monkeypatch.setattr(module, "HfApi", UnexpectedApi)
@@ -118,6 +119,9 @@ def test_alias_revision_resolves_to_full_sha(monkeypatch):
     calls = []
 
     class FakeApi:
+        def __init__(self, token=None):
+            self.token = token
+
         def dataset_info(self, repo_id, revision):
             calls.append((repo_id, revision))
             return SimpleNamespace(sha=FULL_SHA.upper())
@@ -132,6 +136,9 @@ def test_whitespace_wrapped_sha_does_not_bypass_resolution(monkeypatch):
     calls = []
 
     class FakeApi:
+        def __init__(self, token=None):
+            self.token = token
+
         def dataset_info(self, repo_id, revision):
             calls.append((repo_id, revision))
             return SimpleNamespace(sha=FULL_SHA)
@@ -147,6 +154,9 @@ def test_invalid_resolved_revision_fails_closed(monkeypatch, resolved):
     module = _load_module()
 
     class FakeApi:
+        def __init__(self, token=None):
+            self.token = token
+
         def dataset_info(self, repo_id, revision):
             return SimpleNamespace(sha=resolved)
 
@@ -159,6 +169,9 @@ def test_revision_resolution_error_propagates(monkeypatch):
     module = _load_module()
 
     class FailingApi:
+        def __init__(self, token=None):
+            self.token = token
+
         def dataset_info(self, repo_id, revision):
             raise RuntimeError("offline")
 
@@ -740,6 +753,9 @@ def test_main_pins_all_downloads_and_removes_stale_deliverables(monkeypatch, tmp
     calls = []
 
     class FakeApi:
+        def __init__(self, token=None):
+            self.token = token
+
         def dataset_info(self, repo_id, revision):
             assert (repo_id, revision) == ("owner/repo", "main")
             return SimpleNamespace(sha=FULL_SHA)
@@ -936,3 +952,371 @@ def test_unsafe_manifest_fails_before_replacing_existing_deliverables(
 
     assert (destination / "previous.txt").read_text(encoding="utf-8") == "previous"
     assert list(destination.parent.glob(".deliverable_files.staging-*")) == []
+
+# ── hub transport resilience ────────────────────────────────────────────────
+# Five of the nine R1 shards died on the download step with HTTP 429 from the
+# xet read-token endpoint, token present, before a cent had been spent. These
+# pin both halves of the fix: the retry that survives a collision, and the
+# stagger that avoids most of them.
+
+
+def _rate_limited(status=429, retry_after=None):
+    headers = {"Retry-After": str(retry_after)} if retry_after is not None else {}
+    return HfHubHTTPError(
+        "rate limited",
+        response=httpx.Response(
+            status,
+            headers=headers,
+            request=httpx.Request("GET", "https://huggingface.invalid/xet"),
+        ),
+    )
+
+
+@pytest.fixture
+def hub_clock(monkeypatch):
+    """Record every wait instead of taking it, with jitter pinned to its max.
+
+    Patches the module-level names rather than ``time.sleep`` itself so the
+    real clock is left alone for everything else in the session.
+    """
+    module = _load_module()
+    slept = []
+    monkeypatch.setattr(module, "time", SimpleNamespace(sleep=slept.append))
+    monkeypatch.setattr(
+        module, "random", SimpleNamespace(uniform=lambda low, high: high)
+    )
+    return module, slept
+
+
+def test_rate_limited_download_is_retried_until_it_succeeds(hub_clock):
+    module, slept = hub_clock
+    attempts = []
+
+    def flaky():
+        attempts.append(len(attempts))
+        if len(attempts) <= 2:
+            raise _rate_limited()
+        return "downloaded"
+
+    assert module._with_hub_retry("deliverable_files snapshot", flaky) == "downloaded"
+    assert len(attempts) == 3
+    # 4s and 8s bases, each carrying up to half again in jitter.
+    assert slept == [6.0, 12.0]
+
+
+def test_retry_gives_up_and_raises_the_rate_limit(hub_clock):
+    module, slept = hub_clock
+
+    def always_limited():
+        raise _rate_limited()
+
+    with pytest.raises(HfHubHTTPError):
+        module._with_hub_retry("snapshot", always_limited)
+
+    # Five retries after the first attempt, then the error is the caller's.
+    assert len(slept) == 5
+
+
+def test_missing_sidecar_is_raised_on_the_first_attempt(hub_clock):
+    """The 404 that drives control flow must not be slowed down by the retry.
+
+    ``RemoteEntryNotFoundError`` is itself an ``HfHubHTTPError``, so a
+    class-level retry rule would swallow the signal that
+    ``_download_or_reconstruct_inference`` uses to fall back to the parquet,
+    and turn a prompt fallback into minutes of waiting.
+    """
+    module, slept = hub_clock
+    attempts = []
+
+    def missing():
+        attempts.append(1)
+        raise _remote_missing()
+
+    with pytest.raises(RemoteEntryNotFoundError):
+        module._with_hub_retry("inference_provenance.json", missing)
+
+    assert attempts == [1]
+    assert slept == []
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 416])
+def test_client_errors_are_not_retried(hub_clock, status):
+    module, slept = hub_clock
+
+    def denied():
+        raise _rate_limited(status=status)
+
+    with pytest.raises(HfHubHTTPError):
+        module._with_hub_retry("dataset_info", denied)
+
+    assert slept == []
+
+
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
+def test_transient_statuses_are_retried(hub_clock, status):
+    module, slept = hub_clock
+    attempts = []
+
+    def flaky():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise _rate_limited(status=status)
+        return "ok"
+
+    assert module._with_hub_retry("snapshot", flaky) == "ok"
+    assert len(slept) == 1
+
+
+def test_xet_transport_failure_is_retried(hub_clock):
+    """The storage backend the R1 shards actually died in.
+
+    ``XetDownloadError`` carries no status to filter on, so it is retried on
+    its shape: the xet path raises it for transport failures only, and a file
+    that is genuinely absent surfaces as ``EntryNotFoundError`` instead.
+    """
+    module, slept = hub_clock
+    attempts = []
+
+    def flaky():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise XetDownloadError("xet-read-token refused")
+        return "ok"
+
+    assert module._with_hub_retry("snapshot", flaky) == "ok"
+    assert len(slept) == 1
+
+
+def test_unrelated_exceptions_are_not_retried(hub_clock):
+    module, slept = hub_clock
+
+    def broken():
+        raise ValueError("bad revision")
+
+    with pytest.raises(ValueError):
+        module._with_hub_retry("dataset_info", broken)
+
+    assert slept == []
+
+
+def test_retry_after_header_overrides_our_own_backoff(hub_clock):
+    module, slept = hub_clock
+    attempts = []
+
+    def flaky():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise _rate_limited(retry_after=7)
+        return "ok"
+
+    assert module._with_hub_retry("snapshot", flaky) == "ok"
+    # Taken verbatim: no jitter is added on top of an instruction from the hub.
+    assert slept == [7.0]
+
+
+@pytest.mark.parametrize("retry_after", [3600, "not-a-number", "", -5])
+def test_unusable_retry_after_falls_back_to_our_backoff(hub_clock, retry_after):
+    """A capped wait, an HTTP-date, and a hostile value all land somewhere sane.
+
+    3600 is the interesting one: obeying it verbatim would park the runner for
+    an hour and burn the job's whole timeout on a wait.
+    """
+    module, slept = hub_clock
+    attempts = []
+
+    def flaky():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise _rate_limited(retry_after=retry_after)
+        return "ok"
+
+    assert module._with_hub_retry("snapshot", flaky) == "ok"
+    assert len(slept) == 1
+    assert 0 < slept[0] <= 120.0
+
+
+def test_retry_budget_is_tunable_without_editing_the_file(hub_clock, monkeypatch):
+    """The knob exists because this file feeds ``grader_source_hash``.
+
+    Editing the constants to wait longer mid-campaign would change the hash and
+    put shards graded either side of the edit into disagreement at merge time.
+    """
+    module, slept = hub_clock
+    monkeypatch.setenv("HF_DOWNLOAD_MAX_RETRIES", "2")
+    monkeypatch.setenv("HF_DOWNLOAD_BACKOFF_SEC", "1")
+
+    def always_limited():
+        raise _rate_limited()
+
+    with pytest.raises(HfHubHTTPError):
+        module._with_hub_retry("snapshot", always_limited)
+
+    assert slept == [1.5, 3.0]
+
+
+@pytest.mark.parametrize("value", ["", "   ", "abc", "-3", "nan"])
+def test_unusable_env_override_is_ignored(hub_clock, monkeypatch, value):
+    module, _ = hub_clock
+    monkeypatch.setenv("HF_DOWNLOAD_BACKOFF_SEC", value)
+
+    assert module._env_number(
+        "HF_DOWNLOAD_BACKOFF_SEC", 4.0, maximum=120.0
+    ) == 4.0
+
+
+def test_shard_stagger_spreads_a_fan_out_by_index(hub_clock, monkeypatch):
+    module, slept = hub_clock
+    monkeypatch.setenv("GRADE_SHARD_COUNT", "9")
+    monkeypatch.setenv("GRADE_SHARD_INDEX", "3")
+
+    module._stagger_shard_start()
+
+    assert slept == [60.0]
+
+
+@pytest.mark.parametrize(
+    ("count", "index"),
+    [
+        ("1", "0"),   # unsharded run
+        ("9", "0"),   # the canary, which runs on its own
+        ("", ""),     # local invocation, no workflow env at all
+        ("9", "9"),   # out of range: refuse rather than guess
+        ("nine", "3"),
+    ],
+)
+def test_stagger_is_skipped_when_there_is_nothing_to_spread(
+    hub_clock, monkeypatch, count, index
+):
+    module, slept = hub_clock
+    monkeypatch.setenv("GRADE_SHARD_COUNT", count)
+    monkeypatch.setenv("GRADE_SHARD_INDEX", index)
+
+    module._stagger_shard_start()
+
+    assert slept == []
+
+
+def test_stagger_stride_is_tunable_and_can_be_switched_off(hub_clock, monkeypatch):
+    module, slept = hub_clock
+    monkeypatch.setenv("GRADE_SHARD_COUNT", "9")
+    monkeypatch.setenv("GRADE_SHARD_INDEX", "2")
+    monkeypatch.setenv("HF_DOWNLOAD_SHARD_STAGGER_SEC", "0")
+
+    module._stagger_shard_start()
+
+    assert slept == []
+
+
+def test_revision_resolution_is_tokenised(monkeypatch):
+    """The first hub request of the step, which used to go out anonymous.
+
+    Retrying an anonymous call five times treats the symptom; the anonymous
+    rate limit is far lower than the authenticated one, so the token has to be
+    on the call as well.
+    """
+    module = _load_module()
+    seen = []
+
+    class FakeApi:
+        def __init__(self, token=None):
+            seen.append(token)
+
+        def dataset_info(self, repo_id, revision):
+            return SimpleNamespace(sha=FULL_SHA)
+
+    monkeypatch.setattr(module, "HfApi", FakeApi)
+    monkeypatch.setenv("HF_TOKEN", "hf-test-token")
+
+    assert module.resolve_immutable_revision("owner/repo", "main") == FULL_SHA
+    assert seen == ["hf-test-token"]
+
+
+def test_anonymous_resolution_stays_anonymous(monkeypatch):
+    """The free classification job downloads without a token, and must keep
+    doing so -- it is the check that the dataset is publicly readable."""
+    module = _load_module()
+    seen = []
+
+    class FakeApi:
+        def __init__(self, token=None):
+            seen.append(token)
+
+        def dataset_info(self, repo_id, revision):
+            return SimpleNamespace(sha=FULL_SHA)
+
+    monkeypatch.setattr(module, "HfApi", FakeApi)
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
+
+    assert module.resolve_immutable_revision("owner/repo", "main") == FULL_SHA
+    assert seen == [None]
+
+
+def test_main_survives_a_rate_limited_shard_fan_out(monkeypatch, tmp_path):
+    """The R1 outage, end to end: shard 4 of 9, throttled twice on the snapshot.
+
+    Before this, the first 429 ended the step and the shard had to be
+    re-dispatched by hand. The assertions are the two things that were wrong:
+    the run now completes, and it waited its turn before touching the hub at
+    all instead of arriving with the other eight.
+    """
+    module = _load_module()
+    slept = []
+    monkeypatch.setattr(module, "time", SimpleNamespace(sleep=slept.append))
+    monkeypatch.setattr(
+        module, "random", SimpleNamespace(uniform=lambda low, high: high)
+    )
+    frame = pd.DataFrame(
+        [{"task_id": "task-1", "deliverable_text": "hello", "deliverable_files": []}]
+    )
+    monkeypatch.setattr(module.pd, "read_parquet", lambda path: frame)
+    snapshot_attempts = []
+
+    class FakeApi:
+        def __init__(self, token=None):
+            self.token = token
+
+        def dataset_info(self, repo_id, revision):
+            return SimpleNamespace(sha=FULL_SHA)
+
+    def fake_hf_hub_download(**kwargs):
+        if kwargs["filename"] == "step2_inference_results.json":
+            raise _remote_missing()
+        if kwargs["filename"] == "inference_provenance.json":
+            raise _remote_missing("legacy revision")
+        return "unused.parquet"
+
+    def fake_snapshot_download(**kwargs):
+        snapshot_attempts.append(kwargs["revision"])
+        if len(snapshot_attempts) <= 2:
+            raise _rate_limited()
+        return str(kwargs["local_dir"])
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(module, "HfApi", FakeApi)
+    monkeypatch.setattr(module, "hf_hub_download", fake_hf_hub_download)
+    monkeypatch.setattr(module, "snapshot_download", fake_snapshot_download)
+    monkeypatch.setattr(module, "resolve_repo_id", lambda experiment: "owner/repo")
+    monkeypatch.setattr(
+        module,
+        "parse_args",
+        lambda: SimpleNamespace(
+            experiment="exp",
+            output="workspace/inference.json",
+            revision="",
+            expected_leading_task_id=[],
+            grading_config=None,
+            allow_legacy_missing_provenance=True,
+        ),
+    )
+    monkeypatch.setenv("HF_TOKEN", "secret-token")
+    monkeypatch.setenv("GRADE_SHARD_COUNT", "9")
+    monkeypatch.setenv("GRADE_SHARD_INDEX", "4")
+
+    assert module.main() == 0
+
+    payload = json.loads(Path("workspace/inference.json").read_text(encoding="utf-8"))
+    assert payload["results"][0]["task_id"] == "task-1"
+    assert snapshot_attempts == [FULL_SHA] * 3
+    # 80s of stagger first, then the two backoffs.
+    assert slept == [80.0, 6.0, 12.0]
