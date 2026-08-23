@@ -18,6 +18,7 @@ from core.grader_routing import (
     is_overall_style_criterion,
     resolve_runtime_routing,
 )
+from core.media_types import GRADER_VISUAL_RENDER_EXTENSIONS
 
 
 # Twelve representative criterion phrasings — covers all four buckets
@@ -171,6 +172,117 @@ def test_runtime_audio_resolution_is_target_specific():
 
     assert audio_child.modality is Modality.AUDIO
     assert text_child.modality is Modality.TEXT
+
+
+# ── visual with nothing renderable ──────────────────────────────────────────
+# A criterion that asks for a channel none of the selected files can supply
+# has to go somewhere. Where depends on whether text is an honest substitute,
+# which is why this is narrower than the audio rule above.
+
+
+def test_overall_style_criterion_with_only_plain_text_downgrades_to_text():
+    # The whole of task 2c249e0f on the sol-220 rerun: one ``data_flow.txt``,
+    # graded on "Overall formatting and style". There is no visual form of
+    # this file anywhere, so visual routing was unanswerable by construction —
+    # while the text in front of the judge shows its formatting directly.
+    criterion = "Overall formatting and style of the deliverable"
+
+    assert classify_criterion(criterion).modality is Modality.VISUAL
+    decision = resolve_runtime_routing(criterion, ["data_flow.txt"])
+
+    assert decision.modality is Modality.TEXT
+    assert decision.preferred_op == "read_content"
+
+
+def test_explicitly_visual_criterion_with_nothing_renderable_stays_visual():
+    # The line this rule must not cross, and the reason it is not a
+    # straight copy of the audio fallback. Colour and page layout cannot be
+    # read out of the characters in a file: demoting here would trade a
+    # missing verdict for an invented one, which is strictly worse.
+    # ``test_explicit_visual_item_fails_closed_without_render_target`` in
+    # tests/test_grader_selector_integration.py pins the same property
+    # end to end.
+    decision = resolve_runtime_routing(
+        "Document color and page layout are visually polished", ["Summary.csv"]
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.preferred_op == "render_to_image"
+
+
+def test_one_renderable_file_keeps_the_item_visual():
+    # The guard that makes this change safe. A mixed bundle still routes
+    # visual, so no item that renders today is diverted to text.
+    decision = resolve_runtime_routing(
+        "Overall formatting and style of the deliverable",
+        ["summary.txt", "plan.xlsx"],
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.preferred_op == "render_to_image"
+
+
+def test_split_children_route_the_text_child_away_from_visual():
+    # Task bf68f2ad, at the granularity ``grader.py`` actually routes at.
+    # Before this rule the ``.txt`` child errored, and because a split_children
+    # item fails whole on its first child error, the ``.xlsx`` sibling was
+    # dragged down with it — the published item has visual_provenance == [].
+    criterion = "Overall formatting and style of the deliverable"
+
+    xlsx_child = resolve_runtime_routing(criterion, ["MIG_Welding_Catch_Up_Plan.xlsx"])
+    txt_child = resolve_runtime_routing(criterion, ["MIG_Welding_Catch_Up_Summary.txt"])
+
+    assert xlsx_child.modality is Modality.VISUAL
+    assert txt_child.modality is Modality.TEXT
+
+
+def test_overall_style_with_extensionless_target_stays_visual():
+    # Mirrors ``test_audio_keyword_with_extensionless_target_stays_audio``.
+    # No suffix means no evidence either way, and demoting on absence of
+    # evidence would silently strip vision from anything oddly named.
+    decision = resolve_runtime_routing(
+        "Overall formatting and style of the deliverable", ["deliverable"]
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.preferred_op == "render_to_image"
+
+
+@pytest.mark.parametrize("suffix", sorted(GRADER_VISUAL_RENDER_EXTENSIONS))
+def test_every_renderable_suffix_still_routes_visual(suffix: str):
+    decision = resolve_runtime_routing(
+        "Chart is clearly labeled and easy to read", [f"deliverable{suffix}"]
+    )
+
+    assert decision.modality is Modality.VISUAL
+
+
+def test_visual_render_extensions_match_the_renderer():
+    """Hold the routing set equal to what the prepass can actually render.
+
+    ``GRADER_VISUAL_RENDER_EXTENSIONS`` is a copy of the keys of
+    ``tool_calling_judge._VISUAL_RENDER_SCOPES``; the original cannot be
+    imported into ``grader_routing`` without pulling the grading stack into a
+    module that is deliberately pure. A suffix added to one and not the other
+    fails in silence -- either routing sends a renderable file to text, or it
+    promises a render the prepass will refuse -- so the equality is asserted
+    rather than trusted.
+    """
+    from core.tool_calling_judge import _VISUAL_RENDER_SCOPES
+
+    assert set(_VISUAL_RENDER_SCOPES) == set(GRADER_VISUAL_RENDER_EXTENSIONS)
+
+
+def test_downgraded_visual_keeps_its_matched_keywords():
+    # The demotion changes where the judge looks, not what the criterion was
+    # found to be asking for. Losing the keywords would make a downgraded item
+    # indistinguishable from one that never matched anything.
+    criterion = "Overall formatting and style of the deliverable"
+    decision = resolve_runtime_routing(criterion, ["notes.txt"])
+
+    assert decision.modality is Modality.TEXT
+    assert decision.matched_keywords == classify_criterion(criterion).matched_keywords
+    assert decision.matched_keywords != ()
 
 
 def test_routing_decision_to_prompt_hint_keys():

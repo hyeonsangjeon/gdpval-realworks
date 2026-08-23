@@ -354,11 +354,22 @@ def test_plan_split_children_enforces_parent_visual_file_cap(
 def test_plan_split_children_fails_when_visual_child_has_no_render_target(
     monkeypatch, tmp_path: Path
 ):
-    paths = ["Notes.txt", "Chart.pdf"]
+    """One unrenderable visual child still fails the whole split item.
+
+    The child used to be spelled ``Notes.txt``. Plain text under a generic
+    style criterion now routes to text rather than dying on a missing render
+    target, so the unrenderable case needs a target that still routes visual
+    and still has nothing to render: an extensionless file, which carries no
+    evidence of its kind either way and so is never demoted (same reasoning as
+    ``test_audio_keyword_with_extensionless_target_stays_audio``). The
+    property under test -- one child's missing render target blocks every
+    sibling -- is unchanged.
+    """
+    paths = ["Notes", "Chart.pdf"]
     for path in paths:
         (tmp_path / path).write_bytes(path.encode("utf-8"))
     targets = [
-        SelectionTarget("notes", ["Notes.txt"], "txt"),
+        SelectionTarget("notes", ["Notes"], ""),
         SelectionTarget("chart", ["Chart.pdf"], "pdf"),
     ]
     selection = DeliverableSelection(
@@ -388,7 +399,7 @@ def test_plan_split_children_fails_when_visual_child_has_no_render_target(
     assert plan["planned_main_judgments"] == 0
     assert plan["planned_render_calls"] == 0
     assert plan["planned_perception_calls"] == 0
-    assert plan["unsupported_visual_paths"] == ["Notes.txt"]
+    assert plan["unsupported_visual_paths"] == ["Notes"]
     assert plan["items"][0]["outcome"] == "preflight_error"
     assert plan["items"][0]["preflight_error"] == (
         "notes: required_visual_render_target_unavailable"
@@ -402,14 +413,73 @@ def test_plan_split_children_fails_when_visual_child_has_no_render_target(
     ]
 
 
+def test_plan_split_children_text_child_no_longer_blocks_its_siblings(
+    monkeypatch, tmp_path: Path
+):
+    """The fix for the case above, at the level it actually cost us.
+
+    Task bf68f2ad on the sol-220 rerun is exactly this shape: an ``.xlsx``
+    and a ``.txt`` under one "Overall formatting and style" item, scope
+    ``split_children``, aggregation ``blocking_min_else_mean``. The ``.txt``
+    child had no render target, and because a split item fails whole on its
+    first child error the ``.xlsx`` sibling was dragged down with it -- the
+    published item carries ``visual_provenance: []`` and scored nothing.
+
+    The text child now routes to text, contributes no visual preflight error,
+    and the spreadsheet is rendered and judged on its own merits.
+    """
+    paths = ["MIG_Welding_Catch_Up_Summary.txt", "MIG_Welding_Catch_Up_Plan.xlsx"]
+    for path in paths:
+        (tmp_path / path).write_bytes(path.encode("utf-8"))
+    targets = [
+        SelectionTarget("summary", [paths[0]], "txt"),
+        SelectionTarget("plan", [paths[1]], "xlsx"),
+    ]
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="task-1",
+        task_class="separate_equivalent",
+        primary_targets=targets,
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader_preflight.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="split_children",
+            target_ids=["summary", "plan"],
+            selected_paths=paths,
+            aggregation_rule="blocking_min_else_mean",
+        ),
+    )
+
+    plan = plan_task_runtime(
+        {"judge": {"perception": {"visual": {"call_cap_per_task": 4}}}},
+        _task([RubricItem(
+            "style", "Overall formatting and style of the deliverable", 5, None
+        )]),
+        tmp_path,
+    )
+
+    assert plan["errors"] == []
+    assert plan["items"][0]["outcome"] != "preflight_error"
+    assert plan["unsupported_visual_paths"] == []
+    # The spreadsheet still renders; only the text child was diverted.
+    assert plan["planned_render_calls"] == 1
+
+
 @pytest.mark.parametrize(
     ("second_name", "visual_cap", "expected_error"),
     [
-        (
-            "Notes.txt",
-            5,
-            "style: notes: required_visual_render_target_unavailable",
-        ),
+        # A ``Notes.txt`` case used to sit here, erroring with
+        # ``required_visual_render_target_unavailable``. It is gone rather
+        # than re-spelled because the state it described is now unreachable:
+        # under a generic style criterion a file routes visual only if its
+        # suffix is renderable, so "routes visual, cannot render" no longer
+        # exists for this kind of criterion. Removing the fix would make the
+        # case reappear -- which is what
+        # ``test_plan_split_children_text_child_no_longer_blocks_its_siblings``
+        # is for. The surviving case keeps the mixed routing (docx →
+        # formatting, pdf → visual) and the blocking property intact.
         (
             "Chart.pdf",
             0,
