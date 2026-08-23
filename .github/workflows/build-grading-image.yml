@@ -1,0 +1,169 @@
+# Build & publish the GDPVal grading image to GitHub Container Registry.
+#
+# WHY THIS IS NOT A THIRD TARGET IN build-sandbox-image.yml
+#   That workflow's build-sandbox-image job fires on *any* workflow_dispatch
+#   against main, so adding a publish_grading input there would rebuild and
+#   republish the 8.46 GB sandbox image every time someone wanted a grading
+#   image. The two also have different trust stories: the sandbox executes
+#   LLM-generated code and deliberately carries no credentials tooling, while
+#   this image carries the Azure CLI precisely so the grade job can log in.
+#   Keeping them apart keeps that distinction legible.
+#
+# WHAT THE VERIFICATION IS
+#   sandbox/grading.Dockerfile asserts the renderer version, font resolution,
+#   git, and az in its own RUN steps, so a build that succeeds has already
+#   proven the acceptance criteria. The steps below only surface the evidence.
+name: Build Grading Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Push to GHCR (false builds and verifies without pushing)
+        required: true
+        default: false
+        type: boolean
+  pull_request:
+    paths:
+      - ".github/workflows/build-grading-image.yml"
+      - "batch-runner/sandbox/grading.Dockerfile"
+      - "batch-runner/tests/test_grading_image.py"
+
+concurrency:
+  group: build-grading-image-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Build without pushing. This is the acceptance run: if the renderer moved,
+  # the Dockerfile's assertion fails here, for free, on a pull request.
+  verify-grading-image:
+    if: >-
+      ${{
+        github.event_name == 'pull_request' ||
+        (github.event_name == 'workflow_dispatch' && inputs.publish != true)
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+
+      - name: Build grading image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
+        with:
+          context: batch-runner/sandbox
+          file: batch-runner/sandbox/grading.Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: gdpval-grading:verify-${{ github.run_id }}
+
+      - name: Collect renderer evidence
+        env:
+          IMAGE: gdpval-grading:verify-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/grading-image"
+          docker run --rm --entrypoint cat "$IMAGE" \
+            /opt/gdpval/renderer-version.txt \
+            | tee "$RUNNER_TEMP/grading-image/renderer-version.txt"
+          docker run --rm --entrypoint cat "$IMAGE" \
+            /opt/gdpval/grading-packages.txt \
+            > "$RUNNER_TEMP/grading-image/grading-packages.txt"
+          {
+            echo "### Grading image"
+            echo '```'
+            cat "$RUNNER_TEMP/grading-image/renderer-version.txt"
+            echo '```'
+            echo "- packages installed: $(wc -l < "$RUNNER_TEMP/grading-image/grading-packages.txt")"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload grading image evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: grading-image-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/grading-image
+          if-no-files-found: error
+          retention-days: 14
+
+  # Publish. The digest printed to the step summary is what grade-run.yml
+  # pins; a tag would let the renderer move under a job that never changed.
+  publish-grading-image:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' &&
+        inputs.publish == true &&
+        github.ref == 'refs/heads/main' &&
+        github.ref_protected == true
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify protected main checkout
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+
+      - name: Log in to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push grading image
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
+        with:
+          context: batch-runner/sandbox
+          file: batch-runner/sandbox/grading.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/hyeonsangjeon/gdpval-grading:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-grading:buildcache
+          cache-to: type=registry,ref=ghcr.io/hyeonsangjeon/gdpval-grading:buildcache,mode=max
+
+      - name: Verify the published digest
+        env:
+          IMAGE: ghcr.io/hyeonsangjeon/gdpval-grading@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE"
+          ACTUAL_REVISION=$(docker image inspect \
+            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE")
+          test "$ACTUAL_REVISION" = "$GITHUB_SHA"
+          RENDERER=$(docker run --rm --entrypoint cat "$IMAGE" /opt/gdpval/renderer-version.txt)
+          {
+            echo "### Grading image published"
+            echo "- Image: \`$IMAGE\`"
+            echo "- Renderer: \`$RENDERER\`"
+            echo ""
+            echo "Pin this digest in \`grade-run.yml\`."
+          } >> "$GITHUB_STEP_SUMMARY"
