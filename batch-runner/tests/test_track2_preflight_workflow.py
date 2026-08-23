@@ -93,7 +93,7 @@ def test_track2_preflight_workflow_is_model_free_and_fail_closed():
     assert upload["if"] == "always()"
     assert upload["uses"] == (
         "actions/upload-artifact@"
-        "ea165f8d65b6e75b540449e92b4886f43607fa02"
+        "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
     )
     assert upload["with"]["if-no-files-found"] == "warn"
     assert "batch-runner/workspace/track2_cohort_plan.json" in upload["with"]["path"]
@@ -120,8 +120,8 @@ def test_track2_preflight_workflow_requires_strict_identity_inputs():
     assert 'if len(task_ids) != limit:' in workflow
     assert 'if len(set(task_ids)) != len(task_ids):' in workflow
     assert 'ref: ${{ inputs.expected_repository_commit }}' in workflow
-    assert "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5" in workflow
-    assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in workflow
+    assert "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09" in workflow
+    assert "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97" in workflow
     assert "--require-hashes" in workflow
     assert "--only-binary=:all:" in workflow
     assert workflow.index("Verify source and local planner identities") < workflow.index(

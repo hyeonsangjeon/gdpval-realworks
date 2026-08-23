@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 import pytest
@@ -3117,20 +3118,20 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert "inference_revision:" in workflow
     assert 'default: ""' in workflow
     assert checkout["uses"] == (
-        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+        "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"
     )
     assert checkout["with"] == {
         "ref": "main",
         "persist-credentials": True,
     }
     assert setup_python["uses"] == (
-        "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065"
+        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
     )
     assert azure_login["uses"] == (
-        "azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5"
+        "azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca"
     )
     assert upload["uses"] == (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
     )
     assert "GITHUB_WORKFLOW_SHA" in validate_inputs["run"]
     assert "refs/heads/main" in validate_inputs["run"]
@@ -3209,6 +3210,51 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert '-f experiment_yaml="$GRADE_EXPERIMENT_YAML"' in retrigger["run"]
     assert '-f grading_config="$GRADE_CONFIG"' in retrigger["run"]
     assert '--revision "${{ inputs.inference_revision }}"' not in workflow
+
+
+def test_grade_checkout_stays_on_the_major_that_writes_extraheader_to_git_config():
+    """The credentialed checkout and the extraheader guard have to move together.
+
+    checkout v6 persists credentials to a separate file that .git/config only
+    references through an includeIf entry, and ``git config --local`` does not
+    expand includes. The guard below would stop finding the credential and
+    abort the grade job -- on the paid path, after dispatch, for a reason that
+    looks nothing like an action bump. Nothing else in the repository couples
+    a pin to a shell assertion, so nothing else would catch it.
+    """
+    text = Path("../.github/workflows/grade-run.yml").read_text(encoding="utf-8")
+    parsed = yaml.safe_load(text)
+    steps = {
+        step["name"]: step
+        for step in parsed["jobs"]["grade"]["steps"]
+        if step.get("name")
+    }
+    name = "Checkout exact main revision"
+    checkout = steps[name]
+    guard = steps["Verify checked out main and input files"]["run"]
+
+    assert checkout["with"]["persist-credentials"] is True
+
+    # grade-run.yml checks out twice on the same pin, and only this one keeps
+    # credentials, so the version comment has to be read from this step's own
+    # block rather than from the first match in the file. The trailing newline
+    # is load-bearing: the other step is named "<this> (read-only)", so an
+    # unterminated anchor matches it first and reads the wrong pin.
+    start = text.index(f"- name: {name}\n")
+    block = text[start:text.index("- name:", start + 1)]
+    pinned = re.search(
+        rf"uses:\s*{re.escape(checkout['uses'])}\s*#\s*v(?P<major>\d+)\.\d+\.\d+",
+        block,
+    )
+    assert pinned is not None, "the credentialed checkout pin needs a # vX.Y.Z comment"
+    assert pinned.group("major") == "5"
+
+    # The guard reads one file with includes off. If it ever gains --includes,
+    # or reads the credentials config directly, this test has done its job and
+    # the major above is free to move with it.
+    assert "git config --local --name-only --get-regexp" in guard
+    assert "extraheader" in guard
+    assert "--includes" not in guard
 
 
 def _run_grade_workflow_input_preflight(**overrides):
