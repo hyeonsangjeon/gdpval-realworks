@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import importlib
 import io
@@ -324,6 +325,55 @@ def test_inspect_formatting_xlsx_preserves_color_types_without_descriptor_junk(
     assert set(styled) == set(colors)
     assert result["data"]["sheets"][0]["styled_cells_count"] == len(colors)
     assert "Values must be of type" not in str(result)
+
+
+def _rgb_reads_in_core() -> list[tuple[str, str, int]]:
+    """Every ``.rgb`` attribute read under ``core/``, with its enclosing function."""
+    core_root = Path(read_deliverable_module.__file__).resolve().parents[1]
+    reads: list[tuple[str, str, int]] = []
+    for path in sorted(core_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        functions = [
+            node for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Attribute) and node.attr == "rgb"):
+                continue
+            enclosing = [
+                fn for fn in functions
+                if fn.lineno <= node.lineno <= (fn.end_lineno or fn.lineno)
+            ]
+            innermost = max(enclosing, key=lambda fn: fn.lineno).name if enclosing else "<module>"
+            reads.append(
+                (path.relative_to(core_root).as_posix(), innermost, node.lineno)
+            )
+    return reads
+
+
+def test_openpyxl_color_rgb_is_only_read_behind_the_type_guard():
+    """No module may read ``Color.rgb`` outside the type-dispatched helper.
+
+    #156 fixed the read site that put openpyxl's validation message into judge
+    evidence, but the fix is structural -- dispatch on ``color.type`` first --
+    so it holds only as long as nothing else reads the descriptor blind. The
+    behavioural test above cannot see a second offender in another module.
+    """
+    pytest.importorskip("openpyxl")
+    from openpyxl.styles import Color
+
+    # Why the rule is worth enforcing: on a non-RGB colour the descriptor
+    # returns *itself* rather than raising, and its repr is the validation
+    # message. It is not JSON-serialisable, so it only becomes visible once
+    # something stringifies the evidence -- by which point it reads like an
+    # observation. If a future openpyxl raises here instead, relax the rule.
+    leaked = Color(theme=4).rgb
+    assert not isinstance(leaked, str)
+    assert "Values must be of type" in repr(leaked)
+
+    assert [(module, function) for module, function, _ in _rgb_reads_in_core()] == [
+        ("tools/read_deliverable.py", "_safe_cell_color")
+    ], _rgb_reads_in_core()
 
 
 def test_default_font_color_lookup_fails_soft_when_openpyxl_internals_change():
