@@ -49,23 +49,31 @@ export function isPartialCorpusGrade(grade) {
  * rule. Add an id here when a run is promoted.
  */
 export const OFFICIAL_GRADE_IDS = new Set([
-  // gpt-5.6-sol judge, 220 tasks — current primary result
+  // gpt-5.6-sol judge, 220 tasks, grader src_595c7254caf8fbd7 — current primary
+  // result. Same judge and same rubric as the run below; what changed is the
+  // harness that decides what the judge is shown, which took judge_error from
+  // 3.19% to 0.31% (311 harness-caused failures down to 8).
+  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__regrade_exp003_v2_sol_max_score_excluded__cfg_71c325eee0e48c13__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_595c7254caf8fbd7__v2.2',
+  // gpt-5.6-sol judge, 220 tasks, grader src_1c967673eb8081a6 — retained A/B
+  // comparator for the run above
   'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__regrade_exp003_v2_sol_max_score_excluded__cfg_71c325eee0e48c13__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_1c967673eb8081a6__v2.2',
-  // gpt-5.4 judge, 220 tasks — retained A/B comparator for the run above
-  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4__rubric_v2_tools',
 ])
 
 /**
- * Full-corpus runs retired in favour of a newer judge. Their numbers are
- * sound — this is not the partial-corpus rule — but a results page that keeps
- * every generation of judge becomes a changelog, and readers compare whatever
- * is on screen. The dashboard therefore shows the current result plus exactly
- * one older run as an A/B comparator, and retires the rest.
+ * Full-corpus runs retired in favour of a newer one. Their numbers are sound —
+ * this is not the partial-corpus rule — but a results page that keeps every
+ * generation becomes a changelog, and readers compare whatever is on screen.
+ * The dashboard therefore shows the current result plus exactly one older run
+ * as an A/B comparator, and retires the rest.
  *
- * `gpt-5.4-mini` is the one retired: against a `gpt-5.6-sol` judge it varies
- * in both judge size and judge version at once, so a gap measured across it
- * cannot be attributed to either. The full-size `gpt-5.4` run is the
- * like-for-like comparator and stays.
+ * Which older run earns that slot is decided by how many things it varies at
+ * once. The two `gpt-5.6-sol` runs share a judge, a rubric, and an inference
+ * corpus, and differ only in `grader_source_hash` — so the gap between them is
+ * attributable to the harness and to nothing else. Both `gpt-5.4` runs vary the
+ * judge as well, which makes them a worse comparator for the same question:
+ * `gpt-5.4-mini` varies judge size and version together, and full-size
+ * `gpt-5.4` varies judge version on top of the harness change. Neither can
+ * isolate anything the sol-vs-sol pair does not isolate better.
  *
  * Retirement is display-only. The grade JSON is untouched, the card is one
  * `?debug=1` away, and its own page still resolves by direct URL.
@@ -73,6 +81,9 @@ export const OFFICIAL_GRADE_IDS = new Set([
 export const SUPERSEDED_GRADE_IDS = new Set([
   // gpt-5.4-mini judge, 220 tasks — superseded; see above for why this one
   'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__rubric_v2_tools_mini',
+  // gpt-5.4 judge, 220 tasks — was the A/B comparator until a same-judge
+  // predecessor existed to take the slot
+  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4__rubric_v2_tools',
 ])
 
 /** Curated official baseline: badged, and exempt from every hide rule. */

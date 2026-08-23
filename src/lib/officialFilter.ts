@@ -22,6 +22,13 @@
  * to OFFICIAL as the current result, and the older full-corpus runs are retired
  * down to a single A/B comparator — every rule up to here removes things that
  * are not results, this one decides which results still earn screen space.
+ *
+ * Phase 5 recurates that pair after the harness rebuild. The rebuilt run takes
+ * the primary slot and its own predecessor — same judge, same rubric, differing
+ * only in `grader_source_hash` — takes the comparator slot, so the two cards on
+ * screen differ in exactly one variable. The `gpt-5.4` run it displaces joins
+ * `gpt-5.4-mini` in retirement; it held the slot only while no same-judge
+ * predecessor existed.
  */
 import type { GradeResult } from '../hooks/useGrades'
 import type { ExperimentEntry } from '../types/report'

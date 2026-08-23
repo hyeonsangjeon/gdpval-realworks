@@ -147,28 +147,61 @@ test('unknown coverage is never treated as partial', () => {
   assert.equal(isPartialCorpusGrade(undefined), false)
 })
 
-// ── Phase 4: curated baselines ──────────────────────────────────────────────
+// ── Phase 4/5: curated baselines ────────────────────────────────────────────
+// Phase 4 established the shape — one current result plus one A/B comparator.
+// Phase 5 recurated which two runs fill those slots after the harness rebuild.
 
-const SOL_220 =
+const SOL_220_R1 =
+  'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__regrade_exp003_v2_sol_max_score_excluded__cfg_71c325eee0e48c13__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_595c7254caf8fbd7__v2.2'
+const SOL_220_LEGACY =
   'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__regrade_exp003_v2_sol_max_score_excluded__cfg_71c325eee0e48c13__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_1c967673eb8081a6__v2.2'
 const GPT54_220 = 'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4__rubric_v2_tools'
 const GPT54_MINI_220 =
   'exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-mini__rubric_v2_tools_mini'
 
-test('the sol 220 regrade is the current official result', () => {
-  assert.equal(isOfficialGradeId(SOL_220), true)
+test('the rebuilt-harness sol 220 regrade is the current official result', () => {
+  assert.equal(isOfficialGradeId(SOL_220_R1), true)
 })
 
 test('exactly one older run is retained as an A/B comparator', () => {
-  assert.equal(isOfficialGradeId(GPT54_220), true)
-  assert.equal(isSupersededGradeId(GPT54_220), false)
+  assert.equal(isOfficialGradeId(SOL_220_LEGACY), true)
+  assert.equal(isSupersededGradeId(SOL_220_LEGACY), false)
   // Two official ids total: the current result and its single comparator.
   assert.equal(OFFICIAL_GRADE_IDS.size, 2)
+})
+
+test('the retained comparator differs from the result in one variable only', () => {
+  // The point of keeping this particular predecessor: same judge, same rubric,
+  // same inference corpus, different `grader_source_hash`. If a future
+  // recuration picks a comparator that also swaps the judge, the gap stops
+  // being attributable to the harness and the pairing silently stops meaning
+  // what the dashboard says it means.
+  const strip = (id) => id.replace(/__src_[0-9a-f]+__/, '__src__')
+  assert.equal(strip(SOL_220_R1), strip(SOL_220_LEGACY))
+  assert.notEqual(SOL_220_R1, SOL_220_LEGACY)
 })
 
 test('the mini-judge run is retired, not deleted', () => {
   assert.equal(isSupersededGradeId(GPT54_MINI_220), true)
   assert.equal(isOfficialGradeId(GPT54_MINI_220), false)
+})
+
+test('the full-size gpt-5.4 run is retired once a same-judge predecessor exists', () => {
+  // It held the comparator slot only because nothing closer was available. A
+  // sol-vs-sol pair isolates the harness change; sol-vs-5.4 cannot.
+  assert.equal(isSupersededGradeId(GPT54_220), true)
+  assert.equal(isOfficialGradeId(GPT54_220), false)
+})
+
+test('promotion does not disturb the measured hide rules', () => {
+  // Both official ids carry the `__src_<hex>__v2.2` suffix, which is close
+  // enough to the legacy `__<7hex>__v<n>` shape to be worth pinning: if
+  // `isLegacyExp003` ever widened to match them, the official allowlist would
+  // be the only thing keeping the current result on screen.
+  for (const id of [SOL_220_R1, SOL_220_LEGACY]) {
+    assert.equal(/__[0-9a-f]{7}__v\d/i.test(id), false)
+    assert.equal(id.endsWith('_tight'), false)
+  }
 })
 
 test('no id can be both official and superseded', () => {
