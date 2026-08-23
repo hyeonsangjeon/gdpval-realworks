@@ -891,24 +891,44 @@ jobs:
             MSG="$MSG [shard $GRADE_SHARD_INDEX of $GRADE_SHARD_COUNT]"
           fi
           git commit -m "$MSG"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          if [[ ! -f "$GRADE_FILE" ]]; then
-            echo "::error::grade file disappeared after rebase: $GRADE_FILE"
-            exit 1
-          fi
-          POST_REBASE_GRADE_BLOB_SHA="$(python - "$GRADE_FILE" <<'PY'
+          # N shards push to one branch on purpose, so losing a push race is
+          # the expected case rather than a fault. Today the first rejection
+          # ends the job -- after the grading is already paid for -- and takes
+          # the auto-resume chain with it, since that step gates on
+          # committed=true. So a few seconds of contention can cost a slice.
+          #
+          # Every guard sits inside the loop, not ahead of it. Each rebase is
+          # another chance for the tree to move, and checking once and then
+          # pushing six times would be checking a tree we are no longer the
+          # one pushing. The rebase itself is deliberately not retried: `set
+          # -e` still ends the step if it conflicts, because two shards
+          # writing different bytes into one grade file is a real fault and
+          # not contention.
+          #
+          # Any push failure retries, unclassified. A permissions or network
+          # error will not recover, but it costs ~90s to establish that and
+          # the final attempt still prints git's own message. Pattern-matching
+          # git's rejection wording would be one more thing to get wrong.
+          PUSHED=false
+          for attempt in 1 2 3 4 5 6; do
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            if [[ ! -f "$GRADE_FILE" ]]; then
+              echo "::error::grade file disappeared after rebase: $GRADE_FILE"
+              exit 1
+            fi
+            POST_REBASE_GRADE_BLOB_SHA="$(python - "$GRADE_FILE" <<'PY'
           import hashlib
           import sys
           from pathlib import Path
 
           print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
           PY
-          )"
-          if [[ "$POST_REBASE_GRADE_BLOB_SHA" != "$GRADE_BLOB_SHA" ]]; then
-            echo "::error::grade file changed during rebase"
-            exit 1
-          fi
-          python - "$GRADE_FILE" <<'PY'
+            )"
+            if [[ "$POST_REBASE_GRADE_BLOB_SHA" != "$GRADE_BLOB_SHA" ]]; then
+              echo "::error::grade file changed during rebase"
+              exit 1
+            fi
+            python - "$GRADE_FILE" <<'PY'
           import json
           import os
           import sys
@@ -927,7 +947,23 @@ jobs:
           if payload.get("run_status") != os.environ["EXPECTED_GRADE_STATUS"]:
               raise SystemExit("post-rebase grade run_status does not match exit code")
           PY
-          git push
+            if git push; then
+              PUSHED=true
+              break
+            fi
+            if [[ "$attempt" -eq 6 ]]; then
+              break
+            fi
+            # Jittered, or nine shards that collided once line up to collide
+            # again on the same schedule.
+            BACKOFF=$(( attempt * 5 + RANDOM % 5 ))
+            echo "::warning::push attempt $attempt rejected; rebasing and retrying in ${BACKOFF}s"
+            sleep "$BACKOFF"
+          done
+          if [[ "$PUSHED" != "true" ]]; then
+            echo "::error::could not push the grade file to ${GITHUB_REF_NAME} after 6 attempts"
+            exit 1
+          fi
           echo "committed=true" >> "$GITHUB_OUTPUT"
 
       - name: Auto-retrigger next chunk (time budget hit)
@@ -1080,8 +1116,27 @@ jobs:
             # pull above and this push. That is safe at the git level too: the
             # rebase drops our commit by patch-id, and even if it did not, an
             # add/add of byte-identical content resolves without conflict.
-            git pull --rebase origin "${GITHUB_REF_NAME}"
-            git push
+            # Safe, but not automatic -- the push is still rejected as
+            # non-fast-forward, and a rejection here fails the one shard that
+            # completed the corpus. So rebase and try again.
+            MERGE_PUSHED=false
+            for attempt in 1 2 3 4 5 6; do
+              git pull --rebase origin "${GITHUB_REF_NAME}"
+              if git push; then
+                MERGE_PUSHED=true
+                break
+              fi
+              if [[ "$attempt" -eq 6 ]]; then
+                break
+              fi
+              BACKOFF=$(( attempt * 5 + RANDOM % 5 ))
+              echo "::warning::merge push attempt $attempt rejected; rebasing and retrying in ${BACKOFF}s"
+              sleep "$BACKOFF"
+            done
+            if [[ "$MERGE_PUSHED" != "true" ]]; then
+              echo "::error::could not push the merged grade to ${GITHUB_REF_NAME} after 6 attempts"
+              exit 1
+            fi
           fi
           echo "merged=true" >> "$GITHUB_OUTPUT"
           echo "grade_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
@@ -1138,8 +1193,26 @@ jobs:
             exit 0
           fi
           git commit -m "docs(grading): auto-analysis for $GRADE_EXPERIMENT_YAML ($GRADE_CONFIG)"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push
+          # Same race as the grade and merge pushes above. This one runs last,
+          # so it is the most likely to find the branch moved under it.
+          ANALYSIS_PUSHED=false
+          for attempt in 1 2 3 4 5 6; do
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            if git push; then
+              ANALYSIS_PUSHED=true
+              break
+            fi
+            if [[ "$attempt" -eq 6 ]]; then
+              break
+            fi
+            BACKOFF=$(( attempt * 5 + RANDOM % 5 ))
+            echo "::warning::analysis push attempt $attempt rejected; rebasing and retrying in ${BACKOFF}s"
+            sleep "$BACKOFF"
+          done
+          if [[ "$ANALYSIS_PUSHED" != "true" ]]; then
+            echo "::error::could not push the analysis to ${GITHUB_REF_NAME} after 6 attempts"
+            exit 1
+          fi
 
       - name: Upload grade artifact
         if: always() && inputs.dry_run == false && steps.grade.outputs.grade_file != ''
