@@ -12,6 +12,159 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The benchmark has a complete score for the first time: 220 of 220 tasks,
+  zero error tasks** (#205). The published OFFICIAL run for
+  `exp003_GPT52Chat_baseline_runner_exec` is now **57.3% ±3.75** over the full
+  corpus, judged by `gpt-5.6-sol`. Its predecessor scored 57.49% ±3.79 over
+  **215** of 220, with 5 tasks the harness could not score at all.
+
+  The two numbers are 0.19pp apart, and that is the point of the release. Five
+  more tasks entered the average and the headline barely moved, which is the
+  evidence that the work below recovered items the harness had been failing to
+  read — it did not loosen what "correct" means. A fix that inflated scores
+  would have shown up here as a jump.
+
+  | | previous | now |
+  |---|---|---|
+  | tasks scored | 215 / 220 | **220 / 220** |
+  | error tasks | 5 | **0** |
+  | avg score | 57.49% ±3.79 | 57.3% ±3.75 |
+  | judge errors (rubric items) | 333 of 10,453 — **3.19%** | 32 of 10,453 — **0.31%** |
+  | zero-score tasks | 24 | 25 |
+
+  A judge error is not a low score. It is the harness admitting it could not
+  put the deliverable in front of the judge — the item is excluded from the
+  score rather than counted as a failure, so a run full of them is not a hard
+  run, it is an unmeasured one. Ten times fewer of them is the release.
+
+  Broken down by cause, what moved was the harness and only the harness:
+
+  | cause | who | before | after |
+  |---|---|---|---|
+  | `selector_ambiguous` | harness | 243 | **0** |
+  | `render_target_missing` | harness | 68 | **6** |
+  | `render_target_partial` | harness | — | 2 |
+  | `judge_no_verdict` | judge | 4 | 6 |
+  | `wrong_format` | model | 12 | 12 |
+  | `nothing_submitted` | model | 6 | 6 |
+
+  The two model-caused rows are *identical* before and after. That is the
+  strongest single check on this release: 311 harness errors became 8, and not
+  one of the model's own failures was absorbed along with them.
+  (`render_target_partial` reads "—" before because the bucket did not exist
+  yet; those two are a sharper reading of what used to be filed as missing.)
+
+- **`batch-runner/scripts/judge_error_breakdown.py` — a structural six-cause
+  taxonomy for judge errors** (#199). Sorts every `verdict == "judge_error"`
+  item into harness causes (`selector_ambiguous`, `render_target_missing`,
+  `render_target_partial`), judge causes (`judge_no_verdict`) and model causes
+  (`wrong_format`, `nothing_submitted`), plus `unclassified`. It reads only
+  structural fields and never the evidence prose, so its verdict on who is at
+  fault does not depend on how a judge happened to phrase itself. This is what
+  turned "3.19% of items errored" into a list of specific, separately fixable
+  defects — and what makes the remaining 0.31% enumerable rather than
+  mysterious: 12 `wrong_format`, 6 `judge_no_verdict`, 6 `nothing_submitted`,
+  6 `render_target_missing`, 2 `render_target_partial`.
+
+- **Shard the 220-task grade run across N parallel relays** (#175, #176). A
+  full paid grade run is far longer than one GitHub Actions job may live. The
+  run is now split into an ordered subsequence per shard, each shard
+  auto-resumes in chunks, and `step9_merge_shards.py` recomputes the merged
+  summary from the union of item grades rather than averaging shard summaries.
+  Guide at `docs/grading-sharding.md` and `docs/grading-sharding_KR.md`.
+
+- **Report shard relays that stop without finishing** (#197, #198). A relay
+  that dies quietly used to look identical to one that had not started. The
+  sweep now names them, and it runs without importing the grading stack so it
+  keeps working when the grading code is the thing that is broken.
+
+### Fixed
+- **Render `.docx` deliverables for visual judging** (#189, #195). A Word
+  document had no render path, so every visual rubric item pointed at one
+  failed closed. LibreOffice conversion plus a pinned rasterizer gives it a
+  page 1; the grade schema learned to record `source_kind: "docx"`. This took
+  `render_target_missing` from 68 errored items to 6.
+
+- **Grade several same-format outputs instead of declining to choose** (#190).
+  The deliverable selector treated "four `.pptx` files" as ambiguous and
+  refused to select, which turned a complete submission into an unscorable
+  one. It now classifies them as separate equivalent deliverables and grades
+  each. This was the largest single fix in the release: `selector_ambiguous`
+  went from 243 errored items to zero.
+
+- **Text-judge an overall-style item with nothing renderable** (#206). An
+  "Overall formatting and style" criterion whose selected files are all plain
+  text classified VISUAL, found no render target, and errored — on work the
+  judge could simply have read. It is now demoted to TEXT, gated on the same
+  `is_overall_style_criterion` predicate the `.docx → FORMATTING` rule uses,
+  so an *explicitly* visual criterion ("document color and page layout") still
+  fails closed rather than inventing a verdict it cannot ground. Under
+  `split_children` this mattered twice over: one unrenderable child used to
+  collapse every sibling with it. Merged after the run above was graded, so it
+  is not reflected in its numbers — it accounts for 3 of the 6
+  `render_target_missing` items still on it.
+
+- **Name the half-rendered bundle instead of dropping it** (#204). A bundle
+  where only some files rendered reported nothing at all; it now records
+  `render_target_partial` and which file fell out.
+
+- **Stop filing judge flakiness under the model under test** (#200, #201).
+  Judge-error runs are paired on `task_id` rather than on totals, so a run
+  that graded a different number of tasks cannot be silently compared
+  position-by-position, and a judge that failed to return a verdict is no
+  longer counted against the model whose work it was judging.
+
+- **Stop counting a blank submission as a render defect** (#202, #203). A task
+  with nothing submitted is a zero, not a harness failure. The placeholder
+  rule now requires *every* selected target to be a placeholder before the
+  task is treated as a non-submission, matching the dashboard's all-match
+  semantics.
+
+- **Let a shard stand down when the corpus is not yet complete** (#194).
+  A short union under resume is the normal mid-run state, not an error. The
+  merger stopped failing on it.
+
+- **Pin the renderer version the published corpus was graded on** (#193). Two
+  runs rendering the same `.docx` through different LibreOffice builds are not
+  comparable, and nothing recorded which build produced a given image.
+
+- **Exclude judge errors from scores** (#168). An item the harness could not
+  read is now excluded rather than scored zero — the change that makes
+  `error_tasks: 0` meaningful instead of cosmetic.
+
+- **Bound `apt` installs so a stalled mirror cannot hang a job** (#183) and
+  **run the batch-runner pytest suite on pull requests** (#182, #187). Five
+  shards were lost to a mirror stall before the first; two guards were being
+  silently skipped before the last.
+
+### Changed
+- **Publish legacy-provenance runs that pin the complete corpus** (#177, #178,
+  #171). A run whose source inference predates route provenance is publishable
+  when it pins all 220 canonical task ids — it is badged on the dashboard
+  rather than hidden, because a complete scoring with a known gap in its
+  audit trail is more useful than no scoring at all.
+
+- **Hide grading runs that covered part of their corpus** (#185) and **retire
+  the spare baselines** (#186, #205). The dashboard shows two runs: the
+  OFFICIAL 220-task result and one deliberate A/B comparator. Partial-corpus
+  runs no longer sit next to complete ones as if they were the same kind of
+  measurement.
+
+- **Explain what the zeros on a grade page are made of** (#184). A zero from a
+  blank submission, a zero from failed criteria, and an excluded judge error
+  are three different facts and now read as three different facts.
+
+- **Let resume chunks inherit the initial paid approval** (#179). A run
+  approved once no longer re-prompts on every chunk boundary.
+
+- **Freeze the grader source inputs while shards are in flight** (#196).
+  `grader_source_hash` covers `step8_grade.py`, `core/**.py`,
+  `schemas/grade.schema.json`, `requirements.txt` and the prompt templates.
+  Merging any of them mid-run moves the shard partial path, so the relay
+  cannot find its own previous partial — and the failure only surfaces after
+  the spend. The policy and the source set are now written down.
+
+### Added
 - **`summary.wow` analytics now carry data** - `src/types/grade.ts` has declared
   `by_sector`, `by_rubric_category`, `score_density_histogram` and
   `rubric_severity_curve` since the WOW dashboard landed, and
