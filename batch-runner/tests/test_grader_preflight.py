@@ -168,7 +168,7 @@ def test_plan_enforces_visual_call_cap(tmp_path: Path):
 
 
 def test_plan_enforces_runtime_visual_file_cap(monkeypatch, tmp_path: Path):
-    paths = [f"report-{index}.pdf" for index in range(4)]
+    paths = [f"report-{index}.pdf" for index in range(11)]
     for path in paths:
         (tmp_path / path).write_bytes(b"pdf")
     selection = DeliverableSelection(
@@ -196,8 +196,85 @@ def test_plan_enforces_runtime_visual_file_cap(monkeypatch, tmp_path: Path):
     assert plan["planned_render_calls"] == 0
     assert plan["planned_perception_calls"] == 0
     assert plan["errors"] == [
+        "visual: required_visual_file_cap_exceeded:planned=11,cap=10"
+    ]
+
+
+def test_plan_enforces_the_configured_visual_file_cap(monkeypatch, tmp_path: Path):
+    """The preflight has to plan under the run's cap, not the default one.
+
+    A cohort graded with a lowered ``file_cap_per_item`` would otherwise be
+    told its bundles fit when the grader is about to fail them closed, which
+    is the one thing a preflight exists to prevent.
+    """
+    paths = [f"report-{index}.pdf" for index in range(4)]
+    for path in paths:
+        (tmp_path / path).write_bytes(b"pdf")
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="task-1",
+        task_class="single_primary",
+        primary_targets=[SelectionTarget("bundle", paths, "pdf")],
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader_preflight.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="primary_bundle",
+            target_ids=["bundle"],
+            selected_paths=paths,
+        ),
+    )
+
+    plan = plan_task_runtime(
+        {"judge": {"perception": {"visual": {"file_cap_per_item": 3}}}},
+        _task([RubricItem("visual", "The chart layout is readable.", 1, None)]),
+        tmp_path,
+    )
+
+    assert plan["errors"] == [
         "visual: required_visual_file_cap_exceeded:planned=4,cap=3"
     ]
+
+
+def test_plan_plans_a_visual_bundle_up_to_the_default_cap(
+    monkeypatch, tmp_path: Path
+):
+    """Ten files is the default ceiling, and the tenth still renders.
+
+    The cap used to be 3, which silently dropped whole bundles of five and
+    six reports at grading time. Pinning the boundary here keeps a future
+    tightening of the default from passing quietly.
+    """
+    paths = [f"report-{index}.pdf" for index in range(10)]
+    for path in paths:
+        (tmp_path / path).write_bytes(b"pdf")
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="task-1",
+        task_class="single_primary",
+        primary_targets=[SelectionTarget("bundle", paths, "pdf")],
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader_preflight.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="primary_bundle",
+            target_ids=["bundle"],
+            selected_paths=paths,
+        ),
+    )
+
+    plan = plan_task_runtime(
+        {},
+        _task([RubricItem("visual", "The chart layout is readable.", 1, None)]),
+        tmp_path,
+    )
+
+    assert plan["errors"] == []
+    assert plan["planned_main_judgments"] == 1
+    assert plan["planned_render_calls"] == 10
+    assert plan["items"][0]["planned_visual_paths"] == sorted(paths)
 
 
 def test_plan_filters_unsupported_paths_from_visual_bundle(
@@ -313,7 +390,14 @@ def test_plan_split_children_matches_runtime_shape(tmp_path: Path):
 def test_plan_split_children_enforces_parent_visual_file_cap(
     monkeypatch, tmp_path: Path
 ):
-    paths = [f"report-{index}.pdf" for index in range(4)]
+    """The union of a split item's children is capped like a bundle is.
+
+    The runtime hands that whole union to one batched prepass, which renders
+    and perceives every path in it, so the cap has to bind there too. It is
+    also what keeps an over-cap item from booking its entire union into the
+    task visual budget and failing the task's other items with it.
+    """
+    paths = [f"report-{index}.pdf" for index in range(11)]
     targets = []
     for index, path in enumerate(paths):
         (tmp_path / path).write_bytes(b"pdf")
@@ -347,7 +431,103 @@ def test_plan_split_children_enforces_parent_visual_file_cap(
     assert plan["planned_perception_calls"] == 0
     assert plan["items"][0]["outcome"] == "preflight_error"
     assert plan["errors"] == [
-        "style: required_visual_file_cap_exceeded:planned=4,cap=3"
+        "style: required_visual_file_cap_exceeded:planned=11,cap=10"
+    ]
+
+
+def test_plan_split_children_spans_more_children_than_the_old_cap(
+    monkeypatch, tmp_path: Path
+):
+    """Four children under one item, which the old cap of three failed closed.
+
+    This is the shape that cost R1 real coverage: nothing here is over budget
+    and nothing is unrenderable, the item simply spanned more deliverables
+    than the constant allowed, so it scored nothing rather than scoring on a
+    partial view.
+    """
+    paths = [f"report-{index}.pdf" for index in range(4)]
+    targets = []
+    for index, path in enumerate(paths):
+        (tmp_path / path).write_bytes(b"pdf")
+        targets.append(SelectionTarget(f"target-{index}", [path], "pdf"))
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="task-1",
+        task_class="separate_equivalent",
+        primary_targets=targets,
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader_preflight.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="split_children",
+            target_ids=[target.target_id for target in targets],
+            selected_paths=paths,
+            aggregation_rule="blocking_min_else_mean",
+        ),
+    )
+
+    plan = plan_task_runtime(
+        {},
+        _task([RubricItem("style", "Overall Style", 1, None)]),
+        tmp_path,
+    )
+
+    assert plan["errors"] == []
+    assert plan["items"][0]["outcome"] == "judge"
+    assert plan["planned_main_judgments"] == 4
+    assert plan["planned_render_calls"] == 4
+    assert plan["planned_perception_calls"] == 4
+    assert plan["items"][0]["planned_visual_paths"] == sorted(paths)
+
+
+def test_plan_split_children_still_enforces_the_cap_on_one_child(
+    monkeypatch, tmp_path: Path
+):
+    """A single over-cap child fails before the union is ever assembled.
+
+    One failing child fails the whole item, so the error a reader sees names
+    the child rather than the union. Keeping both paths covered means a
+    future change to either one cannot quietly take the other with it.
+    """
+    paths = [f"report-{index}.pdf" for index in range(11)]
+    for path in paths:
+        (tmp_path / path).write_bytes(b"pdf")
+    targets = [
+        SelectionTarget("target-wide", paths, "pdf"),
+        SelectionTarget("target-narrow", ["summary.pdf"], "pdf"),
+    ]
+    (tmp_path / "summary.pdf").write_bytes(b"pdf")
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="task-1",
+        task_class="separate_equivalent",
+        primary_targets=targets,
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader_preflight.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="split_children",
+            target_ids=[target.target_id for target in targets],
+            selected_paths=paths + ["summary.pdf"],
+            aggregation_rule="blocking_min_else_mean",
+        ),
+    )
+
+    plan = plan_task_runtime(
+        {},
+        _task([RubricItem("style", "Overall Style", 1, None)]),
+        tmp_path,
+    )
+
+    assert plan["judge_routes"] == {"visual": 1}
+    assert plan["planned_main_judgments"] == 0
+    assert plan["planned_render_calls"] == 0
+    assert plan["planned_perception_calls"] == 0
+    assert plan["items"][0]["outcome"] == "preflight_error"
+    assert plan["errors"] == [
+        "style: target-wide: required_visual_file_cap_exceeded:planned=11,cap=10"
     ]
 
 
