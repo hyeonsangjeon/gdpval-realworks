@@ -23,7 +23,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Iterable
 
-from core.media_types import GRADER_AUDIO_EXTENSIONS
+from core.media_types import (
+    GRADER_AUDIO_EXTENSIONS,
+    GRADER_VISUAL_RENDER_EXTENSIONS,
+)
 
 
 class Modality(str, Enum):
@@ -172,6 +175,44 @@ def resolve_runtime_routing(
         decision.modality is Modality.AUDIO
         and suffixes
         and suffixes.isdisjoint(GRADER_AUDIO_EXTENSIONS)
+    ):
+        return RoutingDecision(
+            modality=Modality.TEXT,
+            preferred_op="read_content",
+            matched_keywords=decision.matched_keywords,
+        )
+    # A narrower cousin of the audio rule above. Audio can demote wholesale
+    # because a criterion about a mix has no meaning at all against a
+    # spreadsheet. Visual cannot: the two kinds of visual criterion differ in
+    # whether text is an acceptable substitute.
+    #
+    # "Overall formatting and style of the deliverable" against a lone ``.txt``
+    # is answerable from the text -- headings, spacing, structure and line
+    # breaks *are* the formatting of a plain-text file. Today it routes VISUAL,
+    # finds no render target, and returns
+    # ``required_visual_render_target_unavailable``: a guaranteed
+    # ``judge_error`` on work the judge could have read. Three of the eight
+    # remaining harness errors on the sol-220 rerun are this, and under
+    # ``split_children`` one such child collapses every sibling with it
+    # (``grader.py`` fails the whole item on the first child error).
+    #
+    # An explicitly visual criterion must NOT demote. "Document color and page
+    # layout are visually polished" against a ``.csv`` is unanswerable from the
+    # characters in the file, and a text verdict there would be invented rather
+    # than merely absent. Failing closed is the correct outcome and
+    # ``test_explicit_visual_item_fails_closed_without_render_target`` pins it.
+    # ``is_overall_style_criterion`` is the same predicate the ``.docx`` rule
+    # above already uses to draw this line.
+    #
+    # This cannot change an item that renders today: it fires only when *no*
+    # selected file is renderable, which is exactly the set that currently
+    # errors out. Nor can it answer from a partial view the way raising the
+    # file cap would -- the text is handed over whole.
+    if (
+        decision.modality is Modality.VISUAL
+        and is_overall_style_criterion(criterion_text)
+        and suffixes
+        and suffixes.isdisjoint(GRADER_VISUAL_RENDER_EXTENSIONS)
     ):
         return RoutingDecision(
             modality=Modality.TEXT,

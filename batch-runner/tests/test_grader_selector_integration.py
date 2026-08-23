@@ -894,6 +894,25 @@ def test_explicit_visual_docx_renders_instead_of_failing_closed(
 def test_split_visual_child_validation_precedes_task_budget_and_render(
     monkeypatch, tmp_path
 ):
+    """Child validation runs before the task budget check and before render.
+
+    The child used to be spelled ``Notes.txt`` and reached this path through
+    the real selector. It cannot any more: under a generic style criterion a
+    child routes visual only if its suffix is renderable, so "routes visual,
+    nothing to render" now needs an extensionless child -- and
+    ``select_deliverables`` drops extensionless files rather than making them
+    primary targets. The state is therefore constructed here instead of
+    selected, the same way ``test_grader_preflight`` constructs it for the
+    planner. The ordering under test is untouched: with the vision cap at 0
+    the *task budget* error is also armed, and the child error must still be
+    the one that surfaces, before any render call.
+    """
+    from core.deliverable_selector import (
+        CriterionTargetPlan,
+        DeliverableSelection,
+        SelectionTarget,
+    )
+    from core.grader import Grader
     from core.rubric_loader import RubricItem, TaskRubric
     import core.tool_calling_judge as tool_judge_mod
 
@@ -908,8 +927,27 @@ def test_split_visual_child_validation_precedes_task_budget_and_render(
     )
     deliverable_dir = tmp_path / "task"
     deliverable_dir.mkdir()
-    (deliverable_dir / "Notes.txt").write_bytes(b"text")
+    (deliverable_dir / "Notes").write_bytes(b"text")
     (deliverable_dir / "Chart.pdf").write_bytes(b"pdf")
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="t-split-unsupported",
+        task_class="separate_equivalent",
+        primary_targets=[
+            SelectionTarget("notes", ["Notes"], ""),
+            SelectionTarget("chart", ["Chart.pdf"], "pdf"),
+        ],
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="split_children",
+            target_ids=["notes", "chart"],
+            selected_paths=["Notes", "Chart.pdf"],
+            aggregation_rule="blocking_min_else_mean",
+        ),
+    )
     task = TaskRubric(
         task_id="t-split-unsupported",
         sector="Information",
@@ -945,14 +983,109 @@ def test_split_visual_child_validation_precedes_task_budget_and_render(
     assert responses.calls == []
 
 
+def test_split_text_child_no_longer_blocks_its_visual_sibling(
+    monkeypatch, tmp_path
+):
+    """Task bf68f2ad on the sol-220 rerun, end to end.
+
+    An ``.xlsx`` and a ``.txt`` under one "Overall formatting and style" item,
+    scope ``split_children``, aggregation ``blocking_min_else_mean``. The text
+    child had no visual render target; because a split item fails whole on its
+    first child error, the spreadsheet was dragged down with it and the
+    published item carries ``visual_provenance: []`` with nothing scored.
+
+    The text child now routes to text and the spreadsheet renders and is
+    judged. What makes this safe rather than lenient is that the judge sees
+    every child in full -- the text as text, the workbook as an image -- so
+    nothing is answered from a partial view.
+    """
+    from core.rubric_loader import RubricItem, TaskRubric
+    import core.tool_calling_judge as tool_judge_mod
+
+    responses = ScriptedResponses([
+        _response(output=[_final(_payload("pass", 1.0, "plain text is tidy"))]),
+        _response(output=[_final(_payload("pass", 1.0, "workbook is legible"))]),
+    ])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision()
+    grader._tool_judge.vision_perception = vision
+    rendered = []
+
+    def fake_render(op, path, **kwargs):
+        rendered.append((path, kwargs.get("scope")))
+        return {
+            "ok": True,
+            "data": {
+                "kind": "image_png_base64",
+                "base64": "aW1hZ2U=",
+                "byte_size": 5,
+                "scope": {"workbook_page": 1},
+                "source_kind": "xlsx",
+                "converted_page_count": 1,
+                "renderer": {
+                    "converter": "libreoffice",
+                    "rasterizer": "pymupdf",
+                    "libreoffice_binary": "soffice",
+                    "libreoffice_version": "LibreOffice 24.2.7.2",
+                    "pymupdf_version": "1.26.3",
+                    "dpi": 150,
+                },
+            },
+        }
+
+    monkeypatch.setattr(tool_judge_mod, "read_deliverable", fake_render)
+    deliverable_dir = tmp_path / "task"
+    deliverable_dir.mkdir()
+    (deliverable_dir / "MIG_Welding_Catch_Up_Plan.xlsx").write_bytes(b"xlsx")
+    (deliverable_dir / "MIG_Welding_Catch_Up_Summary.txt").write_bytes(b"summary")
+    task = TaskRubric(
+        task_id="t-split-text-sibling",
+        sector="Manufacturing",
+        occupation="Welder",
+        prompt=(
+            "Create two separate deliverables: a spreadsheet catch-up plan "
+            "and a text file summary."
+        ),
+        rubric_items=[RubricItem(
+            "style", "Overall formatting and style of the deliverable", 5, None
+        )],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+
+    grade = grader.grade_task(task, str(deliverable_dir))
+    item = grade.items[0]
+
+    assert item.target_scope == "split_children"
+    assert item.verdict != "judge_error"
+    assert item.score_excluded is False
+    assert "required_visual_render_target_unavailable" not in (item.evidence or "")
+    # The spreadsheet still reached the judge as an image.
+    assert rendered == [("MIG_Welding_Catch_Up_Plan.xlsx", {"workbook_page": 1})]
+    assert [entry["path"] for entry in item.visual_provenance] == [
+        "MIG_Welding_Catch_Up_Plan.xlsx"
+    ]
+    # ...and the text child was judged on the text channel, not skipped.
+    assert {child["routing_modality"] for child in item.child_grades} == {
+        "text",
+        "visual",
+    }
+    assert not any(
+        child["verdict"] == "judge_error" for child in item.child_grades
+    )
+
+
 @pytest.mark.parametrize(
     ("second_name", "vision_cap", "expected_error"),
     [
-        (
-            "Notes.txt",
-            5,
-            "notes: required_visual_render_target_unavailable",
-        ),
+        # A ``Notes.txt`` case used to sit here. It is removed rather than
+        # re-spelled: this test needs the criterion to stay generic so the
+        # docx child routes formatting and the item comes out mixed, and under
+        # a generic criterion plain text no longer routes visual at all. The
+        # blocking property is still covered by the budget case below, and the
+        # behaviour that replaced the removed one is asserted in
+        # ``test_split_text_child_no_longer_blocks_its_visual_sibling``.
         (
             "Chart.pdf",
             0,
