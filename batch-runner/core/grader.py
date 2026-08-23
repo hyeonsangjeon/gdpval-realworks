@@ -753,6 +753,10 @@ class Grader:
         raw_visual_paths: list[str] = []
         supported_visual_paths: list[str] = []
         visual_preflight_error: str | None = None
+        # One read for the three checks below -- the per-child cap, the
+        # single-target cap, and the union cap are all the same bound.
+        # ``grade_task`` only routes here once the tool-calling judge exists.
+        visual_file_cap = self._tool_judge.visual_file_cap
         if plan.target_scope == "split_children":
             target_by_id = {
                 target.target_id: target for target in selection.primary_targets
@@ -767,7 +771,7 @@ class Grader:
                     raw_visual_paths.extend(target.paths)
                     planned_names, child_error = (
                         self._tool_judge.validate_planned_visual_names(
-                            target.paths
+                            target.paths, visual_file_cap
                         )
                     )
                     supported_visual_paths.extend(planned_names)
@@ -779,7 +783,7 @@ class Grader:
             raw_visual_paths.extend(plan.selected_paths)
             supported_visual_paths, visual_preflight_error = (
                 self._tool_judge.validate_planned_visual_names(
-                    plan.selected_paths
+                    plan.selected_paths, visual_file_cap
                 )
             )
 
@@ -788,9 +792,15 @@ class Grader:
             and supported_visual_paths
             and visual_preflight_error is None
         ):
+            # The union is one batched prepass: ``preflight_visual`` renders
+            # and perceives every path in it, so the cap applies to the union
+            # for the same reason it applies to a bundle. It is checked again
+            # inside that call, but not redundantly -- failing here keeps an
+            # over-cap item from booking its whole union into the task visual
+            # budget and dragging the task's other items down with it.
             supported_visual_paths, visual_preflight_error = (
                 self._tool_judge.validate_planned_visual_names(
-                    supported_visual_paths
+                    supported_visual_paths, visual_file_cap
                 )
             )
         visual_paths = tuple(supported_visual_paths)
@@ -1841,6 +1851,7 @@ class Grader:
         of the configured v1 template).
         """
         from core.tool_calling_judge import ToolCallingJudge  # local; avoid cycle
+        from core.tool_calling_judge import resolve_visual_file_cap
 
         judge_cfg = self.config.get("judge", {})
         tool_prompt_path = resolve_tool_prompt_path(self.config)
@@ -1931,6 +1942,7 @@ class Grader:
             audio_perception=audio_perception,
             prompt_cache_key=prompt_cache_key,
             before_upstream_call=self._apply_tpm_delay,
+            visual_file_cap=resolve_visual_file_cap(judge_cfg),
         )
 
     def _judge_via_tool_calling(

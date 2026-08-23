@@ -156,6 +156,51 @@ def test_reasoning_efforts_reject_null_and_unknown_values(
         validate_grading_config(cfg)
 
 
+@pytest.mark.parametrize("bad", [0, -1, 2.5, "3", True])
+def test_visual_file_cap_rejects_a_value_that_is_not_a_positive_int(
+    tmp_path, bad
+):
+    """A bad cap has to be a config error, not a mid-run judge_error.
+
+    Grading is dispatched in paid shards, so a cap that only fails once the
+    first visual item is reached would burn a run to report a typo.
+    """
+    cfg = _valid_config(tmp_path)
+    cfg["judge"]["perception"] = {
+        "visual": {"model": "gpt-5.6-sol", "file_cap_per_item": bad},
+    }
+
+    with pytest.raises(ValueError, match="file_cap_per_item"):
+        validate_grading_config(cfg)
+
+
+@pytest.mark.parametrize("good", [1, 3, 10, 25])
+def test_visual_file_cap_accepts_a_positive_int(tmp_path, good):
+    cfg = _valid_config(tmp_path)
+    cfg["judge"]["perception"] = {
+        "visual": {"model": "gpt-5.6-sol", "file_cap_per_item": good},
+    }
+
+    validate_grading_config(cfg)
+
+
+def test_shipped_configs_leave_the_visual_file_cap_at_the_default(tmp_path):
+    """No shipped config sets the cap, so none of their hashes moved.
+
+    ``config_hash`` is part of a grade's identity. Setting the cap explicitly
+    in the archived, regrade, or validation configs would have changed those
+    hashes and broken comparability with runs already published under them,
+    so the raised default lives in code and lands in provenance instead.
+    """
+    for path in sorted(Path("grading_configs").glob("*.yaml")):
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        visual = (
+            ((data.get("judge") or {}).get("perception") or {}).get("visual")
+            or {}
+        )
+        assert "file_cap_per_item" not in visual, path.name
+
+
 def test_grade_workflow_defaults_to_v2_sol_max():
     workflow = yaml.safe_load(
         Path("../.github/workflows/grade-run.yml").read_text(encoding="utf-8")

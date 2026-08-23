@@ -1530,6 +1530,49 @@ def test_exit_2_when_no_inference_results(monkeypatch, tmp_path):
     assert s8.main() == 2
 
 
+def test_grade_file_records_the_visual_file_cap_it_graded_under(
+    monkeypatch, tmp_path
+):
+    """The resolved cap, not the configured one.
+
+    A config that omits ``file_cap_per_item`` still grades under a cap. If
+    provenance only carried the perception block verbatim, a reader comparing
+    two runs would have to infer the cap from whichever revision of the code
+    happened to produce each grade file.
+    """
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    monkeypatch.setattr("sys.argv", ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml", "--force"])
+    assert s8.main() == 0
+
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["judge"]["visual_file_cap"] == 10
+
+
+def test_grade_file_records_a_configured_visual_file_cap(monkeypatch, tmp_path):
+    _setup_workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["judge"]["perception"] = {
+        "visual": {"model": "gpt-5.4", "file_cap_per_item": 4}
+    }
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    monkeypatch.setattr("sys.argv", ["step8_grade.py", "exp998_smoke_baseline_sample", "--config", "grading_configs/default.yaml", "--force"])
+    assert s8.main() == 0
+
+    out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["judge"]["visual_file_cap"] == 4
+
+
 def test_inference_model_resolved_from_inf_results_when_present(monkeypatch, tmp_path):
     """inf_results['model'] takes priority when populated."""
     _setup_workspace(tmp_path)

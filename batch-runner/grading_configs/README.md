@@ -204,6 +204,74 @@ All diagnostic, operational, modality, audio, visual-budget, and envelope
 results must be reported numerically. Improvement alone does not justify the
 full run if any wiring, cap, unknown-attribution, or time gate fails.
 
+## Visual file cap per rubric item
+
+`judge.perception.visual.file_cap_per_item` bounds how many files one visual
+rubric item may render and perceive. It is a positive integer; omit it and the
+grader uses **10**. A value that is not a positive integer is rejected by
+`validate_grading_config`, so a typo fails at dispatch rather than partway
+through a paid shard.
+
+This is not the same bound as `judge.perception.visual.call_cap_per_task`,
+which is the task-wide budget (72 in the production configs). The per-item cap
+limits one item's evidence; the task cap limits what the whole task may spend.
+
+Where it applies:
+
+- `primary_bundle` / `file_target` — the item's selected files.
+- `split_children` — each child's own files, and then the union across
+  children. The union counts because the runtime hands it to a single batched
+  prepass that renders and perceives every path in it. Failing the union
+  before that call is also what keeps an over-cap item from booking its whole
+  union into the task visual budget and failing the task's other items with it.
+
+Exceeding the cap fails the item closed with
+`required_visual_file_cap_exceeded:planned=<n>,cap=<n>` — the item is scored as
+`judge_error` and excluded, and nothing is rendered. It is a deliberate refusal
+to judge breadth from a partial view rather than a truncation to the first *N*
+files.
+
+### Why the default moved from 3 to 10
+
+A hard-coded 3 was below the size of an ordinary multi-deliverable submission.
+On R1 it failed three rubric items closed on tasks where nothing was over
+budget and nothing was unrenderable — the items simply spanned four or more
+files. Truncating to the first three alphabetically was rejected: on all three
+items the un-rendered files were exactly the ones that could change the
+verdict, so a truncated pass would have been less honest than the refusal.
+
+The full fix costs +20 vision calls, 3.48% of R1's 575. The projected per-task
+maximum stays at 68 against `call_cap_per_task: 72`, so the task budget is
+still not the binding constraint.
+
+### Effect on `grader_source_hash` and comparability
+
+`compute_grader_source_hash` covers `step8_grade.py`, `core/**/*.py`,
+`schemas/grade.schema.json`, `requirements.txt`,
+`scripts/download_inference_from_hf.py`, and the configured prompt, tool
+prompt, and config file. This change edits `core/tool_calling_judge.py`,
+`core/grader.py`, `core/grader_preflight.py`, `step8_grade.py`, and the grade
+schema, so **`grader_source_hash` moves.** Grades written before it and after
+it are not the same grader identity, and a resume or shard merge across the
+boundary is refused by the existing identity checks — as intended.
+
+`config_hash` does **not** move. No shipped config sets `file_cap_per_item`;
+the raised default lives in code and the resolved value is written to
+`judge.visual_file_cap` in every new grade payload. That keeps the archived,
+regrade, and validation configs byte-identical, so runs already published under
+them keep their identity, and a reader can still tell which cap produced any
+given grade file without inferring it from a code revision.
+
+`judge.visual_file_cap` is optional in the grade schema. Payloads written
+before this change do not carry it; for those the cap was 3.
+
+Scores are comparable within one `grader_source_hash`, not across this one.
+An item that previously scored `judge_error` under the cap of 3 may now carry a
+real verdict, which changes both the numerator and the denominator of its
+task's score. Compare conditions only after a complete rerun under one grader
+source and one schema identity — the same rule as the schema `1.3` boundary
+above.
+
 ## Archived (no longer recommended)
 
 Under `_archive_v1/`. These files are provenance references, not runnable inputs
@@ -232,6 +300,7 @@ boundary.
 | `deliverable_extract_max_chars` | present | **removed** |
 | tools | none | `read_deliverable` + opt. `vision_judge` + opt. `audio_judge` |
 | perception | none | gpt-5.6-sol max vision / gpt-audio-1.5 (modality-routed) |
+| visual files per item | n/a | `file_cap_per_item`, default 10 |
 | critical rule | `weight >= 4` | `\|max_score\| >= 4` (sign-aware, includes 94 penalty items) |
 | score math | clamp-hidden negatives | sign-aware, explicit non-positive total_max handling |
 | rubric execution | one final verdict per rubric item | one final verdict per rubric item (plus bounded tool/finalization calls) |

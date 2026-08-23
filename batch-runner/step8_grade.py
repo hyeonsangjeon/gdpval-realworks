@@ -48,6 +48,7 @@ from core.inference_manifest import (
 )
 from core.public_error import public_provider_error_text
 from core.rubric_loader import RubricLoader
+from core.tool_calling_judge import resolve_visual_file_cap
 from core.tools import ReadDeliverableError, get_renderer_fingerprint
 
 SCHEMA_VERSION = "1.3"
@@ -482,6 +483,10 @@ def validate_grading_config(config: dict) -> None:
             raise ValueError(
                 "judge.perception.visual.reasoning_effort is invalid"
             )
+        # resolve_visual_file_cap raises on anything that is not a positive
+        # integer. Calling it here turns a bad cap into a config error before
+        # dispatch rather than a judge_error partway through a paid shard.
+        resolve_visual_file_cap(judge)
 
     # --- v2 critical block (optional) ----------------------------------
     critical = (judge.get("critical") or {})
@@ -1656,6 +1661,11 @@ def _build_grade_payload(
             "temperature": config.get("judge", {}).get("generation", {}).get("temperature", 0),
             "seed": config.get("judge", {}).get("generation", {}).get("seed", 42),
             "perception": config.get("judge", {}).get("perception", {}),
+            # The resolved value, not the configured one. A config that omits
+            # file_cap_per_item still grades under a cap, and a grade file that
+            # only carried the perception block verbatim would leave a reader
+            # inferring it from whichever revision of the code ran.
+            "visual_file_cap": resolve_visual_file_cap(config.get("judge") or {}),
             "config_name": config.get("config_name", "unknown"),
             "config_hash": config_hash,
         },

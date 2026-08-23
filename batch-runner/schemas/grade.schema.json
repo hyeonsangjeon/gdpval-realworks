@@ -352,7 +352,12 @@
         "temperature": {"type": "number"},
         "seed": {"type": "integer"},
         "config_name": {"type": "string"},
-        "config_hash": {"type": "string"}
+        "config_hash": {"type": "string"},
+        "visual_file_cap": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Resolved per-item visual file cap in force for this run. Not required: grades written before the cap became configurable do not carry it, and for those the cap was 3."
+        }
       },
       "additionalProperties": true
     },

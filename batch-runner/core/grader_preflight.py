@@ -10,7 +10,7 @@ from core.deliverable_selector import plan_targets_for_criterion
 from core.grader import Grader
 from core.grader_routing import Modality, resolve_runtime_routing
 from core.rubric_loader import TaskRubric
-from core.tool_calling_judge import ToolCallingJudge
+from core.tool_calling_judge import ToolCallingJudge, resolve_visual_file_cap
 
 
 def _planner(config: dict) -> Grader:
@@ -28,6 +28,7 @@ def plan_task_runtime(
     """Return the exact model-free routing plan for one local task."""
     grader = _planner(config)
     deliverable_path = Path(deliverable_dir)
+    visual_file_cap = resolve_visual_file_cap(config.get("judge") or {})
     files = grader._list_files(deliverable_path)
     selection = grader._select_deliverables(task, deliverable_path, files)
     file_map = grader._relative_file_map(deliverable_path, files)
@@ -92,7 +93,7 @@ def plan_task_runtime(
                 if decision.modality is Modality.VISUAL:
                     planned_names, child_visual_error = (
                         ToolCallingJudge.validate_planned_visual_names(
-                            target.paths
+                            target.paths, visual_file_cap
                         )
                     )
                     unsupported_visual_paths.extend(
@@ -120,7 +121,7 @@ def plan_task_runtime(
             if supported_visual_paths and visual_error is None:
                 planned_names, parent_visual_error = (
                     ToolCallingJudge.validate_planned_visual_names(
-                        supported_visual_paths
+                        supported_visual_paths, visual_file_cap
                     )
                 )
                 if parent_visual_error is not None:
@@ -189,7 +190,7 @@ def plan_task_runtime(
         if decision.modality is Modality.VISUAL:
             planned_names, visual_error = (
                 ToolCallingJudge.validate_planned_visual_names(
-                    target_plan.selected_paths
+                    target_plan.selected_paths, visual_file_cap
                 )
             )
             if visual_error is not None:

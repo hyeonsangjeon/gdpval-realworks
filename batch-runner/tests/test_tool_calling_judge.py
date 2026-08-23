@@ -14,7 +14,11 @@ from typing import Any
 import pytest
 
 from core.rubric_loader import RubricItem, TaskRubric
-from core.tool_calling_judge import ToolCallingJudge, ToolCallingResult
+from core.tool_calling_judge import (
+    ToolCallingJudge,
+    ToolCallingResult,
+    resolve_visual_file_cap,
+)
 
 
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "grader_judge_v2.md"
@@ -1622,7 +1626,7 @@ def test_visual_file_cap_fails_before_render_vision_or_main(
     deliverable_dir, task_and_item, monkeypatch
 ):
     task, _ = task_and_item
-    names = ["a.png", "b.png", "c.png", "d.png"]
+    names = [f"{chr(ord('a') + index)}.png" for index in range(11)]
     for name in names:
         (deliverable_dir / name).write_bytes(b"source")
     monkeypatch.setattr(
@@ -1648,7 +1652,7 @@ def test_visual_file_cap_fails_before_render_vision_or_main(
 
     assert result.verdict == "judge_error"
     assert result.judge_error == (
-        "required_visual_file_cap_exceeded:planned=4,cap=3"
+        "required_visual_file_cap_exceeded:planned=11,cap=10"
     )
     assert result.score_excluded is True
     assert result.render_call_count == 0
@@ -1656,6 +1660,78 @@ def test_visual_file_cap_fails_before_render_vision_or_main(
     assert result.main_api_call_count == 0
     assert vision.calls == []
     assert client.responses.calls == []
+
+
+def test_visual_file_cap_comes_from_the_grading_config(
+    deliverable_dir, task_and_item, monkeypatch
+):
+    """The cap in force is a config value, and it is the one enforced.
+
+    It used to be a constant in this module, which meant a run's grade file
+    recorded no trace of the cap it graded under. A judge constructed with a
+    different cap has to actually use it, or the value in provenance is
+    decoration.
+    """
+    task, _ = task_and_item
+    names = ["a.png", "b.png", "c.png", "d.png"]
+    for name in names:
+        (deliverable_dir / name).write_bytes(b"source")
+    monkeypatch.setattr(
+        tool_calling_judge_module,
+        "read_deliverable",
+        lambda *args, **kwargs: pytest.fail("render must not start"),
+    )
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([])),
+        model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE,
+        vision_perception=StubVision(remaining_calls=5),
+        visual_file_cap=3,
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=RubricItem("r-file-cap", "Overall Style", 4, None),
+        deliverable_dir=str(deliverable_dir),
+        file_names=names,
+    )
+
+    assert result.judge_error == (
+        "required_visual_file_cap_exceeded:planned=4,cap=3"
+    )
+
+
+@pytest.mark.parametrize(
+    "visual, expected",
+    [
+        ({}, 10),
+        ({"model": "gpt-5.4"}, 10),
+        # ``file_cap_per_item:`` with nothing after it is how YAML spells a key
+        # someone started and did not finish. It reads back as None, which is
+        # indistinguishable from the key being absent, so it takes the default
+        # rather than failing a dispatch over a blank line.
+        ({"file_cap_per_item": None}, 10),
+        ({"file_cap_per_item": 3}, 3),
+        ({"file_cap_per_item": 25}, 25),
+    ],
+)
+def test_resolve_visual_file_cap_reads_the_perception_block(visual, expected):
+    assert resolve_visual_file_cap({"perception": {"visual": visual}}) == expected
+
+
+@pytest.mark.parametrize("judge_config", [{}, {"perception": {}}, {"perception": {"visual": {}}}])
+def test_resolve_visual_file_cap_tolerates_a_missing_perception_block(judge_config):
+    assert resolve_visual_file_cap(judge_config) == 10
+
+
+@pytest.mark.parametrize("bad", [0, -1, 2.5, "3", True])
+def test_resolve_visual_file_cap_rejects_a_cap_that_is_not_a_positive_int(bad):
+    # True is here on purpose: bool is an int subclass, so an unguarded check
+    # would resolve ``file_cap_per_item: true`` to a cap of one file.
+    with pytest.raises(ValueError, match="file_cap_per_item"):
+        resolve_visual_file_cap(
+            {"perception": {"visual": {"file_cap_per_item": bad}}}
+        )
 
 
 @pytest.mark.parametrize(

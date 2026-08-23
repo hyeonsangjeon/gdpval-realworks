@@ -1076,6 +1076,180 @@ def test_split_text_child_no_longer_blocks_its_visual_sibling(
     )
 
 
+def test_split_children_render_every_child_past_the_old_file_cap(
+    monkeypatch, tmp_path
+):
+    """Four one-file children under one item, end to end.
+
+    This is the shape the old cap of three failed closed on R1: four separate
+    reports, all renderable, none over any budget, and the item scored nothing
+    because the constant said three. The union is one batched prepass, so the
+    cap still binds on it -- it is just no longer set below the size of an
+    ordinary multi-deliverable submission.
+    """
+    from core.rubric_loader import RubricItem, TaskRubric
+    from core.deliverable_selector import (
+        CriterionTargetPlan,
+        DeliverableSelection,
+        SelectionTarget,
+    )
+    from core.grader import Grader
+    import core.tool_calling_judge as tool_judge_mod
+
+    paths = [f"report-{index}.pdf" for index in range(4)]
+    responses = ScriptedResponses([
+        _response(output=[_final(_payload("pass", 1.0, f"{path} is legible"))])
+        for path in paths
+    ])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision()
+    grader._tool_judge.vision_perception = vision
+    rendered = []
+
+    def fake_render(op, path, **kwargs):
+        rendered.append(path)
+        return {
+            "ok": True,
+            "data": {
+                "kind": "image_png_base64",
+                "base64": "aW1hZ2U=",
+                "byte_size": 5,
+                "scope": {"page": 1},
+                "source_kind": "pdf",
+                "converted_page_count": 1,
+                "renderer": {
+                    "converter": "libreoffice",
+                    "rasterizer": "pymupdf",
+                    "libreoffice_binary": "soffice",
+                    "libreoffice_version": "LibreOffice 24.2.7.2",
+                    "pymupdf_version": "1.26.3",
+                    "dpi": 150,
+                },
+            },
+        }
+
+    monkeypatch.setattr(tool_judge_mod, "read_deliverable", fake_render)
+    deliverable_dir = tmp_path / "task"
+    deliverable_dir.mkdir()
+    targets = []
+    for index, path in enumerate(paths):
+        (deliverable_dir / path).write_bytes(b"pdf")
+        targets.append(SelectionTarget(f"target-{index}", [path], "pdf"))
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="t-split-wide",
+        task_class="separate_equivalent",
+        primary_targets=targets,
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="split_children",
+            target_ids=[target.target_id for target in targets],
+            selected_paths=paths,
+            aggregation_rule="blocking_min_else_mean",
+        ),
+    )
+    task = TaskRubric(
+        task_id="t-split-wide",
+        sector="Information",
+        occupation="Analyst",
+        prompt="Create four separate PDF reports, one per region.",
+        rubric_items=[RubricItem("style", "Overall Style", 4, None)],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+
+    grade = grader.grade_task(task, str(deliverable_dir))
+    item = grade.items[0]
+
+    assert item.target_scope == "split_children"
+    assert item.routing_modality == "visual"
+    assert item.verdict != "judge_error"
+    assert item.score_excluded is False
+    assert sorted(rendered) == sorted(paths)
+    assert [entry["path"] for entry in item.visual_provenance] == sorted(paths)
+    assert len(item.child_grades) == 4
+    assert not any(
+        child["verdict"] == "judge_error" for child in item.child_grades
+    )
+
+
+def test_split_children_union_over_the_file_cap_fails_before_render(
+    monkeypatch, tmp_path
+):
+    """Past the cap the item still fails closed, and before any render.
+
+    The runtime and the preflight have to agree here or a cohort would be
+    told a plan the grader will not run. The preflight half of that pair
+    lives in ``tests/test_grader_preflight.py``.
+    """
+    from core.rubric_loader import RubricItem, TaskRubric
+    from core.deliverable_selector import (
+        CriterionTargetPlan,
+        DeliverableSelection,
+        SelectionTarget,
+    )
+    from core.grader import Grader
+    import core.tool_calling_judge as tool_judge_mod
+
+    paths = [f"report-{index}.pdf" for index in range(11)]
+    responses = ScriptedResponses([])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision()
+    grader._tool_judge.vision_perception = vision
+    monkeypatch.setattr(
+        tool_judge_mod,
+        "read_deliverable",
+        lambda *args, **kwargs: pytest.fail("cap must precede render"),
+    )
+    deliverable_dir = tmp_path / "task"
+    deliverable_dir.mkdir()
+    targets = []
+    for index, path in enumerate(paths):
+        (deliverable_dir / path).write_bytes(b"pdf")
+        targets.append(SelectionTarget(f"target-{index}", [path], "pdf"))
+    selection = DeliverableSelection(
+        selection_status="ok",
+        task_id="t-split-over-cap",
+        task_class="separate_equivalent",
+        primary_targets=targets,
+    )
+    monkeypatch.setattr(Grader, "_select_deliverables", lambda *args: selection)
+    monkeypatch.setattr(
+        "core.grader.plan_targets_for_criterion",
+        lambda *args: CriterionTargetPlan(
+            target_scope="split_children",
+            target_ids=[target.target_id for target in targets],
+            selected_paths=paths,
+            aggregation_rule="blocking_min_else_mean",
+        ),
+    )
+    task = TaskRubric(
+        task_id="t-split-over-cap",
+        sector="Information",
+        occupation="Analyst",
+        prompt="Create eleven separate PDF reports, one per region.",
+        rubric_items=[RubricItem("style", "Overall Style", 4, None)],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+
+    grade = grader.grade_task(task, str(deliverable_dir))
+    item = grade.items[0]
+
+    assert item.verdict == "judge_error"
+    assert item.score_excluded is True
+    assert item.evidence == "required_visual_file_cap_exceeded:planned=11,cap=10"
+    assert item.render_call_count == 0
+    assert item.perception_call_count == 0
+    assert vision.calls == []
+    assert responses.calls == []
+
+
 @pytest.mark.parametrize(
     ("second_name", "vision_cap", "expected_error"),
     [

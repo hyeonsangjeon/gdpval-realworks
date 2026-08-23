@@ -112,7 +112,35 @@ _VISUAL_RENDER_SCOPES: Dict[str, Dict[str, int]] = {
     ".bmp": {},
     ".webp": {},
 }
-_VISUAL_FILE_CAP = 3
+#: Default upper bound on how many files one visual rubric item may render
+#: and perceive. It bounds one item's evidence; ``call_cap_per_task`` bounds
+#: the whole task's visual spend, and the two are not interchangeable.
+#: Configurable per grading config via
+#: ``judge.perception.visual.file_cap_per_item`` so the value in force lands
+#: in run provenance rather than staying implicit in this file. It was 3,
+#: which was below the size of an ordinary multi-deliverable submission and
+#: failed whole items closed rather than judging them.
+_DEFAULT_VISUAL_FILE_CAP = 10
+
+
+def resolve_visual_file_cap(judge_config: Mapping[str, Any]) -> int:
+    """Return the per-item visual file cap a judge config asks for.
+
+    An absent key takes the default. So does an explicitly null one: that is
+    how YAML spells a key someone started and did not finish, and the two are
+    indistinguishable once parsed.
+    """
+    visual = ((judge_config or {}).get("perception") or {}).get("visual") or {}
+    raw = visual.get("file_cap_per_item")
+    if raw is None:
+        return _DEFAULT_VISUAL_FILE_CAP
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise ValueError(
+            "judge.perception.visual.file_cap_per_item must be a positive integer"
+        )
+    return raw
+
+
 #: Where each rendered kind's surface count comes from. "Surface" is the
 #: unit the judge sampled one of -- a page, a slide, a converted workbook
 #: page -- and the count is what makes ``sampled_first_surface`` legible:
@@ -447,6 +475,10 @@ class ToolCallingJudge:
                                  fully cacheable).
         before_upstream_call:     optional zero-argument TPM guard invoked
                      before each main-judge or vision API call.
+        visual_file_cap:         most files one visual item may render.
+                     Resolved from
+                     ``judge.perception.visual.file_cap_per_item``
+                     by :func:`resolve_visual_file_cap`.
     """
 
     client: Any
@@ -465,6 +497,7 @@ class ToolCallingJudge:
     prompt_cache_key: Optional[str] = None
     compact_threshold: Optional[int] = None
     before_upstream_call: Optional[Callable[[], None]] = None
+    visual_file_cap: int = _DEFAULT_VISUAL_FILE_CAP
 
     # Cached: split prompt template into stable + variable halves once at
     # construction (or first use). The stable half is the ``instructions=``
@@ -1103,7 +1136,7 @@ class ToolCallingJudge:
             return result
 
         planned_names, planning_error = self.validate_planned_visual_names(
-            file_names
+            file_names, self.visual_file_cap
         )
         if planning_error is not None:
             result.judge_error = planning_error
@@ -1299,16 +1332,16 @@ class ToolCallingJudge:
 
     @classmethod
     def validate_planned_visual_names(
-        cls, file_names: List[str]
+        cls, file_names: List[str], cap: int
     ) -> Tuple[List[str], Optional[str]]:
         """Apply the exact runtime target, cap, and format checks."""
         planned_names = cls.planned_supported_visual_names(file_names)
         if not planned_names:
             return [], "required_visual_render_target_unavailable"
-        if len(planned_names) > _VISUAL_FILE_CAP:
+        if len(planned_names) > cap:
             return planned_names, (
                 "required_visual_file_cap_exceeded:"
-                f"planned={len(planned_names)},cap={_VISUAL_FILE_CAP}"
+                f"planned={len(planned_names)},cap={cap}"
             )
         return planned_names, None
 
