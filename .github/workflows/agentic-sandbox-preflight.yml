@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout exact implementation
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
           ref: ${{ github.sha }}

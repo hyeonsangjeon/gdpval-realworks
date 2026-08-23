@@ -353,7 +353,7 @@ jobs:
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
     steps:
       - name: Checkout exact main revision (read-only)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: main
           persist-credentials: false
@@ -390,7 +390,7 @@ jobs:
           done
 
       - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -477,8 +477,15 @@ jobs:
 
     steps:
 
+      # Held on the v5 line on purpose. checkout v6 moved persisted
+      # credentials out of .git/config into a separate file referenced by an
+      # includeIf entry, and `git config --local` does not expand includes.
+      # The extraheader check in the next step would stop finding the
+      # credential and abort this job -- on the paid path, after dispatch.
+      # tests/test_step8_grade.py holds the two together; bump both or
+      # neither.
       - name: Checkout exact main revision
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: main
           persist-credentials: true
@@ -519,7 +526,7 @@ jobs:
           done
 
       - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -701,7 +708,7 @@ jobs:
 
       - name: Azure Login (OIDC)
         if: inputs.dry_run != true
-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -1136,7 +1143,7 @@ jobs:
 
       - name: Upload grade artifact
         if: always() && inputs.dry_run == false && steps.grade.outputs.grade_file != ''
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # Shards are separate workflow runs, so the names cannot collide --
           # but a downloaded bundle is unreadable without knowing which slice it

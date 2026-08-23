@@ -228,7 +228,7 @@ def test_hosted_containment_measurement_is_read_only_and_exact():
     assert "GITHUB_STEP_SUMMARY" in measure["run"]
     upload = job["steps"][names.index("Upload hosted containment evidence")]
     assert upload["uses"] == (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
     )
     assert upload["with"]["if-no-files-found"] == "error"
     assert upload["with"]["retention-days"] == 14
