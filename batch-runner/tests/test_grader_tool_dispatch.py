@@ -138,8 +138,14 @@ def test_grader_dispatch_uses_tool_calling_judge_when_configured(monkeypatch, tm
     assert "render_to_image" not in op_enum
 
 
-def test_grader_without_tools_block_uses_legacy_path(monkeypatch, tmp_path):
-    """No judge.tools => _tool_judge stays None => legacy _judge runs."""
+def test_grader_without_tools_block_is_rejected(monkeypatch, tmp_path):
+    """No judge.tools => construction fails.
+
+    Task 207 removed the legacy text-extract path this used to fall back to.
+    A config that does not opt into the tool-calling judge now has no judge
+    at all, so it must be refused up front rather than grade by some other
+    route and produce numbers that are not comparable.
+    """
     from core.grader import Grader
     import core.grader as grader_mod
 
@@ -159,5 +165,5 @@ def test_grader_without_tools_block_uses_legacy_path(monkeypatch, tmp_path):
         "grader": {},
         "tpm_guard": {},
     }
-    grader = Grader(cfg, rubric_loader=None, client=fake_client)
-    assert grader._tool_judge is None
+    with pytest.raises(ValueError, match="judge.tools.read_deliverable"):
+        Grader(cfg, rubric_loader=None, client=fake_client)

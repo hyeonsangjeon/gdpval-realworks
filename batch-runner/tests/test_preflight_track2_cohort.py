@@ -79,7 +79,9 @@ def test_cli_rejects_v1_config_before_inference_load(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "sys.argv",
         _argv(
-            "grading_configs/default_gpt5pro.yaml",
+            # Task 207 archived this v1 config; the point of the test is
+            # that a schema-1.0 config is refused, so it still needs one.
+            "grading_configs/_archive_v1/default_gpt5pro.yaml",
             missing_inference,
             tmp_path,
         ),

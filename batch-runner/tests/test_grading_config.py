@@ -46,7 +46,9 @@ def _valid_config(tmp_path: Path) -> dict:
 
 
 def test_default_config_loads_and_validates():
-    path = Path("grading_configs/default_gpt5pro.yaml")
+    # Task 207 archived the v1 `default_gpt5pro.yaml`; `grade-run.yml` has
+    # defaulted to the v2 Sol Max config since before that.
+    path = Path("grading_configs/default_v2_sol_max.yaml")
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     validate_grading_config(data)
     assert data["output"]["directory"] == "../data/grades"
@@ -215,7 +217,6 @@ def test_grade_workflow_defaults_to_v2_sol_max():
 @pytest.mark.parametrize(
     "filename",
     [
-        "default_gpt5pro.yaml",
         "default_v2.yaml",
         "default_v2_sol_max.yaml",
         "default_v2_mini.yaml",
