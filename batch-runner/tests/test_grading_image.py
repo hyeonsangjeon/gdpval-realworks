@@ -172,7 +172,6 @@ def test_publish_is_gated_and_pinned_by_digest_not_by_tag():
     for guard in (
         "inputs.publish == true",
         "github.ref == 'refs/heads/main'",
-        "github.ref_protected == true",
     ):
         assert guard in publish["if"]
 
@@ -186,6 +185,56 @@ def test_publish_is_gated_and_pinned_by_digest_not_by_tag():
     # never changed, which is the whole failure this image exists to remove.
     assert ":latest" not in tags
     assert "${{ github.sha }}" in tags
+
+
+def test_publish_is_gated_by_an_environment_that_only_main_can_reach():
+    """The approval gate is the environment, so the wiring has to hold.
+
+    This job used to gate on ``github.ref_protected``. main carries no branch
+    protection here on purpose -- grade-run.yml pushes grade files straight to
+    it from up to nine concurrent shards -- so that condition was never true
+    and the job skipped silently on every dispatch. Silently is the problem:
+    the run went green having published nothing.
+
+    grading-image-publish replaces it with a required reviewer and a
+    deployment branch policy naming main and nothing else, both enforced
+    before a runner is handed out. That is a repository setting this file
+    cannot read, so what it locks instead is the half that lives in the repo:
+    the job still asks for the environment, still refuses any ref but main,
+    and is still the only job holding the credential that can write to GHCR.
+    """
+    workflow = _workflow(BUILD_WORKFLOW_PATH)
+    publish = workflow["jobs"]["publish-grading-image"]
+
+    assert publish["environment"] == {"name": "grading-image-publish"}
+
+    # Dropping the environment while keeping the conditions would publish on
+    # dispatch with no human in the loop, which is exactly what the owner
+    # declined when they declined relaxing the guard outright.
+    condition = " ".join(publish["if"].split())
+    assert "github.event_name == 'workflow_dispatch'" in condition
+    assert "inputs.publish == true" in condition
+    assert "github.ref == 'refs/heads/main'" in condition
+
+    # The environment's branch policy enforces main, and so does the job. Both
+    # only because a branch policy is edited in a settings page nobody reviews
+    # in a diff; the condition is the copy that travels with the code.
+    assert "github.ref_protected" not in condition
+    verify_checkout = next(
+        step for step in publish["steps"] if step.get("name") == "Verify main checkout"
+    )
+    assert 'test "$GITHUB_REF" = "refs/heads/main"' in verify_checkout["run"]
+    assert "GITHUB_REF_PROTECTED" not in verify_checkout["run"]
+
+    # packages: write belongs to the approved job alone. Granting it at the
+    # top level, or to the unapproved verify job, would hand the token that
+    # can push to a public registry to a run nobody approved.
+    assert workflow["permissions"] == {"contents": "read"}
+    for name, job in workflow["jobs"].items():
+        has_packages = "packages" in (job.get("permissions") or {})
+        assert has_packages == (name == "publish-grading-image"), name
+        if name != "publish-grading-image":
+            assert "environment" not in job, name
 
 
 def test_every_action_in_the_build_workflow_is_sha_pinned():
