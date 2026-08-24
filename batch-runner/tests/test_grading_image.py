@@ -159,6 +159,39 @@ def test_grading_jobs_run_in_the_published_image_by_digest():
     assert len(images) == 1, sorted(images)
 
 
+def test_grading_jobs_mount_the_toolcache_where_its_shebangs_point():
+    """The runner's prebuilt CPython only works under its build-time path.
+
+    The runner mounts its tool cache at /__t, but the CPython inside it was
+    installed on the runner image with RUNNER_TOOL_CACHE=/opt/hostedtoolcache
+    and nothing rewrites paths on the way in, so ``bin/pip`` still starts
+    ``#!/opt/hostedtoolcache/.../python3.11``. The free 2026-08-24 rehearsal
+    got "Successfully set up CPython (3.11.16)" and then ``spawn
+    /__t/Python/3.11.16/x64/bin/pip ENOENT`` from setup-python's own pip.
+
+    Mounting the same host directory again under the name the shebangs expect
+    costs nothing at run time. Pointing RUNNER_TOOL_CACHE at a container-local
+    path instead would work too, but only by downloading CPython before every
+    paid job.
+    """
+    grade = _workflow(GRADE_WORKFLOW_PATH)
+    mount = "/opt/hostedtoolcache:/opt/hostedtoolcache"
+
+    for name in GRADING_JOBS:
+        job = grade["jobs"][name]
+        volumes = job["container"].get("volumes") or []
+        assert mount in volumes, (name, volumes)
+
+        # The mount only matters because these jobs take their interpreter
+        # from the tool cache rather than from the image, which carries none.
+        setup = [
+            step for step in job["steps"]
+            if str(step.get("uses", "")).startswith("actions/setup-python@")
+        ]
+        assert len(setup) == 1, name
+        assert str(setup[0]["with"]["python-version"]).startswith("3.11"), name
+
+
 def test_grading_jobs_run_their_steps_under_bash():
     """A container job defaults `run:` to sh, and these steps are bash.
 
