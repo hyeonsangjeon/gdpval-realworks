@@ -159,6 +159,34 @@ def test_grading_jobs_run_in_the_published_image_by_digest():
     assert len(images) == 1, sorted(images)
 
 
+def test_grading_jobs_run_their_steps_under_bash():
+    """A container job defaults `run:` to sh, and these steps are bash.
+
+    Found by the free 2026-08-24 rehearsal, which died on the first step with
+    ``set: Illegal option -o pipefail``. The dry run fails cheaply; the paid
+    job would not have, because Run grading, Commit grade result, Merge shards
+    and both analysis steps use ``[[ ]]`` or arrays and all run after the
+    corpus has been judged and paid for.
+
+    ``bash -e {0}`` and not the ``shell: bash`` shorthand: the shorthand
+    expands to ``bash --noprofile --norc -eo pipefail {0}``, which would add
+    pipefail to steps that were graded without it.
+    """
+    grade = _workflow(GRADE_WORKFLOW_PATH)
+
+    for name in GRADING_JOBS:
+        job = grade["jobs"][name]
+        assert job.get("defaults", {}).get("run", {}).get("shell") == "bash -e {0}", name
+
+        # And the default has to actually cover the steps that need it: a
+        # per-step `shell:` that is not bash would slip past the job default.
+        for step in job["steps"]:
+            if "run" not in step:
+                continue
+            shell = step.get("shell")
+            assert shell is None or shell.startswith("bash"), (name, step.get("name"))
+
+
 def test_grading_jobs_declare_the_image_os_setup_python_reads():
     # The runner exports ImageOS for its own image and not for a container, so
     # without this actions/setup-python cannot tell which prebuilt CPython
