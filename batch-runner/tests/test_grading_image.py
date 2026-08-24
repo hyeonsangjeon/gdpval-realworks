@@ -221,6 +221,51 @@ def test_grading_jobs_verify_the_image_before_spending_anything():
     assert "az" not in asserted["grade-dry-run"]
 
 
+def test_grading_jobs_trust_the_workspace_before_touching_git():
+    """A container job runs as root; /__w keeps the runner user's ownership.
+
+    git then refuses the checkout outright -- "fatal: detected dubious
+    ownership" -- and actions/checkout does not settle it for the steps that
+    follow: it makes the same exemption under a throwaway HOME and drops it on
+    the way out. The free 2026-08-24 rehearsal hit this one step after
+    checkout, at ``git rev-parse HEAD``.
+
+    The ordering is the whole assertion. A trust step that lands after the
+    first git call reads as present and protects nothing.
+    """
+    grade = _workflow(GRADE_WORKFLOW_PATH)
+
+    for name in GRADING_JOBS:
+        trusted = None
+        first_git = None
+
+        for index, step in enumerate(grade["jobs"][name]["steps"]):
+            script = step.get("run")
+            if script is None:
+                continue
+            body = "\n".join(
+                line
+                for line in script.splitlines()
+                if not line.lstrip().startswith("#")
+            )
+            if "safe.directory" in body:
+                # Exactly the workspace the job was handed, never a blanket
+                # '*' -- the grading code checks out nothing else, and a
+                # wildcard would also cover whatever it did.
+                assert '--add safe.directory "$GITHUB_WORKSPACE"' in body, name
+                if trusted is None:
+                    trusted = index
+                continue
+            if first_git is None and re.search(r"(?:^|[|&;(]|\$\()\s*git\b", body, re.M):
+                first_git = index
+
+        assert trusted is not None, f"{name} never marks the checkout safe"
+        # Without this the ordering check above would pass vacuously on a job
+        # that had stopped using git at all.
+        assert first_git is not None, f"{name} runs no git; re-read this test"
+        assert trusted < first_git, (name, trusted, first_git)
+
+
 def test_no_grading_job_installs_the_renderer_at_runtime():
     # apt in the grade job was both the outage and the drift: these packages
     # carry no version, so whichever LibreOffice the mirror served that day
