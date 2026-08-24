@@ -192,6 +192,50 @@ def test_grading_jobs_mount_the_toolcache_where_its_shebangs_point():
         assert str(setup[0]["with"]["python-version"]).startswith("3.11"), name
 
 
+def test_grading_jobs_give_pip_a_cache_dir_root_actually_owns():
+    """As root, pip checks who owns its cache, not whether it can write there.
+
+    Container steps run as root, and $HOME is /github/home, bind-mounted from
+    the runner user's own work directory -- so root can write it but does not
+    own it. pip reads that as the sudo-without-H mistake and disables the
+    cache outright (utils/filesystem.py: ``if os.geteuid() == 0: return
+    path_uid == 0``). ``pip cache dir``, which is the first thing
+    ``cache: "pip"`` runs, then exits 1 with "pip cache commands can not
+    function since cache is disabled". The free 2026-08-24 rehearsal died
+    there, one step after setup-python reported success.
+
+    Reproduced as root against a uid-1001 $HOME: chmod 777 does not help, and
+    a container-local PIP_CACHE_DIR does -- the HTTP cache fills and a second
+    install reports "Using cached".
+
+    So the cache is kept rather than dropped, and the assertion is the pair:
+    ``cache: "pip"`` is only safe here while PIP_CACHE_DIR points somewhere
+    root owns. Dropping the cache would work too, at the price of a full PyPI
+    download in front of every paid run.
+    """
+    grade = _workflow(GRADE_WORKFLOW_PATH)
+
+    # Bind-mounted from the runner and left in the runner user's ownership:
+    # the two roots pip will refuse for exactly the reason above.
+    runner_owned = ("/github/home", "/__w", "/home/runner")
+
+    for name in GRADING_JOBS:
+        job = grade["jobs"][name]
+
+        cached = [
+            step for step in job["steps"]
+            if str(step.get("uses", "")).startswith("actions/setup-python@")
+            and (step.get("with") or {}).get("cache")
+        ]
+        if not cached:
+            continue
+
+        cache_dir = (job.get("env") or {}).get("PIP_CACHE_DIR")
+        assert cache_dir, f"{name} caches pip without steering PIP_CACHE_DIR"
+        assert cache_dir.startswith("/"), (name, cache_dir)
+        assert not cache_dir.startswith(runner_owned), (name, cache_dir)
+
+
 def test_grading_jobs_run_their_steps_under_bash():
     """A container job defaults `run:` to sh, and these steps are bash.
 

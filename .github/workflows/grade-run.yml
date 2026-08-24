@@ -359,6 +359,19 @@ jobs:
   # LC_ALL=C.UTF-8 for the renderer either way, so this only keeps Python's
   # default encoding identical to what the corpus was graded under.
   #
+  # PIP_CACHE_DIR moves pip's cache off $HOME. Steps here run as root, and the
+  # runner bind-mounts $HOME=/github/home from its own work directory, so it
+  # stays owned by the runner user. For root, pip does not ask whether it can
+  # write the cache -- it asks who owns it, and takes anything else as the
+  # sudo-without-H mistake it is guarding against (utils/filesystem.py:
+  # `if os.geteuid() == 0: return path_uid == 0`). It then disables the cache,
+  # and `pip cache dir` -- the first thing `cache: "pip"` runs -- exits 1
+  # because there is no cache to report. The free 2026-08-24 rehearsal died
+  # there. chmod does not help; only ownership does. A container-local path
+  # under /root is owned by root, so the cache stays on, which matters:
+  # dropping `cache: "pip"` instead would put a full PyPI download in front of
+  # every paid run.
+  #
   # What the image deliberately does not carry, and why that is safe:
   #   gh      -- one call site, the auto-resume dispatch below. It now POSTs to
   #              the REST endpoint that `gh workflow run` wraps, using curl,
@@ -417,6 +430,7 @@ jobs:
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
       ImageOS: ubuntu24
       LANG: C.UTF-8
+      PIP_CACHE_DIR: /root/.cache/pip
     steps:
       - name: Verify grading container
         run: |
@@ -590,6 +604,7 @@ jobs:
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
       ImageOS: ubuntu24
       LANG: C.UTF-8
+      PIP_CACHE_DIR: /root/.cache/pip
     # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
     # extended. We set 320min so step8_grade.py's internal 4h time guard (env
     # GRADER_TIME_BUDGET_SEC=14400) trips first, partial-saves, and exits 7,
