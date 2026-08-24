@@ -13,6 +13,19 @@
 #   sandbox/grading.Dockerfile asserts the renderer version, font resolution,
 #   git, and az in its own RUN steps, so a build that succeeds has already
 #   proven the acceptance criteria. The steps below only surface the evidence.
+#
+# WHAT GATES THE PUBLISH
+#   The grading-image-publish environment: required reviewer, and a deployment
+#   branch policy that names main and nothing else. Both are enforced by
+#   GitHub before the job starts, so a dispatch from any other ref cannot
+#   reach a runner at all.
+#
+#   This job used to gate on github.ref_protected instead. That read as a
+#   stronger control than it was: main carries no branch protection here on
+#   purpose, because grade-run.yml pushes grade files straight to it from up
+#   to nine concurrent shards. So the condition was never true and the job
+#   silently skipped every time. An environment gates this one publish
+#   without touching how anything else merges or pushes.
 name: Build Grading Image
 
 on:
@@ -104,14 +117,18 @@ jobs:
       ${{
         github.event_name == 'workflow_dispatch' &&
         inputs.publish == true &&
-        github.ref == 'refs/heads/main' &&
-        github.ref_protected == true
+        github.ref == 'refs/heads/main'
       }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
       packages: write
+    # Holds the run until a reviewer approves it, and refuses to start at all
+    # on any ref but main. packages: write lives only on this job, so the
+    # approval and the credential that can write to GHCR are the same gate.
+    environment:
+      name: grading-image-publish
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -119,11 +136,10 @@ jobs:
           persist-credentials: false
           ref: ${{ github.sha }}
 
-      - name: Verify protected main checkout
+      - name: Verify main checkout
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main"
-          test "$GITHUB_REF_PROTECTED" = "true"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Set up Docker Buildx
