@@ -337,10 +337,48 @@ jobs:
             "  resume_chunk=$GRADE_RESUME_CHUNK" \
             "  shard=$GRADE_SHARD_INDEX/$GRADE_SHARD_COUNT"
 
+  # ---------------------------------------------------------------------------
+  # Both grading jobs run inside the purpose-built grading image rather than on
+  # the bare hosted runner. On formatting criteria the renderer *is* the
+  # evidence, so whichever LibreOffice an Ubuntu mirror happened to serve that
+  # morning used to decide what a score meant. The image fixes it at the build
+  # the published corpus was graded on, and is pinned by digest rather than tag
+  # because a tag can be repointed at a rebuild without this file changing.
+  #
+  #   ghcr.io/hyeonsangjeon/gdpval-grading
+  #   revision  59432d4d04dbb2fad049939444bbb8cd8cc4912a
+  #   renderer  LibreOffice 24.2.7.2 420(Build:2)
+  #
+  # No `credentials:` -- the package is public, and adding any would hand a
+  # registry token to a job that has no use for one.
+  #
+  # ImageOS is how actions/setup-python identifies the runner image. The runner
+  # exports it for its own image and not for a container, so setting it keeps
+  # the action on the same tool-cache selection path it takes on the host. LANG
+  # matches what the hosted runner exports; read_deliverable forces
+  # LC_ALL=C.UTF-8 for the renderer either way, so this only keeps Python's
+  # default encoding identical to what the corpus was graded under.
+  #
+  # What the image deliberately does not carry, and why that is safe:
+  #   gh      -- one call site, the auto-resume dispatch below. It now POSTs to
+  #              the REST endpoint that `gh workflow run` wraps, using curl,
+  #              which the image does carry.
+  #   ffprobe -- core/file_reader.py enriches .wav/.mp3/.mp4 *deliverables*
+  #              with a duration/codec line and falls back to name and size
+  #              when ffprobe is absent. Every deliverable recorded in
+  #              data/grades is .pdf/.xlsx/.pptx/.docx/.png -- 2,273 file
+  #              entries, zero media -- so nothing in the published corpus
+  #              reaches it. It is named here because that fallback is silent
+  #              and would change prompt text without moving grader_source_hash
+  #              or renderer_fingerprint. test_grading_image.py fails if any
+  #              new external binary joins the grading path.
+  # ---------------------------------------------------------------------------
   grade-dry-run:
     needs: validate-request
     if: inputs.dry_run == true
     runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
     permissions:
       contents: read
     env:
@@ -351,7 +389,19 @@ jobs:
       HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
       GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
+      ImageOS: ubuntu24
+      LANG: C.UTF-8
     steps:
+      - name: Verify grading container
+        run: |
+          set -euo pipefail
+          test -f /opt/gdpval/renderer-version.txt
+          cat /opt/gdpval/renderer-version.txt
+          for binary in soffice fc-match git curl; do
+            command -v "$binary" >/dev/null \
+              || { echo "::error::$binary is missing from the grading image"; exit 1; }
+          done
+
       - name: Checkout exact main revision (read-only)
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -399,6 +449,16 @@ jobs:
         run: |
           cd batch-runner
           pip install -r requirements.txt
+
+      # The paid job runs this only when the config needs the Office renderer.
+      # Here it is unconditional and deliberately so: a free dry run is the
+      # only place the container's renderer gets exercised before money is
+      # committed, and it costs one step to learn that the pinned digest still
+      # renders xlsx/pptx/docx to the bytes the judge expects.
+      - name: Preflight grading renderer
+        run: |
+          cd batch-runner
+          python scripts/preflight_grading_renderer.py
 
       - name: Download inference results anonymously
         run: |
@@ -453,10 +513,15 @@ jobs:
         )
       }}
     runs-on: ubuntu-24.04
+    # Same pinned grading image as grade-dry-run, for the same reason; see the
+    # block above that job. The two digests must stay identical -- a dry run
+    # against a different renderer than the paid run proves nothing.
+    container:
+      image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
     permissions:
       contents: write
       id-token: write
-      actions: write  # required for self-retrigger via gh workflow run
+      actions: write  # required for the auto-resume workflow dispatch
     env:
       GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
@@ -469,6 +534,8 @@ jobs:
       GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
       GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
+      ImageOS: ubuntu24
+      LANG: C.UTF-8
     # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
     # extended. We set 320min so step8_grade.py's internal 4h time guard (env
     # GRADER_TIME_BUDGET_SEC=14400) trips first, partial-saves, and exits 7,
@@ -476,6 +543,19 @@ jobs:
     timeout-minutes: 320
 
     steps:
+
+      # First, so a wrong or missing image costs seconds rather than a
+      # checkout, a dependency install, and an Azure login. az is on this list
+      # and not on the dry run's because only this job logs in.
+      - name: Verify grading container
+        run: |
+          set -euo pipefail
+          test -f /opt/gdpval/renderer-version.txt
+          cat /opt/gdpval/renderer-version.txt
+          for binary in soffice fc-match git curl az; do
+            command -v "$binary" >/dev/null \
+              || { echo "::error::$binary is missing from the grading image"; exit 1; }
+          done
 
       # Held on the v5 line on purpose. checkout v6 moved persisted
       # credentials out of .git/config into a separate file referenced by an
@@ -605,101 +685,35 @@ jobs:
 
       # The renderer is a host binary, not a library: core/artifact_renderer.py
       # and core/tools/read_deliverable.py both shell out to `soffice`, so it
-      # has to exist on the runner before grading starts.
+      # has to exist before grading starts. It arrives with the container now,
+      # asserted at build time and again by Verify grading container above.
       #
-      # On 2026-08-19 that made this step the single point of failure for the
-      # 220-task run. Between 08:11 and 08:35 UTC azure.archive.ubuntu.com
-      # returned Ign: for every index, apt fell back to archive.ubuntu.com, and
-      # that connection stalled mid-transfer. apt imposes no wall-clock ceiling
-      # on itself, so five grade jobs sat here for 5h18m until timeout-minutes
-      # killed them -- taking 63 of the 220 tasks with them and reporting
-      # nothing until the job died. The same 25-minute window cost nothing to
-      # the shards that reached this step at 08:41 and 08:44, where apt
-      # completed in under two and a half minutes.
+      # It used to arrive by apt, and on 2026-08-19 that made the install step
+      # the single point of failure for the 220-task run: azure.archive.ubuntu
+      # .com returned Ign: for every index between 08:11 and 08:35 UTC, apt
+      # fell back to archive.ubuntu.com, and that connection stalled
+      # mid-transfer. apt imposes no wall-clock ceiling on itself, so five
+      # grade jobs sat there for 5h18m until timeout-minutes killed them --
+      # taking 63 of the 220 tasks with them and reporting nothing until the
+      # job died. Timeouts and a retry loop were added afterwards; they turned
+      # a silent five-hour hang into a legible failure but could not make apt
+      # succeed while a mirror was down.
       #
-      # Three guards, in order of what they catch:
-      #   Acquire::*::Timeout  -- a stalled socket errors out instead of
-      #                           blocking forever, which is what actually
-      #                           happened here.
-      #   sudo timeout         -- a hard ceiling on apt regardless of why it is
-      #                           stuck. Run under sudo, not around it, so the
-      #                           signal reaches apt rather than sudo.
-      #   DPkg::Lock::Timeout  -- after a TERM'd attempt, the next one waits for
-      #                           the dpkg lock instead of failing on contact
-      #                           with a lock the dying process still holds.
-      #   the retry loop       -- a transient mirror outage becomes recoverable
-      #                           inside the job. Worst case is 36 minutes
-      #                           (3 x 11min ceiling + 60s and 120s backoff),
-      #                           which outlasts the ~25-minute outage actually
-      #                           observed and still leaves the 240-minute
-      #                           grading budget inside the 320-minute job
-      #                           timeout.
+      # The deeper problem was that apt could not give a *fixed* renderer at
+      # all. Those packages carried no version, so whichever LibreOffice the
+      # mirror served that day became the judge's eyes, and two runs a
+      # generation apart were not comparable however identical their model,
+      # prompt, and grader_source_hash. Pinning a version in apt was rejected
+      # because Ubuntu drops superseded builds from the pocket, so the pin
+      # would eventually fail as an opaque apt error rather than as a
+      # statement about comparability. The digest-pinned image is the durable
+      # answer, and it had to be ubuntu:24.04-based: gdpval-sandbox ships
+      # LibreOffice 7.4.7.2 against this corpus's 24.2.7.2 and would move the
+      # very scores it was meant to stabilise.
       #
-      # This does not make apt succeed while a mirror is down; nothing here
-      # can. It converts a silent five-hour hang into either a recovery or a
-      # fast, legible failure.
-      #
-      # What apt cannot give is a *fixed* renderer: these packages carry no
-      # version, so whichever LibreOffice the mirror serves that day becomes
-      # the judge's eyes, and on formatting criteria the renderer is the
-      # evidence. Two runs a generation apart are not comparable however
-      # identical their model, prompt, and grader_source_hash. The preflight
-      # below closes that by asserting the installed version against
-      # EXPECTED_LIBREOFFICE_VERSION before Azure login, so drift costs a free
-      # step rather than a paid corpus run.
-      #
-      # Pinning a version here instead was considered and rejected: Ubuntu
-      # drops superseded builds from the pocket, so the pin would fail as an
-      # opaque apt error some months from now rather than as a statement about
-      # comparability. A purpose-built image is the durable answer -- and it
-      # must be ubuntu:24.04-based, since ghcr.io/hyeonsangjeon/gdpval-sandbox
-      # ships LibreOffice 7.4.7.2 against this runner's 24.2.7.2 and would
-      # move the very scores it was meant to stabilise.
-      - name: Install grading render dependencies
-        if: steps.renderer.outputs.required == 'true'
-        run: |
-          APT_OPTS=(
-            -o Acquire::Retries=3
-            -o Acquire::http::Timeout=30
-            -o Acquire::https::Timeout=30
-            -o DPkg::Lock::Timeout=60
-          )
-          install_render_deps() {
-            sudo timeout 240 apt-get "${APT_OPTS[@]}" update || return 1
-            sudo timeout 420 apt-get "${APT_OPTS[@]}" install \
-              --yes --no-install-recommends \
-              libreoffice-core \
-              libreoffice-calc \
-              libreoffice-impress \
-              libreoffice-writer \
-              fonts-dejavu-core \
-              fonts-liberation2 \
-              fontconfig || return 1
-          }
-          for attempt in 1 2 3; do
-            if install_render_deps; then
-              break
-            fi
-            if [[ "$attempt" -eq 3 ]]; then
-              echo "::error::apt could not install the grading renderer after 3 attempts"
-              exit 1
-            fi
-            echo "::warning::apt attempt $attempt failed; retrying in $((attempt * 60))s"
-            sleep "$((attempt * 60))"
-          done
-          libreoffice --headless --version
-          FONT_FAMILIES="$(fc-match --format '%{family}\n' 'Liberation Sans')"
-          if ! printf '%s\n' "$FONT_FAMILIES" | tr ',' '\n' | awk '
-            {
-              gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
-              if ($0 == "Liberation Sans") found = 1
-            }
-            END { exit(found ? 0 : 1) }
-          '; then
-            echo "::error::fc-match did not resolve exact family token Liberation Sans"
-            exit 1
-          fi
-
+      # The preflight below stays gated on the config actually needing the
+      # renderer, and still asserts the version before Azure login, so drift
+      # in a future rebuild costs a free step rather than a paid corpus run.
       - name: Preflight grading renderer
         if: steps.renderer.outputs.required == 'true'
         run: |
@@ -972,25 +986,51 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RESOLVED_INFERENCE_REVISION: ${{ steps.inference.outputs.revision }}
         run: |
+          set -euo pipefail
           NEXT_CHUNK=$(( GRADE_RESUME_CHUNK + 1 ))
           if [[ $NEXT_CHUNK -gt 10 ]]; then
             echo "::error::resume_chunk=$NEXT_CHUNK exceeds safety cap (10). Aborting auto-resume; investigate manually."
             exit 1
           fi
           echo "[auto-resume] triggering chunk $NEXT_CHUNK for $GRADE_EXPERIMENT_YAML / $GRADE_CONFIG (shard $GRADE_SHARD_INDEX/$GRADE_SHARD_COUNT)"
-          gh workflow run grade-run.yml \
-            --ref "${GITHUB_REF_NAME}" \
-            -f experiment_yaml="$GRADE_EXPERIMENT_YAML" \
-            -f grading_config="$GRADE_CONFIG" \
-            -f inference_revision="$RESOLVED_INFERENCE_REVISION" \
-            -f force=false \
-            -f tasks_limit="$GRADE_TASKS_LIMIT" \
-            -f dry_run=false \
-            -f paid_approval="$GRADE_PAID_APPROVAL" \
-            -f resume=true \
-            -f resume_chunk=$NEXT_CHUNK \
-            -f shard_count="$GRADE_SHARD_COUNT" \
-            -f shard_index="$GRADE_SHARD_INDEX"
+          # This used to be `gh workflow run`, which is a thin wrapper over the
+          # endpoint below; gh is not in the grading image. Every input is a
+          # JSON string, including the booleans, because that is what gh sent
+          # and what the dispatch API accepts. Building the body in Python
+          # rather than by string concatenation keeps a value containing a
+          # quote from silently producing a different dispatch.
+          export NEXT_CHUNK
+          python - <<'PY' > "$RUNNER_TEMP/auto-resume.json"
+          import json
+          import os
+
+          print(json.dumps({
+              "ref": os.environ["GITHUB_REF_NAME"],
+              "inputs": {
+                  "experiment_yaml": os.environ["GRADE_EXPERIMENT_YAML"],
+                  "grading_config": os.environ["GRADE_CONFIG"],
+                  "inference_revision": os.environ["RESOLVED_INFERENCE_REVISION"],
+                  "force": "false",
+                  "tasks_limit": os.environ["GRADE_TASKS_LIMIT"],
+                  "dry_run": "false",
+                  "paid_approval": os.environ["GRADE_PAID_APPROVAL"],
+                  "resume": "true",
+                  "resume_chunk": os.environ["NEXT_CHUNK"],
+                  "shard_count": os.environ["GRADE_SHARD_COUNT"],
+                  "shard_index": os.environ["GRADE_SHARD_INDEX"],
+              },
+          }))
+          PY
+          # --fail-with-body, not --fail: a dispatch rejected for a bad input
+          # explains itself in the response body, and a silent 422 here strands
+          # the run with its budget already spent.
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "@$RUNNER_TEMP/auto-resume.json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/grade-run.yml/dispatches"
           echo "[auto-resume] chunk $NEXT_CHUNK dispatched"
 
       - name: Merge shards into the final grade

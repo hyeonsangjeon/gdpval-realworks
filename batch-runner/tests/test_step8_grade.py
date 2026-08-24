@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 import pytest
 import yaml
@@ -3240,9 +3241,19 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert "${{ steps.analysis.outputs.analysis_file }}" in upload["with"]["path"]
 
     assert "steps.commit_grade.outputs.committed == 'true'" in retrigger["if"]
-    assert '-f inference_revision="$RESOLVED_INFERENCE_REVISION"' in retrigger["run"]
-    assert '-f tasks_limit="$GRADE_TASKS_LIMIT"' in retrigger["run"]
-    assert '-f paid_approval="$GRADE_PAID_APPROVAL"' in retrigger["run"]
+    assert "NEXT_CHUNK=$(( GRADE_RESUME_CHUNK + 1 ))" in retrigger["run"]
+    assert "$NEXT_CHUNK -gt 10" in retrigger["run"]
+    dispatch = _auto_resume_dispatch(retrigger["run"])
+    assert dispatch["ref"] == "main"
+    assert dispatch["inputs"]["inference_revision"] == "resolved-revision"
+    assert dispatch["inputs"]["tasks_limit"] == "17"
+    assert dispatch["inputs"]["paid_approval"] == "true"
+    # A handoff that resumed as a fresh dry run would report success having
+    # graded nothing, and one that did not resume would regrade from zero.
+    assert dispatch["inputs"]["dry_run"] == "false"
+    assert dispatch["inputs"]["force"] == "false"
+    assert dispatch["inputs"]["resume"] == "true"
+    assert dispatch["inputs"]["resume_chunk"] == "4"
 
     assert workflow.index("- name: Validate workflow context and inputs") < workflow.index(
         "- name: Checkout exact main revision"
@@ -3250,9 +3261,46 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert "resume_chunk must be between 0 and 10" in workflow
     assert "resume requires the pinned inference_revision" in workflow
     assert "force and resume are mutually exclusive" in workflow
-    assert '-f experiment_yaml="$GRADE_EXPERIMENT_YAML"' in retrigger["run"]
-    assert '-f grading_config="$GRADE_CONFIG"' in retrigger["run"]
+    assert dispatch["inputs"]["experiment_yaml"] == "exp-under-test"
+    assert dispatch["inputs"]["grading_config"] == "config-under-test.yaml"
     assert '--revision "${{ inputs.inference_revision }}"' not in workflow
+
+
+def _auto_resume_dispatch(script: str) -> dict:
+    """Return the body the auto-resume step would POST, by running its builder.
+
+    This used to be a ``gh workflow run`` invocation whose ``-f`` flags could
+    be read straight out of the YAML. gh is not in the grading image, so it is
+    a curl POST now and the readable artefact is the JSON rather than the
+    command line. Executing the builder instead of grepping it is the point:
+    grep cannot tell a misspelled environment variable from a correct one, and
+    that misspelling would strand an rc=7 chunk with its budget already spent.
+    """
+    match = re.search(r"python - <<'PY'[^\n]*\n(.*?)\nPY\n", script, re.DOTALL)
+    assert match is not None, "auto-resume payload builder not found"
+
+    completed = subprocess.run(
+        [sys.executable, "-c", match.group(1)],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={
+            "GITHUB_REF_NAME": "main",
+            "GRADE_EXPERIMENT_YAML": "exp-under-test",
+            "GRADE_CONFIG": "config-under-test.yaml",
+            "RESOLVED_INFERENCE_REVISION": "resolved-revision",
+            "GRADE_TASKS_LIMIT": "17",
+            "GRADE_PAID_APPROVAL": "true",
+            "NEXT_CHUNK": "4",
+            "GRADE_SHARD_COUNT": "9",
+            "GRADE_SHARD_INDEX": "6",
+        },
+    )
+    payload = json.loads(completed.stdout)
+    # The dispatch API takes booleans as strings, which is what gh sent. A
+    # real bool here is a 422 on the paid path.
+    assert all(isinstance(value, str) for value in payload["inputs"].values())
+    return payload
 
 
 def _retry_loop_body(script: str) -> str:
@@ -4123,8 +4171,9 @@ def test_grade_workflow_wires_shards_end_to_end():
     # An rc=7 chunk hands off to the next chunk OF THE SAME SHARD. Losing the
     # shard flags here would resume the remainder as an unsharded run.
     retrigger = by_name["Auto-retrigger next chunk (time budget hit)"]
-    assert '-f shard_count="$GRADE_SHARD_COUNT"' in retrigger["run"]
-    assert '-f shard_index="$GRADE_SHARD_INDEX"' in retrigger["run"]
+    resume_inputs = _auto_resume_dispatch(retrigger["run"])["inputs"]
+    assert resume_inputs["shard_count"] == "9"
+    assert resume_inputs["shard_index"] == "6"
 
     merge = by_name["Merge shards into the final grade"]
     assert merge["id"] == "merge_shards"

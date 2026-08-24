@@ -2,21 +2,22 @@
 #
 # WHY THIS EXISTS
 #   On formatting criteria the renderer is not a detail of how a grade is
-#   produced; it *is* the evidence. grade-run.yml asks apt for
+#   produced; it *is* the evidence. grade-run.yml used to ask apt for
 #   libreoffice-core and friends with no version, so whichever build the
-#   mirror serves that morning becomes what the judge sees, and two runs a
-#   generation apart are not comparable however identical their model,
+#   mirror served that morning became what the judge saw, and two runs a
+#   generation apart were not comparable however identical their model,
 #   prompt, and grader_source_hash.
 #
-#   That install is also a live outage surface. On 2026-08-19 the Ubuntu
+#   That install was also a live outage surface. On 2026-08-19 the Ubuntu
 #   mirror stalled mid-transfer for ~25 minutes; apt imposes no wall-clock
 #   ceiling on itself, five grade jobs sat in that step for 5h18m, and 63 of
 #   the 220 tasks died with them.
 #
 #   scripts/preflight_grading_renderer.py closed the comparability half by
 #   asserting the installed build before Azure login, so drift costs a free
-#   step instead of a paid corpus run. This image closes the other half: the
-#   renderer stops being installed at run time at all.
+#   step instead of a paid corpus run. This image closes the other half: both
+#   grading jobs now run inside it, pinned by digest, and the renderer is not
+#   installed at run time at all.
 #
 # WHY ubuntu:24.04 AND NOT THE EXISTING SANDBOX IMAGE
 #   ghcr.io/hyeonsangjeon/gdpval-sandbox ships LibreOffice 7.4.7.2 (it is
@@ -43,9 +44,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LC_ALL=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1
 
-# ── The renderer, and exactly the packages grade-run.yml installs ───────────
-# tests/test_grading_image.py holds this list against that step, so the image
-# cannot silently drop a package the runner has.
+# ── The renderer, and the packages grade-run.yml used to install ───────────
+# grade-run.yml no longer installs them: both grading jobs run in this image,
+# pinned by digest. tests/test_grading_image.py holds this list under
+# RENDERER_PACKAGES, so the image cannot silently drop one that the runner
+# used to guarantee.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       libreoffice-core \
