@@ -379,6 +379,22 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
+      # The runner already mounts its tool cache, but at /__t, and the prebuilt
+      # CPython in there was installed on the runner image with
+      # RUNNER_TOOL_CACHE=/opt/hostedtoolcache. Nothing rewrites paths on the
+      # way in (actions/python-versions' setup.sh only copies and symlinks), so
+      # bin/pip still starts `#!/opt/hostedtoolcache/.../python3.11` -- a path
+      # that does not exist under this mount name. actions/setup-python found
+      # 3.11.16, reported "Successfully set up CPython", then failed to launch
+      # its own pip: `spawn /__t/Python/3.11.16/x64/bin/pip ENOENT`.
+      #
+      # Mounting the same host directory a second time under the name its
+      # shebangs already expect fixes it without a download. The alternative,
+      # pointing RUNNER_TOOL_CACHE somewhere container-local, makes setup-python
+      # fetch CPython fresh on every job -- a new network dependency in front of
+      # a paid run, which is the shape of the 2026-08-19 apt outage.
+      volumes:
+        - /opt/hostedtoolcache:/opt/hostedtoolcache
     # A container job defaults `run:` to `sh -e {0}`, not to the runner's
     # `bash -e {0}` -- the runner will not assume an arbitrary image has bash.
     # The free 2026-08-24 rehearsal found it on the first step (`set: Illegal
@@ -545,6 +561,9 @@ jobs:
     # against a different renderer than the paid run proves nothing.
     container:
       image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
+      # Same reason as grade-dry-run; see the note there.
+      volumes:
+        - /opt/hostedtoolcache:/opt/hostedtoolcache
     # Same reason as grade-dry-run; see the note there. What makes it matter
     # more here is where the bash syntax sits: Run grading, Commit grade
     # result, Merge shards, Auto-analyze and Commit analysis all use [[ ]] or
