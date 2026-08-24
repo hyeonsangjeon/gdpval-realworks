@@ -7,10 +7,10 @@ text-extraction-then-judge pattern of ``core.grader.Grader._judge``.
 Why standalone (and not a method on ``Grader``):
 
 * Easier to mock for tests (inject a fake client).
-* Lets the legacy ``Judge`` / ``BatchJudge`` code in ``grader.py`` keep
-  working unchanged during PR2. Task 207 will retire the legacy paths.
-* Same return shape as ``Grader._judge`` so dispatch is a single ``if``
-  branch in ``grade_task``.
+* Let the legacy ``Judge`` / ``BatchJudge`` code in ``grader.py`` keep
+  working unchanged during PR2. Task 207 has since removed those paths,
+  so this is now the only judge.
+* Same return shape as ``Grader._judge``, which is now a thin delegator.
 
 Loop shape::
 

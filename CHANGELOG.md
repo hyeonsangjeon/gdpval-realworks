@@ -11,6 +11,64 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Removed
+- **Task 207 — the legacy grader code is gone.** `core/grader_batch.py`
+  (508 lines) is deleted, and with it every batch / tier-routing / text-extract
+  member of `core.grader.Grader`: `_use_batch`, `_tier_judges`,
+  `_build_tier_judges`, `_route_to_tier`, `_resolve_batch_prompt_path`,
+  `_grade_task_batched`, `_summarize_deliverables`, `_build_prompt`,
+  `_call_judge`, `_safe_parse_judge_json`, `_json_scalar`, and the
+  `deliverable_extract_max_chars` knob. `core/grader.py` drops 2045 → 1558
+  lines. **The PR2 acceptance grep for 207 (`tier_pro|tier_standard|tier_mini|
+  deliverable_extract_max_chars`) now returns no matches in `core/grader.py`
+  or in any dispatchable config; it was recorded as PARTIAL and is now
+  complete.** Two residual matches are prose — the "REMOVED" comments in
+  `default_v2.yaml` that document the change — and one is live code outside
+  the grader, discussed below.
+
+  Both preconditions the PR2 note set for this strip hold: `grade-run.yml`
+  defaults to `default_v2_sol_max.yaml` (not the v1 config), and the v2 path
+  has produced published grades.
+
+  **Grade equivalence, established before removing anything.** Of the ten
+  configs then shipping at `grading_configs/*.yaml`, nine already resolved to
+  the v2 tool-calling path and **zero** resolved to the batch path — so no
+  shipped config could reach `grader_batch.py` at all. The one exception,
+  `default_gpt5pro.yaml`, was the only remaining schema-1.0 config and the
+  only user of the text-extract path; it moves to `grading_configs/_archive_v1/`
+  alongside the tier configs archived in PR2. The archived configs are not
+  dispatchable: `grade-run.yml` validates `grading_config` against
+  `^[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$`, which forbids a path separator.
+  Existing `data/grades/*.json` are unaffected — they are stored artifacts,
+  not recomputed by this change.
+
+  `scripts/grading_cost_sweep.py` follows the config to `_archive_v1/`. It is
+  itself a v1-era tool that already rendered `_archive_v1/_sweep_template.yaml`,
+  and it is kept for provenance rather than revived.
+
+- **A config that does not opt into the tool-calling judge is now rejected at
+  construction.** `Grader.__init__` raises `ValueError` when
+  `judge.tools.read_deliverable` is absent, instead of silently taking a
+  different grading path. A silent fallback is how two runs end up with
+  grades that are not comparable, which is the failure this task exists to
+  prevent.
+
+  Deliberately left in place: `core.azure_ai_clients.grader_route_workloads`
+  still enumerates `tier_standard` / `tier_pro` / `tier_mini` when building the
+  Azure deployment allowlist. That function is the credential boundary, not a
+  grader path, and it is called with the same config the `Grader` now rejects,
+  so the branch is unreachable rather than permissive. Narrowing an allowlist
+  is its own change with its own blast radius; it is not folded into a cleanup
+  PR.
+
+### Fixed
+- **`grade.error = "no_deliverables"` is set on the v2 path.** It was written
+  only in the two legacy paths, so the tool-calling path — the one in
+  production — never set it, and a task with nothing to grade was
+  indistinguishable from one that genuinely graded to zero. Carried over as
+  part of the 207 strip rather than lost with it.
+
+
 ### Added
 - **The benchmark has a complete score for the first time: 220 of 220 tasks,
   zero error tasks** (#205). The published OFFICIAL run for

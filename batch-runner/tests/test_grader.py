@@ -44,9 +44,23 @@ class _Loader:
     pass
 
 
+# Task 207 — the v2 tool judge resolves `grader_judge_v2.md` as a sibling of
+# the configured prompt template, so the fixture stages BOTH templates into
+# tmp_path. Copying rather than pointing at prompts/ keeps the fixture
+# self-contained and keeps a test from ever writing to a tracked file.
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+
+
 def _config(tmp_path: Path) -> dict:
-    prompt = tmp_path / "prompt.md"
-    prompt.write_text("""Evidence quote is mandatory\n{{#each deliverable_files}}{{/each}}\n<!-- prompt_version: v1 -->""", encoding="utf-8")
+    prompt = tmp_path / "grader_judge.md"
+    prompt.write_text(
+        (_PROMPTS_DIR / "grader_judge.md").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "grader_judge_v2.md").write_text(
+        (_PROMPTS_DIR / "grader_judge_v2.md").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     return {
         "judge": {
             "provider": "azure_openai",
@@ -56,11 +70,20 @@ def _config(tmp_path: Path) -> dict:
             "api_version": "2025-04-01-preview",
             "generation": {"temperature": 0, "seed": 42, "max_output_tokens": 1024},
             "reasoning": {"effort": "high"},
+            # Task 207 — the tool-calling judge is the only grading path,
+            # so every Grader config must opt in.
+            "tools": {
+                "read_deliverable": {
+                    "ops": ["inspect_structure", "read_content",
+                            "inspect_formatting"],
+                    "per_item_call_cap": 8,
+                    "max_iterations": 6,
+                },
+            },
         },
         "grader": {
             "judge_max_retries": 1,
             "evidence_max_chars": 200,
-            "deliverable_extract_max_chars": 200,
             "task_prompt_truncate_chars": 200,
             "fail_on_missing_evidence": True,
             "save_raw_responses": False,
@@ -308,37 +331,6 @@ def test_judge_parse_retry_then_judge_error(monkeypatch, tmp_path):
     assert ig.verdict == "judge_error"
 
 
-def test_judge_api_failure_becomes_class_only_judge_error(
-    monkeypatch, tmp_path, caplog
-):
-    class RateLimitError(Exception):
-        status_code = 429
-
-    sensitive = "https://private.services.ai.azure.com/ deployment=private"
-    config = _config(tmp_path)
-    config["grader"]["save_raw_responses"] = True
-    grader = Grader(
-        config=config,
-        rubric_loader=_Loader(),
-        client=_FakeClient(error=RateLimitError(sensitive)),
-    )
-    deliverable = tmp_path / "d.txt"
-    deliverable.write_text("content", encoding="utf-8")
-
-    item = RubricItem("r1", "evaluate quality", 3, None)
-    with caplog.at_level("WARNING", logger="core.grader"):
-        ig, input_tokens, output_tokens = grader._judge(
-            _task(item), item, [deliverable]
-        )
-    assert ig.verdict == "judge_error"
-    assert ig.evidence == "judge_api_call_failed"
-    assert ig.judge_raw_response == "provider_error:RateLimitError"
-    assert sensitive not in caplog.text
-    assert sensitive not in (ig.judge_raw_response or "")
-    assert input_tokens == 0
-    assert output_tokens == 0
-
-
 def test_tpm_delay_between_judge_calls(monkeypatch, tmp_path):
     sleeps = []
     now = [100.0]
@@ -480,43 +472,6 @@ def test_extract_finish_reason_heuristic_when_usage_at_ceiling():
 
     assert _extract_finish_reason(_Resp(), 1600, 1600) == "length"
     assert _extract_finish_reason(_Resp(), 1600, 1500) == ""
-
-
-def test_judge_json_parse_failure_evidence_tags_truncation(monkeypatch, tmp_path):
-    """When parse fails AND finish_reason indicates truncation, evidence
-    must be `judge_json_parse_failed:truncated_at_max_tokens` so operators
-    can distinguish prompt-budget failures from genuine model malformation.
-    """
-    grader = _make_grader(monkeypatch, tmp_path)
-    # Patch _call_judge to return non-JSON text with a length finish_reason.
-    monkeypatch.setattr(
-        grader,
-        "_call_judge",
-        lambda prompt: ("{\"verdict\":\"pa", 12.0, 100, 200, "length"),
-    )
-    item = RubricItem("r1", "evaluate quality", 3, None)
-    deliverable = tmp_path / "d.txt"
-    deliverable.write_text("content", encoding="utf-8")
-    result = grader._judge(_task(item), item, [deliverable])
-    assert result[0].verdict == "judge_error"
-    assert result[0].evidence == "judge_json_parse_failed:truncated_at_max_tokens"
-
-
-def test_judge_json_parse_failure_evidence_plain_when_not_truncated(monkeypatch, tmp_path):
-    """When parse fails but finish_reason is NOT length/incomplete, evidence
-    should be the plain `judge_json_parse_failed` (no truncation suffix)."""
-    grader = _make_grader(monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        grader,
-        "_call_judge",
-        lambda prompt: ("not json at all", 12.0, 100, 50, "stop"),
-    )
-    item = RubricItem("r1", "evaluate quality", 3, None)
-    deliverable = tmp_path / "d.txt"
-    deliverable.write_text("content", encoding="utf-8")
-    result = grader._judge(_task(item), item, [deliverable])
-    assert result[0].verdict == "judge_error"
-    assert result[0].evidence == "judge_json_parse_failed"
 
 
 # ---------------------------------------------------------------------------
@@ -893,3 +848,70 @@ def test_list_files_rejects_symlink_layers(tmp_path, symlink_kind):
 
     with pytest.raises(ValueError, match="symlink"):
         grader._list_files(deliverable_dir)
+
+
+# ---------------------------------------------------------------------------
+# Task 207 — legacy grader strip
+# ---------------------------------------------------------------------------
+
+
+def test_config_without_read_deliverable_tool_is_rejected(tmp_path):
+    """A v1-shaped config must fail at construction, not grade differently.
+
+    Before task 207 such a config silently took the text-extract path and
+    produced grades that were not comparable with the tool-calling path.
+    That path is gone, so the only safe response is to refuse the config.
+    """
+    config = _config(tmp_path)
+    del config["judge"]["tools"]
+
+    with pytest.raises(ValueError, match="judge.tools.read_deliverable"):
+        Grader(config=config, rubric_loader=_Loader(), client=_FakeClient())
+
+
+def test_legacy_batch_and_text_extract_surface_is_gone():
+    """The task 207 acceptance grep, asserted in code.
+
+    `core/grader_batch.py` and the batch / tier-routing / text-extract
+    members of `Grader` must not come back by accident.
+    """
+    import core.grader as grader_mod
+
+    assert not hasattr(grader_mod, "BatchJudge")
+    for name in (
+        "_use_batch",
+        "_tier_judges",
+        "_build_tier_judges",
+        "_route_to_tier",
+        "_resolve_batch_prompt_path",
+        "_grade_task_batched",
+        "_summarize_deliverables",
+        "_build_prompt",
+        "_call_judge",
+        "_safe_parse_judge_json",
+    ):
+        assert not hasattr(Grader, name), f"legacy grader member survived: {name}"
+
+    with pytest.raises(ModuleNotFoundError):
+        __import__("core.grader_batch")
+
+
+def test_no_active_grading_config_declares_legacy_knobs():
+    """No shipped config may carry the removed knobs.
+
+    Archived v1 configs under `_archive_v1/` are excluded: `grade-run.yml`
+    validates `grading_config` against `^[A-Za-z0-9][A-Za-z0-9._-]*\\.ya?ml$`,
+    which forbids a path separator, so they cannot be dispatched.
+    """
+    import yaml
+
+    configs_dir = Path(__file__).resolve().parent.parent / "grading_configs"
+    for path in sorted(configs_dir.glob("*.yaml")):
+        config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        grader_block = config.get("grader") or {}
+        assert "deliverable_extract_max_chars" not in grader_block, path.name
+        assert "batch_size" not in grader_block, path.name
+        assert "judge_routing" not in config, path.name
+        assert (config.get("judge") or {}).get("tools", {}).get(
+            "read_deliverable"
+        ), f"{path.name} does not opt into the tool-calling judge"

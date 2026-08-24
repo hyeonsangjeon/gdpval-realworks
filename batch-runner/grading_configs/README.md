@@ -9,7 +9,13 @@
 | `regrade_exp003_v2_mini_score_excluded.yaml` | tool-calling judge | v2 | Full-220 exp003 rerun only. Pins score-excluded semantics, the historical mini judge condition, rubric commit, inference revision, and all 220 task IDs in canonical order. Its source predates the provenance sidecar, so it declares the legacy allowance; the complete pin keeps it publishable. |
 | `regrade_exp003_v2_sol_max_score_excluded.yaml` | tool-calling judge | v2 | Planned full-220 exp003 Sol Max rerun. Pins score-excluded semantics, production judge/perception settings, rubric commit, inference revision, and all 220 task IDs in canonical order. Its source predates the provenance sidecar, so it declares the legacy allowance; the complete pin keeps it publishable. |
 | `validation_exp003_v2_sol_max_anchor4.yaml` | tool-calling judge | v2 | Paid four-task Sol Max anchor with pinned diagnostic-error and visual/audio coverage, plus the same runtime semantics and source identities as the planned full rerun. |
-| `default_gpt5pro.yaml` | text-extract judge | v1 (`Judge` / `BatchJudge`) | Historical mini/text-extract comparison identity. Pass explicitly only for provenance-compatible analysis. |
+
+Since task 207 the tool-calling judge is the only grading path. Every config
+here must define `judge.tools.read_deliverable`; `Grader.__init__` raises on one
+that does not, rather than falling back to a path that would produce grades not
+comparable with these. The removed knobs (`batch_size`, `judge_routing`,
+`deliverable_extract_max_chars`) are asserted absent by
+`tests/test_grader.py::test_no_active_grading_config_declares_legacy_knobs`.
 
 `grade-run.yml` defaults to `default_v2_sol_max.yaml`. The 1.05M context window
 belongs to the deployment and is not represented by a synthetic request field.
@@ -288,10 +294,11 @@ boundary.
 | `validation_hybrid.yaml`, `validation_pro_only.yaml` | tier-routing PR2-preceding validation configs. v2 is single-tier; tier configs no longer match the grader path. |
 | `tiered_critical_pro_mini.yaml` | tier-routing experiment config. Same reason as above. |
 | `_sweep_template.yaml` | cost-sweep parameterization template. Useful only for reproducing the v1 sweep; v2 has a different cost surface and will get its own template if/when needed. |
+| `default_gpt5pro.yaml` | the last v1 text-extract config. Archived by task 207 together with the code that ran it. Retained as the provenance record for the grades it produced; it can no longer be graded with. |
 
 ## v1 vs v2 quick reference
 
-|  | historical v1 (`default_gpt5pro.yaml`) | production v2 (`default_v2_sol_max.yaml`) |
+|  | historical v1 (`_archive_v1/default_gpt5pro.yaml`) | production v2 (`default_v2_sol_max.yaml`) |
 |---|---|---|
 | schema_version | `1.0` | `2.0` |
 | judge tier | mini / standard / pro routing | single (gpt-5.6-sol) |

@@ -280,19 +280,20 @@ class Grader:
             )
             self._last_judge_call_at: float | None = None
 
-            # --- Optional: prompt-level batching + tiered judge routing ---
-            self.batch_size = int(
-                self.config.get("grader", {}).get("batch_size", 1) or 1
-            )
-            self.judge_routing = self.config.get("judge_routing") or None
-            self._use_batch = (self.batch_size > 1) or bool(self.judge_routing)
-            self._tier_judges: dict[str, "object"] = {}
-            if self._use_batch:
-                self._build_tier_judges()
-
-            self._tool_judge = None
-            if self._is_tool_calling_config():
-                self._tool_judge = self._build_tool_calling_judge()
+            # Task 207 — the tool-calling judge is the only grading path.
+            # The legacy text-extract / batch / tier-routing paths are gone,
+            # so a config that does not opt in has no judge at all. Fail
+            # here, loudly, rather than at the first graded item: a config
+            # that silently took a different path is exactly how two runs
+            # end up with incomparable grades.
+            if not self._is_tool_calling_config():
+                raise ValueError(
+                    "grading config must define judge.tools.read_deliverable; "
+                    "the legacy text-extract grader was removed in task 207. "
+                    "Port the config to the v2 tool-calling shape (see "
+                    "grading_configs/default_v2_sol_max.yaml)."
+                )
+            self._tool_judge = self._build_tool_calling_judge()
         except BaseException:
             try:
                 self.close()
@@ -322,134 +323,6 @@ class Grader:
     def __exit__(self, _exc_type, _exc, _traceback) -> None:
         self.close()
 
-    # ------------------------------------------------------------------
-    # Batch / tier routing (no-op unless config opts in)
-    # ------------------------------------------------------------------
-
-    def _build_tier_judges(self) -> None:
-        """Instantiate one `BatchJudge` per active tier.
-
-        Tier resolution order: pro > mini > standard. The 'standard' tier
-        is always present and uses the top-level `judge` block as its
-        defaults so that a plain `batch_size: 8` config (no routing)
-        Just Works using the same model as single-item mode.
-        """
-        from core.grader_batch import BatchJudge  # local import; avoid cycle
-
-        # Load the batch prompt template. Falls back to a sibling file next
-        # to the configured single-item prompt template.
-        batch_prompt_path = self._resolve_batch_prompt_path()
-        batch_prompt_template = self._read_prompt_template(batch_prompt_path)
-
-        base_judge_cfg = dict(self.config.get("judge", {}))
-        base_judge_cfg.setdefault(
-            "reasoning_effort", base_judge_cfg.get("reasoning", {}).get("effort", "high")
-        )
-        base_judge_cfg.setdefault(
-            "max_output_tokens",
-            base_judge_cfg.get("generation", {}).get(
-                "max_output_tokens",
-                self.config.get("grader", {}).get("per_item_max_output_tokens", 2400),
-            ),
-        )
-        grader_cfg = self.config.get("grader", {})
-        tpm_guard = self.config.get("tpm_guard", {})
-
-        def _tier_cfg(tier_block: dict | None, defaults: dict) -> dict:
-            cfg = dict(defaults)
-            if tier_block:
-                deployment = canonical_deployment(
-                    tier_block,
-                    "judge_routing.tier",
-                    fallback=str(defaults.get("deployment") or defaults.get("model") or ""),
-                )
-                cfg["model"] = deployment
-                cfg["deployment"] = deployment
-                for k in ("reasoning_effort", "max_output_tokens"):
-                    if k in tier_block and tier_block[k] is not None:
-                        cfg[k] = tier_block[k]
-            return cfg
-
-        routing = self.judge_routing or {}
-        tier_standard_block = routing.get("tier_standard") or {}
-        tier_pro_block = routing.get("tier_pro") or {}
-        tier_mini_block = routing.get("tier_mini") or {}
-
-        standard_cfg = _tier_cfg(tier_standard_block, base_judge_cfg)
-        self._tier_judges["standard"] = BatchJudge(
-            client=self.client,
-            judge_config=standard_cfg,
-            tpm_guard=tpm_guard,
-            prompt_template=batch_prompt_template,
-            grader_config=grader_cfg,
-        )
-
-        if tier_pro_block:
-            pro_cfg = _tier_cfg(tier_pro_block, base_judge_cfg)
-            self._tier_judges["pro"] = BatchJudge(
-                client=self.client,
-                judge_config=pro_cfg,
-                tpm_guard=tpm_guard,
-                prompt_template=batch_prompt_template,
-                grader_config=grader_cfg,
-            )
-
-        if tier_mini_block:
-            mini_defaults = dict(base_judge_cfg)
-            # NOTE: 'minimal' is NOT supported by gpt-5.4-mini (Azure rejects
-            # with HTTP 400 'Unsupported value'). Valid effort levels for the
-            # mini model are: none, low, medium, high, xhigh. We default to
-            # 'low' (the lightest valid level) for the cost-efficient tier.
-            mini_defaults["reasoning_effort"] = tier_mini_block.get("reasoning_effort", "low")
-            mini_defaults["max_output_tokens"] = int(tier_mini_block.get("max_output_tokens", 400))
-            mini_cfg = _tier_cfg(tier_mini_block, mini_defaults)
-            self._tier_judges["mini"] = BatchJudge(
-                client=self.client,
-                judge_config=mini_cfg,
-                tpm_guard=tpm_guard,
-                prompt_template=batch_prompt_template,
-                grader_config=grader_cfg,
-            )
-
-    def _resolve_batch_prompt_path(self) -> str:
-        """Locate the batch-mode prompt template.
-
-        Default rule: sibling file named `grader_judge_batch.md` next to the
-        configured single-item prompt template. Caller can override via
-        `prompt.batch_template` in the grading config.
-        """
-        override = self.config.get("prompt", {}).get("batch_template")
-        if override:
-            return str(override)
-        single_path = Path(self.config["prompt"]["template"])
-        candidate = single_path.with_name("grader_judge_batch.md")
-        return str(candidate)
-
-    def _route_to_tier(self, item: RubricItem) -> str:
-        """Return the tier name for one judge item: 'pro' | 'mini' | 'standard'."""
-        if not self.judge_routing:
-            return "standard"
-
-        pro = (self.judge_routing.get("tier_pro") or {}) if "pro" in self._tier_judges else {}
-        route_when = pro.get("route_when") or {}
-        weight_gte = route_when.get("weight_gte")
-        if weight_gte is not None:
-            try:
-                if int(item.score) >= int(weight_gte):
-                    return "pro"
-            except (TypeError, ValueError):
-                pass
-
-        mini = (self.judge_routing.get("tier_mini") or {}) if "mini" in self._tier_judges else {}
-        patterns = mini.get("criterion_pattern_match") or []
-        if patterns:
-            crit_lower = item.criterion.lower()
-            for pat in patterns:
-                if isinstance(pat, str) and pat.lower() in crit_lower:
-                    return "mini"
-
-        return "standard"
-
     @staticmethod
     def _classify(item: RubricItem) -> tuple[str, Optional[str]]:
         return "judge", None
@@ -459,71 +332,10 @@ class Grader:
         files = self._list_files(deliverable_path)
 
         # PR3 (0531) — reset per-task perception call caps before each task.
-        if self._tool_judge is not None:
-            self._tool_judge.reset_perception()
-            return self._grade_task_with_selector(task, deliverable_path, files)
+        # __init__ guarantees _tool_judge exists, so this is the only path.
+        self._tool_judge.reset_perception()
+        return self._grade_task_with_selector(task, deliverable_path, files)
 
-        if self._use_batch:
-            return self._grade_task_batched(task, deliverable_path, files)
-
-        no_deliverables = not deliverable_path.exists() or not files
-        items: list[ItemGrade] = []
-        judge_call_count = 0
-        precheck_count = 0
-        judge_total_latency_ms = 0.0
-        judge_input_tokens = 0
-        judge_output_tokens = 0
-        # PR3 Step 0 — cached-tokens accumulator (v2 path only)
-        judge_cached_tokens = 0
-
-        for item in task.rubric_items:
-            mode, pattern_id = self._classify(item)
-            if no_deliverables:
-                if mode == "judge":
-                    ig = self._absent_judge_item(item)
-                    judge_call_count += 1
-                else:
-                    ig = self._fail_precheck_item(item, pattern_id, "deliverable absent")
-                    precheck_count += 1
-                items.append(ig)
-                continue
-
-            if mode == "precheck":
-                precheck_count += 1
-                pre = self._run_precheck(pattern_id, item, files)
-                if pre is None:
-                    self._last_cached_tokens = 0
-                    ig, in_tok, out_tok = self._judge(task, item, files)
-                    judge_call_count += 1
-                    judge_total_latency_ms += ig.judge_latency_ms or 0.0
-                    judge_input_tokens += in_tok
-                    judge_output_tokens += out_tok
-                    judge_cached_tokens += getattr(self, '_last_cached_tokens', 0)
-                else:
-                    verdict, evidence = pre
-                    ig = self._to_item_grade_from_precheck(
-                        item, pattern_id, verdict, evidence
-                    )
-            else:
-                self._last_cached_tokens = 0
-                ig, in_tok, out_tok = self._judge(task, item, files)
-                judge_call_count += 1
-                judge_total_latency_ms += ig.judge_latency_ms or 0.0
-                judge_input_tokens += in_tok
-                judge_output_tokens += out_tok
-                judge_cached_tokens += getattr(self, '_last_cached_tokens', 0)
-            items.append(ig)
-
-        grade = self._aggregate(items, task)
-        grade.judge_call_count = judge_call_count
-        grade.precheck_count = precheck_count
-        grade.judge_total_latency_ms = round(judge_total_latency_ms, 2)
-        grade.judge_input_tokens = judge_input_tokens
-        grade.judge_output_tokens = judge_output_tokens
-        grade.judge_cached_tokens = judge_cached_tokens
-        if no_deliverables:
-            grade.error = "no_deliverables"
-        return grade
 
     def _grade_task_with_selector(
         self, task: TaskRubric, deliverable_path: Path, files: list[Path]
@@ -738,6 +550,11 @@ class Grader:
         self._attach_selection_audit(grade, selection)
         if selection.selection_status == "selection_error":
             grade.error = selection.selection_status
+        elif not deliverable_path.exists() or not files:
+            # Task 207 — carried over from the removed legacy paths, which
+            # were the only place this was ever set. A task with nothing to
+            # grade must stay distinguishable from one that graded to zero.
+            grade.error = "no_deliverables"
         return grade
 
     def _runtime_criterion_plan(
@@ -1317,83 +1134,6 @@ class Grader:
         grade.selection_status = selection.selection_status
         grade.selection_error = selection.selection_error
 
-    def _grade_task_batched(
-        self, task: TaskRubric, deliverable_path: Path, files: list[Path]
-    ) -> TaskGrade:
-        """Batched + tier-routed grading path.
-
-        Differences vs the single-item path:
-        - `judge_call_count` counts Responses API invocations (one per batch),
-          NOT one per rubric item. A batch of 8 items that succeeds in one
-          call contributes 1 to `judge_call_count`. A batch that triggers
-          the `chunk_size // 2` fallback contributes 2.
-        - Item order in the output matches `task.rubric_items` order.
-        - Prechecks still happen first and are NEVER sent to the judge,
-          honoring the project's hard rule #2.
-        """
-        no_deliverables = not deliverable_path.exists() or not files
-
-        # Pre-allocate per-index slots so output order matches input order.
-        item_slots: list[Optional[ItemGrade]] = [None] * len(task.rubric_items)
-        judge_buckets: dict[str, list[tuple[int, RubricItem]]] = {}
-
-        precheck_count = 0
-        judge_call_count = 0
-        judge_total_latency_ms = 0.0
-        judge_input_tokens = 0
-        judge_output_tokens = 0
-
-        # Pass 1 — prechecks (or forced fail when deliverable is absent).
-        for idx, item in enumerate(task.rubric_items):
-            mode, pattern_id = self._classify(item)
-            if no_deliverables:
-                if mode == "judge":
-                    item_slots[idx] = self._absent_judge_item(item)
-                    # absent-judge does not consume an API call
-                else:
-                    item_slots[idx] = self._fail_precheck_item(item, pattern_id, "deliverable absent")
-                    precheck_count += 1
-                continue
-
-            if mode == "precheck":
-                precheck_count += 1
-                pre = self._run_precheck(pattern_id, item, files)
-                if pre is None:
-                    judge_buckets.setdefault(self._route_to_tier(item), []).append((idx, item))
-                else:
-                    verdict, evidence = pre
-                    item_slots[idx] = self._to_item_grade_from_precheck(
-                        item, pattern_id, verdict, evidence
-                    )
-            else:
-                judge_buckets.setdefault(self._route_to_tier(item), []).append((idx, item))
-
-        # Pass 2 — dispatch judge buckets in chunks of `batch_size`.
-        for tier_name, entries in judge_buckets.items():
-            judge = self._tier_judges.get(tier_name) or self._tier_judges["standard"]
-            for chunk_start in range(0, len(entries), self.batch_size):
-                chunk = entries[chunk_start : chunk_start + self.batch_size]
-                chunk_items = [it for _, it in chunk]
-                result = judge.judge_items_batch(task, chunk_items, files)
-                judge_call_count += result.num_api_calls
-                judge_total_latency_ms += result.total_latency_ms
-                judge_input_tokens += result.input_tokens
-                judge_output_tokens += result.output_tokens
-                for (idx, _), graded_item in zip(chunk, result.items):
-                    item_slots[idx] = graded_item
-
-        items: list[ItemGrade] = [it for it in item_slots if it is not None]
-
-        grade = self._aggregate(items, task)
-        grade.judge_call_count = judge_call_count
-        grade.precheck_count = precheck_count
-        grade.judge_total_latency_ms = round(judge_total_latency_ms, 2)
-        grade.judge_input_tokens = judge_input_tokens
-        grade.judge_output_tokens = judge_output_tokens
-        if no_deliverables:
-            grade.error = "no_deliverables"
-        return grade
-
     def _list_files(self, deliverable_dir: Path) -> list[Path]:
         absolute = Path(os.path.abspath(deliverable_dir))
         current = Path(absolute.anchor)
@@ -1431,183 +1171,23 @@ class Grader:
     def _judge(
         self, task: TaskRubric, item: RubricItem, files: list[Path]
     ) -> tuple[ItemGrade, int, int]:
-        # PR2 task 203 — v2 tool-calling dispatch. Enabled by config
-        # (judge.tools.read_deliverable present). Legacy text-extraction
-        # path runs only when this dispatch is inactive.
-        if self._tool_judge is not None:
-            return self._judge_via_tool_calling(task, item, files)
+        """Grade one rubric item via the tool-calling judge.
 
-        if not files:
-            return self._absent_judge_item(item), 0, 0
-
-        summary = self._summarize_deliverables(files)
-        prompt = self._build_prompt(task, item, summary)
-
-        retries = int(self.config.get("grader", {}).get("judge_max_retries", 1))
-        for attempt in range(retries + 1):
-            try:
-                raw, latency_ms, input_tok, output_tok, finish_reason = self._call_judge(prompt)
-            except Exception as exc:
-                public_error = public_provider_error_text(exc)
-                logger.warning(
-                    "Judge call failed for %s after retries: %s",
-                    item.rubric_item_id,
-                    public_error,
-                )
-                return (
-                    ItemGrade(
-                        rubric_item_id=item.rubric_item_id,
-                        criterion=item.criterion,
-                        max_score=item.score,
-                        awarded_score=0.0,
-                        verdict="judge_error",
-                        decided_by="judge",
-                        required=item.required,
-                        evidence="judge_api_call_failed",
-                        judge_confidence=None,
-                        judge_latency_ms=0.0,
-                        precheck_pattern_id=None,
-                        judge_raw_response=(
-                            public_error if self._save_raw() else None
-                        ),
-                    ),
-                    0,
-                    0,
-                )
-            parsed = self._safe_parse_judge_json(raw)
-            if parsed is None:
-                if attempt < retries:
-                    prompt += (
-                        "\n\nYour last response failed to parse as JSON. "
-                        "Return only valid JSON."
-                    )
-                    continue
-                return (
-                    ItemGrade(
-                        rubric_item_id=item.rubric_item_id,
-                        criterion=item.criterion,
-                        max_score=item.score,
-                        awarded_score=0.0,
-                        verdict="judge_error",
-                        decided_by="judge",
-                        required=item.required,
-                        evidence=(
-                            "judge_json_parse_failed:truncated_at_max_tokens"
-                            if finish_reason in {"length", "incomplete"}
-                            else "judge_json_parse_failed"
-                        ),
-                        judge_confidence=None,
-                        judge_latency_ms=latency_ms,
-                        judge_raw_response=raw if self._save_raw() else None,
-                    ),
-                    input_tok,
-                    output_tok,
-                )
-
-            verdict = str(parsed.get("verdict", "fail")).lower()
-            if verdict not in {"pass", "partial", "fail"}:
-                verdict = "fail"
-
-            partial = float(parsed.get("partial_score", 0.0) or 0.0)
-            partial = max(0.0, min(1.0, partial))
-            if verdict == "pass":
-                partial = 1.0
-            elif verdict == "fail":
-                partial = 0.0
-            elif partial <= 0.0 or partial >= 1.0:
-                verdict = "fail"
-                partial = 0.0
-
-            evidence = str(parsed.get("evidence") or "").strip()
-            evidence_max = int(self.config.get("grader", {}).get("evidence_max_chars", 200))
-            if len(evidence) > evidence_max:
-                evidence = evidence[:evidence_max]
-            if self.config.get("grader", {}).get("fail_on_missing_evidence", True) and not evidence:
-                verdict = "fail"
-                partial = 0.0
-                evidence = "missing evidence"
-
-            awarded = float(item.score) * partial
-            confidence_f = None
-            confidence = parsed.get("confidence")
-            if confidence is not None:
-                try:
-                    confidence_f = max(0.0, min(1.0, float(confidence)))
-                except (TypeError, ValueError):
-                    confidence_f = None
-
-            return (
-                ItemGrade(
-                    rubric_item_id=item.rubric_item_id,
-                    criterion=item.criterion,
-                    max_score=item.score,
-                    awarded_score=awarded,
-                    verdict=verdict,
-                    decided_by="judge",
-                    required=item.required,
-                    evidence=evidence,
-                    judge_confidence=confidence_f,
-                    judge_latency_ms=latency_ms,
-                    precheck_pattern_id=None,
-                    judge_raw_response=raw if self._save_raw() else None,
-                ),
-                input_tok,
-                output_tok,
-            )
-
-        raise RuntimeError("unreachable")
-
-    def _call_judge(self, prompt: str) -> tuple[str, float, int, int, str]:
-        """Call the Responses API judge.
-
-        Returns (text, latency_ms, input_tokens, output_tokens, finish_reason).
-        finish_reason is one of "stop", "length", "incomplete", "error", or
-        "" when the SDK does not expose one. Used by the caller to tag
-        parse failures so the evidence string distinguishes truncation
-        from genuine JSON malformation.
+        Task 207 — the legacy text-extraction path this used to fall back
+        to is gone. ``_tool_judge`` is the only judge, so a config without
+        ``judge.tools.read_deliverable`` is rejected at construction rather
+        than silently graded a different way.
         """
-        gen = self.config.get("judge", {}).get("generation", {})
-        reasoning = self.config.get("judge", {}).get("reasoning", {})
-        per_item_max = int(self.config.get("grader", {}).get("per_item_max_output_tokens", 800))
-        max_output = int(min(per_item_max, int(gen.get("max_output_tokens", 4096))))
+        return self._judge_via_tool_calling(task, item, files)
 
-        retry_cfg = self.config.get("tpm_guard", {}).get("retry_on_429", {})
-        max_retries = int(retry_cfg.get("max_retries", 3)) if retry_cfg.get("enabled", True) else 0
-        backoff = float(retry_cfg.get("initial_backoff_sec", 2))
-        factor = float(retry_cfg.get("exponential_factor", 2.0))
-
-        for attempt in range(max_retries + 1):
-            self._apply_tpm_delay()
-            start = time.time()
-            try:
-                # Azure OpenAI Responses API for reasoning models (e.g.,
-                # gpt-5.4-pro) does NOT accept temperature/seed. These values
-                # are kept in config as reproducibility metadata only and
-                # stamped into the grade JSON, but are not passed to the SDK.
-                response = self.client.responses.create(
-                    model=self.model,
-                    input=prompt,
-                    max_output_tokens=max_output,
-                    reasoning={"effort": reasoning.get("effort", "high")},
-                )
-                latency_ms = (time.time() - start) * 1000
-                text = getattr(response, "output_text", "") or ""
-                usage = getattr(response, "usage", None)
-                input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
-                output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-                finish_reason = _extract_finish_reason(response, max_output, output_tokens)
-                return text, latency_ms, input_tokens, output_tokens, finish_reason
-            except Exception as exc:
-                status = getattr(exc, "status_code", None)
-                if status in (429, 500, 502, 503, 504) and attempt < max_retries:
-                    time.sleep(backoff)
-                    backoff *= factor
-                    continue
-                raise
-
-        raise RuntimeError("unreachable")
 
     def _apply_tpm_delay(self) -> None:
+        """TPM guard shared by the tool judge and both perception paths.
+
+        Passed as ``before_upstream_call`` into ``ToolCallingJudge`` and
+        ``VisionPerception``, so this is live v2 infrastructure, not part
+        of the legacy text-extract path removed in task 207.
+        """
         if self._min_delay_seconds <= 0:
             return
         now = time.time()
@@ -1619,55 +1199,6 @@ class Grader:
                 now = time.time()
         self._last_judge_call_at = now
 
-    def _summarize_deliverables(self, files: list[Path]) -> list[dict]:
-        max_chars = int(self.config.get("grader", {}).get("deliverable_extract_max_chars", 4000))
-        out: list[dict] = []
-        for path in files:
-            text = read_reference_file(str(path))
-            if len(text) > max_chars:
-                text = text[:max_chars] + "..."
-            out.append(
-                {
-                    "filename": path.name,
-                    "size_bytes": path.stat().st_size,
-                    "mime_type": path.suffix.lower().lstrip(".") or "unknown",
-                    "content": text,
-                }
-            )
-        return out
-
-    def _build_prompt(
-        self,
-        task: TaskRubric,
-        item: RubricItem,
-        deliverable_summaries: list[dict],
-    ) -> str:
-        task_prompt_max = int(self.config.get("grader", {}).get("task_prompt_truncate_chars", 500))
-        prompt = self.prompt_template
-        prompt = prompt.replace("{{sector}}", task.sector)
-        prompt = prompt.replace("{{occupation}}", task.occupation)
-        prompt = prompt.replace(
-            "{{task_prompt_truncated_500}}", self._truncate(task.prompt, task_prompt_max)
-        )
-        prompt = prompt.replace("{{rubric_item_id}}", item.rubric_item_id)
-        prompt = prompt.replace("{{max_score}}", str(item.score))
-        prompt = prompt.replace("{{required}}", self._json_scalar(item.required))
-        prompt = prompt.replace("{{criterion}}", item.criterion)
-
-        block = ""
-        for d in deliverable_summaries:
-            block += (
-                f"### File: {d['filename']} ({d['size_bytes']} bytes, {d['mime_type']})\n"
-                f"```\n{d['content']}\n```\n"
-            )
-
-        prompt = re.sub(
-            r"\{\{#each deliverable_files\}\}[\s\S]*?\{\{/each\}\}",
-            block.strip(),
-            prompt,
-            flags=re.MULTILINE,
-        )
-        return prompt
 
     def _to_item_grade_from_precheck(
         self,
@@ -1807,20 +1338,6 @@ class Grader:
             evidence=evidence,
             precheck_pattern_id=pattern_id,
         )
-
-    @staticmethod
-    def _safe_parse_judge_json(raw_text: str) -> Optional[dict]:
-        text = raw_text.strip()
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            text = text[start : end + 1]
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return None
 
     @staticmethod
     def _read_prompt_template(path: str) -> str:
@@ -2036,10 +1553,6 @@ class Grader:
         if len(value) <= max_chars:
             return value
         return value[:max_chars] + "..."
-
-    @staticmethod
-    def _json_scalar(value: object) -> str:
-        return json.dumps(value)
 
     def _save_raw(self) -> bool:
         return bool(self.config.get("grader", {}).get("save_raw_responses", False))

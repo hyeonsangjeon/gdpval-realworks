@@ -51,7 +51,12 @@ SWEEP_TEMPLATE = (
     / "_archive_v1"
     / "_sweep_template.yaml"
 )
-BASELINE_CONFIG = BATCH_RUNNER / "grading_configs" / "default_gpt5pro.yaml"
+# Task 207 archived this alongside the v1 grader code it depended on. This
+# whole script is a v1-era tool (it already renders _archive_v1/_sweep_template)
+# and is kept for provenance; the path follows the config.
+BASELINE_CONFIG = (
+    BATCH_RUNNER / "grading_configs" / "_archive_v1" / "default_gpt5pro.yaml"
+)
 STEP8 = BATCH_RUNNER / "step8_grade.py"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
