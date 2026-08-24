@@ -379,6 +379,16 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
+    # A container job defaults `run:` to `sh -e {0}`, not to the runner's
+    # `bash -e {0}` -- the runner will not assume an arbitrary image has bash.
+    # The free 2026-08-24 rehearsal found it on the first step (`set: Illegal
+    # option -o pipefail` under dash), but every step here is written in bash:
+    # [[ ]], arrays, ${VAR%.json}. Restated as the runner's exact default
+    # rather than the `shell: bash` shorthand, which would also add pipefail
+    # to steps that were graded without it.
+    defaults:
+      run:
+        shell: bash -e {0}
     permissions:
       contents: read
     env:
@@ -518,6 +528,14 @@ jobs:
     # against a different renderer than the paid run proves nothing.
     container:
       image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
+    # Same reason as grade-dry-run; see the note there. What makes it matter
+    # more here is where the bash syntax sits: Run grading, Commit grade
+    # result, Merge shards, Auto-analyze and Commit analysis all use [[ ]] or
+    # arrays, and all of them run after the corpus has been judged and paid
+    # for. Only the two steps that already carried `shell: bash` were safe.
+    defaults:
+      run:
+        shell: bash -e {0}
     permissions:
       contents: write
       id-token: write
