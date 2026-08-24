@@ -44,6 +44,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/select_agentic_tasks.py
 !batch-runner/scripts/sweep_stalled_shard_relays.py
 !batch-runner/scripts/judge_error_breakdown.py
+!batch-runner/scripts/summary_wow_drift.py
 
 
 # Experiment report HTML (skews GitHub language stats)

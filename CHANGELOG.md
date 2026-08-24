@@ -11,6 +11,32 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **Two retired 2026-06 grade runs no longer recompute, and now we can say
+  why.** `judge_gpt-5_4__rubric_v2_tools` publishes
+  `rubric_item_coverage_avg` 0.4232 and `critical_item_pass_rate` 0.501 where
+  today's summariser makes 0.4338 and 0.485; the `_mini` run drifts the same
+  way (0.4533 → 0.4646, 0.528 → 0.5128). **One cause, not two:** `6ad789a`
+  (#69) taught `_compute_summary` to skip items carrying `score_excluded`, and
+  both files were graded before it. Deleting that gate — changing nothing else
+  — reproduces all five published rates exactly in both files. The gate removes
+  255 items, every one a `judge_error` the judge never managed to score (243
+  `selection_error`, 12 `wrong_format_primary`, spread over 17 of 220 tasks).
+  Coverage rises because it keeps its whole numerator — a judge error is never
+  a `pass` — while critical falls because all 15 of its excluded items are
+  flagged `model_did_right`. The other three rates reproduce unchanged, which
+  reflects the gate being a no-op for them on this corpus rather than those
+  paths being untouched. **Nothing official moved:** both runs were retired as
+  comparators in Phase 5, and the sol-220 R1 result and its comparator
+  recompute to the digit. Across all 37 published payloads: 31 reproduce, 2 are
+  this gate, 4 are the already-known pre-sign-aware `__v1.json` files, and 0
+  are unexplained. `scripts/summary_wow_drift.py` recomputes every payload with
+  the production summariser and exits nonzero only for drift that matches no
+  rule we have shipped; `tests/test_summary_wow_drift.py` pins the finding, and
+  `data/grades/_validation/SUMMARY_WOW_DRIFT.md` records the full history and
+  the options. **Diagnosis only — no payload was edited and no rate was
+  republished**, so every number already cited stays citable.
+
 ### Removed
 - **Task 207 — the legacy grader code is gone.** `core/grader_batch.py`
   (508 lines) is deleted, and with it every batch / tier-routing / text-extract
