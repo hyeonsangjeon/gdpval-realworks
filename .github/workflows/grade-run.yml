@@ -412,6 +412,23 @@ jobs:
               || { echo "::error::$binary is missing from the grading image"; exit 1; }
           done
 
+      # Steps in a container job run as root, while /__w is bind-mounted from
+      # the runner user's home and stays owned by that user. git therefore sees
+      # a repository owned by somebody else and refuses to read it at all:
+      # "fatal: detected dubious ownership".
+      #
+      # actions/checkout does not settle this for the steps after it. It makes
+      # the same exemption for its own run under a throwaway HOME -- the log
+      # says "Temporarily overriding HOME=... before making global git config
+      # changes" -- and drops it on the way out. The free 2026-08-24 rehearsal
+      # died on the very next step, with `git rev-parse HEAD` returning
+      # nothing and the SHA guard reporting a mismatch it had not really seen.
+      #
+      # Named exactly, never '*': this trusts the one workspace the job was
+      # handed, which is the same directory checkout trusts to clone into.
+      - name: Trust the checkout inside the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Checkout exact main revision (read-only)
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -574,6 +591,13 @@ jobs:
             command -v "$binary" >/dev/null \
               || { echo "::error::$binary is missing from the grading image"; exit 1; }
           done
+
+      # Same reason as grade-dry-run; see the note there. It carries further
+      # here: this job does not only read the checkout, it commits and pushes
+      # to it -- Commit grade result, Merge shards, Commit analysis -- and
+      # every one of those runs after the corpus has been judged and paid for.
+      - name: Trust the checkout inside the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # Held on the v5 line on purpose. checkout v6 moved persisted
       # credentials out of .git/config into a separate file referenced by an
