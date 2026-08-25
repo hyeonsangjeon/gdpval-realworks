@@ -429,20 +429,6 @@ def full_run_tasks(catalog: TaskCatalog) -> tuple[str, ...]:
     return tuple(task.task_id for task in catalog.sorted_tasks())
 
 
-def describe_selection_rule() -> str:
-    """One paragraph a reader can check the chosen five against by hand."""
-    return (
-        "Sort every task in the benchmark by its task number. Then fill five "
-        "slots in this order: spreadsheet, document, presentation, picture, "
-        "text answer only. For each slot take the smallest-numbered task that "
-        "has not been taken, whose job is not already represented, and all of "
-        "whose expert answer files belong to that format; if the benchmark "
-        "holds no such task, take the smallest-numbered one where at least one "
-        "answer file does. The rule reads only task numbers, industries, jobs, "
-        "and expert answer file types, so no score can move it."
-    )
-
-
 def selection_matches(
     task_ids: Sequence[str], selection: AdvanceCheckSelection
 ) -> list[str]:

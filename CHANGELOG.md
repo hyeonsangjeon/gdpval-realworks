@@ -61,15 +61,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   actually run rather than trusting the plan; the container unable to fall
   back; no automatic model switch; a paid-run approval on record; and an
   approved amount covering the ceiling. **A missing approved amount is a
-  refusal, not a pass.** Testing found one real defect and it is fixed: the
-  check could refuse without printing a reason, because the readiness check
-  keeps its own problem list and only the envelope check's was shown, so a plan
-  allowing automatic model switching produced "may not start" with an empty
-  explanation. The moving parts are
+  refusal, not a pass.** Reviewing and testing this work found three real defects,
+  all fixed: the check could refuse **without printing a reason**, because the
+  readiness check keeps its own problem list and only the envelope check's was
+  shown; a settings file that simply **omitted the answer-length cap** passed,
+  though a missing cap falls back to a built-in default that would have given
+  one run place half the answer length of the others; and **nothing checked
+  settings the plan does not name** — temperature, the repeatability seed, and
+  how hard the model is asked to think would each produce a difference that is
+  not the run place, so the three settings files must now agree on all three. The moving parts are
   `batch-runner/core/execution_envelope_tasks.py`,
   `batch-runner/core/execution_envelope_cost.py`,
   `batch-runner/core/execution_envelope_preflight.py`, and
-  `batch-runner/scripts/build_gdpval_task_catalog.py`, with 70 new tests. **The
+  `batch-runner/scripts/build_gdpval_task_catalog.py`, with 75 new tests. **The
   Agentic Sandbox V2 guards were exercised, not worked around, and the Codex
   column stays empty rather than being filled by another place. No comparison
   ran, no model was called, nothing was graded, and no published result file

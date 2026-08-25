@@ -653,6 +653,82 @@ def test_a_missing_experiment_settings_file_is_refused(plan, tmp_path):
     assert any("does not exist" in note for note in result.all_problems)
 
 
+def _preflight_with_edited_settings(plan, tmp_path, environment, edit):
+    """Copy the three settings files, change one, and run the check on them."""
+    root = tmp_path / "batch-runner"
+    (root / "experiments" / "execution_envelope").mkdir(parents=True)
+    for name, relative in plan["experiment_files"].items():
+        settings = yaml.safe_load(
+            (BATCH_RUNNER_ROOT / relative).read_text(encoding="utf-8")
+        )
+        if name == environment:
+            edit(settings)
+        (root / relative).write_text(
+            yaml.safe_dump(settings, sort_keys=False), encoding="utf-8"
+        )
+    return run_envelope_preflight(
+        plan,
+        root=root,
+        docker_daemon_available=True,
+        docker_image_available=True,
+        azure_route_profile="project-ci",
+        environ=FULLY_READY_ENVIRON,
+    )
+
+
+def test_a_settings_file_that_omits_the_answer_length_cap_is_refused(
+    plan, tmp_path
+):
+    """Silence is not agreement: a missing cap falls back to a different one."""
+
+    def drop_the_cap(settings):
+        settings["execution"].pop("tokens", None)
+
+    result = _preflight_with_edited_settings(
+        _approved(plan), tmp_path, "host_python_process", drop_the_cap
+    )
+
+    assert result.may_start is False
+    assert any(
+        "does not say how much the model may write" in note
+        for note in result.all_problems
+    )
+
+
+@pytest.mark.parametrize(
+    "setting, value",
+    [
+        ("reasoning_effort", "high"),
+        ("temperature", 0.7),
+        ("seed", 99),
+    ],
+)
+def test_run_places_that_disagree_on_an_unfixed_setting_are_refused(
+    plan, tmp_path, setting, value
+):
+    """A setting the plan never mentions still has to be the same everywhere."""
+
+    def change_it(settings):
+        settings["condition_a"]["model"][setting] = value
+
+    result = _preflight_with_edited_settings(
+        _approved(plan), tmp_path, "docker_container", change_it
+    )
+
+    assert result.may_start is False
+    assert any(
+        f"({setting})" in note for note in result.all_problems
+    ), result.all_problems
+
+
+def test_the_three_settings_files_agree_on_the_unfixed_settings(plan):
+    """Today they do, and nothing may quietly change that."""
+
+    result = _ready_preflight(_approved(plan))
+
+    assert result.all_problems == []
+
+
 def test_the_committed_files_agree_with_the_committed_plan(plan):
     """The three settings files and the plan say the same thing today."""
     result = _ready_preflight(_approved(plan))

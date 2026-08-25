@@ -114,18 +114,29 @@ repository. **Neither empty slot was filled with a working place.**
 
 ### Verification
 
-- New tests: 70 across
-  `batch-runner/tests/test_execution_envelope_advance_check.py` (57) and
+- New tests: 75 across
+  `batch-runner/tests/test_execution_envelope_advance_check.py` (62) and
   `batch-runner/tests/test_execution_envelope_docker_containment.py` (13). Each
   refusal path has a test that changes exactly one thing in the plan and
   requires the check to say no.
-- One real defect was found by testing and fixed: the check could refuse
-  without printing a reason, because the readiness check keeps its own problem
-  list and only the envelope check's list was shown. A plan allowing automatic
-  model switching produced "may not start" with an empty explanation. The two
-  lists are now merged wherever a verdict is reported, and a test requires
-  every refusal to carry a reason.
-- Full backend suite locally: **3,711 passed, 6 skipped, 45 deselected, 3
+- Three real defects were found by reviewing and testing this work, and all
+  three are fixed:
+  - **The check could refuse without printing a reason.** The readiness check
+    keeps its own problem list and only the envelope check's was shown, so a
+    plan allowing automatic model switching produced "may not start" with an
+    empty explanation. The two lists are now merged wherever a verdict is
+    reported, and a test requires every refusal to carry a reason.
+  - **A settings file that simply omitted the answer-length cap passed.**
+    Silence was read as agreement, but a missing cap falls back to a built-in
+    default that differs from the fixed one, so one run place would have been
+    allowed half the answer length of the others. A missing cap is now a
+    refusal.
+  - **Nothing checked settings the plan does not name.** Temperature, the
+    repeatability seed, and how hard the model is asked to think are not among
+    the fifteen fixed conditions, but a run place with a different value for
+    any of them would produce a difference that is not the run place. The three
+    settings files must now agree on all three.
+- Full backend suite locally: **3,716 passed, 6 skipped, 45 deselected, 3
   failed.** The 3 failures are pre-existing and environmental — `pdfplumber` is
   not installed here (2 tests) and one test pins SDK versions older than those
   installed. Confirmed by stashing every change and re-running those three on

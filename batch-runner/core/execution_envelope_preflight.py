@@ -190,6 +190,7 @@ def check_experiment_files_match_conditions(
             "the plan does not name an experiment settings file for any run "
             "place, so there is nothing to check the shared conditions against"
         ]
+    loaded_settings: dict[str, Mapping[str, Any]] = {}
 
     missing_places = sorted(set(conditions_by_environment) - set(files))
     if missing_places:
@@ -231,6 +232,56 @@ def check_experiment_files_match_conditions(
                 plan=plan,
             )
         )
+        loaded_settings[environment] = settings
+
+    problems.extend(_check_settings_the_plan_does_not_name(loaded_settings))
+    return problems
+
+
+# Settings that are not among the conditions written into the plan, but that
+# would still change the answer if one run place had a different value. They
+# are not given a fixed value here; they only have to be the same everywhere,
+# because the comparison's whole claim is that nothing but the run place
+# differs.
+SETTINGS_THAT_MUST_SIMPLY_MATCH = (
+    ("temperature", "how much the model varies its wording"),
+    ("seed", "the number that makes a run repeatable"),
+    ("reasoning_effort", "how hard the model is asked to think"),
+)
+
+
+def _check_settings_the_plan_does_not_name(
+    settings_by_environment: Mapping[str, Mapping[str, Any]],
+) -> list[str]:
+    """Confirm the run places agree on settings the plan never mentions.
+
+    A setting the plan forgot to fix is still a setting. If one run place asks
+    the model to think harder than another, the difference between their scores
+    is not the run place.
+    """
+    problems: list[str] = []
+    if len(settings_by_environment) < 2:
+        return problems
+    for name, description in SETTINGS_THAT_MUST_SIMPLY_MATCH:
+        seen: dict[Any, list[str]] = {}
+        for environment in sorted(settings_by_environment):
+            condition_a = settings_by_environment[environment].get("condition_a")
+            model = (
+                condition_a.get("model")
+                if isinstance(condition_a, Mapping)
+                else None
+            )
+            value = model.get(name) if isinstance(model, Mapping) else None
+            seen.setdefault(value, []).append(environment)
+        if len(seen) > 1:
+            groups = " | ".join(
+                f"{value!r}: {', '.join(sorted(names))}"
+                for value, names in sorted(seen.items(), key=lambda x: str(x[0]))
+            )
+            problems.append(
+                f"the run places disagree on {description} ({name}), which the "
+                "plan does not fix but which would change the answer: " + groups
+            )
     return problems
 
 
@@ -325,9 +376,13 @@ def _compare_one_experiment_file(
     tokens = execution.get("tokens")
     tokens = tokens if isinstance(tokens, Mapping) else {}
     written_tokens = tokens.get("code_generation")
-    if written_tokens is not None and int(written_tokens) != (
-        conditions.max_output_tokens
-    ):
+    if written_tokens is None:
+        problems.append(
+            f"{label} does not say how much the model may write, so it would "
+            "fall back to a built-in default that differs from the "
+            f"{conditions.max_output_tokens} the shared conditions fix"
+        )
+    elif int(written_tokens) != conditions.max_output_tokens:
         problems.append(
             f"{label} lets the model write up to {written_tokens} tokens, but "
             f"the shared conditions allow {conditions.max_output_tokens}"

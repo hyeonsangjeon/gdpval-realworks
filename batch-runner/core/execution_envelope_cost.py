@@ -25,7 +25,7 @@ import json
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from core.execution_envelope_tasks import CatalogTask
 from core.execution_environment_readiness import ModelRunConditions
@@ -243,17 +243,6 @@ def max_attempt_counts(
     model_calls += reviews * (1 + tool_loop_max_model_turns)
     answer_lengths += reviews * (1 + answers_per_attempt)
     return AttemptCounts(model_calls=model_calls, answer_lengths=answer_lengths)
-
-
-def max_model_calls_per_task(
-    conditions: ModelRunConditions, *, tool_loop_max_model_turns: int
-) -> int:
-    """The most times one task could ask the model, if nothing goes right."""
-    return max_attempt_counts(
-        conditions,
-        tool_loop_max_model_turns=tool_loop_max_model_turns,
-        output_tokens_capped_per_attempt=False,
-    ).model_calls
 
 
 def max_input_tokens_per_call(
@@ -558,30 +547,3 @@ def describe_cost_ceiling(ceiling: CostCeiling) -> list[str]:
         f"{_money(ceiling.total_usd)} United States dollars"
     )
     return lines
-
-
-def unpriced_models_in(
-    conditions_by_environment: Mapping[str, ModelRunConditions],
-    *,
-    prices: Mapping[str, ModelPrice] | None = None,
-) -> list[str]:
-    """Which models in a plan have no published price."""
-    price_table = dict(prices) if prices is not None else load_price_table()
-    return sorted(
-        {
-            conditions.resolved_model
-            for conditions in conditions_by_environment.values()
-            if conditions.resolved_model not in price_table
-        }
-    )
-
-
-def task_ids_in(conditions_by_environment: Mapping[str, ModelRunConditions]) -> Sequence[str]:
-    """The task list the run places agree on, or an empty list if they differ."""
-    lists = {
-        tuple(conditions.task_ids)
-        for conditions in conditions_by_environment.values()
-    }
-    if len(lists) != 1:
-        return ()
-    return next(iter(lists))
