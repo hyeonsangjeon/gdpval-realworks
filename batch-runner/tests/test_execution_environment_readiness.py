@@ -14,6 +14,7 @@ import pytest
 
 from core.execution_environment_readiness import (
     COMPARISON_SAME_GENERATED_CODE,
+    COMPARISONS,
     COMPARISON_TOOL_BUILT_IN_FEATURES,
     ENVIRONMENT_AGENTIC_SANDBOX_V2,
     ENVIRONMENT_AZURE_CODE_INTERPRETER,
@@ -64,8 +65,8 @@ def _conditions(**overrides) -> ModelRunConditions:
         "input_file_versions": {"reference_files/a.xlsx": "a" * 64},
         "max_output_tokens": 16384,
         "per_task_timeout_seconds": 570,
-        "self_review_enabled": True,
-        "self_review_max_attempts": 1,
+        "self_review_enabled": False,
+        "self_review_max_attempts": 0,
         "retry_reasons_allowed": (RETRY_INFRASTRUCTURE_ERROR,),
         "retry_max_attempts": 3,
         "automatic_model_switch_allowed": False,
@@ -137,7 +138,6 @@ def test_codex_is_reported_as_absent_from_this_repository():
     entry = _entry(inspect_environment_support(), ENVIRONMENT_CODEX_BUILT_IN_AGENT)
     assert entry.status == STATUS_NOT_IMPLEMENTED_HERE
     assert entry.blockers
-    assert "agentic_sandbox_v2" not in registered_execution_modes()[:0]
     assert all(
         "codex" not in mode for mode in registered_execution_modes()
     ), "a Codex run mode appeared; the recorded state must be refreshed"
@@ -183,8 +183,7 @@ def test_a_dispatcher_that_builds_v2_for_a_paid_run_is_reported(monkeypatch):
     monkeypatch.setattr(core.executor, "TaskExecutor", PermissiveExecutor)
     problems = check_agentic_sandbox_v2_blocks_are_intact()
     assert any(
-        "without being told the run makes no paid model calls" in problem
-        for problem in problems
+        "declared to make paid model calls" in problem for problem in problems
     )
 
 
@@ -216,6 +215,57 @@ def test_the_real_exec_run_tool_refuses_an_ordinary_command():
     assert AgenticV2Profile.from_mapping(
         dict(readiness.STRUCTURE_CHECK_PROFILE)
     ).foundation_only is True
+
+
+def test_a_dispatcher_that_refuses_for_the_wrong_reason_is_reported():
+    """Deleting the paid-run block must not hide behind a later complaint.
+
+    The dispatcher raises for seven different reasons in this branch. If the
+    check accepted any of them, removing the paid-run block would go unnoticed
+    because a missing-argument complaint would take its place.
+    """
+
+    class WrongReasonExecutor:
+        def __init__(self, **kwargs):
+            raise ValueError(
+                "agentic_sandbox_v2 foundation requires a fixture root"
+            )
+
+    problems = readiness._check_dispatcher_refuses_a_paid_v2_run(
+        WrongReasonExecutor
+    )
+    assert any("unexpected reason" in problem for problem in problems)
+    assert any("may have been removed" in problem for problem in problems)
+
+
+def test_a_dispatcher_missing_only_the_paid_run_block_is_reported():
+    """Reproduce the real branch with just the paid-run block deleted."""
+
+    class GateRemovedExecutor:
+        def __init__(self, **kwargs):
+            if kwargs.get("llm_client") is not None:
+                raise ValueError("agentic_sandbox_v2 foundation refuses model clients")
+            if kwargs.get("agentic_v2_fixture_root") is None:
+                raise ValueError(
+                    "agentic_sandbox_v2 foundation requires a fixture root"
+                )
+            if not isinstance(kwargs.get("agentic_v2_scripted_calls"), (list, tuple)):
+                raise ValueError(
+                    "agentic_sandbox_v2 foundation requires scripted calls"
+                )
+
+    problems = readiness._check_dispatcher_refuses_a_paid_v2_run(
+        GateRemovedExecutor
+    )
+    assert any(
+        "declared to make paid model calls" in problem for problem in problems
+    )
+
+
+def test_the_real_dispatcher_refuses_a_paid_v2_run_by_name():
+    from core.executor import TaskExecutor
+
+    assert readiness._check_dispatcher_refuses_a_paid_v2_run(TaskExecutor) == []
 
 
 # ── The container run place must not be swapped for the host machine ───────
@@ -407,13 +457,89 @@ def test_a_different_deployment_in_one_run_place_is_reported():
     ],
 )
 def test_any_difference_in_the_shared_conditions_is_reported(field, value):
+    for comparison in COMPARISONS:
+        problems = check_model_run_conditions(
+            {
+                ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
+                ENVIRONMENT_DOCKER_CONTAINER: _conditions(**{field: value}),
+            },
+            comparison=comparison,
+        )
+        assert any(
+            "do not share one fixed set" in problem for problem in problems
+        ), f"{field} went unreported in {comparison}"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"self_review_enabled": True, "self_review_max_attempts": 9},
+        {"retry_reasons_allowed": RETRY_REASONS},
+        {"retry_max_attempts": 25},
+    ],
+)
+def test_differing_review_and_retry_settings_break_the_first_comparison(
+    overrides,
+):
     problems = check_model_run_conditions(
         {
             ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
-            ENVIRONMENT_DOCKER_CONTAINER: _conditions(**{field: value}),
-        }
+            ENVIRONMENT_DOCKER_CONTAINER: _conditions(**overrides),
+        },
+        comparison=COMPARISON_SAME_GENERATED_CODE,
     )
-    assert any("do not share one fixed set" in problem for problem in problems)
+    assert problems, f"{overrides} may not differ when the same code is re-run"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"self_review_enabled": True, "self_review_max_attempts": 9},
+        {"retry_reasons_allowed": RETRY_REASONS},
+        {"retry_max_attempts": 25},
+    ],
+)
+def test_differing_review_and_retry_settings_are_fine_in_the_second_comparison(
+    overrides,
+):
+    assert check_model_run_conditions(
+        {
+            ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
+            ENVIRONMENT_DOCKER_CONTAINER: _conditions(**overrides),
+        },
+        comparison=COMPARISON_TOOL_BUILT_IN_FEATURES,
+    ) == []
+
+
+def test_the_first_comparison_refuses_self_review():
+    problems = check_model_run_conditions(
+        {
+            ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(
+                self_review_enabled=True, self_review_max_attempts=1
+            )
+        },
+        comparison=COMPARISON_SAME_GENERATED_CODE,
+    )
+    assert any("must leave it off" in problem for problem in problems)
+
+
+def test_the_second_comparison_allows_self_review():
+    assert check_model_run_conditions(
+        {
+            ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(
+                self_review_enabled=True, self_review_max_attempts=1
+            )
+        },
+        comparison=COMPARISON_TOOL_BUILT_IN_FEATURES,
+    ) == []
+
+
+def test_an_unknown_comparison_name_is_reported():
+    problems = check_model_run_conditions(
+        {ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions()},
+        comparison="one_combined_score",
+    )
+    assert any("not one of the two comparisons" in problem for problem in problems)
 
 
 def test_automatic_model_switching_is_refused():
@@ -480,7 +606,8 @@ def test_self_review_settings_must_agree_with_each_other():
             ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(
                 self_review_enabled=True, self_review_max_attempts=0
             )
-        }
+        },
+        comparison=COMPARISON_TOOL_BUILT_IN_FEATURES,
     )
     assert any("zero attempts" in problem for problem in turned_on_with_no_attempts)
 
@@ -538,7 +665,7 @@ def _stage(count: int) -> dict:
         "advance_conditions": "all run places finish without a blocked task",
         "maximum_expected_cost": "USD 20",
         "allowed_retry_reasons": [RETRY_INFRASTRUCTURE_ERROR],
-        "allowed_self_review_attempts": 1,
+        "allowed_self_review_attempts": 0,
     }
 
 
@@ -607,6 +734,36 @@ def test_a_stage_may_not_allow_an_unknown_retry_reason():
     plan["full_run"]["allowed_retry_reasons"] = ["anything_goes"]
     problems = check_run_size_plan(plan)
     assert any("does not count" in problem for problem in problems)
+
+
+def test_turning_self_review_and_retries_off_is_a_real_answer():
+    """The first comparison needs both switched off, which is 0 and [].
+
+    Treating those as "missing" would make the document's own first comparison
+    impossible to express.
+    """
+    plan = _full_plan()
+    for stage in plan:
+        plan[stage]["allowed_retry_reasons"] = []
+        plan[stage]["allowed_self_review_attempts"] = 0
+    assert check_run_size_plan(plan) == []
+
+
+def test_a_stage_flagged_as_incomplete_is_still_counted():
+    """A missing field must not stop the task-count check from running."""
+    plan = _full_plan()
+    plan["advance_check"]["success_criteria"] = None
+    plan["advance_check"]["task_ids"] = ["task-1", "task-2"]
+    problems = check_run_size_plan(plan)
+    assert any("success_criteria" in problem for problem in problems)
+    assert any("fixes 2 tasks but must fix 5" in problem for problem in problems)
+
+
+def test_a_non_numeric_self_review_allowance_is_reported():
+    plan = _full_plan()
+    plan["trial_run"]["allowed_self_review_attempts"] = "a few"
+    problems = check_run_size_plan(plan)
+    assert any("whole number" in problem for problem in problems)
 
 
 # ── What every finished run must write down ────────────────────────────────
@@ -751,14 +908,76 @@ def test_a_report_with_no_problem_is_ready():
         **_ready_container_arguments(),
     )
     assert report.problems == []
+    assert report.blocked_environments == []
     assert report.ready is True
+
+
+def test_an_unapproved_report_is_never_ready():
+    report = build_readiness_report(
+        environ={},
+        conditions_by_environment={
+            ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
+            ENVIRONMENT_DOCKER_CONTAINER: _conditions(),
+        },
+        **_ready_container_arguments(),
+    )
+    assert report.problems == []
+    assert report.ready is False, (
+        "a report with no approval must not be green; a check wired to this "
+        "would let an unapproved paid run start"
+    )
+    assert set(report.blocked_environments) == {
+        ENVIRONMENT_HOST_PYTHON_PROCESS,
+        ENVIRONMENT_DOCKER_CONTAINER,
+    }
+
+
+def test_comparing_all_five_places_is_not_ready_today():
+    report = build_readiness_report(
+        environ=APPROVED, **_ready_container_arguments()
+    )
+    assert report.compared_environments == ENVIRONMENTS
+    assert report.ready is False
+    assert ENVIRONMENT_CODEX_BUILT_IN_AGENT in report.blocked_environments
+    assert ENVIRONMENT_AGENTIC_SANDBOX_V2 in report.blocked_environments
+
+
+def test_a_blocked_place_outside_the_comparison_does_not_block_the_report():
+    report = build_readiness_report(
+        environ=APPROVED,
+        conditions_by_environment={
+            ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
+        },
+        **_ready_container_arguments(),
+    )
+    assert report.compared_environments == (ENVIRONMENT_HOST_PYTHON_PROCESS,)
+    assert report.ready is True
+    assert (
+        report.status_of(ENVIRONMENT_CODEX_BUILT_IN_AGENT)
+        == STATUS_NOT_IMPLEMENTED_HERE
+    )
+
+
+def test_a_place_in_the_comparison_that_cannot_run_blocks_the_report():
+    report = build_readiness_report(
+        environ=APPROVED,
+        conditions_by_environment={
+            ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
+            ENVIRONMENT_AGENTIC_SANDBOX_V2: _conditions(),
+        },
+        **_ready_container_arguments(),
+    )
+    assert report.ready is False
+    assert report.blocked_environments == [ENVIRONMENT_AGENTIC_SANDBOX_V2]
 
 
 def test_the_report_can_be_written_out_as_plain_data():
     report = build_readiness_report(environ={}, **_ready_container_arguments())
     payload = json.loads(json.dumps(report.as_dict(), ensure_ascii=False))
     assert payload["paid_model_calls_approved"] is False
+    assert payload["ready"] is False
     assert len(payload["environments"]) == 5
+    assert payload["blocked_environments"]
 
 
 def test_asking_about_an_unknown_run_place_raises():
@@ -783,9 +1002,13 @@ def test_the_command_line_tool_runs_without_calling_a_model():
         text=True,
         timeout=180,
     )
-    assert finished.returncode == 0, finished.stderr
+    assert finished.returncode == 1, (
+        "with no paid-run approval the tool must not exit 0, or a check wired "
+        f"to it would green-light an unapproved run: {finished.stderr}"
+    )
     payload = json.loads(finished.stdout)
     assert payload["paid_model_calls_approved"] is False
+    assert payload["ready"] is False
     graded = {entry["environment"]: entry["status"] for entry in payload["environments"]}
     assert graded[ENVIRONMENT_CODEX_BUILT_IN_AGENT] == STATUS_NOT_IMPLEMENTED_HERE
     assert graded[ENVIRONMENT_AGENTIC_SANDBOX_V2] == STATUS_STRUCTURE_CHECK_ONLY
@@ -835,4 +1058,34 @@ def test_the_command_line_tool_reports_a_broken_plan(tmp_path: Path):
     payload = json.loads(finished.stdout)
     assert any(
         "do not share one fixed set" in problem for problem in payload["problems"]
+    )
+
+
+def test_the_command_line_tool_reports_a_plan_naming_no_run_place(tmp_path: Path):
+    """A plan that fixes conditions for nobody must not pass silently."""
+    plan = tmp_path / "plan.yaml"
+    plan.write_text(
+        "model_run_conditions:\n"
+        "  shared: {}\n"
+        "  by_environment: {}\n",
+        encoding="utf-8",
+    )
+    finished = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_execution_environment_readiness.py",
+            "--skip-docker-probe",
+            "--plan",
+            str(plan),
+            "--json",
+        ],
+        cwd=BATCH_RUNNER_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert finished.returncode == 1
+    payload = json.loads(finished.stdout)
+    assert any(
+        "no run place was given" in problem for problem in payload["problems"]
     )

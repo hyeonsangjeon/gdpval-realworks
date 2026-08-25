@@ -12,8 +12,9 @@ Usage:
     python scripts/check_execution_environment_readiness.py --plan plan.yaml
     python scripts/check_execution_environment_readiness.py --json
 
-The exit code is 0 only when nothing is blocking. Any problem exits 1, so this
-is safe to wire into an automated check.
+The exit code is 0 only when every run place being compared can start and no
+problem was found. A blocked run place or any problem exits 1, so this is safe
+to wire into an automated check.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ if str(BATCH_RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
 from core.execution_environment_readiness import (  # noqa: E402
+    COMPARISON_SAME_GENERATED_CODE,
     ModelRunConditions,
     build_readiness_report,
     describe_environment,
@@ -111,8 +113,15 @@ def main() -> int:
                 file=sys.stderr,
             )
 
+    # A plan that names the key but lists no run place is a mistake worth
+    # reporting, so it is passed through rather than turned into "no plan".
+    conditions = (
+        _conditions_from_plan(plan) if "model_run_conditions" in plan else None
+    )
+
     report = build_readiness_report(
-        conditions_by_environment=_conditions_from_plan(plan) or None,
+        conditions_by_environment=conditions,
+        comparison=plan.get("comparison", COMPARISON_SAME_GENERATED_CODE),
         run_size_plan=plan.get("run_sizes"),
         scoreboards=plan.get("scoreboards"),
         docker_daemon_available=docker_daemon,
@@ -131,6 +140,9 @@ def main() -> int:
         "Paid model calls approved: "
         + ("yes" if report.paid_model_calls_approved else "no")
     )
+    print(
+        "Run places being compared: " + ", ".join(report.compared_environments)
+    )
     print()
     for entry in report.environments:
         print(f"[{entry.status}] {entry.environment}")
@@ -145,9 +157,21 @@ def main() -> int:
         print("Problems that must be fixed before the comparison starts:")
         for problem in report.problems:
             print(f"  - {problem}")
+        print()
+
+    if report.blocked_environments:
+        print(
+            "These run places cannot start yet, so the comparison must not "
+            "begin. Do not drop them and run the rest:"
+        )
+        for environment in report.blocked_environments:
+            print(f"  - {environment} ({report.status_of(environment)})")
         return 1
 
-    print("No problem was found by the free checks.")
+    if report.problems:
+        return 1
+
+    print("Every run place being compared can start, and no problem was found.")
     return 0
 
 

@@ -46,9 +46,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   infrastructure failure, the model reviewing its finished output, and the
   model recovering mid-conversation with its tools — with a single lumped count
   rejected. The 5, 30, and 220 task stages each require eight decisions fixed
-  before any spending. `tests/test_execution_environment_readiness.py` adds 103
-  tests, including ones that monkeypatch each safety door open and assert the
-  check reports it. The moving parts are
+  before any spending. `tests/test_execution_environment_readiness.py` adds 123
+  tests, including a dispatcher that reproduces the real Agentic Sandbox V2
+  branch with only the paid-run block removed — the check must still notice,
+  because that branch refuses for seven different reasons and accepting any of
+  them would have let the block be deleted silently. **The check reports
+  "ready" only when every place being compared can actually start**, so with no
+  approval on record it exits non-zero rather than green-lighting a run. The
+  four self-review and retry settings must match when the same code is re-run
+  and are free to differ when each tool uses its own features, which is what
+  the second comparison measures. The moving parts are
   `batch-runner/core/execution_environment_readiness.py` and
   `batch-runner/scripts/check_execution_environment_readiness.py`. **No
   comparison ran, no model was called, nothing was graded, and no published

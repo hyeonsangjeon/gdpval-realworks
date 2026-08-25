@@ -64,25 +64,66 @@ Agentic Sandbox V2 foundation; and Codex's own built-in agent.
   substitutes a working place for a missing one. The 5, 30, and 220 task stages
   each require eight decisions to be fixed before any spending.
 
+### Review Evidence
+
+An independent review found eight defects in the first version; all were fixed
+and each now has a test that fails without the fix. Three mattered:
+
+- **The readiness check said "ready" while every place was blocked.** `ready`
+  was `not problems`, so per-place blockers never reached it and the command
+  line tool exited 0 with no paid-run approval on record — the exact thing the
+  approval exists to prevent. `ready` now requires that every place being
+  compared can actually start, and which places those are comes from the plan.
+- **One of the three Agentic Sandbox V2 doors was not really being tested.**
+  The check accepted any `ValueError` from the dispatcher, but that branch
+  raises for seven different reasons; with the paid-run block deleted a
+  later missing-argument complaint took its place and the door was reported
+  shut. The check now fills in every other argument so the paid-run block is
+  the only remaining reason to refuse, and matches on the refusal itself.
+- **Five of the fifteen fixed conditions were never compared.** Self-review and
+  retry settings were left out, so one place could take nine self-review passes
+  and twenty-five retries against another's one and three and still be called
+  conforming. Fixing this exposed a real distinction rather than a simple
+  oversight: those four settings must match when the same code is re-run, and
+  must be free to differ when each tool uses its own features, because that is
+  what the second comparison measures. The check now takes the comparison as an
+  argument and applies the matching strictness.
+
+Also fixed: a stage plan could not express "no self-review, no retries" because
+zero and the empty list were read as missing, and that misreading also skipped
+the 5/30/220 count check; the command line tool turned a plan naming no place
+at all into "no plan given"; one test assertion sliced a tuple to nothing and
+was true for any input; and the specification said 15 configs where 24 use that
+mode, and claimed one Codex mention repository-wide where the true statement is
+that no *executable* path exists.
+
 ### Verification
 
 - New suite `batch-runner/tests/test_execution_environment_readiness.py`:
-  103 passed. It runs the three Agentic Sandbox V2 doors for real, and also
-  asserts the check reports a problem when each door is monkeypatched open.
-- Full backend suite: 3,618 passed, 9 skipped, 45 deselected, 3 failed.
-- The 3 failures are pre-existing and unrelated: `pdfplumber` is not installed
-  in this environment (2 tests), and one test pins SDK versions older than the
-  installed `openai 2.45.0` / `azure-ai-projects 1.0.0` / `azure-core 1.39.0`.
-  They were confirmed by re-running them with both new files moved out of the
-  tree, where they fail identically.
-- The command-line tool was exercised end to end from the test suite, both on a
-  clean tree and on a plan whose two places disagree on deployment, which exits
-  non-zero.
+  123 passed. It runs the three Agentic Sandbox V2 doors for real, and asserts
+  the check reports a problem when each is opened — including a dispatcher
+  reproducing the real branch with only the paid-run block removed.
+- Full backend suite locally: 3,641 passed, 6 skipped, 45 deselected, 3 failed.
+- **In CI the same suite is 3,621 passed, 0 failed.** The 3 local failures are
+  pre-existing and environmental: `pdfplumber` is not installed here (2 tests),
+  and one test pins SDK versions older than the locally installed
+  `openai 2.45.0` / `azure-ai-projects 1.0.0` / `azure-core 1.39.0`. They were
+  confirmed by re-running them with both new files moved out of the tree, where
+  they fail identically.
+- `mypy` on the new module: clean.
+- Every file path, line number, function name, and count cited in the
+  specification was checked against the repository by the reviewer; the two
+  wrong counts above were the only errors, and both are corrected.
 - No model call, no grading, no Azure sign-in, no image publish, no workflow
-  dispatch, and no Hugging Face write occurred.
-- Work was done in a throwaway worktree at `/tmp/gdpval-exec-env` cut from
-  `origin/main` at `47b0fe5`. The user's own working folder and its 1,275
-  pending changes were not touched.
+  dispatch, and no Hugging Face write occurred. Network access was confirmed
+  unused by patching `socket.connect`, `socket.create_connection`, and
+  `getaddrinfo` to raise and running the whole check.
+- Work was done in a throwaway worktree cut from `origin/main` at `47b0fe5`.
+  The user's own working folder and its 1,275 pending changes were not touched.
+
+### Shipment
+
+- PR [#224](https://github.com/hyeonsangjeon/gdpval-realworks/pull/224).
 
 ### Remaining Work
 

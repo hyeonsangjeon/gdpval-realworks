@@ -252,8 +252,12 @@ class ModelRunConditions:
             "automatic_model_switch_allowed",
         )
 
-    def shared_identity(self) -> tuple:
-        """The part that every run in one comparison must match exactly."""
+    def model_and_input_identity(self) -> tuple:
+        """The part that must match in **both** comparisons.
+
+        If any of this differs, the runs are not answering the same question at
+        all, whichever comparison is being made.
+        """
         return (
             self.provider,
             self.deployment,
@@ -265,6 +269,22 @@ class ModelRunConditions:
             tuple(sorted(self.input_file_versions.items())),
             self.max_output_tokens,
             self.per_task_timeout_seconds,
+            self.automatic_model_switch_allowed,
+        )
+
+    def review_and_retry_identity(self) -> tuple:
+        """The part that must match only in the first comparison.
+
+        Re-running one model's own code isolates the run place, so self-review
+        and retries have to be switched off identically everywhere. The second
+        comparison deliberately lets each tool use its own self-review and
+        retry behaviour, because that behaviour is what it measures.
+        """
+        return (
+            self.self_review_enabled,
+            self.self_review_max_attempts,
+            tuple(sorted(self.retry_reasons_allowed)),
+            self.retry_max_attempts,
         )
 
 
@@ -293,10 +313,29 @@ class ReadinessReport:
     environments: list[EnvironmentReadiness]
     problems: list[str] = field(default_factory=list)
     paid_model_calls_approved: bool = False
+    compared_environments: tuple[str, ...] = ENVIRONMENTS
+
+    @property
+    def blocked_environments(self) -> list[str]:
+        """The places that were asked to take part but cannot run today."""
+        return [
+            entry.environment
+            for entry in self.environments
+            if entry.environment in self.compared_environments
+            and entry.status != STATUS_CAN_RUN_REAL_EXPERIMENT
+        ]
 
     @property
     def ready(self) -> bool:
-        return not self.problems
+        """True only when every place being compared could start right now.
+
+        A place that is merely described, or that is blocked for any reason,
+        keeps this False. Callers are meant to stop on False rather than drop
+        the blocked place and continue with the rest.
+        """
+        if self.problems:
+            return False
+        return not self.blocked_environments
 
     def status_of(self, environment: str) -> str:
         for entry in self.environments:
@@ -308,6 +347,8 @@ class ReadinessReport:
         return {
             "paid_model_calls_approved": self.paid_model_calls_approved,
             "ready": self.ready,
+            "compared_environments": list(self.compared_environments),
+            "blocked_environments": self.blocked_environments,
             "environments": [entry.as_dict() for entry in self.environments],
             "problems": list(self.problems),
         }
@@ -381,20 +422,7 @@ def check_agentic_sandbox_v2_blocks_are_intact() -> list[str]:
             f"block cannot be confirmed: {error}"
         )
     else:
-        try:
-            task_executor(mode="agentic_sandbox_v2", non_paid_test_mode=False)
-        except ValueError:
-            pass
-        except Exception as error:  # pragma: no cover - defensive
-            problems.append(
-                "the task dispatcher failed in an unexpected way while refusing "
-                f"agentic_sandbox_v2: {error!r}"
-            )
-        else:
-            problems.append(
-                "the task dispatcher built an Agentic Sandbox V2 runner without "
-                "being told the run makes no paid model calls"
-            )
+        problems.extend(_check_dispatcher_refuses_a_paid_v2_run(task_executor))
 
     try:
         backend_class = _import_attribute(
@@ -409,6 +437,44 @@ def check_agentic_sandbox_v2_blocks_are_intact() -> list[str]:
         problems.extend(_check_exec_run_stays_unavailable(backend_class))
 
     return problems
+
+
+def _check_dispatcher_refuses_a_paid_v2_run(task_executor: Any) -> list[str]:
+    """Confirm the dispatcher refuses V2 *because the run is paid*.
+
+    Every other argument is filled in with something the dispatcher accepts, so
+    declaring the run paid is the only remaining reason to refuse. Without this
+    care the check would pass on any complaint at all, and deleting the paid-run
+    block would go unnoticed because a later missing-argument complaint would
+    take its place.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as fixture_root:
+        try:
+            task_executor(
+                mode="agentic_sandbox_v2",
+                non_paid_test_mode=False,
+                agentic_v2_fixture_root=fixture_root,
+                agentic_v2_scripted_calls=[],
+            )
+        except ValueError as error:
+            if "model-free" not in str(error):
+                return [
+                    "the task dispatcher refused an Agentic Sandbox V2 run for "
+                    f"an unexpected reason: {error}. The block that refuses a "
+                    "paid run may have been removed."
+                ]
+            return []
+        except Exception as error:  # pragma: no cover - defensive
+            return [
+                "the task dispatcher failed in an unexpected way while refusing "
+                f"agentic_sandbox_v2: {error!r}"
+            ]
+    return [
+        "the task dispatcher built an Agentic Sandbox V2 runner for a run that "
+        "was declared to make paid model calls"
+    ]
 
 
 STRUCTURE_CHECK_PROFILE: Mapping[str, Any] = {
@@ -706,11 +772,22 @@ def _grade_azure_code_interpreter(
 
 def check_model_run_conditions(
     conditions_by_environment: Mapping[str, ModelRunConditions],
+    *,
+    comparison: str = COMPARISON_SAME_GENERATED_CODE,
 ) -> list[str]:
-    """Confirm every run place would use exactly the same model and inputs."""
+    """Confirm every run place would use exactly the same model and inputs.
+
+    ``comparison`` decides how strict the self-review and retry settings are.
+    The first comparison re-runs one model's own code, so those settings must be
+    switched off identically everywhere. The second comparison measures what
+    each tool does on its own, so they are allowed to differ there — but the
+    model, the deployment, the instructions, and the inputs still may not.
+    """
     problems: list[str] = []
+    if comparison not in COMPARISONS:
+        problems.append(f"{comparison!r} is not one of the two comparisons")
     if not conditions_by_environment:
-        return ["no run place was given fixed model run conditions"]
+        return problems + ["no run place was given fixed model run conditions"]
 
     unknown = sorted(set(conditions_by_environment) - set(ENVIRONMENTS))
     if unknown:
@@ -720,6 +797,7 @@ def check_model_run_conditions(
         )
 
     identities: dict[tuple, list[str]] = {}
+    review_settings: dict[tuple, list[str]] = {}
     for environment, conditions in sorted(conditions_by_environment.items()):
         if conditions.automatic_model_switch_allowed:
             problems.append(
@@ -759,20 +837,42 @@ def check_model_run_conditions(
             problems.append(
                 f"{environment} does not cap how long one task may run"
             )
-        identities.setdefault(conditions.shared_identity(), []).append(
-            environment
-        )
+        if comparison == COMPARISON_SAME_GENERATED_CODE and (
+            conditions.self_review_enabled
+        ):
+            problems.append(
+                f"{environment} turns self-review on, but the comparison that "
+                "re-runs one model's own code must leave it off so the only "
+                "thing that changes is the run place"
+            )
+        identities.setdefault(
+            conditions.model_and_input_identity(), []
+        ).append(environment)
+        review_settings.setdefault(
+            conditions.review_and_retry_identity(), []
+        ).append(environment)
 
     if len(identities) > 1:
-        groups = sorted(
-            ", ".join(sorted(names)) for names in identities.values()
-        )
         problems.append(
             "the run places do not share one fixed set of model run "
-            "conditions; they split into these groups: " + " | ".join(groups)
+            "conditions; they split into these groups: "
+            + _describe_groups(identities)
+        )
+    if comparison == COMPARISON_SAME_GENERATED_CODE and len(review_settings) > 1:
+        problems.append(
+            "the run places do not share one self-review and retry setting; "
+            "the comparison that re-runs one model's own code needs them "
+            "identical, and they split into these groups: "
+            + _describe_groups(review_settings)
         )
 
     return problems
+
+
+def _describe_groups(grouped: Mapping[tuple, list[str]]) -> str:
+    return " | ".join(
+        sorted(", ".join(sorted(names)) for names in grouped.values())
+    )
 
 
 def check_run_size_plan(plan: Mapping[str, Mapping[str, Any]]) -> list[str]:
@@ -783,30 +883,42 @@ def check_run_size_plan(plan: Mapping[str, Mapping[str, Any]]) -> list[str]:
         if not isinstance(stage_plan, Mapping):
             problems.append(f"the {stage} stage has no plan")
             continue
+        # An empty list and a zero are real answers: the first comparison turns
+        # self-review and retries off. Only an absent or null entry is missing.
         missing = [
-            name for name in REQUIRED_RUN_SIZE_FIELDS if not stage_plan.get(name)
+            name
+            for name in REQUIRED_RUN_SIZE_FIELDS
+            if name not in stage_plan or stage_plan[name] is None
         ]
         if missing:
             problems.append(
                 f"the {stage} stage is missing: " + ", ".join(sorted(missing))
             )
-            continue
-        task_ids = list(stage_plan["task_ids"])
-        if len(task_ids) != expected_count:
-            problems.append(
-                f"the {stage} stage fixes {len(task_ids)} tasks but must fix "
-                f"{expected_count}"
+        if "task_ids" not in missing:
+            task_ids = list(stage_plan["task_ids"])
+            if len(task_ids) != expected_count:
+                problems.append(
+                    f"the {stage} stage fixes {len(task_ids)} tasks but must "
+                    f"fix {expected_count}"
+                )
+            if len(set(task_ids)) != len(task_ids):
+                problems.append(f"the {stage} stage repeats a task")
+        if "allowed_retry_reasons" not in missing:
+            unknown_reasons = sorted(
+                set(stage_plan["allowed_retry_reasons"]) - set(RETRY_REASONS)
             )
-        if len(set(task_ids)) != len(task_ids):
-            problems.append(f"the {stage} stage repeats a task")
-        unknown_reasons = sorted(
-            set(stage_plan["allowed_retry_reasons"]) - set(RETRY_REASONS)
-        )
-        if unknown_reasons:
-            problems.append(
-                f"the {stage} stage allows retry reasons the comparison does "
-                "not count: " + ", ".join(unknown_reasons)
-            )
+            if unknown_reasons:
+                problems.append(
+                    f"the {stage} stage allows retry reasons the comparison "
+                    "does not count: " + ", ".join(unknown_reasons)
+                )
+        if "allowed_self_review_attempts" not in missing:
+            attempts = stage_plan["allowed_self_review_attempts"]
+            if not isinstance(attempts, int) or attempts < 0:
+                problems.append(
+                    f"the {stage} stage must give a whole number of allowed "
+                    "self-review attempts, using 0 to mean none"
+                )
     return problems
 
 
@@ -873,6 +985,7 @@ def paid_model_calls_approved(environ: Mapping[str, str] | None = None) -> bool:
 def build_readiness_report(
     *,
     conditions_by_environment: Mapping[str, ModelRunConditions] | None = None,
+    comparison: str = COMPARISON_SAME_GENERATED_CODE,
     run_size_plan: Mapping[str, Mapping[str, Any]] | None = None,
     scoreboards: Mapping[str, Mapping[str, Any]] | None = None,
     docker_daemon_available: bool | None = None,
@@ -886,6 +999,10 @@ def build_readiness_report(
     Environments that are not ready are never swapped for a different one. A
     missing requirement becomes a written problem, and the caller is expected to
     stop.
+
+    When ``conditions_by_environment`` names the places being compared, only
+    those places decide whether the report is ready. Otherwise all five must be
+    able to run, which today they cannot.
     """
     environments = inspect_environment_support(
         docker_daemon_available=docker_daemon_available,
@@ -899,7 +1016,11 @@ def build_readiness_report(
     problems.extend(check_agentic_sandbox_v2_blocks_are_intact())
 
     if conditions_by_environment is not None:
-        problems.extend(check_model_run_conditions(conditions_by_environment))
+        problems.extend(
+            check_model_run_conditions(
+                conditions_by_environment, comparison=comparison
+            )
+        )
     if run_size_plan is not None:
         problems.extend(check_run_size_plan(run_size_plan))
     if scoreboards is not None:
@@ -924,10 +1045,21 @@ def build_readiness_report(
                 "one of the five states"
             )
 
+    compared = (
+        tuple(
+            environment
+            for environment in ENVIRONMENTS
+            if environment in conditions_by_environment
+        )
+        if conditions_by_environment
+        else ENVIRONMENTS
+    )
+
     return ReadinessReport(
         environments=environments,
         problems=problems,
         paid_model_calls_approved=approved,
+        compared_environments=compared,
     )
 
 
