@@ -1,12 +1,105 @@
 # Latest Task Result
 
-- Updated: 2026-08-18
-- Status: a pre-sidecar inference is now publishable when its config pins the
-  complete corpus, which removes the provenance blocker from the 220-task
-  exp003 rerun; the anchor's audio-wiring and visual-cap gates preserved below
-  are unchanged, and no run was dispatched
+- Updated: 2026-08-25
+- Status: the comparison of one GPT model across five places a task can be run
+  is now specified, and a check that answers "may it start?" without calling a
+  model ships with it; no comparison ran, because paid model calls are
+  unapproved and two of the five places cannot run a GDPVal task at all
 
-## Current Task: Legacy Provenance Complete-Corpus Policy
+## Current Task: Execution Environment Comparison Groundwork
+
+### Task
+
+Settle in code and in writing what has to be true before the same GPT model is
+compared across five places a GDPVal task can be run, without running the
+comparison, calling a paid model, grading anything, signing in to Azure, or
+publishing an image.
+
+The five places: a separate Python process on the server's own operating
+system; a Docker container; Azure AI Foundry's code interpreter; the
+Agentic Sandbox V2 foundation; and Codex's own built-in agent.
+
+### Result
+
+- `tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md` is the written
+  specification. It names no GPT version, so a later run picks its own model
+  and the document does not change. The card's in-house shorthand for the
+  fixed-model idea is gone; it is written out as "고정 모델 실행 조건" — fifteen
+  entries that must match in every place — and carried in code as
+  `ModelRunConditions`.
+- **Each of the five places is graded from code that was read, not assumed.**
+  A separate Python process can run a real experiment today (24 experiment
+  configs use it; 220 graded tasks exist). A Docker container can, but only
+  when its container setting is `always` — `SandboxRunner._execute` at
+  `batch-runner/core/sandbox_runner.py` line 1039 otherwise runs the code on
+  the host and prints a warning, which would silently turn the container
+  result into a host result. Azure's code interpreter is implemented and
+  selected by 5 configs but refuses to start without its route setting.
+  Agentic Sandbox V2 supports structure checks only. Codex has no code path
+  here at all.
+- **The Agentic Sandbox V2 state is recorded as three closed doors, and the
+  check opens each one to confirm it is still shut**: the command-running tool
+  `exec_run` answers `capability_unavailable` for ordinary commands; there is
+  no loop in which a model reads a tool result and picks a next action; and
+  both `step2_run_inference._require_runnable_execution_mode` and
+  `TaskExecutor` refuse the mode outright. None was bypassed or weakened.
+- **Codex is recorded as absent, and the reason it cannot simply be added is
+  recorded too.** Official documentation does not describe running Codex's own
+  agent loop against an outside benchmark task set, and does not describe
+  Codex's agent loop on an Azure AI Foundry deployment. Since the specification
+  requires all five places to share one deployment, that gap is written down as
+  missing evidence rather than papered over. Azure models whose names contain
+  "codex" are Azure's own agent service using that model, which is a different
+  thing, and the document says so.
+- **The two comparisons cannot share a score.** Re-running one model's already
+  written code in each place, and letting each tool use everything it ships
+  with, get separate scoreboards; `check_comparisons_are_scored_apart` fails if
+  one is missing or mislabelled. Retries are counted in three separate
+  buckets — an infrastructure failure, the model reviewing its own finished
+  output, and the model recovering mid-conversation with its tools — and a
+  single lumped count is rejected.
+- `scripts/check_execution_environment_readiness.py` answers "may the
+  comparison start?" for free. With no approval present it downgrades every
+  runnable place to blocked and names the setting that would grant it; it never
+  substitutes a working place for a missing one. The 5, 30, and 220 task stages
+  each require eight decisions to be fixed before any spending.
+
+### Verification
+
+- New suite `batch-runner/tests/test_execution_environment_readiness.py`:
+  103 passed. It runs the three Agentic Sandbox V2 doors for real, and also
+  asserts the check reports a problem when each door is monkeypatched open.
+- Full backend suite: 3,618 passed, 9 skipped, 45 deselected, 3 failed.
+- The 3 failures are pre-existing and unrelated: `pdfplumber` is not installed
+  in this environment (2 tests), and one test pins SDK versions older than the
+  installed `openai 2.45.0` / `azure-ai-projects 1.0.0` / `azure-core 1.39.0`.
+  They were confirmed by re-running them with both new files moved out of the
+  tree, where they fail identically.
+- The command-line tool was exercised end to end from the test suite, both on a
+  clean tree and on a plan whose two places disagree on deployment, which exits
+  non-zero.
+- No model call, no grading, no Azure sign-in, no image publish, no workflow
+  dispatch, and no Hugging Face write occurred.
+- Work was done in a throwaway worktree at `/tmp/gdpval-exec-env` cut from
+  `origin/main` at `47b0fe5`. The user's own working folder and its 1,275
+  pending changes were not touched.
+
+### Remaining Work
+
+- The comparison itself has not run and must not until the owner approves paid
+  model calls and names the model and deployment.
+- Azure's code interpreter needs its route setting supplied.
+- The Docker container place needs an experiment config that pins its container
+  setting to `always`.
+- Agentic Sandbox V2 needs its command-running tool, a real model loop, and an
+  explicit approval before it can join.
+- Codex needs both a run path here and public evidence that its agent loop can
+  use the same Azure deployment. Until then the fifth column stays empty rather
+  than being filled by another place.
+
+---
+
+## Preserved Prior Result: Legacy Provenance Complete-Corpus Policy (2026-08-18)
 
 ### Task
 
@@ -500,291 +593,3 @@ would have produced a grade the dashboard never shows.
 - A later paid task may run the complete 220-task pinned config after separate
   approval. Do not merge a 53-task partial rerun, and do not create a
   documentation-only PR to record this change's eventual merge metadata.
-
----
-
-## Preserved Prior Result: Non-Recursive Completion Records (2026-08-08)
-
-- Status: Completion records retain verified task evidence without forcing
-  documentation-only PRs that restate their carrying PR's merge status
-
-### Task
-
-- Clarify the repository completion requirements so the latest-task result and
-  changelog remain complete without describing the carrying PR's own merge.
-- Preserve task scope, concrete outcome, verification evidence, reviewed head
-  SHA, remaining work, bounded history, `[Unreleased]`, and unrelated entries.
-- Preserve every existing historical merge record and require genuine earlier
-  corrections to ride with the next substantive work PR.
-
-### Result
-
-- Both completion records now stop at pre-merge facts and exclude their
-  carrying PR's own merge SHA, merge time, and `OPEN` / `MERGED` state.
-- The policy states the reason directly: Git history already holds those facts,
-  while a record describing its own merge cannot be written before that merge
-  and therefore forces an unnecessary follow-up PR.
-- Earlier status corrections remain supported, but they must be folded into the
-  next substantive work PR instead of opening a documentation-only PR solely
-  for merge status.
-- Existing rigor is unchanged: scope, outcome, verification, reviewed head,
-  remaining work, bounded history, changelog category, unrelated-entry
-  preservation, and post-validation/pre-response timing all remain required.
-- The previous README containment, Hosted Tier 1, and Field Notes records are
-  preserved below, and no historical merge metadata was rewritten.
-
-### Verification
-
-- Exact-phrase completion-policy contract: passed.
-- Scope and preservation contract: exactly three changed files, all six prior
-  changelog merge markers unchanged, all three prior latest-task records
-  preserved, and no carrying-PR identity in the new completion entries.
-- VS Code diagnostics and `git diff --check`: passed.
-- No application model/API call, credential, workflow dispatch, or paid
-  operation ran; shipment is limited to authenticated Git and GitHub branch/PR
-  writes.
-
-### Review Evidence
-
-- Reviewed substantive head:
-  `e800734576dbcc314e5646af80281114672e05dc`.
-- Independent `first-reviewer` verdict: `APPROVE`, with no blocking findings.
-
-### Remaining Work
-
-- The owner decides whether and when to merge the reviewed change. Do not create
-  a later documentation-only PR to record the carrying PR's merge metadata.
-
----
-
-## Preserved Prior Result: Root README Containment Evidence (2026-08-08)
-
-- Status: Root English/Korean containment documentation now separates the
-  unexecuted self-hosted preflight from verified hosted Docker controls;
-  merged through PR #165 while `exec_run` and the aggregate gate remain blocked
-
-### Task
-
-- Correct the stale implication that no containment result exists after PR
-  #163, without claiming that the self-hosted preflight itself ran.
-- Keep English and Korean root README descriptions structurally parallel.
-- Preserve the evidence ladder and the blocked boundaries for arbitrary
-  execution and the aggregate gate.
-
-### Result
-
-- Split the operational-control entry into two distinct facts:
-  - the `[self-hosted, linux, x64, agentic-sandbox]` preflight remains
-    unexecuted and `not_run` because no matching runner exists;
-  - the separate GitHub-hosted Docker-control measurement is `verified` for all
-    eight checks through run `31193818481`, PR #163 / merge `4b1bff35`, and
-    containment-report SHA-256
-    `f0c4ec3cdff7d714d0db8aca58b1f5669c3958c6b6203be00095b8acb827e50e`.
-- Both READMEs state that the hosted result measures Docker control
-  effectiveness, not arbitrary execution isolation. `exec_run` remains
-  blocked.
-- Both READMEs retain aggregate gate `blocked` because capability, CVE, license,
-  microVM, OCI, provenance, SBOM, and signature evidence remains unmeasured.
-- Removed the now-false English statement that no containment result is
-  established and its Korean equivalent, while preserving the accurate
-  `not_run` status of the self-hosted workflow.
-
-### Verification
-
-- Bilingual onboarding contracts: 12 passed.
-- Self-preparing aggregate suite: 98 passed, 1 expected Ruby skip.
-- `npm run build`: passed with 2,783 transformed modules.
-- VS Code diagnostics and `git diff --check`: passed.
-- No model, grading, cloud credential, workflow dispatch, Hugging Face write,
-  or paid operation ran. Aggregation made unauthenticated read-only public
-  report requests only.
-
-### Shipment
-
-- Reviewed branch head:
-  `c3b2a0b4e814d8bb2c830b01162d627f1277739b`.
-- Independent `first-reviewer` verdict: `APPROVE`, with no blocking finding.
-- PR [#165](https://github.com/hyeonsangjeon/gdpval-realworks/pull/165) reached
-  `MERGED` at `2026-08-07T17:04:12Z` as squash commit
-  `2d82691ffb5d1911f19f996be0807d4ca037ae81`.
-- GitHub reported the PR `MERGEABLE` and `CLEAN`; automatic PR validation passed
-  with deployment skipped. Automatic post-merge main run
-  [`31200577265`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/31200577265)
-  passed validation and Pages deployment. No workflow was manually dispatched.
-
-### Remaining Work
-
-- No remaining shipment work is carried by this README correction record.
-
----
-
-## Preserved Prior Result: Hosted Containment Tier 1 (2026-08-08)
-
-- Status: GitHub-hosted Agentic Sandbox V2 containment verified 8/8; aggregate
-  gate remains blocked and production execution remains disabled
-
-### Task
-
-- Measure network isolation, read-only root, non-root execution, capability
-  drop, no-new-privileges, memory, effective CPU quota, and PID limit on a
-  GitHub-hosted `ubuntu-latest` runner.
-- Use the existing validated containment probe and exact public parent image,
-  without local-kernel workarounds, model calls, credentials, paid
-  infrastructure, or Phase 1D-B execution code.
-- Emit `verified` / `failed` / `not_run` evidence and decide whether the
-  aggregate gate can leave `blocked`.
-
-### Result
-
-- Run
-  [`31193818481`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/31193818481)
-  measured source `bedcdd8229cc4b96c93f52323dcf2099acc7a0ca` on GitHub-hosted
-  Linux `6.17.0-1021-azure`, amd64, cgroup v2.
-- Exact parent manifest:
-  `sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb`.
-- Result SHA-256:
-  `5caeb42cbe5032169d520e93160a9e19ecbecc0f066faed96979aa44a2103624`.
-- Containment report SHA-256:
-  `f0c4ec3cdff7d714d0db8aca58b1f5669c3958c6b6203be00095b8acb827e50e`.
-
-| Containment check | Status |
-|---|---|
-| Network disabled | `verified` |
-| Read-only root filesystem | `verified` |
-| Non-root UID/GID | `verified` |
-| All capabilities dropped | `verified` |
-| No new privileges | `verified` |
-| Effective memory limit | `verified` |
-| Effective CPU quota | `verified` |
-| PID limit | `verified` |
-
-### Gate Decision
-
-- Production containment is `verified` for the exact hosted Docker measurement;
-  it is not a blocker in this result.
-- The aggregate gate cannot leave `blocked`. Tier 1 did not measure a complete
-  candidate subject's capability receipt, CVE, license, microVM, OCI layout,
-  provenance, SBOM, or signature evidence.
-- Production activation remains `disabled`, and `exec_run` remains
-  `capability_unavailable`. No Phase 1D-B code was written.
-- Tier 2 Azure VM provisioning was not requested or performed because Tier 1
-  was sufficient to measure all eight Docker controls.
-
-### Verification
-
-- Final hosted workflow completed every setup, exact-image pull, measurement,
-  evidence upload, and terminal-cleanup step successfully; the existing image
-  publication job was skipped.
-- The downloaded JSON passed the checked-in strict validator, and its Markdown
-  matched deterministic regeneration byte-for-byte.
-- The preceding hosted run produced the same parent identity, containment
-  report, eight statuses, and gate decision.
-- Focused hosted workflow/result/verifier suite: 74 passed.
-- Agentic V2 / Phase 1B / Phase 1C / Phase 1D-A regression suite: 654 passed.
-- Ruff, `py_compile`, VS Code diagnostics, and `git diff --check`: passed.
-- Independent `azure-infra-engineer` and `first-reviewer` reviews returned
-  `APPROVE` with no blocking findings.
-- No Azure, OIDC, client secret, model, grading, Hugging Face write, registry
-  push, paid infrastructure, or artifact publication outside the 14-day GitHub
-  Actions evidence artifact was used.
-
-### Shipment
-
-- Reviewed branch head:
-  `7e4289e5e9a7707b61caabd61d5102cae2361c61`.
-- PR [#163](https://github.com/hyeonsangjeon/gdpval-realworks/pull/163) reached
-  `MERGED` at `2026-08-07T16:22:26Z` as squash commit
-  `4b1bff35541e953e0e0fc583e4f9c4f832db01d2`.
-- GitHub reported the PR `MERGEABLE` and `CLEAN`. The final hosted measurement
-  succeeded with the protected-main publication job skipped; the merge commit
-  created no additional workflow run.
-
-### Remaining Work
-
-- A future activation task must bind the hosted containment result to one
-  complete candidate subject and verify every remaining required evidence item
-  before enabling production execution.
-
----
-
-## Preserved Prior Result: Field Notes (2026-08-07)
-
-- Status: Field Notes rescue reconciled against current `main`; README facts and
-  public experiment links corrected and validated; `first-reviewer` approved;
-  merged through PR #162
-
-### Task
-
-- Back up the only three-week primary worktree copy before any Git mutation.
-- Surgically rescue seven requested Field Notes assets onto
-  `origin/main@a6593c2` without importing the primary worktree's other changes.
-- Correct English and Korean root README claims about the unexecuted agentic
-  preflight, model roles, Start here cost boundaries, and Field Notes status.
-
-### Result
-
-- Created and checksum-verified an external physical backup outside the
-  repository: 16,173 regular files, 27 symlinks, and 521,099,777 bytes. Its Git
-  status fingerprint is the pre-task 1,235-line SHA-256
-  `8e96ad2cfdaceb05d61c978ad786df13c3647b8ae810771344dd3430314d91ce`.
-- Reconciled all seven requested paths and found the supplied absence premise
-  was no longer true: every path is tracked on current `main`, with Field Notes
-  history from initial commit `8ac9c20` through later evidence-backed fixes.
-- Five primary filesystem assets were exact older Git blobs, `Journal.tsx` was
-  already identical to `main`, and the missing filesystem test had a newer
-  committed successor. The only unique `journal.ts` blob was a stale
-  intermediate that would remove the prompt-complexity note and later runtime,
-  integrity, perception, and success evidence/citation contracts. No stale blob
-  was copied over current `main`.
-- The clean branch keeps all seven canonical paths as ordinary tracked files,
-  resolving the intended final file set without changing the primary
-  index/worktree D/?? state.
-- Fixed all public exp026 detail links in Field Notes evidence and mobile cards
-  to use
-  `https://hyeonsangjeon.github.io/gdpval-realworks/experiments/exp026` with
-  `target="_blank" rel="noopener noreferrer"`.
-- Corrected both root READMEs:
-  - the self-hosted agentic preflight is defined but never run and its
-    containment evidence remains `not_run`;
-  - `gpt-5.2-chat` is labeled as the sample config value and `gpt-5.6-sol` as
-    the current production report default;
-  - every Start here route identifies $0/no-model inspection or paid model and
-    remote-write behavior;
-  - RealWorks Field Notes links to the deployed `/notes` view.
-- The primary worktree was not modified by this task. Relative to the physical
-  backup, its only new status entry is one user-created private task spec
-  supplied during the session.
-
-### Verification
-
-- Focused Field Notes and bilingual onboarding contracts: 21 passed.
-- Self-preparing aggregate suite: 98 passed, 1 expected skip because Ruby is
-  unavailable locally.
-- `npm run build`: passed with 2,783 transformed modules.
-- Four Field Notes Chromium suites passed inside the pinned
-  `mcr.microsoft.com/playwright:v1.61.1-noble` image. They verify:
-  - `/journal/:slug` redirects at runtime to `/notes/:slug` while preserving
-    query parameters;
-  - all visible exp026 links use the public URL and exact safe new-tab
-    attributes;
-  - 390px and 1,280px layouts have zero horizontal overflow;
-  - reduced-motion charts remain static and evidence failure states fail closed.
-- The host Playwright binary itself could not start because `libnspr4.so` is
-  absent; the matching container supplied the browser runtime without changing
-  the host.
-- `git diff --check`: passed.
-- Independent `first-reviewer` review: `APPROVE`, with no blocking findings.
-- No model, grading, cloud credential, workflow dispatch, Hugging Face write,
-  or paid operation ran. Aggregation made unauthenticated read-only requests to
-  23 public report datasets.
-
-### Shipment
-
-- Reviewed branch head: `b5d4c2ec68ff027a3187b183183c8b8d81fbf1fb`.
-- PR [#162](https://github.com/hyeonsangjeon/gdpval-realworks/pull/162) merged
-  at `2026-08-07T15:15:36Z` as squash commit
-  `8216181834b4687fd41e543b77f146918e849a23`.
-
-### Remaining Work
-
-- No remaining Field Notes shipment work is carried by this preserved record.
