@@ -104,7 +104,8 @@ that no *executable* path exists.
   the check reports a problem when each is opened — including a dispatcher
   reproducing the real branch with only the paid-run block removed.
 - Full backend suite locally: 3,641 passed, 6 skipped, 45 deselected, 3 failed.
-- **In CI the same suite is 3,621 passed, 0 failed.** The 3 local failures are
+- **In CI the same suite is 3,641 passed, 9 skipped, 45 deselected, 0 failed**
+  (run 32810669993). The 3 local failures are
   pre-existing and environmental: `pdfplumber` is not installed here (2 tests),
   and one test pins SDK versions older than the locally installed
   `openai 2.45.0` / `azure-ai-projects 1.0.0` / `azure-core 1.39.0`. They were
