@@ -136,6 +136,9 @@ repository. **Neither empty slot was filled with a working place.**
     the fifteen fixed conditions, but a run place with a different value for
     any of them would produce a difference that is not the run place. The three
     settings files must now agree on all three.
+- **In CI the backend suite is 3,716 passed, 9 skipped, 45 deselected, 0
+  failed** (run 32836458107), which is the previous 3,641 plus the 75 new
+  tests exactly.
 - Full backend suite locally: **3,715 passed, 6 skipped, 45 deselected, 4
   failed.** All 4 failures are environmental and none is caused by this work:
   `pdfplumber` is not installed here (2 tests); one test pins SDK versions

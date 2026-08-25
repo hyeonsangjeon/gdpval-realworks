@@ -73,8 +73,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   `batch-runner/core/execution_envelope_tasks.py`,
   `batch-runner/core/execution_envelope_cost.py`,
   `batch-runner/core/execution_envelope_preflight.py`, and
-  `batch-runner/scripts/build_gdpval_task_catalog.py`, with 75 new tests. **The
-  Agentic Sandbox V2 guards were exercised, not worked around, and the Codex
+  `batch-runner/scripts/build_gdpval_task_catalog.py`, with 75 new tests, and
+  CI runs 3,716 tests green. **The Agentic Sandbox V2 guards were exercised,
+  not worked around, and the Codex
   column stays empty rather than being filled by another place. No comparison
   ran, no model was called, nothing was graded, and no published result file
   was touched.**
