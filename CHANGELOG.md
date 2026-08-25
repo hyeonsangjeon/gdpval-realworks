@@ -12,6 +12,68 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The run-place comparison can now start on five tasks in three places, and
+  every check that costs nothing to make refuses on every path that matters.**
+  `batch-runner/experiments/execution_envelope/advance_check_plan.yaml` holds,
+  in one place, everything the three run places share: provider, deployment,
+  the model the service must report back, request-format version, both
+  instruction texts word for word, the task list, a content fingerprint for
+  every input, answer-length cap, time limit, self-review setting, allowed
+  retry reasons and attempts, and a standing refusal to change model or
+  deployment part-way. **The per-place section is empty on purpose** — nothing
+  differs except where the code runs. Three settings drafts pair with it:
+  `exp030` (a separate Python process on the server), `exp031` (a Docker
+  container), and `exp032` (Azure's code interpreter). **The five tasks were
+  chosen by a rule, not by taste, and the rule cannot follow the scores**: it
+  reads a committed catalogue built from the benchmark dataset at one pinned
+  revision holding task numbers, industries, jobs, expert answer file types,
+  reference-file paths, and a fingerprint of the task wording — and no score,
+  grade, or verdict at all, which a test proves by walking the whole file. The
+  rule sorts by task number and fills five slots in a fixed order without
+  repeating a job, giving five formats, five jobs, and four industries. **The
+  picture slot is recorded honestly**: no task in this benchmark hands in a
+  picture on its own, so the rule's fallback took the smaller-numbered of the
+  two that hand in one at all, and the plan says so rather than implying
+  otherwise. **The Docker place can no longer quietly become the server
+  place** — the silent failure that would have put the server's numbers in the
+  container column with nothing saying so. `exp031` pins the container setting
+  to `always`, and `tests/test_execution_envelope_docker_containment.py` holds
+  it from three directions: it calls the real execution path with the Docker
+  service missing and with the image missing and fails if the server runner is
+  reached even once; it reads the committed settings file; and it weakens the
+  setting in both the plan and the settings file and requires the check to
+  refuse. A fourth test records that the default really does fall back, so the
+  reason the pin exists stays visible. **The largest possible bill is worked
+  out rather than guessed**, with every assumption named beside the measurement
+  behind it: at most 1,001 model calls and **$32.23** after a 1.25 safety
+  multiplier, of which $14.02 is grading. Reference files count at the
+  50,000-character cap the file reader applies; characters count at three to
+  the token rather than the usual four; Azure's code interpreter gets eight
+  model turns per attempt because Microsoft publishes no limit, but its answer
+  length counts once per attempt because the Responses API caps a whole reply
+  with one number. **A model with no published price is refused, not counted as
+  free**, and a test holds the committed price list equal to the one the
+  repository already uses for grading. The command-line front end
+  `batch-runner/scripts/check_execution_envelope_advance_check.py`
+  exits 1 unless every one of these holds: no setting
+  missing; every place on the same deployment, model, wording, task list, and
+  input fingerprints — checked by opening the three settings files that would
+  actually run rather than trusting the plan; the container unable to fall
+  back; no automatic model switch; a paid-run approval on record; and an
+  approved amount covering the ceiling. **A missing approved amount is a
+  refusal, not a pass.** Testing found one real defect and it is fixed: the
+  check could refuse without printing a reason, because the readiness check
+  keeps its own problem list and only the envelope check's was shown, so a plan
+  allowing automatic model switching produced "may not start" with an empty
+  explanation. The moving parts are
+  `batch-runner/core/execution_envelope_tasks.py`,
+  `batch-runner/core/execution_envelope_cost.py`,
+  `batch-runner/core/execution_envelope_preflight.py`, and
+  `batch-runner/scripts/build_gdpval_task_catalog.py`, with 70 new tests. **The
+  Agentic Sandbox V2 guards were exercised, not worked around, and the Codex
+  column stays empty rather than being filled by another place. No comparison
+  ran, no model was called, nothing was graded, and no published result file
+  was touched.**
 - **Comparing one GPT model across five places a task can be run is now
   specified, and a check answers "may it start?" without spending anything.**
   `tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md` fixes the

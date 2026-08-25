@@ -1,143 +1,168 @@
 # Latest Task Result
 
 - Updated: 2026-08-25
-- Status: the comparison of one GPT model across five places a task can be run
-  is now specified, and a check that answers "may it start?" without calling a
-  model ships with it; no comparison ran, because paid model calls are
-  unapproved and two of the five places cannot run a GDPVal task at all
+- Status: the five-task advance check of the run-place comparison is ready to
+  start in three of the five places, and every check that can be made without
+  spending money now passes. **Nothing has run and no model has been called.**
+  One decision is outstanding: the largest amount that may be spent
 
-## Current Task: Execution Environment Comparison Groundwork
+## Current Task: Run-Place Comparison — Advance Check Preparation
 
 ### Task
 
-Settle in code and in writing what has to be true before the same GPT model is
-compared across five places a GDPVal task can be run, without running the
-comparison, calling a paid model, grading anything, signing in to Azure, or
-publishing an image.
+Finish everything that can be settled without spending money before the same
+GPT model is run in three different places on the same five benchmark tasks:
+a separate Python process on the server's own operating system, a Docker
+container, and Azure AI Foundry's code interpreter.
 
-The five places: a separate Python process on the server's own operating
-system; a Docker container; Azure AI Foundry's code interpreter; the
-Agentic Sandbox V2 foundation; and Codex's own built-in agent.
+The other two places named in the specification stay out. Agentic Sandbox V2
+can only be checked for structure, and Codex has no run path in this
+repository. **Neither empty slot was filled with a working place.**
 
 ### Result
 
-- `tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md` is the written
-  specification. It names no GPT version, so a later run picks its own model
-  and the document does not change. The card's in-house shorthand for the
-  fixed-model idea is gone; it is written out as "고정 모델 실행 조건" — fifteen
-  entries that must match in every place — and carried in code as
-  `ModelRunConditions`.
-- **Each of the five places is graded from code that was read, not assumed.**
-  A separate Python process can run a real experiment today (24 experiment
-  configs use it; 220 graded tasks exist). A Docker container can, but only
-  when its container setting is `always` — `SandboxRunner._execute` at
-  `batch-runner/core/sandbox_runner.py` line 1039 otherwise runs the code on
-  the host and prints a warning, which would silently turn the container
-  result into a host result. Azure's code interpreter is implemented and
-  selected by 5 configs but refuses to start without its route setting.
-  Agentic Sandbox V2 supports structure checks only. Codex has no code path
-  here at all.
-- **The Agentic Sandbox V2 state is recorded as three closed doors, and the
-  check opens each one to confirm it is still shut**: the command-running tool
-  `exec_run` answers `capability_unavailable` for ordinary commands; there is
-  no loop in which a model reads a tool result and picks a next action; and
-  both `step2_run_inference._require_runnable_execution_mode` and
-  `TaskExecutor` refuse the mode outright. None was bypassed or weakened.
-- **Codex is recorded as absent, and the reason it cannot simply be added is
-  recorded too.** Official documentation does not describe running Codex's own
-  agent loop against an outside benchmark task set, and does not describe
-  Codex's agent loop on an Azure AI Foundry deployment. Since the specification
-  requires all five places to share one deployment, that gap is written down as
-  missing evidence rather than papered over. Azure models whose names contain
-  "codex" are Azure's own agent service using that model, which is a different
-  thing, and the document says so.
-- **The two comparisons cannot share a score.** Re-running one model's already
-  written code in each place, and letting each tool use everything it ships
-  with, get separate scoreboards; `check_comparisons_are_scored_apart` fails if
-  one is missing or mislabelled. Retries are counted in three separate
-  buckets — an infrastructure failure, the model reviewing its own finished
-  output, and the model recovering mid-conversation with its tools — and a
-  single lumped count is rejected.
-- `scripts/check_execution_environment_readiness.py` answers "may the
-  comparison start?" for free. With no approval present it downgrades every
-  runnable place to blocked and names the setting that would grant it; it never
-  substitutes a working place for a missing one. The 5, 30, and 220 task stages
-  each require eight decisions to be fixed before any spending.
+- **One file now holds every condition the three places share.**
+  `batch-runner/experiments/execution_envelope/advance_check_plan.yaml` fixes
+  the provider, the deployment name, the model the service must report back,
+  the request-format version, both instruction texts word for word, the task
+  list, the content fingerprint of every input, the answer-length cap, the time
+  limit, whether self-review is allowed and how often, which retry reasons are
+  allowed and how many attempts, and a standing refusal to change model or
+  deployment part-way. The per-place section is deliberately empty: nothing
+  differs between the places except where the code runs.
 
-### Review Evidence
+- **The five tasks were chosen by a rule, not by taste, and the rule cannot
+  follow the scores.** It reads a committed catalogue built from the benchmark
+  dataset at one pinned revision that holds task numbers, industries, jobs, the
+  file types of the human expert's own answer, reference-file paths, and a
+  fingerprint of the task wording — and no score, grade, or verdict at all. A
+  test walks the whole file looking for one. The rule sorts by task number and
+  fills five slots in a fixed order, preferring a task whose expert answer files
+  are entirely of that format, never repeating a job. The result is five
+  formats, five jobs, four industries:
 
-An independent review found eight defects in the first version; all were fixed
-and each now has a test that fails without the fix. Three mattered:
+  | format | task | job |
+  |---|---|---|
+  | spreadsheet | `02aa1805` | Project Management Specialists |
+  | document | `0112fc9b` | Nurse Practitioners |
+  | presentation | `2ea2e5b5` | Computer and Information Systems Managers |
+  | picture | `3baa0009` | News Analysts, Reporters, and Journalists |
+  | text answer only | `0818571f` | Real Estate Brokers |
 
-- **The readiness check said "ready" while every place was blocked.** `ready`
-  was `not problems`, so per-place blockers never reached it and the command
-  line tool exited 0 with no paid-run approval on record — the exact thing the
-  approval exists to prevent. `ready` now requires that every place being
-  compared can actually start, and which places those are comes from the plan.
-- **One of the three Agentic Sandbox V2 doors was not really being tested.**
-  The check accepted any `ValueError` from the dispatcher, but that branch
-  raises for seven different reasons; with the paid-run block deleted a
-  later missing-argument complaint took its place and the door was reported
-  shut. The check now fills in every other argument so the paid-run block is
-  the only remaining reason to refuse, and matches on the refusal itself.
-- **Five of the fifteen fixed conditions were never compared.** Self-review and
-  retry settings were left out, so one place could take nine self-review passes
-  and twenty-five retries against another's one and three and still be called
-  conforming. Fixing this exposed a real distinction rather than a simple
-  oversight: those four settings must match when the same code is re-run, and
-  must be free to differ when each tool uses its own features, because that is
-  what the second comparison measures. The check now takes the comparison as an
-  argument and applies the matching strictness.
+  **The picture slot is recorded honestly.** No task in this benchmark hands in
+  a picture on its own; only two hand in one at all, and both also hand in a
+  document. The rule's fallback clause took the smaller-numbered of those two,
+  and the plan says so rather than implying a pure picture task exists.
 
-Also fixed: a stage plan could not express "no self-review, no retries" because
-zero and the empty list were read as missing, and that misreading also skipped
-the 5/30/220 count check; the command line tool turned a plan naming no place
-at all into "no plan given"; one test assertion sliced a tuple to nothing and
-was true for any input; and the specification said 15 configs where 24 use that
-mode, and claimed one Codex mention repository-wide where the true statement is
-that no *executable* path exists.
+- **The choice is pinned to fingerprints, so it cannot be re-cut after results
+  are seen.** Dataset `openai/gdpval` at revision
+  `11e7900cdcac61bc4daf59e65feb238acda98fbf` — the same revision this
+  repository's published grades used — whose data file is
+  `f8422fab…7ae0202`; catalogue `43f46dda…504eb75d`. The 30-task and 220-task
+  stages are written out in full too, so their rules are fixed now rather than
+  after a disappointing number.
+
+- **The Docker place cannot quietly become the server place.** This was the
+  most dangerous failure mode available, because it is silent: if the container
+  went missing mid-run, `SandboxRunner._execute` would print a warning and run
+  the model's Python on the server, and the Docker column of the result table
+  would hold the server column's numbers with nothing saying so.
+  `exp031_envelope_docker_container.yaml` pins the container setting to
+  `always`, and a new test file holds that from three directions — it calls the
+  real execution path with the Docker service missing and with the image
+  missing and fails if the server runner is reached even once; it reads the
+  committed settings file; and it weakens the setting in both the plan and the
+  settings file and requires the free check to refuse. A fourth test records
+  that the default setting really does fall back, so the reason the pin is
+  needed stays visible.
+
+- **The largest possible bill is worked out, not guessed at.** Every assumption
+  is named in the plan with the measurement behind it. Reference files are
+  counted at the 50,000-character cap the file reader applies, so a large file
+  on disk cannot exceed it. Characters are counted at three to the token, below
+  the usual four, so the ceiling comes out larger. Azure's code interpreter is
+  allowed eight model turns inside one attempt because Microsoft publishes no
+  limit, but its answer length is counted once per attempt because the
+  Responses API caps a whole reply with one number.
+
+  | | most model calls | most it could cost |
+  |---|---:|---:|
+  | separate Python process on the server | 20 | $3.48 |
+  | Docker container | 20 | $3.48 |
+  | Azure code interpreter | 160 | $4.83 |
+  | grading | 801 | $14.02 |
+  | **before the safety multiplier** | **1,001** | **$25.79** |
+  | **after multiplying by 1.25** | | **$32.23** |
+
+  A model with no published price is refused rather than counted as free, and
+  the committed price list is held equal to the one the repository already uses
+  for grading by a test that reads both.
+
+- **Every free check now runs from one command and refuses on every path that
+  matters.** `scripts/check_execution_envelope_advance_check.py` exits 1 unless
+  all of these hold: no setting is missing; every place uses the same
+  deployment, the same model, the same wording, the same task list, and the
+  same input fingerprints — checked by opening the three settings files that
+  would actually run, not by trusting the plan; the container cannot fall back;
+  no automatic model switch is allowed; a paid-run approval is on record; and an
+  approved amount covers the worked-out ceiling. **A missing approved amount is
+  a refusal, not a pass.**
+
+- **The Agentic Sandbox V2 guards were exercised, not worked around.** All
+  three still refuse, and the check opens each one every time it runs. Codex is
+  still reported as having no run path here. Neither was substituted.
 
 ### Verification
 
-- New suite `batch-runner/tests/test_execution_environment_readiness.py`:
-  123 passed. It runs the three Agentic Sandbox V2 doors for real, and asserts
-  the check reports a problem when each is opened — including a dispatcher
-  reproducing the real branch with only the paid-run block removed.
-- Full backend suite locally: 3,641 passed, 6 skipped, 45 deselected, 3 failed.
-- **In CI the same suite is 3,641 passed, 9 skipped, 45 deselected, 0 failed**
-  (run 32810669993). The 3 local failures are
-  pre-existing and environmental: `pdfplumber` is not installed here (2 tests),
-  and one test pins SDK versions older than the locally installed
-  `openai 2.45.0` / `azure-ai-projects 1.0.0` / `azure-core 1.39.0`. They were
-  confirmed by re-running them with both new files moved out of the tree, where
-  they fail identically.
-- `mypy` on the new module: clean.
-- Every file path, line number, function name, and count cited in the
-  specification was checked against the repository by the reviewer; the two
-  wrong counts above were the only errors, and both are corrected.
+- New tests: 70 across
+  `batch-runner/tests/test_execution_envelope_advance_check.py` (57) and
+  `batch-runner/tests/test_execution_envelope_docker_containment.py` (13). Each
+  refusal path has a test that changes exactly one thing in the plan and
+  requires the check to say no.
+- One real defect was found by testing and fixed: the check could refuse
+  without printing a reason, because the readiness check keeps its own problem
+  list and only the envelope check's list was shown. A plan allowing automatic
+  model switching produced "may not start" with an empty explanation. The two
+  lists are now merged wherever a verdict is reported, and a test requires
+  every refusal to carry a reason.
+- Full backend suite locally: **3,711 passed, 6 skipped, 45 deselected, 3
+  failed.** The 3 failures are pre-existing and environmental — `pdfplumber` is
+  not installed here (2 tests) and one test pins SDK versions older than those
+  installed. Confirmed by stashing every change and re-running those three on
+  clean `main`, where they fail identically. The skip count varies between runs
+  on this machine because several tests skip on an absent host capability.
+- `mypy` on the three new modules: clean. The 170 pre-existing errors elsewhere
+  in `core/` are untouched and none is in a new file.
+- The catalogue rebuilds byte-for-byte from the pinned dataset revision
+  (`build_gdpval_task_catalog.py --check` exits 0), so the task choice can be
+  re-derived by anyone rather than trusted.
 - No model call, no grading, no Azure sign-in, no image publish, no workflow
-  dispatch, and no Hugging Face write occurred. Network access was confirmed
-  unused by patching `socket.connect`, `socket.create_connection`, and
-  `getaddrinfo` to raise and running the whole check.
-- Work was done in a throwaway worktree cut from `origin/main` at `47b0fe5`.
-  The user's own working folder and its 1,275 pending changes were not touched.
-
-### Shipment
-
-- PR [#224](https://github.com/hyeonsangjeon/gdpval-realworks/pull/224).
+  dispatch, and no Hugging Face write occurred. The two reference files were
+  read from the public dataset to record their fingerprints, which costs
+  nothing.
+- Work was done in a throwaway clone cut from `origin/main` at `d2ebc40`. The
+  user's own working folder and its 1,275 pending changes were not touched.
 
 ### Remaining Work
 
-- The comparison itself has not run and must not until the owner approves paid
-  model calls and names the model and deployment.
-- Azure's code interpreter needs its route setting supplied.
-- The Docker container place needs an experiment config that pins its container
-  setting to `always`.
-- Agentic Sandbox V2 needs its command-running tool, a real model loop, and an
-  explicit approval before it can join.
-- Codex needs both a run path here and public evidence that its agent loop can
-  use the same Azure deployment. Until then the fifth column stays empty rather
-  than being filled by another place.
+- **The largest amount that may be spent has not been set.** This is the only
+  thing standing between the current state and a run of the three places. The
+  worked-out ceiling is **$32.23**.
+- Paid model calls are still unapproved
+  (`EXECUTION_COMPARISON_PAID_RUN_APPROVED`).
+- The model and deployment are proposed, not confirmed: `gpt-5.4`, on the
+  evidence that it is the only name in this repository already used by the
+  server place, the container place, and the Responses API that the Azure place
+  uses.
+- Azure's code interpreter still needs its connection setting. `project-ci`
+  requires both a direct address and a project address, so supplying the route
+  name alone is not enough.
+- Agentic Sandbox V2 still needs its command-running tool, a real model loop,
+  and an explicit approval. Codex still needs both a run path here and public
+  evidence that its own agent loop can use the same Azure deployment. Until
+  then those two columns stay empty rather than being filled by another place.
+- The 30-task and 220-task stages are written down but not approved.
+
 
 ---
 

@@ -46,6 +46,8 @@ batch-runner/scripts/*
 !batch-runner/scripts/judge_error_breakdown.py
 !batch-runner/scripts/summary_wow_drift.py
 !batch-runner/scripts/check_execution_environment_readiness.py
+!batch-runner/scripts/check_execution_envelope_advance_check.py
+!batch-runner/scripts/build_gdpval_task_catalog.py
 
 
 # Experiment report HTML (skews GitHub language stats)
