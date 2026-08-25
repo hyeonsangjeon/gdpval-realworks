@@ -12,6 +12,54 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Comparing one GPT model across five places a task can be run is now
+  specified, and a check answers "may it start?" without spending anything.**
+  `tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md` fixes the
+  conditions that must be identical everywhere — provider, deployment, the
+  model that actually answered, request-format version, both instruction texts
+  verbatim, the task list, input-file digests, output and time limits, whether
+  self-review is allowed and how often, which retry reasons are allowed, and a
+  standing refusal to switch model or deployment on its own. It names no GPT
+  version, so a later run picks its own model without editing the document.
+  **Each of the five places is graded from code that was read, not assumed:** a
+  separate Python process on the server runs experiments today (24 configs, 220
+  graded tasks); a Docker container can, but only with its container setting
+  pinned to `always`, because `SandboxRunner._execute` otherwise runs the code
+  on the host with a warning and would silently turn a container result into a
+  host result; Azure's code interpreter is implemented and chosen by 5 configs
+  but refuses to start without its route setting; **Agentic Sandbox V2 supports
+  structure checks only** — its command-running tool `exec_run` answers
+  `capability_unavailable`, no loop lets a model read a tool result and pick a
+  next action, and both `_require_runnable_execution_mode` and `TaskExecutor`
+  refuse the mode; **Codex has no run path here at all**, and official
+  documentation describes neither running its agent loop against an outside
+  benchmark nor running it on an Azure AI Foundry deployment, so that gap is
+  recorded as missing evidence rather than assumed away. A new readiness
+  module and its command-line front end re-derive all of this at runtime:
+  they read the registered run modes, import each runner class, and **open all
+  three Agentic Sandbox V2 doors to confirm they are still shut**. Without a
+  paid-run approval every runnable place is downgraded to blocked and told
+  which setting would grant it, and an unavailable place is never substituted
+  with a working one. Re-running one model's own code in each place and letting
+  each tool use everything it ships with get **separate scoreboards that cannot
+  be added together**, and retries are counted in three buckets — an
+  infrastructure failure, the model reviewing its finished output, and the
+  model recovering mid-conversation with its tools — with a single lumped count
+  rejected. The 5, 30, and 220 task stages each require eight decisions fixed
+  before any spending. `tests/test_execution_environment_readiness.py` adds 123
+  tests, including a dispatcher that reproduces the real Agentic Sandbox V2
+  branch with only the paid-run block removed — the check must still notice,
+  because that branch refuses for seven different reasons and accepting any of
+  them would have let the block be deleted silently. **The check reports
+  "ready" only when every place being compared can actually start**, so with no
+  approval on record it exits non-zero rather than green-lighting a run. The
+  four self-review and retry settings must match when the same code is re-run
+  and are free to differ when each tool uses its own features, which is what
+  the second comparison measures. The moving parts are
+  `batch-runner/core/execution_environment_readiness.py` and
+  `batch-runner/scripts/check_execution_environment_readiness.py`. **No
+  comparison ran, no model was called, nothing was graded, and no published
+  result file was touched.**
 - **Two retired 2026-06 grade runs no longer recompute, and now we can say
   why.** `judge_gpt-5_4__rubric_v2_tools` publishes
   `rubric_item_coverage_avg` 0.4232 and `critical_item_pass_rate` 0.501 where
