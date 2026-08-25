@@ -129,6 +129,17 @@ def main() -> int:
         print(f"  {line}")
     print()
 
+    if result.azure is not None:
+        print("Azure resource the deployment must live in")
+        print("-" * 74)
+        print(
+            "  settings name the intended resource: "
+            + ("yes" if result.azure.reachable_intent else "no")
+        )
+        print(f"  account named by the settings: {result.azure.observed_account}")
+        print(f"  project named by the settings: {result.azure.observed_project}")
+        print()
+
     if result.all_problems:
         print("Problems that must be fixed before anything starts:")
         for problem in result.all_problems:

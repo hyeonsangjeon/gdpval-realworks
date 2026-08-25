@@ -235,6 +235,35 @@ container:
   use_docker: "always"
   image: "gdpval-sandbox:latest"
 
+# ── Which Azure resource the deployment must live in ──────────────────────
+#
+# A deployment name does not identify a deployment.
+#
+# When this comparison was first attempted, the Azure tenant it was attempted
+# from held two separate Azure AI Foundry accounts that each exposed a
+# deployment named exactly "gpt-5.4", and a third that exposed the same
+# underlying model under a different deployment name. Two accounts, same name,
+# different resources: possibly different regions, different model versions,
+# different content filters.
+#
+# So pinning `deployment: gpt-5.4` above is not enough on its own. Without the
+# account and project below, the comparison could run against a deployment
+# nobody intended and still report, truthfully by its own rules, that every run
+# place used the same deployment name. That is the exact class of silent error
+# this whole plan exists to prevent, and it was open until this block was added.
+#
+# These two names are the ones this repository already records for its own
+# automated runs, as the repository variables AZURE_AI_EXPECTED_PROJECT_ACCOUNT
+# and AZURE_AI_EXPECTED_PROJECT_NAME. They are settings, not secrets.
+#
+# The free check reads the endpoint settings in the environment, classifies
+# them with this repository's own endpoint rules, and refuses the run if they
+# name any other account or project.
+azure_connection:
+  account: "hjeon-fdpo-foundry-eus2"
+  project: "gdpval-realworks"
+  route_profile: "project-ci"
+
 # ── The two comparisons keep separate score tables ────────────────────────
 #
 # Results from re-running one model's own code and results from letting each
@@ -255,11 +284,21 @@ scoreboards:
 # purpose, because an unstated guess is how a cost ceiling ends up wrong in the
 # direction that costs money.
 cost:
-  # The amount approved for spending. While this is empty the free check
-  # refuses to let anything paid start, whatever else is in order.
+  # The amount approved for spending, in United States dollars.
   #
-  # This is the one decision still outstanding.
-  approved_maximum_usd: null
+  # Approved 2026-08-25 by the repository owner, for exactly this run: five
+  # tasks in three run places, with separate grading, under the retry limits
+  # fixed above. It is a total ceiling, not a per-place allowance.
+  #
+  # It equals the worked-out ceiling to the cent. That is deliberate: it means
+  # the free check passes only while the plan is exactly as costed, and any
+  # change that makes the run more expensive — a longer answer cap, another
+  # retry, a fourth run place — pushes the ceiling above this line and stops
+  # the run instead of quietly spending more.
+  #
+  # The thirty-task and two-hundred-and-twenty-task stages are NOT covered by
+  # this amount and are not approved.
+  approved_maximum_usd: 32.23
 
   assumptions:
     # How many characters of wording are counted as one token. English text

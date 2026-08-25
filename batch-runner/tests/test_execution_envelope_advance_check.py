@@ -82,7 +82,23 @@ EXPECTED_ADVANCE_CHECK_TASKS = (
 )
 
 APPROVED_ENOUGH = 100
-FULLY_READY_ENVIRON = {"EXECUTION_COMPARISON_PAID_RUN_APPROVED": "yes"}
+
+# The Azure resource this comparison is pinned to, matching the plan. Used to
+# build a settings environment in which the Azure run place is correctly
+# configured, so tests can tell "everything is in order" apart from "one thing
+# was changed on purpose".
+PINNED_AZURE_ACCOUNT = "hjeon-fdpo-foundry-eus2"
+PINNED_AZURE_PROJECT = "gdpval-realworks"
+PINNED_PROJECT_ENDPOINT = (
+    f"https://{PINNED_AZURE_ACCOUNT}.services.ai.azure.com"
+    f"/api/projects/{PINNED_AZURE_PROJECT}"
+)
+
+FULLY_READY_ENVIRON = {
+    "EXECUTION_COMPARISON_PAID_RUN_APPROVED": "yes",
+    "AZURE_AI_ROUTE_PROFILE": "project-ci",
+    "FOUNDRY_PROJECT_ENDPOINT": PINNED_PROJECT_ENDPOINT,
+}
 
 
 @pytest.fixture(scope="module")
@@ -422,11 +438,25 @@ def test_a_model_with_no_published_price_is_not_treated_as_free(catalog):
 
 
 def test_a_missing_approved_amount_is_a_refusal(plan, catalog):
+    """Removing the approved amount must stop the run, whatever else is right.
+
+    The committed plan now records an approved amount, so this clears it on
+    purpose rather than relying on it being absent.
+    """
+    plan = _approved(plan, None)
+
     result = _ready_preflight(plan)
+
     assert result.may_start is False
     assert any(
-        "largest amount that may be spent" in note for note in result.problems
+        "largest amount that may be spent" in note
+        for note in result.all_problems
     )
+
+
+def test_the_committed_plan_records_the_approved_amount(plan):
+    """The amount that was approved, to the cent, and no more."""
+    assert str(plan["cost"]["approved_maximum_usd"]) == "32.23"
 
 
 def test_an_approved_amount_below_the_ceiling_is_a_refusal(plan):
@@ -822,16 +852,233 @@ def test_the_scripts_are_in_the_repository(script):
 
 
 def test_the_check_refuses_today_and_says_why():
-    """Run the tool exactly as a person would, and require a refusal."""
+    """Run the tool exactly as a person would, and require a refusal.
+
+    Today the money is approved but the Azure run place is not reachable from
+    an ordinary checkout, so the refusal must name the Azure settings rather
+    than the money.
+    """
     finished = subprocess.run(
         [sys.executable, str(CHECK_SCRIPT)],
         cwd=BATCH_RUNNER_ROOT,
         capture_output=True,
         text=True,
         timeout=300,
-        env={**os.environ, "EXECUTION_COMPARISON_PAID_RUN_APPROVED": ""},
+        env={
+            **{
+                key: value
+                for key, value in os.environ.items()
+                if key
+                not in {
+                    "AZURE_AI_ROUTE_PROFILE",
+                    "FOUNDRY_PROJECT_ENDPOINT",
+                    "AZURE_OPENAI_V1_ENDPOINT",
+                }
+            },
+            "EXECUTION_COMPARISON_PAID_RUN_APPROVED": "",
+        },
     )
 
     assert finished.returncode == 1, finished.stdout + finished.stderr
     assert "no model was called" in finished.stdout
-    assert "largest amount that may be spent" in finished.stdout
+    assert "AZURE_AI_ROUTE_PROFILE is not set" in finished.stdout
+    assert "FOUNDRY_PROJECT_ENDPOINT is not set" in finished.stdout
+
+
+# ── The Azure run place must reach the deployment that was pinned ─────────
+#
+# A deployment name does not identify a deployment. The tenant this comparison
+# was first attempted from held two Azure AI Foundry accounts that each exposed
+# a deployment named exactly "gpt-5.4". Pinning the name alone would let the
+# comparison run against a resource nobody intended and report success.
+
+
+def _environ_with(**overrides):
+    settings = dict(FULLY_READY_ENVIRON)
+    for key, value in overrides.items():
+        if value is None:
+            settings.pop(key, None)
+        else:
+            settings[key] = value
+    return settings
+
+
+def test_the_plan_pins_the_azure_account_and_project(plan):
+    pinned = plan["azure_connection"]
+    assert pinned["account"] == PINNED_AZURE_ACCOUNT
+    assert pinned["project"] == PINNED_AZURE_PROJECT
+    assert pinned["route_profile"] == "project-ci"
+
+
+def test_a_correctly_pointed_azure_setup_is_accepted(plan):
+    result = _ready_preflight(_approved(plan))
+
+    assert result.azure is not None
+    assert result.azure.problems == []
+    assert result.azure.observed_account == PINNED_AZURE_ACCOUNT
+    assert result.azure.observed_project == PINNED_AZURE_PROJECT
+    assert result.may_start is True
+
+
+def test_the_same_deployment_name_on_another_account_is_refused(plan):
+    """The exact hole this block was added to close.
+
+    The settings are well formed, the route is right, and the deployment name
+    is unchanged. Only the account differs — which is precisely the case that
+    used to pass.
+    """
+    other = (
+        "https://some-other-account.services.ai.azure.com"
+        f"/api/projects/{PINNED_AZURE_PROJECT}"
+    )
+    result = _ready_preflight(
+        _approved(plan),
+        environ=_environ_with(FOUNDRY_PROJECT_ENDPOINT=other),
+    )
+
+    assert result.may_start is False
+    assert any(
+        "is not unique across accounts" in note for note in result.all_problems
+    )
+
+
+def test_another_project_on_the_right_account_is_refused(plan):
+    other = (
+        f"https://{PINNED_AZURE_ACCOUNT}.services.ai.azure.com"
+        "/api/projects/some-other-project"
+    )
+    result = _ready_preflight(
+        _approved(plan),
+        environ=_environ_with(FOUNDRY_PROJECT_ENDPOINT=other),
+    )
+
+    assert result.may_start is False
+    assert any("names the project" in note for note in result.all_problems)
+
+
+def test_a_missing_project_address_says_what_it_should_look_like(plan):
+    result = _ready_preflight(
+        _approved(plan), environ=_environ_with(FOUNDRY_PROJECT_ENDPOINT=None)
+    )
+
+    assert result.may_start is False
+    assert any(
+        PINNED_AZURE_ACCOUNT in note and "services.ai.azure.com" in note
+        for note in result.all_problems
+    )
+
+
+def test_a_missing_route_profile_is_told_apart_from_a_wrong_one(plan):
+    """"Not set" and "set to the wrong thing" need different fixes."""
+    missing = _ready_preflight(
+        _approved(plan), environ=_environ_with(AZURE_AI_ROUTE_PROFILE=None)
+    )
+    wrong = _ready_preflight(
+        _approved(plan),
+        environ=_environ_with(AZURE_AI_ROUTE_PROFILE="direct-v1"),
+    )
+
+    assert any("is not set" in note for note in missing.all_problems)
+    assert any("'direct-v1'" in note for note in wrong.all_problems)
+
+
+def test_the_deprecated_endpoint_setting_is_refused(plan):
+    result = _ready_preflight(
+        _approved(plan),
+        environ=_environ_with(
+            AZURE_OPENAI_ENDPOINT="https://something.openai.azure.com/"
+        ),
+    )
+
+    assert result.may_start is False
+    assert any(
+        "does not say which kind of endpoint" in note
+        for note in result.all_problems
+    )
+
+
+@pytest.mark.parametrize(
+    "variable", ["AZURE_OPENAI_API_KEY", "AZURE_CLIENT_SECRET"]
+)
+def test_a_fixed_credential_is_refused_up_front(plan, variable):
+    """Say so during the free check, not after the run has been scheduled."""
+    result = _ready_preflight(
+        _approved(plan), environ=_environ_with(**{variable: "value-not-read"})
+    )
+
+    assert result.may_start is False
+    assert any(variable in note for note in result.all_problems)
+
+
+def test_a_direct_address_on_another_account_is_refused(plan):
+    result = _ready_preflight(
+        _approved(plan),
+        environ=_environ_with(
+            AZURE_OPENAI_V1_ENDPOINT=(
+                "https://some-other-account.services.ai.azure.com/openai/v1/"
+            )
+        ),
+    )
+
+    assert result.may_start is False
+    assert any(
+        "AZURE_OPENAI_V1_ENDPOINT" in note for note in result.all_problems
+    )
+
+
+def test_a_plan_that_forgets_to_pin_the_account_is_refused(plan):
+    plan = _approved(plan)
+    plan.pop("azure_connection")
+
+    result = _ready_preflight(plan)
+
+    assert result.may_start is False
+    assert any(
+        "not unique across accounts" in note for note in result.all_problems
+    )
+
+
+def test_the_azure_check_is_skipped_when_azure_does_not_take_part(plan):
+    """A plan without the Azure run place has no Azure resource to get wrong."""
+    plan = _approved(plan)
+    plan["model_run_conditions"]["by_environment"].pop("azure_code_interpreter")
+    plan["experiment_files"].pop("azure_code_interpreter")
+    plan.pop("azure_connection")
+
+    result = _ready_preflight(plan, environ=_environ_with(
+        AZURE_AI_ROUTE_PROFILE=None, FOUNDRY_PROJECT_ENDPOINT=None
+    ))
+
+    assert result.azure is None
+    assert not any("AZURE" in note for note in result.all_problems)
+
+
+# ── The written specifications must survive a fresh checkout ─────────────
+#
+# Both `batch-runner/scripts/` and `tasks/0822_saturday/` are ignored by
+# default with a per-file allow list. A document added to either without being
+# added to that list is invisible to anyone who clones the repository, which
+# makes it useless exactly when someone needs it.
+
+SPECIFICATION_FILES = (
+    "tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md",
+    "tasks/0822_saturday/TASK_PIN_AZURE_RESOURCE_IDENTITY.md",
+    "tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md",
+    "tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md",
+)
+
+
+@pytest.mark.parametrize("relative", SPECIFICATION_FILES)
+def test_the_specifications_are_in_the_repository(relative):
+    path = REPOSITORY_ROOT / relative
+    assert path.is_file(), f"{relative} is missing"
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", relative],
+        cwd=REPOSITORY_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert tracked.returncode == 0, (
+        f"{relative} exists here but git does not track it, so a fresh clone "
+        "would not have it. Add it to the allow list in .gitignore."
+    )

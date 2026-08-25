@@ -11,6 +11,60 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+- **A deployment name does not identify a deployment, and the run-place
+  comparison was relying on one.** The plan pinned `deployment: gpt-5.4` and
+  said nothing about which Azure AI Foundry account held it; the free check's
+  only Azure input was a single word naming the route. Listing the tenant while
+  preparing the five-task advance check turned up **two separate accounts each
+  exposing a deployment named exactly `gpt-5.4`**, plus a third exposing the
+  same model under a different name. The comparison could therefore have run one
+  column against one account's `gpt-5.4` and another column against a different
+  account's — different region, possibly different model version, possibly
+  different content filters — while every check reported that all three used the
+  same deployment, and nobody reading the table could have told. The plan now
+  pins the account and project, and `batch-runner/core/execution_envelope_azure.py`
+  classifies the endpoint settings the run itself would use, with this
+  repository's own endpoint rules rather than text matching, and refuses any
+  other account or project. Those names are settings the repository already
+  records for its own runs, not secrets.
+- **The Azure check gave the same answer to three different problems.** "Not
+  configured", "configured but pointing elsewhere", and "configured but
+  unreachable" all produced "the Azure route profile was not measured" — three
+  different fixes behind one unhelpful sentence, and working out which applied
+  took a manual investigation. The check now names the specific setting that is
+  wrong and prints the exact address that should have been supplied. It also
+  reports forbidden fixed credentials and the deprecated combined endpoint
+  setting during the free check, instead of letting a run be scheduled and fail
+  later on the same point. Everything still reads settings only: nothing signs
+  in, contacts Azure, or spends anything. Twelve new tests, including one where
+  the settings are well formed, the route is right, the deployment name is
+  unchanged, and **only the account differs** — the case that used to pass.
+
+### Added
+- **The approved spending ceiling for the five-task advance check is recorded**
+  as $32.23 in
+  `batch-runner/experiments/execution_envelope/advance_check_plan.yaml`, equal
+  to the worked-out ceiling to the cent so that any change making the run more
+  expensive pushes it over the line and stops rather than quietly spending more.
+  **The check itself did not run and nothing was spent**: the Azure account it
+  is pinned to sits in a different Azure tenant from the one signed in, a
+  Conditional Access policy refuses the token, and only an interactive browser
+  sign-in remains. Two of the three run places were ready; they were **not** run
+  on their own, because dropping a blocked run place and proceeding would answer
+  a different question from the approved one.
+- **Three standalone specifications** under `tasks/0822_saturday/`: pinning the
+  Azure resource; a four-stage route for Agentic Sandbox V2 from replaying a
+  written script to the model choosing its own next action, with running
+  commands deliberately last and behind its own approval and **none of the three
+  existing safety guards bypassed or weakened**; and what official documentation
+  does and does not say about Codex's own agent. For Codex, a non-interactive
+  mode and custom providers are confirmed, but **pointing its own agent at an
+  Azure AI Foundry deployment using a directory sign-in is not confirmed** — and
+  since every column must share one deployment, that single fact decides whether
+  the column can ever be honest, so it stays empty and marked unconfirmed rather
+  than filled with Azure's own agent service driving a similarly named model.
+
 ### Added
 - **The run-place comparison can now start on five tasks in three places, and
   every check that costs nothing to make refuses on every path that matters.**

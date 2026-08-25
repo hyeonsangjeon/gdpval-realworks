@@ -1,186 +1,131 @@
 # Latest Task Result
 
 - Updated: 2026-08-25
-- Status: the five-task advance check of the run-place comparison is ready to
-  start in three of the five places, and every check that can be made without
-  spending money now passes. **Nothing has run and no model has been called.**
-  One decision is outstanding: the largest amount that may be spent
+- Status: the five-task advance check **did not run and cost nothing.** It is
+  blocked on access to the Azure account it is pinned to, which sits in a
+  different Azure tenant from the one signed in here. While investigating that,
+  a real hole in the comparison's own design was found and closed
 
-## Current Task: Run-Place Comparison — Advance Check Preparation
+## Current Task: Advance Check Attempt, and Pinning the Azure Resource
 
 ### Task
 
-Finish everything that can be settled without spending money before the same
-GPT model is run in three different places on the same five benchmark tasks:
-a separate Python process on the server's own operating system, a Docker
-container, and Azure AI Foundry's code interpreter.
+Run the approved five-task advance check across three run places, or record
+precisely why it cannot run. Then continue with the roadmap.
 
-The other two places named in the specification stay out. Agentic Sandbox V2
-can only be checked for structure, and Codex has no run path in this
-repository. **Neither empty slot was filled with a working place.**
+### Result: the run did not happen, and nothing was spent
 
-### Result
+**Amount spent: $0.00.** No model was called.
 
-- **One file now holds every condition the three places share.**
-  `batch-runner/experiments/execution_envelope/advance_check_plan.yaml` fixes
-  the provider, the deployment name, the model the service must report back,
-  the request-format version, both instruction texts word for word, the task
-  list, the content fingerprint of every input, the answer-length cap, the time
-  limit, whether self-review is allowed and how often, which retry reasons are
-  allowed and how many attempts, and a standing refusal to change model or
-  deployment part-way. The per-place section is deliberately empty: nothing
-  differs between the places except where the code runs.
+The approved amount of $32.23 was recorded in the plan, and with it the cost
+check passes and two of the three run places became ready. The third did not.
 
-- **The five tasks were chosen by a rule, not by taste, and the rule cannot
-  follow the scores.** It reads a committed catalogue built from the benchmark
-  dataset at one pinned revision that holds task numbers, industries, jobs, the
-  file types of the human expert's own answer, reference-file paths, and a
-  fingerprint of the task wording — and no score, grade, or verdict at all. A
-  test walks the whole file looking for one. The rule sorts by task number and
-  fills five slots in a fixed order, preferring a task whose expert answer files
-  are entirely of that format, never repeating a job. The result is five
-  formats, five jobs, four industries:
+**What blocks it.** The Azure AI Foundry account this comparison is pinned to,
+`hjeon-fdpo-foundry-eus2` holding the project `gdpval-realworks`, lives in one
+Azure tenant and subscription. The sign-in available on this machine belongs to
+a different tenant and a different subscription. Asking for access to the pinned
+tenant is refused by a Conditional Access policy (`AADSTS530036`, "the refresh
+token is invalid due to authentication flow checks"), and the only remaining
+route is an interactive sign-in through a web browser. That is an access
+decision for whoever administers the tenant.
 
-  | format | task | job |
-  |---|---|---|
-  | spreadsheet | `02aa1805` | Project Management Specialists |
-  | document | `0112fc9b` | Nurse Practitioners |
-  | presentation | `2ea2e5b5` | Computer and Information Systems Managers |
-  | picture | `3baa0009` | News Analysts, Reporters, and Journalists |
-  | text answer only | `0818571f` | Real Estate Brokers |
+**Why two of three were not run anyway.** The plan, the check, and several
+tests all say the same thing: a blocked run place is never dropped so the rest
+can proceed. Running two columns and labelling the result a three-way comparison
+would answer a different question from the one that was approved, and would
+spend real money doing it. Removing a run place requires a person to edit the
+plan deliberately.
 
-  **The picture slot is recorded honestly.** No task in this benchmark hands in
-  a picture on its own; only two hand in one at all, and both also hand in a
-  document. The rule's fallback clause took the smaller-numbered of those two,
-  and the plan says so rather than implying a pure picture task exists.
+### A real hole was found while investigating, and closed
 
-- **The choice is pinned to fingerprints, so it cannot be re-cut after results
-  are seen.** Dataset `openai/gdpval` at revision
-  `11e7900cdcac61bc4daf59e65feb238acda98fbf` — the same revision this
-  repository's published grades used — whose data file is
-  `f8422fab…7ae0202`; catalogue `43f46dda…504eb75d`. The 30-task and 220-task
-  stages are written out in full too, so their rules are fixed now rather than
-  after a disappointing number.
+Listing the Azure tenant to find the right account turned up something the
+design had missed.
 
-- **The Docker place cannot quietly become the server place.** This was the
-  most dangerous failure mode available, because it is silent: if the container
-  went missing mid-run, `SandboxRunner._execute` would print a warning and run
-  the model's Python on the server, and the Docker column of the result table
-  would hold the server column's numbers with nothing saying so.
-  `exp031_envelope_docker_container.yaml` pins the container setting to
-  `always`, and a new test file holds that from three directions — it calls the
-  real execution path with the Docker service missing and with the image
-  missing and fails if the server runner is reached even once; it reads the
-  committed settings file; and it weakens the setting in both the plan and the
-  settings file and requires the free check to refuse. A fourth test records
-  that the default setting really does fall back, so the reason the pin is
-  needed stays visible.
+**A deployment name does not identify a deployment.** The tenant held *two
+separate accounts each exposing a deployment named exactly `gpt-5.4`*, plus a
+third exposing the same underlying model under a different name. The plan pinned
+`deployment: gpt-5.4` and nothing about which account held it, and the check's
+only Azure input was a single word naming the route. So the comparison could
+have run one column against one account's `gpt-5.4` and another column against a
+different account's `gpt-5.4` — different region, possibly different model
+version, possibly different content filters — and every check would have
+reported that all three used the same deployment. Nobody reading the resulting
+table could have told.
 
-- **The largest possible bill is worked out, not guessed at.** Every assumption
-  is named in the plan with the measurement behind it. Reference files are
-  counted at the 50,000-character cap the file reader applies, so a large file
-  on disk cannot exceed it. Characters are counted at three to the token, below
-  the usual four, so the ceiling comes out larger. Azure's code interpreter is
-  allowed eight model turns inside one attempt because Microsoft publishes no
-  limit, but its answer length is counted once per attempt because the
-  Responses API caps a whole reply with one number.
+That is exactly the class of silent error the whole plan exists to prevent, and
+it was open and reachable, not theoretical.
 
-  | | most model calls | most it could cost |
-  |---|---:|---:|
-  | separate Python process on the server | 20 | $3.48 |
-  | Docker container | 20 | $3.48 |
-  | Azure code interpreter | 160 | $4.83 |
-  | grading | 801 | $14.02 |
-  | **before the safety multiplier** | **1,001** | **$25.79** |
-  | **after multiplying by 1.25** | | **$32.23** |
+**What changed.** The plan now pins the account and the project. The check reads
+the endpoint settings the run itself would use, classifies them with this
+repository's own endpoint rules rather than matching text, and refuses any other
+account or project. Those two names are not new and are not secrets: the
+repository already records them as its own settings
+`AZURE_AI_EXPECTED_PROJECT_ACCOUNT` and `AZURE_AI_EXPECTED_PROJECT_NAME`.
 
-  A model with no published price is refused rather than counted as free, and
-  the committed price list is held equal to the one the repository already uses
-  for grading by a test that reads both.
+**A second, smaller fix in the same area.** The check used to answer "the Azure
+route profile was not measured" whether Azure was unconfigured, configured but
+pointing elsewhere, or configured correctly but unreachable. Three different
+problems, three different fixes, one unhelpful message — working out which was
+true took a manual investigation. It now names the specific setting that is
+wrong and prints the exact address that should have been there. It also reports
+fixed credentials and the deprecated combined endpoint setting during the free
+check, rather than letting a run be scheduled and fail later on the same point.
 
-- **Every free check now runs from one command and refuses on every path that
-  matters.** `scripts/check_execution_envelope_advance_check.py` exits 1 unless
-  all of these hold: no setting is missing; every place uses the same
-  deployment, the same model, the same wording, the same task list, and the
-  same input fingerprints — checked by opening the three settings files that
-  would actually run, not by trusting the plan; the container cannot fall back;
-  no automatic model switch is allowed; a paid-run approval is on record; and an
-  approved amount covers the worked-out ceiling. **A missing approved amount is
-  a refusal, not a pass.**
+Everything here still reads settings only. Nothing signs in, contacts Azure, or
+spends anything, so the check stays free and safe to run anywhere.
 
-- **The Agentic Sandbox V2 guards were exercised, not worked around.** All
-  three still refuse, and the check opens each one every time it runs. Codex is
-  still reported as having no run path here. Neither was substituted.
+### Specifications written
+
+Three, each standing alone:
+
+- `tasks/0822_saturday/TASK_PIN_AZURE_RESOURCE_IDENTITY.md` — the work above.
+- `tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md` — a four-stage
+  route from "replays a written script" to "the model chooses its next action",
+  with running commands deliberately last and behind its own approval. **None of
+  the three existing safety guards is bypassed or weakened**, and the stage that
+  would revisit them comes only after containment has been proven by tests that
+  try to break it.
+- `tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md` — what official
+  documentation does and does not say. Confirmed: a non-interactive mode exists,
+  custom providers exist, and provider settings are deliberately restricted to
+  user-level configuration. **Not confirmed: that Codex's own agent can be
+  pointed at an Azure AI Foundry deployment using a directory sign-in**, which
+  is the only authentication this repository permits. Since every column must
+  share one deployment, that single unconfirmed fact decides whether the column
+  can ever be honest. It stays empty and marked unconfirmed, and is explicitly
+  not filled with Azure's own agent service driving a model whose name contains
+  "codex" — that is a different product.
 
 ### Verification
 
-- New tests: 75 across
-  `batch-runner/tests/test_execution_envelope_advance_check.py` (62) and
-  `batch-runner/tests/test_execution_envelope_docker_containment.py` (13). Each
-  refusal path has a test that changes exactly one thing in the plan and
-  requires the check to say no.
-- Three real defects were found by reviewing and testing this work, and all
-  three are fixed:
-  - **The check could refuse without printing a reason.** The readiness check
-    keeps its own problem list and only the envelope check's was shown, so a
-    plan allowing automatic model switching produced "may not start" with an
-    empty explanation. The two lists are now merged wherever a verdict is
-    reported, and a test requires every refusal to carry a reason.
-  - **A settings file that simply omitted the answer-length cap passed.**
-    Silence was read as agreement, but a missing cap falls back to a built-in
-    default that differs from the fixed one, so one run place would have been
-    allowed half the answer length of the others. A missing cap is now a
-    refusal.
-  - **Nothing checked settings the plan does not name.** Temperature, the
-    repeatability seed, and how hard the model is asked to think are not among
-    the fifteen fixed conditions, but a run place with a different value for
-    any of them would produce a difference that is not the run place. The three
-    settings files must now agree on all three.
-- **In CI the backend suite is 3,716 passed, 9 skipped, 45 deselected, 0
-  failed** (run 32836458107), which is the previous 3,641 plus the 75 new
-  tests exactly.
-- Full backend suite locally: **3,715 passed, 6 skipped, 45 deselected, 4
-  failed.** All 4 failures are environmental and none is caused by this work:
-  `pdfplumber` is not installed here (2 tests); one test pins SDK versions
-  older than those installed; and one builds a candidate image with the system
-  Python, which needs exactly one of `site-packages` or `dist-packages` under
-  `/usr/lib/python3.10/` and this machine now has neither. **Confirmed by
-  checking out the base commit `d2ebc40` in a separate worktree and running the
-  same tests there, where they fail identically.** The last one began failing
-  part-way through this work without any change to it, which is what a shared
-  machine looks like. CI installs the dependencies and has the package
-  directory, so it sees none of these.
-- `mypy` on the three new modules: clean. The 170 pre-existing errors elsewhere
-  in `core/` are untouched and none is in a new file.
-- The catalogue rebuilds byte-for-byte from the pinned dataset revision
-  (`build_gdpval_task_catalog.py --check` exits 0), so the task choice can be
-  re-derived by anyone rather than trusted.
-- No model call, no grading, no Azure sign-in, no image publish, no workflow
-  dispatch, and no Hugging Face write occurred. The two reference files were
-  read from the public dataset to record their fingerprints, which costs
-  nothing.
-- Work was done in a throwaway clone cut from `origin/main` at `d2ebc40`. The
-  user's own working folder and its 1,275 pending changes were not touched.
+- New tests: 12, bringing the two envelope test files to 87. They include the
+  one that matters most: **a plan where the settings are well formed, the route
+  is right, the deployment name is unchanged, and only the account differs must
+  be refused.** That is the case that used to pass.
+- Also covered: a different project on the right account; a missing address, with
+  the message required to contain the address it should have held; "not set"
+  told apart from "set to the wrong thing"; each forbidden fixed credential; a
+  direct address on another account; a plan that forgets to pin the account; and
+  a plan without the Azure column, which must skip the check entirely rather
+  than complain about settings it does not need.
+- `mypy` on the new and changed modules: clean.
+- The command-line tool was run by hand with the Azure settings unset and names
+  both missing settings plus the exact address to supply.
+- The user's own working folder and its pending changes were not touched. Work
+  was done in a throwaway clone cut from `origin/main` at `34123ef`.
 
 ### Remaining Work
 
-- **The largest amount that may be spent has not been set.** This is the only
-  thing standing between the current state and a run of the three places. The
-  worked-out ceiling is **$32.23**.
-- Paid model calls are still unapproved
-  (`EXECUTION_COMPARISON_PAID_RUN_APPROVED`).
-- The model and deployment are proposed, not confirmed: `gpt-5.4`, on the
-  evidence that it is the only name in this repository already used by the
-  server place, the container place, and the Responses API that the Azure place
-  uses.
-- Azure's code interpreter still needs its connection setting. `project-ci`
-  requires both a direct address and a project address, so supplying the route
-  name alone is not enough.
-- Agentic Sandbox V2 still needs its command-running tool, a real model loop,
-  and an explicit approval. Codex still needs both a run path here and public
-  evidence that its own agent loop can use the same Azure deployment. Until
-  then those two columns stay empty rather than being filled by another place.
-- The 30-task and 220-task stages are written down but not approved.
+- **The Azure access decision.** Until the pinned tenant can be reached
+  non-interactively, the advance check cannot run. Nothing in this repository
+  can settle that.
+- The 30-task and 220-task stages remain unapproved and are not covered by the
+  $32.23.
+- Agentic Sandbox V2 needs a cost ceiling for its first stage worked out and
+  approved; that piece of work is free.
+- The Codex column needs one external fact confirmed, or the comparison should
+  be documented as having four columns.
+
 
 
 ---
