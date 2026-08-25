@@ -136,12 +136,17 @@ repository. **Neither empty slot was filled with a working place.**
     the fifteen fixed conditions, but a run place with a different value for
     any of them would produce a difference that is not the run place. The three
     settings files must now agree on all three.
-- Full backend suite locally: **3,716 passed, 6 skipped, 45 deselected, 3
-  failed.** The 3 failures are pre-existing and environmental — `pdfplumber` is
-  not installed here (2 tests) and one test pins SDK versions older than those
-  installed. Confirmed by stashing every change and re-running those three on
-  clean `main`, where they fail identically. The skip count varies between runs
-  on this machine because several tests skip on an absent host capability.
+- Full backend suite locally: **3,715 passed, 6 skipped, 45 deselected, 4
+  failed.** All 4 failures are environmental and none is caused by this work:
+  `pdfplumber` is not installed here (2 tests); one test pins SDK versions
+  older than those installed; and one builds a candidate image with the system
+  Python, which needs exactly one of `site-packages` or `dist-packages` under
+  `/usr/lib/python3.10/` and this machine now has neither. **Confirmed by
+  checking out the base commit `d2ebc40` in a separate worktree and running the
+  same tests there, where they fail identically.** The last one began failing
+  part-way through this work without any change to it, which is what a shared
+  machine looks like. CI installs the dependencies and has the package
+  directory, so it sees none of these.
 - `mypy` on the three new modules: clean. The 170 pre-existing errors elsewhere
   in `core/` are untouched and none is in a new file.
 - The catalogue rebuilds byte-for-byte from the pinned dataset revision
