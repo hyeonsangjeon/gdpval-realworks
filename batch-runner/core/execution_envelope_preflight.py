@@ -37,6 +37,11 @@ from core.execution_envelope_cost import (
     describe_cost_ceiling,
     estimate_cost_ceiling,
 )
+from core.execution_envelope_azure import (
+    AzureConnectionDiagnosis,
+    AzureConnectionRequirement,
+    diagnose_azure_connection,
+)
 from core.execution_envelope_tasks import (
     TaskCatalog,
     check_catalog_carries_no_scores,
@@ -79,6 +84,7 @@ class EnvelopePreflight:
     cost: CostCeiling | None
     problems: list[str] = field(default_factory=list)
     approved_maximum_usd: Decimal | None = None
+    azure: AzureConnectionDiagnosis | None = None
 
     @property
     def all_problems(self) -> list[str]:
@@ -109,6 +115,9 @@ class EnvelopePreflight:
                 else None
             ),
             "problems": self.all_problems,
+            "azure_connection": (
+                self.azure.as_dict() if self.azure is not None else None
+            ),
         }
 
 
@@ -567,12 +576,54 @@ def run_envelope_preflight(
         environ=environ,
     )
 
+    azure = _diagnose_azure(plan, conditions, environ, problems)
+
     return EnvelopePreflight(
         readiness=readiness,
         cost=ceiling,
         problems=problems,
         approved_maximum_usd=approved,
+        azure=azure,
     )
+
+
+def _diagnose_azure(
+    plan: Mapping[str, Any],
+    conditions: Mapping[str, ModelRunConditions],
+    environ: Mapping[str, str] | None,
+    problems: list[str],
+) -> AzureConnectionDiagnosis | None:
+    """Check the Azure run place points at the exact deployment that was pinned.
+
+    Skipped when the Azure run place is not taking part, because then there is
+    no Azure resource for the comparison to get wrong.
+    """
+    if ENVIRONMENT_AZURE_CODE_INTERPRETER not in conditions:
+        return None
+
+    raw = plan.get("azure_connection")
+    if not isinstance(raw, Mapping):
+        problems.append(
+            "the plan asks the Azure run place to take part but does not say "
+            "which Azure AI Foundry account and project must hold the "
+            "deployment. A deployment name is not unique across accounts, so "
+            "without this the comparison could run against a different "
+            "deployment of the same name and never notice."
+        )
+        return None
+
+    try:
+        requirement = AzureConnectionRequirement.from_mapping(raw)
+    except ValueError as error:
+        problems.append(str(error))
+        return None
+
+    import os
+
+    source = os.environ if environ is None else environ
+    diagnosis = diagnose_azure_connection(requirement, source)
+    problems.extend(diagnosis.problems)
+    return diagnosis
 
 
 def _check_instruction_length(

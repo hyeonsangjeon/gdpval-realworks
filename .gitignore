@@ -72,6 +72,9 @@ tasks/0720_monday/*
 !tasks/0822_saturday/
 tasks/0822_saturday/*
 !tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md
+!tasks/0822_saturday/TASK_PIN_AZURE_RESOURCE_IDENTITY.md
+!tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md
+!tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md
 
 *.parquet
 .huggingface/
