@@ -1,0 +1,162 @@
+# Run place 2 of 3: a Docker container
+# ====================================
+#
+# The model writes Python, and the batch runner runs that Python inside a
+# Docker container built from a fixed image.
+#
+# The single most important line in this file is `use_docker: "always"`. Read
+# the note above it before changing anything in the sandbox block.
+#
+# This file is one of three that must agree on everything except where the code
+# runs. The conditions they share are written once in
+# experiments/execution_envelope/advance_check_plan.yaml, and the free check at
+# scripts/check_execution_envelope_advance_check.py compares this file against
+# that one character by character. Editing anything below that the plan also
+# fixes will stop the run rather than quietly change the comparison.
+#
+# No model has been called with this file. It is a draft awaiting approval to
+# spend money.
+
+experiment:
+  id: "exp031_envelope_docker_container"
+  name: "Run-place comparison — a Docker container (5 tasks)"
+  description: >-
+    The five-task advance check for the run-place comparison. The model writes
+    Python and the batch runner runs it inside a Docker container built from a
+    fixed image. Paired with exp030 (a separate Python process on the server)
+    and exp032 (the Azure code interpreter), which differ from this file only
+    in where the code runs.
+  author: "Hyeonsang Jeon"
+  created_at: "2026-08-25"
+
+control:
+  fixed:
+    - model
+    - tasks
+    - temperature
+    - prompt_strategy
+  changed:
+    - execution_environment
+
+data:
+  source: "HyeonSang/exp031_envelope_docker_container"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: null
+    # Fixed by the rule in core/execution_envelope_tasks.py, which reads only
+    # task numbers, industries, jobs, and the file types of the human expert's
+    # own answer. See the plan file for what each one covers.
+    task_ids:
+      - "02aa1805-c658-4069-8a6a-02dec146063a"
+      - "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
+      - "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+      - "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+      - "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+
+condition_a:
+  name: "Docker container"
+  model:
+    provider: "azure"
+    deployment: "gpt-5.4"
+    temperature: 0.0
+    seed: 42
+    # Left unset on purpose. Setting it in one of the three files and not the
+    # others would change how hard the model thinks, which is not the thing
+    # being measured.
+    reasoning_effort: null
+  prompt:
+    system: |
+      You are a helpful assistant that completes professional tasks.
+      When the task requires creating files (e.g., Excel, Word, PDF, PowerPoint),
+      write Python code that generates those files and save them to the current directory.
+      Use libraries such as openpyxl, python-docx, reportlab, python-pptx, and Pillow.
+      Always produce complete, runnable code.
+    prefix: null
+    body: null
+    suffix: |
+      If the task requires creating deliverable files (documents, spreadsheets,
+      presentations, reports, etc.), you MUST use Python code to generate the
+      actual file(s) and save them to the current directory.
+      Do NOT just describe what you would create — actually execute code to produce
+      downloadable files. The task is NOT complete unless the files are saved.
+
+      In your text response, do NOT include any file download links or sandbox URLs
+      (e.g. "[Download ...](sandbox:/mnt/data/...)" or similar).
+      Only provide a plain-text summary of what was produced.
+
+      Before writing any code, ALWAYS inspect the actual structure of any
+      reference files first (df.columns, df.dtypes, df.head()).
+      Never hardcode column names or assume data types.
+
+  # Off in all three files. This comparison changes where the code runs and
+  # nothing else, so the model must not get a second look at its own answer in
+  # one place and not another.
+  qa:
+    enabled: false
+    max_retries: 0
+    model: null
+    min_score: 6
+    prompt: ""
+
+execution:
+  mode: "sandbox"
+  # 1200 seconds in all three files, so no run place is given more time than
+  # another.
+  timeout: 1200
+  # Attempts after a network failure, a server error, or a timeout. The model's
+  # own judgement never causes one, because self-review is off above.
+  max_retries: 3
+  # Off. A second round would let one run place have more attempts than another
+  # depending on how its errors happened to fall.
+  resume_max_rounds: 0
+  sandbox:
+    image: "gdpval-sandbox:latest"
+
+    # ─────────────────────────────────────────────────────────────────────
+    # This line is what keeps this run place honest, and it must stay
+    # "always".
+    #
+    # SandboxRunner._execute in core/sandbox_runner.py has a path that runs
+    # the code on the server's own operating system, after printing a warning,
+    # when this setting is "auto" and either the Docker service or the image is
+    # missing. If that happened during this comparison, this file's results
+    # would in fact be exp030's results, and the two columns of the result
+    # table would be measuring the same thing without saying so. Nobody
+    # reading the table afterwards could tell.
+    #
+    # With "always", a missing Docker service or a missing image ends the task
+    # as a recorded failure instead of moving the work somewhere else. A
+    # missing container is a fact worth knowing; a silently substituted one is
+    # a corrupted measurement.
+    #
+    # tests/test_execution_envelope_docker_containment.py runs this path and
+    # fails if the substitution ever becomes possible again, and the free check
+    # refuses any value other than "always".
+    # ─────────────────────────────────────────────────────────────────────
+    use_docker: "always"
+
+    memory_gb: 8
+    cpus: 2.0
+
+    # Off in all three files. These are extra abilities this run place happens
+    # to ship with, and switching them on here would make this column measure
+    # the extra abilities rather than the container.
+    max_skills: 0
+    repair:
+      enabled: false
+      max_attempts: 0
+    output_qa:
+      enabled: false
+    manifest:
+      enabled: true
+      filename: "manifest.json"
+  tokens:
+    # 16384 truncated this model's generated code in an earlier run and left an
+    # empty visible answer, which would show up as a failure of the run place
+    # rather than of the setting. See the note in exp026.
+    code_generation: 32768
+
+output:
+  publish_to_hf: false
+  submit_to_evals: false

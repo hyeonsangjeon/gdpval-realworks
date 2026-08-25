@@ -1,0 +1,3723 @@
+{
+  "dataset_file_sha256": "f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202",
+  "dataset_repo_id": "openai/gdpval",
+  "dataset_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+  "holds_no_scores": "Only task numbers, industries, jobs, expert answer file types, reference file paths and types, and a fingerprint of the task wording are recorded. No score, grade, or verdict is present.",
+  "reference_file_path_note": "In this dataset each reference file sits in a folder named after the first 32 hexadecimal characters of that file's SHA-256 fingerprint, so a fingerprint written into the plan can be checked against the path without downloading anything.",
+  "schema_version": "gdpval-task-catalog-v1",
+  "tasks": [
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Nurse Practitioners",
+      "prompt_character_count": 2902,
+      "prompt_sha256": "b20e140c0169184998ae2c506e8aad04e1f51772527c8d2ffe10b0c32f042df5",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 55,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Recreation Workers",
+      "prompt_character_count": 3310,
+      "prompt_sha256": "eda153e791eb06d39dcc4db6625e3d0785d27a0c17a1265c0f04a6c4d5102ede",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/21f10d79c065e77a3e36c952a0c3b3b8/Recreare Parks & Recreation Summer Fun Facilities.docx",
+        "reference_files/8c6c4dc7856ed9cebb1e7b35e1a71255/Recreare_Official_Contract_Language.docx",
+        "reference_files/ec76eafe083d0175de7e957f857f4292/Recreare_Contract_Outline.docx"
+      ],
+      "rubric_item_count": 65,
+      "sector": "Government",
+      "task_id": "01d7e53e-0513-4109-a242-8ccaf442cd21"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "General and Operations Managers",
+      "prompt_character_count": 2207,
+      "prompt_sha256": "c3771d57bae58dedb6bb1d6f51cc0743cc33f672633d64f3940e49713f7c2d9c",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 28,
+      "sector": "Retail Trade",
+      "task_id": "02314fc6-a24e-42f4-a8cd-362cae0f0ec1"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Project Management Specialists",
+      "prompt_character_count": 1589,
+      "prompt_sha256": "8dc289aa58f05aa1f65453cb7cf975be037014305da824cef73ec7f6b8869f98",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 71,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "02aa1805-c658-4069-8a6a-02dec146063a"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "First-Line Supervisors of Office and Administrative Support Workers",
+      "prompt_character_count": 2759,
+      "prompt_sha256": "432b511652033348893bb544221e0fd9fba765eb5a58db198336bb1278e56901",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/690bb18c0e997a066e08866074744414/Document A - Email Thread Task 8 Veterans.pdf",
+        "reference_files/6fe3866dfe71efe2605ae7ffc6e14911/Document B - PACT Act Links.pdf"
+      ],
+      "rubric_item_count": 69,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "0353ee0c-18b5-4ad3-88e8-e001d223e1d7"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Property, Real Estate, and Community Association Managers",
+      "prompt_character_count": 2790,
+      "prompt_sha256": "a8c19261df60223fdaad2268b3c4311fb2755385cac24aa829b6ebeb886cc810",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/4d987d08c97426ce3ea11ba3ee413275/Resident Complaint Log.docx",
+        "reference_files/812c387423660609cfd6c157ed226fb8/Work Order Log.xlsx"
+      ],
+      "rubric_item_count": 52,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "0419f1c3-d669-45d0-81cd-f4d5923b06a5"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Pharmacists",
+      "prompt_character_count": 1757,
+      "prompt_sha256": "1c12c29796d063f39356c959c641d8e39726376e3b0bacb35e9b5fdd0292b5ab",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 34,
+      "sector": "Retail Trade",
+      "task_id": "045aba2e-4093-42aa-ab7f-159cc538278c"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Buyers and Purchasing Agents",
+      "prompt_character_count": 3716,
+      "prompt_sha256": "8899271b4be9dd49a86ebc545792f918bc535eec96303d9b34d33a035dcd7010",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/c41747c5d1641a515ac32263e9a697d6/Model A HL quotes_1.docx"
+      ],
+      "rubric_item_count": 66,
+      "sector": "Manufacturing",
+      "task_id": "05389f78-589a-473c-a4ae-67c61050bfca"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Real Estate Brokers",
+      "prompt_character_count": 1548,
+      "prompt_sha256": "718353295dc2778e76283739c455c4faf2c3ee18fb7e125495fd1e95e69aa6d5",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/901e943a97328a661f9e704ae43eeea1/Acquisition Criteria (2).pdf"
+      ],
+      "rubric_item_count": 32,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".zip"
+      ],
+      "occupation": "Software Developers",
+      "prompt_character_count": 3848,
+      "prompt_sha256": "46ed5372bbd43151663c4fc2db09329b2d6b65526d71b8088cc430c48ddaaa9c",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 55,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "0e386e32-df20-4d1f-b536-7159bc409ad5"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Concierges",
+      "prompt_character_count": 6029,
+      "prompt_sha256": "07f8a9f1cec32e5e328df65bc9a0184117ff967bd6659d94d203d4b31cc3df7e",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 50,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "0e4fe8cd-16d0-4f41-8247-6385b4762582"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Registered Nurses",
+      "prompt_character_count": 2847,
+      "prompt_sha256": "7ad2cd292b31e5100bdd5dd3c6b7da417d72b4ed9fa83883c46c71ffb7875462",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 42,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "0ec25916-1b5c-4bfe-93d3-4e103d860f3a"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Customer Service Representatives",
+      "prompt_character_count": 1180,
+      "prompt_sha256": "a8f722f88bba6c6cf7ab948cc0ff7cea75be7cfb343cf9bc32c637ef74a9ec10",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/816a92c72c00a231c92e85f79391d002/ECID Constituent Feedback Tracking Log.xlsx"
+      ],
+      "rubric_item_count": 28,
+      "sector": "Finance and Insurance",
+      "task_id": "0ed38524-a4ad-405f-9dee-7b2252659aad"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "General and Operations Managers",
+      "prompt_character_count": 1542,
+      "prompt_sha256": "fa29c3d42cfbb6020c6ada491a64e37f8cfd0fd6c6132a291c5793bb6e36d797",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 44,
+      "sector": "Retail Trade",
+      "task_id": "0fad6023-767b-42c1-a1b3-027cd4f583cb"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products",
+      "prompt_character_count": 2276,
+      "prompt_sha256": "0d99c23a9c91fcf4e3b61b51d9248699a3034752c9d8bfe8af8a8dde54f3aa16",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/062f057c961cefe89513e32097df802b/Current Product Price List.xlsx"
+      ],
+      "rubric_item_count": 46,
+      "sector": "Wholesale Trade",
+      "task_id": "105f8ad0-8dd2-422f-9e88-2be5fbd2b215"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "occupation": "Order Clerks",
+      "prompt_character_count": 2292,
+      "prompt_sha256": "0c5324071ed144193b13ada0820ea1b82624af092961749a25e72d02e8f8a094",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/ce8f43c8d80b536f0b12e1b7ed0285b1/Reference_PO Data.xlsx"
+      ],
+      "rubric_item_count": 62,
+      "sector": "Wholesale Trade",
+      "task_id": "1137e2bb-bdf9-4876-b572-f29b7de5e595"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Real Estate Sales Agents",
+      "prompt_character_count": 749,
+      "prompt_sha256": "333f52d5193b7e5baf9619bd46543bace3b5f633729411d1fbe6e8439dd61770",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".webp",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/1e15759c2909d91e9cd6024813a1a1f7/Massabama active listings.xlsx",
+        "reference_files/90aa102139088e0e11f8c3aef000f2be/Mort Realty logo.webp"
+      ],
+      "rubric_item_count": 29,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "11593a50-734d-4449-b5b4-f8986a133fd8"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Registered Nurses",
+      "prompt_character_count": 1411,
+      "prompt_sha256": "6ff69520d1ed1d4bf31755e87c21f14cb2da07f6b069d80889c9eaea8fdb77a4",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 46,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "116e791e-890c-42b1-ba90-1db02e8bfd45"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Shipping, Receiving, and Inventory Clerks",
+      "prompt_character_count": 1493,
+      "prompt_sha256": "791639bbf43aae57166e14abedd350df31df2420a16ed1d249a2186356e3daed",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/63f481f2381208a6f2af5d89d2b3e5bc/Inv on line.xlsx",
+        "reference_files/af08cd20fa0c3c74b953957f4b92bb97/Daily Receiving Log 062425 Fix.xlsx",
+        "reference_files/d70a1af75325679ac81143f10492350e/Blank Location Report.xlsx"
+      ],
+      "rubric_item_count": 27,
+      "sector": "Manufacturing",
+      "task_id": "11dcc268-cb07-4d3a-a184-c6d7a19349bc"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "First-Line Supervisors of Police and Detectives",
+      "prompt_character_count": 2174,
+      "prompt_sha256": "337487486e5e07ad314f1b8c511d6674609bf3d9ed075887af9a57f369ad13ae",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 60,
+      "sector": "Government",
+      "task_id": "11e1b169-5fb6-4d79-8a83-82ddf4987a85"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products",
+      "prompt_character_count": 2715,
+      "prompt_sha256": "9fa776f5bb5b7b28bd3e07808a4f0301b2cf2ed5076e0683469e56d2c36ce0bf",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/fc8f738160ce7e1cd864ca69d5700bb6/Pricing email.docx"
+      ],
+      "rubric_item_count": 56,
+      "sector": "Wholesale Trade",
+      "task_id": "15d37511-75c5-4c7f-81f1-16e00c0d95f3"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Buyers and Purchasing Agents",
+      "prompt_character_count": 3871,
+      "prompt_sha256": "c4b01382b744f0b093c9464b2bf7a6b33e584d0d05fadffe2b295cc820a169bc",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 46,
+      "sector": "Manufacturing",
+      "task_id": "15ddd28d-8445-4baa-ac7f-f41372e1344e"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "occupation": "Administrative Services Managers",
+      "prompt_character_count": 2649,
+      "prompt_sha256": "af3addde20388039bafea4c917ae77e7987f5aca22115d7006b02e73ec310fcb",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/909eb6688d89bc67287d523a9fa2d2e9/TENTATIVE CLEANUP SCHEDULE.pdf"
+      ],
+      "rubric_item_count": 44,
+      "sector": "Government",
+      "task_id": "17111c03-aac7-45c2-857d-c06d8223d6ad"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Production and Operating Workers",
+      "prompt_character_count": 1437,
+      "prompt_sha256": "f5268dcfc0d3f550be9376d6ad2bf4746ea172fad5bc272ee55d1676ed068857",
+      "reference_file_count": 5,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/6513fe052d2430c0c93687e29a1cc272/Week One Test Plan.xlsx",
+        "reference_files/7d2204862af57316cc3aee7d883678f5/Tooling Changeover Times.xlsx",
+        "reference_files/991a189304f6edfd7c91c426becc81ad/FG BOM Requirement.xlsx",
+        "reference_files/d37f021510f4acddbe5d7390e616e57f/Raw Material Purchased Parts and Tooling.xlsx",
+        "reference_files/fb0e48e1d5436aef7daf7aa4e3873cdc/Team Member Roster and Ranking.xlsx"
+      ],
+      "rubric_item_count": 46,
+      "sector": "Manufacturing",
+      "task_id": "1752cb53-5983-46b6-92ee-58ac85a11283"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products",
+      "prompt_character_count": 3374,
+      "prompt_sha256": "9d694501c8b1251d9a703cfaf100ddf6bd51d2e73749045d724be6f66f2b18aa",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/83cd6e2233b76f20b6a6643217f9ebb3/DATA XR MU 2023 Final (2).xlsx"
+      ],
+      "rubric_item_count": 63,
+      "sector": "Wholesale Trade",
+      "task_id": "19403010-3e5c-494e-a6d3-13594e99f6af"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Nurse Practitioners",
+      "prompt_character_count": 1623,
+      "prompt_sha256": "9b688f6d37c325f2379c65941b678b9de62148006be21ca946ca8c1ffe73eb9a",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 63,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "1a78e076-445e-4c5d-b8ce-387d2fe5e715"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "First-Line Supervisors of Office and Administrative Support Workers",
+      "prompt_character_count": 1200,
+      "prompt_sha256": "d0a424cdd551ae9d3fd4b4d6254f8d9e932e09fa8cfab288bfbb5feddf9c7df9",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/b49a208f6f0e9dd3dc94dc2820b89489/Telehealth with Doxy.me.docx"
+      ],
+      "rubric_item_count": 52,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "1aecc095-4d76-4b89-b752-1a0f870502cd"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Buyers and Purchasing Agents",
+      "prompt_character_count": 3862,
+      "prompt_sha256": "b4a3397af569f28193afe1780ed2339c329480386eb04f446cefaeaa5707d77d",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 51,
+      "sector": "Manufacturing",
+      "task_id": "1b1ade2d-f9f6-4a04-baa5-aa15012b53be"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Nurse Practitioners",
+      "prompt_character_count": 1369,
+      "prompt_sha256": "deb0e82d6dfc78f63f11301a6ef9fdae02c36c13cbac9be0ea712b16f6de1e72",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 47,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "1b9ec237-bf9c-41f9-8fa9-0e685fcd93c6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Recreation Workers",
+      "prompt_character_count": 2194,
+      "prompt_sha256": "66b2de41ff787251e330c44596221135853110d1a85944741179508c9ba853c4",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 29,
+      "sector": "Government",
+      "task_id": "1bff4551-1d54-4e37-b2e0-d5c3f2ea4a45"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "occupation": "Securities, Commodities, and Financial Services Sales Agents",
+      "prompt_character_count": 2355,
+      "prompt_sha256": "f9e4c84533e0a1bc155f94f60493fd4ea6069bbf54dfd99c6f65e5b67d260a55",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 43,
+      "sector": "Finance and Insurance",
+      "task_id": "1d4672c8-b0a7-488f-905f-9ab4e25a19f7"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Property, Real Estate, and Community Association Managers",
+      "prompt_character_count": 648,
+      "prompt_sha256": "14ff3ae1478aca4ec6d4c7846e1295bd12ac5127ed20afcf65f8414b9afa8f9d",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/9633ae95869c5e80584dfc63d719714e/PM Duties (1).pdf"
+      ],
+      "rubric_item_count": 18,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "1e5a1d7f-12c1-48c6-afd9-82257b3f2409"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "First-Line Supervisors of Retail Sales Workers",
+      "prompt_character_count": 1685,
+      "prompt_sha256": "ef805b21eeceb1dbdf42624b0d158684c07e3904d179cd6ad6a6a4525b3c5a0b",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/a19ff917a5f84ec4b136400cec4a5e1f/Daily Tasks.docx"
+      ],
+      "rubric_item_count": 40,
+      "sector": "Retail Trade",
+      "task_id": "211d0093-2c64-4bd0-828c-0201f18924e7"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "First-Line Supervisors of Police and Detectives",
+      "prompt_character_count": 2342,
+      "prompt_sha256": "0905c930bd862593f0262bcca4e5a01061008a2cc8f9e7d52b40646dc7810123",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 58,
+      "sector": "Government",
+      "task_id": "22c0809b-f8db-489e-93b3-b4da225e3e0e"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Buyers and Purchasing Agents",
+      "prompt_character_count": 2279,
+      "prompt_sha256": "08f8dfb44b0f0a36d8982e5920253c319943c09e71a5187b8bb3488936765345",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/787218a67c75e5c2f6dc405027a2f07c/Quotations and volume projection for model I headlamp.docx"
+      ],
+      "rubric_item_count": 52,
+      "sector": "Manufacturing",
+      "task_id": "24d1e93f-9018-45d4-b522-ad89dfd78079"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Compliance Officers",
+      "prompt_character_count": 1585,
+      "prompt_sha256": "8477036ad4655c9d818dc8e42bb3e94c4c4bfd76598aa80443a0f3fc83c71921",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 25,
+      "sector": "Government",
+      "task_id": "2696757c-1f8a-4959-8f0d-f5597b9e70fc"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".pdf"
+      ],
+      "occupation": "Administrative Services Managers",
+      "prompt_character_count": 2007,
+      "prompt_sha256": "9709702fe17f98f40886c32cc8172757772e40f88e2ce113c8cf4fd8bfbab751",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 37,
+      "sector": "Government",
+      "task_id": "27e8912c-8bd5-44ba-ad87-64066ea05264"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".txt",
+        ".yaml"
+      ],
+      "occupation": "Software Developers",
+      "prompt_character_count": 3036,
+      "prompt_sha256": "98176f024646332c2e920e8106acdf2139aabe4373c88f4dd0a2a8c8be936f53",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 50,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "2c249e0f-4a8c-4f8e-b4f4-6508ba29b34f"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Real Estate Brokers",
+      "prompt_character_count": 2747,
+      "prompt_sha256": "22f5d075dac4c9dd9aab8e68d446ecf733b8b2cd42b9476bb6d47b20915f5ba6",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 34,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "2d06bc0a-89c6-4e89-9417-5ffe725c1bc6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Computer and Information Systems Managers",
+      "prompt_character_count": 3632,
+      "prompt_sha256": "93c975a12dba13dc194d410225bf41da3aa58e45bf9cbc963d0426b0edd2ec14",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/bb09ca2a9999b404d7fced9202b42949/Work Time Study - Source.xlsx"
+      ],
+      "rubric_item_count": 60,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Concierges",
+      "prompt_character_count": 1456,
+      "prompt_sha256": "26bd7adcdc47202472722effcb861f1e2cf3756fd8917be696bda0524f12e7b9",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 28,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "2fa8e956-7b35-4c13-95dc-027f02be318b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Non-Retail Sales Workers",
+      "prompt_character_count": 2172,
+      "prompt_sha256": "dbfadf7daaf17e03dc5fd206efa2b1eaca5a70fe45599b5f9ca134c915b2755e",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/2b2ac74e0d0539fc220e99836692693f/Store Matrix final.xlsx",
+        "reference_files/c136ada0524ff0ec9870548683d1612e/LY May Sales by Store and STD Sales $ by Store final.xlsx"
+      ],
+      "rubric_item_count": 66,
+      "sector": "Wholesale Trade",
+      "task_id": "327fbc21-7d26-4964-bf7c-f4f41e55c54d"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Personal Financial Advisors",
+      "prompt_character_count": 1743,
+      "prompt_sha256": "2a7a73af7e6b461e7fd7dfd011da5b5934a82e800a78e56c884ead6295355035",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 42,
+      "sector": "Finance and Insurance",
+      "task_id": "3600de06-3f71-4e48-9480-e4828c579924"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Compliance Officers",
+      "prompt_character_count": 2265,
+      "prompt_sha256": "3d1a01872dd5ca43bc1ac71eb1e994ab08b1a0fd31414692600fae6bfe4e2910",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 27,
+      "sector": "Government",
+      "task_id": "36d567ba-e205-4313-9756-931c6e4691fe"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".zip"
+      ],
+      "occupation": "Audio and Video Technicians",
+      "prompt_character_count": 1910,
+      "prompt_sha256": "cf0ddcc9be0c8e5e9e9e80f80434f01c54b1097faa11996be89abe1cff51fdd5",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".wav"
+      ],
+      "reference_file_paths": [
+        "reference_files/028fb83486152124cfecf2667c3cef37/DRUM REFERENCE TRACK.wav"
+      ],
+      "rubric_item_count": 35,
+      "sector": "Information",
+      "task_id": "38889c3b-e3d4-49c8-816a-3cc8e5313aba"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Mechanical Engineers",
+      "prompt_character_count": 1548,
+      "prompt_sha256": "c3ca2f0e39abd6123da6e0fa4fc729c07beb26ee41d5f10779ebb0cb195a46e0",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf",
+        ".step"
+      ],
+      "reference_file_paths": [
+        "reference_files/40bef3e53d515c7bc90a19e41783b95b/X-Wing-assembly.STEP",
+        "reference_files/edac132577bb44e35b1a31348f750be2/XWING SIM STUDY.pdf"
+      ],
+      "rubric_item_count": 55,
+      "sector": "Manufacturing",
+      "task_id": "3940b7e7-ec4f-4cea-8097-3ab4cfdcaaa6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Editors",
+      "prompt_character_count": 2135,
+      "prompt_sha256": "0a5e64a4909f231a17816b98dacc9ffd4d33ffc711ca7df3e1792e205a1ca805",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/1389fc5af6430c02dd7bd93c7ce05cc7/Boilerplate.docx"
+      ],
+      "rubric_item_count": 54,
+      "sector": "Information",
+      "task_id": "3a4c347c-4aec-43c7-9a54-eb1f816ab1f9"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".jpg",
+        ".pdf"
+      ],
+      "occupation": "News Analysts, Reporters, and Journalists",
+      "prompt_character_count": 996,
+      "prompt_sha256": "cd6b2d63e8d90a7058bd7d4d9ff3a94e258268b54f78ec1ff3eff467437dbf76",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 49,
+      "sector": "Information",
+      "task_id": "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Project Management Specialists",
+      "prompt_character_count": 4230,
+      "prompt_sha256": "43d4b737de9a10e08b123f087e01d7826dabbe6ad2455939d455b542caff664c",
+      "reference_file_count": 4,
+      "reference_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/25746da83320237383be9cd45689f723/INPUT 2 BridgeMind AI POC Project spend profile for month 2.xlsx",
+        "reference_files/2aae69ead6a47ff4eaf0a4115b21ebf4/INPUT 3 BridgeMind AI POC Project deployment Risk Register.xlsx",
+        "reference_files/a8f8a69ee05ac43f864e4b43cf040529/INPUT 1 BridgeMind AI Project Summary.docx",
+        "reference_files/ca6c768fe272f61c00d001c884c42237/INPUT 4 BridgeMind AI POC deployment PROJECT LOG.docx"
+      ],
+      "rubric_item_count": 41,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "3c19c6d1-672c-467a-8437-6fe21afb8eae"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Lawyers",
+      "prompt_character_count": 1043,
+      "prompt_sha256": "80bee55c93378aa97e2ac66964e9b29824ec805d4213f1669dca79abdf00e035",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 64,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "3f625cb2-f40e-4ead-8a97-6924356d5989"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Non-Retail Sales Workers",
+      "prompt_character_count": 2118,
+      "prompt_sha256": "7feb3377e3ce1e07fcf24eac8c0da790fce8f6ea2670a4fdacee4abe2f35571a",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/6570e63a5703b1f4901dd3e0fb61cfbe/Sales & Stock Last Year Data.xlsx"
+      ],
+      "rubric_item_count": 46,
+      "sector": "Wholesale Trade",
+      "task_id": "3f821c2d-ab97-46ec-a0fb-b8f73c2682bc"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Editors",
+      "prompt_character_count": 1080,
+      "prompt_sha256": "4671e14c08985763e3516cde78977cdd024b11504f3d42cc385658aacffffd01",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 21,
+      "sector": "Information",
+      "task_id": "401a07f1-d57e-4bb0-889b-22de8c900f0e"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Recreation Workers",
+      "prompt_character_count": 1617,
+      "prompt_sha256": "ff1fbb19d343ce077929857e5c6ba54a858a1f1807fa2ea8d124b6dd43b48ea7",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 17,
+      "sector": "Government",
+      "task_id": "403b9234-6299-4b5f-a106-70c1bc11ec4c"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Office and Administrative Support Workers",
+      "prompt_character_count": 2573,
+      "prompt_sha256": "d4728a8186f1f96bf450b83713f647814d746c2b15dd96966a96a9bbf275671a",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/2f471613fd5a1f94d12e0674df9d7c47/Grand Rounds Template.xlsx",
+        "reference_files/c2de137bd05465b7d60443c4b3522803/Scheduled Meetings.docx",
+        "reference_files/fc23517e215f68ad2e6b555d61cc390c/Priorities and Conditions for Scheduling Grand Rounds.docx"
+      ],
+      "rubric_item_count": 72,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "40a8c4b1-b169-4f92-a38b-7f79685037ec"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "occupation": "Industrial Engineers",
+      "prompt_character_count": 2452,
+      "prompt_sha256": "c7b615d76378d6cb550a6df7048809198959fb1fa9552b99868dcf0d095ae88f",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 64,
+      "sector": "Manufacturing",
+      "task_id": "40a99a31-42d6-4f23-b3ec-8f591afe25b6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".zip"
+      ],
+      "occupation": "Software Developers",
+      "prompt_character_count": 3357,
+      "prompt_sha256": "8253120efea70c367ab51690f51d6aad459cb559b137c6465c9165bca597fb4e",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 65,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "4122f866-01fa-400b-904d-fa171cdab7c7"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "occupation": "Medical Secretaries and Administrative Assistants",
+      "prompt_character_count": 2244,
+      "prompt_sha256": "8840cd61769b53f38f4fce6602b27a33feb2789d9d718b2c0180bf7b7e8e9206",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 39,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "41f6ef59-88c9-4b2c-bcc7-9ceb88422f48"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Accountants and Auditors",
+      "prompt_character_count": 714,
+      "prompt_sha256": "6d25c317fdce343b5dd2434de1eecf3f050c822d1b99445c04ce4a778425259a",
+      "reference_file_count": 15,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/17ae59711e82153e5a4231d02a452eb2/LISA 1099-INT Rose edit.pdf",
+        "reference_files/23534bceac9c4a0471d19f9c1ba21a72/Bob & Lisa SMITH LTC PREMIUMS PAID 2024.pdf",
+        "reference_files/253eb2488fb3a1877c452dbc486b7b7f/MORTGAGE INTEREST FORM.pdf",
+        "reference_files/3d8d8f43489024751906178db52e6972/LISA W2 COMPRESS MIDDLE SCHOOL edit.pdf",
+        "reference_files/5afd4a8c335623509907c1455aed00cf/BOB W2 COMPANY Z edit.pdf",
+        "reference_files/6cc99749ed5bed4887184afa367bf58d/LISA STUDENT LOAN INTEREST edit.pdf",
+        "reference_files/800a32d8b7fe4b172239532bcc193b1b/LISA 1099-DIV edit.pdf",
+        "reference_files/82025a6c7590c8b8335acdb85503ff26/BOB 1099-INT Rose Edit.pdf",
+        "reference_files/aeb4899708d6d6db2a471e79048bfd63/LISA 1099-B edit.pdf",
+        "reference_files/c1f513b6f3f77a61530849b854e54bc4/Bob and Lisa 2024 Estimated Taxes Paid.pdf",
+        "reference_files/cd65ec41e28fd163af154c2361285d5f/COMPLETED 2024 Client Intake Form - Bob and Lisa Smith.pdf",
+        "reference_files/d7cbc50f1ecaa6cde65a056265d55b9a/BOB 1099-B edit.pdf",
+        "reference_files/d90786a64afd7f9fb3e85be0b5e111c5/2024 Childcare Statement.pdf",
+        "reference_files/ddbdf0aef62823adcbf0ffe0ab5cfe19/BOB 1099-INT.pdf",
+        "reference_files/de2375f30dc2f1a6155cda663e6f48fa/BOB W2 COMPANY X edit.pdf"
+      ],
+      "rubric_item_count": 67,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "43dc9778-450b-4b46-b77e-b6d82b202035"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Financial Managers",
+      "prompt_character_count": 801,
+      "prompt_sha256": "6c447f7fc92a78207f18ddbdeb77d511c83de1661be320f9a588060692b888f0",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/4d6d96f2061fc75357419dba98993b90/Sample roster and schedule.xlsx",
+        "reference_files/4e2deede441818560dc6da2a5a98bd1d/CBA excerpt.docx"
+      ],
+      "rubric_item_count": 88,
+      "sector": "Finance and Insurance",
+      "task_id": "4520f882-715a-482d-8e87-1cb3cbdfe975"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "First-Line Supervisors of Retail Sales Workers",
+      "prompt_character_count": 2616,
+      "prompt_sha256": "d1cd39ca1c308fa986e8e45fb0b8ae8d1da2075c1d042d2b1e4a6fe4d2c9f26c",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/1def57492a481992362ae95c6ee6e651/PURCHASE ORDER.xlsx",
+        "reference_files/2c0a245a7c98c858b2ae975c7bbab3b6/ORDER LIST.pdf"
+      ],
+      "rubric_item_count": 33,
+      "sector": "Retail Trade",
+      "task_id": "45c6237b-f9c9-4526-9a8d-6a5c404624ec"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Financial and Investment Analysts",
+      "prompt_character_count": 1975,
+      "prompt_sha256": "bd38be3fe9b25c0480c78b77704baf0529d7525005d5db3bb3a64eae0cc70d01",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/40407caad9b871b09e3a075bdd971b15/Research Material.docx"
+      ],
+      "rubric_item_count": 53,
+      "sector": "Finance and Insurance",
+      "task_id": "46b34f78-6c06-4416-87e2-77b6d8b20ce9"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Real Estate Brokers",
+      "prompt_character_count": 1430,
+      "prompt_sha256": "391d77960cd1f93f1bf9d5f4d9b43fab08c610a2198dacb4c499887f4f725d61",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 46,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "46bc7238-3501-4839-b989-e2bd47853676"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf",
+        ".png",
+        ".py"
+      ],
+      "occupation": "Mechanical Engineers",
+      "prompt_character_count": 1825,
+      "prompt_sha256": "3209e1ba2be2752765d640394b0281fdd723b25015c0ead32cc932a3f324ed51",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/c037d7c3ad5619ff64346a7da5c75502/Heat Shield Request.pdf"
+      ],
+      "rubric_item_count": 81,
+      "sector": "Manufacturing",
+      "task_id": "46fc494e-a24f-45ce-b099-851d5c181fd4"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Counter and Rental Clerks",
+      "prompt_character_count": 1017,
+      "prompt_sha256": "20ab8ec8e0075e47961ef6954da8c641ef0b9a812e6632ca8fcd5e72d8abcb1b",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/0909952ceee8c51dbde6e30ed6f1ed91/NOTES.pdf",
+        "reference_files/9d7f1abe63d543a65cab63fa1dcc09fc/MOVE_OUT RPT.pdf"
+      ],
+      "rubric_item_count": 28,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "476db143-163a-4537-9e21-fe46adad703b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Order Clerks",
+      "prompt_character_count": 1686,
+      "prompt_sha256": "3e98480ce7de25720378e78da90e0b6620c234da18401e89cd6131c02ab325af",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/7fad57bbfa86d10ca8801bee5d034817/Reference Inventory.xlsx"
+      ],
+      "rubric_item_count": 58,
+      "sector": "Wholesale Trade",
+      "task_id": "47ef842d-8eac-4b90-bda8-dd934c228c96"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Audio and Video Technicians",
+      "prompt_character_count": 2064,
+      "prompt_sha256": "d6161907f7f89592bbfb854f740702fc7c33ec7981d245098db2519c894b81e8",
+      "reference_file_count": 6,
+      "reference_file_extensions": [
+        ".docx",
+        ".wav"
+      ],
+      "reference_file_paths": [
+        "reference_files/073946a18125717bdad58178466039fd/State of Affairs_STEM_BASS.wav",
+        "reference_files/10844d4ba6b1f18120245109db76f403/State of Affairs_STEM_DRUMS.wav",
+        "reference_files/2adacf89b84661aadd0c80d91a81fb73/State of Affairs_ROUGHMIX.wav",
+        "reference_files/48836e54ef271e8fd1a301d3e20ea470/State of Affairs_STEM_ACGTRS.wav",
+        "reference_files/5940a94634a27388fbbcebb96df50f03/Bass Edit Spots.docx",
+        "reference_files/88944520f1ce15927dd5a6a08d3ee9b2/State of Affairs_STEM_ORGAN.wav"
+      ],
+      "rubric_item_count": 17,
+      "sector": "Information",
+      "task_id": "4b894ae3-1f23-4560-b13d-07ed1132074e"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "occupation": "Medical Secretaries and Administrative Assistants",
+      "prompt_character_count": 2576,
+      "prompt_sha256": "d656b65a09b924eac5b8289e1b8a236c8e7cd8766e84ac323dfc822fc622b51b",
+      "reference_file_count": 4,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/541d0a3ec10422b4ebe5371d750c02f0/Patient Information Sheet.pdf",
+        "reference_files/acc54e3b683c3abf8bae7568eefad365/EMPLOYEE SHEET.pdf",
+        "reference_files/c4cf3b59f54d0c639f7e65693063fe4a/Letter Template Sheet.pdf",
+        "reference_files/d491d8466b25b61ec8d03a19ffe782c9/Clauses Sheet .pdf"
+      ],
+      "rubric_item_count": 31,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "4b98ccce-9e42-44e9-9115-6fc3e79de288"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "occupation": "Compliance Officers",
+      "prompt_character_count": 4154,
+      "prompt_sha256": "f6253aaba00a84613f49c58fe9d84cb20bb40ed4f9da8ed06511e4f3b9f59350",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/2cde5d02ed0fe7a61037c0a1bed6dee3/Transactions Final.xlsx"
+      ],
+      "rubric_item_count": 50,
+      "sector": "Government",
+      "task_id": "4c18ebae-dfaa-4b76-b10c-61fcdf26734c"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Securities, Commodities, and Financial Services Sales Agents",
+      "prompt_character_count": 1337,
+      "prompt_sha256": "15f743e4594978ee5ccf1a0ea7decd2487e14629a290864040c2cb770522211a",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/209be0c0459925665fa2ac9c91f78615/Project Kenonic IM 2.0.pdf"
+      ],
+      "rubric_item_count": 37,
+      "sector": "Finance and Insurance",
+      "task_id": "4c4dc603-c21c-4284-8fb1-1b827c1fddf4"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "First-Line Supervisors of Office and Administrative Support Workers",
+      "prompt_character_count": 3434,
+      "prompt_sha256": "62687cad491afec6788980874b0ada78ba468a6002a0562140f09e8710690639",
+      "reference_file_count": 8,
+      "reference_file_extensions": [
+        ".docx",
+        ".png"
+      ],
+      "reference_file_paths": [
+        "reference_files/184bdf987e5cd6e7867562c06f0c5a76/Pediatric Center.png",
+        "reference_files/3f7e829bf6b5d99feac00f56d19ea7c4/Rural Area Clinic.png",
+        "reference_files/4eed22a765749a2308d50528762c4cf3/Main Hospital.png",
+        "reference_files/6940c7b0ba1ffdcbce4266eba053a9e4/Floor Layout for Interviews.png",
+        "reference_files/6becf4b2c733f26d7b947de7e4689d20/NAMC Applicants and Interviewers.docx",
+        "reference_files/96df11a5cb2a3fe0dbab555c9973d511/avatar-764x1024.png",
+        "reference_files/ecd7347c04fae86f69ed065678749354/Cancer Center.png",
+        "reference_files/fcedbb14b626c39b5d0637db1e588ddb/Simulation and Learning Center.png"
+      ],
+      "rubric_item_count": 64,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "4d1a8410-e9c5-4be5-ab43-cc55563c594c"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx",
+        ".xlsx"
+      ],
+      "occupation": "General and Operations Managers",
+      "prompt_character_count": 1847,
+      "prompt_sha256": "ee07c1ab6dd358dd03a999e106fc748ee306549bcaa3275791518186f4df46e7",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 43,
+      "sector": "Retail Trade",
+      "task_id": "4d61a19a-8438-4d4c-9fc2-cf167e36dcd6"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Securities, Commodities, and Financial Services Sales Agents",
+      "prompt_character_count": 3833,
+      "prompt_sha256": "1935597570bb5d939e5507d0500eac68f372c794b250909134915b420a7e9ad6",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/9f6f0f17b5219718e792c08bf2140e01/Stanton Capital Sub Asset Classes.pdf"
+      ],
+      "rubric_item_count": 44,
+      "sector": "Finance and Insurance",
+      "task_id": "4de6a529-4f61-41a1-b2dc-64951ba03457"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Shipping, Receiving, and Inventory Clerks",
+      "prompt_character_count": 1829,
+      "prompt_sha256": "3f5e7b633c07ede225b68f451f35c6fc635686ba9a87215e3f867f44d638708c",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 94,
+      "sector": "Manufacturing",
+      "task_id": "5349dd7b-bf0a-4544-9a17-75b7013767e6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Shipping, Receiving, and Inventory Clerks",
+      "prompt_character_count": 1642,
+      "prompt_sha256": "7ca8c4192e1e43d03722ce4fdd4c4f893bbb620b8fcf39a1931a2c797c653dec",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/767092c37fd1c2f618371d1fc4f4d620/Inventory Incident Report FINAL.xlsx"
+      ],
+      "rubric_item_count": 63,
+      "sector": "Manufacturing",
+      "task_id": "552b7dd0-96f4-437c-a749-0691e0e4b381"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Property, Real Estate, and Community Association Managers",
+      "prompt_character_count": 1813,
+      "prompt_sha256": "d6776134b1329c8ce50c980950fc905b5727170226afc615d951d7c801a56bcd",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/660ca0d7006e67eddf68d7fb37b0542f/Violation Questions.pdf"
+      ],
+      "rubric_item_count": 41,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "55ddb773-23a4-454c-8704-d432fe1b99d9"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Child, Family, and School Social Workers",
+      "prompt_character_count": 2901,
+      "prompt_sha256": "45bc03c1abd89d546f1e7aadfcae8bbcdbd62e35c9fa51f6241116f6e8d96ed0",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 50,
+      "sector": "Government",
+      "task_id": "575f8679-b4c1-47a2-8e96-d570d4ed9269"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Private Detectives and Investigators",
+      "prompt_character_count": 1822,
+      "prompt_sha256": "91b6fafe74eceda70674132f4211707d80bf7f92f354cd6510f39b37c0dba115",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx",
+        ".zip"
+      ],
+      "reference_file_paths": [
+        "reference_files/74e9b9b1de3156972930ebb7d4d5321a/Photographs.zip",
+        "reference_files/bcbeb0fbed2f475e0becd99b7aa4ebaa/Field investigator report-v2 (1).docx"
+      ],
+      "rubric_item_count": 45,
+      "sector": "Retail Trade",
+      "task_id": "57b2cdf2-ad62-4591-aa91-aad489740320"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".pdf"
+      ],
+      "occupation": "Project Management Specialists",
+      "prompt_character_count": 2799,
+      "prompt_sha256": "f99c3122242b96d460dfe4138c5ae34e7b6e1dc91075b014700ec8b4c235ec9e",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".docx",
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/81df0e569f4dd130e12e49d5e13e15a3/Material Spec_MR.docx",
+        "reference_files/cdd2a8a216946f04ecb01de7f1650f02/Change Control Form.pdf",
+        "reference_files/d4b383f877a2619cbc570dc276377ff1/Anti foam COA_MR.pdf"
+      ],
+      "rubric_item_count": 41,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "58ac1cc5-5754-4580-8c9c-8c67e1a9d619"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Mechanical Engineers",
+      "prompt_character_count": 3789,
+      "prompt_sha256": "d2e86a03ad8397b1bdff3606ee750a3a8d4ae58b6776d4fc88f2bf4457cf81a6",
+      "reference_file_count": 4,
+      "reference_file_extensions": [
+        ".pdf",
+        ".pptx",
+        ".step",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/2dd9d170445aefa3685067f4ecb3c7ff/MEDICALfirm Integration Proposal.pptx",
+        "reference_files/7f750b6578152bd05432da98ee183afa/COVER PLATE.PDF",
+        "reference_files/c8ee668e1a545d3824c7adb90ff2287b/Critical Components List Updated.xlsx",
+        "reference_files/e79617f3d49c94144f223bbbd9088d2e/COVER PLATE.STEP"
+      ],
+      "rubric_item_count": 64,
+      "sector": "Manufacturing",
+      "task_id": "5a2d70da-0a42-4a6b-a3ca-763e03f070a5"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Real Estate Sales Agents",
+      "prompt_character_count": 1211,
+      "prompt_sha256": "3f84eff91d3ea18aeeea4cb2c310b212e1965ac50932227bf950ada5dcdd3480",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 60,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "5ad0c554-a7a2-48cd-b41a-ebc1bff4a9de"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "News Analysts, Reporters, and Journalists",
+      "prompt_character_count": 3725,
+      "prompt_sha256": "5e3566a5f3a6e634520d2791374f333a39a6a2fe7e7fe2325641448d04e932bc",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/c575a5476fac2f921cfd192ca5c48622/TRAPPIST-1 Reporter Draft.docx"
+      ],
+      "rubric_item_count": 46,
+      "sector": "Information",
+      "task_id": "5d0feb24-e8b6-4ace-b64f-d5cd1a8b563d"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf",
+        ".zip"
+      ],
+      "occupation": "Mechanical Engineers",
+      "prompt_character_count": 1919,
+      "prompt_sha256": "133836e4ac17714fe7ad4ffc63e6c89c4f51dfb30093d9dfec52ffdb14354c6d",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 38,
+      "sector": "Manufacturing",
+      "task_id": "5e2b6aab-f9fb-4dd6-a1a5-874ef1743909"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Financial Managers",
+      "prompt_character_count": 2942,
+      "prompt_sha256": "a6a37c3069b4fc296529399b56c2ea9df6737ed3cbf3e6b1baff35d2d77d0490",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/52dfa090145b2077b0434571f616f4b1/Raw Data for Branch Profitability Final.xlsx"
+      ],
+      "rubric_item_count": 137,
+      "sector": "Finance and Insurance",
+      "task_id": "5f6c57dd-feb6-4e70-b152-4969d92d1608"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "News Analysts, Reporters, and Journalists",
+      "prompt_character_count": 953,
+      "prompt_sha256": "d430ad2350523c00f342cf1130b32deef5a44a68281c8ccf6ec8ad5ae9f66a3d",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 20,
+      "sector": "Information",
+      "task_id": "60221cd0-686e-4a08-985e-d9bb2fa18501"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Real Estate Brokers",
+      "prompt_character_count": 1436,
+      "prompt_sha256": "42cb79fec8ecaa720e112993ea430b91547dd52328f9ebb74c11c4d776784e2c",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/5bfd664e938b20a2bbde66d2fb2932ee/NEW CMA template.docx"
+      ],
+      "rubric_item_count": 48,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "6074bba3-7e3a-4b1c-b8c6-a15bb6695c3b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Customer Service Representatives",
+      "prompt_character_count": 2362,
+      "prompt_sha256": "7cb3cffbf80aa6d45a67e945d22564b4f9f8db1eea3ed6b9e214d0028dd79c5f",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/b7fd699f200e9fd2975bcb48857a75f0/Elder Abuse Internal Policy.pdf"
+      ],
+      "rubric_item_count": 42,
+      "sector": "Finance and Insurance",
+      "task_id": "61717508-4df7-41be-bf97-318dfb2475c0"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Medical and Health Services Managers",
+      "prompt_character_count": 5319,
+      "prompt_sha256": "4cea2e07d6508819c8c9d6c71be2fcb1444aa59ca39ba4ba11df89fc84df5f5f",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/9be06106acf0ff3002fa17addb379048/Cadaver Budget.xlsx"
+      ],
+      "rubric_item_count": 50,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "61b0946a-5c1c-4bf6-8607-84d7c7e0dfe0"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Medical and Health Services Managers",
+      "prompt_character_count": 1645,
+      "prompt_sha256": "2e1acc0924afe6c6bb7acebc6af2a3861feaa599497bbe80592e220a55b68a4d",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/f9fdcb0f25bfa8fa49bd09c04414f739/Menopause Formulary template.xlsx"
+      ],
+      "rubric_item_count": 19,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "61e7b9c6-0051-429f-a341-fda9b6578a84"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Counter and Rental Clerks",
+      "prompt_character_count": 1276,
+      "prompt_sha256": "ea2a9fe4d88fce2ffe087de40d1aa6fcc00861b4b294561a5bda1da747201d39",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/1559b2d559683cb8e3c9f88220815bf4/Avail 6.27.25.pdf",
+        "reference_files/d68647bdab80e638d984dd96a7754896/Inspection Report.pdf",
+        "reference_files/d8027a77868f6aaeba3c7abd3b6ccb8b/VENDOR SCHEDULES .pdf"
+      ],
+      "rubric_item_count": 79,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "61f546a8-c374-467f-95cc-d0d9b5656eb6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Producers and Directors",
+      "prompt_character_count": 5099,
+      "prompt_sha256": "3d3bb01de0c3977bc858c8f76199d6e5e5473f532e916b22fcd804829e15deb2",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 60,
+      "sector": "Information",
+      "task_id": "6241e678-4ba3-4831-b3c7-78412697febc"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Non-Retail Sales Workers",
+      "prompt_character_count": 2765,
+      "prompt_sha256": "4311ccddb6c339dd7e68130152e60076510cb5aef579c0d47839bd9f4ea5ea98",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 53,
+      "sector": "Wholesale Trade",
+      "task_id": "62f04c2f-e0f7-4710-876c-54ee9c2e8256"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "General and Operations Managers",
+      "prompt_character_count": 1330,
+      "prompt_sha256": "7eb46293feabe0244b56c0383ab08114bde28f2b21d89eb8feb6233738f7fe29",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/cccea9199916ff3540f7672879993284/Current Class Evaluation Form.docx"
+      ],
+      "rubric_item_count": 51,
+      "sector": "Retail Trade",
+      "task_id": "6436ff9e-c5f2-47ba-9aaa-49d89b0594ab"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Recreation Workers",
+      "prompt_character_count": 2984,
+      "prompt_sha256": "2935a92a38b02aa0a900b302938fe1a266810b1de81a8824279ce70509716bc8",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 48,
+      "sector": "Government",
+      "task_id": "650adcb1-ed19-4f88-8117-77640f7b94b6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Personal Financial Advisors",
+      "prompt_character_count": 1440,
+      "prompt_sha256": "c2cebd426da322a8650a20abaaab2afbcac40c311644f46a7f9ff72d2d792a30",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 42,
+      "sector": "Finance and Insurance",
+      "task_id": "664a42e5-3240-413a-9a57-ea93c6303269"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Production and Operating Workers",
+      "prompt_character_count": 2196,
+      "prompt_sha256": "edd27ec11e25fd0562bd76e9a82c92608caa96c3137f766a2464af83e87ceb0f",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/520aa657282246262108f5e7a02e483a/Product Specification.docx",
+        "reference_files/7a1be3c5fe4bb71b437607e4f5f05496/Plan and Establish Data.docx"
+      ],
+      "rubric_item_count": 61,
+      "sector": "Manufacturing",
+      "task_id": "68d8d901-dd0b-4a7e-bf9a-1074fddf1a96"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "News Analysts, Reporters, and Journalists",
+      "prompt_character_count": 2803,
+      "prompt_sha256": "bc555b44424af8b797bc84995a3dc251e029ac04743b22b5ecbd6d310ef1c8bc",
+      "reference_file_count": 7,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/21f02e0f7259697d7f0ea9ab51c0d313/Useful Fair Farm CattleWatch FINAL.docx",
+        "reference_files/592a6817833978ff8bb2f9791f1ec660/Lars Andersen.docx",
+        "reference_files/6cc33dc8b0cf0d51d1cbf3516e0aca9e/What Is RTLS (Real-Time Location Systems).docx",
+        "reference_files/74d8130643a228c9c739feaf89e28dca/Gasper Olafsen.docx",
+        "reference_files/8e89d2cb425fe8c051f9198110c98b84/Anne Smith, Useful Technologies.docx",
+        "reference_files/ccc83ac0b01a6b13a27e62ebd5792f70/Fair Farm press release.docx",
+        "reference_files/ec6c0724eb5dee99313a4de591d06fef/Jim Dalton.docx"
+      ],
+      "rubric_item_count": 69,
+      "sector": "Information",
+      "task_id": "6974adea-8326-43fa-8187-2724b15d9546"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Sales Managers",
+      "prompt_character_count": 2947,
+      "prompt_sha256": "2a6346f87f450bfb0965b1858533e1e998aaef8ab863f725765e204b08012205",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/a11726ae784885c387f7b42756e08667/Return Issues.docx"
+      ],
+      "rubric_item_count": 47,
+      "sector": "Wholesale Trade",
+      "task_id": "69a8ef86-4e69-4fe2-9168-080f1e978e67"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products",
+      "prompt_character_count": 2975,
+      "prompt_sha256": "653293b52dcec7a11977ac09182dbd28ab497e03f22c4546aacfcf0ef958bc86",
+      "reference_file_count": 5,
+      "reference_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/0dd3a3921d045d40a74c2c9fd3728d0f/Road Freight Quote LB8214498 - Euro Road Logistics Co. (1).pdf",
+        "reference_files/2aa685f8c79c4c7bb77d4803d7288e4a/Internal Price & Lead Time - Sterilization C kits (1).xlsx",
+        "reference_files/8dfe48c6a2eb7681f14a71b8a93fd050/Seafreight Quote R39921-BEY - Red Ocean Shipping (1).pdf",
+        "reference_files/915b365bc4f90265af6cd2930594a15f/Q9749821 Danish Wholesale & Co. Quotation.xlsx",
+        "reference_files/981fadbb4ed22ec983fcba1b82fe604d/Airfreight Quote LEB-5933010 - Euro Air Cargo (1).pdf"
+      ],
+      "rubric_item_count": 32,
+      "sector": "Wholesale Trade",
+      "task_id": "6a900a40-8d2b-4064-a5b1-13a60bc173d8"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Medical Secretaries and Administrative Assistants",
+      "prompt_character_count": 1866,
+      "prompt_sha256": "0585b8a8a87c364d905e200674f32447ea97e14d18846cefe6f877fc6f486921",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/1aaeb0f483548968cc03e863cf76501a/Holiday-Conference-Event-Dates.docx",
+        "reference_files/4740505fcb4c9fd9d6bf4f962498fea5/Room Availability.xlsx"
+      ],
+      "rubric_item_count": 50,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "6d2c8e55-fe20-45c6-bdaf-93e676868503"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Office and Administrative Support Workers",
+      "prompt_character_count": 4327,
+      "prompt_sha256": "e0269728a27b1f9c0fad21565af8518f5e9e4f554388e96f1664dbfcf06a59bb",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/95026b9c5d38cf965691155efed8828d/Key Indicators.xlsx"
+      ],
+      "rubric_item_count": 43,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "6dcae3f5-bf1c-48e0-8b4b-23e6486a934c"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Registered Nurses",
+      "prompt_character_count": 3076,
+      "prompt_sha256": "6118e250d0d2afb93b27cf360f6ed62645fe22e90a048de5037126a787d96765",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/1ad9a4299c6060506a391f995a8fca55/Clinic Logo 2.docx",
+        "reference_files/43655dce408c177b8455507998432d43/Patient Information Document.docx",
+        "reference_files/d043f245a0a1b62e99370d0bf4b66725/Confidentiality Statement.docx"
+      ],
+      "rubric_item_count": 33,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "7151c60a-d4cb-4fc4-8169-3d4cb446e6b9"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Medical and Health Services Managers",
+      "prompt_character_count": 1123,
+      "prompt_sha256": "c47f52359dd505aa83db2dd5ee2f217dc709874d4a7f55f27123cd5d5b5ffff7",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 54,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "74d6e8b0-f334-4e7e-af55-c095d5d4d1a6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Sales Managers",
+      "prompt_character_count": 1631,
+      "prompt_sha256": "4e7c6839ba4db94b9b70abc6b121e0d679117d13f51bbac57785d2a3a247f8d1",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/6ab5f734adc7b9d0aa2c892ccf3250fc/Order Types & Challenges.docx"
+      ],
+      "rubric_item_count": 35,
+      "sector": "Wholesale Trade",
+      "task_id": "74ed1dc7-1468-48a8-9071-58775c0d667a"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".mp4"
+      ],
+      "occupation": "Film and Video Editors",
+      "prompt_character_count": 2330,
+      "prompt_sha256": "209b1e471ea17640ceb73d1277cdf697b337b6fbae7f39b8d0327bb74396716f",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".mp3",
+        ".zip"
+      ],
+      "reference_file_paths": [
+        "reference_files/04fe2846f45b476d5231b53beeae767a/reel footage.zip",
+        "reference_files/9f47a167476d2ff6ecc485f97e8341c9/action-energetic-rock-music-334316.mp3"
+      ],
+      "rubric_item_count": 40,
+      "sector": "Information",
+      "task_id": "75401f7c-396d-406d-b08e-938874ad1045"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Shipping, Receiving, and Inventory Clerks",
+      "prompt_character_count": 1244,
+      "prompt_sha256": "4373020928031dab161b5234305bced7ddb1e6ea339ba56b259431be739f7b53",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/0c9d7139ad82b8101a10705716fde830/Pick Tickets 062525.xlsx",
+        "reference_files/63edd16ae28e50b012347ea841b03c64/Shipping parameters.xlsx",
+        "reference_files/aa5b2c0f19996b0927ee429972fcfb93/Blank Daily Shipment Manifest.xlsx"
+      ],
+      "rubric_item_count": 56,
+      "sector": "Manufacturing",
+      "task_id": "76418a2c-a3c0-4894-b89d-2493369135d9"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Child, Family, and School Social Workers",
+      "prompt_character_count": 1335,
+      "prompt_sha256": "f1fa797669919e4ddd7ab6efea35cf89b019548bcde8ee9b478a4d00812fdeb4",
+      "reference_file_count": 4,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/018aa1c14ee1d037b18e55d1b38b4efa/Paternity Test Results for Michael Reynolds (Case PT-2025-1782).pdf",
+        "reference_files/5ec3ba1a57dd92417f235a95bb7bbd03/Case Detail Summary for Michael Reynolds (Case PT-2025-1782).pdf",
+        "reference_files/7bd7f89afe2ea208b44e1b5942bfa4c9/Case Creation Guide for Michael Reynolds (Case PT-2025-1782).pdf",
+        "reference_files/e81944488c9ceebac52552098e35f3b7/Order of Child Support for Michael Reynolds (Case PT-2025-1782).pdf"
+      ],
+      "rubric_item_count": 74,
+      "sector": "Government",
+      "task_id": "76d10872-9ffa-4ede-83ee-e0f1ec5e2b8d"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Nurse Practitioners",
+      "prompt_character_count": 2129,
+      "prompt_sha256": "3f70e77705159161917b4730b994428c636bb1bd4dd768a9ab71f5b09b72f8d5",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 65,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "772e7524-174e-4c88-957e-6e510b61ea69"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Sales Managers",
+      "prompt_character_count": 1487,
+      "prompt_sha256": "a87a447d7a78e33683b7ed063350d9d3ea4a075fe1abd5cbf479f1b2b681ed8f",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/55d67dd93beba9f9d6d2d400ecd18afa/SERVICESV5.docx"
+      ],
+      "rubric_item_count": 48,
+      "sector": "Wholesale Trade",
+      "task_id": "788d2bc6-82df-4dc7-8467-a0f31405dc14"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Accountants and Auditors",
+      "prompt_character_count": 1894,
+      "prompt_sha256": "71bdc1610cf1299ab014086b6ec4f17362a2da2dc6fba792a6fb672bf1e8e301",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/4e6e2b8d17f751e483aad52c109813b4/Fall Music Tour Ref File.xlsx"
+      ],
+      "rubric_item_count": 59,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "7b08cd4d-df60-41ae-9102-8aaa49306ba2"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Compliance Officers",
+      "prompt_character_count": 1604,
+      "prompt_sha256": "9dd55e1859495454b7442fda329c8888d75cf3477259e8b275c283ff29f9972f",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 40,
+      "sector": "Government",
+      "task_id": "7bbfcfe9-132d-4194-82bb-d6f29d001b01"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Accountants and Auditors",
+      "prompt_character_count": 2403,
+      "prompt_sha256": "6495bff3041b48c19dd608020fc9a293ffdcb0f5571564db3f462202952814a9",
+      "reference_file_count": 6,
+      "reference_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/0d96c101001bcad1d8cc0c2d6de5df74/Aurisic_Prepaid_Expenses_Feb25.pdf",
+        "reference_files/2f0f77ed28ec98110006c77c286558fc/Aurisic_Prepaid_Expenses_Apr25.pdf",
+        "reference_files/2f82ff213ec2ae28a3d84baaee2f5e5a/Aurisic_Prepaid_Insurance.pdf",
+        "reference_files/6498264b7ee431a71a604675222584eb/COA.xlsx",
+        "reference_files/6f09f2533df11e713008a96372fea9bf/Aurisic_Prepaid_Expenses_Jan25.pdf",
+        "reference_files/7ed8b041310d72169ceb6595819b84a0/Aurisic_Prepaid_Expenses_Mar25.pdf"
+      ],
+      "rubric_item_count": 56,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "7d7fc9a7-21a7-4b83-906f-416dea5ad04f"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".zip"
+      ],
+      "occupation": "Software Developers",
+      "prompt_character_count": 3466,
+      "prompt_sha256": "cef772e71afe0f208ba383f428b223265d9d7bc7a9a3e61b461667338687a10b",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 39,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "7de33b48-5163-4f50-b5f3-8deea8185e57"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products",
+      "prompt_character_count": 1276,
+      "prompt_sha256": "da9165b81d34a2225bec361d41d4423795eb6a6afce2c00c56f1f347c8ecfe94",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/915c72afa404c96174d69e03b74c6454/Inventory_and_Shipments Latest.xlsx"
+      ],
+      "rubric_item_count": 55,
+      "sector": "Wholesale Trade",
+      "task_id": "7ed932dd-244f-4d61-bf02-1bc3bab1af14"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Mechanical Engineers",
+      "prompt_character_count": 1837,
+      "prompt_sha256": "9249642cf71473b20d92c3a9d2518cf6ab3ee33f552e66ff714a6a3b83b6b443",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/2234bbb34f0ed69bb4423f05d514fe82/Work Request MATL LAB.pdf",
+        "reference_files/93dfbabef1f9fbdec5ab6890c94333e9/Data.xlsx"
+      ],
+      "rubric_item_count": 44,
+      "sector": "Manufacturing",
+      "task_id": "8077e700-2b31-402d-bd09-df4d33c39653"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Financial and Investment Analysts",
+      "prompt_character_count": 1421,
+      "prompt_sha256": "20b003ca6515d99b493f381c053f8e51f820c68e652ba99ccfd416792330f4b5",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 40,
+      "sector": "Finance and Insurance",
+      "task_id": "8079e27d-b6f3-4f75-a9b5-db27903c798d"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Medical and Health Services Managers",
+      "prompt_character_count": 1186,
+      "prompt_sha256": "4273010fab3a80e7e1560c49d3950bb597e78cb1505e95a87234b3bc0ed42150",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 58,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "81db15ff-ceea-4f63-a1cd-06dc88114709"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Lawyers",
+      "prompt_character_count": 2779,
+      "prompt_sha256": "ccb68f062de4801ad6bd1ae45173c2f5af195aaf19a523ce862ee05ccb95fcbf",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 43,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "8314d1b1-5b0f-42a4-b5d5-91c0867b0913"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Pharmacists",
+      "prompt_character_count": 1294,
+      "prompt_sha256": "e58d9517cae85069ac013546fa567b14d09b568708da9e6175e889466342810d",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 47,
+      "sector": "Retail Trade",
+      "task_id": "8384083a-c31b-4194-80ba-4d335a444918"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Accountants and Auditors",
+      "prompt_character_count": 2010,
+      "prompt_sha256": "324f503b3a44fe7ef995652b007920928cda79307c93eb23af8737949b972ae4",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/cc781e4dc0985c8eb327a53ec03b5900/Population v2.xlsx"
+      ],
+      "rubric_item_count": 38,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "83d10b06-26d1-4636-a32c-23f92c57f30b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Private Detectives and Investigators",
+      "prompt_character_count": 2243,
+      "prompt_sha256": "61a3677735d20786e72c54d11fc44d700bbebd510a926f2e8d4bbd8973f9c5c5",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".docx",
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/0a23637b48915aaf06a8a7694314dbff/Company objectives and time log.docx",
+        "reference_files/a798b4fa01ab60b5e9b9860593a7eaac/Supervisor submission to senior investigator.pdf",
+        "reference_files/db5c1a3cce5be3bed9d292f75e92ebaa/Field Investigator's notes.docx"
+      ],
+      "rubric_item_count": 51,
+      "sector": "Retail Trade",
+      "task_id": "84322284-5c2c-4873-b507-b147449d209d"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".md",
+        ".overpassql"
+      ],
+      "occupation": "Software Developers",
+      "prompt_character_count": 617,
+      "prompt_sha256": "bb9e56fe60fef50cdfbaced3e850039b6ca8105e4f66c6db6dd7b332b27f9457",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 23,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "854f3814-681c-4950-91ac-55b0db0e3781"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Child, Family, and School Social Workers",
+      "prompt_character_count": 2087,
+      "prompt_sha256": "cea6144a55768b34134d730bd258f5acec03976a050db6f219ba391caa54533d",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/53db233f12fd4a2b9a9cf7fa12b5bcc4/Social Developmental History Template.docx",
+        "reference_files/acea1b8e3879d4432def0e232d576224/Notes for Terry Hartsdale.docx",
+        "reference_files/cfcab91338102d918b3bc80cf58653a3/Recommendation Bank T.H..docx"
+      ],
+      "rubric_item_count": 62,
+      "sector": "Government",
+      "task_id": "85d95ce5-b20c-41e2-834e-e788ce9622b6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Customer Service Representatives",
+      "prompt_character_count": 1089,
+      "prompt_sha256": "5a4a56ebb7187eed00f130913cade3e214b18f9f606f16ae9a25bf20e0dc4506",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/1272fc8a6788399f795d1031073ac91e/Policy Reimbursement Account Sample.xlsx",
+        "reference_files/8e2249c26d343289d1396317ddedd6e2/ID Theft Policy (1).docx"
+      ],
+      "rubric_item_count": 59,
+      "sector": "Finance and Insurance",
+      "task_id": "87da214f-fd92-4c58-9854-f4d0d10adce0"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Industrial Engineers",
+      "prompt_character_count": 2151,
+      "prompt_sha256": "d4fa0d4be7f4cf3336a0fdf466ee70c0e8f7181846037a940fbdb8a6aa0bf95b",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 31,
+      "sector": "Manufacturing",
+      "task_id": "8a7b6fca-60cc-4ae3-b649-971753cbf8b9"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "First-Line Supervisors of Police and Detectives",
+      "prompt_character_count": 2346,
+      "prompt_sha256": "8d81d575cdf56ef31b10fc541546ece68777990a17103b41324cbeaf39d6bf8b",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 32,
+      "sector": "Government",
+      "task_id": "8c823e32-537c-42b2-84ba-635d63c2853a"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Film and Video Editors",
+      "prompt_character_count": 1254,
+      "prompt_sha256": "6061605c1b6a54454007dd0253bd487f5d5748f7bf790fae77078f33631a976d",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/4937e7e53a902748ade7febd5a999563/Nature Doc Key Info and VO.docx"
+      ],
+      "rubric_item_count": 30,
+      "sector": "Information",
+      "task_id": "8c8fc328-69fc-4559-a13f-82087baef0a1"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "General and Operations Managers",
+      "prompt_character_count": 1656,
+      "prompt_sha256": "fb2113f2d1ca78c4ebcf17537b0da920b4374b8b3c887fc7db34a195541d7b51",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 33,
+      "sector": "Retail Trade",
+      "task_id": "8f9e8bcd-6102-40da-ab76-23f51d8b21fa"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Registered Nurses",
+      "prompt_character_count": 3364,
+      "prompt_sha256": "ee04e9bc18c0807111bf003554c620e864873c5d134a9166318ecfaaca207491",
+      "reference_file_count": 5,
+      "reference_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/2b7b4e69394e2b6162219bec0c416639/Anemia MANAGEMENT Protocol ARANESP.docx",
+        "reference_files/a30c82c286a35cff05589d5cbef7fbfd/Monthly Tracker Patient Lab Results.xlsx",
+        "reference_files/be86177a9d387cdfbe061350415382bd/PATIENT NUTRITIONAL MANAGEMENT PROTOCOL.docx",
+        "reference_files/d8af41147f60e964f7b433908b023260/Patient Lab Reports.docx",
+        "reference_files/f83afa659d2b8cf4c6db75ad6356e2c3/Anemia Management Protocol VENOFER.docx"
+      ],
+      "rubric_item_count": 71,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "90edba97-74f0-425a-8ff6-8b93182eb7cb"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Real Estate Sales Agents",
+      "prompt_character_count": 1224,
+      "prompt_sha256": "fe5c473b07018c13ded1be074cf5d4e83fe89cb8c3ecb98125c2aca096bf383e",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/f8394eaa7b577e02d77de8d35b52f66d/Lease_Rate_Analysis_Template.docx"
+      ],
+      "rubric_item_count": 30,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "90f37ff3-e4ed-4a0b-94bb-bed0f7def1ef"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Pharmacists",
+      "prompt_character_count": 2189,
+      "prompt_sha256": "bdf053ca12d4380cc45c36771e73e33a994d2415573da77f223a2ec9de4bfdc5",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 37,
+      "sector": "Retail Trade",
+      "task_id": "91060ff0-3eb5-4ddf-9edb-f6758b95499e"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Buyers and Purchasing Agents",
+      "prompt_character_count": 3876,
+      "prompt_sha256": "d07bb78bfaba89ef536bbc3ee0e6e8b18d8eb1c3ead57d8742076cd12fc1c165",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 53,
+      "sector": "Manufacturing",
+      "task_id": "93b336f3-61f3-4287-86d2-87445e1e0f90"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Real Estate Sales Agents",
+      "prompt_character_count": 1498,
+      "prompt_sha256": "5a252f5acbdaa706eed4f2bb051130418f774507bcf69ed1dab6c3b7d6f53a1a",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".webp"
+      ],
+      "reference_file_paths": [
+        "reference_files/48cf474dc1ff7e4d2b0fab6858497660/Mort Realty logo.webp"
+      ],
+      "rubric_item_count": 56,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "94925f49-36bc-42da-b45b-61078d329300"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Audio and Video Technicians",
+      "prompt_character_count": 2929,
+      "prompt_sha256": "57045d82594fadde9dcc15eed8a2b4ba8411d243f59095db8df01ab35a2846a4",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 52,
+      "sector": "Information",
+      "task_id": "99ac6944-4ec6-4848-959c-a460ac705c6f"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Personal Financial Advisors",
+      "prompt_character_count": 1280,
+      "prompt_sha256": "7993097c304db224e49346fa0189c0f0c506e74f9f7e05b73ea3002872d8b741",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 40,
+      "sector": "Finance and Insurance",
+      "task_id": "9a0d8d36-6233-4c76-9107-0d1f783c7340"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Editors",
+      "prompt_character_count": 3178,
+      "prompt_sha256": "08f447b64c2edc635ff1594a431351263b47bbbba30419c0f432791750fc2c60",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 67,
+      "sector": "Information",
+      "task_id": "9a8c8e28-ce76-408b-83c3-488422892e58"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Production and Operating Workers",
+      "prompt_character_count": 2588,
+      "prompt_sha256": "e4c84a8cced3955f3296f927e72e2ba467da5fc5e1b51c91731ea602690ce247",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/d1086763fe7970c9a8f1b1ac53dfd269/Dashboard output week 1 data.xlsx"
+      ],
+      "rubric_item_count": 57,
+      "sector": "Manufacturing",
+      "task_id": "9e39df84-ac57-4c9b-a2e3-12b8abf2c797"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Financial and Investment Analysts",
+      "prompt_character_count": 1424,
+      "prompt_sha256": "1adc6c94ad5f706c7934b79a8dfe938eb82f4fb2711ceda98233dce4e00c862f",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 14,
+      "sector": "Finance and Insurance",
+      "task_id": "9e8607e7-a38a-491f-ace1-e5ea7dc477cb"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Securities, Commodities, and Financial Services Sales Agents",
+      "prompt_character_count": 1426,
+      "prompt_sha256": "2150b08404629c4f0b4aef64289484532876811e383527c295d2a915f3dc7455",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 46,
+      "sector": "Finance and Insurance",
+      "task_id": "9efbcd35-186d-49b6-ac24-28ee2bc9a263"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "occupation": "Medical Secretaries and Administrative Assistants",
+      "prompt_character_count": 2529,
+      "prompt_sha256": "2e6d8138bca30fd8fa684eab79b298acf776f1fe1e04f6122bbbe44f45b43123",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/18778653fb8f70431e7237e613050563/REACH LOGO.pdf",
+        "reference_files/770ea5e60952d111e5403a1ea116646b/July 2025 - Bulk Form Needed.xlsx"
+      ],
+      "rubric_item_count": 50,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "a0552909-bc66-4a3a-8970-ee0d17b49718"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Producers and Directors",
+      "prompt_character_count": 1000,
+      "prompt_sha256": "415331c68c2ad83e19a5b70a760483c361e49da88745f4e3102da01e080dd109",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/86c9321e8b99a5207e367dd216f224ad/Educational video series.pdf",
+        "reference_files/aa3e7d946d6bec54eee1952222273e0f/Service Fees.pdf"
+      ],
+      "rubric_item_count": 34,
+      "sector": "Information",
+      "task_id": "a079d38f-c529-436a-beca-3e291f9e62a3"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Counter and Rental Clerks",
+      "prompt_character_count": 1387,
+      "prompt_sha256": "05e47a245e9f70b3011ad0aeceec42c9c717438143cb5ff85bea8ad3de0ee41f",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 41,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "a0ef404e-82a6-4507-bff1-633d7c8e0004"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Concierges",
+      "prompt_character_count": 2020,
+      "prompt_sha256": "4eeefe58db939a4358e2d4e66d625d0579c28ce709ee62db5c82c6f9fc0eb062",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 22,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "a10ec48c-168e-476c-8fe3-23b2a5f616ac"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Financial Managers",
+      "prompt_character_count": 2166,
+      "prompt_sha256": "2081e51f2590f15d4414a62a62736f76f82fcf1dd59f15e1fafdd067f5a25fac",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 48,
+      "sector": "Finance and Insurance",
+      "task_id": "a1963a68-1bea-4bb1-b7e0-145c92a57449"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Administrative Services Managers",
+      "prompt_character_count": 1978,
+      "prompt_sha256": "770525e8242fa19851630e3e5aa57a6bafc14d3265124d7867d500d6067b6beb",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 16,
+      "sector": "Government",
+      "task_id": "a328feea-47db-4856-b4be-2bdc63dd88fb"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".pdf"
+      ],
+      "occupation": "Computer and Information Systems Managers",
+      "prompt_character_count": 2246,
+      "prompt_sha256": "0b7c75e49b8fbbf431c12d28b66bb7f7d4ee0f7e2fe6faa96c7384aa7a0b4331",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx",
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/024b4aef0c191aa73a42ba213cfa7c79/Current_Architecture.pdf",
+        "reference_files/9b8edc7cc58c7c301316b8cf8adca302/Current_Architecture_Summary.docx"
+      ],
+      "rubric_item_count": 72,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "a45bc83b-22f9-4def-8d89-9c5661b2b86f"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Private Detectives and Investigators",
+      "prompt_character_count": 2201,
+      "prompt_sha256": "f179415aa89803766ee567e73e33fb9ffd031fb8d97944f54eefcce06d9ec378",
+      "reference_file_count": 4,
+      "reference_file_extensions": [
+        ".docx",
+        ".pdf",
+        ".zip"
+      ],
+      "reference_file_paths": [
+        "reference_files/339003d010f40f9ed1411a68395cfb33/Company Letterhead 1.pdf",
+        "reference_files/39e66e0812071bbee3079f25d4c5e50d/Field investigator A.docx",
+        "reference_files/9d504ee569fe60c6cd7f2a4f3fe6a6ee/Field investigator B.docx",
+        "reference_files/f4c7bfae38d21c8ad4f4b624d194aab4/Photographs.zip"
+      ],
+      "rubric_item_count": 56,
+      "sector": "Retail Trade",
+      "task_id": "a46d5cd2-55fe-48fa-a4c6-6aaf6b9991b5"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Shipping, Receiving, and Inventory Clerks",
+      "prompt_character_count": 1123,
+      "prompt_sha256": "b056483d4a7074c1bc45cee3694f99b0d98509085000b6b0fdbdea917d05a134",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 55,
+      "sector": "Manufacturing",
+      "task_id": "a4a9195c-5ebe-4b8d-a0c2-4a6b7a49da8b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Sales Managers",
+      "prompt_character_count": 1109,
+      "prompt_sha256": "7190ed796a54bb8fc0d4028e987777c74bf4c79de42373294437f41602628dfa",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/e8b11b0e86450c84177c4a77b2666746/Territory Fit Report REF (3).xlsx"
+      ],
+      "rubric_item_count": 54,
+      "sector": "Wholesale Trade",
+      "task_id": "a69be28f-9a84-47c9-992e-b90446cdca9d"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "occupation": "Recreation Workers",
+      "prompt_character_count": 1807,
+      "prompt_sha256": "ce067ff0b414917c524fede65f23d02cef6b06b33c2d2a418e70c6ffc7dcaf43",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/4524060e6c713e97eb4c34229d22d88f/Meeting Room table layout-v2.pdf",
+        "reference_files/aa4c414a1cc862720134505c3922d1e5/Arena table layout-v3.pdf",
+        "reference_files/d7917d91b02ecce291abb41486b37909/Spring Bazaar 2025 Vendors List-v2.xlsx"
+      ],
+      "rubric_item_count": 63,
+      "sector": "Government",
+      "task_id": "a73fbc98-90d4-4134-a54f-2b1d0c838791"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Child, Family, and School Social Workers",
+      "prompt_character_count": 2129,
+      "prompt_sha256": "4cd01527c7aa807db783ba3a91e5cbb89660c17e9e3b30b1e314724f2d53d1f4",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 57,
+      "sector": "Government",
+      "task_id": "a74ead3b-f67d-4b1c-9116-f6bb81b29d4f"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Film and Video Editors",
+      "prompt_character_count": 2032,
+      "prompt_sha256": "5a7422f5745db48f9059ecb399461bda4e1f96b3078f574ca82de3e73922de8c",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".mp4"
+      ],
+      "reference_file_paths": [
+        "reference_files/67469cf2a7509f149c095cf4f6542f6d/TWT_A001_03.mp4",
+        "reference_files/d88a33c7e63981a67e899cc8c1347ece/TWT_001_02.mp4"
+      ],
+      "rubric_item_count": 49,
+      "sector": "Information",
+      "task_id": "a941b6d8-4289-4500-b45a-f8e4fc94a724"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "First-Line Supervisors of Police and Detectives",
+      "prompt_character_count": 1291,
+      "prompt_sha256": "1e45bd28309fc9d07868e9c263beafc32298ce57630546c1241da034a4eae9c0",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 29,
+      "sector": "Government",
+      "task_id": "a95a5829-34bb-40f3-993b-558aed6dcdef"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Lawyers",
+      "prompt_character_count": 3843,
+      "prompt_sha256": "0b92819bf715dc83347d39894de7d5244cee874624cdee60b74a916ff6cf370b",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 44,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "a97369c7-e5cf-40ca-99e8-d06f81c57d53"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Property, Real Estate, and Community Association Managers",
+      "prompt_character_count": 2992,
+      "prompt_sha256": "e2618e0aca37cf5e4af18bf877a6ef692c27d5273368e9acf136e63137f3de27",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 52,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "a99d85fc-eff8-48d2-a7d4-42a75d62f18d"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "occupation": "Counter and Rental Clerks",
+      "prompt_character_count": 1654,
+      "prompt_sha256": "de111ae7b50c33a077fe53f407fa32e07452c9274b133a024feec3218f779cbb",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/dc3d2aa5643d1f222c13b2cc132bd1a3/Damage list.xlsx"
+      ],
+      "rubric_item_count": 63,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "aa071045-bcb0-4164-bb85-97245d56287e"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Lawyers",
+      "prompt_character_count": 2539,
+      "prompt_sha256": "d59cfab3b37fd453b7bd72bde1f28d3118a5dd855822d7ee25642811a61f42e0",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 84,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "aad21e4c-1d43-45fc-899a-97754a1b1b63"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products",
+      "prompt_character_count": 1794,
+      "prompt_sha256": "416bd0ca28529b1389826490dc7dccfc8df2f2ade2264975f5de1727d0e2ee0b",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 39,
+      "sector": "Wholesale Trade",
+      "task_id": "ab81b076-e5d8-473a-9bdb-7ea7c38f6ebc"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Private Detectives and Investigators",
+      "prompt_character_count": 1510,
+      "prompt_sha256": "b602d533820abbd754522c4193fbb7285a23fcf858573f240d5324f40cb15a8c",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 14,
+      "sector": "Retail Trade",
+      "task_id": "ae0c1093-5ea8-4b84-a81e-53ebf7a4321d"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Editors",
+      "prompt_character_count": 1996,
+      "prompt_sha256": "95e888eb5580787c4a65248243046537e6c68a8a5026126141c57be514d8889d",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 83,
+      "sector": "Information",
+      "task_id": "afe56d05-dac8-47d7-a233-ad1d035ca5bd"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Producers and Directors",
+      "prompt_character_count": 930,
+      "prompt_sha256": "24afbec857d89c222455611898a114f988befb2ca030878562654f4b810551c5",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/871a1927c192dfac4e419d22cce4dfa0/MEETING NOTES.pdf"
+      ],
+      "rubric_item_count": 35,
+      "sector": "Information",
+      "task_id": "b1a79ce1-86b0-41fb-97dc-9206dfd7b044"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Sales Managers",
+      "prompt_character_count": 1084,
+      "prompt_sha256": "93d2735b5f9d9976a8bbef80edd6d9b476d5005e30ef582affd460f9de9dcf01",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 17,
+      "sector": "Wholesale Trade",
+      "task_id": "b3573f20-5d3e-4954-948f-9461fda693d2"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Financial Managers",
+      "prompt_character_count": 1097,
+      "prompt_sha256": "0dbf7d2ec057e9742766c2ead7d8607da29cbcd503e8441cd9da3bbb59d5a793",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/179cdf46f7d3ab23a063831a3e680793/Orchestra assumptions and roster.xlsx"
+      ],
+      "rubric_item_count": 32,
+      "sector": "Finance and Insurance",
+      "task_id": "b39a5aa7-cd1b-47ad-b249-90afd22f8f21"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products",
+      "prompt_character_count": 1172,
+      "prompt_sha256": "b291c2774ea8c0bc5c81288311c775cffaf63d673e57363fd22052e57c6fabb0",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 62,
+      "sector": "Wholesale Trade",
+      "task_id": "b57efde3-26d6-4742-bbff-2b63c43b4baa"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Order Clerks",
+      "prompt_character_count": 1484,
+      "prompt_sha256": "8d5b8aea3ec5bc0ee8d70debc31998beb4a22b280978b6d59228cf67cdde7651",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/60e80dd2cb7d73c3e4845c5399fb95ce/Weekly Sales Data.xlsx"
+      ],
+      "rubric_item_count": 32,
+      "sector": "Wholesale Trade",
+      "task_id": "b5d2e6f1-62a2-433a-bcdd-95b260cdd860"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Financial Managers",
+      "prompt_character_count": 1845,
+      "prompt_sha256": "a9f0ebc72e1f515259593bdb4ac99a53af685eaeb98c1a7c4bef06c8a6f79ffc",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/e0784d15e464a30316ae57313a9fbd97/Tiny Rod Hit Inc Reference.pdf"
+      ],
+      "rubric_item_count": 51,
+      "sector": "Finance and Insurance",
+      "task_id": "b78fd844-db76-448e-a783-5e9877cb74c2"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Counter and Rental Clerks",
+      "prompt_character_count": 1467,
+      "prompt_sha256": "0b536303c618a986d139342c590d9eb1265363f050ba8aa600a58c5a156df459",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/ce62841ec25ee0ab1874df6d1bb383e0/Closed Rental Agreements- June 27, 2025.xlsx"
+      ],
+      "rubric_item_count": 59,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "b7a5912e-0e63-41f5-8c22-9cdb8f46ab01"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Industrial Engineers",
+      "prompt_character_count": 4465,
+      "prompt_sha256": "98e1bce59ef793023dad8c72ba9dbb000656784eed385d10b6e2a51fdf74e907",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".png"
+      ],
+      "reference_file_paths": [
+        "reference_files/f88e5fdf72851878f7dfec87dd57bb67/E-stop locations.PNG"
+      ],
+      "rubric_item_count": 59,
+      "sector": "Manufacturing",
+      "task_id": "b9665ca1-4da4-4ff9-86f2-40b9a8683048"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Securities, Commodities, and Financial Services Sales Agents",
+      "prompt_character_count": 2880,
+      "prompt_sha256": "28c69e92a9381feac2e9d40122e5a590da480ef81d7b1304c992bfd82cdd85aa",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/669b9ade052e7c0bc0332ce056db1d2b/Vice President Sales_Brief_2.0.pdf"
+      ],
+      "rubric_item_count": 61,
+      "sector": "Finance and Insurance",
+      "task_id": "bb499d9c-0263-4684-9238-75e8e86077b1"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products",
+      "prompt_character_count": 2108,
+      "prompt_sha256": "96810f2dcbe47336e95e8c41f25ec0e1332357684b5cae1edd2b5e65ad703925",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/51ffc3e291f1029b855fd535b9b11404/Request for Indicative Pricing - IEHK 2017 - BO-757820.pdf",
+        "reference_files/ca6328d2e3f9eac513d24a545162f958/Internal_Pricing_and_Lead_time_IEHK.xlsx"
+      ],
+      "rubric_item_count": 53,
+      "sector": "Wholesale Trade",
+      "task_id": "bb863dd9-31c2-4f64-911a-ce11f457143b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Child, Family, and School Social Workers",
+      "prompt_character_count": 2643,
+      "prompt_sha256": "c3ebd854303295f387629d7cf396b973ab5bd292fa7fe87e807d47825bff6039",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 61,
+      "sector": "Government",
+      "task_id": "bbe0a93b-ebf0-40b0-98dc-8d9243099034"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "First-Line Supervisors of Retail Sales Workers",
+      "prompt_character_count": 1000,
+      "prompt_sha256": "9633c3ac2639fd4b8d93493f8abb088c768c86c4efcf9e0408ce25008ee484bb",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 19,
+      "sector": "Retail Trade",
+      "task_id": "bd72994f-5659-4084-9fab-fc547d1efe3b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Industrial Engineers",
+      "prompt_character_count": 6618,
+      "prompt_sha256": "f4c18f06e1a64bd09e69576b75b4ae958f6b55a36426dd318d6bdfbc3bdbfada",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/d18f030de4c4854185daf04838324857/Processing Data.xlsx"
+      ],
+      "rubric_item_count": 55,
+      "sector": "Manufacturing",
+      "task_id": "be830ca0-b352-4658-a5bd-57139d6780ba"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Production and Operating Workers",
+      "prompt_character_count": 1727,
+      "prompt_sha256": "7ad449165bdd4fcd33bc34121c1f0a1a33c7e3dc92f00daa9cfa27af18fa62a6",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/4e38b04e8edcb5875cd36e58ee7f821c/Copy of Capacity sheet.xlsx"
+      ],
+      "rubric_item_count": 40,
+      "sector": "Manufacturing",
+      "task_id": "bf68f2ad-eac5-490a-adec-d847eb45bd6f"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Computer and Information Systems Managers",
+      "prompt_character_count": 2565,
+      "prompt_sha256": "4ec521edcf3227b92ebc330d755fc5f9a03128a019dd0471245d48a7cc55f6fe",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 67,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "c2e8f271-7858-412f-b460-472463ad81d9"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "occupation": "Order Clerks",
+      "prompt_character_count": 2647,
+      "prompt_sha256": "f9e6cc445580b5cf30fd8edbbef311ab123a163ae23ef6356498817c7a9cb3ca",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/0d79e0cdd2e811609e73dcadc34d682f/Email Trail Floorstands.docx",
+        "reference_files/123c0b1cf9e9b6ecfccc06501a205384/Holiday Floorstand Store List Original.xlsx",
+        "reference_files/8548106161db37c37ff079eb0eec6ff9/Holiday Matrix final count.xlsx"
+      ],
+      "rubric_item_count": 52,
+      "sector": "Wholesale Trade",
+      "task_id": "c3525d4d-2012-45df-853e-2d2a0e902991"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Computer and Information Systems Managers",
+      "prompt_character_count": 2824,
+      "prompt_sha256": "9902b39e2dfb58fb163d5e48576609a8609ba90c35d3c139104fb2bd93fa6e67",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/834f529b7fc225ceec030a6f59475f18/UAT Plan - Template.xlsx"
+      ],
+      "rubric_item_count": 70,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "c357f0e2-963d-4eb7-a6fa-3078fe55b3ba"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".pdf",
+        ".xlsx"
+      ],
+      "occupation": "Administrative Services Managers",
+      "prompt_character_count": 3101,
+      "prompt_sha256": "23f1b0f2b7f67d4d484052478ce9c34cebd04e58aa21e6d2aa19c2d8c70dc186",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".pdf",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/876735afc566b3b7fa2cfae8a382b793/Fulltime Equivalent Report Administrative Support Services.xlsx",
+        "reference_files/c2e469f0e82ba3cad84c1f45984793a4/Organizational Chart Administrative Support Services Branch.pdf",
+        "reference_files/d460ca9c47e44fbd248a60a92bba8c75/Budget Planning Principles.pdf"
+      ],
+      "rubric_item_count": 44,
+      "sector": "Government",
+      "task_id": "c44e9b62-7cd8-4f72-8ad9-f8fbddb94083"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "Industrial Engineers",
+      "prompt_character_count": 2848,
+      "prompt_sha256": "05be307ca222641e0aaa72d13620d94f656d851c43b47a09742d29b185d1b69c",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/d30017e5b972bf15a12511fc0dd6b8c7/Process Capability Data.xlsx"
+      ],
+      "rubric_item_count": 31,
+      "sector": "Manufacturing",
+      "task_id": "c6269101-fdc8-4602-b345-eac7597c0c81"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx",
+        ".xlsx"
+      ],
+      "occupation": "Personal Financial Advisors",
+      "prompt_character_count": 2647,
+      "prompt_sha256": "e21bfafa9abcb4a6176116f25e5fae7614d5f047cfaa6f97688fee265f292737",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/79a786ef650fc4a72d45061b08432506/Roth Conversion Strategy Client Assumptions.docx"
+      ],
+      "rubric_item_count": 36,
+      "sector": "Finance and Insurance",
+      "task_id": "c657103b-b348-4496-a848-b2b7165d28b2"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".ipynb"
+      ],
+      "occupation": "Financial and Investment Analysts",
+      "prompt_character_count": 1066,
+      "prompt_sha256": "5fa6d37327935e62814915c6bb9a01550e737a44d84ac6186a9d39064d34b63e",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 43,
+      "sector": "Finance and Insurance",
+      "task_id": "c7d83f01-2874-4876-b7fd-52582ec99e1a"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Film and Video Editors",
+      "prompt_character_count": 2493,
+      "prompt_sha256": "29f0b57a57fedfabe8b6e0f9d08e47f2bcfbd4bad252be9d493093610955d4a6",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf",
+        ".psd"
+      ],
+      "reference_file_paths": [
+        "reference_files/601577415f0cbb1292ca65f9992ab792/CareNotCutbacks_Script.pdf",
+        "reference_files/7b0d15c20ac77d3d1b21224d7b39c8c6/Care_Not_Cutbacks.psd"
+      ],
+      "rubric_item_count": 28,
+      "sector": "Information",
+      "task_id": "c94452e4-39cd-4846-b73a-ab75933d1ad7"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".pdf"
+      ],
+      "occupation": "Medical and Health Services Managers",
+      "prompt_character_count": 2162,
+      "prompt_sha256": "1fb66e59795359d48fa9672df4e510b70770379a3743782fb060753574ef2c58",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/0b50c365f4096f36fefad1e80091802a/OIIDP Mentorship Guide Background Information and NIPHS logo.docx"
+      ],
+      "rubric_item_count": 47,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "c9bf9801-9640-45fa-8166-1ab01f2d98e4"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Lawyers",
+      "prompt_character_count": 2296,
+      "prompt_sha256": "20c08c64784239008fc5e0935cb075a0665ca4286057307e72d41b82dbf58849",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 67,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "cd9efc18-d14a-4f69-8531-5d178a08084d"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Project Management Specialists",
+      "prompt_character_count": 2027,
+      "prompt_sha256": "0c89c326b54c83de9f9365aaf654737c8a968e0d9d0c24dde2c324584f5bcb0a",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/2d3c529d2f8ece6a2d0834de35ebfc69/WDTTimekeepingExport_1.xlsx",
+        "reference_files/d1035b4983f75c6e25420e720565a1f9/MarchBudget.xlsx",
+        "reference_files/f27321058df020d263e13f2df3405742/WDTStakeholderRegistry.xlsx"
+      ],
+      "rubric_item_count": 39,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "ce864f41-8584-49ba-b24f-9c9104b47bf0"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Computer and Information Systems Managers",
+      "prompt_character_count": 4380,
+      "prompt_sha256": "ee6bc23eea5622dc6d99249c8681a3e5b655c6ff1f73991464347859a6bc8423",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 35,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "cebf301e-5ea7-41ae-b117-ad8f43e7ac22"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "First-Line Supervisors of Retail Sales Workers",
+      "prompt_character_count": 1982,
+      "prompt_sha256": "9b7d0f50469541bbafb60c3377027a291686997f81bd920e47c3d59b27b58561",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/991379bc590e78c4a4a86545c709f6b4/Black Friday 2023 vs 2024 Targets.pdf",
+        "reference_files/f80d6a6d9a6767376417e7c24464ee09/Marketing Email.pdf"
+      ],
+      "rubric_item_count": 55,
+      "sector": "Retail Trade",
+      "task_id": "cecac8f9-8203-4ebd-ad49-54436a8c4171"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Customer Service Representatives",
+      "prompt_character_count": 1351,
+      "prompt_sha256": "304ded0e664ed5ff7c06c988f978b965e04918216447113007ded5d4541d01d1",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/23f24ecc2551ea538181d7e7b424ead5/Case Two.docx",
+        "reference_files/4712900d4bda3ef442818af676ed7fdc/Case One.docx",
+        "reference_files/69b8a9055881ed0f9d3a53428bbb96df/Case Three.docx"
+      ],
+      "rubric_item_count": 60,
+      "sector": "Finance and Insurance",
+      "task_id": "d025a41c-c439-4ee1-bc79-dd5c94b27a2d"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Real Estate Sales Agents",
+      "prompt_character_count": 1351,
+      "prompt_sha256": "0db36c75c1871143fb242cefb53f21f708596b16f539de011cef13ca71aa776b",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/fa1d022a0122450ab088daf4a30bf037/T9 Market analysis b.pdf"
+      ],
+      "rubric_item_count": 29,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "d3d255b2-f5f2-4841-9f62-2083ec9ef3da"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "First-Line Supervisors of Retail Sales Workers",
+      "prompt_character_count": 1014,
+      "prompt_sha256": "b8435e9751de70fc119f7b507816ae0aba20a371e718c6177ea7f374e964533a",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/011093da681a3aeb5d442fc8c4f29942/Evaluation_stocking.xlsx"
+      ],
+      "rubric_item_count": 18,
+      "sector": "Retail Trade",
+      "task_id": "d4525420-a427-4ef2-b4e9-2dcc2d31b3b6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products",
+      "prompt_character_count": 2018,
+      "prompt_sha256": "530c4a3fb6ccbc3fca06e9f0fe0fee6b99d1f5157e1454799d6f02e050f47d73",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/bcfc9801fb77a2f919b49a213a28074a/DATA_Beutist_Set_Selling_v2.xlsx"
+      ],
+      "rubric_item_count": 63,
+      "sector": "Wholesale Trade",
+      "task_id": "d7cfae6f-4a82-4289-955e-c799dfe1e0f4"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Registered Nurses",
+      "prompt_character_count": 1372,
+      "prompt_sha256": "091ae150ca4c0d75d36926225bb40b7014ed6f4277370f09d590fb73a0f56dd0",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 31,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "dd724c67-8118-4b99-ab50-4761af705c3b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Compliance Officers",
+      "prompt_character_count": 2425,
+      "prompt_sha256": "f988462ea71f69c65e53b21a6e11597fc0c020b43e0b51e33f2fdd0f7b3dbb80",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/c13889e954f4ce8d032fcb426dbbb707/Award Data Report.xlsx"
+      ],
+      "rubric_item_count": 26,
+      "sector": "Government",
+      "task_id": "dfb4e0cd-a0b7-454e-b943-0dd586c2764c"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Producers and Directors",
+      "prompt_character_count": 728,
+      "prompt_sha256": "5e9fe753215d2c8797ec04dcd634e4b0b730910e4c01c7b9841b2c27d318bf34",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/11e1dde7e3ff8cf75bd338a876d39f2e/WordDoc_ResearchFormatReferenceSheet.docx"
+      ],
+      "rubric_item_count": 15,
+      "sector": "Information",
+      "task_id": "e14e32ba-d310-4d45-9b8a-6d73d0ece1ae"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Financial and Investment Analysts",
+      "prompt_character_count": 1308,
+      "prompt_sha256": "12ac14d6615779c375abae4e237e157579b28fc1fe672c531d305945c922130d",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 28,
+      "sector": "Finance and Insurance",
+      "task_id": "e21cd746-404d-4602-b9d2-01d2812c5b87"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".mp4"
+      ],
+      "occupation": "Film and Video Editors",
+      "prompt_character_count": 2856,
+      "prompt_sha256": "9bb545ce530b53e5a5ce330e11342dfdf3a106a6c1a5685cecf1d8c97063ad9c",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/f2515f5b4d7cc98a322442ceb553f705/GreenEnergy-30_Script.pdf"
+      ],
+      "rubric_item_count": 33,
+      "sector": "Information",
+      "task_id": "e222075d-5d62-4757-ae3c-e34b0846583b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Producers and Directors",
+      "prompt_character_count": 2537,
+      "prompt_sha256": "a2412de1294117ff4d6565874a8431264b39e3561f0f8ff5fe129ad58e01ea7e",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".jpg",
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/3081e9d32a2433c4d6283155ca35d35d/HowToGuide_ScriptFormatting.jpg",
+        "reference_files/ac088f41d1d947eab0464ecb59ae2e02/SAINTLINESS_StoryBreakdownCharacterDescriptions.pdf"
+      ],
+      "rubric_item_count": 50,
+      "sector": "Information",
+      "task_id": "e4f664ea-0e5c-4e4e-a0d3-a87a33da947a"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Nurse Practitioners",
+      "prompt_character_count": 1637,
+      "prompt_sha256": "057a512f6c2d433743750d2cca59163f2e70ee419067c68359372337bd5dc285",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx",
+        ".png"
+      ],
+      "reference_file_paths": [
+        "reference_files/18d423f479622b322763eca3aeae460f/Insurance Card.png",
+        "reference_files/692e1fc7609f75334a28d33e69d9f6eb/Robert Palen Chart.docx"
+      ],
+      "rubric_item_count": 63,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "e6429658-4de1-42dd-a9e0-2d2b9b02fb10"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Non-Retail Sales Workers",
+      "prompt_character_count": 2260,
+      "prompt_sha256": "6e621cca5a71f7d720cd287474fd00232ed41538f47e9214dbf96a9bfeb0f20a",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/83b5fec4f86420392d0d9baede42e264/Sales and Shipment Proj New CosmoGenics.xlsx"
+      ],
+      "rubric_item_count": 50,
+      "sector": "Wholesale Trade",
+      "task_id": "e996036e-8287-4e7f-8d0a-90a57cb53c45"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "First-Line Supervisors of Police and Detectives",
+      "prompt_character_count": 2761,
+      "prompt_sha256": "1a2e243672aa5f1ea93a5330b16c681f493530053d994f7c348dc8cc8deba5cd",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 53,
+      "sector": "Government",
+      "task_id": "eb54f575-93f9-408b-b9e0-f1208a0b6759"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Editors",
+      "prompt_character_count": 2821,
+      "prompt_sha256": "2254e1dd37458f97409e89b29bf8b2077fea201b5a137ae4d5b2bc0b9f6e5a3c",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/e2453b0c5203c7e45d4b9c9478b8c36d/NFT Photography Context.docx"
+      ],
+      "rubric_item_count": 31,
+      "sector": "Information",
+      "task_id": "ec2fccc9-b7f6-4c73-bf51-896fdb433cec"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pptx"
+      ],
+      "occupation": "First-Line Supervisors of Non-Retail Sales Workers",
+      "prompt_character_count": 1693,
+      "prompt_sha256": "55c8fcf311a7685e2058b39109a8fa97df957d3cccc8542cd03ce274c7798a24",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 68,
+      "sector": "Wholesale Trade",
+      "task_id": "ec591973-04d5-48c0-981c-1ab2fcec2dc1"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Property, Real Estate, and Community Association Managers",
+      "prompt_character_count": 2346,
+      "prompt_sha256": "45f39f339f3c35b9be4b4ba8feefefe519528af1725aed0078ae256eb6ad584e",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/0ed2a7ea01432e01078397f8eac2df90/Current Renewal Letter.docx",
+        "reference_files/ef991a800b19839204fe74a4dd41205a/Exit Survey Feedback.xlsx"
+      ],
+      "rubric_item_count": 36,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "ed2bc14c-99ac-4a2a-8467-482a1a5d67f3"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Accountants and Auditors",
+      "prompt_character_count": 2987,
+      "prompt_sha256": "fbbfaadc84a95e15370b8d1d5ba050f4fb6939fe397a0886df44067b3ebb9368",
+      "reference_file_count": 17,
+      "reference_file_extensions": [
+        ".txt",
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/21d59a3e152d568eff768dd9947d9254/Aurisic_Financials_3-25-1.xlsx",
+        "reference_files/2704c6315098ee0960cb2500370ff607/Prof_Fee_Dump-1.xlsx",
+        "reference_files/2af9eb7c1c58c6042e1c028a9674612c/PPD1250-1.xlsx",
+        "reference_files/2f01d8a61124af63743d4bcefd39258e/PPD1251-1.xlsx",
+        "reference_files/328e0d3d319142a5d652972cf6e9cc6a/Legal_Dump-1.xlsx",
+        "reference_files/348fbbd9e92703b1df1a72dd4ab269d5/Aurisic_Final_TB_4-25-1.txt",
+        "reference_files/3f82469796cc673a356823a06278838c/Aurisic_Corp_Payrolls_April_2025-1.xlsx",
+        "reference_files/719bfd265bf5d3da69da4d7864672b60/AccrMisc-1.xlsx",
+        "reference_files/8fa9dfa255bef3b2cbf09baa7c0ee36d/Outstanding_CKs_4-30-25-1.xlsx",
+        "reference_files/9b3ff362d6764c61c29298ab132685ab/AR_Accrual-1.xlsx",
+        "reference_files/a58d05097055f3a607bc186a54c371dd/Rebates-1.xlsx",
+        "reference_files/a6efe49467e050a76777d74a94b17ae7/Payroll-1.xlsx",
+        "reference_files/c04d9809419a98ed20dbeb77e6d8320d/Good Insurance Co - Loan.xlsx",
+        "reference_files/d66ebb3cc6c362e11462625f9808cf36/AccrBonus-1.xlsx",
+        "reference_files/ddfdb3a18fcfe34c7adc18c2134ec689/Good Insurance Co - Loan II.xlsx",
+        "reference_files/ec5e2b463297b0ddfb074a036ed58b8b/Accr2011-1.xlsx",
+        "reference_files/f41836df23874e5e027be27fd10ae305/Aurisic_Prepaid_Expenses_4-25-1.xlsx"
+      ],
+      "rubric_item_count": 44,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "ee09d943-5a11-430a-b7a2-971b4e9b01b5"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "News Analysts, Reporters, and Journalists",
+      "prompt_character_count": 3290,
+      "prompt_sha256": "66c16e90754e83f74019bf3882e78cfba6e0aee103ac86e4a37ff4f5bbdae941",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 40,
+      "sector": "Information",
+      "task_id": "ef8719da-18e5-4bfe-b986-399652d77376"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "First-Line Supervisors of Production and Operating Workers",
+      "prompt_character_count": 4263,
+      "prompt_sha256": "31c4239eaffb68ad9dcd74793f63dfaedc1c2137dd93332c829e160bdd9a5583",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/a4c80d328b4344f2aff2e2c1b0f0e44c/Open Purchase Orders Listing.xlsx"
+      ],
+      "rubric_item_count": 59,
+      "sector": "Manufacturing",
+      "task_id": "efca245f-c24f-4f75-a9d5-59201330ab7a"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Medical Secretaries and Administrative Assistants",
+      "prompt_character_count": 4743,
+      "prompt_sha256": "43ba1aff4619d54a44c0ac935be03a0546d11b1e17281544a9722c73ad7d27f6",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 47,
+      "sector": "Health Care and Social Assistance",
+      "task_id": "f1be6436-ffff-4fee-9e66-d550291a1735"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Pharmacists",
+      "prompt_character_count": 1185,
+      "prompt_sha256": "418527f9f1ed621ea27b20c3afe82f24e31d26172df5a584094a2f7dbaab13dd",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".jpg"
+      ],
+      "reference_file_paths": [
+        "reference_files/8860a54103b6edb9313d04c0f4434980/what are these.jpg"
+      ],
+      "rubric_item_count": 77,
+      "sector": "Retail Trade",
+      "task_id": "f2986c1f-2bbf-4b83-bc93-624a9d617f45"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Customer Service Representatives",
+      "prompt_character_count": 1588,
+      "prompt_sha256": "a0294ea93fec103eaaf64db3b807eed764a8b19fe9c3fd8769bad73fec8a349d",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 74,
+      "sector": "Finance and Insurance",
+      "task_id": "f3351922-dbdd-45da-85c5-e7110696bbe5"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Concierges",
+      "prompt_character_count": 1323,
+      "prompt_sha256": "c32410fa38671ea0a46f868a6842b1a4d5e6a1a0f325d566e069c9334a5fb1b2",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 39,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "f5d428fd-b38e-41f0-8783-35423dab80f6"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".xlsx"
+      ],
+      "occupation": "Order Clerks",
+      "prompt_character_count": 1449,
+      "prompt_sha256": "69a8efb123161b5e21ea56f808e1a7e50930191836507f1f2761d26679192eac",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".xlsx"
+      ],
+      "reference_file_paths": [
+        "reference_files/aa14b39d08640f4f7bcfcfc0d6a4cde9/PO Log.xlsx"
+      ],
+      "rubric_item_count": 59,
+      "sector": "Wholesale Trade",
+      "task_id": "f841ddcf-2a28-4f6d-bac3-61b607219d3e"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx"
+      ],
+      "occupation": "Administrative Services Managers",
+      "prompt_character_count": 1374,
+      "prompt_sha256": "984971c6137e367487e4fe7720ec148ce4280f4f1d50dc9c5d0b5c250af52606",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 30,
+      "sector": "Government",
+      "task_id": "f84ea6ac-8f9f-428c-b96c-d0884e30f7c7"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Audio and Video Technicians",
+      "prompt_character_count": 2821,
+      "prompt_sha256": "ee25b783d60b9509374f9d6a27be57a98f2154a57617d9e13950649c10209825",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 51,
+      "sector": "Information",
+      "task_id": "f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Private Detectives and Investigators",
+      "prompt_character_count": 1372,
+      "prompt_sha256": "e24e816ee7828d471d8a5ac0b03985cdad5211cf239a492fea9500392f861046",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 26,
+      "sector": "Retail Trade",
+      "task_id": "f9f82549-fdde-4462-aff8-e70fba5b8c66"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Concierges",
+      "prompt_character_count": 2207,
+      "prompt_sha256": "944c0758a8226a389ffed09f7387c1d30007ad8d9e373065fba30d96312020a2",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 40,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "fccaa4a1-1c39-49ac-b701-55361a19966b"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Real Estate Brokers",
+      "prompt_character_count": 1081,
+      "prompt_sha256": "c239a4da36ee4f867ac7a475f58ba17b6c49164d464f22b04314982c784036ab",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/0608371b74fb5d30da16ce261aede297/Compensation Model Ideas.docx"
+      ],
+      "rubric_item_count": 21,
+      "sector": "Real Estate and Rental and Leasing",
+      "task_id": "fd3ad420-6f7d-43b1-a990-c0c5c047d071"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".docx",
+        ".pdf"
+      ],
+      "occupation": "Project Management Specialists",
+      "prompt_character_count": 1539,
+      "prompt_sha256": "d9c98f21e307328bee245a2fcc3d2f851dbf4c4602102a83eca2ea43ce7d918e",
+      "reference_file_count": 1,
+      "reference_file_extensions": [
+        ".docx"
+      ],
+      "reference_file_paths": [
+        "reference_files/6823215b962a3565ad4516b7e1b005f4/Change Control SOP Working Session Internal Input Summary.docx"
+      ],
+      "rubric_item_count": 64,
+      "sector": "Professional, Scientific, and Technical Services",
+      "task_id": "fd6129bd-f095-429b-873c-dcc3137be2c3"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf",
+        ".pptx"
+      ],
+      "occupation": "Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products",
+      "prompt_character_count": 3216,
+      "prompt_sha256": "0daeedb59269415f4009f3eb51653ad839a0b530965afb274e9d147d48600173",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".docx",
+        ".jpg"
+      ],
+      "reference_file_paths": [
+        "reference_files/08bf400a23c97eaccd8b56f35ae99892/Workflow steps.docx",
+        "reference_files/ffb8155fe369c846b4fd31b696a9df05/Schematic technology TM.jpg"
+      ],
+      "rubric_item_count": 27,
+      "sector": "Wholesale Trade",
+      "task_id": "fe0d3941-e32c-4bf1-a643-b566d2b4cb3c"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Personal Financial Advisors",
+      "prompt_character_count": 1454,
+      "prompt_sha256": "c83e318bcf93599c8e274b829c2e73f112fb173fe1015ef96a8bb30c1fd21e5f",
+      "reference_file_count": 0,
+      "reference_file_extensions": [],
+      "reference_file_paths": [],
+      "rubric_item_count": 83,
+      "sector": "Finance and Insurance",
+      "task_id": "feb5eefc-39f1-4451-9ef9-bffe011b71dd"
+    },
+    {
+      "deliverable_file_extensions": [],
+      "occupation": "Audio and Video Technicians",
+      "prompt_character_count": 1933,
+      "prompt_sha256": "48535946a3549f416ccd34493be945c93f9c6ed5663c8b4e41673f471d364932",
+      "reference_file_count": 3,
+      "reference_file_extensions": [
+        ".mp3",
+        ".wav"
+      ],
+      "reference_file_paths": [
+        "reference_files/758a72de9d221d7aa2707e554c20459d/TAVARUA_SAX RAW.wav",
+        "reference_files/7b740f4720fe70f8b445fd059e1912f5/TAVARUA_SAX REFERENCE MP3.mp3",
+        "reference_files/ca53448cbec7b57b575d9d0e229f08c4/TAVARUA_MUSIC ONLY.wav"
+      ],
+      "rubric_item_count": 36,
+      "sector": "Information",
+      "task_id": "ff85ee58-bc9f-4aa2-806d-87edeabb1b81"
+    },
+    {
+      "deliverable_file_extensions": [
+        ".pdf"
+      ],
+      "occupation": "Pharmacists",
+      "prompt_character_count": 2528,
+      "prompt_sha256": "c2608fd07b9bee35b0930f008ffe7ed0c33b38d1db686539d0b13f6bfb30b183",
+      "reference_file_count": 2,
+      "reference_file_extensions": [
+        ".pdf"
+      ],
+      "reference_file_paths": [
+        "reference_files/0f36c2b691aedb1b856bfbb013fad18e/Reimbursement.pdf",
+        "reference_files/32b0322caa203f78a78c8dd1108156f5/Wholesale Price.pdf"
+      ],
+      "rubric_item_count": 46,
+      "sector": "Retail Trade",
+      "task_id": "ffed32d8-d192-4e3f-8cd4-eda5a730aec3"
+    }
+  ],
+  "written_by": "batch-runner/scripts/build_gdpval_task_catalog.py"
+}

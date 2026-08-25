@@ -1,0 +1,27 @@
+{
+  "schema_version": "execution-envelope-price-table-v1",
+  "currency": "USD",
+  "unit": "per 1,000,000 tokens",
+  "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
+  "mirrors": "scripts/analyze_grade_run.py PRICING_USD_PER_M_TOKENS",
+  "last_reviewed": "2026-05-28",
+  "note": "These are list prices recorded in this repository, not a quote from a bill. A tenant with negotiated rates must replace them before any number here is treated as a commitment. tests/test_execution_envelope_cost.py fails if these stop matching scripts/analyze_grade_run.py.",
+  "models": {
+    "gpt-5.4": {
+      "input_usd_per_million": "1.25",
+      "output_usd_per_million": "5.00"
+    },
+    "gpt-5.4-mini": {
+      "input_usd_per_million": "0.25",
+      "output_usd_per_million": "1.00"
+    },
+    "gpt-5.4-nano": {
+      "input_usd_per_million": "0.075",
+      "output_usd_per_million": "0.30"
+    },
+    "gpt-5.4-pro": {
+      "input_usd_per_million": "5.00",
+      "output_usd_per_million": "15.00"
+    }
+  }
+}
