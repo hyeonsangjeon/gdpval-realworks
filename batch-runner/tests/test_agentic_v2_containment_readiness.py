@@ -22,6 +22,7 @@ from core.agentic_v2_containment_readiness import (
     NEEDS_A_PROCESSOR_THAT_CAN,
     NEEDS_THE_PROGRAMS_INSTALLED,
     NEEDS_TO_REACH_THE_HARDWARE,
+    NOTHING_APPLIES_THESE_RULES_YET,
     OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES,
     RECORDED_FINDINGS,
     MachineFacts,
@@ -33,7 +34,12 @@ from core.agentic_v2_containment_readiness import (
     refuse_command_execution,
     runner_labels_used_by_workflows,
 )
-from core.agentic_v2_substrate import REQUIRED_MICROVM_POLICY
+from core.agentic_v2_substrate import (
+    MICROVM_MEMORY_MIB,
+    MICROVM_WALL_CLOCK_SECONDS,
+    MICROVM_WORKDIR_QUOTA_MIB,
+    REQUIRED_MICROVM_POLICY,
+)
 
 WORKFLOWS_DIRECTORY = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 
@@ -82,11 +88,28 @@ def a_microvm_report(*, kvm: bool = False, programs: tuple[str, ...] = ()) -> di
 # ── A machine that has everything ─────────────────────────────────────────
 
 
-def test_a_machine_with_everything_can_provide_the_required_containment():
+def test_a_machine_with_everything_could_host_the_containment():
     answer = judge_containment(a_machine())
 
-    assert answer.required_containment_available is True
-    assert answer.whats_missing() == []
+    assert answer.machine_could_host_it is True
+
+
+def test_a_machine_with_everything_still_does_not_have_the_containment():
+    """Being able to start a machine is not the same as the rules being applied.
+
+    These were one field until 2026-08-26, and that is how a rule nothing
+    applies came to be reported as met. On the three machines in play it never
+    showed, because none of them can start a virtual machine at all. On the
+    first machine that could, the old report would have said the containment was
+    in place while nothing carried a single rule to it.
+    """
+    answer = judge_containment(a_machine())
+
+    assert answer.required_containment_available is False
+    assert answer.whats_missing(), "a rule nobody applies is not nothing missing"
+    assert all(
+        "unenforced rather than met" in line for line in answer.whats_missing()
+    )
 
 
 def test_every_setting_the_manifest_asks_for_appears_in_the_answer():
@@ -112,9 +135,24 @@ def test_the_configured_settings_are_not_claimed_to_have_been_checked():
     answer = judge_containment(a_machine())
     network = claim(answer, "the small isolated virtual machine's network")
 
-    assert network.met is True
-    assert "setting applied when the virtual machine is started" in network.because
-    assert "rather than a capability the host must already have" in network.because
+    assert network.met is None
+    assert network.verdict == "cannot be established here"
+    assert NOTHING_APPLIES_THESE_RULES_YET in network.because
+
+
+def test_the_report_names_the_module_that_would_have_to_apply_the_rules():
+    """A reader who wants to fix this has to be told where the gap is.
+
+    "Cannot be established" with no address sends somebody looking for a better
+    machine, which is the wrong work: the rules would go unapplied on the best
+    machine in the world.
+    """
+    answer = judge_containment(a_machine())
+    quota = claim(answer, "the command may write at most")
+
+    assert "core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY" in quota.because
+    assert "core.agentic_v2_microvm" in quota.because
+    assert "it applies nothing" in quota.because
 
 
 # ── Each requirement, taken away one at a time ────────────────────────────
@@ -124,7 +162,7 @@ def test_a_processor_that_cannot_do_it_is_a_permanent_no():
     answer = judge_containment(a_machine(processor_flags=("fpu", "aes")))
     judged = claim(answer, NEEDS_A_PROCESSOR_THAT_CAN)
 
-    assert answer.required_containment_available is False
+    assert answer.machine_could_host_it is False
     assert judged.met is False
     assert "no amount of configuration would make this work here" in judged.because
 
@@ -142,7 +180,7 @@ def test_a_processor_whose_capabilities_could_not_be_read_is_not_called_a_no():
 
     assert judged.met is None
     assert judged.verdict == "cannot be established here"
-    assert answer.required_containment_available is False
+    assert answer.machine_could_host_it is False
 
 
 def test_an_amd_processor_counts_as_well_as_an_intel_one():
@@ -155,7 +193,7 @@ def test_hardware_the_machine_cannot_reach_is_a_no():
     answer = judge_containment(a_machine(hardware_virtualisation_reachable=False))
     judged = claim(answer, NEEDS_TO_REACH_THE_HARDWARE)
 
-    assert answer.required_containment_available is False
+    assert answer.machine_could_host_it is False
     assert judged.met is False
     assert "core.agentic_v2_microvm.inspect_microvm_readiness" in judged.because
 
@@ -201,7 +239,7 @@ def test_a_kernel_below_what_firecracker_validates_is_refused(release):
     answer = judge_containment(a_machine(kernel_release=release))
     judged = claim(answer, NEEDS_A_KERNEL_FIRECRACKER_TESTS)
 
-    assert answer.required_containment_available is False
+    assert answer.machine_could_host_it is False
     assert judged.met is False
     assert release in judged.because
 
@@ -245,15 +283,23 @@ def test_a_claim_that_could_not_be_established_counts_against_availability():
     """
     answer = judge_containment(a_machine(kernel_release="unknown"))
 
+    assert answer.machine_could_host_it is False
     assert answer.required_containment_available is False
 
 
-def test_the_settings_are_unanswerable_while_no_virtual_machine_can_start():
+def test_the_settings_say_both_reasons_while_no_virtual_machine_can_start():
+    """Two things are wrong at once here, and the report says both.
+
+    There is no machine to apply the rule to, *and* nothing that would apply it
+    if there were. Naming only the first would send a reader to find a machine
+    and leave them surprised when the rule still went unapplied on it.
+    """
     answer = judge_containment(a_machine(hardware_virtualisation_reachable=False))
     rootfs = claim(answer, "the small isolated virtual machine's root filesystem")
 
     assert rootfs.met is None
-    assert "It becomes answerable only once the four claims above hold" in rootfs.because
+    assert "no small isolated virtual machine on this machine" in rootfs.because
+    assert NOTHING_APPLIES_THESE_RULES_YET in rootfs.because
 
 
 def test_whats_missing_lists_only_what_is_wrong_and_why():
@@ -277,7 +323,10 @@ def test_an_answer_with_no_requirements_in_it_is_not_treated_as_available():
     """An empty report is the absence of evidence, not evidence of readiness."""
     from core.agentic_v2_containment_readiness import ContainmentAnswer
 
-    assert ContainmentAnswer(machine="nowhere").required_containment_available is False
+    empty = ContainmentAnswer(machine="nowhere")
+
+    assert empty.machine_could_host_it is False
+    assert empty.required_containment_available is False
 
 
 # ── The manifest is read, not copied ──────────────────────────────────────
@@ -290,14 +339,22 @@ def test_a_new_setting_in_the_manifest_is_reported_rather_than_ignored(monkeypat
     the honest output is to say so. The alternative — quietly reporting on the
     settings it happens to know about — would let the answer stay green while
     the requirement it answers about had changed underneath it.
+
+    The setting below is invented for this test and deliberately unlike any real
+    one, so that adding it here can never be mistaken for adding it to the
+    manifest.
     """
-    monkeypatch.setitem(REQUIRED_MICROVM_POLICY, "memory", "512MiB-hard-cap")
+    monkeypatch.setitem(
+        REQUIRED_MICROVM_POLICY, "there_is_no_such_rule", "invented-for-a-test"
+    )
     try:
         answer = judge_containment(a_machine())
     finally:
-        REQUIRED_MICROVM_POLICY.pop("memory", None)
+        REQUIRED_MICROVM_POLICY.pop("there_is_no_such_rule", None)
 
-    unknown = claim(answer, "the manifest's containment setting 'memory'")
+    unknown = claim(
+        answer, "the manifest's containment setting 'there_is_no_such_rule'"
+    )
     assert unknown.met is None
     assert "does not know how to describe or check" in unknown.because
     assert answer.required_containment_available is False
@@ -319,7 +376,7 @@ def test_a_manifest_that_stopped_requiring_containment_would_show_up(monkeypatch
         REQUIRED_MICROVM_POLICY["required"] = True
 
     assert claim(answer, "containment is mandatory").met is False
-    assert answer.required_containment_available is False
+    assert any("containment is mandatory" in line for line in answer.whats_missing())
 
 
 def test_the_premise_is_stated_before_the_details_of_it():
@@ -499,6 +556,7 @@ def test_reading_this_machine_costs_nothing_and_answers():
 
     assert isinstance(facts.kernel_release, str) and facts.kernel_release
     assert [item.claim for item in answer.requirements]
+    assert isinstance(answer.machine_could_host_it, bool)
     assert isinstance(answer.required_containment_available, bool)
 
 
@@ -535,7 +593,8 @@ def test_every_recorded_finding_says_where_it_came_from_and_when():
 def test_no_recorded_finding_claims_the_containment_is_available():
     """The answer as it stands. This test changes on the day the answer does."""
     assert all(
-        finding.containment_available is not True for finding in RECORDED_FINDINGS
+        finding.could_host_the_containment is not True
+        for finding in RECORDED_FINDINGS
     )
 
 
@@ -544,7 +603,7 @@ def test_the_github_runner_finding_rests_on_githubs_own_documentation():
         finding for finding in RECORDED_FINDINGS if "github-hosted" in finding.machine
     )
 
-    assert github.containment_available is False
+    assert github.could_host_the_containment is False
     assert "docs.github.com" in github.established_by
     assert "not officially supported" in github.finding
 
@@ -560,7 +619,7 @@ def test_the_self_hosted_machine_is_an_unknown_because_it_does_not_exist():
         finding for finding in RECORDED_FINDINGS if "self-hosted" in finding.machine
     )
 
-    assert self_hosted.containment_available is None
+    assert self_hosted.could_host_the_containment is None
     assert "there is no such machine" in self_hosted.finding
     assert "total_count 0" in self_hosted.established_by
 
@@ -622,9 +681,11 @@ def test_the_whole_answer_covers_this_machine_and_the_recorded_ones():
     )
 
     assert report["required_containment"] == dict(REQUIRED_MICROVM_POLICY)
+    assert report["this_machine"]["machine_could_host_it"] is False
     assert report["this_machine"]["required_containment_available"] is False
     assert len(report["recorded_findings"]) == len(RECORDED_FINDINGS)
     assert report["machines_without_a_finding"] == []
+    assert report["could_be_hosted_on_any_machine_in_play"] is False
     assert report["available_on_any_machine_in_play"] is False
 
 
@@ -634,11 +695,35 @@ def test_the_whole_answer_can_be_written_down_as_it_stands():
     assert json.loads(json.dumps(report)) == report
 
 
-def test_a_machine_here_that_could_do_it_would_change_the_answer():
+def test_a_machine_here_that_could_do_it_changes_one_answer_and_not_the_other():
+    """The distinction the whole report now turns on.
+
+    A machine that has everything moves the hosting question and nothing else.
+    The containment still is not in place, because no code applies its rules,
+    and the refusal must stay standing on that second ground rather than lifting
+    because the first was cleared.
+    """
     report = containment_answer_everywhere(facts=a_machine())
 
-    assert report["available_on_any_machine_in_play"] is True
-    assert refuse_command_execution(report) is None
+    assert report["could_be_hosted_on_any_machine_in_play"] is True
+    assert report["anything_applies_the_containment_rules"] is False
+    assert report["available_on_any_machine_in_play"] is False
+    assert refuse_command_execution(report) is not None
+
+
+def test_the_refusal_on_a_capable_machine_names_the_rules_nobody_applies():
+    """Two grounds for refusing, and the sentence says which one it is on.
+
+    Repeating "no machine can host it" to somebody standing in front of a
+    machine that can would read as a bug in the report rather than as the real
+    remaining gap.
+    """
+    refusal = refuse_command_execution(containment_answer_everywhere(facts=a_machine()))
+
+    assert refusal is not None
+    assert "could be started on a machine in play" in refusal
+    assert NOTHING_APPLIES_THESE_RULES_YET in refusal
+    assert "is not available on any machine in play" not in refusal
 
 
 def test_an_unanswered_machine_is_reported_beside_the_answer_not_folded_into_it(
@@ -648,7 +733,7 @@ def test_an_unanswered_machine_is_reported_beside_the_answer_not_folded_into_it(
 
     ``scripts/check_agentic_containment.py`` passes only when both hold, so a
     workflow that starts running somewhere nobody has answered for fails the
-    check even on a machine that could itself provide the containment. The two
+    check even on a machine that could itself host the containment. The two
     are separate keys rather than one, because folding them together would
     report an unanswered machine as though it had been answered no.
     """
@@ -660,7 +745,7 @@ def test_an_unanswered_machine_is_reported_beside_the_answer_not_folded_into_it(
         facts=a_machine(), workflows_directory=tmp_path
     )
 
-    assert report["available_on_any_machine_in_play"] is True
+    assert report["could_be_hosted_on_any_machine_in_play"] is True
     assert report["every_machine_in_play_has_an_answer"] is False
     assert len(report["machines_without_a_finding"]) == 1
     assert "macos-15" in report["machines_without_a_finding"][0]
@@ -740,12 +825,14 @@ def test_the_printed_report_states_the_requirement_the_verdict_and_the_sources()
     assert "must not run" in printed
 
 
-def test_the_printed_report_says_so_plainly_if_the_containment_becomes_available():
+def test_the_printed_report_says_which_rules_nobody_applies():
     report = containment_answer_everywhere(facts=a_machine())
     printed = "\n".join(describe_containment(report))
 
-    assert "The required containment is available" in printed
-    assert "opening command execution is a separate decision" in printed
+    assert "Whether anything applies the rules, on any machine" in printed
+    assert "Nothing does:" in printed
+    assert "a fact about this repository rather than about any machine" in printed
+    assert "The required containment is available" not in printed
 
 
 def test_the_printed_report_shows_a_machine_nobody_has_an_answer_for(tmp_path):

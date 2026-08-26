@@ -6,6 +6,12 @@
   blocked stage three has been answered, and the answer is in section 7b: the
   containment is available on no machine currently in play. Nothing was spent
   finding either out and nothing was switched on.
+- Updated: 2026-08-26, later the same day — the containment rules themselves are
+  now complete and stated once. Four of the six things a containment has to say
+  were never written down, and the two that were had three copies that nothing
+  compared. Section 7c. Writing down what a containment *would* be is not the
+  same as having one: the rules still apply to nothing, and this made the report
+  refuse in one more case rather than one fewer.
 - Status: **specification only. Nothing here is built, and nothing in it may be
   built without a separate, explicit approval to open command execution.**
 - Related GitHub Project: hyeonsangjeon/projects/5 — card
@@ -112,11 +118,23 @@ whether the network is reachable, how much memory and time, which user it runs
 as, and what happens when it exceeds any of those. Prove each one with a test
 that tries to exceed it and requires the attempt to fail. This is a test-only
 stage; nothing is switched on.
-*Half of this is now done, and it is the half that turned out to matter.
-Section 7b establishes **where** the containment could run, by reading machines
-rather than by asserting it, and the answer is: nowhere currently in play.
-Writing rules and testing them can proceed regardless, but they would be rules
-for a machine that does not yet exist.*
+*Where the containment could run is established — section 7b, and the answer is
+nowhere in play. The rules themselves are now written down in full: on
+2026-08-26 all six questions above got an answer, where before only two had one
+and the working directory said "there is a quota" without ever saying what the
+quota was. They are decided in one place, `REQUIRED_MICROVM_POLICY`; the signed
+policy on disk still carries its own copy because a signed artefact has to, but
+nothing hand-writes a third one any more and a disagreement between the two is
+refused by name. Every rule has a test that attempting to weaken it is refused.*
+
+*What is still missing from this stage, and cannot be supplied yet, is the other
+half of "prove it": a test that starts a machine, exceeds a limit and watches the
+limit stop it. That needs both a machine that can host the containment and code
+that turns these rules into arguments for starting one. Neither exists. A test
+written today could only assert that a value is written down, so
+`tests/test_agentic_v2_containment_rules.py` says in its own opening lines that
+this is what it does and does not do — because a passing test named after a thing
+that never happened is how an unenforced rule comes to look enforced.*
 
 **Stage three — open command execution behind its own approval.**
 Only after stage two passes. `exec_run` starts running real commands inside the
@@ -140,8 +158,10 @@ the loop is worth having.
 | `batch-runner/core/agentic_v2_runner.py` | Unchanged. Still replays the written-down list; the loop was added beside it, not inside it. |
 | `batch-runner/core/agentic_v2_tools.py` | Unchanged surface; the ceilings it already applies become the loop's limits. |
 | `batch-runner/core/agentic_v2_fixture_backend.py` | Stays shut through stages one and two. |
-| `batch-runner/core/agentic_v2_substrate.py` | Stage two: the containment rules are stated and checked here. `REQUIRED_MICROVM_POLICY` is the one written-down copy of them. |
-| `batch-runner/core/agentic_v2_containment_readiness.py` | Stage two, **built**: reads a machine and reports which of those rules it can actually meet, and why. Reads the policy above rather than restating it. |
+| `batch-runner/core/agentic_v2_substrate.py` | Stage two, **built**: the containment rules are stated and checked here. `REQUIRED_MICROVM_POLICY` is the one written-down copy of them, and the numbers in it carry documentation saying what each was derived from. `supply_chain_microvm_block()` and `containment_rules_that_disagree()` exist so the signed policy can be derived from it and compared against it rather than restating it. |
+| `batch-runner/core/agentic_v2_supply_chain.py` | Stage two: held a hand-written second copy of the containment rules until 2026-08-26. Now derives the block it requires from the file above, and refuses a signed policy whose rules have drifted from it, naming both places in the message. |
+| `batch-runner/security/agentic-v2-supply-chain-policy.json` | The signed statement of the same rules, under different names — it says `read_only_rootfs: true` where the substrate says `rootfs: "read-only"`. The mismatch in names is why the two copies could drift unnoticed; the comparison above translates between them. |
+| `batch-runner/core/agentic_v2_containment_readiness.py` | Stage two, **built**: reads a machine and reports which of those rules it can actually meet, and why. Reads the policy above rather than restating it. Reports "could this machine host the containment" and "does anything apply the rules" as two separate answers; see section 7b. |
 | `batch-runner/core/agentic_v2_microvm.py` | Unchanged. Reports whether a boot test could be attempted; does not judge the host kernel or the processor, which is why the module above exists. |
 | `batch-runner/step2_run_inference.py` | Stage three: the guard is revisited, not before. |
 | `batch-runner/core/executor.py` | Stage three: the paid-run refusal is revisited, not before. |
@@ -287,11 +307,19 @@ and published policies.
 
 The substrate manifest will not validate unless it promises a small isolated
 virtual machine, run by Firecracker, with no network, a read-only root
-filesystem, and a working directory that is wiped and size-limited. Those five
+filesystem, and a working directory that is wiped and size-limited. Those
 settings now have exactly one written-down copy,
 `core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY`, which the manifest check
 enforces and the readiness report reads. Two copies could disagree with each
 other about what is required; one cannot.
+
+*Updated 2026-08-26, later the same day: there were, in fact, three copies. The
+signed supply-chain policy stated the same rules under different names, and
+`core/agentic_v2_supply_chain.py` held a third copy hand-written into its
+validator — so a rule could be weakened in one place and left standing in the
+others with every file still validating. The signed policy's block is now
+derived from the one above, and a disagreement between the two is refused by
+name. Section 7c has the detail.*
 
 ### The answer, in one line
 
@@ -303,6 +331,11 @@ are in play, and each is a different kind of no.
 | the box this repository is worked on from | no | read from the machine itself |
 | GitHub-hosted runners | no | GitHub's own published documentation |
 | the self-hosted `agentic-sandbox` runner | the question cannot be answered | there is no such machine |
+
+*And a fourth answer, added 2026-08-26, that no machine can change: even a
+machine that could host the containment would be started with none of the rules
+applied, because no code in this repository turns them into arguments for
+starting a machine. See "Two questions that were one field" below.*
 
 ### This box
 
@@ -383,6 +416,104 @@ It also changes what stage three's first step is. It was "write the containment
 rules". It is now "obtain a machine that can hold them" — which is a request for
 hardware, not a code change, and is the owner's to make.
 
+## 7c. The containment rules themselves, finished on 2026-08-26
+
+Section 7b answered *where* the containment could run. This answers *what* it
+is. The two are separate, and the second turned out to be in worse shape than
+the first suggested.
+
+### What was actually written down, and what was missing
+
+A set of settings is a containment only if it answers six questions: where a
+command may write, whether it can reach the network, how much memory it gets,
+how long it may run, who it runs as, and what happens when it exceeds any of
+those. Only two were answered. The working directory said `ephemeral-quota` —
+"there is a quota" — and never said what the quota was. There was no memory
+limit, no time limit, no user, and no answer to what a breach does.
+
+All six are now answered, each with a number or a word rather than a promise:
+
+| question | the rule | where the number comes from |
+|---|---|---|
+| where it may write | `workdir: ephemeral-quota`, `workdir_quota_mib: 256` | twice what the tool layer already accepts — `_MAX_WORKSPACE_BYTES` and `_MAX_FINAL_BYTES` are 64 MiB each, so a smaller disk would let the tools accept a write the disk could not hold |
+| the network | `network: none` | unchanged; it was one of the two already answered |
+| memory | `memory_mib: 4096` | **picked, not derived** — the only number here with nothing behind it |
+| time | `wall_clock_seconds: 1200` | the same per-task timeout the other three run places are held to, taken from `agentic_stage_one_plan.yaml` |
+| the user | `user: jailer-unprivileged` | Firecracker's jailer drops privileges; naming it makes "not root" checkable |
+| a breach | `on_breach: stop-and-report` | section 7 already requires stage three to fail loudly when its containment is unavailable, and a rule that has been exceeded is a containment that is not holding |
+
+A test refuses any rule whose name ends in a unit but whose value is not a
+positive whole number, because that is exactly the shape the working directory
+had before.
+
+**The memory number is the honest weak spot, and is recorded as one.** None of
+the three run places in the comparison caps memory at all. Applying a cap here
+makes this column stricter than the others on an axis the comparison does not
+otherwise control, so a task that failed here for memory would not have failed
+elsewhere for that reason. That is written into the rule's own documentation
+rather than left for somebody to notice later.
+
+### Three copies of one rule, and nothing comparing them
+
+The rules were stated in three places: `REQUIRED_MICROVM_POLICY`, the signed
+supply-chain policy on disk, and a hand-written dictionary inside the
+supply-chain validator. Nothing compared any two of them, and the names differ
+between them — one says `read_only_rootfs: true` where another says
+`rootfs: "read-only"` — which is what made a disagreement hard to see by eye.
+Three copies is three chances to weaken a rule and no chance to notice.
+
+There is now one copy. The validator's dictionary is derived from it by
+`supply_chain_microvm_block()`, and a signed policy that disagrees with it is
+refused with a message naming the rule and both places it is written down.
+
+### Every rule is refused when weakened, and nothing pretends to be enforced
+
+`tests/test_agentic_v2_containment_rules.py` — 33 tests — takes each rule in
+turn, weakens it, and requires the weakened version to be rejected: the network
+opened to an allowlist or to the host, the root filesystem made writable, the
+working directory made persistent, any limit quadrupled, the user set to root,
+the breach rule changed to carry on, the runtime changed to Docker, and the
+whole containment marked optional. Deleting a rule outright is refused too,
+since that is the quietest way to remove one.
+
+What those tests deliberately do not do is start a machine, run a command,
+exceed a limit and watch it stop. That is the test these rules will eventually
+need. It cannot be written yet, and the file says so in its own opening lines
+rather than quietly omitting it, because a passing test named after a thing that
+never happened is how an unenforced rule comes to look enforced.
+
+### Two questions that were one field
+
+Writing the numbers down exposed a reporting fault. The readiness report had one
+field for "the containment is available", and it was answering two different
+questions at once: *could this machine host the containment*, and *is the
+containment actually in place*. Because they were one field, a rule that nothing
+applies was being reported as met.
+
+They are now two fields, because they are fixed by two different things:
+
+- **Could a machine host it** is fixed by finding, configuring or buying a
+  machine. It is read off the machine.
+- **Does anything apply the rules** is fixed by writing code that turns
+  `REQUIRED_MICROVM_POLICY` into arguments for starting a machine. Nobody has
+  written it. This is a fact about this repository, so the answer is the same on
+  every machine, and a better machine does not change it.
+
+Every policy setting in the report now answers "cannot be established here"
+rather than "met", and says which of the two reasons applies. The recorded
+findings for machines that cannot be read from here were renamed accordingly:
+they record whether a machine *could host* the containment, which is the only
+part of the question a machine can answer.
+
+This makes the report strictly more cautious than before: the refusal now stands
+even on a machine that meets every hardware requirement. The free check's exit
+code is 1 for either reason, and its own documentation lists them separately so
+that a reader can tell whether to go and find a machine or go and write code.
+
+**No refusal was removed and nothing was switched on.** Writing down what a
+containment would be is not the same as having one, and the three guards are
+exactly as shut as they were.
+
 ## 8. Order the work would be done in
 
 1. ~~Work out and get approval for the cost ceiling of a small stage-one run.~~
@@ -392,12 +523,14 @@ hardware, not a code change, and is the owner's to make.
    nothing. `exec_run` is still shut, and the loop cannot reach a real model.
 3. Measure whether choosing tools helps, on the same five tasks. **Needs an
    approved amount and a way to reach a real model.**
-4. Write the containment rules and the tests that try to break them.
-   **Where those rules could run is now established (section 7b): nowhere in
-   play.** So this step now begins with obtaining a machine that can hold them,
-   which is a request for hardware rather than a code change. The rules can be
-   written and tested before that machine exists; they simply would not apply to
-   anything yet.
+4. ~~Write the containment rules and the tests that try to break them.~~
+   **Rules written (section 7c):** all six questions answered with numbers, one
+   written-down copy, and a test per rule that weakening it is refused.
+   **The tests that try to break them are only half written**, and the missing
+   half needs two things that do not exist: a machine that can host the
+   containment — a request for hardware, not a code change — and code that turns
+   the rules into arguments for starting one. Until both exist, the rules are
+   written down and applied to nothing.
 5. Seek approval for command execution, presenting those test results.
 6. Only then, open `exec_run`.
 7. Revisit the two guards, each in its own change.
@@ -413,13 +546,25 @@ hardware, not a code change, and is the owner's to make.
   than continuing indefinitely. **Done:**
   `tests/test_agentic_v2_conversation.py::test_the_run_stops_at_the_dispatchers_own_call_ceiling`.
 - Stage two: one test per containment rule, each attempting to exceed it and
-  requiring failure.
+  requiring failure. **Half done, and the half that is missing is named rather
+  than skipped.** `tests/test_agentic_v2_containment_rules.py`, 33 tests, takes
+  each rule in turn, weakens it, and requires the weakened version to be
+  refused — including a rule deleted outright, and a rule weakened in the signed
+  policy alone. What no test does is start a machine, exceed a limit and watch
+  the limit stop it; that needs a machine that can host the containment and code
+  that applies the rules, and neither exists. The file's own opening lines say
+  so, and a test in it fails if the file ever gains the ability to run anything.
+- Stage two: the numbers that were derived from something else are checked
+  against their source, so the source moving is caught: the working disk against
+  the tool layer's own write ceilings, and the time limit against the per-task
+  timeout the other three run places are held to.
 - Stage two: a check that reports, per machine, which containment rules that
   machine can meet and why. **Done:**
-  `tests/test_agentic_v2_containment_readiness.py`, 61 tests, including one that
-  requires the check itself to be incapable of starting a process and one that
+  `tests/test_agentic_v2_containment_readiness.py`, 64 tests, including one that
+  requires the check itself to be incapable of starting a process, one that
   fails if a workflow starts asking for a machine nobody has answered the
-  containment question for.
+  containment question for, and one that requires no policy rule to be reported
+  as met while nothing applies the rules.
 - All stages: the existing test that opens all three guards and requires them
   shut must keep passing until the stage that deliberately changes one. **Still
   passing**, and both the loop's and the containment check's own test suites run
@@ -431,13 +576,17 @@ hardware, not a code change, and is the owner's to make.
       failure it was shown. (Against a stand-in model. A real one is still out
       of reach and needs an approved amount.)
 - [ ] Every containment rule has a test that tries to exceed it and fails.
-      (Which machine could satisfy those rules is now established — none of the
-      three in play. See section 7b.)
+      Every rule now exists and has a number (section 7c), and every rule has a
+      test that weakening it is refused. Exceeding one and watching it stop
+      needs a machine that can host the containment — none of the three in play
+      can, see section 7b — and code that applies the rules to that machine,
+      which nobody has written.
 - [ ] Command execution is opened only after a separate written approval.
 - [ ] The free check reports this run place as able to run only when it is.
-      (Two of the three questions behind that report are now answered from real
-      readings rather than assumed: whether a real model can be reached, and
-      whether the containment exists anywhere. Both answers are no.)
+      (Three of the questions behind that report are now answered from real
+      readings rather than assumed: whether a real model can be reached, whether
+      any machine could host the containment, and whether anything applies the
+      containment rules. All three answers are no.)
 
 ## 11. Known blockers and the next decision
 
@@ -466,6 +615,18 @@ hardware, not a code change, and is the owner's to make.
   self-hosted machine one workflow asks for has never been registered, so its
   question has no subject. This blocks stage three only, not stage one. It is
   also the only blocker on this list that code cannot clear: it needs a machine.
+- **Blocked on nothing applying the containment rules.** Added 2026-08-26, and
+  it is genuinely new rather than a restatement of the one above. The rules are
+  now complete and written down once (section 7c), but no code turns them into
+  arguments for starting a machine, so a machine that could hold the containment
+  would still be started with none of the rules applied. This blocker is the
+  same on every machine, because it is a fact about this repository rather than
+  about any machine — obtaining hardware does not clear it, and it does not
+  clear the hardware blocker either. Both must go before stage three can be
+  considered. Unlike the one above, this one *is* clearable by code; it was not
+  cleared here on purpose, because writing a launcher builds the risky
+  capability before there is anywhere to test it and before anyone has approved
+  opening it.
 
 The next decision is now a specific one with a price beside it: **which row of
 the table in section 7a is stage one worth running at?** The cheapest row that

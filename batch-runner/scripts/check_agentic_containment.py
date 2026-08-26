@@ -15,13 +15,21 @@ Usage:
 
 The exit code is 0 only when the required containment is available on some
 machine in play *and* every machine the workflows ask for has an answer
-recorded. Today neither holds for the first reason: this machine cannot reach
-hardware virtualisation and runs a kernel below the oldest Firecracker
-validates, GitHub-hosted runners do not officially support running a virtual
-machine inside them, and the self-hosted machine the one workflow asks for has
-never been registered. Anything else exits 1, so this is safe to wire into an
-automated check — including the case where somebody adds a workflow that runs
-somewhere nobody has answered the question for.
+recorded. Today neither holds, for two separate reasons:
+
+* **No machine in play could host it.** This machine cannot reach hardware
+  virtualisation and runs a kernel below the oldest Firecracker validates,
+  GitHub-hosted runners do not officially support running a virtual machine
+  inside them, and the self-hosted machine the one workflow asks for has never
+  been registered.
+* **Nothing applies the rules.** No code in this repository turns the
+  containment rules into arguments for starting a machine, so even a machine
+  that could host it would be started with none of them applied. This one is the
+  same on every machine, and finding a better machine does not fix it.
+
+Anything else exits 1, so this is safe to wire into an automated check —
+including the case where somebody adds a workflow that runs somewhere nobody has
+answered the question for.
 
 Stage three of the specification — letting a model's chosen commands really run
 — is what this answers a question for. It switches nothing on and removes no
