@@ -78,6 +78,10 @@ def _caps(**overrides) -> GradingCaps:
         tool_calls_per_rubric_item=8,
         characters_per_tool_result=MAX_CONTENT_CHARS,
         output_tokens_per_call=2400,
+        standing_instructions_path="prompts/grader_judge_v2.md",
+        characters_of_standing_instructions=6000,
+        characters_of_task_prompt_preview=500,
+        task_prompt_preview_setting=500,
         visual_model=None,
         visual_calls_per_task=0,
         audio_model=None,
@@ -97,7 +101,9 @@ def _assumptions(**overrides) -> CostAssumptions:
         "grading_required": True,
         "grading_model": "a-marking-model",
         "grading_calls_per_rubric_item": 11,
-        "grading_input_tokens_per_call": math.ceil(8 * MAX_CONTENT_CHARS / 3.0),
+        "grading_input_tokens_per_call": _caps().input_tokens_one_call_must_cover(
+            THREE
+        ),
         "grading_output_tokens_per_call": 2400,
     }
     raw.update(overrides)
@@ -203,10 +209,17 @@ def test_a_sum_below_the_pile_up_is_refused():
     assert "533334" in problems[0]
 
 
-def test_the_refusal_says_the_instructions_are_not_even_in_that_number():
-    """A reader must not take the demanded figure for the whole story."""
+def test_the_refusal_says_what_is_still_missing_from_that_number():
+    """A reader must not take the demanded figure for the whole story.
+
+    The instructions and the task preview are in the figure now. The scoring
+    line being judged is not, because nothing caps it, and the refusal has to
+    keep saying so — otherwise a plan that clears the figure reads as proved
+    when it has only cleared a floor.
+    """
     problems = _refusals(_caps(), grading_input_tokens_per_call=1)
-    assert "before a word of the instructions is counted" in problems[0]
+    assert "still a floor" in problems[0]
+    assert "the scoring line being judged is not capped by anything" in problems[0]
 
 
 def test_a_sum_above_the_pile_up_is_allowed():
@@ -246,8 +259,9 @@ def test_the_committed_plan_is_refused_by_this_rule_today():
     assert "533334" in matching[0]
 
 
-@pytest.mark.parametrize("raised_to", [533_334, 1_000_000])
+@pytest.mark.parametrize("raised_to", [535_589, 1_000_000])
 def test_raising_the_number_to_the_limit_settles_this_rule(raised_to):
+    """535589 is the whole demand: 533334 of tool results, 2255 of opening."""
     plan = load_plan(PLAN_PATH)
     plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = raised_to
     result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)

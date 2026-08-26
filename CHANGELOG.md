@@ -12,6 +12,52 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The marking-cost floor left out what every marking conversation opens
+  with, and said so in a sentence that named one of the caps it was
+  denying.** `core/execution_envelope_grading_cost.py` demands that a plan
+  price at least what one marking call can carry. It counted the
+  `read_deliverable` results and stopped, on the stated grounds that the
+  opening — "the standing instructions, the scoring line being judged, and the
+  first 500 characters of the task" — "is not capped by anything". Two of
+  those three are pinned by this repository. The standing instructions are a
+  committed file named by `prompt.tool_template`, which `ToolCallingJudge`
+  splits in two and sends **both halves of on every single call** (one as
+  `instructions=`, one inside the message); it is **6,263 characters** today.
+  The task preview is cut to `ToolCallingJudge.task_prompt_truncate`, which is
+  **500**, and every one of the 220 committed tasks is longer than that
+  (shortest 617 characters), so the cut is always taken in full.
+- **The direction of the error is the one that costs money.** Omitting the
+  opening made the demanded floor **lower** than the truth, so a plan could
+  clear a floor that was too low and be recorded as checked. The floor rises
+  from **533,334 to 535,589 tokens** a call — the 2,255 the opening adds. Both
+  pieces are read from where the marking run reads them, so a longer
+  instruction file raises the demand by itself instead of leaving this module
+  quoting a number that has stopped being true. Characters, not bytes: the
+  ratio is characters-per-token, and the instruction file holds multi-byte
+  characters (6,267 bytes, 6,263 characters).
+- **The figure is still described as a floor.** The third piece really is
+  uncapped — the scoring line comes from the dataset and no setting bounds its
+  length — so the refusal and `describe_grading_caps` both keep saying that a
+  plan above this number may still not be a ceiling. Settings that name no
+  instruction file, or name one that is not on disk, are now **refused rather
+  than priced at nothing**, and the refusal names the settings file so a reader
+  knows which one to open.
+- **`grader.task_prompt_truncate_chars` reaches nothing, and now says so.**
+  Nine settings files carry the key, every one saying 500, and no module reads
+  it: `core/grader.py` builds `ToolCallingJudge` without passing it, so the
+  judge applies its own default and the setting has never taken effect. The
+  cost check therefore counts the **applied** width, not the written one, and
+  reports the setting as ignored when the two disagree — a width an operator
+  can edit without effect is how a number stops describing the run it sits
+  next to. No new problem fires today, because all nine happen to agree with
+  the default.
+- **Nothing else moved.** The cost ceiling is unchanged at **363.59 United
+  States dollars** (363.58481250 before rounding), the free check reports the
+  same 14 problems, blocks the same run places, and still exits non-zero. The
+  report differs from the old one in exactly one line, and a test asserts that
+  by running the check twice with the new counting patched out — no dependence
+  on which machine it runs on.
+
 - **The task catalogue recorded a count of zero for anything it could not
   read, and a zero is priced as work that costs nothing.**
   `scripts/build_gdpval_task_catalog.py` read all four of its measured columns

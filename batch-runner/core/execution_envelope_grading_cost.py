@@ -21,7 +21,11 @@ call                                                         generation``
 grading_input_tokens_per_    ``per_item_call_cap`` results,  ``judge.tools.
 call                         each of at most                 read_deliverable``
                              ``MAX_CONTENT_CHARS``           and ``core/tools/
-                             characters                      read_deliverable``
+                             characters, plus what the       read_deliverable``
+                             conversation opens with: the    and ``prompt.
+                             standing instruction file and   tool_template``
+                             the width the task preview is   and the judge's
+                             cut to                          own default
 (no assumption at all)       ``perception.visual.call_cap_   ``judge.
                              per_task`` and the audio one    perception``
 ===========================  =============================  ==================
@@ -45,12 +49,36 @@ you have the most one marking call can be asked to re-read. Nothing was doing
 that multiplication, so the plan priced 10,000 tokens a call where the settings
 permit some fifty times that.
 
-What is still not pinned is the wording the conversation *starts* with: the
-standing instructions, the scoring line being judged, and the first 500
-characters of the task. Nothing caps those, so the figure this module demands is
-a floor on the true largest and not the largest itself. A plan below the floor
-is certainly not a ceiling; a plan above it may still not be one.
-:func:`describe_grading_caps` says both halves of that out loud.
+**The same row was wrong a second time, about the opening.** It said the
+wording a marking conversation *starts* with — the standing instructions, the
+scoring line being judged, and the first 500 characters of the task — "is not
+capped by anything", and wrote one of those caps down in prose in the very
+sentence that denied it. Two of the three are pinned by this repository and can
+be read rather than described. The standing instructions are a committed file
+named by ``prompt.tool_template``; the judge splits it in two and sends both
+halves on every call, one as the ``instructions=`` argument and one inside the
+message. The task preview is cut to
+``ToolCallingJudge.task_prompt_truncate`` characters. Both are counted now,
+from the places the marking run itself reads them, so a longer instruction file
+raises the demanded figure by itself instead of leaving this module quoting a
+number that has stopped being true.
+
+The third piece really is uncapped: the scoring line comes from the dataset and
+no setting bounds how long one line may be. So the figure this module demands
+is still a floor on the true largest and not the largest itself — a plan below
+it is certainly not a ceiling, a plan above it may still not be one — and
+:func:`describe_grading_caps` still says that out loud. What has changed is
+that the floor now includes everything the settings do pin, instead of starting
+from zero.
+
+``grader.task_prompt_truncate_chars`` earns its own warning. Nine settings
+files carry it, every one of them saying 500, and no module reads it:
+``core/grader.py`` builds the judge without passing it, so the judge applies
+its own default and the setting has never done anything at all. This module
+therefore counts the default, which is what the run applies, and reports the
+setting as ignored when the two disagree — because a width an operator can edit
+without effect is exactly how a number stops describing the run it is written
+next to.
 
 The perception gap is the one that can hide a model entirely.
 :func:`core.execution_envelope_cost.check_cost_ceiling` already refuses to let a
@@ -87,8 +115,78 @@ JUDGE_GENERATION_SETTINGS_PATH = ("judge", "generation")
 VISUAL_SETTINGS_PATH = ("judge", "perception", "visual")
 AUDIO_SETTINGS_PATH = ("judge", "perception", "audio")
 
+#: Where ``core/grader.py:resolve_tool_prompt_path`` looks for the standing
+#: instruction file, in the order it looks. ``prompt.template`` is the fallback
+#: and is used with its filename swapped, which is mirrored below.
+PROMPT_SETTINGS_PATH = ("prompt",)
+FALLBACK_TOOL_TEMPLATE_NAME = "grader_judge_v2.md"
+
+#: The setting that names how much of the task wording the judge is shown.
+#: Read to be compared against what the judge really applies, not to be used:
+#: nothing passes it to the judge, so it has never taken effect.
+TASK_PROMPT_TRUNCATE_SETTING = ("grader", "task_prompt_truncate_chars")
+
+#: Settings name the instruction file as a path relative to ``batch-runner``,
+#: which is where the marking run is started from.
+BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
+
 DEFAULT_VISUAL_CALLS_PER_TASK = 5
 DEFAULT_AUDIO_CALLS_PER_TASK = 3
+
+
+def resolve_standing_instructions_path(
+    document: Mapping[str, Any], settings_path: str | Path = "the marking settings"
+) -> Path:
+    """Which file the settings name as the standing instructions.
+
+    Mirrors ``core.grader.resolve_tool_prompt_path`` exactly, including its
+    fallback of taking ``prompt.template`` and swapping the filename, and
+    including returning the path as the settings write it rather than as an
+    absolute location. Reports name it, and where this check happens to be
+    running from is nobody else's business.
+
+    It is mirrored rather than imported because importing ``core.grader`` pulls
+    in the whole marking stack, and this module's promise is that it reads two
+    files and spends nothing.
+    ``test_execution_envelope_grading_cost.py`` puts the two side by side and
+    fails if they ever disagree, so the mirror cannot go stale quietly.
+    """
+    prompt_settings = _dig(document, PROMPT_SETTINGS_PATH)
+    configured = prompt_settings.get("tool_template")
+    if configured:
+        return Path(str(configured))
+    template = prompt_settings.get("template")
+    if not template:
+        raise ValueError(
+            f"{settings_path} names no standing instruction file under "
+            "prompt.tool_template or prompt.template, so what every marking "
+            "call opens with cannot be measured — and leaving it out would "
+            "price the opening at nothing"
+        )
+    return Path(str(template)).with_name(FALLBACK_TOOL_TEMPLATE_NAME)
+
+
+def standing_instructions_characters(
+    named: Path, settings_path: str | Path = "the marking settings"
+) -> int:
+    """How long that file is, in characters rather than bytes.
+
+    Characters, because the ratio it is divided by is characters per token. The
+    v2 instruction file holds a handful of multi-byte characters, so counting
+    bytes would quietly overstate it.
+
+    A relative name is taken from ``batch-runner``, which is where the marking
+    run is started from.
+    """
+    on_disk = named if named.is_absolute() else BATCH_RUNNER_ROOT / named
+    if not on_disk.is_file():
+        raise ValueError(
+            f"{settings_path} names {named} as the standing instructions sent "
+            f"on every marking call, and there is no file at {on_disk}. Its "
+            "length cannot be guessed: leaving it out would price the opening "
+            "of every marking conversation at nothing"
+        )
+    return len(on_disk.read_text(encoding="utf-8"))
 
 
 def _judge_default(field_name: str) -> Any:
@@ -167,6 +265,44 @@ class GradingCaps:
     """
 
     output_tokens_per_call: int
+
+    standing_instructions_path: str
+    """The file the judge sends as its standing instructions on every call.
+
+    Named by ``prompt.tool_template``. Recorded so the reported figure can be
+    traced back to a file someone can open and count, rather than to a number
+    typed into this module.
+    """
+
+    characters_of_standing_instructions: int
+    """How long that file is, in characters.
+
+    The judge splits the template at its marker and sends the head as the
+    ``instructions=`` argument and the tail inside the message, on every single
+    call, so the whole file is on the wire every time.
+
+    Counting the template as written is a floor rather than an overstatement in
+    the case that matters: its placeholders are replaced by real content — the
+    scoring line, the file names — which is longer than the placeholder text far
+    more often than it is shorter, and no placeholder's replacement is bounded
+    by anything this module can read.
+    """
+
+    characters_of_task_prompt_preview: int
+    """How much of the task wording the judge is shown.
+
+    Read off :class:`~core.tool_calling_judge.ToolCallingJudge` because that is
+    where the run reads it. Every task in the committed catalogue is longer
+    than this cut, so on the real dataset this width is always used in full.
+    """
+
+    task_prompt_preview_setting: int | None
+    """What ``grader.task_prompt_truncate_chars`` says, if the file says it.
+
+    Recorded only to be compared against the field above. Nothing passes this
+    setting to the judge, so on its own it describes nothing.
+    """
+
     visual_model: str | None
     visual_calls_per_task: int
     audio_model: str | None
@@ -181,10 +317,11 @@ class GradingCaps:
         the conversation again. So by the last turn a single call can be
         carrying every result the cap allowed, all at full width.
 
-        This counts the tool results only. What the conversation starts with —
-        the standing instructions, the scoring line, the first 500 characters
-        of the task — is not capped by anything, so this is a floor on the
-        largest a call can be and not the largest itself.
+        This counts the tool results only. What the conversation opens with is
+        counted by :meth:`input_tokens_the_conversation_opens_with`, and the
+        two are added together by
+        :meth:`input_tokens_one_call_must_cover`, which is the figure a plan
+        has to reach.
         """
         characters = Decimal(self.tool_calls_per_rubric_item) * Decimal(
             self.characters_per_tool_result
@@ -194,6 +331,50 @@ class GradingCaps:
         # ``//`` truncates towards zero rather than flooring, so it would round
         # this number *down* and quietly lower the very ceiling being worked out.
         return int(tokens.to_integral_value(rounding=ROUND_CEILING))
+
+    def input_tokens_the_conversation_opens_with(
+        self, characters_per_token: Decimal
+    ) -> int:
+        """The most the two pinned parts of the opening can be, in tokens.
+
+        Every marking call, including the very first one, carries the standing
+        instruction file and the preview of the task wording. Neither depends
+        on how the marking goes, so both are on the wire for all of the calls
+        the cap allows.
+
+        The scoring line being judged is the part that is genuinely not pinned:
+        it comes from the dataset and no setting bounds its length. It is not
+        counted here, which is why the whole figure remains a floor.
+        """
+        characters = Decimal(self.characters_of_standing_instructions) + Decimal(
+            self.characters_of_task_prompt_preview
+        )
+        tokens = characters / characters_per_token
+        return int(tokens.to_integral_value(rounding=ROUND_CEILING))
+
+    def input_tokens_one_call_must_cover(
+        self, characters_per_token: Decimal
+    ) -> int:
+        """The floor a plan's input-per-call figure has to reach.
+
+        The two parts are rounded up separately and then added, rather than
+        added and rounded once. That can demand one token more than the single
+        rounding would, and it is worth the token: a person reading the report
+        sees both parts and can add them up and get this number, instead of
+        finding it a token off and wondering which of the three is wrong.
+        """
+        return self.input_tokens_carried_by_tool_results(
+            characters_per_token
+        ) + self.input_tokens_the_conversation_opens_with(characters_per_token)
+
+    @property
+    def task_prompt_preview_setting_is_ignored(self) -> bool:
+        """Whether the settings name a preview width the run will not apply."""
+        return (
+            self.task_prompt_preview_setting is not None
+            and self.task_prompt_preview_setting
+            != self.characters_of_task_prompt_preview
+        )
 
     @property
     def models_the_marking_can_call(self) -> tuple[str, ...]:
@@ -215,6 +396,19 @@ class GradingCaps:
                 self.characters_per_tool_result
             ),
             "most_output_tokens_per_call": self.output_tokens_per_call,
+            "standing_instructions_read_from": self.standing_instructions_path,
+            "characters_of_standing_instructions": (
+                self.characters_of_standing_instructions
+            ),
+            "characters_of_task_wording_shown": (
+                self.characters_of_task_prompt_preview
+            ),
+            "task_wording_width_named_by_the_settings": (
+                self.task_prompt_preview_setting
+            ),
+            "the_settings_width_is_ignored": (
+                self.task_prompt_preview_setting_is_ignored
+            ),
             "picture_reading_model": self.visual_model,
             "most_picture_reading_calls_per_task": self.visual_calls_per_task,
             "sound_listening_model": self.audio_model,
@@ -282,6 +476,14 @@ def read_grading_caps(path: str | Path) -> GradingCaps:
     visual_model = _model_named_in(visual)
     audio_model = _model_named_in(audio)
 
+    instructions_path = resolve_standing_instructions_path(document, target)
+
+    # What the settings say the task preview is cut to, and what the run really
+    # cuts it to. They are read from different places on purpose: nothing
+    # carries the setting to the judge, so only the second one is applied.
+    named_width = grader_settings.get("task_prompt_truncate_chars")
+    applied_width = int(_judge_default("task_prompt_truncate"))
+
     return GradingCaps(
         settings_path=str(target),
         judge_model=judge_model,
@@ -289,6 +491,14 @@ def read_grading_caps(path: str | Path) -> GradingCaps:
         tool_calls_per_rubric_item=max(tool_call_cap, 0),
         characters_per_tool_result=MAX_CONTENT_CHARS,
         output_tokens_per_call=max(output_tokens, 0),
+        standing_instructions_path=str(instructions_path),
+        characters_of_standing_instructions=standing_instructions_characters(
+            instructions_path, target
+        ),
+        characters_of_task_prompt_preview=max(applied_width, 0),
+        task_prompt_preview_setting=(
+            int(named_width) if named_width is not None else None
+        ),
         visual_model=visual_model,
         visual_calls_per_task=(
             int(visual.get("call_cap_per_task", DEFAULT_VISUAL_CALLS_PER_TASK))
@@ -350,15 +560,38 @@ def check_assumptions_cover_the_caps(
     carried = caps.input_tokens_carried_by_tool_results(
         assumptions.characters_per_token
     )
-    if assumptions.grading_input_tokens_per_call < carried:
+    opening = caps.input_tokens_the_conversation_opens_with(
+        assumptions.characters_per_token
+    )
+    must_cover = caps.input_tokens_one_call_must_cover(
+        assumptions.characters_per_token
+    )
+    if assumptions.grading_input_tokens_per_call < must_cover:
         problems.append(
             f"the cost sum allows {assumptions.grading_input_tokens_per_call} "
             f"tokens of input per marking call, but {caps.settings_path} lets "
             f"{caps.tool_calls_per_rubric_item} tool results pile up in the "
             "conversation for one scoring line, each up to "
             f"{caps.characters_per_tool_result} characters, and every later "
-            f"turn sends them all again — so one call can carry {carried} "
-            "tokens before a word of the instructions is counted"
+            f"turn sends them all again — {carried} tokens — on top of the "
+            f"{opening} tokens every call opens with, being the "
+            f"{caps.characters_of_standing_instructions} characters of "
+            f"{caps.standing_instructions_path} and the "
+            f"{caps.characters_of_task_prompt_preview} characters of the task "
+            f"the judge is shown. So one call can carry {must_cover} tokens, "
+            "and that is still a floor: the scoring line being judged is not "
+            "capped by anything"
+        )
+
+    if caps.task_prompt_preview_setting_is_ignored:
+        problems.append(
+            f"{caps.settings_path} says the judge is shown "
+            f"{caps.task_prompt_preview_setting} characters of the task "
+            "wording, but nothing carries that setting to the judge, which "
+            f"applies its own {caps.characters_of_task_prompt_preview}. The "
+            "figure above counts what is applied. Either wire the setting up "
+            "or take it out, because a width that can be edited without "
+            "effect will be read as describing this run"
         )
 
     for modality, label, model, calls in (
@@ -452,8 +685,22 @@ def describe_grading_caps(caps: GradingCaps) -> list[str]:
         "sum's input-per-call figure has to cover"
     )
     lines.append(
-        "what the conversation starts with — the standing instructions, the "
-        "scoring line, the first 500 characters of the task — is not capped by "
-        "anything, so that figure is a floor and not the largest possible"
+        "and every call opens with "
+        f"{caps.characters_of_standing_instructions} characters of standing "
+        f"instructions, read from {caps.standing_instructions_path}, plus the "
+        f"{caps.characters_of_task_prompt_preview} characters of the task "
+        "wording the judge is shown — both on the wire every single call"
+    )
+    if caps.task_prompt_preview_setting_is_ignored:
+        lines.append(
+            "note: the settings say that task wording is cut to "
+            f"{caps.task_prompt_preview_setting} characters, and nothing "
+            "carries that setting to the judge, so the applied width above is "
+            "the one that counts"
+        )
+    lines.append(
+        "the one part still not capped is the scoring line being judged, "
+        "which comes from the dataset — so that figure is a floor and not the "
+        "largest possible"
     )
     return lines
