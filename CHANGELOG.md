@@ -12,6 +12,49 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The cost sum charged every reference file at 50,000 characters and named,
+  as its authority, a cap the pipeline never reaches.** The comment on
+  `REFERENCE_FILE_CHARACTER_CAP` in `core/execution_envelope_cost.py` said the
+  figure was "the cap `core/file_reader.py` applies when it reads a reference
+  file". That module's 50,000-character cut is dead code: `read_all_references`
+  is reachable only through `PromptBuilder.build`, and `PromptBuilder` is
+  constructed nowhere the pipeline runs — `main.py` does not exist in this
+  repository, and the sole construction anywhere is a test patching
+  `main.PromptBuilder.from_preset`. No step file mentions it. The reference
+  text that really reaches a model comes from `core/file_preview.py`, whose
+  caps nothing was holding the constant against.
+- **The real caps are an order of magnitude lower, and two things have no cap
+  at all.** `core/file_preview.py` cuts each preview at 3,000 characters and
+  all previews together at 10,000. Counting the file name that goes into a
+  header written *after* the cut, and this file's share of the block wrapper
+  that sits outside the running total, the widest a single reference file can
+  add through every section any run place fills is **3,814 characters** —
+  leaving the constant **46,186** above what it bounds. Over-charging is safe,
+  so the constant stayed at 50,000 and is now *required* to stay above. Two
+  things genuinely have no ceiling anywhere in this repository: the column
+  headers `build_file_structure_info` lists, one line per sheet with no cut,
+  and the file names outside the cap. `reference_file_prompt_budget` reports
+  those as unbounded rather than inventing a number for them — a figure that
+  looks checked is worse than an admission that it is not.
+- **Each run place now says which prompt sections it fills from the reference
+  files, and the arithmetic is read rather than copied.**
+  `SubprocessRunner` and `SandboxRunner` declare all three sections
+  (`file_structure`, `previews`, `available_files`); `CodeInterpreterRunner`
+  declares only `file_structure`, because the files themselves go up as
+  container attachments and arrive as tool results already priced by
+  `max_tool_result_tokens_per_turn` and the carried-forward input assumption.
+  `core/execution_envelope_preflight.py` asks `core/file_preview.py` what those
+  sections cost per file and refuses a plan whose per-file charge has fallen
+  below them. Only that direction is refused; a run place whose runner is
+  unregistered or declares nothing is refused too, matching the rule already
+  applied to exempted settings and to one-cap-per-attempt. The budget is
+  computed on every call, not frozen at import, so raising a cap moves it.
+- **Today the new rule is silent, and that is now proved rather than asserted.**
+  The free check's report is byte-identical with the rule wired in and with it
+  patched out, and the ceiling stays at **363.58 United States dollars** — the
+  constant did not move, only its justification and the check around it. No
+  problem count is asserted, because that number differs between this machine
+  and a build server that has neither the container nor the Azure route.
 - **Whether one cap on answer length covers a whole attempt was three
   hand-written booleans, and nothing anywhere held them to anything.** It is
   the largest single divisor in the cost sum: `core/execution_envelope_cost.py`

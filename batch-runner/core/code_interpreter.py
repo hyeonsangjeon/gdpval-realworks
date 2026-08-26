@@ -111,6 +111,23 @@ class CodeInterpreterRunner:
     #: one each turn divides the bill by the number of turns.
     SENDS_A_FRESH_REQUEST_PER_TURN = False
 
+    #: Which prompt sections this run place fills from the reference files.
+    #: Only the structure summary: ``run`` calls ``build_file_structure_info``
+    #: at line 208 and prepends it, and nothing else here puts file content
+    #: into the prompt. The files themselves go up as container attachments
+    #: (``_upload_reference_files`` → ``container_cfg["file_ids"]``, lines
+    #: 220-226); the model reads them by running code, so their bytes arrive
+    #: as tool results inside the request rather than as prompt text, and are
+    #: already priced by ``max_tool_result_tokens_per_turn`` and the
+    #: carried-forward input assumption.
+    #:
+    #: Read by core/execution_envelope_preflight.py, which asks
+    #: core/file_preview.py what these sections can add per file and holds the
+    #: answer against the cost sum's ``REFERENCE_FILE_CHARACTER_CAP``. Dropping
+    #: a section from this tuple lowers what the plan is required to cover, so
+    #: it must be dropped from the code first.
+    REFERENCE_FILE_PROMPT_SECTIONS = ("file_structure",)
+
     DEFAULT_PROMPT = "code_interpreter_occupation_codegen"
 
     def __init__(

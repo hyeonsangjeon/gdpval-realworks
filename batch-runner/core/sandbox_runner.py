@@ -310,6 +310,24 @@ class SandboxRunner:
     #: turn to bill; it starts to matter the moment that block changes.
     SENDS_A_FRESH_REQUEST_PER_TURN = True
 
+    #: Which prompt sections this run place fills from the reference files.
+    #: All three, though this one reaches them by name rather than inline: the
+    #: prompt spec's ``sections:`` list — ``DEFAULT_SECTIONS`` when the spec is
+    #: silent — is handed to ``assemble_sections``, and
+    #: core/prompt_sections.py's ``SECTION_PROVIDERS`` maps ``file_structure``
+    #: and ``previews`` onto the same two functions the host runner calls, plus
+    #: ``available_files``. A spec may switch any of them off, so this tuple is
+    #: what the run place *can* send, which is what a ceiling has to be built
+    #: on.
+    #:
+    #: Read by core/execution_envelope_preflight.py — see the note on
+    #: ``CodeInterpreterRunner.REFERENCE_FILE_PROMPT_SECTIONS``.
+    REFERENCE_FILE_PROMPT_SECTIONS = (
+        "file_structure",
+        "previews",
+        "available_files",
+    )
+
     DEFAULT_PROMPT = "sandbox_occupation_codegen"
 
     def __init__(
