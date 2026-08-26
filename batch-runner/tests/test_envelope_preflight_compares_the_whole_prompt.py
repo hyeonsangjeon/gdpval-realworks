@@ -39,8 +39,9 @@ if str(BATCH_RUNNER_ROOT) not in sys.path:
 
 from core.code_interpreter import CodeInterpreterRunner  # noqa: E402
 from core.execution_envelope_preflight import (  # noqa: E402
-    BLOCKS_THAT_MUST_MATCH_EVERYWHERE,
+    SETTINGS_ALLOWED_TO_DIFFER,
     _check_settings_the_plan_does_not_name,
+    _may_differ,
     check_experiment_files_match_conditions,
     conditions_from_plan,
 )
@@ -312,5 +313,19 @@ def test_one_run_place_is_not_compared_with_itself():
     )
 
 
-def test_the_prompt_is_among_the_blocks_that_have_to_match():
-    assert ("condition_a", "prompt") in BLOCKS_THAT_MUST_MATCH_EVERYWHERE
+def test_the_prompt_is_compared_because_nothing_excuses_it():
+    """The same guarantee as before, now the other way round.
+
+    This used to read ``("condition_a", "prompt") in
+    BLOCKS_THAT_MUST_MATCH_EVERYWHERE`` — the prompt was compared because
+    somebody had put it on a list of four blocks to compare. Everything off
+    that list went unlooked at, which is what pull request #237 turned round.
+    The prompt is now compared for the reason every other setting is: no entry
+    in :data:`SETTINGS_ALLOWED_TO_DIFFER` gives a reason for it to differ.
+    """
+    assert _may_differ(("condition_a", "prompt")) is None
+    assert _may_differ(("condition_a", "prompt", "prefix")) is None
+    assert not any(
+        excused[:2] == ("condition_a", "prompt")
+        for excused in SETTINGS_ALLOWED_TO_DIFFER
+    )

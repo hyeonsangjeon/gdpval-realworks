@@ -261,34 +261,98 @@ def check_experiment_files_match_conditions(
         loaded_settings[environment] = settings
 
     problems.extend(_check_settings_the_plan_does_not_name(loaded_settings))
+    problems.extend(
+        _check_the_container_calls_no_model_after_the_code_is_made(
+            loaded_settings,
+            str(plan.get("comparison") or COMPARISON_SAME_GENERATED_CODE),
+        )
+    )
     return problems
 
 
-# The blocks in which every key has to hold the same value in every run place.
+# The settings a run place is allowed to hold differently, and why each one.
 #
-# This names *places a setting can appear*, not settings. The keys to compare
-# are read out of the files themselves, so a setting nobody thought of when
-# this was written is compared anyway. Listing the keys by hand is what let
-# condition_a.prompt.prefix and condition_a.prompt.body go uncompared while
-# core/prompt_loader.py was joining both of them into the wording the model
-# reads: the list held three model settings, and the prompt has four parts of
-# which only two were being looked at.
+# Read this as the *whole* list of exceptions. Every other setting found in the
+# files is compared, whether or not anyone thought of it when this was written.
 #
-# data.filter is here for a different reason. A narrowing filter cannot quietly
-# change which tasks run — step1_prepare_tasks.py builds its lookup from the
-# already-filtered tasks, so a sector that excludes a pinned task raises there
-# instead. But that is a run that had already been started, and refusing before
-# it starts is what this check is for.
+# It used to be the other way round: four blocks were named as the ones to
+# compare, under a comment saying the blocks left out "are the ones that are
+# meant to differ between run places". Measured against the three experiment
+# files this plan actually names, that was not so. The files hold 44 settings;
+# the four blocks covered 18.
 #
-# The blocks left out are the ones that are meant to differ between run places:
-# the experiment's own id, name and description, the repository its results are
-# written to, and the label each run place is given.
-BLOCKS_THAT_MUST_MATCH_EVERYWHERE: tuple[tuple[str, ...], ...] = (
-    ("condition_a", "model"),
-    ("condition_a", "prompt"),
-    ("condition_a", "qa"),
-    ("data", "filter"),
-)
+# Seven of the 26 left out were caught anyway, by a different route:
+# :func:`_compare_one_experiment_file` holds each file against the plan, and the
+# plan happens to pin the time limit, the retry count, the resume count and the
+# code length. That route answers a narrower question — does this file agree
+# with the plan — so it covers only the settings somebody thought to write into
+# the plan, and it stops covering one the moment the plan stops naming it.
+#
+# The other 19 were invisible to every rule. Measured the same way at the level
+# of the whole check, this change takes it from 25 of 44 to 30. The five it
+# newly sees are what the run claims it is holding still and varying, whether
+# the results are published, whether they are entered for scoring, and the
+# container's own repair loop — which calls the model again after the code is
+# written, and which the comparison forbids in as many words.
+#
+# A list of what to check is only ever as complete as the last person to think
+# about it. A list of what may differ has to be argued for, entry by entry, and
+# anything nobody argued for is checked by default.
+SETTINGS_ALLOWED_TO_DIFFER: Mapping[tuple[str, ...], str] = {
+    ("experiment",): (
+        "the experiment's own id, name, description, author and date, which "
+        "name the run rather than shape its answer"
+    ),
+    ("condition_a", "name"): "the label this run place is given in the report",
+    ("data", "source"): (
+        "step0_bootstrap.sh duplicates the benchmark into one repository per "
+        "experiment, so each file names its own; which tasks are read out of "
+        "it is pinned separately by data.filter.task_ids and by the "
+        "catalogue's dataset fingerprint"
+    ),
+    ("execution", "mode"): (
+        "the run place itself — this is the one thing the comparison varies"
+    ),
+    ("execution", "sandbox"): (
+        "settings that describe the container, which only the container run "
+        "place has at all; a value here is not a disagreement with the run "
+        "places that have no container. What the container may do *after the "
+        "code is generated* is not left to this exception — see "
+        ":func:`_check_the_container_calls_no_model_after_the_code_is_made`"
+    ),
+}
+
+# Settings inside the container's own block that turn the model back on after
+# the code has been generated. Named separately from the exception above
+# because the comparison that re-runs one model's own code forbids exactly
+# this, and the container is the second way to reach it — condition_a.qa is the
+# first, and was the only one being watched.
+#
+# Each entry carries the value the runner uses when the setting is **absent**,
+# because leaving a setting out is not the same as turning it off. The repair
+# loop is the case that matters: core/sandbox_runner.py builds its settings as
+# ``{"enabled": True, "max_attempts": 1, **(repair or {})}``, so deleting the
+# block turns the loop on. The `enabled: false` written in the container's
+# experiment file is load-bearing, and a check that read an absent setting as
+# "off" would report a run clean at the moment it became least safe.
+#
+# Each entry also says what calling it does, because the reason has to survive
+# the next person who reads the list and wonders whether it still applies.
+CONTAINER_SETTINGS_THAT_CALL_THE_MODEL_AGAIN: Mapping[
+    tuple[str, ...], tuple[Any, str]
+] = {
+    ("repair", "enabled"): (
+        True,
+        "the container's repair loop writes a reflection and asks the model "
+        "for the code again, and core/sandbox_runner.py turns it on when the "
+        "setting is left out",
+    ),
+    ("output_qa", "vision", "enabled"): (
+        False,
+        "the container's picture check sends rendered pages to a vision "
+        "model; core/output_qa.py leaves it off when the setting is left out",
+    ),
+}
 
 # Plain words for the settings already known about, so the report reads as a
 # sentence instead of a key path. A setting missing from here is still
@@ -299,7 +363,6 @@ WHAT_THE_SETTING_DOES: Mapping[str, str] = {
     "condition_a.model.temperature": "how much the model varies its wording",
     "condition_a.model.seed": "the number that makes a run repeatable",
     "condition_a.model.reasoning_effort": "how hard the model is asked to think",
-    "condition_a.model.max_tokens": "the longest answer the model may write",
     "condition_a.prompt.system": "the standing instruction",
     "condition_a.prompt.prefix": "the wording put in front of the task",
     "condition_a.prompt.body": "the wording put between that and the task",
@@ -313,6 +376,14 @@ WHAT_THE_SETTING_DOES: Mapping[str, str] = {
     "data.filter.sample_size": "how many tasks are drawn",
     "data.filter.sector": "which sector the tasks are narrowed to",
     "data.filter.occupation": "which occupation the tasks are narrowed to",
+    "execution.timeout": "how long one task may run before it is given up on",
+    "execution.max_retries": "how many times a failed task is started again",
+    "execution.resume_max_rounds": "how many times a stopped run may pick up",
+    "execution.tokens.code_generation": "how much code the model may write",
+    "control.fixed": "what the run claims it is holding still",
+    "control.changed": "what the run claims it is varying",
+    "output.publish_to_hf": "whether the results are published",
+    "output.submit_to_evals": "whether the results are entered for scoring",
 }
 
 
@@ -326,49 +397,157 @@ def _dig(settings: Mapping[str, Any], path: tuple[str, ...]) -> Mapping[str, Any
     return node if isinstance(node, Mapping) else {}
 
 
+def _settings_in(node: Any, prefix: tuple[str, ...] = ()) -> dict[tuple[str, ...], Any]:
+    """Every setting in a file, as a flat map from key path to value.
+
+    A setting is anything that is not itself a block of further settings, so
+    the depth of the file does not decide what gets compared.
+    """
+    if not isinstance(node, Mapping):
+        return {prefix: node}
+    found: dict[tuple[str, ...], Any] = {}
+    for key, value in node.items():
+        found.update(_settings_in(value, prefix + (str(key),)))
+    return found
+
+
+def _may_differ(path: tuple[str, ...]) -> str | None:
+    """The stated reason this setting may differ, or None if it may not."""
+    for allowed, reason in SETTINGS_ALLOWED_TO_DIFFER.items():
+        if path[: len(allowed)] == allowed:
+            return reason
+    return None
+
+
 def _check_settings_the_plan_does_not_name(
     settings_by_environment: Mapping[str, Mapping[str, Any]],
 ) -> list[str]:
     """Confirm the run places agree on every setting that shapes the answer.
 
     A setting the plan forgot to fix is still a setting. If one run place asks
-    the model to think harder than another, or puts an extra sentence in front
-    of the task, the difference between their scores is not the run place.
+    the model to think harder than another, gives it half the time, or lets it
+    try again twice more, the difference between their scores is not the run
+    place.
 
-    Which settings those are is read out of the files rather than written down
-    here. A written-down list only ever covers what somebody remembered.
+    Every setting in the files is compared. The only ones passed over are the
+    ones :data:`SETTINGS_ALLOWED_TO_DIFFER` gives a reason for. This is the
+    opposite way round from how it was written first, where four blocks were
+    named as the ones to compare and everything outside them went unlooked at:
+    against the three files this plan names, that covered 18 of 44 settings,
+    and this covers 26.
+
+    That is the count for this rule alone, not for the check as a whole. Four
+    of the eight settings it newly reaches — the time limit, the retry count,
+    the resume count and the code length — were caught elsewhere already, by
+    :func:`_compare_one_experiment_file` holding each file against the plan.
+    Reaching them here as well is still worth having: this rule asks whether
+    the run places agree with *each other*, which stays true of a setting the
+    plan never mentions and of one the plan stops mentioning later.
     """
     problems: list[str] = []
     if len(settings_by_environment) < 2:
         return problems
-    for path in BLOCKS_THAT_MUST_MATCH_EVERYWHERE:
-        blocks = {
-            environment: _dig(settings, path)
-            for environment, settings in settings_by_environment.items()
-        }
-        for name in sorted({name for block in blocks.values() for name in block}):
-            dotted = ".".join(path + (name,))
-            seen: dict[str, list[str]] = {}
-            for environment in sorted(blocks):
-                # A key one file leaves out while another sets it is a real
-                # difference, so an absent key is grouped with an explicit
-                # null rather than passed over. Values are grouped by how they
-                # print, because a setting may hold a list or a block.
-                seen.setdefault(repr(blocks[environment].get(name)), []).append(
-                    environment
-                )
-            if len(seen) == 1:
+
+    found = {
+        environment: _settings_in(settings)
+        for environment, settings in settings_by_environment.items()
+    }
+    every_path = {path for settings in found.values() for path in settings}
+
+    for path in sorted(every_path):
+        if _may_differ(path) is not None:
+            continue
+        dotted = ".".join(path)
+        seen: dict[str, list[str]] = {}
+        for environment in sorted(found):
+            # A setting one file leaves out while another sets it is a real
+            # difference, so an absent one is grouped with an explicit null
+            # rather than passed over. Values are grouped by how they print,
+            # because a setting may hold a list.
+            seen.setdefault(repr(found[environment].get(path)), []).append(
+                environment
+            )
+        if len(seen) == 1:
+            continue
+        described = WHAT_THE_SETTING_DOES.get(dotted)
+        subject = f"{described} ({dotted})" if described else dotted
+        groups = " | ".join(
+            f"{shown}: {', '.join(sorted(places))}"
+            for shown, places in sorted(seen.items())
+        )
+        problems.append(
+            f"the run places disagree on {subject}, so the difference "
+            "between their answers would not only be the run place: " + groups
+        )
+    return problems
+
+
+def _check_the_container_calls_no_model_after_the_code_is_made(
+    settings_by_environment: Mapping[str, Mapping[str, Any]],
+    comparison: str,
+) -> list[str]:
+    """Hold the container to the rule the comparison already states.
+
+    The comparison that re-runs one model's own code fixes one thing above all
+    others: the model is called once, to write the code, and not again. No
+    self-review, no retry. That is what lets a difference in the answers be
+    read as a difference in the run place.
+
+    ``condition_a.qa`` is checked against that rule already. The container has
+    its own way to reach the same thing, and nothing was looking at it. Worse,
+    the setting that matters most is the one whose absence means *on*: leaving
+    ``repair`` out of the container's file turns the repair loop on, so the
+    check reads an absent setting as the value the runner would really use
+    rather than as "off".
+
+    The other comparison deliberately leaves each tool's own features running,
+    so this rule is not applied there.
+
+    Which run places get asked is decided by ``execution.mode``, the setting
+    the runner itself dispatches on, and not by whether a sandbox block has
+    anything in it. Those two answers differ in exactly the case that matters:
+    a container run place whose sandbox block is empty has no repair setting
+    written anywhere, which is the state that turns the repair loop on.
+    """
+    if comparison != COMPARISON_SAME_GENERATED_CODE:
+        return []
+    container_mode = EXECUTION_MODE_BY_ENVIRONMENT[ENVIRONMENT_DOCKER_CONTAINER]
+    problems: list[str] = []
+    for environment in sorted(settings_by_environment):
+        execution = _dig(settings_by_environment[environment], ("execution",))
+        if execution.get("mode") != container_mode:
+            continue
+        container = _dig(
+            settings_by_environment[environment], ("execution", "sandbox")
+        )
+        for path, (
+            when_absent,
+            what_it_does,
+        ) in sorted(CONTAINER_SETTINGS_THAT_CALL_THE_MODEL_AGAIN.items()):
+            node: Any = container
+            written_down = True
+            for key in path:
+                if not isinstance(node, Mapping) or key not in node:
+                    node = when_absent
+                    written_down = False
+                    break
+                node = node[key]
+            if not node:
                 continue
-            described = WHAT_THE_SETTING_DOES.get(dotted)
-            subject = f"{described} ({dotted})" if described else dotted
-            groups = " | ".join(
-                f"{shown}: {', '.join(sorted(places))}"
-                for shown, places in sorted(seen.items())
+            dotted = "execution.sandbox." + ".".join(path)
+            # Tracked with its own flag rather than by comparing the value to
+            # the default: `True is True` in Python, so an explicitly written
+            # `true` would otherwise be reported as a setting nobody wrote.
+            written = (
+                f"sets {dotted} to {node!r}"
+                if written_down
+                else f"leaves {dotted} out, which the runner reads as "
+                f"{when_absent!r}"
             )
             problems.append(
-                f"the run places disagree on {subject}, so the difference "
-                "between their answers would not only be the run place: "
-                + groups
+                f"{environment} {written}, but the comparison that re-runs "
+                "one model's own code calls the model once and not again: "
+                + what_it_does
             )
     return problems
 
