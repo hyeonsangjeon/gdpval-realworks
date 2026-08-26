@@ -130,6 +130,58 @@ def _approved(plan, amount=APPROVED_ENOUGH):
     return plan
 
 
+def _apart_from_the_marking_gap(result):
+    """Every problem except the marking half of the cost sum being too low.
+
+    Several tests below use "no problems at all" to mean "the thing I am
+    testing is right, and nothing else is wrong either". That reading stopped
+    being available when the marking check began reporting a gap **no plan can
+    close on its own**: the cost arithmetic has no way to count the
+    picture-reading and sound-listening calls the marking settings allow, and
+    every committed marking settings file switches both on. Raising a number in
+    the plan cannot fix that; building the arithmetic can.
+
+    Leaving the gap in would make these tests fail for a reason none of them is
+    about. Weakening the marking check to make them pass would be far worse —
+    it is reporting something true. So the gap is set aside by name, asserted
+    on separately just below, and held in place by
+    tests/test_execution_envelope_grading_cost.py.
+    """
+    return [
+        note
+        for note in result.all_problems
+        if note not in result.grading_ceiling_problems
+    ]
+
+
+def test_the_marking_gap_is_the_only_thing_a_ready_plan_still_reports(plan):
+    """What ``_apart_from_the_marking_gap`` sets aside, and nothing more.
+
+    If a new problem ever appears in a fully ready plan, it must not be able to
+    hide behind that helper. This names exactly what is being set aside.
+    """
+    result = _ready_preflight(_approved(plan))
+
+    assert _apart_from_the_marking_gap(result) == []
+    assert result.all_problems == result.grading_ceiling_problems
+    assert len(result.grading_ceiling_problems) == 5
+    assert result.may_start is False
+
+
+def test_a_plan_that_marks_and_names_no_marking_settings_is_refused(plan):
+    """Nothing having looked is not the same as the numbers being high enough."""
+    plan = _approved(plan)
+    plan.pop("grading_config")
+
+    result = _ready_preflight(plan)
+
+    assert result.may_start is False
+    assert any(
+        "names no marking settings file" in note
+        for note in result.grading_ceiling_problems
+    )
+
+
 # ── The task catalogue holds nothing that could follow a score ────────────
 
 
@@ -469,8 +521,8 @@ def test_an_approved_amount_below_the_ceiling_is_a_refusal(plan):
 
 def test_an_approved_amount_that_covers_the_ceiling_is_accepted(plan):
     result = _ready_preflight(_approved(plan))
-    assert result.all_problems == []
-    assert result.may_start is True
+    assert _apart_from_the_marking_gap(result) == []
+    assert not any("is above the" in note for note in result.all_problems)
 
 
 def test_the_worked_out_ceiling_is_reported_in_full(plan):
@@ -758,13 +810,13 @@ def test_the_three_settings_files_agree_on_the_unfixed_settings(plan):
 
     result = _ready_preflight(_approved(plan))
 
-    assert result.all_problems == []
+    assert _apart_from_the_marking_gap(result) == []
 
 
 def test_the_committed_files_agree_with_the_committed_plan(plan):
     """The three settings files and the plan say the same thing today."""
     result = _ready_preflight(_approved(plan))
-    assert result.all_problems == []
+    assert _apart_from_the_marking_gap(result) == []
 
 
 def test_the_plan_names_the_version_this_check_reads(plan):
@@ -784,7 +836,7 @@ def test_the_two_comparisons_keep_separate_score_tables(plan):
 def test_the_agentic_sandbox_v2_guards_are_not_worked_around(plan):
     """The check exercises all three guards; none may have been opened."""
     result = _ready_preflight(_approved(plan))
-    assert result.all_problems == []
+    assert _apart_from_the_marking_gap(result) == []
     assert result.readiness.status_of("agentic_sandbox_v2") == "structure_check_only"
 
 
@@ -921,7 +973,8 @@ def test_a_correctly_pointed_azure_setup_is_accepted(plan):
     assert result.azure.problems == []
     assert result.azure.observed_account == PINNED_AZURE_ACCOUNT
     assert result.azure.observed_project == PINNED_AZURE_PROJECT
-    assert result.may_start is True
+    assert _apart_from_the_marking_gap(result) == []
+    assert result.readiness.ready is True
 
 
 def test_the_same_deployment_name_on_another_account_is_refused(plan):
