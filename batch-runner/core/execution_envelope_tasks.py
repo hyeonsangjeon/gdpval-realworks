@@ -9,8 +9,14 @@ Two properties matter more than anything else here:
 **The choice cannot follow the scores.** Everything this module reads comes from
 a catalogue built from the benchmark dataset itself: the task number, the
 industry, the job, the file types the human expert handed in, and how many
-reference files the task ships with. No score, no grade, and no verdict is
-present, and :func:`check_catalog_carries_no_scores` proves it by looking.
+reference files the task ships with. :func:`check_catalog_carries_no_scores`
+holds that shape to the file: every field name in it, at any depth, must be one
+the schema below describes, and no number may be a fraction and no value true or
+false, because every number the schema holds is a count. So a result cannot
+arrive as a new field under any name, and cannot take over an existing one. What
+that cannot prove is a score hidden inside text a field is allowed to hold — an
+occupation written as ``"Nurse (0.87)"`` — and it is worth saying so rather than
+claiming the file is proven clean.
 
 **The choice can be re-derived by anyone.** The catalogue records which dataset
 revision it came from and the content fingerprint of that revision's data file.
@@ -20,6 +26,7 @@ catalogue always returns the same task numbers in the same order.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from dataclasses import dataclass
@@ -74,23 +81,16 @@ ADVANCE_CHECK_FORMAT_ORDER: tuple[str, ...] = (
     FORMAT_TEXT_ONLY,
 )
 
-# Field names that would mean a score leaked into the catalogue.
-_SCORE_LIKE_FIELD_NAMES = frozenset(
+# Keys the catalogue is allowed to carry that hold no data — only prose that
+# says where the file came from and how to read it. Every other allowed name is
+# derived from the schema below rather than written here, so a field added to
+# the schema is allowed without anyone editing this, and a field added to the
+# *file* is refused without anyone remembering to.
+_PROSE_ONLY_CATALOG_KEYS = frozenset(
     {
-        "awarded_score",
-        "score",
-        "max_score",
-        "pct",
-        "pct_raw",
-        "verdict",
-        "passed",
-        "grade",
-        "external_grade",
-        "summary",
-        "judge",
-        "judge_confidence",
-        "total_awarded",
-        "rank",
+        "written_by",
+        "holds_no_scores",
+        "reference_file_path_note",
     }
 )
 
@@ -248,36 +248,104 @@ def load_task_catalog(path: str | Path | None = None) -> TaskCatalog:
     return catalog
 
 
+def _allowed_catalog_field_names() -> frozenset[str]:
+    """Every field name the catalogue is allowed to carry.
+
+    Read from the two dataclasses the loader actually fills, so the permitted
+    set and the schema cannot drift apart. Adding a field to the schema permits
+    it here; adding one to the file does not.
+    """
+    return frozenset(
+        {field.name for field in dataclasses.fields(TaskCatalog)}
+        | {field.name for field in dataclasses.fields(CatalogTask)}
+        | _PROSE_ONLY_CATALOG_KEYS
+    )
+
+
 def check_catalog_carries_no_scores(
     path: str | Path | None = None,
 ) -> list[str]:
-    """Look for any score, grade, or verdict that leaked into the catalogue.
+    """Refuse any field the schema does not describe, and any fraction.
 
     The selection must be defensible as having been made before results were
     seen, so the file it reads is not allowed to carry results at all.
+
+    This asks the question the other way round from how it was first written.
+    It used to hold a list of fourteen field names somebody had typed out —
+    ``score``, ``verdict``, ``grade`` and eleven more — and report a leak only
+    when one of those names appeared. That list was never compared against the
+    names this repository's own grading pipeline writes. Injecting each of the
+    forty-five result-carrying names found in the committed grade files, it
+    caught eight and missed thirty-seven: a grade arriving as ``avg_score``,
+    ``scores``, ``pass_rate``, ``graded_by`` or ``child_grades`` passed this
+    check with a clean report.
+
+    A list of names to refuse can only ever be as good as whoever last thought
+    about it. The catalogue's shape, on the other hand, is small, fixed and
+    already written down as two dataclasses, so the question worth asking is
+    "is this field one the schema describes?" — which needs no foresight about
+    what a future field might be called.
+
+    Two things are checked, and it is worth being exact about which:
+
+    - **Every field name, at any depth, must be one the schema describes.** A
+      result cannot arrive as a new field under any name at all.
+    - **No number may be fractional, and no value may be true or false.** Every
+      number the schema holds is a count, and every score this repository
+      produces is a fraction or a flag, so a result cannot arrive by taking
+      over a field that is allowed.
+
+    What this does *not* prove: a result smuggled into the text of a field that
+    is allowed to hold text — an occupation written as ``"Nurse (0.87)"``, say
+    — is not caught by either rule. Saying so plainly is the point; the sentence
+    this function replaced claimed more than it did.
     """
     target = Path(path) if path is not None else CATALOG_PATH
-    raw = json.loads(target.read_text(encoding="utf-8"))
-    found: set[str] = set()
+    return catalog_score_problems(json.loads(target.read_text(encoding="utf-8")))
 
-    def walk(node: Any) -> None:
+
+def catalog_score_problems(raw: Any) -> list[str]:
+    """The same question, asked of a catalogue already in memory.
+
+    Separate from :func:`check_catalog_carries_no_scores` so the builder can
+    ask it about what it is *about* to write. A file that has already been
+    committed is a worse place to find this out.
+    """
+    allowed = _allowed_catalog_field_names()
+    unknown: set[str] = set()
+    fractions: set[str] = set()
+
+    def walk(node: Any, where: str) -> None:
         if isinstance(node, Mapping):
             for key, value in node.items():
-                if str(key).lower() in _SCORE_LIKE_FIELD_NAMES:
-                    found.add(str(key))
-                walk(value)
+                name = str(key)
+                if name not in allowed:
+                    unknown.add(name)
+                walk(value, name)
         elif isinstance(node, (list, tuple)):
             for value in node:
-                walk(value)
+                walk(value, where)
+        elif isinstance(node, (bool, float)):
+            # True and False are named here on purpose. Python counts them as
+            # whole numbers, so a pass/fail flag would otherwise slip through
+            # as if it were one of the schema's counts.
+            fractions.add(where)
 
-    walk(raw)
-    if found:
-        return [
-            "the task catalogue carries fields that could hold a result, so "
-            "the task choice cannot be shown to predate the scores: "
-            + ", ".join(sorted(found))
-        ]
-    return []
+    walk(raw, "the top level")
+    problems: list[str] = []
+    if unknown:
+        problems.append(
+            "the task catalogue carries fields the schema does not describe, "
+            "so the task choice cannot be shown to predate the scores: "
+            + ", ".join(sorted(unknown))
+        )
+    if fractions:
+        problems.append(
+            "the task catalogue holds a fraction or a true/false value, and "
+            "every number in its schema is a count, so one of these fields is "
+            "not holding what it should: " + ", ".join(sorted(fractions))
+        )
+    return problems
 
 
 @dataclass(frozen=True)

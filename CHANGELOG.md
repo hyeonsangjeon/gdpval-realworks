@@ -12,6 +12,42 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The check that "proves" the task list carries no scores caught 8 of 45 real
+  score field names and missed 37.** `check_catalog_carries_no_scores` in
+  `core/execution_envelope_tasks.py` backs the only claim that makes the
+  three-way run-place comparison meaningful — that the five tasks were chosen
+  before anybody saw a result — and the module docstring said no score, grade or
+  verdict "is present, and `check_catalog_carries_no_scores` proves it by
+  looking". It held fourteen hand-typed field names and reported a leak only
+  when one appeared verbatim. Nobody had compared that list against the field
+  names this repository's own grading pipeline writes. Harvesting the 45
+  result-carrying names out of the 19 committed files in `data/grades/` and
+  injecting each into a copy of the catalogue, **8 were caught and 37 were
+  reported clean** — `avg_score`, `scores`, `pass_rate`, `avg_pct`,
+  `confidence`, `critical_fail`, `graded_by`, `child_grades`, `num_grades` and
+  twenty-eight more. The question is now asked the other way round: every field
+  name, at any depth, must be one the two dataclasses the loader fills actually
+  describe, so a result is refused whatever it is called. All 45 are now caught.
+- The same check looked only at names, never values, so a result could take over
+  a field that was already allowed. Every number the catalogue's schema holds is
+  a count, and every score this repository produces is a fraction or a flag, so
+  fractions and true/false values are now refused wherever they appear. What
+  this still cannot catch — a score written into the text of a field allowed to
+  hold text, an occupation recorded as `"Nurse (0.87)"` — is stated in the
+  docstring instead of being covered by a claim to prove the file clean, and a
+  test fails if that sentence is removed.
+- `scripts/build_gdpval_task_catalog.py` wrote the catalogue without ever asking
+  the check. The committed file is clean only because the builder happens to
+  construct each field by hand, so the exposure was the next edit that recorded
+  one more useful-looking column: it would have been written, committed, and
+  found at the advance check, if at all. The builder now runs the same check on
+  what it is about to write and refuses to write at all if anything is flagged.
+- `tests/test_catalogue_carries_no_scores.py` is new — 21 tests. The central one
+  reads the field names out of `data/grades/*.json` rather than retyping them
+  and requires every one to be refused; another reads the source of the
+  permitted-name helper and fails if a schema field name is ever typed there
+  instead of derived. Against the code as it was, the file does not import at
+  all: there was no derivation to test.
 - **The free Azure check gave a clean bill of health for six settings the paid
   run refuses to start with.** `core/execution_envelope_azure.py` decides
   whether the three-way run-place comparison may spend anything on Azure, and
