@@ -410,9 +410,24 @@ cost:
       azure_code_interpreter: 8
 
     # Whether the cap on answer length covers a whole attempt or each turn
-    # inside it. Azure's Responses API applies one cap to the whole reply,
-    # tool turns included, so its answer length is counted once per attempt.
-    # The other two places send a fresh request per turn.
+    # inside it. This is the largest single divisor in the sum below: a true
+    # bills one answer an attempt, a false bills one for every turn.
+    #
+    # The readable half. Each runner declares SENDS_A_FRESH_REQUEST_PER_TURN,
+    # and core/execution_envelope_preflight.py holds these three against it,
+    # refusing a true where the repository itself opens a fresh request each
+    # turn. core/code_interpreter.py sends exactly one responses.create an
+    # attempt with the tool attached to that same call; core/sandbox_runner.py
+    # repairs with a Python for loop that calls the model again with the whole
+    # budget; core/subprocess_runner.py asks once and runs the code itself.
+    #
+    # The half that cannot be checked here. Whether Azure honours its one
+    # max_output_tokens across the tool turns it takes inside that single
+    # request is Microsoft's behaviour, taken on the documentation's word, in
+    # the same way as the turn count above. If it does not hold, the honest
+    # value is false and the ceiling rises about 50 dollars — more than the
+    # whole approved amount. Only the cheapening direction is refused: a false
+    # where one cap really does cover the attempt over-charges, which is safe.
     output_tokens_capped_per_attempt:
       host_python_process: false
       docker_container: false

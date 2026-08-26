@@ -298,6 +298,18 @@ def docker_image_exists(image: str) -> bool:
 class SandboxRunner:
     """LLM code generation → skill-aware, containerized execution."""
 
+    #: Whether this run place opens a new request for each turn the model
+    #: takes. ``True`` here: the repair loop in ``run`` is an ordinary Python
+    #: ``for`` loop, and every go through it calls ``complete`` again with the
+    #: whole ``max_completion_tokens`` budget. Nothing joins those calls into
+    #: one reply, so no single cap covers the attempt.
+    #:
+    #: Read by core/execution_envelope_preflight.py — see the note on
+    #: ``CodeInterpreterRunner.SENDS_A_FRESH_REQUEST_PER_TURN``. It costs
+    #: nothing while the repair loop is switched off and there is only one
+    #: turn to bill; it starts to matter the moment that block changes.
+    SENDS_A_FRESH_REQUEST_PER_TURN = True
+
     DEFAULT_PROMPT = "sandbox_occupation_codegen"
 
     def __init__(
