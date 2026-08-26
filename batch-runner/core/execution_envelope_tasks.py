@@ -23,6 +23,14 @@ revision it came from and the content fingerprint of that revision's data file.
 The catalogue has a fingerprint of its own. Re-running the selection on the same
 catalogue always returns the same task numbers in the same order.
 
+**The counts have to be capable of being true.** The catalogue's numbers are what
+the cost ceiling is worked out from, and the way they go wrong is not by being
+absurd — it is by being zero. :func:`catalog_number_problems` refuses the zeros
+that cannot be true: a task nobody marks, and a task with no wording. It does not
+refuse a task shipping no reference files, because 95 of the 220 really ship
+none. Only the direction that makes the work look smaller is refused; a count
+that is too large would only overstate what a run might cost.
+
 **The inputs are checked by reading them.** :func:`verify_input_file_versions`
 hashes each file the chosen tasks ship with and compares all 64 characters of
 the result against what the plan wrote down. It only ever reads a copy already
@@ -353,6 +361,110 @@ def catalog_score_problems(raw: Any) -> list[str]:
             "every number in its schema is a count, so one of these fields is "
             "not holding what it should: " + ", ".join(sorted(fractions))
         )
+    return problems
+
+
+# ── Could the counts be true at all? ───────────────────────────────────────
+
+#: The fingerprint of an empty piece of text. Worked out rather than typed: a
+#: single wrong character in a 64-character constant would switch the rule that
+#: uses it off, and nothing would say so.
+SHA256_OF_NOTHING = hashlib.sha256(b"").hexdigest()
+
+#: How many task numbers a refusal names before it starts counting instead. A
+#: refusal listing all 220 does not get read; one naming none cannot be acted
+#: on.
+_TASKS_NAMED_IN_A_REFUSAL = 5
+
+
+def _name_a_few(task_ids: Sequence[str]) -> str:
+    ordered = sorted(str(value) for value in task_ids)
+    shown = ordered[:_TASKS_NAMED_IN_A_REFUSAL]
+    remaining = len(ordered) - len(shown)
+    return ", ".join(shown) + (f" and {remaining} more" if remaining else "")
+
+
+def catalog_number_problems(catalog: TaskCatalog) -> list[str]:
+    """Refuse counts that cannot be true, in the direction that under-charges.
+
+    Every number in the catalogue is read straight out of a dataset column, and
+    the way those numbers go wrong is not by being absurd. It is by being zero.
+    A column that gets renamed upstream, or arrives empty, or holds text that
+    will not parse, used to become an empty list or an empty string, and an
+    empty value is not read further down as *unknown*. It is read as a real,
+    small measurement, and a real small measurement is exactly what nothing
+    complains about.
+
+    What that costs is worth writing down. Set every ``rubric_item_count`` in
+    the committed catalogue to zero and the ceiling for the planned comparison
+    falls from 363.59 to 93.75 United States dollars — 269.84 of it gone, about
+    three quarters — because marking is charged per scoring line and a task with
+    no scoring lines is marked for free. Nothing noticed: the loader takes any
+    whole number, :func:`catalog_score_problems` is asked a different question
+    and answers it correctly, and the builder's ``--check`` cannot help because
+    it rebuilds with the same code and so reproduces the same zeros.
+
+    Three things are refused, and the reason each one cannot be true is a fact
+    about this benchmark rather than a preference:
+
+    - **A task nobody marks.** Every task in the benchmark is marked against a
+      written rubric; the committed catalogue runs from 14 scoring lines to 137.
+      Zero says marking that task costs nothing.
+    - **A task with no wording.** The wording is the task. The committed
+      catalogue runs from 617 characters to 6,618. This also refuses a wording
+      fingerprint that is the fingerprint of nothing, which catches a length
+      corrected by hand without the fingerprint being corrected with it.
+    - **A reference-file count that disagrees with the paths listed beside
+      it.** Both are written from the same list, so they cannot honestly
+      differ. This one is here because a count of zero reference files is
+      entirely ordinary — 95 of the 220 tasks ship none — so the zero rule the
+      other two use would be wrong for this column, and without this it would
+      have no guard at all.
+
+    What this does *not* do: it catches a count of zero, not a count that is
+    merely too small. If a rubric column were replaced by one holding a single
+    scoring line per task, every number here would be positive and this would
+    report nothing. The builder is the place that problem has to be caught, and
+    :mod:`scripts.build_gdpval_task_catalog` refuses a missing column by name
+    rather than filling it in.
+    """
+    problems: list[str] = []
+
+    unmarked = [task.task_id for task in catalog.tasks if task.rubric_item_count <= 0]
+    if unmarked:
+        problems.append(
+            "the task catalogue says these tasks have no marking rubric at "
+            "all, and marking is charged per scoring line, so the cost "
+            "ceiling would leave out what it costs to mark them: "
+            + _name_a_few(unmarked)
+        )
+
+    wordless = [
+        task.task_id
+        for task in catalog.tasks
+        if task.prompt_character_count <= 0
+        or task.prompt_sha256.strip().lower() == SHA256_OF_NOTHING
+    ]
+    if wordless:
+        problems.append(
+            "the task catalogue says these tasks have no wording, which no "
+            "task in this benchmark does, so the column it was read from was "
+            "probably renamed or empty rather than the tasks being blank: "
+            + _name_a_few(wordless)
+        )
+
+    miscounted = [
+        task.task_id
+        for task in catalog.tasks
+        if task.reference_file_count != len(task.reference_file_paths)
+    ]
+    if miscounted:
+        problems.append(
+            "the task catalogue counts a different number of reference files "
+            "than it lists paths for, and both are written from the same "
+            "list, so one of the two is wrong: " + _name_a_few(miscounted)
+        )
+
     return problems
 
 

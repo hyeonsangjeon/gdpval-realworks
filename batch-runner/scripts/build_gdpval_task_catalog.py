@@ -17,7 +17,12 @@ Usage:
     python scripts/build_gdpval_task_catalog.py --check
 
 ``--check`` rebuilds the catalogue in memory and reports whether the committed
-file still matches, without writing anything.
+file still matches, without writing anything. Note what that does not cover: it
+rebuilds using this same code, so if a column this script reads were renamed in
+the dataset and this script went on quietly recording nothing in its place, both
+sides of the comparison would carry the same missing value and ``--check``
+would report a match. That is why the reading below refuses rather than
+substitutes a value it could not read.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Iterable
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
@@ -38,6 +44,8 @@ from core.execution_envelope_tasks import (  # noqa: E402
     CATALOG_SCHEMA_VERSION,
     DATASET_REPO_ID,
     DATASET_REVISION,
+    TaskCatalog,
+    catalog_number_problems,
     catalog_score_problems,
 )
 
@@ -52,6 +60,24 @@ HUGGING_FACE_CACHE_PARQUET = (
     / "data"
     / "train-00000-of-00001.parquet"
 )
+
+#: Every column this script reads out of the dataset. Kept in one place so the
+#: reading below can say up front which of them a file does not hold, instead of
+#: discovering it one row at a time and recording nothing in its place.
+COLUMNS_THE_CATALOGUE_IS_BUILT_FROM = (
+    "task_id",
+    "sector",
+    "occupation",
+    "deliverable_files",
+    "reference_files",
+    "prompt",
+    "rubric_json",
+)
+
+
+def missing_columns(column_names: Iterable[str]) -> list[str]:
+    """Which columns this script needs that the dataset file does not hold."""
+    return sorted(set(COLUMNS_THE_CATALOGUE_IS_BUILT_FROM) - set(column_names))
 
 
 def _find_parquet(explicit: Path | None) -> Path:
@@ -68,21 +94,65 @@ def _find_parquet(explicit: Path | None) -> Path:
 
 
 def build_catalog(parquet_path: Path) -> dict:
+    """Read the pinned dataset and write down what the selection may look at.
+
+    Nothing here substitutes a value it could not read. A missing column, a
+    null, or a rubric that will not parse stops the build, because each of them
+    used to become a count of zero, and a zero is read further on as work that
+    costs nothing rather than as something nobody could find.
+    """
     import pyarrow.parquet as pq
 
     raw = parquet_path.read_bytes()
-    rows = pq.read_table(parquet_path).to_pylist()
+    table = pq.read_table(parquet_path)
+
+    absent = missing_columns(table.column_names)
+    if absent:
+        raise ValueError(
+            "the dataset file does not hold: "
+            + ", ".join(absent)
+            + ". It holds: "
+            + ", ".join(sorted(table.column_names))
+            + ". Writing a catalogue now would record a count of "
+            "zero for every task, and a zero is read further on as work that "
+            "costs nothing rather than as a column nobody could find."
+        )
+
+    rows = table.to_pylist()
 
     tasks = []
     for row in rows:
-        deliverables = list(row.get("deliverable_files") or [])
-        references = list(row.get("reference_files") or [])
-        prompt = str(row.get("prompt") or "")
-        rubric_json = row.get("rubric_json")
+        empty = sorted(
+            name
+            for name in COLUMNS_THE_CATALOGUE_IS_BUILT_FROM
+            if row.get(name) is None
+        )
+        if empty:
+            raise ValueError(
+                f"task {row.get('task_id')!r} holds nothing at all under: "
+                + ", ".join(empty)
+                + ". Nothing is not the same as none, and recording it as none "
+                "would price part of this task at zero."
+            )
+
+        deliverables = list(row["deliverable_files"])
+        references = list(row["reference_files"])
+        prompt = str(row["prompt"])
         try:
-            rubric_items = json.loads(rubric_json) if rubric_json else []
-        except (TypeError, ValueError):
-            rubric_items = []
+            rubric_items = json.loads(row["rubric_json"])
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                f"task {row['task_id']!r}: the marking rubric could not be "
+                f"read ({error}). This used to be recorded as a task with no "
+                "rubric, which prices marking it at nothing."
+            ) from error
+        if not isinstance(rubric_items, list):
+            raise ValueError(
+                f"task {row['task_id']!r}: the marking rubric is a "
+                f"{type(rubric_items).__name__} rather than a list of scoring "
+                "lines, so there is no number of scoring lines to record."
+            )
+
         tasks.append(
             {
                 "task_id": str(row["task_id"]),
@@ -130,6 +200,15 @@ def render(catalog: dict) -> str:
     return json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
+def _counts_that_cannot_be_true(catalog: dict) -> list[str]:
+    """The same question the advance check asks, asked of what is about to be written."""
+    try:
+        loaded = TaskCatalog.from_mapping(catalog)
+    except ValueError as error:
+        return [str(error)]
+    return catalog_number_problems(loaded)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--parquet", type=Path, default=None)
@@ -141,14 +220,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    catalog = build_catalog(_find_parquet(args.parquet))
+    try:
+        catalog = build_catalog(_find_parquet(args.parquet))
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
 
     # Ask before writing, not after committing. Whoever next edits this script
     # to record one more useful-looking column will find out here, rather than
     # at the advance check that was supposed to be reading a clean file.
-    leaks = catalog_score_problems(catalog)
-    if leaks:
-        for note in leaks:
+    problems = list(catalog_score_problems(catalog))
+    # And ask whether the numbers about to be written could be true at all,
+    # because the cost ceiling is worked out from these same numbers.
+    problems.extend(_counts_that_cannot_be_true(catalog))
+    if problems:
+        for note in problems:
             print(note, file=sys.stderr)
         return 1
 
