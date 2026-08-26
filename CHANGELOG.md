@@ -117,6 +117,47 @@ entries land under a fresh dated heading the day they merge to `main`.
   copy shadowing the eight new descriptions, and held one entry
   (`condition_a.model.max_tokens`) that no settings file uses; both are fixed and
   a test now fails on either.
+- **An exemption was granted to a block, and it quietly covered a setting that
+  decides what goes into the model's prompt.** `SETTINGS_ALLOWED_TO_DIFFER`
+  matches by key-path prefix, so naming `execution.sandbox` — reasonably, since
+  a container's image, memory and processor count really are the run place
+  being described — excused all ten settings under it. Nine describe the
+  container. The tenth, `execution.sandbox.max_skills`, decides how many skill
+  documents `core/skills_registry.py` writes into the container's prompt
+  **ahead of the task itself**, as a manual of up to 7,000 characters that
+  neither of the other two run places is given — while all three experiment
+  files declare `control.fixed` to include `prompt_strategy`. The files make
+  the promise; the exemption let one of them break it. Changing the committed
+  `max_skills: 0` to `3` produced **10 refusals before and 10 after: no
+  detection at all**. `_check_the_container_is_told_no_more_than_the_others`
+  now refuses it, taking the whole check from **30 of 44 settings to 31**.
+- **Absence is not off, again, and here it is worst.** `core/executor.py` reads
+  the setting as `opts.get("max_skills", 5)`, `SandboxRunner` defaults the same
+  field to 5, and this repository ships exactly five skill documents — so
+  deleting the line does not mean "no skills", it hands the container every
+  skill there is. The `max_skills: 0` written in the container's file is
+  load-bearing in the same way `repair: enabled: false` is, and deleting either
+  is now refused by name.
+- **Every setting an exemption lets through is now argued for one at a time.**
+  A block-level exception is an argument about a block; the settings under it
+  are excused by where they sit. `SETTINGS_EACH_EXCEPTION_COVERS` in the tests
+  records a reason for each of the 15 settings the five exemptions cover, and
+  fails until a newly added one has one — either a reason written there or a
+  rule of its own, as `max_skills` now has. Writing the reasons found a second
+  thing worth saying out loud rather than assuming: `manifest.enabled` puts a
+  `manifest.json` into the delivered file list, so the container ships one file
+  the other two do not. It is built after the answer is chosen and cannot reach
+  the model, and what it records is the run place — which is the thing being
+  varied — so it stays exempt, but now on stated grounds instead of by
+  inheritance.
+- 14 further tests in
+  `tests/test_envelope_preflight_compares_every_setting.py` (69 in all). The
+  count in the comments is no longer a number somebody remembered: one test
+  changes all 44 settings in one run place, runs the whole check, and fails if
+  the total it reaches is not the 31 the comments claim. Another confirms the
+  skill manual really is rendered into the prompt ahead of the task, by calling
+  the real registry rather than trusting a sentence about it, and another reads
+  the default out of `SandboxRunner` rather than restating it.
 - **The check that "proves" the task list carries no scores caught 8 of 45 real
   score field names and missed 37.** `check_catalog_carries_no_scores` in
   `core/execution_envelope_tasks.py` backs the only claim that makes the
