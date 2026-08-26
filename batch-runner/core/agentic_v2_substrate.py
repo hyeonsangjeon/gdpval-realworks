@@ -128,6 +128,29 @@ def canonical_sha256(value: Any) -> str:
     ).hexdigest()
 
 
+# NOTHING MAY BE INSERTED ABOVE THIS POINT WITHOUT REPINNING THE LICENCE
+# EVALUATOR. core/agentic_v2_license.py freezes the exact bytecode identity of
+# canonical_sha256 above, and that identity includes the line it starts on. Add
+# a line anywhere before it and every licence report stops validating, with an
+# error that names the licence evaluator and never mentions this file. New
+# constants for this module therefore go here, below it, not up with the others.
+
+# The containment a substrate manifest must promise before it will validate.
+#
+# Named rather than written inline in the check below, so that anything asking
+# "what containment is actually required here?" reads the answer from the same
+# place the check enforces it. Two copies of these five settings could disagree
+# with each other; one cannot. core/agentic_v2_containment_readiness.py reads it
+# to report which of them a given machine can actually meet.
+REQUIRED_MICROVM_POLICY: dict[str, Any] = {
+    "required": True,
+    "runtime": "firecracker",
+    "network": "none",
+    "rootfs": "read-only",
+    "workdir": "ephemeral-quota",
+}
+
+
 @dataclass(frozen=True)
 class AgenticV2SubstrateManifest:
     document: dict[str, Any]
@@ -289,13 +312,10 @@ def _validate_manifest(value: Any) -> dict[str, Any]:
         "license_policy_id": "agentic-v2-license-v2",
     }:
         raise ValueError("agentic v2 substrate supply-chain policy is invalid")
-    if document["microvm"] != {
-        "required": True,
-        "runtime": "firecracker",
-        "network": "none",
-        "rootfs": "read-only",
-        "workdir": "ephemeral-quota",
-    } or document["microvm"].get("required") is not True:
+    if (
+        document["microvm"] != REQUIRED_MICROVM_POLICY
+        or document["microvm"].get("required") is not True
+    ):
         raise ValueError("agentic v2 substrate microvm policy is invalid")
     return document
 

@@ -32,6 +32,49 @@ entries land under a fresh dated heading the day they merge to `main`.
   place: leaving it out stops the count rather than quietly standing in a zero.
 
 ### Added
+- **The containment question that blocked Agentic Sandbox V2 stage three is
+  answered, and the answer is no machine.** The specification said whether the
+  small isolated virtual machine it requires "is available on the machines this
+  would run on has not been established". It is now established by reading
+  machines rather than by asserting prose, and it cost nothing: no model was
+  called, no command was run, no account was signed in to, nothing was
+  installed. `batch-runner/core/agentic_v2_containment_readiness.py` reports,
+  per requirement, whether a machine meets it and **why** in a full sentence.
+  Three machines are in play and each is a different kind of no. This box has a
+  processor that could do it, but sits inside a container with no virtualisation
+  device passed through, runs kernel 3.10.102 against the 5.10 that is the
+  oldest Firecracker validates, and has neither `firecracker` nor `jailer`
+  installed. GitHub-hosted runners are a documented no: GitHub says running a
+  virtual machine inside one is "technically possible" but "not officially
+  supported", with no guarantee of stability, performance or compatibility —
+  **a containment boundary offered with no guarantee is not a containment
+  boundary.** The self-hosted `agentic-sandbox` runner is not a no at all: no
+  such machine is registered, so the question has no subject, and that is the
+  only one of the three a decision could change.
+
+  Four things it deliberately does. It reads the five required settings from
+  `core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY` instead of restating them,
+  so the check and the rule it enforces cannot drift apart. It **never runs a
+  command** to find any of this out — a test reads its own source and fails if
+  it ever gains a way to start a process, because a containment check that
+  starts processes to decide whether starting processes is safe has the problem
+  backwards. It counts "cannot be established" against availability rather than
+  for it, so an unanswered question can never be mistaken for a cleared one. And
+  it reads `runs-on:` out of every workflow file and fails if a machine is being
+  asked for that has no recorded finding, so adding a runner without answering
+  the containment question for it is caught by a test rather than by somebody
+  remembering. It also distinguishes "not validated" from "forbidden": Firecracker
+  does not ban older kernels, it declines to test them, and the report says so.
+
+  Nothing is switched on and no refusal is removed. `exec_run` still answers
+  `capability_unavailable`, both guards still reject the mode, and
+  `refuse_command_execution` returns a refusal that would clear only once the
+  containment genuinely exists somewhere. `scripts/check_agentic_containment.py`
+  prints the whole report for free and exits 1. 61 new tests, one of which pins
+  a trap this change fell into: a line added above `canonical_sha256` in
+  `core/agentic_v2_substrate.py` silently breaks 91 licence tests, because that
+  function's starting line is part of a frozen identity, and the error names the
+  licence evaluator and never mentions the file that moved.
 - **What Agentic Sandbox V2 stage one would cost, worked out for free.** Step
   one of `tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md`. A loop's
   bill does not rise in step with the number of turns — it rises roughly with

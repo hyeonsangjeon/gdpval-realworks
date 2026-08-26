@@ -2,8 +2,10 @@
 
 - Written: 2026-08-25
 - Updated: 2026-08-26 — step one of section 8 is done. The cost of a stage-one
-  run has been worked out and is in section 7a. Nothing was spent doing it and
-  nothing was switched on.
+  run has been worked out and is in section 7a. The containment question that
+  blocked stage three has been answered, and the answer is in section 7b: the
+  containment is available on no machine currently in play. Nothing was spent
+  finding either out and nothing was switched on.
 - Status: **specification only. Nothing here is built, and nothing in it may be
   built without a separate, explicit approval to open command execution.**
 - Related GitHub Project: hyeonsangjeon/projects/5 — card
@@ -35,7 +37,11 @@ result, and a deadline.
 **There is a large amount of supporting machinery.** Alongside the tools sit
 modules for the contract, provenance, supply chain, licence evaluation, the
 image format, and the substrate. The substrate manifest requires a small
-isolated virtual machine and refuses to validate without that policy.
+isolated virtual machine and refuses to validate without that policy. Whether
+any machine can actually provide that virtual machine is now answered rather
+than assumed — `core/agentic_v2_containment_readiness.py` reads the machine it
+is on and reports which parts of the policy it can meet. Section 7b has the
+answer: none of the machines in play can meet it.
 
 **Three things stand between this and a real run:**
 
@@ -106,6 +112,11 @@ whether the network is reachable, how much memory and time, which user it runs
 as, and what happens when it exceeds any of those. Prove each one with a test
 that tries to exceed it and requires the attempt to fail. This is a test-only
 stage; nothing is switched on.
+*Half of this is now done, and it is the half that turned out to matter.
+Section 7b establishes **where** the containment could run, by reading machines
+rather than by asserting it, and the answer is: nowhere currently in play.
+Writing rules and testing them can proceed regardless, but they would be rules
+for a machine that does not yet exist.*
 
 **Stage three — open command execution behind its own approval.**
 Only after stage two passes. `exec_run` starts running real commands inside the
@@ -129,7 +140,9 @@ the loop is worth having.
 | `batch-runner/core/agentic_v2_runner.py` | Unchanged. Still replays the written-down list; the loop was added beside it, not inside it. |
 | `batch-runner/core/agentic_v2_tools.py` | Unchanged surface; the ceilings it already applies become the loop's limits. |
 | `batch-runner/core/agentic_v2_fixture_backend.py` | Stays shut through stages one and two. |
-| `batch-runner/core/agentic_v2_substrate.py` | Stage two: the containment rules are stated and checked here. |
+| `batch-runner/core/agentic_v2_substrate.py` | Stage two: the containment rules are stated and checked here. `REQUIRED_MICROVM_POLICY` is the one written-down copy of them. |
+| `batch-runner/core/agentic_v2_containment_readiness.py` | Stage two, **built**: reads a machine and reports which of those rules it can actually meet, and why. Reads the policy above rather than restating it. |
+| `batch-runner/core/agentic_v2_microvm.py` | Unchanged. Reports whether a boot test could be attempted; does not judge the host kernel or the processor, which is why the module above exists. |
 | `batch-runner/step2_run_inference.py` | Stage three: the guard is revisited, not before. |
 | `batch-runner/core/executor.py` | Stage three: the paid-run refusal is revisited, not before. |
 
@@ -256,6 +269,113 @@ will change by itself the day somebody wires a real client in.
 That was left alone on purpose: the loop is a separate module, so nothing that
 runs today changed behaviour, and the existing runner's tests still hold.
 
+## 7b. Where the containment could actually run, established on 2026-08-26
+
+Section 11 used to say the containment question "has not been established". It
+has now. Like section 7a, this cost nothing: no model was called, no command was
+run, no account was signed in to, and nothing was installed. It reads machines
+and published policies.
+
+### What was actually required, and where that is written
+
+The substrate manifest will not validate unless it promises a small isolated
+virtual machine, run by Firecracker, with no network, a read-only root
+filesystem, and a working directory that is wiped and size-limited. Those five
+settings now have exactly one written-down copy,
+`core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY`, which the manifest check
+enforces and the readiness report reads. Two copies could disagree with each
+other about what is required; one cannot.
+
+### The answer, in one line
+
+**The containment is available on no machine currently in play.** Three machines
+are in play, and each is a different kind of no.
+
+| machine | can it provide the containment? | how that was established |
+|---|---|---|
+| the box this repository is worked on from | no | read from the machine itself |
+| GitHub-hosted runners | no | GitHub's own published documentation |
+| the self-hosted `agentic-sandbox` runner | the question cannot be answered | there is no such machine |
+
+### This box
+
+Its processor can do the job — it reports `svm`, so the hardware itself supports
+running a virtual machine. Everything above the hardware fails:
+
+- It cannot reach the hardware. This is running inside a container
+  (`/.dockerenv` exists) with no virtualisation device passed through. Running
+  inside a container is not disqualifying on its own — Firecracker supports it
+  when the device is passed through — but nothing here passes it through.
+- Its kernel is 3.10.102. The oldest host kernel Firecracker validates against
+  is 5.10. Firecracker does not *forbid* older ones; its kernel policy says
+  untabled versions "might work" but are not validated in its test suite. An
+  unvalidated containment boundary is not one to rely on, so this is treated as
+  not met rather than as forbidden, and the report says which of the two it
+  means.
+- Neither `firecracker` nor `jailer` is installed.
+
+### GitHub-hosted runners
+
+This is a documented no, not an unknown. GitHub's own documentation says running
+a virtual machine inside one of its runners is "technically possible" but "not
+officially supported" — experimental, at the user's own risk, with no guarantee
+of stability, performance or compatibility. **A containment boundary offered
+with no guarantee is not a containment boundary.** The whole point of stage
+three's containment is that it holds when a model asks for something unexpected,
+and "no guarantee of compatibility" is the opposite of that.
+
+### The self-hosted runner
+
+`.github/workflows/agentic-sandbox-preflight.yml` asks for a machine labelled
+`agentic-sandbox`. No self-hosted runner is registered to this repository, and
+that workflow has never run. So this is not a no — it is a question with no
+subject. A machine that does not exist has no containment either way, and
+whether a future one would have it is a decision nobody has taken yet.
+
+This is worth stating separately from the other two, because it is the only one
+of the three that a decision could change.
+
+### How to see this for yourself, for free
+
+```
+cd batch-runner
+python scripts/check_agentic_containment.py
+```
+
+It prints every requirement, whether this machine meets it, and *why* in a full
+sentence; then the findings recorded about the two machines that cannot be read
+from here, each with its source; then the answer. It exits 0 only if the
+containment is available somewhere, so it is safe to wire into an automated
+check — today it exits 1.
+
+Three properties of that check are worth knowing:
+
+- **It never runs a command to find any of this out.** It reads files and
+  inspects the program search path. A test asserts the module's own source
+  contains no way of starting a process, because a containment check that
+  starts processes to decide whether starting processes is safe has the problem
+  backwards.
+- **It notices when a new machine appears.** It reads `runs-on:` out of every
+  workflow file and fails if any machine is being asked for that has no recorded
+  finding. Adding a runner to a workflow without answering the containment
+  question for it is caught by a test rather than by a person remembering.
+- **It distinguishes "no" from "cannot be answered".** A requirement whose
+  answer is unknown counts against availability rather than for it, so an
+  unanswered question can never be mistaken for a cleared one.
+
+### What this changes, and what it deliberately does not
+
+It answers the question that blocked stage three from being *designed*. It does
+not unblock stage three, and it removes no refusal: `exec_run` still answers
+`capability_unavailable`, and the two guards still reject the mode. The
+readiness module has its own function for this,
+`refuse_command_execution`, which returns a refusal today and would return
+nothing only once the containment genuinely exists somewhere.
+
+It also changes what stage three's first step is. It was "write the containment
+rules". It is now "obtain a machine that can hold them" — which is a request for
+hardware, not a code change, and is the owner's to make.
+
 ## 8. Order the work would be done in
 
 1. ~~Work out and get approval for the cost ceiling of a small stage-one run.~~
@@ -266,6 +386,11 @@ runs today changed behaviour, and the existing runner's tests still hold.
 3. Measure whether choosing tools helps, on the same five tasks. **Needs an
    approved amount and a way to reach a real model.**
 4. Write the containment rules and the tests that try to break them.
+   **Where those rules could run is now established (section 7b): nowhere in
+   play.** So this step now begins with obtaining a machine that can hold them,
+   which is a request for hardware rather than a code change. The rules can be
+   written and tested before that machine exists; they simply would not apply to
+   anything yet.
 5. Seek approval for command execution, presenting those test results.
 6. Only then, open `exec_run`.
 7. Revisit the two guards, each in its own change.
@@ -282,9 +407,16 @@ runs today changed behaviour, and the existing runner's tests still hold.
   `tests/test_agentic_v2_conversation.py::test_the_run_stops_at_the_dispatchers_own_call_ceiling`.
 - Stage two: one test per containment rule, each attempting to exceed it and
   requiring failure.
+- Stage two: a check that reports, per machine, which containment rules that
+  machine can meet and why. **Done:**
+  `tests/test_agentic_v2_containment_readiness.py`, 61 tests, including one that
+  requires the check itself to be incapable of starting a process and one that
+  fails if a workflow starts asking for a machine nobody has answered the
+  containment question for.
 - All stages: the existing test that opens all three guards and requires them
   shut must keep passing until the stage that deliberately changes one. **Still
-  passing**, and the loop's own test suite runs all three blocks as well.
+  passing**, and both the loop's and the containment check's own test suites run
+  all three blocks as well.
 
 ## 10. Done when
 
@@ -292,8 +424,13 @@ runs today changed behaviour, and the existing runner's tests still hold.
       failure it was shown. (Against a stand-in model. A real one is still out
       of reach and needs an approved amount.)
 - [ ] Every containment rule has a test that tries to exceed it and fails.
+      (Which machine could satisfy those rules is now established — none of the
+      three in play. See section 7b.)
 - [ ] Command execution is opened only after a separate written approval.
 - [ ] The free check reports this run place as able to run only when it is.
+      (Two of the three questions behind that report are now answered from real
+      readings rather than assumed: whether a real model can be reached, and
+      whether the containment exists anywhere. Both answers are no.)
 
 ## 11. Known blockers and the next decision
 
@@ -311,10 +448,17 @@ runs today changed behaviour, and the existing runner's tests still hold.
   empty on purpose, and the free check refuses while it is empty. The 32.23
   United States dollars approved on 2026-08-25 was for the three-place
   comparison and does not extend here.
-- **Blocked on a decision about containment.** The substrate manifest requires a
-  small isolated virtual machine. Whether that is available on the machines this
-  would run on has not been established, and stage three cannot be designed
-  concretely until it is. This blocks stage three only, not stage one.
+- **Blocked on there being no machine that can hold the containment.** This was
+  previously "blocked on a decision about containment", with the note that
+  whether it was available "has not been established". It has now been
+  established, by reading machines rather than by asserting it, and the answer
+  is in section 7b: **no machine currently in play can provide it.** This box
+  cannot reach hardware virtualisation and runs a kernel below the oldest
+  Firecracker validates; GitHub-hosted runners offer the capability only as
+  unsupported and unguaranteed, which is not a containment boundary; and the
+  self-hosted machine one workflow asks for has never been registered, so its
+  question has no subject. This blocks stage three only, not stage one. It is
+  also the only blocker on this list that code cannot clear: it needs a machine.
 
 The next decision is now a specific one with a price beside it: **which row of
 the table in section 7a is stage one worth running at?** The cheapest row that
@@ -325,3 +469,11 @@ own defaults are 492.67 to run.
 Choosing a row does not start anything, and neither figure above is an approved
 amount. Approving one, and removing the refusal that keeps a real model out of
 the loop, are two separate steps and both are the owner's to take.
+
+There is now a second decision, for stage three rather than stage one, and it
+does not compete with the first: **is a machine that can run a Firecracker
+virtual machine worth obtaining?** Section 7b establishes that none exists
+today. Stage one does not need one — it never runs a command. Stage three
+cannot happen without one. Deciding not to obtain one is a legitimate answer,
+and it would mean stage three is closed rather than pending, which is worth
+knowing either way.
