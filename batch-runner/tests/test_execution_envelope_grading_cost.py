@@ -41,6 +41,8 @@ from core.execution_envelope_grading_cost import (
     check_assumptions_cover_the_caps,
     describe_grading_caps,
     read_grading_caps,
+    resolve_standing_instructions_path,
+    standing_instructions_characters,
 )
 from core.tools.read_deliverable import MAX_CONTENT_CHARS
 from core.execution_envelope_preflight import (
@@ -82,7 +84,12 @@ def tool_calling_config_paths() -> list[Path]:
 
 
 def settings(**overrides) -> dict:
-    """A minimal marking settings document that builds a tool-calling judge."""
+    """A minimal marking settings document that builds a tool-calling judge.
+
+    The prompt block is part of the minimum: ``core.grader`` refuses to build a
+    judge from settings that name no instruction file, so a document without
+    one never described a run that could happen.
+    """
     document = {
         "judge": {
             "model": "gpt-5.4",
@@ -94,6 +101,7 @@ def settings(**overrides) -> dict:
                 }
             },
         },
+        "prompt": {"tool_template": "prompts/grader_judge_v2.md"},
         "grader": {"judge_max_retries": 1},
     }
     document.update(overrides)
@@ -118,13 +126,30 @@ def assumptions(**overrides) -> CostAssumptions:
         "grading_required": True,
         "grading_model": "gpt-5.4",
         "grading_calls_per_rubric_item": 11,
-        # Worked out from the same two limits the check reads, not typed in, so
-        # that "sits exactly on the limits" stays true if either one moves.
-        "grading_input_tokens_per_call": math.ceil(8 * MAX_CONTENT_CHARS / 3.0),
+        # Worked out from the same limits the check reads, not typed in, so
+        # that "sits exactly on the limits" stays true if any of them moves.
+        # That now includes what every call opens with, so a wider instruction
+        # file moves this fixture rather than making these tests report a
+        # problem that is not the one they are about.
+        "grading_input_tokens_per_call": caps().input_tokens_one_call_must_cover(
+            Decimal("3.0")
+        ),
         "grading_output_tokens_per_call": 2400,
     }
     raw.update(overrides)
     return CostAssumptions.from_mapping(raw)
+
+
+def real_instruction_file_length() -> int:
+    """How long the real instruction file is, read the way the check reads it.
+
+    Measured rather than typed so that this fixture and the committed settings
+    cannot drift apart. If they did, tests about the other limits would start
+    reporting an input-per-call problem that is not what they are about.
+    """
+    return standing_instructions_characters(
+        resolve_standing_instructions_path(settings())
+    )
 
 
 def caps(**overrides) -> GradingCaps:
@@ -135,6 +160,10 @@ def caps(**overrides) -> GradingCaps:
         tool_calls_per_rubric_item=8,
         characters_per_tool_result=MAX_CONTENT_CHARS,
         output_tokens_per_call=2400,
+        standing_instructions_path="prompts/grader_judge_v2.md",
+        characters_of_standing_instructions=real_instruction_file_length(),
+        characters_of_task_prompt_preview=500,
+        task_prompt_preview_setting=500,
         visual_model=None,
         visual_calls_per_task=0,
         audio_model=None,
