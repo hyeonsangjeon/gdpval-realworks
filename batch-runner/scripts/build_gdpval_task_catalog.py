@@ -38,6 +38,7 @@ from core.execution_envelope_tasks import (  # noqa: E402
     CATALOG_SCHEMA_VERSION,
     DATASET_REPO_ID,
     DATASET_REVISION,
+    catalog_score_problems,
 )
 
 HUGGING_FACE_CACHE_PARQUET = (
@@ -141,6 +142,16 @@ def main() -> int:
     args = parser.parse_args()
 
     catalog = build_catalog(_find_parquet(args.parquet))
+
+    # Ask before writing, not after committing. Whoever next edits this script
+    # to record one more useful-looking column will find out here, rather than
+    # at the advance check that was supposed to be reading a clean file.
+    leaks = catalog_score_problems(catalog)
+    if leaks:
+        for note in leaks:
+            print(note, file=sys.stderr)
+        return 1
+
     rendered = render(catalog)
 
     if args.check:
