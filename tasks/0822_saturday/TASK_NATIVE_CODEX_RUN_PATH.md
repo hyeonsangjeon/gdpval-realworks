@@ -1,6 +1,8 @@
 # Codex's own agent: what is officially supported, and what is still unknown
 
 - Written: 2026-08-25
+- Updated: 2026-08-26 — the documentation was searched again and half of the
+  open question is now answered. See section 3a.
 - Status: **investigation recorded. The run place stays blocked, and one part of
   it stays explicitly unconfirmed.** No code was written, because writing code
   for a path that may not be able to meet the comparison's conditions would be
@@ -72,6 +74,59 @@ The list of run modes in `core/executor.py` has no entry for it, and no module
 starts a benchmark task this way. Mentions of Codex in the repository are in
 documents people read, not in code that runs.
 
+## 3a. Searched again on 2026-08-26: half the question is now answered
+
+The question in section 7 has two halves, and it turns out they have different
+answers. Separating them is the main result of the second search.
+
+**Half one — getting a token from a directory sign-in. Confirmed supported, in
+general.** The configuration reference documents a table
+`model_providers.<id>.auth`, described as command-backed bearer token
+configuration for a custom provider. Its `auth.command` setting runs a command
+which "must print the token to stdout", with `auth.args`, `auth.cwd`,
+`auth.timeout_ms`, and `auth.refresh_interval_ms` alongside it. It is documented
+as mutually exclusive with `env_key`, `experimental_bearer_token`, and
+`requires_openai_auth`.
+
+That is exactly the shape a directory sign-in needs: a command runs, it prints a
+short-lived token, and the token is refreshed when it expires. The earlier
+version of this document said the documentation "does not describe using an
+Azure AI Foundry deployment with a token obtained from a directory sign-in".
+That was right about Azure and wrong about tokens: a general mechanism for
+tokens from a command is documented. This repository's rule is that
+authentication comes from a directory sign-in rather than a fixed key, and that
+rule could be satisfied by this setting.
+
+**Half two — addressing an Azure AI Foundry deployment. Still not confirmed,
+and the evidence now leans against it.** Three things were found:
+
+1. `model_providers.<id>.wire_api` documents `responses` as "the only supported
+   value". Azure AI Foundry serves a Responses API of its own, but nothing
+   states that the format Codex sends is accepted by it. A shared name is not a
+   shared format.
+2. Azure OpenAI and Azure AI Foundry do not appear in the configuration
+   reference at all. The only Azure entry anywhere in the documentation
+   navigation is a workload identity federation page, which is about using an
+   Azure identity to authenticate **to OpenAI** — the opposite direction from
+   what this run place would need.
+3. Amazon Bedrock, by contrast, has a built-in provider selected with
+   `model_provider = "amazon-bedrock"`, its own settings
+   (`model_providers.amazon-bedrock.aws.profile` and `.aws.region`), its own
+   documentation page, and its own authentication path covering federated
+   identity. It is documented as providing "an OpenAI-compatible Responses API
+   implementation for supported OpenAI models".
+
+Point 3 is what changes the weight of the evidence. Before it, Azure's absence
+could be read as documentation simply not covering every case. After it, the
+documentation demonstrably does cover a competing cloud in depth, with a
+purpose-built provider and a statement of format compatibility. Azure has none
+of those. That is not proof of impossibility, but it is no longer neutral, and
+it should not be read as "probably fine, nobody wrote it down".
+
+**What this means for the column.** It stays empty. What changes is that the
+remaining unknown is now one specific, checkable thing rather than a general
+doubt, and it is written in section 7 below.
+
 ## 4. A distinction that is easy to get wrong
 
 Azure offers models whose names contain "codex", and Azure's own agent service
@@ -106,17 +161,54 @@ thing measured changes.
 
 ## 7. The one fact that would unblock this
 
+The original question was:
+
 > Can Codex's own agent loop be pointed at a named Azure AI Foundry deployment,
 > authenticating with a token from a directory sign-in rather than a fixed key?
 
-If **yes**, and it can be shown in official documentation, then a run place
-becomes worth designing: a mode that hands one task to `codex exec`, lets it
-work, and collects the files it produced.
+After the second search, the authentication half is answered yes, so what is
+left is narrower and more specific:
 
-If **no**, the honest outcome is that this column can never satisfy the
-comparison's conditions, and the comparison is a four-column comparison. That is
-a perfectly good result, and much better than a fifth column that silently
-measures something else.
+> Does Codex's `responses` request format work against an Azure AI Foundry
+> deployment's own Responses API endpoint, and is that stated in official
+> documentation?
+
+This is now a single checkable thing rather than a general doubt. If it is
+answered **yes** in official documentation, a run place becomes worth designing,
+and the settings it would use are already known:
+
+```toml
+# In the user-level configuration, not a repository-local one: provider and
+# credential settings are ignored when a repository tries to set them.
+[model_providers.azure-foundry]
+name = "Azure AI Foundry"
+base_url = "<the project endpoint>"
+wire_api = "responses"
+
+# A directory sign-in rather than a fixed key, which is the only kind of
+# credential this repository permits.
+[model_providers.azure-foundry.auth]
+command = "<a command that prints a directory token to stdout>"
+refresh_interval_ms = <shorter than the token's lifetime>
+```
+
+This block is written here so that the next person starts from the documented
+settings rather than searching again. **It is not a working configuration and
+must not be treated as one.** It rests on the unanswered question above, and if
+that answer is no, none of it works.
+
+If the answer is **no**, the honest outcome is that this column can never
+satisfy the comparison's conditions, and the comparison is a four-column
+comparison. That is a perfectly good result, and much better than a fifth column
+that silently measures something else.
+
+A third possibility is worth naming because it is the most likely trap: the
+settings above might partly work — a connection is made, answers come back —
+while some part of the format is quietly handled differently. That would produce
+a column that looks filled in and is not comparable. So "it seemed to work when
+somebody tried it" is not the standard here; the standard is a documented
+statement, which is why this stays blocked on documentation rather than on an
+experiment.
 
 ## 8. Files that would change, if it were unblocked
 
@@ -163,9 +255,14 @@ None of these should be touched before the question in section 7 is answered.
 
 - **Blocked on an external fact**, not on effort in this repository. No amount of
   work here establishes whether the connection is supported.
+- As of 2026-08-26 the fact is narrower than it was: the authentication half is
+  answered, and what remains is whether Codex's `responses` request format is
+  documented as working against an Azure AI Foundry deployment.
 - The next decision belongs to whoever can confirm it: either a documented
-  statement that Codex's own agent can use an Azure AI Foundry deployment with a
-  directory sign-in, or acceptance that the comparison has four columns.
+  statement that it does, or acceptance that the comparison has four columns.
+  Given that a competing cloud is documented in depth and Azure is not mentioned
+  at all, four columns is the more likely outcome, and planning around it would
+  not be premature.
 
 Until then the column stays empty and is reported as unconfirmed. It is not
 filled with a substitute.

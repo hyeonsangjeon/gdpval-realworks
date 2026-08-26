@@ -290,14 +290,36 @@ cost:
   # tasks in three run places, with separate grading, under the retry limits
   # fixed above. It is a total ceiling, not a per-place allowance.
   #
-  # It equals the worked-out ceiling to the cent. That is deliberate: it means
-  # the free check passes only while the plan is exactly as costed, and any
-  # change that makes the run more expensive — a longer answer cap, another
-  # retry, a fourth run place — pushes the ceiling above this line and stops
-  # the run instead of quietly spending more.
-  #
   # The thirty-task and two-hundred-and-twenty-task stages are NOT covered by
   # this amount and are not approved.
+  #
+  # IMPORTANT — this amount no longer covers the worked-out ceiling, and the
+  # free check refuses the run because of it. That is the safety mechanism
+  # working, not a fault.
+  #
+  # When the amount was approved, the ceiling came to exactly 32.23. That
+  # figure was too low, because of a counting mistake in how a looping request
+  # was charged. The Azure code interpreter asks the model again after each
+  # piece of code it runs, and every one of those later turns re-reads the
+  # whole conversation so far. The old count charged the first turn's input
+  # eight times over instead, which leaves out everything the model wrote and
+  # every result it was shown in between. Counting the conversation as it grows
+  # raises the Azure place from 4.83 to 14.06 and the whole run from 32.23 to
+  # 43.77.
+  #
+  # Nothing was spent under the wrong figure: the Azure run place has never
+  # been reachable from the machine this was attempted from. But had it been,
+  # the run could have been allowed to start and then billed more than was
+  # approved, with every check reporting it as within budget.
+  #
+  # Three ways out, and the choice belongs to the owner:
+  #   1. approve 43.77 instead;
+  #   2. lower azure_code_interpreter in tool_loop_max_model_turns, which is a
+  #      chosen limit rather than a published one — the free check prints the
+  #      resulting figure;
+  #   3. leave it, and the run stays refused.
+  # The answer-length cap is not one of the ways out: the note at
+  # max_output_tokens records that a lower value truncated this model's code.
   approved_maximum_usd: 32.23
 
   assumptions:
@@ -335,6 +357,28 @@ cost:
       host_python_process: false
       docker_container: false
       azure_code_interpreter: true
+
+    # The most one tool result may add to the conversation, in tokens.
+    #
+    # This only has an effect where the model is asked more than once inside
+    # one attempt. Every later turn re-reads the results of the earlier ones,
+    # so a result written on turn one is paid for again on turns two, three and
+    # onwards. That is why a loop's input rises faster than its number of
+    # turns.
+    #
+    #   A separate Python process on the server, and a Docker container: the
+    #   model is asked once and nothing is carried forward, so 0.
+    #
+    #   Azure code interpreter: the service feeds the output of the code it ran
+    #   back to the model. Microsoft's documentation does not publish a limit on
+    #   how large that may be, so a limit is chosen here rather than left open,
+    #   the same way the turn limit above is. 5000 tokens is roughly fifteen
+    #   thousand characters, which is a great deal of program output for one
+    #   step and well above what the tasks in this comparison produce.
+    max_tool_result_tokens_per_turn:
+      host_python_process: 0
+      docker_container: 0
+      azure_code_interpreter: 5000
 
     # Applied to the whole ceiling at the end, to leave room for counting that
     # turns out to be optimistic.

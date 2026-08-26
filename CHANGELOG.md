@@ -12,6 +12,65 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The cost ceiling charged a looping request as though it never grew, and the
+  approved amount was worked out with that mistake in it.** The shared
+  arithmetic multiplied one turn's input by the number of model calls. That is
+  right when each attempt is a fresh request, and wrong for any request where
+  the model is asked again after each tool result: every later turn re-reads the
+  whole conversation before it, so what was written on turn one is charged again
+  on turns two, three and onwards. Counting a conversation as it grows raises
+  the Azure code interpreter column from 4.83 to 14.06 United States dollars and
+  the whole five-task, three-place run from 32.23 to 43.77 — **above the 32.23
+  approved for it on 2026-08-25**. So the run could have been allowed to start
+  and then billed more than was approved, with every check reporting it as
+  within budget. Nothing was spent under the wrong figure, because the Azure run
+  place has never been reachable from the machine it was attempted from. The
+  free check now refuses, which is the safety mechanism working; the plan file
+  records the three ways out and leaves the choice to the owner. The two
+  single-turn run places are unchanged to the token, and a test holds that in
+  place. `max_tool_result_tokens_per_turn` is now a required assumption per run
+  place: leaving it out stops the count rather than quietly standing in a zero.
+
+### Added
+- **What Agentic Sandbox V2 stage one would cost, worked out for free.** Step
+  one of `tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md`. A loop's
+  bill does not rise in step with the number of turns — it rises roughly with
+  the square of it, because the earlier turns are re-read by every later one.
+  `batch-runner/core/agentic_v2_stage_one_budget.py` prices the candidate
+  settings over the same five tasks, taking the tool-call ceiling and the
+  tool-result size from the dispatcher's own code rather than from numbers
+  copied into a document. The finding that motivates the table: **the
+  dispatcher's own defaults are the most expensive setting available**, at most
+  492.67 dollars to run five tasks, against 3.24 for the cheapest setting that
+  could still answer the question — over fifty times, from two settings a
+  reasonable person would have left alone. `StageOneBudget` then holds a run to
+  the figure, refusing the next call at each ceiling and raising rather than
+  reporting quietly if one is passed, so the worked-out amount is a limit and
+  not a hope. Nothing is approved, nothing is switched on, and all three safety
+  blocks stay shut: `scripts/check_agentic_stage_one_ceiling.py` prints the
+  table and refuses, reporting first that the model conversation stage one is
+  about does not exist yet — established by looking at what the runner accepts,
+  so the answer changes by itself when it is built. 52 new tests.
+
+### Changed
+- **The Codex question is now half answered, and narrower.**
+  `tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md` asked whether Codex's own
+  agent could be pointed at an Azure AI Foundry deployment using a directory
+  sign-in. The authentication half turns out to be documented in general: a
+  `model_providers.<id>.auth` table runs a command that prints a token to
+  standard output and refreshes it, which is the shape a directory sign-in
+  needs. The Azure half is still unconfirmed, and the evidence now leans
+  against: `wire_api` documents `responses` as its only supported value with no
+  statement that Azure's Responses API accepts that format, Azure appears
+  nowhere in the configuration reference, and Amazon Bedrock — which does have a
+  built-in provider, its own settings, its own page, and a statement of format
+  compatibility — shows that the documentation covers a competing cloud in depth
+  when it means to. The column stays empty and is not filled with Azure's own
+  agent service, which is a different product. The remaining unknown is written
+  down as one checkable question, with the configuration it would use, marked
+  clearly as untested.
+
+### Fixed
 - **A deployment name does not identify a deployment, and the run-place
   comparison was relying on one.** The plan pinned `deployment: gpt-5.4` and
   said nothing about which Azure AI Foundry account held it; the free check's
