@@ -12,6 +12,56 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The check that holds the three run places to identical settings compared 18
+  of the 44 settings in their files, and the comment above it said the rest
+  "are the ones that are meant to differ between run places".** Nobody had
+  measured that sentence. `_check_settings_the_plan_does_not_name` in
+  `core/execution_envelope_preflight.py` named four blocks —
+  `condition_a.model`, `condition_a.prompt`, `condition_a.qa`, `data.filter` —
+  and looked at nothing outside them. Flattening the three experiment files the
+  advance-check plan actually names and changing one setting at a time in a
+  single run place, **the rule caught 18 of 44 and now catches 26**; at the
+  level of the whole check, **25 of 44 and now 30**. Seven of the 26 the rule
+  missed were caught anyway by `_compare_one_experiment_file` holding each file
+  against the plan — the plan pins the time limit, the retry count, the resume
+  count and the code length — so those were covered because somebody wrote them
+  into the plan, not because they are in the files. Nineteen were invisible to
+  every rule. The question is now asked the other way round: every setting found
+  in the files is compared, and `SETTINGS_ALLOWED_TO_DIFFER` holds the whole set
+  of exceptions with a stated reason for each, so a setting added later is
+  compared without anybody remembering to add it.
+- **The container's repair loop calls the model again after the code is written,
+  which the strict comparison forbids in as many words, and nothing was looking
+  at it.** `same_generated_code_rerun` fixes that the model is called once, to
+  write the code, and not again — no self-review, no retry. `condition_a.qa` was
+  checked against that; `execution.sandbox.repair` is the second way to reach the
+  same thing and was inside the exemption for container-only settings.
+  `_check_the_container_calls_no_model_after_the_code_is_made` now refuses it,
+  along with `execution.sandbox.output_qa.vision.enabled`, which sends rendered
+  pages to a vision model. The rule deliberately does not fire for
+  `tool_built_in_features`, whose whole purpose is to leave each tool's own
+  features running.
+- **Absence is not off.** `core/sandbox_runner.py` builds its settings as
+  `{"enabled": True, "max_attempts": 1, **(repair or {})}`, so deleting the
+  `repair` block from the container's experiment file turns the repair loop
+  **on** — the `enabled: false` written there is load-bearing. The first version
+  of the rule above read a missing setting as falsy and reported a run clean at
+  the moment it became least safe; it also decided which run places to ask by
+  whether their sandbox block had anything in it, which is wrong in exactly the
+  same case. Each watched setting now carries the value the runner really
+  applies when it is left out, read from the runner's source, and which places
+  get asked is decided by `execution.mode`, the setting the runner dispatches on.
+- `tests/test_envelope_preflight_compares_every_setting.py` is new — 55 tests.
+  The central one is derived rather than typed: it reads the settings out of the
+  committed files, changes each in one run place, and requires either a refusal
+  or a stated reason, so it grows with the files. Others require every exception
+  to give an argument and to match something the files really hold, check the
+  absent-means-on default by building a `SandboxRunner` and by calling
+  `run_output_qa`, and read the source to fail if the compared set is ever typed
+  out again. `WHAT_THE_SETTING_DOES` was duplicated by the same edit, the second
+  copy shadowing the eight new descriptions, and held one entry
+  (`condition_a.model.max_tokens`) that no settings file uses; both are fixed and
+  a test now fails on either.
 - **The check that "proves" the task list carries no scores caught 8 of 45 real
   score field names and missed 37.** `check_catalog_carries_no_scores` in
   `core/execution_envelope_tasks.py` backs the only claim that makes the
