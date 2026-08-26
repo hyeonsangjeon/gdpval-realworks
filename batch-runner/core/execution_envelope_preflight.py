@@ -10,8 +10,10 @@ that can be made without calling a model:
 * the fingerprints of every input file are checked against the dataset;
 * each run place's experiment settings file is opened and compared against the
   shared conditions, so no run place can use a different model, a different
-  deployment, different wording, a different task list, a different answer
-  length, a different time limit, or a different number of attempts;
+  deployment, different wording in any part of the prompt, a different task
+  list, a different answer length, a different time limit, or a different
+  number of attempts. Which settings get compared is read out of the files
+  rather than listed here, so a setting added later is compared too;
 * the Docker run place is confirmed to be unable to fall back to the server's
   own operating system;
 * the three Agentic Sandbox V2 guards are exercised and must still refuse;
@@ -262,49 +264,111 @@ def check_experiment_files_match_conditions(
     return problems
 
 
-# Settings that are not among the conditions written into the plan, but that
-# would still change the answer if one run place had a different value. They
-# are not given a fixed value here; they only have to be the same everywhere,
-# because the comparison's whole claim is that nothing but the run place
-# differs.
-SETTINGS_THAT_MUST_SIMPLY_MATCH = (
-    ("temperature", "how much the model varies its wording"),
-    ("seed", "the number that makes a run repeatable"),
-    ("reasoning_effort", "how hard the model is asked to think"),
+# The blocks in which every key has to hold the same value in every run place.
+#
+# This names *places a setting can appear*, not settings. The keys to compare
+# are read out of the files themselves, so a setting nobody thought of when
+# this was written is compared anyway. Listing the keys by hand is what let
+# condition_a.prompt.prefix and condition_a.prompt.body go uncompared while
+# core/prompt_loader.py was joining both of them into the wording the model
+# reads: the list held three model settings, and the prompt has four parts of
+# which only two were being looked at.
+#
+# data.filter is here for a different reason. A narrowing filter cannot quietly
+# change which tasks run — step1_prepare_tasks.py builds its lookup from the
+# already-filtered tasks, so a sector that excludes a pinned task raises there
+# instead. But that is a run that had already been started, and refusing before
+# it starts is what this check is for.
+#
+# The blocks left out are the ones that are meant to differ between run places:
+# the experiment's own id, name and description, the repository its results are
+# written to, and the label each run place is given.
+BLOCKS_THAT_MUST_MATCH_EVERYWHERE: tuple[tuple[str, ...], ...] = (
+    ("condition_a", "model"),
+    ("condition_a", "prompt"),
+    ("condition_a", "qa"),
+    ("data", "filter"),
 )
+
+# Plain words for the settings already known about, so the report reads as a
+# sentence instead of a key path. A setting missing from here is still
+# compared; it is only described by its own name.
+WHAT_THE_SETTING_DOES: Mapping[str, str] = {
+    "condition_a.model.provider": "whose model is called",
+    "condition_a.model.deployment": "which model is called",
+    "condition_a.model.temperature": "how much the model varies its wording",
+    "condition_a.model.seed": "the number that makes a run repeatable",
+    "condition_a.model.reasoning_effort": "how hard the model is asked to think",
+    "condition_a.model.max_tokens": "the longest answer the model may write",
+    "condition_a.prompt.system": "the standing instruction",
+    "condition_a.prompt.prefix": "the wording put in front of the task",
+    "condition_a.prompt.body": "the wording put between that and the task",
+    "condition_a.prompt.suffix": "the wording put after the task",
+    "condition_a.qa.enabled": "whether the model reviews its own answer",
+    "condition_a.qa.max_retries": "how many times it may answer again",
+    "condition_a.qa.model": "which model reviews the answer",
+    "condition_a.qa.min_score": "the mark the answer has to reach",
+    "condition_a.qa.prompt": "the wording the reviewer is given",
+    "data.filter.task_ids": "which tasks are run",
+    "data.filter.sample_size": "how many tasks are drawn",
+    "data.filter.sector": "which sector the tasks are narrowed to",
+    "data.filter.occupation": "which occupation the tasks are narrowed to",
+}
+
+
+def _dig(settings: Mapping[str, Any], path: tuple[str, ...]) -> Mapping[str, Any]:
+    """Follow a key path and return the block found there, or an empty one."""
+    node: Any = settings
+    for key in path:
+        if not isinstance(node, Mapping):
+            return {}
+        node = node.get(key)
+    return node if isinstance(node, Mapping) else {}
 
 
 def _check_settings_the_plan_does_not_name(
     settings_by_environment: Mapping[str, Mapping[str, Any]],
 ) -> list[str]:
-    """Confirm the run places agree on settings the plan never mentions.
+    """Confirm the run places agree on every setting that shapes the answer.
 
     A setting the plan forgot to fix is still a setting. If one run place asks
-    the model to think harder than another, the difference between their scores
-    is not the run place.
+    the model to think harder than another, or puts an extra sentence in front
+    of the task, the difference between their scores is not the run place.
+
+    Which settings those are is read out of the files rather than written down
+    here. A written-down list only ever covers what somebody remembered.
     """
     problems: list[str] = []
     if len(settings_by_environment) < 2:
         return problems
-    for name, description in SETTINGS_THAT_MUST_SIMPLY_MATCH:
-        seen: dict[Any, list[str]] = {}
-        for environment in sorted(settings_by_environment):
-            condition_a = settings_by_environment[environment].get("condition_a")
-            model = (
-                condition_a.get("model")
-                if isinstance(condition_a, Mapping)
-                else None
-            )
-            value = model.get(name) if isinstance(model, Mapping) else None
-            seen.setdefault(value, []).append(environment)
-        if len(seen) > 1:
+    for path in BLOCKS_THAT_MUST_MATCH_EVERYWHERE:
+        blocks = {
+            environment: _dig(settings, path)
+            for environment, settings in settings_by_environment.items()
+        }
+        for name in sorted({name for block in blocks.values() for name in block}):
+            dotted = ".".join(path + (name,))
+            seen: dict[str, list[str]] = {}
+            for environment in sorted(blocks):
+                # A key one file leaves out while another sets it is a real
+                # difference, so an absent key is grouped with an explicit
+                # null rather than passed over. Values are grouped by how they
+                # print, because a setting may hold a list or a block.
+                seen.setdefault(repr(blocks[environment].get(name)), []).append(
+                    environment
+                )
+            if len(seen) == 1:
+                continue
+            described = WHAT_THE_SETTING_DOES.get(dotted)
+            subject = f"{described} ({dotted})" if described else dotted
             groups = " | ".join(
-                f"{value!r}: {', '.join(sorted(names))}"
-                for value, names in sorted(seen.items(), key=lambda x: str(x[0]))
+                f"{shown}: {', '.join(sorted(places))}"
+                for shown, places in sorted(seen.items())
             )
             problems.append(
-                f"the run places disagree on {description} ({name}), which the "
-                "plan does not fix but which would change the answer: " + groups
+                f"the run places disagree on {subject}, so the difference "
+                "between their answers would not only be the run place: "
+                + groups
             )
     return problems
 

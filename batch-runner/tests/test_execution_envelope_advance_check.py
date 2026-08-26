@@ -1225,7 +1225,12 @@ def test_a_settings_file_that_omits_the_answer_length_cap_is_refused(
 def test_run_places_that_disagree_on_an_unfixed_setting_are_refused(
     plan, tmp_path, setting, value
 ):
-    """A setting the plan never mentions still has to be the same everywhere."""
+    """A setting the plan never mentions still has to be the same everywhere.
+
+    The refusal names the setting by its full key path. A bare name stopped
+    being enough once the reviewer's settings were compared too, since both it
+    and the model have a ``model`` of their own.
+    """
 
     def change_it(settings):
         settings["condition_a"]["model"][setting] = value
@@ -1236,7 +1241,7 @@ def test_run_places_that_disagree_on_an_unfixed_setting_are_refused(
 
     assert result.may_start is False
     assert any(
-        f"({setting})" in note for note in result.all_problems
+        f"(condition_a.model.{setting})" in note for note in result.all_problems
     ), result.all_problems
 
 
