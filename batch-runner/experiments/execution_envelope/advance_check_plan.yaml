@@ -385,14 +385,25 @@ cost:
     # The most times the model may be asked again inside one attempt while it
     # is still working with its tools.
     #
-    #   A separate Python process on the server, and a Docker container: the
-    #   model is asked once, it writes Python, and the batch runner runs that
-    #   Python itself. The model is not asked again inside the attempt, so 1.
+    #   A separate Python process on the server: the model is asked once, it
+    #   writes Python, and the batch runner runs that Python itself.
+    #   core/subprocess_runner.py has no loop at all, so 1 is structural.
+    #
+    #   A Docker container: 1 as well, but for a reason that lives in the
+    #   settings rather than in the code. core/sandbox_runner.py goes at the
+    #   code once per repair allowed, and calls a vision model once per go when
+    #   the picture check is on — and it turns repair *on* when the setting is
+    #   left out. The container's file says `repair: enabled: false` and
+    #   `output_qa: enabled: false`, which is what makes this 1. Delete those
+    #   lines and the real number is 2. So it is not taken on trust: the free
+    #   check works it out from that file and refuses if this number is lower.
+    #   See _check_the_plan_counts_every_call_the_container_makes.
     #
     #   Azure code interpreter: the service runs the model's Python for it and
     #   may return to the model with the result several times inside one reply.
     #   Microsoft's documentation does not publish a limit on how many times,
-    #   so a limit is chosen here rather than left open. 8 is used.
+    #   so a limit is chosen here rather than left open. 8 is used. This is the
+    #   one of the three that cannot be read from anywhere in this repository.
     tool_loop_max_model_turns:
       host_python_process: 1
       docker_container: 1

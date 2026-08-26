@@ -20,7 +20,10 @@ that can be made without calling a model:
   own operating system;
 * the three Agentic Sandbox V2 guards are exercised and must still refuse;
 * the largest possible bill is worked out and compared against the amount
-  approved, and a missing amount is a refusal rather than a pass.
+  approved, and a missing amount is a refusal rather than a pass. Where the
+  number the bill rests on can be read off the settings instead of being taken
+  on trust, it is: the container's own file says how many times one attempt
+  asks a model, and the plan is refused if it prices fewer.
 
 Nothing here calls a model, signs in to a cloud account, or spends anything.
 """
@@ -296,6 +299,11 @@ def check_experiment_files_match_conditions(
     )
     problems.extend(
         _check_the_container_is_told_no_more_than_the_others(loaded_settings)
+    )
+    problems.extend(
+        _check_the_plan_counts_every_call_the_container_makes(
+            loaded_settings, conditions_by_environment, plan
+        )
     )
     return problems
 
@@ -658,6 +666,190 @@ def _check_the_container_is_told_no_more_than_the_others(
             settings_by_environment, CONTAINER_SETTINGS_THAT_ADD_TO_THE_PROMPT
         )
     ]
+
+
+@dataclass(frozen=True)
+class ContainerAttemptShape:
+    """How many times one attempt in the container really asks a model.
+
+    Worked out from the container's own settings, the way
+    :mod:`core.sandbox_runner` works it out, rather than read off a number
+    somebody wrote into the plan by hand.
+    """
+
+    code_turns: int
+    """One go at writing the code, plus one more for each repair allowed."""
+
+    picture_check_turns: int
+    """The picture check asks once per go at the code, when it is switched on."""
+
+    picture_check_model: str | None
+    """The model the picture check would call. It need not be the run model, and
+    it is None when the picture check is on but names nothing."""
+
+    @property
+    def model_turns(self) -> int:
+        """Every call to a model inside one attempt, added up."""
+        return self.code_turns + self.picture_check_turns
+
+    def in_words(self) -> str:
+        """The sum spelled out, so a reader can check it without the source."""
+        if not self.picture_check_turns:
+            return f"{self.code_turns} to write the code"
+        named = self.picture_check_model or "a model it does not name"
+        return (
+            f"{self.code_turns} to write the code and "
+            f"{self.picture_check_turns} to {named} for the picture check"
+        )
+
+
+def _container_loop_defaults() -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+    """The container runner's own values for its two model-calling loops.
+
+    Read off :class:`~core.sandbox_runner.SandboxRunner` rather than typed again
+    here, the same way :mod:`core.execution_envelope_grading_cost` reads the
+    judge's limits off the judge. Changing a value in the runner then moves this
+    check with it, instead of leaving it quoting a number that stopped being
+    true. Building one costs nothing and calls nothing: the constructor only
+    fills settings in, and the client handed to it here is never used.
+
+    Imported inside the function because the runner reaches for the container
+    libraries at import time, and this module is meant to run on a machine with
+    no container on it at all.
+    """
+    from core.sandbox_runner import SandboxRunner
+
+    runner = SandboxRunner(llm_client=None)
+    return runner.repair_cfg, runner.output_qa_cfg
+
+
+def container_attempt_shape(
+    container_settings: Mapping[str, Any],
+) -> ContainerAttemptShape:
+    """Count one attempt's model calls out of the container's own settings.
+
+    This follows :meth:`core.sandbox_runner.SandboxRunner.run`. It goes at the
+    code ``max_attempts + 1`` times, where ``max_attempts`` is the repair budget
+    when repair is on and nothing at all when it is off. Inside each of those it
+    calls ``_analyze_output`` once, which hands rendered pages to a vision model
+    when the picture check is on.
+
+    Anything the settings leave out takes the runner's own value, and for repair
+    that value is *on*. That is the whole reason for reading the settings rather
+    than a written number: a container file with an empty block is a container
+    that asks a model twice per attempt, and nothing in the plan would say so.
+    """
+    repair_defaults, picture_defaults = _container_loop_defaults()
+
+    repair = _dig(container_settings, ("repair",))
+    repair_on = bool(repair.get("enabled", repair_defaults.get("enabled")))
+    budget = int(
+        repair.get("max_attempts", repair_defaults.get("max_attempts", 0)) or 0
+    )
+    code_turns = (1 + max(budget, 0)) if repair_on else 1
+
+    picture = _dig(container_settings, ("output_qa",))
+    vision = _dig(picture, ("vision",))
+    # Three gates, each read the way the code reads it. run_output_qa returns at
+    # once unless ``enabled``; it collects no pages to look at unless ``render``;
+    # and it asks a model only when ``vision.enabled`` is written, which is read
+    # with no default at all and so is off whenever it is left out.
+    picture_on = (
+        bool(picture.get("enabled", picture_defaults.get("enabled")))
+        and bool(picture.get("render", picture_defaults.get("render")))
+        and bool(vision.get("enabled"))
+    )
+    named = vision.get("deployment") or vision.get("model")
+    return ContainerAttemptShape(
+        code_turns=code_turns,
+        picture_check_turns=code_turns if picture_on else 0,
+        picture_check_model=str(named).strip() if named else None,
+    )
+
+
+def _check_the_plan_counts_every_call_the_container_makes(
+    settings_by_environment: Mapping[str, Mapping[str, Any]],
+    conditions_by_environment: Mapping[str, ModelRunConditions],
+    plan: Mapping[str, Any],
+) -> list[str]:
+    """Hold the plan's turn limit against what the container's settings do.
+
+    The cost sum prices one attempt as ``tool_loop_max_model_turns`` calls to a
+    model, and that number is written into the plan by hand. For two of the
+    three run places it has to be: a separate Python process on the server has
+    no loop at all, and what Azure's own tool loop does inside itself is not
+    readable from here. The container is the one place where the real number is
+    sitting in a file in this repository, and nothing was reading it.
+
+    Two settings move it. Repair asks the model for the code again, as many
+    times as its budget allows. The picture check sends rendered pages to a
+    vision model, once for each go at the code. The plan says 1, and 1 is true
+    only while the committed file happens to say ``repair: enabled: false``.
+    Delete those two lines and the container asks twice at the same price a
+    call, with the plan still saying 1 and the sum still reporting the same
+    ceiling.
+
+    This refuses only when the plan's number sits *below* what the settings
+    would really do. A plan is allowed to be more careful than the settings; it
+    is not allowed to be less. That leaves the number a stated assumption where
+    it has to be one and pins it where it does not.
+
+    A second thing is said rather than folded in silently: the picture check
+    calls whatever model ``output_qa.vision`` names, which need not be the model
+    the run places are being compared on. Counting that call correctly and
+    pricing it at the wrong rate is still a wrong sum, so where the two differ
+    it is reported in its own sentence.
+
+    Unlike :func:`_check_the_container_calls_no_model_after_the_code_is_made`,
+    this holds whichever comparison is being run. A ceiling is a ceiling either
+    way, and the comparison that leaves each tool's own features running is
+    exactly the one where the container's loop is expected to be on.
+
+    A run place the plan writes no number for is left alone here. The cost sum
+    already refuses that on its own terms, and saying it twice helps nobody.
+    """
+    written = _dig(plan, ("cost", "assumptions", "tool_loop_max_model_turns"))
+    container_mode = EXECUTION_MODE_BY_ENVIRONMENT[ENVIRONMENT_DOCKER_CONTAINER]
+    problems: list[str] = []
+    for environment in sorted(settings_by_environment):
+        settings = settings_by_environment[environment]
+        if _dig(settings, ("execution",)).get("mode") != container_mode:
+            continue
+        shape = container_attempt_shape(_dig(settings, ("execution", "sandbox")))
+
+        claimed = written.get(environment)
+        try:
+            claimed_turns = int(claimed)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            # Absent, or not a number the sum could use either. Both are
+            # refused where the assumptions are read; this rule adds nothing.
+            claimed_turns = None
+        if claimed_turns is not None and claimed_turns < shape.model_turns:
+            problems.append(
+                f"{environment}'s settings ask a model {shape.model_turns} "
+                f"times inside one attempt ({shape.in_words()}), but the plan's "
+                f"cost sum prices {claimed_turns}; that sum is what says the "
+                "run fits inside the approved maximum"
+            )
+
+        if not shape.picture_check_turns:
+            continue
+        conditions = conditions_by_environment.get(environment)
+        run_model = conditions.resolved_model if conditions is not None else None
+        if shape.picture_check_model is None:
+            problems.append(
+                f"{environment} switches its picture check on but names no "
+                "model for it, so what the cost sum should charge for that "
+                "call cannot be read from the settings at all"
+            )
+        elif run_model and shape.picture_check_model != run_model:
+            problems.append(
+                f"{environment}'s picture check calls "
+                f"{shape.picture_check_model}, but the cost sum prices every "
+                f"call in an attempt at {run_model}, the model the run places "
+                "are being compared on"
+            )
+    return problems
 
 
 def _compare_one_experiment_file(
