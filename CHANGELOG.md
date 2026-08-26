@@ -12,6 +12,53 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Whether one cap on answer length covers a whole attempt was three
+  hand-written booleans, and nothing anywhere held them to anything.** It is
+  the largest single divisor in the cost sum: `core/execution_envelope_cost.py`
+  computes `answers_per_attempt = 1 if output_tokens_capped_per_attempt else
+  tool_loop_max_model_turns`, and the input side either charges every earlier
+  answer once each (`turns - 1`) or on the growing sum (`turns × (turns − 1) ÷
+  2`). Flipping Azure's `true` to `false` moves the ceiling from **363.58** to
+  **413.76 United States dollars** — Azure's own line from 14.06 to 54.20, a
+  factor of 3.86, and a **50.18-dollar** swing on a comparison approved at
+  32.23. The container fails in the direction nobody goes looking for: at the
+  two turns task #27 made reachable, a wrong `true` *lowers* the ceiling from
+  368.95 to 364.85, so the extra turn reads as free.
+- **The answer is readable from the shape of the request, so it is now read.**
+  `CodeInterpreterRunner.run` issues exactly one `responses.create` an attempt,
+  with the code interpreter attached to that same call and one
+  `max_output_tokens` on it; `SandboxRunner.run` repairs with an ordinary
+  Python `for` loop that calls `complete` again with the whole
+  `max_completion_tokens`; `SubprocessRunner.run` calls it once and runs the
+  code itself. Each runner now declares `SENDS_A_FRESH_REQUEST_PER_TURN`, the
+  three constants are proved by driving the runners with the model call patched
+  out and counting requests, and `core/execution_envelope_preflight.py` refuses
+  a plan that claims one cap where the repository itself opens a fresh one each
+  turn. Only that direction is refused — claiming a fresh cap where one really
+  covers the attempt over-charges, which is safe.
+- **A `true` for a run place whose runner says nothing is refused too.**
+  Nothing looked is not a pass, matching the rule the settings comparison
+  already applies. That covers Codex, which has no runner registered, and the
+  Agentic Sandbox V2 fixture runner, which is deliberately left undeclared
+  because it makes no model calls and no request shape would be true of it.
+- **The plan's four lines of prose are replaced by a comment that separates
+  what was checked from what cannot be.** That the Azure request is one call
+  carrying one cap is now read from `core/code_interpreter.py`. Whether Azure
+  *honours* that cap across the tool turns it takes inside that request is
+  Microsoft's behaviour, taken on the documentation's word — the same class of
+  fact as `tool_loop_max_model_turns.azure_code_interpreter: 8`, which the plan
+  already flagged as unreadable here. If it does not hold, the honest value is
+  `false` and the ceiling rises about 50 dollars. The comment now says so.
+- **The check is silent on the committed plan, and that is the correct
+  result.** Azure is the only `true` and Azure really does ask once, so the free
+  check's report is word for word what it would be with this rule switched off
+  — which is how the test states it, holding the two runs against each other
+  rather than naming a problem count. That count is a property of the machine,
+  not of the rule: a build server with no container daemon and no Azure route
+  has more to say than a workstation with both. The ceiling, which is not
+  machine-dependent, stays **363.58 dollars**. Two tests drive the public entry
+  and the whole free check with a wrong `true` in the plan, so deleting the
+  wiring fails a test rather than passing quietly.
 - **The container's carried-forward input was priced at nothing, on the written
   grounds that "the model is asked once and nothing is carried forward".** That
   is a property of one line in the container's settings file — `repair:

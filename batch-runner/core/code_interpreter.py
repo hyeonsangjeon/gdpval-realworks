@@ -97,6 +97,20 @@ def _close_sync_resources(resources: tuple[tuple[str, object | None], ...]) -> N
 class CodeInterpreterRunner:
     """Synchronous Code Interpreter runner; instances are not thread-safe."""
 
+    #: Whether this run place opens a new request for each turn the model
+    #: takes. ``False`` here: ``run`` issues exactly one ``responses.create``
+    #: per attempt, with the code interpreter attached to that same call, so
+    #: however many times the service returns to the model with a tool result,
+    #: it happens inside the one request and under the one
+    #: ``max_output_tokens`` sent with it.
+    #:
+    #: Read by core/execution_envelope_preflight.py, which holds the cost
+    #: sum's ``output_tokens_capped_per_attempt`` against it. That figure
+    #: decides whether an attempt is billed for one answer or for one per
+    #: turn, so claiming a single cap where the caller really sends a fresh
+    #: one each turn divides the bill by the number of turns.
+    SENDS_A_FRESH_REQUEST_PER_TURN = False
+
     DEFAULT_PROMPT = "code_interpreter_occupation_codegen"
 
     def __init__(

@@ -206,6 +206,17 @@ def extract_description(text: str) -> str:
 class SubprocessRunner:
     """LLM code generation → safe subprocess execution"""
 
+    #: Whether this run place opens a new request for each turn the model
+    #: takes. ``True`` here, though it currently takes only one: ``run`` calls
+    #: ``complete`` once, gets the code, and runs it itself. There is no loop,
+    #: and if one were ever added it would be a Python loop around that same
+    #: call — a fresh request with a fresh cap each time, as in
+    #: ``SandboxRunner``.
+    #:
+    #: Read by core/execution_envelope_preflight.py — see the note on
+    #: ``CodeInterpreterRunner.SENDS_A_FRESH_REQUEST_PER_TURN``.
+    SENDS_A_FRESH_REQUEST_PER_TURN = True
+
     DEFAULT_PROMPT = "subprocess_occupation_codegen"
 
     def __init__(

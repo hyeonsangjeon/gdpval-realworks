@@ -26,7 +26,10 @@ that can be made without calling a model:
   asks a model, and the plan is refused if it prices fewer. Where that file
   lets the container ask twice, the repair prompt says how much of the run's
   own output comes back with the second question, and the plan is refused if it
-  prices less than that.
+  prices less than that. Whether one cap on answer length covers a whole
+  attempt is read from the runner that sends the request, and a plan that
+  claims one cap where the caller really opens a fresh request each turn is
+  refused.
 
 Nothing here calls a model, signs in to a cloud account, or spends anything.
 """
@@ -35,6 +38,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from decimal import Decimal, ROUND_CEILING
+from importlib import import_module
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -73,6 +77,7 @@ from core.execution_environment_readiness import (
     ENVIRONMENT_DOCKER_CONTAINER,
     ENVIRONMENT_HOST_PYTHON_PROCESS,
     EXECUTION_MODE_BY_ENVIRONMENT,
+    RUNNER_CLASS_BY_ENVIRONMENT,
     ModelRunConditions,
     ReadinessReport,
     build_readiness_report,
@@ -313,6 +318,7 @@ def check_experiment_files_match_conditions(
             loaded_settings, plan
         )
     )
+    problems.extend(_check_the_plan_knows_what_one_cap_covers(plan))
     return problems
 
 
@@ -981,6 +987,132 @@ def _check_the_plan_counts_what_the_container_carries_forward(
             "plan's ratio, and that is a floor — the blocking-error lines, the "
             "warnings, the repair guidance and the contract section have no "
             "fixed width at all"
+        )
+    return problems
+
+
+def _runner_sends_a_fresh_request_per_turn(environment: str) -> bool | None:
+    """Whether this run place opens a new request for each turn the model takes.
+
+    Read off the runner class that actually does the work, named in
+    ``RUNNER_CLASS_BY_ENVIRONMENT``, rather than decided here from the mode
+    name. The two answers are structural and neither is a setting:
+
+    * ``core.code_interpreter.CodeInterpreterRunner`` issues one
+      ``responses.create`` per attempt with the code interpreter attached to it,
+      so the whole reply — every tool turn the service takes inside it —
+      happens under the one ``max_output_tokens`` sent with that call.
+    * ``core.sandbox_runner.SandboxRunner`` repairs by going round an ordinary
+      Python ``for`` loop, calling ``complete`` again each time with the full
+      budget. No single cap covers the attempt because there is no single
+      request.
+
+    ``None`` means the runner does not say. That is not the same as ``False``,
+    and the caller must not read it as permission: see
+    :func:`_check_the_plan_knows_what_one_cap_covers`.
+
+    Imported inside the function because these runners reach for container and
+    provider libraries at import time, and this module is meant to run on a
+    machine that has neither.
+    """
+    named = RUNNER_CLASS_BY_ENVIRONMENT.get(environment)
+    if named is None:
+        return None
+    module_name, class_name = named
+    try:
+        module = import_module(module_name)
+        runner = getattr(module, class_name)
+        declared = getattr(runner, "SENDS_A_FRESH_REQUEST_PER_TURN")
+    except (AttributeError, ImportError):
+        return None
+    return bool(declared)
+
+
+def _check_the_plan_knows_what_one_cap_covers(
+    plan: Mapping[str, Any],
+) -> list[str]:
+    """Hold ``output_tokens_capped_per_attempt`` against the request really sent.
+
+    This is the largest single divisor in the cost sum, and until now it was
+    three booleans typed into the plan with four lines of prose beside them and
+    nothing checking any of it.
+    :func:`core.execution_envelope_cost.max_attempt_counts` bills
+    ``1 if capped else tool_loop_max_model_turns`` answers per attempt, and
+    :func:`core.execution_envelope_cost.max_input_tokens_per_attempt` charges
+    ``(turns - 1)`` earlier answers when it is set against
+    ``turns * (turns - 1) / 2`` when it is not. At Azure's eight turns that is
+    the difference between 14.06 and 54.20 United States dollars for one run
+    place — more, by itself, than the whole amount the plan asks to be approved.
+
+    What decides it is not a setting but the shape of the request: a run place
+    that hands the model's whole reply to one API call is capped once for the
+    attempt; a run place that opens a new request each turn is capped again
+    each turn. So the answer is read from the runner
+    (:func:`_runner_sends_a_fresh_request_per_turn`), not from the plan.
+
+    Only the cheap direction is refused, as everywhere else here. Claiming one
+    cap where the caller really sends a fresh one each turn divides the answer
+    charge by the number of turns, so it is refused. Claiming a fresh cap where
+    one would have covered the attempt over-charges, and a ceiling is allowed
+    to be more careful than the thing it bounds.
+
+    A ``true`` for a run place whose runner does not say is refused as well.
+    Nothing looked, and nothing looking is not the same as the claim holding —
+    the same rule :func:`_check_grading_assumptions_match_the_settings` applies
+    to a plan that marks answers but names no marking settings.
+
+    **One thing here cannot be checked from this repository at all**, and the
+    refusal must not pretend otherwise. That the Azure request is a single call
+    carrying a single cap is readable, and is read. Whether the service honours
+    that cap across the tool turns it takes inside the call is Microsoft's
+    behaviour, not this repository's, and stands with
+    ``tool_loop_max_model_turns.azure_code_interpreter`` as something taken on
+    the documentation's word. It is worth naming which way that one leans: if
+    the service did not hold to it, the honest value would be ``false`` and the
+    ceiling would rise by about 50 dollars.
+    """
+    capped = _dig(plan, ("cost", "assumptions", "output_tokens_capped_per_attempt"))
+    turns = _dig(plan, ("cost", "assumptions", "tool_loop_max_model_turns"))
+
+    problems: list[str] = []
+    for environment in sorted(capped):
+        if not bool(capped[environment]):
+            continue
+        fresh_each_turn = _runner_sends_a_fresh_request_per_turn(environment)
+        if fresh_each_turn is False:
+            continue
+
+        try:
+            claimed_turns = int(turns.get(environment))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            claimed_turns = 1
+        cost_note = (
+            f"at the {claimed_turns} turns this plan allows that divides the "
+            f"answer charge by {claimed_turns}"
+            if claimed_turns > 1
+            else "at the 1 turn this plan allows it changes no figure today, "
+            "but the turn count is read from the settings and rises the "
+            "moment they do"
+        )
+
+        if fresh_each_turn is None:
+            problems.append(
+                f"the cost sum says one cap on answer length covers a whole "
+                f"{environment} attempt, but nothing in this repository says "
+                "so: no runner is registered for that run place, or the one "
+                "that is does not declare SENDS_A_FRESH_REQUEST_PER_TURN. "
+                f"{cost_note}, and a claim nothing checked is not a claim that "
+                "holds"
+            )
+            continue
+
+        module_name, class_name = RUNNER_CLASS_BY_ENVIRONMENT[environment]  # type: ignore[misc]
+        problems.append(
+            f"the cost sum says one cap on answer length covers a whole "
+            f"{environment} attempt, but {module_name.replace('.', '/')}.py "
+            f"declares that {class_name} opens a new request for every turn "
+            "the model takes, and each one carries the whole budget again — "
+            f"so no single cap covers the attempt. {cost_note}"
         )
     return problems
 
