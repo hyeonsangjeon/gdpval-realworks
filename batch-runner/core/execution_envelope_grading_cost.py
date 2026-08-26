@@ -6,11 +6,11 @@ that promise: it reads how many times the model may be asked again inside one
 attempt and charges the conversation as it grows.
 
 The half that prices *marking* the answers does not. It rests on three numbers
-an operator writes into the plan by hand, and two of those three can be checked
-against limits this repository already states in its own marking settings:
+an operator writes into the plan by hand, and every one of the three can be
+checked against a limit this repository already states somewhere:
 
 ===========================  =============================  ==================
-plan assumption              limit the marking settings set  where
+plan assumption              limit that is already stated    where
 ===========================  =============================  ==================
 grading_calls_per_rubric_    ``max_iterations`` plus the     ``judge.tools.
 item                         finalisation retry             read_deliverable``
@@ -18,6 +18,10 @@ item                         finalisation retry             read_deliverable``
                                                             judge_max_retries``
 grading_output_tokens_per_   ``max_output_tokens``           ``judge.
 call                                                         generation``
+grading_input_tokens_per_    ``per_item_call_cap`` results,  ``judge.tools.
+call                         each of at most                 read_deliverable``
+                             ``MAX_CONTENT_CHARS``           and ``core/tools/
+                             characters                      read_deliverable``
 (no assumption at all)       ``perception.visual.call_cap_   ``judge.
                              per_task`` and the audio one    perception``
 ===========================  =============================  ==================
@@ -28,11 +32,25 @@ A stated assumption that sits below a limit is not a ceiling. It is a forecast
 wearing a ceiling's name, and the whole point of the cost check is that the
 largest possible bill is known before anything starts.
 
-**One number cannot be pinned this way and is not pretended otherwise.**
-``grading_input_tokens_per_call`` depends on how long the answer being marked
-turns out to be, and nothing in the settings caps that. It stays an observation
-drawn from runs that really happened, and :func:`describe_grading_caps` says so
-out loud rather than letting a reader assume the whole sum became a ceiling.
+**The third row is the one this module used to get wrong.** It said in its own
+words that how much a marking call sends "depends on how long the answer being
+marked turns out to be, and nothing in the settings caps that". Something does.
+The judge never sees the answer whole: it asks for pieces through the
+``read_deliverable`` tool, that tool refuses to hand back more than
+``MAX_CONTENT_CHARS`` in one result, and ``per_item_call_cap`` — which this
+module already reads, and already describes as a number where each result "is
+re-read by every later turn" — says how many results can pile up in the
+conversation. Multiply the two and divide by the characters-per-token ratio and
+you have the most one marking call can be asked to re-read. Nothing was doing
+that multiplication, so the plan priced 10,000 tokens a call where the settings
+permit some fifty times that.
+
+What is still not pinned is the wording the conversation *starts* with: the
+standing instructions, the scoring line being judged, and the first 500
+characters of the task. Nothing caps those, so the figure this module demands is
+a floor on the true largest and not the largest itself. A plan below the floor
+is certainly not a ceiling; a plan above it may still not be one.
+:func:`describe_grading_caps` says both halves of that out loud.
 
 The perception gap is the one that can hide a model entirely.
 :func:`core.execution_envelope_cost.check_cost_ceiling` already refuses to let a
@@ -49,7 +67,7 @@ two files and compares numbers.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -57,6 +75,7 @@ import yaml
 
 from core.execution_envelope_cost import CostAssumptions, ModelPrice
 from core.tool_calling_judge import ToolCallingJudge
+from core.tools.read_deliverable import MAX_CONTENT_CHARS
 
 # Where core/grader.py reads each limit from, and what it falls back to when
 # the settings file leaves it out. These paths and fallbacks mirror
@@ -134,11 +153,47 @@ class GradingCaps:
     are not themselves billed, but each one adds its result to the conversation
     that the next turn re-sends, so the number is recorded."""
 
+    characters_per_tool_result: int
+    """The most characters one tool result can hand back.
+
+    Read from ``core/tools/read_deliverable.py`` rather than typed again here.
+    That module ends every content read with ``text[:MAX_CONTENT_CHARS]``, so
+    whatever the format-specific readers do on the way, this is the width of
+    the door.
+
+    The result is put into the conversation as JSON, which escapes quotes and
+    newlines and so can only make it longer. Counting the characters before
+    escaping keeps this a floor rather than an overstatement.
+    """
+
     output_tokens_per_call: int
     visual_model: str | None
     visual_calls_per_task: int
     audio_model: str | None
     audio_calls_per_task: int
+
+    def input_tokens_carried_by_tool_results(
+        self, characters_per_token: Decimal
+    ) -> int:
+        """The most one marking call can be asked to re-read, in tokens.
+
+        Every tool result stays in the conversation, and every later turn sends
+        the conversation again. So by the last turn a single call can be
+        carrying every result the cap allowed, all at full width.
+
+        This counts the tool results only. What the conversation starts with —
+        the standing instructions, the scoring line, the first 500 characters
+        of the task — is not capped by anything, so this is a floor on the
+        largest a call can be and not the largest itself.
+        """
+        characters = Decimal(self.tool_calls_per_rubric_item) * Decimal(
+            self.characters_per_tool_result
+        )
+        tokens = characters / characters_per_token
+        # Round up: a fraction of a token is still charged as a token. Decimal's
+        # ``//`` truncates towards zero rather than flooring, so it would round
+        # this number *down* and quietly lower the very ceiling being worked out.
+        return int(tokens.to_integral_value(rounding=ROUND_CEILING))
 
     @property
     def models_the_marking_can_call(self) -> tuple[str, ...]:
@@ -156,6 +211,9 @@ class GradingCaps:
             "judge_model": self.judge_model,
             "most_judge_calls_per_scoring_line": self.judge_calls_per_rubric_item,
             "most_tool_calls_per_scoring_line": self.tool_calls_per_rubric_item,
+            "most_characters_one_tool_result_returns": (
+                self.characters_per_tool_result
+            ),
             "most_output_tokens_per_call": self.output_tokens_per_call,
             "picture_reading_model": self.visual_model,
             "most_picture_reading_calls_per_task": self.visual_calls_per_task,
@@ -229,6 +287,7 @@ def read_grading_caps(path: str | Path) -> GradingCaps:
         judge_model=judge_model,
         judge_calls_per_rubric_item=max(max_iterations + finalisation_retries, 0),
         tool_calls_per_rubric_item=max(tool_call_cap, 0),
+        characters_per_tool_result=MAX_CONTENT_CHARS,
         output_tokens_per_call=max(output_tokens, 0),
         visual_model=visual_model,
         visual_calls_per_task=(
@@ -286,6 +345,20 @@ def check_assumptions_cover_the_caps(
             f"{assumptions.grading_output_tokens_per_call} tokens of reply per "
             f"marking call, but {caps.settings_path} lets one reply run to "
             f"{caps.output_tokens_per_call}"
+        )
+
+    carried = caps.input_tokens_carried_by_tool_results(
+        assumptions.characters_per_token
+    )
+    if assumptions.grading_input_tokens_per_call < carried:
+        problems.append(
+            f"the cost sum allows {assumptions.grading_input_tokens_per_call} "
+            f"tokens of input per marking call, but {caps.settings_path} lets "
+            f"{caps.tool_calls_per_rubric_item} tool results pile up in the "
+            "conversation for one scoring line, each up to "
+            f"{caps.characters_per_tool_result} characters, and every later "
+            f"turn sends them all again — so one call can carry {carried} "
+            "tokens before a word of the instructions is counted"
         )
 
     for modality, label, model, calls in (
@@ -352,6 +425,10 @@ def describe_grading_caps(caps: GradingCaps) -> list[str]:
             f"{caps.tool_calls_per_rubric_item} (each one is re-read by every "
             "later turn)"
         ),
+        (
+            "most characters one tool use hands back: "
+            f"{caps.characters_per_tool_result}"
+        ),
         f"most tokens in one reply: {caps.output_tokens_per_call}",
     ]
     if caps.visual_model:
@@ -369,8 +446,14 @@ def describe_grading_caps(caps: GradingCaps) -> list[str]:
     else:
         lines.append("listening to sound: switched off")
     lines.append(
-        "how long each marking call's input runs is not capped by these "
-        "settings — it follows the answer being marked, so that one number "
-        "stays an observation and is not a ceiling"
+        "so one marking call can be carrying "
+        f"{caps.tool_calls_per_rubric_item * caps.characters_per_tool_result} "
+        "characters of the answer by the last turn, which is what the cost "
+        "sum's input-per-call figure has to cover"
+    )
+    lines.append(
+        "what the conversation starts with — the standing instructions, the "
+        "scoring line, the first 500 characters of the task — is not capped by "
+        "anything, so that figure is a floor and not the largest possible"
     )
     return lines

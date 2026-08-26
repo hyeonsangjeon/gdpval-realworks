@@ -2,9 +2,11 @@
 
 ``core.execution_envelope_cost`` promises that every number in it is a ceiling.
 The half that prices running the tasks keeps that promise. The half that prices
-marking rested on three numbers typed into the plan by hand, two of which this
-repository's own marking settings already bound — and it named neither of the
-two extra models marking is allowed to call.
+marking rested on three numbers typed into the plan by hand, each of which this
+repository already bounds somewhere — two in the marking settings, and the
+third, how much one marking call carries, in the read tool's own payload cap
+times the number of tool results the settings let pile up. It also named
+neither of the two extra models marking is allowed to call.
 
 These tests pin all of that down. The one that matters most is
 ``test_the_limits_read_match_the_judge_the_grader_really_builds``: it builds the
@@ -17,6 +19,7 @@ Nothing here calls a model, marks anything, or spends anything.
 from __future__ import annotations
 
 import io
+import math
 import tokenize
 from dataclasses import replace
 from decimal import Decimal
@@ -39,11 +42,11 @@ from core.execution_envelope_grading_cost import (
     describe_grading_caps,
     read_grading_caps,
 )
+from core.tools.read_deliverable import MAX_CONTENT_CHARS
 from core.execution_envelope_preflight import (
     _check_grading_assumptions_match_the_settings,
     describe_preflight,
-    run_envelope_preflight,
-)
+    run_envelope_preflight,)
 from core.tool_calling_judge import ToolCallingJudge
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
@@ -115,7 +118,9 @@ def assumptions(**overrides) -> CostAssumptions:
         "grading_required": True,
         "grading_model": "gpt-5.4",
         "grading_calls_per_rubric_item": 11,
-        "grading_input_tokens_per_call": 10000,
+        # Worked out from the same two limits the check reads, not typed in, so
+        # that "sits exactly on the limits" stays true if either one moves.
+        "grading_input_tokens_per_call": math.ceil(8 * MAX_CONTENT_CHARS / 3.0),
         "grading_output_tokens_per_call": 2400,
     }
     raw.update(overrides)
@@ -128,6 +133,7 @@ def caps(**overrides) -> GradingCaps:
         judge_model="gpt-5.4",
         judge_calls_per_rubric_item=11,
         tool_calls_per_rubric_item=8,
+        characters_per_tool_result=MAX_CONTENT_CHARS,
         output_tokens_per_call=2400,
         visual_model=None,
         visual_calls_per_task=0,
@@ -423,14 +429,22 @@ def test_a_plan_that_marks_nothing_reports_nothing():
 # ---------------------------------------------------------------------------
 
 
-def test_the_description_says_which_number_is_not_a_ceiling():
-    """The input length per call cannot be pinned, and that is said out loud.
+def test_the_description_says_how_much_one_call_can_carry():
+    """The size a call can reach is stated, and so is what it leaves out.
 
-    Leaving it unsaid would let a reader believe the whole marking sum became a
-    ceiling when one number in it is still an average of runs that happened.
+    This description used to say the input length "is not a ceiling" and stop
+    there, which read as though nothing bounded it. Something does: the tool
+    hands back a capped amount and the settings cap how many results pile up.
+    Both halves of the truth are printed — the figure, and the fact that the
+    opening wording is not inside it.
     """
     lines = describe_grading_caps(caps())
-    assert any("is not a ceiling" in line for line in lines)
+
+    assert any(str(8 * MAX_CONTENT_CHARS) in line for line in lines)
+    assert any(str(MAX_CONTENT_CHARS) in line for line in lines)
+    assert any(
+        "floor and not the largest possible" in line for line in lines
+    )
 
 
 def test_the_description_names_the_file_it_read():
@@ -515,17 +529,20 @@ def _committed_plan_problems(plan=None) -> list[str]:
 
 
 def test_the_committed_plan_now_counts_everything_that_can_be_measured():
-    """The five findings are down to the one nothing can settle.
+    """The closed findings stay closed, and the two open ones are named.
 
-    This test used to assert that all five were present. Raising the plan's
-    numbers to meet the limits is what its own instructions said would make it
-    pass, and that is what happened — so it now pins the other side: the four
-    that were closed must stay closed.
+    This test used to assert that all five findings were present. Raising the
+    plan's numbers to meet the limits is what its own instructions said would
+    make it pass, and that is what happened — so it pins the other side: the
+    ones that were closed must stay closed.
 
-    What is left is the sound model. Not a number that was left too low, but a
-    model that has never been called once, so nothing exists to measure, and
-    that has no published price, so a measurement would not produce an amount
-    either. Both of those are reported and neither is treated as free.
+    Two are open. The sound model is not a number left too low but a model that
+    has never been called once, so nothing exists to measure, and that has no
+    published price, so a measurement would not produce an amount either. The
+    input size per marking call is the opposite kind of gap: it *can* be worked
+    out, from the read tool's payload cap and the number of results the
+    settings let pile up, and the plan is still below it. Both are reported and
+    neither is treated as free.
     """
     joined = " | ".join(_committed_plan_problems())
 
@@ -534,6 +551,7 @@ def test_the_committed_plan_now_counts_everything_that_can_be_measured():
     assert "reading pictures" not in joined
     assert "listening to sound" in joined
     assert "it is not zero" in joined
+    assert "tokens of input per marking call" in joined
 
 
 @pytest.mark.parametrize(

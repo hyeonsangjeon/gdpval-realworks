@@ -12,6 +12,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Marking was priced at 10,000 tokens of input a call. The settings permit
+  533,334, and both the plan and the checking module said in writing that no
+  settings file could pin the number down.** They can. The judge never sees the
+  answer whole: it asks for pieces through `read_deliverable`, that tool ends
+  every content read with `text[:MAX_CONTENT_CHARS]` — 200,000 characters — and
+  `judge.tools.read_deliverable.per_item_call_cap` says how many results may
+  pile up for one scoring line. Eight, in the committed settings.
+  `core/tool_calling_judge.py` appends each result whole and every later turn
+  sends the conversation again, so one call can be carrying 8 × 200,000
+  characters. `core/execution_envelope_grading_cost.py` already read the call
+  cap, and already described it as a number where each result "is re-read by
+  every later turn" — then charged nothing for it. It now does the
+  multiplication, reading the payload cap off the tool module rather than
+  typing it again, and refuses a plan that prices less. Measured on the
+  committed plan: the ceiling it reports is **363.58 United States dollars**;
+  with the number the settings actually permit it is **7,568.42** — a gap of
+  **7,204.84 dollars** the plan called impossible to know.
+- **The one thing that still cannot be pinned is now said precisely instead of
+  broadly.** What the marking conversation *opens* with — the standing
+  instructions, the scoring line, the first 500 characters of the task — is
+  capped by nothing. So the figure the check demands is a floor on the largest
+  a call can be, not the largest itself, and `describe_grading_caps` prints
+  both the figure and that caveat. The old wording said the whole number was
+  unknowable, which is how a readable limit went unread.
+- **The ceiling rounded itself down.** The new arithmetic first used
+  `-(-tokens // 1)` to round up, but `Decimal`'s `//` truncates towards zero
+  rather than flooring, so it rounded a ceiling **down** — 533,333 where the
+  answer is 533,334. It now uses `ROUND_CEILING`, the same as the rest of
+  `core/execution_envelope_cost.py`.
+- **Two tests were carrying the same wrong claim, and they were the ones
+  guarding it.** `tests/test_execution_envelope_advance_check.py` said in a
+  docstring that "everything there that a measurement could settle has been
+  settled" and named the unpriced sound model as the only survivor, while a
+  helper set the whole marking gap aside for six other tests. That was the
+  sentence that made a measurable gap look like a settled one. Both now name
+  the two remaining items separately — the sound model, which no measurement
+  exists for, and the input-per-call figure, which is measured and left low in
+  the plan on purpose — and assert that there is nothing else in the set-aside
+  list.
 - **The cost sum priced the container's attempt at one call to a model. Two
   deleted lines make it two, and the sum would not have moved.** The plan's
   `cost.assumptions.tool_loop_max_model_turns` is written by hand, one number a
