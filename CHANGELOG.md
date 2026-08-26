@@ -12,6 +12,56 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The check that refuses the paid three-way comparison compared two of the
+  prompt's four parts — and the two it compared were the wrong two.**
+  `check_experiment_files_match_conditions` in
+  `core/execution_envelope_preflight.py` is the last gate before the run costs
+  anything, and the only thing the comparison claims is that nothing but the run
+  place differs. It compared `condition_a.prompt.system` and
+  `condition_a.prompt.suffix`. `core/prompt_loader.py` joins `prefix` and `body`
+  into the wording the model receives as well, so either of them set on one
+  settings file and not the others changed what one run place was asked while
+  every free check reported nothing. Meanwhile `system` does not survive at all:
+  each run place loads a codegen prompt carrying its own `system_message`, and
+  that one wins — so the check was guarding the part that gets dropped and
+  ignoring the two that always arrive.
+
+  Found by measurement rather than reading. Each of the 34 settings in the
+  committed files was changed in one file at a time and the check asked whether
+  it noticed: **16 noticed, 18 not**. Most of the 18 are meant to differ — the
+  experiment's own id, the repository its results go to, the label each run place
+  is given. The rest were not.
+
+  The cause was a hand-written list of three setting names. Instead of a longer
+  list, the check now names the *blocks* whose every key must match
+  (`condition_a.model`, `condition_a.prompt`, `condition_a.qa`, `data.filter`)
+  and reads the keys to compare out of the settings files, so a setting added
+  later is compared without anybody remembering to add it — an invented `top_p`
+  on one file is now refused by name. Coverage went from 16 to 23 of 34; the
+  remaining 11 are exactly the fields that must be free to differ. The three
+  committed files still pass unchanged.
+
+  Two suspicions were checked and dropped rather than carried: `data.filter.sector`
+  and `occupation` cannot silently change which tasks run, because
+  `step1_prepare_tasks.py` builds its lookup from the already-filtered tasks and
+  raises there instead (they are covered anyway, since refusing before a run
+  starts beats crashing after it does); and the reviewer settings are safe today
+  only because `qa.enabled` is pinned off, which is luck rather than safety.
+
+  20 tests in `tests/test_envelope_preflight_compares_the_whole_prompt.py`,
+  **11 of which fail against the old coverage**. They pin the fact underneath the
+  fix by calling `render_prompt` — that `prefix` and `body` reach the model and
+  that the settings file's `system` does not — so if prompt assembly changes, a
+  test fails instead of a sentence going quietly out of date. One existing
+  assertion in `tests/test_execution_envelope_advance_check.py` was updated: the
+  refusal now names a setting by its full key path
+  (`condition_a.model.temperature`), because a bare `temperature` stopped being
+  unambiguous once the reviewer's settings were compared too. The refusal itself
+  is unchanged — those three settings were refused before and still are. Nothing
+  was enabled: no model was called, no command was run, no amount was approved,
+  and no block was loosened.
+
+### Fixed
 - **Two free checks printed contradicting answers about the same fact, to the
   same reader, in the same session.** `scripts/check_agentic_stage_one_ceiling.py`
   said the model conversation loop exists, is proven against stand-ins that spend
