@@ -426,8 +426,38 @@ cost:
     # onwards. That is why a loop's input rises faster than its number of
     # turns.
     #
-    #   A separate Python process on the server, and a Docker container: the
-    #   model is asked once and nothing is carried forward, so 0.
+    #   A separate Python process on the server: the model is asked once, that
+    #   run place has no loop of any kind, and nothing comes back to it. 0.
+    #
+    #   A Docker container: 0, and it is 0 because of one line in
+    #   exp031_envelope_docker_container.yaml — `repair: enabled: false`. It is
+    #   not 0 because the container has no way of carrying anything forward.
+    #
+    #   This comment used to say the container "is asked once and nothing is
+    #   carried forward", flatly, as a property of the run place. That was
+    #   wrong. Switch repair on — or simply delete the block, since
+    #   core/sandbox_runner.py builds its settings as
+    #   `{"enabled": True, "max_attempts": 1, **(repair or {})}` and so turns
+    #   the loop *on* when it is left out — and SandboxRunner._build_reflection
+    #   writes the run's own output into the next request: the last 800
+    #   characters of what the code printed, the last 800 it printed as an
+    #   error, and the 600-character tail of the failure that stopped it. That
+    #   is 2200 characters, 734 tokens at the ratio above, and the 0 below
+    #   charges for none of it.
+    #
+    #   core/execution_envelope_preflight.py now reads those three widths out of
+    #   the runner and refuses this plan if the container's own settings would
+    #   really loop while the number below sits under 734. Today the settings
+    #   say the loop is off, so the check is silent and the 0 stands. It stops
+    #   being silent the moment that one line changes, which is the point.
+    #
+    #   734 is a floor and not the largest. The same repair prompt also carries
+    #   up to twelve blocking-error lines, up to six warnings, whatever repair
+    #   guidance the prompt spec holds, and the whole contract section, and none
+    #   of those has a stated width anywhere. It leaves out the prior code on
+    #   purpose: the reflection carries up to 4000 characters of it, but that is
+    #   the model's own earlier answer, which max_input_tokens_per_attempt
+    #   already charges a full max_output_tokens for.
     #
     #   Azure code interpreter: the service feeds the output of the code it ran
     #   back to the model. Microsoft's documentation does not publish a limit on

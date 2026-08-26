@@ -12,6 +12,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The container's carried-forward input was priced at nothing, on the written
+  grounds that "the model is asked once and nothing is carried forward".** That
+  is a property of one line in the container's settings file — `repair:
+  enabled: false` — not of the run place. `core/sandbox_runner.py` builds its
+  repair settings as `{"enabled": True, "max_attempts": 1, **(repair or {})}`,
+  so deleting the block turns the loop *on*; and once it is on,
+  `_build_reflection` writes the run's own output into the next request: the
+  last 800 characters of what the code printed, the last 800 it printed as an
+  error, and the 600-character tail of the failure that stopped it. Those three
+  widths are now named constants in the runner, and
+  `core/execution_envelope_preflight.py` reads them rather than quoting figures
+  of its own. It refuses a plan whose `max_tool_result_tokens_per_turn` for the
+  container sits below **734 tokens** — 2,200 characters at the plan's ratio —
+  whenever the container's own settings would really loop. Today they say the
+  loop is off, so the check is silent and the plan's `0` stands; it stops being
+  silent the moment that one line changes. Task #27 made the extra turn
+  readable but left what the turn *carries* priced at zero, and this closes
+  that half.
+- **What the `0` was hiding, measured: about two pennies, and rising.** With
+  repair switched on at one attempt the ceiling moves from **368.95** to
+  **368.97** United States dollars; at two attempts the gap is 0.07, at three
+  it is 0.14. Small, and said plainly rather than dressed up — the defect here
+  is a sentence that is false in a reachable setting, not a large sum. The
+  figure is a floor: the same repair prompt also carries up to twelve
+  blocking-error lines, up to six warnings, the repair guidance and the whole
+  contract section, none with a stated width. The prior code is deliberately
+  left out, though the prompt carries up to 4,000 characters of it, because
+  `max_input_tokens_per_attempt` already charges a full `max_output_tokens` for
+  every earlier answer.
+- **A rule nobody calls refuses nothing.** Deleting the new check from the free
+  check's wiring left all 34 of its first tests passing, because every one of
+  them called the rule directly. Two more now copy the plan's settings files to
+  a temporary directory, switch the container's repair loop on there, and ask
+  the free check the way a person would.
 - **Marking was priced at 10,000 tokens of input a call. The settings permit
   533,334, and both the plan and the checking module said in writing that no
   settings file could pin the number down.** They can. The judge never sees the
