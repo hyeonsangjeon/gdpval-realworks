@@ -23,6 +23,15 @@ whether they are entered for scoring, and the container's own repair loop —
 which calls the model again after the code is written, and which the strict
 comparison forbids in as many words.
 
+Then a second round, for the hole left in the first. An exception is matched by
+prefix, so naming a block excuses every setting under it — including settings
+nobody has argued for, which are excused by where they sit and by nothing else.
+``execution.sandbox.max_skills`` was one: it decides how many skill manuals are
+written into the container's prompt ahead of the task, while all three files
+declare they are holding ``prompt_strategy`` still. It has a rule of its own
+now, taking the check to 31 of 44, and the settings the two block exceptions
+let through are argued for here one at a time.
+
 The tests here hold that from both ends. The sweep is derived, not typed: it
 reads the settings out of the committed files, changes each one in a single run
 place, and requires either a refusal or a stated reason. Nothing here calls a
@@ -47,11 +56,13 @@ if str(BATCH_RUNNER_ROOT) not in sys.path:
 from core import execution_envelope_preflight  # noqa: E402
 from core import output_qa as output_qa_module  # noqa: E402
 from core.execution_envelope_preflight import (  # noqa: E402
+    CONTAINER_SETTINGS_THAT_ADD_TO_THE_PROMPT,
     CONTAINER_SETTINGS_THAT_CALL_THE_MODEL_AGAIN,
     SETTINGS_ALLOWED_TO_DIFFER,
     WHAT_THE_SETTING_DOES,
     _check_settings_the_plan_does_not_name,
     _check_the_container_calls_no_model_after_the_code_is_made,
+    _check_the_container_is_told_no_more_than_the_others,
     _may_differ,
     _settings_in,
     check_experiment_files_match_conditions,
@@ -63,7 +74,9 @@ from core.execution_environment_readiness import (  # noqa: E402
     ENVIRONMENT_DOCKER_CONTAINER,
     EXECUTION_MODE_BY_ENVIRONMENT,
 )
+from core.prompt_sections import DEFAULT_SECTIONS  # noqa: E402
 from core.sandbox_runner import SandboxRunner  # noqa: E402
+from core.skills_registry import SkillsRegistry  # noqa: E402
 
 ENVELOPE_DIRECTORY = BATCH_RUNNER_ROOT / "experiments" / "execution_envelope"
 PLAN_PATH = ENVELOPE_DIRECTORY / "advance_check_plan.yaml"
@@ -664,3 +677,305 @@ def test_the_plain_words_describe_settings_the_files_really_hold(plan):
         "these settings are described in plain words but no settings file "
         "holds them: " + ", ".join(unused)
     )
+
+
+# ── The container's own way of being briefed better than the others ───────
+
+
+def test_the_committed_container_file_is_told_no_more_than_the_others(
+    plan, copied_root
+):
+    """`max_skills: 0` is written in the file, and it is load-bearing."""
+    assert (
+        _check_the_container_is_told_no_more_than_the_others(
+            {
+                place: yaml.safe_load(
+                    (copied_root / str(relative)).read_text(encoding="utf-8")
+                )
+                for place, relative in plan["experiment_files"].items()
+            }
+        )
+        == []
+    )
+
+
+def test_giving_the_container_skills_is_refused():
+    problems = _check_the_container_is_told_no_more_than_the_others(
+        _container_settings(max_skills=3)
+    )
+    assert len(problems) == 1
+    assert "execution.sandbox.max_skills" in problems[0]
+    assert "sets" in problems[0]
+    assert "prompt_strategy" in problems[0]
+
+
+@pytest.mark.parametrize(
+    "sandbox",
+    [
+        pytest.param({}, id="the whole sandbox block empty"),
+        pytest.param(
+            {"repair": {"enabled": False}}, id="everything else written but not this"
+        ),
+    ],
+)
+def test_leaving_max_skills_out_is_refused_because_absent_means_all_of_them(sandbox):
+    """The case that matters most here too, and for the same reason.
+
+    ``core/executor.py`` reads the setting as ``opts.get("max_skills", 5)``, so
+    deleting the line does not mean "no skills" — it means as many as the
+    repository has. The one run place with a block of its own is the one that
+    can be quietly given a manual the other two never see.
+    """
+    problems = _check_the_container_is_told_no_more_than_the_others(
+        _container_settings(**sandbox)
+    )
+    assert len(problems) == 1
+    assert "leaves execution.sandbox.max_skills out" in problems[0]
+    assert "the runner reads as 5" in problems[0]
+
+
+def test_the_skill_default_this_check_assumes_is_the_runner_s_own():
+    """Read the default from the runner, not from a sentence about it."""
+    absent, _ = CONTAINER_SETTINGS_THAT_ADD_TO_THE_PROMPT[("max_skills",)]
+    built_with_nothing_written = SandboxRunner(llm_client=object())
+    assert built_with_nothing_written.max_skills == absent
+
+
+def test_the_default_really_reaches_for_every_skill_the_repository_has():
+    """The reason given is a claim about this repository, so check it here."""
+    absent, _ = CONTAINER_SETTINGS_THAT_ADD_TO_THE_PROMPT[("max_skills",)]
+    shipped = sorted(SkillsRegistry().skills)
+    assert shipped, "no skill documents found, so this rule guards nothing"
+    assert absent >= len(shipped), (
+        f"the reason says an absent setting hands the container every skill "
+        f"there is, but the default selects {absent} and the repository now "
+        f"ships {len(shipped)}: {', '.join(shipped)} — reword the reason"
+    )
+
+
+def test_a_selected_skill_really_is_written_into_the_prompt():
+    """Why this setting is not just a container detail, derived by calling it.
+
+    The manual goes into the prompt ahead of the task, which is exactly what
+    every one of the three files says it is holding still. Run against the real
+    registry and the real renderer rather than trusting a sentence about them.
+    """
+    assert DEFAULT_SECTIONS.index("skills_manual") < DEFAULT_SECTIONS.index("task")
+
+    registry = SkillsRegistry()
+    # Built from what the skills themselves say they match, so the probe keeps
+    # working when the skills change.
+    files = [
+        f"reference{skill.file_extensions[0]}"
+        for skill in registry.skills.values()
+        if skill.file_extensions
+    ]
+    task_text = " ".join(
+        keyword for skill in registry.skills.values() for keyword in skill.keywords
+    )
+
+    none_at_all = registry.select(files, task_text, max_skills=0)
+    assert none_at_all == []
+    assert registry.render_manual(none_at_all) == ""
+
+    absent, _ = CONTAINER_SETTINGS_THAT_ADD_TO_THE_PROMPT[("max_skills",)]
+    what_absent_would_give = registry.select(files, task_text, max_skills=absent)
+    assert what_absent_would_give, "the probe selected nothing, so this proves nothing"
+    assert registry.render_manual(what_absent_would_give).strip() != ""
+
+
+def test_the_promise_this_rule_holds_the_container_to_is_in_every_file(plan):
+    """The rule is not invented here; the files say it themselves."""
+    for relative in plan["experiment_files"].values():
+        document = yaml.safe_load(
+            (BATCH_RUNNER_ROOT / str(relative)).read_text(encoding="utf-8")
+        )
+        assert "prompt_strategy" in document["control"]["fixed"]
+
+
+def test_the_rule_holds_whichever_comparison_is_being_run():
+    """A file that says it is holding the prompt still has said so either way.
+
+    Written as a fact about the function rather than a pair of cases: unlike
+    the rule about calling the model again, this one takes no comparison to
+    weigh, so there is no comparison under which it can be skipped.
+    """
+    parameters = inspect.signature(
+        _check_the_container_is_told_no_more_than_the_others
+    ).parameters
+    assert "comparison" not in parameters
+
+
+def test_the_whole_check_refuses_a_container_given_extra_skills(plan, copied_root):
+    """End to end, through the entry point the gate really calls.
+
+    The regression this pins: with the setting exempted, changing it moved the
+    refusal count not at all.
+    """
+    before = _refusals(plan, copied_root)
+    _change_one_run_place(
+        copied_root,
+        _settings_file_of_one_run_place(plan),
+        ("execution", "sandbox", "max_skills"),
+        3,
+    )
+    after = _refusals(plan, copied_root)
+    assert len(after) == len(before) + 1
+    assert any("execution.sandbox.max_skills" in problem for problem in after)
+
+
+# ── An exception has to be argued for setting by setting ──────────────────
+
+
+# What each exception in SETTINGS_ALLOWED_TO_DIFFER really lets through, and
+# why each one may differ — setting by setting, not block by block.
+#
+# An exception is written as a key path and matched by prefix, so naming one
+# block excuses every setting under it, including settings written long after
+# the argument was made. Those settings have not been argued for. They have
+# been inherited.
+#
+# `execution.sandbox.max_skills` is why this exists. It sat under an exception
+# granted for the container's shape — its image, its memory, how many
+# processors it gets — and it decides how much instruction goes into the
+# container's prompt. It was excused by where it sat, and by nothing else.
+#
+# Adding a setting under one of these blocks will fail the test below. That is
+# the point: write the reason here, or give the setting a rule of its own, as
+# max_skills now has.
+SETTINGS_EACH_EXCEPTION_COVERS = {
+    ("experiment",): {
+        "experiment.id": "the name the results are filed under; if the three "
+        "shared one they would overwrite each other",
+        "experiment.name": "the human title of the run, for the same reason",
+        "experiment.description": "prose about the run; nothing reads it back",
+        "experiment.author": "who wrote the file; nothing reads it back",
+        "experiment.created_at": "when it was written; nothing reads it back",
+    },
+    ("condition_a", "name"): {
+        "condition_a.name": "the label the run place is reported under, which "
+        "is the thing being varied",
+    },
+    ("data", "source"): {
+        "data.source": "the repository this run publishes its own results to. "
+        "What tasks are run is pinned separately, by data.filter.task_ids, "
+        "which is compared, and by the plan's input_file_versions, which pins "
+        "the dataset itself by content fingerprint",
+    },
+    ("execution", "mode"): {
+        "execution.mode": "which run place is used, which is the whole point "
+        "of the comparison",
+    },
+    ("execution", "sandbox"): {
+        "execution.sandbox.image": "which container image is used; only the "
+        "container has one, and it is what the container *is*",
+        "execution.sandbox.use_docker": "whether a container is required. "
+        "Checked separately and harder, by check_container_cannot_fall_back: "
+        "a container run place quietly falling back to the server would make "
+        "two of the three run places the same one",
+        "execution.sandbox.memory_gb": "how much memory the container gets; "
+        "part of describing the run place, not of shaping the answer",
+        "execution.sandbox.cpus": "how many processors the container gets, "
+        "for the same reason",
+        "execution.sandbox.max_skills": "argued for on its own terms and no "
+        "longer excused by this block: see "
+        "CONTAINER_SETTINGS_THAT_ADD_TO_THE_PROMPT and the tests above",
+        "execution.sandbox.repair.enabled": "the container's repair loop, "
+        "which the strict comparison forbids outright; watched by "
+        "CONTAINER_SETTINGS_THAT_CALL_THE_MODEL_AGAIN rather than compared",
+        "execution.sandbox.repair.max_attempts": "how many repair rounds are "
+        "allowed, which does not matter while the loop itself is refused",
+        "execution.sandbox.output_qa.enabled": "the container's own look at "
+        "the files it produced. It reads them; it does not rewrite them, and "
+        "the vision half — the half that would call a model — is watched "
+        "separately as output_qa.vision.enabled",
+        "execution.sandbox.manifest.enabled": "whether a record of the run "
+        "place — which executor ran, which packages were installed, what each "
+        "attempt did — is written out beside the answer. It is built after "
+        "the code has finished and the answer has been chosen, so it cannot "
+        "reach the model. It does join the delivered file list, so the "
+        "container ships one file the other two do not; that file is about "
+        "the run place, which is the thing this comparison is varying",
+        "execution.sandbox.manifest.filename": "what that record is called. "
+        "Same argument as the line above, and it decides nothing further: an "
+        "empty name would not suppress the file, only misname it",
+    },
+}
+
+
+def test_every_exception_is_argued_for_setting_by_setting(plan):
+    assert set(SETTINGS_EACH_EXCEPTION_COVERS) == set(SETTINGS_ALLOWED_TO_DIFFER), (
+        "a new exception was granted without saying which settings it lets "
+        "through; add it here with that list"
+    )
+    settings = _all_settings(plan)
+    for exception, argued_for in SETTINGS_EACH_EXCEPTION_COVERS.items():
+        covered = {
+            ".".join(path)
+            for path in settings
+            if path[: len(exception)] == exception
+        }
+        block = ".".join(exception)
+        unargued = sorted(covered - set(argued_for))
+        assert not unargued, (
+            f"{', '.join(unargued)} is excused from the settings comparison "
+            f"only because it sits under {block}, and nobody has argued that "
+            "it may differ between run places. Either write the reason here, "
+            "in SETTINGS_EACH_EXCEPTION_COVERS, or give it a rule of its own, "
+            "as execution.sandbox.max_skills has."
+        )
+        gone = sorted(set(argued_for) - covered)
+        assert not gone, (
+            f"{', '.join(gone)} is argued for here but no settings file holds "
+            f"it any more; drop it from SETTINGS_EACH_EXCEPTION_COVERS"
+        )
+
+
+def test_the_arguments_are_arguments_and_not_placeholders(plan):
+    """A one-word reason is how a list of reasons becomes a list of names."""
+    too_thin = sorted(
+        name
+        for reasons in SETTINGS_EACH_EXCEPTION_COVERS.values()
+        for name, reason in reasons.items()
+        if len(reason.split()) < 6
+    )
+    assert too_thin == [], (
+        "these exemptions are stated but not argued: " + ", ".join(too_thin)
+    )
+
+
+def test_the_setting_that_caused_this_is_no_longer_excused_by_where_it_sits(plan):
+    """It is still under an exempt block, and it is no longer unwatched."""
+    assert _may_differ(("execution", "sandbox", "max_skills")) is not None
+    assert ("max_skills",) in CONTAINER_SETTINGS_THAT_ADD_TO_THE_PROMPT
+
+
+def test_the_number_this_module_claims_is_the_number_it_reaches(plan, copied_root):
+    """The count in the comments, measured rather than remembered.
+
+    Every setting is changed in one run place and the whole check is run. A
+    number written in a comment is a number that goes stale; this one cannot,
+    because failing here is what stops it.
+    """
+    settings = _all_settings(plan)
+    noticed = []
+    for path, value in sorted(settings.items()):
+        root = copied_root
+        relative = _settings_file_of_one_run_place(plan)
+        original = yaml.safe_load(
+            (root / relative).read_text(encoding="utf-8")
+        )
+        _change_one_run_place(root, relative, path, _something_else(value))
+        if _refusals(plan, root):
+            noticed.append(".".join(path))
+        (root / relative).write_text(
+            yaml.safe_dump(original, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+    assert (len(noticed), len(settings)) == (31, 44), (
+        f"the comments in this module and in core/execution_envelope_"
+        f"preflight.py say the check reaches 31 of 44 settings; it now "
+        f"reaches {len(noticed)} of {len(settings)}. Update both."
+    )
+    assert "execution.sandbox.max_skills" in noticed

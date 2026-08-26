@@ -294,6 +294,9 @@ def check_experiment_files_match_conditions(
             str(plan.get("comparison") or COMPARISON_SAME_GENERATED_CODE),
         )
     )
+    problems.extend(
+        _check_the_container_is_told_no_more_than_the_others(loaded_settings)
+    )
     return problems
 
 
@@ -325,6 +328,19 @@ def check_experiment_files_match_conditions(
 # A list of what to check is only ever as complete as the last person to think
 # about it. A list of what may differ has to be argued for, entry by entry, and
 # anything nobody argued for is checked by default.
+#
+# That principle had a hole in it, because an exception here is matched by
+# prefix: naming a block excuses every setting under it, including settings
+# added long after the argument was made. Those were not argued for; they were
+# inherited. ``execution.sandbox`` is the block where that mattered — an
+# exception granted for the container's shape, its image and memory and
+# processors, was also excusing ``max_skills``, which decides how much
+# instruction goes into the container's prompt while all three files declare
+# they are holding ``prompt_strategy`` still. It now has a rule of its own
+# below, taking the whole check from 30 of 44 to 31, and every setting the two
+# block-level exceptions let through is argued for one by one in
+# tests/test_envelope_preflight_compares_every_setting.py, which fails until a
+# new one is.
 SETTINGS_ALLOWED_TO_DIFFER: Mapping[tuple[str, ...], str] = {
     ("experiment",): (
         "the experiment's own id, name, description, author and date, which "
@@ -378,6 +394,29 @@ CONTAINER_SETTINGS_THAT_CALL_THE_MODEL_AGAIN: Mapping[
         False,
         "the container's picture check sends rendered pages to a vision "
         "model; core/output_qa.py leaves it off when the setting is left out",
+    ),
+}
+
+# Settings inside the container's own block that put wording into the prompt
+# the other two run places never see. Kept apart from the settings that call the
+# model again because the promise they break is a different one: all three
+# experiment files declare ``control.fixed`` to include ``prompt_strategy``, and
+# this is the block that can quietly make that untrue.
+#
+# Each entry carries the absent value for the same reason as above, and here the
+# absent value is the worse one. core/executor.py reads the setting as
+# ``opts.get("max_skills", 5)``, core/skills_registry.py defaults the same
+# argument to 5, and this repository ships exactly five skill documents — so
+# deleting the line hands the container every skill there is.
+CONTAINER_SETTINGS_THAT_ADD_TO_THE_PROMPT: Mapping[
+    tuple[str, ...], tuple[Any, str]
+] = {
+    ("max_skills",): (
+        5,
+        "each skill selected is written into the container's prompt ahead of "
+        "the task itself, as a worked manual of up to 7000 characters that "
+        "neither of the other two run places is given; core/executor.py reads "
+        "the setting as 5 when it is left out",
     ),
 }
 
@@ -509,37 +548,24 @@ def _check_settings_the_plan_does_not_name(
     return problems
 
 
-def _check_the_container_calls_no_model_after_the_code_is_made(
+def _container_settings_left_on(
     settings_by_environment: Mapping[str, Mapping[str, Any]],
-    comparison: str,
-) -> list[str]:
-    """Hold the container to the rule the comparison already states.
+    watched: Mapping[tuple[str, ...], tuple[Any, str]],
+) -> list[tuple[str, str, str]]:
+    """Watched container settings that are on: (run place, what is written, why).
 
-    The comparison that re-runs one model's own code fixes one thing above all
-    others: the model is called once, to write the code, and not again. No
-    self-review, no retry. That is what lets a difference in the answers be
-    read as a difference in the run place.
+    Shared by the two checks below, because finding the container run places and
+    reading a setting the way the runner really reads it is the same work either
+    way. Only the rule being enforced differs, so only the sentence differs.
 
-    ``condition_a.qa`` is checked against that rule already. The container has
-    its own way to reach the same thing, and nothing was looking at it. Worse,
-    the setting that matters most is the one whose absence means *on*: leaving
-    ``repair`` out of the container's file turns the repair loop on, so the
-    check reads an absent setting as the value the runner would really use
-    rather than as "off".
-
-    The other comparison deliberately leaves each tool's own features running,
-    so this rule is not applied there.
-
-    Which run places get asked is decided by ``execution.mode``, the setting
-    the runner itself dispatches on, and not by whether a sandbox block has
-    anything in it. Those two answers differ in exactly the case that matters:
-    a container run place whose sandbox block is empty has no repair setting
-    written anywhere, which is the state that turns the repair loop on.
+    Which run places get asked is decided by ``execution.mode``, the setting the
+    runner itself dispatches on, and not by whether a sandbox block has anything
+    in it. Those two answers differ in exactly the case that matters: a container
+    run place with an empty sandbox block has none of these settings written
+    anywhere, and that is the state where the absent values apply.
     """
-    if comparison != COMPARISON_SAME_GENERATED_CODE:
-        return []
     container_mode = EXECUTION_MODE_BY_ENVIRONMENT[ENVIRONMENT_DOCKER_CONTAINER]
-    problems: list[str] = []
+    found: list[tuple[str, str, str]] = []
     for environment in sorted(settings_by_environment):
         execution = _dig(settings_by_environment[environment], ("execution",))
         if execution.get("mode") != container_mode:
@@ -547,10 +573,7 @@ def _check_the_container_calls_no_model_after_the_code_is_made(
         container = _dig(
             settings_by_environment[environment], ("execution", "sandbox")
         )
-        for path, (
-            when_absent,
-            what_it_does,
-        ) in sorted(CONTAINER_SETTINGS_THAT_CALL_THE_MODEL_AGAIN.items()):
+        for path, (when_absent, what_it_does) in sorted(watched.items()):
             node: Any = container
             written_down = True
             for key in path:
@@ -571,12 +594,70 @@ def _check_the_container_calls_no_model_after_the_code_is_made(
                 else f"leaves {dotted} out, which the runner reads as "
                 f"{when_absent!r}"
             )
-            problems.append(
-                f"{environment} {written}, but the comparison that re-runs "
-                "one model's own code calls the model once and not again: "
-                + what_it_does
-            )
-    return problems
+            found.append((environment, written, what_it_does))
+    return found
+
+
+def _check_the_container_calls_no_model_after_the_code_is_made(
+    settings_by_environment: Mapping[str, Mapping[str, Any]],
+    comparison: str,
+) -> list[str]:
+    """Hold the container to the rule the comparison already states.
+
+    The comparison that re-runs one model's own code fixes one thing above all
+    others: the model is called once, to write the code, and not again. No
+    self-review, no retry. That is what lets a difference in the answers be
+    read as a difference in the run place.
+
+    ``condition_a.qa`` is checked against that rule already. The container has
+    its own way to reach the same thing, and nothing was looking at it. Worse,
+    the setting that matters most is the one whose absence means *on*: leaving
+    ``repair`` out of the container's file turns the repair loop on, so the
+    check reads an absent setting as the value the runner would really use
+    rather than as "off".
+
+    The other comparison deliberately leaves each tool's own features running,
+    so this rule is not applied there.
+    """
+    if comparison != COMPARISON_SAME_GENERATED_CODE:
+        return []
+    return [
+        f"{environment} {written}, but the comparison that re-runs "
+        "one model's own code calls the model once and not again: " + what_it_does
+        for environment, written, what_it_does in _container_settings_left_on(
+            settings_by_environment, CONTAINER_SETTINGS_THAT_CALL_THE_MODEL_AGAIN
+        )
+    ]
+
+
+def _check_the_container_is_told_no_more_than_the_others(
+    settings_by_environment: Mapping[str, Mapping[str, Any]],
+) -> list[str]:
+    """Hold the container to the promise every experiment file already makes.
+
+    All three files declare ``control.fixed`` to include ``prompt_strategy``.
+    That is the run's own word that the wording put in front of the model is the
+    same in all three places, and it is what lets a difference in the answers be
+    read as a difference in the run place rather than as one run place having
+    been briefed better than the others.
+
+    The container is the only run place with a block of its own, and one of the
+    settings in that block decides how much extra instruction goes into its
+    prompt. Nothing was comparing it, because the whole ``execution.sandbox``
+    subtree is exempt from the settings comparison — reasonably, since most of
+    what is in there really is the run place being described. This is the part
+    that is not.
+
+    Unlike the rule above, this one holds whichever comparison is being run: a
+    file that says it is holding the prompt still has said so either way.
+    """
+    return [
+        f"{environment} {written}, but every experiment file names "
+        "prompt_strategy among the things it is holding still: " + what_it_does
+        for environment, written, what_it_does in _container_settings_left_on(
+            settings_by_environment, CONTAINER_SETTINGS_THAT_ADD_TO_THE_PROMPT
+        )
+    ]
 
 
 def _compare_one_experiment_file(
