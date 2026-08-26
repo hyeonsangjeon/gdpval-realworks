@@ -217,6 +217,19 @@ class SubprocessRunner:
     #: ``CodeInterpreterRunner.SENDS_A_FRESH_REQUEST_PER_TURN``.
     SENDS_A_FRESH_REQUEST_PER_TURN = True
 
+    #: Which prompt sections this run place fills from the reference files.
+    #: All three, built inline in ``run``: ``build_file_structure_info``, then
+    #: ``generate_all_previews``, then the "Files available in current
+    #: directory" line — see the block at lines 283-299.
+    #:
+    #: Read by core/execution_envelope_preflight.py — see the note on
+    #: ``CodeInterpreterRunner.REFERENCE_FILE_PROMPT_SECTIONS``.
+    REFERENCE_FILE_PROMPT_SECTIONS = (
+        "file_structure",
+        "previews",
+        "available_files",
+    )
+
     DEFAULT_PROMPT = "subprocess_occupation_codegen"
 
     def __init__(

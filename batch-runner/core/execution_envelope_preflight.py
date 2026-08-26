@@ -29,7 +29,9 @@ that can be made without calling a model:
   prices less than that. Whether one cap on answer length covers a whole
   attempt is read from the runner that sends the request, and a plan that
   claims one cap where the caller really opens a fresh request each turn is
-  refused.
+  refused. What a reference file adds to the prompt is read from the module
+  that assembles it, against the sections each run place says it fills, so the
+  per-file figure cannot quietly fall below what a file really sends.
 
 Nothing here calls a model, signs in to a cloud account, or spends anything.
 """
@@ -48,6 +50,7 @@ from core.execution_envelope_cost import (
     CostCeiling,
     CostAssumptions,
     ModelPrice,
+    REFERENCE_FILE_CHARACTER_CAP,
     check_cost_ceiling,
     describe_cost_ceiling,
     estimate_cost_ceiling,
@@ -82,6 +85,7 @@ from core.execution_environment_readiness import (
     ReadinessReport,
     build_readiness_report,
 )
+from core.file_preview import reference_file_prompt_budget
 
 PLAN_VERSION = "execution-envelope-advance-check-v1"
 
@@ -319,6 +323,9 @@ def check_experiment_files_match_conditions(
         )
     )
     problems.extend(_check_the_plan_knows_what_one_cap_covers(plan))
+    problems.extend(
+        _check_the_plan_prices_what_the_files_add_to_the_prompt(loaded_settings)
+    )
     return problems
 
 
@@ -1113,6 +1120,121 @@ def _check_the_plan_knows_what_one_cap_covers(
             f"declares that {class_name} opens a new request for every turn "
             "the model takes, and each one carries the whole budget again — "
             f"so no single cap covers the attempt. {cost_note}"
+        )
+    return problems
+
+
+def _runner_reference_file_prompt_sections(
+    environment: str,
+) -> tuple[str, ...] | None:
+    """Which prompt sections this run place fills from the reference files.
+
+    Read off the runner class that actually does the work, named in
+    ``RUNNER_CLASS_BY_ENVIRONMENT``, rather than decided here from the mode
+    name. ``None`` means the runner does not say, which is not the same as
+    "it sends none of them": see
+    :func:`_check_the_plan_prices_what_the_files_add_to_the_prompt`.
+
+    Imported inside the function for the reason given on
+    :func:`_runner_sends_a_fresh_request_per_turn`.
+    """
+    named = RUNNER_CLASS_BY_ENVIRONMENT.get(environment)
+    if named is None:
+        return None
+    module_name, class_name = named
+    try:
+        module = import_module(module_name)
+        runner = getattr(module, class_name)
+        declared = getattr(runner, "REFERENCE_FILE_PROMPT_SECTIONS")
+    except (AttributeError, ImportError):
+        return None
+    return tuple(str(section) for section in declared)
+
+
+def _check_the_plan_prices_what_the_files_add_to_the_prompt(
+    loaded_settings: Mapping[str, Mapping[str, Any]],
+) -> list[str]:
+    """Hold ``REFERENCE_FILE_CHARACTER_CAP`` against the module that really cuts.
+
+    Every reference file a task ships with is billed at that constant, and for
+    a long time the comment beside it said ``core/file_reader.py`` cuts files
+    there before they reach the model. That is not what happens.
+    ``read_all_references`` is reached only through ``PromptBuilder``, and
+    ``PromptBuilder`` is not built anywhere the pipeline runs — the only place
+    that constructs it is a test patching a ``main.py`` this repository does
+    not contain. So the figure was carrying a justification that pointed at
+    dead code, which is worse than carrying none: a reader who checked it would
+    have found a real cap at a real number and stopped looking.
+
+    What the model is really sent about a reference file is assembled in
+    ``core/file_preview.py``, and how much of it depends on the run place. Each
+    runner declares which prompt sections it fills — ``file_structure`` alone
+    for Azure, all three for the host and the container — and
+    :func:`core.file_preview.reference_file_prompt_budget` adds up what those
+    sections can contribute for one file, from the caps beside the code that
+    applies them rather than from anything copied here.
+
+    Only the cheap direction is refused, as everywhere else in this module. The
+    constant sits far above the readable caps, so today it over-charges by a
+    wide margin, and a ceiling is allowed to be more careful than the thing it
+    bounds. What is refused is the constant falling below what a file can
+    readably add — raising ``MAX_PREVIEW_CHARS_PER_FILE`` past 50,000 would do
+    it silently, and the bill would then be understated by however far past it
+    went, on every reference file of every task in every run place.
+
+    A run place whose runner does not declare is refused too, on the rule
+    :func:`_check_the_plan_knows_what_one_cap_covers` already applies: nothing
+    looked, and nothing looking is not the same as the claim holding.
+
+    **Two things here are not bounded by any number in this repository**, and
+    the refusal must not imply otherwise. ``build_file_structure_info`` prints
+    every column header of every sheet with no character limit at all, and the
+    preview headers put the file name outside the cut. The name is allowed for
+    at :data:`core.file_preview.MAX_FILE_NAME_CHARACTERS`; the column headers
+    are not, and cannot honestly be, because a workbook may carry any number of
+    them. The headroom between the readable caps and this constant is what
+    covers them, which is the whole reason the constant is not lowered to fit,
+    and the reason this check guards that headroom from below.
+    """
+    problems: list[str] = []
+    for environment in sorted(loaded_settings):
+        sections = _runner_reference_file_prompt_sections(environment)
+        if sections is None:
+            problems.append(
+                f"the cost sum bills every {environment} reference file at "
+                f"{REFERENCE_FILE_CHARACTER_CAP:,} characters, but nothing in "
+                "this repository says how much of a file that run place puts "
+                "in the prompt: no runner is registered for it, or the one "
+                "that is does not declare REFERENCE_FILE_PROMPT_SECTIONS. A "
+                "figure nothing checked is not a figure that holds"
+            )
+            continue
+
+        try:
+            budget = reference_file_prompt_budget(sections)
+        except KeyError as unknown_section:
+            problems.append(
+                f"{environment}'s runner says it fills the prompt section "
+                f"{unknown_section} from each reference file, but "
+                "core/file_preview.py knows no such section and so cannot say "
+                "what it adds. Pricing it at nothing would lower the bill by "
+                "whatever it really sends, so it is refused until the two "
+                "agree"
+            )
+            continue
+
+        if REFERENCE_FILE_CHARACTER_CAP >= budget.capped_characters:
+            continue
+
+        problems.append(
+            f"the cost sum bills every {environment} reference file at "
+            f"{REFERENCE_FILE_CHARACTER_CAP:,} characters, but "
+            "core/file_preview.py lets one file add up to "
+            f"{budget.capped_characters:,} through the sections that run place "
+            f"fills ({', '.join(sections)}) — and that is only the part with a "
+            "cap to read. The bill is understated on every reference file of "
+            "every task there, so either the caps come back down or the "
+            "constant goes up to cover them"
         )
     return problems
 

@@ -26,14 +26,115 @@ Usage:
     # Returns a formatted string block ready for prompt injection
 """
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterable, List, Optional, Tuple
 
 
 # Limits
 MAX_PREVIEW_ROWS = 10
 MAX_PREVIEW_CHARS_PER_FILE = 3000
 MAX_TOTAL_PREVIEW_CHARS = 10000
+
+#: The longest a file name may be on the filesystems this runs on (POSIX
+#: NAME_MAX). Several of the previews below put the name in a header built
+#: *after* the character cap is applied — ``_preview_docx`` and its siblings
+#: cut the text to ``max_chars - 200`` and then add lines around it — so the
+#: name is the amount by which one preview can exceed its own cap.
+MAX_FILE_NAME_CHARACTERS = 255
+
+#: What ``generate_all_previews`` wraps around the previews it returns: the
+#: opening banner, the closing line, and the blank lines between entries. These
+#: sit outside the ``max_total_chars`` running total, which counts only the
+#: previews themselves, so they are counted here instead of being ignored.
+PREVIEW_BLOCK_WRAPPER_CHARACTERS = 300
+
+
+@dataclass(frozen=True)
+class ReferenceFilePromptBudget:
+    """The most one reference file can add to a prompt, and what is unbounded.
+
+    ``capped_characters`` is the part this module really does limit, worked out
+    from the constants above rather than copied anywhere. ``uncapped_sections``
+    names the sections that have no limit in this module at all — for those, no
+    number is the truth, and saying so is more use than a figure that looks
+    checked.
+    """
+
+    capped_characters: int
+    uncapped_sections: Tuple[str, ...]
+
+    @property
+    def is_fully_capped(self) -> bool:
+        return not self.uncapped_sections
+
+
+#: The prompt sections this module supplies the text for, named as
+#: core/prompt_sections.py routes them. Anything outside this set is refused
+#: rather than priced at nothing.
+SECTIONS_THIS_MODULE_FILLS = frozenset(
+    {"file_structure", "previews", "available_files"}
+)
+
+
+def _characters_one_file_may_add(section: str) -> Optional[int]:
+    """How much one reference file may add through ``section``, or ``None``.
+
+    ``None`` means this module sets no limit on that section. It is a
+    different answer from zero and must not be added up as though it were.
+
+    Worked out from the constants above on every call rather than once at
+    import, so raising a cap moves this — and moves everything that holds a
+    figure against it — instead of leaving a stale number behind.
+
+    Raises:
+        KeyError: for a section this module does not fill. Guessing zero for
+                  one would quietly lower a cost ceiling.
+    """
+    if section not in SECTIONS_THIS_MODULE_FILLS:
+        raise KeyError(section)
+    if section == "file_structure":
+        # build_file_structure_info writes one line per sheet listing every
+        # column header it finds. Nothing here cuts that off, and a workbook
+        # may carry any number of columns, so there is no ceiling to read.
+        return None
+    if section == "previews":
+        # One preview, cut at MAX_PREVIEW_CHARS_PER_FILE, plus the file name
+        # in the header that is written after the cut, plus this file's share
+        # of the block wrapper.
+        return (
+            MAX_PREVIEW_CHARS_PER_FILE
+            + MAX_FILE_NAME_CHARACTERS
+            + PREVIEW_BLOCK_WRAPPER_CHARACTERS
+        )
+    # available_files: this file's name in the list, with the quotes around it
+    # and the separator that follows.
+    return MAX_FILE_NAME_CHARACTERS + len("', '")
+
+
+def reference_file_prompt_budget(
+    sections: Iterable[str],
+) -> ReferenceFilePromptBudget:
+    """Work out what one reference file can add through the sections named.
+
+    Args:
+        sections: prompt section ids, as core/prompt_sections.py knows them.
+
+    Raises:
+        KeyError: if a section is named that this module does not fill.
+    """
+    capped = 0
+    uncapped: List[str] = []
+    for section in sections:
+        per_file = _characters_one_file_may_add(section)
+        if per_file is None:
+            uncapped.append(section)
+        else:
+            capped += per_file
+    return ReferenceFilePromptBudget(
+        capped_characters=capped,
+        uncapped_sections=tuple(sorted(uncapped)),
+    )
 
 
 def generate_file_preview(

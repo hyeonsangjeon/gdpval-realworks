@@ -12,7 +12,9 @@ The ceiling is built from four things, all of them visible:
 * the fixed model run conditions, which cap how long an answer may be and how
   many times a task may be attempted;
 * the task catalogue, which says how long each task's wording is and how many
-  reference files it ships with;
+  reference files it ships with — a file is billed for what a preview of it
+  can add to the prompt, not for its size on disk, since no run place sends
+  the file itself as text;
 * a small set of written assumptions, each of which has to be stated by the
   operator rather than guessed here.
 
@@ -41,9 +43,19 @@ PRICE_TABLE_SCHEMA_VERSION = "execution-envelope-price-table-v1"
 
 TOKENS_PER_MILLION = Decimal(1_000_000)
 
-# core/file_reader.py cuts every reference file off at this many characters
-# before it reaches the model, so no single reference file can push the input
-# beyond this no matter how large the file on disk is.
+# How much of one reference file may reach the model's prompt. The module that
+# decides this is core/file_preview.py, which every run place goes through —
+# not core/file_reader.py, whose 50,000-character cut is only reachable through
+# PromptBuilder, and PromptBuilder is not built anywhere the pipeline runs.
+#
+# The previews really are capped, and far below this: 3,000 characters per file
+# and 10,000 across all of them. Two things are not capped there — the column
+# headers in the structure summary, and the file names in the headers written
+# after the cut — so this figure is deliberately left far above the readable
+# caps to cover them, and is required to stay above them. It is held against
+# core/file_preview.py's own arithmetic by
+# _check_the_plan_prices_what_the_files_add_to_the_prompt in
+# core/execution_envelope_preflight.py, which refuses only if it drops below.
 REFERENCE_FILE_CHARACTER_CAP = 50_000
 
 
@@ -484,9 +496,11 @@ def max_input_tokens_per_call(
     """The most one call could send, for this task.
 
     The task wording and the standing instructions are counted at their real
-    length. Every reference file is counted at the cap the file reader applies,
-    whatever the file's real size, because that cap is what actually reaches
-    the model.
+    length. Every reference file is counted at
+    :data:`REFERENCE_FILE_CHARACTER_CAP`, whatever the file's real size,
+    because what reaches the model is a preview and a structure summary rather
+    than the file — see the note on that constant for which module decides how
+    much of one file gets through.
     """
     characters = (
         assumptions.instruction_character_count
