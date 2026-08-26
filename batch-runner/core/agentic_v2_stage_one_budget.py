@@ -548,48 +548,116 @@ def load_stage_one_plan(path: Any = None) -> dict:
     return raw
 
 
-def check_the_model_conversation_does_not_exist_yet() -> list[str]:
-    """Confirm the runner still replays a written-down list rather than asking.
+def check_stage_one_cannot_reach_a_model() -> list[str]:
+    """Confirm nothing here can put a real model into the stage-one loop.
 
-    Stage one is defined as the step that replaces the replayed list with a
-    real conversation. Until that exists, stage one cannot start however much
-    money is approved, and saying so plainly is more useful than letting the
-    money question stand in for it.
+    The loop stage one is about now exists:
+    :func:`core.agentic_v2_conversation.run_model_conversation` asks something,
+    runs the tool it asked for, shows it what came back, and asks again. What
+    does not exist is any way to reach a *real* model with it. The seam a real
+    client would be plugged into refuses, because reaching one costs money in a
+    loop and no amount has been approved for that.
 
-    Checked by looking at what the runner accepts, not by reading a comment, so
-    the answer changes by itself when the conversation is built.
+    So stage one still cannot start, but for a different and much smaller
+    reason than before, and the difference is worth stating rather than
+    flattening into "not built yet".
+
+    Everything below is established by running the code, not by reading it:
+    the refusing seam is called and required to refuse, and the loop is run
+    with a stand-in that declares itself paid and required to stop before
+    asking it anything. A comment could say either of those and be wrong.
     """
     import inspect
 
     try:
-        from core.agentic_v2_runner import AgenticV2ScriptedRunner
+        from core.agentic_v2_conversation import (
+            GaveUp,
+            LoopLimits,
+            NoModelVoiceAvailable,
+            ScriptedToolDesk,
+            ScriptedVoice,
+            StopReason,
+            real_model_voice,
+            run_model_conversation,
+        )
     except ImportError as error:  # pragma: no cover - defensive
         return [
-            "the Agentic Sandbox V2 runner could not be loaded, so whether "
-            f"the model conversation exists cannot be established: {error}"
+            "the Agentic Sandbox V2 model conversation could not be loaded, so "
+            "whether a real model can be reached cannot be established: "
+            f"{error}"
         ]
-    accepted = set(
-        inspect.signature(AgenticV2ScriptedRunner.__init__).parameters
+
+    problems: list[str] = []
+
+    try:
+        real_model_voice()
+    except NoModelVoiceAvailable:
+        pass
+    except Exception as error:  # pragma: no cover - defensive
+        problems.append(
+            "asking for a real model failed in an unexpected way, so what "
+            "would happen on a paid run is unknown: "
+            f"{type(error).__name__}: {error}"
+        )
+    else:
+        problems.append(
+            "core.agentic_v2_conversation.real_model_voice now hands back a "
+            "way to reach a real model. Stage one may be about to spend money "
+            "in a loop, so before any paid run is allowed somebody must "
+            "confirm the amount is approved here and that the loop still "
+            "stops at the dispatcher's own tool-call ceiling"
+        )
+
+    would_be_charged_for = ScriptedVoice(
+        replies=[GaveUp(note="never asked")], makes_paid_calls=True
     )
-    if "scripted_calls" not in accepted:
-        return [
-            "the Agentic Sandbox V2 runner no longer takes a list of calls "
-            "written down in advance. If the model conversation has been "
-            "built, this check needs updating to say so; until then stage one "
-            "cannot be graded"
-        ]
-    if accepted & {"model_client", "llm_client", "client"}:
-        return [
-            "the Agentic Sandbox V2 runner now accepts a model client. Stage "
-            "one may have been built, and this check must be updated to "
-            "confirm the loop stops at the dispatcher's ceiling before any "
-            "paid run is allowed"
-        ]
+    refused = run_model_conversation(
+        task_prompt="a check that spends nothing",
+        voice=would_be_charged_for,
+        desk=ScriptedToolDesk(),
+        limits=LoopLimits(),
+    )
+    if refused.stop_reason is not StopReason.PAID_CALL_REFUSED:
+        problems.append(
+            "the stage-one loop no longer refuses a model that would be "
+            "charged for: it stopped with "
+            f"{refused.stop_reason.value!r} instead. That refusal is what "
+            "keeps an unapproved paid run from starting by accident"
+        )
+    if would_be_charged_for.requests_seen:
+        problems.append(
+            "the stage-one loop asked a model that declares itself paid "
+            "before refusing it, so the money would already have been spent "
+            "by the time anything noticed"
+        )
+
+    try:
+        from core.agentic_v2_runner import AgenticV2ScriptedRunner
+    except ImportError as error:  # pragma: no cover - defensive
+        problems.append(
+            "the Agentic Sandbox V2 runner could not be loaded, so whether it "
+            f"holds a model client cannot be established: {error}"
+        )
+    else:
+        accepted = set(
+            inspect.signature(AgenticV2ScriptedRunner.__init__).parameters
+        )
+        if accepted & {"model_client", "llm_client", "client"}:
+            problems.append(
+                "the Agentic Sandbox V2 runner now accepts a model client "
+                "directly. That is a second route to a paid call which this "
+                "check does not cover, and it must be reviewed before any "
+                "stage-one run is allowed"
+            )
+
+    if problems:
+        return problems
     return [
-        "the model conversation stage one is about does not exist yet: "
-        "core.agentic_v2_runner.AgenticV2ScriptedRunner replays a list of "
-        "calls written down in advance and holds no model client, so no model "
-        "ever sees a tool result and chooses what to do next"
+        "stage one cannot start because nothing here can reach a real model: "
+        "the loop exists at core.agentic_v2_conversation.run_model_conversation "
+        "and is proven against stand-ins that spend nothing, but "
+        "real_model_voice refuses and the loop refuses any model that would be "
+        "charged for. Approving an amount below is what removes this"
     ]
 
 
@@ -621,7 +689,7 @@ def run_stage_one_preflight(
             "stay true"
         )
     problems.extend(check_agentic_sandbox_v2_blocks_are_intact())
-    problems.extend(check_the_model_conversation_does_not_exist_yet())
+    problems.extend(check_stage_one_cannot_reach_a_model())
 
     fixed = dict(plan.get("fixed_settings") or {})
     if fixed.get("exec_run_open") is not False:

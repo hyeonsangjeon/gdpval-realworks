@@ -37,7 +37,7 @@ from core.agentic_v2_stage_one_budget import (  # noqa: E402
     StageOneBudgetExceeded,
     StageOneConditions,
     budget_for_one_task,
-    check_the_model_conversation_does_not_exist_yet,
+    check_stage_one_cannot_reach_a_model,
     load_stage_one_plan,
     price_the_options,
     read_dispatcher_limits,
@@ -595,29 +595,99 @@ def _preflight(plan, catalog, assumptions):
     )
 
 
-def test_stage_one_is_refused_today_and_says_the_conversation_is_missing(
+def test_stage_one_is_refused_today_and_says_no_model_can_be_reached(
     stage_one_plan, catalog, assumptions
 ):
-    """The honest first answer is not about money.
+    """The honest first answer is still not about money.
 
-    Even with an amount approved, stage one could not start: the thing it is
-    about — the model being asked again with a tool result in front of it —
-    has not been built. Saying that plainly is more useful than letting the
-    money question stand in for it.
+    The loop stage one is about now exists and is proven against stand-ins.
+    What does not exist is any way to put a real model into it, so stage one
+    could not start even with an amount approved — and saying which of the two
+    is missing is more useful than letting the money question stand in for it.
     """
     result = _preflight(stage_one_plan, catalog, assumptions)
 
     assert result.may_start is False
     assert any(
-        "does not exist yet" in note for note in result.problems
+        "nothing here can reach a real model" in note
+        for note in result.problems
     )
 
 
-def test_the_missing_conversation_is_established_by_looking_at_the_code():
-    """Read from what the runner accepts, so the answer changes by itself."""
-    problems = check_the_model_conversation_does_not_exist_yet()
+def test_the_missing_model_is_established_by_running_the_code():
+    """Established by calling the refusing seam, not by reading a comment."""
+    problems = check_stage_one_cannot_reach_a_model()
     assert len(problems) == 1
-    assert "replays a list of calls written down in advance" in problems[0]
+    assert "real_model_voice refuses" in problems[0]
+    assert "core.agentic_v2_conversation.run_model_conversation" in problems[0]
+
+
+def test_the_check_reports_it_if_a_way_to_reach_a_model_appears(monkeypatch):
+    """The answer must change by itself the day somebody builds one."""
+    import core.agentic_v2_conversation as conversation
+
+    monkeypatch.setattr(
+        conversation,
+        "real_model_voice",
+        lambda *args, **kwargs: conversation.ScriptedVoice(replies=[]),
+    )
+
+    problems = check_stage_one_cannot_reach_a_model()
+
+    assert any("now hands back a way to reach a real model" in note
+               for note in problems)
+    assert any("dispatcher's own tool-call ceiling" in note
+               for note in problems)
+
+
+def test_the_check_reports_it_if_the_loop_stops_refusing_paid_models(
+    monkeypatch,
+):
+    """The refusal is what keeps an unapproved paid run from starting."""
+    import core.agentic_v2_conversation as conversation
+
+    def a_loop_that_asks_anyway(*, voice, **_kwargs):
+        voice.next_turn(
+            conversation.ModelRequest(
+                turn=1,
+                task_prompt="",
+                tools_available=(),
+                history=(),
+                turns_left=0,
+            )
+        )
+        return conversation.ConversationOutcome(
+            stop_reason=conversation.StopReason.MODEL_STOPPED_WITHOUT_FINISHING,
+            detail="",
+            turns=(),
+            events=(),
+        )
+
+    monkeypatch.setattr(
+        conversation, "run_model_conversation", a_loop_that_asks_anyway
+    )
+
+    problems = check_stage_one_cannot_reach_a_model()
+
+    assert any(
+        "no longer refuses a model that would be charged for" in note
+        for note in problems
+    )
+    assert any("before refusing it" in note for note in problems)
+
+
+def test_the_check_reports_it_if_the_runner_gains_a_model_client(monkeypatch):
+    """A second route to a paid call this check does not otherwise cover."""
+    from core.agentic_v2_runner import AgenticV2ScriptedRunner
+
+    def __init__(self, *, model_client=None, **kwargs):  # pragma: no cover
+        raise AssertionError("only the signature is read")
+
+    monkeypatch.setattr(AgenticV2ScriptedRunner, "__init__", __init__)
+
+    problems = check_stage_one_cannot_reach_a_model()
+
+    assert any("now accepts a model client" in note for note in problems)
 
 
 def test_the_committed_stage_one_plan_approves_nothing(stage_one_plan):
@@ -663,10 +733,12 @@ def test_choosing_a_row_reports_the_limit_each_task_would_be_stopped_by(
         assert budget.refusal_before_next_call() is None
 
     # The money is settled and the settings are chosen, so the only thing left
-    # standing between here and a run is that the conversation does not exist.
+    # standing between here and a run is that no real model can be reached.
     assert result.may_start is False
     assert [
-        note for note in result.problems if "does not exist yet" in note
+        note
+        for note in result.problems
+        if "nothing here can reach a real model" in note
     ] == result.problems
 
 
@@ -893,7 +965,7 @@ def test_running_the_tool_refuses_and_prints_the_table():
 
     assert finished.returncode == 1, finished.stdout + finished.stderr
     assert "What each candidate setting could cost at most" in finished.stdout
-    assert "does not exist yet" in finished.stdout
+    assert "nothing here can reach a real model" in finished.stdout
     # The dispatcher's real ceiling, read from code, must reach the report.
     assert str(read_dispatcher_limits().max_total_calls) in finished.stdout
 

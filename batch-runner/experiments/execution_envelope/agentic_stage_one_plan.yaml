@@ -19,9 +19,12 @@
 # Beyond the money, two things still block stage one even if the money is
 # approved, and neither is removed here:
 #
-#   - the model conversation itself does not exist. core/agentic_v2_runner.py
-#     replays a list of calls written down in advance and holds no model client
-#     at all.
+#   - nothing here can reach a real model. The repeated conversation stage one
+#     is about does now exist, at
+#     core/agentic_v2_conversation.run_model_conversation, and it is proven
+#     against stand-ins that spend nothing. But real_model_voice refuses to
+#     hand back a way to reach a real model, and the loop itself refuses any
+#     model that says it would be charged for, before asking it anything.
 #   - two separate guards refuse the mode: the check in
 #     step2_run_inference._require_runnable_execution_mode, and the refusal in
 #     core/executor.py to build a runner unless the caller states the run makes

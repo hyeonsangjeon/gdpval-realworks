@@ -14,9 +14,8 @@ Usage:
     python scripts/check_agentic_stage_one_ceiling.py --plan other.yaml
 
 The exit code is 0 only when nothing is left to fix, which today it never is:
-the model conversation stage one is about has not been built, and no amount has
-been approved for it. Anything else exits 1, so this is safe to wire into an
-automated check.
+nothing here can reach a real model, and no amount has been approved for one.
+Anything else exits 1, so this is safe to wire into an automated check.
 """
 
 from __future__ import annotations
