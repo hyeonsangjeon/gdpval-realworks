@@ -505,24 +505,94 @@ def test_the_committed_plan_names_marking_settings_that_exist():
     assert (BATCH_RUNNER_ROOT / str(named)).is_file()
 
 
-def test_the_committed_plan_marking_sum_is_below_the_limits_today():
-    """Pin the finding so it cannot be undone without this failing.
-
-    Every one of these is a way the largest possible bill is larger than the
-    number the run is being checked against. Raising the stated numbers to meet
-    the limits is what makes this pass; deleting the check is not.
-    """
-    plan = committed_plan()
-    problems = _check_grading_assumptions_match_the_settings(
+def _committed_plan_problems(plan=None) -> list[str]:
+    plan = plan if plan is not None else committed_plan()
+    return _check_grading_assumptions_match_the_settings(
         plan,
         CostAssumptions.from_mapping(plan["cost"]["assumptions"]),
         root=BATCH_RUNNER_ROOT,
     )
-    joined = " | ".join(problems)
-    assert "marking calls per scoring line" in joined
-    assert "tokens of reply per marking call" in joined
-    assert "reading pictures" in joined
+
+
+def test_the_committed_plan_now_counts_everything_that_can_be_measured():
+    """The five findings are down to the one nothing can settle.
+
+    This test used to assert that all five were present. Raising the plan's
+    numbers to meet the limits is what its own instructions said would make it
+    pass, and that is what happened — so it now pins the other side: the four
+    that were closed must stay closed.
+
+    What is left is the sound model. Not a number that was left too low, but a
+    model that has never been called once, so nothing exists to measure, and
+    that has no published price, so a measurement would not produce an amount
+    either. Both of those are reported and neither is treated as free.
+    """
+    joined = " | ".join(_committed_plan_problems())
+
+    assert "marking calls per scoring line" not in joined
+    assert "tokens of reply per marking call" not in joined
+    assert "reading pictures" not in joined
     assert "listening to sound" in joined
+    assert "it is not zero" in joined
+
+
+@pytest.mark.parametrize(
+    "key, lowered, expected",
+    [
+        ("grading_calls_per_rubric_item", 1.0, "marking calls per scoring line"),
+        (
+            "grading_output_tokens_per_call",
+            1000,
+            "tokens of reply per marking call",
+        ),
+    ],
+)
+def test_lowering_a_number_back_below_the_limit_is_reported_again(
+    key, lowered, expected
+):
+    """The checks did not stop working when the plan stopped tripping them.
+
+    A check that only ever passes is indistinguishable from a check that was
+    quietly deleted. Each number is put back where it was before and the
+    matching complaint has to return.
+    """
+    plan = committed_plan()
+    plan["cost"]["assumptions"][key] = lowered
+
+    assert any(expected in note for note in _committed_plan_problems(plan))
+
+
+def test_removing_the_picture_block_brings_the_whole_gap_back():
+    """Counting pictures is what closed the largest part of the gap.
+
+    Marking may look at a picture seventy-two times for one task. Leaving that
+    out of the sum does not make it smaller — it makes it wrong, and silently,
+    because a missing line reads exactly like a line that costs nothing.
+    """
+    plan = committed_plan()
+    del plan["cost"]["assumptions"]["grading_perception"]["vision"]
+
+    joined = " | ".join(_committed_plan_problems(plan))
+
+    assert "reading pictures" in joined
+    assert "counts none of it" in joined
+
+
+def test_guessing_a_size_for_the_sound_model_does_not_satisfy_the_check():
+    """A number nobody measured is not a measurement.
+
+    Filling the two blanks in would silence the "never been measured"
+    complaint, which is the point of that complaint — but the model still has
+    no published price, so the amount still cannot be worked out. This is the
+    guard against closing the last gap by inventing evidence.
+    """
+    plan = committed_plan()
+    audio = plan["cost"]["assumptions"]["grading_perception"]["audio"]
+    audio["input_tokens_per_call"] = 4000
+    audio["output_tokens_per_call"] = 500
+
+    joined = " | ".join(_committed_plan_problems(plan))
+
     assert "it is not zero" in joined
 
 

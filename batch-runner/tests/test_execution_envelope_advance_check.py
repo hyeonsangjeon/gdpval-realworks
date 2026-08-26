@@ -30,6 +30,7 @@ from core.execution_envelope_cost import (  # noqa: E402
     CostAssumptions,
     REFERENCE_FILE_CHARACTER_CAP,
     check_cost_ceiling,
+    describe_cost_ceiling,
     estimate_cost_ceiling,
     load_price_table,
     max_attempt_counts,
@@ -81,7 +82,21 @@ EXPECTED_ADVANCE_CHECK_TASKS = (
     "0818571f-5ff7-4d39-9d2c-ced5ae44299e",  # text answer only
 )
 
-APPROVED_ENOUGH = 100
+# The model marking would call to listen to sound. It has no published price
+# and has never been called, so several tests below have to name it. Written
+# once here rather than typed into each of them.
+UNPRICED_SOUND_MODEL = "gpt-audio-1.5"
+
+# A number large enough to sit above the worked-out ceiling, so that tests
+# about something else are not blocked by the amount. It is written into a copy
+# of the plan held in memory and never into the plan on disk. **It approves
+# nothing.** The only approved amount is the one in the committed plan, and
+# test_the_committed_plan_records_the_approved_amount checks it separately.
+#
+# It has to be raised whenever the arithmetic learns to count something it was
+# missing before, which is the opposite of a warning sign: the total rising
+# means a real cost stopped being invisible.
+APPROVED_ENOUGH = 500
 
 # The Azure resource this comparison is pinned to, matching the plan. Used to
 # build a settings environment in which the Azure run place is correctly
@@ -130,42 +145,111 @@ def _approved(plan, amount=APPROVED_ENOUGH):
     return plan
 
 
-def _apart_from_the_marking_gap(result):
-    """Every problem except the marking half of the cost sum being too low.
+def _apart_from_the_unused_sound_model(result):
+    """Every problem except the ones about the sound model nobody has used.
 
     Several tests below use "no problems at all" to mean "the thing I am
     testing is right, and nothing else is wrong either". That reading stopped
-    being available when the marking check began reporting a gap **no plan can
-    close on its own**: the cost arithmetic has no way to count the
-    picture-reading and sound-listening calls the marking settings allow, and
-    every committed marking settings file switches both on. Raising a number in
-    the plan cannot fix that; building the arithmetic can.
+    being available when the marking check began reporting a gap between what
+    the plan counts and what the marking settings allow.
+
+    Most of that gap has since been closed. What is left is one model:
+    ``gpt-audio-1.5``, which marking may call to listen to sound. It has never
+    been called once, so how much it would send and write back has never been
+    measured, and it has no published price, so even a measurement would not
+    produce an amount. Neither fact can be fixed by writing a number into the
+    plan — a number nobody measured is not evidence, and a zero would say the
+    calls are free.
+
+    Both checks report it, from opposite ends: the marking check compares the
+    plan against the marking settings, and the cost check refuses to price a
+    model it has no price for. So the notes appear in two lists, and setting
+    aside only ``grading_ceiling_problems`` would leave half of them behind.
 
     Leaving the gap in would make these tests fail for a reason none of them is
-    about. Weakening the marking check to make them pass would be far worse —
-    it is reporting something true. So the gap is set aside by name, asserted
-    on separately just below, and held in place by
+    about. Weakening either check to make them pass would be far worse — both
+    are reporting something true. So the gap is set aside by name, asserted on
+    separately just below, and held in place by
     tests/test_execution_envelope_grading_cost.py.
     """
     return [
         note
         for note in result.all_problems
         if note not in result.grading_ceiling_problems
+        and UNPRICED_SOUND_MODEL not in note
     ]
 
 
-def test_the_marking_gap_is_the_only_thing_a_ready_plan_still_reports(plan):
-    """What ``_apart_from_the_marking_gap`` sets aside, and nothing more.
+def test_the_sound_model_is_the_only_thing_a_ready_plan_still_reports(plan):
+    """What ``_apart_from_the_unused_sound_model`` sets aside, and nothing more.
 
     If a new problem ever appears in a fully ready plan, it must not be able to
     hide behind that helper. This names exactly what is being set aside.
     """
     result = _ready_preflight(_approved(plan))
 
-    assert _apart_from_the_marking_gap(result) == []
-    assert result.all_problems == result.grading_ceiling_problems
-    assert len(result.grading_ceiling_problems) == 5
+    assert _apart_from_the_unused_sound_model(result) == []
+    assert len(result.all_problems) == 4
+    assert all(
+        UNPRICED_SOUND_MODEL in note or "sound" in note
+        for note in result.all_problems
+    )
+    assert len(result.grading_ceiling_problems) == 2
     assert result.may_start is False
+
+
+def test_what_is_left_of_the_marking_gap_is_only_the_unused_sound_model(plan):
+    """The gap used to cover five things. Four of them were the arithmetic.
+
+    Marking may ask the model eleven times about one scoring line, let each
+    reply run to 2,400 tokens, look at a picture up to seventy-two times per
+    task, and listen to sound up to three times. The cost sum counted one call,
+    a thousand tokens, and neither kind of perception at all.
+
+    Everything there that a measurement could settle has been settled. What
+    survives is the one thing no measurement exists for, and this says so by
+    name so that a later change cannot quietly widen the gap again.
+    """
+    result = _ready_preflight(_approved(plan))
+    left = " | ".join(result.grading_ceiling_problems)
+
+    assert UNPRICED_SOUND_MODEL in left
+    for closed in ("scoring line", "reading pictures", "tokens of reply"):
+        assert closed not in left
+
+
+def test_looking_at_pictures_is_now_part_of_the_worked_out_amount(plan):
+    """The picture model is priced, so its calls turn into an amount.
+
+    Before this existed the sum was silent about them, which read as free.
+    """
+    result = _ready_preflight(_approved(plan))
+
+    assert result.cost.perception_model_calls > 0
+    assert result.cost.perception_usd > 0
+    # Sound stays out of the amount on purpose, and says so rather than
+    # disappearing into it.
+    assert result.cost.perception_of_unknown_size == [
+        f"audio ({UNPRICED_SOUND_MODEL})"
+    ]
+
+
+def test_the_sound_model_reaches_the_refusal_that_was_written_for_it(plan):
+    """An unpriced model has always been a refusal. It never saw this one.
+
+    ``check_cost_ceiling`` refuses a run whose models have no published price,
+    on the stated grounds that an unpriced model would otherwise be counted as
+    free. The marking half never named the sound model, so the refusal had no
+    chance to fire for it. Counting perception calls is what finally hands the
+    name over.
+    """
+    result = _ready_preflight(_approved(plan))
+
+    assert UNPRICED_SOUND_MODEL in result.cost.unpriced_models
+    assert any(
+        "no published price" in note and UNPRICED_SOUND_MODEL in note
+        for note in result.all_problems
+    )
 
 
 def test_a_plan_that_marks_and_names_no_marking_settings_is_refused(plan):
@@ -491,6 +575,338 @@ def test_a_model_with_no_published_price_is_not_treated_as_free(catalog):
     assert any("no published price" in note for note in problems)
 
 
+# ── Marking that looks and listens is counted too ─────────────────────────
+#
+# Marking can send a picture of the answer to one model and a sound clip to
+# another. Both are billed separately from the model that reads the words, and
+# until this section existed the sum did not count a single one of those calls.
+
+
+def _marking_assumptions(perception=None, **overrides):
+    """The smallest set of assumptions that marks something.
+
+    ``grading_perception`` is passed through untouched, including when it is
+    left out entirely, so that the tests below can show what each shape does.
+    """
+    mapping = {
+        "characters_per_token": 3,
+        "instruction_character_count": 0,
+        "tool_loop_max_model_turns": {"host_python_process": 1},
+        "output_tokens_capped_per_attempt": {"host_python_process": False},
+        "max_tool_result_tokens_per_turn": {"host_python_process": 0},
+        "safety_multiplier": 1,
+        "grading_required": True,
+        "grading_model": "gpt-5.4",
+        "grading_calls_per_rubric_item": 1,
+        "grading_input_tokens_per_call": 1,
+        "grading_output_tokens_per_call": 1,
+    }
+    if perception is not None:
+        mapping["grading_perception"] = perception
+    mapping.update(overrides)
+    return CostAssumptions.from_mapping(mapping)
+
+
+def _marking_ceiling(catalog, perception=None, **overrides):
+    """A ceiling over all five tasks, so "per task" can actually be seen.
+
+    One task would not tell a per-task count apart from a per-run one.
+    """
+    return estimate_cost_ceiling(
+        conditions_by_environment={
+            "host_python_process": _conditions(
+                task_ids=list(EXPECTED_ADVANCE_CHECK_TASKS)
+            )
+        },
+        tasks_by_id=catalog.by_task_id(),
+        assumptions=_marking_assumptions(perception, **overrides),
+    )
+
+
+def test_a_plan_that_says_nothing_about_perception_still_works(catalog):
+    """Leaving the block out is allowed, because not every plan marks anything.
+
+    It costs nothing here and claims nothing. What stops that from becoming a
+    quiet way to hide the calls is a separate check, which compares the plan
+    against the marking settings and reports a block that should be there and
+    is not.
+    """
+    ceiling = _marking_ceiling(catalog)
+
+    assert ceiling.perception_model_calls == 0
+    assert ceiling.perception_usd == 0
+    assert ceiling.perception_of_unknown_size == []
+
+
+def test_perception_is_counted_once_per_task_rather_than_per_scoring_line(
+    catalog,
+):
+    """One picture can answer several scoring lines, and the cap is per task.
+
+    The marking settings limit how many times a task may be looked at, not how
+    many times each line may be. Counting per line would multiply the figure by
+    however many lines a task happens to have, which is not what would be
+    billed.
+    """
+    ceiling = _marking_ceiling(
+        catalog,
+        {
+            "vision": {
+                "model": "gpt-5.4",
+                "calls_per_task": 4,
+                "input_tokens_per_call": 1000,
+                "output_tokens_per_call": 100,
+            }
+        },
+    )
+
+    assert ceiling.perception_model_calls == 4 * len(EXPECTED_ADVANCE_CHECK_TASKS)
+    assert ceiling.perception_usd > 0
+
+
+def test_a_kind_of_perception_nobody_measured_is_named_rather_than_priced(
+    catalog,
+):
+    """A size nobody established is a refusal, not a zero.
+
+    The calls are still counted, because they will still happen. What cannot be
+    done is turn them into an amount, and saying so is the whole point: an
+    amount that silently leaves them out reads as an amount that includes them.
+    """
+    ceiling = _marking_ceiling(
+        catalog,
+        {
+            "audio": {
+                "model": "gpt-5.4",
+                "calls_per_task": 3,
+                "input_tokens_per_call": None,
+                "output_tokens_per_call": None,
+            }
+        },
+    )
+
+    assert ceiling.perception_model_calls == 3 * len(EXPECTED_ADVANCE_CHECK_TASKS)
+    assert ceiling.perception_usd == 0
+    assert ceiling.perception_of_unknown_size == ["audio (gpt-5.4)"]
+    assert any(
+        "unknown rather than nothing" in note
+        for note in check_cost_ceiling(ceiling, approved_maximum_usd=10_000)
+    )
+
+
+def test_half_a_measurement_is_no_measurement(catalog):
+    """Knowing what a call sends is not knowing what it writes back.
+
+    Nothing in this repository limits how long a perception reply may run, so a
+    known input size and an unknown output size still leaves the amount
+    unknown.
+    """
+    ceiling = _marking_ceiling(
+        catalog,
+        {
+            "vision": {
+                "model": "gpt-5.4",
+                "calls_per_task": 2,
+                "input_tokens_per_call": 5000,
+                "output_tokens_per_call": None,
+            }
+        },
+    )
+
+    assert ceiling.perception_usd == 0
+    assert ceiling.perception_of_unknown_size == ["vision (gpt-5.4)"]
+
+
+def test_a_perception_model_with_no_published_price_is_refused(catalog):
+    """The refusal that was already written for unpriced models reaches these.
+
+    It could not before. The marking half never named the picture-reading or
+    sound-listening models, so a model with no price simply never arrived at
+    the check that would have stopped it.
+    """
+    ceiling = _marking_ceiling(
+        catalog,
+        {
+            "audio": {
+                "model": "a-listening-model-nobody-priced",
+                "calls_per_task": 1,
+                "input_tokens_per_call": 100,
+                "output_tokens_per_call": 100,
+            }
+        },
+    )
+
+    assert ceiling.unpriced_models == ["a-listening-model-nobody-priced"]
+    assert ceiling.perception_usd == 0
+    assert any(
+        "no published price" in note
+        for note in check_cost_ceiling(ceiling, approved_maximum_usd=10_000)
+    )
+
+
+def test_a_kind_of_perception_that_is_switched_off_costs_nothing(catalog):
+    ceiling = _marking_ceiling(
+        catalog,
+        {
+            "vision": {
+                "model": "gpt-5.4",
+                "calls_per_task": 0,
+                "input_tokens_per_call": None,
+                "output_tokens_per_call": None,
+            }
+        },
+    )
+
+    assert ceiling.perception_model_calls == 0
+    assert ceiling.perception_of_unknown_size == []
+    assert ceiling.unpriced_models == []
+
+
+def test_perception_is_left_out_when_nothing_is_being_marked(catalog):
+    ceiling = _marking_ceiling(
+        catalog,
+        {
+            "vision": {
+                "model": "gpt-5.4",
+                "calls_per_task": 9,
+                "input_tokens_per_call": 1000,
+                "output_tokens_per_call": 100,
+            }
+        },
+        grading_required=False,
+    )
+
+    assert ceiling.perception_model_calls == 0
+    assert ceiling.perception_usd == 0
+
+
+def test_perception_is_part_of_the_total_and_of_the_call_count(catalog):
+    """It has to reach the figures a reader actually looks at.
+
+    Counting the calls into a field nothing adds up would be no better than not
+    counting them.
+    """
+    without = _marking_ceiling(catalog)
+    with_pictures = _marking_ceiling(
+        catalog,
+        {
+            "vision": {
+                "model": "gpt-5.4",
+                "calls_per_task": 6,
+                "input_tokens_per_call": 20_000,
+                "output_tokens_per_call": 3000,
+            }
+        },
+    )
+
+    assert with_pictures.total_before_safety_usd > without.total_before_safety_usd
+    assert with_pictures.total_model_calls == without.total_model_calls + 6 * len(
+        EXPECTED_ADVANCE_CHECK_TASKS
+    )
+
+
+def test_the_written_out_sum_and_the_readable_lines_both_show_perception(
+    catalog,
+):
+    """A reader must be able to see the calls and see what is missing from them.
+
+    Two of the three kinds here are priced, one is not, and the printed line
+    has to say which is which rather than presenting one amount as if it
+    covered everything.
+    """
+    ceiling = _marking_ceiling(
+        catalog,
+        {
+            "vision": {
+                "model": "gpt-5.4",
+                "calls_per_task": 2,
+                "input_tokens_per_call": 1000,
+                "output_tokens_per_call": 100,
+            },
+            "audio": {
+                "model": "gpt-5.4",
+                "calls_per_task": 1,
+                "input_tokens_per_call": None,
+                "output_tokens_per_call": None,
+            },
+        },
+    )
+
+    written = ceiling.as_dict()["grading_perception"]
+    assert written["most_model_calls"] == 3 * len(EXPECTED_ADVANCE_CHECK_TASKS)
+    assert Decimal(written["most_it_could_cost_usd"]) > 0
+    assert written["kinds_whose_size_is_unknown"] == ["audio (gpt-5.4)"]
+
+    printed = " | ".join(describe_cost_ceiling(ceiling))
+    assert "looking and listening" in printed
+    assert "audio (gpt-5.4)" in printed
+    assert "never measured" in printed
+
+
+@pytest.mark.parametrize(
+    "broken, expected",
+    [
+        ({"vision": "sometimes"}, "must be a block of settings"),
+        ({"vision": {"model": "gpt-5.4"}}, "is missing"),
+        (
+            {
+                "vision": {
+                    "model": "gpt-5.4",
+                    "calls_per_task": -1,
+                    "input_tokens_per_call": 1,
+                    "output_tokens_per_call": 1,
+                }
+            },
+            "fewer than no times",
+        ),
+        (
+            {
+                "vision": {
+                    "model": "gpt-5.4",
+                    "calls_per_task": 1,
+                    "input_tokens_per_call": -5,
+                    "output_tokens_per_call": 1,
+                }
+            },
+            "less than nothing",
+        ),
+    ],
+)
+def test_a_perception_block_that_makes_no_sense_is_refused(broken, expected):
+    """Each refusal says what is wrong in words, not by failing later.
+
+    A block missing a setting is the one that matters most: without this, a
+    forgotten ``output_tokens_per_call`` would read as a reply of no length.
+    """
+    with pytest.raises(ValueError, match=expected):
+        _marking_assumptions(broken)
+
+
+def test_perception_settings_that_are_not_a_block_are_refused():
+    with pytest.raises(ValueError, match="name each kind of perception"):
+        _marking_assumptions("look at everything")
+
+
+def test_the_committed_plan_measures_pictures_and_leaves_sound_blank(plan):
+    """What the plan claims about perception, in the plan's own words.
+
+    The picture numbers come from the largest call in every marking run this
+    repository has committed. The sound numbers are blank because that model
+    has never been called, so there is nothing to draw on — and a blank is a
+    refusal while a zero would be a claim that the calls are free.
+    """
+    perception = plan["cost"]["assumptions"]["grading_perception"]
+
+    assert perception["vision"]["model"] == "gpt-5.4"
+    assert perception["vision"]["calls_per_task"] == 72
+    assert perception["vision"]["input_tokens_per_call"] == 24000
+    assert perception["vision"]["output_tokens_per_call"] == 4000
+
+    assert perception["audio"]["model"] == UNPRICED_SOUND_MODEL
+    assert perception["audio"]["input_tokens_per_call"] is None
+    assert perception["audio"]["output_tokens_per_call"] is None
+
+
 def test_a_missing_approved_amount_is_a_refusal(plan, catalog):
     """Removing the approved amount must stop the run, whatever else is right.
 
@@ -521,7 +937,7 @@ def test_an_approved_amount_below_the_ceiling_is_a_refusal(plan):
 
 def test_an_approved_amount_that_covers_the_ceiling_is_accepted(plan):
     result = _ready_preflight(_approved(plan))
-    assert _apart_from_the_marking_gap(result) == []
+    assert _apart_from_the_unused_sound_model(result) == []
     assert not any("is above the" in note for note in result.all_problems)
 
 
@@ -537,15 +953,34 @@ def test_the_worked_out_ceiling_is_reported_in_full(plan):
 
 
 def test_grading_is_counted_once_for_every_run_place(plan, catalog):
+    """Each run place produces its own answers, so each is marked separately.
+
+    How many marking calls one scoring line costs is read from the plan rather
+    than assumed to be one. This test is about the multiplication by run place;
+    pinning the other number here would make it fail whenever that number is
+    corrected, for a reason it is not about.
+    """
     result = _ready_preflight(_approved(plan))
     by_id = catalog.by_task_id()
     scoring_lines = sum(
         by_id[task_id].rubric_item_count for task_id in EXPECTED_ADVANCE_CHECK_TASKS
     )
+    calls_per_line = plan["cost"]["assumptions"]["grading_calls_per_rubric_item"]
     assert result.cost is not None
-    assert result.cost.grading_model_calls == scoring_lines * len(
-        COMPARABLE_ENVIRONMENTS
+    assert result.cost.grading_model_calls == int(
+        Decimal(str(calls_per_line)) * scoring_lines * len(COMPARABLE_ENVIRONMENTS)
     )
+
+
+def test_marking_a_scoring_line_is_counted_at_the_settings_limit(plan):
+    """The plan counts every turn the marking settings allow, not the usual one.
+
+    It used to say one call per scoring line, taken from what three recorded
+    runs happened to average. The settings allow ten tool rounds and a final
+    answer, so the bill can be eleven times what that assumed.
+    """
+    assert plan["cost"]["assumptions"]["grading_calls_per_rubric_item"] == 11.0
+    assert plan["cost"]["assumptions"]["grading_output_tokens_per_call"] == 2400
 
 
 def test_the_cost_sum_uses_the_wording_that_is_actually_sent(plan):
@@ -810,13 +1245,13 @@ def test_the_three_settings_files_agree_on_the_unfixed_settings(plan):
 
     result = _ready_preflight(_approved(plan))
 
-    assert _apart_from_the_marking_gap(result) == []
+    assert _apart_from_the_unused_sound_model(result) == []
 
 
 def test_the_committed_files_agree_with_the_committed_plan(plan):
     """The three settings files and the plan say the same thing today."""
     result = _ready_preflight(_approved(plan))
-    assert _apart_from_the_marking_gap(result) == []
+    assert _apart_from_the_unused_sound_model(result) == []
 
 
 def test_the_plan_names_the_version_this_check_reads(plan):
@@ -836,7 +1271,7 @@ def test_the_two_comparisons_keep_separate_score_tables(plan):
 def test_the_agentic_sandbox_v2_guards_are_not_worked_around(plan):
     """The check exercises all three guards; none may have been opened."""
     result = _ready_preflight(_approved(plan))
-    assert _apart_from_the_marking_gap(result) == []
+    assert _apart_from_the_unused_sound_model(result) == []
     assert result.readiness.status_of("agentic_sandbox_v2") == "structure_check_only"
 
 
@@ -973,7 +1408,7 @@ def test_a_correctly_pointed_azure_setup_is_accepted(plan):
     assert result.azure.problems == []
     assert result.azure.observed_account == PINNED_AZURE_ACCOUNT
     assert result.azure.observed_project == PINNED_AZURE_PROJECT
-    assert _apart_from_the_marking_gap(result) == []
+    assert _apart_from_the_unused_sound_model(result) == []
     assert result.readiness.ready is True
 
 

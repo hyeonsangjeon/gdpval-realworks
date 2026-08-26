@@ -288,16 +288,47 @@ def check_assumptions_cover_the_caps(
             f"{caps.output_tokens_per_call}"
         )
 
-    for label, model, calls in (
-        ("reading pictures", caps.visual_model, caps.visual_calls_per_task),
-        ("listening to sound", caps.audio_model, caps.audio_calls_per_task),
+    for modality, label, model, calls in (
+        (
+            "vision",
+            "reading pictures",
+            caps.visual_model,
+            caps.visual_calls_per_task,
+        ),
+        (
+            "audio",
+            "listening to sound",
+            caps.audio_model,
+            caps.audio_calls_per_task,
+        ),
     ):
         if not model or calls <= 0:
             continue
-        problems.append(
-            f"{caps.settings_path} lets marking call {model!r} for {label} up "
-            f"to {calls} times per task, and the cost sum counts none of it"
-        )
+        stated = assumptions.grading_perception.get(modality)
+        if stated is None:
+            problems.append(
+                f"{caps.settings_path} lets marking call {model!r} for {label} "
+                f"up to {calls} times per task, and the cost sum counts none "
+                "of it"
+            )
+        else:
+            if stated.model != model:
+                problems.append(
+                    f"the cost sum prices {label} against {stated.model!r}, "
+                    f"but {caps.settings_path} uses {model!r}"
+                )
+            if stated.calls_per_task < calls:
+                problems.append(
+                    f"the cost sum allows {stated.calls_per_task} calls per "
+                    f"task for {label}, but {caps.settings_path} lets it "
+                    f"happen {calls} times"
+                )
+            if not stated.size_is_known:
+                problems.append(
+                    f"how much one {label} call sends and writes back has "
+                    "never been measured, so its cost is unknown rather than "
+                    "nothing"
+                )
         if prices is not None and model not in prices:
             problems.append(
                 f"{model!r} has no published price, so what it could cost "

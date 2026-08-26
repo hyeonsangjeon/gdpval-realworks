@@ -12,6 +12,67 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The cost arithmetic had no way to express a perception call, so marking's
+  two extra models could not be counted even once they were named.** The
+  previous change proved the gap existed: `grading_configs/default_v2.yaml`
+  lets marking call `gpt-5.4` to **read a picture up to 72 times per task** and
+  `gpt-audio-1.5` to **listen to sound up to 3 times per task**, and the sum
+  mentioned neither. Naming them in the check was as far as that change could
+  go — `CostAssumptions` had nowhere to put them, so no plan could close the
+  gap by raising a number. This builds the arithmetic.
+
+  A plan may now carry `grading_perception`, naming per kind of perception
+  which model is called, how many times per task, and how much one call sends
+  and writes back. Call counts are checked against the marking settings and
+  refused when they sit below them. **Perception is counted per task, not per
+  scoring line**, because that is how the settings cap it and because one
+  picture can answer several scoring lines at once.
+
+  **Two different refusals, kept apart, because they are fixed differently.**
+  A model with no published price cannot be priced at all. A model whose price
+  is known but whose call size nobody has measured cannot be priced either —
+  but for a reason a measurement would settle. Both refuse; neither is
+  silently a zero. `check_cost_ceiling` gained the second refusal and the
+  printed line names what is missing from the amount rather than presenting a
+  partial figure as a whole one.
+
+  **The picture numbers come from measurement, and from the largest one.**
+  Across every marking run committed to this repository, 817 scoring lines
+  really called the picture model. The largest single call sent **23,139
+  tokens** and wrote back **3,202**; the plan records 24,000 and 4,000. The
+  means were 2,123 and 349, so this repository's usual "measured mean, doubled"
+  convention would have produced **4,246 — below a call that has already
+  happened.** That is exactly the class of error the previous change fixed, so
+  the convention is deliberately not followed here. Nothing in the repository
+  caps a perception reply at all: `core/perception/vision.py` and
+  `core/perception/audio.py` both call the Responses API without
+  `max_output_tokens`, so even the measured maximum is a floor rather than a
+  lid, and the plan says so.
+
+  **The sound numbers are left blank on purpose.** 116 scoring lines were
+  routed to sound across every committed run and the sound model was called
+  **zero** times — the text judge decided all of them. There is no measurement
+  to draw on, so writing a number would invent evidence and writing 0 would
+  claim the calls are free. A blank refuses.
+
+  **A refusal written years ago fired for the first time.** Because the sum now
+  hands `gpt-audio-1.5` to the price table, `check_cost_ceiling`'s existing
+  "an unpriced model would otherwise be counted as free" refusal finally
+  reaches it.
+
+  The plan's own marking numbers were raised to the limits the settings allow
+  while the arithmetic was being fixed, since leaving them low would have kept
+  the check reporting a wrong number instead of a real one: 1 marking call per
+  scoring line → **11**, and 1,000 tokens of reply → **2,400**. Five reported
+  problems are down to two, and both are the same unused model.
+
+  **The total rose from 43.77 to 363.59 United States dollars and nothing got
+  more expensive.** The same calls were always allowed; the old figure counted
+  marking at a ninth of its limit and pictures not at all. **No approved amount
+  was changed or added**: 32.23 stands exactly as the owner set it, 363.59 is a
+  computed figure and not an approval, and the gap between them is the owner's
+  decision to make.
+
 - **The half of the cost ceiling that prices marking was never a ceiling, and
   it hid two whole models.** `core/execution_envelope_cost.py` opens by saying
   every number in it is a ceiling and not a forecast. The half that prices

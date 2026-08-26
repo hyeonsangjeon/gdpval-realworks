@@ -195,6 +195,13 @@ comparison's ceiling from 32.23 to 43.77 United States dollars, above the amount
 that had been approved for it. That is recorded in
 `batch-runner/experiments/execution_envelope/advance_check_plan.yaml`.
 
+A later correction to the same file raised that ceiling again, to 363.59, by
+counting marking at what its settings permit rather than at what past runs
+happened to average, and by counting the two extra models marking uses to read
+pictures and listen to sound. Neither correction made anything more expensive.
+Read the plan file rather than the figure quoted above if you need the current
+one; 43.77 is left here because it is what this particular fix produced.
+
 ### The numbers
 
 Worked out by `batch-runner/core/agentic_v2_stage_one_budget.py` over the same
