@@ -548,13 +548,33 @@ def test_the_public_check_stays_quiet_on_the_committed_plan(tmp_path):
     assert not any(REFUSAL_OPENING in problem for problem in problems)
 
 
-def test_the_free_check_reports_what_it_reported_before():
-    """This rule is dormant today; it must not move the standing report."""
+def test_the_free_check_reports_exactly_what_it_would_without_this_rule():
+    """This rule is dormant today; it must not move the standing report.
+
+    Held against the same check with this rule switched off rather than against
+    a problem count typed in here. How many problems the free check finds
+    depends on the machine it runs on — a box with no container daemon and no
+    Azure route has more to say than one with both — so a fixed number would
+    only be true where it was written, and would fail on a build server for
+    reasons that have nothing to do with what is being checked.
+    """
+    plan = load_plan(PLAN_PATH)
+    with_rule = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+    with patch(
+        "core.execution_envelope_preflight."
+        "_check_the_plan_knows_what_one_cap_covers",
+        return_value=[],
+    ):
+        without_rule = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+
+    assert with_rule.all_problems == without_rule.all_problems
+    assert with_rule.may_start is without_rule.may_start is False
+
+
+def test_the_committed_plan_draws_no_refusal_from_the_free_check():
     result = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
 
-    assert len(result.all_problems) == 11
     assert not any(REFUSAL_OPENING in problem for problem in result.all_problems)
-    assert result.may_start is False
     assert result.cost is not None
     assert result.cost.total_usd == Decimal("363.58481250")
 

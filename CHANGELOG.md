@@ -51,9 +51,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   `false` and the ceiling rises about 50 dollars. The comment now says so.
 - **The check is silent on the committed plan, and that is the correct
   result.** Azure is the only `true` and Azure really does ask once, so the free
-  check still reports **11 problems** and **363.58 dollars**. Two tests drive
-  the public entry and the whole free check with a wrong `true` in the plan, so
-  deleting the wiring fails a test rather than passing quietly.
+  check's report is word for word what it would be with this rule switched off
+  — which is how the test states it, holding the two runs against each other
+  rather than naming a problem count. That count is a property of the machine,
+  not of the rule: a build server with no container daemon and no Azure route
+  has more to say than a workstation with both. The ceiling, which is not
+  machine-dependent, stays **363.58 dollars**. Two tests drive the public entry
+  and the whole free check with a wrong `true` in the plan, so deleting the
+  wiring fails a test rather than passing quietly.
 - **The container's carried-forward input was priced at nothing, on the written
   grounds that "the model is asked once and nothing is carried forward".** That
   is a property of one line in the container's settings file — `repair:
