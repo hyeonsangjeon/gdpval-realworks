@@ -631,12 +631,9 @@ def test_the_committed_stage_one_plan_approves_nothing(stage_one_plan):
 def test_the_three_place_approval_does_not_extend_to_stage_one(
     stage_one_plan, catalog, assumptions
 ):
+    """The 32.23 approved on 2026-08-25 was for that comparison and no other."""
     result = _preflight(stage_one_plan, catalog, assumptions)
-    assert any(
-        "does not\nextend here" in note.replace(" ", " ")
-        or "does not extend here" in note
-        for note in result.problems
-    )
+    assert any("does not extend here" in note for note in result.problems)
 
 
 def test_choosing_a_row_reports_the_limit_each_task_would_be_stopped_by(
