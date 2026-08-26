@@ -462,11 +462,34 @@ cost:
     # The same three runs averaged 4,745 tokens of input per marking call
     # (398,629 tokens over 84 calls). 10,000 is used, a little over twice that.
     #
-    # This is the one number here that no settings file can pin down, and it is
-    # not pretended otherwise. How much is sent depends on how long the answer
-    # being marked turns out to be, which nothing caps in advance. Measured and
-    # doubled is the best available footing; it is an assumption, stated on
-    # purpose, rather than a limit read from a file.
+    # This comment used to say that no settings file could pin this number down,
+    # because how much is sent follows the answer being marked. That was wrong,
+    # and the number below is left as it is so the free check can say so out
+    # loud rather than the mistake being quietly tidied away.
+    #
+    # The judge never sees the answer whole. It asks for pieces through the
+    # read_deliverable tool, and two limits bound what those pieces come to:
+    #   * core/tools/read_deliverable.py hands back at most MAX_CONTENT_CHARS
+    #     (200,000) characters in one result — every content read ends with
+    #     text[:MAX_CONTENT_CHARS];
+    #   * grading_configs/default_v2.yaml sets per_item_call_cap: 8, so at most
+    #     eight results can pile up for one scoring line.
+    # Every result stays in the conversation and every later turn sends it
+    # again, so one call can carry 8 x 200,000 characters — 533,334 tokens at
+    # the three-characters-per-token ratio above. 10,000 is 1.87 per cent of it.
+    #
+    # core/execution_envelope_grading_cost.py now works that out and refuses
+    # this plan. Three things would settle it, and paying more is only one:
+    #   1. raise the number below to 533,334 — the ceiling then reads about
+    #      7,568 US dollars rather than 364, which is the honest figure;
+    #   2. lower per_item_call_cap in the marking settings, which lowers the
+    #      requirement in proportion;
+    #   3. lower MAX_CONTENT_CHARS, which is a code change and not a setting.
+    #
+    # One caveat the check states itself: what the conversation opens with — the
+    # standing instructions, the scoring line, the first 500 characters of the
+    # task — is capped by nothing, so 533,334 is a floor on the largest a call
+    # can be, not the largest itself.
     grading_input_tokens_per_call: 10000
 
     # How long one marking reply may run. Read from the same settings file,
