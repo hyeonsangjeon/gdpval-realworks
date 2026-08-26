@@ -12,6 +12,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The cost sum priced the container's attempt at one call to a model. Two
+  deleted lines make it two, and the sum would not have moved.** The plan's
+  `cost.assumptions.tool_loop_max_model_turns` is written by hand, one number a
+  run place. For two of the three it has to be: a separate Python process on
+  the server has no loop at all, and what Azure's tool loop does inside itself
+  is not readable from here. The container is the third, and its real number is
+  sitting in a file in this repository. Nothing was reading it. `repair` asks
+  the model for the code again, as often as its budget allows; `output_qa.vision`
+  sends rendered pages to a vision model once for every go at the code — and
+  `core/sandbox_runner.py` builds its settings as `{"enabled": True, ...}`, so
+  deleting the `repair` block turns the loop **on**. Measured on the committed
+  plan: delete those two lines and the container's quoted cost stays at
+  **20 calls and 3.47 United States dollars, unchanged**. `core/execution_envelope_preflight.py`
+  now works the number out of the container's own settings — taking the runner's
+  defaults off `SandboxRunner` rather than typing them again — and refuses when
+  the plan prices fewer. It refuses only when the plan is *below* the settings,
+  so a number that has to be a chosen limit stays one.
+- **The staleness was hidden under one comparison and invisible under the
+  other.** Under `same_generated_code_rerun` a different rule refused the run
+  for its own reasons, so the too-low ceiling never surfaced. Under
+  `tool_built_in_features` — a comparison the same plan names, with a scoreboard
+  of its own — nothing refused at all. The new rule holds under both, because a
+  ceiling is a ceiling either way, and the comparison that leaves each tool its
+  own features running is exactly the one where the container's loop is meant to
+  be on.
+- **A picture check at another model was counted at the run model's price.**
+  `output_qa.vision.deployment` names whatever model it likes, and
+  `core/output_qa.py` passes the name straight through. Counting that call and
+  pricing it at the compared model's rate is still a wrong sum, so it is now
+  reported in a sentence of its own — as is a picture check switched on that
+  names no model at all, which cannot be priced from the settings at any rate.
+
 - **The gate said "the fingerprints of every input file are checked against the
   dataset". Nothing read a byte of any file.** `check_input_file_versions` in
   `core/execution_envelope_tasks.py` compared the first 32 of each
