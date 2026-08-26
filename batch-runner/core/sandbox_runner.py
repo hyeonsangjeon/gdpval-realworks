@@ -184,7 +184,21 @@ _REDACT_ROOTS = sorted(
 )
 
 
-def _sanitize_tail(text: Optional[str], limit: int = 600) -> str:
+# How much of a failed run's own output is carried back to the model when the
+# repair loop asks for the code a second time. Named here rather than typed at
+# each call site because these three widths are the only part of the repair
+# prompt with a number attached, and something outside this module needs to
+# read them: core/execution_envelope_preflight.py imports them to work out the
+# least a container's second turn can be carrying, instead of quoting figures
+# of its own that would go stale the moment one of these changed.
+REFLECTION_STDOUT_TAIL_CHARS = 800
+REFLECTION_STDERR_TAIL_CHARS = 800
+EXECUTION_ERROR_TAIL_CHARS = 600
+
+
+def _sanitize_tail(
+    text: Optional[str], limit: int = EXECUTION_ERROR_TAIL_CHARS
+) -> str:
     """Trim to the last ``limit`` chars and redact local absolute paths.
 
     stdout/stderr tails come from executed code (e.g. a traceback referencing the
@@ -626,7 +640,9 @@ class SandboxRunner:
             or classify_execution_error(result.get("error"))
         )
         if not result.get("success"):
-            tail = _sanitize_tail(result.get("error"), limit=600)
+            tail = _sanitize_tail(
+                result.get("error"), limit=EXECUTION_ERROR_TAIL_CHARS
+            )
             blocking.insert(
                 0,
                 f"execution_failed[{execution_error_category or 'execution_error'}]: {tail}",
@@ -1012,8 +1028,12 @@ class SandboxRunner:
         lines.append("")
         lines.append(contract.to_prompt_section())
 
-        stdout_tail = _sanitize_tail(result.get("text"), limit=800)
-        stderr_tail = _sanitize_tail(result.get("error"), limit=800)
+        stdout_tail = _sanitize_tail(
+            result.get("text"), limit=REFLECTION_STDOUT_TAIL_CHARS
+        )
+        stderr_tail = _sanitize_tail(
+            result.get("error"), limit=REFLECTION_STDERR_TAIL_CHARS
+        )
         if stdout_tail.strip():
             lines += ["", s["stdout_header"], stdout_tail]
         if stderr_tail.strip():

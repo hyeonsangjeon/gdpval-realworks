@@ -23,7 +23,10 @@ that can be made without calling a model:
   approved, and a missing amount is a refusal rather than a pass. Where the
   number the bill rests on can be read off the settings instead of being taken
   on trust, it is: the container's own file says how many times one attempt
-  asks a model, and the plan is refused if it prices fewer.
+  asks a model, and the plan is refused if it prices fewer. Where that file
+  lets the container ask twice, the repair prompt says how much of the run's
+  own output comes back with the second question, and the plan is refused if it
+  prices less than that.
 
 Nothing here calls a model, signs in to a cloud account, or spends anything.
 """
@@ -31,7 +34,7 @@ Nothing here calls a model, signs in to a cloud account, or spends anything.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -303,6 +306,11 @@ def check_experiment_files_match_conditions(
     problems.extend(
         _check_the_plan_counts_every_call_the_container_makes(
             loaded_settings, conditions_by_environment, plan
+        )
+    )
+    problems.extend(
+        _check_the_plan_counts_what_the_container_carries_forward(
+            loaded_settings, plan
         )
     )
     return problems
@@ -849,6 +857,131 @@ def _check_the_plan_counts_every_call_the_container_makes(
                 f"call in an attempt at {run_model}, the model the run places "
                 "are being compared on"
             )
+    return problems
+
+
+def _container_carried_forward_characters() -> dict[str, int]:
+    """The widths the container's repair prompt is guaranteed to carry back.
+
+    Read off :mod:`core.sandbox_runner` rather than typed again here, for the
+    same reason :func:`_container_loop_defaults` reads the loop settings off the
+    runner: a width that changed there would otherwise leave this check quoting
+    a number that had stopped being true.
+
+    Each entry is a place in ``_build_reflection`` where the runner trims
+    something to a fixed length and puts it in front of the model again. They
+    are kept apart rather than summed here so the refusal can say what the
+    total is made of.
+
+    Imported inside the function because the runner reaches for the container
+    libraries at import time, and this module is meant to run on a machine with
+    no container on it at all.
+    """
+    from core.sandbox_runner import (
+        EXECUTION_ERROR_TAIL_CHARS,
+        REFLECTION_STDERR_TAIL_CHARS,
+        REFLECTION_STDOUT_TAIL_CHARS,
+    )
+
+    return {
+        "the last of what the code printed": REFLECTION_STDOUT_TAIL_CHARS,
+        "the last of what it printed as an error": REFLECTION_STDERR_TAIL_CHARS,
+        "the tail of the failure that stopped it": EXECUTION_ERROR_TAIL_CHARS,
+    }
+
+
+def _check_the_plan_counts_what_the_container_carries_forward(
+    settings_by_environment: Mapping[str, Mapping[str, Any]],
+    plan: Mapping[str, Any],
+) -> list[str]:
+    """Hold the plan's carried-forward figure against the repair prompt itself.
+
+    ``max_tool_result_tokens_per_turn`` is what the cost sum charges for
+    everything that is in front of the model on a later turn without being
+    either the task or the model's own words.
+    :func:`core.execution_envelope_cost.max_input_tokens_per_attempt` multiplies
+    it by the number of earlier turn pairs, so at two turns it is charged once.
+
+    The plan writes ``0`` for the container and says the model "is asked once
+    and nothing is carried forward". That is true only while the committed file
+    says ``repair: enabled: false``. Switch repair on — which nothing outside
+    that one line prevents, and which the runner does by itself whenever the
+    block is left out — and ``SandboxRunner._build_reflection`` puts the last
+    800 characters of what the code printed, the last 800 it printed as an
+    error and the 600-character tail of the failure that stopped it in front of
+    the model on the second turn. At ``0`` the sum charges nothing for any of it.
+
+    So this refuses only where the container would really loop, and only where
+    the plan sits *below* what the loop is certain to carry. A plan more
+    careful than the settings is left alone, exactly as in
+    :func:`_check_the_plan_counts_every_call_the_container_makes`.
+
+    **It is a floor, not the largest.** The repair prompt also carries up to
+    twelve blocking-error lines, up to six warnings, whatever repair guidance
+    the prompt spec holds for the error categories seen, and the whole
+    deliverable contract section — none of which has a fixed width anywhere.
+    What is counted here is only the part the source pins down.
+
+    The prior code is deliberately *not* counted, though the reflection carries
+    up to 4000 characters of it. That code is the model's own earlier answer,
+    and ``max_input_tokens_per_attempt`` already charges a full
+    ``max_output_tokens`` for every earlier answer. Adding it here would bill
+    the same words twice and make the ceiling look better founded than it is.
+    """
+    written = _dig(
+        plan, ("cost", "assumptions", "max_tool_result_tokens_per_turn")
+    )
+    raw_ratio = _dig(plan, ("cost", "assumptions")).get("characters_per_token")
+    try:
+        characters_per_token = Decimal(str(raw_ratio))
+    except (ArithmeticError, TypeError, ValueError):
+        return []
+    if characters_per_token <= 0:
+        # Absent, or not a ratio the sum could use. Both are refused where the
+        # assumptions are read; this rule adds nothing by saying it again.
+        return []
+
+    widths = _container_carried_forward_characters()
+    characters = sum(widths.values())
+    floor = int(
+        (Decimal(characters) / characters_per_token).to_integral_value(
+            rounding=ROUND_CEILING
+        )
+    )
+    container_mode = EXECUTION_MODE_BY_ENVIRONMENT[ENVIRONMENT_DOCKER_CONTAINER]
+
+    problems: list[str] = []
+    for environment in sorted(settings_by_environment):
+        settings = settings_by_environment[environment]
+        if _dig(settings, ("execution",)).get("mode") != container_mode:
+            continue
+        shape = container_attempt_shape(_dig(settings, ("execution", "sandbox")))
+        if shape.code_turns < 2:
+            # One go at the code, so there is no second turn to carry anything
+            # into and nothing here to price.
+            continue
+
+        claimed = written.get(environment)
+        try:
+            claimed_tokens = int(claimed)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+        if claimed_tokens >= floor:
+            continue
+        made_of = ", ".join(
+            f"{width} characters of {what}"
+            for what, width in sorted(widths.items(), key=lambda pair: -pair[1])
+        )
+        problems.append(
+            f"{environment}'s settings let its repair loop ask for the code "
+            f"{shape.code_turns} times, and core/sandbox_runner.py writes the "
+            f"run's own output back into the next request ({made_of}), but the "
+            f"plan's cost sum charges {claimed_tokens} tokens for what a later "
+            f"turn carries; {characters} characters is {floor} tokens at this "
+            "plan's ratio, and that is a floor — the blocking-error lines, the "
+            "warnings, the repair guidance and the contract section have no "
+            "fixed width at all"
+        )
     return problems
 
 
