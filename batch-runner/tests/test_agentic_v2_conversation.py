@@ -161,7 +161,13 @@ def test_a_refusal_the_model_could_work_around_does_not_end_the_run():
 
 
 def test_asking_to_run_a_command_is_refused_and_the_command_never_runs():
-    """The unsupported capability, end to end, against the real dispatcher."""
+    """The unsupported capability seen from the loop's side.
+
+    The refusal itself, against the real dispatcher, is
+    :func:`test_the_real_dispatcher_still_refuses_to_run_a_command` below. What
+    this fixes is what the loop does with it: records it, shows it, and lets
+    the model decide, rather than treating it as the run failing.
+    """
     voice = ScriptedVoice(replies=[run_a_command(), GaveUp(note="nothing left")])
     desk = ScriptedToolDesk(answers=[ToolOutcome.refused("capability_unavailable")])
 
