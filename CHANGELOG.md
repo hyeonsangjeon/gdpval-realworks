@@ -12,6 +12,51 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The free Azure check gave a clean bill of health for six settings the paid
+  run refuses to start with.** `core/execution_envelope_azure.py` decides
+  whether the three-way run-place comparison may spend anything on Azure, and
+  its own specification claimed a plan checked there was "checked against
+  exactly the rules the real run applies". Nothing measured that. Sweeping
+  seventeen Azure settings one at a time and asking both the check and
+  `AzureAIRouteSettings.from_env`, **seven disagreed and six of the seven
+  disagreed in the direction that costs money.** All six were endpoint-identity
+  settings — `AZURE_AI_EXPECTED_DIRECT_ACCOUNT`,
+  `AZURE_AI_EXPECTED_PROJECT_ACCOUNT`, `AZURE_AI_EXPECTED_PROJECT_NAME` — which
+  the run demands and compares against the endpoint it is about to use, and
+  which the check never looked at. Every workflow step in `batch-run.yml` and
+  `grade-run.yml` that can spend money hard-sets
+  `AZURE_AI_REQUIRE_EXPECTED_IDENTITIES` to `'1'`, so the run always demands
+  them, while the check that gates a 363.59 USD ceiling saw none of them. The
+  check now reads the run's own identity table and applies it, and compares the
+  plan's pinned account and project against those settings — a comparison the
+  plan file asserted in a comment and nothing performed. Sixteen of the
+  seventeen settings now agree; the seventeenth is refused here on purpose,
+  because the comparison is pinned to the `project-ci` profile.
+- **Two lists of setting names were typed out a second time inside the Azure
+  check.** The ten fixed credentials the repository refuses to run with were
+  retyped in `core/execution_envelope_azure.py`, while
+  `scripts/azure_ai_route_preflight.py` imported the same list correctly.
+  Demonstrated rather than argued: adding an eleventh name to the real list
+  left the run refusing to start and the check reporting no problems at all.
+  Four endpoint-setting names were retyped beside a comment claiming they were
+  "the same names core/azure_ai_clients.py reads" — which nothing could check,
+  because that module held them as string literals inside its functions. Those
+  names are now module-scope constants there, and the check reads them from
+  there. `core/azure_ai_clients.py` behaviour is unchanged; its 323 existing
+  tests pass untouched.
+- `tests/test_envelope_azure_applies_the_run_rules.py` is new — 41 tests, of
+  which **20 fail against the code as it was**. The core of the file is a
+  parametrised sweep that sets one Azure setting, asks the free check and the
+  paid run separately, and requires the same verdict, so this class of
+  disagreement is measured rather than reasoned about. One test opens the
+  workflow files and pins the sentence the check's own wording rests on.
+  `core/execution_envelope_azure.py` had no test file at all before this.
+- The existing `tests/test_execution_envelope_advance_check.py` carried the same
+  omission in its own fixture: the environment it called fully ready, and reused
+  across six tests, set no expected-identity names, so "nothing left to fix"
+  described a setup the paid run would have stopped. Fixed. `batch-runner`'s
+  README and `docs/first-experiment.md` had all three names listed correctly the
+  whole time — the written instructions were right and the code was wrong.
 - **The check that refuses the paid three-way comparison compared two of the
   prompt's four parts — and the two it compared were the wrong two.**
   `check_experiment_files_match_conditions` in
