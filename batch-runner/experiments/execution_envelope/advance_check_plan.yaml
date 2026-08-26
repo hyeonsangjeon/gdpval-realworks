@@ -278,6 +278,18 @@ scoreboards:
     comparison: "tool_built_in_features"
     status: "not started — no paid model call has been made"
 
+# ── Which marking settings the answers will be marked with ────────────────
+#
+# Named here so the free check can open the file and compare the marking
+# numbers in the cost sum below against the limits the marking would really
+# apply. Without this the marking half of the ceiling is three numbers typed by
+# hand that nothing verifies, which is how a ceiling quietly becomes a guess.
+#
+# The check reads four limits out of this file: how many times the model may be
+# asked about one scoring line, how long one reply may run, and whether picture
+# reading and sound listening are switched on and at what per-task limit.
+grading_config: "grading_configs/default_v2.yaml"
+
 # ── What the largest possible bill is, and how it was worked out ──────────
 #
 # These are the written guesses the ceiling rests on. Each one is stated on

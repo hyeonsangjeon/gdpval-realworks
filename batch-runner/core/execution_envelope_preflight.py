@@ -23,7 +23,7 @@ Nothing here calls a model, signs in to a cloud account, or spends anything.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping
@@ -33,9 +33,15 @@ import yaml
 from core.execution_envelope_cost import (
     CostCeiling,
     CostAssumptions,
+    ModelPrice,
     check_cost_ceiling,
     describe_cost_ceiling,
     estimate_cost_ceiling,
+    load_price_table,
+)
+from core.execution_envelope_grading_cost import (
+    check_assumptions_cover_the_caps,
+    read_grading_caps,
 )
 from core.execution_envelope_azure import (
     AzureConnectionDiagnosis,
@@ -85,6 +91,13 @@ class EnvelopePreflight:
     problems: list[str] = field(default_factory=list)
     approved_maximum_usd: Decimal | None = None
     azure: AzureConnectionDiagnosis | None = None
+    grading_ceiling_problems: list[str] = field(default_factory=list)
+    """Ways the marking half of the cost sum sits below what marking allows.
+
+    Kept apart from the general problem list because these say something the
+    other problems do not: the worked-out total printed above them is itself
+    too low. A reader who sees only the total needs to be told that.
+    """
 
     @property
     def all_problems(self) -> list[str]:
@@ -115,6 +128,8 @@ class EnvelopePreflight:
                 else None
             ),
             "problems": self.all_problems,
+            "grading_ceiling_problems": list(self.grading_ceiling_problems),
+            "marking_half_is_a_ceiling": not self.grading_ceiling_problems,
             "azure_connection": (
                 self.azure.as_dict() if self.azure is not None else None
             ),
@@ -531,6 +546,7 @@ def run_envelope_preflight(
     cost_block = plan.get("cost")
     cost_block = cost_block if isinstance(cost_block, Mapping) else {}
     ceiling: CostCeiling | None = None
+    grading_ceiling_problems: list[str] = []
     approved_raw = cost_block.get("approved_maximum_usd")
     approved: Decimal | None = None
     if conditions and loaded_catalog is not None:
@@ -544,6 +560,12 @@ def run_envelope_preflight(
             problems.extend(
                 _check_instruction_length(conditions, assumptions)
             )
+            grading_ceiling_problems = (
+                _check_grading_assumptions_match_the_settings(
+                    plan, assumptions, root=root
+                )
+            )
+            problems.extend(grading_ceiling_problems)
             try:
                 ceiling = estimate_cost_ceiling(
                     conditions_by_environment=conditions,
@@ -584,6 +606,7 @@ def run_envelope_preflight(
         problems=problems,
         approved_maximum_usd=approved,
         azure=azure,
+        grading_ceiling_problems=grading_ceiling_problems,
     )
 
 
@@ -650,11 +673,66 @@ def _check_instruction_length(
     return problems
 
 
+def _check_grading_assumptions_match_the_settings(
+    plan: Mapping[str, Any],
+    assumptions: CostAssumptions,
+    *,
+    root: Path,
+) -> list[str]:
+    """Confirm the marking half of the cost sum is a ceiling, not a forecast.
+
+    The half of the sum that prices running the tasks reads how far the
+    settings let a run go and charges that. The half that prices marking rests
+    on numbers written into the plan by hand, and this repository's own marking
+    settings state limits that two of those numbers can be checked against —
+    plus two whole models the sum never names. See
+    :mod:`core.execution_envelope_grading_cost`.
+
+    A plan that marks answers but names no marking settings file is a problem,
+    not a pass. Nothing looked, and "nothing looked" is not "the numbers are
+    high enough".
+    """
+    if not assumptions.grading_required:
+        return []
+    relative = plan.get("grading_config")
+    if relative is None or not str(relative).strip():
+        return [
+            "the plan says the answers will be marked but names no marking "
+            "settings file, so nothing checked whether the cost sum's marking "
+            "numbers sit above the limits the marking would really apply"
+        ]
+    try:
+        caps = read_grading_caps(root / str(relative))
+    except ValueError as error:
+        return [f"the marking settings could not be read: {error}"]
+    # Report the file the way the plan names it. Where this check happens to be
+    # running from is nobody's business but this machine's.
+    caps = replace(caps, settings_path=str(relative))
+    try:
+        prices: Mapping[str, ModelPrice] | None = load_price_table()
+    except ValueError:
+        # The price list is checked properly elsewhere. Failing to read it here
+        # must not turn into a claim that every model has a published price.
+        prices = None
+    return check_assumptions_cover_the_caps(assumptions, caps, prices=prices)
+
+
 def describe_preflight(result: EnvelopePreflight) -> list[str]:
     """Readable lines summarising what was found."""
     lines: list[str] = []
     if result.cost is not None:
         lines.extend(describe_cost_ceiling(result.cost))
+        if result.grading_ceiling_problems:
+            # These totals are printed under a heading that calls them the
+            # largest possible bill. Once the marking half is known to be too
+            # low, saying so beside the number is the whole difference between
+            # a reader quoting a ceiling and quoting a guess.
+            lines.append(
+                "WARNING: the marking figure above is not a ceiling — "
+                f"{len(result.grading_ceiling_problems)} thing(s) the marking "
+                "settings allow are not counted in it, so every total here is "
+                "too low. See the problems below."
+            )
     if result.approved_maximum_usd is None:
         lines.append(
             "approved maximum: none on record, so nothing paid may start"

@@ -12,6 +12,56 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The half of the cost ceiling that prices marking was never a ceiling, and
+  it hid two whole models.** `core/execution_envelope_cost.py` opens by saying
+  every number in it is a ceiling and not a forecast. The half that prices
+  running the tasks keeps that promise — it reads how far the settings let a
+  request go and charges it. The half that prices marking rested on three
+  numbers an operator typed into the plan by hand, and this repository's own
+  marking settings already state limits that two of them can be checked
+  against. Both were under. The plan allowed **1 marking call per scoring
+  line** where `grading_configs/default_v2.yaml` lets the model be asked **11**
+  times about one line, and **1,000 tokens of reply** where one reply may run to
+  **2,400**.
+
+  The worse half is what the sum never mentioned at all. The same settings let
+  marking call `gpt-5.4` to **read pictures up to 72 times per task** and
+  `gpt-audio-1.5` to **listen to sound up to 3 times per task**, and neither
+  model appeared anywhere in the cost sum. `check_cost_ceiling` has always
+  refused a run whose model has no published price, on its own stated grounds
+  that "an unpriced model would otherwise be counted as free" — and
+  `gpt-audio-1.5` is not in the price table. Because marking never named it,
+  **that refusal never had the chance to fire.** An unpriced model was reachable
+  from an approved run and counted as costing nothing.
+
+  `batch-runner/core/execution_envelope_grading_cost.py` now opens the marking
+  settings the plan will really be marked with, reads the limits out of it, and
+  reports every place the written sum sits below one. The plan names that file
+  in a new `grading_config` key; **a plan that marks answers and names no
+  settings file is refused rather than passed**, because nothing having looked
+  is not the same as the numbers being high enough.
+
+  **One number is not pinned this way and is not pretended to be.** How long a
+  marking call's input runs follows the answer being marked and nothing in the
+  settings caps it, so `grading_input_tokens_per_call` stays an observation
+  drawn from runs that really happened, and `describe_grading_caps` says so in
+  the output rather than letting a reader assume the whole sum became a ceiling.
+
+  The limits are read from code, not from documentation. A test builds the real
+  judge through `core/grader.py` from each of the **nine** committed marking
+  settings files and fails if any limit it reads differs from the one that judge
+  would really apply, so this cannot drift into quoting numbers marking no
+  longer uses.
+
+  The printed report changed too. The totals sit under a heading calling them
+  the largest possible bill, so once the marking half is known to be short, a
+  warning now prints **beside the number** instead of only in the problem list
+  further down — the difference between a reader quoting a ceiling and quoting a
+  guess. The free check exits 1 as before, now with five more reasons.
+  **No approved amount was changed**: 32.23 United States dollars stands exactly
+  as the owner set it, and raising numbers to meet the limits would raise the
+  total again, so it is left for the owner to decide alongside the amount.
+
 - **The cost ceiling charged a looping request as though it never grew, and the
   approved amount was worked out with that mistake in it.** The shared
   arithmetic multiplied one turn's input by the number of model calls. That is
