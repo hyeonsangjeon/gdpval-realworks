@@ -60,6 +60,7 @@ from core.execution_envelope_tasks import (  # noqa: E402
     select_advance_check_tasks,
     select_trial_run_tasks,
     selection_matches,
+    verify_input_file_versions,
 )
 from core.execution_environment_readiness import ModelRunConditions  # noqa: E402
 
@@ -154,7 +155,7 @@ def _approved(plan, amount=APPROVED_ENOUGH):
     return plan
 
 
-def _apart_from_the_unused_sound_model(result):
+def _apart_from_the_sound_model_and_absent_inputs(result):
     """Every problem except the ones about the sound model nobody has used.
 
     Several tests below use "no problems at all" to mean "the thing I am
@@ -180,31 +181,73 @@ def _apart_from_the_unused_sound_model(result):
     are reporting something true. So the gap is set aside by name, asserted on
     separately just below, and held in place by
     tests/test_execution_envelope_grading_cost.py.
+
+    The second thing set aside arrived with the input-file check and is set
+    aside for a different reason: it depends on the machine. That check reads
+    the real benchmark files and compares all 64 characters of each written
+    fingerprint against them. On a machine that has already downloaded the
+    pinned revision, every file is read and there is nothing to report. On one
+    that has not — a fresh continuous-integration runner, for instance — there
+    is nothing to read, and the check says so rather than passing the files. So
+    these tests would pass on a developer's machine and fail on a build server,
+    for a reason none of them is about, and none of that is the plan's fault.
+
+    Only ``missing_input_file_problems`` is set aside, never
+    ``InputFileVerification.problems``. A written fingerprint that disagrees
+    with the file it names is a fault in the plan, says the same thing on every
+    machine, and must fail these tests wherever they run.
     """
     return [
         note
         for note in result.all_problems
         if note not in result.grading_ceiling_problems
+        and note not in result.missing_input_file_problems
         and UNPRICED_SOUND_MODEL not in note
     ]
 
 
-def test_the_sound_model_is_the_only_thing_a_ready_plan_still_reports(plan):
-    """What ``_apart_from_the_unused_sound_model`` sets aside, and nothing more.
+def test_a_ready_plan_reports_the_sound_model_and_nothing_of_its_own(plan):
+    """What ``_apart_from_the_sound_model_and_absent_inputs`` sets aside.
 
     If a new problem ever appears in a fully ready plan, it must not be able to
-    hide behind that helper. This names exactly what is being set aside.
+    hide behind that helper. This names exactly what is being set aside, in a
+    way that reads the same on a machine holding the benchmark files and on one
+    that has never downloaded them.
     """
     result = _ready_preflight(_approved(plan))
 
-    assert _apart_from_the_unused_sound_model(result) == []
-    assert len(result.all_problems) == 4
-    assert all(
-        UNPRICED_SOUND_MODEL in note or "sound" in note
-        for note in result.all_problems
-    )
+    assert _apart_from_the_sound_model_and_absent_inputs(result) == []
     assert len(result.grading_ceiling_problems) == 2
     assert result.may_start is False
+
+    about_the_sound_model = [
+        note
+        for note in result.all_problems
+        if note not in result.missing_input_file_problems
+    ]
+    assert len(about_the_sound_model) == 4
+    assert all(
+        UNPRICED_SOUND_MODEL in note or "sound" in note
+        for note in about_the_sound_model
+    )
+
+
+def test_only_files_that_are_absent_are_ever_set_aside(plan):
+    """The set-aside list may hold "not here", never "does not match".
+
+    This is the load-bearing half of the helper above. If a disagreement could
+    reach ``missing_input_file_problems`` it would be filtered out of six other
+    tests, and a plan pinning the wrong file would sail through all of them.
+    """
+    result = _ready_preflight(_approved(plan))
+
+    for note in result.missing_input_file_problems:
+        assert "is on this machine" in note, note
+        assert "describes some other file" not in note, note
+        assert "different revision" not in note, note
+
+    for verification in result.input_files.values():
+        assert set(verification.problems) & set(verification.missing_copies) == set()
 
 
 def test_what_is_left_of_the_marking_gap_is_only_the_unused_sound_model(plan):
@@ -381,9 +424,13 @@ def test_the_thirty_keep_the_industry_mix(catalog):
 def test_the_plan_pins_every_reference_file_the_five_tasks_use(plan, catalog):
     conditions = conditions_from_plan(plan)
     for environment, entry in conditions.items():
-        assert check_input_file_versions(
+        verification = verify_input_file_versions(
             entry.input_file_versions, entry.task_ids, catalog
-        ) == [], environment
+        )
+        # Whether the files themselves are on the machine running this test is
+        # not the plan's fault, and the check keeps that answer in its own list.
+        # What is left is what the plan got wrong, which must be nothing.
+        assert verification.problems == (), environment
 
 
 def test_a_reference_file_left_unpinned_is_reported(plan, catalog):
@@ -946,7 +993,7 @@ def test_an_approved_amount_below_the_ceiling_is_a_refusal(plan):
 
 def test_an_approved_amount_that_covers_the_ceiling_is_accepted(plan):
     result = _ready_preflight(_approved(plan))
-    assert _apart_from_the_unused_sound_model(result) == []
+    assert _apart_from_the_sound_model_and_absent_inputs(result) == []
     assert not any("is above the" in note for note in result.all_problems)
 
 
@@ -1259,13 +1306,13 @@ def test_the_three_settings_files_agree_on_the_unfixed_settings(plan):
 
     result = _ready_preflight(_approved(plan))
 
-    assert _apart_from_the_unused_sound_model(result) == []
+    assert _apart_from_the_sound_model_and_absent_inputs(result) == []
 
 
 def test_the_committed_files_agree_with_the_committed_plan(plan):
     """The three settings files and the plan say the same thing today."""
     result = _ready_preflight(_approved(plan))
-    assert _apart_from_the_unused_sound_model(result) == []
+    assert _apart_from_the_sound_model_and_absent_inputs(result) == []
 
 
 def test_the_plan_names_the_version_this_check_reads(plan):
@@ -1285,7 +1332,7 @@ def test_the_two_comparisons_keep_separate_score_tables(plan):
 def test_the_agentic_sandbox_v2_guards_are_not_worked_around(plan):
     """The check exercises all three guards; none may have been opened."""
     result = _ready_preflight(_approved(plan))
-    assert _apart_from_the_unused_sound_model(result) == []
+    assert _apart_from_the_sound_model_and_absent_inputs(result) == []
     assert result.readiness.status_of("agentic_sandbox_v2") == "structure_check_only"
 
 
@@ -1422,7 +1469,7 @@ def test_a_correctly_pointed_azure_setup_is_accepted(plan):
     assert result.azure.problems == []
     assert result.azure.observed_account == PINNED_AZURE_ACCOUNT
     assert result.azure.observed_project == PINNED_AZURE_PROJECT
-    assert _apart_from_the_unused_sound_model(result) == []
+    assert _apart_from_the_sound_model_and_absent_inputs(result) == []
     assert result.readiness.ready is True
 
 

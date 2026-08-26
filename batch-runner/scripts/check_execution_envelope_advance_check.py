@@ -31,6 +31,7 @@ if str(BATCH_RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
 from core.execution_envelope_preflight import (  # noqa: E402
+    describe_input_file_checks,
     describe_preflight,
     load_plan,
     run_envelope_preflight,
@@ -65,6 +66,17 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--dataset-root",
+        type=Path,
+        default=None,
+        help=(
+            "A folder holding a copy of the benchmark's files, used to check "
+            "the written input fingerprints by reading the files themselves. "
+            "Only needed when the pinned revision is not already in the "
+            "Hugging Face download cache; nothing is ever downloaded."
+        ),
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         dest="as_json",
@@ -91,6 +103,7 @@ def main() -> int:
         docker_daemon_available=docker_daemon,
         docker_image_available=docker_image,
         azure_route_profile=os.getenv("AZURE_AI_ROUTE_PROFILE") or None,
+        dataset_root=args.dataset_root,
     )
 
     if args.as_json:
@@ -128,6 +141,14 @@ def main() -> int:
     for line in describe_preflight(result):
         print(f"  {line}")
     print()
+
+    input_file_lines = describe_input_file_checks(result)
+    if input_file_lines:
+        print("Input files the comparison will read")
+        print("-" * 74)
+        for line in input_file_lines:
+            print(f"  {line}")
+        print()
 
     if result.azure is not None:
         print("Azure resource the deployment must live in")
