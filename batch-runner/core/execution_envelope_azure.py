@@ -17,6 +17,17 @@ in the environment, classifies them with the repository's own endpoint rules,
 and reports precisely which part does not line up with the account and project
 the plan pins. Every check here reads settings only: nothing contacts Azure,
 signs in, or spends money.
+
+Every rule it applies is read from ``core/azure_ai_clients.py``, which is the
+module the paid run uses to decide whether a route may be built at all. That is
+deliberate and it was not always so. This module used to hold its own written-
+out copies of the same lists, and a copy agrees only until one of the two is
+edited: seventeen settings were swept one at a time, and seven of them got
+different answers here and there, six of the seven in the direction where this
+check hands out a clean bill of health for a setting the run refuses to start
+with. Reading the rules instead of restating them closes six of those seven;
+``tests/test_envelope_azure_applies_the_run_rules.py`` holds all seventeen in
+place and states the seventh, which is refused here on purpose.
 """
 
 from __future__ import annotations
@@ -25,29 +36,22 @@ import importlib
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-# The settings that name each kind of Azure endpoint. These are the same names
-# core/azure_ai_clients.py reads, so a plan checked here is checked against the
-# variables the run itself will use.
-DIRECT_ENDPOINT_VARIABLE = "AZURE_OPENAI_V1_ENDPOINT"
-PROJECT_ENDPOINT_VARIABLE = "FOUNDRY_PROJECT_ENDPOINT"
-ROUTE_PROFILE_VARIABLE = "AZURE_AI_ROUTE_PROFILE"
-DEPRECATED_ENDPOINT_VARIABLE = "AZURE_OPENAI_ENDPOINT"
 
-# Static credentials this repository refuses to run with. Naming them here lets
-# the free check say so up front, instead of the run failing later with the
-# same complaint after someone has already scheduled it.
-FORBIDDEN_CREDENTIAL_VARIABLES = (
-    "AZURE_OPENAI_API_KEY",
-    "AZURE_API_KEY",
-    "AZURE_AI_API_KEY",
-    "AZURE_AI_PROJECT_API_KEY",
-    "AZURE_OPENAI_AD_TOKEN",
-    "AZURE_CLIENT_SECRET",
-    "AZURE_CLIENT_CERTIFICATE_PATH",
-    "AZURE_CLIENT_CERTIFICATE_PASSWORD",
-    "AZURE_USERNAME",
-    "AZURE_PASSWORD",
-)
+def _route_rules() -> Any:
+    """The module the paid run uses to decide whether a route may be built.
+
+    Every setting name and every rule below is read from here rather than
+    written out again. The two used to be written out in both places, and a
+    copy agrees only until somebody edits one of them: adding a name to the
+    list of forbidden fixed credentials in that module left this check handing
+    out a clean bill of health for a setting the run refuses to start with.
+
+    It is imported inside the function, rather than at the top of the file, so
+    that this check keeps working in a stripped-down environment where the
+    Azure client libraries are absent until something actually needs them.
+    """
+    return importlib.import_module("core.azure_ai_clients")
+
 
 
 @dataclass(frozen=True)
@@ -110,8 +114,100 @@ class AzureConnectionDiagnosis:
 
 
 def _classify(value: str):
-    module = importlib.import_module("core.azure_ai_clients")
-    return module.classify_endpoint(value)
+    return _route_rules().classify_endpoint(value)
+
+
+def _same_identity(observed: str, expected: str, names_a_project: bool) -> bool:
+    """Compare two names the way the run place compares them.
+
+    Account names are folded to lower case on both sides before the run place
+    compares them, so a difference in capitals is not a difference. Project
+    names are not folded, so there it is.
+    """
+    if names_a_project:
+        return observed == expected
+    return observed.lower() == expected.lower()
+
+
+def _pinned_identity_problems(
+    rules: Any,
+    requirement: AzureConnectionRequirement,
+    environ: Mapping[str, str],
+) -> list[str]:
+    """Apply the run place's own identity pinning before anything is spent.
+
+    The run place refuses to build a route unless the identity settings for its
+    profile are present, and refuses again if one of them names a resource the
+    endpoints do not match. Both refusals arrive after a run has started and
+    after the money has been committed to it, which is the wrong moment to find
+    out about a setting.
+
+    Which names matter is read from the run place rather than listed here, so a
+    name added there is checked here without anyone having to remember.
+
+    This check demands the names whatever the local value of the switch that
+    turns the requirement on, because every automated run place in this
+    repository that can spend money turns it on, and the local value of that
+    switch does not change what those runs do. Refusing before the start beats
+    stopping after it.
+    """
+    problems: list[str] = []
+    required = rules.REQUIRED_IDENTITY_ENV_BY_PROFILE.get(
+        requirement.route_profile
+    )
+    if required is None:
+        # An unrecognised profile is reported by the caller, and there is no
+        # identity list to apply for one.
+        return problems
+
+    # What the plan pins each of those names to. The plan names one account and
+    # one project, and every identity setting the run place compares names one
+    # or the other.
+    pinned: Mapping[str, tuple[str, bool]] = {
+        rules.EXPECTED_DIRECT_ACCOUNT_ENV: (requirement.account, False),
+        rules.EXPECTED_PROJECT_ACCOUNT_ENV: (requirement.account, False),
+        rules.EXPECTED_LEGACY_ACCOUNT_ENV: (requirement.account, False),
+        rules.EXPECTED_PROJECT_NAME_ENV: (requirement.project, True),
+    }
+
+    for name in required:
+        value = str(environ.get(name, "") or "").strip()
+        entry = pinned.get(name)
+        if entry is None:
+            # The run place has gained an identity setting that the plan has
+            # nothing to compare against. Saying so is the whole point: an
+            # unchecked requirement is exactly what this function exists to
+            # stop, and staying quiet about one would be the old fault in a
+            # new place.
+            problems.append(
+                f"the Azure run place requires {name} before it will start, "
+                "and the plan says nothing this check can compare it against. "
+                "Either pin the value in the plan or say in writing why it "
+                "does not need pinning."
+            )
+            continue
+
+        expected, names_a_project = entry
+        subject = "project" if names_a_project else "account"
+        if not value:
+            problems.append(
+                f"{name} is not set. Every automated run place in this "
+                "repository that can spend money turns on "
+                f"{rules.REQUIRE_EXPECTED_IDENTITIES_ENV}, and the Azure run "
+                f"place then refuses to start unless this names the {subject} "
+                f"— which for this comparison is {expected!r}."
+            )
+            continue
+        if not _same_identity(value, expected, names_a_project):
+            problems.append(
+                f"{name} names the {subject} {value!r}, but the comparison is "
+                f"pinned to {expected!r}. The Azure run place compares this "
+                "setting against the endpoint it is about to use and refuses "
+                "when the two differ, so the run would stop after it had "
+                "started."
+            )
+
+    return problems
 
 
 def diagnose_azure_connection(
@@ -124,35 +220,60 @@ def diagnose_azure_connection(
     pointing somewhere else" are different problems with different fixes, and a
     check that reports both as "not measured" sends the reader looking in the
     wrong place.
+
+    Every rule applied here is read from the module the paid run uses to decide
+    whether a route may be built. A rule described here but not read from there
+    would only be a second opinion, and the opinion that stops a run is that
+    module's.
     """
+    rules = _route_rules()
     problems: list[str] = []
     observed_account: str | None = None
     observed_project: str | None = None
 
-    profile = str(environ.get(ROUTE_PROFILE_VARIABLE, "") or "").strip()
+    route_profile_variable = rules.ROUTE_PROFILE_ENV
+    project_endpoint_variable = rules.PROJECT_ENDPOINT_ENV
+    direct_endpoint_variable = rules.DIRECT_ENDPOINT_ENV
+    deprecated_endpoint_variable = rules.DEPRECATED_ENDPOINT_ENV
+
+    known_profiles = tuple(profile.value for profile in rules.RouteProfile)
+    if requirement.route_profile not in known_profiles:
+        problems.append(
+            f"the plan pins the route profile {requirement.route_profile!r}, "
+            "which the Azure run place does not recognise, so it would refuse "
+            "to start whatever the settings say. It must be one of: "
+            + ", ".join(known_profiles)
+        )
+
+    profile = str(environ.get(route_profile_variable, "") or "").strip()
     if not profile:
         problems.append(
-            f"{ROUTE_PROFILE_VARIABLE} is not set, so the Azure run place "
+            f"{route_profile_variable} is not set, so the Azure run place "
             "refuses to start. It must be "
             f"{requirement.route_profile!r} for this comparison."
         )
     elif profile != requirement.route_profile:
         problems.append(
-            f"{ROUTE_PROFILE_VARIABLE} is {profile!r}, but this comparison "
+            f"{route_profile_variable} is {profile!r}, but this comparison "
             f"requires {requirement.route_profile!r}"
         )
 
-    deprecated = str(environ.get(DEPRECATED_ENDPOINT_VARIABLE, "") or "").strip()
+    deprecated = str(
+        environ.get(deprecated_endpoint_variable, "") or ""
+    ).strip()
     if deprecated:
         problems.append(
-            f"{DEPRECATED_ENDPOINT_VARIABLE} is set. This repository refuses to "
-            "run while it is, because it does not say which kind of endpoint it "
-            f"holds. Move the address to {PROJECT_ENDPOINT_VARIABLE} or "
-            f"{DIRECT_ENDPOINT_VARIABLE} and unset it."
+            f"{deprecated_endpoint_variable} is set. This repository refuses "
+            "to run while it is, because it does not say which kind of "
+            f"endpoint it holds. Move the address to "
+            f"{project_endpoint_variable} or {direct_endpoint_variable} and "
+            "unset it."
         )
 
     present_forbidden = [
-        name for name in FORBIDDEN_CREDENTIAL_VARIABLES if environ.get(name)
+        name
+        for name in rules.FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV
+        if environ.get(name)
     ]
     if present_forbidden:
         problems.append(
@@ -162,21 +283,21 @@ def diagnose_azure_connection(
         )
 
     project_endpoint = str(
-        environ.get(PROJECT_ENDPOINT_VARIABLE, "") or ""
+        environ.get(project_endpoint_variable, "") or ""
     ).strip()
     if not project_endpoint:
         problems.append(
-            f"{PROJECT_ENDPOINT_VARIABLE} is not set. The Azure run place needs "
-            "the address of the project that holds the deployment, which looks "
-            f"like https://{requirement.account}.services.ai.azure.com"
-            f"/api/projects/{requirement.project}"
+            f"{project_endpoint_variable} is not set. The Azure run place "
+            "needs the address of the project that holds the deployment, "
+            f"which looks like https://{requirement.account}"
+            f".services.ai.azure.com/api/projects/{requirement.project}"
         )
     else:
         try:
             endpoint = _classify(project_endpoint)
         except Exception as error:
             problems.append(
-                f"{PROJECT_ENDPOINT_VARIABLE} is not an address this "
+                f"{project_endpoint_variable} is not an address this "
                 f"repository recognises: {error}"
             )
         else:
@@ -184,7 +305,7 @@ def diagnose_azure_connection(
             observed_project = getattr(endpoint, "project", None)
             if observed_account != requirement.account:
                 problems.append(
-                    f"{PROJECT_ENDPOINT_VARIABLE} names the account "
+                    f"{project_endpoint_variable} names the account "
                     f"{observed_account!r}, but the comparison is pinned to "
                     f"{requirement.account!r}. A deployment name is not unique "
                     "across accounts, so running against a different account "
@@ -193,28 +314,32 @@ def diagnose_azure_connection(
                 )
             if observed_project != requirement.project:
                 problems.append(
-                    f"{PROJECT_ENDPOINT_VARIABLE} names the project "
+                    f"{project_endpoint_variable} names the project "
                     f"{observed_project!r}, but the comparison is pinned to "
                     f"{requirement.project!r}"
                 )
 
-    direct_endpoint = str(environ.get(DIRECT_ENDPOINT_VARIABLE, "") or "").strip()
+    direct_endpoint = str(
+        environ.get(direct_endpoint_variable, "") or ""
+    ).strip()
     if direct_endpoint:
         try:
             endpoint = _classify(direct_endpoint)
         except Exception as error:
             problems.append(
-                f"{DIRECT_ENDPOINT_VARIABLE} is not an address this repository "
+                f"{direct_endpoint_variable} is not an address this repository "
                 f"recognises: {error}"
             )
         else:
             account = getattr(endpoint, "account", None)
             if account != requirement.account:
                 problems.append(
-                    f"{DIRECT_ENDPOINT_VARIABLE} names the account "
+                    f"{direct_endpoint_variable} names the account "
                     f"{account!r}, but the comparison is pinned to "
                     f"{requirement.account!r}"
                 )
+
+    problems.extend(_pinned_identity_problems(rules, requirement, environ))
 
     return AzureConnectionDiagnosis(
         problems=problems,

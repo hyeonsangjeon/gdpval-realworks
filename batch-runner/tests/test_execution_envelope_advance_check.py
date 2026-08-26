@@ -109,10 +109,19 @@ PINNED_PROJECT_ENDPOINT = (
     f"/api/projects/{PINNED_AZURE_PROJECT}"
 )
 
+# A settings environment in which nothing is left to fix. The three expected-
+# identity names below are here because the Azure run place refuses to start
+# without them, and every automated run place in this repository that can spend
+# money turns that requirement on. They were absent from this dictionary while
+# the free check did not look at them, which made "fully ready" describe a
+# setup the paid run would have stopped.
 FULLY_READY_ENVIRON = {
     "EXECUTION_COMPARISON_PAID_RUN_APPROVED": "yes",
     "AZURE_AI_ROUTE_PROFILE": "project-ci",
     "FOUNDRY_PROJECT_ENDPOINT": PINNED_PROJECT_ENDPOINT,
+    "AZURE_AI_EXPECTED_DIRECT_ACCOUNT": PINNED_AZURE_ACCOUNT,
+    "AZURE_AI_EXPECTED_PROJECT_ACCOUNT": PINNED_AZURE_ACCOUNT,
+    "AZURE_AI_EXPECTED_PROJECT_NAME": PINNED_AZURE_PROJECT,
 }
 
 

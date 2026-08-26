@@ -261,9 +261,18 @@ container:
 # automated runs, as the repository variables AZURE_AI_EXPECTED_PROJECT_ACCOUNT
 # and AZURE_AI_EXPECTED_PROJECT_NAME. They are settings, not secrets.
 #
+# That sentence used to sit here on its own, with nothing comparing the two.
+# The free check now compares them: if either repository variable names another
+# account or another project, the run is refused before it starts. It also
+# demands that they be set at all, because every automated run place here that
+# can spend money turns on AZURE_AI_REQUIRE_EXPECTED_IDENTITIES, and the Azure
+# run place then refuses to start without them.
+#
 # The free check reads the endpoint settings in the environment, classifies
 # them with this repository's own endpoint rules, and refuses the run if they
-# name any other account or project.
+# name any other account or project. Every rule it applies is read from
+# core/azure_ai_clients.py, which is the module the paid run itself uses to
+# decide whether a route may be built.
 azure_connection:
   account: "hjeon-fdpo-foundry-eus2"
   project: "gdpval-realworks"

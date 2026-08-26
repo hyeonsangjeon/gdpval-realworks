@@ -38,6 +38,47 @@ FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV = (
 )
 FORBIDDEN_API_KEY_ENV = FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV
 
+# The environment variables that decide which route is built and which
+# resource it is allowed to reach.
+#
+# These live at module scope, rather than as string literals inside the
+# functions that read them, so that a check wanting to report the same
+# requirement up front can read the names from here instead of retyping them. A
+# retyped copy agrees until somebody edits one of the two, and then the check
+# that was meant to give early warning gives a clean answer about a setting the
+# run refuses.
+ROUTE_PROFILE_ENV = "AZURE_AI_ROUTE_PROFILE"
+DIRECT_ENDPOINT_ENV = "AZURE_OPENAI_V1_ENDPOINT"
+PROJECT_ENDPOINT_ENV = "FOUNDRY_PROJECT_ENDPOINT"
+LEGACY_ENDPOINT_ENV = "AZURE_OPENAI_LEGACY_ENDPOINT"
+DEPRECATED_ENDPOINT_ENV = "AZURE_OPENAI_ENDPOINT"
+ALLOW_LEGACY_ROLLBACK_ENV = "AZURE_AI_ALLOW_LEGACY_ROLLBACK"
+
+EXPECTED_DIRECT_ACCOUNT_ENV = "AZURE_AI_EXPECTED_DIRECT_ACCOUNT"
+EXPECTED_PROJECT_ACCOUNT_ENV = "AZURE_AI_EXPECTED_PROJECT_ACCOUNT"
+EXPECTED_PROJECT_NAME_ENV = "AZURE_AI_EXPECTED_PROJECT_NAME"
+EXPECTED_LEGACY_ACCOUNT_ENV = "AZURE_AI_EXPECTED_LEGACY_ACCOUNT"
+
+# Which endpoint identities must be named before a route is built, per profile,
+# when AZURE_AI_REQUIRE_EXPECTED_IDENTITIES is "1". Keyed by the profile's
+# written value, so a reader that only has the string can look it up without
+# importing the enumeration.
+#
+# For every profile these are also exactly the identities
+# ``_verify_expected_identities`` compares against the endpoints, so a checker
+# reading this table learns both which names must be present and which names
+# are acted on.
+REQUIRE_EXPECTED_IDENTITIES_ENV = "AZURE_AI_REQUIRE_EXPECTED_IDENTITIES"
+REQUIRED_IDENTITY_ENV_BY_PROFILE: Mapping[str, tuple[str, ...]] = {
+    "direct-v1": (EXPECTED_DIRECT_ACCOUNT_ENV,),
+    "project-ci": (
+        EXPECTED_DIRECT_ACCOUNT_ENV,
+        EXPECTED_PROJECT_ACCOUNT_ENV,
+        EXPECTED_PROJECT_NAME_ENV,
+    ),
+    "legacy-rollback": (EXPECTED_LEGACY_ACCOUNT_ENV,),
+}
+
 _AZURE_PROVIDER_ALIASES = frozenset({"azure", "azure_openai"})
 _PREPROCESSOR_DEFAULT_DEPLOYMENTS = {
     "audio_analyzer": "gpt-audio-1.5",
@@ -262,16 +303,16 @@ def _deprecated_endpoint_error(raw: str) -> ValueError:
         kind = classify_endpoint(raw).kind
     except ValueError:
         return ValueError(
-            "AZURE_OPENAI_ENDPOINT is deprecated and must be unset; use the "
-            "typed endpoint variable for the required endpoint kind"
+            f"{DEPRECATED_ENDPOINT_ENV} is deprecated and must be unset; use "
+            "the typed endpoint variable for the required endpoint kind"
         )
     variable = {
-        EndpointKind.DIRECT_V1: "AZURE_OPENAI_V1_ENDPOINT",
-        EndpointKind.PROJECT: "FOUNDRY_PROJECT_ENDPOINT",
-        EndpointKind.LEGACY_DATED: "AZURE_OPENAI_LEGACY_ENDPOINT",
+        EndpointKind.DIRECT_V1: DIRECT_ENDPOINT_ENV,
+        EndpointKind.PROJECT: PROJECT_ENDPOINT_ENV,
+        EndpointKind.LEGACY_DATED: LEGACY_ENDPOINT_ENV,
     }[kind]
     return ValueError(
-        "AZURE_OPENAI_ENDPOINT is deprecated and must be unset; move the "
+        f"{DEPRECATED_ENDPOINT_ENV} is deprecated and must be unset; move the "
         f"{kind.value} endpoint to {variable}"
     )
 
@@ -288,31 +329,31 @@ class AzureAIRouteSettings:
         values = os.environ if env is None else env
         _reject_static_azure_credential_env(values)
 
-        raw_profile = _env_value(values, "AZURE_AI_ROUTE_PROFILE")
+        raw_profile = _env_value(values, ROUTE_PROFILE_ENV)
         if not raw_profile:
-            raise ValueError("AZURE_AI_ROUTE_PROFILE is required")
+            raise ValueError(f"{ROUTE_PROFILE_ENV} is required")
         try:
             profile = RouteProfile(raw_profile)
         except ValueError:
-            raise ValueError("AZURE_AI_ROUTE_PROFILE is unsupported") from None
+            raise ValueError(f"{ROUTE_PROFILE_ENV} is unsupported") from None
 
-        deprecated = _env_value(values, "AZURE_OPENAI_ENDPOINT")
+        deprecated = _env_value(values, DEPRECATED_ENDPOINT_ENV)
         if deprecated:
             raise _deprecated_endpoint_error(deprecated)
 
         direct = _classify_typed_endpoint(
             values,
-            "AZURE_OPENAI_V1_ENDPOINT",
+            DIRECT_ENDPOINT_ENV,
             EndpointKind.DIRECT_V1,
         )
         project = _classify_typed_endpoint(
             values,
-            "FOUNDRY_PROJECT_ENDPOINT",
+            PROJECT_ENDPOINT_ENV,
             EndpointKind.PROJECT,
         )
         legacy = _classify_typed_endpoint(
             values,
-            "AZURE_OPENAI_LEGACY_ENDPOINT",
+            LEGACY_ENDPOINT_ENV,
             EndpointKind.LEGACY_DATED,
         )
 
@@ -335,7 +376,7 @@ class AzureAIRouteSettings:
                 "project-ci profile requires direct-v1 and project endpoints"
             )
         if profile is RouteProfile.LEGACY_ROLLBACK:
-            if _env_value(values, "AZURE_AI_ALLOW_LEGACY_ROLLBACK") != "1":
+            if _env_value(values, ALLOW_LEGACY_ROLLBACK_ENV) != "1":
                 raise ValueError("legacy rollback is not explicitly authorized")
             if legacy is None:
                 raise ValueError(
@@ -353,19 +394,9 @@ class AzureAIRouteSettings:
         return settings
 
     def _require_expected_identities(self, env: Mapping[str, str]) -> None:
-        if _env_value(env, "AZURE_AI_REQUIRE_EXPECTED_IDENTITIES") != "1":
+        if _env_value(env, REQUIRE_EXPECTED_IDENTITIES_ENV) != "1":
             return
-        required = {
-            RouteProfile.DIRECT_V1: ("AZURE_AI_EXPECTED_DIRECT_ACCOUNT",),
-            RouteProfile.PROJECT_CI: (
-                "AZURE_AI_EXPECTED_DIRECT_ACCOUNT",
-                "AZURE_AI_EXPECTED_PROJECT_ACCOUNT",
-                "AZURE_AI_EXPECTED_PROJECT_NAME",
-            ),
-            RouteProfile.LEGACY_ROLLBACK: (
-                "AZURE_AI_EXPECTED_LEGACY_ACCOUNT",
-            ),
-        }[self.profile]
+        required = REQUIRED_IDENTITY_ENV_BY_PROFILE[self.profile.value]
         missing = [name for name in required if not _env_value(env, name)]
         if missing:
             raise ValueError(
@@ -375,9 +406,7 @@ class AzureAIRouteSettings:
 
     def _verify_expected_identities(self, env: Mapping[str, str]) -> None:
         if self.profile in (RouteProfile.DIRECT_V1, RouteProfile.PROJECT_CI):
-            expected_direct = _env_value(
-                env, "AZURE_AI_EXPECTED_DIRECT_ACCOUNT"
-            )
+            expected_direct = _env_value(env, EXPECTED_DIRECT_ACCOUNT_ENV)
             if expected_direct:
                 expected_direct = _validate_account(expected_direct)
                 if (
@@ -388,7 +417,7 @@ class AzureAIRouteSettings:
 
         if self.profile is RouteProfile.PROJECT_CI:
             expected_project_account = _env_value(
-                env, "AZURE_AI_EXPECTED_PROJECT_ACCOUNT"
+                env, EXPECTED_PROJECT_ACCOUNT_ENV
             )
             if expected_project_account:
                 expected_project_account = _validate_account(
@@ -400,9 +429,7 @@ class AzureAIRouteSettings:
                 ):
                     raise ValueError("project endpoint account identity mismatch")
 
-            expected_project = _env_value(
-                env, "AZURE_AI_EXPECTED_PROJECT_NAME"
-            )
+            expected_project = _env_value(env, EXPECTED_PROJECT_NAME_ENV)
             if expected_project:
                 expected_project = _validate_project(expected_project)
                 if (
@@ -412,9 +439,7 @@ class AzureAIRouteSettings:
                     raise ValueError("Foundry project identity mismatch")
 
         if self.profile is RouteProfile.LEGACY_ROLLBACK:
-            expected_legacy = _env_value(
-                env, "AZURE_AI_EXPECTED_LEGACY_ACCOUNT"
-            )
+            expected_legacy = _env_value(env, EXPECTED_LEGACY_ACCOUNT_ENV)
             if expected_legacy:
                 expected_legacy = _validate_account(expected_legacy)
                 if (
