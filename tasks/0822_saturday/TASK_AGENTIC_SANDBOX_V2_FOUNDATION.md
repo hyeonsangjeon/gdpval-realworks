@@ -514,6 +514,88 @@ that a reader can tell whether to go and find a machine or go and write code.
 containment would be is not the same as having one, and the three guards are
 exactly as shut as they were.
 
+## 7d. Two free checks that answered the same question differently, fixed 2026-08-26
+
+### What a reader saw
+
+Both of these are printed to whoever is deciding what to do next, and on
+2026-08-26 both were run in the same session:
+
+| Check | What it said about the loop |
+|---|---|
+| `scripts/check_agentic_stage_one_ceiling.py` | the loop exists at `core.agentic_v2_conversation.run_model_conversation`, is proven against stand-ins that spend nothing, and what is missing is a way to reach a real model |
+| `scripts/check_execution_envelope_advance_check.py` | "the model never sees a tool result and never chooses a next action" |
+
+Only one of them had looked. The first settles the question by running the loop
+against a stand-in that declares itself paid and requiring the loop to stop
+before asking it anything. The second was a sentence in
+`core/execution_environment_readiness.py`, written before the loop existed and
+correct when it was written. Building the loop (section 5, pull request #228) did
+not change it, because a sentence is not checked against anything.
+
+This is the same fault as sections 7b and 7c and as the two pull requests before
+them: **a claim written in prose, relied on, and never compared with the code.**
+The only new part is that this time the repository was already contradicting
+itself out loud and nobody had put the two outputs side by side.
+
+### Why it mattered rather than being untidy
+
+The stale half pointed at work that was already finished. A reader taking the
+advance check at its word would have concluded that stage one still needed its
+loop written, when what stage one needs is an amount approved and a way to reach
+a real model — a different job, for a different person.
+
+### One sentence that was three claims
+
+The blocker read: *the command-running tool exec_run is closed, the model never
+sees a tool result and never chooses a next action, and no approval exists to use
+this environment in a real experiment.*
+
+Those are three separate blockers with three different ways out — opening the
+command tool, reaching a real model, and an approval. Bundled into one sentence,
+finishing any one of them changed nothing in the report, which is precisely how
+the finished one went on being listed as outstanding.
+
+### What it does now
+
+They are three blockers, and none of them is asserted:
+
+- **The command tool** is called, here, with an ordinary command, and the
+  blocker reports what came back. If it ever answers instead of refusing, the
+  report says so rather than repeating the reassuring sentence.
+- **Reaching a real model** is not decided here at all. The readiness report asks
+  `core.agentic_v2_stage_one_budget.check_stage_one_cannot_reach_a_model`, which
+  is the one place that establishes it by running the loop, and prints back
+  exactly what it returns. Writing a second copy of that reasoning is what caused
+  this defect; the fix is to have one copy and one caller.
+- **The approval** stays a plain statement, because there is nothing in the code
+  to observe: an approval is a decision, not a fact about a module.
+
+The lookup goes through this module's existing by-name import helper, so a module
+that has moved is reported as an unanswered question rather than crashing the
+whole report — and an unanswered question is reported as *a real model has to be
+treated as reachable until somebody checks*, never as silence.
+
+`experiments/execution_envelope/advance_check_plan.yaml` carried the same stale
+claim in a comment and was corrected in the same change, with a note saying which
+of the two copies is the one checked against the code.
+
+### The test that stops it happening again
+
+Nine tests in `tests/test_free_checks_agree_on_the_loop.py`. The load-bearing one
+requires the sentence the readiness report prints about reaching a real model to
+be, character for character, the sentence the other check produced. Matching on
+substance rather than on the text would let the two drift apart again, which is
+the whole failure being fixed. Five of the nine fail against the code as it stood
+before this change.
+
+### What was switched on — nothing
+
+The report gained a blocker and lost none. The three guards are as shut as they
+were, `check_agentic_sandbox_v2_blocks_are_intact()` still returns no problems,
+the environment is still `structure_check_only`, and all three free checks still
+exit 1.
+
 ## 8. Order the work would be done in
 
 1. ~~Work out and get approval for the cost ceiling of a small stage-one run.~~

@@ -535,6 +535,79 @@ def _check_exec_run_stays_unavailable(backend_class: Any) -> list[str]:
     return []
 
 
+def _why_a_real_model_is_out_of_reach() -> list[str]:
+    """Ask the one place that establishes this instead of restating it.
+
+    ``core.agentic_v2_stage_one_budget.check_stage_one_cannot_reach_a_model``
+    settles this by running the loop with a stand-in that declares itself paid
+    and requiring it to stop before asking the stand-in anything. Saying the
+    same thing again here in a sentence is exactly what let the two free checks
+    print contradicting answers in the same run, so this asks rather than says.
+
+    Looked up by name, in this module's usual way, so a missing module is
+    reported as an unanswered question rather than crashing the whole report.
+    """
+    try:
+        establish = _import_attribute(
+            "core.agentic_v2_stage_one_budget",
+            "check_stage_one_cannot_reach_a_model",
+        )
+    except (ImportError, AttributeError) as error:
+        return [
+            "whether a real model can be reached could not be established, so "
+            f"it has to be treated as reachable until somebody checks: {error}"
+        ]
+    try:
+        return list(establish())
+    except Exception as error:  # pragma: no cover - defensive
+        return [
+            "establishing whether a real model can be reached failed, so it "
+            "has to be treated as reachable until somebody checks: "
+            f"{type(error).__name__}: {error}"
+        ]
+
+
+def _agentic_sandbox_v2_blockers() -> list[str]:
+    """Work out what stops this run place by running it, not by describing it.
+
+    Until 2026-08-26 this was one hand-written sentence that said three things
+    at once: that the command-running tool was closed, that the model never saw
+    a tool result and never chose a next action, and that nobody had approved
+    using this environment for real work.
+
+    The middle one stopped being true when the loop was built.
+    ``core.agentic_v2_conversation.run_model_conversation`` shows the model what
+    a tool returned and asks it again, and is proven doing so against stand-ins
+    that spend nothing. The sentence carried on being printed, because a
+    sentence is not checked against anything, while the other free check
+    established the opposite by running the code and printed that in the same
+    session. A reader had two answers and no way to tell which one had been
+    looked up.
+
+    They are also three separate blockers with three different ways out —
+    opening the command tool, reaching a real model, and an approval — so
+    bundling them meant that when one of the three moved, nothing in the report
+    changed shape.
+    """
+    blockers: list[str] = []
+
+    blocks_that_opened = check_agentic_sandbox_v2_blocks_are_intact()
+    if blocks_that_opened:
+        blockers.extend(blocks_that_opened)
+    else:
+        blockers.append(
+            "the command-running tool exec_run is closed: called here with an "
+            "ordinary command, it answers that the capability is unavailable"
+        )
+
+    blockers.extend(_why_a_real_model_is_out_of_reach())
+
+    blockers.append(
+        "no approval exists to use this environment in a real experiment"
+    )
+    return blockers
+
+
 def inspect_environment_support(
     *,
     docker_daemon_available: bool | None = None,
@@ -606,20 +679,19 @@ def inspect_environment_support(
 
         if environment == ENVIRONMENT_AGENTIC_SANDBOX_V2:
             evidence.append(
-                "core.executor.TaskExecutor refuses this mode unless the run is "
-                "declared free of paid model calls, and "
-                "step2_run_inference._require_runnable_execution_mode refuses it "
-                "in the paid inference pipeline"
+                "the three safety blocks were run rather than read: "
+                "step2_run_inference._require_runnable_execution_mode, "
+                "core.executor.TaskExecutor's refusal of a paid run, and "
+                "core.agentic_v2_fixture_backend.AgenticV2FixtureBackend."
+                "exec_run on an ordinary command"
             )
             evidence.append(
-                "core.agentic_v2_fixture_backend.AgenticV2FixtureBackend.exec_run "
-                "answers capability_unavailable for ordinary commands"
+                "whether a real model can be reached was settled by "
+                "core.agentic_v2_stage_one_budget."
+                "check_stage_one_cannot_reach_a_model, which runs the loop "
+                "with a stand-in instead of describing what it would do"
             )
-            blockers.append(
-                "the command-running tool exec_run is closed, the model never "
-                "sees a tool result and never chooses a next action, and no "
-                "approval exists to use this environment in a real experiment"
-            )
+            blockers.extend(_agentic_sandbox_v2_blockers())
             results.append(
                 EnvironmentReadiness(
                     environment=environment,
