@@ -12,6 +12,41 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The task catalogue recorded a count of zero for anything it could not
+  read, and a zero is priced as work that costs nothing.**
+  `scripts/build_gdpval_task_catalog.py` read all four of its measured columns
+  as `row.get(name) or <empty>`. A renamed column, a null, or a rubric that
+  would not parse therefore became `[]` or `""`, and was written down as a real
+  measurement rather than as something nobody could find. The number that
+  matters most here is `rubric_item_count`: marking is charged per scoring
+  line, so zeroing it across all 220 tasks drops the cost ceiling from
+  **363.59 to 93.75 United States dollars** — 269.84 of it gone, about three
+  quarters — while every free check still reports a clean, matching catalogue.
+- **Nothing caught it, at four separate points.** `TaskCatalog.from_mapping`
+  accepts any whole number, so a zero loads. `catalog_score_problems` answers a
+  different question (no scores are present) and answers it correctly.
+  `test_a_whole_number_is_still_a_perfectly_good_count` explicitly blesses a
+  zero. And `--check` rebuilds with the same code, so it reproduces the same
+  zeros and reports a match — the docstring now says so, and a test fails if
+  that sentence is ever deleted.
+- **The builder now refuses rather than substitutes.** It names the columns it
+  reads in one place, refuses a dataset that does not hold them (naming what
+  the file *does* hold, so a rename is visible rather than guessed at), refuses
+  a row holding a null under any of them, and refuses a rubric that will not
+  parse or that is not a list of scoring lines. An empty list stays a real
+  answer: a task shipping no reference files still builds, because 95 of the
+  220 really ship none. The rebuilt script reproduces the committed catalogue
+  byte for byte from the pinned dataset revision.
+- **`catalog_number_problems` refuses the zeros that cannot be true**, in
+  `core/execution_envelope_tasks.py`, and the free advance check now asks it of
+  the catalogue in play before the cost ceiling is worked out from those same
+  numbers. Three rules, each resting on a measured fact about this benchmark: a
+  task nobody marks (real range 14–137 scoring lines, no zeros), a task with no
+  wording (617–6,618 characters, no zeros, 220 distinct fingerprints, none the
+  empty-string hash), and a count that disagrees with the paths it was written
+  from. A count of reference files being zero is refused by nothing. Only the
+  direction that makes the work look smaller is refused; a count that is too
+  large would merely overstate what a run might cost.
 - **The cost sum charged every reference file at 50,000 characters and named,
   as its authority, a cap the pipeline never reaches.** The comment on
   `REFERENCE_FILE_CHARACTER_CAP` in `core/execution_envelope_cost.py` said the

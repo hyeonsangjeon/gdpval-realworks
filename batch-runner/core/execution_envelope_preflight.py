@@ -68,6 +68,7 @@ from core.execution_envelope_azure import (
 from core.execution_envelope_tasks import (
     InputFileVerification,
     TaskCatalog,
+    catalog_number_problems,
     check_catalog_carries_no_scores,
     load_task_catalog,
     select_advance_check_tasks,
@@ -1459,6 +1460,9 @@ def run_envelope_preflight(
 
     if loaded_catalog is not None:
         problems.extend(check_catalog_carries_no_scores())
+        # Asked of the catalogue in play rather than of the file on disk, and
+        # asked before the cost ceiling is worked out from these same numbers.
+        problems.extend(catalog_number_problems(loaded_catalog))
         selection = select_advance_check_tasks(loaded_catalog)
         for environment in sorted(conditions):
             problems.extend(
