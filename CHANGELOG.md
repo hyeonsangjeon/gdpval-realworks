@@ -48,11 +48,25 @@ entries land under a fresh dated heading the day they merge to `main`.
   some other file. The dataset's own data file carries no such promise, so a
   mismatch against a copy in a folder somebody pointed at is reported as what
   it is — that folder may hold a different revision — rather than as tampering.
-- 26 new tests in
+- **"Could not check" and "does not match" are now two lists, not one.** They
+  answer different questions: a disagreement means the plan pinned the wrong
+  file and says the same thing wherever the check runs, while a missing copy
+  means only that this machine has not downloaded the benchmark yet. Both still
+  stop a run and both are still printed together, but
+  `InputFileVerification.missing_copies` and
+  `EnvelopePreflight.missing_input_file_problems` name the machine-dependent
+  half. Without that name, six tests asserting "and nothing else is wrong"
+  passed on a machine holding the dataset and failed on a fresh build runner —
+  and the only way to fix them by hand would have been a substring filter that
+  could also have swallowed a real disagreement. The filter is now by list
+  membership, and a test asserts a disagreement can never reach that list.
+- 32 new tests in
   `batch-runner/tests/test_envelope_preflight_reads_the_input_files.py`,
   including the exhaustive sweep above rebuilt against a small benchmark of
   real files, so the 64-position claim is re-proved on every run rather than
-  measured once.
+  measured once. Two of them run with the download cache emptied, which is the
+  state a fresh build runner is in and the one condition the first version of
+  this work was never tried under.
 - **The check that holds the three run places to identical settings compared 18
   of the 44 settings in their files, and the comment above it said the rest
   "are the ones that are meant to differ between run places".** Nobody had

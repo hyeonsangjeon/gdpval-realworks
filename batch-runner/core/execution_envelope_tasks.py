@@ -588,6 +588,28 @@ class InputFileVerification:
 
     checks: tuple[InputFileCheck, ...]
     problems: tuple[str, ...]
+    """Ways the written fingerprints and the real files disagree.
+
+    A defect in the plan. It says the same thing on every machine, because it
+    is about what was written down, not about what happens to be lying around.
+    """
+    missing_copies: tuple[str, ...] = ()
+    """Files no copy of which is on this machine, so nothing could be read.
+
+    Kept apart from :attr:`problems` because it answers a different question.
+    A disagreement means the written value is wrong. A missing copy means this
+    machine cannot tell whether it is right or wrong, which is neither a pass
+    nor an accusation — and, unlike a disagreement, it can be cleared by
+    fetching the pinned revision for nothing. Both still stop a run: an
+    unchecked fingerprint is not evidence. Only this one changes from machine
+    to machine, which is why anything asserting "and nothing else is wrong"
+    has to name it rather than trip over it.
+    """
+
+    @property
+    def all_notes(self) -> tuple[str, ...]:
+        """Every reason the written fingerprints are not proven right."""
+        return self.problems + self.missing_copies
 
     @property
     def fully_checked(self) -> tuple[InputFileCheck, ...]:
@@ -605,6 +627,7 @@ class InputFileVerification:
         return {
             "checks": [check.as_dict() for check in self.checks],
             "problems": list(self.problems),
+            "missing_copies": list(self.missing_copies),
             "everything_was_read": self.everything_was_read,
         }
 
@@ -719,6 +742,7 @@ def _check_one_written_fingerprint(
     catalog: TaskCatalog,
     dataset_root: Path | None,
     problems: list[str],
+    missing_copies: list[str],
     *,
     what_it_is: str,
 ) -> InputFileCheck:
@@ -772,7 +796,7 @@ def _check_one_written_fingerprint(
                 "the dataset keeps that file in, so the written value describes "
                 "some other file"
             )
-        problems.append(
+        missing_copies.append(
             f"no copy of {path} at the pinned revision is on this machine, so "
             f"only {REFERENCE_PATH_FINGERPRINT_LENGTH} of its 64 fingerprint "
             "characters could be checked against the file itself; "
@@ -786,7 +810,7 @@ def _check_one_written_fingerprint(
             note="the folder name repeats the first half of the fingerprint",
         )
 
-    problems.append(
+    missing_copies.append(
         f"no copy of {path} at the pinned revision is on this machine, and its "
         "path says nothing about its contents, so none of its 64 fingerprint "
         f"characters could be checked; {HOW_TO_GET_THE_FILES}"
@@ -818,12 +842,15 @@ def verify_input_file_versions(
       copy of that exact file already on this machine.
 
     When no copy is reachable the fingerprint is **not** treated as correct. It
-    is reported as a problem saying how much of it went unchecked and how to
-    get the missing bytes for nothing. A fingerprint nobody compared is not
-    evidence, and a check that stayed quiet about it would be claiming to have
-    done work it did not do.
+    is reported under :attr:`InputFileVerification.missing_copies`, saying how
+    much of it went unchecked and how to get the missing bytes for nothing. A
+    fingerprint nobody compared is not evidence, and a check that stayed quiet
+    about it would be claiming to have done work it did not do. That answer is
+    kept apart from a disagreement, which is a different finding: one says the
+    plan is wrong, the other says this machine cannot tell.
     """
     problems: list[str] = []
+    missing_copies: list[str] = []
     checks: list[InputFileCheck] = []
     expected = set(reference_files_for(task_ids, catalog))
     written = {str(key): str(value) for key, value in input_file_versions.items()}
@@ -848,6 +875,7 @@ def verify_input_file_versions(
                 catalog,
                 dataset_root,
                 problems,
+                missing_copies,
                 what_it_is="dataset file",
             )
         )
@@ -875,12 +903,15 @@ def verify_input_file_versions(
                 catalog,
                 dataset_root,
                 problems,
+                missing_copies,
                 what_it_is="file",
             )
         )
 
     return InputFileVerification(
-        checks=tuple(checks), problems=tuple(problems)
+        checks=tuple(checks),
+        problems=tuple(problems),
+        missing_copies=tuple(missing_copies),
     )
 
 
@@ -890,9 +921,14 @@ def check_input_file_versions(
     catalog: TaskCatalog,
     dataset_root: Path | None = None,
 ) -> list[str]:
-    """Every reason the written input fingerprints are not proven right."""
+    """Every reason the written input fingerprints are not proven right.
+
+    Both kinds: the ones saying a written value and its file disagree, and the
+    ones saying no copy of the file was here to compare against. A caller that
+    needs to tell them apart wants :func:`verify_input_file_versions`.
+    """
     return list(
         verify_input_file_versions(
             input_file_versions, task_ids, catalog, dataset_root
-        ).problems
+        ).all_notes
     )

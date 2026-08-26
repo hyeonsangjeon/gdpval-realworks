@@ -14,6 +14,14 @@ on the machine. It must be its own visible answer — "this went unchecked" — 
 never silence, because a fingerprint nobody compared is not evidence, and the
 report is read by someone deciding whether to authorise a bill.
 
+That answer is also kept in a list of its own, apart from the disagreements.
+The two say different things: a disagreement means the plan pinned the wrong
+file and reads the same on every machine, while a missing copy means only that
+this machine has not downloaded the benchmark yet. Both stop a run. Merging
+them would force anything asking "is anything else wrong?" to either fail on a
+build server or filter by guesswork, and a filter that could swallow a
+disagreement would undo the whole check.
+
 Nothing here calls a model, downloads anything, or spends anything.
 """
 
@@ -129,6 +137,21 @@ def small_benchmark(tmp_path):
     return root, catalog, ("task-one",), written
 
 
+@pytest.fixture
+def no_download_cache(monkeypatch):
+    """A machine that has never downloaded the benchmark.
+
+    This is the state a fresh build runner is in, and it is not the same as
+    pointing the check at an empty folder: the check also looks in the download
+    cache, which on a developer's machine usually holds the pinned revision
+    already. Emptying both is what makes these tests say the same thing in both
+    places.
+    """
+    import huggingface_hub
+
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lambda **_: None)
+
+
 def _verify(benchmark, written=None, root=None):
     dataset_root, catalog, task_ids, honest = benchmark
     return verify_input_file_versions(
@@ -190,7 +213,7 @@ def test_a_file_no_copy_of_which_is_reachable_is_reported_not_passed(
 ):
     result = _verify(small_benchmark, root=tmp_path / "nowhere")
 
-    assert result.problems != ()
+    assert result.missing_copies != ()
     assert not result.everything_was_read
 
 
@@ -199,8 +222,10 @@ def test_the_report_says_how_to_get_the_missing_files_for_nothing(
 ):
     result = _verify(small_benchmark, root=tmp_path / "nowhere")
 
-    assert any("huggingface-cli download" in note for note in result.problems)
-    assert any("--dataset-root" in note for note in result.problems)
+    assert any(
+        "huggingface-cli download" in note for note in result.missing_copies
+    )
+    assert any("--dataset-root" in note for note in result.missing_copies)
 
 
 def test_a_missing_copy_says_how_much_of_the_fingerprint_went_unchecked(
@@ -245,6 +270,49 @@ def test_the_second_half_is_still_checked_when_the_first_half_cannot_be(
     assert any("describes some other file" in note for note in result.problems)
 
 
+def test_a_missing_copy_is_not_filed_as_a_disagreement(
+    small_benchmark, tmp_path
+):
+    """Absent bytes say nothing about whether the written value is right."""
+    result = _verify(small_benchmark, root=tmp_path / "nowhere")
+
+    assert result.problems == ()
+    assert len(result.missing_copies) == 3
+
+
+def test_a_disagreement_is_never_filed_as_a_missing_copy(small_benchmark):
+    """The set-aside list must not be able to swallow a real fault.
+
+    Six tests elsewhere set ``missing_copies`` aside to mean "this machine has
+    not downloaded the benchmark". If a disagreement could land there, a plan
+    pinning the wrong file would be filtered out of all six.
+    """
+    dataset_root, catalog, task_ids, honest = small_benchmark
+    path = sorted(key for key in honest if key.startswith("reference_files/"))[0]
+    (dataset_root / path).write_bytes(b"a different file altogether\n")
+
+    result = verify_input_file_versions(honest, task_ids, catalog, dataset_root)
+
+    assert result.missing_copies == ()
+    assert any("describes some other file" in note for note in result.problems)
+
+
+def test_both_lists_are_reasons_not_to_start(small_benchmark, tmp_path):
+    """Splitting the answer in two must not quietly drop half of the gate."""
+    dataset_root, catalog, task_ids, honest = small_benchmark
+
+    result = verify_input_file_versions(
+        honest, task_ids, catalog, tmp_path / "nowhere"
+    )
+    gate = check_input_file_versions(
+        honest, task_ids, catalog, tmp_path / "nowhere"
+    )
+
+    assert result.all_notes == result.problems + result.missing_copies
+    assert gate == list(result.all_notes)
+    assert gate != []
+
+
 # ── The path shape that used to be waved through ───────────────────────────
 
 
@@ -275,7 +343,7 @@ def test_a_path_that_says_nothing_about_its_contents_is_not_waved_through(
     by_path = {check.path: check for check in result.checks}
     assert by_path["inputs/Costs.xlsx"].state == INPUT_FILE_NOT_CHECKED
     assert by_path["inputs/Costs.xlsx"].characters_compared == 0
-    assert any("none of its 64" in note for note in result.problems)
+    assert any("none of its 64" in note for note in result.missing_copies)
 
 
 def test_a_value_that_is_not_a_fingerprint_at_all_is_reported(small_benchmark):
@@ -432,6 +500,47 @@ def test_the_written_report_carries_the_per_file_state(small_benchmark):
             }
 
 
+def test_files_nobody_could_read_are_named_apart_but_still_refuse_a_start(
+    tmp_path, no_download_cache
+):
+    """The machine-dependent answer is named, and still blocks.
+
+    This is the state a build server is in: no download cache, so nothing to
+    read. The notes must be reachable by name, so a test about something else
+    can set them aside deliberately, and must still appear among the problems,
+    so nobody reads the report as "the fingerprints checked out".
+    """
+    plan = load_plan(PLAN_PATH)
+
+    result = run_envelope_preflight(
+        plan, root=BATCH_RUNNER_ROOT, dataset_root=tmp_path / "nowhere"
+    )
+
+    assert result.missing_input_file_problems
+    for note in result.missing_input_file_problems:
+        assert "is on this machine" in note, note
+        assert note in result.all_problems, note
+    assert result.may_start is False
+
+
+def test_what_was_named_apart_matches_what_went_unread(
+    tmp_path, no_download_cache
+):
+    """The named list is derived from the per-file states, not written twice."""
+    plan = load_plan(PLAN_PATH)
+
+    result = run_envelope_preflight(
+        plan, root=BATCH_RUNNER_ROOT, dataset_root=tmp_path / "nowhere"
+    )
+
+    unread = sum(
+        len(verification.not_fully_checked)
+        for verification in result.input_files.values()
+    )
+    assert unread == len(result.missing_input_file_problems)
+    assert result.as_dict()["every_input_file_was_read"] is False
+
+
 def test_a_wrong_fingerprint_stops_the_comparison_starting(small_benchmark):
     dataset_root, _, _, _ = small_benchmark
     plan = load_plan(PLAN_PATH)
@@ -458,13 +567,11 @@ def test_the_committed_plan_is_either_read_in_full_or_says_it_was_not(
         entry.input_file_versions, entry.task_ids, catalog
     )
 
+    assert result.problems == (), result.problems
     if result.everything_was_read:
-        assert result.problems == ()
+        assert result.missing_copies == ()
     else:
-        assert result.problems != ()
-        assert all(
-            "is on this machine" in note for note in result.problems
-        ), result.problems
+        assert result.missing_copies != ()
 
 
 def test_the_committed_plan_pins_exactly_the_files_the_five_tasks_use():
@@ -480,24 +587,68 @@ def test_the_committed_plan_pins_exactly_the_files_the_five_tasks_use():
     )
 
 
-def test_the_module_explanation_points_at_things_that_exist(small_benchmark):
+def test_every_cross_reference_in_the_module_points_at_something_real(
+    small_benchmark,
+):
     """A cross-reference in prose is a claim, and claims get checked here.
 
     Writing this file, the module explanation was left pointing at a constant
     under a name it never had. Nobody would have noticed, which is the same
     reason nobody noticed the check was reading half a fingerprint.
+
+    Every docstring in the file is read, not only the one at the top, because
+    the first version of this test read only the top one and the next stale
+    reference written into the file went into a field docstring instead.
     """
+    import dataclasses
     import re
 
     import core.execution_envelope_tasks as module
 
+    source = Path(module.__file__).read_text(encoding="utf-8")
     referenced = set(
-        re.findall(r":(?:data|func|class):`([A-Za-z_][A-Za-z0-9_]*)`", module.__doc__)
+        re.findall(
+            r":(?:data|func|class|attr|meth):`([A-Za-z_][A-Za-z0-9_.]*)`", source
+        )
     )
+    classes = [
+        value
+        for value in vars(module).values()
+        if isinstance(value, type) and getattr(value, "__module__", "") == module.__name__
+    ]
 
-    assert referenced
-    missing = sorted(name for name in referenced if not hasattr(module, name))
-    assert missing == []
+    def member(holder, name):
+        """A name on this holder, counting fields a dataclass declares.
+
+        A field with no default is not an attribute of the class object, only
+        of its instances, so ``getattr`` alone would call a perfectly real
+        field a dangling reference.
+        """
+        found = getattr(holder, name, None)
+        if found is not None:
+            return found
+        if dataclasses.is_dataclass(holder):
+            for field in dataclasses.fields(holder):
+                if field.name == name:
+                    return field
+        return None
+
+    def resolves(name: str) -> bool:
+        head, _, rest = name.partition(".")
+        for holder in [module] + ([] if rest else classes):
+            found = member(holder, head)
+            if found is None:
+                continue
+            for step in rest.split(".") if rest else []:
+                found = member(found, step)
+                if found is None:
+                    break
+            else:
+                return True
+        return False
+
+    assert len(referenced) >= 6, referenced
+    assert sorted(name for name in referenced if not resolves(name)) == []
 
 
 # ── The sweep: no character of any fingerprint may be changed unnoticed ────

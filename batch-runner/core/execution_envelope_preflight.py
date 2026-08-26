@@ -110,6 +110,17 @@ class EnvelopePreflight:
     and "assumed correct" are different answers and the reader is entitled to
     know which one they got.
     """
+    missing_input_file_problems: list[str] = field(default_factory=list)
+    """Input files no copy of which is on the machine running this check.
+
+    Kept apart from the general problem list for the same reason the marking
+    notes are: it says something the others do not. Every other problem here
+    reports a fault in the plan or the settings, and reports it identically
+    wherever the check is run. This one reports a limit of *this machine* — a
+    fingerprint that could not be compared because the bytes were not here to
+    compare it against. It still stops a run, because an unchecked fingerprint
+    is not evidence, and it clears for nothing by fetching the pinned revision.
+    """
 
     @property
     def all_problems(self) -> list[str]:
@@ -142,6 +153,8 @@ class EnvelopePreflight:
             "problems": self.all_problems,
             "grading_ceiling_problems": list(self.grading_ceiling_problems),
             "marking_half_is_a_ceiling": not self.grading_ceiling_problems,
+            "missing_input_file_problems": list(self.missing_input_file_problems),
+            "every_input_file_was_read": not self.missing_input_file_problems,
             "azure_connection": (
                 self.azure.as_dict() if self.azure is not None else None
             ),
@@ -758,6 +771,7 @@ def run_envelope_preflight(
     """Run every free check and return one answer listing every problem."""
     problems: list[str] = []
     input_files: dict[str, InputFileVerification] = {}
+    missing_input_file_problems: list[str] = []
 
     if plan.get("plan_version") != PLAN_VERSION:
         problems.append(
@@ -803,6 +817,12 @@ def run_envelope_preflight(
             problems.extend(
                 f"{environment}: {note}" for note in verification.problems
             )
+            missing_input_file_problems.extend(
+                f"{environment}: {note}" for note in verification.missing_copies
+            )
+        # Named separately above, but still counted here. Being unable to check
+        # a fingerprint is a reason not to start, not a reason to stay quiet.
+        problems.extend(missing_input_file_problems)
 
     cost_block = plan.get("cost")
     cost_block = cost_block if isinstance(cost_block, Mapping) else {}
@@ -869,6 +889,7 @@ def run_envelope_preflight(
         azure=azure,
         grading_ceiling_problems=grading_ceiling_problems,
         input_files=input_files,
+        missing_input_file_problems=missing_input_file_problems,
     )
 
 
