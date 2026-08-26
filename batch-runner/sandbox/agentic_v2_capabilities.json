@@ -90,6 +90,11 @@
     "runtime": "firecracker",
     "network": "none",
     "rootfs": "read-only",
-    "workdir": "ephemeral-quota"
+    "workdir": "ephemeral-quota",
+    "workdir_quota_mib": 256,
+    "memory_mib": 4096,
+    "wall_clock_seconds": 1200,
+    "user": "jailer-unprivileged",
+    "on_breach": "stop-and-report"
   }
 }

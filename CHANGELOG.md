@@ -12,6 +12,77 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Four of the six things a containment has to say were never written down,
+  and the two that were had three copies that nothing compared.** A set of
+  settings is a containment only if it answers where a command may write,
+  whether it can reach the network, how much memory it gets, how long it may
+  run, who it runs as, and what happens when it exceeds any of those. Two were
+  answered. The working directory said `ephemeral-quota` — "there is a quota" —
+  and **never said what the quota was**, which is a rule nobody could apply even
+  if something were applying rules.
+
+  All six now have a number or a word, and every number that could be derived
+  from something already in the repository was derived rather than picked: the
+  work disk is **256 mebibytes**, twice what the tool layer already accepts, so
+  the tools can never accept a write the disk cannot hold; the clock is
+  **1,200 seconds**, the same per-task timeout the other three run places are
+  held to, so this column cannot lose a task to a stricter deadline than its
+  neighbours; the user is **`jailer-unprivileged`**, so "not root" is
+  checkable; a breach is **`stop-and-report`**, because a rule that has been
+  exceeded is a containment that is not holding. A test refuses any rule whose
+  name ends in a unit but whose value is not a positive whole number — the
+  exact shape the working directory had.
+
+  **Memory is the one number with nothing behind it, and it says so.** 4,096
+  mebibytes was picked. None of the three run places in the comparison caps
+  memory at all, so a cap here makes this column stricter on an axis the
+  comparison does not otherwise control. That is written into the rule's own
+  documentation, and a test fails if the admission is ever removed.
+
+  **Three copies became one.** The rules were stated in
+  `REQUIRED_MICROVM_POLICY`, in the signed supply-chain policy on disk, and in a
+  hand-written dictionary inside the supply-chain validator — with different
+  names in each (`read_only_rootfs: true` in one, `rootfs: "read-only"` in
+  another), which is what made a disagreement hard to see by eye. Nothing
+  compared any two of them, so a rule could be weakened in one place and left
+  standing in the others with every file still validating. The validator's copy
+  is now derived from the first, and a signed policy that disagrees is refused
+  with a message naming the rule and both places it is written down.
+
+  **Every rule is now refused when weakened** — 33 tests covering the network
+  opened to an allowlist or the host, a writable root filesystem, a persistent
+  working directory, any limit quadrupled, the user set to root, a breach rule
+  that carries on, the runtime changed to Docker, the containment marked
+  optional, and any rule deleted outright.
+
+  **What no test does is start a machine, exceed a limit and watch it stop.**
+  That test needs a machine that can host the containment — none of the three in
+  play can — and code that turns these rules into arguments for starting one,
+  which nobody has written. `tests/test_agentic_v2_containment_rules.py` says so
+  in its own opening lines rather than quietly omitting it, because a passing
+  test named after a thing that never happened is how an unenforced rule comes
+  to look enforced.
+
+- **A rule nothing applies was being reported as met.** The readiness report had
+  one field for "the containment is available", and it was answering two
+  different questions at once: *could this machine host the containment*, and
+  *is the containment actually in place*. Every policy rule now answers "cannot
+  be established here" instead of "met", and says which of the two reasons
+  applies.
+
+  They are two fields now because they are fixed by two different things. One
+  is fixed by finding or building a machine, and is read off the machine. The
+  other is fixed by writing the code that applies the rules — a fact about this
+  repository, so the answer is the same on every machine, and a better machine
+  does not change it. A reader of the refusal can now tell whether to go and
+  find a machine or go and write code.
+
+  This makes the report **strictly more cautious than before**: the refusal now
+  stands even on a machine meeting every hardware requirement. No refusal was
+  removed, nothing was switched on, and the three safety blocks are exactly as
+  shut as they were — `exec_run` still answers `capability_unavailable`, and
+  both guards still reject the mode.
+
 - **The cost arithmetic had no way to express a perception call, so marking's
   two extra models could not be counted even once they were named.** The
   previous change proved the gap existed: `grading_configs/default_v2.yaml`

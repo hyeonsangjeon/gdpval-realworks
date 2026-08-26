@@ -100,7 +100,35 @@ _POLICY_SETTING_AS_A_CLAIM = {
     "rootfs": "the small isolated virtual machine's root filesystem is {value}",
     "workdir": "the small isolated virtual machine's working directory is "
     "{value}",
+    "workdir_quota_mib": "the command may write at most {value} mebibytes",
+    "memory_mib": "the command is given at most {value} mebibytes of memory",
+    "wall_clock_seconds": "the command is stopped after {value} seconds",
+    "user": "the command runs as {value} rather than as a privileged user",
+    "on_breach": "exceeding any rule above results in {value}",
 }
+
+# What has to exist before any of the settings above can be reported as met.
+#
+# Nothing in this repository turns a containment rule into an argument for
+# starting a virtual machine. core/agentic_v2_microvm.py looks for the
+# Firecracker programs on the search path and stops there; no module reads
+# REQUIRED_MICROVM_POLICY and produces a start-up configuration from it.
+#
+# This matters more than it sounds. Until 2026-08-26 this report marked every
+# one of those settings as met the moment a machine could start a virtual
+# machine at all — as though being able to start one meant the rules had been
+# applied to it. On the three machines in play that never showed, because none
+# of them can start one. On the first machine that could, the report would have
+# said the containment was in place while nothing carried it there.
+#
+# A rule nobody applies is not met. It is unenforced, which is a different
+# answer, and the report now gives that one.
+NOTHING_APPLIES_THESE_RULES_YET = (
+    "no module turns core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY into "
+    "arguments for starting a virtual machine, so this rule is written down "
+    "and unenforced rather than met. core.agentic_v2_microvm only looks for "
+    "the Firecracker programs; it applies nothing"
+)
 
 
 @dataclass(frozen=True)
@@ -157,10 +185,17 @@ class Requirement:
 
 @dataclass(frozen=True)
 class RecordedFinding:
-    """An answer for a machine that cannot be read from this one."""
+    """An answer for a machine that cannot be read from this one.
+
+    What is recorded is whether the machine *could host* the containment, which
+    is the only one of the two questions below anybody has established about
+    these machines. Whether the rules would then be applied to it is not a
+    property of a machine at all — it is a property of this repository, and the
+    answer is the same everywhere.
+    """
 
     machine: str
-    containment_available: bool | None
+    could_host_the_containment: bool | None
     finding: str
     established_by: str
     on_date: str
@@ -168,7 +203,7 @@ class RecordedFinding:
     def as_dict(self) -> dict[str, Any]:
         return {
             "machine": self.machine,
-            "containment_available": self.containment_available,
+            "could_host_the_containment": self.could_host_the_containment,
             "finding": self.finding,
             "established_by": self.established_by,
             "on_date": self.on_date,
@@ -184,6 +219,30 @@ class ContainmentAnswer:
     notes: list[str] = field(default_factory=list)
 
     @property
+    def machine_could_host_it(self) -> bool:
+        """True when the four readings taken on this machine all hold.
+
+        Not the same question as :attr:`required_containment_available`, and
+        until 2026-08-26 they were one field, which is how a rule nothing
+        applies came to be reported as met. This one asks whether the machine
+        could start a small isolated virtual machine at all. That one asks
+        whether the containment is actually in place.
+
+        They are kept apart because they are fixed by different things. This one
+        is fixed by finding, configuring or building a machine. That one is
+        additionally fixed by writing the code that turns the containment rules
+        into arguments for starting the machine — which nobody has written.
+        """
+        taken_here = [
+            requirement
+            for requirement in self.requirements
+            if requirement.claim in READINGS_TAKEN_HERE
+        ]
+        return len(taken_here) == len(READINGS_TAKEN_HERE) and all(
+            requirement.met is True for requirement in taken_here
+        )
+
+    @property
     def required_containment_available(self) -> bool:
         """True only when every claim was established and every one holds.
 
@@ -191,6 +250,11 @@ class ContainmentAnswer:
         rule the specification already sets for the container run place applies
         here too: when the intended isolation cannot be shown to be present, the
         answer is no, not "probably".
+
+        This is false on every machine today, including one that has everything,
+        and it stays false until two separate things change: some machine has to
+        be able to host the containment, and something has to apply the rules to
+        it. See :data:`NOTHING_APPLIES_THESE_RULES_YET` for the second.
         """
         return bool(self.requirements) and all(
             requirement.met is True for requirement in self.requirements
@@ -207,6 +271,7 @@ class ContainmentAnswer:
     def as_dict(self) -> dict[str, Any]:
         return {
             "machine": self.machine,
+            "machine_could_host_it": self.machine_could_host_it,
             "required_containment_available": self.required_containment_available,
             "requirements": [item.as_dict() for item in self.requirements],
             "whats_missing": self.whats_missing(),
@@ -450,6 +515,13 @@ def _judge_policy_settings(
     Read from :data:`core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY` rather
     than listed again here, so that a setting added to the manifest turns into a
     line in this report instead of being silently left out of it.
+
+    None of them is ever reported as met. Two separate things would have to be
+    true for that, and only one of them is even about the machine: something
+    would have to apply the rule, and the machine would have to be able to hold
+    it. Nothing applies any of them — see
+    :data:`NOTHING_APPLIES_THESE_RULES_YET` — so the second question does not
+    arise yet.
     """
     can_start_one = all(item.met is True for item in already_judged)
     settings: list[Requirement] = []
@@ -497,15 +569,13 @@ def _judge_policy_settings(
         settings.append(
             Requirement(
                 claim=wording.format(value=value),
-                met=True if can_start_one else None,
+                met=None,
                 because=(
-                    "this is a setting applied when the virtual machine is "
-                    "started rather than a capability the host must already "
-                    "have, and this machine can start one"
+                    NOTHING_APPLIES_THESE_RULES_YET
                     if can_start_one
                     else "there is no small isolated virtual machine on this "
-                    "machine to apply this to. It becomes answerable only once "
-                    "the four claims above hold"
+                    "machine to apply this to, and "
+                    + NOTHING_APPLIES_THESE_RULES_YET
                 ),
             )
         )
@@ -524,7 +594,7 @@ def _kernel_version(release: str) -> tuple[int, int] | None:
 RECORDED_FINDINGS: tuple[RecordedFinding, ...] = (
     RecordedFinding(
         machine="github-hosted runner (ubuntu-latest, ubuntu-24.04)",
-        containment_available=False,
+        could_host_the_containment=False,
         finding=(
             "GitHub's own documentation says that running a virtual machine "
             "inside one of its runners, which is what this containment would "
@@ -542,7 +612,7 @@ RECORDED_FINDINGS: tuple[RecordedFinding, ...] = (
     ),
     RecordedFinding(
         machine="self-hosted runner labelled agentic-sandbox",
-        containment_available=None,
+        could_host_the_containment=None,
         finding=(
             "there is no such machine. No self-hosted runner is registered to "
             "this repository, and .github/workflows/agentic-sandbox-preflight."
@@ -631,6 +701,21 @@ def containment_answer_everywhere(
 ) -> dict[str, Any]:
     """The whole answer: this machine read live, the others from record.
 
+    Three answers come back rather than one, because three different things
+    would have to be done about them:
+
+    ``could_be_hosted_on_any_machine_in_play``
+        Is there a machine that could start the containment? Fixed by finding,
+        configuring or building one.
+    ``anything_applies_the_containment_rules``
+        Does any code turn the rules into arguments for starting it? Fixed by
+        writing that code. False today, on every machine, for the reason in
+        :data:`NOTHING_APPLIES_THESE_RULES_YET`.
+    ``available_on_any_machine_in_play``
+        Is the containment actually in place anywhere? Needs both of the above,
+        so it is false today and would stay false if a perfect machine appeared
+        tomorrow.
+
     ``every_machine_in_play_has_an_answer`` is ``None`` rather than ``True``
     when no workflows directory was given, because in that case nothing looked.
     A check that treats "nobody asked" as "the answer is yes" is the failure
@@ -640,9 +725,13 @@ def containment_answer_everywhere(
         facts if facts is not None else read_this_machine(),
         machine="the machine this check is running on",
     )
-    available_anywhere = here.required_containment_available or any(
-        finding.containment_available is True for finding in RECORDED_FINDINGS
+    could_be_hosted_anywhere = here.machine_could_host_it or any(
+        finding.could_host_the_containment is True for finding in RECORDED_FINDINGS
     )
+    # Not a machine fact and so not read off one. A rule is applied by code, and
+    # no code here applies these; if that changes, this changes with it and so
+    # does everything below.
+    anything_applies_the_rules = False
     gaps = (
         check_every_machine_has_a_containment_finding(workflows_directory)
         if workflows_directory is not None
@@ -656,7 +745,11 @@ def containment_answer_everywhere(
         "every_machine_in_play_has_an_answer": (
             None if workflows_directory is None else not gaps
         ),
-        "available_on_any_machine_in_play": available_anywhere,
+        "could_be_hosted_on_any_machine_in_play": could_be_hosted_anywhere,
+        "anything_applies_the_containment_rules": anything_applies_the_rules,
+        "available_on_any_machine_in_play": (
+            could_be_hosted_anywhere and anything_applies_the_rules
+        ),
     }
 
 
@@ -670,6 +763,11 @@ def refuse_command_execution(
     value a caller can act on rather than something a reader has to infer from a
     report, and so that the day it changes, it changes here.
 
+    There are two reasons it can refuse and the sentence says which, because
+    they send a reader to different work. Until 2026-08-26 there was only one,
+    and a machine that could host the containment would have cleared the refusal
+    while nothing applied a single rule to it.
+
     It does not switch anything on or off by itself. The three refusals that
     keep command execution shut are unchanged and stay where they are; this is
     the containment answer they were waiting on, not a replacement for them.
@@ -677,15 +775,25 @@ def refuse_command_execution(
     report = answer if answer is not None else containment_answer_everywhere()
     if report.get("available_on_any_machine_in_play"):
         return None
-    return (
-        "a model's chosen commands must not run: the containment the substrate "
-        "manifest requires — a small isolated virtual machine run by "
+
+    settings = (
+        "a small isolated virtual machine run by "
         f"{REQUIRED_MICROVM_POLICY['runtime']}, with "
         f"network {REQUIRED_MICROVM_POLICY['network']} and a "
-        f"{REQUIRED_MICROVM_POLICY['rootfs']} root filesystem — is not "
-        "available on any machine in play. Running them somewhere weaker "
-        "instead is the substitution the specification forbids, so the answer "
-        "is to leave the capability shut"
+        f"{REQUIRED_MICROVM_POLICY['rootfs']} root filesystem"
+    )
+    if not report.get("could_be_hosted_on_any_machine_in_play"):
+        why = f"— {settings} — is not available on any machine in play"
+    else:
+        why = (
+            f"— {settings} — could be started on a machine in play, but "
+            "nothing applies its rules: " + NOTHING_APPLIES_THESE_RULES_YET
+        )
+    return (
+        "a model's chosen commands must not run: the containment the substrate "
+        f"manifest requires {why}. Running them somewhere weaker instead is the "
+        "substitution the specification forbids, so the answer is to leave the "
+        "capability shut"
     )
 
 
@@ -714,12 +822,12 @@ def describe_containment(report: Mapping[str, Any]) -> list[str]:
     lines.append("On the machines that cannot be read from here")
     lines.append("-" * 74)
     for finding in report["recorded_findings"]:
-        available = finding["containment_available"]
+        could_host = finding["could_host_the_containment"]
         verdict = (
-            "available"
-            if available is True
-            else "not available"
-            if available is False
+            "could host it"
+            if could_host is True
+            else "could not host it"
+            if could_host is False
             else "cannot be answered"
         )
         lines.append(f"  {finding['machine']}: {verdict}")
@@ -727,6 +835,21 @@ def describe_containment(report: Mapping[str, Any]) -> list[str]:
         lines.append(
             f"      established {finding['on_date']} from "
             f"{finding['established_by']}"
+        )
+    lines.append("")
+
+    lines.append("Whether anything applies the rules, on any machine")
+    lines.append("-" * 74)
+    if report["anything_applies_the_containment_rules"]:
+        lines.append(
+            "  Something now turns the containment rules into arguments for "
+            "starting the machine."
+        )
+    else:
+        lines.append(f"  Nothing does: {NOTHING_APPLIES_THESE_RULES_YET}.")
+        lines.append(
+            "  This is the same on every machine, because it is a fact about "
+            "this repository rather than about any machine."
         )
     lines.append("")
 

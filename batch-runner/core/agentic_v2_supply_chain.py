@@ -22,6 +22,8 @@ from packaging.licenses import (
 from core.agentic_v2_substrate import (
     AgenticV2SubstrateManifest,
     canonical_sha256,
+    containment_rules_that_disagree,
+    supply_chain_microvm_block,
     validate_capability_receipt,
 )
 from core.agentic_v2_license import (
@@ -877,6 +879,18 @@ def _validate_policy(value: Any) -> dict[str, Any]:
     cve = document.get("cve")
     signature = document.get("signature")
     microvm = document.get("microvm")
+    # Asked before the block below, and separately from it, because the block
+    # below can only say that this file's wording changed. It cannot say whether
+    # the wording still means the same thing as the containment rules in
+    # core/agentic_v2_substrate.py, which are the copy every other check reads.
+    # Until 2026-08-26 nothing compared the two, so a rule could be weakened in
+    # one and left standing in the other with both files still validating.
+    drifted = containment_rules_that_disagree(microvm)
+    if drifted:
+        raise ValueError(
+            "agentic v2 supply-chain policy containment drift: "
+            + "; ".join(drifted)
+        )
     if (
         document["schema_version"] != "1.0"
         or document["policy_id"] != "agentic-v2-phase1c-candidate-v1"
@@ -927,14 +941,11 @@ def _validate_policy(value: Any) -> dict[str, Any]:
                 "probe", "sbom", "policy",
             ],
         }
-        or document["microvm"] != {
-            "runtime": "firecracker",
-            "jailer_required": True,
-            "kvm_required": True,
-            "network": "none",
-            "read_only_rootfs": True,
-            "ephemeral_work_disk": True,
-        }
+        # Derived from the containment rules rather than written out here for a
+        # third time. The four rules both files state are checked against the
+        # substrate above; this pins the exact shape, so a rule added to one
+        # file and not the other is refused as well.
+        or document["microvm"] != supply_chain_microvm_block()
         or not isinstance(microvm, dict)
         or microvm.get("jailer_required") is not True
         or microvm.get("kvm_required") is not True

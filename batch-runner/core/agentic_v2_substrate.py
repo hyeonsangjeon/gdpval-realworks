@@ -135,20 +135,161 @@ def canonical_sha256(value: Any) -> str:
 # error that names the licence evaluator and never mentions this file. New
 # constants for this module therefore go here, below it, not up with the others.
 
-# The containment a substrate manifest must promise before it will validate.
+# ── The containment rules ─────────────────────────────────────────────────
 #
-# Named rather than written inline in the check below, so that anything asking
-# "what containment is actually required here?" reads the answer from the same
-# place the check enforces it. Two copies of these five settings could disagree
-# with each other; one cannot. core/agentic_v2_containment_readiness.py reads it
-# to report which of them a given machine can actually meet.
+# What a command is allowed to touch when Agentic Sandbox V2 eventually runs
+# one. A substrate manifest promising anything different fails to validate.
+#
+# Six things have to be stated for this to be a containment rather than a
+# gesture: where it may write, whether it can reach the network, how much
+# memory it gets, how long it may run, who it runs as, and what happens when it
+# exceeds any of them. Until 2026-08-26 only the first two were written down,
+# and the working directory said "there is a quota" without ever saying what
+# the quota was. A limit with no number is not a limit.
+#
+# Every value here is a *chosen* limit rather than a measured one, and for a
+# containment that is the right kind of number — the point is to decide what is
+# allowed, not to record what happened. Where a value is derived from something
+# else in this repository, a test fails if the two stop agreeing; where it was
+# simply picked, it says so.
+#
+# **One other file still states these rules, and it has to.**
+# security/agentic-v2-supply-chain-policy.json is a signed artefact, so it
+# physically carries its own copy of the values in its own published wording —
+# it says ``read_only_rootfs: true`` where this file says
+# ``rootfs: "read-only"``. There was a third copy, hand-written into
+# core/agentic_v2_supply_chain.py's validator, and nothing compared any two of
+# the three; a rule could be weakened in one and left standing in the others
+# with every check still passing. The validator's copy is gone as of
+# 2026-08-26 — it derives what it requires from
+# :func:`supply_chain_microvm_block` — and :func:`containment_rules_that_disagree`
+# compares the signed file against this one, so drift is refused by name.
+#
+# core/agentic_v2_containment_readiness.py reads this to report which of these
+# a given machine could actually meet.
+
+MICROVM_WORKDIR_QUOTA_MIB = 256
+"""How much the command may write, in mebibytes.
+
+Derived, not picked. core/agentic_v2_fixture_backend.py already lets a model
+hold 64 MiB of workspace and hand back 64 MiB of finished files, so a disk
+below 128 MiB would let the tool layer accept a write the disk cannot hold —
+the failure would surface as a disk error rather than as the ceiling the tool
+layer meant to apply. This is twice that, so the disk is not the first thing to
+fail. ``test_the_disk_is_not_smaller_than_the_tools_already_allow`` fails if
+either backend ceiling is raised past it.
+"""
+
+MICROVM_MEMORY_MIB = 4096
+"""How much memory the command gets, in mebibytes.
+
+Picked, not derived, and this is the only rule here with nothing behind it to
+derive from. 4 GiB is enough to open the spreadsheets and documents these tasks
+involve with a library like pandas loaded, and small enough that a runaway
+process stops instead of taking the host down with it.
+
+**A difference between run places worth knowing about.** None of the three run
+places in the comparison caps memory at all. Applying a cap here makes this
+column stricter than the others on an axis the comparison does not otherwise
+control, so a task that fails here for memory would not have failed elsewhere
+for that reason. Recorded rather than hidden, because a comparison that is
+uneven in a way nobody wrote down is worse than one that is uneven on purpose.
+"""
+
+MICROVM_WALL_CLOCK_SECONDS = 1200
+"""How long the command may run, in seconds.
+
+Derived from ``per_task_timeout_seconds`` in
+experiments/execution_envelope/agentic_stage_one_plan.yaml, which is the same
+figure the other run places are held to. A containment that cut a task off
+earlier than the other columns do would make this run place look worse for a
+reason that had nothing to do with the model.
+``test_the_clock_matches_the_one_the_other_run_places_are_held_to`` fails if the
+plan and this stop agreeing.
+"""
+
 REQUIRED_MICROVM_POLICY: dict[str, Any] = {
     "required": True,
     "runtime": "firecracker",
     "network": "none",
     "rootfs": "read-only",
     "workdir": "ephemeral-quota",
+    "workdir_quota_mib": MICROVM_WORKDIR_QUOTA_MIB,
+    "memory_mib": MICROVM_MEMORY_MIB,
+    "wall_clock_seconds": MICROVM_WALL_CLOCK_SECONDS,
+    # Not a separate decision: Firecracker's jailer is what drops privileges,
+    # and the signed policy already requires it. Written down anyway, because
+    # "which user does the command run as" is one of the six questions, and
+    # answering it by implication elsewhere is how it went unanswered here.
+    "user": "jailer-unprivileged",
+    # What happens on breach. Stop and say so — never carry on with the rule
+    # relaxed, and never fail quietly. Section 7 of the specification asks for
+    # exactly this: stage three must fail loudly when its containment is
+    # unavailable, and a rule that has been exceeded is a containment that is
+    # not holding.
+    "on_breach": "stop-and-report",
 }
+
+# The same rules as the signed supply-chain policy states them. The key is that
+# file's name for the rule; the value is what each side has to say for the two
+# to be stating the same thing. The signed policy writes most of its rules as
+# true/false, so the pair is not a comparison of like with like and cannot be
+# left implicit.
+_SUPPLY_CHAIN_RULE_NAMES: dict[str, tuple[str, Any, Any]] = {
+    "runtime": ("runtime", "firecracker", "firecracker"),
+    "network": ("network", "none", "none"),
+    "read_only_rootfs": ("rootfs", "read-only", True),
+    "ephemeral_work_disk": ("workdir", "ephemeral-quota", True),
+}
+
+# Two rules the signed policy states that have no counterpart above, because
+# they are facts about the host rather than settings applied at start-up.
+# core/agentic_v2_containment_readiness.py reads the machine for both.
+SUPPLY_CHAIN_HOST_FACTS: dict[str, Any] = {
+    "jailer_required": True,
+    "kvm_required": True,
+}
+
+
+def supply_chain_microvm_block() -> dict[str, Any]:
+    """Exactly what the signed policy's containment block has to say.
+
+    Derived from the rules above rather than written out a third time.
+    core/agentic_v2_supply_chain.py held its own hand-written copy of this until
+    2026-08-26, which made three places stating one set of rules and no check
+    that any two of them agreed.
+    """
+    block = dict(SUPPLY_CHAIN_HOST_FACTS)
+    for their_name, (our_name, _, theirs_must_be) in _SUPPLY_CHAIN_RULE_NAMES.items():
+        block[their_name] = theirs_must_be
+    return block
+
+
+def containment_rules_that_disagree(supply_chain_microvm: Any) -> list[str]:
+    """Where the signed policy and the rules above stop saying the same thing.
+
+    Two written-down copies of one rule is two chances to weaken it and one
+    chance to notice. This is the noticing. Returns a description per rule that
+    has drifted, and an empty list when they agree.
+    """
+    if not isinstance(supply_chain_microvm, Mapping):
+        return ["the signed policy's containment block is not a set of rules"]
+
+    drifted: list[str] = []
+    for their_name, (our_name, ours_must_be, theirs_must_be) in sorted(
+        _SUPPLY_CHAIN_RULE_NAMES.items()
+    ):
+        ours = REQUIRED_MICROVM_POLICY.get(our_name)
+        theirs = supply_chain_microvm.get(their_name)
+        if ours == ours_must_be and theirs == theirs_must_be:
+            continue
+        drifted.append(
+            f"containment rule {our_name!r} disagrees between the two places "
+            f"it is written down: core.agentic_v2_substrate says {ours!r} and "
+            f"security/agentic-v2-supply-chain-policy.json says "
+            f"{their_name}={theirs!r}"
+        )
+    return drifted
 
 
 @dataclass(frozen=True)
