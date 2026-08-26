@@ -1,0 +1,194 @@
+# Agentic Sandbox V2, stage one: the settings and what they could cost
+# ====================================================================
+#
+# Stage one is the first step in
+# tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md: let the model
+# choose its own next action from the safe tools, with the command-running tool
+# exec_run still shut. It answers one question — does asking the model again
+# after each tool result help at all? — and nothing else.
+#
+# NOTHING HERE IS APPROVED AND NOTHING HERE RUNS.
+#
+# The amount that may be spent is deliberately left empty below. The free check
+# at batch-runner/scripts/check_agentic_stage_one_ceiling.py reads this file,
+# works out what each candidate setting could cost, and refuses to let anything
+# start while that amount is empty. Filling it in is a decision for the owner
+# of the repository, and this file exists to put the numbers in front of that
+# decision rather than to make it.
+#
+# Beyond the money, two things still block stage one even if the money is
+# approved, and neither is removed here:
+#
+#   - the model conversation itself does not exist. core/agentic_v2_runner.py
+#     replays a list of calls written down in advance and holds no model client
+#     at all.
+#   - two separate guards refuse the mode: the check in
+#     step2_run_inference._require_runnable_execution_mode, and the refusal in
+#     core/executor.py to build a runner unless the caller states the run makes
+#     no paid model calls. Both stay exactly as they are.
+#
+# Read this file with:
+#     cd batch-runner
+#     python scripts/check_agentic_stage_one_ceiling.py
+#
+# Written: 2026-08-26.
+
+plan_version: "agentic-stage-one-v1"
+
+# ── The model, which must be the same one the comparison uses ─────────────
+#
+# Stage one is not itself a scored comparison against the other run places, but
+# its result is only worth anything if it can later be set beside them. That
+# needs the same deployment, in the same Azure account, so the same rules apply
+# here as in advance_check_plan.yaml.
+model:
+  deployment: "gpt-5.4"
+  resolved_model: "gpt-5.4"
+
+azure_connection:
+  account: "hjeon-fdpo-foundry-eus2"
+  project: "gdpval-realworks"
+  route_profile: "project-ci"
+
+# ── The tasks ─────────────────────────────────────────────────────────────
+#
+# The same five tasks the three-place comparison fixed, chosen by the rule in
+# core/execution_envelope_tasks.py from a catalogue that holds no score. Using
+# the same five means a stage-one result can be set beside the other three run
+# places on the same work, rather than on work chosen afterwards.
+task_ids:
+  - "02aa1805-c658-4069-8a6a-02dec146063a"
+  - "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
+  - "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+  - "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+  - "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+
+# ── The settings whose price is being asked about ─────────────────────────
+#
+# Two settings decide almost all of the cost, and they are the two the owner
+# has to choose between. They are listed here as candidates rather than fixed,
+# because the point of this file is to price the choice.
+#
+#   tool_calls_per_attempt — how many times the model may be asked again inside
+#     one attempt. The dispatcher in core/agentic_v2_tools.py refuses anything
+#     past its own ceiling, and the free check reads that ceiling from the code
+#     rather than from a number written here, so a candidate above it is left
+#     out instead of being priced.
+#
+#     This is the setting that matters most, and not in the way people expect.
+#     Every turn re-reads the whole conversation before it, so what was written
+#     early is charged again on every later turn. Doubling this number roughly
+#     quadruples what the earlier turns cost to re-read.
+#
+#   max_output_tokens_per_turn — the most the model may write in one turn.
+#
+#     The three-place comparison uses 32768, and there that is nearly free
+#     because one answer is written per task. Here an answer may be written on
+#     every turn, so the same number is multiplied by the number of turns. A
+#     turn that only picks a tool needs very little room, so the smaller
+#     candidates are not a compromise; they match what a turn actually does.
+candidate_settings:
+  tool_calls_per_attempt: [4, 6, 8, 12, 16, 32]
+  max_output_tokens_per_turn: [2048, 4096, 8192, 32768]
+
+# The settings that are fixed whatever is chosen above.
+fixed_settings:
+  # One retry, and only after a network failure, a server error, or a timeout.
+  # The model's own judgement never triggers one.
+  retry_max_attempts: 1
+  retry_reasons_allowed:
+    - "infrastructure_error"
+
+  # Off. Stage one asks whether choosing tools helps. Letting the model take a
+  # second look at its finished answer is a different question, and running
+  # both at once would make it impossible to say which one produced the
+  # difference.
+  self_review_enabled: false
+  self_review_max_attempts: 0
+
+  per_task_timeout_seconds: 1200
+
+  # Never allowed. If a call fails, the run stops rather than quietly asking a
+  # different model or a different deployment.
+  automatic_model_switch_allowed: false
+
+  # exec_run stays shut. Stage one proves the loop works — the model reads a
+  # result and picks a next action — without the capability that carries the
+  # risk. Opening it is stage three and needs its own separate approval.
+  exec_run_open: false
+
+# ── The command-running tool stays shut ───────────────────────────────────
+#
+# Listed separately so it cannot be lost among the settings above. All three
+# blocks described in the specification stay exactly as they are through stage
+# one, and the free check confirms each of them by running it, not by reading
+# text:
+#
+#   1. step2_run_inference._require_runnable_execution_mode refuses the mode.
+#   2. core/executor.py refuses to build a runner for a paid run.
+#   3. exec_run answers that the capability is unavailable for any ordinary
+#      command.
+#
+# If any of the three has opened, the free check refuses regardless of money.
+safety_blocks_must_stay_closed: true
+
+# ── What may be spent ─────────────────────────────────────────────────────
+cost:
+  # Empty on purpose. Nothing has been approved for stage one.
+  #
+  # The 32.23 United States dollars approved on 2026-08-25 was for the
+  # three-place comparison of five tasks and nothing else. It does not extend
+  # here, and stage one must not be started under it.
+  #
+  # To approve stage one, choose one row from the table the free check prints,
+  # write the two settings into chosen_settings below, and write the amount
+  # from that row here.
+  approved_maximum_usd: null
+
+  # Empty until a row is chosen. The free check refuses while either is empty,
+  # and refuses if the pair is not one of the candidates above.
+  chosen_settings:
+    tool_calls_per_attempt: null
+    max_output_tokens_per_turn: null
+
+  # The written guesses the figures rest on. These are the same ones the
+  # three-place comparison uses, taken from
+  # experiments/execution_envelope/advance_check_plan.yaml so the two cannot
+  # drift apart. The free check reads them from that file rather than from a
+  # second copy here.
+  #
+  # One of those guesses is borrowed rather than measured: the length of the
+  # standing instructions. Stage one will have its own wording, which does not
+  # exist yet, so the three-place comparison's 1068 characters stands in for it.
+  # That wording is sent on every turn, so if stage one's instructions turn out
+  # much longer, this must be measured again before the figures are trusted.
+  assumptions_come_from: "experiments/execution_envelope/advance_check_plan.yaml"
+
+  # One thing is NOT taken from that file: how much a single tool result may
+  # add to the conversation. That number is read from the dispatcher's own code
+  # in core/agentic_v2_tools.py, because the dispatcher is what will actually
+  # enforce it when something runs. A number written down here could disagree
+  # with the code; a number read from the code cannot.
+  tool_result_size_comes_from: "core/agentic_v2_tools.py AgenticV2ToolDispatcher"
+
+# ── What happens after stage one ──────────────────────────────────────────
+#
+# Written down now so that a disappointing result cannot lead to the rules
+# being loosened afterwards.
+after_stage_one:
+  success_criteria: >-
+    All five tasks finish without an error, and a test shows the model was
+    asked again with a tool result in front of it and changed what it did
+    because of it. Whether the answers scored well is a separate question and
+    is not part of finishing stage one.
+  stop_conditions: >-
+    Stop at once if the model name or deployment name reported back differs
+    from the one fixed above; if a run switches model or deployment on its own;
+    if any of the three safety blocks shows signs of having been opened; if a
+    paid call is about to happen without an approved amount on record; or if
+    real spending passes the amount approved above.
+  next_stage: >-
+    Stage two writes down what a command may touch and proves each limit with a
+    test that tries to exceed it. It is test-only and switches nothing on.
+    Opening exec_run is stage three and needs its own separate written
+    approval, presented with those test results.

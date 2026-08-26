@@ -118,6 +118,15 @@ class CostAssumptions:
     number, so its answer length is counted once per attempt. A place that
     sends a fresh request per turn is counted once per turn."""
 
+    max_tool_result_tokens_per_turn: Mapping[str, int]
+    """For each run place, the most one tool result may add to the conversation.
+
+    This only matters where the model is asked more than once inside an
+    attempt. Each turn re-reads every tool result that came before it, so this
+    number is charged again on every later turn of the same attempt. A place
+    that asks the model once per attempt carries nothing forward and may state
+    0."""
+
     safety_multiplier: Decimal
     """A final multiplier applied to the whole ceiling, to leave room for
     counting that turns out to be optimistic."""
@@ -135,6 +144,7 @@ class CostAssumptions:
             "instruction_character_count",
             "tool_loop_max_model_turns",
             "output_tokens_capped_per_attempt",
+            "max_tool_result_tokens_per_turn",
             "safety_multiplier",
             "grading_required",
             "grading_model",
@@ -166,6 +176,18 @@ class CostAssumptions:
                     f"{place} allows {value} model turns inside one attempt; "
                     "every attempt asks the model at least once"
                 )
+        tool_result_tokens = {
+            str(key): int(value)
+            for key, value in dict(
+                raw["max_tool_result_tokens_per_turn"]
+            ).items()
+        }
+        for place, value in tool_result_tokens.items():
+            if value < 0:
+                raise ValueError(
+                    f"{place} states {value} tokens per tool result; a tool "
+                    "result cannot be shorter than nothing"
+                )
         return cls(
             characters_per_token=characters_per_token,
             instruction_character_count=int(raw["instruction_character_count"]),
@@ -176,6 +198,7 @@ class CostAssumptions:
                     raw["output_tokens_capped_per_attempt"]
                 ).items()
             },
+            max_tool_result_tokens_per_turn=tool_result_tokens,
             safety_multiplier=safety_multiplier,
             grading_required=bool(raw["grading_required"]),
             grading_model=str(raw["grading_model"]),
@@ -193,15 +216,23 @@ class CostAssumptions:
 class AttemptCounts:
     """How many times one task could be billed, split by what is billed.
 
-    ``model_calls`` is how many times the model is asked, which is what the
-    input side is billed for. ``answer_lengths`` is how many times a full
-    answer of the maximum permitted length could be produced, which is what the
-    output side is billed for. The two differ wherever one request may loop
-    through several tool turns under a single cap on answer length.
+    ``model_calls`` is how many times the model is asked in total.
+    ``answer_lengths`` is how many times a full answer of the maximum permitted
+    length could be produced, which is what the output side is billed for. The
+    two differ wherever one request may loop through several tool turns under a
+    single cap on answer length.
+
+    The input side needs a third and fourth number, because a request that
+    loops does not send the same thing every time. ``looping_attempts`` counts
+    the attempts that run the whole tool loop, and ``single_turn_calls`` counts
+    the calls that ask the model exactly once and carry nothing forward — today
+    that is the call each self-review makes to look at a finished answer.
     """
 
     model_calls: int
     answer_lengths: int
+    looping_attempts: int
+    single_turn_calls: int
 
 
 def max_attempt_counts(
@@ -242,7 +273,67 @@ def max_attempt_counts(
     # produce a replacement, and the replacement may loop like any attempt.
     model_calls += reviews * (1 + tool_loop_max_model_turns)
     answer_lengths += reviews * (1 + answers_per_attempt)
-    return AttemptCounts(model_calls=model_calls, answer_lengths=answer_lengths)
+    return AttemptCounts(
+        model_calls=model_calls,
+        answer_lengths=answer_lengths,
+        looping_attempts=attempts + reviews,
+        single_turn_calls=reviews,
+    )
+
+
+def max_input_tokens_per_attempt(
+    *,
+    base_input_tokens: int,
+    tool_loop_max_model_turns: int,
+    max_output_tokens: int,
+    output_tokens_capped_per_attempt: bool,
+    max_tool_result_tokens_per_turn: int,
+) -> int:
+    """The most one attempt could send, counting the conversation as it grows.
+
+    A place that asks the model once per attempt sends the same thing every
+    time, so its input is just what the task and the standing instructions
+    weigh. A place that asks the model again after each tool result does not:
+    every later turn re-reads the whole conversation so far, so what was
+    written on turn one is paid for again on turns two, three, and onwards.
+
+    Multiplying one turn's input by the number of turns therefore undercounts
+    any loop. The count below adds, for each turn, everything that could
+    already be in front of the model when that turn starts:
+
+    * the task and the standing instructions, once per turn;
+    * everything the model has written so far. Where one cap covers the whole
+      attempt, the largest that can be is the whole cap, and the worst case for
+      the bill is that it was all written early, so every later turn re-reads
+      all of it. Where the cap applies to each turn separately, turn *k* can
+      have at most *k* full-length answers behind it;
+    * every tool result so far, at the largest a single result may be.
+
+    The last two both grow with the turn number, which is why a loop's input
+    rises faster than the number of turns. Doubling the turns roughly
+    quadruples what the tool results cost.
+
+    At one turn per attempt every added term is zero, so this returns exactly
+    the base input and nothing about the two single-turn run places changes.
+    """
+    if tool_loop_max_model_turns < 1:
+        raise ValueError("every attempt asks the model at least once")
+    if max_tool_result_tokens_per_turn < 0:
+        raise ValueError("a tool result cannot be shorter than nothing")
+    turns = tool_loop_max_model_turns
+    output = max(max_output_tokens, 0)
+    # 0 + 1 + ... + (turns - 1): how many earlier turns each turn re-reads,
+    # summed over the whole attempt.
+    earlier_turn_pairs = turns * (turns - 1) // 2
+    if output_tokens_capped_per_attempt:
+        # One cap covers the attempt. Worst case for the bill: it is spent on
+        # the first turn, so each of the remaining turns re-reads all of it.
+        written_so_far = (turns - 1) * output
+    else:
+        # A fresh cap per turn, so turn k can have k full answers behind it.
+        written_so_far = earlier_turn_pairs * output
+    tool_results_so_far = earlier_turn_pairs * max_tool_result_tokens_per_turn
+    return turns * base_input_tokens + written_so_far + tool_results_so_far
 
 
 def max_input_tokens_per_call(
@@ -272,6 +363,7 @@ class TaskCostCeiling:
     model_calls: int
     answer_lengths: int
     input_tokens_per_call: int
+    input_tokens_per_attempt: int
     output_tokens_per_call: int
     total_input_tokens: int
     total_output_tokens: int
@@ -282,7 +374,10 @@ class TaskCostCeiling:
             "task_id": self.task_id,
             "most_model_calls": self.model_calls,
             "most_full_length_answers": self.answer_lengths,
-            "most_input_tokens_per_call": self.input_tokens_per_call,
+            "most_input_tokens_in_the_first_turn": self.input_tokens_per_call,
+            "most_input_tokens_across_one_attempt": (
+                self.input_tokens_per_attempt
+            ),
             "most_output_tokens_per_answer": self.output_tokens_per_call,
             "most_input_tokens_in_total": self.total_input_tokens,
             "most_output_tokens_in_total": self.total_output_tokens,
@@ -395,6 +490,15 @@ def estimate_cost_ceiling(
         capped = bool(
             assumptions.output_tokens_capped_per_attempt.get(environment, False)
         )
+        tool_result_tokens = assumptions.max_tool_result_tokens_per_turn.get(
+            environment
+        )
+        if tool_result_tokens is None:
+            raise ValueError(
+                f"{environment} has no written limit on how much one tool "
+                "result may add to the conversation, so the input a looping "
+                "attempt re-reads cannot be counted"
+            )
         counts = max_attempt_counts(
             conditions,
             tool_loop_max_model_turns=turns,
@@ -416,7 +520,20 @@ def estimate_cost_ceiling(
                 )
             input_tokens = max_input_tokens_per_call(task, assumptions)
             output_tokens = max(conditions.max_output_tokens, 0)
-            total_input = input_tokens * counts.model_calls
+            attempt_input = max_input_tokens_per_attempt(
+                base_input_tokens=input_tokens,
+                tool_loop_max_model_turns=turns,
+                max_output_tokens=output_tokens,
+                output_tokens_capped_per_attempt=capped,
+                max_tool_result_tokens_per_turn=tool_result_tokens,
+            )
+            # Attempts that run the whole loop are charged the growing
+            # conversation. The calls that ask the model once and carry nothing
+            # forward are charged the base input on its own.
+            total_input = (
+                attempt_input * counts.looping_attempts
+                + input_tokens * counts.single_turn_calls
+            )
             total_output = output_tokens * counts.answer_lengths
             cost = (
                 price.cost_of(
@@ -431,6 +548,7 @@ def estimate_cost_ceiling(
                     model_calls=counts.model_calls,
                     answer_lengths=counts.answer_lengths,
                     input_tokens_per_call=input_tokens,
+                    input_tokens_per_attempt=attempt_input,
                     output_tokens_per_call=output_tokens,
                     total_input_tokens=total_input,
                     total_output_tokens=total_output,

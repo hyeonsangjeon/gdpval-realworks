@@ -47,6 +47,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/summary_wow_drift.py
 !batch-runner/scripts/check_execution_environment_readiness.py
 !batch-runner/scripts/check_execution_envelope_advance_check.py
+!batch-runner/scripts/check_agentic_stage_one_ceiling.py
 !batch-runner/scripts/build_gdpval_task_catalog.py
 
 

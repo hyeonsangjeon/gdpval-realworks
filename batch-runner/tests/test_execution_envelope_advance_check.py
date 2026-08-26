@@ -391,6 +391,7 @@ def test_a_reference_file_is_counted_at_the_cap_the_reader_applies(catalog):
             "instruction_character_count": 0,
             "tool_loop_max_model_turns": {"host_python_process": 1},
             "output_tokens_capped_per_attempt": {"host_python_process": False},
+            "max_tool_result_tokens_per_turn": {"host_python_process": 0},
             "safety_multiplier": 1,
             "grading_required": False,
             "grading_model": "gpt-5.4",
@@ -416,6 +417,7 @@ def test_a_model_with_no_published_price_is_not_treated_as_free(catalog):
             "instruction_character_count": 0,
             "tool_loop_max_model_turns": {"host_python_process": 1},
             "output_tokens_capped_per_attempt": {"host_python_process": False},
+            "max_tool_result_tokens_per_turn": {"host_python_process": 0},
             "safety_multiplier": 1,
             "grading_required": False,
             "grading_model": "gpt-5.4",
@@ -854,9 +856,10 @@ def test_the_scripts_are_in_the_repository(script):
 def test_the_check_refuses_today_and_says_why():
     """Run the tool exactly as a person would, and require a refusal.
 
-    Today the money is approved but the Azure run place is not reachable from
-    an ordinary checkout, so the refusal must name the Azure settings rather
-    than the money.
+    Two separate things are wrong today and the report must name both. The
+    Azure run place is not reachable from an ordinary checkout, and the amount
+    approved on 2026-08-25 no longer covers the worked-out ceiling, because it
+    was agreed while a looping request was undercounted.
     """
     finished = subprocess.run(
         [sys.executable, str(CHECK_SCRIPT)],
@@ -883,6 +886,7 @@ def test_the_check_refuses_today_and_says_why():
     assert "no model was called" in finished.stdout
     assert "AZURE_AI_ROUTE_PROFILE is not set" in finished.stdout
     assert "FOUNDRY_PROJECT_ENDPOINT is not set" in finished.stdout
+    assert "is above the" in finished.stdout
 
 
 # ── The Azure run place must reach the deployment that was pinned ─────────

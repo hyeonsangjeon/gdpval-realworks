@@ -1,6 +1,9 @@
 # Agentic Sandbox V2: a safe path to running commands and letting the model decide
 
 - Written: 2026-08-25
+- Updated: 2026-08-26 — step one of section 8 is done. The cost of a stage-one
+  run has been worked out and is in section 7a. Nothing was spent doing it and
+  nothing was switched on.
 - Status: **specification only. Nothing here is built, and nothing in it may be
   built without a separate, explicit approval to open command execution.**
 - Related GitHub Project: hyeonsangjeon/projects/5 — card
@@ -139,6 +142,105 @@ back to the model; repeat until the model finishes or a ceiling is hit.
 - The existing free check must keep reporting this run place as
   "structure checks only" until stage three is genuinely approved and complete.
 
+## 7a. What stage one would cost, worked out on 2026-08-26
+
+This is step one of section 8, done. It cost nothing: no model was called, no
+command was run, and no account was signed in to.
+
+### Why a loop is not priced the way a single request is
+
+The three run places already in the comparison ask the model once per task.
+Their cost is close to fixed: the task is however long it is, the answer may be
+up to the length the settings permit, and that is the bill.
+
+A loop is different in three ways at once, and only the first is obvious.
+
+1. The model is asked once per tool call rather than once per task.
+2. Every one of those turns may write a full-length answer, so the writing is
+   charged per turn instead of per task.
+3. **Every turn re-reads the whole conversation before it.** What the model
+   wrote on turn one, and every tool result it was shown, is sent again on turn
+   two, and again on turn three, and so on.
+
+The third is the one that catches people out, because it means the bill does not
+rise in step with the number of turns. It rises roughly with the square of it.
+Doubling how many times the model may be asked roughly quadruples what the
+earlier turns cost to re-read.
+
+That property was worth finding for a second reason: the same mistake was
+already in the shared arithmetic, where it was undercounting the Azure code
+interpreter — which also loops. Correcting it raised the three-place
+comparison's ceiling from 32.23 to 43.77 United States dollars, above the amount
+that had been approved for it. That is recorded in
+`batch-runner/experiments/execution_envelope/advance_check_plan.yaml`.
+
+### The numbers
+
+Worked out by `batch-runner/core/agentic_v2_stage_one_budget.py` over the same
+five tasks the three-place comparison uses. Print the table with:
+
+```
+cd batch-runner
+python scripts/check_agentic_stage_one_ceiling.py
+```
+
+Two settings decide almost the whole bill. Running costs, in United States
+dollars, at most:
+
+| tool calls per attempt | most a turn may write | most it could cost to run |
+|---|---|---|
+| 4 | 2,048 | 3.24 |
+| 4 | 32,768 | 13.80 |
+| 8 | 2,048 | 12.45 |
+| 8 | 32,768 | 41.25 |
+| 16 | 2,048 | 48.79 |
+| 32 | 2,048 | 193.15 |
+| 32 | 32,768 | 492.67 |
+
+Marking the answers adds 5.85 whichever row is chosen, so a total is the running
+figure plus 5.85.
+
+### What the table says
+
+**The dispatcher's own defaults are the most expensive row on it.** The
+dispatcher allows 32 tool calls, and the three-place comparison lets an answer
+run to 32,768 tokens. Someone starting from both defaults, reasonably assuming
+they were sensible starting points, would be committing to at most 492.67
+dollars for five tasks — over fifty times the cheapest row that could still
+answer the question.
+
+**The answer-length cap is the cheaper of the two levers, and costs nothing to
+turn down.** In the three-place comparison a generous cap is nearly free,
+because one answer is written per task; the note there records that lowering it
+truncated the model's code. Here it is multiplied by the number of turns, and a
+turn that only picks a tool needs very little room. It is not a compromise to
+lower it; it matches what a turn actually does.
+
+**Marking dominates at the small end.** At four tool calls, marking is 5.85
+against 3.24 for running. Anyone trying to make stage one cheaper by shortening
+the loop further will find there is little left to save.
+
+### The figure is enforced, not just written down
+
+A worked-out ceiling that nothing enforces is a hope. `StageOneBudget` in the
+same module counts what a run has spent and refuses the next call once any of
+the three ceilings is reached, and it is built from the same worked-out figure
+rather than from a number typed in beside it, so the two cannot drift apart.
+Spending past a ceiling raises rather than being reported quietly, because a
+loop that has already overspent has lost track of what it is doing.
+
+### What is still missing before stage one could run
+
+The money is the smaller of the two blockers, and saying so plainly matters more
+than the numbers above.
+
+`core/agentic_v2_runner.py` still replays a list of calls written down in
+advance and holds no model client at all. The thing stage one is *about* — the
+model being asked again with a tool result in front of it — does not exist. The
+free check reports this first, before it reports anything about money, and it
+establishes it by looking at what the runner accepts rather than by reading a
+comment, so the answer will change by itself when the conversation is built.
+
 ## 8. Order the work would be done in
 
 1. Work out and get approval for the cost ceiling of a small stage-one run.
@@ -171,13 +273,26 @@ back to the model; repeat until the model finishes or a ceiling is hit.
 
 ## 11. Known blockers and the next decision
 
-- **Blocked on approval to call a model in a loop.** Stage one costs money and
-  its ceiling has not been worked out or approved.
+- **Blocked on the model conversation, which does not exist.** This is the
+  larger blocker and it is free to remove: `core/agentic_v2_runner.py` replays a
+  written-down list and holds no model client. Until that changes, no amount of
+  approved money lets stage one start.
+- **Blocked on approval to call a model in a loop.** The ceiling has now been
+  worked out (section 7a) and nothing has been approved against it.
+  `experiments/execution_envelope/agentic_stage_one_plan.yaml` leaves the amount
+  empty on purpose, and the free check refuses while it is empty. The 32.23
+  United States dollars approved on 2026-08-25 was for the three-place
+  comparison and does not extend here.
 - **Blocked on a decision about containment.** The substrate manifest requires a
   small isolated virtual machine. Whether that is available on the machines this
   would run on has not been established, and stage three cannot be designed
-  concretely until it is.
+  concretely until it is. This blocks stage three only, not stage one.
 
-The next decision is whether stage one is worth its cost, which cannot be
-answered until that cost is worked out. That is the first piece of work, and it
-is free.
+The next decision is now a specific one with a price beside it: **which row of
+the table in section 7a is stage one worth running at?** The cheapest row that
+could still answer the question is four tool calls with a 2,048-token cap per
+turn, at most 3.24 to run and 5.85 to mark, so 9.09 in total. The dispatcher's
+own defaults are 492.67 to run.
+
+Choosing a row does not start anything. The model conversation still has to be
+built first, and that is the next piece of work either way.
