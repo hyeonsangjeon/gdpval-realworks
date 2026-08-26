@@ -45,11 +45,15 @@ isolated virtual machine and refuses to validate without that policy.
    test case that copies a file and converts it to capital letters. Nothing real
    can be run.
 
-2. **The model is never asked anything.** `core/agentic_v2_runner.py` replays a
-   list of calls written down in advance. It has a `scripted_calls` input and no
-   model client at all. The state machine can be exercised, but no model ever
-   sees a result and chooses what to do next, which is the entire point of this
-   run place.
+2. **No real model can be asked anything.** The loop now exists:
+   `core/agentic_v2_conversation.py` asks a model, runs the tool it asked for,
+   shows it the result, and asks again, under five ceilings checked before each
+   call. It is proven against stand-in models that spend nothing. What it
+   cannot do is reach a real model: `real_model_voice()` refuses, and the loop
+   refuses any model that declares itself paid before asking it anything.
+   `core/agentic_v2_runner.py` is untouched and still replays a list of calls
+   written down in advance, with no model client at all — the loop was added
+   beside it rather than inside it, so nothing that runs today changed.
 
 3. **Two separate guards refuse the mode outright.**
    `step2_run_inference._require_runnable_execution_mode` rejects it, and
@@ -92,6 +96,9 @@ while leaving `exec_run` shut. The model can look at the workspace, resolve
 packages, and finish, but it cannot run a command. This proves the loop works —
 the model reads a result and picks a next action — without the risky capability.
 It is enough to answer "does asking the model repeatedly help at all?"
+*The loop is built (`core/agentic_v2_conversation.py`) and proven against
+stand-ins. Asking a real model needs an approved amount and the removal of a
+deliberate refusal; neither has happened.*
 
 **Stage two — write down the containment, and prove it separately.**
 Before any command runs, state what the command may touch: which directory,
@@ -118,7 +125,8 @@ the loop is worth having.
 
 | File | Role |
 |---|---|
-| `batch-runner/core/agentic_v2_runner.py` | Stage one: gains a real conversation with the model in place of the replayed list. |
+| `batch-runner/core/agentic_v2_conversation.py` | Stage one, **built**: the loop that asks the model, runs the tool it chose, shows it the result, and asks again. Reaches no real model. |
+| `batch-runner/core/agentic_v2_runner.py` | Unchanged. Still replays the written-down list; the loop was added beside it, not inside it. |
 | `batch-runner/core/agentic_v2_tools.py` | Unchanged surface; the ceilings it already applies become the loop's limits. |
 | `batch-runner/core/agentic_v2_fixture_backend.py` | Stays shut through stages one and two. |
 | `batch-runner/core/agentic_v2_substrate.py` | Stage two: the containment rules are stated and checked here. |
@@ -231,21 +239,32 @@ loop that has already overspent has lost track of what it is doing.
 
 ### What is still missing before stage one could run
 
-The money is the smaller of the two blockers, and saying so plainly matters more
-than the numbers above.
+The money is now the larger of the two blockers, which is a change from where
+this section started.
 
-`core/agentic_v2_runner.py` still replays a list of calls written down in
-advance and holds no model client at all. The thing stage one is *about* — the
-model being asked again with a tool result in front of it — does not exist. The
-free check reports this first, before it reports anything about money, and it
-establishes it by looking at what the runner accepts rather than by reading a
-comment, so the answer will change by itself when the conversation is built.
+The loop itself is built. `core/agentic_v2_conversation.py` asks a model, runs
+the tool it asked for, shows it what came back, and asks again, with every
+ceiling checked before the next call and every way of stopping named. What is
+missing is narrower: nothing here can reach a *real* model.
+`real_model_voice()` refuses, and the loop refuses any model that declares
+itself paid before asking it anything. The free check still reports this first,
+before it reports anything about money, and it now establishes it by *running*
+both refusals rather than by reading what the runner accepts — so the answer
+will change by itself the day somebody wires a real client in.
+
+`core/agentic_v2_runner.py` is unchanged and still replays a written-down list.
+That was left alone on purpose: the loop is a separate module, so nothing that
+runs today changed behaviour, and the existing runner's tests still hold.
 
 ## 8. Order the work would be done in
 
-1. Work out and get approval for the cost ceiling of a small stage-one run.
-2. Build the model conversation with `exec_run` still shut.
-3. Measure whether choosing tools helps, on the same five tasks.
+1. ~~Work out and get approval for the cost ceiling of a small stage-one run.~~
+   Worked out (section 7a). **Approval still outstanding.**
+2. ~~Build the model conversation with `exec_run` still shut.~~ Built:
+   `core/agentic_v2_conversation.py`, proven against stand-ins that spend
+   nothing. `exec_run` is still shut, and the loop cannot reach a real model.
+3. Measure whether choosing tools helps, on the same five tasks. **Needs an
+   approved amount and a way to reach a real model.**
 4. Write the containment rules and the tests that try to break them.
 5. Seek approval for command execution, presenting those test results.
 6. Only then, open `exec_run`.
@@ -256,29 +275,38 @@ comment, so the answer will change by itself when the conversation is built.
 
 - Stage one: a test that gives the model a task whose first attempt must fail,
   and requires that the model be asked again with the failure in front of it.
+  **Done:**
+  `tests/test_agentic_v2_conversation.py::test_the_model_is_asked_again_with_the_failure_in_front_of_it`.
 - Stage one: a test that the run stops at the dispatcher's call ceiling rather
-  than continuing indefinitely.
+  than continuing indefinitely. **Done:**
+  `tests/test_agentic_v2_conversation.py::test_the_run_stops_at_the_dispatchers_own_call_ceiling`.
 - Stage two: one test per containment rule, each attempting to exceed it and
   requiring failure.
 - All stages: the existing test that opens all three guards and requires them
-  shut must keep passing until the stage that deliberately changes one.
+  shut must keep passing until the stage that deliberately changes one. **Still
+  passing**, and the loop's own test suite runs all three blocks as well.
 
 ## 10. Done when
 
-- [ ] The model chooses its own next action, and a test proves it reacts to a
-      failure it was shown.
+- [x] The model chooses its own next action, and a test proves it reacts to a
+      failure it was shown. (Against a stand-in model. A real one is still out
+      of reach and needs an approved amount.)
 - [ ] Every containment rule has a test that tries to exceed it and fails.
 - [ ] Command execution is opened only after a separate written approval.
 - [ ] The free check reports this run place as able to run only when it is.
 
 ## 11. Known blockers and the next decision
 
-- **Blocked on the model conversation, which does not exist.** This is the
-  larger blocker and it is free to remove: `core/agentic_v2_runner.py` replays a
-  written-down list and holds no model client. Until that changes, no amount of
-  approved money lets stage one start.
-- **Blocked on approval to call a model in a loop.** The ceiling has now been
-  worked out (section 7a) and nothing has been approved against it.
+- **Blocked on there being no way to reach a real model.** This is now the
+  smaller blocker. The loop exists at
+  `core/agentic_v2_conversation.run_model_conversation` and is proven against
+  stand-ins that spend nothing, but `real_model_voice` refuses and the loop
+  refuses any model that would be charged for. That refusal is deliberate: it
+  means a paid run cannot start until somebody removes it in a change a
+  reviewer will see, alongside approving the amount.
+- **Blocked on approval to call a model in a loop.** This is now the larger
+  blocker. The ceiling has been worked out (section 7a) and nothing has been
+  approved against it.
   `experiments/execution_envelope/agentic_stage_one_plan.yaml` leaves the amount
   empty on purpose, and the free check refuses while it is empty. The 32.23
   United States dollars approved on 2026-08-25 was for the three-place
@@ -294,5 +322,6 @@ could still answer the question is four tool calls with a 2,048-token cap per
 turn, at most 3.24 to run and 5.85 to mark, so 9.09 in total. The dispatcher's
 own defaults are 492.67 to run.
 
-Choosing a row does not start anything. The model conversation still has to be
-built first, and that is the next piece of work either way.
+Choosing a row does not start anything, and neither figure above is an approved
+amount. Approving one, and removing the refusal that keeps a real model out of
+the loop, are two separate steps and both are the owner's to take.

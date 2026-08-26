@@ -48,9 +48,43 @@ entries land under a fresh dated heading the day they merge to `main`.
   reporting quietly if one is passed, so the worked-out amount is a limit and
   not a hope. Nothing is approved, nothing is switched on, and all three safety
   blocks stay shut: `scripts/check_agentic_stage_one_ceiling.py` prints the
-  table and refuses, reporting first that the model conversation stage one is
-  about does not exist yet — established by looking at what the runner accepts,
-  so the answer changes by itself when it is built. 52 new tests.
+  table and refuses, reporting first that nothing here can reach a real model —
+  established by running the refusing seam and the loop's own refusal, so the
+  answer changes by itself when that stops being true. 52 new tests.
+
+### Added
+- **The repeated conversation Agentic Sandbox V2 stage one is about now
+  exists.** Step two of
+  `tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md`. Until now the
+  runner replayed a list of tool calls written down in advance; a run therefore
+  proved that the tools worked, not that a model could choose them.
+  `batch-runner/core/agentic_v2_conversation.py` adds the loop itself: ask,
+  run the tool it asked for, show it what came back, ask again — with every
+  state and every way of stopping named rather than implied. It reaches no real
+  model and cannot be made to: `real_model_voice` refuses, and the loop refuses
+  any model that says it would be charged for **before** asking it anything, so
+  an unapproved paid run cannot start by accident. A test reads the module's
+  own imports and fails if it ever gains a route to a paid client or to another
+  way of running a task.
+
+  Three things it holds to, each fixed by tests. **A loop with no limit is not
+  a loop, it is a leak** — five ceilings (turns, tokens written in one turn,
+  wall-clock seconds, cost, and how often one request may be repeated) are
+  checked *before* the next call, and a run whose limits are not all set is
+  refused rather than run unlimited. **A failure the model is shown is not a
+  failure of the loop** — a refused tool call, including one for a capability
+  that is not available, goes back to the model to react to; only a limit
+  reached, a cancellation, or a broken tool desk ends the run. **What the model
+  reasons is not kept** — the model is shown real tool results, but what is
+  stored per turn is fingerprints, sizes, token counts and a short stated
+  reason, never the reasoning itself.
+
+  Nothing is switched on. All three safety blocks stay shut, and the free check
+  now reports the smaller remaining blocker — no way to reach a real model —
+  instead of the loop being missing. 97 new tests, covering normal completion,
+  every ceiling, cancellation before and mid-turn, timeout, repeated requests,
+  corrupted replies, broken desks, unsupported capabilities, and six runs
+  against the real dispatcher.
 
 ### Changed
 - **The Codex question is now half answered, and narrower.**
