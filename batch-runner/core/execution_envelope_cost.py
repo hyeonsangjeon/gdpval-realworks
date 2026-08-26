@@ -89,6 +89,136 @@ def load_price_table(path: str | Path | None = None) -> dict[str, ModelPrice]:
 
 
 @dataclass(frozen=True)
+class PerceptionAssumptions:
+    """What one kind of perception call is taken to cost, per call.
+
+    Marking does not only read words. It can send a picture of the answer to a
+    model that looks at pictures, and a sound clip to a model that listens. Each
+    is a separate model, separately billed, and neither shows up anywhere in the
+    text-marking numbers.
+
+    ``input_tokens_per_call`` and ``output_tokens_per_call`` may be ``None``,
+    which means **nobody has established them**. That is a refusal, not a zero.
+    A picture whose size was never measured does not cost nothing; it costs an
+    amount this repository cannot state, and the difference matters.
+    """
+
+    modality: str
+    """Which kind of perception this is — ``vision`` or ``audio`` today."""
+
+    model: str
+    """The deployment marking would call for this kind of perception."""
+
+    calls_per_task: int
+    """The most times this may be called while marking one task's answer.
+
+    Read from the marking settings, not chosen here. The free check compares
+    this against the settings and refuses if it is lower.
+    """
+
+    input_tokens_per_call: int | None
+    """How much one call is taken to send, or ``None`` if it is not known.
+
+    Neither a picture's size nor a sound clip's length is fixed by any setting
+    in this repository, so no settings file can bound this. Where a number is
+    given it has to come from measurement, and where no measurement exists the
+    honest value is ``None``.
+    """
+
+    output_tokens_per_call: int | None
+    """How much one call is taken to write back, or ``None`` if not known.
+
+    Worth reading twice: **nothing in this repository caps a perception reply.**
+    ``core/perception/vision.py`` and ``core/perception/audio.py`` both call the
+    Responses API without ``max_output_tokens``, so the only real limit is
+    whatever the model itself will write. A number here is a measurement of what
+    replies have been, never a promise about what they can be.
+    """
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "modality": self.modality,
+            "model": self.model,
+            "calls_per_task": self.calls_per_task,
+            "input_tokens_per_call": self.input_tokens_per_call,
+            "output_tokens_per_call": self.output_tokens_per_call,
+        }
+
+    @property
+    def size_is_known(self) -> bool:
+        return (
+            self.input_tokens_per_call is not None
+            and self.output_tokens_per_call is not None
+        )
+
+
+def _perception_from_mapping(
+    raw: Mapping[str, Any],
+) -> dict[str, PerceptionAssumptions]:
+    """Read the optional per-modality perception block.
+
+    Absent means the plan states nothing about perception. That is deliberately
+    **not** read as "there is no perception" — whether marking would use it is
+    settled by the marking settings, and
+    :func:`core.execution_envelope_grading_cost.check_assumptions_cover_the_caps`
+    is what compares the two and refuses on a mismatch.
+    """
+    block = raw.get("grading_perception")
+    if block is None:
+        return {}
+    if not isinstance(block, Mapping):
+        raise ValueError(
+            "grading_perception must name each kind of perception separately"
+        )
+    parsed: dict[str, PerceptionAssumptions] = {}
+    for modality, entry in block.items():
+        if not isinstance(entry, Mapping):
+            raise ValueError(
+                f"grading_perception.{modality} must be a block of settings"
+            )
+        missing = sorted(
+            {
+                "model",
+                "calls_per_task",
+                "input_tokens_per_call",
+                "output_tokens_per_call",
+            }
+            - set(entry)
+        )
+        if missing:
+            raise ValueError(
+                f"grading_perception.{modality} is missing: "
+                + ", ".join(missing)
+            )
+        calls = int(entry["calls_per_task"])
+        if calls < 0:
+            raise ValueError(
+                f"grading_perception.{modality} states {calls} calls per task; "
+                "a call cannot happen fewer than no times"
+            )
+        def _size(key: str) -> int | None:
+            value = entry[key]
+            if value is None:
+                return None
+            number = int(value)
+            if number < 0:
+                raise ValueError(
+                    f"grading_perception.{modality}.{key} is {number}; a call "
+                    "cannot send or write less than nothing"
+                )
+            return number
+
+        parsed[str(modality)] = PerceptionAssumptions(
+            modality=str(modality),
+            model=str(entry["model"]),
+            calls_per_task=calls,
+            input_tokens_per_call=_size("input_tokens_per_call"),
+            output_tokens_per_call=_size("output_tokens_per_call"),
+        )
+    return parsed
+
+
+@dataclass(frozen=True)
 class CostAssumptions:
     """The written guesses the ceiling rests on.
 
@@ -136,6 +266,17 @@ class CostAssumptions:
     grading_calls_per_rubric_item: Decimal
     grading_input_tokens_per_call: int
     grading_output_tokens_per_call: int
+
+    grading_perception: Mapping[str, PerceptionAssumptions] = field(
+        default_factory=dict
+    )
+    """What each kind of perception call is taken to cost, keyed by modality.
+
+    Optional, because a plan that marks nothing has nothing to say here. It is
+    **not** optional in the sense that leaving it out makes perception free —
+    the marking settings decide whether perception happens, and the free check
+    compares the two and refuses when this is short.
+    """
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "CostAssumptions":
@@ -209,6 +350,7 @@ class CostAssumptions:
             grading_output_tokens_per_call=int(
                 raw["grading_output_tokens_per_call"]
             ),
+            grading_perception=_perception_from_mapping(raw),
         )
 
 
@@ -416,6 +558,16 @@ class CostCeiling:
     grading_model_calls: int
     safety_multiplier: Decimal
     unpriced_models: list[str] = field(default_factory=list)
+    perception_usd: Decimal = Decimal(0)
+    perception_model_calls: int = 0
+    perception_of_unknown_size: list[str] = field(default_factory=list)
+    """Kinds of perception that would happen but whose size nobody has stated.
+
+    Separate from ``unpriced_models`` because it is a different failure. There
+    the price is missing; here the price is known but how much would be sent is
+    not, so the multiplication has no second number. Both end in a refusal, and
+    both must, since a missing number is not a zero.
+    """
 
     @property
     def running_usd(self) -> Decimal:
@@ -425,7 +577,7 @@ class CostCeiling:
 
     @property
     def total_before_safety_usd(self) -> Decimal:
-        return self.running_usd + self.grading_usd
+        return self.running_usd + self.grading_usd + self.perception_usd
 
     @property
     def total_usd(self) -> Decimal:
@@ -436,6 +588,7 @@ class CostCeiling:
         return (
             sum(entry.model_calls for entry in self.environments)
             + self.grading_model_calls
+            + self.perception_model_calls
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -444,6 +597,13 @@ class CostCeiling:
             "grading": {
                 "most_model_calls": self.grading_model_calls,
                 "most_it_could_cost_usd": _money(self.grading_usd),
+            },
+            "grading_perception": {
+                "most_model_calls": self.perception_model_calls,
+                "most_it_could_cost_usd": _money(self.perception_usd),
+                "kinds_whose_size_is_unknown": list(
+                    self.perception_of_unknown_size
+                ),
             },
             "most_model_calls_in_total": self.total_model_calls,
             "most_running_could_cost_usd": _money(self.running_usd),
@@ -561,6 +721,9 @@ def estimate_cost_ceiling(
 
     grading_usd = Decimal(0)
     grading_calls = 0
+    perception_usd = Decimal(0)
+    perception_calls = 0
+    perception_unknown: list[str] = []
     if assumptions.grading_required:
         grading_price = price_table.get(assumptions.grading_model)
         if grading_price is None:
@@ -588,12 +751,45 @@ def estimate_cost_ceiling(
                     * assumptions.grading_output_tokens_per_call,
                 )
 
+        # Perception is charged per task rather than per scoring line: the
+        # marking settings cap it that way, and one picture may answer several
+        # scoring lines at once.
+        for modality in sorted(assumptions.grading_perception):
+            perception = assumptions.grading_perception[modality]
+            if perception.calls_per_task <= 0:
+                continue
+            calls = (
+                perception.calls_per_task * len(graded_task_ids) * runs_to_grade
+            )
+            perception_calls += calls
+            price = price_table.get(perception.model)
+            if price is None:
+                unpriced.add(perception.model)
+            if not perception.size_is_known:
+                # Say which kind, not just which model. A reader who is told
+                # "gpt-5.4" learns nothing about which of its two jobs is the
+                # one nobody measured.
+                perception_unknown.append(
+                    f"{perception.modality} ({perception.model})"
+                )
+                continue
+            if price is not None:
+                perception_usd += price.cost_of(
+                    input_tokens=calls
+                    * int(perception.input_tokens_per_call or 0),
+                    output_tokens=calls
+                    * int(perception.output_tokens_per_call or 0),
+                )
+
     return CostCeiling(
         environments=environments,
         grading_usd=grading_usd,
         grading_model_calls=grading_calls,
         safety_multiplier=assumptions.safety_multiplier,
         unpriced_models=sorted(unpriced),
+        perception_usd=perception_usd,
+        perception_model_calls=perception_calls,
+        perception_of_unknown_size=perception_unknown,
     )
 
 
@@ -603,7 +799,10 @@ def check_cost_ceiling(
     """Refuse the run unless an approved amount covers the whole ceiling.
 
     A missing amount is a refusal, not a pass. So is a model whose price is not
-    published, because an unpriced model would otherwise be counted as free.
+    published, because an unpriced model would otherwise be counted as free. So
+    is a kind of perception that would happen but whose size nobody has stated,
+    for the same reason read from the other end: knowing the price per token
+    buys nothing when the number of tokens is unknown.
     """
     problems: list[str] = []
     if ceiling.unpriced_models:
@@ -611,6 +810,13 @@ def check_cost_ceiling(
             "no published price was found for these models, so the most this "
             "could cost cannot be worked out: "
             + ", ".join(ceiling.unpriced_models)
+        )
+    if ceiling.perception_of_unknown_size:
+        problems.append(
+            "marking would call these, but how much each call sends and writes "
+            "back has never been measured, so their cost is unknown rather "
+            "than nothing: "
+            + ", ".join(ceiling.perception_of_unknown_size)
         )
     if approved_maximum_usd is None:
         problems.append(
@@ -656,6 +862,23 @@ def describe_cost_ceiling(ceiling: CostCeiling) -> list[str]:
             f"grading: at most {ceiling.grading_model_calls} model calls, "
             f"at most {_money(ceiling.grading_usd)} United States dollars"
         )
+    if ceiling.perception_model_calls:
+        line = (
+            "grading, looking and listening: at most "
+            f"{ceiling.perception_model_calls} model calls, at most "
+            f"{_money(ceiling.perception_usd)} United States dollars"
+        )
+        if ceiling.perception_of_unknown_size:
+            # Without this the reader sees a dollar figure on the same line as a
+            # call count that is larger than the figure accounts for, and has no
+            # way to tell that some of those calls were priced at nothing.
+            line += (
+                " — but "
+                + ", ".join(ceiling.perception_of_unknown_size)
+                + " is not in that figure at all, because how much it sends was "
+                "never measured"
+            )
+        lines.append(line)
     lines.append(
         f"before the safety multiplier: "
         f"{_money(ceiling.total_before_safety_usd)} United States dollars"
