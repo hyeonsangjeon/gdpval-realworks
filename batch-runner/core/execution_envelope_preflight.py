@@ -7,7 +7,9 @@ that can be made without calling a model:
   cannot run is never quietly replaced by one that can;
 * the five tasks written into the plan are re-derived from the fixed rule and
   compared, so a task list cannot drift after results are seen;
-* the fingerprints of every input file are checked against the dataset;
+* every input file is read off this machine and its fingerprint compared, all
+  64 characters of it, against what the plan wrote down. A file no copy of
+  which is reachable is reported as unchecked, never as correct;
 * each run place's experiment settings file is opened and compared against the
   shared conditions, so no run place can use a different model, a different
   deployment, different wording in any part of the prompt, a different task
@@ -51,12 +53,13 @@ from core.execution_envelope_azure import (
     diagnose_azure_connection,
 )
 from core.execution_envelope_tasks import (
+    InputFileVerification,
     TaskCatalog,
     check_catalog_carries_no_scores,
-    check_input_file_versions,
     load_task_catalog,
     select_advance_check_tasks,
     selection_matches,
+    verify_input_file_versions,
 )
 from core.execution_environment_readiness import (
     COMPARISON_SAME_GENERATED_CODE,
@@ -100,6 +103,13 @@ class EnvelopePreflight:
     other problems do not: the worked-out total printed above them is itself
     too low. A reader who sees only the total needs to be told that.
     """
+    input_files: dict[str, InputFileVerification] = field(default_factory=dict)
+    """How thoroughly each run place's input fingerprints were checked.
+
+    Kept even when nothing is wrong, because "checked against the real file"
+    and "assumed correct" are different answers and the reader is entitled to
+    know which one they got.
+    """
 
     @property
     def all_problems(self) -> list[str]:
@@ -135,6 +145,10 @@ class EnvelopePreflight:
             "azure_connection": (
                 self.azure.as_dict() if self.azure is not None else None
             ),
+            "input_files": {
+                environment: verification.as_dict()
+                for environment, verification in sorted(self.input_files.items())
+            },
         }
 
 
@@ -739,9 +753,11 @@ def run_envelope_preflight(
     docker_image_available: bool | None = None,
     azure_route_profile: str | None = None,
     environ: Mapping[str, str] | None = None,
+    dataset_root: Path | None = None,
 ) -> EnvelopePreflight:
     """Run every free check and return one answer listing every problem."""
     problems: list[str] = []
+    input_files: dict[str, InputFileVerification] = {}
 
     if plan.get("plan_version") != PLAN_VERSION:
         problems.append(
@@ -777,13 +793,15 @@ def run_envelope_preflight(
                     conditions[environment].task_ids, selection
                 )
             )
+            verification = verify_input_file_versions(
+                conditions[environment].input_file_versions,
+                conditions[environment].task_ids,
+                loaded_catalog,
+                dataset_root,
+            )
+            input_files[environment] = verification
             problems.extend(
-                f"{environment}: {note}"
-                for note in check_input_file_versions(
-                    conditions[environment].input_file_versions,
-                    conditions[environment].task_ids,
-                    loaded_catalog,
-                )
+                f"{environment}: {note}" for note in verification.problems
             )
 
     cost_block = plan.get("cost")
@@ -850,6 +868,7 @@ def run_envelope_preflight(
         approved_maximum_usd=approved,
         azure=azure,
         grading_ceiling_problems=grading_ceiling_problems,
+        input_files=input_files,
     )
 
 
@@ -958,6 +977,32 @@ def _check_grading_assumptions_match_the_settings(
         # must not turn into a claim that every model has a published price.
         prices = None
     return check_assumptions_cover_the_caps(assumptions, caps, prices=prices)
+
+
+def describe_input_file_checks(result: EnvelopePreflight) -> list[str]:
+    """Readable lines saying how each input fingerprint was checked.
+
+    Printed whether or not anything was wrong. A reader who is about to
+    authorise a bill needs to see the difference between a fingerprint that was
+    compared against the file and one that was taken on trust, and that
+    difference is invisible in a list that only shows problems.
+    """
+    lines: list[str] = []
+    for environment, verification in sorted(result.input_files.items()):
+        if not verification.checks:
+            lines.append(f"{environment}: no input fingerprint was written down")
+            continue
+        read = len(verification.fully_checked)
+        lines.append(
+            f"{environment}: {read} of {len(verification.checks)} input file(s) "
+            "read off this machine and compared in full"
+        )
+        for check in verification.checks:
+            lines.append(
+                f"    [{check.state}] {check.path} "
+                f"— {check.characters_compared} of 64 characters compared"
+            )
+    return lines
 
 
 def describe_preflight(result: EnvelopePreflight) -> list[str]:

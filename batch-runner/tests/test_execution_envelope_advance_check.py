@@ -60,6 +60,7 @@ from core.execution_envelope_tasks import (  # noqa: E402
     select_advance_check_tasks,
     select_trial_run_tasks,
     selection_matches,
+    verify_input_file_versions,
 )
 from core.execution_environment_readiness import ModelRunConditions  # noqa: E402
 
@@ -381,9 +382,17 @@ def test_the_thirty_keep_the_industry_mix(catalog):
 def test_the_plan_pins_every_reference_file_the_five_tasks_use(plan, catalog):
     conditions = conditions_from_plan(plan)
     for environment, entry in conditions.items():
-        assert check_input_file_versions(
+        verification = verify_input_file_versions(
             entry.input_file_versions, entry.task_ids, catalog
-        ) == [], environment
+        )
+        # Whether the files themselves are on the machine running this test is
+        # not the plan's fault, so the only complaint tolerated here is that
+        # they were not there to be read.
+        assert [
+            note
+            for note in verification.problems
+            if "is on this machine" not in note
+        ] == [], environment
 
 
 def test_a_reference_file_left_unpinned_is_reported(plan, catalog):

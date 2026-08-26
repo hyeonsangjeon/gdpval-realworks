@@ -1,0 +1,567 @@
+"""The gate reads the input files rather than taking their fingerprints on trust.
+
+Before this, the check compared the first 32 of a fingerprint's 64 characters
+against the folder name in the file's own path, and called that a match. The
+other 32 characters were never compared against anything, so a fingerprint
+could be half wrong and pass. Nothing read a byte of any file.
+
+The tests here hold the check to reading the file. The proof is the sweep at
+the bottom: every single-character change to every fingerprint, at every one of
+the 64 positions, must be caught. Half of those positions used to sail through.
+
+The second thing these tests hold is the answer given when no copy of a file is
+on the machine. It must be its own visible answer — "this went unchecked" — and
+never silence, because a fingerprint nobody compared is not evidence, and the
+report is read by someone deciding whether to authorise a bill.
+
+Nothing here calls a model, downloads anything, or spends anything.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import sys
+from pathlib import Path
+
+import pytest
+
+BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
+if str(BATCH_RUNNER_ROOT) not in sys.path:
+    sys.path.insert(0, str(BATCH_RUNNER_ROOT))
+
+from core.execution_envelope_preflight import (  # noqa: E402
+    conditions_from_plan,
+    describe_input_file_checks,
+    load_plan,
+    run_envelope_preflight,
+)
+from core.execution_envelope_tasks import (  # noqa: E402
+    DATASET_DATA_FILE,
+    INPUT_FILE_FOLDER_NAME_ONLY,
+    INPUT_FILE_NOT_CHECKED,
+    INPUT_FILE_READ,
+    REFERENCE_PATH_FINGERPRINT_LENGTH,
+    CatalogTask,
+    TaskCatalog,
+    check_input_file_versions,
+    load_task_catalog,
+    locate_input_file,
+    path_carries_its_own_fingerprint,
+    reference_files_for,
+    sha256_of_file,
+    verify_input_file_versions,
+)
+from core.execution_envelope_tasks import (  # noqa: E402
+    _copy_in_the_download_cache,
+)
+
+PLAN_PATH = (
+    BATCH_RUNNER_ROOT
+    / "experiments"
+    / "execution_envelope"
+    / "advance_check_plan.yaml"
+)
+
+# A fingerprint of something else entirely, used as a donor when a tampered
+# value has to look exactly as plausible as the real one.
+UNRELATED_FINGERPRINT = (
+    "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+)
+
+
+# ── A small benchmark made of real files, so the check has bytes to read ───
+
+
+def _write_reference_file(root: Path, name: str, body: bytes) -> str:
+    """Put a file where this dataset keeps it, and return its path."""
+    fingerprint = hashlib.sha256(body).hexdigest()
+    folder = root / "reference_files" / fingerprint[:REFERENCE_PATH_FINGERPRINT_LENGTH]
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / name).write_bytes(body)
+    return f"reference_files/{fingerprint[:REFERENCE_PATH_FINGERPRINT_LENGTH]}/{name}"
+
+
+def _task(task_id: str, paths: tuple[str, ...]) -> CatalogTask:
+    return CatalogTask(
+        task_id=task_id,
+        sector="Retail Trade",
+        occupation="Buyer",
+        deliverable_file_extensions=(".xlsx",),
+        reference_file_count=len(paths),
+        reference_file_extensions=(".xlsx",),
+        reference_file_paths=paths,
+        prompt_sha256="c" * 64,
+        prompt_character_count=100,
+        rubric_item_count=5,
+    )
+
+
+@pytest.fixture
+def small_benchmark(tmp_path):
+    """A dataset root holding two reference files and one data file.
+
+    Everything the check reads is a real file with a real fingerprint, so the
+    tests can tamper with a written value and watch what happens.
+    """
+    root = tmp_path / "dataset"
+    root.mkdir()
+    first = _write_reference_file(root, "Costs.xlsx", b"one hundred widgets\n")
+    second = _write_reference_file(root, "Notes.docx", b"a note about widgets\n")
+
+    data_file = root / DATASET_DATA_FILE
+    data_file.parent.mkdir(parents=True, exist_ok=True)
+    data_file.write_bytes(b"a stand-in for the benchmark's own data file\n")
+
+    catalog = TaskCatalog(
+        schema_version="gdpval-task-catalog-v1",
+        dataset_repo_id="example/benchmark",
+        dataset_revision="d" * 40,
+        dataset_file_sha256=sha256_of_file(data_file),
+        tasks=(_task("task-one", (first, second)),),
+    )
+    written = {
+        f"{catalog.dataset_repo_id}@{catalog.dataset_revision}": (
+            catalog.dataset_file_sha256
+        ),
+        first: sha256_of_file(root / first),
+        second: sha256_of_file(root / second),
+    }
+    return root, catalog, ("task-one",), written
+
+
+def _verify(benchmark, written=None, root=None):
+    dataset_root, catalog, task_ids, honest = benchmark
+    return verify_input_file_versions(
+        honest if written is None else written,
+        task_ids,
+        catalog,
+        dataset_root if root is None else root,
+    )
+
+
+# ── The honest plan passes, and says how it was checked ────────────────────
+
+
+def test_honest_fingerprints_pass_with_nothing_left_over(small_benchmark):
+    result = _verify(small_benchmark)
+
+    assert result.problems == ()
+    assert result.everything_was_read
+
+
+def test_every_file_reports_all_sixty_four_characters_compared(small_benchmark):
+    result = _verify(small_benchmark)
+
+    assert len(result.checks) == 3
+    for check in result.checks:
+        assert check.state == INPUT_FILE_READ, check.path
+        assert check.characters_compared == 64, check.path
+
+
+def test_the_dataset_file_itself_is_read_not_only_compared_to_the_catalogue(
+    small_benchmark,
+):
+    result = _verify(small_benchmark)
+
+    data_file_checks = [
+        check for check in result.checks if check.path == DATASET_DATA_FILE
+    ]
+    assert len(data_file_checks) == 1
+    assert data_file_checks[0].state == INPUT_FILE_READ
+
+
+def test_a_file_that_changed_on_disk_is_caught_even_though_nothing_was_edited(
+    small_benchmark,
+):
+    dataset_root, _, _, honest = small_benchmark
+    path = sorted(key for key in honest if key.startswith("reference_files/"))[0]
+    (dataset_root / path).write_bytes(b"something else entirely\n")
+
+    result = _verify(small_benchmark)
+
+    assert any("describes some other file" in note for note in result.problems)
+
+
+# ── When no copy is there, that is its own answer ───────────────────────────
+
+
+def test_a_file_no_copy_of_which_is_reachable_is_reported_not_passed(
+    small_benchmark, tmp_path
+):
+    result = _verify(small_benchmark, root=tmp_path / "nowhere")
+
+    assert result.problems != ()
+    assert not result.everything_was_read
+
+
+def test_the_report_says_how_to_get_the_missing_files_for_nothing(
+    small_benchmark, tmp_path
+):
+    result = _verify(small_benchmark, root=tmp_path / "nowhere")
+
+    assert any("huggingface-cli download" in note for note in result.problems)
+    assert any("--dataset-root" in note for note in result.problems)
+
+
+def test_a_missing_copy_says_how_much_of_the_fingerprint_went_unchecked(
+    small_benchmark, tmp_path
+):
+    result = _verify(small_benchmark, root=tmp_path / "nowhere")
+
+    by_path = {check.path: check for check in result.checks}
+    reference = [
+        check
+        for path, check in by_path.items()
+        if path.startswith("reference_files/")
+    ]
+    assert reference
+    for check in reference:
+        assert check.state == INPUT_FILE_FOLDER_NAME_ONLY
+        assert check.characters_compared == REFERENCE_PATH_FINGERPRINT_LENGTH
+
+
+def test_a_fingerprint_nobody_could_compare_is_never_called_fully_checked(
+    small_benchmark, tmp_path
+):
+    result = _verify(small_benchmark, root=tmp_path / "nowhere")
+
+    assert result.fully_checked == ()
+    assert len(result.not_fully_checked) == len(result.checks)
+
+
+def test_the_second_half_is_still_checked_when_the_first_half_cannot_be(
+    small_benchmark, tmp_path
+):
+    """A missing copy must not turn into a free pass for the folder rule."""
+    dataset_root, catalog, task_ids, honest = small_benchmark
+    path = sorted(key for key in honest if key.startswith("reference_files/"))[0]
+    tampered = dict(honest)
+    tampered[path] = UNRELATED_FINGERPRINT
+
+    result = verify_input_file_versions(
+        tampered, task_ids, catalog, tmp_path / "nowhere"
+    )
+
+    assert any("describes some other file" in note for note in result.problems)
+
+
+# ── The path shape that used to be waved through ───────────────────────────
+
+
+def test_a_path_that_says_nothing_about_its_contents_is_not_waved_through(
+    tmp_path,
+):
+    """The old check compared nothing at all for a differently shaped path.
+
+    Its folder-name rule only applied when the folder was exactly 32 characters
+    long. Any other path skipped the comparison entirely and was reported as
+    fine, which is the one answer that was certainly wrong.
+    """
+    catalog = TaskCatalog(
+        schema_version="gdpval-task-catalog-v1",
+        dataset_repo_id="example/benchmark",
+        dataset_revision="d" * 40,
+        dataset_file_sha256="a" * 64,
+        tasks=(_task("task-one", ("inputs/Costs.xlsx",)),),
+    )
+    written = {
+        f"{catalog.dataset_repo_id}@{catalog.dataset_revision}": "a" * 64,
+        "inputs/Costs.xlsx": UNRELATED_FINGERPRINT,
+    }
+
+    result = verify_input_file_versions(written, ("task-one",), catalog, tmp_path)
+
+    assert not path_carries_its_own_fingerprint("inputs/Costs.xlsx")
+    by_path = {check.path: check for check in result.checks}
+    assert by_path["inputs/Costs.xlsx"].state == INPUT_FILE_NOT_CHECKED
+    assert by_path["inputs/Costs.xlsx"].characters_compared == 0
+    assert any("none of its 64" in note for note in result.problems)
+
+
+def test_a_value_that_is_not_a_fingerprint_at_all_is_reported(small_benchmark):
+    dataset_root, catalog, task_ids, honest = small_benchmark
+    path = sorted(key for key in honest if key.startswith("reference_files/"))[0]
+    tampered = dict(honest)
+    tampered[path] = "not a fingerprint"
+
+    result = verify_input_file_versions(tampered, task_ids, catalog, dataset_root)
+
+    assert any("is not a SHA-256 value" in note for note in result.problems)
+    by_path = {check.path: check for check in result.checks}
+    assert by_path[path].state == INPUT_FILE_NOT_CHECKED
+
+
+# ── Where a copy may be looked for ─────────────────────────────────────────
+
+
+def test_a_folder_named_on_purpose_is_preferred_over_the_download_cache(
+    small_benchmark,
+):
+    dataset_root, catalog, _, honest = small_benchmark
+    path = sorted(key for key in honest if key.startswith("reference_files/"))[0]
+
+    found = locate_input_file(path, catalog, dataset_root)
+
+    assert found == dataset_root / path
+
+
+def test_a_copy_in_a_named_folder_is_read_rather_than_refused(small_benchmark):
+    """A file sitting right there is evidence, and refusing it helps nobody."""
+    dataset_root, catalog, _, _ = small_benchmark
+    assert not path_carries_its_own_fingerprint(DATASET_DATA_FILE)
+
+    found = locate_input_file(DATASET_DATA_FILE, catalog, dataset_root)
+
+    assert found == dataset_root / DATASET_DATA_FILE
+
+
+def test_a_disagreement_in_a_named_folder_is_not_called_tampering(
+    small_benchmark,
+):
+    """A named folder promises no particular revision, so say only what is known.
+
+    The data file's path says nothing about its contents, unlike a reference
+    file's. If the copy in the folder disagrees with the written fingerprint,
+    that folder may simply hold a different revision of the benchmark. Naming
+    the written value as the wrong one would be a guess.
+    """
+    dataset_root, catalog, task_ids, honest = small_benchmark
+    (dataset_root / DATASET_DATA_FILE).write_bytes(b"a different revision\n")
+
+    result = verify_input_file_versions(honest, task_ids, catalog, dataset_root)
+
+    assert any("different revision" in note for note in result.problems)
+    assert not any("describes some other file" in note for note in result.problems)
+
+
+def test_a_disagreement_about_a_reference_file_is_called_what_it_is(
+    small_benchmark,
+):
+    """A reference file's path repeats its own fingerprint, so there is no doubt."""
+    dataset_root, catalog, task_ids, honest = small_benchmark
+    path = sorted(key for key in honest if key.startswith("reference_files/"))[0]
+    (dataset_root / path).write_bytes(b"a different file altogether\n")
+
+    result = verify_input_file_versions(honest, task_ids, catalog, dataset_root)
+
+    assert any("describes some other file" in note for note in result.problems)
+
+
+def test_nothing_is_looked_for_outside_the_pinned_revision(monkeypatch):
+    """The download cache is asked about one revision, and told not to fetch."""
+    asked = {}
+
+    def fake_try_to_load_from_cache(**kwargs):
+        asked.update(kwargs)
+        return None
+
+    import huggingface_hub
+
+    monkeypatch.setattr(
+        huggingface_hub, "try_to_load_from_cache", fake_try_to_load_from_cache
+    )
+
+    assert _copy_in_the_download_cache("owner/name", "e" * 40, "a/file.txt") is None
+    assert asked == {
+        "repo_id": "owner/name",
+        "filename": "a/file.txt",
+        "repo_type": "dataset",
+        "revision": "e" * 40,
+    }
+
+
+def test_a_cache_answer_that_is_not_a_path_is_not_treated_as_one(monkeypatch):
+    """The cache says "this revision has no such file" with a sentinel object."""
+    sentinel = object()
+
+    import huggingface_hub
+
+    monkeypatch.setattr(
+        huggingface_hub, "try_to_load_from_cache", lambda **_: sentinel
+    )
+
+    assert _copy_in_the_download_cache("owner/name", "e" * 40, "a/file.txt") is None
+
+
+def test_a_damaged_cache_stops_the_check_rather_than_the_process(monkeypatch):
+    import huggingface_hub
+
+    def explode(**_):
+        raise OSError("the cache folder is unreadable")
+
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", explode)
+
+    assert _copy_in_the_download_cache("owner/name", "e" * 40, "a/file.txt") is None
+
+
+# ── What the reader is shown ───────────────────────────────────────────────
+
+
+def test_the_report_shows_how_each_file_was_checked_even_when_all_is_well(
+    small_benchmark,
+):
+    dataset_root, catalog, task_ids, honest = small_benchmark
+    plan = load_plan(PLAN_PATH)
+
+    result = run_envelope_preflight(
+        plan, root=BATCH_RUNNER_ROOT, dataset_root=dataset_root
+    )
+    lines = describe_input_file_checks(result)
+
+    assert lines
+    assert any("of 64 characters compared" in line for line in lines)
+
+
+def test_the_written_report_carries_the_per_file_state(small_benchmark):
+    dataset_root, _, _, _ = small_benchmark
+    plan = load_plan(PLAN_PATH)
+
+    result = run_envelope_preflight(
+        plan, root=BATCH_RUNNER_ROOT, dataset_root=dataset_root
+    )
+
+    written = result.as_dict()["input_files"]
+    assert written
+    for environment, entry in written.items():
+        assert "checks" in entry, environment
+        for check in entry["checks"]:
+            assert check["state"] in {
+                INPUT_FILE_READ,
+                INPUT_FILE_FOLDER_NAME_ONLY,
+                INPUT_FILE_NOT_CHECKED,
+            }
+
+
+def test_a_wrong_fingerprint_stops_the_comparison_starting(small_benchmark):
+    dataset_root, _, _, _ = small_benchmark
+    plan = load_plan(PLAN_PATH)
+
+    result = run_envelope_preflight(
+        plan, root=BATCH_RUNNER_ROOT, dataset_root=dataset_root
+    )
+
+    assert not result.may_start
+
+
+# ── The committed plan, checked against whatever this machine holds ────────
+
+
+def test_the_committed_plan_is_either_read_in_full_or_says_it_was_not(
+    small_benchmark,
+):
+    """No third answer. Either the files were read, or that is said out loud."""
+    catalog = load_task_catalog()
+    plan = load_plan(PLAN_PATH)
+    entry = conditions_from_plan(plan)["host_python_process"]
+
+    result = verify_input_file_versions(
+        entry.input_file_versions, entry.task_ids, catalog
+    )
+
+    if result.everything_was_read:
+        assert result.problems == ()
+    else:
+        assert result.problems != ()
+        assert all(
+            "is on this machine" in note for note in result.problems
+        ), result.problems
+
+
+def test_the_committed_plan_pins_exactly_the_files_the_five_tasks_use():
+    catalog = load_task_catalog()
+    plan = load_plan(PLAN_PATH)
+    entry = conditions_from_plan(plan)["host_python_process"]
+    dataset_key = f"{catalog.dataset_repo_id}@{catalog.dataset_revision}"
+
+    written = {str(key) for key in entry.input_file_versions}
+
+    assert written - {dataset_key} == set(
+        reference_files_for(entry.task_ids, catalog)
+    )
+
+
+def test_the_module_explanation_points_at_things_that_exist(small_benchmark):
+    """A cross-reference in prose is a claim, and claims get checked here.
+
+    Writing this file, the module explanation was left pointing at a constant
+    under a name it never had. Nobody would have noticed, which is the same
+    reason nobody noticed the check was reading half a fingerprint.
+    """
+    import re
+
+    import core.execution_envelope_tasks as module
+
+    referenced = set(
+        re.findall(r":(?:data|func|class):`([A-Za-z_][A-Za-z0-9_]*)`", module.__doc__)
+    )
+
+    assert referenced
+    missing = sorted(name for name in referenced if not hasattr(module, name))
+    assert missing == []
+
+
+# ── The sweep: no character of any fingerprint may be changed unnoticed ────
+
+
+def _tamper_variants(honest):
+    """Every single-character change, at every position, on every fingerprint.
+
+    Exhaustive rather than sampled, because the whole failure being fixed here
+    was a range of positions nobody had looked at.
+    """
+    for key, original in sorted(honest.items()):
+        for position in range(64):
+            replacement = "1" if original[position] == "0" else "0"
+            changed = dict(honest)
+            changed[key] = (
+                original[:position] + replacement + original[position + 1 :]
+            )
+            yield f"{key} position {position}", changed
+
+
+def test_no_single_character_of_any_fingerprint_can_be_changed_unnoticed(
+    small_benchmark,
+):
+    dataset_root, catalog, task_ids, honest = small_benchmark
+    assert check_input_file_versions(honest, task_ids, catalog, dataset_root) == []
+
+    missed = [
+        name
+        for name, changed in _tamper_variants(honest)
+        if not check_input_file_versions(changed, task_ids, catalog, dataset_root)
+    ]
+
+    assert missed == []
+
+
+def test_the_sweep_covers_all_sixty_four_positions_of_all_three_fingerprints(
+    small_benchmark,
+):
+    """The sweep is only worth its result if it is as wide as it claims."""
+    _, _, _, honest = small_benchmark
+
+    variants = list(_tamper_variants(honest))
+
+    assert len(variants) == 3 * 64
+
+
+def test_half_a_fingerprint_swapped_for_another_real_one_is_caught(
+    small_benchmark,
+):
+    """The change that used to pass: keep the folder's half, replace the rest."""
+    dataset_root, catalog, task_ids, honest = small_benchmark
+    donors = sorted(honest.values()) + [UNRELATED_FINGERPRINT]
+
+    missed = []
+    for key, original in sorted(honest.items()):
+        for donor in donors:
+            if donor == original:
+                continue
+            changed = dict(honest)
+            changed[key] = original[:32] + donor[32:]
+            if not check_input_file_versions(
+                changed, task_ids, catalog, dataset_root
+            ):
+                missed.append(f"{key} second half from {donor[:8]}")
+
+    assert missed == []

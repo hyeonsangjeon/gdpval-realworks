@@ -22,6 +22,14 @@ claiming the file is proven clean.
 revision it came from and the content fingerprint of that revision's data file.
 The catalogue has a fingerprint of its own. Re-running the selection on the same
 catalogue always returns the same task numbers in the same order.
+
+**The inputs are checked by reading them.** :func:`verify_input_file_versions`
+hashes each file the chosen tasks ship with and compares all 64 characters of
+the result against what the plan wrote down. It only ever reads a copy already
+on this machine; it never downloads anything. When no copy is there, that is
+reported as a file whose fingerprint *could not be checked*, which is not the
+same answer as a file that matched — see :data:`INPUT_FILE_READ`,
+:data:`INPUT_FILE_FOLDER_NAME_ONLY` and :data:`INPUT_FILE_NOT_CHECKED`.
 """
 
 from __future__ import annotations
@@ -514,9 +522,91 @@ def selection_matches(
 
 
 # Each reference file in this dataset lives in a folder named after the first
-# 32 hexadecimal characters of that file's SHA-256 fingerprint. That makes a
-# written fingerprint checkable without downloading the file.
+# 32 hexadecimal characters of that file's SHA-256 fingerprint. That folder name
+# is worth something when no copy of the file can be read — but it is only half
+# the fingerprint, so on its own it leaves the other half unchecked.
 REFERENCE_PATH_FINGERPRINT_LENGTH = 32
+
+# The one data file the pinned dataset revision ships its tasks in.
+DATASET_DATA_FILE = "data/train-00000-of-00001.parquet"
+
+# How thoroughly one written fingerprint was checked.
+#: The real file was read and all 64 characters agreed.
+INPUT_FILE_READ = "read the file"
+#: No copy of the file was reachable, so only the 32 characters the folder name
+#: repeats could be compared. The other 32 stand unchecked.
+INPUT_FILE_FOLDER_NAME_ONLY = "folder name only"
+#: Nothing was compared. This is not the same answer as "it matched".
+INPUT_FILE_NOT_CHECKED = "not checked"
+
+# How to get the missing bytes, free and once. Named in the report so a person
+# reading it knows what to do rather than being told only that they failed.
+HOW_TO_GET_THE_FILES = (
+    "download the pinned revision once with "
+    f"`huggingface-cli download {DATASET_REPO_ID} --repo-type dataset "
+    f"--revision {DATASET_REVISION}` (no charge), or point the check at a copy "
+    "you already have with --dataset-root"
+)
+
+
+def sha256_of_file(path: Path) -> str:
+    """The SHA-256 fingerprint of a file's contents, read in blocks."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+@dataclass(frozen=True)
+class InputFileCheck:
+    """What was actually done about one written fingerprint."""
+
+    path: str
+    written: str
+    state: str
+    characters_compared: int
+    note: str = ""
+
+    @property
+    def fully_checked(self) -> bool:
+        return self.state == INPUT_FILE_READ
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "written": self.written,
+            "state": self.state,
+            "characters_compared": self.characters_compared,
+            "note": self.note,
+        }
+
+
+@dataclass(frozen=True)
+class InputFileVerification:
+    """The outcome of checking every written input fingerprint."""
+
+    checks: tuple[InputFileCheck, ...]
+    problems: tuple[str, ...]
+
+    @property
+    def fully_checked(self) -> tuple[InputFileCheck, ...]:
+        return tuple(check for check in self.checks if check.fully_checked)
+
+    @property
+    def not_fully_checked(self) -> tuple[InputFileCheck, ...]:
+        return tuple(check for check in self.checks if not check.fully_checked)
+
+    @property
+    def everything_was_read(self) -> bool:
+        return bool(self.checks) and not self.not_fully_checked
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "checks": [check.as_dict() for check in self.checks],
+            "problems": list(self.problems),
+            "everything_was_read": self.everything_was_read,
+        }
 
 
 def reference_files_for(
@@ -533,21 +623,208 @@ def reference_files_for(
     return tuple(sorted(set(paths)))
 
 
-def check_input_file_versions(
+def _is_hexadecimal(value: str) -> bool:
+    return bool(value) and all(
+        character in "0123456789abcdef" for character in value
+    )
+
+
+def path_carries_its_own_fingerprint(path: str) -> bool:
+    """Whether this file's own folder name is the start of its fingerprint.
+
+    The dataset files under ``reference_files/`` are kept in a folder named
+    after the first 32 characters of the file's fingerprint, so a copy found at
+    such a path can only be the file the plan means. Paths of any other shape
+    carry no such promise, and a copy found at one of them may belong to some
+    other revision of the dataset.
+    """
+    folder = Path(path).parent.name.lower()
+    return (
+        len(folder) == REFERENCE_PATH_FINGERPRINT_LENGTH
+        and _is_hexadecimal(folder)
+    )
+
+
+def _copy_in_the_download_cache(
+    repo_id: str, revision: str, path: str
+) -> Path | None:
+    """A copy of ``path`` at exactly ``revision``, if one is already on disk.
+
+    This never downloads. It asks the Hugging Face download cache whether that
+    one revision of that one file has been fetched before, and returns where it
+    was put if so.
+    """
+    try:
+        from huggingface_hub import try_to_load_from_cache
+    except Exception:  # pragma: no cover - the library is a normal dependency
+        return None
+    try:
+        found = try_to_load_from_cache(
+            repo_id=repo_id,
+            filename=path,
+            repo_type="dataset",
+            revision=revision,
+        )
+    except Exception:  # pragma: no cover - a damaged cache must not stop us
+        return None
+    # A miss is None; a file the cache knows the revision does not contain is a
+    # sentinel object rather than a path. Only a real string is a copy.
+    if not isinstance(found, str):
+        return None
+    candidate = Path(found)
+    return candidate if candidate.is_file() else None
+
+
+def _locate_with_provenance(
+    path: str,
+    catalog: TaskCatalog,
+    dataset_root: Path | None,
+) -> tuple[Path, bool] | None:
+    """A readable copy of one pinned input file, and whether it is pinned.
+
+    Nothing is downloaded. A folder named by the person running the check is
+    preferred over the download cache, because it was named on purpose. The
+    second value says whether the copy is the pinned revision's *by
+    construction*: true for a copy the download cache holds under that exact
+    revision, and true for a file whose own path repeats the first half of its
+    fingerprint. False for a copy found in a named folder that could hold any
+    revision — such a copy is still worth reading, but a fingerprint that
+    disagrees with it means something weaker.
+    """
+    if dataset_root is not None:
+        candidate = Path(dataset_root) / path
+        if candidate.is_file():
+            return candidate, path_carries_its_own_fingerprint(path)
+    cached = _copy_in_the_download_cache(
+        catalog.dataset_repo_id, catalog.dataset_revision, path
+    )
+    if cached is not None:
+        return cached, True
+    return None
+
+
+def locate_input_file(
+    path: str,
+    catalog: TaskCatalog,
+    dataset_root: Path | None = None,
+) -> Path | None:
+    """Where a readable copy of one pinned input file is, or None."""
+    found = _locate_with_provenance(path, catalog, dataset_root)
+    return None if found is None else found[0]
+
+
+def _check_one_written_fingerprint(
+    path: str,
+    written: str,
+    catalog: TaskCatalog,
+    dataset_root: Path | None,
+    problems: list[str],
+    *,
+    what_it_is: str,
+) -> InputFileCheck:
+    fingerprint = written.strip().lower()
+    if len(fingerprint) != 64 or not _is_hexadecimal(fingerprint):
+        problems.append(
+            f"the fingerprint written for {path} is not a SHA-256 value"
+        )
+        return InputFileCheck(
+            path=path,
+            written=written,
+            state=INPUT_FILE_NOT_CHECKED,
+            characters_compared=0,
+            note="the written value is not a fingerprint at all",
+        )
+
+    found = _locate_with_provenance(path, catalog, dataset_root)
+    if found is not None:
+        copy, pinned_by_construction = found
+        real = sha256_of_file(copy)
+        if real != fingerprint and pinned_by_construction:
+            problems.append(
+                f"the fingerprint written for {path} is {fingerprint}, but the "
+                f"copy of that {what_it_is} on this machine is {real}, so the "
+                "written value describes some other file"
+            )
+        elif real != fingerprint:
+            # The copy was found where somebody pointed, and nothing about that
+            # folder promises which revision it holds. Saying which of the two
+            # is wrong would be guessing; saying they disagree is not.
+            problems.append(
+                f"the fingerprint written for {path} is {fingerprint}, but the "
+                f"copy in the folder this check was pointed at is {real}. "
+                "Either that folder holds a different revision of the benchmark "
+                "or the written fingerprint is wrong; either way the two do "
+                "not describe the same file"
+            )
+        return InputFileCheck(
+            path=path,
+            written=fingerprint,
+            state=INPUT_FILE_READ,
+            characters_compared=64,
+            note=f"read from {copy}",
+        )
+
+    folder = Path(path).parent.name.lower()
+    if path_carries_its_own_fingerprint(path):
+        if not fingerprint.startswith(folder):
+            problems.append(
+                f"the fingerprint written for {path} does not match the folder "
+                "the dataset keeps that file in, so the written value describes "
+                "some other file"
+            )
+        problems.append(
+            f"no copy of {path} at the pinned revision is on this machine, so "
+            f"only {REFERENCE_PATH_FINGERPRINT_LENGTH} of its 64 fingerprint "
+            "characters could be checked against the file itself; "
+            f"{HOW_TO_GET_THE_FILES}"
+        )
+        return InputFileCheck(
+            path=path,
+            written=fingerprint,
+            state=INPUT_FILE_FOLDER_NAME_ONLY,
+            characters_compared=REFERENCE_PATH_FINGERPRINT_LENGTH,
+            note="the folder name repeats the first half of the fingerprint",
+        )
+
+    problems.append(
+        f"no copy of {path} at the pinned revision is on this machine, and its "
+        "path says nothing about its contents, so none of its 64 fingerprint "
+        f"characters could be checked; {HOW_TO_GET_THE_FILES}"
+    )
+    return InputFileCheck(
+        path=path,
+        written=fingerprint,
+        state=INPUT_FILE_NOT_CHECKED,
+        characters_compared=0,
+        note="nothing on this machine could be compared against",
+    )
+
+
+def verify_input_file_versions(
     input_file_versions: Mapping[str, str],
     task_ids: Sequence[str],
     catalog: TaskCatalog,
-) -> list[str]:
-    """Confirm the written input fingerprints cover, and match, the real inputs.
+    dataset_root: Path | None = None,
+) -> InputFileVerification:
+    """Check the written input fingerprints against the real inputs.
 
-    Two things are checked, both without any download:
+    Three things are checked, none of which downloads anything:
 
     * every reference file the chosen tasks ship with has a fingerprint written
       down, and nothing extra is written down;
-    * each written fingerprint agrees with the folder the dataset keeps that
-      file in, which is named after the start of the file's own fingerprint.
+    * the dataset itself is pinned, to the revision and content the catalogue
+      was built from;
+    * each written fingerprint is compared, all 64 characters of it, against a
+      copy of that exact file already on this machine.
+
+    When no copy is reachable the fingerprint is **not** treated as correct. It
+    is reported as a problem saying how much of it went unchecked and how to
+    get the missing bytes for nothing. A fingerprint nobody compared is not
+    evidence, and a check that stayed quiet about it would be claiming to have
+    done work it did not do.
     """
     problems: list[str] = []
+    checks: list[InputFileCheck] = []
     expected = set(reference_files_for(task_ids, catalog))
     written = {str(key): str(value) for key, value in input_file_versions.items()}
 
@@ -562,6 +839,17 @@ def check_input_file_versions(
             f"the input file versions pin {dataset_key} to "
             f"{written[dataset_key]}, but the catalogue was built from "
             f"{catalog.dataset_file_sha256}"
+        )
+    else:
+        checks.append(
+            _check_one_written_fingerprint(
+                DATASET_DATA_FILE,
+                written[dataset_key],
+                catalog,
+                dataset_root,
+                problems,
+                what_it_is="dataset file",
+            )
         )
 
     file_entries = {
@@ -580,21 +868,31 @@ def check_input_file_versions(
             "chosen task: " + ", ".join(extra)
         )
     for path in sorted(expected & set(file_entries)):
-        fingerprint = file_entries[path].strip().lower()
-        if len(fingerprint) != 64 or any(
-            character not in "0123456789abcdef" for character in fingerprint
-        ):
-            problems.append(
-                f"the fingerprint written for {path} is not a SHA-256 value"
+        checks.append(
+            _check_one_written_fingerprint(
+                path,
+                file_entries[path],
+                catalog,
+                dataset_root,
+                problems,
+                what_it_is="file",
             )
-            continue
-        folder = Path(path).parent.name.lower()
-        if len(folder) == REFERENCE_PATH_FINGERPRINT_LENGTH and not (
-            fingerprint.startswith(folder)
-        ):
-            problems.append(
-                f"the fingerprint written for {path} does not match the folder "
-                "the dataset keeps that file in, so the written value describes "
-                "some other file"
-            )
-    return problems
+        )
+
+    return InputFileVerification(
+        checks=tuple(checks), problems=tuple(problems)
+    )
+
+
+def check_input_file_versions(
+    input_file_versions: Mapping[str, str],
+    task_ids: Sequence[str],
+    catalog: TaskCatalog,
+    dataset_root: Path | None = None,
+) -> list[str]:
+    """Every reason the written input fingerprints are not proven right."""
+    return list(
+        verify_input_file_versions(
+            input_file_versions, task_ids, catalog, dataset_root
+        ).problems
+    )

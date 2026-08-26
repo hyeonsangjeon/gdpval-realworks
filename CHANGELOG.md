@@ -12,6 +12,47 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The gate said "the fingerprints of every input file are checked against the
+  dataset". Nothing read a byte of any file.** `check_input_file_versions` in
+  `core/execution_envelope_tasks.py` compared the first 32 of each
+  fingerprint's 64 characters against the folder name in the file's own path —
+  this benchmark keeps a reference file in a folder named after the start of
+  its fingerprint — and called that a match. The other 32 characters were
+  compared against nothing at all. Running every single-character change, at
+  every one of the 64 positions, against all three fingerprints the committed
+  plan pins: **210 changes tried, 70 went unnoticed, and now none do.** All 70
+  were on the two reference files, 35 each: the 32 positions past the halfway
+  mark, plus swapping the whole second half for the tail of the other reference
+  file, of the dataset fingerprint, or of an unrelated file. The dataset's own
+  fingerprint was already fully compared, against the catalogue. The check now
+  finds a copy of each file already on this machine, hashes it, and compares
+  all 64 characters. It never downloads: it asks the Hugging Face download
+  cache about that one file at that one pinned revision, or reads a folder
+  named with the new `--dataset-root` option.
+- **A path of a different shape had nothing compared at all, and was reported
+  as fine.** The folder rule only ran when the folder name was exactly 32
+  characters long. Any other path skipped the comparison and produced no
+  complaint, which is the one answer that was certainly wrong. Such a path is
+  now reported as unchecked.
+- **A fingerprint nobody could compare is no longer silence.** When no copy of
+  a file is reachable, the report now says so per file, with how many of the 64
+  characters were compared and the free command that fetches the rest. The
+  advance check prints the state of every input file whether or not anything is
+  wrong, because "read off this machine and matched" and "assumed correct" are
+  different answers and the person authorising a bill is entitled to know which
+  one they are looking at. This follows the same rule the Docker probe already
+  used: not measured is reported as not measured, never as ready.
+- Where a copy is found matters to what a disagreement proves. A reference
+  file's path repeats the first half of its own fingerprint, so a copy found
+  there can only be that file and a mismatch means the written value describes
+  some other file. The dataset's own data file carries no such promise, so a
+  mismatch against a copy in a folder somebody pointed at is reported as what
+  it is — that folder may hold a different revision — rather than as tampering.
+- 26 new tests in
+  `batch-runner/tests/test_envelope_preflight_reads_the_input_files.py`,
+  including the exhaustive sweep above rebuilt against a small benchmark of
+  real files, so the 64-position claim is re-proved on every run rather than
+  measured once.
 - **The check that holds the three run places to identical settings compared 18
   of the 44 settings in their files, and the comment above it said the rest
   "are the ones that are meant to differ between run places".** Nobody had
