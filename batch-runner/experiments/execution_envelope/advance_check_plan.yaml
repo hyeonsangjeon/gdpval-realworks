@@ -37,9 +37,14 @@ comparison: "same_generated_code_rerun"
 # other two are left out on purpose and are NOT replaced by anything:
 #
 #   Agentic Sandbox V2 — its command-running tool answers that the capability
-#     is unavailable, no loop lets the model read a tool result and pick a next
-#     action, and two separate guards refuse the mode. Only structure checks
-#     are possible, so it cannot take part in a scored comparison.
+#     is unavailable, two separate guards refuse the mode, and nothing here can
+#     reach a real model to drive it. The loop itself does exist, at
+#     core/agentic_v2_conversation.py, and is proven against stand-ins that
+#     spend nothing; this comment said otherwise until 2026-08-26, which is
+#     what a written-down claim does when nobody re-reads it. Only structure
+#     checks are possible, so it cannot take part in a scored comparison.
+#     core/execution_environment_readiness.py is the copy that is checked
+#     against the code; if the two ever disagree, believe that one.
 #
 #   Codex built-in agent — this repository holds no code that runs a benchmark
 #     task through it, and no official documentation was found describing

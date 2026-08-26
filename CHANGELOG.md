@@ -12,6 +12,61 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **Two free checks printed contradicting answers about the same fact, to the
+  same reader, in the same session.** `scripts/check_agentic_stage_one_ceiling.py`
+  said the model conversation loop exists, is proven against stand-ins that spend
+  nothing, and that what is missing is a way to reach a real model.
+  `scripts/check_execution_envelope_advance_check.py` said "the model never sees
+  a tool result and never chooses a next action". Only one of them had looked:
+  the first establishes its answer by running the loop, the second was a sentence
+  in `core/execution_environment_readiness.py` written before the loop existed
+  and never re-read after it was built. A sentence is not checked against
+  anything.
+
+  This was not untidiness. **The stale half pointed at work that was already
+  finished**, so a reader taking it at its word would have gone off to write a
+  loop that exists, instead of at the two things stage one actually waits on.
+
+  `core/execution_environment_readiness.py` no longer decides this. It asks
+  `core.agentic_v2_stage_one_budget.check_stage_one_cannot_reach_a_model`, the
+  one place that settles it by running the loop against a stand-in that declares
+  itself paid and requiring the loop to stop before asking it anything, and
+  prints back exactly what that returns. Two copies of one piece of reasoning is
+  what caused the defect, so the fix is one copy and one caller. The lookup uses
+  this module's existing by-name import helper, so a module that has moved is
+  reported as *a real model has to be treated as reachable until somebody
+  checks* — never as silence, which reads as a question that was asked and came
+  back clear.
+
+- **One blocker sentence was making three claims with three different ways
+  out.** "the command-running tool exec_run is closed, the model never sees a
+  tool result and never chooses a next action, and no approval exists to use this
+  environment in a real experiment" bundles opening the command tool, reaching a
+  real model, and obtaining an approval. While they shared a sentence, finishing
+  one of the three changed nothing in the report — which is how the finished one
+  went on being listed as outstanding. They are now three blockers. The command
+  tool is **called** and the blocker reports what came back, so a tool that
+  opened reaches the report instead of the reassuring sentence; the approval
+  stays a plain statement, because an approval is a decision, not a fact about a
+  module.
+
+- **`experiments/execution_envelope/advance_check_plan.yaml`** carried the same
+  stale claim in a comment. Corrected, with a note naming which of the two copies
+  is the one checked against the code.
+
+### Added
+- `batch-runner/tests/test_free_checks_agree_on_the_loop.py` — nine tests. The
+  load-bearing one requires the sentence the readiness report prints about
+  reaching a real model to be, character for character, the sentence the other
+  check produced; matching on substance instead would let the two drift apart
+  again, which is the failure being fixed. Five of the nine fail against the code
+  as it stood before this change.
+
+  Nothing was switched on. The report gained a blocker and lost none, the three
+  guards are as shut as they were, the environment is still
+  `structure_check_only`, and all three free checks still exit 1.
+
+### Fixed
 - **Four of the six things a containment has to say were never written down,
   and the two that were had three copies that nothing compared.** A set of
   settings is a containment only if it answers where a command may write,
