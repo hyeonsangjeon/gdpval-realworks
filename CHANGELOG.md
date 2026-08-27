@@ -11,6 +11,81 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **Three more run places, two of which change only the program driving the
+  work.** The comparison covered five places, all of which take Python from
+  the model and run it somewhere. Products that drive the whole task
+  themselves were missing. `core/execution_environment_readiness.py` now
+  carries eight: `codex_command_line_tool_foundry` and
+  `copilot_command_line_tool_foundry` each do the whole task with their own
+  program while asking **the same named deployment in the same Microsoft
+  Foundry resource** `azure_code_interpreter` asks, and
+  `copilot_command_line_tool_github_served` does the whole task on a model
+  GitHub picks. A test reads the first two out of
+  `SERVING_PATH_FIXED_BY_ENVIRONMENT` and compares them against the Azure
+  place's entry, so "same deployment" is checked rather than asserted in prose.
+- **Where a model comes from is now a declared field, because every other
+  field can match while the model does not.** `model_serving_path` is required
+  on `ModelRunConditions` and takes one of two values —
+  `microsoft_foundry_deployment` or `github_served_copilot`. A plan that names
+  a third value is refused; a plan that contradicts
+  `SERVING_PATH_FIXED_BY_ENVIRONMENT` is refused, so no plan can relabel the
+  GitHub-served place as a Foundry one and inherit the fixed conditions it
+  cannot honour. `PRODUCT_CHOOSES_THE_MODEL` is **derived from that table
+  rather than written out a second time**, and a test asserts the derivation —
+  a hand-written second copy that agrees today and diverges later is the shape
+  the same-number-in-four-places entry below was opened to close.
+- **A third scoreboard, `native_product_bundle`, which may be absent but may
+  not be merged.** A product that chooses its own model cannot join a
+  comparison that holds the model still, so scoring it beside one would leave
+  a better result unattributable between the program and the model.
+  `REQUIRED_SCOREBOARDS` therefore holds only the two same-model boards; the
+  bundle board is optional because an operator may judge it not worth the
+  money. If present it is kept apart: a bundle board labelled as one of the
+  other two is refused as "added together by mistake", a same-model board
+  listing any `PRODUCT_CHOOSES_THE_MODEL` place is refused, and a bundle
+  comparison of fewer than two places is refused as not a comparison. The
+  bundle still fixes the instructions, the task list, the input files and the
+  budget — only the model route is free — and a plan that lets those drift is
+  told the places "are not being asked the same thing for the same money".
+- **Two more prohibitions, required separately, because they are three
+  different accidents.** Alongside `automatic_model_switch_allowed`,
+  `ModelRunConditions` now requires `automatic_fallback_allowed` and
+  `unsupported_runner_substitution_allowed`. Switching model changes **what
+  answered**; carrying on with a substitute changes **what ran**; substituting
+  a runner changes **where it ran**. A plan that says no to one has said
+  nothing about the other two, so all three are required fields and silence is
+  refused at load time rather than defaulted to permission. `resource` becomes
+  required for the same reason — a deployment name alone does not say which
+  model would answer — and is **inherited from `azure_connection.account`
+  rather than written twice**, with distinct refusals for a plan that pins no
+  account and for a place whose model does not come from that resource at all.
+- **The documented reasons these three cannot run are checked against the code
+  they cite.** All three grade `not_implemented_in_this_repository` from the
+  absence of an execution mode and a runner class, not from an opinion.
+  `DOCUMENTED_BLOCKERS_BY_ENVIRONMENT` records **three** further reasons for
+  the Codex tool, **two** for Copilot's own-key setting and **three** for the
+  GitHub-served one, and a test counts them so that clearing one does not read
+  as clearing the place. The static-key conflict is checked against
+  `core.azure_ai_clients.FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV` itself, so a
+  later decision to permit one of those names fails the test instead of
+  leaving the blocker text quietly wrong. The Azure address GitHub's own-key
+  documentation gives —
+  `https://<resource>.openai.azure.com/openai/deployments/<deployment>` — is
+  **passed to `classify_endpoint` and shown to raise**, alongside an address
+  the repository does accept, so the result is a statement about that shape
+  rather than about the call.
+- **A plan that names a place with no code behind it now stops the run.**
+  `build_readiness_report` previously let such a place be dropped and the rest
+  proceed, which files a score under the name of a place that never ran. It
+  now refuses, and repeats what is missing rather than only saying no.
+- **Side effect, intended.** The free check's `environments` list grows from
+  five entries to eight, and `not_implemented_in_this_repository` from one to
+  four. `ready`, `may_start`, `compared_environments`,
+  `blocked_environments`, the eleven problems, and the status of all five
+  pre-existing places are **unchanged**; the three new places cost nothing
+  because none of them can run.
+
 ### Fixed
 - **The marking-cost floor left out what every marking conversation opens
   with, and said so in a sentence that named one of the caps it was

@@ -52,6 +52,30 @@ comparison: "same_generated_code_rerun"
 #     on an Azure AI Foundry deployment. Its place in the comparison stays
 #     empty until both of those exist.
 #
+#   Codex native harness on this same Foundry deployment — no code here runs a
+#     task through it. Its published configuration reference gives a provider
+#     its credential through a static API key in an environment variable, or
+#     through a command that prints a bearer token; this repository forbids
+#     every static Azure credential variable and raises when one is set. That
+#     reference documents no Microsoft Entra sign-in for a provider and gives
+#     no way to pin an API version. Those are three separate blockers, and
+#     none of them is cleared by clearing the others.
+#
+#   GitHub Copilot command-line tool on this same Foundry deployment — no code
+#     here runs a task through it. Its own-key documentation supplies the
+#     credential through COPILOT_PROVIDER_API_KEY, a static API key this
+#     repository forbids; and its Azure example addresses the service at
+#     /openai/deployments/<name>, which is none of the three endpoint shapes
+#     core/azure_ai_clients.py accepts. Either one alone would stop the run.
+#
+#   GitHub Copilot command-line tool on a GitHub-served model — no code here
+#     runs a task through it, and it is not the same comparison in any case.
+#     GitHub's documentation describes automatic model selection routing a
+#     task to whichever model it judges best, and a designated base model used
+#     when no other is available. Which model answers is therefore GitHub's
+#     decision, so a result from here says something about the product, not
+#     about a run place. It has a scoreboard of its own or none at all.
+#
 # Leaving a place out of this list does not make the comparison complete. It
 # records that the place could not run, which is a different statement from
 # "the place performed badly".
@@ -198,6 +222,35 @@ model_run_conditions:
     # a different model or a different deployment, which would leave a score
     # that no single model earned.
     automatic_model_switch_allowed: false
+
+    # Where the answer comes from.
+    #
+    # Two run places can agree on every line above and still not be asking the
+    # same model, because a product may choose one for itself. This says which
+    # of the two known sources each place uses, and the free check refuses a
+    # place that lets a product choose from joining a comparison that reports
+    # its results as differences between run places.
+    #
+    # The Microsoft Foundry resource the deployment lives in is deliberately
+    # NOT repeated here. It is named once, in the azure_connection block below,
+    # and the free check fills it in from there; writing it twice would let the
+    # two copies drift with nothing to notice.
+    model_serving_path: "microsoft_foundry_deployment"
+
+    # Never allowed. When something the run needs cannot be had, the run stops
+    # and the failure is written down. Carrying on with a substitute would put
+    # the substitute's score under the name of the thing it replaced.
+    #
+    # This is a separate prohibition from the one above: that one is about
+    # changing model, this one is about carrying on at all.
+    automatic_fallback_allowed: false
+
+    # Never allowed. If the run place named here cannot be used, the task is
+    # not run somewhere else. The whole comparison is between run places, so a
+    # run that moved would report one place while measuring another. The
+    # container block below is the same rule written where a real code path
+    # could break it.
+    unsupported_runner_substitution_allowed: false
 
   # The three run places. Each one takes the shared conditions above with no
   # change at all — that is the point of the comparison — so each entry is

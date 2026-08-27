@@ -83,6 +83,7 @@ from core.execution_environment_readiness import (
     ENVIRONMENT_HOST_PYTHON_PROCESS,
     EXECUTION_MODE_BY_ENVIRONMENT,
     RUNNER_CLASS_BY_ENVIRONMENT,
+    SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
     ModelRunConditions,
     ReadinessReport,
     build_readiness_report,
@@ -95,8 +96,10 @@ PLAN_VERSION = "execution-envelope-advance-check-v1"
 # by the server's own operating system.
 REQUIRED_CONTAINER_SETTING = "always"
 
-# Which run places this plan is allowed to name. The two that are left out are
-# left out because they cannot run, not because they were forgotten.
+# Which run places this plan is allowed to name. The five that are left out
+# are left out because they cannot run, not because they were forgotten: the
+# agent sandbox is still a structure check, and the four whole-product places
+# have no code here at all.
 COMPARABLE_ENVIRONMENTS = (
     ENVIRONMENT_HOST_PYTHON_PROCESS,
     ENVIRONMENT_DOCKER_CONTAINER,
@@ -192,7 +195,15 @@ def load_plan(path: str | Path) -> dict:
 
 
 def conditions_from_plan(plan: Mapping[str, Any]) -> dict[str, ModelRunConditions]:
-    """Build each run place's conditions from the shared block plus its own."""
+    """Build each run place's conditions from the shared block plus its own.
+
+    One value is filled in rather than read: the Microsoft Foundry resource.
+    The plan already names it once, in the ``azure_connection`` block the
+    connection check reads, and a second copy could drift from the first with
+    nothing to notice. Only run places whose model comes from that resource
+    inherit it; a place served by somebody else's model has to say so itself,
+    because there is nothing there to inherit.
+    """
     raw = plan.get("model_run_conditions")
     if not isinstance(raw, Mapping):
         raise ValueError("the plan has no model_run_conditions block")
@@ -200,10 +211,33 @@ def conditions_from_plan(plan: Mapping[str, Any]) -> dict[str, ModelRunCondition
     per_environment = raw.get("by_environment")
     if not isinstance(per_environment, Mapping):
         raise ValueError("model_run_conditions.by_environment must be a mapping")
+    account = str(
+        (dict(plan.get("azure_connection") or {})).get("account") or ""
+    )
     resolved: dict[str, ModelRunConditions] = {}
     for environment, override in per_environment.items():
         merged = dict(shared)
         merged.update(dict(override or {}))
+        if "resource" not in merged:
+            wants_foundry = merged.get("model_serving_path") == (
+                SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT
+            )
+            if wants_foundry and account:
+                merged["resource"] = account
+            elif wants_foundry:
+                raise ValueError(
+                    f"{environment} takes its model from a Microsoft Foundry "
+                    "deployment, but the plan's azure_connection block names "
+                    "no account, so the deployment name on its own does not "
+                    "say which model would answer"
+                )
+            else:
+                raise ValueError(
+                    f"{environment} does not take its model from the "
+                    "Microsoft Foundry resource this plan pins, so it has to "
+                    "name the resource its model comes from itself; there is "
+                    "nothing here for it to inherit"
+                )
         resolved[str(environment)] = ModelRunConditions.from_mapping(merged)
     return resolved
 
@@ -1568,8 +1602,21 @@ def _diagnose_azure(
 
     Skipped when the Azure run place is not taking part, because then there is
     no Azure resource for the comparison to get wrong.
+
+    Whether it takes part is read from the plan's own list of run places rather
+    than from ``conditions``, which is empty whenever the conditions could not
+    be assembled at all. A plan that leaves out ``azure_connection`` is one
+    such plan — and it is exactly the plan this check exists to refuse, so
+    reading the answer from ``conditions`` would switch the check off in the
+    one case that needs it.
     """
-    if ENVIRONMENT_AZURE_CODE_INTERPRETER not in conditions:
+    named = plan.get("model_run_conditions")
+    named_places = (
+        set(dict((named or {}).get("by_environment") or {}))
+        if isinstance(named, Mapping)
+        else set()
+    )
+    if ENVIRONMENT_AZURE_CODE_INTERPRETER not in (set(conditions) | named_places):
         return None
 
     raw = plan.get("azure_connection")

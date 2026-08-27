@@ -62,7 +62,10 @@ from core.execution_envelope_tasks import (  # noqa: E402
     selection_matches,
     verify_input_file_versions,
 )
-from core.execution_environment_readiness import ModelRunConditions  # noqa: E402
+from core.execution_environment_readiness import (  # noqa: E402
+    SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
+    ModelRunConditions,
+)
 
 PLAN_PATH = (
     BATCH_RUNNER_ROOT
@@ -540,9 +543,11 @@ def test_the_model_the_plan_uses_has_a_published_price(plan):
 def _conditions(**overrides):
     base = {
         "provider": "azure",
+        "resource": "hjeon-fdpo-foundry-eus2",
         "deployment": "gpt-5.4",
         "resolved_model": "gpt-5.4",
         "api_version": "2025-04-01-preview",
+        "model_serving_path": SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
         "system_instruction": "a",
         "task_instruction": "b",
         "task_ids": ["02aa1805-c658-4069-8a6a-02dec146063a"],
@@ -554,6 +559,8 @@ def _conditions(**overrides):
         "retry_reasons_allowed": ["infrastructure_error"],
         "retry_max_attempts": 0,
         "automatic_model_switch_allowed": False,
+        "automatic_fallback_allowed": False,
+        "unsupported_runner_substitution_allowed": False,
     }
     base.update(overrides)
     return ModelRunConditions.from_mapping(base)

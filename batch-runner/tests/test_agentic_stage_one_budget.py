@@ -53,9 +53,15 @@ from core.execution_envelope_cost import (  # noqa: E402
     max_attempt_counts,
     max_input_tokens_per_attempt,
 )
-from core.execution_envelope_preflight import load_plan  # noqa: E402
+from core.execution_envelope_preflight import (  # noqa: E402
+    conditions_from_plan,
+    load_plan,
+)
 from core.execution_envelope_tasks import load_task_catalog  # noqa: E402
-from core.execution_environment_readiness import ModelRunConditions  # noqa: E402
+from core.execution_environment_readiness import (  # noqa: E402
+    SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
+    ModelRunConditions,
+)
 
 SHARED_PLAN_PATH = (
     BATCH_RUNNER_ROOT
@@ -111,9 +117,11 @@ def _assumptions(**overrides) -> CostAssumptions:
 def _conditions(**overrides) -> ModelRunConditions:
     base = {
         "provider": "azure",
+        "resource": "hjeon-fdpo-foundry-eus2",
         "deployment": "gpt-5.4",
         "resolved_model": "gpt-5.4",
         "api_version": "2025-04-01-preview",
+        "model_serving_path": SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
         "system_instruction": "a",
         "task_instruction": "b",
         "task_ids": [ONLY_TASK],
@@ -125,6 +133,8 @@ def _conditions(**overrides) -> ModelRunConditions:
         "retry_reasons_allowed": ["infrastructure_error"],
         "retry_max_attempts": 0,
         "automatic_model_switch_allowed": False,
+        "automatic_fallback_allowed": False,
+        "unsupported_runner_substitution_allowed": False,
     }
     base.update(overrides)
     return ModelRunConditions.from_mapping(base)
@@ -300,7 +310,7 @@ def test_the_single_turn_places_in_the_committed_plan_are_unchanged(
     committed plan is what would actually be billed.
     """
     shared = shared_plan["model_run_conditions"]["shared"]
-    conditions = ModelRunConditions.from_mapping(shared)
+    conditions = conditions_from_plan(shared_plan)["host_python_process"]
     ceiling = estimate_cost_ceiling(
         conditions_by_environment={"host_python_process": conditions},
         tasks_by_id=catalog.by_task_id(),
@@ -336,9 +346,7 @@ def test_the_committed_plan_no_longer_fits_inside_the_approved_amount(
     """
     from core.execution_envelope_cost import check_cost_ceiling
 
-    conditions = ModelRunConditions.from_mapping(
-        shared_plan["model_run_conditions"]["shared"]
-    )
+    conditions = conditions_from_plan(shared_plan)["host_python_process"]
     ceiling = estimate_cost_ceiling(
         conditions_by_environment={
             place: conditions
@@ -407,6 +415,7 @@ def test_a_lower_dispatcher_ceiling_lowers_the_bill(catalog, assumptions):
 def _stage_one_conditions(**overrides) -> StageOneConditions:
     base = {
         "deployment": "gpt-5.4",
+        "resource": "hjeon-fdpo-foundry-eus2",
         "resolved_model": "gpt-5.4",
         "task_ids": (ONLY_TASK,),
         "tool_calls_per_attempt": 8,

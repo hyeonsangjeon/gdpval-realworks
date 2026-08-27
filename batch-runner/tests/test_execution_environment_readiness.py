@@ -1,4 +1,4 @@
-"""Tests for the free readiness check on the five run places.
+"""Tests for the free readiness check on the eight run places.
 
 Nothing in this file calls a model, contacts a provider, or spends money.
 """
@@ -15,6 +15,7 @@ import pytest
 from core.execution_environment_readiness import (
     COMPARISON_SAME_GENERATED_CODE,
     COMPARISONS,
+    COMPARISON_NATIVE_PRODUCT_BUNDLE,
     COMPARISON_TOOL_BUILT_IN_FEATURES,
     ENVIRONMENT_AGENTIC_SANDBOX_V2,
     ENVIRONMENT_AZURE_CODE_INTERPRETER,
@@ -29,6 +30,8 @@ from core.execution_environment_readiness import (
     RETRY_REASONS,
     RETRY_TOOL_LOOP_INTERNAL_RECOVERY,
     RUN_SIZE_TASK_COUNTS,
+    SAME_MODEL_COMPARISONS,
+    SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
     STATUS_BLOCKED_REQUIREMENT_UNMET,
     STATUS_CAN_RUN_REAL_EXPERIMENT,
     STATUS_EVIDENCE_INSUFFICIENT,
@@ -56,9 +59,11 @@ APPROVED = {PAID_RUN_APPROVAL_VARIABLE: "yes"}
 def _conditions(**overrides) -> ModelRunConditions:
     base = {
         "provider": "azure",
+        "resource": "fixed-foundry-resource",
         "deployment": "fixed-deployment",
         "resolved_model": "fixed-model-2026-01-01",
         "api_version": "2025-04-01-preview",
+        "model_serving_path": SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
         "system_instruction": "You complete professional tasks.",
         "task_instruction": "Produce the requested deliverable files.",
         "task_ids": ("task-1", "task-2"),
@@ -70,6 +75,8 @@ def _conditions(**overrides) -> ModelRunConditions:
         "retry_reasons_allowed": (RETRY_INFRASTRUCTURE_ERROR,),
         "retry_max_attempts": 3,
         "automatic_model_switch_allowed": False,
+        "automatic_fallback_allowed": False,
+        "unsupported_runner_substitution_allowed": False,
     }
     base.update(overrides)
     return ModelRunConditions.from_mapping(base)
@@ -84,13 +91,13 @@ def _ready_container_arguments() -> dict:
     }
 
 
-# ── The five run places and the five states ────────────────────────────────
+# ── The eight run places and the five states ───────────────────────────────
 
 
-def test_exactly_five_run_places_are_graded_into_the_five_known_states():
+def test_exactly_eight_run_places_are_graded_into_the_five_known_states():
     entries = inspect_environment_support()
     assert [entry.environment for entry in entries] == list(ENVIRONMENTS)
-    assert len(ENVIRONMENTS) == 5
+    assert len(ENVIRONMENTS) == 8
     assert len(STATUSES) == 5
     for entry in entries:
         assert entry.status in STATUSES
@@ -446,6 +453,7 @@ def test_a_different_deployment_in_one_run_place_is_reported():
     "field,value",
     [
         ("provider", "openai"),
+        ("resource", "another-foundry-resource"),
         ("resolved_model", "another-model"),
         ("api_version", "2024-01-01"),
         ("system_instruction", "different"),
@@ -457,7 +465,7 @@ def test_a_different_deployment_in_one_run_place_is_reported():
     ],
 )
 def test_any_difference_in_the_shared_conditions_is_reported(field, value):
-    for comparison in COMPARISONS:
+    for comparison in SAME_MODEL_COMPARISONS:
         problems = check_model_run_conditions(
             {
                 ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
@@ -468,6 +476,59 @@ def test_any_difference_in_the_shared_conditions_is_reported(field, value):
         assert any(
             "do not share one fixed set" in problem for problem in problems
         ), f"{field} went unreported in {comparison}"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("system_instruction", "different"),
+        ("task_instruction", "different"),
+        ("task_ids", ("task-1",)),
+        ("input_file_versions", {"reference_files/a.xlsx": "b" * 64}),
+        ("max_output_tokens", 4096),
+        ("per_task_timeout_seconds", 60),
+    ],
+)
+def test_the_whole_product_comparison_still_fixes_the_question_and_the_budget(
+    field, value
+):
+    """Products may answer from their own model. They may not be asked
+    different questions, given different files, or allowed different budgets —
+    otherwise the score says as much about the plan as about the product."""
+    problems = check_model_run_conditions(
+        {
+            ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
+            ENVIRONMENT_DOCKER_CONTAINER: _conditions(**{field: value}),
+        },
+        comparison=COMPARISON_NATIVE_PRODUCT_BUNDLE,
+    )
+    assert any(
+        "not being asked the same thing for the same money" in problem
+        for problem in problems
+    ), f"{field} went unreported in {COMPARISON_NATIVE_PRODUCT_BUNDLE}"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("provider", "openai"),
+        ("resource", "another-foundry-resource"),
+        ("deployment", "another-deployment"),
+        ("resolved_model", "another-model"),
+        ("api_version", "2024-01-01"),
+    ],
+)
+def test_the_whole_product_comparison_lets_the_model_route_differ(field, value):
+    """That is the whole point of it: each product answers from wherever it
+    normally answers, which is why its score may never be read as a statement
+    about a run place."""
+    assert check_model_run_conditions(
+        {
+            ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
+            ENVIRONMENT_DOCKER_CONTAINER: _conditions(**{field: value}),
+        },
+        comparison=COMPARISON_NATIVE_PRODUCT_BUNDLE,
+    ) == []
 
 
 @pytest.mark.parametrize(
@@ -539,7 +600,7 @@ def test_an_unknown_comparison_name_is_reported():
         {ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions()},
         comparison="one_combined_score",
     )
-    assert any("not one of the two comparisons" in problem for problem in problems)
+    assert any("not one of the three comparisons" in problem for problem in problems)
 
 
 def test_automatic_model_switching_is_refused():
@@ -577,9 +638,11 @@ def test_all_three_retry_reasons_are_accepted():
 def test_every_fixed_condition_field_is_required():
     complete = dict(
         provider="azure",
+        resource="r",
         deployment="d",
         resolved_model="m",
         api_version="v",
+        model_serving_path=SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
         system_instruction="s",
         task_instruction="t",
         task_ids=["task-1"],
@@ -591,9 +654,11 @@ def test_every_fixed_condition_field_is_required():
         retry_reasons_allowed=[],
         retry_max_attempts=0,
         automatic_model_switch_allowed=False,
+        automatic_fallback_allowed=False,
+        unsupported_runner_substitution_allowed=False,
     )
     assert set(complete) == set(ModelRunConditions.field_names())
-    assert len(complete) == 15
+    assert len(complete) == 19
     for name in complete:
         incomplete = {key: value for key, value in complete.items() if key != name}
         with pytest.raises(ValueError, match="missing required entries"):
@@ -976,7 +1041,7 @@ def test_the_report_can_be_written_out_as_plain_data():
     payload = json.loads(json.dumps(report.as_dict(), ensure_ascii=False))
     assert payload["paid_model_calls_approved"] is False
     assert payload["ready"] is False
-    assert len(payload["environments"]) == 5
+    assert len(payload["environments"]) == 8
     assert payload["blocked_environments"]
 
 
@@ -1020,9 +1085,11 @@ def test_the_command_line_tool_reports_a_broken_plan(tmp_path: Path):
         "model_run_conditions:\n"
         "  shared:\n"
         "    provider: azure\n"
+        "    resource: fixed-foundry-resource\n"
         "    deployment: fixed-deployment\n"
         "    resolved_model: fixed-model\n"
         "    api_version: '2025-04-01-preview'\n"
+        "    model_serving_path: microsoft_foundry_deployment\n"
         "    system_instruction: s\n"
         "    task_instruction: t\n"
         "    task_ids: [task-1]\n"
@@ -1034,6 +1101,8 @@ def test_the_command_line_tool_reports_a_broken_plan(tmp_path: Path):
         "    retry_reasons_allowed: [infrastructure_error]\n"
         "    retry_max_attempts: 3\n"
         "    automatic_model_switch_allowed: false\n"
+        "    automatic_fallback_allowed: false\n"
+        "    unsupported_runner_substitution_allowed: false\n"
         "  by_environment:\n"
         "    host_python_process: {}\n"
         "    docker_container:\n"
