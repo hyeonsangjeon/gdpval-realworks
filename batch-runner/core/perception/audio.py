@@ -36,10 +36,17 @@ from typing import Any, Dict, Optional, Tuple
 
 from core.public_error import public_provider_error_text, public_task_error_text
 
-#: Hard per-task ceiling on audio sub-judge invocations.
+#: How many audio sub-judge calls one task gets when the marking settings
+#: name no number of their own. Not a hard ceiling: ``call_cap_per_task``
+#: under ``judge.perception.audio`` replaces it, and the grader passes
+#: whatever it finds there on every construction. The free cost check reads
+#: it from here too, so moving it moves the ceiling with it.
 AUDIO_CALL_CAP = 3
 
-#: Seconds of audio sent to the model per call.
+#: Seconds of audio sent to the model per call when the marking settings name
+#: no ``trim_seconds`` of their own. A longer clip costs more to send, so this
+#: is a price as much as a limit, and the grader reads it from here rather
+#: than keeping a second copy.
 AUDIO_TRIM_SECONDS = 30
 
 

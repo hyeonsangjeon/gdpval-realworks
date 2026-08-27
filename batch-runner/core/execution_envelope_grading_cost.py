@@ -88,6 +88,20 @@ marking half never names the picture-reading or sound-listening models, so that
 refusal has never had the chance to fire for them — and at the time of writing
 the sound model in ``default_v2.yaml`` is not in the price list at all.
 
+**The perception caps were the same defect again, in three copies.** How many
+picture-reading and sound-listening calls one task gets when the settings name
+no number was written by hand in ``core/perception/vision.py``, written again
+in ``core/grader.py``, and written a third time here; ``AUDIO_TRIM_SECONDS``
+made a fourth. Nothing bound them together, and both perception constants were
+labelled a hard per-task ceiling, which the settings have always been able to
+raise. The note above this module's settings paths named the real-judge
+comparison as what kept the fallbacks honest, but every committed settings file
+names its own caps, so that comparison never reached a fallback on either side
+of itself. Raising what the run falls back to without raising this copy would
+have understated the perception line of any run whose settings stayed quiet,
+and understating is the direction that costs more than it says. There is one
+copy now, in the perception modules, and every reader imports it.
+
 Nothing here contacts a provider, marks anything, or spends anything. It reads
 two files and compares numbers.
 """
@@ -102,14 +116,23 @@ from typing import Any, Mapping
 import yaml
 
 from core.execution_envelope_cost import CostAssumptions, ModelPrice
+from core.perception.audio import AUDIO_CALL_CAP
+from core.perception.vision import VISION_CALL_CAP
 from core.tool_calling_judge import ToolCallingJudge
 from core.tools.read_deliverable import MAX_CONTENT_CHARS
 
 # Where core/grader.py reads each limit from, and what it falls back to when
-# the settings file leaves it out. These paths and fallbacks mirror
+# the settings file leaves it out. These paths mirror
 # Grader._build_tool_calling_judge; test_execution_envelope_grading_cost.py
-# builds the real judge from the real settings and fails if they ever diverge,
-# so this is a mirror that cannot go stale quietly.
+# builds the real judge from the real settings and fails if they ever diverge.
+#
+# That comparison only ever sees what the committed settings say, and every
+# one of them names its own perception caps. The fallbacks were therefore
+# never reached on either side of it, so citing it as the thing that keeps
+# them honest claimed more than it checked. They are no longer copied here at
+# all: they are imported from the modules that define them, and
+# test_perception_caps_have_one_source.py runs the same comparison against
+# settings that name no cap, which is the only case that reaches them.
 JUDGE_TOOL_SETTINGS_PATH = ("judge", "tools", "read_deliverable")
 JUDGE_GENERATION_SETTINGS_PATH = ("judge", "generation")
 VISUAL_SETTINGS_PATH = ("judge", "perception", "visual")
@@ -130,8 +153,15 @@ TASK_PROMPT_TRUNCATE_SETTING = ("grader", "task_prompt_truncate_chars")
 #: which is where the marking run is started from.
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 
-DEFAULT_VISUAL_CALLS_PER_TASK = 5
-DEFAULT_AUDIO_CALLS_PER_TASK = 3
+#: How many perception calls one task gets when the marking settings name no
+#: number. Imported, never typed: the check refuses a plan that allows fewer
+#: calls than the settings permit, so whenever a settings file leaves
+#: ``call_cap_per_task`` out, this is the figure it refuses against. A second
+#: copy here would let someone raise what the run falls back to and leave the
+#: ceiling behind, understating the perception line of every such run -- the
+#: direction that costs more than it says.
+DEFAULT_VISUAL_CALLS_PER_TASK = VISION_CALL_CAP
+DEFAULT_AUDIO_CALLS_PER_TASK = AUDIO_CALL_CAP
 
 
 def resolve_standing_instructions_path(

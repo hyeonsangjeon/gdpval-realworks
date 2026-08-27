@@ -38,7 +38,13 @@ from core.public_error import public_provider_error_text
 
 logger = logging.getLogger(__name__)
 
-#: Hard per-task ceiling on vision sub-judge invocations.
+#: How many vision sub-judge calls one task gets when the marking settings
+#: name no number of their own. Not a hard ceiling: ``call_cap_per_task``
+#: under ``judge.perception.visual`` replaces it, and the grader passes
+#: whatever it finds there on every construction. This is the figure both
+#: sides fall back to -- the grader when it builds the perception, and the
+#: free cost check when it prices one -- and both read it from here, so
+#: moving it moves the ceiling with it.
 VISION_CALL_CAP = 5
 
 
