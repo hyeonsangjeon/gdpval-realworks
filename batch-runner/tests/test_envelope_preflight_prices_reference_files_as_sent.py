@@ -584,11 +584,19 @@ def test_the_free_check_reports_exactly_what_it_would_without_this_rule():
 
 
 def test_the_ceiling_is_unchanged_because_the_constant_did_not_move():
-    """Only the justification and the check around it changed, not the figure."""
+    """Only the justification and the check around it changed, not the figure.
+
+    The absolute figure has moved once since, and not because of this rule: the
+    wording every request opens with is now measured by rendering the prompt
+    each run place really sends rather than by adding up two blocks written into
+    the plan, which took the plan's ``instruction_character_count`` from 1068 to
+    5020 and the ceiling from 363.58481250 to 363.99643750. Pinning the total
+    here is deliberate — a ceiling that changes should make somebody look.
+    """
     result = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
 
     assert result.cost is not None
-    assert result.cost.total_usd == Decimal("363.58481250")
+    assert result.cost.total_usd == Decimal("363.99643750")
 
 
 # ── The justification that was wrong, and why it stayed wrong ────────────────

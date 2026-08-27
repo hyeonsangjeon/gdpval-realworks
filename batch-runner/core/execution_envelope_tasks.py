@@ -410,7 +410,7 @@ def catalog_number_problems(catalog: TaskCatalog) -> list[str]:
 
     What that costs is worth writing down. Set every ``rubric_item_count`` in
     the committed catalogue to zero and the ceiling for the planned comparison
-    falls from 363.59 to 93.75 United States dollars — 269.84 of it gone, about
+    falls from 364.00 to 94.16 United States dollars — 269.84 of it gone, about
     three quarters — because marking is charged per scoring line and a task with
     no scoring lines is marked for free. Nothing noticed: the loader takes any
     whole number, :func:`catalog_score_problems` is asked a different question
@@ -524,6 +524,36 @@ def widest_scoring_line_characters(catalog: TaskCatalog) -> int:
             "costs nothing"
         )
     return max(task.widest_rubric_criterion_characters for task in catalog.tasks)
+
+
+def widest_occupation(catalog: TaskCatalog) -> str:
+    """The longest occupation name anywhere in the catalogue.
+
+    Every committed prompt file writes the occupation into both the standing
+    instruction and the wording around the task, some of them three times over,
+    so the name's own length is part of what a run place sends about every task.
+    It is a benchmark fact rather than a setting: the names come from the
+    ``occupation`` column of the dataset file this catalogue pins to all
+    sixty-four characters of its fingerprint, and nothing between that column
+    and the prompt shortens them.
+
+    Taken across the whole catalogue rather than across whichever tasks a plan
+    selects, for the reason given on
+    :func:`widest_scoring_line_characters`: a plan running five tasks is held to
+    the widest of all 220, which overstates that plan slightly, and overstating
+    is the direction a ceiling is allowed to be wrong in.
+
+    Raises :class:`ValueError` on an empty catalogue rather than returning an
+    empty name, because an empty name reads as a prompt that carries no
+    occupation at all.
+    """
+    if not catalog.tasks:
+        raise ValueError(
+            "the task catalogue holds no tasks, so the widest occupation name "
+            "cannot be measured — and an empty name would be read as a prompt "
+            "that names no occupation"
+        )
+    return max((task.occupation for task in catalog.tasks), key=len)
 
 
 @dataclass(frozen=True)

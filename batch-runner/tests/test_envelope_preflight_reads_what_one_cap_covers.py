@@ -15,11 +15,11 @@ them, both in ``core/execution_envelope_cost.py``:
   the growing sum ``turns * (turns - 1) / 2`` into the flat ``turns - 1``.
 
 Measured against the committed plan: flipping Azure from ``true`` to ``false``
-moves the ceiling from 363.58 United States dollars to 413.76, and Azure's own
-line from 14.06 to 54.20 — a factor of 3.86, and more than the whole approved
+moves the ceiling from 364.00 United States dollars to 414.17, and Azure's own
+line from 14.32 to 54.46 — a factor of 3.80, and more than the whole approved
 amount of 32.23 on its own. The container fails in the direction that is
 harder to notice: at the two turns task #27 made reachable, flipping it from
-``false`` to ``true`` *lowers* the ceiling, 368.97 to 364.87. A wrong figure
+``false`` to ``true`` *lowers* the ceiling, 369.40 to 365.30. A wrong figure
 that makes the bill look smaller is the one nobody goes looking for.
 
 None of that has to be taken on trust, because the answer is readable from the
@@ -479,8 +479,8 @@ def test_azure_flipped_the_wrong_way_is_worth_about_fifty_dollars(catalog):
     flipped_total, flipped_azure = _ceiling(
         catalog, {ENVIRONMENT_AZURE_CODE_INTERPRETER: False}
     )
-    assert committed_total == Decimal("363.58481250")
-    assert flipped_total == Decimal("413.76081250")
+    assert committed_total == Decimal("363.99643750")
+    assert flipped_total == Decimal("414.17243750")
     assert flipped_total - committed_total == Decimal("50.17600000")
     assert flipped_azure > committed_azure * 3
 
@@ -572,11 +572,18 @@ def test_the_free_check_reports_exactly_what_it_would_without_this_rule():
 
 
 def test_the_committed_plan_draws_no_refusal_from_the_free_check():
+    """The committed plan is priced, not refused, and the total is pinned here.
+
+    The total moved from 363.58481250 to 363.99643750 when the wording every
+    request opens with started being measured by rendering the prompt each run
+    place really sends, rather than by adding up two blocks written into the
+    plan. Nothing about this rule changed with it.
+    """
     result = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
 
     assert not any(REFUSAL_OPENING in problem for problem in result.all_problems)
     assert result.cost is not None
-    assert result.cost.total_usd == Decimal("363.58481250")
+    assert result.cost.total_usd == Decimal("363.99643750")
 
 
 def test_the_free_check_does_refuse_once_the_plan_claims_the_wrong_cap():

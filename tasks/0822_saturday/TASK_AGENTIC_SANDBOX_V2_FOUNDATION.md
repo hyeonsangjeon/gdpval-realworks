@@ -232,30 +232,49 @@ cd batch-runner
 python scripts/check_agentic_stage_one_ceiling.py
 ```
 
-Two settings decide almost the whole bill. Running costs, in United States
-dollars, at most:
+Two settings decide almost the whole *running* column, which turns out to be the
+smaller part of the bill. Every figure below is a column the check itself
+prints, in United States dollars:
 
-| tool calls per attempt | most a turn may write | most it could cost to run |
-|---|---|---|
-| 4 | 2,048 | 3.24 |
-| 4 | 32,768 | 13.80 |
-| 8 | 2,048 | 12.45 |
-| 8 | 32,768 | 41.25 |
-| 16 | 2,048 | 48.79 |
-| 32 | 2,048 | 193.15 |
-| 32 | 32,768 | 492.67 |
+| tool calls per attempt | most a turn may write | to run | to mark | total |
+|---|---|---|---|---|
+| 4 | 2,048 | 3.32 | 89.95 | 115.77 |
+| 4 | 32,768 | 13.88 | 89.95 | 126.33 |
+| 8 | 2,048 | 12.61 | 89.95 | 125.06 |
+| 8 | 32,768 | 41.41 | 89.95 | 153.86 |
+| 16 | 2,048 | 49.12 | 89.95 | 161.56 |
+| 32 | 2,048 | 193.81 | 89.95 | 306.25 |
+| 32 | 32,768 | 493.33 | 89.95 | 605.77 |
 
-Marking the answers adds 5.85 whichever row is chosen, so a total is the running
-figure plus 5.85.
+Marking costs the same whatever the settings are, because the settings do not
+change how the answers are marked. The total column is **not** the first two
+added up, because a third cost is missing from the table: looking at the
+answers — opening the spreadsheets, slides and images a task produced so the
+marker can see them — adds 22.50 on every row. The ceiling counts it separately
+from marking because it is a different set of calls. So each total is running
+plus 89.95 plus 22.50, to within a cent: every column is rounded up on its own,
+while the total is worked out from the unrounded parts, so on three of the rows
+adding the printed figures overshoots the printed total by 0.01.
+
+An earlier version of this section said marking adds 5.85 and stopped there.
+That was wrong twice over, in the direction that costs money: it predated the
+correction that made marking a real ceiling rather than a sample, and it left
+out looking at the answers entirely. On the cheapest row it understated the bill
+by about 106 dollars. The figures above are quoted from the check's own output
+rather than carried over, so a future correction moves them here as well.
 
 ### What the table says
 
 **The dispatcher's own defaults are the most expensive row on it.** The
 dispatcher allows 32 tool calls, and the three-place comparison lets an answer
 run to 32,768 tokens. Someone starting from both defaults, reasonably assuming
-they were sensible starting points, would be committing to at most 492.67
-dollars for five tasks — over fifty times the cheapest row that could still
-answer the question.
+they were sensible starting points, would be committing to at most 493.33
+dollars of running for five tasks — nearly a hundred and fifty times the
+cheapest row that could still answer the question. On totals the gap is much
+smaller, about five times, because marking and looking at the answers are the
+same on every row. Both comparisons are worth having: the first says what the
+settings are worth choosing carefully, the second says what the bill will
+actually look like.
 
 **The answer-length cap is the cheaper of the two levers, and costs nothing to
 turn down.** In the three-place comparison a generous cap is nearly free,
@@ -264,9 +283,13 @@ truncated the model's code. Here it is multiplied by the number of turns, and a
 turn that only picks a tool needs very little room. It is not a compromise to
 lower it; it matches what a turn actually does.
 
-**Marking dominates at the small end.** At four tool calls, marking is 5.85
-against 3.24 for running. Anyone trying to make stage one cheaper by shortening
-the loop further will find there is little left to save.
+**Marking dominates, and not only at the small end.** At four tool calls,
+marking is 89.95 against 3.32 for running, and looking at the answers adds
+another 22.50. Running does not overtake the other two until sixteen tool calls
+with a generous cap. Anyone trying to make stage one cheaper by shortening the
+loop is working on the smaller half of the bill: at eight tool calls or fewer
+the running column never passes 41.41, against 112.45 of marking and looking
+that does not move whatever is chosen.
 
 ### The figure is enforced, not just written down
 
@@ -713,11 +736,13 @@ exit 1.
 The next decision is now a specific one with a price beside it: **which row of
 the table in section 7a is stage one worth running at?** The cheapest row that
 could still answer the question is four tool calls with a 2,048-token cap per
-turn, at most 3.24 to run and 5.85 to mark, so 9.09 in total. The dispatcher's
-own defaults are 492.67 to run.
+turn, at most 3.32 to run, 89.95 to mark and 22.50 to look at the answers, so
+115.77 in total. The dispatcher's own defaults are 493.33 to run and 605.77 in
+total. Choosing the cheapest row saves 490 dollars of running and changes
+nothing else, which is why the choice is worth making rather than defaulting.
 
-Choosing a row does not start anything, and neither figure above is an approved
-amount. Approving one, and removing the refusal that keeps a real model out of
+Choosing a row does not start anything, and none of the figures above is an
+approved amount. Approving one, and removing the refusal that keeps a real model out of
 the loop, are two separate steps and both are the owner's to take.
 
 There is now a second decision, for stage three rather than stage one, and it

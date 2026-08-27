@@ -27,7 +27,7 @@ Usage:
 
 import yaml
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
@@ -124,4 +124,72 @@ def render_prompt(
     return {
         "system_message": system_message,
         "user_prompt": user_prompt,
+    }
+
+
+#: Stands in for the task's own words while the wording wrapped around them is
+#: measured. One character, taken off again afterwards, so what is reported is
+#: what a run place sends about every task rather than what it sends about one.
+_TASK_STAND_IN = "t"
+
+
+def fixed_prompt_characters(
+    prompt_data: dict,
+    experiment_prompt: Optional[dict] = None,
+    occupation: str = "",
+) -> Dict[str, int]:
+    """What one first request carries besides the task itself, part by part.
+
+    Every figure returned is the length of a string this module really renders,
+    through the same :func:`render_prompt` an attempt is built with. Nothing is
+    added up from lengths written down a second time, so wording edited in
+    ``prompts/<name>.yaml``, a ``prefix``/``body``/``suffix`` added to a run
+    place's own settings, or a change to how the two are joined all move this
+    with them.
+
+    The parts are measured by difference — the committed prompt file rendered on
+    its own, then rendered again with the run place's settings — so they come to
+    the whole request exactly. They are kept apart rather than summed here so a
+    refusal can say what the total is made of, and so that a run place whose
+    ``system`` block loses to the prompt file's own reports nothing for it
+    instead of reporting a length that never reaches the model.
+
+    ``occupation`` is formatted into both halves, so a caller pricing a real run
+    passes the widest name that run will meet. At its default of ``""`` the
+    figures cover the committed wording alone.
+
+    The task's own words are the one thing left out. They are charged per task
+    by :func:`core.execution_envelope_cost.max_input_tokens_per_call`, from the
+    length recorded for that task, and counting them again here would bill the
+    same words twice. What is subtracted is the stand-in that took their place,
+    so the wording around them is counted whole.
+
+    Raises whatever :func:`render_prompt` raises when a template will not
+    render — a missing key, a stray brace. There is no reading of a template
+    nobody can render that would let this return a smaller answer instead.
+    """
+
+    def rendered(settings: Optional[dict]) -> tuple:
+        parts = render_prompt(
+            prompt_data,
+            occupation=occupation,
+            task_prompt=_TASK_STAND_IN,
+            experiment_prompt=settings,
+        )
+        return len(parts["system_message"]), len(parts["user_prompt"])
+
+    file_system, file_user = rendered(None)
+    sent_system, sent_user = rendered(experiment_prompt)
+
+    return {
+        "the standing instruction the committed prompt file holds": file_system,
+        "the wording the committed prompt file wraps the task in": (
+            file_user - len(_TASK_STAND_IN)
+        ),
+        "the standing instruction this run place's own settings add": (
+            sent_system - file_system
+        ),
+        "the wording this run place's own settings add around it": (
+            sent_user - file_user
+        ),
     }
