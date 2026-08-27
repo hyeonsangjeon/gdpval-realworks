@@ -57,6 +57,42 @@ entries land under a fresh dated heading the day they merge to `main`.
   report differs from the old one in exactly one line, and a test asserts that
   by running the check twice with the new counting patched out — no dependence
   on which machine it runs on.
+- **How many perception calls one task gets was written by hand in four
+  places, and nothing bound them together.** Marking may call a second model
+  to look at a picture and a third to listen to a sound.
+  `core/perception/vision.py` defined `VISION_CALL_CAP = 5`;
+  `core/perception/audio.py` defined `AUDIO_CALL_CAP = 3` and
+  `AUDIO_TRIM_SECONDS = 30`; `core/grader.py` typed `5`, `3` and `30` again as
+  its own fallbacks, never once consulting those constants; and
+  `core/execution_envelope_grading_cost.py` typed `5` and `3` a third time.
+  All four agreed, so nothing was wrong today — but the free check refuses a
+  plan that allows fewer perception calls than the settings permit, so
+  whenever a settings file leaves `call_cap_per_task` out, its copy **is** the
+  figure the refusal is measured against. Raising what the run falls back to
+  without raising that copy would have let marking make more calls than the
+  ceiling was ever asked to cover: **understating the bill**, the same
+  direction as the two defects before it. Every reader now imports the one
+  constant.
+- **The guard that was cited as covering this could not reach it.** The note
+  above the settings paths named
+  `test_the_limits_read_match_the_judge_the_grader_really_builds` as the thing
+  that stopped these fallbacks going stale. That test builds the real judge
+  from the **committed** settings, and all nine name their own caps — so the
+  fallback was never reached on either side of the comparison. The guard was
+  real; the claim about what it guarded was not. The same comparison now also
+  runs against settings that name perception models and no caps at all, which
+  is the only shape that reaches a fallback.
+- **Both constants called themselves a "Hard per-task ceiling", which they
+  never were.** `call_cap_per_task` in the marking settings replaces the
+  number, and the grader passed whatever it found there on every construction.
+  The notes now say what each one is — the figure used when the settings name
+  none — and which key replaces it.
+- **Nothing moved today.** The free check's output is **byte-identical** to
+  the previous commit's: same exit code, same 14 problems, same ceiling of
+  **363.59 United States dollars** (363.58481250 before rounding). Every
+  committed settings file names its caps, so no fallback is in use; this
+  closes a latent defect rather than correcting a live number. 41 new tests,
+  and a mutation sweep breaks the rule 12 ways and is caught 12 times.
 
 - **The task catalogue recorded a count of zero for anything it could not
   read, and a zero is priced as work that costs nothing.**

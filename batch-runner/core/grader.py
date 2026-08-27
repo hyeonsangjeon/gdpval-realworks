@@ -1413,14 +1413,19 @@ class Grader:
         vis_cfg = perception_cfg.get("visual") or {}
         aud_cfg = perception_cfg.get("audio") or {}
         if vis_cfg.get("model") is not None or vis_cfg.get("deployment") is not None:
-            from core.perception.vision import VisionPerception  # local import
+            from core.perception.vision import (  # local import
+                VISION_CALL_CAP,
+                VisionPerception,
+            )
             vision_deployment = canonical_deployment(
                 vis_cfg, "judge.perception.visual"
             )
             vision_perception = VisionPerception(
                 client=self.client,
                 deployment=vision_deployment,
-                call_cap=int(vis_cfg.get("call_cap_per_task", 5)),
+                call_cap=int(
+                    vis_cfg.get("call_cap_per_task", VISION_CALL_CAP)
+                ),
                 reasoning_effort=vis_cfg.get(
                     "reasoning_effort",
                     (judge_cfg.get("reasoning") or {}).get("effort", "medium"),
@@ -1428,15 +1433,23 @@ class Grader:
                 before_upstream_call=self._apply_tpm_delay,
             )
         if aud_cfg.get("model") is not None or aud_cfg.get("deployment") is not None:
-            from core.perception.audio import AudioPerception  # local import
+            from core.perception.audio import (  # local import
+                AUDIO_CALL_CAP,
+                AUDIO_TRIM_SECONDS,
+                AudioPerception,
+            )
             audio_deployment = canonical_deployment(
                 aud_cfg, "judge.perception.audio"
             )
             audio_perception = AudioPerception(
                 client=self.client,
                 deployment=audio_deployment,
-                call_cap=int(aud_cfg.get("call_cap_per_task", 3)),
-                trim_seconds=int(aud_cfg.get("trim_seconds", 30)),
+                call_cap=int(
+                    aud_cfg.get("call_cap_per_task", AUDIO_CALL_CAP)
+                ),
+                trim_seconds=int(
+                    aud_cfg.get("trim_seconds", AUDIO_TRIM_SECONDS)
+                ),
             )
 
         return ToolCallingJudge(
