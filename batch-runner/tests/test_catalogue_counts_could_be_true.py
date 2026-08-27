@@ -20,7 +20,7 @@ measurement, which is precisely the thing nothing complains about.
 
 The measurement that made this worth doing: set every ``rubric_item_count`` in
 the committed catalogue to zero and the ceiling for the planned comparison falls
-from **363.59 to 93.75 United States dollars** — 269.84 of it gone, about three
+from **364.00 to 94.16 United States dollars** — 269.84 of it gone, about three
 quarters — because marking is charged per scoring line and a task with no
 scoring lines is marked for free. Four things had a chance to notice and none
 did. The loader takes any whole number. The no-scores check is asked a different
@@ -203,8 +203,8 @@ def test_zeroing_the_scoring_lines_takes_three_quarters_off_the_ceiling():
         task["rubric_item_count"] = 0
     zeroed = _ceiling_usd(_loaded(payload))
 
-    assert _as_money(real) == "363.59"
-    assert _as_money(zeroed) == "93.75"
+    assert _as_money(real) == "364.00"
+    assert _as_money(zeroed) == "94.16"
 
     lost = real - zeroed
     assert lost > real * Decimal("0.7"), (

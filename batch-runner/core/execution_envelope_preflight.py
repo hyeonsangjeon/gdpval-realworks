@@ -74,6 +74,7 @@ from core.execution_envelope_tasks import (
     select_advance_check_tasks,
     selection_matches,
     verify_input_file_versions,
+    widest_occupation,
     widest_scoring_line_characters,
 )
 from core.execution_environment_readiness import (
@@ -89,6 +90,7 @@ from core.execution_environment_readiness import (
     build_readiness_report,
 )
 from core.file_preview import reference_file_prompt_budget
+from core.prompt_loader import fixed_prompt_characters, load_prompt
 
 PLAN_VERSION = "execution-envelope-advance-check-v1"
 
@@ -1557,7 +1559,13 @@ def run_envelope_preflight(
             problems.append(str(error))
         else:
             problems.extend(
-                _check_instruction_length(conditions, assumptions)
+                _check_instruction_length(
+                    conditions,
+                    assumptions,
+                    plan=plan,
+                    root=root,
+                    catalog=loaded_catalog,
+                )
             )
             grading_ceiling_problems = (
                 _check_grading_assumptions_match_the_settings(
@@ -1663,27 +1671,203 @@ def _diagnose_azure(
     return diagnosis
 
 
+def _runner_default_prompt_name(environment: str) -> str | None:
+    """Which committed prompt file this run place falls back to.
+
+    Read off the runner class that actually does the work, named in
+    ``RUNNER_CLASS_BY_ENVIRONMENT``, rather than decided here from the mode
+    name — the same reasoning as
+    :func:`_runner_reference_file_prompt_sections`. ``None`` means this
+    repository has no runner registered for the place, or the one it has does
+    not declare a default; the caller turns either into a refusal rather than
+    into a guess.
+
+    Imported inside the function for the reason given on
+    :func:`_runner_sends_a_fresh_request_per_turn`.
+    """
+    named = RUNNER_CLASS_BY_ENVIRONMENT.get(environment)
+    if named is None:
+        return None
+    module_name, class_name = named
+    try:
+        module = import_module(module_name)
+        runner = getattr(module, class_name)
+        declared = getattr(runner, "DEFAULT_PROMPT")
+    except (AttributeError, ImportError):
+        return None
+    return str(declared)
+
+
+def _prompt_files_a_run_place_might_send(
+    environment: str, settings: Mapping[str, Any]
+) -> tuple[str, ...]:
+    """Every committed prompt file this run place's settings could reach for.
+
+    Two of them, where the two differ, and the caller prices the longer. That is
+    not indecision, it is what ``core/executor.py`` does: the sandbox branch
+    passes ``execution.sandbox.prompt_name`` on to the runner, while the
+    subprocess branch reaches straight past it for ``SubprocessRunner``'s own
+    ``DEFAULT_PROMPT``. So a ``prompt_name`` written into a settings file is
+    followed in one place and ignored in another, and which of the two a run
+    place takes is settled by wiring in ``executor.py`` that nothing here can
+    read back.
+
+    Rather than guess at that wiring, both candidates are returned. Charging the
+    longer costs a plan nothing it would not have to hold anyway, and it leaves
+    no arrangement of settings under which the prompt really sent is longer than
+    the prompt priced. An empty tuple means this repository has no runner
+    registered for the place, or the one it has declares no default: the caller
+    turns that into a refusal rather than into a guess.
+    """
+    candidates: list[str] = []
+    named = _dig(settings, ("execution", "sandbox")).get("prompt_name")
+    if named:
+        candidates.append(str(named))
+    declared = _runner_default_prompt_name(environment)
+    if declared and declared not in candidates:
+        candidates.append(declared)
+    return tuple(candidates)
+
+
 def _check_instruction_length(
     conditions_by_environment: Mapping[str, ModelRunConditions],
     assumptions: CostAssumptions,
+    *,
+    plan: Mapping[str, Any],
+    root: Path,
+    catalog: TaskCatalog,
 ) -> list[str]:
-    """Confirm the length used for the cost sum matches the real wording.
+    """Hold the cost sum's instruction length against the prompt really sent.
 
-    If the two drift apart, the ceiling is worked out from wording that is not
-    the wording being sent.
+    ``instruction_character_count`` is the slot in
+    :func:`core.execution_envelope_cost.max_input_tokens_per_call` that pays for
+    everything a request carries besides the task's own words and its reference
+    files. It is charged on every call every run place makes, so a figure below
+    what is really sent understates the whole running half of the bill, once per
+    call, for as long as the plan stands.
+
+    This rule used to add up the two wording blocks the plan keeps in
+    ``model_run_conditions`` and check the total matched. Both halves of that
+    were wrong.
+
+    * The ``system_instruction`` block it counted is never sent.
+      :func:`core.prompt_loader.render_prompt` lets the committed prompt file's
+      own ``system_message`` win whenever it has one, and all three committed
+      files have one, so a run place's own ``system`` block is a fallback that
+      never comes up. 345 characters were being charged for wording no model
+      ever reads.
+    * The committed prompt file itself was not counted at all — neither its
+      standing instruction nor the several thousand characters of wording it
+      wraps every task in. That is the great majority of what is sent.
+
+    So the figure is now taken from the render rather than from the plan: each
+    run place's prompt file is resolved the way ``core/executor.py`` resolves
+    it, rendered through :func:`core.prompt_loader.fixed_prompt_characters` with
+    that place's own ``condition_a.prompt`` block, and the sum charged is
+    refused where it falls below what came back. Editing any of that wording
+    moves the demand with it, and nothing here is a length somebody typed.
+
+    Where the settings name a prompt file and the runner declares a different
+    default, both are rendered and the longer is charged: see
+    :func:`_prompt_files_a_run_place_might_send` for why the two can disagree
+    and why guessing between them would leave a way to be under-charged.
+
+    The occupation is written into every one of those templates, up to three
+    times over, so the widest name in the committed catalogue is what they are
+    rendered with. A plan running five tasks is then held to the widest of all
+    220, which overstates slightly — the direction a ceiling may be wrong in.
+
+    A plan more careful than its settings is left alone, exactly as in
+    :func:`_check_the_plan_counts_every_call_the_container_makes`. Only the
+    cheap direction is refused.
+
+    **What the figure does not cover.** ``SandboxRunner._augment_prompt`` adds
+    further sections to the container's first request — a deliverable contract
+    section, a dependency hint, and a skills manual its committed settings
+    currently switch off. Those are outside what ``render_prompt`` produces and
+    outside this figure, and they are recorded as the next thing to price
+    rather than left implied. What that means is a container demand smaller than
+    the container's real first request, so this rule under-demands there; it
+    never lets a plan claim more than the render proved.
     """
     problems: list[str] = []
+    files = plan.get("experiment_files")
+    files = files if isinstance(files, Mapping) else {}
+
+    try:
+        occupation = widest_occupation(catalog)
+    except ValueError as unreadable:
+        return [
+            "the prompt every run place sends writes an occupation into it, "
+            "but the widest one cannot be taken from the task catalogue, so "
+            f"what the prompt comes to cannot be worked out: {unreadable}"
+        ]
+
     for environment in sorted(conditions_by_environment):
-        conditions = conditions_by_environment[environment]
-        actual = len(conditions.system_instruction) + len(
-            conditions.task_instruction
-        )
-        if actual != assumptions.instruction_character_count:
+        relative = files.get(environment)
+        if not relative:
             problems.append(
-                f"the cost sum assumes the standing and task instructions run "
-                f"to {assumptions.instruction_character_count} characters, but "
-                f"{environment} sends {actual}"
+                f"the plan names no experiment settings file for {environment}, "
+                "so the prompt it sends cannot be read and the "
+                "instruction_character_count charged for that prompt cannot be "
+                "checked"
             )
+            continue
+        try:
+            settings = yaml.safe_load(
+                (root / str(relative)).read_text(encoding="utf-8")
+            )
+            if not isinstance(settings, Mapping):
+                raise ValueError("it does not hold a mapping at the top level")
+            candidates = _prompt_files_a_run_place_might_send(environment, settings)
+            if not candidates:
+                raise ValueError(
+                    "no runner is registered for this run place, or the one "
+                    "that is does not declare DEFAULT_PROMPT, so which prompt "
+                    "file it sends is not written down anywhere here"
+                )
+            measured = {
+                candidate: fixed_prompt_characters(
+                    load_prompt(candidate),
+                    experiment_prompt=_dig(settings, ("condition_a",)).get("prompt"),
+                    occupation=occupation,
+                )
+                for candidate in candidates
+            }
+        except Exception as unreadable:  # noqa: BLE001 - anything here is a refusal
+            # A missing settings file, a prompt file that is not there, wording
+            # that will not render: every one of them leaves the request
+            # unpriceable. Caught broadly and turned into a refusal rather than
+            # allowed to pass this rule by falling through it.
+            problems.append(
+                f"{environment}'s cost is charged "
+                f"{assumptions.instruction_character_count} characters for "
+                "everything its request carries besides the task and its "
+                "files, but that request cannot be built here and so cannot be "
+                f"priced: {unreadable}"
+            )
+            continue
+
+        name = max(measured, key=lambda candidate: sum(measured[candidate].values()))
+        widths = measured[name]
+        characters = sum(widths.values())
+        if assumptions.instruction_character_count >= characters:
+            continue
+        short_by = characters - assumptions.instruction_character_count
+        made_of = ", ".join(
+            f"{width} characters of {what}"
+            for what, width in sorted(widths.items(), key=lambda pair: -pair[1])
+            if width
+        )
+        problems.append(
+            f"{environment} sends prompts/{name}.yaml wrapped in its own "
+            f"condition_a.prompt wording, which core/prompt_loader.py renders "
+            f"to {characters} characters before the task's own words are added "
+            f"({made_of}), but the plan's cost sum charges "
+            f"{assumptions.instruction_character_count} characters for that "
+            f"part of every request — {short_by} characters short, on every "
+            "call this comparison makes"
+        )
     return problems
 
 

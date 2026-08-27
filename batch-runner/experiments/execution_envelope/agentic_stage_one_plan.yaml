@@ -160,11 +160,15 @@ cost:
   # drift apart. The free check reads them from that file rather than from a
   # second copy here.
   #
-  # One of those guesses is borrowed rather than measured: the length of the
-  # standing instructions. Stage one will have its own wording, which does not
-  # exist yet, so the three-place comparison's 1068 characters stands in for it.
-  # That wording is sent on every turn, so if stage one's instructions turn out
-  # much longer, this must be measured again before the figures are trusted.
+  # One of those guesses is borrowed rather than measured here: the length of
+  # the standing instructions. Stage one will have its own wording, which does
+  # not exist yet, so the three-place comparison's figure stands in for it. That
+  # figure is now measured rather than written down — the comparison renders the
+  # prompt each of its run places really sends and takes the widest, which is
+  # 5020 characters, where it used to say 1068. Borrowing it moved the cheapest
+  # row here from 3.24 to 3.32 to run. The wording is sent on every turn, so if
+  # stage one's own instructions turn out longer than the widest of those three,
+  # this must be measured again before the figures are trusted.
   assumptions_come_from: "experiments/execution_envelope/advance_check_plan.yaml"
 
   # One thing is NOT taken from that file: how much a single tool result may

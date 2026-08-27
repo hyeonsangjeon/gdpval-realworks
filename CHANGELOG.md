@@ -87,6 +87,87 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **Every request was charged 1,068 characters for wording that renders to
+  between 3,533 and 5,020, and 345 of the 1,068 were for wording no model ever
+  reads.** `instruction_character_count` pays for everything a request carries
+  besides the task's own words and its reference files, and it is charged on
+  every call every run place makes. The plan reached 1,068 by adding up the two
+  wording blocks it keeps in `model_run_conditions`, and both halves of that
+  were wrong in the same direction. The `system_instruction` block it counted
+  is **never sent** — `core/prompt_loader.py` lets a committed prompt file's own
+  `system_message` win whenever it has one, and all three committed files have
+  one — while the committed prompt file itself, which is the great majority of
+  what is sent, **was not counted at all**. The container's first request comes
+  to **5,020 characters**, not 1,068: short by **3,952 on every call**.
+- **Measured by rendering the prompt, not by adding up lengths written down a
+  second time.** New `fixed_prompt_characters()` renders each run place's
+  prompt file through the same `render_prompt()` an attempt is built with, once
+  alone and once wrapped in that place's `condition_a.prompt` block, and reports
+  what each part added — so the parts come to the length of a real render by
+  construction, and a refusal can say what the total is made of. The task's own
+  words are the one thing left out, because `max_input_tokens_per_call` already
+  charges them per task and counting them here would bill them twice. Editing
+  any of that wording moves the demand with it; no test in the new file types
+  5,020.
+- **The occupation is read from the catalogue, because the prompt writes it in
+  up to three times.** New `widest_occupation()` takes the longest name across
+  all 220 tasks — a benchmark fact from the pinned dataset column, not a
+  setting — so a plan running five tasks is held to the widest name any of them
+  could carry. An empty catalogue is **refused** rather than priced with a
+  prompt that names nobody.
+- **A prompt file named in the settings is priced alongside the runner's own,
+  and the longer is charged.** `core/executor.py` follows
+  `execution.sandbox.prompt_name` on the sandbox branch and reaches straight
+  past it on the subprocess branch, so which of the two a run place takes is
+  settled by wiring the check cannot read back. Charging the longer leaves no
+  arrangement of settings under which the prompt really sent exceeds the prompt
+  priced.
+- **Unreadable means refused, not skipped.** A settings file the plan does not
+  name, a settings file that is not there, one that holds no mapping, a named
+  prompt missing the keys `load_prompt` requires, a run place no runner serves,
+  or wording that will not render: each returns a refusal naming the run place
+  and what could not be built. Fourteen mutations of the rule — including the
+  original defect, restored — were each caught by a test.
+- **What is still not priced, named rather than implied.**
+  `SandboxRunner._augment_prompt` adds a deliverable contract section, a
+  dependency hint and a skills manual the committed settings switch off to the
+  container's **first** request. Those sit outside `render_prompt`, so the
+  demand made of the container is smaller than the container's real request.
+  This rule under-demands there; it never lets a plan claim more than the render
+  proved.
+- **The ceiling moves from 363.59 to 364.00 United States dollars.** Running the
+  tasks rises from 21.00 to 21.33; marking (269.87) and perception are
+  unchanged. Nothing has been spent under any of these figures — the plan is
+  refused on cost either way, against an approved maximum of 32.23, and this
+  correction does not ask for a new approval.
+- **Agentic Sandbox V2 stage one moved with it, which is the borrowing working.**
+  `experiments/execution_envelope/agentic_stage_one_plan.yaml` reads its
+  assumptions out of the comparison's plan rather than keeping a second copy,
+  so raising `instruction_character_count` there raised every row of the
+  stage-one table here: the cheapest row goes from **3.24 to 3.32** to run and
+  the dispatcher's own defaults from **492.67 to 493.33**.
+  `tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md` is updated to
+  match. **None of these is an approved amount**, no row has been chosen, and
+  the three refusals that keep a real model out of the stage-one loop are
+  untouched.
+- **A separate, older understatement in the stage-one specification, found
+  while checking the figure above.** That document said "marking the answers
+  adds 5.85 whichever row is chosen, so a total is the running figure plus
+  5.85". Both halves were wrong in the expensive direction: 5.85 predates the
+  correction that made marking a real ceiling, and looking at the answers was
+  left out of the total altogether. `scripts/check_agentic_stage_one_ceiling.py`
+  prints **89.95** to mark and, on top of it, **22.50** to look, on every row —
+  so the cheapest row's real total is **115.77**, not the 9.17 the old sentence
+  implied, an understatement of about 106 dollars. No code changed; the
+  specification now quotes the check's own columns, including its total column,
+  rather than carrying figures over by hand. Nothing has been spent under either
+  figure: stage one has no approved amount at all and cannot reach a model.
+- **Two tests that pin the ceiling were updated by hand, on purpose.**
+  `test_the_ceiling_is_unchanged_because_the_constant_did_not_move` and
+  `test_the_committed_plan_draws_no_refusal_from_the_free_check` each assert the
+  total outright, so a correction to the cost arithmetic makes them fail until
+  somebody looks at the new figure and writes it in. Both now read
+  **363.99643750**, and both say in their docstring which correction moved it.
 - **The container's repair prompt was priced at three of its eight parts,
   because the other five were called unmeasurable.** When a container run
   fails, `core/sandbox_runner.py` asks the model for the code again and sends

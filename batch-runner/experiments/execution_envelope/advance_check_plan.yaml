@@ -112,9 +112,17 @@ model_run_conditions:
     # The version of the request format used to call the service.
     api_version: "2025-04-01-preview"
 
-    # The standing instruction sent with every call, word for word. Copied
-    # unchanged into all three experiment settings files; the free check
+    # The standing instruction each run place's settings offer, word for word.
+    # Copied unchanged into all three experiment settings files; the free check
     # compares them character by character and refuses the run if they drift.
+    #
+    # It is offered rather than sent. core/prompt_loader.py lets a committed
+    # prompt file's own system_message win whenever it has one, and all three
+    # prompt files have one, so this wording is a fallback that never comes up.
+    # Holding the three places to the same fallback is still worth doing — it
+    # is one more way they could quietly stop being comparable — but it is not
+    # what the model reads, and the cost sum no longer charges for it as though
+    # it were. See instruction_character_count below.
     system_instruction: |
       You are a helpful assistant that completes professional tasks.
       When the task requires creating files (e.g., Excel, Word, PDF, PowerPoint),
@@ -377,10 +385,11 @@ cost:
   # working, not a fault.
   #
   # When the amount was approved, the ceiling came to exactly 32.23. It has
-  # since been corrected twice, and both corrections raised it. Nothing about
-  # the run got more expensive on either occasion — no extra call, no different
-  # model, no changed setting. Both times the old figure was simply wrong in
-  # the direction that costs money, and was replaced by one that is not.
+  # since been corrected three times, and every one of them raised it. Nothing
+  # about the run got more expensive on any of those occasions — no extra call,
+  # no different model, no changed setting. Each time the old figure was simply
+  # wrong in the direction that costs money, and was replaced by one that is
+  # not.
   #
   # First correction, 32.23 → 43.77: a looping request was charged wrongly. The
   # Azure code interpreter asks the model again after each piece of code it
@@ -398,14 +407,24 @@ cost:
   # work is 21.00; marking is where nearly the whole bill sits, and it was the
   # part being estimated most loosely.
   #
-  # Nothing was spent under either wrong figure: the Azure run place has never
-  # been reachable from the machine this was attempted from, and marking has
+  # Third correction, 363.59 → 364.00: the wording every request carries was
+  # charged at 1068 characters, being the two instruction blocks written out at
+  # the top of this file added together. The first of those is never sent, and
+  # the committed prompt file that is sent — several thousand characters of it,
+  # around every task, on every call — was not counted at all. Measuring what
+  # core/prompt_loader.py really renders puts the widest of the three at 5020
+  # characters and raises the running half from 21.00 to 21.33. Of the 291.20
+  # before the safety multiplier, marking is 269.87 and the actual work 21.33.
+  #
+  # Nothing was spent under any of the wrong figures: the Azure run place has
+  # never been reachable from the machine this was attempted from, and marking
+  # has
   # not been run for this plan. But had it been, the run could have been
   # allowed to start and then billed more than was approved, with every check
   # reporting it as within budget.
   #
   # Ways out, and the choice belongs to the owner:
-  #   1. approve 363.59 instead;
+  #   1. approve 364.00 instead;
   #   2. lower the marking settings in grading_configs/default_v2.yaml — the
   #      ten tool rounds per scoring line and the 72 picture calls per task are
   #      both chosen limits rather than published ones, and they are what makes
@@ -420,7 +439,7 @@ cost:
   # The answer-length cap is not one of the ways out: the note at
   # max_output_tokens records that a lower value truncated this model's code.
   #
-  # Whichever is chosen, 363.59 is a worked-out figure and not an approval. The
+  # Whichever is chosen, 364.00 is a worked-out figure and not an approval. The
   # approved amount is the number written below, and only the owner changes it.
   approved_maximum_usd: 32.23
 
@@ -430,10 +449,37 @@ cost:
     # the ceiling comes out larger rather than smaller.
     characters_per_token: 3.0
 
-    # The combined length, in characters, of the standing instruction and the
-    # task instruction above. Both are sent with every call. A test recomputes
-    # this from the text and fails if the two stop agreeing.
-    instruction_character_count: 1068
+    # What one request carries, in characters, besides the task's own words and
+    # its reference files. Charged on every call, by every run place, so a
+    # figure below what is really sent understates the running half once per
+    # call for as long as this plan stands.
+    #
+    # This used to say 1068, being the standing instruction and the task
+    # instruction written out above added together. Both halves of that were
+    # wrong. The standing instruction above is never sent — core/prompt_loader.py
+    # lets a committed prompt file's own system_message win whenever it has one,
+    # and all three of them have one — so 345 characters were charged for
+    # wording no model reads. And the committed prompt file itself was not
+    # counted at all, neither its own standing instruction nor the several
+    # thousand characters of wording it wraps every task in, which is the great
+    # majority of what is sent.
+    #
+    # 5020 is the widest of the three, measured rather than typed: the container
+    # sends prompts/sandbox_occupation_codegen.yaml, which renders to 571
+    # characters of standing instruction and 3725 of wording around the task,
+    # with 724 more from its own condition_a.prompt suffix. The other two come
+    # to 3867 and 3533. The occupation is written into those templates up to
+    # three times, so they are rendered with the longest name in the catalogue.
+    # The free check builds all three through the same renderer a real attempt
+    # uses and refuses this plan if the number here is lower — nothing below is
+    # copied from anything, so editing the prompt files moves the demand.
+    #
+    # Still outside this figure: SandboxRunner._augment_prompt adds a
+    # deliverable contract section and a dependency hint to the container's
+    # first request, and a skills manual its settings currently switch off.
+    # Those are the next thing to price. Their absence makes the container's
+    # demand smaller than its real first request, never larger.
+    instruction_character_count: 5020
 
     # The most times the model may be asked again inside one attempt while it
     # is still working with its tools.
