@@ -506,26 +506,37 @@ cost:
     #   wrong. Switch repair on — or simply delete the block, since
     #   core/sandbox_runner.py builds its settings as
     #   `{"enabled": True, "max_attempts": 1, **(repair or {})}` and so turns
-    #   the loop *on* when it is left out — and SandboxRunner._build_reflection
-    #   writes the run's own output into the next request: the last 800
-    #   characters of what the code printed, the last 800 it printed as an
-    #   error, and the 600-character tail of the failure that stopped it. That
-    #   is 2200 characters, 734 tokens at the ratio above, and the 0 below
-    #   charges for none of it.
+    #   the loop *on* when it is left out — and a whole repair prompt sits in
+    #   front of the model on the second turn: the opening, instruction and
+    #   close it always carries, twelve blocking-error lines under their heading
+    #   with a 600-character failure tail at the head of them, every
+    #   repair_guidance entry prompts/sandbox_occupation_codegen.yaml holds, six
+    #   warning lines under their heading, a deliverable contract section, and
+    #   the last 800 characters each of what the code printed and what it
+    #   printed as an error. That is 3922 characters, 1308 tokens at the ratio
+    #   above, and the 0 below charges for none of it.
     #
-    #   core/execution_envelope_preflight.py now reads those three widths out of
-    #   the runner and refuses this plan if the container's own settings would
-    #   really loop while the number below sits under 734. Today the settings
+    #   core/execution_envelope_preflight.py now gets that figure by asking
+    #   core/sandbox_runner.py to build such a prompt through the same function a
+    #   repair turn renders with, and refuses this plan if the container's own
+    #   settings would really loop while the number below sits under 1308. None
+    #   of 3922, 1308 or the parts above is typed into the checking code: edit a
+    #   heading in the prompt file, change a limit in the runner or add a
+    #   repair_guidance entry and the figure moves by itself. Today the settings
     #   say the loop is off, so the check is silent and the 0 stands. It stops
-    #   being silent the moment that one line changes, which is the point.
+    #   being silent the moment that one line changes, which is the point. It
+    #   also refuses rather than staying silent if the named prompt cannot be
+    #   read at all.
     #
-    #   734 is a floor and not the largest. The same repair prompt also carries
-    #   up to twelve blocking-error lines, up to six warnings, whatever repair
-    #   guidance the prompt spec holds, and the whole contract section, and none
-    #   of those has a stated width anywhere. It leaves out the prior code on
-    #   purpose: the reflection carries up to 4000 characters of it, but that is
-    #   the model's own earlier answer, which max_input_tokens_per_attempt
-    #   already charges a full max_output_tokens for.
+    #   The one part of the prompt outside the 3922 is the English the run writes
+    #   onto those lines while it runs — the text of each blocking error and
+    #   warning, and whatever a real contract adds over the least one that can
+    #   render. Those are settled by the task and the failure, not by anything
+    #   committed here. The prior code is left out on purpose in the other
+    #   direction: the prompt carries up to 4000 characters of it and the words
+    #   placed around it are counted, but the code itself is the model's own
+    #   earlier answer, which max_input_tokens_per_attempt already charges a full
+    #   max_output_tokens for.
     #
     #   Azure code interpreter: the service feeds the output of the code it ran
     #   back to the model. Microsoft's documentation does not publish a limit on

@@ -30,7 +30,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from core.config import SUBPROCESS_TIMEOUT, SUBPROCESS_MEMORY_GB, DEFAULT_TOKENS
 from core.artifact_verifier import verify_artifacts
@@ -184,16 +184,17 @@ _REDACT_ROOTS = sorted(
 )
 
 
-# How much of a failed run's own output is carried back to the model when the
-# repair loop asks for the code a second time. Named here rather than typed at
-# each call site because these three widths are the only part of the repair
-# prompt with a number attached, and something outside this module needs to
-# read them: core/execution_envelope_preflight.py imports them to work out the
-# least a container's second turn can be carrying, instead of quoting figures
-# of its own that would go stale the moment one of these changed.
+# What the repair loop carries back to the model when it asks for the code a
+# second time: how much of the failed run's own output, and how many lines of
+# each kind go with it. Named here rather than typed at each call site because
+# core/execution_envelope_preflight.py has to price the repair prompt, and a
+# figure typed over there would go stale the moment one of these changed.
 REFLECTION_STDOUT_TAIL_CHARS = 800
 REFLECTION_STDERR_TAIL_CHARS = 800
 EXECUTION_ERROR_TAIL_CHARS = 600
+REFLECTION_MAX_BLOCKING_ERRORS = 12
+REFLECTION_MAX_WARNINGS = 6
+REFLECTION_PRIOR_CODE_MAX_CHARS = 4000
 
 
 def _sanitize_tail(
@@ -215,6 +216,22 @@ def _sanitize_tail(
     return s
 
 
+def execution_failure_blocking_error(
+    category: Optional[str], error_text: Optional[str]
+) -> str:
+    """The blocking line a run that stopped on an error contributes.
+
+    Named rather than formatted where it is used because
+    :func:`widest_repair_prompt_characters` has to build one at its full width
+    in order to price the repair prompt, and a second copy of this wording is
+    exactly how two figures start disagreeing about the same line.
+    """
+    return (
+        f"execution_failed[{category or 'execution_error'}]: "
+        f"{_sanitize_tail(error_text, limit=EXECUTION_ERROR_TAIL_CHARS)}"
+    )
+
+
 # Built-in fallback for the self-repair reflection wording. The canonical copy
 # lives in the prompt spec (`reflection_strings:` in the codegen YAML) so it can
 # be edited in one place; these defaults keep _build_reflection working when a
@@ -226,6 +243,7 @@ _DEFAULT_REFLECTION_STRINGS = {
         "Regenerate the COMPLETE solution and fix every issue below."
     ),
     "blocking_header": "Blocking problems to fix:",
+    "strategy_header": "Required repair strategy:",
     "warnings_header": "Secondary warnings (address if relevant):",
     "stdout_header": "Previous stdout (tail):",
     "stderr_header": "Previous stderr/error (tail):",
@@ -233,6 +251,202 @@ _DEFAULT_REFLECTION_STRINGS = {
     "code_fence": "----",
     "close": "[/REFLECTION]",
 }
+
+
+def reflection_strings(prompt_data: Mapping[str, Any]) -> Dict[str, str]:
+    """The repair prompt's wording: the spec's where it has one, else the default."""
+    written = prompt_data.get("reflection_strings") or {}
+    merged = {**_DEFAULT_REFLECTION_STRINGS, **written}
+    return {str(key): str(value) for key, value in merged.items()}
+
+
+def reflection_repair_guidance(
+    prompt_data: Mapping[str, Any], categories: Sequence[str]
+) -> List[str]:
+    """The guidance lines the spec holds for these error categories, in order."""
+    written = prompt_data.get("repair_guidance") or {}
+    return [str(written[c]) for c in categories if written.get(c)]
+
+
+def render_reflection(
+    *,
+    strings: Mapping[str, str],
+    contract_section: str,
+    blocking_errors: Sequence[str],
+    guidance: Sequence[str],
+    warnings: Sequence[str],
+    stdout_tail: str,
+    stderr_tail: str,
+    code: str,
+) -> str:
+    """Lay out one repair prompt, and apply the limits on how much it may carry.
+
+    The only place the [REFLECTION] block is built. ``SandboxRunner`` calls this
+    on a failed attempt; ``widest_repair_prompt_characters`` calls it to measure
+    what such a block comes to. Two renderers would be two answers, and the one
+    used for pricing would be the one nobody noticed drifting.
+    """
+    lines = [
+        strings["open"],
+        strings["intro"],
+        "",
+        strings["blocking_header"],
+    ]
+    for err in blocking_errors[:REFLECTION_MAX_BLOCKING_ERRORS]:
+        lines.append(f"- {err}")
+
+    if guidance:
+        lines += ["", strings["strategy_header"]]
+        lines.extend(f"- {item}" for item in guidance)
+
+    if warnings:
+        lines.append("")
+        lines.append(strings["warnings_header"])
+        for w in warnings[:REFLECTION_MAX_WARNINGS]:
+            lines.append(f"- {w}")
+
+    lines.append("")
+    lines.append(contract_section)
+
+    if stdout_tail.strip():
+        lines += ["", strings["stdout_header"], stdout_tail]
+    if stderr_tail.strip():
+        lines += ["", strings["stderr_header"], stderr_tail]
+
+    # Include the prior code when short enough to be useful context.
+    if code and len(code) <= REFLECTION_PRIOR_CODE_MAX_CHARS:
+        lines += ["", strings["code_header"],
+                  strings["code_fence"], code, strings["code_fence"]]
+    lines.append(strings["close"])
+    return "\n".join(lines)
+
+
+def narrowest_contract_section() -> str:
+    """The least a deliverable contract section can come to, built by the contract.
+
+    ``render_reflection`` appends one of these on every repair prompt, whatever
+    the task, so its length is part of what a later turn always carries. The
+    figure is taken by building the section rather than by counting its words
+    here, so wording edited in :mod:`core.deliverable_contract` moves it.
+
+    Both branches of ``to_prompt_section`` are built and the shorter kept, and
+    every field is set to the least that still renders: no notes, no keywords,
+    and the shortest count and confidence either can be. A real contract is
+    longer, which is the direction that is safe to be wrong in.
+    """
+    return min(
+        (
+            DeliverableContract(
+                expected_extensions=list(expected),
+                min_count=0,
+                required_keywords=[],
+                notes=[],
+                confidence="",  # type: ignore[arg-type]
+            ).to_prompt_section()
+            for expected in ((), ("",))
+        ),
+        key=len,
+    )
+
+
+#: Stands in for the model's own earlier code while the words placed around it
+#: are measured. One character, taken off again afterwards, so the count covers
+#: the runner's own wording without covering the answer it wraps.
+_PRIOR_CODE_STAND_IN = "c"
+
+#: What the widest repair prompt is made of, in the order the parts are added.
+#: Each name is the English a refusal quotes back, so it reads as a sentence,
+#: and each covers its own heading as well as its contents — a part is measured
+#: by what it adds to the prompt, and a heading only appears when it does.
+_REPAIR_PROMPT_PARTS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    ("the opening, the instruction and the close it always carries", ()),
+    (
+        "up to twelve blocking-error lines under their heading, the first of "
+        "them the failure that stopped the run",
+        ("blocking_errors",),
+    ),
+    (
+        "the repair guidance the committed prompt holds, under its heading",
+        ("guidance",),
+    ),
+    ("up to six secondary warnings under their heading", ("warnings",)),
+    ("the deliverable contract section, at its narrowest", ("contract_section",)),
+    ("the last of what the code printed, under its heading", ("stdout_tail",)),
+    (
+        "the last of what it printed as an error, under its heading",
+        ("stderr_tail",),
+    ),
+)
+
+
+def widest_repair_prompt_characters(
+    prompt_name: Optional[str] = None,
+) -> Dict[str, int]:
+    """What one repair prompt comes to, part by part, worked out by building it.
+
+    Every figure returned is the length of a string this module really renders,
+    through the same :func:`render_reflection` a repair turn uses. Nothing is
+    added up from widths written down a second time, so a header edited in
+    ``prompts/<name>.yaml``, a limit changed above, or a repair-guidance entry
+    added all move this with them.
+
+    The parts are added one at a time and each figure is what that part added,
+    so they come to the whole prompt exactly. They are kept apart rather than
+    summed here so a refusal can say what the total is made of.
+
+    The model's own earlier code is the one thing left out. The words placed
+    around it are counted; the code between them is not, because it is the
+    model's earlier answer and a cost sum that charges ``max_output_tokens`` for
+    every earlier answer has already paid for those words once.
+
+    Raises whatever :func:`core.prompt_loader.load_prompt` raises when the named
+    prompt cannot be read. There is no reading of an unreadable prompt that
+    would let this return a smaller answer instead.
+    """
+    prompt_data = load_prompt(prompt_name or SandboxRunner.DEFAULT_PROMPT)
+    strings = reflection_strings(prompt_data)
+    every_category = list((prompt_data.get("repair_guidance") or {}).keys())
+
+    widest = {
+        "contract_section": narrowest_contract_section(),
+        "blocking_errors": (
+            [execution_failure_blocking_error(None, "x" * EXECUTION_ERROR_TAIL_CHARS)]
+            + [""] * (REFLECTION_MAX_BLOCKING_ERRORS - 1)
+        ),
+        "guidance": reflection_repair_guidance(prompt_data, every_category),
+        "warnings": [""] * REFLECTION_MAX_WARNINGS,
+        "stdout_tail": "o" * REFLECTION_STDOUT_TAIL_CHARS,
+        "stderr_tail": "e" * REFLECTION_STDERR_TAIL_CHARS,
+        "code": "",
+    }
+    so_far: Dict[str, Any] = {
+        "contract_section": "",
+        "blocking_errors": [],
+        "guidance": [],
+        "warnings": [],
+        "stdout_tail": "",
+        "stderr_tail": "",
+        "code": "",
+    }
+
+    measured: Dict[str, int] = {}
+    counted = 0
+    for what, fields in _REPAIR_PROMPT_PARTS:
+        for field in fields:
+            so_far[field] = widest[field]
+        now = len(render_reflection(strings=strings, **so_far))
+        measured[what] = now - counted
+        counted = now
+
+    with_the_code = len(
+        render_reflection(
+            strings=strings, **{**so_far, "code": _PRIOR_CODE_STAND_IN}
+        )
+    )
+    measured["the words placed around the model's earlier code"] = (
+        with_the_code - counted - len(_PRIOR_CODE_STAND_IN)
+    )
+    return measured
 
 # Cache for the (relatively expensive) `docker info` probe.
 _DOCKER_AVAILABLE: Optional[bool] = None
@@ -670,12 +884,11 @@ class SandboxRunner:
             or classify_execution_error(result.get("error"))
         )
         if not result.get("success"):
-            tail = _sanitize_tail(
-                result.get("error"), limit=EXECUTION_ERROR_TAIL_CHARS
-            )
             blocking.insert(
                 0,
-                f"execution_failed[{execution_error_category or 'execution_error'}]: {tail}",
+                execution_failure_blocking_error(
+                    execution_error_category, result.get("error")
+                ),
             )
 
         status = self._status_for(attempt_idx, result, analysis, blocking)
@@ -1027,54 +1240,27 @@ class SandboxRunner:
         """A focused [REFLECTION] block fed back to the model for the next attempt.
 
         The wording is authored in the prompt spec (``reflection_strings:`` in the
-        codegen YAML) so a researcher can edit it in one place; this method owns
-        only the layout and the safety limits. Missing keys fall back to
-        ``_DEFAULT_REFLECTION_STRINGS``.
+        codegen YAML) so a researcher can edit it in one place; the layout and the
+        safety limits belong to :func:`render_reflection`, which this method feeds
+        and which ``core/execution_envelope_preflight.py`` prices. Missing keys
+        fall back to ``_DEFAULT_REFLECTION_STRINGS``.
         """
-        s = {**_DEFAULT_REFLECTION_STRINGS, **(self.prompt_data.get("reflection_strings") or {})}
-        lines = [
-            s["open"],
-            s["intro"],
-            "",
-            s["blocking_header"],
-        ]
-        for err in blocking_errors[:12]:
-            lines.append(f"- {err}")
-
-        categories = _blocking_error_categories(blocking_errors)
-        guidance_map = self.prompt_data.get("repair_guidance") or {}
-        guidance = [guidance_map[category] for category in categories if guidance_map.get(category)]
-        if guidance:
-            lines += ["", s.get("strategy_header", "Required repair strategy:")]
-            lines.extend(f"- {item}" for item in guidance)
-
-        warnings = analysis.get("warnings") or []
-        if warnings:
-            lines.append("")
-            lines.append(s["warnings_header"])
-            for w in warnings[:6]:
-                lines.append(f"- {w}")
-
-        lines.append("")
-        lines.append(contract.to_prompt_section())
-
-        stdout_tail = _sanitize_tail(
-            result.get("text"), limit=REFLECTION_STDOUT_TAIL_CHARS
+        return render_reflection(
+            strings=reflection_strings(self.prompt_data),
+            contract_section=contract.to_prompt_section(),
+            blocking_errors=blocking_errors,
+            guidance=reflection_repair_guidance(
+                self.prompt_data, _blocking_error_categories(blocking_errors)
+            ),
+            warnings=analysis.get("warnings") or [],
+            stdout_tail=_sanitize_tail(
+                result.get("text"), limit=REFLECTION_STDOUT_TAIL_CHARS
+            ),
+            stderr_tail=_sanitize_tail(
+                result.get("error"), limit=REFLECTION_STDERR_TAIL_CHARS
+            ),
+            code=code or "",
         )
-        stderr_tail = _sanitize_tail(
-            result.get("error"), limit=REFLECTION_STDERR_TAIL_CHARS
-        )
-        if stdout_tail.strip():
-            lines += ["", s["stdout_header"], stdout_tail]
-        if stderr_tail.strip():
-            lines += ["", s["stderr_header"], stderr_tail]
-
-        # Include the prior code when short enough to be useful context.
-        if code and len(code) <= 4000:
-            lines += ["", s["code_header"],
-                      s["code_fence"], code, s["code_fence"]]
-        lines.append(s["close"])
-        return "\n".join(lines)
 
     def _metadata(self, executor_used: str, skills, manifest: DependencyManifest) -> dict:
         return {

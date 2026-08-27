@@ -909,34 +909,35 @@ def _check_the_plan_counts_every_call_the_container_makes(
     return problems
 
 
-def _container_carried_forward_characters() -> dict[str, int]:
-    """The widths the container's repair prompt is guaranteed to carry back.
+def _container_carried_forward_characters(
+    container_settings: Mapping[str, Any],
+) -> dict[str, int]:
+    """What the container's repair prompt comes to, part by part.
 
-    Read off :mod:`core.sandbox_runner` rather than typed again here, for the
-    same reason :func:`_container_loop_defaults` reads the loop settings off the
-    runner: a width that changed there would otherwise leave this check quoting
-    a number that had stopped being true.
+    Measured by :mod:`core.sandbox_runner` rather than counted again here, for
+    the same reason :func:`_container_loop_defaults` reads the loop settings off
+    the runner: a figure worked out over there is worked out by building a real
+    repair prompt through the very function a repair turn renders with, so a
+    heading edited in the prompt file, a limit changed in the runner or a
+    repair-guidance entry added moves this with it. A number typed here would
+    stop being true the moment any of those changed, and nothing would say so.
 
-    Each entry is a place in ``_build_reflection`` where the runner trims
-    something to a fixed length and puts it in front of the model again. They
-    are kept apart rather than summed here so the refusal can say what the
-    total is made of.
+    The prompt measured is the one this run place's settings name, not whichever
+    one is the runner's default, because ``core/executor.py`` hands
+    ``execution.sandbox.prompt_name`` straight to ``SandboxRunner``.
+
+    Raises when that prompt cannot be read. The caller turns that into a
+    refusal: a repair prompt nobody can read is a repair prompt nobody can
+    price, and treating it as free would be the optimistic answer.
 
     Imported inside the function because the runner reaches for the container
     libraries at import time, and this module is meant to run on a machine with
     no container on it at all.
     """
-    from core.sandbox_runner import (
-        EXECUTION_ERROR_TAIL_CHARS,
-        REFLECTION_STDERR_TAIL_CHARS,
-        REFLECTION_STDOUT_TAIL_CHARS,
-    )
+    from core.sandbox_runner import widest_repair_prompt_characters
 
-    return {
-        "the last of what the code printed": REFLECTION_STDOUT_TAIL_CHARS,
-        "the last of what it printed as an error": REFLECTION_STDERR_TAIL_CHARS,
-        "the tail of the failure that stopped it": EXECUTION_ERROR_TAIL_CHARS,
-    }
+    named = _dig(container_settings, ("execution", "sandbox")).get("prompt_name")
+    return widest_repair_prompt_characters(str(named) if named else None)
 
 
 def _check_the_plan_counts_what_the_container_carries_forward(
@@ -955,27 +956,30 @@ def _check_the_plan_counts_what_the_container_carries_forward(
     and nothing is carried forward". That is true only while the committed file
     says ``repair: enabled: false``. Switch repair on — which nothing outside
     that one line prevents, and which the runner does by itself whenever the
-    block is left out — and ``SandboxRunner._build_reflection`` puts the last
-    800 characters of what the code printed, the last 800 it printed as an
-    error and the 600-character tail of the failure that stopped it in front of
-    the model on the second turn. At ``0`` the sum charges nothing for any of it.
+    block is left out — and a whole repair prompt sits in front of the model on
+    the second turn. At ``0`` the sum charges nothing for any of it.
 
     So this refuses only where the container would really loop, and only where
     the plan sits *below* what the loop is certain to carry. A plan more
     careful than the settings is left alone, exactly as in
     :func:`_check_the_plan_counts_every_call_the_container_makes`.
 
-    **It is a floor, not the largest.** The repair prompt also carries up to
-    twelve blocking-error lines, up to six warnings, whatever repair guidance
-    the prompt spec holds for the error categories seen, and the whole
-    deliverable contract section — none of which has a fixed width anywhere.
-    What is counted here is only the part the source pins down.
+    **What the figure covers.** ``core.sandbox_runner`` builds the prompt at the
+    widest its committed wording allows and reports what each part came to: the
+    opening, instruction and close it always carries; twelve blocking-error
+    lines under their heading, the first of them a full-width failure tail; every
+    repair-guidance entry the committed prompt holds; six warning lines under
+    their heading; the narrowest a deliverable contract section can render to;
+    and both output tails under their headings. The only thing outside the count
+    is the English the run writes onto those lines while it runs, which is
+    settled by the task and the failure rather than by anything committed here.
 
-    The prior code is deliberately *not* counted, though the reflection carries
-    up to 4000 characters of it. That code is the model's own earlier answer,
-    and ``max_input_tokens_per_attempt`` already charges a full
-    ``max_output_tokens`` for every earlier answer. Adding it here would bill
-    the same words twice and make the ceiling look better founded than it is.
+    The model's own earlier code is left out on purpose, though the prompt
+    carries up to four thousand characters of it — the words placed around it are
+    counted, the code between them is not. That code is the model's earlier
+    answer, and ``max_input_tokens_per_attempt`` already charges a full
+    ``max_output_tokens`` for every earlier answer. Adding it here would bill the
+    same words twice and make the ceiling look better founded than it is.
     """
     written = _dig(
         plan, ("cost", "assumptions", "max_tool_result_tokens_per_turn")
@@ -990,13 +994,6 @@ def _check_the_plan_counts_what_the_container_carries_forward(
         # assumptions are read; this rule adds nothing by saying it again.
         return []
 
-    widths = _container_carried_forward_characters()
-    characters = sum(widths.values())
-    floor = int(
-        (Decimal(characters) / characters_per_token).to_integral_value(
-            rounding=ROUND_CEILING
-        )
-    )
     container_mode = EXECUTION_MODE_BY_ENVIRONMENT[ENVIRONMENT_DOCKER_CONTAINER]
 
     problems: list[str] = []
@@ -1010,12 +1007,34 @@ def _check_the_plan_counts_what_the_container_carries_forward(
             # into and nothing here to price.
             continue
 
+        try:
+            widths = _container_carried_forward_characters(settings)
+        except Exception as unreadable:  # noqa: BLE001 - anything here is a refusal
+            # A missing prompt file, wording that will not parse, a spec that
+            # fails its own required keys: every one of them leaves the repair
+            # prompt unpriceable. Caught broadly and turned into a refusal
+            # rather than allowed to pass this rule by falling through it.
+            problems.append(
+                f"{environment}'s settings let its repair loop ask for the code "
+                f"{shape.code_turns} times, so a later turn carries the repair "
+                "prompt core/sandbox_runner.py builds, but that prompt cannot be "
+                f"read here and so cannot be priced: {unreadable}"
+            )
+            continue
+
+        characters = sum(widths.values())
+        least_tokens = int(
+            (Decimal(characters) / characters_per_token).to_integral_value(
+                rounding=ROUND_CEILING
+            )
+        )
+
         claimed = written.get(environment)
         try:
             claimed_tokens = int(claimed)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             continue
-        if claimed_tokens >= floor:
+        if claimed_tokens >= least_tokens:
             continue
         made_of = ", ".join(
             f"{width} characters of {what}"
@@ -1023,13 +1042,13 @@ def _check_the_plan_counts_what_the_container_carries_forward(
         )
         problems.append(
             f"{environment}'s settings let its repair loop ask for the code "
-            f"{shape.code_turns} times, and core/sandbox_runner.py writes the "
-            f"run's own output back into the next request ({made_of}), but the "
-            f"plan's cost sum charges {claimed_tokens} tokens for what a later "
-            f"turn carries; {characters} characters is {floor} tokens at this "
-            "plan's ratio, and that is a floor — the blocking-error lines, the "
-            "warnings, the repair guidance and the contract section have no "
-            "fixed width at all"
+            f"{shape.code_turns} times, and core/sandbox_runner.py builds the "
+            f"next request out of the committed repair prompt and the run's own "
+            f"output ({made_of}), but the plan's cost sum charges "
+            f"{claimed_tokens} tokens for what a later turn carries; "
+            f"{characters} characters is {least_tokens} tokens at this plan's "
+            "ratio, and the only part of the prompt outside that figure is the "
+            "English the run writes onto those lines while it runs"
         )
     return problems
 

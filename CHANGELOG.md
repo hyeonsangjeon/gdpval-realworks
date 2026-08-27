@@ -87,6 +87,56 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **The container's repair prompt was priced at three of its eight parts,
+  because the other five were called unmeasurable.** When a container run
+  fails, `core/sandbox_runner.py` asks the model for the code again and sends
+  the failed run's own record along with it.
+  `core/execution_envelope_preflight.py` demands the plan pay for what that
+  second request carries, and it counted the stdout tail, the stderr tail and
+  the failure tail — **2,200 characters, 734 tokens** — on the stated grounds
+  that the blocking errors, the warnings, the repair guidance and the fixed
+  headings "have no fixed width". Every one of those had a width available in
+  this repository: the render trims blocking errors to **12** lines and
+  warnings to **6**, the repair guidance is written in a committed
+  `prompts/*.yaml`, a deliverable contract section is appended on every repair
+  prompt whatever the task, and the opening, instruction, close and headings
+  are strings. The real figure is **3,922 characters, 1,308 tokens** — the
+  omission understated it by **78%**.
+- **Measured by building the prompt, not by adding up widths written down a
+  second time.** `widest_repair_prompt_characters()` renders the widest repair
+  prompt the committed wording allows through the same new
+  `render_reflection()` that a real repair turn renders with, adding one part
+  at a time and recording what each part added — so the parts sum to the
+  length of a real render by construction, and the refusal can say what the
+  total is made of. `SandboxRunner._build_reflection` now delegates to that
+  same function (the golden-output test confirms the rendered block is
+  byte-identical), the limits are named constants, and the failure line is
+  built by one shared `execution_failure_blocking_error()`. Neither `3922`,
+  `1308`, `12` nor `6` appears in the rule that spends them: editing a heading
+  in `prompts/sandbox_occupation_codegen.yaml`, changing a limit, or adding a
+  repair-guidance entry moves the demanded figure on its own.
+- **An unreadable prompt is now a refusal rather than a cheaper answer.** The
+  measurement raises when `load_prompt` cannot find, parse, or validate the
+  prompt the settings name, and the rule turns that into a problem instead of
+  falling through it — including when the plan prices the place at nothing, so
+  reading the plan's figure first can no longer let an unreadable prompt pass
+  in silence. The prompt measured is the one `execution.sandbox.prompt_name`
+  names, matching what `core/executor.py` hands the runner; naming a different
+  committed prompt changes the answer to 3,056, which a test asserts. With the
+  repair loop off, an unnameable prompt produces nothing — the rule stays
+  scoped to runs that would really carry it.
+- **The exemption list this sweep carried is now empty, and had to be
+  earned.** `test_marking_ceiling_has_no_uncapped_part.py` allowed exactly one
+  production string to say a bill had no top. `STILL_OPEN_ELSEWHERE` is now
+  `()`, paired with a `CLOSED_HERE` entry asserting the excusing sentence is
+  really gone from the source rather than merely dropped from the list.
+- **The free check's report is unchanged: 11 problems, `may_start` still
+  false.** The committed container file has `repair: enabled: false`, so
+  nothing was being under-charged today. What this closes is the case where
+  someone turns that one line on: at 220 tasks and one repair each, the
+  understatement was **574 tokens a turn, about $0.20** with the safety
+  multiplier. Small, and saying so is part of the finding — the defect was a
+  figure the source could have settled, not a large sum.
 - **The marking-cost floor left out what every marking conversation opens
   with, and said so in a sentence that named one of the caps it was
   denying.** `core/execution_envelope_grading_cost.py` demands that a plan
