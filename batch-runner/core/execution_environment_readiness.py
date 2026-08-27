@@ -1,4 +1,4 @@
-"""Readiness check for running one GPT model in five different places.
+"""Readiness check for running one GPT model in eight different places.
 
 This module answers one question without ever calling a paid model:
 *may the execution-environment comparison start, and if not, what exactly is
@@ -8,10 +8,19 @@ Nothing here contacts a provider, signs in to a cloud account, or spends money.
 Every check either reads the repository's own code or reads a plan the operator
 wrote by hand, so the whole check is free to run and safe to run in CI.
 
-The five places a task can be run are described by :data:`ENVIRONMENTS`. Each
+The eight places a task can be run are described by :data:`ENVIRONMENTS`. Each
 one is graded into exactly one of the five states in :data:`STATUSES`, together
 with the file, function, setting, or product-documentation page that justifies
 the grade.
+
+Three of the eight are whole products that drive the work themselves — Codex's
+own command-line tool and the GitHub Copilot command-line tool, twice. Those
+three raise a question the first five never did: *where does the answer
+actually come from?* Five of the places send the task to one named deployment
+in one named Microsoft Foundry resource. The last one lets a product choose
+the model. That is not a difference in run place; it is a difference in
+product. It is written down in :data:`MODEL_SERVING_PATHS`, kept out of the
+two comparisons that hold the model still, and scored on a board of its own.
 """
 
 from __future__ import annotations
@@ -48,13 +57,16 @@ STATUSES = (
     STATUS_EVIDENCE_INSUFFICIENT,
 )
 
-# ── The five places a task can be run ──────────────────────────────────────
+# ── The eight places a task can be run ─────────────────────────────────────
 
 ENVIRONMENT_HOST_PYTHON_PROCESS = "host_python_process"
 ENVIRONMENT_DOCKER_CONTAINER = "docker_container"
 ENVIRONMENT_AZURE_CODE_INTERPRETER = "azure_code_interpreter"
 ENVIRONMENT_AGENTIC_SANDBOX_V2 = "agentic_sandbox_v2"
 ENVIRONMENT_CODEX_BUILT_IN_AGENT = "codex_built_in_agent"
+ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY = "codex_command_line_tool_foundry"
+ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY = "copilot_command_line_tool_foundry"
+ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED = "copilot_command_line_tool_github_served"
 
 ENVIRONMENTS = (
     ENVIRONMENT_HOST_PYTHON_PROCESS,
@@ -62,7 +74,57 @@ ENVIRONMENTS = (
     ENVIRONMENT_AZURE_CODE_INTERPRETER,
     ENVIRONMENT_AGENTIC_SANDBOX_V2,
     ENVIRONMENT_CODEX_BUILT_IN_AGENT,
+    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY,
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY,
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED,
 )
+
+# ── Where the answer comes from ────────────────────────────────────────────
+# Two run places can share every setting in the plan and still not be running
+# the same model, because one of them lets a product pick. Writing the source
+# down turns that into something a check can refuse.
+
+SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT = "microsoft_foundry_deployment"
+"""One named deployment, in one named Microsoft Foundry resource, chosen by
+the plan and by nobody else."""
+
+SERVING_PATH_GITHUB_SERVED_COPILOT = "github_served_copilot"
+"""A model GitHub serves to Copilot subscribers. Which model answers is
+GitHub's decision, not the plan's."""
+
+MODEL_SERVING_PATHS = (
+    SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
+    SERVING_PATH_GITHUB_SERVED_COPILOT,
+)
+
+# Some run places are named after where their model comes from, so the plan is
+# not free to claim otherwise. ``None`` means the plan decides and the check
+# takes it at its word after confirming it is one of the paths above.
+SERVING_PATH_FIXED_BY_ENVIRONMENT: Mapping[str, str | None] = {
+    ENVIRONMENT_HOST_PYTHON_PROCESS: None,
+    ENVIRONMENT_DOCKER_CONTAINER: None,
+    ENVIRONMENT_AZURE_CODE_INTERPRETER: SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
+    ENVIRONMENT_AGENTIC_SANDBOX_V2: None,
+    ENVIRONMENT_CODEX_BUILT_IN_AGENT: None,
+    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: (
+        SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT
+    ),
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: (
+        SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT
+    ),
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED: SERVING_PATH_GITHUB_SERVED_COPILOT,
+}
+
+PRODUCT_CHOOSES_THE_MODEL = tuple(
+    environment
+    for environment, path in SERVING_PATH_FIXED_BY_ENVIRONMENT.items()
+    if path is not None and path != SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT
+)
+"""The run places where which model answers is not the plan's decision.
+
+Derived from the table above rather than written out again, so a place added
+there cannot be forgotten here.
+"""
 
 # Each place is reached by an ``execution.mode`` value in an experiment YAML
 # file. ``None`` means this repository has no such setting at all.
@@ -72,6 +134,9 @@ EXECUTION_MODE_BY_ENVIRONMENT: Mapping[str, str | None] = {
     ENVIRONMENT_AZURE_CODE_INTERPRETER: "code_interpreter",
     ENVIRONMENT_AGENTIC_SANDBOX_V2: "agentic_sandbox_v2",
     ENVIRONMENT_CODEX_BUILT_IN_AGENT: None,
+    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: None,
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: None,
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED: None,
 }
 
 # The class that actually runs a task in each place, so the check can confirm
@@ -88,9 +153,61 @@ RUNNER_CLASS_BY_ENVIRONMENT: Mapping[str, tuple[str, str] | None] = {
         "AgenticV2IsolatedFixtureRunner",
     ),
     ENVIRONMENT_CODEX_BUILT_IN_AGENT: None,
+    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: None,
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: None,
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED: None,
 }
 
-# ── The two comparisons, which must never share a score ────────────────────
+# ── What each product's own documentation says stands in the way ───────────
+# A place with no code here is already refused. These add the reason a reader
+# would otherwise have to go and find, and they are quoted from the product's
+# own published reference rather than guessed. Each one is a separate reason:
+# clearing one of them does not clear the others.
+
+DOCUMENTED_BLOCKERS_BY_ENVIRONMENT: Mapping[str, tuple[str, ...]] = {
+    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: (
+        "the Codex command-line configuration reference gives a provider its "
+        "key through env_key, an environment variable holding a static API "
+        "key, or through an auth command that prints a bearer token; this "
+        "repository forbids every static Azure credential variable in "
+        "core.azure_ai_clients.FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV and "
+        "raises in _reject_static_azure_credential_env when one is set, so the "
+        "two cannot both hold",
+        "that same reference documents no Microsoft Entra sign-in for a "
+        "provider and shows no Azure example, so there is no published route "
+        "from Codex to a Foundry deployment under this repository's sign-in "
+        "rule; absence of a documented route is not evidence that one works",
+        "the reference gives no api-version setting for a provider, while a "
+        "Foundry deployment is pinned by API version in this comparison's "
+        "fixed conditions, so the version actually used could not be shown",
+    ),
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: (
+        "the GitHub Copilot command-line own-key documentation supplies the "
+        "model's credential through COPILOT_PROVIDER_API_KEY, a static API "
+        "key; this repository forbids every static Azure credential variable "
+        "in core.azure_ai_clients.FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV, so "
+        "the two cannot both hold",
+        "that documentation's Azure example points COPILOT_PROVIDER_BASE_URL "
+        "at /openai/deployments/<deployment>, which is none of the three "
+        "endpoint shapes core.azure_ai_clients.classify_endpoint accepts; "
+        "that function raises on any other shape, so this address would be "
+        "refused here even if the credential rule were satisfied",
+    ),
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED: (
+        "GitHub's published Copilot documentation describes automatic model "
+        "selection routing a task to whichever model it judges best from "
+        "real-time availability and task complexity, which is a model change "
+        "the plan did not make and cannot see",
+        "that same documentation designates a base model that will be used "
+        "when no other model is available, which is a fallback to a different "
+        "model rather than a stop",
+        "which model answered is therefore GitHub's decision, so this place "
+        "cannot join a comparison that holds the model still; it belongs to "
+        "the whole-product comparison and to no other",
+    ),
+}
+
+# ── The three comparisons, which must never share a score ──────────────────
 
 COMPARISON_SAME_GENERATED_CODE = "same_generated_code_rerun"
 """Re-run one model's already-written code in each place, changing nothing else.
@@ -105,7 +222,42 @@ tools, reviewing its own output, retrying, and checking the result.
 This measures the whole tool, not just the run place.
 """
 
-COMPARISONS = (COMPARISON_SAME_GENERATED_CODE, COMPARISON_TOOL_BUILT_IN_FEATURES)
+COMPARISON_NATIVE_PRODUCT_BUNDLE = "native_product_bundle"
+"""Compare whole products, each answering from wherever it normally answers.
+
+The other two comparisons pin one deployment and change only where the task
+runs, so a difference in score is a difference the run place made. This one
+does not pin the model: a product may be answering from a model its own vendor
+chose. What it measures is the finished product — the program driving the
+work, its tools, whichever model it decided to ask, and all — so its result
+may never be read as a statement about a run place, and never added to either
+of the other two scores.
+"""
+
+COMPARISONS = (
+    COMPARISON_SAME_GENERATED_CODE,
+    COMPARISON_TOOL_BUILT_IN_FEATURES,
+    COMPARISON_NATIVE_PRODUCT_BUNDLE,
+)
+
+SAME_MODEL_COMPARISONS = (
+    COMPARISON_SAME_GENERATED_CODE,
+    COMPARISON_TOOL_BUILT_IN_FEATURES,
+)
+"""The two comparisons that hold one deployment still.
+
+Everything in these two must answer from the same place. A run place that lets
+a product choose the model is refused here rather than quietly averaged in.
+"""
+
+REQUIRED_SCOREBOARDS = SAME_MODEL_COMPARISONS
+"""The whole-product comparison is optional; the other two are not.
+
+An operator may decide the product comparison is not worth its money and run
+neither of its places. That is a choice about scope. Leaving out one of the two
+same-model boards is not a choice about scope — it is the comparison losing its
+control — so those two are always required.
+"""
 
 # ── The three reasons a task may be attempted again ────────────────────────
 
@@ -184,9 +336,11 @@ class ModelRunConditions:
     """
 
     provider: str
+    resource: str
     deployment: str
     resolved_model: str
     api_version: str
+    model_serving_path: str
     system_instruction: str
     task_instruction: str
     task_ids: tuple[str, ...]
@@ -198,6 +352,8 @@ class ModelRunConditions:
     retry_reasons_allowed: tuple[str, ...]
     retry_max_attempts: int
     automatic_model_switch_allowed: bool
+    automatic_fallback_allowed: bool
+    unsupported_runner_substitution_allowed: bool
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "ModelRunConditions":
@@ -209,9 +365,11 @@ class ModelRunConditions:
             )
         return cls(
             provider=str(raw["provider"]),
+            resource=str(raw["resource"]),
             deployment=str(raw["deployment"]),
             resolved_model=str(raw["resolved_model"]),
             api_version=str(raw["api_version"]),
+            model_serving_path=str(raw["model_serving_path"]),
             system_instruction=str(raw["system_instruction"]),
             task_instruction=str(raw["task_instruction"]),
             task_ids=tuple(str(value) for value in raw["task_ids"]),
@@ -230,15 +388,21 @@ class ModelRunConditions:
             automatic_model_switch_allowed=bool(
                 raw["automatic_model_switch_allowed"]
             ),
+            automatic_fallback_allowed=bool(raw["automatic_fallback_allowed"]),
+            unsupported_runner_substitution_allowed=bool(
+                raw["unsupported_runner_substitution_allowed"]
+            ),
         )
 
     @staticmethod
     def field_names() -> tuple[str, ...]:
         return (
             "provider",
+            "resource",
             "deployment",
             "resolved_model",
             "api_version",
+            "model_serving_path",
             "system_instruction",
             "task_instruction",
             "task_ids",
@@ -250,26 +414,61 @@ class ModelRunConditions:
             "retry_reasons_allowed",
             "retry_max_attempts",
             "automatic_model_switch_allowed",
+            "automatic_fallback_allowed",
+            "unsupported_runner_substitution_allowed",
         )
 
-    def model_and_input_identity(self) -> tuple:
-        """The part that must match in **both** comparisons.
+    def model_route_identity(self) -> tuple:
+        """Where the answer comes from.
 
-        If any of this differs, the runs are not answering the same question at
-        all, whichever comparison is being made.
+        Two run places that disagree on any of this are not asking the same
+        model, whatever else they share. The two same-model comparisons
+        require this to match. The whole-product comparison deliberately does
+        not, because a difference here is the thing it is measuring.
         """
         return (
             self.provider,
+            self.resource,
             self.deployment,
             self.resolved_model,
             self.api_version,
+            self.model_serving_path,
+        )
+
+    def prompt_and_task_identity(self) -> tuple:
+        """What is asked, and of which tasks. Must match in all three."""
+        return (
             self.system_instruction,
             self.task_instruction,
             self.task_ids,
             tuple(sorted(self.input_file_versions.items())),
+        )
+
+    def budget_and_refusal_identity(self) -> tuple:
+        """What one task may spend, and what the run refuses to do on its own.
+
+        Must match in all three comparisons. A product allowed to quietly swap
+        model, fall back, or move the work elsewhere is not comparable to one
+        that stops, even when the comparison is between whole products.
+        """
+        return (
             self.max_output_tokens,
             self.per_task_timeout_seconds,
             self.automatic_model_switch_allowed,
+            self.automatic_fallback_allowed,
+            self.unsupported_runner_substitution_allowed,
+        )
+
+    def model_and_input_identity(self) -> tuple:
+        """The part that must match in **both** same-model comparisons.
+
+        If any of this differs, the runs are not answering the same question at
+        all, whichever of those two comparisons is being made.
+        """
+        return (
+            self.model_route_identity()
+            + self.prompt_and_task_identity()
+            + self.budget_and_refusal_identity()
         )
 
     def review_and_retry_identity(self) -> tuple:
@@ -642,6 +841,7 @@ def inspect_environment_support(
                     blockers=[
                         "there is no code path in this repository that runs a "
                         "GDPVal task in this environment",
+                        *DOCUMENTED_BLOCKERS_BY_ENVIRONMENT.get(environment, ()),
                     ],
                 )
             )
@@ -847,17 +1047,26 @@ def check_model_run_conditions(
     *,
     comparison: str = COMPARISON_SAME_GENERATED_CODE,
 ) -> list[str]:
-    """Confirm every run place would use exactly the same model and inputs.
+    """Confirm the run places would run under the conditions the plan fixed.
 
-    ``comparison`` decides how strict the self-review and retry settings are.
-    The first comparison re-runs one model's own code, so those settings must be
-    switched off identically everywhere. The second comparison measures what
-    each tool does on its own, so they are allowed to differ there — but the
-    model, the deployment, the instructions, and the inputs still may not.
+    ``comparison`` decides what is allowed to differ.
+
+    The first comparison re-runs one model's own code, so self-review and
+    retries must be switched off identically everywhere. The second measures
+    what each tool does on its own, so those are allowed to differ there — but
+    the model, the resource, the deployment, the instructions, and the inputs
+    still may not. The third compares whole products, so where the answer comes
+    from is allowed to differ as well; what is asked, and what one task may
+    spend, still may not.
+
+    In all three, a run place that may change model on its own, fall back to
+    something else, or move the work to a different runner is refused. The plan
+    has to say so in writing; leaving the answer out is refused too, because a
+    silent default here would be a permission nobody granted.
     """
     problems: list[str] = []
     if comparison not in COMPARISONS:
-        problems.append(f"{comparison!r} is not one of the two comparisons")
+        problems.append(f"{comparison!r} is not one of the three comparisons")
     if not conditions_by_environment:
         return problems + ["no run place was given fixed model run conditions"]
 
@@ -868,6 +1077,17 @@ def check_model_run_conditions(
             + ", ".join(unknown)
         )
 
+    holds_the_model_still = comparison in SAME_MODEL_COMPARISONS
+    if comparison == COMPARISON_NATIVE_PRODUCT_BUNDLE and (
+        len(conditions_by_environment) < 2
+    ):
+        problems.append(
+            "the whole-product comparison was given "
+            f"{len(conditions_by_environment)} run place; comparing products "
+            "needs at least two, and one product on its own is a measurement "
+            "rather than a comparison"
+        )
+
     identities: dict[tuple, list[str]] = {}
     review_settings: dict[tuple, list[str]] = {}
     for environment, conditions in sorted(conditions_by_environment.items()):
@@ -876,6 +1096,49 @@ def check_model_run_conditions(
                 f"{environment} allows switching to another model or another "
                 "deployment on its own; the comparison requires that a run stop "
                 "instead of quietly changing model"
+            )
+        if conditions.automatic_fallback_allowed:
+            problems.append(
+                f"{environment} allows carrying on with a substitute when "
+                "something it needs is unavailable; the comparison requires "
+                "that the run stop and be recorded as a failure, because a "
+                "score produced by the substitute would be read as the score "
+                "of the thing it replaced"
+            )
+        if conditions.unsupported_runner_substitution_allowed:
+            problems.append(
+                f"{environment} allows the task to be run somewhere other than "
+                "the run place named here when that place cannot be used; the "
+                "whole comparison is between run places, so a run that moves "
+                "would report one place while measuring another"
+            )
+        if conditions.model_serving_path not in MODEL_SERVING_PATHS:
+            problems.append(
+                f"{environment} says the model is served by "
+                f"{conditions.model_serving_path!r}, which is not one of the "
+                "ways this comparison knows how to account for: "
+                + ", ".join(MODEL_SERVING_PATHS)
+            )
+        elif SERVING_PATH_FIXED_BY_ENVIRONMENT.get(environment) not in (
+            None,
+            conditions.model_serving_path,
+        ):
+            problems.append(
+                f"{environment} is a run place whose model always comes from "
+                f"{SERVING_PATH_FIXED_BY_ENVIRONMENT[environment]}, but the "
+                f"plan says {conditions.model_serving_path}; the plan cannot "
+                "change where a product gets its model by writing down a "
+                "different answer"
+            )
+        elif holds_the_model_still and conditions.model_serving_path != (
+            SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT
+        ):
+            problems.append(
+                f"{environment} lets its own product choose which model "
+                f"answers ({conditions.model_serving_path}), so it cannot take "
+                f"part in {comparison}, which reports differences as though "
+                "the model had been held still; it belongs to "
+                f"{COMPARISON_NATIVE_PRODUCT_BUNDLE}"
             )
         unknown_reasons = sorted(
             set(conditions.retry_reasons_allowed) - set(RETRY_REASONS)
@@ -917,17 +1180,28 @@ def check_model_run_conditions(
                 "re-runs one model's own code must leave it off so the only "
                 "thing that changes is the run place"
             )
-        identities.setdefault(
-            conditions.model_and_input_identity(), []
-        ).append(environment)
+        shared_part = (
+            conditions.model_and_input_identity()
+            if holds_the_model_still
+            else conditions.prompt_and_task_identity()
+            + conditions.budget_and_refusal_identity()
+        )
+        identities.setdefault(shared_part, []).append(environment)
         review_settings.setdefault(
             conditions.review_and_retry_identity(), []
         ).append(environment)
 
     if len(identities) > 1:
         problems.append(
-            "the run places do not share one fixed set of model run "
-            "conditions; they split into these groups: "
+            (
+                "the run places do not share one fixed set of model run "
+                "conditions; they split into these groups: "
+                if holds_the_model_still
+                else "the run places are not being asked the same thing for "
+                "the same money; the whole-product comparison still fixes the "
+                "instructions, the task list, the input files, and the budget, "
+                "and they split into these groups: "
+            )
             + _describe_groups(identities)
         )
     if comparison == COMPARISON_SAME_GENERATED_CODE and len(review_settings) > 1:
@@ -1023,9 +1297,15 @@ def check_run_record_fields(record: Mapping[str, Any]) -> list[str]:
 def check_comparisons_are_scored_apart(
     scoreboards: Mapping[str, Mapping[str, Any]],
 ) -> list[str]:
-    """Confirm the two comparisons never end up inside one score."""
+    """Confirm the three comparisons never end up inside one score.
+
+    The two same-model boards are always required. The whole-product board is
+    not: an operator may decide that comparison is not worth its money. But if
+    it is present it must be labelled as itself, and neither same-model board
+    may quietly contain a run place whose model its own product chose.
+    """
     problems: list[str] = []
-    missing = sorted(set(COMPARISONS) - set(scoreboards))
+    missing = sorted(set(REQUIRED_SCOREBOARDS) - set(scoreboards))
     if missing:
         problems.append(
             "these comparisons have no scoreboard of their own: "
@@ -1043,7 +1323,24 @@ def check_comparisons_are_scored_apart(
         if labelled != name:
             problems.append(
                 f"the {name} scoreboard is labelled {labelled!r}, so results "
-                "from the two comparisons could be added together by mistake"
+                "from the three comparisons could be added together by mistake"
+            )
+        if name not in SAME_MODEL_COMPARISONS:
+            continue
+        listed = board.get("environments")
+        if listed is None:
+            continue
+        product_chosen = sorted(
+            str(environment)
+            for environment in listed
+            if str(environment) in PRODUCT_CHOOSES_THE_MODEL
+        )
+        if product_chosen:
+            problems.append(
+                f"the {name} scoreboard counts run places whose own product "
+                "chooses which model answers, so a product's model routing "
+                "would be reported as an effect of the run place: "
+                + ", ".join(product_chosen)
             )
     return problems
 
@@ -1073,8 +1370,8 @@ def build_readiness_report(
     stop.
 
     When ``conditions_by_environment`` names the places being compared, only
-    those places decide whether the report is ready. Otherwise all five must be
-    able to run, which today they cannot.
+    those places decide whether the report is ready. Otherwise all eight must
+    be able to run, which today they cannot.
     """
     environments = inspect_environment_support(
         docker_daemon_available=docker_daemon_available,
@@ -1093,6 +1390,19 @@ def build_readiness_report(
                 conditions_by_environment, comparison=comparison
             )
         )
+        graded = {entry.environment: entry for entry in environments}
+        for environment in sorted(conditions_by_environment):
+            entry = graded.get(environment)
+            if entry is None or entry.status != STATUS_NOT_IMPLEMENTED_HERE:
+                continue
+            problems.append(
+                f"the plan asks {environment} to take part, but this "
+                "repository has no code that runs a GDPVal task there; the "
+                "run must stop rather than let a run place that does exist "
+                "stand in for it, because the result would be filed under the "
+                "name of the place that never ran. What is missing: "
+                + "; ".join(entry.blockers)
+            )
     if run_size_plan is not None:
         problems.extend(check_run_size_plan(run_size_plan))
     if scoreboards is not None:
@@ -1168,5 +1478,22 @@ def describe_environment(environment: str) -> str:
             "Codex runs its own built-in agent: it picks its own tools, runs "
             "commands, reviews its work, and retries without this repository "
             "directing any of it"
+        ),
+        ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: (
+            "Codex's own command-line tool does the whole task, but the model "
+            "it asks is the same named deployment in the same Microsoft "
+            "Foundry resource the other run places use, so the only thing "
+            "that changes is the program driving the work"
+        ),
+        ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: (
+            "the GitHub Copilot command-line tool does the whole task using "
+            "its own-key setting, pointed at the same named deployment in the "
+            "same Microsoft Foundry resource, so again the only thing that "
+            "changes is the program driving the work"
+        ),
+        ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED: (
+            "the GitHub Copilot command-line tool does the whole task on a "
+            "model GitHub serves, so the product chooses which model answers "
+            "and this is a comparison of products rather than of run places"
         ),
     }[environment]

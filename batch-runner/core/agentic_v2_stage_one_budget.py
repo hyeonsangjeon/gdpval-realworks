@@ -58,6 +58,7 @@ from core.execution_envelope_cost import (
 from core.execution_envelope_tasks import CatalogTask
 from core.execution_environment_readiness import (
     ENVIRONMENT_AGENTIC_SANDBOX_V2,
+    SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
     ModelRunConditions,
 )
 
@@ -132,6 +133,14 @@ class StageOneConditions:
     repeatedly help at all — for the least money that can answer it.
     """
 
+    resource: str
+    """The Microsoft Foundry resource the deployment lives in.
+
+    A deployment name on its own does not name a model: the same name in a
+    different resource is a different deployment. Read from the plan's own
+    ``azure_connection`` block rather than written down a second time.
+    """
+
     deployment: str
     resolved_model: str
     task_ids: tuple[str, ...]
@@ -187,6 +196,10 @@ class StageOneConditions:
         return ModelRunConditions.from_mapping(
             {
                 "provider": "azure",
+                "resource": self.resource,
+                "model_serving_path": (
+                    SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT
+                ),
                 "deployment": self.deployment,
                 "resolved_model": self.resolved_model,
                 "api_version": "2025-04-01-preview",
@@ -204,6 +217,11 @@ class StageOneConditions:
                 "retry_reasons_allowed": ["infrastructure_error"],
                 "retry_max_attempts": self.retry_max_attempts,
                 "automatic_model_switch_allowed": False,
+                # Stage one runs in one place only. Nothing may quietly take
+                # that place's turn, and nothing may quietly answer for the
+                # deployment named above.
+                "automatic_fallback_allowed": False,
+                "unsupported_runner_substitution_allowed": False,
             }
         )
 
@@ -716,6 +734,18 @@ def run_stage_one_preflight(
         problems.append("the stage-one plan names no task to run")
 
     model = dict(plan.get("model") or {})
+    # The resource comes from the plan's own Azure block, which already names
+    # it for the connection check. Asking the plan to write it twice would let
+    # the two copies drift apart with nothing to notice.
+    resource = str(
+        (dict(plan.get("azure_connection") or {})).get("account") or ""
+    )
+    if not resource:
+        problems.append(
+            "the stage-one plan does not name the Microsoft Foundry resource "
+            "its deployment lives in, so the deployment name on its own does "
+            "not say which model would answer"
+        )
     candidates = dict(plan.get("candidate_settings") or {})
     tool_call_choices = tuple(
         int(value) for value in (candidates.get("tool_calls_per_attempt") or [])
@@ -733,6 +763,7 @@ def run_stage_one_preflight(
     options: list[StageOneOption] = []
     if task_ids and tool_call_choices and output_token_choices:
         base = StageOneConditions(
+            resource=resource,
             deployment=str(model.get("deployment") or ""),
             resolved_model=str(model.get("resolved_model") or ""),
             task_ids=task_ids,
@@ -792,6 +823,7 @@ def run_stage_one_preflight(
             # computed, so an approver sees the limit and not just the amount.
             chosen_ceiling = stage_one_ceiling(
                 conditions=StageOneConditions(
+                    resource=resource,
                     deployment=str(model.get("deployment") or ""),
                     resolved_model=str(model.get("resolved_model") or ""),
                     task_ids=task_ids,
