@@ -35,13 +35,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   quoting a number that has stopped being true. Characters, not bytes: the
   ratio is characters-per-token, and the instruction file holds multi-byte
   characters (6,267 bytes, 6,263 characters).
-- **The figure is still described as a floor.** The third piece really is
-  uncapped — the scoring line comes from the dataset and no setting bounds its
-  length — so the refusal and `describe_grading_caps` both keep saying that a
-  plan above this number may still not be a ceiling. Settings that name no
-  instruction file, or name one that is not on disk, are now **refused rather
-  than priced at nothing**, and the refusal names the settings file so a reader
-  knows which one to open.
+- **The figure was still described as a floor, on a reason that was wrong.**
+  The third piece was said to be uncapped — the scoring line comes from the
+  dataset and no *setting* bounds its length — so the refusal and
+  `describe_grading_caps` both went on saying that a plan above this number
+  might still not be a ceiling. That reason does not hold, and the entry below
+  in this same block closes it. Settings that name no instruction file, or name
+  one that is not on disk, are now **refused rather than priced at nothing**,
+  and the refusal names the settings file so a reader knows which one to open.
 - **`grader.task_prompt_truncate_chars` reaches nothing, and now says so.**
   Nine settings files carry the key, every one saying 500, and no module reads
   it: `core/grader.py` builds `ToolCallingJudge` without passing it, so the
@@ -93,6 +94,68 @@ entries land under a fresh dated heading the day they merge to `main`.
   committed settings file names its caps, so no fallback is in use; this
   closes a latent defect rather than correcting a live number. 41 new tests,
   and a mutation sweep breaks the rule 12 ways and is caught 12 times.
+- **The free check printed a total it called the largest possible bill and, in
+  the same report, called one part of that total uncapped.** The marking
+  refusal in `core/execution_envelope_grading_cost.py` ended: "So one call can
+  carry 535589 tokens, and that is still a floor: the scoring line being judged
+  is not capped by anything." Both sentences cannot be true at once — if a part
+  of a sum has no upper bound the sum has no maximum — so the check was either
+  quoting a ceiling it did not have or denying one it did. It was the second.
+- **The scoring line was never capped by a *setting*, which is not the same as
+  being unbounded.** It lives in the `rubric_json` column of the dataset file
+  the check already locates and already verifies to all 64 characters of its
+  fingerprint, at a revision it also pins, and nothing between that file and
+  the judge shortens it. Measured from the pinned parquet: **220 tasks, 10,453
+  scoring lines, none blank and none non-text**; the per-task longest runs from
+  **94 to 1,203 characters**, the widest being task
+  `0353ee0c-18b5-4ad3-88e8-e001d223e1d7`. A fixed, readable number had been
+  described as no number at all.
+- **The width is now measured where the catalogue is built and demanded where
+  the bill is checked.** `scripts/build_gdpval_task_catalog.py` records
+  `widest_rubric_criterion_characters` per task, refusing a criterion that is
+  missing, not text, or blank rather than writing a zero.
+  `CatalogTask` carries it as a **required** field, `catalog_number_problems`
+  refuses a zero the same way it refuses a task nobody marks, and
+  `widest_scoring_line_characters` takes the maximum across all 220 tasks — not
+  across whichever tasks a plan selects, so the demanded figure cannot move
+  when the selection moves. The catalogue schema is now
+  `gdpval-task-catalog-v2`, so a file written before the width existed is
+  refused by name instead of read with a piece missing. The rebuilt catalogue
+  reproduces the same `dataset_file_sha256`; `--check` reports a match.
+- **A width nobody measured is refused, and so is a width of zero.**
+  `GradingCaps.characters_of_widest_scoring_line` defaults to `None`, meaning
+  *nobody looked*, and both the opening arithmetic and the plan check raise or
+  report rather than leaving the scoring line out of the sum — leaving it out
+  does not make it free, it makes the marking total smaller than the bill. Zero
+  is refused too: no scoring line in this benchmark is blank, so a zero is a
+  reading that failed rather than a line with no wording in it, and accepting
+  it would re-open the same defect through the other door.
+- **What actually changed in the report: one line.** The opening every marking
+  call carries rises from **2,255 to 2,656 tokens** and the demanded input per
+  call from **535,589 to 535,990** — the 1,203 characters of the widest scoring
+  line at the plan's own 3.0 characters-per-token ratio. The sentence claiming
+  the figure was still a floor is gone, and the description now says the
+  figure is a ceiling rather than a floor. Everything else is unchanged: the
+  same **14 problems**, the same ceiling of **363.59 United States dollars**
+  (363.58481250 before rounding), the same approved maximum of **32.23**, the
+  same non-zero exit. Verified by running the check on this commit and on its
+  parent and diffing the two reports: exactly one line differs.
+- **One instance of the same contradiction is still open, and is now named
+  rather than left to be found again.** `core/execution_envelope_preflight.py`
+  tells a reader that what a container carries into a later turn is charged at
+  a figure that "is a floor — the blocking-error lines, the warnings, the
+  repair guidance and the contract section have no fixed width at all". That is
+  the identical shape in the run half of the check. It is a different
+  measurement — those four kinds of line are produced by `core/sandbox_runner.py`
+  at run time, not read from a pinned dataset column — so it is recorded as
+  open, exempted by name in the sweep, and a test fails if the exemption ever
+  stops pointing at something real.
+- **254 new tests**, including a 220-way sweep that empties one task's width at
+  a time, and a mutation sweep that breaks the fix five ways — dropping the
+  scoring line from the sum, letting a zero through the guard, defaulting the
+  width to a number, taking the first task instead of the widest, and cutting
+  the catalogue off from the marking check — and is caught five times out of
+  five.
 
 - **The task catalogue recorded a count of zero for anything it could not
   read, and a zero is priced as work that costs nothing.**

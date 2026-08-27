@@ -48,7 +48,12 @@ from core.tools.read_deliverable import MAX_CONTENT_CHARS
 from core.execution_envelope_preflight import (
     _check_grading_assumptions_match_the_settings,
     describe_preflight,
-    run_envelope_preflight,)
+    run_envelope_preflight,
+)
+from core.execution_envelope_tasks import (
+    load_task_catalog,
+    widest_scoring_line_characters,
+)
 from core.tool_calling_judge import ToolCallingJudge
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
@@ -152,6 +157,18 @@ def real_instruction_file_length() -> int:
     )
 
 
+def real_widest_scoring_line() -> int:
+    """The benchmark's widest scoring line, read from the committed catalogue.
+
+    Measured rather than typed for the same reason as the length above, and for
+    one more: this number is not in the marking settings at all. It comes from
+    the dataset, so a fixture that typed it would go on asserting an old width
+    after the pinned revision moved, and the direction it would be wrong in is
+    the one that under-charges.
+    """
+    return widest_scoring_line_characters(load_task_catalog())
+
+
 def caps(**overrides) -> GradingCaps:
     base = GradingCaps(
         settings_path="marking.yaml",
@@ -168,6 +185,7 @@ def caps(**overrides) -> GradingCaps:
         visual_calls_per_task=0,
         audio_model=None,
         audio_calls_per_task=0,
+        characters_of_widest_scoring_line=real_widest_scoring_line(),
     )
     return replace(base, **overrides)
 
@@ -459,21 +477,21 @@ def test_a_plan_that_marks_nothing_reports_nothing():
 
 
 def test_the_description_says_how_much_one_call_can_carry():
-    """The size a call can reach is stated, and so is what it leaves out.
+    """The size a call can reach is stated, and it is the largest one.
 
     This description used to say the input length "is not a ceiling" and stop
-    there, which read as though nothing bounded it. Something does: the tool
-    hands back a capped amount and the settings cap how many results pile up.
-    Both halves of the truth are printed — the figure, and the fact that the
-    opening wording is not inside it.
+    there, which read as though nothing bounded it. Then it said the figure was
+    a floor, because the scoring line being judged was not counted. Everything
+    is counted now: the tool hands back a capped amount, the settings cap how
+    many results pile up, and the scoring line is at most the widest one in the
+    pinned benchmark. So the figure is the most a call can carry, and the line
+    a person reads says so.
     """
     lines = describe_grading_caps(caps())
 
     assert any(str(8 * MAX_CONTENT_CHARS) in line for line in lines)
     assert any(str(MAX_CONTENT_CHARS) in line for line in lines)
-    assert any(
-        "floor and not the largest possible" in line for line in lines
-    )
+    assert any("a ceiling rather than a floor" in line for line in lines)
 
 
 def test_the_description_names_the_file_it_read():
@@ -527,6 +545,7 @@ def test_the_problem_names_the_file_the_way_the_plan_does(tmp_path):
         {"grading_config": "settings/marking.yaml"},
         assumptions(),
         root=tmp_path,
+        catalog=load_task_catalog(),
     )
     assert len(problems) == 1
     assert "settings/marking.yaml" in problems[0]
@@ -554,6 +573,11 @@ def _committed_plan_problems(plan=None) -> list[str]:
         plan,
         CostAssumptions.from_mapping(plan["cost"]["assumptions"]),
         root=BATCH_RUNNER_ROOT,
+        # The real check is handed the catalogue, because how wide a scoring
+        # line can be is a fact about the dataset rather than about the marking
+        # settings. Leaving it out here would make these tests exercise the
+        # refusal path instead of the arithmetic they are about.
+        catalog=load_task_catalog(),
     )
 
 

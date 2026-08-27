@@ -25,9 +25,13 @@ place puts the whole ceiling at 363.58 United States dollars, and raising it to
 what the settings permit puts it at 7,568.42 — 7,204.84 dollars the plan called
 impossible and the settings allow.
 
-What is *not* counted here is the wording the conversation opens with. Nothing
-caps that, so the figure this rule demands is a floor on the true largest, and
-the tests below pin that it is described as a floor rather than as the answer.
+The wording the conversation opens with is counted here too — the standing
+instructions, the preview of the task, and the scoring line being judged. The
+last of those is not bounded by any setting, which this module used to read as
+not bounded at all, and so the figure was described as a floor. It is bounded
+by the dataset: at the pinned revision the widest scoring line in the benchmark
+is 1,203 characters and cannot grow. The tests below pin that the figure is now
+demanded as a ceiling, and that it refuses when nobody measured that width.
 
 Nothing here calls a model, marks anything, or spends anything.
 """
@@ -56,6 +60,10 @@ from core.execution_envelope_grading_cost import (  # noqa: E402
 from core.execution_envelope_preflight import (  # noqa: E402
     load_plan,
     run_envelope_preflight,
+)
+from core.execution_envelope_tasks import (  # noqa: E402
+    load_task_catalog,
+    widest_scoring_line_characters,
 )
 from core.tool_calling_judge import ToolCallingJudge  # noqa: E402
 from core.tools.read_deliverable import MAX_CONTENT_CHARS  # noqa: E402
@@ -86,6 +94,11 @@ def _caps(**overrides) -> GradingCaps:
         visual_calls_per_task=0,
         audio_model=None,
         audio_calls_per_task=0,
+        # Round like the two above it, and not the benchmark's real 1,203, so
+        # that the arithmetic in these tests can be added up by hand. What the
+        # real number is, and that the real check reads it rather than being
+        # handed one, is pinned against the committed catalogue further down.
+        characters_of_widest_scoring_line=1200,
     )
     return GradingCaps(**{**base.__dict__, **overrides})
 
@@ -209,17 +222,49 @@ def test_a_sum_below_the_pile_up_is_refused():
     assert "533334" in problems[0]
 
 
-def test_the_refusal_says_what_is_still_missing_from_that_number():
-    """A reader must not take the demanded figure for the whole story.
+def test_the_refusal_accounts_for_every_part_of_what_a_call_carries():
+    """A reader may now take the demanded figure for the whole story.
 
-    The instructions and the task preview are in the figure now. The scoring
-    line being judged is not, because nothing caps it, and the refusal has to
-    keep saying so — otherwise a plan that clears the figure reads as proved
-    when it has only cleared a floor.
+    The refusal used to end by saying the figure was "still a floor" because
+    "the scoring line being judged is not capped by anything" — printed inside
+    a report whose heading called its total the largest possible bill. Both
+    could not be true. The scoring line is not capped by a *setting*, which is
+    a different thing, and its width is fixed in the pinned dataset. The
+    refusal has to name all three parts of the opening and stop calling the
+    result a floor.
     """
     problems = _refusals(_caps(), grading_input_tokens_per_call=1)
-    assert "still a floor" in problems[0]
-    assert "the scoring line being judged is not capped by anything" in problems[0]
+    assert "characters of prompts/grader_judge_v2.md" in problems[0]
+    assert "characters of the task the judge is shown" in problems[0]
+    assert "1200 characters of the widest scoring line" in problems[0]
+    assert "floor" not in problems[0]
+    assert "not capped by anything" not in problems[0]
+
+
+def test_a_width_nobody_measured_is_refused_rather_than_left_out():
+    """Leaving it out is exactly how the contradiction got printed.
+
+    ``None`` here means nobody measured the scoring line, not that it is
+    narrow. Working out an opening without it would produce a smaller figure
+    than the truth, which is the direction that understates a bill, so the
+    check has to say so instead.
+    """
+    problems = _refusals(_caps(characters_of_widest_scoring_line=None))
+    assert len(problems) == 1
+    assert "never measured" in problems[0]
+    assert "does not make it free" in problems[0]
+
+
+def test_the_opening_cannot_be_worked_out_without_that_width():
+    """The refusal above is not the only guard — the arithmetic refuses too.
+
+    A caller that skips ``check_assumptions_cover_the_caps`` and asks for the
+    figure directly must not be handed one that quietly leaves a part out.
+    """
+    with pytest.raises(ValueError, match="never measured"):
+        _caps(
+            characters_of_widest_scoring_line=None
+        ).input_tokens_one_call_must_cover(THREE)
 
 
 def test_a_sum_above_the_pile_up_is_allowed():
@@ -259,9 +304,33 @@ def test_the_committed_plan_is_refused_by_this_rule_today():
     assert "533334" in matching[0]
 
 
-@pytest.mark.parametrize("raised_to", [535_589, 1_000_000])
+def test_the_real_check_measures_the_scoring_line_instead_of_being_told():
+    """The width in the refusal is the benchmark's, read from the catalogue.
+
+    The fixture above types a round 1200 so its arithmetic can be checked by
+    hand. This is the test that stops that round number from being the only
+    one anybody ever looks at: the real check has to reach the committed
+    catalogue, take the widest scoring line across all 220 tasks, and put that
+    in front of the reader.
+    """
+    catalog = load_task_catalog()
+    widest = widest_scoring_line_characters(catalog)
+
+    plan = load_plan(PLAN_PATH)
+    result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+    matching = [p for p in result.problems if "input per marking call" in p]
+
+    assert len(matching) == 1
+    assert f"{widest} characters of the widest scoring line" in matching[0]
+    assert widest == max(
+        task.widest_rubric_criterion_characters for task in catalog.tasks
+    )
+    assert widest > 0, "a width of zero would price the scoring line at nothing"
+
+
+@pytest.mark.parametrize("raised_to", [535_990, 1_000_000])
 def test_raising_the_number_to_the_limit_settles_this_rule(raised_to):
-    """535589 is the whole demand: 533334 of tool results, 2255 of opening."""
+    """535990 is the whole demand: 533334 of tool results, 2656 of opening."""
     plan = load_plan(PLAN_PATH)
     plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = raised_to
     result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)

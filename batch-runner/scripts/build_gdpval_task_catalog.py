@@ -4,7 +4,9 @@
 This reads the benchmark dataset at one pinned revision and writes down, for
 every task, only what the fixed selection rule is allowed to look at: the task
 number, the industry, the job, the file types of the human expert's own answer,
-the reference files the task ships with, and a fingerprint of the task wording.
+the reference files the task ships with, a fingerprint of the task wording, how
+many scoring lines the task is marked against, and how long its longest scoring
+line is.
 
 No score, grade, or verdict is read or written. No model is called and nothing
 is spent. The dataset revision and the content fingerprint of its data file are
@@ -32,6 +34,7 @@ import hashlib
 import json
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Iterable
 
@@ -91,6 +94,46 @@ def _find_parquet(explicit: Path | None) -> Path:
         "the pinned dataset file was not found. Download revision "
         f"{DATASET_REVISION} of {DATASET_REPO_ID} first, or pass --parquet."
     )
+
+
+def _widest_scoring_line(task_id: str, rubric_items: list) -> int:
+    """How long the longest scoring line of one task is, in characters.
+
+    Every marking call carries the scoring line it is judging, so this is a
+    price and not only a description. It is measured here, from the same rubric
+    the scoring-line count is measured from, because the advance check used to
+    call the marking total a maximum while calling this part of it uncapped —
+    which cannot both be true.
+
+    Nothing is substituted. A scoring line that is not a mapping, or holds no
+    ``criterion``, or holds one that is not text, or holds one that is empty,
+    stops the build. All four used to be capable of becoming a zero, and a zero
+    here would price the widest scoring line in the benchmark at nothing, which
+    is the direction that under-charges.
+    """
+    widest = 0
+    for position, scoring_line in enumerate(rubric_items):
+        where = f"task {task_id!r}, scoring line {position}"
+        if not isinstance(scoring_line, Mapping):
+            raise ValueError(
+                f"{where}: is a {type(scoring_line).__name__} rather than a "
+                "mapping, so the wording the judge is shown cannot be measured."
+            )
+        criterion = scoring_line.get("criterion")
+        if not isinstance(criterion, str):
+            raise ValueError(
+                f"{where}: holds no readable wording under 'criterion' (it "
+                f"holds {type(criterion).__name__}). Every marking call carries "
+                "that wording, so recording nothing here would price it at zero."
+            )
+        if not criterion.strip():
+            raise ValueError(
+                f"{where}: the wording under 'criterion' is empty. No scoring "
+                "line in this benchmark is blank, so the column it was read "
+                "from was probably renamed rather than the line being blank."
+            )
+        widest = max(widest, len(criterion))
+    return widest
 
 
 def build_catalog(parquet_path: Path) -> dict:
@@ -153,6 +196,8 @@ def build_catalog(parquet_path: Path) -> dict:
                 "lines, so there is no number of scoring lines to record."
             )
 
+        widest_criterion = _widest_scoring_line(str(row["task_id"]), rubric_items)
+
         tasks.append(
             {
                 "task_id": str(row["task_id"]),
@@ -171,6 +216,7 @@ def build_catalog(parquet_path: Path) -> dict:
                 ).hexdigest(),
                 "prompt_character_count": len(prompt),
                 "rubric_item_count": len(rubric_items),
+                "widest_rubric_criterion_characters": widest_criterion,
             }
         )
     tasks.sort(key=lambda entry: entry["task_id"])
@@ -183,8 +229,11 @@ def build_catalog(parquet_path: Path) -> dict:
         "written_by": "batch-runner/scripts/build_gdpval_task_catalog.py",
         "holds_no_scores": (
             "Only task numbers, industries, jobs, expert answer file types, "
-            "reference file paths and types, and a fingerprint of the task "
-            "wording are recorded. No score, grade, or verdict is present."
+            "reference file paths and types, a fingerprint of the task "
+            "wording, how many scoring lines each task is marked against and "
+            "how long its longest one is are recorded. No score, grade, or "
+            "verdict is present, and no scoring line is reproduced — only its "
+            "length."
         ),
         "reference_file_path_note": (
             "In this dataset each reference file sits in a folder named after "

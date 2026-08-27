@@ -65,6 +65,10 @@ from core.execution_envelope_grading_cost import (
     check_assumptions_cover_the_caps,
     read_grading_caps,
 )
+from core.execution_envelope_tasks import (
+    load_task_catalog,
+    widest_scoring_line_characters,
+)
 from core.perception.audio import AUDIO_CALL_CAP, AUDIO_TRIM_SECONDS
 from core.perception.vision import VISION_CALL_CAP
 
@@ -128,6 +132,23 @@ def written(tmp_path: Path, document, name: str = "marking.yaml") -> Path:
     path = tmp_path / name
     path.write_text(yaml.safe_dump(document), encoding="utf-8")
     return path
+
+
+def caps_with_a_measured_scoring_line(path: Path):
+    """Read the settings and hand in the one width they cannot hold.
+
+    How wide a scoring line can be comes from the pinned dataset, not from a
+    settings file, so ``read_grading_caps`` has to be told. Without it the
+    input-per-call arithmetic refuses rather than working out a figure with a
+    piece missing, which would make these perception tests fail for a reason
+    that has nothing to do with perception.
+    """
+    return read_grading_caps(
+        path,
+        widest_scoring_line_characters=widest_scoring_line_characters(
+            load_task_catalog()
+        ),
+    )
 
 
 def plan(caps_used, *, vision_calls=None, audio_calls=None) -> CostAssumptions:
@@ -467,7 +488,7 @@ def test_the_module_says_out_loud_what_it_used_to_get_wrong():
 def test_a_plan_allowing_fewer_calls_than_the_fallback_is_refused(tmp_path):
     """This is what the copied number was the threshold for."""
     document = naming_no_caps()
-    caps = read_grading_caps(written(tmp_path, document))
+    caps = caps_with_a_measured_scoring_line(written(tmp_path, document))
     problems = check_assumptions_cover_the_caps(
         plan(caps, vision_calls=VISION_CALL_CAP - 1), caps
     )
@@ -479,7 +500,7 @@ def test_a_plan_allowing_fewer_calls_than_the_fallback_is_refused(tmp_path):
 
 def test_a_plan_allowing_fewer_sound_calls_is_refused_too(tmp_path):
     document = naming_no_caps()
-    caps = read_grading_caps(written(tmp_path, document))
+    caps = caps_with_a_measured_scoring_line(written(tmp_path, document))
     problems = check_assumptions_cover_the_caps(
         plan(caps, audio_calls=AUDIO_CALL_CAP - 1), caps
     )
@@ -493,6 +514,6 @@ def test_a_plan_meeting_the_fallback_is_not_refused_for_the_call_count(
     tmp_path,
 ):
     document = naming_no_caps()
-    caps = read_grading_caps(written(tmp_path, document))
+    caps = caps_with_a_measured_scoring_line(written(tmp_path, document))
     problems = check_assumptions_cover_the_caps(plan(caps), caps)
     assert not any("calls per" in problem for problem in problems), problems

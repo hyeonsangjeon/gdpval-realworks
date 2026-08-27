@@ -101,6 +101,7 @@ def _task(task_id: str, paths: tuple[str, ...]) -> CatalogTask:
         prompt_sha256="c" * 64,
         prompt_character_count=100,
         rubric_item_count=5,
+        widest_rubric_criterion_characters=200,
     )
 
 
@@ -599,7 +600,13 @@ def test_every_cross_reference_in_the_module_points_at_something_real(
     Every docstring in the file is read, not only the one at the top, because
     the first version of this test read only the top one and the next stale
     reference written into the file went into a field docstring instead.
+
+    Builtins count as real. A docstring saying which exception a function
+    raises points at ``ValueError``, which exists; calling that dangling would
+    push writers into plain prose to appease a test, which is the wrong way
+    round.
     """
+    import builtins
     import dataclasses
     import re
 
@@ -635,7 +642,7 @@ def test_every_cross_reference_in_the_module_points_at_something_real(
 
     def resolves(name: str) -> bool:
         head, _, rest = name.partition(".")
-        for holder in [module] + ([] if rest else classes):
+        for holder in [module, builtins] + ([] if rest else classes):
             found = member(holder, head)
             if found is None:
                 continue

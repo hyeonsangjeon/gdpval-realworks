@@ -63,13 +63,26 @@ from the places the marking run itself reads them, so a longer instruction file
 raises the demanded figure by itself instead of leaving this module quoting a
 number that has stopped being true.
 
-The third piece really is uncapped: the scoring line comes from the dataset and
-no setting bounds how long one line may be. So the figure this module demands
-is still a floor on the true largest and not the largest itself — a plan below
-it is certainly not a ceiling, a plan above it may still not be one — and
-:func:`describe_grading_caps` still says that out loud. What has changed is
-that the floor now includes everything the settings do pin, instead of starting
-from zero.
+**The third piece was the contradiction this module printed in its own report.**
+It said the scoring line being judged "is not capped by anything", and in the
+same breath the advance check headed the total it fed "the largest possible
+bill". Both cannot be true: if one part of a sum is unbounded the sum has no
+maximum, so either the ceiling was not a ceiling or the part was not unbounded.
+The part was not unbounded. The scoring line comes from ``rubric_json`` in the
+pinned dataset the check already locates and already verifies to all 64
+characters of its fingerprint, and nothing anywhere truncates it — the judge
+substitutes it whole into its template. It was never capped by a *setting*,
+which is a different thing from not being bounded, and the sentence quietly
+traded one for the other. It is measured now: the catalogue records how long
+each task's longest scoring line is, and
+:func:`core.execution_envelope_tasks.widest_scoring_line_characters` hands the
+widest of them to :class:`GradingCaps`. Across the 220 tasks the longest is
+1,203 characters.
+
+When that measurement is absent, this module does not fall back to leaving it
+out. :func:`check_assumptions_cover_the_caps` refuses, because leaving it out
+is what produced a figure that called itself a maximum while omitting one of
+its parts. A number nobody measured is not a small number.
 
 ``grader.task_prompt_truncate_chars`` earns its own warning. Nine settings
 files carry it, every one of them saying 500, and no module reads it:
@@ -337,6 +350,24 @@ class GradingCaps:
     visual_calls_per_task: int
     audio_model: str | None
     audio_calls_per_task: int
+    characters_of_widest_scoring_line: int | None = None
+    """How long the longest scoring line in the benchmark is, in characters.
+
+    Every marking call carries the scoring line it is judging, so this sits on
+    the wire beside the standing instructions and the task preview on all of
+    the calls the cap allows.
+
+    It does not come from the settings file — it comes from the dataset, via
+    :func:`core.execution_envelope_tasks.widest_scoring_line_characters` — so
+    :func:`read_grading_caps` cannot read it and the caller has to supply it.
+    ``None`` therefore means *nobody measured it*, and that is deliberately not
+    the same as zero: :func:`check_assumptions_cover_the_caps` refuses on
+    ``None`` rather than working out an opening that leaves this part out. The
+    figure that omitted it used to be printed under a heading calling it the
+    largest possible bill. A width of zero or below is refused too, because no
+    scoring line in this benchmark is blank, so a zero is a reading that failed
+    rather than a line with no wording in it.
+    """
 
     def input_tokens_carried_by_tool_results(
         self, characters_per_token: Decimal
@@ -365,19 +396,51 @@ class GradingCaps:
     def input_tokens_the_conversation_opens_with(
         self, characters_per_token: Decimal
     ) -> int:
-        """The most the two pinned parts of the opening can be, in tokens.
+        """The most one marking call's opening can be, in tokens.
 
         Every marking call, including the very first one, carries the standing
-        instruction file and the preview of the task wording. Neither depends
-        on how the marking goes, so both are on the wire for all of the calls
-        the cap allows.
+        instruction file, the preview of the task wording, and the scoring line
+        it is judging. None of the three depends on how the marking goes, so
+        all three are on the wire for all of the calls the cap allows.
 
-        The scoring line being judged is the part that is genuinely not pinned:
-        it comes from the dataset and no setting bounds its length. It is not
-        counted here, which is why the whole figure remains a floor.
+        The scoring line's width is not read from the settings — no setting
+        bounds it — but it is not therefore unbounded. It is read from the
+        dataset, where it is fixed at the pinned revision, and passed in.
+
+        Adding it on top of the whole instruction file counts the template's
+        own ``{{criterion}}`` placeholder twice, some fourteen characters. That
+        is an overstatement of fourteen characters in a figure that is meant to
+        be an upper bound, which is the direction an upper bound may be wrong
+        in, and correcting it would mean this method assuming a placeholder
+        spelling it cannot see.
+
+        Raises :class:`ValueError` when the scoring line was never measured,
+        rather than leaving it out. Leaving it out is what let the total call
+        itself a maximum while one of its parts was described as uncapped. It
+        raises on a width of zero for the same reason: no scoring line in this
+        benchmark is blank, so a zero is a reading that failed, and treating it
+        as a width would price the wording on every marking call at nothing.
         """
-        characters = Decimal(self.characters_of_standing_instructions) + Decimal(
-            self.characters_of_task_prompt_preview
+        if self.characters_of_widest_scoring_line is None:
+            raise ValueError(
+                "how wide the scoring line being judged can be was never "
+                "measured, so what a marking call opens with cannot be worked "
+                "out. It is not zero: every marking call carries the scoring "
+                "line. Pass the width from the task catalogue "
+                "(core.execution_envelope_tasks.widest_scoring_line_characters)"
+            )
+        if self.characters_of_widest_scoring_line <= 0:
+            raise ValueError(
+                "the widest scoring line in the benchmark came out as "
+                f"{self.characters_of_widest_scoring_line} characters. No "
+                "scoring line here is blank, so that is a reading that failed "
+                "rather than a narrow line, and using it would price the "
+                "wording every marking call carries at nothing"
+            )
+        characters = (
+            Decimal(self.characters_of_standing_instructions)
+            + Decimal(self.characters_of_task_prompt_preview)
+            + Decimal(self.characters_of_widest_scoring_line)
         )
         tokens = characters / characters_per_token
         return int(tokens.to_integral_value(rounding=ROUND_CEILING))
@@ -385,13 +448,19 @@ class GradingCaps:
     def input_tokens_one_call_must_cover(
         self, characters_per_token: Decimal
     ) -> int:
-        """The floor a plan's input-per-call figure has to reach.
+        """The figure a plan's input-per-call number has to reach.
 
         The two parts are rounded up separately and then added, rather than
         added and rounded once. That can demand one token more than the single
         rounding would, and it is worth the token: a person reading the report
         sees both parts and can add them up and get this number, instead of
         finding it a token off and wondering which of the three is wrong.
+
+        This is now a ceiling on what one marking call can be asked to carry,
+        not a floor under it. Everything on the wire is counted: the tool
+        results the settings let pile up, the standing instructions, the task
+        preview, and the scoring line. It raises rather than under-reports when
+        the last of those was never measured.
         """
         return self.input_tokens_carried_by_tool_results(
             characters_per_token
@@ -433,6 +502,9 @@ class GradingCaps:
             "characters_of_task_wording_shown": (
                 self.characters_of_task_prompt_preview
             ),
+            "characters_of_widest_scoring_line": (
+                self.characters_of_widest_scoring_line
+            ),
             "task_wording_width_named_by_the_settings": (
                 self.task_prompt_preview_setting
             ),
@@ -447,12 +519,22 @@ class GradingCaps:
         }
 
 
-def read_grading_caps(path: str | Path) -> GradingCaps:
+def read_grading_caps(
+    path: str | Path,
+    *,
+    widest_scoring_line_characters: int | None = None,
+) -> GradingCaps:
     """Read the limits out of a marking settings file.
 
     Every fallback matches what ``core/grader.py`` uses when the file leaves a
     setting out, so the limits reported here are the limits the marking run
     would really apply.
+
+    ``widest_scoring_line_characters`` is the one figure that is not in this
+    file and cannot be. It belongs to the dataset, and the caller reads it from
+    the task catalogue. It defaults to ``None`` — meaning *not measured* — on
+    purpose: a default number here would be a number nobody read, which is the
+    shape of every understatement this module has had to be corrected for.
     """
     target = Path(path)
     if not target.is_file():
@@ -541,6 +623,11 @@ def read_grading_caps(path: str | Path) -> GradingCaps:
             if audio_model
             else 0
         ),
+        characters_of_widest_scoring_line=(
+            int(widest_scoring_line_characters)
+            if widest_scoring_line_characters is not None
+            else None
+        ),
     )
 
 
@@ -590,28 +677,56 @@ def check_assumptions_cover_the_caps(
     carried = caps.input_tokens_carried_by_tool_results(
         assumptions.characters_per_token
     )
-    opening = caps.input_tokens_the_conversation_opens_with(
-        assumptions.characters_per_token
-    )
-    must_cover = caps.input_tokens_one_call_must_cover(
-        assumptions.characters_per_token
-    )
-    if assumptions.grading_input_tokens_per_call < must_cover:
-        problems.append(
-            f"the cost sum allows {assumptions.grading_input_tokens_per_call} "
-            f"tokens of input per marking call, but {caps.settings_path} lets "
-            f"{caps.tool_calls_per_rubric_item} tool results pile up in the "
-            "conversation for one scoring line, each up to "
-            f"{caps.characters_per_tool_result} characters, and every later "
-            f"turn sends them all again — {carried} tokens — on top of the "
-            f"{opening} tokens every call opens with, being the "
-            f"{caps.characters_of_standing_instructions} characters of "
-            f"{caps.standing_instructions_path} and the "
-            f"{caps.characters_of_task_prompt_preview} characters of the task "
-            f"the judge is shown. So one call can carry {must_cover} tokens, "
-            "and that is still a floor: the scoring line being judged is not "
-            "capped by anything"
+    if caps.characters_of_widest_scoring_line is None or (
+        caps.characters_of_widest_scoring_line <= 0
+    ):
+        # Fail closed. The figure that can be worked out without this — tool
+        # results plus instructions plus task preview — is the figure that used
+        # to be printed under a heading calling it the largest possible bill
+        # while the report said in its own words that this part of it was not
+        # capped by anything. Reporting a smaller number with a caveat attached
+        # is what that was. A number nobody measured is not a small number.
+        how_it_failed = (
+            "was never measured"
+            if caps.characters_of_widest_scoring_line is None
+            else "came out as nothing, which no scoring line in this "
+            "benchmark is"
         )
+        problems.append(
+            f"how wide the scoring line being judged can be {how_it_failed}, "
+            "so nothing checked whether the cost sum's "
+            f"{assumptions.grading_input_tokens_per_call} tokens of input per "
+            "marking call cover what one call really carries. Every marking "
+            "call carries the scoring line, so leaving it out does not make it "
+            "free — it makes the marking total smaller than the bill. The "
+            "width is in the task catalogue, next to the count of scoring "
+            "lines this same sum already uses"
+        )
+    else:
+        opening = caps.input_tokens_the_conversation_opens_with(
+            assumptions.characters_per_token
+        )
+        must_cover = caps.input_tokens_one_call_must_cover(
+            assumptions.characters_per_token
+        )
+        if assumptions.grading_input_tokens_per_call < must_cover:
+            problems.append(
+                f"the cost sum allows "
+                f"{assumptions.grading_input_tokens_per_call} tokens of input "
+                f"per marking call, but {caps.settings_path} lets "
+                f"{caps.tool_calls_per_rubric_item} tool results pile up in "
+                "the conversation for one scoring line, each up to "
+                f"{caps.characters_per_tool_result} characters, and every "
+                f"later turn sends them all again — {carried} tokens — on top "
+                f"of the {opening} tokens every call opens with, being the "
+                f"{caps.characters_of_standing_instructions} characters of "
+                f"{caps.standing_instructions_path}, the "
+                f"{caps.characters_of_task_prompt_preview} characters of the "
+                "task the judge is shown, and the "
+                f"{caps.characters_of_widest_scoring_line} characters of the "
+                "widest scoring line in the benchmark. So one call can carry "
+                f"{must_cover} tokens"
+            )
 
     if caps.task_prompt_preview_setting_is_ignored:
         problems.append(
@@ -728,9 +843,26 @@ def describe_grading_caps(caps: GradingCaps) -> list[str]:
             "carries that setting to the judge, so the applied width above is "
             "the one that counts"
         )
-    lines.append(
-        "the one part still not capped is the scoring line being judged, "
-        "which comes from the dataset — so that figure is a floor and not the "
-        "largest possible"
-    )
+    if caps.characters_of_widest_scoring_line is None or (
+        caps.characters_of_widest_scoring_line <= 0
+    ):
+        how_it_failed = (
+            "was never measured"
+            if caps.characters_of_widest_scoring_line is None
+            else "came out as nothing, which no scoring line here is"
+        )
+        lines.append(
+            f"WARNING: how wide the scoring line being judged can be "
+            f"{how_it_failed}, so the opening above is missing a part that is "
+            "on the wire for every single marking call. The figures here are "
+            "below what one call carries, by an unknown amount"
+        )
+    else:
+        lines.append(
+            "and each call also carries the scoring line it is judging, at "
+            f"most {caps.characters_of_widest_scoring_line} characters — the "
+            "widest in the benchmark, read from the task catalogue. With that "
+            "counted, every part of one marking call is accounted for, so the "
+            "input-per-call figure above is a ceiling rather than a floor"
+        )
     return lines

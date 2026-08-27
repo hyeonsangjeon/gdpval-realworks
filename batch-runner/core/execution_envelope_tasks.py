@@ -58,7 +58,7 @@ CATALOG_PATH = (
     / "gdpval_task_catalog.json"
 )
 
-CATALOG_SCHEMA_VERSION = "gdpval-task-catalog-v1"
+CATALOG_SCHEMA_VERSION = "gdpval-task-catalog-v2"
 
 # The benchmark dataset revision every part of this comparison is pinned to.
 # The same revision already backs this repository's published grades, so a
@@ -125,6 +125,16 @@ class CatalogTask:
     prompt_sha256: str
     prompt_character_count: int
     rubric_item_count: int
+    widest_rubric_criterion_characters: int
+    """How long this task's longest scoring line is, in characters.
+
+    Every marking call carries the scoring line it is judging, so this is part
+    of what a marking call costs and not only a description of the task. It is
+    recorded here — a length, never the wording itself — because the advance
+    check used to print a marking total it called the largest possible bill and
+    say in the same breath that this part of it was capped by nothing, and both
+    cannot be true at once.
+    """
 
     @property
     def deliverable_formats(self) -> tuple[str, ...]:
@@ -208,6 +218,9 @@ class TaskCatalog:
                 prompt_sha256=str(entry["prompt_sha256"]),
                 prompt_character_count=int(entry["prompt_character_count"]),
                 rubric_item_count=int(entry["rubric_item_count"]),
+                widest_rubric_criterion_characters=int(
+                    entry["widest_rubric_criterion_characters"]
+                ),
             )
             for entry in raw["tasks"]
         )
@@ -404,7 +417,7 @@ def catalog_number_problems(catalog: TaskCatalog) -> list[str]:
     and answers it correctly, and the builder's ``--check`` cannot help because
     it rebuilds with the same code and so reproduces the same zeros.
 
-    Three things are refused, and the reason each one cannot be true is a fact
+    Four things are refused, and the reason each one cannot be true is a fact
     about this benchmark rather than a preference:
 
     - **A task nobody marks.** Every task in the benchmark is marked against a
@@ -414,6 +427,10 @@ def catalog_number_problems(catalog: TaskCatalog) -> list[str]:
       catalogue runs from 617 characters to 6,618. This also refuses a wording
       fingerprint that is the fingerprint of nothing, which catches a length
       corrected by hand without the fingerprint being corrected with it.
+    - **A task whose longest scoring line is empty.** Every marking call carries
+      the scoring line it is judging, so a zero prices that wording at nothing.
+      No scoring line in this benchmark is blank: across all 10,453 of them the
+      per-task longest runs from 94 characters to 1,203.
     - **A reference-file count that disagrees with the paths listed beside
       it.** Both are written from the same list, so they cannot honestly
       differ. This one is here because a count of zero reference files is
@@ -453,6 +470,19 @@ def catalog_number_problems(catalog: TaskCatalog) -> list[str]:
             + _name_a_few(wordless)
         )
 
+    unworded_scoring_lines = [
+        task.task_id
+        for task in catalog.tasks
+        if task.widest_rubric_criterion_characters <= 0
+    ]
+    if unworded_scoring_lines:
+        problems.append(
+            "the task catalogue says the longest scoring line of these tasks "
+            "is empty, and every marking call carries the scoring line it is "
+            "judging, so the cost ceiling would price that wording at nothing: "
+            + _name_a_few(unworded_scoring_lines)
+        )
+
     miscounted = [
         task.task_id
         for task in catalog.tasks
@@ -466,6 +496,34 @@ def catalog_number_problems(catalog: TaskCatalog) -> list[str]:
         )
 
     return problems
+
+
+def widest_scoring_line_characters(catalog: TaskCatalog) -> int:
+    """The longest scoring line anywhere in the catalogue, in characters.
+
+    This is the figure the marking half of the cost ceiling needs. Every
+    marking call carries the scoring line it is judging, so a call about the
+    widest line in the benchmark is the largest a call's opening can be, and a
+    figure that does not reach it is not a ceiling.
+
+    It is taken across the whole catalogue rather than across whichever tasks a
+    plan happens to select. A plan running five tasks is then held to the width
+    of all 220, which overstates that plan's opening slightly — and overstating
+    is the direction a ceiling is allowed to be wrong in. The alternative,
+    measuring only the selected tasks, would make the demanded figure move
+    whenever the selection moved, which is exactly the sort of quiet change
+    that has hidden an understatement before.
+
+    Raises :class:`ValueError` on an empty catalogue rather than returning
+    zero, because zero here reads as marking that costs nothing.
+    """
+    if not catalog.tasks:
+        raise ValueError(
+            "the task catalogue holds no tasks, so the widest scoring line "
+            "cannot be measured — and zero would be read as marking that "
+            "costs nothing"
+        )
+    return max(task.widest_rubric_criterion_characters for task in catalog.tasks)
 
 
 @dataclass(frozen=True)
