@@ -442,19 +442,29 @@ def test_the_module_no_longer_argues_that_the_part_has_no_top():
     assert "The third piece really is uncapped" not in text
 
 
-#: The one place this same contradiction is still printed, and is not this
-#: task's to close. ``core/execution_envelope_preflight.py`` tells a reader that
-#: the container's carried-forward output is charged at a figure that "is a
-#: floor — the blocking-error lines, the warnings, the repair guidance and the
-#: contract section have no fixed width at all". That is the identical shape:
-#: a total headed the largest possible bill, containing a part described as
-#: having no top. It is a different half of the check and a different
-#: measurement — those four kinds of line come out of
-#: ``core/sandbox_runner.py`` at run time rather than out of a pinned dataset
-#: column — so closing it is its own piece of work, and it is recorded here
-#: rather than waved through. The sweep below fails if this entry ever stops
-#: matching, so whoever closes it is told to delete the line.
-STILL_OPEN_ELSEWHERE = (
+#: Places this same contradiction is still printed and that are not this task's
+#: to close. Empty, and meant to stay that way: an entry here is a promise that
+#: someone will come back, and the two tests below make sure it is a promise
+#: this repository keeps rather than a line that quietly stops meaning anything.
+STILL_OPEN_ELSEWHERE: tuple[tuple[str, str], ...] = ()
+
+#: What used to be exempt, kept so the exemption cannot be emptied by accident.
+#:
+#: ``core/execution_envelope_preflight.py`` told a reader that the container's
+#: carried-forward output was charged at a figure that "is a floor — the
+#: blocking-error lines, the warnings, the repair guidance and the contract
+#: section have no fixed width at all". That was the identical shape this whole
+#: file is about: a total headed the largest possible bill, containing a part
+#: described as having no top. It was recorded as still open rather than waved
+#: through, because closing it needed the repair prompt measured rather than
+#: guessed at.
+#:
+#: It is closed now. ``core/sandbox_runner.widest_repair_prompt_characters``
+#: builds the widest repair prompt its committed wording allows and reports what
+#: every part of it came to, so the check quotes a measurement instead of three
+#: widths and an apology. The wording below is asserted *absent*, so emptying
+#: STILL_OPEN_ELSEWHERE above cannot be mistaken for having done the work.
+CLOSED_HERE = (
     (
         "core/execution_envelope_preflight.py",
         "and that is a floor — the blocking-error lines",
@@ -462,8 +472,8 @@ STILL_OPEN_ELSEWHERE = (
 )
 
 
-def test_the_one_place_this_is_still_printed_is_still_the_one_place():
-    """The exemption above has to keep pointing at something real.
+def test_every_exemption_still_points_at_something_real():
+    """An exemption has to keep pointing at something real.
 
     An allow-list nobody checks becomes a list of things that were fixed years
     ago, and then the next real instance slips in beside them.
@@ -472,8 +482,49 @@ def test_the_one_place_this_is_still_printed_is_still_the_one_place():
         text = (BATCH_RUNNER_ROOT / relative).read_text(encoding="utf-8")
         assert text.count(wording) == 1, (
             f"{relative} no longer says {wording!r} exactly once — if it was "
-            "fixed, delete it from STILL_OPEN_ELSEWHERE"
+            "fixed, delete it from STILL_OPEN_ELSEWHERE and record it in "
+            "CLOSED_HERE"
         )
+
+
+def test_what_this_sweep_used_to_excuse_is_really_gone():
+    """The other half: an emptied allow-list has to have been earned.
+
+    Deleting an entry from STILL_OPEN_ELSEWHERE is a one-line change that makes
+    the sweep pass whether or not anything was fixed. So every entry that leaves
+    lands in CLOSED_HERE, and this asserts the wording it named is no longer in
+    the file at all — which only a real fix achieves.
+    """
+    for relative, wording in CLOSED_HERE:
+        text = (BATCH_RUNNER_ROOT / relative).read_text(encoding="utf-8")
+        assert wording not in text, (
+            f"{relative} says {wording!r} again — it is in CLOSED_HERE, so it "
+            "was supposed to have been fixed, not moved"
+        )
+        assert not any(
+            entry[1] == wording for entry in STILL_OPEN_ELSEWHERE
+        ), f"{wording!r} cannot be both closed and still open"
+
+
+def test_the_container_half_now_prices_the_whole_repair_prompt():
+    """What closing CLOSED_HERE had to mean, checked against the check itself.
+
+    The entry above could be satisfied by deleting the sentence and leaving the
+    arithmetic exactly as optimistic as it was. This asserts the arithmetic
+    moved: the container rule now reaches the runner's measurement of a whole
+    repair prompt, and that measurement covers the four kinds of line the old
+    sentence excused itself from counting.
+    """
+    from core.sandbox_runner import widest_repair_prompt_characters
+
+    parts = widest_repair_prompt_characters()
+    named = " ".join(parts).lower()
+    for counted in ("blocking-error", "warning", "guidance", "contract"):
+        assert counted in named, f"the repair prompt measurement omits {counted}"
+    assert sum(parts.values()) > 2200, (
+        "the measurement is no larger than the three tail widths the old "
+        "sentence counted, so nothing was actually added"
+    )
 
 
 def test_nothing_the_production_code_can_print_says_the_bill_has_no_top():
@@ -487,8 +538,9 @@ def test_nothing_the_production_code_can_print_says_the_bill_has_no_top():
     not a repeat of it. A string that is not a docstring is something the code
     can say out loud.
 
-    One line is exempt and named above. It is the same defect in the container
-    half of the check, still open, and deliberately not closed here.
+    Nothing is exempt. STILL_OPEN_ELSEWHERE is empty, and the two tests above
+    keep it honest: an entry has to name wording that is really there, and an
+    entry that leaves has to name wording that is really gone.
     """
     import ast
 
