@@ -74,6 +74,7 @@ from core.execution_envelope_tasks import (
     select_advance_check_tasks,
     selection_matches,
     verify_input_file_versions,
+    widest_scoring_line_characters,
 )
 from core.execution_environment_readiness import (
     COMPARISON_SAME_GENERATED_CODE,
@@ -1507,7 +1508,7 @@ def run_envelope_preflight(
             )
             grading_ceiling_problems = (
                 _check_grading_assumptions_match_the_settings(
-                    plan, assumptions, root=root
+                    plan, assumptions, root=root, catalog=loaded_catalog
                 )
             )
             problems.extend(grading_ceiling_problems)
@@ -1625,6 +1626,7 @@ def _check_grading_assumptions_match_the_settings(
     assumptions: CostAssumptions,
     *,
     root: Path,
+    catalog: TaskCatalog | None = None,
 ) -> list[str]:
     """Confirm the marking half of the cost sum is a ceiling, not a forecast.
 
@@ -1638,6 +1640,13 @@ def _check_grading_assumptions_match_the_settings(
     A plan that marks answers but names no marking settings file is a problem,
     not a pass. Nothing looked, and "nothing looked" is not "the numbers are
     high enough".
+
+    One of the limits is not in the settings file at all. Every marking call
+    carries the scoring line it is judging, and how wide that can be is a fact
+    about the dataset, so it is read from ``catalog`` and passed down. When no
+    catalogue reaches here the width goes down as *not measured*, and
+    :func:`check_assumptions_cover_the_caps` refuses rather than working out an
+    opening with a part of it missing.
     """
     if not assumptions.grading_required:
         return []
@@ -1648,8 +1657,19 @@ def _check_grading_assumptions_match_the_settings(
             "settings file, so nothing checked whether the cost sum's marking "
             "numbers sit above the limits the marking would really apply"
         ]
+    widest_scoring_line: int | None = None
+    if catalog is not None:
+        try:
+            widest_scoring_line = widest_scoring_line_characters(catalog)
+        except ValueError:
+            # An empty catalogue is reported elsewhere. Turning it into a
+            # width of zero here would price the scoring line at nothing.
+            widest_scoring_line = None
     try:
-        caps = read_grading_caps(root / str(relative))
+        caps = read_grading_caps(
+            root / str(relative),
+            widest_scoring_line_characters=widest_scoring_line,
+        )
     except ValueError as error:
         return [f"the marking settings could not be read: {error}"]
     # Report the file the way the plan names it. Where this check happens to be

@@ -1,13 +1,13 @@
 """Every marking conversation opens with wording this repository pins.
 
-``core.execution_envelope_grading_cost`` demands a floor on how many input
+``core.execution_envelope_grading_cost`` demands a figure for how many input
 tokens one marking call can carry, and refuses a plan that states less. Until
-this file existed the floor counted the tool results and nothing else. Its own
+this file existed the demand counted the tool results and nothing else. Its own
 docstring explained why: what the conversation *starts* with — the standing
 instructions, the scoring line, "the first 500 characters of the task" — "is
 not capped by anything".
 
-Two of those three are capped, and one of the caps was written down in prose in
+All three of those are capped, and one of the caps was written down in prose in
 the sentence that denied it.
 
 * The standing instructions are a committed file. ``prompt.tool_template``
@@ -16,12 +16,20 @@ the sentence that denied it.
 * The task preview is cut to ``ToolCallingJudge.task_prompt_truncate``
   characters, which is 500, and every task in the committed catalogue is longer
   than that — so the cut is always taken in full.
+* The scoring line is not capped by any *setting*, which the module read as not
+  capped at all. It comes from ``rubric_json`` in the pinned dataset, where the
+  widest of all 10,453 of them is 1,203 characters and cannot change without
+  the revision changing. Its width is measured into the task catalogue and
+  handed in, because the settings file cannot supply it.
 
-Leaving them out made the demanded floor *lower* than the truth. That is the
-direction that costs money: a plan clears a floor that is too low and is
-recorded as having been checked. The tests here hold the floor to the two
-capped pieces, hold the module to reading them from where the marking run reads
-them, and hold it to still saying out loud that the third piece is uncapped.
+Leaving them out made the demanded figure *lower* than the truth. That is the
+direction that costs money: a plan clears a figure that is too low and is
+recorded as having been checked. Worse, the module said so itself — it called
+its own demand "still a floor" inside a report headed the largest possible
+bill, and a sum with an unbounded part has no maximum. The tests here hold the
+demand to all three pieces, hold the module to reading each of them from where
+the marking run reads it, and hold it to refusing rather than quietly
+subtracting when the third was never handed in.
 
 They also pin the thing found next door. ``grader.task_prompt_truncate_chars``
 sits in nine settings files and reaches nothing: ``core.grader`` builds the
@@ -54,7 +62,10 @@ from core.execution_envelope_grading_cost import (
     standing_instructions_characters,
 )
 from core.execution_envelope_preflight import load_plan, run_envelope_preflight
-from core.execution_envelope_tasks import load_task_catalog
+from core.execution_envelope_tasks import (
+    load_task_catalog,
+    widest_scoring_line_characters,
+)
 from core.grader import resolve_tool_prompt_path
 from core.tool_calling_judge import ToolCallingJudge
 from core.tools.read_deliverable import MAX_CONTENT_CHARS
@@ -105,8 +116,22 @@ def written(tmp_path: Path, document, name: str = "marking.yaml") -> Path:
     return path
 
 
+def real_widest_scoring_line() -> int:
+    """The benchmark's widest scoring line, read from the committed catalogue.
+
+    Measured rather than typed, like everything else this module counts. It is
+    the one piece of the opening that is not in the settings file at all — it
+    comes from the pinned dataset — so a caller has to hand it to
+    ``read_grading_caps`` and the fixture below does that once.
+    """
+    return widest_scoring_line_characters(load_task_catalog())
+
+
 def caps(**overrides) -> GradingCaps:
-    base = read_grading_caps(COMMITTED_SETTINGS)
+    base = read_grading_caps(
+        COMMITTED_SETTINGS,
+        widest_scoring_line_characters=real_widest_scoring_line(),
+    )
     return replace(base, **overrides)
 
 
@@ -252,6 +277,24 @@ def test_the_new_measurements_have_no_defaults():
         assert declared.default_factory is MISSING, f"{measurement} has a default"
 
 
+def test_the_one_measurement_that_does_default_defaults_to_nobody_looked():
+    """The scoring line's width is the exception, and it has to be a loud one.
+
+    It cannot be required like the others, because it is not in the settings
+    file — it comes from the pinned dataset, and callers that only want to read
+    a settings file have no way to supply it. So it defaults. What it must
+    never default to is a number: ``None`` makes the check refuse, while a zero
+    would make it work out a smaller opening and say nothing.
+    """
+    declared = {f.name: f for f in fields(GradingCaps)}[
+        "characters_of_widest_scoring_line"
+    ]
+    assert declared.default is None
+    assert declared.default_factory is MISSING
+    read = read_grading_caps(COMMITTED_SETTINGS)
+    assert read.characters_of_widest_scoring_line is None
+
+
 # ---------------------------------------------------------------------------
 # The width counted is the width the judge applies
 # ---------------------------------------------------------------------------
@@ -314,18 +357,20 @@ def test_the_demand_is_the_tool_results_plus_the_opening():
     )
 
 
-def test_the_opening_is_both_pieces_and_nothing_else():
+def test_the_opening_is_all_three_pieces_and_nothing_else():
     read = caps(
         characters_of_standing_instructions=6_000,
         characters_of_task_prompt_preview=600,
+        characters_of_widest_scoring_line=1_200,
     )
-    assert read.input_tokens_the_conversation_opens_with(THREE) == 2_200
+    assert read.input_tokens_the_conversation_opens_with(THREE) == 2_600
 
 
 def test_a_fraction_of_a_token_is_charged_as_a_token():
     read = caps(
         characters_of_standing_instructions=1,
         characters_of_task_prompt_preview=0,
+        characters_of_widest_scoring_line=1,
     )
     assert read.input_tokens_the_conversation_opens_with(THREE) == 1
 
@@ -333,12 +378,30 @@ def test_a_fraction_of_a_token_is_charged_as_a_token():
 def test_forgetting_the_opening_lowers_the_demand():
     """The direction that matters, measured rather than asserted in prose."""
     with_opening = caps().input_tokens_one_call_must_cover(THREE)
+    # One character of scoring line rather than none: a width of zero is
+    # refused outright, so this is the smallest opening the module will work
+    # out at all.
     without = caps(
         characters_of_standing_instructions=0,
         characters_of_task_prompt_preview=0,
+        characters_of_widest_scoring_line=1,
     ).input_tokens_one_call_must_cover(THREE)
     assert without < with_opening
-    assert with_opening - without == 2_255
+    assert with_opening - without == 2_655
+
+
+def test_leaving_the_scoring_line_out_of_the_opening_lowers_the_demand():
+    """The piece this task added, priced on its own.
+
+    401 tokens a call does not sound like the finding. Multiplied by the calls
+    the settings allow across 10,453 scoring lines it is the difference between
+    a figure that is a ceiling and a figure that was printed as one.
+    """
+    whole = caps().input_tokens_one_call_must_cover(THREE)
+    almost_without = caps(
+        characters_of_widest_scoring_line=1
+    ).input_tokens_one_call_must_cover(THREE)
+    assert whole - almost_without == 401
 
 
 def test_a_longer_instruction_file_raises_the_demand_by_itself():
@@ -373,7 +436,7 @@ def test_a_plan_that_covers_the_whole_demand_is_left_alone():
     ) == []
 
 
-def test_the_refusal_names_both_pieces_and_where_they_were_read():
+def test_the_refusal_names_every_piece_and_where_they_were_read():
     read = caps()
     problems = input_problems(read, grading_input_tokens_per_call=1)
     assert len(problems) == 1
@@ -381,13 +444,56 @@ def test_the_refusal_names_both_pieces_and_where_they_were_read():
     assert str(read.characters_of_standing_instructions) in message
     assert read.standing_instructions_path in message
     assert str(read.characters_of_task_prompt_preview) in message
+    assert str(read.characters_of_widest_scoring_line) in message
 
 
-def test_the_refusal_still_says_the_scoring_line_is_not_capped():
-    """The demand is bigger, not complete. A reader must not read it as complete."""
+def test_the_refusal_no_longer_calls_its_own_figure_a_floor():
+    """The demand is complete now, and must not be read as anything less.
+
+    It used to end "and that is still a floor: the scoring line being judged is
+    not capped by anything", printed inside a report headed the largest
+    possible bill. A sum with an unbounded part has no maximum, so that report
+    contradicted itself. The scoring line is bounded by the pinned dataset, it
+    is counted, and the sentence has to go with it.
+    """
     problems = input_problems(caps(), grading_input_tokens_per_call=1)
-    assert "still a floor" in problems[0]
-    assert "scoring line being judged is not capped" in problems[0]
+    assert "floor" not in problems[0]
+    assert "not capped by anything" not in problems[0]
+    assert "widest scoring line in the benchmark" in problems[0]
+
+
+def test_a_width_nobody_measured_is_refused_instead_of_left_out():
+    """``None`` means nobody looked, which is not the same as narrow.
+
+    Working out an opening without it would hand back a smaller figure than the
+    truth and nothing would say so. That is the shape of every finding on this
+    check so far, so the check refuses instead.
+    """
+    problems = input_problems(caps(characters_of_widest_scoring_line=None))
+    assert len(problems) == 1
+    assert "never measured" in problems[0]
+    assert "does not make it free" in problems[0]
+
+    with pytest.raises(ValueError, match="never measured"):
+        caps(
+            characters_of_widest_scoring_line=None
+        ).input_tokens_the_conversation_opens_with(THREE)
+
+
+def test_a_width_that_came_out_as_nothing_is_refused_too():
+    """No scoring line in this benchmark is blank, so zero is a failed reading.
+
+    A zero would slip past a ``None`` check and price the wording every marking
+    call carries at nothing — the same bug, entered by the other door.
+    """
+    problems = input_problems(caps(characters_of_widest_scoring_line=0))
+    assert len(problems) == 1
+    assert "came out as nothing" in problems[0]
+
+    with pytest.raises(ValueError, match="came out as"):
+        caps(
+            characters_of_widest_scoring_line=0
+        ).input_tokens_the_conversation_opens_with(THREE)
 
 
 def test_the_report_names_the_instruction_file_the_way_the_settings_do():
@@ -478,7 +584,7 @@ def test_the_committed_plan_is_still_refused_and_by_a_bigger_number():
 
     matching = [p for p in result.problems if "input per marking call" in p]
     assert len(matching) == 1
-    assert "535589" in matching[0]
+    assert "535990" in matching[0]
     assert "533334" in matching[0]
 
 
@@ -550,27 +656,53 @@ def test_the_description_says_what_every_call_opens_with():
     assert "6263" in opening[0]
 
 
-def test_the_description_still_says_the_figure_is_a_floor():
-    lines = describe_grading_caps(read_grading_caps(COMMITTED_SETTINGS))
-    assert any(
-        "not capped is the scoring line" in line and "floor" in line
-        for line in lines
+def test_the_description_says_the_figure_is_a_ceiling_once_the_width_is_known():
+    lines = describe_grading_caps(
+        read_grading_caps(
+            COMMITTED_SETTINGS,
+            widest_scoring_line_characters=real_widest_scoring_line(),
+        )
     )
+    scoring_line = [line for line in lines if "scoring line it is judging" in line]
+    assert len(scoring_line) == 1
+    assert str(real_widest_scoring_line()) in scoring_line[0]
+    assert "ceiling rather than a floor" in scoring_line[0]
+    assert not [line for line in lines if line.startswith("WARNING")]
 
 
-def test_the_description_says_only_the_scoring_line_is_uncapped():
-    """The description must not leave a reader thinking the opening is free.
+def test_the_description_warns_rather_than_quoting_a_short_figure():
+    """A width nobody handed in must be visible, not absorbed.
 
-    Exactly one line may talk about something being uncapped, and it has to be
-    the scoring line. The sentence this task exists to delete named three
-    things there, two of which are read from disk now.
+    ``describe_grading_caps`` prints an opening worked out from the two pieces
+    it can read. With the third missing that opening is below what a call
+    carries, and the reader has to be told, because a figure with a piece
+    silently left out is exactly what this task exists to remove.
     """
     lines = describe_grading_caps(read_grading_caps(COMMITTED_SETTINGS))
-    uncapped = [line for line in lines if "not capped" in line]
-    assert len(uncapped) == 1
-    assert "scoring line" in uncapped[0]
-    assert "standing instructions" not in uncapped[0]
-    assert not re.search(r"first \d+ characters of the task", uncapped[0])
+    warnings = [line for line in lines if line.startswith("WARNING")]
+    assert len(warnings) == 1
+    assert "never measured" in warnings[0]
+    assert "below what one call carries" in warnings[0]
+
+
+def test_the_description_no_longer_calls_anything_uncapped():
+    """The description must not leave a reader thinking a piece is free.
+
+    The sentence this task exists to delete named three things as uncapped, and
+    the previous task read two of them from disk. The third is read from the
+    pinned dataset now, so nothing in these lines may still claim a part of a
+    marking call is unbounded.
+    """
+    lines = describe_grading_caps(
+        read_grading_caps(
+            COMMITTED_SETTINGS,
+            widest_scoring_line_characters=real_widest_scoring_line(),
+        )
+    )
+    assert [line for line in lines if "not capped" in line] == []
+    assert not any(
+        re.search(r"first \d+ characters of the task", line) for line in lines
+    )
 
 
 def test_the_description_flags_a_width_that_does_nothing(tmp_path):
@@ -589,6 +721,15 @@ def test_the_written_out_form_carries_the_new_measurements():
     assert written_out["characters_of_task_wording_shown"] == 500
     assert written_out["task_wording_width_named_by_the_settings"] == 500
     assert written_out["the_settings_width_is_ignored"] is False
+    assert written_out["characters_of_widest_scoring_line"] is None
+
+    measured = read_grading_caps(
+        COMMITTED_SETTINGS,
+        widest_scoring_line_characters=real_widest_scoring_line(),
+    ).as_dict()
+    assert measured["characters_of_widest_scoring_line"] == (
+        real_widest_scoring_line()
+    )
 
 
 def test_the_module_says_out_loud_what_it_used_to_get_wrong():
@@ -601,7 +742,10 @@ def test_the_module_says_out_loud_what_it_used_to_get_wrong():
     import core.execution_envelope_grading_cost as grading_cost
 
     assert "wrote one of those caps down in prose" in grading_cost.__doc__
-    assert "The third piece really is uncapped" in grading_cost.__doc__
+    assert (
+        "The third piece was the contradiction this module printed in its own "
+        "report." in grading_cost.__doc__
+    )
     assert "has never done anything at all" in grading_cost.__doc__
 
 
