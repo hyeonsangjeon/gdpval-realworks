@@ -30,12 +30,14 @@ from core.result_fingerprint import (
     validate_inference_result_fingerprint,
 )
 from core.result_projection import project_result_row
+from core.cost_projection import project_cost_ledger_reference
 from core.repository_identity import validate_hf_dataset_repo_id
 from core.repository_identity import validate_experiment_id
 
 
 INCLUDE_PATTERNS = [
     "README.md",
+    "cost_ledger.jsonl",
     "data/train-*.parquet",
     "deliverable_files/**",
     "inference_provenance.json",
@@ -52,12 +54,18 @@ IGNORE_PATTERNS = [
     "dataset_info.json",
 ]
 DELETE_PATTERNS = [
+    "cost_ledger.jsonl",
     "data/**",
     "deliverable_files/**",
     "inference_provenance.json",
     "self_report.json",
     "step2_inference_results.json",
 ]
+#: The audit sidecar publishes under one fixed name. ``self_report.json``
+#: declares the path, but the declaration is payload — and managed paths drive
+#: remote deletion, so a payload that could name its own managed path could
+#: name someone else's file. The name is pinned here instead.
+COST_LEDGER_PATH = "cost_ledger.jsonl"
 DEFAULT_PUBLICATION_RECEIPT_PATH = Path("workspace/publication_receipt.json")
 _PUBLICATION_RECEIPT_FIELDS = frozenset({
     "repo_id",
@@ -668,6 +676,8 @@ def _publication_source_paths(root: Path) -> list[Path]:
     ]
     if _regular_file(root / "README.md", required=False):
         paths.append(root / "README.md")
+    if _regular_file(root / COST_LEDGER_PATH, required=False):
+        paths.append(root / COST_LEDGER_PATH)
     _regular_file(paths[0], required=True)
 
     deliverable_root = root / "deliverable_files"
@@ -1041,7 +1051,7 @@ def _validate_self_report_path(
 def _validate_self_report(
     files: tuple[_PublicationFile, ...],
     identity: PublicationIdentity,
-) -> None:
+) -> dict:
     report = next((record for record in files if record.path == "self_report.json"), None)
     if report is None:
         raise ValueError("self_report.json is required for publication")
@@ -1053,13 +1063,42 @@ def _validate_self_report(
     finally:
         report.stream.seek(0)
     _validate_self_report_payload(payload, identity)
+    return payload
+
+
+def _validate_cost_ledger(
+    files: tuple[_PublicationFile, ...],
+    payload: dict,
+) -> None:
+    """Match the staged audit sidecar against the digest self_report declares.
+
+    The two must agree in both directions. A declaration with no file leaves
+    readers chasing a receipt that was never published; a file with no
+    declaration is a payload nobody vouched for, and it would be published
+    under a digest nobody checked.
+    """
+    reference = project_cost_ledger_reference(payload.get("cost_ledger"))
+    staged = next(
+        (record for record in files if record.path == COST_LEDGER_PATH),
+        None,
+    )
+    if reference is None:
+        if staged is not None:
+            raise ValueError("cost ledger is present but self_report.json declares none")
+        return
+    if reference["path"] != COST_LEDGER_PATH:
+        raise ValueError(f"cost ledger must be published as {COST_LEDGER_PATH}")
+    if staged is None:
+        raise ValueError("self_report.json declares a cost ledger that is missing")
+    if staged.sha256 != reference["sha256"]:
+        raise ValueError("cost ledger digest does not match self_report.json")
 
 
 def _validate_publication_files(
     files: tuple[_PublicationFile, ...],
     identity: PublicationIdentity,
 ) -> None:
-    _validate_self_report(files, identity)
+    _validate_cost_ledger(files, _validate_self_report(files, identity))
     provenance_records = [
         record
         for record in files
@@ -1103,6 +1142,7 @@ def _validate_publication_files(
 def _is_managed_publication_path(path: str) -> bool:
     return (
         path in {
+            COST_LEDGER_PATH,
             "inference_provenance.json",
             "self_report.json",
             "step2_inference_results.json",
