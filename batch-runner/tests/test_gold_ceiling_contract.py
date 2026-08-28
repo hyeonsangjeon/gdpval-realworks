@@ -723,3 +723,41 @@ def test_repeats_are_not_visible_to_the_dashboard_aggregator():
     listings = re.findall(r"readdir\((.*?)\)", aggregator)
     assert listings == ["GRADES_DIR"]
     assert "extname(f) === '.json'" in aggregator
+
+
+# --------------------------------------------------------------------------
+# The contract must survive a fresh clone
+# --------------------------------------------------------------------------
+#
+# `batch-runner/scripts/` is ignored by default with a per-file allow list, so
+# a script added there is present for whoever wrote it and absent for everyone
+# else. That is not a hypothetical: the manifest builder below was written,
+# used to produce the committed manifest, exercised by the tests in this file,
+# and still missing from the first push -- green here, red on a fresh checkout.
+#
+# The manifest itself carries the same risk from the other direction: it is the
+# only committed record of which 30 tasks were graded and what their files
+# hashed to, and both fingerprints in the specification are re-derived from it.
+
+CONTRACT_FILES = (
+    "batch-runner/scripts/build_gold_deliverable_manifest.py",
+    "batch-runner/experiments/gold_corpus/gold_deliverable_manifest.json",
+    "batch-runner/experiments/exp_gold_baseline.yaml",
+    "batch-runner/grading_configs/gold_ceiling_30_v2_sol_max.yaml",
+)
+
+
+@pytest.mark.parametrize("relative", CONTRACT_FILES)
+def test_the_frozen_contract_is_in_the_repository(relative):
+    path = REPO_ROOT / relative
+    assert path.is_file(), f"{relative} is missing"
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", relative],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert tracked.returncode == 0, (
+        f"{relative} exists here but git does not track it, so a fresh clone "
+        "would not have it. Add it to the allow list in .gitignore."
+    )
