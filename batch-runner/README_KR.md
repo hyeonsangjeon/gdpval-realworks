@@ -215,8 +215,9 @@ regular file이며 identity가 맞는 `self_report.json`과
 deliverable tree를 다시 검증합니다. 그 뒤 원격 `data/**`,
 `deliverable_files/**`, `self_report.json`을 CAS로 교체하고 오래된
 `step2_inference_results.json`을 삭제합니다. Step 0에서 검증한 target HEAD를
-HF CAS parent로 사용해 `README.md`, `data/train-*.parquet`,
-`deliverable_files/**`, `inference_provenance.json`, `self_report.json`만
+HF CAS parent로 사용해 `README.md`, `cost_ledger.jsonl`,
+`data/train-*.parquet`, `deliverable_files/**`, `inference_provenance.json`,
+`self_report.json`만
 게시하므로 다른 run이 target을 바꿨으면 덮어쓰지 않고 실패합니다.
 self-report identity는 prepared/result fingerprint, publication generation,
 ordered task identity와 일치해야 하고, task별 summary와 deliverable 목록은
@@ -489,10 +490,16 @@ Hugging Face 대상을 사용합니다.
 - Step 6은 `results/<experiment_id>/report/`에 `report_data.json`과
   `report.md`를 쓰고 HF용 `self_report.json`을 staging합니다.
 - Step 7은 `README.md`, `data/train-*.parquet`, `deliverable_files/**`,
-  `inference_provenance.json`, `self_report.json`만 게시합니다. endpoint-free
+  `inference_provenance.json`, `self_report.json`, 그리고 run이 기록한 경우
+  `cost_ledger.jsonl`만 게시합니다. endpoint-free
   provenance sidecar에는 experiment, source, prepared input, ordered task,
   typed route fingerprint만 있으며 endpoint URL과 credential은 없습니다. 이
   정보는 provenance일 뿐 SKU, PTU, provisioned capacity를 증명하지 않습니다.
+- `cost_ledger.jsonl`은 비용 영수증의 근거가 되는 호출별 audit sidecar입니다.
+  게시 검증은 양방향입니다. `self_report.json`이 정확히 그 경로로 선언하지
+  않으면 파일을 거부하고, 선언된 SHA-256과 실제 바이트 해시가 다르면 업로드
+  대신 run을 실패시킵니다. 이 파일에는 사용량으로 계산한 예상 비용만 있고
+  프롬프트, 응답, API 키, 청구서 금액은 들어가지 않습니다.
 - 전체 Step 2 inference JSON은 30일 Actions artifact에만 남고 HF allowlist에는
   들어가지 않습니다. Step 7은 이전 게시자가 남긴 원격
   `step2_inference_results.json`도 삭제합니다.
