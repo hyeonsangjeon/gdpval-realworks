@@ -560,3 +560,227 @@ def test_the_tool_is_in_the_repository():
         f"{TOOL_PATH} exists here but git does not track it, so a fresh clone "
         "would not have it. Add it to the allow list in .gitignore."
     )
+
+
+# ── Every task gets a row, not just the biggest individual losses ──────────
+
+
+def test_every_graded_task_gets_a_row():
+    """Ranking item losses hides tasks; the specification asks about tasks.
+
+    Stage 1's first run lost its forty largest item scores across nine tasks,
+    so a report built from that ranking alone would never mention the other
+    twenty-one -- including the ones that scored well, which is the evidence
+    that the low scores are not uniform.
+    """
+    tasks = [
+        _task("task-a", pct=100.0, total_awarded=2.0, total_max=2),
+        _task("task-b", pct=50.0, total_awarded=1.0, total_max=2),
+    ]
+
+    rows = analysis.per_task(_payload(tasks=tasks))
+
+    assert [row["task_id"] for row in rows] == ["task-b", "task-a"]
+    assert rows[0]["pct"] == 50.0
+
+
+def test_a_task_with_no_score_at_all_sorts_first_rather_than_disappearing():
+    """A task the grader could not score is the most interesting row there is."""
+    tasks = [
+        _task("task-ok", pct=80.0, total_awarded=8.0, total_max=10),
+        _task("task-broken", pct=None, total_awarded=None, total_max=None),
+    ]
+
+    rows = analysis.per_task(_payload(tasks=tasks))
+
+    assert rows[0]["task_id"] == "task-broken"
+    assert rows[0]["points_lost"] is None
+
+
+def test_a_fired_penalty_is_counted_as_lost_points():
+    """A negative-maximum item is full marks at zero, so it never reads as low.
+
+    `core/grader.py` keeps penalty items out of the denominator with
+    ``max(0, it.max_score)``. An item-wise sum of "maximum minus awarded" over
+    items *below their maximum* therefore misses a penalty that fired: -2
+    awarded against a -2 maximum is not below it. Reading the loss off the
+    task's own totals is what makes the two agree.
+    """
+    penalty = _item(
+        rubric_item_id="penalty",
+        criterion="Cites sources behind a paywall.",
+        max_score=-2,
+        awarded_score=-2.0,
+        verdict="pass",
+    )
+    task = _task(
+        "task-penalised",
+        items=[_item(max_score=10, awarded_score=10.0), penalty],
+        pct=80.0,
+        total_awarded=8.0,
+        total_max=10,
+    )
+
+    row = analysis.per_task(_payload(tasks=[task]))[0]
+
+    assert row["items_below_full_marks"] == 0
+    assert row["points_lost"] == 2.0
+    assert analysis.items_below_full_marks(_payload(tasks=[task])) == []
+
+
+def test_an_unfired_penalty_costs_nothing():
+    penalty = _item(max_score=-2, awarded_score=-0.0, verdict="fail")
+    task = _task(
+        "task-clean",
+        items=[_item(max_score=10, awarded_score=10.0), penalty],
+        pct=100.0,
+        total_awarded=10.0,
+        total_max=10,
+    )
+
+    row = analysis.per_task(_payload(tasks=[task]))[0]
+
+    assert row["items_below_full_marks"] == 0
+    assert row["points_lost"] == 0.0
+
+
+def test_every_task_is_named_in_the_readable_report(tmp_path, capsys):
+    """The report's per-task classification is checked against this block."""
+    tasks = [
+        _task(f"task-{n:02d}", pct=float(n), total_awarded=float(n), total_max=100)
+        for n in range(30)
+    ]
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(json.dumps(_payload(tasks=tasks)))
+
+    analysis.main([str(grade_file), "--shortfall-limit", "0"])
+    printed = capsys.readouterr().out
+
+    assert "Per task (worst first)" in printed
+    for task in tasks:
+        assert task["task_id"] in printed
+    assert max(len(line) for line in printed.splitlines()) < 120
+
+
+def test_a_long_occupation_does_not_run_off_the_page():
+    """Real occupation names reach 41 characters; the line has to hold them."""
+    task = _task(
+        "task-wide",
+        occupation="Computer and Information Systems Managers",
+        critical_fail=True,
+        selection_status="degraded",
+        pct=47.1,
+        total_awarded=47.57,
+        total_max=101,
+    )
+
+    rendered = analysis._render(
+        analysis.analyze(_payload(tasks=[task])), shortfall_limit=0
+    )
+
+    assert "Computer and Information Systems Managers" in rendered
+    assert "selection degraded" in rendered
+    assert max(len(line) for line in rendered.splitlines()) < 120
+
+
+# ── What the second threshold is counting ─────────────────────────────────
+
+
+def test_required_items_counts_what_the_grader_counts():
+    """Partial credit is a miss, and a negative maximum still qualifies.
+
+    Both come from `core.grader`: an item is required iff its score magnitude
+    reaches ``MAGNITUDE_THRESHOLD``, and it is marked done right only on a
+    ``pass`` verdict.
+    """
+    task = _task(
+        "task-1",
+        items=[
+            _item(criterion="required, passed", max_score=5, verdict="pass"),
+            _item(criterion="required, partial", max_score=5, verdict="partial"),
+            _item(criterion="required penalty", max_score=-4, verdict="fail"),
+            _item(criterion="not required", max_score=3, verdict="partial"),
+        ],
+    )
+
+    required = analysis.required_items(_payload(tasks=[task]))
+
+    assert required["total"] == 3
+    assert required["passed"] == 1
+    assert required["rate"] == pytest.approx(1 / 3, abs=1e-4)
+    assert required["by_verdict"] == {"pass": 1, "partial": 1, "fail": 1}
+
+
+def test_the_threshold_is_the_graders_own():
+    """A copy of the number could drift from the number that decides."""
+    from core.grader import MAGNITUDE_THRESHOLD
+
+    assert analysis.REQUIRED_ITEM_MIN_ABS_SCORE == MAGNITUDE_THRESHOLD
+
+
+def test_a_criterion_repeated_across_tasks_is_surfaced():
+    """One recurring subjective criterion can set the whole rate.
+
+    In stage 1's first run, nineteen of the thirty-five required items were
+    "Overall formatting and style of the deliverable" and twelve of them drew
+    partial credit -- three quarters of every miss. A rate of 0.5429 does not
+    show that; this does.
+    """
+    shared = "Overall formatting and style of the deliverable"
+    tasks = [
+        _task(
+            f"task-{n}",
+            items=[
+                _item(criterion=shared, max_score=5, verdict="pass" if n else "partial"),
+                _item(criterion=f"unique to task {n}", max_score=5, verdict="pass"),
+            ],
+        )
+        for n in range(3)
+    ]
+
+    required = analysis.required_items(_payload(tasks=tasks))
+
+    assert required["recurring_criteria"] == [
+        {"criterion": shared, "tasks": 3, "passed": 2}
+    ]
+
+
+def test_the_required_item_block_reaches_the_readable_report(tmp_path, capsys):
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(
+        json.dumps(
+            _payload(
+                tasks=[
+                    _task(
+                        "task-1",
+                        items=[_item(max_score=5, verdict="partial")],
+                        pct=50.0,
+                        total_awarded=2.5,
+                        total_max=5,
+                    )
+                ]
+            )
+        )
+    )
+
+    analysis.main([str(grade_file), "--shortfall-limit", "0"])
+    printed = capsys.readouterr().out
+
+    assert "Required items (|max score| >= 4)" in printed
+    assert "0 of 1 passed" in printed
+    assert max(len(line) for line in printed.splitlines()) < 120
+
+
+def test_a_run_with_no_required_items_does_not_divide_by_zero():
+    payload = _payload(tasks=[_task("task-1", items=[_item(max_score=1)])])
+
+    required = analysis.required_items(payload)
+
+    assert required == {
+        "total": 0,
+        "passed": 0,
+        "rate": None,
+        "by_verdict": {},
+        "recurring_criteria": [],
+    }
+    analysis._render(analysis.analyze(payload), shortfall_limit=0)

@@ -42,7 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +53,19 @@ from typing import Any
 MEAN_SCORE_PCT_FLOOR = 90.0
 CRITICAL_ITEM_PASS_FLOOR = 0.95
 JUDGE_ERROR_RATE_CEILING = 0.02
+
+# Which items the second threshold counts. Imported rather than restated: the
+# comment above `MAGNITUDE_THRESHOLD` names this very run as the thing that
+# should decide whether 4 is the right boundary, so an analysis that counted
+# through its own copy of the number could disagree with the grader about what
+# it was measuring at exactly the moment the disagreement mattered.
+#
+# The report's generated blocks run this from the repository root, where
+# `batch-runner/` is not importable, so the package root goes on the path here
+# rather than relying on the caller's working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from core.grader import MAGNITUDE_THRESHOLD as REQUIRED_ITEM_MIN_ABS_SCORE  # noqa: E402
 
 # What the specification pinned. A payload disagreeing with either is some
 # other run, and reading stage 1's numbers out of it would be a mistake no
@@ -191,6 +204,128 @@ def items_below_full_marks(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return shortfalls
 
 
+def per_task(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """One row per graded task, worst score first.
+
+    The specification asks for per-task evidence, and a report that lists only
+    its biggest individual losses can leave a whole task unmentioned -- the
+    forty largest item losses in stage 1's first run came from nine tasks, so
+    twenty-one of the thirty were invisible in that view. Ranking by item loss
+    answers "where did the points go"; this answers "how did each answer do",
+    which is the question a per-task classification is written against.
+
+    Scores are read from the fields the grader wrote (``pct``, ``total_awarded``,
+    ``total_max``) rather than recomputed from the items, so this reports the
+    run's own arithmetic instead of a second opinion about it.
+
+    ``points_lost`` is that subtraction rather than a sum over the items below
+    their maximum, and the two can differ. A rubric may carry penalty items with
+    a *negative* maximum -- "reviews articles behind a paywall", "includes test
+    questions beyond the two required" -- which `core/grader.py` deliberately
+    keeps out of the denominator via ``max(0, it.max_score)``. Full marks on
+    such an item is an award of zero, so a fired penalty leaves the award
+    *below* zero but never below the maximum, and an item-wise sum would drop it
+    while the task's own total counts it. Stage 1's first run had two of these
+    and neither fired, so the two spellings happened to agree; relying on that
+    would be relying on a coincidence.
+    """
+    rows: list[dict[str, Any]] = []
+    for task in payload.get("tasks") or []:
+        items = task.get("items") or []
+        below = [
+            item
+            for item in items
+            if not item.get("score_excluded")
+            and item.get("awarded_score") is not None
+            and item.get("max_score") is not None
+            and item["awarded_score"] < item["max_score"]
+        ]
+        awarded = task.get("total_awarded")
+        maximum = task.get("total_max")
+        rows.append(
+            {
+                "task_id": task.get("task_id"),
+                "sector": task.get("sector"),
+                "occupation": task.get("occupation"),
+                "pct": task.get("pct"),
+                "total_awarded": awarded,
+                "total_max": maximum,
+                "items": len(items),
+                "items_below_full_marks": len(below),
+                "points_lost": (
+                    None
+                    if awarded is None or maximum is None
+                    else round(float(maximum) - float(awarded), 4)
+                ),
+                "critical_fail": bool(task.get("critical_fail")),
+                "selection_status": task.get("selection_status"),
+                "error": task.get("error"),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["pct"] if row["pct"] is not None else -1.0,
+            str(row["task_id"]),
+        )
+    )
+    return rows
+
+
+def required_items(payload: dict[str, Any]) -> dict[str, Any]:
+    """What the second threshold is actually counting.
+
+    `core/grader.py` calls an item required when ``|max_score| >= 4`` and marks
+    it passed only on a ``pass`` verdict, so partial credit counts against the
+    rate exactly as hard as a flat failure does. Whether 0.95 is a reachable
+    bar therefore depends entirely on which items clear that width and how
+    subjective they are -- neither of which the rate itself shows.
+
+    So this reports the denominator: how many items, split by verdict, and the
+    criteria that recur across tasks. A criterion appearing in most of the
+    thirty rubrics is a criterion whose wording sets the threshold, and a
+    reader deciding whether a missed gate is a grader defect or a metric
+    artefact needs to see it rather than take the claim on trust.
+    """
+    rows: list[dict[str, Any]] = []
+    for task in payload.get("tasks") or []:
+        for item in task.get("items") or []:
+            maximum = item.get("max_score")
+            if maximum is None or abs(maximum) < REQUIRED_ITEM_MIN_ABS_SCORE:
+                continue
+            rows.append(
+                {
+                    "task_id": task.get("task_id"),
+                    "criterion": (item.get("criterion") or "").strip(),
+                    "max_score": maximum,
+                    "awarded_score": item.get("awarded_score"),
+                    "verdict": item.get("verdict"),
+                }
+            )
+
+    by_verdict = Counter(str(row["verdict"]) for row in rows)
+    by_criterion = Counter(row["criterion"] for row in rows)
+    passed = by_verdict.get("pass", 0)
+    return {
+        "total": len(rows),
+        "passed": passed,
+        "rate": None if not rows else round(passed / len(rows), 4),
+        "by_verdict": dict(by_verdict.most_common()),
+        "recurring_criteria": [
+            {
+                "criterion": criterion,
+                "tasks": count,
+                "passed": sum(
+                    1
+                    for row in rows
+                    if row["criterion"] == criterion and row["verdict"] == "pass"
+                ),
+            }
+            for criterion, count in by_criterion.most_common()
+            if count > 1
+        ],
+    }
+
+
 def _tasks_with_errors(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {"task_id": task.get("task_id"), "error": task.get("error")}
@@ -302,6 +437,8 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
             "tasks_with_errors": _tasks_with_errors(payload),
             "items": shortfalls,
         },
+        "per_task": per_task(payload),
+        "required_items": required_items(payload),
     }
 
 
@@ -367,6 +504,25 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
     )
     lines.append("")
 
+    req = report["required_items"]
+    lines.append(
+        f"Required items (|max score| >= {REQUIRED_ITEM_MIN_ABS_SCORE})"
+    )
+    lines.append("-" * 60)
+    lines.append(
+        f"  {req['passed']} of {req['total']} passed"
+        + ("" if req["rate"] is None else f"  ({req['rate']})")
+    )
+    if req["by_verdict"]:
+        verdicts = ", ".join(f"{n} {v}" for v, n in req["by_verdict"].items())
+        lines.append(f"  verdicts                {verdicts}")
+    for entry in req["recurring_criteria"]:
+        lines.append(
+            f"  {entry['passed']:3d}/{entry['tasks']:<3d} passed  ·  "
+            f"{entry['criterion'][:66]}"
+        )
+    lines.append("")
+
     scores = report["scores"]
     lines.append("Scores")
     lines.append("-" * 60)
@@ -423,6 +579,31 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
             "published price"
         )
         lines.append(f"  unpriced models         {bill['unpriced_models']}")
+    lines.append("")
+
+    lines.append("Per task (worst first)")
+    lines.append("-" * 60)
+    for row in report["per_task"]:
+        pct = "  n/a" if row["pct"] is None else f"{row['pct']:6.2f}"
+        awarded = "?" if row["total_awarded"] is None else f"{row['total_awarded']:.2f}"
+        maximum = "?" if row["total_max"] is None else f"{row['total_max']:.0f}"
+        lines.append(
+            f"  {row['task_id']}  {pct}%  {awarded}/{maximum}"
+            f"  ·  {(row['occupation'] or 'occupation unrecorded')[:44]}"
+        )
+        notes = [
+            f"{row['items_below_full_marks']}/{row['items']} item(s) below max",
+            "loss unrecorded"
+            if row["points_lost"] is None
+            else f"-{row['points_lost']} point(s)",
+        ]
+        if row["critical_fail"]:
+            notes.append("required item failed")
+        if row["selection_status"] and row["selection_status"] != "ok":
+            notes.append(f"selection {row['selection_status']}")
+        if row["error"]:
+            notes.append(f"ERROR {str(row['error'])[:60]}")
+        lines.append(f"      {', '.join(notes)}")
     lines.append("")
 
     short = report["shortfalls"]
