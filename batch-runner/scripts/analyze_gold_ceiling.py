@@ -191,6 +191,73 @@ def items_below_full_marks(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return shortfalls
 
 
+def per_task(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """One row per graded task, worst score first.
+
+    The specification asks for per-task evidence, and a report that lists only
+    its biggest individual losses can leave a whole task unmentioned -- the
+    forty largest item losses in stage 1's first run came from nine tasks, so
+    twenty-one of the thirty were invisible in that view. Ranking by item loss
+    answers "where did the points go"; this answers "how did each answer do",
+    which is the question a per-task classification is written against.
+
+    Scores are read from the fields the grader wrote (``pct``, ``total_awarded``,
+    ``total_max``) rather than recomputed from the items, so this reports the
+    run's own arithmetic instead of a second opinion about it.
+
+    ``points_lost`` is that subtraction rather than a sum over the items below
+    their maximum, and the two can differ. A rubric may carry penalty items with
+    a *negative* maximum -- "reviews articles behind a paywall", "includes test
+    questions beyond the two required" -- which `core/grader.py` deliberately
+    keeps out of the denominator via ``max(0, it.max_score)``. Full marks on
+    such an item is an award of zero, so a fired penalty leaves the award
+    *below* zero but never below the maximum, and an item-wise sum would drop it
+    while the task's own total counts it. Stage 1's first run had two of these
+    and neither fired, so the two spellings happened to agree; relying on that
+    would be relying on a coincidence.
+    """
+    rows: list[dict[str, Any]] = []
+    for task in payload.get("tasks") or []:
+        items = task.get("items") or []
+        below = [
+            item
+            for item in items
+            if not item.get("score_excluded")
+            and item.get("awarded_score") is not None
+            and item.get("max_score") is not None
+            and item["awarded_score"] < item["max_score"]
+        ]
+        awarded = task.get("total_awarded")
+        maximum = task.get("total_max")
+        rows.append(
+            {
+                "task_id": task.get("task_id"),
+                "sector": task.get("sector"),
+                "occupation": task.get("occupation"),
+                "pct": task.get("pct"),
+                "total_awarded": awarded,
+                "total_max": maximum,
+                "items": len(items),
+                "items_below_full_marks": len(below),
+                "points_lost": (
+                    None
+                    if awarded is None or maximum is None
+                    else round(float(maximum) - float(awarded), 4)
+                ),
+                "critical_fail": bool(task.get("critical_fail")),
+                "selection_status": task.get("selection_status"),
+                "error": task.get("error"),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["pct"] if row["pct"] is not None else -1.0,
+            str(row["task_id"]),
+        )
+    )
+    return rows
+
+
 def _tasks_with_errors(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {"task_id": task.get("task_id"), "error": task.get("error")}
@@ -302,6 +369,7 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
             "tasks_with_errors": _tasks_with_errors(payload),
             "items": shortfalls,
         },
+        "per_task": per_task(payload),
     }
 
 
@@ -423,6 +491,31 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
             "published price"
         )
         lines.append(f"  unpriced models         {bill['unpriced_models']}")
+    lines.append("")
+
+    lines.append("Per task (worst first)")
+    lines.append("-" * 60)
+    for row in report["per_task"]:
+        pct = "  n/a" if row["pct"] is None else f"{row['pct']:6.2f}"
+        awarded = "?" if row["total_awarded"] is None else f"{row['total_awarded']:.2f}"
+        maximum = "?" if row["total_max"] is None else f"{row['total_max']:.0f}"
+        lines.append(
+            f"  {row['task_id']}  {pct}%  {awarded}/{maximum}"
+            f"  ·  {(row['occupation'] or 'occupation unrecorded')[:44]}"
+        )
+        notes = [
+            f"{row['items_below_full_marks']}/{row['items']} item(s) below max",
+            "loss unrecorded"
+            if row["points_lost"] is None
+            else f"-{row['points_lost']} point(s)",
+        ]
+        if row["critical_fail"]:
+            notes.append("required item failed")
+        if row["selection_status"] and row["selection_status"] != "ok":
+            notes.append(f"selection {row['selection_status']}")
+        if row["error"]:
+            notes.append(f"ERROR {str(row['error'])[:60]}")
+        lines.append(f"      {', '.join(notes)}")
     lines.append("")
 
     short = report["shortfalls"]
