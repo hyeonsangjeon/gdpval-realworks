@@ -51,6 +51,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/check_agentic_containment.py
 !batch-runner/scripts/build_gdpval_task_catalog.py
 !batch-runner/scripts/build_gold_deliverable_manifest.py
+!batch-runner/scripts/analyze_gold_ceiling.py
 
 
 # Experiment report HTML (skews GitHub language stats)
