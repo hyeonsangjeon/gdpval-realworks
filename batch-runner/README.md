@@ -223,7 +223,8 @@ Requires regular, identity-bound `self_report.json` and
 and exact deliverable tree, then CAS-replaces remote `data/**`,
 `deliverable_files/**`, and `self_report.json` while deleting any stale
 `step2_inference_results.json`. It publishes only `README.md`,
-`data/train-*.parquet`, `deliverable_files/**`, `inference_provenance.json`, and
+`cost_ledger.jsonl`, `data/train-*.parquet`, `deliverable_files/**`,
+`inference_provenance.json`, and
 `self_report.json` with the Step 0 validated target HEAD as the HF CAS parent.
 If another run changed the target, publication fails instead of overwriting it.
 The self-report identity must match the prepared/result fingerprints,
@@ -569,11 +570,18 @@ that same Hugging Face target.
 - Step 6 writes `report_data.json` and `report.md` under
   `results/<experiment_id>/report/`, then stages `self_report.json` for HF.
 - Step 7 publishes only `README.md`, `data/train-*.parquet`,
-  `deliverable_files/**`, `inference_provenance.json`, and `self_report.json`.
+  `deliverable_files/**`, `inference_provenance.json`, `self_report.json`, and,
+  when the run recorded one, `cost_ledger.jsonl`.
   The endpoint-free provenance sidecar contains experiment, source, prepared
   input, ordered task, and typed route fingerprints; it contains no endpoint
   URL or credential. It is provenance only and does not attest SKU, PTU, or
   provisioned capacity.
+- `cost_ledger.jsonl` is the per-call audit sidecar behind the cost receipts.
+  Publication is bidirectional: the file is refused unless `self_report.json`
+  declares it at exactly that path, and a declared ledger whose bytes do not
+  hash to the declared SHA-256 fails the run instead of being uploaded. It
+  records usage-derived cost estimates, never prompts, responses, API keys, or
+  invoice amounts.
 - Full Step 2 inference JSON stays in the 30-day Actions artifact and is never
   in the HF allowlist. Step 7 deletes a stale remote
   `step2_inference_results.json` left by an older publisher.

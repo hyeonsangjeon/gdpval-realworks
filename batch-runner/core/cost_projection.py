@@ -1,0 +1,472 @@
+"""Read side of the per-task cost receipt contract (``cost-receipt-v1``).
+
+Instrumentation writes receipts while a task runs and while it is graded.
+This module never prices anything: it normalises what reaches Step 3, refuses
+to publish a receipt it cannot vouch for, and aggregates the run-level
+summaries the report and the dashboard show.
+
+Two properties matter more than the arithmetic:
+
+* A run that carries no receipts projects to ``None``. Experiments that
+  predate the instrumentation keep rendering as "no record" — never as ``$0``.
+* ``unavailable`` (nothing was recorded), ``not_run`` (the step never ran),
+  ``partial`` (some components priced, some not) and a real ``$0`` under
+  ``complete`` are four different findings, so they stay four different
+  states all the way to the screen.
+
+Every amount is a usage-based estimate. ``ESTIMATE_BASIS`` travels with each
+summary so no consumer can present one of these figures as a cloud invoice.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import math
+import re
+from pathlib import Path
+
+COST_RECEIPT_SCHEMA_VERSION = "cost-receipt-v1"
+COST_CURRENCY = "USD"
+
+#: Amounts are usage estimates, not billed figures. Carried in every summary
+#: so the disclaimer cannot be lost between the report and the dashboard.
+ESTIMATE_BASIS = "usage_estimate_not_azure_invoice"
+
+#: ``complete`` — a figure we stand behind, including a genuine ``$0``.
+#: ``partial`` — priced in part; ``known_cost_usd`` is a lower bound.
+#: ``unavailable`` — the step ran and recorded nothing.
+#: ``not_run`` — the step never ran, so there is nothing to record.
+COST_STATUSES = ("complete", "partial", "unavailable", "not_run")
+
+#: Statuses that contribute a number to the run-level totals.
+_MEASURED_STATUSES = ("complete", "partial")
+
+COST_FIELDS = ("problem_solving_cost", "grading_cost")
+
+# Slugs, not prose. Reason codes and component names are published, and a free
+# text field on a published payload is a prompt-leak waiting to happen.
+_SLUG = re.compile(r"[a-z][a-z0-9_]{0,47}")
+_REASON_CODE = re.compile(r"[a-z][a-z0-9_.:-]{0,63}")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+_LEDGER_PATH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}(/[A-Za-z0-9][A-Za-z0-9._-]{0,127})*")
+
+_MAX_COMPONENTS = 32
+_MAX_USAGE_KEYS = 32
+_MAX_MISSING_REASONS = 32
+_LEDGER_CHUNK_BYTES = 1024 * 1024
+
+# Micro-dollars. Fine enough for a single cheap call, coarse enough that
+# float noise never reaches the screen.
+_MONEY_DIGITS = 6
+_MAX_COST_USD = 1_000_000.0
+_MAX_COUNT = 10_000_000
+
+
+def _fail(field: str, detail: str) -> None:
+    raise ValueError(f"{field} {detail}")
+
+
+def _cost_amount(value, field: str):
+    """Return a non-negative finite amount, or ``None`` when absent."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        _fail(field, "must be a number")
+    amount = float(value)
+    if not math.isfinite(amount):
+        _fail(field, "must be finite")
+    if amount < 0 or amount > _MAX_COST_USD:
+        _fail(field, "is out of range")
+    return round(amount, _MONEY_DIGITS)
+
+
+def _cost_count(value, field: str):
+    """Return a non-negative bounded integer, or ``None`` when absent."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        _fail(field, "must be an integer")
+    if value < 0 or value > _MAX_COUNT:
+        _fail(field, "is out of range")
+    return value
+
+
+def _cost_usage(value, field: str) -> dict:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        _fail(field, "must be an object")
+    if len(value) > _MAX_USAGE_KEYS:
+        _fail(field, "carries too many keys")
+    usage = {}
+    for key, raw in value.items():
+        if not isinstance(key, str) or _SLUG.fullmatch(key) is None:
+            _fail(field, "carries an invalid key")
+        usage[key] = _cost_count(raw, f"{field}.{key}")
+    return dict(sorted(usage.items()))
+
+
+def _missing_reasons(value, field: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        _fail(field, "must be a list")
+    if len(value) > _MAX_MISSING_REASONS:
+        _fail(field, "carries too many entries")
+    reasons = []
+    for raw in value:
+        if not isinstance(raw, str) or _REASON_CODE.fullmatch(raw) is None:
+            _fail(field, "must contain reason codes only")
+        reasons.append(raw)
+    return sorted(set(reasons))
+
+
+def _price_table_sha256(value, field: str):
+    if value is None:
+        return None
+    if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
+        _fail(field, "must be a sha256 digest")
+    return value
+
+
+def _cost_status(value, field: str) -> str:
+    if value not in COST_STATUSES:
+        _fail(field, "must be one of " + ", ".join(COST_STATUSES))
+    return value
+
+
+def _project_component(value, field: str) -> dict:
+    if not isinstance(value, dict):
+        _fail(field, "must be an object")
+    name = value.get("name")
+    if not isinstance(name, str) or _SLUG.fullmatch(name) is None:
+        _fail(field, "requires a slug name")
+    status = _cost_status(value.get("status"), f"{field}.status")
+    estimated = _cost_amount(value.get("estimated_cost_usd"), f"{field}.estimated_cost_usd")
+    known = _cost_amount(value.get("known_cost_usd"), f"{field}.known_cost_usd")
+    if status == "complete":
+        if estimated is None:
+            _fail(field, "is complete without an amount")
+        if known is None:
+            known = estimated
+    elif status == "partial":
+        if known is None:
+            _fail(field, "is partial without a known amount")
+    elif estimated is not None or known is not None:
+        _fail(field, f"is {status} but carries an amount")
+    if estimated is not None and known is not None and known > estimated:
+        _fail(field, "known amount exceeds its estimate")
+    return {
+        "name": name,
+        "status": status,
+        "estimated_cost_usd": estimated,
+        "known_cost_usd": known,
+        "model_calls": _cost_count(value.get("model_calls"), f"{field}.model_calls"),
+        "usage": _cost_usage(value.get("usage"), f"{field}.usage"),
+    }
+
+
+def project_cost_receipt(value, field: str = "cost receipt"):
+    """Normalise one ``cost-receipt-v1`` receipt.
+
+    ``None`` in, ``None`` out — an absent receipt is a legitimate state and
+    stays absent rather than becoming a zero. Anything present but malformed
+    raises: a receipt the consumer cannot read must not be published as if it
+    were sound.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        _fail(field, "must be an object")
+    if value.get("schema_version") != COST_RECEIPT_SCHEMA_VERSION:
+        _fail(field, f"must declare schema_version {COST_RECEIPT_SCHEMA_VERSION}")
+    if value.get("currency") != COST_CURRENCY:
+        _fail(field, f"must be denominated in {COST_CURRENCY}")
+
+    status = _cost_status(value.get("status"), f"{field}.status")
+    estimated = _cost_amount(value.get("estimated_cost_usd"), f"{field}.estimated_cost_usd")
+    known = _cost_amount(value.get("known_cost_usd"), f"{field}.known_cost_usd")
+    model_cost = _cost_amount(value.get("model_cost_usd"), f"{field}.model_cost_usd")
+    runtime_cost = _cost_amount(value.get("runtime_cost_usd"), f"{field}.runtime_cost_usd")
+    reasons = _missing_reasons(value.get("missing_reasons"), f"{field}.missing_reasons")
+
+    raw_components = value.get("components")
+    if raw_components is None:
+        raw_components = []
+    if not isinstance(raw_components, list):
+        _fail(field, "components must be a list")
+    if len(raw_components) > _MAX_COMPONENTS:
+        _fail(field, "carries too many components")
+    components = [
+        _project_component(item, f"{field}.components[{index}]")
+        for index, item in enumerate(raw_components)
+    ]
+    names = [component["name"] for component in components]
+    if len(names) != len(set(names)):
+        _fail(field, "carries duplicate component names")
+
+    if status == "complete":
+        if estimated is None:
+            _fail(field, "is complete without an amount")
+        if known is None:
+            known = estimated
+        if known != estimated:
+            _fail(field, "is complete but its known amount differs")
+        if reasons:
+            _fail(field, "is complete but reports missing components")
+    elif status == "partial":
+        if known is None:
+            _fail(field, "is partial without a known amount")
+        if not reasons:
+            _fail(field, "is partial without a reason code")
+    else:
+        if estimated is not None or known is not None:
+            _fail(field, f"is {status} but carries an amount")
+        if status == "unavailable" and not reasons:
+            _fail(field, "is unavailable without a reason code")
+    if estimated is not None and known is not None and known > estimated:
+        _fail(field, "known amount exceeds its estimate")
+    for amount, part in ((model_cost, "model_cost_usd"), (runtime_cost, "runtime_cost_usd")):
+        if amount is not None and known is not None and amount > known:
+            _fail(f"{field}.{part}", "exceeds the known amount")
+
+    return {
+        "schema_version": COST_RECEIPT_SCHEMA_VERSION,
+        "currency": COST_CURRENCY,
+        "status": status,
+        "estimate_basis": ESTIMATE_BASIS,
+        "estimated_cost_usd": estimated,
+        "known_cost_usd": known,
+        "model_cost_usd": model_cost,
+        "runtime_cost_usd": runtime_cost,
+        "model_calls": _cost_count(value.get("model_calls"), f"{field}.model_calls"),
+        "usage": _cost_usage(value.get("usage"), f"{field}.usage"),
+        "components": components,
+        "price_table_sha256": _price_table_sha256(
+            value.get("price_table_sha256"), f"{field}.price_table_sha256"
+        ),
+        "missing_reasons": reasons,
+    }
+
+
+def project_cost_ledger_reference(value, field: str = "cost_ledger"):
+    """Normalise the ``{path, sha256}`` pointer to the audit JSONL sidecar."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        _fail(field, "must be an object")
+    path = value.get("path")
+    if not isinstance(path, str) or _LEDGER_PATH.fullmatch(path) is None:
+        _fail(field, "path must be a relative repository path")
+    if ".." in path.split("/"):
+        _fail(field, "path must not traverse parents")
+    digest = value.get("sha256")
+    if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
+        _fail(field, "sha256 must be a sha256 digest")
+    return {"path": path, "sha256": digest}
+
+
+def verify_cost_ledger(reference: dict | None, ledger_path: Path) -> dict | None:
+    """Re-hash the audit sidecar and confirm it matches the recorded digest.
+
+    A missing file is not an error: the pointer legitimately reaches consumers
+    that do not hold the sidecar. A file that is present and hashes to
+    something else is — and it raises. A mismatch caught before upload costs
+    nothing; the same mismatch caught after upload costs a retraction.
+    """
+    if reference is None:
+        return None
+    if not ledger_path.is_file():
+        return reference
+    digest = hashlib.sha256()
+    with ledger_path.open("rb") as stream:
+        while chunk := stream.read(_LEDGER_CHUNK_BYTES):
+            digest.update(chunk)
+    if digest.hexdigest() != reference["sha256"]:
+        raise ValueError("cost ledger digest does not match the recorded sha256")
+    return reference
+
+
+def _percentile(values: list[float], percentile: float):
+    """Linearly interpolated percentile over a non-empty sample."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return round(ordered[0], _MONEY_DIGITS)
+    position = (len(ordered) - 1) * percentile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = position - lower
+    return round(ordered[lower] * (1 - weight) + ordered[upper] * weight, _MONEY_DIGITS)
+
+
+def _receipt_amount(receipt: dict):
+    """The number this receipt contributes to a total, or ``None``."""
+    if receipt["status"] not in _MEASURED_STATUSES:
+        return None
+    amount = receipt["known_cost_usd"]
+    return amount if amount is not None else receipt["estimated_cost_usd"]
+
+
+def summarize_cost_receipts(
+    rows: list[dict],
+    field: str,
+    *,
+    successful_deliverables: int | None = None,
+) -> dict | None:
+    """Aggregate one cost field across a run.
+
+    Returns ``None`` when not a single row carries a receipt, which is what
+    keeps pre-instrumentation experiments reading as "no record".
+    """
+    receipts = []
+    failed_amount = 0.0
+    failed_count = 0
+    for row in rows:
+        receipt = row.get(field)
+        if not isinstance(receipt, dict):
+            continue
+        receipts.append(receipt)
+        if row.get("status") != "success":
+            failed_count += 1
+            amount = _receipt_amount(receipt)
+            if amount is not None:
+                failed_amount += amount
+    if not receipts:
+        return None
+
+    counts = {status: 0 for status in COST_STATUSES}
+    for receipt in receipts:
+        counts[receipt["status"]] += 1
+
+    amounts = [
+        amount
+        for receipt in receipts
+        if (amount := _receipt_amount(receipt)) is not None
+    ]
+    known_total = round(sum(amounts), _MONEY_DIGITS) if amounts else 0.0
+
+    # The run total is only a total when every receipt is complete. One
+    # partial or unavailable receipt makes it a floor, and it is labelled as
+    # one rather than quietly rounded up into a headline number.
+    complete_run = counts["complete"] == len(receipts)
+    if complete_run:
+        status = "complete"
+    elif amounts:
+        status = "partial"
+    elif counts["unavailable"]:
+        status = "unavailable"
+    else:
+        status = "not_run"
+
+    reasons = sorted({
+        reason
+        for receipt in receipts
+        for reason in receipt["missing_reasons"]
+    })
+    price_tables = sorted({
+        receipt["price_table_sha256"]
+        for receipt in receipts
+        if receipt["price_table_sha256"]
+    })
+    component_totals: dict[str, dict] = {}
+    for receipt in receipts:
+        for component in receipt["components"]:
+            bucket = component_totals.setdefault(
+                component["name"],
+                {
+                    "name": component["name"],
+                    "tasks": 0,
+                    "known_cost_usd": 0.0,
+                    "complete_tasks": 0,
+                    "model_calls": 0,
+                },
+            )
+            bucket["tasks"] += 1
+            if component["status"] == "complete":
+                bucket["complete_tasks"] += 1
+            amount = component["known_cost_usd"]
+            if amount is None:
+                amount = component["estimated_cost_usd"]
+            if amount is not None:
+                bucket["known_cost_usd"] += amount
+            if component["model_calls"]:
+                bucket["model_calls"] += component["model_calls"]
+    components = []
+    for bucket in sorted(component_totals.values(), key=lambda item: item["name"]):
+        bucket["known_cost_usd"] = round(bucket["known_cost_usd"], _MONEY_DIGITS)
+        bucket["status"] = (
+            "complete" if bucket["complete_tasks"] == bucket["tasks"] else "partial"
+        )
+        components.append(bucket)
+
+    per_deliverable = None
+    if complete_run and successful_deliverables:
+        per_deliverable = round(known_total / successful_deliverables, _MONEY_DIGITS)
+
+    return {
+        "schema_version": COST_RECEIPT_SCHEMA_VERSION,
+        "currency": COST_CURRENCY,
+        "estimate_basis": ESTIMATE_BASIS,
+        "status": status,
+        "total_tasks": len(rows),
+        "receipt_tasks": len(receipts),
+        "measured_tasks": len(amounts),
+        "coverage_pct": round(len(receipts) / len(rows) * 100, 1) if rows else 0.0,
+        "complete_tasks": counts["complete"],
+        "partial_tasks": counts["partial"],
+        "unavailable_tasks": counts["unavailable"],
+        "not_run_tasks": counts["not_run"],
+        "known_cost_usd": known_total,
+        "estimated_cost_usd": known_total if complete_run else None,
+        "avg_cost_usd": round(sum(amounts) / len(amounts), _MONEY_DIGITS) if amounts else None,
+        "median_cost_usd": _percentile(amounts, 0.50),
+        "p95_cost_usd": _percentile(amounts, 0.95),
+        "max_cost_usd": round(max(amounts), _MONEY_DIGITS) if amounts else None,
+        "successful_deliverables": successful_deliverables,
+        "cost_per_successful_deliverable_usd": per_deliverable,
+        # Failed work costs real money. It is reported beside the total, not
+        # netted out of it.
+        "failed_task_count": failed_count,
+        "failed_task_cost_usd": round(failed_amount, _MONEY_DIGITS),
+        "components": components,
+        "price_table_sha256": price_tables[0] if len(price_tables) == 1 else None,
+        "missing_reasons": reasons,
+    }
+
+
+def build_cost_summaries(
+    rows: list[dict],
+    *,
+    successful_deliverables: int | None = None,
+) -> dict:
+    """Return the present cost summaries; absent fields stay absent."""
+    summaries = {}
+    for field in COST_FIELDS:
+        summary = summarize_cost_receipts(
+            rows,
+            field,
+            successful_deliverables=successful_deliverables,
+        )
+        if summary is not None:
+            summaries[field] = summary
+    return summaries
+
+
+def successful_deliverable_count(rows: list[dict]) -> int:
+    """Count tasks that finished successfully with something to grade.
+
+    Both halves matter. A ``success`` row that produced neither a file nor any
+    deliverable text is not a deliverable, and counting it would make the
+    per-deliverable figure look cheaper than the run actually was.
+    """
+    count = 0
+    for row in rows:
+        if row.get("status") != "success":
+            continue
+        files = row.get("deliverable_files") or []
+        text = row.get("deliverable_text") or ""
+        if (isinstance(files, list) and files) or (isinstance(text, str) and text.strip()):
+            count += 1
+    return count

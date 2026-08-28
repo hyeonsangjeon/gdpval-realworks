@@ -35,6 +35,14 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from core.config import NEEDS_FILES_POLICIES_KNOWN, WORKSPACE_DIR  # noqa: E402
+from core.cost_projection import (  # noqa: E402
+    COST_FIELDS,
+    build_cost_summaries,
+    project_cost_ledger_reference,
+    project_cost_receipt,
+    successful_deliverable_count,
+    verify_cost_ledger,
+)
 from core.execution_metrics import bounded_count, bounded_duration_ms  # noqa: E402
 from core.prepared_fingerprint import FINGERPRINT_RE  # noqa: E402
 from core.result_fingerprint import RESULT_FINGERPRINT_RE  # noqa: E402
@@ -433,6 +441,47 @@ def _compute_sector_breakdown(data: dict) -> list[dict]:
     return breakdown
 
 
+def _task_cost_receipts(result: dict) -> dict:
+    """Re-project the cost receipts carried on one result row.
+
+    Step 6 can be pointed at any ``result.json`` via ``--result-json``, so the
+    receipts are re-read through the contract rather than trusted. A receipt
+    that no longer parses raises here instead of being quietly averaged into a
+    headline figure.
+    """
+    label = result.get("task_id") or "unknown task"
+    receipts = {}
+    for field in COST_FIELDS:
+        receipt = project_cost_receipt(result.get(field), f"report {field} for {label}")
+        if receipt is not None:
+            receipts[field] = receipt
+    return receipts
+
+
+def _compute_cost_summaries(data: dict) -> dict:
+    """Aggregate the per-task cost receipts; empty for uninstrumented runs.
+
+    An experiment that recorded nothing yields no summaries at all, so it
+    renders as "no record" rather than as a run that cost nothing.
+    """
+    rows = [
+        {**result, **_task_cost_receipts(result)}
+        for result in data.get("results", [])
+    ]
+    return build_cost_summaries(
+        rows,
+        successful_deliverables=successful_deliverable_count(rows),
+    )
+
+
+def _report_cost_ledger(data: dict) -> dict | None:
+    """Resolve the audit-sidecar pointer, re-hashing the file when it is here."""
+    reference = project_cost_ledger_reference(data.get("cost_ledger"))
+    if reference is None:
+        return None
+    return verify_cost_ledger(reference, WORKSPACE_DIR / "upload" / reference["path"])
+
+
 def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dict]]:
     task_results = []
     error_tasks = []
@@ -465,6 +514,10 @@ def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dic
                 for p in NEEDS_FILES_POLICIES_KNOWN
             }
             entry["has_deliverable_files"] = manifest.has_deliverable_files(task_id)
+        # Absent stays absent, exactly as it does upstream: a task with no
+        # receipt gains no key, so the dashboard can tell "not recorded" from
+        # "recorded as nothing".
+        entry.update(_task_cost_receipts(r))
         task_results.append(entry)
         if r.get("error"):
             error_tasks.append({
@@ -504,6 +557,8 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
                        error_tasks: list[dict],
                        execution_metrics: dict | None = None,
                        agentic_metrics: dict | None = None,
+                       cost_summaries: dict | None = None,
+                       cost_ledger: dict | None = None,
                        dry_run: bool = False) -> dict:
     meta_date = (data.get("started_at") or "")[:10]
     grading_referenced = bool(narrative.get("grading_referenced", False))
@@ -553,6 +608,10 @@ def _build_report_data(data: dict, narrative: dict, summary: dict,
         report["execution_metrics"] = execution_metrics
     if agentic_metrics:
         report["agentic_metrics"] = agentic_metrics
+    if cost_summaries:
+        report["cost_summary"] = dict(cost_summaries)
+    if cost_ledger:
+        report["cost_ledger"] = cost_ledger
     return report
 
 
@@ -656,6 +715,19 @@ def _compute_recovery_stats(results: list) -> dict:
     }
 
 
+_COST_STATUS_LABELS = {
+    "complete": "complete",
+    "partial": "partial — the figures below are a floor",
+    "unavailable": "unavailable — nothing was recorded",
+    "not_run": "not run",
+}
+
+
+def _cost_money(value) -> str:
+    """Render an amount, keeping "not recorded" visibly apart from ``$0``."""
+    return "no record" if value is None else f"${value:,.4f}"
+
+
 def _build_markdown(rd: dict) -> str:
     meta = rd["meta"]
     summary = rd["summary"]
@@ -723,6 +795,51 @@ def _build_markdown(rd: dict) -> str:
             f"| Avg time to valid artifact | {valid_time:,.0f}ms |" if valid_time is not None else "| Avg time to valid artifact | N/A |",
             f"| Tool calls | {execution_metrics['total_tool_calls']} |",
             f"| Execution attempts | {execution_metrics['total_execution_attempts']} |",
+            "",
+        ]
+
+    cost_summary = rd.get("cost_summary") or {}
+    for field, label in (
+        ("problem_solving_cost", "Problem-Solving Cost"),
+        ("grading_cost", "Grading Cost"),
+    ):
+        cost = cost_summary.get(field)
+        if not cost:
+            continue
+        lines += [
+            f"## {label}",
+            "",
+            "> Usage-based estimate, not an Azure invoice amount.",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
+            f"| Coverage | {cost['receipt_tasks']} / {cost['total_tasks']} tasks ({cost['coverage_pct']}%) |",
+            f"| Receipt status | {_COST_STATUS_LABELS[cost['status']]} |",
+            f"| {'Total' if cost['status'] == 'complete' else 'Recorded so far'} | {_cost_money(cost['known_cost_usd'])} |",
+            f"| Average per task | {_cost_money(cost['avg_cost_usd'])} |",
+            f"| Median | {_cost_money(cost['median_cost_usd'])} |",
+            f"| P95 | {_cost_money(cost['p95_cost_usd'])} |",
+            f"| Max | {_cost_money(cost['max_cost_usd'])} |",
+        ]
+        if field == "problem_solving_cost":
+            lines.append(
+                "| Per successful deliverable | "
+                f"{_cost_money(cost['cost_per_successful_deliverable_usd'])} |"
+            )
+        # Failed work is reported, never netted out of the total.
+        lines.append(
+            f"| Failed tasks | {cost['failed_task_count']} "
+            f"({_cost_money(cost['failed_task_cost_usd'])}) |"
+        )
+        if cost["missing_reasons"]:
+            lines.append(f"| Not priced | {', '.join(cost['missing_reasons'])} |")
+        lines.append("")
+
+    cost_ledger = rd.get("cost_ledger")
+    if cost_ledger:
+        lines += [
+            f"- 🧾 Cost ledger: `{cost_ledger['path']}` "
+            f"(sha256 `{cost_ledger['sha256'][:12]}…`)",
             "",
         ]
 
@@ -1306,6 +1423,8 @@ def generate_report(
     summary = _compute_summary(data)
     execution_metrics = _compute_execution_metrics(data)
     agentic_metrics = _compute_agentic_metrics(data)
+    cost_summaries = _compute_cost_summaries(data)
+    cost_ledger = _report_cost_ledger(data)
     sector_breakdown = _compute_sector_breakdown(data)
     manifest = _load_manifest_safe() if workspace_owned else None
     task_results, error_tasks = _build_task_results(data, manifest=manifest)
@@ -1371,6 +1490,8 @@ def generate_report(
         error_tasks,
         execution_metrics=execution_metrics,
         agentic_metrics=agentic_metrics,
+        cost_summaries=cost_summaries,
+        cost_ledger=cost_ledger,
         dry_run=dry_run,
     )
 

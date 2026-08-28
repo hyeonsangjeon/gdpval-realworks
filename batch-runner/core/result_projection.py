@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.cost_projection import project_cost_receipt
+
 
 def project_result_row(task_meta: dict, result: dict) -> dict:
     if not isinstance(task_meta, dict) or not isinstance(result, dict):
@@ -18,8 +20,12 @@ def project_result_row(task_meta: dict, result: dict) -> dict:
     issues = qa.get("issues", [])
     if not isinstance(issues, list):
         raise ValueError("result projection QA issues are invalid")
+    cost = project_cost_receipt(
+        result.get("problem_solving_cost"),
+        f"result projection problem_solving_cost for {task_id}",
+    )
 
-    return {
+    row = {
         "task_id": task_id,
         "sector": task_meta.get("sector", ""),
         "occupation": task_meta.get("occupation", ""),
@@ -47,3 +53,8 @@ def project_result_row(task_meta: dict, result: dict) -> dict:
         "qa_undetermined": qa.get("undetermined", False),
         "error": result.get("error"),
     }
+    # Absent stays absent. A run that predates cost instrumentation must not
+    # gain a null field that reads like a recorded zero downstream.
+    if cost is not None:
+        row["problem_solving_cost"] = cost
+    return row
