@@ -165,6 +165,10 @@ jobs:
         timeout-minutes: 8
         run: npm run test:notes-browser:dist
 
+      - name: Verify per-task cost receipts in browser
+        timeout-minutes: 8
+        run: npm run test:cost-browser:dist
+
       - name: Verify dashboard build provenance in browser
         timeout-minutes: 8
         run: npm run test:build-provenance-browser:dist
