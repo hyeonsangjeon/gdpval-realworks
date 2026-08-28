@@ -38,6 +38,8 @@ from core.execution_envelope_cost import (  # noqa: E402
 )
 from core.execution_envelope_preflight import (  # noqa: E402
     COMPARABLE_ENVIRONMENTS,
+    COST_POLICY_BLOCK,
+    COST_POLICY_RECORD_ONLY,
     PLAN_VERSION,
     conditions_from_plan,
     load_plan,
@@ -154,6 +156,7 @@ def _ready_preflight(plan, **overrides):
 
 def _approved(plan, amount=APPROVED_ENOUGH):
     plan = copy.deepcopy(plan)
+    plan["cost"]["policy"] = COST_POLICY_BLOCK
     plan["cost"]["approved_maximum_usd"] = amount
     return plan
 
@@ -1018,9 +1021,84 @@ def test_a_missing_approved_amount_is_a_refusal(plan, catalog):
     )
 
 
-def test_the_committed_plan_records_the_approved_amount(plan):
-    """The amount that was approved, to the cent, and no more."""
-    assert str(plan["cost"]["approved_maximum_usd"]) == "32.23"
+def test_the_committed_plan_records_the_credit_backed_owner_decision(plan):
+    """The old per-run dollar refusal is replaced by the owner's decision."""
+    cost = plan["cost"]
+    approval = cost["owner_approval"]
+
+    assert cost["policy"] == COST_POLICY_RECORD_ONLY
+    assert cost["approved_maximum_usd"] is None
+    assert approval == {
+        "approved_on": "2026-08-28",
+        "paid_model_calls": True,
+        "available_monthly_credit_usd": 3700.00,
+        "unpriced_audio_measurement": True,
+    }
+
+
+def test_record_only_cost_findings_do_not_block_the_owner_approved_run(plan):
+    environ = dict(FULLY_READY_ENVIRON)
+    environ.pop("EXECUTION_COMPARISON_PAID_RUN_APPROVED")
+    result = _ready_preflight(plan, environ=environ)
+
+    assert result.cost_policy == COST_POLICY_RECORD_ONLY
+    assert result.cost_findings
+    assert set(result.cost_findings).isdisjoint(result.all_problems)
+    assert result.available_monthly_credit_usd == Decimal("3700.0")
+    assert result.readiness.paid_model_calls_approved is True
+    assert all(
+        note in result.missing_input_file_problems for note in result.all_problems
+    ), result.all_problems
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("paid_model_calls", "unpriced_audio_measurement"),
+)
+def test_record_only_cost_policy_requires_the_exact_owner_approval(plan, field):
+    plan = copy.deepcopy(plan)
+    plan["cost"]["owner_approval"][field] = False
+
+    result = _ready_preflight(plan)
+
+    assert result.may_start is False
+    assert any(field in note or "audio model" in note for note in result.all_problems)
+
+
+@pytest.mark.parametrize("credit", (None, 0, -1, "not-a-number"))
+def test_record_only_cost_policy_requires_a_positive_monthly_credit(plan, credit):
+    plan = copy.deepcopy(plan)
+    plan["cost"]["owner_approval"]["available_monthly_credit_usd"] = credit
+
+    result = _ready_preflight(plan)
+
+    assert result.may_start is False
+    assert any(
+        "available_monthly_credit_usd" in note for note in result.all_problems
+    )
+
+
+def test_record_only_cost_policy_does_not_hide_a_missing_grading_config(plan):
+    plan = copy.deepcopy(plan)
+    plan.pop("grading_config")
+
+    result = _ready_preflight(plan)
+
+    matching = [
+        note for note in result.all_problems if "names no marking settings" in note
+    ]
+    assert len(matching) == 1
+    assert matching[0] not in result.cost_findings
+
+
+def test_an_unknown_cost_policy_is_refused(plan):
+    plan = copy.deepcopy(plan)
+    plan["cost"]["policy"] = "ignore_everything"
+
+    result = _ready_preflight(plan)
+
+    assert result.may_start is False
+    assert any("cost.policy" in note for note in result.all_problems)
 
 
 def test_an_approved_amount_below_the_ceiling_is_a_refusal(plan):
@@ -1442,10 +1520,9 @@ def test_the_scripts_are_in_the_repository(script):
 def test_the_check_refuses_today_and_says_why():
     """Run the tool exactly as a person would, and require a refusal.
 
-    Two separate things are wrong today and the report must name both. The
-    Azure run place is not reachable from an ordinary checkout, and the amount
-    approved on 2026-08-25 no longer covers the worked-out ceiling, because it
-    was agreed while a looping request was undercounted.
+    The ordinary checkout still cannot reach Azure. Cost findings remain
+    visible, while the committed owner approval satisfies the paid-run switch
+    and keeps those findings out of the refusal.
     """
     finished = subprocess.run(
         [sys.executable, str(CHECK_SCRIPT)],
@@ -1472,7 +1549,8 @@ def test_the_check_refuses_today_and_says_why():
     assert "no model was called" in finished.stdout
     assert "AZURE_AI_ROUTE_PROFILE is not set" in finished.stdout
     assert "FOUNDRY_PROJECT_ENDPOINT is not set" in finished.stdout
-    assert "is above the" in finished.stdout
+    assert "record findings only" in finished.stdout
+    assert "3700.0 United States dollars" in finished.stdout
 
 
 # ── The Azure run place must reach the deployment that was pinned ─────────

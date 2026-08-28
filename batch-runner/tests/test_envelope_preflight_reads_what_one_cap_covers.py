@@ -485,13 +485,16 @@ def test_azure_flipped_the_wrong_way_is_worth_about_fifty_dollars(catalog):
     assert flipped_azure > committed_azure * 3
 
 
-def test_that_one_flip_is_worth_more_than_the_whole_approved_amount(catalog):
-    """Which is why a hand-written boolean was the wrong place to keep it."""
+def test_that_one_flip_stays_visible_without_a_per_run_dollar_threshold(catalog):
+    """Removing the threshold must not remove the arithmetic."""
     plan = load_plan(PLAN_PATH)
-    approved = Decimal(str(plan["cost"]["approved_maximum_usd"]))
     committed_total, _ = _ceiling(catalog)
     flipped_total, _ = _ceiling(catalog, {ENVIRONMENT_AZURE_CODE_INTERPRETER: False})
-    assert flipped_total - committed_total > approved
+    assert plan["cost"]["approved_maximum_usd"] is None
+    assert Decimal(
+        str(plan["cost"]["owner_approval"]["available_monthly_credit_usd"])
+    ) == Decimal("3700.0")
+    assert flipped_total - committed_total == Decimal("50.17600000")
 
 
 def test_the_container_claimed_capped_at_two_turns_lowers_the_bill(catalog):

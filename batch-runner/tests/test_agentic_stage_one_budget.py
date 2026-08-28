@@ -326,24 +326,10 @@ def test_the_single_turn_places_in_the_committed_plan_are_unchanged(
         )
 
 
-def test_the_committed_plan_no_longer_fits_inside_the_approved_amount(
+def test_the_shared_plan_records_cost_without_a_per_run_threshold(
     shared_plan, assumptions, catalog
 ):
-    """The approved amount was worked out with the mistake in place.
-
-    32.23 United States dollars was approved on 2026-08-25, when the Azure run
-    place was priced by charging its first turn's input eight times. Counting
-    the conversation as it grows raises the whole run above that line, so the
-    free check must now refuse.
-
-    Nothing was spent under the wrong figure — the Azure run place has never
-    been reachable — but the run could have been allowed to start and then
-    billed more than was approved.
-
-    This test exists so that the correction cannot be undone quietly. If the
-    ceiling ever drops back below the approved amount, either the arithmetic
-    was reverted or the plan was changed, and both deserve to be noticed.
-    """
+    """The 2026-08-28 owner decision removes only the dollar refusal."""
     from core.execution_envelope_cost import check_cost_ceiling
 
     conditions = conditions_from_plan(shared_plan)["host_python_process"]
@@ -360,18 +346,31 @@ def test_the_committed_plan_no_longer_fits_inside_the_approved_amount(
         assumptions=assumptions,
     )
 
-    approved = Decimal(str(shared_plan["cost"]["approved_maximum_usd"]))
-    assert approved == Decimal("32.23")
-    assert ceiling.total_usd > approved
+    assert shared_plan["cost"]["approved_maximum_usd"] is None
+    assert shared_plan["cost"]["policy"] == "record_cost_findings_only"
+    assert Decimal(
+        str(
+            shared_plan["cost"]["owner_approval"][
+                "available_monthly_credit_usd"
+            ]
+        )
+    ) == Decimal("3700.0")
+    assert ceiling.total_usd > 0
 
-    problems = check_cost_ceiling(ceiling, approved_maximum_usd=approved)
-    assert any("is above the" in note for note in problems)
+    findings = check_cost_ceiling(
+        ceiling,
+        approved_maximum_usd=None,
+        approved_maximum_required=False,
+    )
+    assert not any("largest amount that may be spent" in note for note in findings)
 
 
-def test_the_plan_says_the_approved_amount_no_longer_covers_the_ceiling():
-    """A reader of the plan must be told, not left to work it out."""
+def test_the_plan_says_cost_findings_are_recorded_after_owner_approval():
+    """A reader sees the current decision instead of the superseded amount."""
     text = SHARED_PLAN_PATH.read_text(encoding="utf-8")
-    assert "no longer covers the worked-out ceiling" in text
+    assert 'policy: "record_cost_findings_only"' in text
+    assert "available_monthly_credit_usd: 3700.00" in text
+    assert "unpriced_audio_measurement: true" in text
 
 
 # ── Where the stage-one limits come from ───────────────────────────────────

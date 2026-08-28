@@ -13,8 +13,10 @@ Usage:
     python scripts/check_execution_envelope_advance_check.py --json
     python scripts/check_execution_envelope_advance_check.py --plan other.yaml
 
-The exit code is 0 only when every run place being compared can start, no
-problem was found, and an approved amount covers the largest possible bill.
+The exit code is 0 only when every run place being compared can start and no
+non-cost problem was found. The default policy also requires an approved amount
+to cover the largest possible bill. A plan may instead record an explicit owner
+decision to run a bounded measurement and review cost findings afterward.
 Anything else exits 1, so this is safe to wire into an automated check.
 """
 
@@ -31,6 +33,7 @@ if str(BATCH_RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
 from core.execution_envelope_preflight import (  # noqa: E402
+    COST_POLICY_RECORD_ONLY,
     describe_input_file_checks,
     describe_preflight,
     load_plan,
@@ -136,11 +139,22 @@ def main() -> int:
             print(f"    blocked by: {note}")
         print()
 
-    print("Largest possible bill")
+    print("Cost estimate and unresolved measurements")
     print("-" * 74)
     for line in describe_preflight(result):
         print(f"  {line}")
     print()
+
+    if result.cost_findings:
+        label = (
+            "Cost findings recorded for review (they do not block this run):"
+            if result.cost_policy == COST_POLICY_RECORD_ONLY
+            else "Cost findings that must be fixed before anything starts:"
+        )
+        print(label)
+        for finding in result.cost_findings:
+            print(f"  - {finding}")
+        print()
 
     input_file_lines = describe_input_file_checks(result)
     if input_file_lines:
@@ -181,10 +195,17 @@ def main() -> int:
         print()
 
     if result.may_start:
-        print(
-            "Every run place being compared can start, no problem was found, "
-            "and an approved amount covers the largest possible bill."
-        )
+        if result.cost_policy == COST_POLICY_RECORD_ONLY:
+            print(
+                "Every run place being compared can start and no non-cost "
+                "problem was found. Cost findings were recorded for review."
+            )
+        else:
+            print(
+                "Every run place being compared can start, no problem was "
+                "found, and an approved amount covers the largest possible "
+                "bill."
+            )
         return 0
     return 1
 

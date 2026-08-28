@@ -723,13 +723,14 @@ def test_no_caveat_is_printed_once_the_marking_half_is_a_ceiling():
 
 
 def test_the_written_answer_says_whether_the_marking_half_is_a_ceiling():
-    """Anything reading the answer as data gets the same fact as a reader."""
+    """Structured output keeps the gap even when this plan does not block."""
     result = preflight_on_the_committed_plan()
     written_out = result.as_dict()
     assert written_out["marking_half_is_a_ceiling"] is False
     assert written_out["grading_ceiling_problems"] == result.grading_ceiling_problems
     for problem in result.grading_ceiling_problems:
-        assert problem in written_out["problems"]
+        assert problem in written_out["cost_findings"]
+        assert problem not in written_out["problems"]
 
 
 def test_reading_the_limits_calls_nothing_and_spends_nothing():
