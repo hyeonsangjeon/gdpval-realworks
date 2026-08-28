@@ -1,5 +1,7 @@
 // Grade v1.0 schema types (matches tasks/grading_task/007-grade-schema.md)
 
+import type { CostReceipt, CostSummary } from './cost'
+
 export type Verdict = 'pass' | 'partial' | 'fail' | 'judge_error'
 export type DecidedBy = 'precheck' | 'judge'
 
@@ -55,6 +57,11 @@ export interface TaskGradeV1 {
   required_formats?: string[]
   format_demand?: 'unproducible_media' | 'producible' | null
   candidate_files?: string[]
+  /**
+   * What grading this task cost. Read from schema 1.4 grade files only;
+   * absent on 1.0–1.3, where it means "no record" rather than free.
+   */
+  grading_cost?: CostReceipt | null
 }
 
 export interface DeliverableTarget {
@@ -203,6 +210,12 @@ export interface GradeSummaryV1 {
    * reasoning — check `covered` before rendering.
    */
   selection?: SelectionSummary
+  /**
+   * Grading cost across the run, derived in scripts/aggregate-grades.mjs from
+   * the per-task receipts so the headline always adds up to the rows. Absent
+   * unless the grade file is schema 1.4 and recorded receipts.
+   */
+  grading_cost?: CostSummary
 }
 
 export interface JudgeTierConfig {

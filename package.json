@@ -25,6 +25,8 @@
     "test:success-browser": "npm run build && npm run test:success-browser:dist",
     "test:notes-browser:dist": "npm run test:runtime-browser:dist && npm run test:integrity-browser:dist && npm run test:perception-browser:dist && npm run test:success-browser:dist",
     "test:cost-data": "node --test scripts/__tests__/cost-receipt.test.mjs scripts/__tests__/aggregate-grades.test.mjs",
+    "test:cost-browser:dist": "node scripts/__tests__/cost-receipts.browser.mjs",
+    "test:cost-browser": "npm run build && npm run test:cost-browser:dist",
     "test:official-filter": "node --test scripts/__tests__/official-filter.test.mjs",
     "test:grade-provenance": "node --test scripts/__tests__/grade-provenance.test.mjs",
     "test:selection-outcome": "node --test scripts/__tests__/selection-outcome.test.mjs",
