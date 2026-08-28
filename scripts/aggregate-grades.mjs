@@ -14,6 +14,25 @@ import { readdir, readFile, writeFile, mkdir, access } from 'fs/promises';
 import { join, extname, basename } from 'path';
 import { gradeIdentityFromRaw } from './grade-identity.mjs';
 import { classifyTaskOutcome, summarizeOutcomes } from './selection-outcome.mjs';
+import {
+  projectCostLedgerReference,
+  projectCostReceipt,
+  summarizeCostReceipts,
+} from './cost-receipt.mjs';
+
+// Item-level payloads that go through the rich grade projection. Later minor
+// versions add provenance contracts without changing the dashboard score
+// shape, so they join this list rather than forking the reader.
+const ITEM_LEVEL_VERSIONS = ['1.0', '1.1', '1.2', '1.3', '1.4'];
+
+// Versions whose invariants the aggregator enforces itself. 1.0-1.2 predate
+// the score_excluded contract and are checked more loosely below.
+const ITEM_LEVEL_STRICT_VERSIONS = ['1.3', '1.4'];
+
+// Versions that carry per-task grading cost receipts. Gated rather than
+// sniffed: an older grade file must read exactly as it read before this
+// feature existed, cost keys or not.
+const COST_RECEIPT_VERSIONS = ['1.4'];
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const GRADES_DIR = join(ROOT, 'data', 'grades');
@@ -190,27 +209,28 @@ function processLegacyGradesFile(
 // while preserving the full v1 payload in summary_v1 / tasks_v1 so WOW
 // components can consume rich item-level data.
 function validateScoreExcludedGrade(raw) {
-  if (raw?.schema_version !== '1.3') return;
+  const version = raw?.schema_version;
+  if (!ITEM_LEVEL_STRICT_VERSIONS.includes(version)) return;
 
   if (!Array.isArray(raw.tasks)) {
-    throw new Error('schema 1.3 tasks are missing or invalid');
+    throw new Error(`schema ${version} tasks are missing or invalid`);
   }
   if (!raw.summary || typeof raw.summary !== 'object' || Array.isArray(raw.summary)) {
-    throw new Error('schema 1.3 summary is missing or invalid');
+    throw new Error(`schema ${version} summary is missing or invalid`);
   }
   if (
     !raw.summary.openai_compat
     || typeof raw.summary.openai_compat !== 'object'
     || Array.isArray(raw.summary.openai_compat)
   ) {
-    throw new Error('schema 1.3 headline summary is missing or invalid');
+    throw new Error(`schema ${version} headline summary is missing or invalid`);
   }
   if (
     !raw.summary.wow
     || typeof raw.summary.wow !== 'object'
     || Array.isArray(raw.summary.wow)
   ) {
-    throw new Error('schema 1.3 health summary is missing or invalid');
+    throw new Error(`schema ${version} health summary is missing or invalid`);
   }
 
   const tasks = raw.tasks;
@@ -219,28 +239,28 @@ function validateScoreExcludedGrade(raw) {
   let gradedTasks = 0;
   for (const task of tasks) {
     if (!task || typeof task !== 'object' || Array.isArray(task)) {
-      throw new Error('schema 1.3 task is missing or invalid');
+      throw new Error(`schema ${version} task is missing or invalid`);
     }
     if (!Array.isArray(task.items)) {
-      throw new Error('schema 1.3 task items are missing or invalid');
+      throw new Error(`schema ${version} task items are missing or invalid`);
     }
     const items = task.items;
     const allExcluded = items.length > 0
       && items.every((item) => item?.score_excluded === true);
     if (allExcluded && !task?.error) {
-      throw new Error('schema 1.3 all-excluded task must be unscored');
+      throw new Error(`schema ${version} all-excluded task must be unscored`);
     }
     if (!task?.error) gradedTasks += 1;
     for (const item of items) {
       if (!item || typeof item !== 'object' || Array.isArray(item)) {
-        throw new Error('schema 1.3 item is missing or invalid');
+        throw new Error(`schema ${version} item is missing or invalid`);
       }
       if (item?.decided_by === 'judge') {
         judgeItems += 1;
         if (item.verdict === 'judge_error') judgeErrors += 1;
       }
       if (item?.verdict === 'judge_error' && item.score_excluded !== true) {
-        throw new Error('schema 1.3 judge_error must be score_excluded');
+        throw new Error(`schema ${version} judge_error must be score_excluded`);
       }
     }
   }
@@ -249,7 +269,7 @@ function validateScoreExcludedGrade(raw) {
   const errorTasks = tasks.length - gradedTasks;
   for (const field of ['total_tasks', 'graded_tasks', 'error_tasks']) {
     if (!Number.isInteger(summary[field]) || summary[field] < 0) {
-      throw new Error(`schema 1.3 ${field} is missing or invalid`);
+      throw new Error(`schema ${version} ${field} is missing or invalid`);
     }
   }
   if (
@@ -257,7 +277,7 @@ function validateScoreExcludedGrade(raw) {
     || summary?.graded_tasks !== gradedTasks
     || summary?.error_tasks !== errorTasks
   ) {
-    throw new Error('schema 1.3 task counts are inconsistent');
+    throw new Error(`schema ${version} task counts are inconsistent`);
   }
   const openaiCompat = summary?.openai_compat;
   for (const field of [
@@ -267,7 +287,7 @@ function validateScoreExcludedGrade(raw) {
     'inconsistent_count',
   ]) {
     if (!Number.isInteger(openaiCompat[field]) || openaiCompat[field] < 0) {
-      throw new Error(`schema 1.3 ${field} is missing or invalid`);
+      throw new Error(`schema ${version} ${field} is missing or invalid`);
     }
   }
   if (
@@ -276,7 +296,7 @@ function validateScoreExcludedGrade(raw) {
       + openaiCompat.partial_count
     !== gradedTasks
   ) {
-    throw new Error('schema 1.3 headline counts are inconsistent');
+    throw new Error(`schema ${version} headline counts are inconsistent`);
   }
   if (gradedTasks === 0) {
     if (
@@ -287,7 +307,7 @@ function validateScoreExcludedGrade(raw) {
       || openaiCompat?.partial_count !== 0
       || openaiCompat?.inconsistent_count !== 0
     ) {
-      throw new Error('schema 1.3 unscored grade must not report headline scores');
+      throw new Error(`schema ${version} unscored grade must not report headline scores`);
     }
   } else if (
     !Number.isFinite(openaiCompat?.avg_score_pct)
@@ -296,7 +316,7 @@ function validateScoreExcludedGrade(raw) {
     || !Number.isFinite(openaiCompat?.ci_pct)
     || openaiCompat.ci_pct < 0
   ) {
-    throw new Error('schema 1.3 scored headline is missing or invalid');
+    throw new Error(`schema ${version} scored headline is missing or invalid`);
   }
 
   const rate = raw?.summary?.wow?.judge_error_rate;
@@ -309,7 +329,7 @@ function validateScoreExcludedGrade(raw) {
     || rate > 1
     || rate !== canonicalRate
   ) {
-    throw new Error('schema 1.3 judge_error_rate is missing or inconsistent');
+    throw new Error(`schema ${version} judge_error_rate is missing or inconsistent`);
   }
 }
 
@@ -319,6 +339,50 @@ function validateHistoricalHeadline(raw) {
   if (openaiCompat?.avg_score_pct === null || openaiCompat?.ci_pct === null) {
     throw new Error('schema 1.0-1.2 headline must remain numeric');
   }
+}
+
+// ── Grading cost receipts (schema 1.4) ────────────────────────────────────
+//
+// The grade JSON is the only place a per-task grading cost is recorded, so
+// the aggregator is where it enters the dashboard. Two rules hold the whole
+// feature together:
+//
+//   * Version-gated, never sniffed. A 1.0-1.3 grade file reads exactly as it
+//     read before this code existed, so no published experiment changes
+//     meaning because a new field arrived.
+//   * The run summary is derived here from the per-task receipts rather than
+//     copied out of the payload. A headline the rows do not add up to is
+//     worse than no headline, and deriving it in one place makes that
+//     impossible.
+
+/** Map<task_id, projected receipt> for a cost-carrying grade file. */
+function costReceiptsByTask(raw) {
+  const receipts = new Map();
+  if (!COST_RECEIPT_VERSIONS.includes(raw?.schema_version)) return receipts;
+  for (const task of Array.isArray(raw.tasks) ? raw.tasks : []) {
+    const receipt = projectCostReceipt(
+      task?.grading_cost,
+      `schema ${raw.schema_version} grading_cost for ${task?.task_id ?? 'unknown task'}`,
+    );
+    if (receipt !== null) receipts.set(task.task_id, receipt);
+  }
+  return receipts;
+}
+
+/**
+ * Run-level grading cost, or null when nothing was recorded.
+ *
+ * `cost_per_successful_deliverable_usd` stays null on purpose: a per-unit
+ * figure belongs to the run that produced the deliverables, not to the run
+ * that graded them.
+ */
+function gradingCostSummary(rawTasks, receipts) {
+  return summarizeCostReceipts(
+    rawTasks.map((task) => ({
+      receipt: receipts.get(task?.task_id) ?? null,
+      succeeded: !(task?.error !== null && task?.error !== undefined && task?.error !== ''),
+    })),
+  );
 }
 
 function processV1GradesFile(
@@ -348,12 +412,21 @@ function processV1GradesFile(
   // Strict per-experiment Self-QA resolver. v1 grades are never dummies.
   const qaFor = makeQaResolver(experiment_id, false, taskQaByExperiment, source_experiment_id);
 
+  // Empty for every version below 1.4, which is what keeps already-published
+  // grades rendering as "no record" instead of as grading that cost nothing.
+  const costReceipts = costReceiptsByTask(raw);
+
   // Convert v1 tasks → legacy-compatible task rows. Snap pct to exact 0/1
   // when it crosses the openai_compat thresholds (pct >= 99 → perfect,
   // pct <= 1 → zero) so legacy Status badges agree with summary counts.
   const tasks = rawTasks.map((t) => {
     const qa_score = qaFor(t.task_id);
     const hasError = t.error !== null && t.error !== undefined && t.error !== '';
+    // Absent stays absent. A task with no receipt gains no key, so the
+    // dashboard can tell "not recorded" from "recorded as nothing".
+    const cost = costReceipts.has(t.task_id)
+      ? { grading_cost: costReceipts.get(t.task_id) }
+      : {};
     // Additive: the legacy row keeps every field it had, and gains only the
     // reason it ended where it did. error_messages still carries the raw token
     // so anything already reading it sees no change.
@@ -370,6 +443,7 @@ function processV1GradesFile(
         outcome_detail: detail,
         reached_judge,
         qa_score,
+        ...cost,
       };
     }
     const pct = typeof t.pct === 'number' ? t.pct : 0;
@@ -388,6 +462,7 @@ function processV1GradesFile(
       outcome_detail: detail,
       reached_judge,
       qa_score,
+      ...cost,
     };
   });
 
@@ -404,6 +479,11 @@ function processV1GradesFile(
       required_formats,
       format_demand,
       candidate_files: files,
+      // Overwrites the raw receipt with the projected one, so every consumer
+      // reads the same normalised shape the validator vouched for.
+      ...(costReceipts.has(t.task_id)
+        ? { grading_cost: costReceipts.get(t.task_id) }
+        : {}),
     };
   });
 
@@ -411,6 +491,11 @@ function processV1GradesFile(
   // grade JSON publishes is passed through untouched below, so this block can
   // only add an explanation, never move a number.
   const selection = summarizeOutcomes(rawTasks);
+
+  const costSummary = gradingCostSummary(rawTasks, costReceipts);
+  const costLedger = COST_RECEIPT_VERSIONS.includes(raw?.schema_version)
+    ? projectCostLedgerReference(raw.cost_ledger)
+    : null;
 
   const totalTasks = typeof summary.total_tasks === 'number'
     ? summary.total_tasks
@@ -491,8 +576,13 @@ function processV1GradesFile(
       calibration_mae,
       calibration_counts,
       selection,
+      // Only on a run that recorded something. Absent here is what the
+      // dashboard reads as "no record" — never as $0.
+      ...(costSummary ? { grading_cost: costSummary } : {}),
     },
     tasks_v1,
+    ...(costSummary ? { cost_summary: { grading_cost: costSummary } } : {}),
+    ...(costLedger ? { cost_ledger: costLedger } : {}),
   };
 }
 
@@ -504,7 +594,7 @@ export function processGradesFile(
 ) {
   // All item-level 1.x payloads share the rich grade projection. Later minor
   // versions add provenance contracts without changing dashboard score shape.
-  if (raw && ['1.0', '1.1', '1.2', '1.3'].includes(raw.schema_version)) {
+  if (raw && ITEM_LEVEL_VERSIONS.includes(raw.schema_version)) {
     return processV1GradesFile(filePath, raw, taskQaByExperiment, corpusByExperiment);
   }
   return processLegacyGradesFile(filePath, raw, taskQaByExperiment, corpusByExperiment);

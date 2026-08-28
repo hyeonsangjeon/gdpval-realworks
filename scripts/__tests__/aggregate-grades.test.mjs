@@ -975,3 +975,237 @@ test('processGradesFile emits coverage on legacy grades too', () => {
   assert.equal(out.coverage.corpus_tasks, 220);
   assert.equal(out.coverage.is_partial_corpus, true);
 });
+
+// ── Grading cost receipts (schema 1.4) ────────────────────────────────────
+//
+// The distinction under test throughout: a grade file that recorded nothing
+// must never render as grading that cost nothing.
+
+function costReceipt(overrides = {}) {
+  return {
+    schema_version: 'cost-receipt-v1',
+    currency: 'USD',
+    status: 'complete',
+    estimated_cost_usd: 0.02,
+    known_cost_usd: 0.02,
+    model_cost_usd: 0.02,
+    runtime_cost_usd: null,
+    model_calls: 4,
+    usage: { input_tokens: 900, output_tokens: 300 },
+    components: [
+      {
+        name: 'primary_grading',
+        status: 'complete',
+        estimated_cost_usd: 0.02,
+        known_cost_usd: 0.02,
+        model_calls: 4,
+      },
+    ],
+    price_table_sha256: 'a'.repeat(64),
+    missing_reasons: [],
+    ...overrides,
+  };
+}
+
+function gradeFile(version, tasks, extra = {}) {
+  const graded = tasks.filter((t) => !t.error).length;
+  return {
+    schema_version: version,
+    experiment_id: 'exp-cost',
+    inference_model: 'gpt-5.2-chat',
+    judge: { model: 'gpt-5.4-mini' },
+    summary: {
+      total_tasks: tasks.length,
+      graded_tasks: graded,
+      error_tasks: tasks.length - graded,
+      openai_compat: {
+        avg_score_pct: graded ? 100 : null,
+        ci_pct: graded ? 0 : null,
+        perfect_count: graded,
+        partial_count: 0,
+        zero_count: 0,
+        inconsistent_count: 0,
+      },
+      wow: { judge_error_rate: 0 },
+    },
+    tasks,
+    ...extra,
+  };
+}
+
+test('processGradesFile routes schema 1.4 through item-level grading', () => {
+  const out = processGradesFile('cost.json', gradeFile('1.4', [
+    { task_id: 'task-1', pct: 100, error: null, items: [] },
+  ]));
+
+  assert.equal(out.grade_status, 'graded_v1');
+  assert.equal(out.schema_version, '1.4');
+  assert.equal(out.summary.avg_score_pct, 100);
+});
+
+test('processGradesFile enforces schema 1.4 invariants under its own version label', () => {
+  const invalid = gradeFile('1.4', [{ task_id: 'task-1', pct: 100, error: null, items: [] }]);
+  delete invalid.summary.openai_compat.zero_count;
+
+  assert.throws(
+    () => processGradesFile('cost.json', invalid),
+    /schema 1\.4 zero_count is missing or invalid/,
+  );
+});
+
+test('processGradesFile still reads schema 1.0-1.3 grade files', () => {
+  for (const version of ['1.0', '1.1', '1.2', '1.3']) {
+    const out = processGradesFile('legacy.json', gradeFile(version, [
+      { task_id: 'task-1', pct: 100, error: null, items: [] },
+    ]));
+    assert.equal(out.schema_version, version);
+    assert.equal(out.grade_status, 'graded_v1');
+    assert.equal(out.cost_summary, undefined);
+    assert.equal(out.tasks[0].grading_cost, undefined);
+  }
+});
+
+test('processGradesFile carries a schema 1.4 grading cost onto tasks and the summary', () => {
+  const out = processGradesFile('cost.json', gradeFile('1.4', [
+    { task_id: 'task-1', pct: 100, error: null, items: [], grading_cost: costReceipt() },
+    {
+      task_id: 'task-2',
+      pct: 100,
+      error: null,
+      items: [],
+      grading_cost: costReceipt({
+        estimated_cost_usd: 0.04,
+        known_cost_usd: 0.04,
+        model_cost_usd: 0.04,
+        components: [],
+      }),
+    },
+  ]));
+
+  assert.equal(out.tasks[0].grading_cost.known_cost_usd, 0.02);
+  assert.equal(out.tasks_v1[1].grading_cost.known_cost_usd, 0.04);
+  assert.equal(
+    out.tasks_v1[0].grading_cost.estimate_basis,
+    'usage_estimate_not_azure_invoice',
+  );
+
+  const summary = out.cost_summary.grading_cost;
+  assert.equal(summary.status, 'complete');
+  assert.equal(summary.known_cost_usd, 0.06);
+  assert.equal(summary.estimated_cost_usd, 0.06);
+  assert.equal(summary.avg_cost_usd, 0.03);
+  assert.equal(summary.median_cost_usd, 0.03);
+  assert.equal(summary.max_cost_usd, 0.04);
+  assert.equal(summary.coverage_pct, 100);
+  // Per-deliverable belongs to the run that made the deliverables, not to the
+  // run that graded them.
+  assert.equal(summary.cost_per_successful_deliverable_usd, null);
+  assert.equal(out.summary_v1.grading_cost.known_cost_usd, 0.06);
+});
+
+test('processGradesFile leaves a schema 1.4 run with no receipts unpriced', () => {
+  const out = processGradesFile('cost.json', gradeFile('1.4', [
+    { task_id: 'task-1', pct: 100, error: null, items: [] },
+  ]));
+
+  assert.equal(out.cost_summary, undefined);
+  assert.equal(out.summary_v1.grading_cost, undefined);
+  assert.equal(out.tasks[0].grading_cost, undefined);
+});
+
+test('processGradesFile keeps one unpriced schema 1.4 receipt from becoming a total', () => {
+  const out = processGradesFile('cost.json', gradeFile('1.4', [
+    { task_id: 'task-1', pct: 100, error: null, items: [], grading_cost: costReceipt() },
+    {
+      task_id: 'task-2',
+      pct: 100,
+      error: null,
+      items: [],
+      grading_cost: costReceipt({
+        status: 'unavailable',
+        estimated_cost_usd: null,
+        known_cost_usd: null,
+        model_cost_usd: null,
+        components: [],
+        missing_reasons: ['usage_not_recorded'],
+      }),
+    },
+  ]));
+
+  const summary = out.cost_summary.grading_cost;
+  assert.equal(summary.status, 'partial');
+  assert.equal(summary.known_cost_usd, 0.02);
+  assert.equal(summary.estimated_cost_usd, null);
+  assert.equal(summary.unavailable_tasks, 1);
+  assert.deepEqual(summary.missing_reasons, ['usage_not_recorded']);
+});
+
+test('processGradesFile reports the cost of tasks the grader failed on', () => {
+  const out = processGradesFile('cost.json', gradeFile('1.4', [
+    { task_id: 'task-1', pct: 100, error: null, items: [], grading_cost: costReceipt() },
+    {
+      task_id: 'task-2',
+      pct: 0,
+      error: 'judge_error',
+      items: [],
+      grading_cost: costReceipt({
+        estimated_cost_usd: 0.01,
+        known_cost_usd: 0.01,
+        model_cost_usd: 0.01,
+        components: [],
+      }),
+    },
+  ]));
+
+  const summary = out.cost_summary.grading_cost;
+  assert.equal(summary.known_cost_usd, 0.03);
+  assert.equal(summary.failed_task_count, 1);
+  assert.equal(summary.failed_task_cost_usd, 0.01);
+  assert.equal(out.tasks[1].error, true);
+  assert.equal(out.tasks[1].grading_cost.known_cost_usd, 0.01);
+});
+
+test('processGradesFile refuses a schema 1.4 grading cost it cannot read', () => {
+  const raw = gradeFile('1.4', [
+    {
+      task_id: 'task-1',
+      pct: 100,
+      error: null,
+      items: [],
+      grading_cost: costReceipt({ currency: 'KRW' }),
+    },
+  ]);
+
+  assert.throws(
+    () => processGradesFile('cost.json', raw),
+    /grading_cost for task-1 must be denominated in USD/,
+  );
+});
+
+test('processGradesFile validates the schema 1.4 audit ledger pointer', () => {
+  const tasks = [
+    { task_id: 'task-1', pct: 100, error: null, items: [], grading_cost: costReceipt() },
+  ];
+
+  const out = processGradesFile('cost.json', gradeFile('1.4', tasks, {
+    cost_ledger: { path: 'cost_ledger.jsonl', sha256: 'b'.repeat(64) },
+  }));
+  assert.deepEqual(out.cost_ledger, {
+    path: 'cost_ledger.jsonl',
+    sha256: 'b'.repeat(64),
+  });
+
+  assert.throws(
+    () => processGradesFile('cost.json', gradeFile('1.4', tasks, {
+      cost_ledger: { path: '../secrets.jsonl', sha256: 'b'.repeat(64) },
+    })),
+    /cost_ledger path must be a relative repository path/,
+  );
+
+  assert.throws(
+    () => processGradesFile('cost.json', gradeFile('1.4', tasks, {
+      cost_ledger: { path: 'cost_ledger.jsonl', sha256: 'not-a-digest' },
+    })),
+    /cost_ledger sha256 must be a sha256 digest/,
+  );
+});
