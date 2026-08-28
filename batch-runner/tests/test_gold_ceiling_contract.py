@@ -390,11 +390,22 @@ def test_spec_records_the_input_fingerprints_that_re_derive():
     and settles nothing. Both of these come from the manifest and the config
     alone, so the 623 MB of gold files are not needed to check the claim, and
     a sample that shifted by one task changes both.
+
+    The task-id digest is recomputed by calling the grader's own function
+    rather than by restating its formula here. Restating it is how the spec
+    came to carry ``09ce9245…`` -- the same thirty ids in the same order,
+    newline-joined instead of encoded as a compact JSON array. The list was
+    right, the order was right, and the number matched nothing the pipeline
+    ever writes: a run's own payload failed the check that was supposed to
+    confirm it. A test that re-implements the thing it is testing can agree
+    with itself all the way to the wrong answer.
     """
+    from step8_grade import _ordered_task_ids_sha256
+
     spec = SPEC_PATH.read_text(encoding="utf-8")
     pinned = _load_yaml(GOLD_CONFIG_PATH)["rerun_identity"]["task_ids"]
 
-    ordered_ids = hashlib.sha256("\n".join(pinned).encode("utf-8")).hexdigest()
+    ordered_ids = _ordered_task_ids_sha256(pinned)
     file_set = hashlib.sha256(
         "\n".join(
             f"{file['graded_path']}\t{file['sha256']}\t{file['size']}"
@@ -452,14 +463,30 @@ def test_spec_names_the_container_and_renderer_the_run_will_use():
     assert preflight.EXPECTED_LIBREOFFICE_VERSION in spec
 
 
-def test_spec_discloses_the_unreadable_deliverable_before_the_run():
-    """One pinned task's only answer is a zip the read tool cannot open.
+def test_spec_accounts_for_the_archive_answer_the_run_could_not_read():
+    """One pinned task's only answer is a zip, and that cost it the task.
 
     Predicting a weak score is evidence; explaining one afterwards is not. The
     task stays in the sample -- dropping it would flatter the ceiling -- so the
-    limitation is written down in advance, and this keeps the disclosure honest
-    by checking the tool really does refuse the format.
+    limitation went into the spec in advance, and the first paid run confirmed
+    it exactly: 2.00 of 62, and the one item that passed was "exactly one
+    top-level ZIP archive is submitted", which passed *because* it is a zip.
+
+    What the disclosure got wrong was the reason. It called this a format the
+    reading tool does not support. Every format inside the archive is
+    supported -- they are WAV stems, and ``probe_audio`` has read WAV since
+    PR2. What was unsupported was the container: nothing ever opened it, so
+    thirty-four items about sample rate, bit depth and duration were answered
+    from a file the judge never saw inside of.
+
+    So this now checks the container is readable and that the spec still says
+    which items remain out of reach, since the remaining gap is real and is a
+    different one: routing and selection still treat the archive as a single
+    opaque file, so no listening model is dispatched for it.
     """
+    import zipfile
+    import wave
+
     from core.tools import read_deliverable
 
     spec = SPEC_PATH.read_text(encoding="utf-8")
@@ -473,17 +500,38 @@ def test_spec_discloses_the_unreadable_deliverable_before_the_run():
     assert ".zip" in spec
 
     with tempfile.TemporaryDirectory() as workdir:
-        name = Path(zipped[0]["graded_path"]).name
-        (Path(workdir) / name).write_bytes(b"PK\x03\x04not really a zip")
-        envelope = read_deliverable("read_content", name, base_dir=workdir)
+        stem = Path(workdir) / "STEM.wav"
+        with wave.open(str(stem), "wb") as sound:
+            sound.setnchannels(2)
+            sound.setsampwidth(3)  # 24-bit, as the rubric asks about
+            sound.setframerate(48_000)
+            sound.writeframes(b"\x00" * 3 * 2 * 4_800)
 
-    # Not an error -- that is the point. The judge is handed an empty reading
-    # with a note, so the shortfall looks like a weak answer rather than a
-    # tool that failed, which is exactly why it has to be disclosed up front.
-    assert envelope["ok"] is True
-    assert envelope["data"]["kind"] == "unknown"
-    assert envelope["data"]["text"] == ""
-    assert envelope["data"]["note"] == "binary or unsupported for text read"
+        name = Path(zipped[0]["graded_path"]).name
+        archive = Path(workdir) / name
+        with zipfile.ZipFile(archive, "w") as writing:
+            writing.write(stem, "STEMS/MASTER.wav")
+            # macOS ships one of these beside every real file. The gold answer
+            # carries five, and listing them would bury the five that matter.
+            writing.writestr("__MACOSX/STEMS/._MASTER.wav", b"\x00\x05\x16\x07")
+        stem.unlink()
+
+        listing = read_deliverable("read_content", name, base_dir=workdir)
+        probe = read_deliverable(
+            "probe_audio", name, base_dir=workdir,
+            scope={"member": "STEMS/MASTER.wav"},
+        )
+
+    assert listing["ok"] is True
+    assert listing["data"]["kind"] == "zip"
+    assert "STEMS/MASTER.wav" in listing["data"]["text"]
+    assert "__MACOSX" not in listing["data"]["text"]
+
+    # The three rubric items this recovers, on the real answer: WAV format,
+    # 48 kHz exactly, and 24-bit PCM.
+    assert probe["ok"] is True, probe
+    assert probe["data"]["sample_rate"] == 48_000
+    assert probe["data"]["codec"] == "pcm_s24le"
 
 
 # --------------------------------------------------------------------------

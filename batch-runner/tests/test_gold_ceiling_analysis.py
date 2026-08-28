@@ -152,10 +152,18 @@ def test_the_thresholds_are_the_ones_the_spec_states():
 
 
 def test_the_pinned_corpus_matches_the_grading_config():
-    """The 30 the tool insists on are the 30 the run was told to grade."""
-    import hashlib
+    """The 30 the tool insists on are the 30 the run was told to grade.
 
+    Recomputed through ``step8_grade``'s own function rather than by restating
+    its formula here. The constant is compared against a field that function
+    writes, so a second spelling of "hash these ids" is a second thing that can
+    drift -- and it did: a newline-joined digest of these very ids sat in the
+    constant and refused stage 1's own run, saying nothing about the corpus
+    while looking exactly like a corpus mismatch.
+    """
     import yaml
+
+    from step8_grade import _ordered_task_ids_sha256
 
     config = yaml.safe_load(
         (
@@ -165,8 +173,7 @@ def test_the_pinned_corpus_matches_the_grading_config():
     pinned = config["rerun_identity"]["task_ids"]
 
     assert len(pinned) == analysis.EXPECTED_TASK_COUNT
-    digest = hashlib.sha256("\n".join(pinned).encode("utf-8")).hexdigest()
-    assert digest == analysis.EXPECTED_ORDERED_TASK_IDS_SHA256
+    assert _ordered_task_ids_sha256(pinned) == analysis.EXPECTED_ORDERED_TASK_IDS_SHA256
 
 
 # ── Only stage 1's own run may be read as stage 1's number ─────────────────
@@ -179,6 +186,30 @@ def test_a_complete_pinned_run_is_accepted():
 def test_a_shard_is_refused():
     """A shard's aggregates cover its slice, and read like the whole run's."""
     problems = analysis._identity_problems(_payload(run_status="partial"))
+
+    assert any("run_status" in problem for problem in problems)
+
+
+def test_a_complete_run_is_accepted_under_either_spelling():
+    """Sharding, not completeness, decides which word a gold run gets.
+
+    `step8_grade.py` calls a gold-corpus run `diagnostic` so that it forks away
+    from the dashboard, but `step9_merge_shards.py` writes a flat `final` when
+    it joins shards back up. So the same thirty tasks, fully graded, land under
+    one name or the other purely on whether the run was split. Refusing
+    `diagnostic` would refuse a complete single-shard repeat -- and stage 2 is
+    made of repeats.
+    """
+    for status in ("final", "diagnostic"):
+        assert analysis._identity_problems(_payload(run_status=status)) == [], status
+
+
+def test_a_run_with_no_status_at_all_is_refused():
+    """Absent is not complete. A payload that never says must not be assumed."""
+    payload = _payload()
+    payload.pop("run_status")
+
+    problems = analysis._identity_problems(payload)
 
     assert any("run_status" in problem for problem in problems)
 
@@ -216,7 +247,11 @@ def test_the_command_line_refuses_rather_than_reporting(tmp_path):
 
 
 def test_the_refusal_can_be_overridden_on_purpose(tmp_path, capsys):
-    """Stage 2 reads repeats with this tool, and they are legitimately not run 1."""
+    """Looking inside one shard is a legitimate thing to want to do.
+
+    Not for a number any report quotes -- a shard's mean is the mean of its
+    slice -- but for working out which shard a bad task landed in.
+    """
     grade_file = tmp_path / "repeat.json"
     grade_file.write_text(json.dumps(_payload(run_status="partial")))
 
