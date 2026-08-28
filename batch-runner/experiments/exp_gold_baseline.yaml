@@ -1,0 +1,76 @@
+# Experiment Configuration — gold-ceiling baseline
+#
+# This is not an experiment. No model is called, no task is executed and no
+# submission repository exists. It registers the benchmark's OWN expert answers
+# as the graded corpus so the grader can be pointed at them, which answers one
+# question: how high can this grader score at all?
+#
+# That number is the ceiling every model result is read against. If the expert
+# answers do not score near the top, the shortfall is in the grader, its inputs
+# or its file-reading tools -- not in any model -- and every score already
+# published is measured against a ruler that is bent. So this file exists to be
+# graded, and its result is deliberately unpublishable: `step8_grade.py` routes
+# every `gold-corpus` run into the diagnostic path, because the dashboard has
+# no way to say "this is the ceiling, not a competitor".
+#
+# Spec: tasks/rebuilding_grading_task/300-gold-ceiling.md
+
+experiment:
+  id: "exp_gold_baseline"
+  name: "Gold Deliverable Ceiling Baseline"
+  description: >-
+    The gdpval reference answers, registered as if they were a run's output, so
+    the v2 grader can be measured against the best result it will ever see.
+  author: "Hyeonsang Jeon"
+  created_at: "2026-08-28"
+
+# Nothing varies, because nothing runs. Both lists are empty rather than
+# invented: a control block that named a changed variable would describe a
+# comparison this file does not make.
+control:
+  fixed: []
+  changed: []
+
+data:
+  # The dataset repository itself, not a submission repository. There is no
+  # `HyeonSang/exp_gold_baseline` on the Hub and there never will be.
+  source: "openai/gdpval"
+  # Read by `scripts/download_inference_from_hf.py`. Absent means `submission`,
+  # so this line is what stops the downloader looking for inference output that
+  # was never produced. Any unrecognised value is refused rather than defaulted.
+  inference_source: "gold_deliverables"
+  filter:
+    sector: null
+    occupation: null
+    # Which tasks are actually graded is pinned by `rerun_identity.task_ids` in
+    # the grading config, not here -- a sample size taken at this layer would
+    # be a different 30 tasks each time the dataset order changed.
+    sample_size: null
+
+condition_a:
+  name: "Gold Deliverable"
+  model:
+    provider: "azure"
+    # Named explicitly so no default can speak for this file. `step8_grade.py`
+    # prefers the `model` recorded in the inference payload -- which the gold
+    # builder sets to this same string -- but if that lookup ever fell through
+    # to here, the record would read "gpt-4" and claim a model produced work it
+    # did not.
+    deployment: "gold-deliverable"
+    temperature: 0.0
+    seed: null
+  prompt:
+    system: null
+    prefix: null
+    body: null
+    suffix: null
+  qa:
+    enabled: false
+
+execution:
+  # Every mode this pipeline offers describes how a model produces a
+  # deliverable. None of them applies: the deliverables already exist, written
+  # by the human experts who wrote the benchmark. Nothing here is dispatched.
+  mode: "none"
+  max_retries: 0
+  resume_max_rounds: 0

@@ -1,0 +1,165 @@
+schema_version: "2.0"
+config_name: "gold_ceiling_30_v2_sol_max"
+description: |
+  The gold-ceiling measurement over a fixed 30-task sample, spec
+  tasks/rebuilding_grading_task/300-gold-ceiling.md.
+
+  Runtime semantics are byte-for-byte those of default_v2_sol_max: same judge,
+  same reasoning effort, same tool ops and caps, same perception models, same
+  critical rule, same scoring, same prompts, same rate-limit guard. Only the
+  identity differs -- the config name, the pinned corpus, and a rubric revision
+  frozen to a commit instead of following `main`. That is deliberate: a ceiling
+  measured with different settings than the runs it is the ceiling FOR would
+  not be their ceiling.
+
+  What is being graded is not a model's work. It is the benchmark's own expert
+  answers, registered by experiments/exp_gold_baseline.yaml. So the expected
+  result is near the top of the scale, and a shortfall is a finding about the
+  grader rather than about anybody's model.
+
+# Which 30, and why these. The corpus is walked in the dataset's own row order
+# and the first 30 tasks that actually carry an expert answer are taken -- 185
+# of the 220 do, so 4 tasks inside the first 34 positions are skipped for
+# having none. Taking a prefix rather than a spread is what makes the sample
+# re-derivable by anyone with the dataset: there is no seed to lose and no
+# sampling code to reimplement. tests/test_gold_ceiling_contract.py re-derives
+# this list from experiments/gold_corpus/gold_deliverable_manifest.json and
+# fails if the two ever disagree, so this block is checked, not trusted.
+#
+# The sample is narrow by construction: 4 sectors and 7 occupations, because
+# consecutive rows share an occupation. It is a grader sanity check, not a
+# representative survey -- stage 3 grades all 220.
+#
+# Order is load-bearing twice over. step8_grade.py refuses a pinned list that
+# does not follow canonical source order, and it compares the pinned list to
+# the selected list by equality, so a reordering is a refusal rather than a
+# silently different run.
+rerun_identity:
+  experiment_id: "exp_gold_baseline"
+  expected_task_count: 30
+  # The dataset commit the rubric is read from. Pinned rather than `main` so
+  # the three repeats stage 2 needs cannot drift between them.
+  rubric_commit_sha: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  # The same commit, because for a gold corpus the dataset IS the inference:
+  # no model ran, so the revision that supplied the answers is the revision
+  # that supplied the rubric.
+  inference_revision: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  # Deliberately absent: allow_legacy_missing_provenance. That switch forgives
+  # a submission whose Azure routes were never recorded. Here no inference ran,
+  # so there is no route that could be missing -- the payload says `gold-corpus`
+  # outright, and step8_grade.py keeps every such run out of the published path
+  # on that basis alone.
+  task_ids:
+    - "83d10b06-26d1-4636-a32c-23f92c57f30b"
+    - "7b08cd4d-df60-41ae-9102-8aaa49306ba2"
+    - "7d7fc9a7-21a7-4b83-906f-416dea5ad04f"
+    - "43dc9778-450b-4b46-b77e-b6d82b202035"
+    - "ee09d943-5a11-430a-b7a2-971b4e9b01b5"
+    - "f84ea6ac-8f9f-428c-b96c-d0884e30f7c7"
+    - "a328feea-47db-4856-b4be-2bdc63dd88fb"
+    - "27e8912c-8bd5-44ba-ad87-64066ea05264"
+    - "17111c03-aac7-45c2-857d-c06d8223d6ad"
+    - "c44e9b62-7cd8-4f72-8ad9-f8fbddb94083"
+    - "99ac6944-4ec6-4848-959c-a460ac705c6f"
+    - "f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb"
+    - "38889c3b-e3d4-49c8-816a-3cc8e5313aba"
+    - "1b1ade2d-f9f6-4a04-baa5-aa15012b53be"
+    - "93b336f3-61f3-4287-86d2-87445e1e0f90"
+    - "15ddd28d-8445-4baa-ac7f-f41372e1344e"
+    - "24d1e93f-9018-45d4-b522-ad89dfd78079"
+    - "05389f78-589a-473c-a4ae-67c61050bfca"
+    - "a74ead3b-f67d-4b1c-9116-f6bb81b29d4f"
+    - "bbe0a93b-ebf0-40b0-98dc-8d9243099034"
+    - "76d10872-9ffa-4ede-83ee-e0f1ec5e2b8d"
+    - "36d567ba-e205-4313-9756-931c6e4691fe"
+    - "7bbfcfe9-132d-4194-82bb-d6f29d001b01"
+    - "2696757c-1f8a-4959-8f0d-f5597b9e70fc"
+    - "dfb4e0cd-a0b7-454e-b943-0dd586c2764c"
+    - "4c18ebae-dfaa-4b76-b10c-61fcdf26734c"
+    - "cebf301e-5ea7-41ae-b117-ad8f43e7ac22"
+    - "c2e8f271-7858-412f-b460-472463ad81d9"
+    - "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+    - "c357f0e2-963d-4eb7-a6fa-3078fe55b3ba"
+
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.6-sol"
+  deployment: "gpt-5.6-sol"
+  api_version: "2025-04-01-preview"
+  timeout_sec: 600
+  reasoning:
+    effort: "max"
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 2400
+    finalization_reasoning_effort: "max"
+
+  tools:
+    read_deliverable:
+      env: "exp011_subprocess"
+      ops:
+        - inspect_structure
+        - read_content
+        - inspect_formatting
+        - probe_audio
+        - probe_video
+      read_only: true
+      per_item_call_cap: 8
+      max_iterations: 10
+
+  perception:
+    visual:
+      model: "gpt-5.6-sol"
+      deployment: "gpt-5.6-sol"
+      reasoning_effort: "max"
+      vision: true
+      call_cap_per_task: 72
+    audio:
+      model: "gpt-audio-1.5"
+      deployment: "gpt-audio-1.5"
+      call_cap_per_task: 3
+      trim_seconds: 30
+
+  critical:
+    rule: "abs_max_score_threshold"
+    threshold: 4
+    sign_aware: true
+
+  scoring:
+    sign_aware_pct: true
+    handle_nonpositive_total_max: "explicit"
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v2"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  task_prompt_truncate_chars: 500
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  tool_template: "prompts/grader_judge_v2.md"
+  version: "v2.2"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__judge_{judge_slug}__{config_name}__cfg_{config_hash}__rubric_{rubric_sha}__inference_{inference_sha}__src_{grader_source_hash_short}__{prompt_v}.json"

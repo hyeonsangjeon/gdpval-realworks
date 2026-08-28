@@ -30,6 +30,16 @@ STEP2_PROGRESS_SCHEMA = "step2-progress-v2"
 STEP2_RESULT_STATUSES = frozenset({
     "success", "error", "qa_failed", "pending"
 })
+#: What ``azure_ai_provenance_status`` says when the graded files are the
+#: benchmark's own expert answers rather than any model's output. It is not a
+#: missing record: no inference ran, so there is no route that could have been
+#: recorded. Grading these answers measures how high the grader can score at
+#: all, which only reads as a ceiling if it is never mistaken for a model's
+#: result -- so ``step8_grade.py`` keeps every such run out of the published
+#: path. The matching entry in ``schemas/grade.schema.json`` is what the
+#: written grade is validated against; ``tests/test_step8_grade.py`` proves the
+#: two still agree.
+GOLD_PROVENANCE_STATUS = "gold-corpus"
 _ROUTE_KEYS = {
     "endpoint_kind",
     "profile",
