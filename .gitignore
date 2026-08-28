@@ -87,6 +87,8 @@ tasks/0822_saturday/*
 !tasks/rebuilding_grading_task/
 tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/PR3_GOLD_CEILING.md
+!tasks/rebuilding_grading_task/PR3_VARIANCE.md
+!tasks/rebuilding_grading_task/PR3_REPORT.md
 
 *.parquet
 .huggingface/
