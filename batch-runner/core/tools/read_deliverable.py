@@ -34,6 +34,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -58,6 +59,23 @@ READ_DELIVERABLE_OPS: Tuple[str, ...] = (
 MAX_CONTENT_CHARS = 200_000   # ``read_content`` text payload cap
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB before/after downsample
 MAX_CELLS_FORMATTING = 5_000  # inspect_formatting iterates capped cells
+
+#: Archive limits. A deliverable submitted as a ``.zip`` is a container of
+#: files the other ops already handle, so the archive is listed and single
+#: members can be opened through ``scope={"member": ...}``. Both numbers bound
+#: what one call can cost: entries bound the listing sent to a judge, bytes
+#: bound what is written to temp before an op reads it.
+MAX_ZIP_ENTRIES = 2_000
+MAX_ZIP_MEMBER_BYTES = 2 * 1024 * 1024 * 1024  # 2 GiB extracted per member
+
+#: Archive members macOS writes alongside the real files. These are resource
+#: forks, not deliverables, and listing them buries the actual content -- the
+#: one gold answer in the stage-1 corpus that ships as an archive has five
+#: real stems and five of these. Hidden from the default listing, still
+#: openable by exact name so nothing is unreachable.
+_ZIP_NOISE = ("__MACOSX/",)
+_ZIP_NOISE_BASENAMES = ("._",)
+
 MAX_PAGES_DEFAULT = 200       # PDF page-iteration safety cap
 MAX_SHEETS = 100              # workbook safety cap
 RENDERER_VERSION_TIMEOUT_SEC = 10
@@ -211,6 +229,7 @@ _EXT_KIND = {
     **{extension: "audio" for extension in GRADER_AUDIO_EXTENSIONS},
     ".mp4": "video", ".mov": "video", ".webm": "video",
     ".mkv": "video", ".avi": "video",
+    ".zip": "zip",
 }
 
 
@@ -269,6 +288,135 @@ def _inspect_pptx(p: Path) -> Dict[str, Any]:
     return {"kind": "pptx", "slide_count": len(pres.slides), "slides": slides}
 
 
+# ── Archives ─────────────────────────────────────────────────────────
+#
+# A ``.zip`` deliverable is not an unreadable binary. It is a container of
+# files every other op here already handles, and refusing it refuses them all:
+# one stage-1 gold answer is five WAV stems in an archive, and it scored 2 of
+# 62 because thirty-four rubric items -- sample rate, bit depth, duration, key,
+# tempo -- were answered "binary or unsupported for text read" about a file
+# nothing ever opened. The single item it did pass was "exactly one top-level
+# ZIP archive is submitted".
+
+
+def _is_zip_noise(name: str) -> bool:
+    """AppleDouble resource forks, which are not part of the deliverable."""
+    return name.startswith(_ZIP_NOISE) or Path(name).name.startswith(
+        _ZIP_NOISE_BASENAMES
+    )
+
+
+def _zip_entries(p: Path) -> Tuple[List[Dict[str, Any]], int, bool]:
+    """Real members, count of hidden noise, and whether the list was cut."""
+    import zipfile
+
+    entries: List[Dict[str, Any]] = []
+    hidden = 0
+    truncated = False
+    with zipfile.ZipFile(p) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            if _is_zip_noise(info.filename):
+                hidden += 1
+                continue
+            if len(entries) >= MAX_ZIP_ENTRIES:
+                truncated = True
+                break
+            entries.append({
+                "name": info.filename,
+                "size": info.file_size,
+                "compressed_size": info.compress_size,
+                "kind": _EXT_KIND.get(Path(info.filename).suffix.lower(), "unknown"),
+            })
+    return entries, hidden, truncated
+
+
+def _inspect_zip(p: Path) -> Dict[str, Any]:
+    entries, hidden, truncated = _zip_entries(p)
+    return {
+        "kind": "zip",
+        "entry_count": len(entries),
+        "entries": entries,
+        "hidden_resource_fork_count": hidden,
+        "truncated": truncated,
+        "note": (
+            "open a member with scope={\"member\": \"<name>\"} on any op, "
+            "e.g. probe_audio for a .wav or read_content for a .docx"
+        ),
+    }
+
+
+def _read_zip_text(p: Path, _scope: Dict[str, Any]) -> str:
+    """The manifest, as text.
+
+    A judge that never learns about the member scope still has to be able to
+    answer "does the archive contain a Bass stem in WAV format", so the listing
+    itself is the content of an archive.
+    """
+    entries, hidden, truncated = _zip_entries(p)
+    lines = [f"[Archive: {len(entries)} file(s)]"]
+    lines += [
+        f"{entry['name']} | {entry['kind']} | {entry['size']} bytes"
+        for entry in entries
+    ]
+    if truncated:
+        lines.append(f"... listing truncated at {MAX_ZIP_ENTRIES} entries")
+    if hidden:
+        lines.append(f"({hidden} macOS resource-fork entries hidden)")
+    return "\n".join(lines)
+
+
+@contextmanager
+def _extracted_zip_member(p: Path, member: str) -> Any:
+    """One member on disk, under its own suffix, for the length of one op.
+
+    The name has to already be in the archive, so there is no path a caller can
+    name that is not a member -- traversal is refused by lookup rather than by
+    sanitising. The extract is streamed to a temp file so a member is bounded
+    by disk rather than held in memory, and the declared size is checked first
+    so an archive cannot ask for more than the cap by lying cheaply.
+    """
+    import zipfile
+
+    with zipfile.ZipFile(p) as archive:
+        try:
+            info = archive.getinfo(member)
+        except KeyError:
+            names = [
+                entry["name"]
+                for entry in _zip_entries(p)[0][:20]
+            ]
+            raise InvalidScope(
+                f"no member {member!r} in archive; members: {names}"
+            ) from None
+        if info.is_dir():
+            raise InvalidScope(f"member {member!r} is a directory, not a file")
+        if info.file_size > MAX_ZIP_MEMBER_BYTES:
+            raise ReadDeliverableError(
+                f"member {member!r} is {info.file_size} bytes, over the "
+                f"{MAX_ZIP_MEMBER_BYTES}-byte extraction cap"
+            )
+
+        temp_dir = tempfile.mkdtemp(prefix="gdpval-zip-")
+        try:
+            target = Path(temp_dir) / Path(member).name
+            written = 0
+            with archive.open(info) as source, open(target, "wb") as sink:
+                while chunk := source.read(1024 * 1024):
+                    written += len(chunk)
+                    if written > MAX_ZIP_MEMBER_BYTES:
+                        raise ReadDeliverableError(
+                            f"member {member!r} exceeded the "
+                            f"{MAX_ZIP_MEMBER_BYTES}-byte extraction cap while "
+                            "being read; its declared size was understated"
+                        )
+                    sink.write(chunk)
+            yield target
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def _inspect_pdf(p: Path) -> Dict[str, Any]:
     try:
         import fitz  # type: ignore
@@ -312,6 +460,8 @@ def _op_inspect_structure(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
             base["audio"] = _inspect_audio(p)
         elif kind == "video":
             base["video"] = _inspect_video(p)
+        elif kind == "zip":
+            base.update(_inspect_zip(p))
         # txt/csv/image: size + kind only
     except Exception as exc:  # noqa: BLE001
         base["inspection_error"] = f"{type(exc).__name__}: {exc}"
@@ -371,6 +521,131 @@ def _read_docx_text(p: Path, _scope: Dict[str, Any]) -> str:
     return "\n\n".join(parts)
 
 
+#: Namespace of the DrawingML chart part. Used to read cached category and
+#: value points straight out of the XML when python-pptx will not model the
+#: plot type -- see ``_pptx_chart_xml_text``.
+_CHART_NS = {"c": "http://schemas.openxmlformats.org/drawingml/2006/chart"}
+
+
+def _pptx_chart_xml_text(chart: Any) -> List[str]:
+    """Categories and values read from the chart part itself.
+
+    python-pptx models a subset of plot types and raises ``ValueError:
+    unsupported plot type`` on the rest -- ``pie3DChart`` among them, which is
+    what four of the five charts in one stage-1 gold answer are. For those, the
+    modelled accessors give nothing at all: not the values, not the categories,
+    not even the type name.
+
+    The cached points are in the XML regardless, because that is what lets a
+    deck render without the workbook it was built from. Reading them there is
+    uniform across every plot type, which is the point: the set of chart types
+    a judge might meet is not the set python-pptx happens to model.
+    """
+    lines: List[str] = []
+    plot_types = [
+        etree_tag.split("}")[-1]
+        for plot in chart.findall(".//c:plotArea/*", _CHART_NS)
+        for etree_tag in [str(plot.tag)]
+        if etree_tag.endswith("Chart")
+    ]
+    lines.append(f"[Chart: {', '.join(plot_types)}]" if plot_types else "[Chart]")
+
+    for series in chart.findall(".//c:ser", _CHART_NS):
+        name = next(
+            (v.text for v in series.findall("./c:tx//c:v", _CHART_NS) if v.text),
+            "series",
+        )
+        categories = [
+            v.text or "" for v in series.findall("./c:cat//c:pt/c:v", _CHART_NS)
+        ]
+        values = [
+            v.text or "" for v in series.findall("./c:val//c:pt/c:v", _CHART_NS)
+        ]
+        if categories:
+            lines.append("categories: " + ", ".join(categories))
+        if values:
+            lines.append(f"{name}: " + ", ".join(values))
+    return lines
+
+
+def _pptx_chart_text(shape: Any) -> List[str]:
+    """Category and series values behind a chart, when they can be read.
+
+    Rubrics ask things like "no categories outside the specified 12 appear in
+    the table or chart", which is unanswerable from a picture of a pie. The
+    numbers are in the embedded workbook and in the chart part, and this tries
+    the modelled accessors first -- they name the chart type and hand back
+    typed values -- then falls back to the raw XML for the plot types
+    python-pptx declines to model.
+
+    Every step is guarded. This runs against arbitrary gold answers, so a chart
+    that will not describe itself has to cost its own text and nothing else:
+    one bad chart must not take the slides behind it down with it.
+    """
+    try:
+        chart = shape.chart
+    except Exception:
+        return []
+
+    lines: List[str] = []
+    try:
+        lines.append(f"[Chart: {chart.chart_type}]")
+    except Exception:
+        lines = []
+    if lines:
+        try:
+            categories = [str(c) for c in chart.plots[0].categories]
+            if categories:
+                lines.append("categories: " + ", ".join(categories))
+        except Exception:
+            pass
+        try:
+            for series in chart.series:
+                values = ", ".join("" if v is None else str(v) for v in series.values)
+                lines.append(f"{series.name}: {values}")
+        except Exception:
+            pass
+
+    if len(lines) < 2:
+        try:
+            lines = _pptx_chart_xml_text(chart._chartSpace)
+        except Exception:
+            return []
+    return ["\n".join(lines)] if len(lines) > 1 else []
+
+
+def _pptx_shape_text(shape: Any, depth: int = 0) -> List[str]:
+    """Everything on one shape a judge should be able to read.
+
+    ``shape.has_text_frame`` on its own misses most of what a real deck carries.
+    A table is a graphic frame with no text frame, so every cell of it is
+    invisible; a group is a single shape whose children are never visited. Both
+    were silently dropped, which is how a five-slide deck read as 186 characters
+    of slide titles while the table holding the twelve categories a rubric item
+    asked about sat unread.
+    """
+    out: List[str] = []
+    if getattr(shape, "has_text_frame", False):
+        text = shape.text_frame.text.strip()
+        if text:
+            out.append(text)
+    if getattr(shape, "has_table", False):
+        rows = [
+            " | ".join(cell.text.strip() for cell in row.cells)
+            for row in shape.table.rows
+        ]
+        out.append("[Table]\n" + "\n".join(rows))
+    if getattr(shape, "has_chart", False):
+        out.extend(_pptx_chart_text(shape))
+    # Groups nest, and a table one level down is as unreadable as one at the
+    # top. The depth cap is only a guard against a malformed file describing a
+    # cycle -- real decks do not nest anywhere near this deep.
+    if depth < 8 and hasattr(shape, "shapes"):
+        for child in shape.shapes:
+            out.extend(_pptx_shape_text(child, depth + 1))
+    return out
+
+
 def _read_pptx_text(p: Path, _scope: Dict[str, Any]) -> str:
     from pptx import Presentation  # type: ignore
 
@@ -379,10 +654,7 @@ def _read_pptx_text(p: Path, _scope: Dict[str, Any]) -> str:
     for i, slide in enumerate(pres.slides, 1):
         chunks = [f"[Slide {i}]"]
         for shape in slide.shapes:
-            if shape.has_text_frame:
-                t = shape.text_frame.text.strip()
-                if t:
-                    chunks.append(t)
+            chunks.extend(_pptx_shape_text(shape))
         parts.append("\n".join(chunks))
         if sum(len(x) for x in parts) > MAX_CONTENT_CHARS:
             break
@@ -401,6 +673,8 @@ def _op_read_content(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
         text = _read_pptx_text(p, scope)
     elif kind in ("txt", "csv"):
         text = p.read_text(encoding="utf-8", errors="replace")
+    elif kind == "zip":
+        text = _read_zip_text(p, scope)
     else:
         return {"kind": kind, "text": "", "note": "binary or unsupported for text read"}
     truncated = len(text) > MAX_CONTENT_CHARS
@@ -1146,6 +1420,9 @@ def read_deliverable(
               outside the base is rejected.
         base_dir: Trusted base directory (required keyword).
         scope: Op-specific scope dict (sheet name, page range, …).
+               On a ``.zip``, ``{"member": "<name>"}`` runs the op against
+               that member of the archive instead of the archive itself; the
+               rest of the scope is passed through to it unchanged.
 
     Returns:
         Envelope dict — see module docstring.
@@ -1165,7 +1442,22 @@ def read_deliverable(
         )
     fn = _OP_TABLE[op]
     try:
-        data = fn(resolved, scope or {})
+        scope = dict(scope or {})
+        # A member is addressed by the same op as a loose file, so the
+        # extraction happens here rather than inside each op: `probe_audio` on
+        # a WAV inside an archive is `probe_audio` on a WAV.
+        if "member" in scope:
+            if _kind_of(resolved) != "zip":
+                raise InvalidScope(
+                    f"scope key 'member' is only valid on a zip archive, "
+                    f"not on a {_kind_of(resolved)} file"
+                )
+            member = scope.pop("member")
+            if not isinstance(member, str) or not member:
+                raise InvalidScope("scope key 'member' must be a non-empty string")
+            with _extracted_zip_member(resolved, member) as member_path:
+                return _envelope_ok(fn(member_path, scope))
+        data = fn(resolved, scope)
         return _envelope_ok(data)
     except RendererDependencyError as exc:
         return _envelope_error(str(exc), kind="dependency_missing")

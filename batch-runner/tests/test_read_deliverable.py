@@ -261,6 +261,232 @@ def test_read_content_docx(base_dir, docx_file):
     assert "First paragraph" in r["data"]["text"]
 
 
+# ── read_content: a deck is more than its text frames ────────────────
+#
+# `_read_pptx_text` used to take `shape.has_text_frame` and nothing else, so a
+# table was a graphic frame it walked straight past and a group was one shape
+# whose children it never entered. Both are where real decks keep their
+# content: a gold answer in the stage-1 corpus, `WorkStudy.pptx`, read as 186
+# characters of slide titles while the fifteen-row table holding every activity
+# category and percentage -- which a rubric item then asked about, and scored
+# 0/1 -- was never shown to the judge at all.
+#
+# Each fixture below puts its content *only* in the shape under test, so a
+# reader that regresses to text frames alone fails rather than passing on the
+# title it can still see.
+
+
+@pytest.fixture
+def pptx_with_table(base_dir: Path) -> Path:
+    pytest.importorskip("pptx")
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    slide.shapes.title.text = "Activity Analysis"
+    table = slide.shapes.add_table(
+        3, 2, Inches(1), Inches(2), Inches(6), Inches(2)
+    ).table
+    table.cell(0, 0).text = "Activity"
+    table.cell(0, 1).text = "Share"
+    table.cell(1, 0).text = "Material handling"
+    table.cell(1, 1).text = "31.4%"
+    table.cell(2, 0).text = "Machine setup"
+    table.cell(2, 1).text = "12.7%"
+    p = base_dir / "study.pptx"
+    presentation.save(p)
+    return p
+
+
+@pytest.fixture
+def pptx_with_group(base_dir: Path) -> Path:
+    pytest.importorskip("pptx")
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    slide.shapes.title.text = "Findings"
+    group = slide.shapes.add_group_shape()
+    box = group.shapes.add_textbox(
+        Inches(1), Inches(2), Inches(4), Inches(1)
+    )
+    box.text_frame.text = "Grouped callout text"
+    p = base_dir / "grouped.pptx"
+    presentation.save(p)
+    return p
+
+
+@pytest.fixture
+def pptx_with_chart(base_dir: Path) -> Path:
+    pytest.importorskip("pptx")
+    from pptx import Presentation
+    from pptx.chart.data import CategoryChartData
+    from pptx.enum.chart import XL_CHART_TYPE
+    from pptx.util import Inches
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    slide.shapes.title.text = "Distribution"
+    chart_data = CategoryChartData()
+    chart_data.categories = ["Inspection", "Rework"]
+    chart_data.add_series("Share", (0.62, 0.38))
+    slide.shapes.add_chart(
+        XL_CHART_TYPE.PIE, Inches(1), Inches(2), Inches(6), Inches(4), chart_data
+    )
+    p = base_dir / "chart.pptx"
+    presentation.save(p)
+    return p
+
+
+def test_read_content_pptx_reads_text_frames(base_dir, pptx_file):
+    """The behaviour that already worked has to keep working."""
+    r = read_deliverable("read_content", pptx_file.name, base_dir=str(base_dir))
+    assert r["ok"] is True
+    assert "Overview" in r["data"]["text"]
+    assert "Details" in r["data"]["text"]
+
+
+def test_read_content_pptx_reads_table_cells(base_dir, pptx_with_table):
+    """The defect this fixes: cells live on a shape with no text frame."""
+    r = read_deliverable(
+        "read_content", pptx_with_table.name, base_dir=str(base_dir)
+    )
+
+    assert r["ok"] is True
+    text = r["data"]["text"]
+    assert "Material handling" in text
+    assert "31.4%" in text
+    assert "Machine setup" in text
+
+
+def test_read_content_pptx_keeps_table_rows_together(base_dir, pptx_with_table):
+    """A row read cell-by-cell loses which share belongs to which activity.
+
+    Marked and joined the same way ``_read_docx_text`` already marks tables, so
+    a judge meets one shape of table across both formats.
+    """
+    r = read_deliverable(
+        "read_content", pptx_with_table.name, base_dir=str(base_dir)
+    )
+
+    text = r["data"]["text"]
+    assert "[Table]" in text
+    assert "Material handling | 31.4%" in text
+
+
+def test_read_content_pptx_reads_inside_a_group(base_dir, pptx_with_group):
+    """A group is one shape; its children were never visited."""
+    r = read_deliverable(
+        "read_content", pptx_with_group.name, base_dir=str(base_dir)
+    )
+
+    assert r["ok"] is True
+    assert "Grouped callout text" in r["data"]["text"]
+
+
+def test_read_content_pptx_reads_chart_categories(base_dir, pptx_with_chart):
+    """Rubrics ask which categories a chart shows, which a picture cannot say."""
+    r = read_deliverable(
+        "read_content", pptx_with_chart.name, base_dir=str(base_dir)
+    )
+
+    assert r["ok"] is True
+    text = r["data"]["text"]
+    assert "Inspection" in text
+    assert "Rework" in text
+
+
+@pytest.fixture
+def pptx_with_unmodelled_chart(base_dir: Path, pptx_with_chart: Path) -> Path:
+    """A plot type python-pptx will not model, built from one it will.
+
+    ``pie3DChart`` is not exotic -- four of the five charts in one stage-1 gold
+    answer are that -- but python-pptx raises ``unsupported plot type`` on it,
+    and there is no way to author one through the library. Retagging the plot
+    element of a chart it *can* write produces the same file Excel would, and
+    reproduces the failure exactly: chart_type, categories and series all raise.
+    """
+    pytest.importorskip("pptx")
+    from pptx import Presentation
+
+    namespace = {"c": "http://schemas.openxmlformats.org/drawingml/2006/chart"}
+    presentation = Presentation(str(pptx_with_chart))
+    shape = next(
+        s
+        for s in presentation.slides[0].shapes
+        if getattr(s, "has_chart", False)
+    )
+    plot = shape.chart._chartSpace.find(".//c:plotArea/c:pieChart", namespace)
+    plot.tag = "{%s}pie3DChart" % namespace["c"]
+    p = base_dir / "pie3d.pptx"
+    presentation.save(p)
+    return p
+
+
+def test_the_modelled_chart_accessors_really_do_refuse(pptx_with_unmodelled_chart):
+    """The fixture is only worth anything if it reproduces the real failure.
+
+    Without this, a python-pptx release that starts modelling 3-D pies would
+    leave the fallback untested and the next test passing down the easy path.
+    """
+    from pptx import Presentation
+
+    shape = next(
+        s
+        for s in Presentation(str(pptx_with_unmodelled_chart)).slides[0].shapes
+        if getattr(s, "has_chart", False)
+    )
+
+    with pytest.raises(ValueError, match="unsupported plot type"):
+        shape.chart.chart_type
+
+
+def test_read_content_pptx_reads_a_chart_python_pptx_cannot_model(
+    base_dir, pptx_with_unmodelled_chart
+):
+    """The cached points are in the XML whatever the plot type is."""
+    r = read_deliverable(
+        "read_content", pptx_with_unmodelled_chart.name, base_dir=str(base_dir)
+    )
+
+    assert r["ok"] is True
+    text = r["data"]["text"]
+    assert "pie3DChart" in text, "the chart type is itself a rubric fact"
+    assert "Inspection" in text
+    assert "Rework" in text
+    assert "0.62" in text
+
+
+def test_a_chart_that_cannot_describe_itself_does_not_break_the_read(
+    base_dir, pptx_with_table, monkeypatch
+):
+    """One unreadable chart must cost its own text, not the whole deck's.
+
+    python-pptx raises on chart types with no category axis, and this reader
+    runs against arbitrary gold answers -- so the guard is the difference
+    between losing a chart and losing every slide behind it.
+    """
+    class Exploding:
+        has_text_frame = False
+        has_table = False
+        has_chart = True
+
+        @property
+        def chart(self):
+            raise ValueError("no category axis on this chart type")
+
+    assert read_deliverable_module._pptx_shape_text(Exploding()) == []
+
+    # And the surrounding deck still reads.
+    r = read_deliverable(
+        "read_content", pptx_with_table.name, base_dir=str(base_dir)
+    )
+    assert r["ok"] is True
+    assert "Material handling" in r["data"]["text"]
+
+
 def test_read_content_truncation_flag(base_dir):
     big = base_dir / "big.txt"
     big.write_text("x" * (300_000))
@@ -990,3 +1216,259 @@ def test_probe_video_note_for_non_video(base_dir, txt_file):
     r = read_deliverable("probe_video", txt_file.name, base_dir=str(base_dir))
     assert r["ok"] is True
     assert "note" in r["data"]
+
+
+# ── Archives: a container of readable files is not an unreadable file ─
+#
+# A `.zip` used to fall through to `kind: "unknown"`, and `read_content`
+# answered every question about it with an empty string and the note "binary or
+# unsupported for text read". One stage-1 gold answer is five WAV stems in an
+# archive; it scored 2.00 of 62, and the single item it passed was "exactly one
+# top-level ZIP archive is submitted" -- which passed *because* it is a zip.
+# Everything else -- five "in WAV format", five "48,000 Hz exactly", five
+# "24-bit PCM or IEEE float", the master's running time -- was asked about a
+# file nothing had opened.
+#
+# The formats inside were never the problem. `probe_audio` has read WAV since
+# PR2. What was missing was a way in.
+
+
+@pytest.fixture
+def wav_bytes() -> bytes:
+    """A 24-bit 48 kHz stereo WAV, which is what the rubric asks about."""
+    import io as _io
+    import wave
+
+    buffer = _io.BytesIO()
+    with wave.open(buffer, "wb") as sound:
+        sound.setnchannels(2)
+        sound.setsampwidth(3)
+        sound.setframerate(48_000)
+        sound.writeframes(b"\x00" * 3 * 2 * 24_000)  # half a second
+    return buffer.getvalue()
+
+
+@pytest.fixture
+def zip_file(base_dir: Path, wav_bytes: bytes) -> Path:
+    """One real stem and the resource fork macOS files beside it."""
+    import zipfile
+
+    p = base_dir / "STEMS.zip"
+    with zipfile.ZipFile(p, "w") as writing:
+        writing.writestr("STEMS/MASTER.wav", wav_bytes)
+        writing.writestr("STEMS/notes.txt", "mixed at 48k, 24-bit\n")
+        writing.writestr("__MACOSX/STEMS/._MASTER.wav", b"\x00\x05\x16\x07")
+        writing.writestr("STEMS/._notes.txt", b"\x00\x05\x16\x07")
+    return p
+
+
+def test_inspect_structure_lists_an_archive(base_dir, zip_file):
+    r = read_deliverable("inspect_structure", zip_file.name, base_dir=str(base_dir))
+
+    assert r["ok"] is True
+    data = r["data"]
+    assert data["kind"] == "zip"
+    assert data["entry_count"] == 2
+    assert [entry["name"] for entry in data["entries"]] == [
+        "STEMS/MASTER.wav",
+        "STEMS/notes.txt",
+    ]
+    # The kind of each member is what tells a judge which op to reach for.
+    assert [entry["kind"] for entry in data["entries"]] == ["audio", "txt"]
+
+
+def test_an_archive_reads_as_its_own_listing(base_dir, zip_file):
+    """"Does it contain a Bass stem in WAV format" is answerable from names.
+
+    A judge that never learns about the member scope still has to be able to
+    answer that, so the listing is the text of an archive.
+    """
+    r = read_deliverable("read_content", zip_file.name, base_dir=str(base_dir))
+
+    assert r["ok"] is True
+    assert r["data"]["kind"] == "zip"
+    assert "STEMS/MASTER.wav" in r["data"]["text"]
+    assert "audio" in r["data"]["text"]
+
+
+def test_resource_forks_are_hidden_but_counted(base_dir, zip_file):
+    """Five real stems and five ``._`` twins reads as ten files of nothing.
+
+    Hiding them is not the same as dropping them: the count says how many were
+    withheld, so a listing that looks short can be checked rather than trusted.
+    """
+    listing = read_deliverable(
+        "inspect_structure", zip_file.name, base_dir=str(base_dir)
+    )["data"]
+
+    assert "__MACOSX" not in str(listing["entries"])
+    assert "._notes.txt" not in str(listing["entries"])
+    assert listing["hidden_resource_fork_count"] == 2
+
+
+def test_a_hidden_member_is_still_reachable_by_name(base_dir, zip_file):
+    """Hidden from the listing, not removed from the archive.
+
+    Something has to be able to look at a resource fork to establish that it is
+    one, and a reader that can only report what it chose to show cannot be
+    argued with.
+    """
+    r = read_deliverable(
+        "read_content", zip_file.name, base_dir=str(base_dir),
+        scope={"member": "__MACOSX/STEMS/._MASTER.wav"},
+    )
+
+    assert r["ok"] is True
+
+
+def test_probe_audio_reaches_a_stem_inside_an_archive(base_dir, zip_file):
+    """The three rubric items the archive gap cost, on one member.
+
+    Format, sample rate and bit depth are each five items on the real answer --
+    thirty of the sixty points it lost -- and all three come off a WAV header
+    that was always readable, once something opens the container.
+    """
+    pytest.importorskip("av")
+
+    r = read_deliverable(
+        "probe_audio", zip_file.name, base_dir=str(base_dir),
+        scope={"member": "STEMS/MASTER.wav"},
+    )
+
+    assert r["ok"] is True, r
+    data = r["data"]
+    assert data["sample_rate"] == 48_000
+    assert data["channels"] == 2
+    assert data["codec"] == "pcm_s24le"  # 24-bit PCM, little-endian
+    assert 0.4 < data["duration_s"] < 0.6
+
+
+def test_read_content_reaches_a_text_member(base_dir, zip_file):
+    """Any op, not just the audio one: a member is addressed like a file."""
+    r = read_deliverable(
+        "read_content", zip_file.name, base_dir=str(base_dir),
+        scope={"member": "STEMS/notes.txt"},
+    )
+
+    assert r["ok"] is True
+    assert r["data"]["kind"] == "txt"
+    assert "24-bit" in r["data"]["text"]
+
+
+def test_a_member_keeps_its_extension_while_being_read(base_dir, zip_file):
+    """Extraction under a random temp name would make every member unknown.
+
+    Every op here dispatches on suffix, so a member written to disk as
+    ``tmpXXXX`` is a member no op can identify -- the container would be open
+    and its contents still unreadable.
+    """
+    with read_deliverable_module._extracted_zip_member(
+        zip_file, "STEMS/MASTER.wav"
+    ) as extracted:
+        assert extracted.suffix == ".wav"
+        assert read_deliverable_module._kind_of(extracted) == "audio"
+        assert extracted.is_file()
+
+    # And it does not outlive the op that asked for it.
+    assert not extracted.exists()
+
+
+def test_an_unknown_member_is_refused_with_the_names_that_exist(
+    base_dir, zip_file
+):
+    r = read_deliverable(
+        "probe_audio", zip_file.name, base_dir=str(base_dir),
+        scope={"member": "STEMS/BASS.wav"},
+    )
+
+    assert r["ok"] is False
+    assert r["error_type"] == "bad_scope"
+    assert "STEMS/MASTER.wav" in r["error"]
+
+
+def test_a_member_name_cannot_escape_the_archive(base_dir, zip_file):
+    """Traversal is refused by lookup, not by sanitising.
+
+    ``getinfo`` matches names exactly, so a member that is not in the archive
+    cannot be named -- there is no rule to get wrong and no encoding to slip
+    past. This checks the property rather than a blocklist.
+    """
+    for attempt in ("../../etc/passwd", "/etc/passwd", "STEMS/../../../secret"):
+        r = read_deliverable(
+            "read_content", zip_file.name, base_dir=str(base_dir),
+            scope={"member": attempt},
+        )
+        assert r["ok"] is False, attempt
+        assert r["error_type"] == "bad_scope", attempt
+
+
+def test_the_member_scope_is_refused_on_a_file_that_is_not_an_archive(
+    base_dir, txt_file
+):
+    """A scope key that silently does nothing is worse than one that errors."""
+    r = read_deliverable(
+        "read_content", txt_file.name, base_dir=str(base_dir),
+        scope={"member": "anything"},
+    )
+
+    assert r["ok"] is False
+    assert r["error_type"] == "bad_scope"
+    assert "zip" in r["error"]
+
+
+def test_an_oversized_member_is_refused_before_it_is_written(
+    base_dir, zip_file, monkeypatch
+):
+    """The cap bounds temp disk, so it has to be checked before extracting.
+
+    The real archive is 179.7 MB compressed; a hostile or merely broken one is
+    the reason this is a number rather than a hope.
+    """
+    monkeypatch.setattr(read_deliverable_module, "MAX_ZIP_MEMBER_BYTES", 16)
+
+    r = read_deliverable(
+        "read_content", zip_file.name, base_dir=str(base_dir),
+        scope={"member": "STEMS/notes.txt"},
+    )
+
+    assert r["ok"] is False
+    assert r["error_type"] == "op_error"
+    assert "cap" in r["error"]
+
+
+def test_a_long_listing_is_cut_and_says_so(base_dir, monkeypatch):
+    """A truncated listing that looks complete is a wrong answer, not a short one."""
+    import zipfile
+
+    monkeypatch.setattr(read_deliverable_module, "MAX_ZIP_ENTRIES", 3)
+    p = base_dir / "many.zip"
+    with zipfile.ZipFile(p, "w") as writing:
+        for i in range(10):
+            writing.writestr(f"file{i}.txt", "x")
+
+    listing = read_deliverable("inspect_structure", p.name, base_dir=str(base_dir))
+    text = read_deliverable("read_content", p.name, base_dir=str(base_dir))
+
+    assert listing["data"]["entry_count"] == 3
+    assert listing["data"]["truncated"] is True
+    assert "truncated" in text["data"]["text"]
+
+
+def test_a_corrupt_archive_reports_the_failure_instead_of_reading_empty(
+    base_dir
+):
+    """The old behaviour was an empty read with a note, which reads as a weak
+    answer rather than a broken file. An archive that will not open should look
+    like what it is.
+    """
+    p = base_dir / "broken.zip"
+    p.write_bytes(b"PK\x03\x04not really a zip")
+
+    r = read_deliverable("read_content", p.name, base_dir=str(base_dir))
+    structure = read_deliverable("inspect_structure", p.name, base_dir=str(base_dir))
+
+    assert r["ok"] is False
+    assert r["error_type"] == "exception"
+    # inspect_structure keeps its own contract: it never raises, it annotates.
+    assert structure["ok"] is True
+    assert "inspection_error" in structure["data"]

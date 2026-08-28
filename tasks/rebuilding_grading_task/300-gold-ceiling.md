@@ -83,11 +83,17 @@
 
 **표본 구성**: 파일 40개 / 184,099,078 바이트. 확장자는 docx 13, pdf 12, xlsx 11, pptx 3, zip 1. sector는 Government 13, Professional·Scientific·Technical 9, Manufacturing 5, Information 3. 직업은 Accountants and Auditors 5, Administrative Services Managers 5, Buyers and Purchasing Agents 5, Compliance Officers 5, Computer and Information Systems Managers 4, Audio and Video Technicians 3, Child·Family·School Social Workers 3.
 
-### 알려진 입력 한계 (사전 공개)
+### 알려진 입력 한계 (사전 공개 → 1차 실행이 확인 → 고침)
 
-task `38889c3b-e3d4-49c8-816a-3cc8e5313aba`의 gold 답안은 179.7MB `.zip` 한 개다. `core/tools/read_deliverable.py`는 zip을 다루지 못한다 — `kind`가 `unknown`으로 떨어지고 `read_content`는 빈 텍스트에 "binary or unsupported for text read" 주석을 붙여 돌려준다.
+task `38889c3b-e3d4-49c8-816a-3cc8e5313aba`의 gold 답안은 179.7MB `.zip` 한 개다. 실행 전에 이 표본에서 빼지 않겠다고 적어두었다 — 빼면 천장이 실제보다 좋아 보이기 때문이다. 미리 적어두는 이유는, 실행 후에 이유를 만들어내는 것과 미리 예측해두는 것은 증거로서 값이 다르기 때문이다.
 
-그래도 표본에서 빼지 않는다. 빼면 천장이 실제보다 좋아 보이기 때문이다. 이 task가 낮게 나오면 그건 grader 결함이 아니라 **읽기 도구의 형식 미지원**이며, 결과 분석에서 그렇게 분류해야 한다. 미리 적어두는 이유는, 실행 후에 이유를 만들어내는 것과 미리 예측해두는 것은 증거로서 값이 다르기 때문이다.
+1차 유료 실행이 예측을 그대로 확인했다: **62점 만점에 2.00점**. 통과한 항목은 "최상위 zip 압축 파일 정확히 한 개를 제출한다" 하나뿐이고, 그건 zip이라서 통과한 것이다. 나머지 34개 항목은 전부 "binary or unsupported for text read" 또는 "not an audio file"이라는 증거를 달고 떨어졌다.
+
+**다만 예측의 이유가 틀렸다.** 예전 판은 이걸 "읽기 도구의 형식 미지원"이라고 적었다. 압축 파일 **안**의 형식은 전부 지원된다 — 5개 WAV stem이고, `probe_audio`는 PR2부터 WAV를 읽는다. 지원되지 않은 것은 형식이 아니라 **컨테이너**였다. 아무도 열어보지 않은 파일을 놓고 표본율·비트 심도·길이를 물은 것이다.
+
+그래서 고쳤다. `core/tools/read_deliverable.py`가 이제 압축 파일의 목록을 내용으로 돌려주고, `scope={"member": "<이름>"}`으로 개별 구성원에 아무 op이나 걸 수 있다. 실제 답안에 걸어 확인한 결과: 5개 stem 전부 48,000Hz / `pcm_s24le`(24비트) / 스테레오, MASTER 137.14초(2분 17초). 이걸로 32점어치 항목(WAV 형식 5, 표본율 5, 비트 심도 5, 길이 1)이 증거를 갖게 된다.
+
+**아직 닿지 않는 것**은 남은 28점이다. `grader_routing.py`와 `deliverable_selector.py`에게 이 답안은 여전히 확장자가 `.zip`인 파일 한 개라서, 듣기 모델이 배정되지 않는다. 조성(G장조 → A♭장조 → G장조), 템포 140, 보컬 없음, 브리지 1:22–1:49, 시간계 이펙트, 신스 계열, `DRUM REFERENCE TRACK.wav`와의 동기 — 전부 실제로 들어야 답할 수 있고, 이번 수정 범위 밖이다. 후속 항목으로 분리해 점수 영향까지 적어 둔다.
 
 ### 결과가 발표되지 않는 이유
 
