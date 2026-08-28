@@ -21,6 +21,7 @@ from core.azure_ai_clients import (
     canonical_deployment,
     grader_route_workloads,
 )
+from core.cost_receipts import STAGE_GRADING, STAGE_PERCEPTION
 from core.llm_client import ManagedAzureAIClient, create_typed_azure_client
 from core.public_error import public_provider_error_text
 from core.deliverable_selector import (
@@ -236,6 +237,7 @@ class Grader:
         *,
         client=None,
         client_factory: AzureAIClientFactory | None = None,
+        cost_recorder=None,
     ):
         self.config = config
         self.rubric_loader = rubric_loader
@@ -265,6 +267,26 @@ class Grader:
             )
             client = self._managed_client.client
         self.client = client
+
+        # Per-task cost receipts (task 0828). Metering is opt-in: with no
+        # recorder the two attributes below are the bare client and nothing
+        # is written, which is what keeps an unmetered run reporting an
+        # absent ledger rather than a smaller bill.
+        #
+        # Two wrappers, one connection. The judge's own calls follow whatever
+        # stage is in scope; the perception readers share this client but are
+        # pinned to their own stage, so a visual read taken mid-grading lands
+        # in its own component of the marking receipt instead of disappearing
+        # into the judge's.
+        self._cost_recorder = cost_recorder
+        self._perception_client = client
+        if cost_recorder is not None:
+            self.client = cost_recorder.meter(
+                client, provider="azure", model=deployment
+            )
+            self._perception_client = cost_recorder.meter(
+                client, provider="azure", stage=STAGE_PERCEPTION
+            )
 
         try:
             self.prompt_template = self._read_prompt_template(
@@ -325,6 +347,7 @@ class Grader:
         finally:
             self._managed_client = None
             self.client = None
+            self._perception_client = None
 
     def __enter__(self) -> "Grader":
         return self
@@ -348,8 +371,16 @@ class Grader:
         # once per item. Cleared here for the same reason the caps are.
         self._text_layer_cache = {}
         self._audio_content_cache = {}
-        return self._grade_task_with_selector(task, deliverable_path, files)
+        if self._cost_recorder is None:
+            return self._grade_task_with_selector(task, deliverable_path, files)
 
+        # Everything this call spends — judge turns, retries inside the
+        # judge, and the perception reads it delegates — belongs to one
+        # task's marking bill.
+        with self._cost_recorder.attributed(
+            task_id=task.task_id, stage=STAGE_GRADING
+        ):
+            return self._grade_task_with_selector(task, deliverable_path, files)
 
     def _grade_task_with_selector(
         self, task: TaskRubric, deliverable_path: Path, files: list[Path]
@@ -1503,7 +1534,7 @@ class Grader:
                 vis_cfg, "judge.perception.visual"
             )
             vision_perception = VisionPerception(
-                client=self.client,
+                client=self._perception_client,
                 deployment=vision_deployment,
                 call_cap=int(
                     vis_cfg.get("call_cap_per_task", VISION_CALL_CAP)
@@ -1524,7 +1555,7 @@ class Grader:
                 aud_cfg, "judge.perception.audio"
             )
             audio_perception = AudioPerception(
-                client=self.client,
+                client=self._perception_client,
                 deployment=audio_deployment,
                 call_cap=int(
                     aud_cfg.get("call_cap_per_task", AUDIO_CALL_CAP)

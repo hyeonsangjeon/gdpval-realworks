@@ -56,6 +56,7 @@ from pathlib import Path
 import pytest
 
 import step9_merge_shards as s9
+from core.cost_receipts import CostReceipt
 from core.grade_payload import canonical_rate, validate_grade_payload
 from step8_grade import (
     SCHEMA_VERSION,
@@ -125,7 +126,7 @@ def anchor_provenance() -> dict:
 
 
 def _normalised_tasks(raw_corpus: dict, limit: int | None = None) -> list[dict]:
-    """Deep-copied corpus tasks migrated to the schema-1.3 item contract."""
+    """Deep-copied corpus tasks migrated to the schema-1.4 item contract."""
     tasks = copy.deepcopy(raw_corpus["tasks"])
     if limit is not None:
         tasks = tasks[:limit]
@@ -133,6 +134,11 @@ def _normalised_tasks(raw_corpus: dict, limit: int | None = None) -> list[dict]:
         for item in task["items"]:
             if item.get("verdict") == "judge_error":
                 item["score_excluded"] = True
+        # The corpus these rows come from was graded before receipts existed,
+        # so nothing is known about what it cost. That is the honest reading,
+        # and it is the one the merge has to keep: an old row must not merge
+        # into a total as though it were free.
+        task["grading_cost"] = CostReceipt.unavailable().as_dict()
     return tasks
 
 
@@ -181,6 +187,7 @@ def _build_reference(
         "graded_at": raw_corpus["graded_at"],
         "graded_by": raw_corpus["graded_by"],
         "graded_by_version": raw_corpus["graded_by_version"],
+        "cost_ledger": None,
         "tasks": tasks,
         "summary": _compute_summary(tasks, unpriced_models=UNPRICED_MODELS),
     }

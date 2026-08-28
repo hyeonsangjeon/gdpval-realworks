@@ -56,6 +56,21 @@ def _planned_fingerprint(workload, deployment):
     ).hexdigest()
 
 
+def _unmetered(client):
+    """Look through the cost-metering wrapper at the client it stands for.
+
+    Step 2 hands out every provider client already wrapped, so that each call
+    records what it cost. The wrapper forwards everything and changes nothing
+    about *which* client is *which* — which is what the assertions below are
+    for. So they check the wrapper is present, then look through it, and the
+    routing claim they always made is unchanged.
+    """
+    assert getattr(client, "_is_cost_metered", False), (
+        "Step 2 must hand out metered clients"
+    )
+    return client.inner
+
+
 def _checkpoint_success(task_id="task-1"):
     return {
         "task_id": task_id,
@@ -469,7 +484,7 @@ def test_profile_absent_keeps_legacy_client_and_output_shape(monkeypatch, tmp_pa
         "azure",
         {"endpoint": "https://legacy.invalid/"},
     )]
-    assert created["executors"][0].kwargs["llm_client"] is raw_client
+    assert _unmetered(created["executors"][0].kwargs["llm_client"]) is raw_client
     assert "redact_provider_errors" not in created["executors"][0].kwargs
     assert "azure_ai_routes" not in output
     assert "azure_ai_routes" not in json.loads(
@@ -661,7 +676,7 @@ def test_requested_profile_with_native_only_workload_uses_no_typed_resources(
     assert provider_calls == ["openai"]
     assert created["managed"] == []
     assert created["factories"] == []
-    assert created["executors"][0].kwargs["llm_client"] is native
+    assert _unmetered(created["executors"][0].kwargs["llm_client"]) is native
     assert events == [
         "preflight:workloads",
         "create:executor",
@@ -694,8 +709,9 @@ def test_typed_clients_share_factory_and_reach_exact_executor_slots(
     executor = created["executors"][0]
     main = created["managed"][0]
     assert created["factories"][0].settings is settings
-    assert isinstance(executor.kwargs["llm_client"], step2._RedactedAzureAIClient)
-    assert executor.kwargs["llm_client"]._target is main
+    main_proxy = _unmetered(executor.kwargs["llm_client"])
+    assert isinstance(main_proxy, step2._RedactedAzureAIClient)
+    assert main_proxy._target is main
     assert all(
         managed.factory is created["factories"][0]
         for managed in created["managed"]
@@ -703,7 +719,7 @@ def test_typed_clients_share_factory_and_reach_exact_executor_slots(
     if mode == "code_interpreter":
         assert executor.kwargs["redact_provider_errors"] is True
         ci_client = created["managed"][1]
-        assert executor.kwargs["code_interpreter_client"] is ci_client
+        assert _unmetered(executor.kwargs["code_interpreter_client"]) is ci_client
         assert [event for event in events if event.startswith("close:")] == [
             "close:executor",
             "close:code-interpreter:main-model",
@@ -832,10 +848,10 @@ def test_typed_self_qa_uses_distinct_verified_wrapper_and_closes_in_order(
 
     main_client, qa_client = created["managed"]
     assert qa_client is not main_client
-    main_proxy = created["executors"][0].kwargs["llm_client"]
+    main_proxy = _unmetered(created["executors"][0].kwargs["llm_client"])
     assert isinstance(main_proxy, step2._RedactedAzureAIClient)
     assert main_proxy._target is main_client
-    assert qa_clients == [qa_client]
+    assert [_unmetered(seen) for seen in qa_clients] == [qa_client]
     assert main_client.runtime_fingerprint == qa_client.runtime_fingerprint
     assert [event for event in events if event.startswith("close:")] == [
         "close:executor",
@@ -1023,7 +1039,7 @@ def test_native_main_with_azure_preprocessor_executor_init_error_preserves_detai
 
     def _fail_executor(**kwargs):
         events.append("create:executor")
-        assert kwargs["llm_client"] is native_client
+        assert _unmetered(kwargs["llm_client"]) is native_client
         raise RuntimeError(detail)
 
     monkeypatch.setattr(step2, "TaskExecutor", _fail_executor)
@@ -1403,7 +1419,7 @@ def test_native_main_with_azure_preprocessor_uses_both_paths(
     _run()
 
     assert provider_calls == ["openai"]
-    assert created["executors"][0].kwargs["llm_client"] is native
+    assert _unmetered(created["executors"][0].kwargs["llm_client"]) is native
     assert created["executors"][0].execute_calls[0]["model"] == "  native-main  "
     assert [client.name for client in created["managed"]] == [
         "inference:probe-model"
@@ -1466,7 +1482,7 @@ def test_native_main_with_azure_preprocessor_preserves_local_failure_detail(
     final = json.loads(
         (workspace / "step2_inference_results_condition_a.json").read_text()
     )
-    assert created["executors"][0].kwargs["llm_client"] is native
+    assert _unmetered(created["executors"][0].kwargs["llm_client"]) is native
     assert "redact_provider_errors" not in created["executors"][0].kwargs
     expected = "task_execution_error:TaskExecutionError"
     assert progress["results"][0]["error"] == expected
@@ -1611,7 +1627,7 @@ def test_typed_whitespace_deployments_use_exact_canonical_runtime_strings(
     qa_calls = []
 
     def _complete(client, model, messages, **kwargs):
-        qa_calls.append((client, model, kwargs))
+        qa_calls.append((_unmetered(client), model, kwargs))
         return (
             SimpleNamespace(
                 choices=[SimpleNamespace(

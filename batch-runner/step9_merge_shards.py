@@ -89,6 +89,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
+from core.cost_receipts import (
+    BUCKET_GRADING,
+    CostReceiptLedger,
+    ledger_reference,
+    verify_export,
+)
 from core.grade_payload import canonical_rate, validate_grade_payload
 from step8_grade import (
     SCHEMA_VERSION,
@@ -487,6 +493,52 @@ def _check_cost_sums(
             )
 
 
+def _check_grading_call_sums(
+    shards: Sequence[dict],
+    labels: Sequence[str],
+    merged_summary: dict,
+) -> None:
+    """Prove no shard's grading receipts were dropped on the way in.
+
+    The merged receipt is recomputed from the merged task rows, so the money
+    in it is only as complete as the rows that survived the merge. Comparing
+    amounts would mean comparing rounded decimals; the call *count* behind
+    them is an integer and sums exactly, which catches the failure that
+    actually matters — a shard whose receipts silently did not arrive.
+
+    A shard that carries no receipt at all is a merge that cannot be checked,
+    and an unchecked merge of a priced run is refused rather than published.
+    """
+    merged_receipt = merged_summary.get(BUCKET_GRADING)
+    if not isinstance(merged_receipt, dict):
+        raise ShardMergeError(
+            "merged summary is missing its grading cost receipt: "
+            f"{_describe(merged_receipt)}"
+        )
+    total = 0
+    for shard, label in zip(shards, labels):
+        receipt = _get_path(shard, ("summary", BUCKET_GRADING))
+        if not isinstance(receipt, dict):
+            raise ShardMergeError(
+                f"{label} summary.{BUCKET_GRADING} is missing: "
+                f"{_describe(receipt)}"
+            )
+        calls = receipt.get("model_calls")
+        if type(calls) is not int:
+            raise ShardMergeError(
+                f"{label} summary.{BUCKET_GRADING}.model_calls must be an "
+                f"integer, got {_describe(calls)}"
+            )
+        total += calls
+    if merged_receipt.get("model_calls") != total:
+        raise ShardMergeError(
+            f"merged summary.{BUCKET_GRADING}.model_calls does not equal the "
+            f"shard sum: recomputed="
+            f"{_describe(merged_receipt.get('model_calls'))}, "
+            f"shard_sum={total}"
+        )
+
+
 def _check_latency_sums(
     shards: Sequence[dict],
     labels: Sequence[str],
@@ -727,6 +779,7 @@ def merge_shard_payloads(
     source_digests: Sequence[str] | None = None,
     expected_task_ids: Sequence[str] | None = None,
     strict_routes: bool = False,
+    cost_ledger: dict[str, str] | None = None,
     warn: Callable[[str], None] | None = None,
 ) -> dict:
     """Merge N partial shard payloads into one final grade payload.
@@ -892,6 +945,7 @@ def merge_shard_payloads(
     summary = _compute_summary(merged_tasks, unpriced_models=unpriced_models)
     _check_cost_sums(shards, labels, summary["cost"])
     _check_latency_sums(shards, labels, summary["cost"])
+    _check_grading_call_sums(shards, labels, summary)
 
     shard_usage_complete = True
     for shard, label in zip(shards, labels):
@@ -963,6 +1017,12 @@ def merge_shard_payloads(
     merged["azure_ai_routes"] = merged_routes
     merged["azure_ai_runtime_fingerprint"] = primary_fingerprint
     merged["graded_at"] = merged_graded_at
+    # Deliberately not adopted from shard 0: each shard pointed at its own
+    # ledger, and the merged result may only point at a ledger that actually
+    # holds every shard's rows. The caller builds that file; ``None`` here
+    # means it could not be built, which is a different claim from a ledger
+    # showing nothing.
+    merged["cost_ledger"] = cost_ledger
     merged["tasks"] = merged_tasks
     merged["summary"] = summary
     merged["shard_provenance"] = [
@@ -1099,6 +1159,77 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def merge_shard_cost_ledgers(
+    shard_paths: Sequence[Path],
+    payloads: Sequence[dict],
+    out_path: Path,
+    *,
+    warn: Callable[[str], None] | None = None,
+) -> dict[str, str] | None:
+    """Fold every shard's grading ledger into one beside the merged grade.
+
+    Each shard pointed at its own audit trail; the merged grade may only point
+    at a file that holds all of them. Records are keyed by identifier, so a
+    file folded in twice adds nothing, and a record arriving with figures that
+    contradict one already held raises rather than overwriting.
+
+    Returns ``None`` — and says why — whenever the merged ledger would be
+    partial: a shard with no pointer, a pointer whose file is gone, or a file
+    that no longer matches the digest its shard published. A merged trail that
+    quietly omits a shard reads as though that shard had spent nothing, which
+    is exactly the reading this whole mechanism exists to prevent. The per-task
+    receipts are unaffected; they travel in the rows.
+    """
+    emit = warn if warn is not None else (
+        lambda message: print(f"WARNING: {message}", file=sys.stderr)
+    )
+
+    exports: list[Path] = []
+    for shard_path, payload in zip(shard_paths, payloads):
+        pointer = payload.get("cost_ledger")
+        if not isinstance(pointer, dict):
+            emit(
+                f"{shard_path} carries no cost ledger pointer; the merged "
+                "grade will not claim one."
+            )
+            return None
+        export = shard_path.with_name(str(pointer.get("path") or ""))
+        if not export.is_file():
+            emit(
+                f"{shard_path} points at a cost ledger that is not beside it "
+                f"({export.name}); the merged grade will not claim one."
+            )
+            return None
+        if not verify_export(export, str(pointer.get("sha256") or "")):
+            emit(
+                f"{export.name} does not match the digest {shard_path} "
+                "published for it; the merged grade will not claim one."
+            )
+            return None
+        exports.append(export)
+
+    if not exports:
+        return None
+
+    merged_db = out_path.with_name(out_path.stem + ".cost_ledger.sqlite3")
+    merged_export = out_path.with_name(out_path.stem + ".cost_ledger.jsonl")
+    try:
+        ledger = CostReceiptLedger(merged_db, run_id=out_path.stem)
+    except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+        emit(f"merged cost ledger could not be opened ({type(exc).__name__})")
+        return None
+    try:
+        for export in exports:
+            ledger.import_jsonl(export)
+        digest = ledger.export_jsonl(merged_export)
+    except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+        emit(f"merged cost ledger could not be written ({type(exc).__name__})")
+        return None
+    finally:
+        ledger.close()
+    return ledger_reference(merged_export.name, digest)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
 
@@ -1145,6 +1276,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_digests=[digest for _, digest in loaded],
             expected_task_ids=explicit_ids,
             strict_routes=args.strict_routes,
+            cost_ledger=merge_shard_cost_ledgers(
+                shard_paths,
+                [payload for payload, _ in loaded],
+                out_path,
+            ),
         )
     except ShardMergeIncomplete as exc:
         if args.defer_if_incomplete:

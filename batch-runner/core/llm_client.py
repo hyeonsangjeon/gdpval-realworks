@@ -372,7 +372,13 @@ def complete(
     """
     start = time.time()
 
-    if isinstance(client, AnthropicClient):
+    # A client may be wrapped by core.cost_metering so that each call records
+    # what it cost. The wrapper forwards every attribute but not its type, so
+    # the provider test below looks *through* it while the call itself still
+    # goes *through* it — the request has to stay metered.
+    probe = client.inner if getattr(client, "_is_cost_metered", False) else client
+
+    if isinstance(probe, AnthropicClient):
         response = client.chat_complete(
             model=model,
             messages=messages,

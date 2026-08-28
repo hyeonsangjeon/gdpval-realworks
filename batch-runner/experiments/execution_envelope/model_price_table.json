@@ -23,5 +23,56 @@
       "input_usd_per_million": "5.00",
       "output_usd_per_million": "15.00"
     }
-  }
+  },
+  "cost_receipt_schema_version": "cost-receipt-price-table-v1",
+  "cost_receipt_note": "The block above prices a plan before it runs. The two blocks below price calls after they have run, and are read by core/cost_receipts.py. They are kept apart because a ceiling and a receipt are answers to different questions and must not be edited as if they were one list. Keys here are provider:resolved_model, where resolved_model is the model the response reports — not the deployment name in the request. A provider or model with no entry here is recorded as price_missing; it is never priced from a similar entry.",
+  "providers": {
+    "azure:gpt-5.4": {
+      "input_usd_per_million": "1.25",
+      "cached_input_usd_per_million": "1.25",
+      "output_usd_per_million": "5.00",
+      "reasoning_billed_as": "output",
+      "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
+      "last_reviewed": "2026-05-28",
+      "currency": "USD",
+      "unit": "per 1,000,000 tokens"
+    },
+    "azure:gpt-5.4-mini": {
+      "input_usd_per_million": "0.25",
+      "cached_input_usd_per_million": "0.25",
+      "output_usd_per_million": "1.00",
+      "reasoning_billed_as": "output",
+      "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
+      "last_reviewed": "2026-05-28",
+      "currency": "USD",
+      "unit": "per 1,000,000 tokens"
+    },
+    "azure:gpt-5.4-nano": {
+      "input_usd_per_million": "0.075",
+      "cached_input_usd_per_million": "0.075",
+      "output_usd_per_million": "0.30",
+      "reasoning_billed_as": "output",
+      "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
+      "last_reviewed": "2026-05-28",
+      "currency": "USD",
+      "unit": "per 1,000,000 tokens"
+    },
+    "azure:gpt-5.4-pro": {
+      "input_usd_per_million": "5.00",
+      "cached_input_usd_per_million": "5.00",
+      "output_usd_per_million": "15.00",
+      "reasoning_billed_as": "output",
+      "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
+      "last_reviewed": "2026-05-28",
+      "currency": "USD",
+      "unit": "per 1,000,000 tokens"
+    }
+  },
+  "cost_receipt_caveats": {
+    "cached_input": "No discounted cache rate has been sourced for this tenant, so cached input is priced at the full input rate. That over-states the bill rather than under-stating it, which is the only direction this repository is willing to be wrong in. Replace these with a sourced rate before treating a receipt as a quote.",
+    "reasoning_tokens": "reasoning_billed_as is 'output' because these deployments report reasoning tokens inside the completion token count, so charging them again on top would bill the same tokens twice. A provider that bills reasoning separately needs 'separate' and its own rate; where nobody has established which it is, 'unknown' leaves the call unpriced.",
+    "other_providers": "Only the provider covered by the source above is listed. Calls to any other provider are recorded as price_missing and hold their receipt at partial until someone sources the rates and adds them here.",
+    "runtime": "No execution-environment rate has been sourced, so the runtime block is empty and directly attributable runtime fees are recorded as runtime_cost_unpriced. An empty list is a smaller error than an invented hourly rate."
+  },
+  "runtime": {}
 }

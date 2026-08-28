@@ -32,6 +32,14 @@ from core.azure_ai_clients import (
     grader_route_workloads,
     preflight_routes,
 )
+from core.cost_metering import open_cost_recorder
+from core.cost_receipts import (
+    BUCKET_GRADING,
+    STATUS_COMPLETE,
+    CostReceipt,
+    ledger_reference,
+    summarise_receipts,
+)
 from core.experiment_config import ExperimentConfig
 from core.grader import (
     Grader,
@@ -52,7 +60,7 @@ from core.rubric_loader import RubricLoader
 from core.tool_calling_judge import resolve_visual_file_cap
 from core.tools import ReadDeliverableError, get_renderer_fingerprint
 
-SCHEMA_VERSION = "1.3"
+SCHEMA_VERSION = "1.4"
 GRADED_BY_VERSION = "0.1.0"
 FULL_HF_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 FULL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -1599,6 +1607,15 @@ def _compute_summary(
             "total_render_latency_sec": round(render_latency_ms / 1000.0, 2),
             "usage_complete": usage_complete,
         },
+        # The priced counterpart to the token counters above. Read back off
+        # the task rows rather than off the live ledger, so that the total a
+        # reader sees is the sum of the receipts a reader can see: a resumed
+        # run's earlier tasks were written by an earlier process, and a merged
+        # shard's ledger may be long gone, but their rows are right here.
+        BUCKET_GRADING: summarise_receipts([
+            CostReceipt.from_dict(task.get(BUCKET_GRADING))
+            for task in task_dicts
+        ]).as_dict(),
     }
 
 
@@ -1661,6 +1678,7 @@ def _build_grade_payload(
     exp_config: ExperimentConfig | None = None,
     source_experiment_id: str | None = None,
     renderer_fingerprint: dict[str, str] | None = None,
+    cost_ledger: dict[str, str] | None = None,
 ) -> dict:
     if run_status not in {"partial", "final", "diagnostic"}:
         raise ValueError("grade run_status is invalid")
@@ -1732,6 +1750,10 @@ def _build_grade_payload(
         "graded_at": _now_iso(),
         "graded_by": "step8_grade.py",
         "graded_by_version": GRADED_BY_VERSION,
+        # Where the per-call audit trail for this run's grading costs was
+        # written, and its digest. ``None`` where no ledger was kept, which is
+        # a different claim from a ledger showing nothing.
+        "cost_ledger": cost_ledger,
         "tasks": task_dicts,
         "summary": _compute_summary(
             task_dicts,
@@ -2082,19 +2104,79 @@ def main() -> int:
             file=sys.stderr,
         )
 
+    # ── Per-task grading cost receipts (task 0828) ──
+    #
+    # One ledger per grade file, opened before the judge so that the judge's
+    # client and its perception readers are already metered on the first task.
+    # It lives beside the grade file and is append-only: a resumed chunk, and
+    # the next chunk after that, reopen this same ledger and add to it. What an
+    # abandoned attempt cost stays in it, because it was still spent.
+    #
+    # `continue_rounds` is how a resume avoids colliding with the chunk before
+    # it. Step 8 keeps no round counter of its own — a resumed run only knows
+    # which tasks are already done — so the round is read off the ledger's size.
+    cost_ledger_path = out_path.with_name(out_path.stem + ".cost_ledger.sqlite3")
+    cost_export_path = out_path.with_name(out_path.stem + ".cost_ledger.jsonl")
+    cost_recorder, cost_ledger_note = open_cost_recorder(
+        cost_ledger_path,
+        run_id=f"{args.experiment_yaml_name}|{config_hash}|{grader_source_hash}",
+        continue_rounds=True,
+    )
+    if cost_ledger_note:
+        print(f"[cost] {cost_ledger_note}", file=sys.stderr)
+
+    def cost_ledger_pointer() -> dict[str, str] | None:
+        """Export the ledger and return the pointer a saved grade carries.
+
+        Called at each save rather than once at the end, because a partial is a
+        published result too and its pointer has to match the ledger as it
+        stood when that partial was written. A failed export returns ``None``:
+        a grade that cannot point at its own audit trail says so, instead of
+        carrying a digest of something else.
+        """
+        if cost_recorder is None:
+            return None
+        try:
+            digest = cost_recorder.ledger.export_jsonl(cost_export_path)
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            print(
+                f"[cost] ledger export failed ({type(exc).__name__})",
+                file=sys.stderr,
+            )
+            return None
+        return ledger_reference(cost_export_path.name, digest)
+
+    def grading_receipt(task_id: str) -> dict:
+        """This task's grading receipt, or an explicit reason there is none.
+
+        ``when_empty`` is ``complete`` on purpose. Reaching this line means the
+        task *was* graded; a task graded entirely by rule, with no judge call
+        at all, really did cost nothing, and that is the one honest ``$0``. A
+        run with no ledger is the other case and reports ``unavailable``.
+        """
+        if cost_recorder is None:
+            return CostReceipt.unavailable().as_dict()
+        return cost_recorder.receipt_for(
+            task_id, BUCKET_GRADING, when_empty=STATUS_COMPLETE
+        ).as_dict()
+
     try:
         config["_runtime"] = {
             "experiment_id": args.experiment_yaml_name,
             "rubric_sha": loader.rubric_sha,
             "azure_ai_runtime_fingerprint": primary_runtime_fingerprint,
         }
-        grader = Grader(config=config, rubric_loader=loader)
+        grader = Grader(
+            config=config, rubric_loader=loader, cost_recorder=cost_recorder
+        )
     except BaseException as exc:
         print(
             "ERROR: judge initialization failed: "
             f"{public_provider_error_text(exc)}",
             file=sys.stderr,
         )
+        if cost_recorder is not None:
+            cost_recorder.ledger.close()
         return 4
 
     def close_grader() -> None:
@@ -2111,6 +2193,16 @@ def main() -> int:
                 f"{public_provider_error_text(exc)}",
                 file=sys.stderr,
             )
+        # After the judge, never before: closing the ledger first would leave
+        # a client that is still being shut down writing to a closed database.
+        if cost_recorder is not None:
+            try:
+                cost_recorder.ledger.close()
+            except BaseException as exc:
+                print(
+                    f"ERROR: cost ledger cleanup failed: {type(exc).__name__}",
+                    file=sys.stderr,
+                )
 
     grader_exit_cleanup = atexit.register(close_grader)
 
@@ -2204,6 +2296,7 @@ def main() -> int:
                     exp_config=exp_config,
                     source_experiment_id=args.source_experiment_id,
                     renderer_fingerprint=renderer_fingerprint,
+                    cost_ledger=cost_ledger_pointer(),
                 )
                 _validate_schema(partial)
                 _save_json(out_path, partial)
@@ -2228,6 +2321,11 @@ def main() -> int:
             grade,
             grading_wall_time_ms=grading_wall_time_ms,
         )
+        # Stamped here, once, while this task's calls are the newest in the
+        # ledger — not recomputed at save time. A resumed chunk loads the
+        # earlier chunk's rows verbatim, so what an earlier process recorded
+        # for an earlier task stays exactly as that process recorded it.
+        row[BUCKET_GRADING] = grading_receipt(row["task_id"])
         runtime_error = None
         if config.get("schema_version") == "2.0":
             runtime_error = _track2_task_runtime_error(row)
@@ -2260,6 +2358,7 @@ def main() -> int:
                     exp_config=exp_config,
                     source_experiment_id=args.source_experiment_id,
                     renderer_fingerprint=renderer_fingerprint,
+                    cost_ledger=cost_ledger_pointer(),
                 )
                 _validate_schema(diagnostic)
                 _save_json(out_path, diagnostic)
@@ -2300,6 +2399,7 @@ def main() -> int:
                     exp_config=exp_config,
                     source_experiment_id=args.source_experiment_id,
                     renderer_fingerprint=renderer_fingerprint,
+                    cost_ledger=cost_ledger_pointer(),
                 )
                 _validate_schema(partial)
                 _save_json(out_path, partial)
@@ -2334,6 +2434,7 @@ def main() -> int:
         exp_config=exp_config,
         source_experiment_id=args.source_experiment_id,
         renderer_fingerprint=renderer_fingerprint,
+        cost_ledger=cost_ledger_pointer(),
     )
     _validate_schema(final)
     _save_json(out_path, final)

@@ -24,7 +24,7 @@ def validate_grade_payload(payload: Any, schema: dict) -> None:
     validate(instance=payload, schema=schema)
     if not isinstance(payload, dict):
         return
-    current_schema = payload.get("schema_version") in {"1.2", "1.3"}
+    current_schema = payload.get("schema_version") in {"1.2", "1.3", "1.4"}
     if current_schema and "run_status" not in payload:
         raise ValueError("current grade lifecycle identity is missing")
     if "run_status" not in payload:
@@ -66,7 +66,7 @@ def validate_grade_payload(payload: Any, schema: dict) -> None:
         raise ValueError("primary grader route fingerprint mismatch")
     if not current_schema:
         return
-    if payload.get("schema_version") == "1.3":
+    if payload.get("schema_version") in {"1.3", "1.4"}:
         tasks = payload.get("tasks")
         if not isinstance(tasks, list):
             raise ValueError("current grade tasks are missing")
@@ -173,4 +173,45 @@ def validate_grade_payload(payload: Any, schema: dict) -> None:
     ):
         raise ValueError(
             "current grade unpriced models do not match persisted model identity"
+        )
+    if payload.get("schema_version") == "1.4":
+        _validate_grading_cost_receipts(payload)
+
+
+def _validate_grading_cost_receipts(payload: dict) -> None:
+    """Check that the run total does not claim more certainty than its parts.
+
+    The receipts' shape is the schema's business. The one thing the schema
+    cannot say is how the summary relates to the rows it was summed from, and
+    that relation is the whole guarantee: a total is only a total when every
+    part behind it is known. A run holding one task whose usage never arrived
+    may still report what it confirmed, but it reports it as a floor, not as
+    the bill.
+
+    Tasks that were never run are not parts of the total and do not count
+    against it — a shard that graded ten of two hundred tasks has a complete
+    bill for ten.
+    """
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        raise ValueError("grade summary is missing")
+    run_receipt = summary.get("grading_cost")
+    if not isinstance(run_receipt, dict):
+        raise ValueError("schema 1.4 grade summary is missing its cost receipt")
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, list):
+        raise ValueError("grade tasks are missing")
+
+    task_statuses = []
+    for task in tasks:
+        receipt = task.get("grading_cost") if isinstance(task, dict) else None
+        if not isinstance(receipt, dict):
+            raise ValueError("schema 1.4 grade task is missing its cost receipt")
+        task_statuses.append(receipt.get("status"))
+
+    if run_receipt.get("status") == "complete" and any(
+        status not in {"complete", "not_run"} for status in task_statuses
+    ):
+        raise ValueError(
+            "grade summary claims a complete cost over an incomplete task"
         )
