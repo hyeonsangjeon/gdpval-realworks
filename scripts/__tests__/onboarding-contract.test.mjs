@@ -869,6 +869,7 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
     extractPythonStringList(publicationText, 'INCLUDE_PATTERNS'),
     [
       'README.md',
+      'cost_ledger.jsonl',
       'data/train-*.parquet',
       'deliverable_files/**',
       'inference_provenance.json',
@@ -878,6 +879,7 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
   assert.deepEqual(
     extractPythonStringList(publicationText, 'DELETE_PATTERNS'),
     [
+      'cost_ledger.jsonl',
       'data/**',
       'deliverable_files/**',
       'inference_provenance.json',
