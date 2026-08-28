@@ -7,6 +7,10 @@ Downloads:
 
 Usage:
   python scripts/download_inference_from_hf.py --experiment exp998_smoke_baseline_sample --output workspace/step2_inference_results.json
+
+An experiment may also declare ``data.inference_source: gold_deliverables``,
+which sources the graded corpus from the benchmark's own reference answers
+rather than from a submission repo. See ``_build_gold_inference``.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ import tempfile
 import time
 import types
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pandas as pd
 import yaml
@@ -44,6 +48,8 @@ if "core" not in sys.modules:
     sys.modules["core"] = core_package
 
 from core.inference_manifest import (  # noqa: E402
+    GOLD_PROVENANCE_STATUS,
+    canonical_deliverable_path,
     canonicalize_inference_payload,
     validate_inference_provenance,
     validate_local_deliverables,
@@ -52,6 +58,26 @@ from core.inference_manifest import (  # noqa: E402
 
 FULL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 FULL_LOWER_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+#: An experiment sourcing its graded corpus from a submission repo -- the
+#: default, and what every model run produces.
+SUBMISSION_INFERENCE_SOURCE = "submission"
+#: An experiment sourcing its graded corpus from the benchmark's own reference
+#: answers. No model produced these, so there is no submission repo to read and
+#: no Azure AI route provenance to verify.
+GOLD_INFERENCE_SOURCE = "gold_deliverables"
+_INFERENCE_SOURCES = frozenset({SUBMISSION_INFERENCE_SOURCE, GOLD_INFERENCE_SOURCE})
+
+#: ``openai/gdpval`` files its reference answers under a per-deliverable digest
+#: directory (``deliverable_files/<md5>/<name>``), not under the task that owns
+#: them. Nothing downstream accepts that shape -- ``canonical_deliverable_path``
+#: requires ``deliverable_files/<task_id>/`` -- so the digest segment is dropped
+#: and the file is re-rooted under its task. Matching the dataset layout exactly
+#: rather than loosely is deliberate: a path that is merely *close* to this shape
+#: is a dataset change we have not read, and re-rooting it would be a guess.
+_GOLD_SOURCE_PATH_RE = re.compile(
+    r"^deliverable_files/[A-Za-z0-9][A-Za-z0-9._-]*/[^/\\]+$"
+)
 
 
 def _hf_token() -> str | None:
@@ -258,15 +284,40 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def resolve_repo_id(experiment: str) -> str:
+def _load_experiment_data_block(experiment: str) -> dict:
     exp_path = Path("experiments") / f"{experiment}.yaml"
     data = yaml.safe_load(exp_path.read_text(encoding="utf-8"))
-    source = str((data or {}).get("data", {}).get("source", "")).strip()
+    block = (data or {}).get("data")
+    return block if isinstance(block, dict) else {}
+
+
+def resolve_repo_id(experiment: str) -> str:
+    source = str(_load_experiment_data_block(experiment).get("source", "")).strip()
     if not source:
         raise ValueError("data.source is missing in experiment yaml")
     if "/" not in source:
         raise ValueError("data.source must be owner/name")
     return source
+
+
+def resolve_inference_source(experiment: str) -> str:
+    """Read where this experiment's graded corpus comes from, fail-closed.
+
+    Absent means ``submission``, which is what every experiment written before
+    the gold-ceiling test declared implicitly. Any other unrecognised value is
+    refused rather than defaulted: silently grading a submission because a
+    typo'd source did not match is exactly the substitution this pipeline
+    exists to prevent.
+    """
+    declared = _load_experiment_data_block(experiment).get(
+        "inference_source", SUBMISSION_INFERENCE_SOURCE
+    )
+    if declared not in _INFERENCE_SOURCES:
+        raise ValueError(
+            "data.inference_source must be one of "
+            f"{sorted(_INFERENCE_SOURCES)}; got {declared!r}"
+        )
+    return declared
 
 
 def resolve_immutable_revision(repo_id: str, revision: str = "") -> str:
@@ -410,6 +461,112 @@ def _build_inference_from_parquet(parquet_path: str, experiment: str, repo_id: s
         "completed_at": None,
         "results": results,
     }
+
+
+def gold_deliverable_path(task_id: str, source_path: str) -> str:
+    """Re-root one dataset gold path under the task that owns it.
+
+    ``deliverable_files/<md5>/Report.docx`` -> ``deliverable_files/<task_id>/Report.docx``.
+    The basename is carried across untouched; only the digest directory is
+    dropped. ``canonical_deliverable_path`` then re-checks the result, so a
+    basename that would escape its task directory is refused there.
+    """
+    if not isinstance(source_path, str) or not _GOLD_SOURCE_PATH_RE.fullmatch(
+        source_path
+    ):
+        raise ValueError(
+            f"gold deliverable path is not dataset-shaped for task {task_id!r}: "
+            f"{source_path!r}"
+        )
+    name = source_path.rsplit("/", 1)[1]
+    return canonical_deliverable_path(task_id, f"deliverable_files/{task_id}/{name}")
+
+
+def gold_rows_from_parquet(parquet_path: str) -> list[dict]:
+    """Read every task's gold deliverables in canonical dataset order.
+
+    Every row is kept, including the tasks the dataset ships no reference
+    answer for. Dropping them would make a pinned 30-task selection read as the
+    *whole* corpus downstream, and a subset that calls itself complete is
+    published as a final grade instead of a diagnostic one.
+    """
+    df = pd.read_parquet(parquet_path)
+    rows: list[dict] = []
+    for record in df.to_dict("records"):
+        task_id = str(record.get("task_id") or "").strip()
+        if not task_id:
+            continue
+        source_paths = _coerce_list(record.get("deliverable_files"))
+        files: list[str] = []
+        for source_path in source_paths:
+            path = gold_deliverable_path(task_id, source_path)
+            if path in files:
+                # Two digest directories holding the same basename collapse
+                # onto one path once the digest is dropped. Refuse rather than
+                # silently grade whichever copy landed second.
+                raise ValueError(
+                    "gold deliverables collide after re-rooting for task "
+                    f"{task_id!r}: {path}"
+                )
+            files.append(path)
+        rows.append(
+            {
+                "task_id": task_id,
+                "gold_source_files": source_paths,
+                "deliverable_files": files,
+            }
+        )
+    if not rows:
+        raise ValueError("gold corpus parquet contains no tasks")
+    return rows
+
+
+def _build_gold_inference(parquet_path: str, experiment: str, repo_id: str) -> dict:
+    results = []
+    for row in gold_rows_from_parquet(parquet_path):
+        result = {
+            "task_id": row["task_id"],
+            "status": "success" if row["deliverable_files"] else "error",
+            "deliverable_text": "",
+            "deliverable_files": row["deliverable_files"],
+            "gold_source_files": row["gold_source_files"],
+        }
+        if not row["deliverable_files"]:
+            result["error"] = "no_gold_deliverable"
+        results.append(result)
+
+    return {
+        "experiment_id": experiment,
+        "source": repo_id,
+        # Named rather than blank so a grade payload records what produced the
+        # graded bytes. Nothing did: these are the benchmark's own answers.
+        "model": "gold-deliverable",
+        "completed_at": None,
+        "inference_source": GOLD_INFERENCE_SOURCE,
+        "azure_ai_routes": [],
+        # Distinct from "legacy-missing", which means a submission whose routes
+        # were never recorded. Here no inference ran at all, so there is no
+        # route to be missing.
+        "azure_ai_provenance_status": GOLD_PROVENANCE_STATUS,
+        "results": results,
+    }
+
+
+def _download_gold_inference(
+    experiment: str, repo_id: str, revision: str, out: Path
+) -> None:
+    parquet_file = _with_hub_retry(
+        "gold corpus parquet",
+        lambda: hf_hub_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            filename="data/train-00000-of-00001.parquet",
+            revision=revision,
+            token=_hf_token(),
+        ),
+    )
+    payload = _build_gold_inference(parquet_file, experiment, repo_id)
+    _atomic_write_json(out, _canonicalize_inference_payload(payload, repo_id, revision))
 
 
 def _canonicalize_inference_payload(payload: object, repo_id: str, revision: str) -> dict:
@@ -612,13 +769,145 @@ def _download_and_replace_deliverables(
         _remove_owned_path(staging_root)
 
 
+def _gold_file_plan(results: list[dict]) -> list[tuple[str, str, str]]:
+    """Pair every declared gold path with the dataset path it is copied from."""
+    plan: list[tuple[str, str, str]] = []
+    for row in results:
+        task_id = row["task_id"]
+        targets = row["deliverable_files"]
+        sources = row.get("gold_source_files")
+        if not isinstance(sources, list) or len(sources) != len(targets):
+            raise ValueError(
+                f"gold source paths do not pair with deliverables for task {task_id!r}"
+            )
+        for source_path, target in zip(sources, targets):
+            if gold_deliverable_path(task_id, source_path) != target:
+                raise ValueError(
+                    f"gold source path does not re-root to {target!r} for task {task_id!r}"
+                )
+            plan.append((task_id, str(source_path), target))
+    return plan
+
+
+def _materialize_gold_deliverables(
+    repo_id: str, revision: str, results: list[dict]
+) -> None:
+    """Copy the benchmark's own reference answers into the graded tree.
+
+    Unlike a submission repo, the dataset does not lay its files out the way the
+    grader reads them, so this stages the download and the re-rooted copy in two
+    separate directories -- both are called ``deliverable_files``, and writing
+    one into the other would nest the corpus inside itself.
+    """
+    plan = _gold_file_plan(results)
+    destination = Path("workspace") / "upload" / "deliverable_files"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging_root = Path(
+        tempfile.mkdtemp(prefix=f".{destination.name}.staging-", dir=destination.parent)
+    )
+    backup = destination.with_name(f".{destination.name}.backup-{uuid.uuid4().hex}")
+    backup_created = False
+
+    try:
+        source_root = staging_root / "source"
+        built_root = staging_root / "built"
+        built_deliverables = built_root / "deliverable_files"
+        built_deliverables.mkdir(parents=True)
+
+        if plan:
+            allow_patterns = sorted({source_path for _, source_path, _ in plan})
+            _with_hub_retry(
+                "gold deliverable_files snapshot",
+                lambda: snapshot_download(
+                    repo_id=repo_id,
+                    repo_type="dataset",
+                    local_dir=source_root,
+                    allow_patterns=allow_patterns,
+                    revision=revision,
+                    token=_hf_token(),
+                ),
+            )
+
+        for task_id, source_path, target in plan:
+            downloaded = source_root.joinpath(*PurePosixPath(source_path).parts)
+            if downloaded.is_symlink() or not downloaded.is_file():
+                raise ValueError(
+                    f"gold deliverable did not download as a regular file: {source_path}"
+                )
+            copied = built_root.joinpath(*PurePosixPath(target).parts)
+            copied.parent.mkdir(parents=True, exist_ok=True)
+            if copied.exists() or copied.is_symlink():
+                raise ValueError(f"gold deliverable target is already present: {target}")
+            shutil.copyfile(downloaded, copied, follow_symlinks=False)
+
+        validate_local_deliverables(results, built_root)
+
+        if destination.exists() or destination.is_symlink():
+            os.replace(destination, backup)
+            backup_created = True
+        try:
+            os.replace(built_deliverables, destination)
+        except BaseException:
+            if backup_created:
+                _remove_owned_path(destination)
+                os.replace(backup, destination)
+                backup_created = False
+            raise
+
+        if backup_created:
+            _remove_owned_path(backup)
+            backup_created = False
+        print(
+            f"Materialized {len(plan)} gold deliverable file(s) across "
+            f"{sum(1 for row in results if row['deliverable_files'])} task(s)"
+        )
+    finally:
+        _remove_owned_path(staging_root)
+
+
+def resolve_pinned_task_ids(config: dict) -> list[str] | None:
+    identity = config.get("rerun_identity")
+    if not isinstance(identity, dict):
+        return None
+    task_ids = identity.get("task_ids")
+    if task_ids is None:
+        return None
+    if (
+        not isinstance(task_ids, list)
+        or not task_ids
+        or any(not isinstance(task_id, str) or not task_id for task_id in task_ids)
+        or len(task_ids) != len(set(task_ids))
+    ):
+        raise ValueError("rerun_identity.task_ids must be a unique non-empty list")
+    return list(task_ids)
+
+
+def _select_gold_materialization(payload: dict, task_ids: list[str] | None) -> list[dict]:
+    """Choose which tasks' reference answers are put on disk.
+
+    The graded selection decides this, so there is no second knob to forget:
+    grading a task the config did not pin fails in ``step8_grade.py`` with a
+    missing deliverable directory rather than quietly grading nothing.
+    """
+    results = payload["results"]
+    if task_ids is None:
+        return results
+    by_task = {row["task_id"]: row for row in results}
+    missing = sorted(set(task_ids) - set(by_task))
+    if missing:
+        raise ValueError(f"pinned task_ids are absent from the gold corpus: {missing}")
+    return [by_task[task_id] for task_id in task_ids]
+
+
 def main() -> int:
     args = parse_args()
     repo_id = resolve_repo_id(args.experiment)
+    inference_source = resolve_inference_source(args.experiment)
     _stagger_shard_start()
     revision = resolve_immutable_revision(repo_id, args.revision)
     print(f"Resolved inference revision: {revision}")
 
+    grading_config: dict | None = None
     config_allowance = False
     if args.grading_config:
         grading_config = _load_repository_grading_config(args.grading_config)
@@ -631,6 +920,38 @@ def main() -> int:
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    if inference_source == GOLD_INFERENCE_SOURCE:
+        # No submission repo means no branch history to fall back on, so the
+        # dispatcher names the frozen revision rather than letting `main` drift
+        # between the three runs that have to be byte-identical.
+        if not FULL_SHA_RE.fullmatch(args.revision):
+            print(
+                "ERROR: a gold corpus requires --revision pinned to a full commit SHA",
+                file=sys.stderr,
+            )
+            return 1
+        if args.expected_leading_task_id:
+            print(
+                "ERROR: --expected-leading-task-id does not apply to a gold corpus; "
+                "pin rerun_identity.task_ids instead",
+                file=sys.stderr,
+            )
+            return 1
+        _download_gold_inference(args.experiment, repo_id, revision, out)
+        payload = _canonicalize_inference_payload(
+            json.loads(out.read_text(encoding="utf-8")), repo_id, revision
+        )
+        materialized = _select_gold_materialization(
+            payload, resolve_pinned_task_ids(grading_config or {})
+        )
+        payload["gold_materialized_task_ids"] = [
+            row["task_id"] for row in materialized
+        ]
+        _atomic_write_json(out, payload)
+        _materialize_gold_deliverables(repo_id, revision, materialized)
+        print(f"Built gold corpus from {repo_id} at {revision}")
+        return 0
 
     _download_or_reconstruct_inference(
         args.experiment,

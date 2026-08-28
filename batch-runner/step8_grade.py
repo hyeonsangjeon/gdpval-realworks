@@ -41,6 +41,7 @@ from core.grader import (
 )
 from core.grade_payload import canonical_rate, validate_grade_payload
 from core.inference_manifest import (
+    GOLD_PROVENANCE_STATUS,
     canonical_task_id,
     canonicalize_inference_payload,
     task_deliverable_dir,
@@ -55,6 +56,10 @@ SCHEMA_VERSION = "1.3"
 GRADED_BY_VERSION = "0.1.0"
 FULL_HF_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 FULL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+#: How many times one identical run may be repeated. A variance measurement
+#: needs a handful of repeats, not an open-ended budget, and every repeat past
+#: the first is a second full charge for a corpus that has already been graded.
+MAX_RUN_ORDINAL = 10
 
 
 def _now_iso() -> str:
@@ -215,6 +220,7 @@ def resolve_grade_output_path(
     diagnostic_task_scope_sha: str | None = None,
     shard_index: int = 0,
     shard_count: int = 1,
+    run_ordinal: int = 1,
 ) -> Path:
     if not FULL_HF_SHA_RE.fullmatch(rubric_sha):
         raise ValueError(
@@ -243,6 +249,10 @@ def resolve_grade_output_path(
         raise ValueError(
             "shard_index must satisfy 0 <= index < shard_count (count >= 1)"
         )
+    if not 1 <= run_ordinal <= MAX_RUN_ORDINAL:
+        raise ValueError(
+            f"run_ordinal must satisfy 1 <= ordinal <= {MAX_RUN_ORDINAL}"
+        )
     out_name = config["output"]["filename_template"].format(
         exp_id=experiment_id,
         judge_slug=judge_slug,
@@ -261,6 +271,22 @@ def resolve_grade_output_path(
     output_root = Path(config["output"]["directory"])
     if diagnostic_task_scope_sha is not None:
         output_root = output_root / "_diagnostic" / diagnostic_task_scope_sha
+    if run_ordinal > 1:
+        # Measuring how far a score drifts between reruns needs the SAME grader
+        # source, config, corpus and inputs graded more than once. Nothing that
+        # identifies the run may change, so every repeat resolves to one path,
+        # where the second would be refused as already existing and --force
+        # would erase the first.
+        #
+        # Fork above the shard fork, not below it, so the two compose: a repeat
+        # that is too large for one four-hour chunk still shards, and its shards
+        # land under this repeat's own root instead of mixing with run 1's. Run
+        # 1 keeps the canonical path, so the original of a repeat set stays an
+        # ordinary run. `scripts/aggregate-grades.mjs` globs `data/grades/*.json`
+        # without descending, so a repeat is never published to the dashboard as
+        # a second, competing result for the same config -- the repeats exist to
+        # be compared with each other, not to replace the run they repeat.
+        output_root = output_root / "_repeats" / f"run-{run_ordinal:03d}"
     if shard_count > 1:
         # Every shard of a run resolves to the same `out_name`, because their
         # identity inputs (config_hash, rubric_sha, grader_source_hash, ...) are
@@ -355,6 +381,24 @@ def parse_args() -> argparse.Namespace:
         help="0-based index of this shard; must satisfy 0 <= index < count.",
     )
     parser.add_argument(
+        "--run-ordinal",
+        type=int,
+        default=1,
+        help=(
+            "Which repeat of an otherwise identical run this is. Measuring how "
+            "much a score moves between reruns needs the SAME grader source, "
+            "config, corpus and inputs graded more than once, so nothing that "
+            "identifies the run may change -- which leaves every repeat "
+            "resolving to one output path, where the second would be refused "
+            "as already existing and --force would erase the first. Ordinals "
+            "above 1 fork the output directory the way --shard-count forks the "
+            "filename, above the shard fork so a repeat too large for one "
+            "chunk can still shard, and touch no identity input. Default 1 "
+            "keeps the canonical path, so run 1 of a repeat set is an ordinary "
+            "run and needs no flag."
+        ),
+    )
+    parser.add_argument(
         "--source-experiment-id",
         default=None,
         help=(
@@ -371,6 +415,11 @@ def parse_args() -> argparse.Namespace:
         parser.error(
             "--shard-index must satisfy 0 <= index < --shard-count "
             f"(got index={args.shard_index}, count={args.shard_count})"
+        )
+    if not 1 <= args.run_ordinal <= MAX_RUN_ORDINAL:
+        parser.error(
+            f"--run-ordinal must satisfy 1 <= ordinal <= {MAX_RUN_ORDINAL} "
+            f"(got {args.run_ordinal})"
         )
     return args
 
@@ -1802,11 +1851,20 @@ def main() -> int:
         source_provenance_status == "legacy-missing"
         and config_pinned_scope != "complete"
     )
+    # A gold corpus is the benchmark's own expert answers, graded to find out
+    # how high the grader can score at all. No model wrote it and no model
+    # could enter it in a leaderboard, so it never takes the canonical output
+    # path — `scripts/aggregate-grades.mjs` reads that path and has no way to
+    # say "this is the ceiling, not a competitor". Unlike the scope rules
+    # above, pinning the complete corpus does not lift this: what makes it
+    # unpublishable is what it is, not how much of it was graded.
+    gold_corpus_run = source_provenance_status == GOLD_PROVENANCE_STATUS
     diagnostic_run = (
         config_pinned_scope == "subset"
         or args.tasks is not None
         or args.limit > 0
         or legacy_provenance_unbounded
+        or gold_corpus_run
     )
     completed_run_status = "diagnostic" if diagnostic_run else "final"
     # Sharding deliberately does NOT feed `diagnostic_run` above. A diagnostic
@@ -1839,6 +1897,7 @@ def main() -> int:
             diagnostic_task_scope_sha=diagnostic_task_scope_sha,
             shard_index=args.shard_index,
             shard_count=args.shard_count,
+            run_ordinal=args.run_ordinal,
         )
         _write_github_output("grade_file", _repo_relative_grade_file(out_path))
         _write_github_output("grade_status", emitted_run_status)

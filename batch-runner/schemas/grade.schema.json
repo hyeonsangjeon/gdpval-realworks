@@ -294,7 +294,13 @@
       }
     },
     "source_azure_ai_provenance_status": {
-      "enum": ["runtime-verified", "verified-sidecar", "legacy-missing", "local-runtime"]
+      "enum": [
+        "runtime-verified",
+        "verified-sidecar",
+        "legacy-missing",
+        "local-runtime",
+        "gold-corpus"
+      ]
     },
     "azure_ai_routes": {
       "type": "array",

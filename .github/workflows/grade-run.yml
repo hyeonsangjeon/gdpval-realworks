@@ -57,6 +57,11 @@ on:
         required: false
         type: number
         default: 0
+      run_ordinal:
+        description: "Which repeat of an identical run this is (1 = the original). Repeats above 1 commit under data/grades/**/_repeats/run-NNN/ — above the shard fork, so a repeat can still be sharded — and measure how much the score moves instead of erasing the run they repeat."
+        required: false
+        type: number
+        default: 1
 
 permissions:
   contents: read
@@ -68,6 +73,11 @@ concurrency:
   # shard_count: re-dispatching the same index under a different N still
   # serializes, which is what stops two overlapping slices from being graded
   # (and paid for) simultaneously.
+  #
+  # run_ordinal is deliberately absent for the same reason shard_count is.
+  # Repeats write to separate paths and could safely overlap, but a variance
+  # measurement gains nothing from running them at once and would bill two full
+  # corpora against one judge quota simultaneously. Queuing them is free.
   group: grade-${{ inputs.experiment_yaml }}-${{ inputs.grading_config }}-shard${{ inputs.shard_index }}
   cancel-in-progress: false
 
@@ -88,6 +98,7 @@ jobs:
       GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
       GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
+      GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}
     steps:
       - name: Validate workflow context and inputs
         shell: bash
@@ -189,6 +200,13 @@ jobs:
           # subtree that nothing merges. Refuse the combination outright.
           if [[ "$GRADE_SHARD_COUNT" != "1" && "$GRADE_TASKS_LIMIT" != "0" ]]; then
             echo "::error::shard_count > 1 cannot be combined with tasks_limit"
+            exit 1
+          fi
+          # Ten is the same cap step8_grade.py enforces (MAX_RUN_ORDINAL). A
+          # variance measurement needs a handful of repeats; every repeat past
+          # the first is another full charge for a corpus already graded.
+          if [[ ! "$GRADE_RUN_ORDINAL" =~ ^([1-9]|10)$ ]]; then
+            echo "::error::run_ordinal must be an integer between 1 and 10"
             exit 1
           fi
 
@@ -327,6 +345,7 @@ jobs:
           GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
           GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
           GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
+          GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}
         run: |
           printf '%s\n' \
             "Approved paid grading request:" \
@@ -428,6 +447,7 @@ jobs:
       HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
       GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
+      GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}
       ImageOS: ubuntu24
       LANG: C.UTF-8
       PIP_CACHE_DIR: /root/.cache/pip
@@ -543,6 +563,9 @@ jobs:
           if [[ "$GRADE_SHARD_COUNT" != "1" ]]; then
             ARGS+=(--shard-count "$GRADE_SHARD_COUNT" --shard-index "$GRADE_SHARD_INDEX")
           fi
+          if [[ "$GRADE_RUN_ORDINAL" != "1" ]]; then
+            ARGS+=(--run-ordinal "$GRADE_RUN_ORDINAL")
+          fi
           python step8_grade.py "${ARGS[@]}"
 
   grade:
@@ -602,6 +625,7 @@ jobs:
       GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
       GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
+      GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}
       ImageOS: ubuntu24
       LANG: C.UTF-8
       PIP_CACHE_DIR: /root/.cache/pip
@@ -901,6 +925,13 @@ jobs:
           if [[ "$GRADE_SHARD_COUNT" != "1" ]]; then
             ARGS+=(--shard-count "$GRADE_SHARD_COUNT" --shard-index "$GRADE_SHARD_INDEX")
           fi
+          # A repeat changes nothing about what is graded or how -- that is the
+          # entire point, since a rerun only measures movement if everything
+          # else held still. It forks the output path so the repeat sits beside
+          # the run it repeats instead of replacing it.
+          if [[ "$GRADE_RUN_ORDINAL" != "1" ]]; then
+            ARGS+=(--run-ordinal "$GRADE_RUN_ORDINAL")
+          fi
 
           set +e
           python step8_grade.py "${ARGS[@]}"
@@ -1068,7 +1099,7 @@ jobs:
             echo "::error::resume_chunk=$NEXT_CHUNK exceeds safety cap (10). Aborting auto-resume; investigate manually."
             exit 1
           fi
-          echo "[auto-resume] triggering chunk $NEXT_CHUNK for $GRADE_EXPERIMENT_YAML / $GRADE_CONFIG (shard $GRADE_SHARD_INDEX/$GRADE_SHARD_COUNT)"
+          echo "[auto-resume] triggering chunk $NEXT_CHUNK for $GRADE_EXPERIMENT_YAML / $GRADE_CONFIG (shard $GRADE_SHARD_INDEX/$GRADE_SHARD_COUNT, run $GRADE_RUN_ORDINAL)"
           # This used to be `gh workflow run`, which is a thin wrapper over the
           # endpoint below; gh is not in the grading image. Every input is a
           # JSON string, including the booleans, because that is what gh sent
@@ -1094,6 +1125,12 @@ jobs:
                   "resume_chunk": os.environ["NEXT_CHUNK"],
                   "shard_count": os.environ["GRADE_SHARD_COUNT"],
                   "shard_index": os.environ["GRADE_SHARD_INDEX"],
+                  # Load-bearing: a repeat that runs out of its four hours
+                  # resumes from a partial under _repeats/. Dropping the
+                  # ordinal here would send the next chunk to run 1's path,
+                  # where it would either be refused or overwrite the run this
+                  # one exists to be compared against.
+                  "run_ordinal": os.environ["GRADE_RUN_ORDINAL"],
               },
           }))
           PY

@@ -45,6 +45,20 @@ def _remote_missing(message="missing"):
     )
 
 
+def _write_submission_experiment(name="exp", source="owner/repo"):
+    """Write the experiment file ``main()`` reads, under the current directory.
+
+    ``main()`` resolves two things from it: which repository the graded corpus
+    comes from, and whether that corpus is a submission or the benchmark's own
+    reference answers. A test that chdirs into a tmp dir has to supply the file
+    for both reads -- stubbing only ``resolve_repo_id`` leaves the second one
+    looking at a path that does not exist.
+    """
+    path = Path("experiments") / f"{name}.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f'data:\n  source: "{source}"\n', encoding="utf-8")
+
+
 def test_direct_script_entrypoint_resolves_core_import():
     batch_root = Path(__file__).resolve().parents[1]
     script = batch_root / "scripts" / "download_inference_from_hf.py"
@@ -776,10 +790,10 @@ def test_main_pins_all_downloads_and_removes_stale_deliverables(monkeypatch, tmp
     stale = Path("workspace/upload/deliverable_files/stale/task.txt")
     stale.parent.mkdir(parents=True)
     stale.write_text("stale", encoding="utf-8")
+    _write_submission_experiment()
     monkeypatch.setattr(module, "HfApi", FakeApi)
     monkeypatch.setattr(module, "hf_hub_download", fake_hf_hub_download)
     monkeypatch.setattr(module, "snapshot_download", fake_snapshot_download)
-    monkeypatch.setattr(module, "resolve_repo_id", lambda experiment: "owner/repo")
     monkeypatch.setattr(
         module,
         "parse_args",
@@ -831,7 +845,7 @@ def test_main_filters_manifest_and_snapshot_to_expected_leading_tasks(
     snapshot_calls = []
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(module, "resolve_repo_id", lambda experiment: "owner/repo")
+    _write_submission_experiment()
     monkeypatch.setattr(module, "resolve_immutable_revision", lambda *args: FULL_SHA)
     def fake_download(**kwargs):
         if kwargs["filename"] == "inference_provenance.json":
@@ -1293,10 +1307,10 @@ def test_main_survives_a_rate_limited_shard_fan_out(monkeypatch, tmp_path):
         return str(kwargs["local_dir"])
 
     monkeypatch.chdir(tmp_path)
+    _write_submission_experiment()
     monkeypatch.setattr(module, "HfApi", FakeApi)
     monkeypatch.setattr(module, "hf_hub_download", fake_hf_hub_download)
     monkeypatch.setattr(module, "snapshot_download", fake_snapshot_download)
-    monkeypatch.setattr(module, "resolve_repo_id", lambda experiment: "owner/repo")
     monkeypatch.setattr(
         module,
         "parse_args",

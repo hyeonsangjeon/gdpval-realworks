@@ -3294,6 +3294,7 @@ def _auto_resume_dispatch(script: str) -> dict:
             "NEXT_CHUNK": "4",
             "GRADE_SHARD_COUNT": "9",
             "GRADE_SHARD_INDEX": "6",
+            "GRADE_RUN_ORDINAL": "3",
         },
     )
     payload = json.loads(completed.stdout)
@@ -3473,6 +3474,7 @@ def _run_grade_workflow_input_preflight(**overrides):
         "GRADE_RESUME_CHUNK": "0",
         "GRADE_SHARD_COUNT": "1",
         "GRADE_SHARD_INDEX": "0",
+        "GRADE_RUN_ORDINAL": "1",
         **overrides,
     }
     return subprocess.run(
@@ -3505,6 +3507,24 @@ def _run_grade_workflow_input_preflight(**overrides):
             "GRADE_RESUME_CHUNK": "1",
             "GRADE_SHARD_COUNT": "11",
             "GRADE_SHARD_INDEX": "10",
+        },
+        # The top repeat, dry: previewing a repeat has to be as free as
+        # previewing the run it repeats, or the only way to check the path is
+        # to pay for it.
+        {"GRADE_RUN_ORDINAL": "10"},
+        # A repeat that is also sharded and mid-relay. All three forks stack in
+        # the output path, so all three have to be dispatchable at once --
+        # otherwise a repeat too long for one four-hour chunk cannot be run at
+        # all, and stage 2 needs three of them.
+        {
+            "GRADE_INFERENCE_REVISION": "b" * 40,
+            "GRADE_DRY_RUN": "false",
+            "GRADE_PAID_APPROVAL": "true",
+            "GRADE_RESUME": "true",
+            "GRADE_RESUME_CHUNK": "2",
+            "GRADE_SHARD_COUNT": "3",
+            "GRADE_SHARD_INDEX": "2",
+            "GRADE_RUN_ORDINAL": "3",
         },
     ],
 )
@@ -3555,6 +3575,16 @@ def test_grade_workflow_input_preflight_accepts_valid_dispatch(overrides):
             {"GRADE_SHARD_COUNT": "2", "GRADE_TASKS_LIMIT": "5"},
             "cannot be combined with tasks_limit",
         ),
+        # step8 caps repeats at MAX_RUN_ORDINAL. An ordinal past it is refused
+        # here rather than after the runner has been paid for and started, and
+        # 0 is refused rather than silently meaning "the original".
+        ({"GRADE_RUN_ORDINAL": "0"}, "run_ordinal"),
+        ({"GRADE_RUN_ORDINAL": "11"}, "run_ordinal"),
+        ({"GRADE_RUN_ORDINAL": "-1"}, "run_ordinal"),
+        # "01" reads as 1 to a shell comparison and as a different directory
+        # name to the grader, which is how two runs end up in one file.
+        ({"GRADE_RUN_ORDINAL": "01"}, "run_ordinal"),
+        ({"GRADE_RUN_ORDINAL": ""}, "run_ordinal"),
     ],
 )
 def test_grade_workflow_input_preflight_rejects_invalid_dispatch(overrides, error):
@@ -4174,6 +4204,10 @@ def test_grade_workflow_wires_shards_end_to_end():
     resume_inputs = _auto_resume_dispatch(retrigger["run"])["inputs"]
     assert resume_inputs["shard_count"] == "9"
     assert resume_inputs["shard_index"] == "6"
+    # ...and OF THE SAME REPEAT. A repeat's partial lives under _repeats/, so
+    # an ordinal dropped here resumes into run 1's path and either is refused
+    # or overwrites the run this one exists to be compared against.
+    assert resume_inputs["run_ordinal"] == "3"
 
     merge = by_name["Merge shards into the final grade"]
     assert merge["id"] == "merge_shards"
