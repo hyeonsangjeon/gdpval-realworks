@@ -294,14 +294,15 @@ def test_a_plan_that_marks_nothing_is_not_asked():
 # ── The committed plan, and the amount that was hidden ────────────────────
 
 
-def test_the_committed_plan_is_refused_by_this_rule_today():
-    """The finding this task exists for. It is open, and it is meant to be."""
+def test_the_committed_plan_records_this_finding_today():
+    """The finding stays visible under the owner's record-only policy."""
     plan = load_plan(PLAN_PATH)
     result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
 
-    matching = [p for p in result.problems if "input per marking call" in p]
+    matching = [p for p in result.cost_findings if "input per marking call" in p]
     assert len(matching) == 1
     assert "533334" in matching[0]
+    assert matching[0] not in result.problems
 
 
 def test_the_real_check_measures_the_scoring_line_instead_of_being_told():
@@ -318,7 +319,7 @@ def test_the_real_check_measures_the_scoring_line_instead_of_being_told():
 
     plan = load_plan(PLAN_PATH)
     result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
-    matching = [p for p in result.problems if "input per marking call" in p]
+    matching = [p for p in result.cost_findings if "input per marking call" in p]
 
     assert len(matching) == 1
     assert f"{widest} characters of the widest scoring line" in matching[0]

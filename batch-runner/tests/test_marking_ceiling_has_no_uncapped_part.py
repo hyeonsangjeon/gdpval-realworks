@@ -140,7 +140,11 @@ def assumptions(**overrides) -> CostAssumptions:
 def every_line_of_the_report() -> list[str]:
     """The whole advance check, as a person reading it would see it."""
     result = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
-    return list(describe_preflight(result)) + list(result.problems)
+    return (
+        list(describe_preflight(result))
+        + list(result.cost_findings)
+        + list(result.problems)
+    )
 
 
 # ── The report may not contradict its own heading ─────────────────────────

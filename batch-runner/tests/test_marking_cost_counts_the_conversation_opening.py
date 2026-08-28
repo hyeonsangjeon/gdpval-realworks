@@ -578,14 +578,15 @@ def test_the_setting_sits_where_this_module_looks_for_it(path):
 # ---------------------------------------------------------------------------
 
 
-def test_the_committed_plan_is_still_refused_and_by_a_bigger_number():
+def test_the_committed_plan_still_records_the_bigger_number():
     plan = load_plan(PLAN_PATH)
     result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
 
-    matching = [p for p in result.problems if "input per marking call" in p]
+    matching = [p for p in result.cost_findings if "input per marking call" in p]
     assert len(matching) == 1
     assert "535990" in matching[0]
     assert "533334" in matching[0]
+    assert matching[0] not in result.problems
 
 
 def test_the_only_thing_this_rule_moved_is_that_one_line(monkeypatch):
@@ -609,11 +610,13 @@ def test_the_only_thing_this_rule_moved_is_that_one_line(monkeypatch):
     without = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
 
     assert with_opening.may_start == without.may_start
-    assert len(with_opening.problems) == len(without.problems)
+    assert len(with_opening.cost_findings) == len(without.cost_findings)
 
     differing = [
         (before, after)
-        for before, after in zip(without.problems, with_opening.problems)
+        for before, after in zip(
+            without.cost_findings, with_opening.cost_findings
+        )
         if before != after
     ]
     assert len(differing) == 1

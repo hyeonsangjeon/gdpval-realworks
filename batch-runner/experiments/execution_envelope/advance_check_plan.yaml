@@ -7,9 +7,9 @@
 # "everything else" is written down, once, for all three places to read.
 #
 # Nothing in this file causes a model to be called. It is read by the free
-# check at batch-runner/scripts/check_execution_envelope_advance_check.py,
-# which refuses the run if anything here is missing, inconsistent, or would
-# cost more than the amount approved.
+# check at batch-runner/scripts/check_execution_envelope_advance_check.py.
+# Technical inconsistencies still stop the run. Cost findings are recorded for
+# review under the owner's explicit credit-backed measurement decision below.
 #
 # Read this file with:
 #     cd batch-runner
@@ -18,7 +18,9 @@
 #
 # Written: 2026-08-25. Stage: the five-task advance check only. The thirty-task
 # and two-hundred-and-twenty-task stages are written down further below so the
-# rules for them are fixed before any result is seen, but neither is approved.
+# rules for them are fixed before any result is seen. This approval applies to
+# paid benchmark work under the recorded monthly credit, but each stage keeps
+# its fixed task and execution limits.
 
 plan_version: "execution-envelope-advance-check-v1"
 
@@ -371,77 +373,19 @@ grading_config: "grading_configs/default_v2.yaml"
 # purpose, because an unstated guess is how a cost ceiling ends up wrong in the
 # direction that costs money.
 cost:
-  # The amount approved for spending, in United States dollars.
-  #
-  # Approved 2026-08-25 by the repository owner, for exactly this run: five
-  # tasks in three run places, with separate grading, under the retry limits
-  # fixed above. It is a total ceiling, not a per-place allowance.
-  #
-  # The thirty-task and two-hundred-and-twenty-task stages are NOT covered by
-  # this amount and are not approved.
-  #
-  # IMPORTANT — this amount no longer covers the worked-out ceiling, and the
-  # free check refuses the run because of it. That is the safety mechanism
-  # working, not a fault.
-  #
-  # When the amount was approved, the ceiling came to exactly 32.23. It has
-  # since been corrected three times, and every one of them raised it. Nothing
-  # about the run got more expensive on any of those occasions — no extra call,
-  # no different model, no changed setting. Each time the old figure was simply
-  # wrong in the direction that costs money, and was replaced by one that is
-  # not.
-  #
-  # First correction, 32.23 → 43.77: a looping request was charged wrongly. The
-  # Azure code interpreter asks the model again after each piece of code it
-  # runs, and every one of those later turns re-reads the whole conversation so
-  # far. The old count charged the first turn's input eight times over instead,
-  # which leaves out everything the model wrote and every result it was shown
-  # in between. Counting the conversation as it grows raises the Azure place
-  # from 4.83 to 14.06.
-  #
-  # Second correction, 43.77 → 363.59: marking was counted at what three past
-  # runs happened to average rather than at what the marking settings permit,
-  # and its two extra models — the one that reads pictures and the one that
-  # listens to sound — were not counted at all. An average is not a ceiling. Of
-  # the 290.87 before the safety multiplier, marking is 269.87 and the actual
-  # work is 21.00; marking is where nearly the whole bill sits, and it was the
-  # part being estimated most loosely.
-  #
-  # Third correction, 363.59 → 364.00: the wording every request carries was
-  # charged at 1068 characters, being the two instruction blocks written out at
-  # the top of this file added together. The first of those is never sent, and
-  # the committed prompt file that is sent — several thousand characters of it,
-  # around every task, on every call — was not counted at all. Measuring what
-  # core/prompt_loader.py really renders puts the widest of the three at 5020
-  # characters and raises the running half from 21.00 to 21.33. Of the 291.20
-  # before the safety multiplier, marking is 269.87 and the actual work 21.33.
-  #
-  # Nothing was spent under any of the wrong figures: the Azure run place has
-  # never been reachable from the machine this was attempted from, and marking
-  # has
-  # not been run for this plan. But had it been, the run could have been
-  # allowed to start and then billed more than was approved, with every check
-  # reporting it as within budget.
-  #
-  # Ways out, and the choice belongs to the owner:
-  #   1. approve 364.00 instead;
-  #   2. lower the marking settings in grading_configs/default_v2.yaml — the
-  #      ten tool rounds per scoring line and the 72 picture calls per task are
-  #      both chosen limits rather than published ones, and they are what makes
-  #      marking 269.87 of the 290.87. The free check prints the resulting
-  #      figure, and refuses if this file then claims less than the settings
-  #      allow;
-  #   3. lower azure_code_interpreter in tool_loop_max_model_turns, likewise a
-  #      chosen limit — though this only moves the smaller 21.00 part;
-  #   4. mark nothing, by setting grading_required to false — the check then
-  #      leaves marking out of the sum entirely;
-  #   5. leave it, and the run stays refused.
-  # The answer-length cap is not one of the ways out: the note at
-  # max_output_tokens records that a lower value truncated this model's code.
-  #
-  # Whichever is chosen, 364.00 is a worked-out figure and not an approval. The
-  # approved amount is the number written below, and only the owner changes it.
-  approved_maximum_usd: 32.23
+  # The owner has 3,700 United States dollars of Azure credit each month and
+  # explicitly approved using it for these benchmark runs on 2026-08-28. Cost
+  # calculations remain visible, but an estimate above a prior amount, a model
+  # without a published price, or a missing first-use measurement no longer
+  # blocks this plan. Fixed task, call, retry, token, and timeout limits still
+  # bound the five-task run.
+  policy: "record_cost_findings_only"
+  approved_maximum_usd: null
+  owner_approval:
+    approved_on: "2026-08-28"
+    paid_model_calls: true
+    available_monthly_credit_usd: 3700.00
+    unpriced_audio_measurement: true
 
   assumptions:
     # How many characters of wording are counted as one token. English text
@@ -524,9 +468,9 @@ cost:
     # max_output_tokens across the tool turns it takes inside that single
     # request is Microsoft's behaviour, taken on the documentation's word, in
     # the same way as the turn count above. If it does not hold, the honest
-    # value is false and the ceiling rises about 50 dollars — more than the
-    # whole approved amount. Only the cheapening direction is refused: a false
-    # where one cap really does cover the attempt over-charges, which is safe.
+    # value is false and the estimate rises about 50 dollars. Only the
+    # cheapening direction is rejected: a false where one cap really does cover
+    # the attempt over-charges, which is safe.
     output_tokens_capped_per_attempt:
       host_python_process: false
       docker_container: false
@@ -731,9 +675,9 @@ run_sizes:
       places; if a run switches model or deployment on its own; if the Docker
       place ends up running on the server's operating system instead; if any of
       the three Agentic Sandbox V2 guards shows signs of having been opened; if
-      a paid call is about to happen without approval on record; if any required
-      field of the run record is missing; or if real spending passes the amount
-      approved above.
+      a paid call is about to happen without approval on record; or if any
+      required field of the run record is missing. Cost is recorded and
+      reviewed after the bounded run instead of stopping this stage.
     advance_conditions: >-
       Every point of the success criteria is met and every required field of the
       run record was written down for all fifteen runs, that being five tasks in
@@ -741,8 +685,8 @@ run_sizes:
     maximum_expected_cost: >-
       Worked out by batch-runner/core/execution_envelope_cost.py from the price
       list committed alongside this plan and the assumptions above. The free
-      check prints the figure and refuses to let anything start until an
-      approved amount is written into cost.approved_maximum_usd and covers it.
+      check prints the estimate and every unresolved measurement. Under the
+      owner-approved record-only policy, those findings do not stop the run.
     allowed_retry_reasons:
       - "infrastructure_error"
     allowed_self_review_attempts: 0
@@ -798,11 +742,11 @@ run_sizes:
       The same list as the advance check above, with no additions and no
       removals.
     advance_conditions: >-
-      The success criteria are met and the worked-out ceiling for two hundred
-      and twenty tasks has been written down and approved in writing.
+      The success criteria are met, the observed cost report is saved, and all
+      non-cost requirements for the two-hundred-and-twenty-task run pass.
     maximum_expected_cost: >-
-      Not worked out yet. This stage is not approved, and no figure is quoted
-      for it here, because quoting one would invite it being treated as agreed.
+      Calculated and reported before the stage starts. It is an estimate for
+      observation, not an execution blocker under the owner's recorded policy.
     allowed_retry_reasons:
       - "infrastructure_error"
     allowed_self_review_attempts: 0
@@ -1033,10 +977,8 @@ run_sizes:
       - "ffed32d8-d192-4e3f-8cd4-eda5a730aec3"
     task_selection_method: >-
       Every task in the benchmark, in ascending task-number order. Produced by
-      full_run_tasks in batch-runner/core/execution_envelope_tasks.py. The list
-      is left empty here on purpose: this stage is not approved, and the free
-      check reports the empty list as a blocker so it cannot be started by
-      accident. It is filled in when the stage is approved.
+      full_run_tasks in batch-runner/core/execution_envelope_tasks.py. The full
+      list is written above so the task set cannot change after results appear.
     success_criteria: >-
       Every run place that can run finishes all two hundred and twenty tasks.
     stop_conditions: >-
@@ -1045,7 +987,8 @@ run_sizes:
     advance_conditions: >-
       None. This is the last stage.
     maximum_expected_cost: >-
-      Not worked out yet. This stage is not approved.
+      Calculated and reported before the stage starts. It is an estimate for
+      observation, not an execution blocker under the owner's recorded policy.
     allowed_retry_reasons:
       - "infrastructure_error"
     allowed_self_review_attempts: 0

@@ -20,7 +20,8 @@ that can be made without calling a model:
   own operating system;
 * the three Agentic Sandbox V2 guards are exercised and must still refuse;
 * the largest possible bill is worked out and compared against the amount
-  approved, and a missing amount is a refusal rather than a pass. Where the
+  approved unless the plan records an explicit owner-approved measurement run.
+  In that mode cost gaps remain visible findings but do not block. Where the
   number the bill rests on can be read off the settings instead of being taken
   on trust, it is: the container's own file says how many times one attempt
   asks a model, and the plan is refused if it prices fewer. Where that file
@@ -83,6 +84,7 @@ from core.execution_environment_readiness import (
     ENVIRONMENT_DOCKER_CONTAINER,
     ENVIRONMENT_HOST_PYTHON_PROCESS,
     EXECUTION_MODE_BY_ENVIRONMENT,
+    PAID_RUN_APPROVAL_VARIABLE,
     RUNNER_CLASS_BY_ENVIRONMENT,
     SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
     ModelRunConditions,
@@ -93,6 +95,9 @@ from core.file_preview import reference_file_prompt_budget
 from core.prompt_loader import fixed_prompt_characters, load_prompt
 
 PLAN_VERSION = "execution-envelope-advance-check-v1"
+COST_POLICY_BLOCK = "block_on_cost_findings"
+COST_POLICY_RECORD_ONLY = "record_cost_findings_only"
+VALID_COST_POLICIES = {COST_POLICY_BLOCK, COST_POLICY_RECORD_ONLY}
 
 # The one container setting that stops a missing container from being replaced
 # by the server's own operating system.
@@ -117,6 +122,9 @@ class EnvelopePreflight:
     cost: CostCeiling | None
     problems: list[str] = field(default_factory=list)
     approved_maximum_usd: Decimal | None = None
+    cost_policy: str = COST_POLICY_BLOCK
+    cost_findings: list[str] = field(default_factory=list)
+    available_monthly_credit_usd: Decimal | None = None
     azure: AzureConnectionDiagnosis | None = None
     grading_ceiling_problems: list[str] = field(default_factory=list)
     """Ways the marking half of the cost sum sits below what marking allows.
@@ -172,6 +180,14 @@ class EnvelopePreflight:
                 if self.approved_maximum_usd is not None
                 else None
             ),
+            "cost_policy": self.cost_policy,
+            "cost_findings": list(self.cost_findings),
+            "cost_findings_block_execution": self.cost_policy == COST_POLICY_BLOCK,
+            "available_monthly_credit_usd": (
+                str(self.available_monthly_credit_usd)
+                if self.available_monthly_credit_usd is not None
+                else None
+            ),
             "problems": self.all_problems,
             "grading_ceiling_problems": list(self.grading_ceiling_problems),
             "marking_half_is_a_ceiling": not self.grading_ceiling_problems,
@@ -185,6 +201,18 @@ class EnvelopePreflight:
                 for environment, verification in sorted(self.input_files.items())
             },
         }
+
+
+@dataclass
+class GradingCostInspection:
+    """Separate broken configuration from incomplete cost knowledge."""
+
+    structural_problems: list[str] = field(default_factory=list)
+    cost_findings: list[str] = field(default_factory=list)
+
+    @property
+    def all_findings(self) -> list[str]:
+        return [*self.structural_problems, *self.cost_findings]
 
 
 def load_plan(path: str | Path) -> dict:
@@ -1546,8 +1574,46 @@ def run_envelope_preflight(
 
     cost_block = plan.get("cost")
     cost_block = cost_block if isinstance(cost_block, Mapping) else {}
+    cost_policy = str(cost_block.get("policy") or COST_POLICY_BLOCK)
+    if cost_policy not in VALID_COST_POLICIES:
+        problems.append(
+            f"cost.policy is {cost_policy!r}; it must be one of "
+            + ", ".join(sorted(VALID_COST_POLICIES))
+        )
+        cost_policy = COST_POLICY_BLOCK
+
+    owner_approval = cost_block.get("owner_approval")
+    owner_approval = owner_approval if isinstance(owner_approval, Mapping) else {}
+    available_monthly_credit_usd: Decimal | None = None
+    if cost_policy == COST_POLICY_RECORD_ONLY:
+        if owner_approval.get("paid_model_calls") is not True:
+            problems.append(
+                "cost.policy records cost findings without blocking, but "
+                "cost.owner_approval.paid_model_calls is not true"
+            )
+        if owner_approval.get("unpriced_audio_measurement") is not True:
+            problems.append(
+                "cost.policy records cost findings without blocking, but the "
+                "owner did not approve measuring the unpriced audio model"
+            )
+        raw_credit = owner_approval.get("available_monthly_credit_usd")
+        try:
+            available_monthly_credit_usd = Decimal(str(raw_credit))
+        except Exception:
+            problems.append(
+                "cost.owner_approval.available_monthly_credit_usd must be a "
+                "number greater than zero"
+            )
+        else:
+            if available_monthly_credit_usd <= 0:
+                problems.append(
+                    "cost.owner_approval.available_monthly_credit_usd must be "
+                    "greater than zero"
+                )
+
     ceiling: CostCeiling | None = None
     grading_ceiling_problems: list[str] = []
+    cost_findings: list[str] = []
     approved_raw = cost_block.get("approved_maximum_usd")
     approved: Decimal | None = None
     if conditions and loaded_catalog is not None:
@@ -1567,12 +1633,12 @@ def run_envelope_preflight(
                     catalog=loaded_catalog,
                 )
             )
-            grading_ceiling_problems = (
-                _check_grading_assumptions_match_the_settings(
-                    plan, assumptions, root=root, catalog=loaded_catalog
-                )
+            grading_inspection = _inspect_grading_assumptions_match_the_settings(
+                plan, assumptions, root=root, catalog=loaded_catalog
             )
-            problems.extend(grading_ceiling_problems)
+            grading_ceiling_problems = grading_inspection.all_findings
+            problems.extend(grading_inspection.structural_problems)
+            cost_findings.extend(grading_inspection.cost_findings)
             try:
                 ceiling = estimate_cost_ceiling(
                     conditions_by_environment=conditions,
@@ -1582,9 +1648,13 @@ def run_envelope_preflight(
             except ValueError as error:
                 problems.append(str(error))
             else:
-                problems.extend(
+                cost_findings.extend(
                     check_cost_ceiling(
-                        ceiling, approved_maximum_usd=approved_raw
+                        ceiling,
+                        approved_maximum_usd=approved_raw,
+                        approved_maximum_required=(
+                            cost_policy == COST_POLICY_BLOCK
+                        ),
                     )
                 )
                 if approved_raw is not None:
@@ -1592,6 +1662,19 @@ def run_envelope_preflight(
                         approved = Decimal(str(approved_raw))
                     except Exception:
                         approved = None
+
+    if cost_policy == COST_POLICY_BLOCK:
+        problems.extend(cost_findings)
+
+    readiness_environ = environ
+    if (
+        cost_policy == COST_POLICY_RECORD_ONLY
+        and owner_approval.get("paid_model_calls") is True
+    ):
+        import os
+
+        readiness_environ = dict(os.environ if environ is None else environ)
+        readiness_environ[PAID_RUN_APPROVAL_VARIABLE] = "yes"
 
     readiness = build_readiness_report(
         conditions_by_environment=conditions or None,
@@ -1602,7 +1685,7 @@ def run_envelope_preflight(
         docker_image_available=docker_image_available,
         azure_route_profile=azure_route_profile,
         docker_run_setting=(plan.get("container") or {}).get("use_docker"),
-        environ=environ,
+        environ=readiness_environ,
     )
 
     azure = _diagnose_azure(plan, conditions, environ, problems)
@@ -1612,6 +1695,9 @@ def run_envelope_preflight(
         cost=ceiling,
         problems=problems,
         approved_maximum_usd=approved,
+        cost_policy=cost_policy,
+        cost_findings=cost_findings,
+        available_monthly_credit_usd=available_monthly_credit_usd,
         azure=azure,
         grading_ceiling_problems=grading_ceiling_problems,
         input_files=input_files,
@@ -1871,13 +1957,13 @@ def _check_instruction_length(
     return problems
 
 
-def _check_grading_assumptions_match_the_settings(
+def _inspect_grading_assumptions_match_the_settings(
     plan: Mapping[str, Any],
     assumptions: CostAssumptions,
     *,
     root: Path,
     catalog: TaskCatalog | None = None,
-) -> list[str]:
+) -> GradingCostInspection:
     """Confirm the marking half of the cost sum is a ceiling, not a forecast.
 
     The half of the sum that prices running the tasks reads how far the
@@ -1899,14 +1985,17 @@ def _check_grading_assumptions_match_the_settings(
     opening with a part of it missing.
     """
     if not assumptions.grading_required:
-        return []
+        return GradingCostInspection()
     relative = plan.get("grading_config")
     if relative is None or not str(relative).strip():
-        return [
-            "the plan says the answers will be marked but names no marking "
-            "settings file, so nothing checked whether the cost sum's marking "
-            "numbers sit above the limits the marking would really apply"
-        ]
+        return GradingCostInspection(
+            structural_problems=[
+                "the plan says the answers will be marked but names no marking "
+                "settings file, so nothing checked whether the cost sum's "
+                "marking numbers sit above the limits the marking would really "
+                "apply"
+            ]
+        )
     widest_scoring_line: int | None = None
     if catalog is not None:
         try:
@@ -1921,7 +2010,9 @@ def _check_grading_assumptions_match_the_settings(
             widest_scoring_line_characters=widest_scoring_line,
         )
     except ValueError as error:
-        return [f"the marking settings could not be read: {error}"]
+        return GradingCostInspection(
+            structural_problems=[f"the marking settings could not be read: {error}"]
+        )
     # Report the file the way the plan names it. Where this check happens to be
     # running from is nobody's business but this machine's.
     caps = replace(caps, settings_path=str(relative))
@@ -1931,7 +2022,24 @@ def _check_grading_assumptions_match_the_settings(
         # The price list is checked properly elsewhere. Failing to read it here
         # must not turn into a claim that every model has a published price.
         prices = None
-    return check_assumptions_cover_the_caps(assumptions, caps, prices=prices)
+    return GradingCostInspection(
+        cost_findings=check_assumptions_cover_the_caps(
+            assumptions, caps, prices=prices
+        )
+    )
+
+
+def _check_grading_assumptions_match_the_settings(
+    plan: Mapping[str, Any],
+    assumptions: CostAssumptions,
+    *,
+    root: Path,
+    catalog: TaskCatalog | None = None,
+) -> list[str]:
+    """Compatibility wrapper returning every grading-cost finding."""
+    return _inspect_grading_assumptions_match_the_settings(
+        plan, assumptions, root=root, catalog=catalog
+    ).all_findings
 
 
 def describe_input_file_checks(result: EnvelopePreflight) -> list[str]:
@@ -1976,7 +2084,22 @@ def describe_preflight(result: EnvelopePreflight) -> list[str]:
                 "settings allow are not counted in it, so every total here is "
                 "too low. See the problems below."
             )
-    if result.approved_maximum_usd is None:
+    if result.cost_policy == COST_POLICY_RECORD_ONLY:
+        lines.append(
+            "cost policy: record findings only; cost estimates, missing prices, "
+            "and missing measurements do not stop this owner-approved run"
+        )
+        if result.available_monthly_credit_usd is not None:
+            lines.append(
+                "available monthly credit recorded by the owner: "
+                f"{result.available_monthly_credit_usd} United States dollars"
+            )
+        if result.cost_findings:
+            lines.append(
+                f"cost findings to measure and review after the run: "
+                f"{len(result.cost_findings)}"
+            )
+    elif result.approved_maximum_usd is None:
         lines.append(
             "approved maximum: none on record, so nothing paid may start"
         )

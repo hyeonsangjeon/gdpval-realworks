@@ -808,15 +808,18 @@ def estimate_cost_ceiling(
 
 
 def check_cost_ceiling(
-    ceiling: CostCeiling, *, approved_maximum_usd: Any | None
+    ceiling: CostCeiling,
+    *,
+    approved_maximum_usd: Any | None,
+    approved_maximum_required: bool = True,
 ) -> list[str]:
-    """Refuse the run unless an approved amount covers the whole ceiling.
+    """Report incomplete pricing and, when required, enforce an approved amount.
 
-    A missing amount is a refusal, not a pass. So is a model whose price is not
-    published, because an unpriced model would otherwise be counted as free. So
-    is a kind of perception that would happen but whose size nobody has stated,
-    for the same reason read from the other end: knowing the price per token
-    buys nothing when the number of tokens is unknown.
+    Strict callers keep ``approved_maximum_required`` true, so a missing amount,
+    an unpriced model, and an unmeasured perception call all become refusals.
+    An explicitly owner-approved measurement run may set it false and treat the
+    returned list as findings rather than blockers. The unknowns are still
+    returned and are never priced as zero.
     """
     problems: list[str] = []
     if ceiling.unpriced_models:
@@ -833,6 +836,8 @@ def check_cost_ceiling(
             + ", ".join(ceiling.perception_of_unknown_size)
         )
     if approved_maximum_usd is None:
+        if not approved_maximum_required:
+            return problems
         problems.append(
             "nobody has written down the largest amount that may be spent, so "
             "there is nothing for the worked-out ceiling of "
