@@ -152,10 +152,18 @@ def test_the_thresholds_are_the_ones_the_spec_states():
 
 
 def test_the_pinned_corpus_matches_the_grading_config():
-    """The 30 the tool insists on are the 30 the run was told to grade."""
-    import hashlib
+    """The 30 the tool insists on are the 30 the run was told to grade.
 
+    Recomputed through ``step8_grade``'s own function rather than by restating
+    its formula here. The constant is compared against a field that function
+    writes, so a second spelling of "hash these ids" is a second thing that can
+    drift -- and it did: a newline-joined digest of these very ids sat in the
+    constant and refused stage 1's own run, saying nothing about the corpus
+    while looking exactly like a corpus mismatch.
+    """
     import yaml
+
+    from step8_grade import _ordered_task_ids_sha256
 
     config = yaml.safe_load(
         (
@@ -165,8 +173,7 @@ def test_the_pinned_corpus_matches_the_grading_config():
     pinned = config["rerun_identity"]["task_ids"]
 
     assert len(pinned) == analysis.EXPECTED_TASK_COUNT
-    digest = hashlib.sha256("\n".join(pinned).encode("utf-8")).hexdigest()
-    assert digest == analysis.EXPECTED_ORDERED_TASK_IDS_SHA256
+    assert _ordered_task_ids_sha256(pinned) == analysis.EXPECTED_ORDERED_TASK_IDS_SHA256
 
 
 # ── Only stage 1's own run may be read as stage 1's number ─────────────────

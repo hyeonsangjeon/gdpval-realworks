@@ -58,8 +58,25 @@ JUDGE_ERROR_RATE_CEILING = 0.02
 # other run, and reading stage 1's numbers out of it would be a mistake no
 # reader could detect afterwards.
 EXPECTED_TASK_COUNT = 30
+
+# The 30 pinned task ids, fingerprinted the way the grader fingerprints them.
+#
+# This is compared against `expected_ordered_task_ids_sha256` in the payload,
+# and that field is written by `step8_grade._ordered_task_ids_sha256`, which
+# hashes `json.dumps(ids, ensure_ascii=False, separators=(",", ":"))` -- a
+# compact JSON array. So this constant has to be the compact-JSON digest of
+# the same ids in the same order; any other encoding of the identical list
+# produces a different digest and refuses the very run it was written for.
+#
+# That is not hypothetical. An earlier pass pinned the newline-joined digest
+# of these exact ids, `09ce9245...`, and it refused stage 1's own run. Both
+# digests cover the same thirty ids in the same order -- only the separator
+# differs -- so the mismatch says nothing whatsoever about the corpus, which
+# is what made it slow to read. `test_the_pinned_corpus_matches_the_grading_
+# config` now recomputes this through the grader's own function rather than
+# restating the formula, so the two can no longer drift apart in silence.
 EXPECTED_ORDERED_TASK_IDS_SHA256 = (
-    "09ce924576b6822a7f96d651b40c18add5fceb6e216653c8bdb9c5a194c9dfdc"
+    "82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b"
 )
 
 # What a finished run is allowed to call itself. Both spellings mean the same

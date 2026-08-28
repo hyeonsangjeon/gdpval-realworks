@@ -59,11 +59,25 @@
 
 | 지문 | 값 |
 |---|---|
-| `ordered_task_ids_sha256` | `09ce924576b6822a7f96d651b40c18add5fceb6e216653c8bdb9c5a194c9dfdc` |
+| `ordered_task_ids_sha256` | `82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b` |
 | `gold_file_set_sha256` | `cd4448b4a25b12aa3ae95616a60fdccc47707298d86a9aa2f7cd2ace9c15a7c8` |
 
-- `ordered_task_ids_sha256` = 30개 task id를 순서대로 개행으로 이어 붙인 문자열의 SHA-256
-- `gold_file_set_sha256` = 각 파일의 `graded_path\tsha256\tsize`를 task 순서대로 개행으로 이어 붙인 문자열의 SHA-256
+- `ordered_task_ids_sha256` = 30개 task id를 순서대로 담은 compact JSON 배열
+  (`json.dumps(ids, ensure_ascii=False, separators=(",", ":"))`)의 SHA-256.
+  이건 **채점기가 직접 쓰는 값**이다. `step8_grade._ordered_task_ids_sha256`가
+  계산해서 모든 grade JSON의 `expected_ordered_task_ids_sha256`에 넣고,
+  출력 디렉터리 이름도 이 값이 된다. 그래서 2단계 반복 실행은 이 값을
+  payload 필드와 그대로 맞대볼 수 있다.
+- `gold_file_set_sha256` = 각 파일의 `graded_path\tsha256\tsize`를 task 순서대로
+  개행으로 이어 붙인 문자열의 SHA-256. 이건 **이 문서가 정의한 값**이다.
+  파이프라인 어디에도 정답 파일 묶음을 지문화하는 코드가 없어서, payload에는
+  대응하는 필드가 없다. 자기 자신끼리만 비교한다.
+
+> 같은 30개를 다른 방식으로 인코딩하면 당연히 다른 지문이 나온다. 예전 판의 이
+> 표에는 같은 id 목록을 개행으로 이어 붙인 `09ce9245…`가 적혀 있었고, 그 값이
+> 분석 도구에 그대로 옮겨져 **1단계 자기 실행을 거부했다**. 목록도 순서도 옳았고
+> 구분자만 달랐다. 그래서 지금은 도구가 이 값을 문자열로 베끼지 않고
+> `step8_grade`의 함수로 다시 계산해 맞춘다.
 
 두 값 모두 매니페스트와 grading config만으로 다시 계산된다 — 623MB짜리 원본 파일 없이도 검증 가능하다.
 

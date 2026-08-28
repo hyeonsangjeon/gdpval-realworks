@@ -390,11 +390,22 @@ def test_spec_records_the_input_fingerprints_that_re_derive():
     and settles nothing. Both of these come from the manifest and the config
     alone, so the 623 MB of gold files are not needed to check the claim, and
     a sample that shifted by one task changes both.
+
+    The task-id digest is recomputed by calling the grader's own function
+    rather than by restating its formula here. Restating it is how the spec
+    came to carry ``09ce9245…`` -- the same thirty ids in the same order,
+    newline-joined instead of encoded as a compact JSON array. The list was
+    right, the order was right, and the number matched nothing the pipeline
+    ever writes: a run's own payload failed the check that was supposed to
+    confirm it. A test that re-implements the thing it is testing can agree
+    with itself all the way to the wrong answer.
     """
+    from step8_grade import _ordered_task_ids_sha256
+
     spec = SPEC_PATH.read_text(encoding="utf-8")
     pinned = _load_yaml(GOLD_CONFIG_PATH)["rerun_identity"]["task_ids"]
 
-    ordered_ids = hashlib.sha256("\n".join(pinned).encode("utf-8")).hexdigest()
+    ordered_ids = _ordered_task_ids_sha256(pinned)
     file_set = hashlib.sha256(
         "\n".join(
             f"{file['graded_path']}\t{file['sha256']}\t{file['size']}"
