@@ -28,6 +28,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "name",
         "stage",
         "retry_kind",
         "status",
@@ -37,6 +38,16 @@
         "missing_reasons"
       ],
       "properties": {
+        "name": {
+          "enum": [
+            "preprocessing",
+            "generation",
+            "self_qa",
+            "grading",
+            "perception",
+            "retry"
+          ]
+        },
         "stage": {
           "enum": [
             "preprocessing",

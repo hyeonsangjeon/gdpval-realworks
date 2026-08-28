@@ -90,6 +90,23 @@ BUCKET_GRADING = "grading_cost"
 
 BUCKETS = (BUCKET_PROBLEM_SOLVING, BUCKET_GRADING)
 
+#: The label a receipt line carries when the work was a second attempt. It is
+#: not a stage — retrying is something a stage does — but a reader showing one
+#: row per line needs a word for it, and "what did retrying cost" is a question
+#: worth being able to answer at a glance.
+COMPONENT_RETRY = "retry"
+
+#: Every value :attr:`ReceiptComponent.name` can take. Published so that a
+#: reader can build its display from the producer's own vocabulary instead of
+#: guessing at one; a name absent from here is a bug on this side, not a slug
+#: the reader has to defend against.
+#:
+#: There is deliberately no ``runtime`` entry. Runtime fees are not model
+#: calls, they are reported separately as ``runtime_cost_usd``, and a component
+#: line carrying them would be added twice by any reader that sums the lines
+#: and then adds the runtime total.
+COMPONENT_NAMES = (*STAGES, COMPONENT_RETRY)
+
 #: The one place that decides which pipeline a stage belongs to. Every caller
 #: that needs the split reads it from here, so the two totals cannot drift into
 #: each other through a second, disagreeing copy.
@@ -565,8 +582,23 @@ class ReceiptComponent:
     usage: dict[str, int | None]
     missing_reasons: tuple[str, ...] = ()
 
+    @property
+    def name(self) -> str:
+        """A single word for this line, for readers that show one label.
+
+        The pair ``(stage, retry_kind)`` is the honest shape — a retry belongs
+        to the stage that retried — but a breakdown with a column per line
+        needs one name, and deriving it here means every reader derives the
+        same one. First work carries its stage's name; anything that had to be
+        done again is :data:`COMPONENT_RETRY`, because "how much did retrying
+        cost" is the question a reader actually asks. Which stage a retry
+        belonged to is not lost: both fields travel beside this one.
+        """
+        return self.stage if self.retry_kind == RETRY_NONE else COMPONENT_RETRY
+
     def as_dict(self) -> dict[str, Any]:
         return {
+            "name": self.name,
             "stage": self.stage,
             "retry_kind": self.retry_kind,
             "status": self.status,
