@@ -681,3 +681,106 @@ def test_a_long_occupation_does_not_run_off_the_page():
     assert "Computer and Information Systems Managers" in rendered
     assert "selection degraded" in rendered
     assert max(len(line) for line in rendered.splitlines()) < 120
+
+
+# ── What the second threshold is counting ─────────────────────────────────
+
+
+def test_required_items_counts_what_the_grader_counts():
+    """Partial credit is a miss, and a negative maximum still qualifies.
+
+    Both come from `core.grader`: an item is required iff its score magnitude
+    reaches ``MAGNITUDE_THRESHOLD``, and it is marked done right only on a
+    ``pass`` verdict.
+    """
+    task = _task(
+        "task-1",
+        items=[
+            _item(criterion="required, passed", max_score=5, verdict="pass"),
+            _item(criterion="required, partial", max_score=5, verdict="partial"),
+            _item(criterion="required penalty", max_score=-4, verdict="fail"),
+            _item(criterion="not required", max_score=3, verdict="partial"),
+        ],
+    )
+
+    required = analysis.required_items(_payload(tasks=[task]))
+
+    assert required["total"] == 3
+    assert required["passed"] == 1
+    assert required["rate"] == pytest.approx(1 / 3, abs=1e-4)
+    assert required["by_verdict"] == {"pass": 1, "partial": 1, "fail": 1}
+
+
+def test_the_threshold_is_the_graders_own():
+    """A copy of the number could drift from the number that decides."""
+    from core.grader import MAGNITUDE_THRESHOLD
+
+    assert analysis.REQUIRED_ITEM_MIN_ABS_SCORE == MAGNITUDE_THRESHOLD
+
+
+def test_a_criterion_repeated_across_tasks_is_surfaced():
+    """One recurring subjective criterion can set the whole rate.
+
+    In stage 1's first run, nineteen of the thirty-five required items were
+    "Overall formatting and style of the deliverable" and twelve of them drew
+    partial credit -- three quarters of every miss. A rate of 0.5429 does not
+    show that; this does.
+    """
+    shared = "Overall formatting and style of the deliverable"
+    tasks = [
+        _task(
+            f"task-{n}",
+            items=[
+                _item(criterion=shared, max_score=5, verdict="pass" if n else "partial"),
+                _item(criterion=f"unique to task {n}", max_score=5, verdict="pass"),
+            ],
+        )
+        for n in range(3)
+    ]
+
+    required = analysis.required_items(_payload(tasks=tasks))
+
+    assert required["recurring_criteria"] == [
+        {"criterion": shared, "tasks": 3, "passed": 2}
+    ]
+
+
+def test_the_required_item_block_reaches_the_readable_report(tmp_path, capsys):
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(
+        json.dumps(
+            _payload(
+                tasks=[
+                    _task(
+                        "task-1",
+                        items=[_item(max_score=5, verdict="partial")],
+                        pct=50.0,
+                        total_awarded=2.5,
+                        total_max=5,
+                    )
+                ]
+            )
+        )
+    )
+
+    analysis.main([str(grade_file), "--shortfall-limit", "0"])
+    printed = capsys.readouterr().out
+
+    assert "Required items (|max score| >= 4)" in printed
+    assert "0 of 1 passed" in printed
+    assert max(len(line) for line in printed.splitlines()) < 120
+
+
+def test_a_run_with_no_required_items_does_not_divide_by_zero():
+    payload = _payload(tasks=[_task("task-1", items=[_item(max_score=1)])])
+
+    required = analysis.required_items(payload)
+
+    assert required == {
+        "total": 0,
+        "passed": 0,
+        "rate": None,
+        "by_verdict": {},
+        "recurring_criteria": [],
+    }
+    analysis._render(analysis.analyze(payload), shortfall_limit=0)
