@@ -21,11 +21,12 @@ Two of the six need work the payload does not do for you:
   evidence the judge recorded, sorted so the largest losses come first, which
   is the input a person needs to classify them.
 
-It also refuses a payload that is not the run the specification pinned. A
-number read out of the wrong file is worse than no number, and the three
-identity fields it checks -- task count, ordered-id fingerprint, and run
-status -- are exactly the ones that would differ if somebody pointed this at a
-shard, a repeat, or a different corpus.
+It also refuses a payload that is not stage 1's corpus, fully graded. A number
+read out of the wrong file is worse than no number, and the four things it
+checks -- task count, ordered-id fingerprint, graded count and run status --
+are the ones that differ when somebody points this at a shard or at a
+different corpus. A stage 2 repeat passes them, and should: it is the same
+thirty tasks graded again, which is exactly what stage 2 needs to read.
 
 Usage
 -----
@@ -61,6 +62,18 @@ EXPECTED_ORDERED_TASK_IDS_SHA256 = (
     "09ce924576b6822a7f96d651b40c18add5fceb6e216653c8bdb9c5a194c9dfdc"
 )
 
+# What a finished run is allowed to call itself. Both spellings mean the same
+# thing here -- every task was graded -- and which one a gold run gets is
+# decided by whether it was sharded, not by anything about its completeness.
+# `step8_grade.py` marks a gold-corpus run `diagnostic` so it forks away from
+# the dashboard, but `step9_merge_shards.py` writes a flat `final` when it
+# joins shards back together. Insisting on `final` would therefore refuse a
+# perfectly complete single-shard repeat, which is precisely the run stage 2
+# needs to read. `partial` is the one that must never be accepted: a shard
+# declares the whole corpus in its identity fields while holding only its own
+# slice, so its aggregates read exactly like the full run's.
+COMPLETE_RUN_STATUSES = frozenset({"final", "diagnostic"})
+
 
 class NotTheRunThatWasPinned(SystemExit):
     """The payload is readable but is not stage 1's run."""
@@ -70,10 +83,11 @@ def _identity_problems(payload: dict[str, Any]) -> list[str]:
     problems: list[str] = []
 
     status = payload.get("run_status")
-    if status != "final":
+    if status not in COMPLETE_RUN_STATUSES:
         problems.append(
-            f"run_status is {status!r}, not 'final' -- this is a shard or an "
-            "unfinished run, and its aggregates cover only part of the corpus"
+            f"run_status is {status!r}, which is not a finished run "
+            f"({', '.join(sorted(COMPLETE_RUN_STATUSES))}) -- a shard covers "
+            "only its own slice while declaring the whole corpus"
         )
 
     count = payload.get("expected_task_count")
@@ -448,8 +462,9 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-any-run",
         action="store_true",
         help=(
-            "skip the check that this payload is the run the specification "
-            "pinned. Use for a repeat or a shard, never for stage 1's own number"
+            "skip the check that this payload is stage 1's corpus, fully "
+            "graded. Use to look inside a single shard or another corpus, "
+            "never for a number a report will quote"
         ),
     )
     args = parser.parse_args(argv)

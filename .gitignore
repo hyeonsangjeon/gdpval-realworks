@@ -79,6 +79,13 @@ tasks/0822_saturday/*
 !tasks/0822_saturday/TASK_PIN_AZURE_RESOURCE_IDENTITY.md
 !tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md
 !tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md
+# The grading-rebuild specs and reports here predate the `tasks/**` rule, so
+# they stay tracked without an entry. A *new* file among them does not -- git
+# will not un-ignore a path inside an ignored directory, which is why the
+# directory has to be re-opened before the file can be named.
+!tasks/rebuilding_grading_task/
+tasks/rebuilding_grading_task/*
+!tasks/rebuilding_grading_task/PR3_GOLD_CEILING.md
 
 *.parquet
 .huggingface/
