@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -78,6 +79,12 @@ _ZIP_NOISE_BASENAMES = ("._",)
 
 MAX_PAGES_DEFAULT = 200       # PDF page-iteration safety cap
 MAX_SHEETS = 100              # workbook safety cap
+
+#: How much of a file is examined before deciding it is text. The question is
+#: whether the bytes are text, and 64 KiB answers it -- a binary format puts
+#: its magic number and its first NUL byte far inside this. Bounding the read
+#: keeps the decision cheap on a large file.
+TEXT_SNIFF_BYTES = 64 * 1024
 
 #: Page geometry. A rubric asks "is it landscape", "is it letter size", "does
 #: it fit on one page" -- questions about the page, which a page count alone
@@ -257,6 +264,7 @@ _EXT_KIND = {
     ".csv": "csv",
     ".txt": "txt", ".md": "txt",
     ".json": "txt",
+    ".ipynb": "notebook",
     ".png": "image", ".jpg": "image", ".jpeg": "image",
     ".gif": "image", ".bmp": "image", ".webp": "image",
     **{extension: "audio" for extension in GRADER_AUDIO_EXTENSIONS},
@@ -266,8 +274,55 @@ _EXT_KIND = {
 }
 
 
+def _reads_as_text(path: Path) -> bool:
+    """Does this file hold text? Answered by opening it, not by its name.
+
+    Only ever asked about an extension ``_EXT_KIND`` does not map, so it
+    cannot reinterpret a format the map already names.
+    """
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(TEXT_SNIFF_BYTES)
+    except OSError:
+        # Unreadable is not the same as binary, but nothing downstream can
+        # read it either, so the honest answer is the conservative one.
+        return False
+    if b"\x00" in head:
+        return False
+    if not head:
+        # No bytes, so no byte that is not text. A zero-byte deliverable is a
+        # real defect and reads better as an empty file the judge is told is
+        # empty than as a file nothing here claims to understand.
+        return True
+    try:
+        head.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        # A multi-byte character can straddle the cap. That is a fact about
+        # where the read stopped, not about the file -- but only when the read
+        # actually stopped there, and only within one character of the end.
+        if len(head) < TEXT_SNIFF_BYTES or exc.start < len(head) - 4:
+            return False
+    return True
+
+
 def _kind_of(path: Path) -> str:
-    return _EXT_KIND.get(path.suffix.lower(), "unknown")
+    """Map a file to the kind the ops dispatch on.
+
+    The extension answers first and its answer is final: an ``.xlsx`` is a
+    workbook whatever its bytes look like, and letting content override that
+    would only invent ways to misread a format already named correctly.
+
+    An unmapped extension is where the name has stopped saying anything, and
+    the corpus ships several -- ``.py``, ``.yaml``, ``.overpassql`` are all
+    gold deliverables, all plainly readable, and all previously ``unknown``,
+    which routes zero rubric items. So the file is opened and looked at, on
+    the same reasoning ``has_audio_content`` already uses for containers: the
+    extension is a fact about naming, not about whether the bytes are text.
+    """
+    mapped = _EXT_KIND.get(path.suffix.lower())
+    if mapped is not None:
+        return mapped
+    return "txt" if _reads_as_text(path) else "unknown"
 
 
 # ── inspect_structure ────────────────────────────────────────────────
@@ -647,10 +702,131 @@ def _op_inspect_structure(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
             base["video"] = _inspect_video(p)
         elif kind == "zip":
             base.update(_inspect_zip(p))
+        elif kind == "notebook":
+            base.update(_inspect_notebook(p))
         # txt/csv/image: size + kind only
     except Exception as exc:  # noqa: BLE001
         base["inspection_error"] = f"{type(exc).__name__}: {exc}"
     return base
+
+
+# ── Notebooks ────────────────────────────────────────────────────────
+
+#: An ``.ipynb`` is JSON, so the sniff above would call it text and a judge
+#: would be handed the raw file. That reads badly in a specific way: the
+#: corpus notebook is 2,285,938 characters of which 39,478 -- 1.7 per cent --
+#: are source, the rest being base64 image payload. A raw read is cut at
+#: MAX_CONTENT_CHARS, so 91 per cent of the file never arrives and most of
+#: what does is base64. Flattening to source plus text output puts the whole
+#: notebook, all 69 cells, inside the window at 48,933 characters.
+#:
+#: Parsed with ``json`` rather than ``nbformat``: the grading container is
+#: pinned by digest, so this cannot add a package to it.
+
+_NOTEBOOK_TEXT_MIMES = ("text/plain", "text/markdown", "application/json")
+
+
+def _notebook_document(p: Path) -> Optional[Dict[str, Any]]:
+    """The parsed notebook, or ``None`` if it is not one.
+
+    A file that does not parse is not an error to report -- it is still text,
+    and the caller falls back to reading it as text, which is what a broken
+    notebook is.
+    """
+    try:
+        document = json.loads(p.read_text(encoding="utf-8", errors="replace"))
+    except ValueError:
+        return None
+    if not isinstance(document, dict) or not isinstance(document.get("cells"), list):
+        return None
+    return document
+
+
+def _joined(value: Any) -> str:
+    """Notebook string fields are either a string or a list of lines."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(part for part in value if isinstance(part, str))
+    return ""
+
+
+def _notebook_output_lines(output: Dict[str, Any]) -> List[str]:
+    kind = output.get("output_type")
+    if kind == "stream":
+        return [f"    [{output.get('name', 'stdout')}] {_joined(output.get('text'))}"]
+    if kind == "error":
+        traceback = "\n".join(
+            line for line in output.get("traceback", []) if isinstance(line, str)
+        )
+        return [f"    [error] {output.get('ename', '')}: "
+                f"{output.get('evalue', '')}\n{traceback}"]
+    if kind in ("execute_result", "display_data"):
+        data = output.get("data")
+        if not isinstance(data, dict):
+            return []
+        for mime in _NOTEBOOK_TEXT_MIMES:
+            if mime in data:
+                return [f"    [{mime}] {_joined(data[mime])}"]
+        # An image output is named rather than dropped. A rubric asking
+        # whether the notebook plots something is answered by the fact that a
+        # figure exists here, and the bytes themselves would not help a text
+        # read.
+        return [f"    [{mime} output, not text]" for mime in sorted(data)]
+    return []
+
+
+def _read_notebook_text(p: Path, _scope: Dict[str, Any]) -> str:
+    document = _notebook_document(p)
+    if document is None:
+        return p.read_text(encoding="utf-8", errors="replace")
+    language = (
+        (document.get("metadata") or {}).get("language_info", {}).get("name")
+        or (document.get("metadata") or {}).get("kernelspec", {}).get("language")
+        or "unknown"
+    )
+    cells = document["cells"]
+    lines = [f"[Notebook: {len(cells)} cell(s), language {language}]"]
+    length = len(lines[0])
+    for index, cell in enumerate(cells, start=1):
+        if not isinstance(cell, dict):
+            continue
+        block = [f"--- cell {index} ({cell.get('cell_type', 'unknown')}) ---",
+                 _joined(cell.get("source"))]
+        for output in cell.get("outputs") or []:
+            if isinstance(output, dict):
+                block.extend(_notebook_output_lines(output))
+        lines.extend(block)
+        length += sum(len(line) + 1 for line in block)
+        if length > MAX_CONTENT_CHARS:
+            # ``_op_read_content`` truncates and says so; stopping here only
+            # avoids building text nobody will see.
+            break
+    return "\n".join(lines)
+
+
+def _inspect_notebook(p: Path) -> Dict[str, Any]:
+    document = _notebook_document(p)
+    if document is None:
+        return {"kind": "notebook", "note": "not valid notebook JSON; read_content "
+                                            "returns the raw file as text"}
+    cells = [cell for cell in document["cells"] if isinstance(cell, dict)]
+    metadata = document.get("metadata") or {}
+    counts: Dict[str, int] = {}
+    outputs = 0
+    for cell in cells:
+        kind = str(cell.get("cell_type", "unknown"))
+        counts[kind] = counts.get(kind, 0) + 1
+        outputs += len(cell.get("outputs") or [])
+    return {
+        "kind": "notebook",
+        "cell_count": len(cells),
+        "cell_types": dict(sorted(counts.items())),
+        "output_count": outputs,
+        "language": (metadata.get("language_info", {}).get("name")
+                     or metadata.get("kernelspec", {}).get("language")),
+        "nbformat": document.get("nbformat"),
+    }
 
 
 # ── read_content ─────────────────────────────────────────────────────
@@ -999,6 +1175,8 @@ def has_extractable_text(path: Union[str, Path]) -> Optional[bool]:
             return bool(_read_xlsx_text(p, {}).strip())
         if kind in ("txt", "csv"):
             return bool(p.read_text(encoding="utf-8", errors="replace").strip())
+        if kind == "notebook":
+            return bool(_read_notebook_text(p, {}).strip())
     except Exception:  # noqa: BLE001
         return None
     # audio, video, zip, unknown: text is not the medium, and "this file has
@@ -1051,6 +1229,8 @@ def _op_read_content(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
         text = _read_pptx_text(p, scope)
     elif kind in ("txt", "csv"):
         text = p.read_text(encoding="utf-8", errors="replace")
+    elif kind == "notebook":
+        text = _read_notebook_text(p, scope)
     elif kind == "zip":
         text = _read_zip_text(p, scope)
     else:

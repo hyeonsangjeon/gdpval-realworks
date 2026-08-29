@@ -34,6 +34,27 @@ DOCUMENT_EXTENSIONS = {
     ".txt",
     ".md",
     ".csv",
+    # Source and configuration files. A task that asks for a script, a query,
+    # or a specification is answered with one, and the corpus does exactly
+    # that: ``.py``, ``.overpassql`` and ``.yaml`` each ship as a gold
+    # deliverable on the pinned revision, and each was previously left out of
+    # this set, so ``_classify_task`` found fewer than two document-like files
+    # and declined the task -- 154 rubric items, 224 points, judged as nothing.
+    #
+    # This is a named list rather than "anything unrecognised", because
+    # ``grader._list_files`` walks the whole deliverable tree with no junk
+    # filter: a permissive rule would promote a stray ``.DS_Store``, ``.log``
+    # or ``.pyc`` to a primary deliverable on a model run.
+    ".py",
+    ".overpassql",
+    ".yaml",
+    # ``.yml`` is not in the corpus as a file, but 2c249e0f's own rubric names
+    # it beside .yaml -- "A YAML file with extension .yaml or .yml exists in
+    # the deliverable root" -- so the benchmark treats the two as one format.
+    ".yml",
+    # ``.json`` is already read as text by ``read_deliverable``; its absence
+    # here was the same inconsistency ``.ipynb`` had in the other direction.
+    ".json",
 }
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".tif", ".tiff"}
 SPREADSHEET_EXTENSIONS = {".xls", ".xlsx", ".xlsm", ".csv"}
