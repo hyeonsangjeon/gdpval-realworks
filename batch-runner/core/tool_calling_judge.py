@@ -54,6 +54,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from core.cost_metering import read_reported_usage
 from core.grader_routing import (
     RoutingDecision,
     classify_criterion,
@@ -714,28 +715,19 @@ class ToolCallingJudge:
                 )
                 break
 
-            usage = getattr(response, "usage", None)
-            if usage is None or not all(
-                hasattr(usage, field_name)
-                for field_name in ("input_tokens", "output_tokens")
-            ):
+            # Cached input is a *part* of the reported input, so a reply that
+            # carries no prompt-cache breakdown is still fully counted -- it is
+            # counted as though nothing came from cache. Only a missing input or
+            # output count leaves the total unpublishable. The rule lives in
+            # read_reported_usage so this and the two perception readers cannot
+            # disagree with the receipt ledger, or with each other.
+            reported = read_reported_usage(response)
+            if not reported.usage_complete:
                 usage_complete = False
-            response_input_tokens = int(
-                getattr(usage, "input_tokens", 0) or 0
-            )
-            response_output_tokens = int(
-                getattr(usage, "output_tokens", 0) or 0
-            )
-            input_tok_total += response_input_tokens
+            response_output_tokens = reported.output_tokens
+            input_tok_total += reported.input_tokens
             output_tok_total += response_output_tokens
-            # PR3 Step 0 — cached_tokens (Azure Responses API automatic prompt
-            # caching). Field path: usage.input_tokens_details.cached_tokens.
-            # Older SDKs may not expose the details object; default 0.
-            details = getattr(usage, "input_tokens_details", None)
-            if details is not None:
-                cached_tok_total += int(getattr(details, "cached_tokens", 0) or 0)
-            else:
-                usage_complete = False
+            cached_tok_total += reported.cached_tokens
 
             output_items = list(getattr(response, "output", []) or [])
             function_calls = [o for o in output_items

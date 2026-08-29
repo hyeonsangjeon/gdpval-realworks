@@ -47,8 +47,10 @@ __all__ = [
     "Attribution",
     "CostRecorder",
     "MeteredClient",
+    "ReportedUsage",
     "extract_usage",
     "open_cost_recorder",
+    "read_reported_usage",
     "resolved_model_of",
 ]
 
@@ -154,6 +156,72 @@ def extract_usage(response: Any) -> CallUsage:
         cached_input_tokens=cached,
         output_tokens=output_tokens,
         reasoning_tokens=reasoning,
+    )
+
+
+@dataclass(frozen=True)
+class ReportedUsage:
+    """One call's token counts, as a running tally needs them.
+
+    Separate from :class:`CallUsage` because the two answer different
+    questions. ``CallUsage`` is what the ledger stores, where an absent count
+    must stay ``None`` forever and never becomes a zero. This is what a
+    *caller keeping a running total* needs: counts it can add up, and one flag
+    saying whether the total is still worth publishing.
+
+    That flag deliberately does not depend on whether the prompt-cache
+    breakdown arrived. Cached tokens are a *part* of the input, not an
+    addition to it, so a call that comes back without a breakdown is still
+    fully counted — counted as though none of it were served from cache, which
+    is the conservative reading and can only overstate the bill, never
+    understate it. Which calls had no breakdown is not lost by flattening it
+    to zero here: the metered client records that call's
+    ``cached_input_tokens`` as ``None`` in the receipt, and ``None`` is not
+    ``0`` there.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    usage_complete: bool = False
+
+
+def read_reported_usage(response: Any) -> ReportedUsage:
+    """Read one reply's usage the way a running tally needs it.
+
+    Three call sites keep their own token totals — the tool-calling judge and
+    the two perception sub-judges — and each used to read the usage block
+    itself. All three then treated a missing prompt-cache breakdown as
+    *unknown usage*, which is neither what a missing breakdown means nor what
+    the rest of this pipeline does with one:
+    :func:`core.cost_receipts.price_call` charges a ``None`` cached count at
+    the full uncached rate and does not call the receipt partial, and
+    ``AgenticSandboxRunner._usage`` returns a complete tuple with a cached
+    count of zero. This is the one place that decides, so the copies cannot
+    disagree with the ledger — or with each other — again.
+
+    Usage is incomplete when, and only when:
+
+    * no usage block came back at all; or
+    * the input or the output count is missing, or is not a count; or
+    * more tokens were served from cache than were sent — a contradiction that
+      makes both numbers untrustworthy, and the same check ``price_call``
+      makes before it will put a number on a call.
+    """
+    usage = extract_usage(response)
+    cached = usage.cached_input_tokens
+    complete = usage.input_tokens is not None and usage.output_tokens is not None
+    if (
+        usage.input_tokens is not None
+        and cached is not None
+        and cached > usage.input_tokens
+    ):
+        complete = False
+    return ReportedUsage(
+        input_tokens=usage.input_tokens or 0,
+        output_tokens=usage.output_tokens or 0,
+        cached_tokens=cached or 0,
+        usage_complete=complete,
     )
 
 

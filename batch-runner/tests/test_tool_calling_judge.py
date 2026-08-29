@@ -53,18 +53,18 @@ def test_prompt_cache_key_respects_azure_length_limit():
 
 
 def _usage(
-    in_tok: int = 100, out_tok: int = 30, cached_tok: int = 7
+    in_tok: int = 100, out_tok: int = 30, cached_tok: int | None = 7
 ) -> SimpleNamespace:
-    return SimpleNamespace(
-        input_tokens=in_tok,
-        output_tokens=out_tok,
-        input_tokens_details=SimpleNamespace(cached_tokens=cached_tok),
-    )
+    """A usage block. ``cached_tok=None`` means the reply carried no breakdown."""
+    usage = SimpleNamespace(input_tokens=in_tok, output_tokens=out_tok)
+    if cached_tok is not None:
+        usage.input_tokens_details = SimpleNamespace(cached_tokens=cached_tok)
+    return usage
 
 
 def _response(*, output: list[dict] | None = None, output_text: str = "",
               in_tok: int = 100, out_tok: int = 30,
-              cached_tok: int = 7, status: str | None = None,
+              cached_tok: int | None = 7, status: str | None = None,
               incomplete_reason: str | None = None) -> SimpleNamespace:
     return SimpleNamespace(
         output=output or [],
@@ -268,6 +268,46 @@ def test_tool_round_then_final(deliverable_dir, task_and_item):
     types = [m.get("type") for m in second_input if isinstance(m, dict)]
     assert "function_call" in types
     assert "function_call_output" in types
+
+
+def test_a_turn_without_a_cache_breakdown_still_counts_toward_the_total(
+    deliverable_dir, task_and_item
+):
+    """One turn's missing breakdown must not void the whole conversation.
+
+    The marking model does send ``input_tokens_details``, so this reading has
+    never fired here -- but the judge, the looking sub-judge and the listening
+    sub-judge each kept their own copy of the rule, and the listening one's
+    copy failed a paid shard. They now share a single rule, so each is held to
+    it. Cached input is a part of the input: a turn that reports no breakdown
+    is counted in full, as though nothing came from cache.
+    """
+    task, item = task_and_item
+    asks = _response(
+        output=[_fc("c1", "read_deliverable", op="inspect_structure",
+                    path="report.xlsx")],
+        in_tok=100, out_tok=30, cached_tok=None,
+    )
+    finishes = _response(output=[_final(json.dumps({
+        "verdict": "pass", "partial_score": 1.0,
+        "evidence": "kind=xlsx, 1 sheet", "confidence": 0.95,
+        "reasoning": "ok", "tool_calls_made": 1,
+    }))], in_tok=40, out_tok=6, cached_tok=4)
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([asks, finishes])),
+        model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE,
+    )
+
+    res = judge.judge_item(task=task, item=item,
+                           deliverable_dir=str(deliverable_dir),
+                           file_names=["report.xlsx"])
+
+    assert res.verdict == "pass"
+    assert res.input_tokens == 140
+    assert res.output_tokens == 36
+    assert res.cached_tokens == 4      # the turn that reported none counts none
+    assert res.usage_complete is True
 
 
 def test_empty_final_response_retries_once_without_tools(

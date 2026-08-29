@@ -27,26 +27,34 @@ def _png_b64() -> str:
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+#: Lets a test say "this reply carried no usage block at all" without that
+#: being confused with "this test did not care about the usage block".
+_UNSET = object()
+
+
+def _default_usage() -> SimpleNamespace:
+    return SimpleNamespace(
+        input_tokens=123,
+        output_tokens=17,
+        input_tokens_details=SimpleNamespace(cached_tokens=11),
+    )
+
+
 class FakeResponses:
     def __init__(self, *, text: str = '{"verdict":"pass","partial_score":1.0,'
                  '"evidence":"chart title visible","confidence":0.9,'
-                 '"reasoning":"clean"}', raise_with: Exception | None = None):
+                 '"reasoning":"clean"}', raise_with: Exception | None = None,
+                 usage: Any = _UNSET):
         self.text = text
         self.raise_with = raise_with
+        self.usage = _default_usage() if usage is _UNSET else usage
         self.calls: list[dict[str, Any]] = []
 
     def create(self, **kwargs: Any) -> Any:
         self.calls.append(kwargs)
         if self.raise_with is not None:
             raise self.raise_with
-        return SimpleNamespace(
-            output_text=self.text,
-            usage=SimpleNamespace(
-                input_tokens=123,
-                output_tokens=17,
-                input_tokens_details=SimpleNamespace(cached_tokens=11),
-            ),
-        )
+        return SimpleNamespace(output_text=self.text, usage=self.usage)
 
 
 class FakeClient:
@@ -91,6 +99,42 @@ def test_usage_latency_and_guard_are_recorded_exactly(monkeypatch):
     assert verdict.cached_tokens == 11
     assert verdict.latency_ms == 250.0
     assert verdict.usage_complete is True
+
+
+def test_a_reply_with_no_cache_breakdown_is_still_counted():
+    """The looking model does send the breakdown -- so this guards the rule.
+
+    Unlike the listening model, ``gpt-5.6-sol`` has always returned
+    ``input_tokens_details``, so this reading has never actually fired here.
+    It is pinned anyway: the three call sites that keep running token totals
+    now share one rule, and a rule only stays shared if each site is held to
+    it. Cached input is a part of the input, so a reply without the breakdown
+    is fully counted -- counted as though nothing came from cache, which can
+    only overstate the bill.
+    """
+    client = FakeClient(
+        FakeResponses(usage=SimpleNamespace(input_tokens=123, output_tokens=17))
+    )
+    vp = VisionPerception(client=client)
+
+    v = vp.judge(criterion="chart is labeled", image_b64=_png_b64())
+
+    assert v.verdict == "pass"
+    assert v.input_tokens == 123
+    assert v.output_tokens == 17
+    assert v.cached_tokens == 0
+    assert v.usage_complete is True
+
+
+def test_a_reply_that_reports_no_tokens_at_all_is_not_counted():
+    """The genuine unknown: a reply that says nothing about what it used."""
+    client = FakeClient(FakeResponses(usage=None))
+    vp = VisionPerception(client=client)
+
+    v = vp.judge(criterion="chart is labeled", image_b64=_png_b64())
+
+    assert v.verdict == "pass"
+    assert v.usage_complete is False
 
 
 def test_request_shape_includes_image_and_model():
