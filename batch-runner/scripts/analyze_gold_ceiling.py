@@ -951,18 +951,32 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
     mean = gates["mean_score_pct"]
     crit = gates["critical_item_pass_rate"]
     err = gates["judge_error_rate"]
-    lines.append(
-        f"  mean score              {mean['value']}%   "
-        f"(needs >= {mean['floor']}%)   {_mark(mean['met'])}"
-    )
-    lines.append(
-        f"  required-item pass      {crit['value']}   "
-        f"(needs >= {crit['floor']})   {_mark(crit['met'])}"
-    )
-    lines.append(
-        f"  grader error rate       {err['value']}   "
-        f"(needs < {err['ceiling']})   {_mark(err['met'])}"
-    )
+    # Three gates decide the stage, so the eye should be able to run straight
+    # down the PASS/MISS column. The bars are different lengths -- "needs >=
+    # 90.0%" against "needs < 0.02" -- so the column only lines up if every
+    # field is padded to the widest of the three rather than written by hand.
+    gate_rows = [
+        ("mean score", f"{mean['value']}%", f"needs >= {mean['floor']}%", mean["met"]),
+        (
+            "required-item pass",
+            f"{crit['value']}",
+            f"needs >= {crit['floor']}",
+            crit["met"],
+        ),
+        (
+            "grader error rate",
+            f"{err['value']}",
+            f"needs < {err['ceiling']}",
+            err["met"],
+        ),
+    ]
+    value_width = max(len(value) for _, value, _, _ in gate_rows)
+    bar_width = max(len(bar) for _, _, bar, _ in gate_rows) + 2
+    for label, value, bar, met in gate_rows:
+        lines.append(
+            f"  {label:<24}{value:>{value_width}}   "
+            f"{f'({bar})':<{bar_width}}   {_mark(met)}"
+        )
     lines.append("")
 
     req = report["required_items"]

@@ -819,6 +819,30 @@ def test_a_long_occupation_does_not_run_off_the_page():
     assert max(len(line) for line in rendered.splitlines()) < 120
 
 
+def test_the_three_verdicts_line_up_in_one_column():
+    """Three gates decide the stage, so the eye should run down one column.
+
+    The bars are different lengths -- 'needs >= 90.0%' against 'needs < 0.02'
+    -- so writing the three lines by hand left PASS and MISS stepping across
+    the page. This is worth a test because it is the block every reader looks
+    at first, and because the padding is computed from the widest row, so a
+    fourth gate or a re-worded bar would silently break the alignment again.
+    """
+    rendered = analysis._render(
+        analysis.analyze(_payload(tasks=[_task("task-1")])), shortfall_limit=0
+    )
+
+    verdicts = [
+        line for line in rendered.splitlines() if line.endswith(("  PASS", "  MISS"))
+    ]
+    assert len(verdicts) == 3, verdicts
+
+    columns = {line.index("(") for line in verdicts}
+    assert len(columns) == 1, f"the bars start in different columns: {verdicts}"
+    columns = {len(line) for line in verdicts}
+    assert len(columns) == 1, f"the verdicts end in different columns: {verdicts}"
+
+
 def test_a_long_criterion_wraps_instead_of_stopping_mid_word():
     """The criterion and the evidence are other people's prose, at any length.
 
