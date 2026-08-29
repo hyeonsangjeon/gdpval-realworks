@@ -20,6 +20,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from core.config import WORKSPACE_DIR, BATCH_RUNNER_ROOT
+from core.cost_projection import (
+    build_cost_summaries,
+    project_cost_ledger_reference,
+    successful_deliverable_count,
+    verify_cost_ledger,
+)
 from core.inference_manifest import build_inference_provenance
 from core.prepared_fingerprint import validate_prepared_fingerprint
 from core.result_fingerprint import validate_inference_result_fingerprint
@@ -98,6 +104,22 @@ def _build_sector_stats(results: list) -> dict:
             "avg_latency_ms": round(sum(b["latencies"]) / len(b["latencies"])) if b["latencies"] else None,
         }
     return out
+
+
+def _cost_ledger_reference(inference: dict) -> dict | None:
+    """Carry Step 2's audit-ledger pointer forward, re-hashing it when present.
+
+    The digest is the whole point of the pointer, so it is checked here as
+    well as at publication: a mismatch caught in the workspace costs nothing,
+    the same mismatch caught after upload costs a retraction.
+
+    The export sits beside the other Step 2 outputs, not in the upload area —
+    it is staged there later, under its published name, by Step 6.
+    """
+    reference = project_cost_ledger_reference(inference.get("cost_ledger"))
+    if reference is None:
+        return None
+    return verify_cost_ledger(reference, WORKSPACE_DIR / reference["path"])
 
 
 def _write_json_outputs(data: dict, *paths: Path) -> None:
@@ -245,6 +267,11 @@ def format_results():
     qa_stats = _build_qa_stats(enriched_results)
     timing_stats = _build_timing_stats(enriched_results)
     sector_stats = _build_sector_stats(enriched_results)
+    cost_summaries = build_cost_summaries(
+        enriched_results,
+        successful_deliverables=successful_deliverable_count(enriched_results),
+    )
+    cost_ledger = _cost_ledger_reference(inference)
     duration = _duration_str(
         inference.get("started_at", ""),
         inference.get("completed_at", ""),
@@ -283,6 +310,12 @@ def format_results():
         "sector_stats": sector_stats,
         "results": enriched_results,
     }
+    # Conditional, like every other opt-in block: an experiment with no cost
+    # instrumentation publishes no cost keys at all.
+    for field, summary in cost_summaries.items():
+        final_json.setdefault("cost_summary", {})[field] = summary
+    if cost_ledger:
+        final_json["cost_ledger"] = cost_ledger
 
     json_path = results_dir / f"{experiment_id}.json"
     workspace_result = WORKSPACE_DIR / "result.json"

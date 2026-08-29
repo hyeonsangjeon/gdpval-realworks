@@ -1,6 +1,8 @@
+import ast
 import json
 import hashlib
 import os
+import re
 import stat
 import tempfile
 from collections import Counter
@@ -306,7 +308,13 @@ def _upload_root(
         "error_tasks": [],
     }
     for key, value in (report_overrides or {}).items():
-        if key in {"summary", "task_results", "error_tasks", "narrative"}:
+        if key in {
+            "summary",
+            "task_results",
+            "error_tasks",
+            "narrative",
+            "cost_ledger",
+        }:
             report[key] = value
         else:
             report["meta"][key] = value
@@ -1588,6 +1596,144 @@ def test_publication_rejects_same_path_byte_drift_before_remote_call(tmp_path):
     assert api.calls == []
 
 
+def _cost_ledger_root(tmp_path: Path, *, declare=True, body=b'{"task_id": "task-1"}\n'):
+    """Stage an upload root carrying the audit sidecar and its declaration."""
+    digest = hashlib.sha256(body).hexdigest()
+    overrides = (
+        {"cost_ledger": {"path": "cost_ledger.jsonl", "sha256": digest}}
+        if declare
+        else None
+    )
+    root = _upload_root(tmp_path, report_overrides=overrides)
+    (root / "cost_ledger.jsonl").write_bytes(body)
+    return root, digest
+
+
+def test_publication_carries_a_declared_cost_ledger(tmp_path):
+    api = FakeApi()
+    root, _ = _cost_ledger_root(tmp_path)
+
+    publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        api=api,
+    )
+
+    additions = [
+        operation.path_in_repo
+        for operation in api.calls[2][1]["operations"]
+        if isinstance(operation, CommitOperationAdd)
+    ]
+    assert "cost_ledger.jsonl" in additions
+
+
+def test_publication_rejects_an_undeclared_cost_ledger(tmp_path):
+    # A sidecar nobody vouched for would go up under a digest nobody checked.
+    api = FakeApi()
+    root, _ = _cost_ledger_root(tmp_path, declare=False)
+
+    with pytest.raises(ValueError, match="declares none"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_rejects_a_declared_cost_ledger_that_is_missing(tmp_path):
+    # The other direction: readers would chase a receipt that never shipped.
+    api = FakeApi()
+    root, _ = _cost_ledger_root(tmp_path)
+    (root / "cost_ledger.jsonl").unlink()
+
+    with pytest.raises(ValueError, match="declares a cost ledger that is missing"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_rejects_a_cost_ledger_whose_bytes_drifted(tmp_path):
+    api = FakeApi()
+    root, _ = _cost_ledger_root(tmp_path)
+    (root / "cost_ledger.jsonl").write_bytes(b'{"task_id": "task-2"}\n')
+
+    with pytest.raises(ValueError, match="does not match self_report.json"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_rejects_a_cost_ledger_declared_under_another_path(tmp_path):
+    # Managed paths drive remote deletion, so the payload never gets to name
+    # the file it is published — or deleted — as.
+    api = FakeApi()
+    body = b'{"task_id": "task-1"}\n'
+    root = _upload_root(
+        tmp_path,
+        report_overrides={
+            "cost_ledger": {
+                "path": "self_report.json",
+                "sha256": hashlib.sha256(body).hexdigest(),
+            }
+        },
+    )
+    (root / "cost_ledger.jsonl").write_bytes(body)
+
+    with pytest.raises(ValueError, match="must be published as cost_ledger.jsonl"):
+        publish_dataset(
+            "owner/repository",
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=_identity(),
+            api=api,
+        )
+
+    assert api.calls == []
+
+
+def test_publication_without_a_cost_ledger_stays_unchanged(tmp_path):
+    # Uninstrumented runs publish exactly what they published before.
+    api = FakeApi()
+    root = _upload_root(tmp_path)
+
+    publish_dataset(
+        "owner/repository",
+        root,
+        token="token",
+        expected_head="a" * 40,
+        identity=_identity(),
+        api=api,
+    )
+
+    operations = api.calls[2][1]["operations"]
+    assert not any(
+        operation.path_in_repo == "cost_ledger.jsonl" for operation in operations
+    )
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
@@ -2201,3 +2347,34 @@ def test_load_publication_identity_rejects_mixed_scope(
 
     with pytest.raises(ValueError, match=message):
         load_publication_identity(prepared_path, inference_path)
+
+def _step7_literal_list(name: str) -> list[str]:
+    """Pull one of the mirrored pattern lists out of the step 7 shell script."""
+    script = Path(__file__).resolve().parents[1] / "step7_upload_hf.sh"
+    match = re.search(
+        rf"^{name} = (\[[^\]]*\])$",
+        script.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    assert match is not None, f"step7_upload_hf.sh no longer defines {name}"
+    return ast.literal_eval(match.group(1))
+
+
+@pytest.mark.parametrize(
+    ("mirrored", "constant"),
+    [
+        ("INCLUDE", hf_publication.INCLUDE_PATTERNS),
+        ("IGNORE", hf_publication.IGNORE_PATTERNS),
+        ("DELETE", hf_publication.DELETE_PATTERNS),
+    ],
+)
+def test_step7_mirrors_the_publication_patterns(mirrored, constant):
+    """The upload script's copy of the patterns must equal the real ones.
+
+    step7_upload_hf.sh restates all three lists and aborts if they differ from
+    the module's, which is a good guard and a sharp edge: a pattern added on
+    one side and not the other stops every upload, including experiments that
+    have nothing to do with the change. The guard fires at upload time, after
+    a paid run. This fires here.
+    """
+    assert _step7_literal_list(mirrored) == constant

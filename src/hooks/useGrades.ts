@@ -8,6 +8,11 @@ import type {
   CalibrationCounts,
   SelectionOutcome,
 } from '../types/grade'
+import type {
+  CostLedgerReference,
+  CostReceipt,
+  CostSummaries,
+} from '../types/cost'
 
 export interface TaskGrade {
   task_id: string
@@ -27,6 +32,8 @@ export interface TaskGrade {
   outcome_detail?: string
   /** False when no deliverable reached a judge — the zero is plumbing, not a verdict. */
   reached_judge?: boolean
+  /** What grading this task cost. Schema 1.4 only; absent means no record. */
+  grading_cost?: CostReceipt | null
 }
 
 export interface GradeSummary {
@@ -96,13 +103,21 @@ export interface GradeResult {
   }
 
   // ── Item-level grade schema additions ──
-  schema_version?: '1.0' | '1.1' | '1.2' | '1.3' | null
+  schema_version?: '1.0' | '1.1' | '1.2' | '1.3' | '1.4' | null
   judge?: JudgeProvenance
   rubric?: RubricProvenance
   prompt?: GradePromptInfo
   graded_at?: string
   summary_v1?: GradeSummaryV1
   tasks_v1?: TaskGradeV1[]
+  /**
+   * Run totals for the cost fields this grade recorded. Only 1.4 grade files
+   * carry receipts, so this stays absent on every earlier run — which is what
+   * the dashboard reads as "no record".
+   */
+  cost_summary?: CostSummaries
+  /** Pointer to the grading run's per-call audit sidecar, when one exists. */
+  cost_ledger?: CostLedgerReference
 }
 
 export function useGrades() {

@@ -3,6 +3,8 @@
  * Sourced from batch-runner/results/(experiment_id)/report/report_data.json
  */
 
+import type { CostLedgerReference, CostReceipt, CostSummaries } from './cost'
+
 export interface TaskResult {
   task_id: string
   sector: string
@@ -28,6 +30,11 @@ export interface TaskResult {
   prompt_classification?: PromptClassification | null
   policy_results?: Record<string, boolean> | null
   has_deliverable_files?: boolean | null
+  /**
+   * What generating this deliverable cost. Absent on every run that predates
+   * cost instrumentation — absent means "no record", never $0.
+   */
+  problem_solving_cost?: CostReceipt | null
   observability?: {
     execution_metrics?: TaskExecutionMetrics
     agentic_metrics?: TaskAgenticMetrics
@@ -292,6 +299,13 @@ export interface ReportData {
   agentic_metrics?: AgenticMetricsSummary
   /** task_id → Self-QA score (0–10). Enriched in scripts/aggregate-reports.mjs for Phase 1 calibration. */
   task_qa?: Record<string, number>
+  /**
+   * Run totals for whichever cost fields this run recorded. Absent, rather
+   * than zeroed, on an uninstrumented run.
+   */
+  cost_summary?: CostSummaries
+  /** Pointer to the published per-call audit sidecar, when one exists. */
+  cost_ledger?: CostLedgerReference
 }
 
 export interface ExperimentEntry {

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, CheckCircle2, XCircle, RefreshCw,
   X, Search, Sun, Moon, Code2, ChevronDown, ChevronRight,
-  Timer, BookOpen, ArrowRight,
+  Timer, BookOpen, ArrowRight, Receipt,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -20,6 +20,25 @@ import { useGrades, GradeResult } from '../hooks/useGrades'
 import PromptArchitectureView from '../components/dashboard/PromptArchitectureView'
 import type { TaskResult } from '../types/report'
 import type { ReportMeta } from '../types/report'
+import type { CostReceipt, CostSummary } from '../types/cost'
+import {
+  COST_ESTIMATE_NOTE,
+  COST_FIELD_LABELS,
+  combinedTaskCost,
+  componentDetail,
+  componentKey,
+  componentLabel,
+  costCell,
+  costCellClass,
+  formatCostUsd,
+  missingReasonText,
+  perDeliverableCell,
+  receiptAmount,
+  runtimeLineAmount,
+  summaryStatCell,
+  summaryStatusLabel,
+  summaryTotalCell,
+} from '../lib/cost'
 import { getJournalLinksForExperiment, lensLabels } from '../data/journalLinks'
 
 // ── Color helpers ──
@@ -60,8 +79,19 @@ function resolveScope(
   return 'self_assessed_pre_grading'
 }
 
-type SortKey = 'task_id' | 'sector' | 'occupation' | 'status' | 'qa_score' | 'latency_ms' | 'task_wall_time_ms'
+type SortKey =
+  | 'task_id' | 'sector' | 'occupation' | 'status' | 'qa_score' | 'latency_ms'
+  | 'task_wall_time_ms' | 'problem_solving_cost' | 'grading_cost'
 type SortDir = 'asc' | 'desc'
+
+/**
+ * Sort key for a cost column. Rows with no recorded amount sink to the bottom
+ * rather than being sorted as if they were free.
+ */
+function costSortValue(receipt: CostReceipt | null | undefined): number {
+  if (!receipt) return -1
+  return receiptAmount(receipt) ?? -1
+}
 
 function ExperimentDetail() {
   const { id } = useParams<{ id: string }>()
@@ -102,6 +132,28 @@ function ExperimentDetail() {
     [report]
   )
 
+  // ── Cost receipts ──
+  // Problem-solving cost rides on the report's own task rows; grading cost
+  // lives on the grade row for the same experiment and is joined by task_id.
+  const gradeRow = useMemo(
+    () => grades.find((g) => g.experiment_id === meta?.experiment_id),
+    [grades, meta],
+  )
+  const gradingCosts = useMemo(() => {
+    const receipts = new Map<string, CostReceipt>()
+    // Which tasks a judge actually looked at. A task missing from this set was
+    // never graded (미채점); a task in it with no receipt was graded without a
+    // cost record (기록 없음). Collapsing the two would misreport both.
+    const attempted = new Set<string>()
+    for (const task of gradeRow?.tasks ?? []) {
+      attempted.add(task.task_id)
+      if (task.grading_cost) receipts.set(task.task_id, task.grading_cost)
+    }
+    return { receipts, attempted }
+  }, [gradeRow])
+  const problemSolvingSummary = report?.cost_summary?.problem_solving_cost ?? null
+  const gradingSummary = gradeRow?.cost_summary?.grading_cost ?? null
+
   const filteredTasks = useMemo(() => {
     let tasks = report?.task_results || []
     if (searchTerm) {
@@ -126,6 +178,10 @@ function ExperimentDetail() {
             ? a.latency_ms
             : sortKey === 'task_wall_time_ms'
               ? a.observability?.execution_metrics?.task_wall_time_ms ?? -1
+            : sortKey === 'problem_solving_cost'
+              ? costSortValue(a.problem_solving_cost)
+            : sortKey === 'grading_cost'
+              ? costSortValue(gradingCosts.receipts.get(a.task_id))
             : (a as any)[sortKey]
       const bv =
         sortKey === 'qa_score'
@@ -134,13 +190,17 @@ function ExperimentDetail() {
             ? b.latency_ms
             : sortKey === 'task_wall_time_ms'
               ? b.observability?.execution_metrics?.task_wall_time_ms ?? -1
+            : sortKey === 'problem_solving_cost'
+              ? costSortValue(b.problem_solving_cost)
+            : sortKey === 'grading_cost'
+              ? costSortValue(gradingCosts.receipts.get(b.task_id))
             : (b as any)[sortKey]
       if (av < bv) return sortDir === 'asc' ? -1 : 1
       if (av > bv) return sortDir === 'asc' ? 1 : -1
       return 0
     })
     return tasks
-  }, [report, searchTerm, sectorFilter, statusFilter, qaScoreFilter, sortKey, sortDir])
+  }, [report, searchTerm, sectorFilter, statusFilter, qaScoreFilter, sortKey, sortDir, gradingCosts])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -486,6 +546,14 @@ function ExperimentDetail() {
             </div>
           </motion.div>
         )}
+
+        {/* ── Cost: problem-solving and grading, side by side ── */}
+        <CostSummaryCard
+          problemSolving={problemSolvingSummary}
+          grading={gradingSummary}
+          gradeLedger={gradeRow?.cost_ledger ?? null}
+          reportLedger={report.cost_ledger ?? null}
+        />
 
         {/* ── File Generation & Resume Rounds ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -951,6 +1019,20 @@ function ExperimentDetail() {
                   <th className="px-3 py-2 text-right cursor-pointer" onClick={() => handleSort('latency_ms')}>
                     Latency
                   </th>
+                  <th
+                    className="px-3 py-2 text-right cursor-pointer whitespace-nowrap"
+                    onClick={() => handleSort('problem_solving_cost')}
+                    title={COST_ESTIMATE_NOTE}
+                  >
+                    문제 풀이 비용
+                  </th>
+                  <th
+                    className="px-3 py-2 text-right cursor-pointer whitespace-nowrap"
+                    onClick={() => handleSort('grading_cost')}
+                    title={COST_ESTIMATE_NOTE}
+                  >
+                    채점 비용
+                  </th>
                   {report.execution_metrics && (
                     <th className="px-3 py-2 text-right cursor-pointer" onClick={() => handleSort('task_wall_time_ms')}>
                       Job Time
@@ -959,7 +1041,14 @@ function ExperimentDetail() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTasks.map((task, i) => (
+                {filteredTasks.map((task, i) => {
+                  const problemCost = costCell(task.problem_solving_cost, 'problem_solving_cost')
+                  const gradeCost = costCell(
+                    gradingCosts.receipts.get(task.task_id),
+                    'grading_cost',
+                    { ran: gradingCosts.attempted.has(task.task_id) },
+                  )
+                  return (
                   <tr
                     key={task.task_id}
                     className="border-b border-dash-border-subtle hover:bg-dash-card-hover cursor-pointer transition"
@@ -995,13 +1084,30 @@ function ExperimentDetail() {
                     <td className="px-3 py-2 text-right font-mono text-dash-text-muted">
                       {task.latency_ms ? `${(task.latency_ms / 1000).toFixed(1)}s` : '—'}
                     </td>
+                    <td
+                      className={`px-3 py-2 text-right font-mono whitespace-nowrap ${costCellClass(problemCost)}`}
+                      title={problemCost.title}
+                      data-cost-field="problem_solving_cost"
+                      data-cost-state={problemCost.state}
+                    >
+                      {problemCost.text}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-right font-mono whitespace-nowrap ${costCellClass(gradeCost)}`}
+                      title={gradeCost.title}
+                      data-cost-field="grading_cost"
+                      data-cost-state={gradeCost.state}
+                    >
+                      {gradeCost.text}
+                    </td>
                     {report.execution_metrics && (
                       <td className="px-3 py-2 text-right font-mono text-dash-text-muted">
                         {formatDuration(task.observability?.execution_metrics?.task_wall_time_ms)}
                       </td>
                     )}
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -1009,17 +1115,159 @@ function ExperimentDetail() {
 
         {/* Task Detail Modal */}
         <AnimatePresence>
-          {selectedTask && <TaskDetailModal task={selectedTask} experimentId={meta?.experiment_id} onClose={() => setSelectedTask(null)} />}
+          {selectedTask && (
+            <TaskDetailModal
+              task={selectedTask}
+              experimentId={meta?.experiment_id}
+              gradingCost={gradingCosts.receipts.get(selectedTask.task_id) ?? null}
+              gradingRan={gradingCosts.attempted.has(selectedTask.task_id)}
+              onClose={() => setSelectedTask(null)}
+            />
+          )}
         </AnimatePresence>
       </div>
     </motion.div>
   )
 }
 
-function TaskDetailModal({ task, experimentId, onClose }: { task: TaskResult; experimentId?: string; onClose: () => void }) {
+/**
+ * Run-level cost, both fields side by side.
+ *
+ * Always rendered, including for the runs that predate cost instrumentation:
+ * an experiment that recorded nothing has to say 기록 없음 out loud, because a
+ * hidden card and a $0 card are equally easy to misread as "this was free".
+ */
+function CostSummaryCard({
+  problemSolving,
+  grading,
+  gradeLedger,
+  reportLedger,
+}: {
+  problemSolving: CostSummary | null
+  grading: CostSummary | null
+  gradeLedger: { path: string; sha256: string } | null
+  reportLedger: { path: string; sha256: string } | null
+}) {
+  const columns = [
+    { field: 'problem_solving_cost' as const, summary: problemSolving, ledger: reportLedger },
+    { field: 'grading_cost' as const, summary: grading, ledger: gradeLedger },
+  ]
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: 0.1 }}
+      className="bg-dash-card border border-dash-border rounded-xl overflow-hidden mb-6"
+      data-testid="cost-summary"
+    >
+      <div className="px-4 py-3 border-b border-dash-border flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="text-sm font-semibold text-dash-heading flex items-center gap-2">
+          <Receipt className="h-4 w-4 text-sky-500" />
+          비용
+        </h3>
+        <span className="text-[10px] text-dash-text-muted" data-testid="cost-estimate-note">
+          {COST_ESTIMATE_NOTE}
+        </span>
+      </div>
+      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+        {columns.map(({ field, summary, ledger }) => (
+          <div key={field} data-cost-summary-field={field}>
+            <div className="flex items-baseline justify-between gap-2 mb-2">
+              <h4 className="text-xs font-semibold text-dash-heading">{COST_FIELD_LABELS[field]}</h4>
+              {summary && (
+                <span className="text-[10px] text-dash-text-muted">
+                  {summaryStatusLabel(summary.status)}
+                </span>
+              )}
+            </div>
+            {!summary ? (
+              <p
+                className="text-xs text-dash-text-faint leading-relaxed"
+                data-cost-state="absent"
+              >
+                기록 없음 — 이 실행에는 비용 기록이 없습니다. $0이 아니라, 얼마가 들었는지
+                알 수 없다는 뜻입니다.
+              </p>
+            ) : (
+              <div className="space-y-1 text-xs">
+                {[
+                  { label: '총액', cell: summaryTotalCell(summary, field) },
+                  { label: '평균', cell: summaryStatCell(summary.avg_cost_usd) },
+                  { label: '중앙값', cell: summaryStatCell(summary.median_cost_usd) },
+                  { label: 'P95', cell: summaryStatCell(summary.p95_cost_usd) },
+                  { label: '최대', cell: summaryStatCell(summary.max_cost_usd) },
+                  ...(field === 'problem_solving_cost'
+                    ? [{ label: '성공 결과물 1건당', cell: perDeliverableCell(summary) }]
+                    : []),
+                ].map(({ label, cell }) => (
+                  <div
+                    key={label}
+                    className="flex justify-between gap-2 border-b border-dash-border-subtle py-1 last:border-0"
+                  >
+                    <span className="text-dash-text-muted">{label}</span>
+                    <span
+                      className={`font-mono ${costCellClass(cell)}`}
+                      title={cell.title}
+                      data-cost-stat={label}
+                      data-cost-state={cell.state}
+                    >
+                      {cell.text}
+                    </span>
+                  </div>
+                ))}
+                {/* Failed work costs money. It sits beside the total, not inside it. */}
+                <div className="flex justify-between gap-2 py-1">
+                  <span className="text-dash-text-muted">실패 작업 비용</span>
+                  <span
+                    className="font-mono text-amber-400"
+                    title={`${COST_FIELD_LABELS[field]}: 실패한 작업에도 비용이 들었습니다. 총액에서 빼지 않았습니다. · ${COST_ESTIMATE_NOTE}`}
+                    data-cost-stat="실패 작업 비용"
+                  >
+                    {summary.failed_task_count}건 · {formatCostUsd(summary.failed_task_cost_usd)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2 py-1 text-[11px]">
+                  <span className="text-dash-text-muted">기록 범위</span>
+                  <span className="font-mono text-dash-text-secondary">
+                    {summary.receipt_tasks} / {summary.total_tasks}건 ({summary.coverage_pct}%)
+                  </span>
+                </div>
+                {summary.missing_reasons.length > 0 && (
+                  <p className="text-[11px] text-amber-400/80 pt-1">
+                    미가격 사유: {missingReasonText(summary.missing_reasons)}
+                  </p>
+                )}
+                {ledger && (
+                  <p className="text-[10px] text-dash-text-faint font-mono pt-1 break-all">
+                    🧾 {ledger.path} · sha256 {ledger.sha256.slice(0, 12)}…
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  )
+}
+
+function TaskDetailModal({
+  task,
+  experimentId,
+  gradingCost,
+  gradingRan,
+  onClose,
+}: {
+  task: TaskResult
+  experimentId?: string
+  gradingCost: CostReceipt | null
+  gradingRan: boolean
+  onClose: () => void
+}) {
   const [showPrompt, setShowPrompt] = useState(false)
   const executionMetrics = task.observability?.execution_metrics
   const agenticMetrics = task.observability?.agentic_metrics
+  const combinedCost = combinedTaskCost(task.problem_solving_cost, gradingCost)
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -1127,6 +1375,115 @@ function TaskDetailModal({ task, experimentId, onClose }: { task: TaskResult; ex
               </div>
             </div>
           )}
+
+          {/* ── What this one task cost: to solve, and to grade ── */}
+          <div className="border border-dash-border rounded-lg p-3" data-testid="task-cost">
+            <div className="text-[10px] text-dash-text-muted uppercase mb-2 flex items-center gap-1.5">
+              <Receipt className="h-3 w-3" /> 비용
+            </div>
+            <div className="space-y-2 text-xs">
+              {([
+                {
+                  field: 'problem_solving_cost' as const,
+                  receipt: task.problem_solving_cost ?? null,
+                  // The task itself ran; whether it was priced is the receipt's business.
+                  ran: true,
+                },
+                { field: 'grading_cost' as const, receipt: gradingCost, ran: gradingRan },
+              ]).map(({ field, receipt, ran }) => {
+                const cell = costCell(receipt, field, { ran })
+                // Runtime is not a model call, so it is not one of the component
+                // lines. It gets its own, and only when something was charged.
+                const runtime = receipt ? runtimeLineAmount(receipt) : null
+                return (
+                  <div key={field}>
+                    <div className="flex justify-between gap-2 border-b border-dash-border-subtle py-1">
+                      <span className="text-dash-text-secondary">{COST_FIELD_LABELS[field]}</span>
+                      <span
+                        className={`font-mono ${costCellClass(cell)}`}
+                        title={cell.title}
+                        data-cost-field={field}
+                        data-cost-state={cell.state}
+                      >
+                        {cell.text}
+                      </span>
+                    </div>
+                    {receipt && (receipt.components.length > 0 || runtime !== null) && (
+                      // Keyed by field: the same stage can legitimately appear
+                      // under both, e.g. a perception read the solver made and
+                      // one the judge made, and they must not read as one line.
+                      <div className="pl-3 pt-1 space-y-0.5" data-cost-components={field}>
+                        {receipt.components.map((component) => {
+                          const amount = component.known_cost_usd
+                          const text =
+                            component.status === 'not_run'
+                              ? '미수행'
+                              : amount === null
+                                ? '미확정'
+                                : formatCostUsd(amount)
+                          return (
+                            <div
+                              // Two stages that each had to retry are two rows
+                              // both labelled 재시도. The stage and retry kind
+                              // are what tell them apart, so they are the key.
+                              key={componentKey(component)}
+                              className="flex justify-between gap-2 text-[11px]"
+                              data-cost-component={component.name}
+                              data-cost-component-key={componentKey(component)}
+                            >
+                              <span
+                                className="text-dash-text-muted"
+                                title={componentDetail(component)}
+                              >
+                                · {componentLabel(component.name)}
+                              </span>
+                              <span
+                                className="font-mono text-dash-text-secondary"
+                                title={COST_ESTIMATE_NOTE}
+                              >
+                                {text}
+                              </span>
+                            </div>
+                          )
+                        })}
+                        {runtime !== null && (
+                          // Runtime is not a model call, so it is not one of the
+                          // lines above. It is shown once here so the lines and
+                          // the total agree without being added twice.
+                          <div
+                            className="flex justify-between gap-2 text-[11px]"
+                            data-cost-runtime={field}
+                          >
+                            <span className="text-dash-text-muted">· 실행 환경</span>
+                            <span
+                              className="font-mono text-dash-text-secondary"
+                              title={COST_ESTIMATE_NOTE}
+                            >
+                              {formatCostUsd(runtime)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              {combinedCost && (
+                <div className="flex justify-between gap-2 border-t border-dash-border pt-2 mt-1">
+                  <span className="text-dash-text font-semibold">합계</span>
+                  <span
+                    className={`font-mono font-semibold ${costCellClass(combinedCost)}`}
+                    title={combinedCost.title}
+                    data-cost-field="combined"
+                    data-cost-state={combinedCost.state}
+                  >
+                    {combinedCost.text}
+                  </span>
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-dash-text-faint mt-2">{COST_ESTIMATE_NOTE}</p>
+          </div>
 
           {/* ★ Error Message (for error tasks) ★ */}
           {task.status === 'error' && task.error && (
