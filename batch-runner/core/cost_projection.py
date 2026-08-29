@@ -43,6 +43,27 @@ _MEASURED_STATUSES = ("complete", "partial")
 
 COST_FIELDS = ("problem_solving_cost", "grading_cost")
 
+#: The closed vocabulary the producer publishes for ``components[].name``
+#: (``core/cost_receipts.py``: ``COMPONENT_NAMES``). Recorded here for readers,
+#: not enforced here: the grade schema is the gate, and a second copy that
+#: disagreed would reject a receipt the producer considers valid.
+#:
+#: There is deliberately no ``runtime`` entry. Runtime fees are not model calls
+#: and arrive as ``runtime_cost_usd``; a component line carrying them would be
+#: counted twice by any reader that sums the lines and then adds the runtime
+#: total.
+COST_COMPONENT_NAMES = (
+    "preprocessing",
+    "generation",
+    "self_qa",
+    "grading",
+    "perception",
+    "retry",
+)
+
+#: What a component line carries when it was not a first attempt.
+_RETRY_NONE = "none"
+
 # Slugs, not prose. Reason codes and component names are published, and a free
 # text field on a published payload is a prompt-leak waiting to happen.
 _SLUG = re.compile(r"[a-z][a-z0-9_]{0,47}")
@@ -135,34 +156,72 @@ def _cost_status(value, field: str) -> str:
     return value
 
 
+def _measured_amount(amount, status: str, field: str):
+    """Drop the zero a non-``complete`` line carries as a placeholder.
+
+    The producer fills every money field on every status, so an ``unavailable``
+    receipt — one that recorded nothing at all — still reaches here as
+    ``known_cost_usd: 0.0``. Passed through, that zero renders as ``$0.0000``,
+    which is the exact reading the four statuses exist to prevent: "no record"
+    turning into "it was free".
+
+    So a zero is a measurement under ``complete`` and nowhere else. That is not
+    a convention chosen here; it is the one real ``$0`` the contract admits — a
+    rule-based path that never called a model. Under ``partial`` a zero means
+    nothing was confirmed yet, which is absence, not a floor of zero.
+
+    A *non-zero* amount under ``unavailable`` or ``not_run`` is neither: the
+    receipt claims to know an amount and to have recorded nothing, and a
+    receipt that contradicts itself is not one this module will publish.
+    """
+    if status == "complete" or amount is None:
+        return amount
+    if amount == 0:
+        return None
+    if status == "partial":
+        return amount
+    _fail(field, f"is {status} but carries an amount")
+
+
 def _project_component(value, field: str) -> dict:
+    """Normalise one receipt line.
+
+    The producer's line is ``(stage, retry_kind)`` — a retry belongs to the
+    stage that retried — with ``name`` derived from the pair for readers that
+    show one label per row. All three travel: the derived name is what a reader
+    displays, and the pair is what identifies the row, because two stages that
+    each had to retry both derive the name ``retry`` and are not the same line.
+    """
     if not isinstance(value, dict):
         _fail(field, "must be an object")
     name = value.get("name")
     if not isinstance(name, str) or _SLUG.fullmatch(name) is None:
         _fail(field, "requires a slug name")
+    # Defaulted the way the producer defaults them when reading a receipt back,
+    # so a line written by an older build still identifies itself.
+    stage = value.get("stage") or name
+    if not isinstance(stage, str) or _SLUG.fullmatch(stage) is None:
+        _fail(field, "requires a slug stage")
+    retry_kind = value.get("retry_kind") or _RETRY_NONE
+    if not isinstance(retry_kind, str) or _SLUG.fullmatch(retry_kind) is None:
+        _fail(field, "requires a slug retry_kind")
     status = _cost_status(value.get("status"), f"{field}.status")
-    estimated = _cost_amount(value.get("estimated_cost_usd"), f"{field}.estimated_cost_usd")
-    known = _cost_amount(value.get("known_cost_usd"), f"{field}.known_cost_usd")
-    if status == "complete":
-        if estimated is None:
-            _fail(field, "is complete without an amount")
-        if known is None:
-            known = estimated
-    elif status == "partial":
-        if known is None:
-            _fail(field, "is partial without a known amount")
-    elif estimated is not None or known is not None:
-        _fail(field, f"is {status} but carries an amount")
-    if estimated is not None and known is not None and known > estimated:
-        _fail(field, "known amount exceeds its estimate")
+    known = _measured_amount(
+        _cost_amount(value.get("known_cost_usd"), f"{field}.known_cost_usd"),
+        status,
+        f"{field}.known_cost_usd",
+    )
     return {
         "name": name,
+        "stage": stage,
+        "retry_kind": retry_kind,
         "status": status,
-        "estimated_cost_usd": estimated,
         "known_cost_usd": known,
         "model_calls": _cost_count(value.get("model_calls"), f"{field}.model_calls"),
         "usage": _cost_usage(value.get("usage"), f"{field}.usage"),
+        "missing_reasons": _missing_reasons(
+            value.get("missing_reasons"), f"{field}.missing_reasons"
+        ),
     }
 
 
@@ -185,9 +244,21 @@ def project_cost_receipt(value, field: str = "cost receipt"):
 
     status = _cost_status(value.get("status"), f"{field}.status")
     estimated = _cost_amount(value.get("estimated_cost_usd"), f"{field}.estimated_cost_usd")
-    known = _cost_amount(value.get("known_cost_usd"), f"{field}.known_cost_usd")
-    model_cost = _cost_amount(value.get("model_cost_usd"), f"{field}.model_cost_usd")
-    runtime_cost = _cost_amount(value.get("runtime_cost_usd"), f"{field}.runtime_cost_usd")
+    known = _measured_amount(
+        _cost_amount(value.get("known_cost_usd"), f"{field}.known_cost_usd"),
+        status,
+        f"{field}.known_cost_usd",
+    )
+    model_cost = _measured_amount(
+        _cost_amount(value.get("model_cost_usd"), f"{field}.model_cost_usd"),
+        status,
+        f"{field}.model_cost_usd",
+    )
+    runtime_cost = _measured_amount(
+        _cost_amount(value.get("runtime_cost_usd"), f"{field}.runtime_cost_usd"),
+        status,
+        f"{field}.runtime_cost_usd",
+    )
     reasons = _missing_reasons(value.get("missing_reasons"), f"{field}.missing_reasons")
 
     raw_components = value.get("components")
@@ -201,9 +272,12 @@ def project_cost_receipt(value, field: str = "cost receipt"):
         _project_component(item, f"{field}.components[{index}]")
         for index, item in enumerate(raw_components)
     ]
-    names = [component["name"] for component in components]
-    if len(names) != len(set(names)):
-        _fail(field, "carries duplicate component names")
+    # A line is identified by the pair, not by its label. Generation that had to
+    # be redone and Self-QA that had to be redone both display as 재시도, and
+    # rejecting the second as a duplicate would throw away a real charge.
+    keys = [(component["stage"], component["retry_kind"]) for component in components]
+    if len(keys) != len(set(keys)):
+        _fail(field, "carries duplicate component keys")
 
     if status == "complete":
         if estimated is None:
@@ -214,18 +288,17 @@ def project_cost_receipt(value, field: str = "cost receipt"):
             _fail(field, "is complete but its known amount differs")
         if reasons:
             _fail(field, "is complete but reports missing components")
-    elif status == "partial":
-        if known is None:
-            _fail(field, "is partial without a known amount")
-        if not reasons:
-            _fail(field, "is partial without a reason code")
     else:
-        if estimated is not None or known is not None:
-            _fail(field, f"is {status} but carries an amount")
-        if status == "unavailable" and not reasons:
-            _fail(field, "is unavailable without a reason code")
-    if estimated is not None and known is not None and known > estimated:
-        _fail(field, "known amount exceeds its estimate")
+        # Only a complete receipt names a figure. Anything else offers at most
+        # a floor, and an estimate riding on it would be the floor promoted to
+        # a total by whoever reads it next.
+        if estimated is not None:
+            _fail(field, f"is {status} but carries an estimate")
+        if status in ("partial", "unavailable") and not reasons:
+            _fail(field, f"is {status} without a reason code")
+    # ``model_cost_usd + runtime_cost_usd == known_cost_usd`` holds at the
+    # producer, which sums in Decimal; each field is rounded independently on
+    # the way out, so it is checked as a bound rather than an identity.
     for amount, part in ((model_cost, "model_cost_usd"), (runtime_cost, "runtime_cost_usd")):
         if amount is not None and known is not None and amount > known:
             _fail(f"{field}.{part}", "exceeds the known amount")
@@ -234,7 +307,6 @@ def project_cost_receipt(value, field: str = "cost receipt"):
         "schema_version": COST_RECEIPT_SCHEMA_VERSION,
         "currency": COST_CURRENCY,
         "status": status,
-        "estimate_basis": ESTIMATE_BASIS,
         "estimated_cost_usd": estimated,
         "known_cost_usd": known,
         "model_cost_usd": model_cost,
@@ -372,11 +444,28 @@ def summarize_cost_receipts(
     })
     component_totals: dict[str, dict] = {}
     for receipt in receipts:
+        # Roll one receipt's lines up by displayed name before touching the run
+        # totals. A task whose generation and Self-QA both had to be redone
+        # carries two 재시도 lines but is still one task, and counting it twice
+        # would make the coverage figure beside the row a fiction.
+        rolled: dict[str, dict] = {}
         for component in receipt["components"]:
-            bucket = component_totals.setdefault(
+            entry = rolled.setdefault(
                 component["name"],
+                {"known_cost_usd": 0.0, "model_calls": 0, "complete": True},
+            )
+            amount = component["known_cost_usd"]
+            if amount is not None:
+                entry["known_cost_usd"] += amount
+            if component["model_calls"]:
+                entry["model_calls"] += component["model_calls"]
+            if component["status"] != "complete":
+                entry["complete"] = False
+        for name, entry in rolled.items():
+            bucket = component_totals.setdefault(
+                name,
                 {
-                    "name": component["name"],
+                    "name": name,
                     "tasks": 0,
                     "known_cost_usd": 0.0,
                     "complete_tasks": 0,
@@ -384,15 +473,10 @@ def summarize_cost_receipts(
                 },
             )
             bucket["tasks"] += 1
-            if component["status"] == "complete":
+            if entry["complete"]:
                 bucket["complete_tasks"] += 1
-            amount = component["known_cost_usd"]
-            if amount is None:
-                amount = component["estimated_cost_usd"]
-            if amount is not None:
-                bucket["known_cost_usd"] += amount
-            if component["model_calls"]:
-                bucket["model_calls"] += component["model_calls"]
+            bucket["known_cost_usd"] += entry["known_cost_usd"]
+            bucket["model_calls"] += entry["model_calls"]
     components = []
     for bucket in sorted(component_totals.values(), key=lambda item: item["name"]):
         bucket["known_cost_usd"] = round(bucket["known_cost_usd"], _MONEY_DIGITS)

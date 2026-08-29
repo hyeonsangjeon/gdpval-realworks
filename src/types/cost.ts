@@ -26,24 +26,52 @@ export type CostStatus = 'complete' | 'partial' | 'unavailable' | 'not_run'
 /** The two cost fields a task can carry. */
 export type CostField = 'problem_solving_cost' | 'grading_cost'
 
+/**
+ * The stage a charge belongs to. `preprocessing`, `generation` and `self_qa`
+ * flow into `problem_solving_cost`; `grading` and `perception` flow into
+ * `grading_cost`. The mapping itself lives once, at the producer.
+ */
+export type CostStage =
+  | 'preprocessing'
+  | 'generation'
+  | 'self_qa'
+  | 'grading'
+  | 'perception'
+
+/**
+ * The closed vocabulary for `components[].name`: the five stages plus `retry`,
+ * which is what any stage's line is called when it was not a first attempt.
+ *
+ * There is deliberately no `runtime` member. Runtime fees are not model calls
+ * and arrive as `runtime_cost_usd`; a component line carrying them would be
+ * counted twice by any reader that sums the lines and then adds the runtime
+ * total.
+ */
+export type CostComponentName = CostStage | 'retry'
+
 /** Token/second counters, keyed by producer-defined snake_case slugs. */
 export type CostUsage = Record<string, number>
 
 export interface CostComponent {
-  /** Slug, e.g. `generation`, `self_qa`, `runtime`. See `componentLabel()`. */
-  name: string
+  /** What the row is called on screen. See `componentLabel()`. */
+  name: CostComponentName | string
+  /** Which stage the charge belongs to — a retry keeps its stage. */
+  stage: CostStage | string
+  /** `none` on a first attempt; otherwise why it had to be repeated. */
+  retry_kind: string
   status: CostStatus
-  estimated_cost_usd: number | null
+  /** What was priced on this line. `null` unless something was measured. */
   known_cost_usd: number | null
   model_calls: number | null
   usage: CostUsage | null
+  /** Reason codes, never prose. Empty unless something went unpriced. */
+  missing_reasons: string[]
 }
 
 export interface CostReceipt {
   schema_version: typeof COST_RECEIPT_SCHEMA_VERSION
   currency: typeof COST_CURRENCY
   status: CostStatus
-  estimate_basis: typeof ESTIMATE_BASIS
   /** The full amount. Non-null only when nothing is missing. */
   estimated_cost_usd: number | null
   /** What was actually priced. A floor when `status` is `partial`. */

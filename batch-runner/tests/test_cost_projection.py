@@ -28,6 +28,27 @@ from core.cost_projection import (
 from core.result_projection import project_result_row
 
 
+def _component(**overrides) -> dict:
+    """One receipt line in the shape ``core/cost_receipts.py`` writes it.
+
+    Note what is *not* here: no ``estimated_cost_usd``. The producer puts an
+    estimate on the receipt and nowhere else, so a line only ever reports what
+    was confirmed.
+    """
+    component = {
+        "name": "generation",
+        "stage": "generation",
+        "retry_kind": "none",
+        "status": "complete",
+        "known_cost_usd": 0.25,
+        "model_calls": 3,
+        "usage": {"input_tokens": 1200},
+        "missing_reasons": [],
+    }
+    component.update(overrides)
+    return component
+
+
 def _receipt(**overrides) -> dict:
     receipt = {
         "schema_version": COST_RECEIPT_SCHEMA_VERSION,
@@ -39,19 +60,31 @@ def _receipt(**overrides) -> dict:
         "runtime_cost_usd": 0.05,
         "model_calls": 3,
         "usage": {"input_tokens": 1200, "output_tokens": 400},
-        "components": [
-            {
-                "name": "generation",
-                "status": "complete",
-                "estimated_cost_usd": 0.25,
-                "known_cost_usd": 0.25,
-                "model_calls": 3,
-                "usage": {"input_tokens": 1200},
-            },
-        ],
+        "components": [_component()],
         "price_table_sha256": "a" * 64,
         "missing_reasons": [],
     }
+    receipt.update(overrides)
+    return receipt
+
+
+def _unmeasured(status: str, **overrides) -> dict:
+    """A receipt with no amount, in the shape the producer actually writes.
+
+    ``core/cost_receipts.py`` fills every money field on every status, so an
+    ``unavailable`` receipt arrives carrying ``0.0`` rather than ``None``. A
+    test that passed ``None`` here would go green against a payload that never
+    occurs, and the placeholder zero would reach the screen as ``$0.0000``.
+    """
+    receipt = _receipt(
+        status=status,
+        estimated_cost_usd=None,
+        known_cost_usd=0.0,
+        model_cost_usd=0.0,
+        runtime_cost_usd=0.0,
+        components=[],
+        missing_reasons=[] if status == "not_run" else ["usage_absent"],
+    )
     receipt.update(overrides)
     return receipt
 
@@ -74,11 +107,37 @@ def test_absent_receipt_projects_to_none_not_zero():
     assert project_cost_receipt(None) is None
 
 
-def test_complete_receipt_round_trips_with_the_estimate_basis():
+def test_complete_receipt_round_trips_without_inventing_fields():
     projected = project_cost_receipt(_receipt())
     assert projected["status"] == "complete"
     assert projected["known_cost_usd"] == 0.25
-    assert projected["estimate_basis"] == ESTIMATE_BASIS
+    # The producer's schema is closed (``additionalProperties: false``), so the
+    # estimate-basis disclaimer rides on the summary this module builds, never
+    # on a receipt this module merely relays.
+    assert "estimate_basis" not in projected
+
+
+def test_a_component_keeps_its_stage_and_retry_kind():
+    projected = project_cost_receipt(
+        _receipt(
+            components=[
+                _component(name="retry", stage="self_qa", retry_kind="semantic"),
+            ]
+        )
+    )
+    component = projected["components"][0]
+    # Which stage a retry belonged to is what makes the charge readable. The
+    # displayed label collapses it; the record must not.
+    assert component == {
+        "name": "retry",
+        "stage": "self_qa",
+        "retry_kind": "semantic",
+        "status": "complete",
+        "known_cost_usd": 0.25,
+        "model_calls": 3,
+        "usage": {"input_tokens": 1200},
+        "missing_reasons": [],
+    }
 
 
 def test_a_genuine_zero_is_a_complete_receipt():
@@ -93,6 +152,51 @@ def test_a_genuine_zero_is_a_complete_receipt():
     )
     assert projected["status"] == "complete"
     assert projected["known_cost_usd"] == 0.0
+
+
+@pytest.mark.parametrize("status", ["unavailable", "not_run"])
+def test_the_placeholder_zero_of_an_unmeasured_receipt_becomes_no_record(status):
+    projected = project_cost_receipt(_unmeasured(status))
+    assert projected["status"] == status
+    # Every money field arrived as 0.0. None of them survives as a number: a
+    # receipt that recorded nothing must not read as a run that cost nothing.
+    assert projected["known_cost_usd"] is None
+    assert projected["model_cost_usd"] is None
+    assert projected["runtime_cost_usd"] is None
+    assert projected["estimated_cost_usd"] is None
+
+
+def test_a_partial_receipt_that_confirmed_nothing_reports_no_floor():
+    projected = project_cost_receipt(
+        _receipt(
+            status="partial",
+            estimated_cost_usd=None,
+            known_cost_usd=0.0,
+            model_cost_usd=0.0,
+            runtime_cost_usd=0.0,
+            components=[_component(status="partial", known_cost_usd=0.0)],
+            missing_reasons=["price_missing"],
+        )
+    )
+    # "At least $0" is true of every run ever made and tells the reader nothing.
+    assert projected["known_cost_usd"] is None
+    assert projected["components"][0]["known_cost_usd"] is None
+
+
+def test_a_partial_receipt_keeps_the_part_it_did_confirm():
+    projected = project_cost_receipt(
+        _receipt(
+            status="partial",
+            estimated_cost_usd=None,
+            known_cost_usd=0.12,
+            model_cost_usd=0.12,
+            runtime_cost_usd=0.0,
+            components=[_component(status="partial", known_cost_usd=0.12)],
+            missing_reasons=["runtime_cost_unpriced"],
+        )
+    )
+    assert projected["known_cost_usd"] == 0.12
+    assert projected["runtime_cost_usd"] is None
 
 
 @pytest.mark.parametrize(
@@ -110,42 +214,55 @@ def test_a_genuine_zero_is_a_complete_receipt():
             "reports missing components",
         ),
         (
-            {"status": "partial", "known_cost_usd": 0.1, "missing_reasons": []},
+            {
+                "status": "partial",
+                "estimated_cost_usd": None,
+                "known_cost_usd": 0.1,
+                "missing_reasons": [],
+            },
             "partial without a reason code",
         ),
         (
             {
                 "status": "unavailable",
                 "estimated_cost_usd": None,
+                "known_cost_usd": 0.0,
+                "model_cost_usd": 0.0,
+                "runtime_cost_usd": 0.0,
+                "components": [],
+                "missing_reasons": [],
+            },
+            "unavailable without a reason code",
+        ),
+        # An estimate is the one thing only a complete receipt may name.
+        (
+            {"status": "partial", "missing_reasons": ["price_missing"]},
+            "partial but carries an estimate",
+        ),
+        (
+            {
+                "status": "not_run",
                 "known_cost_usd": None,
                 "model_cost_usd": None,
                 "runtime_cost_usd": None,
                 "components": [],
                 "missing_reasons": [],
             },
-            "unavailable without a reason code",
+            "not_run but carries an estimate",
         ),
+        # …and a non-zero amount under a status that recorded nothing is not a
+        # placeholder, it is a receipt contradicting itself.
         (
             {
                 "status": "not_run",
+                "estimated_cost_usd": None,
+                "known_cost_usd": 0.4,
                 "components": [],
                 "missing_reasons": [],
             },
-            "carries an amount",
+            "is not_run but carries an amount",
         ),
         ({"known_cost_usd": 0.9}, "complete but its known amount differs"),
-        (
-            {
-                "status": "partial",
-                "estimated_cost_usd": 0.25,
-                "known_cost_usd": 0.9,
-                "model_cost_usd": None,
-                "runtime_cost_usd": None,
-                "components": [],
-                "missing_reasons": ["runtime_price_missing"],
-            },
-            "known amount exceeds its estimate",
-        ),
         ({"estimated_cost_usd": float("inf")}, "finite"),
         ({"estimated_cost_usd": -1.0}, "out of range"),
         ({"model_cost_usd": 0.9}, "exceeds the known amount"),
@@ -159,14 +276,36 @@ def test_malformed_receipts_raise_rather_than_publish(overrides, message):
         project_cost_receipt(_receipt(**overrides))
 
 
-def test_duplicate_component_names_are_rejected():
-    component = {
-        "name": "generation",
-        "status": "complete",
-        "estimated_cost_usd": 0.1,
-        "known_cost_usd": 0.1,
-    }
-    with pytest.raises(ValueError, match="duplicate component names"):
+def test_two_retries_from_different_stages_are_two_lines():
+    # Both derive the name ``retry`` from the producer. Rejecting the second as
+    # a duplicate would drop a call that really was billed.
+    projected = project_cost_receipt(
+        _receipt(
+            estimated_cost_usd=0.2,
+            known_cost_usd=0.2,
+            model_cost_usd=0.2,
+            runtime_cost_usd=None,
+            components=[
+                _component(
+                    name="retry", stage="generation", retry_kind="infrastructure",
+                    known_cost_usd=0.1, model_calls=1,
+                ),
+                _component(
+                    name="retry", stage="self_qa", retry_kind="semantic",
+                    known_cost_usd=0.1, model_calls=1,
+                ),
+            ],
+        )
+    )
+    assert [component["stage"] for component in projected["components"]] == [
+        "generation",
+        "self_qa",
+    ]
+
+
+def test_the_same_stage_and_retry_kind_twice_is_rejected():
+    component = _component(known_cost_usd=0.1, model_calls=1)
+    with pytest.raises(ValueError, match="duplicate component keys"):
         project_cost_receipt(
             _receipt(
                 estimated_cost_usd=0.2,
@@ -244,6 +383,9 @@ def test_complete_run_reports_a_total_and_a_per_deliverable_figure():
     assert summary["max_cost_usd"] == 0.75
     assert summary["cost_per_successful_deliverable_usd"] == 0.5
     assert summary["coverage_pct"] == 100.0
+    # The disclaimer lives on the summary, which is the payload a reader sees a
+    # headline number in. It is not a field of the receipt itself.
+    assert summary["estimate_basis"] == ESTIMATE_BASIS
 
 
 def test_one_partial_receipt_makes_the_run_total_a_floor():
@@ -278,17 +420,7 @@ def test_one_partial_receipt_makes_the_run_total_a_floor():
 
 
 def test_unavailable_receipts_are_counted_but_never_priced():
-    unavailable = project_cost_receipt(
-        _receipt(
-            status="unavailable",
-            estimated_cost_usd=None,
-            known_cost_usd=None,
-            model_cost_usd=None,
-            runtime_cost_usd=None,
-            components=[],
-            missing_reasons=["usage_not_recorded"],
-        )
-    )
+    unavailable = project_cost_receipt(_unmeasured("unavailable"))
     summary = summarize_cost_receipts(
         [_row("task-a", problem_solving_cost=unavailable)],
         "problem_solving_cost",
@@ -371,6 +503,43 @@ def test_components_aggregate_across_tasks():
             "known_cost_usd": 0.5,
             "complete_tasks": 2,
             "model_calls": 6,
+            "status": "complete",
+        },
+    ]
+
+
+def test_two_retries_in_one_task_are_one_task_in_the_component_total():
+    # `tasks` sits beside the amount as "how many tasks paid this". A task that
+    # retried twice paid it once; counting the lines would make that column
+    # exceed the number of tasks in the run.
+    receipt = project_cost_receipt(
+        _receipt(
+            estimated_cost_usd=0.2,
+            known_cost_usd=0.2,
+            model_cost_usd=0.2,
+            runtime_cost_usd=None,
+            components=[
+                _component(
+                    name="retry", stage="generation", retry_kind="infrastructure",
+                    known_cost_usd=0.15, model_calls=2, usage={},
+                ),
+                _component(
+                    name="retry", stage="self_qa", retry_kind="semantic",
+                    known_cost_usd=0.05, model_calls=1, usage={},
+                ),
+            ],
+        )
+    )
+    summary = summarize_cost_receipts(
+        [_row("task-a", problem_solving_cost=receipt)], "problem_solving_cost"
+    )
+    assert summary["components"] == [
+        {
+            "name": "retry",
+            "tasks": 1,
+            "known_cost_usd": 0.2,
+            "complete_tasks": 1,
+            "model_calls": 3,
             "status": "complete",
         },
     ]
@@ -482,15 +651,7 @@ def test_markdown_labels_every_amount_as_an_estimate():
 
 
 def test_markdown_says_no_record_rather_than_zero_for_an_unpriced_figure():
-    unavailable = _receipt(
-        status="unavailable",
-        estimated_cost_usd=None,
-        known_cost_usd=None,
-        model_cost_usd=None,
-        runtime_cost_usd=None,
-        components=[],
-        missing_reasons=["usage_not_recorded"],
-    )
+    unavailable = _unmeasured("unavailable", missing_reasons=["usage_not_recorded"])
     report = _report_data(_report_input(_row("task-a", problem_solving_cost=unavailable)))
     markdown = step6_report._build_markdown(report)
     assert "| Average per task | no record |" in markdown

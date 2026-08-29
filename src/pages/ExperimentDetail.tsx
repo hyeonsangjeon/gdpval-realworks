@@ -25,6 +25,8 @@ import {
   COST_ESTIMATE_NOTE,
   COST_FIELD_LABELS,
   combinedTaskCost,
+  componentDetail,
+  componentKey,
   componentLabel,
   costCell,
   costCellClass,
@@ -1402,12 +1404,12 @@ function TaskDetailModal({
                       </span>
                     </div>
                     {receipt && receipt.components.length > 0 && (
-                      // Keyed by field: the same slug can legitimately appear
-                      // under both, e.g. a runtime the solver used and one the
-                      // judge used, and they must not read as one line item.
+                      // Keyed by field: the same stage can legitimately appear
+                      // under both, e.g. a perception read the solver made and
+                      // one the judge made, and they must not read as one line.
                       <div className="pl-3 pt-1 space-y-0.5" data-cost-components={field}>
                         {receipt.components.map((component) => {
-                          const amount = component.known_cost_usd ?? component.estimated_cost_usd
+                          const amount = component.known_cost_usd
                           const text =
                             component.status === 'not_run'
                               ? '미수행'
@@ -1416,11 +1418,18 @@ function TaskDetailModal({
                                 : formatCostUsd(amount)
                           return (
                             <div
-                              key={component.name}
+                              // Two stages that each had to retry are two rows
+                              // both labelled 재시도. The stage and retry kind
+                              // are what tell them apart, so they are the key.
+                              key={componentKey(component)}
                               className="flex justify-between gap-2 text-[11px]"
                               data-cost-component={component.name}
+                              data-cost-component-key={componentKey(component)}
                             >
-                              <span className="text-dash-text-muted">
+                              <span
+                                className="text-dash-text-muted"
+                                title={componentDetail(component)}
+                              >
                                 · {componentLabel(component.name)}
                               </span>
                               <span
@@ -1432,6 +1441,23 @@ function TaskDetailModal({
                             </div>
                           )
                         })}
+                        {receipt.runtime_cost_usd !== null && (
+                          // Runtime is not a model call, so it is not one of the
+                          // lines above. It is shown once here so the lines and
+                          // the total agree without being added twice.
+                          <div
+                            className="flex justify-between gap-2 text-[11px]"
+                            data-cost-runtime={field}
+                          >
+                            <span className="text-dash-text-muted">· 실행 환경</span>
+                            <span
+                              className="font-mono text-dash-text-secondary"
+                              title={COST_ESTIMATE_NOTE}
+                            >
+                              {formatCostUsd(receipt.runtime_cost_usd)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

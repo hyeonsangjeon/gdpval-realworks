@@ -36,6 +36,29 @@ const MEASURED_STATUSES = ['complete', 'partial'];
 
 export const COST_FIELDS = ['problem_solving_cost', 'grading_cost'];
 
+/**
+ * The closed vocabulary the producer publishes for `components[].name`
+ * (batch-runner/core/cost_receipts.py: COMPONENT_NAMES). Recorded here for
+ * readers, not enforced here: the grade schema is the gate, and a second copy
+ * that disagreed would reject a receipt the producer considers valid.
+ *
+ * There is deliberately no `runtime` entry. Runtime fees are not model calls
+ * and arrive as `runtime_cost_usd`; a component line carrying them would be
+ * counted twice by any reader that sums the lines and then adds the runtime
+ * total.
+ */
+export const COST_COMPONENT_NAMES = [
+  'preprocessing',
+  'generation',
+  'self_qa',
+  'grading',
+  'perception',
+  'retry',
+];
+
+/** What a component line carries when it was not a first attempt. */
+const RETRY_NONE = 'none';
+
 // Slugs, not prose. Reason codes and component names are published to a
 // public dashboard, and a free-text field on a published payload is a
 // prompt-leak waiting to happen.
@@ -125,32 +148,70 @@ function costStatus(value, field) {
   return value;
 }
 
+/**
+ * Drop the zero a non-`complete` line carries as a placeholder.
+ *
+ * The producer fills every money field on every status, so an `unavailable`
+ * receipt — one that recorded nothing at all — still reaches here as
+ * `known_cost_usd: 0.0`. Passed through, that zero renders as `$0.0000`, which
+ * is the exact reading the four statuses exist to prevent: "no record" turning
+ * into "it was free".
+ *
+ * So a zero is a measurement under `complete` and nowhere else. That is not a
+ * convention chosen here; it is the one real $0 the contract admits — a
+ * rule-based path that never called a model. Under `partial` a zero means
+ * nothing was confirmed yet, which is absence, not a floor of zero.
+ *
+ * A non-zero amount under `unavailable` or `not_run` is neither: the receipt
+ * claims to know an amount and to have recorded nothing, and a receipt that
+ * contradicts itself is not one this module will render.
+ */
+function measuredAmount(amount, status, field) {
+  if (status === 'complete' || amount === null) return amount;
+  if (amount === 0) return null;
+  if (status === 'partial') return amount;
+  return fail(field, `is ${status} but carries an amount`);
+}
+
+/**
+ * Normalise one receipt line.
+ *
+ * The producer's line is `(stage, retry_kind)` — a retry belongs to the stage
+ * that retried — with `name` derived from the pair for readers that show one
+ * label per row. All three travel: the derived name is what a reader displays,
+ * and the pair is what identifies the row, because two stages that each had to
+ * retry both derive the name `retry` and are not the same line.
+ */
 function projectComponent(value, field) {
   if (!isPlainObject(value)) fail(field, 'must be an object');
   if (typeof value.name !== 'string' || !SLUG.test(value.name)) {
     fail(field, 'requires a slug name');
   }
+  // Defaulted the way the producer defaults them when reading a receipt back,
+  // so a line written by an older build still identifies itself.
+  const stage = value.stage || value.name;
+  if (typeof stage !== 'string' || !SLUG.test(stage)) {
+    fail(field, 'requires a slug stage');
+  }
+  const retryKind = value.retry_kind || RETRY_NONE;
+  if (typeof retryKind !== 'string' || !SLUG.test(retryKind)) {
+    fail(field, 'requires a slug retry_kind');
+  }
   const status = costStatus(value.status, `${field}.status`);
-  const estimated = costAmount(value.estimated_cost_usd, `${field}.estimated_cost_usd`);
-  let known = costAmount(value.known_cost_usd, `${field}.known_cost_usd`);
-  if (status === 'complete') {
-    if (estimated === null) fail(field, 'is complete without an amount');
-    if (known === null) known = estimated;
-  } else if (status === 'partial') {
-    if (known === null) fail(field, 'is partial without a known amount');
-  } else if (estimated !== null || known !== null) {
-    fail(field, `is ${status} but carries an amount`);
-  }
-  if (estimated !== null && known !== null && known > estimated) {
-    fail(field, 'known amount exceeds its estimate');
-  }
+  const known = measuredAmount(
+    costAmount(value.known_cost_usd, `${field}.known_cost_usd`),
+    status,
+    `${field}.known_cost_usd`,
+  );
   return {
     name: value.name,
+    stage,
+    retry_kind: retryKind,
     status,
-    estimated_cost_usd: estimated,
     known_cost_usd: known,
     model_calls: costCount(value.model_calls, `${field}.model_calls`),
     usage: costUsage(value.usage, `${field}.usage`),
+    missing_reasons: missingReasons(value.missing_reasons, `${field}.missing_reasons`),
   };
 }
 
@@ -174,9 +235,21 @@ export function projectCostReceipt(value, field = 'cost receipt') {
 
   const status = costStatus(value.status, `${field}.status`);
   const estimated = costAmount(value.estimated_cost_usd, `${field}.estimated_cost_usd`);
-  let known = costAmount(value.known_cost_usd, `${field}.known_cost_usd`);
-  const modelCost = costAmount(value.model_cost_usd, `${field}.model_cost_usd`);
-  const runtimeCost = costAmount(value.runtime_cost_usd, `${field}.runtime_cost_usd`);
+  let known = measuredAmount(
+    costAmount(value.known_cost_usd, `${field}.known_cost_usd`),
+    status,
+    `${field}.known_cost_usd`,
+  );
+  const modelCost = measuredAmount(
+    costAmount(value.model_cost_usd, `${field}.model_cost_usd`),
+    status,
+    `${field}.model_cost_usd`,
+  );
+  const runtimeCost = measuredAmount(
+    costAmount(value.runtime_cost_usd, `${field}.runtime_cost_usd`),
+    status,
+    `${field}.runtime_cost_usd`,
+  );
   const reasons = missingReasons(value.missing_reasons, `${field}.missing_reasons`);
 
   const rawComponents = value.components ?? [];
@@ -185,9 +258,12 @@ export function projectCostReceipt(value, field = 'cost receipt') {
   const components = rawComponents.map(
     (item, index) => projectComponent(item, `${field}.components[${index}]`),
   );
-  const names = components.map((component) => component.name);
-  if (names.length !== new Set(names).size) {
-    fail(field, 'carries duplicate component names');
+  // A line is identified by the pair, not by its label. Generation that had to
+  // be redone and Self-QA that had to be redone both display as 재시도, and
+  // rejecting the second as a duplicate would throw away a real charge.
+  const keys = components.map((component) => `${component.stage} ${component.retry_kind}`);
+  if (keys.length !== new Set(keys).size) {
+    fail(field, 'carries duplicate component keys');
   }
 
   if (status === 'complete') {
@@ -195,20 +271,18 @@ export function projectCostReceipt(value, field = 'cost receipt') {
     if (known === null) known = estimated;
     if (known !== estimated) fail(field, 'is complete but its known amount differs');
     if (reasons.length) fail(field, 'is complete but reports missing components');
-  } else if (status === 'partial') {
-    if (known === null) fail(field, 'is partial without a known amount');
-    if (!reasons.length) fail(field, 'is partial without a reason code');
   } else {
-    if (estimated !== null || known !== null) {
-      fail(field, `is ${status} but carries an amount`);
-    }
-    if (status === 'unavailable' && !reasons.length) {
-      fail(field, 'is unavailable without a reason code');
+    // Only a complete receipt names a figure. Anything else offers at most a
+    // floor, and an estimate riding on it would be the floor promoted to a
+    // total by whoever reads it next.
+    if (estimated !== null) fail(field, `is ${status} but carries an estimate`);
+    if ((status === 'partial' || status === 'unavailable') && !reasons.length) {
+      fail(field, `is ${status} without a reason code`);
     }
   }
-  if (estimated !== null && known !== null && known > estimated) {
-    fail(field, 'known amount exceeds its estimate');
-  }
+  // `model_cost_usd + runtime_cost_usd === known_cost_usd` holds at the
+  // producer, which sums in Decimal; each field is rounded independently on the
+  // way out, so it is checked as a bound rather than an identity.
   for (const [amount, part] of [[modelCost, 'model_cost_usd'], [runtimeCost, 'runtime_cost_usd']]) {
     if (amount !== null && known !== null && amount > known) {
       fail(`${field}.${part}`, 'exceeds the known amount');
@@ -219,7 +293,6 @@ export function projectCostReceipt(value, field = 'cost receipt') {
     schema_version: COST_RECEIPT_SCHEMA_VERSION,
     currency: COST_CURRENCY,
     status,
-    estimate_basis: ESTIMATE_BASIS,
     estimated_cost_usd: estimated,
     known_cost_usd: known,
     model_cost_usd: modelCost,
@@ -270,22 +343,35 @@ function receiptAmount(receipt) {
 function aggregateComponents(receipts) {
   const totals = new Map();
   for (const receipt of receipts) {
+    // Roll one receipt's lines up by displayed name before touching the run
+    // totals. A task whose generation and Self-QA both had to be redone carries
+    // two 재시도 lines but is still one task, and counting it twice would make
+    // the coverage figure beside the row a fiction.
+    const rolled = new Map();
     for (const component of receipt.components) {
-      if (!totals.has(component.name)) {
-        totals.set(component.name, {
-          name: component.name,
+      if (!rolled.has(component.name)) {
+        rolled.set(component.name, { known_cost_usd: 0, model_calls: 0, complete: true });
+      }
+      const entry = rolled.get(component.name);
+      if (component.known_cost_usd !== null) entry.known_cost_usd += component.known_cost_usd;
+      if (component.model_calls) entry.model_calls += component.model_calls;
+      if (component.status !== 'complete') entry.complete = false;
+    }
+    for (const [name, entry] of rolled) {
+      if (!totals.has(name)) {
+        totals.set(name, {
+          name,
           tasks: 0,
           known_cost_usd: 0,
           complete_tasks: 0,
           model_calls: 0,
         });
       }
-      const bucket = totals.get(component.name);
+      const bucket = totals.get(name);
       bucket.tasks += 1;
-      if (component.status === 'complete') bucket.complete_tasks += 1;
-      const amount = component.known_cost_usd ?? component.estimated_cost_usd;
-      if (amount !== null) bucket.known_cost_usd += amount;
-      if (component.model_calls) bucket.model_calls += component.model_calls;
+      if (entry.complete) bucket.complete_tasks += 1;
+      bucket.known_cost_usd += entry.known_cost_usd;
+      bucket.model_calls += entry.model_calls;
     }
   }
   return [...totals.values()]

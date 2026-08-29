@@ -992,13 +992,19 @@ function costReceipt(overrides = {}) {
     runtime_cost_usd: null,
     model_calls: 4,
     usage: { input_tokens: 900, output_tokens: 300 },
+    // `grading` and `perception` are the two stages that flow into
+    // grading_cost. A line carries the stage that was billed and, when it was
+    // not a first attempt, why it happened again.
     components: [
       {
-        name: 'primary_grading',
+        name: 'grading',
+        stage: 'grading',
+        retry_kind: 'none',
         status: 'complete',
-        estimated_cost_usd: 0.02,
         known_cost_usd: 0.02,
         model_calls: 4,
+        usage: { input_tokens: 900 },
+        missing_reasons: [],
       },
     ],
     price_table_sha256: 'a'.repeat(64),
@@ -1084,12 +1090,13 @@ test('processGradesFile carries a schema 1.4 grading cost onto tasks and the sum
 
   assert.equal(out.tasks[0].grading_cost.known_cost_usd, 0.02);
   assert.equal(out.tasks_v1[1].grading_cost.known_cost_usd, 0.04);
-  assert.equal(
-    out.tasks_v1[0].grading_cost.estimate_basis,
-    'usage_estimate_not_azure_invoice',
-  );
+  // The estimate-basis disclaimer belongs to the summary, which is where a
+  // headline number is read. The producer's receipt schema is closed and has
+  // no room for it.
+  assert.equal('estimate_basis' in out.tasks_v1[0].grading_cost, false);
 
   const summary = out.cost_summary.grading_cost;
+  assert.equal(summary.estimate_basis, 'usage_estimate_not_azure_invoice');
   assert.equal(summary.status, 'complete');
   assert.equal(summary.known_cost_usd, 0.06);
   assert.equal(summary.estimated_cost_usd, 0.06);
@@ -1124,8 +1131,11 @@ test('processGradesFile keeps one unpriced schema 1.4 receipt from becoming a to
       grading_cost: costReceipt({
         status: 'unavailable',
         estimated_cost_usd: null,
-        known_cost_usd: null,
-        model_cost_usd: null,
+        // The producer fills every money field on every status, so an
+        // unavailable receipt arrives carrying a placeholder zero. It must not
+        // survive as a number.
+        known_cost_usd: 0,
+        model_cost_usd: 0,
         components: [],
         missing_reasons: ['usage_not_recorded'],
       }),

@@ -18,6 +18,7 @@
  */
 
 import type {
+  CostComponent,
   CostField,
   CostReceipt,
   CostStatus,
@@ -67,32 +68,21 @@ const NEVER_RAN_LABELS: Record<CostField, string> = {
 }
 
 /**
- * Component slugs come from the producer, not from here, so unknown names must
- * still render. Aliases are listed because the vocabulary is Session A's to
- * fix and this side should not break when it lands on a synonym.
+ * The closed vocabulary the producer publishes for `components[].name`: the
+ * five stages plus `retry`. No aliases — the names are fixed at the producer
+ * and a synonym listed here would only hide the day one stopped matching.
+ *
+ * There is deliberately no `runtime` entry. Runtime fees are not model calls;
+ * they arrive as `runtime_cost_usd` and are shown once, beside the components,
+ * not as a row inside them.
  */
 const COMPONENT_LABELS: Record<string, string> = {
+  preprocessing: '전처리',
   generation: '생성',
-  generate: '생성',
-  inference: '생성',
   self_qa: 'Self-QA',
-  selfqa: 'Self-QA',
-  qa: 'Self-QA',
-  retry: '재시도',
-  retries: '재시도',
-  resume: '재시도',
-  reflection: '재시도',
-  runtime: '실행 환경',
-  sandbox: '실행 환경',
-  execution: '실행 환경',
-  container: '실행 환경',
   grading: '주 채점',
-  judge: '주 채점',
-  primary_judge: '주 채점',
-  main_judge: '주 채점',
   perception: '판독',
-  vision: '판독',
-  audio: '판독',
+  retry: '재시도',
 }
 
 /** Human label for a component slug; unknown slugs degrade to spaced words. */
@@ -100,13 +90,51 @@ export function componentLabel(name: string): string {
   return COMPONENT_LABELS[name] ?? name.split('_').join(' ')
 }
 
+/**
+ * Why a line had to be repeated. `none` never reaches a label — a first
+ * attempt is shown under its own stage, not as a retry.
+ */
+const RETRY_KIND_LABELS: Record<string, string> = {
+  semantic: '품질 재시도',
+  infrastructure: '오류 재시도',
+  resume: '재개',
+  internal_recovery: '내부 복구',
+}
+
+/**
+ * What a component row is, in full: which stage it belongs to and, when it was
+ * not a first attempt, why it happened again. Two stages that each had to
+ * retry are two rows both labelled 재시도, and this is what tells them apart.
+ */
+export function componentDetail(component: CostComponent): string {
+  const stage = componentLabel(component.stage)
+  if (component.retry_kind === 'none') return stage
+  const reason = RETRY_KIND_LABELS[component.retry_kind] ?? component.retry_kind
+  return `${stage} · ${reason}`
+}
+
+/**
+ * A row is identified by its stage and retry kind, not by its label, because
+ * two stages that each had to retry both display as 재시도.
+ */
+export function componentKey(component: CostComponent): string {
+  return `${component.stage}:${component.retry_kind}`
+}
+
 /** Four decimal places, matching the existing conservative-cost readouts. */
 export function formatCostUsd(value: number): string {
   return `$${value.toFixed(4)}`
 }
 
-/** The amount a receipt is willing to stand behind, or null. */
+/**
+ * The amount a receipt is willing to stand behind, or null.
+ *
+ * Status-gated on purpose. A receipt that recorded nothing still carries a
+ * zero in its money fields, and returning it here would put `$0.0000` on
+ * screen for a run nobody measured.
+ */
 export function receiptAmount(receipt: CostReceipt): number | null {
+  if (receipt.status !== 'complete' && receipt.status !== 'partial') return null
   return receipt.estimated_cost_usd ?? receipt.known_cost_usd
 }
 
