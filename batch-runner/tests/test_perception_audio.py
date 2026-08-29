@@ -228,6 +228,45 @@ def test_an_unsupported_container_is_refused_without_spending_a_call(tmp_path):
     assert verdict.usage_complete is True
 
 
+def test_the_rate_limit_guard_runs_before_every_request(wav_file):
+    """Audio is paced by the same spacer as looking and as the main judge.
+
+    All three go out over one client and draw on one token-per-minute
+    allowance, so a guard only some of them call does not pace the run — it
+    just moves where the 429s land. This reader had no guard at all until the
+    content-part key was corrected, which hid the gap completely: every audio
+    request was refused before it reached a model, so there was never any
+    traffic to throttle.
+
+    The guard runs *before* the call is counted, so a clip refused for its
+    container (checked earlier) does not consume a spacing interval either.
+    """
+    guarded = []
+    client = FakeClient(FakeResponses())
+    ap = AudioPerception(
+        client=client, before_upstream_call=lambda: guarded.append("guard")
+    )
+
+    ap.judge(criterion="voice is clear", audio_path=str(wav_file))
+    ap.judge(criterion="no clipping", audio_path=str(wav_file))
+
+    assert guarded == ["guard", "guard"]
+    assert len(client.responses.calls) == 2
+
+
+def test_a_refused_container_does_not_consume_a_spacing_interval(tmp_path):
+    """No request, so nothing to pace."""
+    guarded = []
+    clip = tmp_path / "stem.aiff"
+    clip.write_bytes(b"FORM\x00\x00\x00\x04AIFF")
+    ap = AudioPerception(
+        client=FakeClient(FakeResponses()),
+        before_upstream_call=lambda: guarded.append("guard"),
+    )
+
+    ap.judge(criterion="x", audio_path=str(clip))
+
+    assert guarded == []
 
 
 def test_call_cap_short_circuits(wav_file):

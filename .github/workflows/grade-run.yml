@@ -490,17 +490,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
-            echo "::error::checked out HEAD does not match the dispatched main SHA"
-            exit 1
-          fi
           if [[ "$(git symbolic-ref --quiet --short HEAD)" != "main" ]]; then
             echo "::error::checkout is not on the local main branch"
             exit 1
           fi
-          if [[ "$(git rev-parse refs/remotes/origin/main)" != "$GITHUB_SHA" ]]; then
-            echo "::error::origin/main moved after dispatch; retry from the new main"
-            exit 1
+
+          # Same reasoning as the paid job's copy, which carries the full
+          # explanation: the branch tip is allowed to move, the grading inputs
+          # are not. Kept in step with it by
+          # test_a_sibling_shards_commit_cannot_kill_a_chunk.py, which reads
+          # both lists and requires them identical.
+          GRADING_INPUT_PATHS=(
+            .github/workflows/grade-run.yml
+            batch-runner/core
+            batch-runner/experiments
+            batch-runner/grading_configs
+            batch-runner/prompts
+            batch-runner/requirements.txt
+            batch-runner/schemas
+            batch-runner/scripts
+            batch-runner/step8_grade.py
+            batch-runner/step9_merge_shards.py
+          )
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if [[ "$HEAD_SHA" != "$GITHUB_SHA" ]]; then
+            git fetch --no-tags --quiet --depth=1 origin "$GITHUB_SHA"
+            CHANGED="$(git diff --name-only "$GITHUB_SHA" "$HEAD_SHA" -- "${GRADING_INPUT_PATHS[@]}")"
+            if [[ -n "$CHANGED" ]]; then
+              echo "::error::grading inputs changed between the dispatched $GITHUB_SHA and the checked out $HEAD_SHA; retry from the new main"
+              while IFS= read -r changed_path; do
+                echo "::error::changed grading input: $changed_path"
+              done <<< "$CHANGED"
+              exit 1
+            fi
+            echo "[pin] main advanced $GITHUB_SHA -> $HEAD_SHA; no grading input differs"
           fi
           if git config --local --name-only --get-regexp '^http\..*\.extraheader$' >/dev/null; then
             echo "::error::dry-run checkout must not retain repository credentials"
@@ -675,10 +698,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
-            echo "::error::checked out HEAD does not match the dispatched main SHA"
-            exit 1
-          fi
           if [[ "$(git symbolic-ref --quiet --short HEAD)" != "main" ]]; then
             echo "::error::checkout is not on the local main branch"
             exit 1
@@ -687,9 +706,52 @@ jobs:
             echo "::error::local main does not track origin/main"
             exit 1
           fi
-          if [[ "$(git rev-parse refs/remotes/origin/main)" != "$GITHUB_SHA" ]]; then
-            echo "::error::origin/main moved after dispatch; retry from the new main"
-            exit 1
+
+          # main moves between dispatch and here, and that is normal: eleven
+          # shards commit their grades to the same branch, so a chunk that
+          # waits on its paid-approval gate almost always comes back to a main
+          # a sibling has already written to. Run 33248832615 was dispatched at
+          # d5c1e18 and killed 117 seconds later because shard 3 landed
+          # shard-003-of-011.json in the gap. One grade file, no code, and the
+          # chunk died with its approval already spent -- an equality check on
+          # the branch tip is false for the most ordinary reason there is.
+          #
+          # What must not move is what this job *reads*. Every path below is an
+          # input to grading; nothing the job writes appears in the list. The
+          # set is a deliberate superset of what `compute_grader_source_hash`
+          # covers -- whole directories rather than the `.py` files and the one
+          # prompt template it selects -- because erring wide can only refuse a
+          # run that would have been fine, while erring narrow lets changed
+          # code grade under an approval given for something else.
+          GRADING_INPUT_PATHS=(
+            .github/workflows/grade-run.yml
+            batch-runner/core
+            batch-runner/experiments
+            batch-runner/grading_configs
+            batch-runner/prompts
+            batch-runner/requirements.txt
+            batch-runner/schemas
+            batch-runner/scripts
+            batch-runner/step8_grade.py
+            batch-runner/step9_merge_shards.py
+          )
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if [[ "$HEAD_SHA" != "$GITHUB_SHA" ]]; then
+            # Fetching one commit by SHA into the shallow clone. `git diff`
+            # needs both trees and not the history between them, so there is
+            # no reason to deepen. The repository is public, so this needs no
+            # credentials -- which matters in the read-only job, where they
+            # are deliberately absent.
+            git fetch --no-tags --quiet --depth=1 origin "$GITHUB_SHA"
+            CHANGED="$(git diff --name-only "$GITHUB_SHA" "$HEAD_SHA" -- "${GRADING_INPUT_PATHS[@]}")"
+            if [[ -n "$CHANGED" ]]; then
+              echo "::error::grading inputs changed between the dispatched $GITHUB_SHA and the checked out $HEAD_SHA; retry from the new main"
+              while IFS= read -r changed_path; do
+                echo "::error::changed grading input: $changed_path"
+              done <<< "$CHANGED"
+              exit 1
+            fi
+            echo "[pin] main advanced $GITHUB_SHA -> $HEAD_SHA; no grading input differs"
           fi
           if ! git config --local --name-only --get-regexp '^http\..*\.extraheader$' >/dev/null; then
             echo "::error::checkout credentials required for result publication are missing"
@@ -951,6 +1013,8 @@ jobs:
         if: always() && steps.grade.conclusion == 'success' && (steps.grade.outputs.rc == '0' || steps.grade.outputs.rc == '7') && inputs.dry_run == false
         env:
           EXPECTED_GRADE_STATUS: ${{ steps.grade.outputs.rc == '7' && 'partial' || steps.grade.outputs.grade_status }}
+          COST_LEDGER_FILE: ${{ steps.grade.outputs.cost_ledger_file }}
+          COST_LEDGER_SHA256: ${{ steps.grade.outputs.cost_ledger_sha256 }}
         run: |
           GRADE_FILE="${{ steps.grade.outputs.grade_file }}"
           if [[ -z "$GRADE_FILE" || ! -f "$GRADE_FILE" ]]; then
@@ -991,6 +1055,39 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- "$GRADE_FILE"
+          # The per-call cost ledger travels with the grade it belongs to.
+          #
+          # It has to be committed, not merely uploaded: step9_merge_shards
+          # looks for each shard's ledger *beside that shard's JSON* in the
+          # checkout, and a resumed chunk rebuilds its ledger by importing the
+          # export the previous chunk left there. Both of those read from the
+          # repository, because a chunk gets a fresh runner and the workspace
+          # the ledger was written into is gone by the time anyone looks. Until
+          # this line existed the file was never committed anywhere, so the
+          # merge silently dropped every shard's ledger and each chunk counted
+          # only its own calls.
+          if [[ -n "$COST_LEDGER_FILE" ]]; then
+            if [[ "$COST_LEDGER_FILE" == /* || "$COST_LEDGER_FILE" == *$'\n'* || "$COST_LEDGER_FILE" != data/grades/*.cost_ledger.jsonl || ! -f "$COST_LEDGER_FILE" || -L "$COST_LEDGER_FILE" ]]; then
+              echo "::error::resolved cost ledger path is invalid: $COST_LEDGER_FILE"
+              exit 1
+            fi
+            LEDGER_BLOB_SHA="$(python - "$COST_LEDGER_FILE" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+          PY
+          )"
+            if [[ "$LEDGER_BLOB_SHA" != "$COST_LEDGER_SHA256" ]]; then
+              echo "::error::cost ledger on disk does not match the digest step8 published"
+              exit 1
+            fi
+            git add -- "$COST_LEDGER_FILE"
+            echo "[cost] committing ledger $COST_LEDGER_FILE ($LEDGER_BLOB_SHA)"
+          else
+            echo "::warning::this grade carries no cost ledger; its per-call costs will not survive the run"
+          fi
           if git diff --staged --quiet; then
             if [[ "${{ steps.grade.outputs.rc }}" == "7" ]]; then
               echo "::error::rc=7 requires a newly persisted partial grade diff"
@@ -1366,6 +1463,28 @@ jobs:
             echo "::error::could not push the analysis to ${GITHUB_REF_NAME} after 6 attempts"
             exit 1
           fi
+
+      - name: Upload cost ledger
+        # Deliberately *not* gated on steps.grade.outputs.grade_file. That
+        # output is written inside the save path, so a run that dies before its
+        # first save has none -- which is exactly the run whose costs most need
+        # preserving. Shard 4 of the first Stage 3 attempt spent five hours and
+        # left `{"total_count":0,"artifacts":[]}` behind, because this upload
+        # did not exist and the grade upload below had nothing to trigger on.
+        #
+        # Both sidecars go up. The JSONL is the portable record with a digest;
+        # the sqlite3 is what the process was writing into as it went, so it
+        # survives even a kill that never let the exporter run.
+        if: always() && inputs.dry_run == false
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cost-ledger-${{ env.GRADE_EXPERIMENT_YAML }}${{ inputs.shard_count > 1 && format('-shard{0}of{1}', inputs.shard_index, inputs.shard_count) || '' }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            data/grades/**/*.cost_ledger.jsonl
+            data/grades/**/*.cost_ledger.sqlite3
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Upload grade artifact
         if: always() && inputs.dry_run == false && steps.grade.outputs.grade_file != ''

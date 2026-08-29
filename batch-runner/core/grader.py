@@ -46,6 +46,23 @@ DEFAULT_GRADER_TIMEOUT = 600
 DEFAULT_GRADER_API_VERSION = "2025-04-01-preview"
 
 
+class GradingDeadlineExceeded(RuntimeError):
+    """The run ran out of time part-way through a task.
+
+    Raised out of ``grade_task`` rather than returned, because a half-marked
+    task must not become a grade. Its remaining items would be missing, and a
+    task missing items scores lower than one that was never attempted — a
+    silent penalty for having been unlucky with the clock. The driver drops
+    the task, keeps everything already finished, and lets the next chunk mark
+    it from the beginning.
+
+    The alternative — no check at all — is what shard 4 of the first Stage 3
+    attempt did: one task held the loop for four hours past a four-hour
+    budget, the job hit ``timeout-minutes`` at five hours twenty, and six
+    finished tasks went down with it.
+    """
+
+
 def grader_transport_options(config: dict) -> dict[str, object]:
     """Return the exact transport fields bound into grader route identity."""
     judge = config.get("judge") or {}
@@ -238,9 +255,15 @@ class Grader:
         client=None,
         client_factory: AzureAIClientFactory | None = None,
         cost_recorder=None,
+        should_stop: Optional[Callable[[], bool]] = None,
     ):
         self.config = config
         self.rubric_loader = rubric_loader
+
+        # The driver's answer to "should I still be working?", consulted
+        # between units of work inside a task rather than only between tasks.
+        # See ``_check_should_stop``.
+        self.should_stop = should_stop
 
         provider = self.config.get("judge", {}).get("provider", "azure_openai")
         if provider != "azure_openai":
@@ -359,6 +382,26 @@ class Grader:
     def _classify(item: RubricItem) -> tuple[str, Optional[str]]:
         return "judge", None
 
+    def _check_should_stop(self, task_id: str, unit: str) -> None:
+        """Give up on this task if the driver says the run is out of time.
+
+        Called at the top of the two loops that can each run for hours: the
+        rubric items of a task, and the split children of one item. Neither is
+        bounded by anything but the deliverable — a task with forty children
+        and twenty items makes eight hundred judge conversations, and each of
+        those may retry — so a budget consulted only between tasks is a budget
+        that a single unlucky task can ignore completely.
+
+        The check sits *before* the work, so the unit that would have started
+        is never charged for. What has already been spent on this task is
+        spent; the loss is bounded at one task and the driver keeps the rest.
+        """
+        if self.should_stop is None or not self.should_stop():
+            return
+        raise GradingDeadlineExceeded(
+            f"grading deadline reached during {task_id} while starting {unit}"
+        )
+
     def grade_task(self, task: TaskRubric, deliverable_dir: str) -> TaskGrade:
         deliverable_path = Path(deliverable_dir)
         files = self._list_files(deliverable_path)
@@ -413,6 +456,7 @@ class Grader:
         judge_cached_tokens = 0
 
         for item, runtime_plan in zip(task.rubric_items, runtime_plans):
+            self._check_should_stop(task.task_id, f"item {item.rubric_item_id}")
             mode, pattern_id = self._classify(item)
             plan = runtime_plan.target_plan
 
@@ -1001,6 +1045,7 @@ class Grader:
             target = target_by_id.get(target_id)
             if target is None:
                 continue
+            self._check_should_stop(task.task_id, f"child {target_id}")
             self._last_cached_tokens = 0
             child, in_tok, out_tok = self._judge_via_tool_calling_selected(
                 task,
@@ -1297,9 +1342,14 @@ class Grader:
     def _apply_tpm_delay(self) -> None:
         """TPM guard shared by the tool judge and both perception paths.
 
-        Passed as ``before_upstream_call`` into ``ToolCallingJudge`` and
-        ``VisionPerception``, so this is live v2 infrastructure, not part
-        of the legacy text-extract path removed in task 207.
+        Passed as ``before_upstream_call`` into ``ToolCallingJudge``,
+        ``VisionPerception`` and ``AudioPerception``, so this is live v2
+        infrastructure, not part of the legacy text-extract path removed in
+        task 207.
+
+        All three share one spacer on purpose: they share one connection and
+        therefore one token-per-minute allowance, so a guard that only some
+        of them honour paces nothing.
         """
         if self._min_delay_seconds <= 0:
             return
@@ -1563,6 +1613,7 @@ class Grader:
                 trim_seconds=int(
                     aud_cfg.get("trim_seconds", AUDIO_TRIM_SECONDS)
                 ),
+                before_upstream_call=self._apply_tpm_delay,
             )
 
         return ToolCallingJudge(
