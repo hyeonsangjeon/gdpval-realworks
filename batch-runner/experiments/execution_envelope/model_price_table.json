@@ -5,7 +5,7 @@
   "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
   "mirrors": "scripts/analyze_grade_run.py PRICING_USD_PER_M_TOKENS",
   "last_reviewed": "2026-05-28",
-  "note": "These are list prices recorded in this repository, not a quote from a bill. A tenant with negotiated rates must replace them before any number here is treated as a commitment. tests/test_execution_envelope_cost.py fails if these stop matching scripts/analyze_grade_run.py.",
+  "note": "These are list prices recorded in this repository, not a quote from a bill. A tenant with negotiated rates must replace them before any number here is treated as a commitment. tests/test_execution_envelope_cost.py fails if these stop matching scripts/analyze_grade_run.py. KNOWN DEFECT, not fixed here: on 2026-08-29 every figure in this planning block was checked against the Azure Retail Prices API and none of them matched a published meter — see cost_receipt_caveats.planning_block_is_also_wrong. It is left alone in this change because it is a pre-run ceiling mirrored in another file under its own test, and correcting it is a separate change with a separate blast radius.",
   "models": {
     "gpt-5.4": {
       "input_usd_per_million": "1.25",
@@ -25,54 +25,184 @@
     }
   },
   "cost_receipt_schema_version": "cost-receipt-price-table-v1",
-  "cost_receipt_note": "The block above prices a plan before it runs. The two blocks below price calls after they have run, and are read by core/cost_receipts.py. They are kept apart because a ceiling and a receipt are answers to different questions and must not be edited as if they were one list. Keys here are provider:resolved_model, where resolved_model is the model the response reports — not the deployment name in the request. A provider or model with no entry here is recorded as price_missing; it is never priced from a similar entry.",
+  "cost_receipt_note": "The block above prices a plan before it runs. The blocks below price calls after they have run, and are read by core/cost_receipts.py. They are kept apart because a ceiling and a receipt are answers to different questions and must not be edited as if they were one list. Keys here are provider:resolved_model, where resolved_model is the model the response reports — not the deployment name in the request. A provider or model with no entry here is recorded as price_missing; it is never priced from a similar entry. Every rate in `providers` names the exact published meter it came from, so it can be re-checked without trusting this file. `azure_published_meters` records the full official matrix including the rates NOT used, so that a reader can see what was chosen and what was rejected. `pricing_axes` records, per model, which billing axes were settled by evidence and which are still open.",
+  "cost_receipt_last_reviewed": "2026-08-29",
+  "cost_receipt_source": {
+    "authority": "Azure Retail Prices API (unauthenticated, public)",
+    "query": "https://prices.azure.com/api/retail/prices?currencyCode='USD'&$filter=contains(meterName,'<meter fragment>')",
+    "published_page": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
+    "product_name": "Azure OpenAI GPT5",
+    "service_name": "Foundry Models",
+    "price_type": "Consumption",
+    "retrieved": "2026-08-29",
+    "currency": "USD",
+    "unit": "per 1,000,000 tokens",
+    "why_the_api_and_not_the_page": "The pricing page renders every figure from a region and currency selector, so fetching the page returns rows whose price cells are all '$-'. The Retail Prices API returns the same list prices as data. That is why every number below can be re-checked by re-running one query, instead of by trusting a screenshot or a person's memory.",
+    "meter_name_key": "Inp = input, Opt = output, Cd Inp = cached input, Cd Wr = cache write. Gl = Global deployment, Dz = Data Zone deployment. Std = standard, PP = Priority Processing, Batch = Batch API. ShortCo / LongCo (and, on the 5.4 meters, the absence or presence of 'longco') = the context-length tier."
+  },
   "providers": {
     "azure:gpt-5.4": {
-      "input_usd_per_million": "1.25",
-      "cached_input_usd_per_million": "1.25",
-      "output_usd_per_million": "5.00",
-      "reasoning_billed_as": "output",
-      "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
-      "last_reviewed": "2026-05-28",
-      "currency": "USD",
-      "unit": "per 1,000,000 tokens"
-    },
-    "azure:gpt-5.4-mini": {
-      "input_usd_per_million": "0.25",
+      "input_usd_per_million": "2.50",
       "cached_input_usd_per_million": "0.25",
-      "output_usd_per_million": "1.00",
-      "reasoning_billed_as": "output",
-      "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
-      "last_reviewed": "2026-05-28",
-      "currency": "USD",
-      "unit": "per 1,000,000 tokens"
-    },
-    "azure:gpt-5.4-nano": {
-      "input_usd_per_million": "0.075",
-      "cached_input_usd_per_million": "0.075",
-      "output_usd_per_million": "0.30",
-      "reasoning_billed_as": "output",
-      "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
-      "last_reviewed": "2026-05-28",
-      "currency": "USD",
-      "unit": "per 1,000,000 tokens"
-    },
-    "azure:gpt-5.4-pro": {
-      "input_usd_per_million": "5.00",
-      "cached_input_usd_per_million": "5.00",
       "output_usd_per_million": "15.00",
       "reasoning_billed_as": "output",
-      "source": "https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/",
-      "last_reviewed": "2026-05-28",
+      "source": "https://prices.azure.com/api/retail/prices — meters '5.4 inp Gl 1M Tokens', '5.4 cd inp Gl 1M Tokens', '5.4 opt Gl 1M Tokens'; productName 'Azure OpenAI GPT5', type Consumption",
+      "last_reviewed": "2026-08-29",
       "currency": "USD",
-      "unit": "per 1,000,000 tokens"
+      "unit": "per 1,000,000 tokens",
+      "meters": {
+        "input": "5.4 inp Gl 1M Tokens",
+        "cached_input": "5.4 cd inp Gl 1M Tokens",
+        "output": "5.4 opt Gl 1M Tokens"
+      },
+      "tier": "standard",
+      "zone": "global",
+      "context_tier": "under 272k",
+      "premises": [
+        "The deployment is a Global one, not a Data Zone one. Nothing in this repository or in any published artifact records the deployment's zone, so this is stated rather than proven. If it is a Data Zone deployment the correct meters are 3.00 input, 0.30 cached input, 16.50 output.",
+        "No single request sends more than 272,000 input tokens. Azure prices 5.4 in two context tiers split at that figure, and the receipt records tokens per task rather than per call, so this cannot be read off the receipt. It CAN be read off the per-call cost ledger, which the inference workflow does publish. If a request crosses 272k the correct meters are 5.00 input, 0.50 cached input, 22.50 output."
+      ]
+    },
+    "azure:gpt-5.4-mini": {
+      "input_usd_per_million": "0.75",
+      "cached_input_usd_per_million": "0.075",
+      "output_usd_per_million": "4.50",
+      "reasoning_billed_as": "output",
+      "source": "https://prices.azure.com/api/retail/prices — meters '5.4 mini Inp Gl 1M Tokens', '5.4 mini cd Inp Gl 1M Tokens', '5.4 mini Opt Gl 1M Tokens'; productName 'Azure OpenAI GPT5', type Consumption",
+      "last_reviewed": "2026-08-29",
+      "currency": "USD",
+      "unit": "per 1,000,000 tokens",
+      "meters": {
+        "input": "5.4 mini Inp Gl 1M Tokens",
+        "cached_input": "5.4 mini cd Inp Gl 1M Tokens",
+        "output": "5.4 mini Opt Gl 1M Tokens"
+      },
+      "tier": "standard",
+      "zone": "global",
+      "premises": [
+        "The deployment is a Global one, not a Data Zone one. See azure:gpt-5.4."
+      ]
+    },
+    "azure:gpt-5.4-nano": {
+      "input_usd_per_million": "0.20",
+      "cached_input_usd_per_million": "0.02",
+      "output_usd_per_million": "1.25",
+      "reasoning_billed_as": "output",
+      "source": "https://prices.azure.com/api/retail/prices — meters '5.4 nano Inp Gl 1M Tokens', '5.4 nano cd Inp Gl 1M Tokens', '5.4 nano Opt Gl 1M Tokens'; productName 'Azure OpenAI GPT5', type Consumption",
+      "last_reviewed": "2026-08-29",
+      "currency": "USD",
+      "unit": "per 1,000,000 tokens",
+      "meters": {
+        "input": "5.4 nano Inp Gl 1M Tokens",
+        "cached_input": "5.4 nano cd Inp Gl 1M Tokens",
+        "output": "5.4 nano Opt Gl 1M Tokens"
+      },
+      "tier": "standard",
+      "zone": "global",
+      "premises": [
+        "The deployment is a Global one, not a Data Zone one. See azure:gpt-5.4."
+      ]
+    }
+  },
+  "pricing_axes": {
+    "why_this_block_exists": "Azure does not publish one price per model. It publishes one price per (model x context tier x zone x tier x rate kind). A key in `providers` is flat — one provider:model maps to one set of rates — so adding an entry means asserting where the call sat on every one of those axes. This block records how each axis was settled, so that a rate here is either evidence or a stated premise, never an unmarked choice.",
+    "axes_settled_for_every_azure_call_in_this_pipeline": {
+      "batch_api": "Excluded by evidence, not by preference. The Batch API is a separate endpoint with its own meters ('5.4 Batch inp Gl' and friends, roughly half the standard rate for a 24-hour turnaround). This pipeline never calls it: core/ contains no reference to a batches endpoint, and every call site is a synchronous responses.create or chat.completions.create. Batch meters are therefore not applicable.",
+      "priority_processing": "Excluded by evidence. Priority Processing has its own meters ('5.4 pp inp Gl' and friends, exactly 2x standard) and has to be asked for. Nothing in core/ or step*.py ever sets service_tier or any priority flag, so calls land on the standard meters."
+    },
+    "axes_open": {
+      "zone": {
+        "status": "unresolved",
+        "spread": "Data Zone is 1.1x to 1.2x Global depending on the rate kind.",
+        "why_it_cannot_be_read": "Global versus Data Zone is a property of the deployment, chosen when the deployment was created. It is not in the response, not in the config, and not in any published artifact. azure_ai_routes.endpoint_kind ('direct-v1') describes the shape of the API surface, not the zone. core/config.py holds no region or zone token at all.",
+        "what_would_settle_it": "One statement from whoever owns the deployment, or recording the deployment's SKU alongside the resolved model at call time.",
+        "handling": "Stated as a premise on each entry rather than left silent, because a receipt that is 10% wrong AND says which way is a smaller problem than one that is 10% wrong and says nothing."
+      },
+      "context_tier": {
+        "status": "resolved for 5.4, unresolved for 5.6-sol",
+        "gpt_5_4": "The split is published as 272k, so the premise is checkable against the per-call cost ledger that the inference workflow publishes.",
+        "gpt_5_6_sol": "Azure labels the two tiers only 'short context' and 'long context' and publishes no threshold anywhere. Even with per-call tokens in hand there would be nothing to compare them against.",
+        "what_would_settle_it": "Azure publishing the 5.6-sol threshold, plus per-call input tokens surviving into a published artifact on the grading side."
+      }
+    }
+  },
+  "models_deliberately_not_priced": {
+    "azure:gpt-5.6-sol": {
+      "used_for": "the Track 2 grading judge and its visual perception calls",
+      "official_price_exists": true,
+      "why_unpriced": "Not because Azure is silent — Azure publishes 24 meters for this model. Because nothing available says which of them applies. Two axes are open at once: the zone, as for every model here, and the context tier, and for 5.6-sol the context tier is the worse of the two. Azure names those tiers only 'short context' and 'long context' and publishes no threshold for either, so no token measurement can settle the question — there is nothing to compare a measurement against. Nor would one blanket answer serve: across the 86 graded tasks whose receipts were read on 2026-08-29, per-task input ranged from 76,600 tokens over 32 calls to 6,150,162 tokens over 177 calls, an eighty-fold spread, and a tool-calling judge's conversation grows with every turn within a task. Picking a tier would move the answer by 2x on input and 1.5x on output. That is the guess this table exists to refuse.",
+      "what_would_settle_it": "Publish the grading-side per-call cost ledger (it is written next to the grade file and then dies with the runner), and establish the 5.6-sol context threshold. With both, the tier becomes arithmetic instead of a choice.",
+      "consequence": "Every grading receipt stays partial with missing_reason price_missing. Call counts and token counts are all preserved; only the rate is absent."
+    },
+    "azure:gpt-audio-1.5": {
+      "used_for": "audio perception during grading, and the audio branch of inference",
+      "official_price_exists": false,
+      "why_unpriced": "No meter for it exists. The Azure Retail Prices API was searched for every meter containing 'audio' and every meter containing 'Audio'; the model does not appear under any of them, and it is absent from the pricing page as well. The audio meters that do exist belong to other products entirely — gpt4o realtime audio, Azure Speech, Azure Video Indexer, Azure Content Understanding. Pricing this model from any of those would be pricing it from a different service.",
+      "what_would_settle_it": "Azure publishing a meter, or the tenant's own negotiated rate.",
+      "consequence": "Audio perception calls stay unpriced, and any receipt containing one stays partial."
+    },
+    "azure:gpt-5.4-pro": {
+      "used_for": "nothing in this pipeline at present",
+      "official_price_exists": "partly",
+      "why_unpriced": "Azure publishes input (30.00) and output (180.00) for 5.4 pro but publishes no cached-input meter for it at all. The receipt schema requires a cached-input rate, and every call this pipeline makes reports cached tokens. Filling that field would mean inventing the one rate Azure declines to state. The entry that used to be here claimed 5.00 / 5.00 / 15.00, which was wrong on all three counts and would have under-charged output by a factor of twelve.",
+      "what_would_settle_it": "Azure publishing a cached-input meter for 5.4 pro.",
+      "consequence": "A 5.4-pro call would be recorded as price_missing. Nothing in this pipeline makes one."
+    }
+  },
+  "azure_published_meters": {
+    "why_this_block_exists": "The rates actually in use are a small selection out of a large published matrix. Recording the whole matrix means a reviewer can check not only that a chosen rate is real, but that the right one was chosen — and it means the alternatives are already here when a premise turns out to be wrong.",
+    "retrieved": "2026-08-29",
+    "currency": "USD",
+    "unit": "per 1,000,000 tokens unless stated otherwise",
+    "gpt-5.4": {
+      "standard_global": {"input": "2.50", "cached_input": "0.25", "output": "15.00"},
+      "standard_data_zone": {"input": "3.00", "cached_input": "0.30", "output": "16.50"},
+      "standard_global_long_context": {"input": "5.00", "cached_input": "0.50", "output": "22.50"},
+      "standard_data_zone_long_context": {"input": "6.00", "cached_input": "0.60", "output": "24.75"},
+      "priority_global": {"input": "5.00", "cached_input": "0.50", "output": "30.00"},
+      "priority_data_zone": {"input": "5.50", "cached_input": "0.55", "output": "33.00"},
+      "batch_global": {"input": "1.25", "cached_input": "0.13", "output": "7.50"},
+      "batch_data_zone": {"input": "1.375", "cached_input": "0.143", "output": "8.25"}
+    },
+    "gpt-5.4-mini": {
+      "standard_global": {"input": "0.75", "cached_input": "0.075", "output": "4.50"}
+    },
+    "gpt-5.4-nano": {
+      "standard_global": {"input": "0.20", "cached_input": "0.02", "output": "1.25"}
+    },
+    "gpt-5.4-pro": {
+      "standard_global": {"input": "30.00", "cached_input": null, "output": "180.00"},
+      "standard_data_zone": {"input": "33.00", "cached_input": null, "output": "198.00"},
+      "standard_global_long_context": {"input": "60.00", "cached_input": null, "output": "270.00"},
+      "note": "No cached-input meter is published for any 5.4 pro variant."
+    },
+    "gpt-5.6-sol": {
+      "short_context_standard_global": {"input": "5.00", "cached_input": "0.50", "cache_write": "6.25", "output": "30.00"},
+      "short_context_standard_data_zone": {"input": "5.50", "cached_input": "0.55", "cache_write": "6.875", "output": "33.00"},
+      "short_context_priority_global": {"input": "10.00", "cached_input": "1.00", "cache_write": "12.50", "output": "60.00"},
+      "short_context_priority_data_zone": {"input": "11.00", "cached_input": "1.10", "cache_write": "13.75", "output": "66.00"},
+      "long_context_standard_global": {"input": "10.00", "cached_input": "1.00", "cache_write": "12.50", "output": "45.00"},
+      "long_context_standard_data_zone": {"input": "11.00", "cached_input": "1.10", "cache_write": "13.75", "output": "49.50"},
+      "note": "Long context has no Priority Processing variant. 5.6-sol also bills cache WRITES, which 5.4 does not; the receipt records cached-input tokens but no cache-write count, so even with the tier settled that meter could not be applied from what is recorded."
+    },
+    "execution_environment": {
+      "code_interpreter_session_global": {"price": "0.03", "unit": "per session", "meter": "Code-Interpreter-global Session", "product": "Azure OpenAI"},
+      "code_interpreter_session_regional": {"price": "0.0363", "unit": "per session", "meter": "Code-Interpreter-regnl EP Session", "product": "Azure OpenAI"},
+      "note": "Recorded here as evidence; see cost_receipt_caveats.runtime for why it cannot yet be loaded into the runtime block."
+    },
+    "audio": {
+      "gpt-audio-1.5": null,
+      "note": "Searched exhaustively; no meter exists for this model under any product. See models_deliberately_not_priced."
     }
   },
   "cost_receipt_caveats": {
-    "cached_input": "No discounted cache rate has been sourced for this tenant, so cached input is priced at the full input rate. That over-states the bill rather than under-stating it, which is the only direction this repository is willing to be wrong in. Replace these with a sourced rate before treating a receipt as a quote.",
-    "reasoning_tokens": "reasoning_billed_as is 'output' because these deployments report reasoning tokens inside the completion token count, so charging them again on top would bill the same tokens twice. A provider that bills reasoning separately needs 'separate' and its own rate; where nobody has established which it is, 'unknown' leaves the call unpriced.",
+    "cached_input": "Cached input is now priced from its own published meter, one per model, named on each entry. This replaces an earlier rule that charged cached input at the full input rate on the stated grounds that no cache rate had been sourced. A cache rate had in fact been published all along — 0.25 against 2.50 for 5.4 — so that rule was over-charging cached tokens roughly tenfold, and cached tokens are the majority of input on a grading run.",
+    "reasoning_tokens": "reasoning_billed_as is 'output' because these deployments report reasoning tokens inside the completion token count, so charging them again on top would bill the same tokens twice. core/cost_receipts.py price_call enforces this: it charges output_tokens once and adds a separate reasoning charge only where an entry says 'separate' and supplies its own rate. A provider that bills reasoning separately needs 'separate'; where nobody has established which it is, 'unknown' leaves the call unpriced rather than guessed.",
+    "double_counting_of_cached_input": "Providers report input_tokens inclusive of the part served from cache. price_call charges (input - cached) at the input rate and cached at the cache rate, so no token is charged twice. With the cache rate now correct rather than equal to the input rate, that split finally changes the answer.",
     "other_providers": "Only the provider covered by the source above is listed. Calls to any other provider are recorded as price_missing and hold their receipt at partial until someone sources the rates and adds them here.",
-    "runtime": "No execution-environment rate has been sourced, so the runtime block is empty and directly attributable runtime fees are recorded as runtime_cost_unpriced. An empty list is a smaller error than an invented hourly rate."
+    "runtime": "The runtime block is still empty, but the reason has changed and is worth stating precisely. A rate HAS now been sourced: Azure publishes the code interpreter container at 0.03 per session (Global) and 0.0363 per session (regional endpoint), recorded under azure_published_meters.execution_environment. It cannot be loaded here because core/cost_receipts.py's runtime entry accepts only usd_per_hour, and turning a per-session charge into an hourly one would require inventing a session length. Directly attributable runtime fees therefore remain runtime_cost_unpriced. Expressing a per-session rate needs a schema change in a file that is inside the grader source-hash freeze, so it is a separate change.",
+    "planning_block_is_also_wrong": "The `models` block at the top of this file, which prices a plan before it runs rather than a call after it, was checked against the same API on 2026-08-29 and none of its figures match a published meter either — it records 1.25/5.00 for 5.4 where the meters say 2.50/15.00, and 5.00/15.00 for 5.4 pro where they say 30.00/180.00. That block understates a pre-run ceiling by between two and twelve times depending on the model. It is deliberately NOT corrected in this change: it is mirrored in scripts/analyze_grade_run.py under a test that compares the two, so correcting it touches a different file and a different gate, and bundling that into a receipts change would put a budget guard and a receipt in the same blast radius.",
+    "what_these_rates_are_not": "List prices retrieved from a public catalogue. Not a bill, not a quote, and not this tenant's negotiated rate. A receipt priced from them says what the published rate would have cost, which is the most this repository can honestly claim without access to the account's actual invoices."
   },
   "runtime": {}
 }
