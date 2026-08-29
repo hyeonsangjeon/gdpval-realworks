@@ -23,6 +23,7 @@ Usage:
 """
 
 import argparse
+import contextlib
 import copy
 import gc
 import hashlib
@@ -59,6 +60,22 @@ from core.execution_metrics import (
     add_durations_ms,
     bounded_count,
     bounded_duration_ms,
+)
+from core.cost_metering import open_cost_recorder
+from core.cost_receipts import (
+    BUCKET_PROBLEM_SOLVING,
+    REASON_LEDGER_ABSENT,
+    REASON_STAGE_UNSUPPORTED,
+    RETRY_NONE,
+    RETRY_RESUME,
+    RETRY_SEMANTIC,
+    STAGE_GENERATION,
+    STAGE_PREPROCESSING,
+    STAGE_SELF_QA,
+    STATUS_NOT_RUN,
+    CostReceipt,
+    ledger_reference,
+    summarise_receipts,
 )
 from core.file_preview import generate_all_previews
 from core.inference_manifest import (
@@ -205,6 +222,7 @@ class _Step2RuntimeResources:
         self.managed_clients: list[ManagedAzureAIClient] = []
         self.provider_clients: list[object] = []
         self.factory: Optional[AzureAIClientFactory] = None
+        self.cost_ledger: Optional[object] = None
         self._closed = False
 
     def own_executor(self, executor: TaskExecutor) -> None:
@@ -215,6 +233,9 @@ class _Step2RuntimeResources:
 
     def own_provider_client(self, client: object) -> None:
         self.provider_clients.append(client)
+
+    def own_cost_ledger(self, ledger: object) -> None:
+        self.cost_ledger = ledger
 
     def own_factory(self, factory: AzureAIClientFactory) -> None:
         if self.factory is not None and self.factory is not factory:
@@ -239,6 +260,10 @@ class _Step2RuntimeResources:
                 for client in reversed(self.provider_clients)
             ),
             ("factory", self.factory),
+            # Last: the ledger outlives the clients whose calls it recorded,
+            # so a settle issued during their teardown still has somewhere
+            # to go.
+            ("cost ledger", self.cost_ledger),
         ]
         for role, resource in resources:
             if resource is None or id(resource) in seen:
@@ -258,7 +283,11 @@ class _Step2RuntimeResources:
             if executor_error is not None:
                 close_error = executor_error
             elif typed_error_type is not None:
-                prefix = "typed Azure AI " if role != "provider client" else ""
+                prefix = (
+                    ""
+                    if role in {"provider client", "cost ledger"}
+                    else "typed Azure AI "
+                )
                 close_error = RuntimeError(
                     f"{prefix}{role} cleanup failed ({typed_error_type})"
                 )
@@ -586,6 +615,7 @@ def _run_preprocessors(
     azure_ai_route_plan: Optional[
         list[tuple[AzureAIWorkload, str, dict]]
     ] = None,
+    cost_recorder=None,
 ) -> str:
     """Run preprocessors defined in condition YAML (e.g. audio_analyzer).
 
@@ -596,6 +626,23 @@ def _run_preprocessors(
     preprocessors = condition.get("preprocessors", [])
     if not preprocessors:
         return ""
+
+    def _metered(raw_client, provider_name: str, deployment: str):
+        """Bill a preprocessor's reads to the task, under their own stage.
+
+        These clients are built here and thrown away here, so they cannot be
+        wrapped once at the top of the run like the main one. The stage is
+        pinned because this work happens inside the generation scope: without
+        the pin, listening to an audio file would be filed as generation.
+        """
+        if cost_recorder is None:
+            return raw_client
+        return cost_recorder.meter(
+            raw_client,
+            provider=("azure" if provider_name == "azure_openai" else provider_name),
+            model=deployment,
+            stage=STAGE_PREPROCESSING,
+        )
 
     results: list[str] = []
 
@@ -667,7 +714,9 @@ def _run_preprocessors(
                             pp_deployment,
                             azure_ai_route_plan or [],
                         )
-                        pp_client = managed_pp_client
+                        pp_client = _metered(
+                            managed_pp_client, pp_provider, pp_deployment
+                        )
                         observation["runtime_fingerprint"] = verified_route[
                             "runtime_fingerprint"
                         ]
@@ -684,7 +733,11 @@ def _run_preprocessors(
                     finally:
                         managed_pp_client.close()
                 else:
-                    pp_client = create_provider_client(pp_provider)
+                    pp_client = _metered(
+                        create_provider_client(pp_provider),
+                        pp_provider,
+                        pp_deployment,
+                    )
                     try:
                         analysis = analyze_audio_files(
                             client=pp_client,
@@ -784,7 +837,9 @@ def _run_preprocessors(
                             pp_deployment,
                             azure_ai_route_plan or [],
                         )
-                        pp_client = managed_pp_client
+                        pp_client = _metered(
+                            managed_pp_client, pp_provider, pp_deployment
+                        )
                         observation["runtime_fingerprint"] = verified_route[
                             "runtime_fingerprint"
                         ]
@@ -805,7 +860,11 @@ def _run_preprocessors(
                     finally:
                         managed_pp_client.close()
                 else:
-                    pp_client = create_provider_client(pp_provider)
+                    pp_client = _metered(
+                        create_provider_client(pp_provider),
+                        pp_provider,
+                        pp_deployment,
+                    )
                     try:
                         analysis = analyze_video_files(
                             client=pp_client,
@@ -1972,6 +2031,7 @@ def _execute_single_task(
     azure_ai_route_plan: Optional[
         list[tuple[AzureAIWorkload, str, dict]]
     ] = None,
+    cost_recorder=None,
 ) -> dict:
     """Execute a single task and return result dict."""
     task_id = task_info["task_id"]
@@ -2074,6 +2134,7 @@ def _execute_single_task(
             observations=preprocessor_observations,
             azure_ai_factory=azure_ai_factory,
             azure_ai_route_plan=azure_ai_route_plan,
+            cost_recorder=cost_recorder,
         )
         perception_text = None
         if preprocessor_prefix:
@@ -3187,6 +3248,59 @@ def _run_inference_impl(
             )
             sys.exit(1)
 
+    # ── Per-task cost receipts (task 0828) ──
+    #
+    # One ledger per condition, opened before the executor so that every
+    # client the run will use is already metered when the first task starts.
+    # The ledger is append-only and keyed by call, so a relay restart reopens
+    # this same file and adds to it rather than starting a fresh bill.
+    #
+    # Two paths are deliberately left unmetered. The hardened and agentic
+    # substrates build their clients behind a signed approval gate and account
+    # for their own spend against a separate budget ledger; wrapping that
+    # factory here would put a second, unattested layer inside an attested
+    # path. Their receipts therefore report `stage_unsupported` — an explicit
+    # "this build kept no priced record", which is the honest reading, rather
+    # than a total that silently omits them.
+    cost_ledger_path = WORKSPACE_DIR / f"cost_ledger_{condition_key}.sqlite3"
+    cost_recorder = None
+    cost_ledger_note = "unsupported for this execution mode"
+    if not hardened_requested:
+        cost_recorder, cost_ledger_note = open_cost_recorder(
+            cost_ledger_path,
+            run_id=run_identity,
+            round_index=int(
+                (prevalidated_progress or {}).get("resume_round", 0) or 0
+            ),
+        )
+    if cost_recorder is not None:
+        runtime_resources.own_cost_ledger(cost_recorder.ledger)
+
+        metered_provider = "azure" if provider == "azure_openai" else provider
+        # Self-QA usually shares the main client. Wrapping the same object
+        # twice would open two reservations for one request and bill it twice,
+        # so the shared case reuses the one wrapper.
+        qa_shares_main_client = qa_client is client
+        if client is not None:
+            client = cost_recorder.meter(
+                client, provider=metered_provider, model=model
+            )
+        if qa_shares_main_client:
+            qa_client = client
+        elif qa_client is not None:
+            qa_client = cost_recorder.meter(
+                qa_client, provider=metered_provider, model=qa_deployment
+            )
+        if code_interpreter_client is not None:
+            code_interpreter_client = cost_recorder.meter(
+                code_interpreter_client, provider=metered_provider, model=model
+            )
+        print(f"   Cost ledger:        {cost_ledger_path.name}")
+        if cost_ledger_note:
+            print(f"                       {cost_ledger_note}")
+    else:
+        print(f"   Cost ledger:        not kept ({cost_ledger_note})")
+
     # 3. Initialize executor (no silent fallback — fail loudly)
     reasoning_effort = condition.get("model", {}).get("reasoning_effort")
     agentic_task_requests = None
@@ -3291,7 +3405,9 @@ def _run_inference_impl(
 
     # ── Helper: execute one task with QA loop ──
 
-    def _run_task_with_qa(task: dict, error_context: str = None) -> dict:
+    def _run_task_with_qa(
+        task: dict, error_context: str = None, resume_round: int = 0
+    ) -> dict:
         """Execute one task with infra retries + Self-QA retry loop.
 
         QA status handling:
@@ -3326,6 +3442,24 @@ def _run_inference_impl(
         qa_attempts = 0
         last_qa_feedback = error_context
         reflection_history = []
+
+        # Which bill each call lands on. A resume round's calls are marked as
+        # such and kept beside the round before them: the earlier attempt was
+        # paid for whether or not its output survived.
+        solving_retry_kind = RETRY_RESUME if resume_round else RETRY_NONE
+
+        def _solving_scope(stage: str, attempt: int):
+            """Attribute the calls made inside to this task, at one stage."""
+            if cost_recorder is None:
+                return contextlib.nullcontext()
+            return cost_recorder.attributed(
+                task_id=task_id,
+                stage=stage,
+                retry_kind=(
+                    solving_retry_kind if attempt == 0 else RETRY_SEMANTIC
+                ),
+                attempt_index=attempt,
+            )
 
         # ── best-swap state ──
         best_result = None
@@ -3498,19 +3632,21 @@ def _run_inference_impl(
                     # 파일을 생성했을 때 구/신 파일이 공존하게 됨
                     _clear_task_files()
 
-                result = _execute_single_task(
-                    task, condition, executor, execution_mode,
-                    client, model, manifest,
-                    error_context=last_qa_feedback,
-                    verbose=verbose,
-                    run_id=run_identity,
-                    condition_name=execution_condition,
-                    strict_inputs=hardened_requested,
-                    experiment_id=experiment_id,
-                    upload_root=condition_upload_root,
-                    azure_ai_factory=azure_ai_factory,
-                    azure_ai_route_plan=azure_ai_route_plan,
-                )
+                with _solving_scope(STAGE_GENERATION, qa_attempts):
+                    result = _execute_single_task(
+                        task, condition, executor, execution_mode,
+                        client, model, manifest,
+                        error_context=last_qa_feedback,
+                        verbose=verbose,
+                        run_id=run_identity,
+                        condition_name=execution_condition,
+                        strict_inputs=hardened_requested,
+                        experiment_id=experiment_id,
+                        upload_root=condition_upload_root,
+                        azure_ai_factory=azure_ai_factory,
+                        azure_ai_route_plan=azure_ai_route_plan,
+                        cost_recorder=cost_recorder,
+                    )
                 if metrics_enabled:
                     _record_execution_metrics(result)
 
@@ -3530,22 +3666,23 @@ def _run_inference_impl(
 
                 # Run Self-QA (파일이 workspace에 저장된 상태 → file_preview로 실제 내용 확인)
                 qa_started = time.perf_counter()
-                qa_result_info = _run_self_qa(
-                    task, condition,
-                    result.get("deliverable_text", ""),
-                    result.get("deliverable_files", []),
-                    qa_client,
-                    qa_max_tokens=qa_max_tokens,
-                    upload_root=condition_upload_root,
-                    **(
-                        {"redact_provider_errors": True}
-                        if (
-                            typed_azure_active
-                            and provider in {"azure", "azure_openai"}
-                        )
-                        else {}
-                    ),
-                )
+                with _solving_scope(STAGE_SELF_QA, qa_attempts):
+                    qa_result_info = _run_self_qa(
+                        task, condition,
+                        result.get("deliverable_text", ""),
+                        result.get("deliverable_files", []),
+                        qa_client,
+                        qa_max_tokens=qa_max_tokens,
+                        upload_root=condition_upload_root,
+                        **(
+                            {"redact_provider_errors": True}
+                            if (
+                                typed_azure_active
+                                and provider in {"azure", "azure_openai"}
+                            )
+                            else {}
+                        ),
+                    )
                 if metrics_enabled:
                     self_qa_call_count += 1
                     self_qa_time_ms += (time.perf_counter() - qa_started) * 1000
@@ -3644,12 +3781,42 @@ def _run_inference_impl(
             best_result["reflection_attempts"] = len(reflection_history)
             if len(reflection_history) > 0:
                 best_result["reflection_final_score"] = best_score
-            return _attach_job_metrics(best_result)
+            return _attach_solving_cost(_attach_job_metrics(best_result))
         result["reflection_history"] = reflection_history
         result["reflection_attempts"] = len(reflection_history)
         if len(reflection_history) > 0 and result.get("status") == "success":
             result["reflection_final_score"] = best_score if best_score >= 0 else None
-        return _attach_job_metrics(result)
+        return _attach_solving_cost(_attach_job_metrics(result))
+
+    # ── Helper: what this task cost to solve ──
+
+    def _solving_receipt(task_id: str) -> CostReceipt:
+        """This task's problem-solving bill, read from the ledger.
+
+        Read rather than accumulated in memory, so a task picked up by a
+        resume round carries the earlier round's calls too — the discarded
+        attempt was still paid for.
+
+        A run with no ledger reports ``unavailable``. It does not report
+        ``$0``: a reader who cannot tell "free" from "unrecorded" will read
+        the first.
+        """
+        if cost_recorder is None:
+            return CostReceipt.unavailable(
+                reasons=(
+                    (REASON_STAGE_UNSUPPORTED,)
+                    if hardened_requested
+                    else (REASON_LEDGER_ABSENT,)
+                )
+            )
+        return cost_recorder.receipt_for(task_id, BUCKET_PROBLEM_SOLVING)
+
+    def _attach_solving_cost(result: dict) -> dict:
+        """Stamp the task's problem-solving bill onto its result."""
+        task_id = result.get("task_id")
+        if task_id:
+            result[BUCKET_PROBLEM_SOLVING] = _solving_receipt(task_id).as_dict()
+        return result
 
     # ── Helper: print result status ──
 
@@ -3848,7 +4015,11 @@ def _run_inference_impl(
                   f"(prev: {fail_info['status']})...",
                   end=" ", flush=True)
 
-            result = _run_task_with_qa(task, error_context=fail_info.get("error"))
+            result = _run_task_with_qa(
+                task,
+                error_context=fail_info.get("error"),
+                resume_round=round_num,
+            )
             result["resume_round"] = round_num
 
             # progress.json에서 해당 task_id 오브젝트를 직접 교체
@@ -3885,6 +4056,23 @@ def _run_inference_impl(
     )
     results = bind_deliverable_file_records(results, condition_upload_root)
     results = _public_persisted_results(results)
+
+    # ── Per-task cost receipts: settle up ──
+    #
+    # Re-read every task's bill now that the last round is over. A task that
+    # succeeded in round 0 and was never touched again still gets a fresh read,
+    # which costs nothing and removes the class of bug where a result carries a
+    # receipt from before the ledger was complete.
+    solving_receipts = []
+    for result in results:
+        task_id = result.get("task_id")
+        if not task_id:
+            continue
+        receipt = _solving_receipt(task_id)
+        result[BUCKET_PROBLEM_SOLVING] = receipt.as_dict()
+        solving_receipts.append(receipt)
+    solving_summary = summarise_receipts(solving_receipts)
+
     success = sum(1 for r in results if r["status"] == "success")
     errors = sum(1 for r in results if r["status"] == "error")
     qa_failed = sum(1 for r in results if r.get("status") == "qa_failed")
@@ -3909,11 +4097,28 @@ def _run_inference_impl(
             "success": success,
             "error": errors,
             "qa_failed": qa_failed,
+            BUCKET_PROBLEM_SOLVING: solving_summary.as_dict(),
         },
         "results": results,
     }
     if azure_ai_routes is not None:
         final_output["azure_ai_routes"] = azure_ai_routes
+
+    # The audit trail the receipts above are derived from. Exported as JSONL
+    # next to the results so a later step — a resume, a shard merge, a reader
+    # who wants to recheck the arithmetic — can reimport it, and so the digest
+    # makes silent edits detectable.
+    if cost_recorder is not None:
+        cost_export_path = WORKSPACE_DIR / f"cost_ledger_{condition_key}.jsonl"
+        try:
+            digest = cost_recorder.ledger.export_jsonl(cost_export_path)
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            print(f"   ⚠️  cost ledger export failed ({type(exc).__name__})")
+        else:
+            final_output["cost_ledger"] = ledger_reference(
+                cost_export_path.name, digest
+            )
+
     final_output["result_fingerprint"] = inference_result_fingerprint(final_output)
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -3936,6 +4141,24 @@ def _run_inference_impl(
     if qa_failed:
         print(f"   QA failed:          {qa_failed}/{len(results)}")
     print(f"   Resume rounds used: {progress.get('resume_round', 0)}/{resume_max_rounds}")
+    solving_estimate = solving_summary.as_dict()["estimated_cost_usd"]
+    if solving_estimate is not None:
+        solving_line = (
+            f"${solving_estimate:.4f} ({solving_summary.model_calls} calls)"
+        )
+    elif solving_summary.status == STATUS_NOT_RUN:
+        # Not "$0.00 so far". Nothing was metered here at all, which is a
+        # different statement from a run that recorded calls it could not
+        # price, and printing a figure would blur the two.
+        solving_line = "not recorded (no metered calls)"
+    else:
+        solving_line = (
+            f"{solving_summary.status} — "
+            f"${float(solving_summary.known_cost_usd):.4f} confirmed so far, "
+            "not a total ("
+            f"{', '.join(solving_summary.missing_reasons) or 'reason unrecorded'})"
+        )
+    print(f"   Problem-solving:    {solving_line}")
     print(f"{'='*60}")
 
 

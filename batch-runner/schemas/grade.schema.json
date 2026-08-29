@@ -2,6 +2,143 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "GDPVal Grade Result",
   "$defs": {
+    "costUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": {"type": ["integer", "null"], "minimum": 0},
+        "cached_input_tokens": {"type": ["integer", "null"], "minimum": 0},
+        "output_tokens": {"type": ["integer", "null"], "minimum": 0},
+        "reasoning_tokens": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "costMissingReason": {
+      "enum": [
+        "usage_absent",
+        "usage_partial",
+        "price_missing",
+        "call_reachability_unknown",
+        "runtime_cost_unattributable",
+        "runtime_cost_unpriced",
+        "ledger_absent",
+        "stage_unsupported"
+      ]
+    },
+    "costComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "stage",
+        "retry_kind",
+        "status",
+        "model_calls",
+        "known_cost_usd",
+        "usage",
+        "missing_reasons"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "preprocessing",
+            "generation",
+            "self_qa",
+            "grading",
+            "perception",
+            "retry"
+          ]
+        },
+        "stage": {
+          "enum": [
+            "preprocessing",
+            "generation",
+            "self_qa",
+            "grading",
+            "perception"
+          ]
+        },
+        "retry_kind": {
+          "enum": [
+            "none",
+            "semantic",
+            "infrastructure",
+            "resume",
+            "internal_recovery"
+          ]
+        },
+        "status": {"enum": ["complete", "partial", "unavailable", "not_run"]},
+        "model_calls": {"type": "integer", "minimum": 0},
+        "known_cost_usd": {"type": "number", "minimum": 0},
+        "usage": {"$ref": "#/$defs/costUsage"},
+        "missing_reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/costMissingReason"}
+        }
+      }
+    },
+    "costReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "status",
+        "currency",
+        "estimated_cost_usd",
+        "known_cost_usd",
+        "model_cost_usd",
+        "runtime_cost_usd",
+        "model_calls",
+        "usage",
+        "components",
+        "price_table_sha256",
+        "missing_reasons"
+      ],
+      "properties": {
+        "schema_version": {"const": "cost-receipt-v1"},
+        "status": {"enum": ["complete", "partial", "unavailable", "not_run"]},
+        "currency": {"const": "USD"},
+        "estimated_cost_usd": {"type": ["number", "null"], "minimum": 0},
+        "known_cost_usd": {"type": "number", "minimum": 0},
+        "model_cost_usd": {"type": "number", "minimum": 0},
+        "runtime_cost_usd": {"type": "number", "minimum": 0},
+        "model_calls": {"type": "integer", "minimum": 0},
+        "usage": {"$ref": "#/$defs/costUsage"},
+        "components": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/costComponent"}
+        },
+        "price_table_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "missing_reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/costMissingReason"}
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "estimated_cost_usd is a number only where every cost behind it is confirmed. Anywhere else the confirmed part stays in known_cost_usd and the total stays null, so a floor is never read as a total.",
+          "if": {
+            "required": ["status"],
+            "properties": {"status": {"const": "complete"}}
+          },
+          "then": {"properties": {"estimated_cost_usd": {"type": "number"}}},
+          "else": {"properties": {"estimated_cost_usd": {"type": "null"}}}
+        }
+      ]
+    },
+    "costLedgerReference": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
     "visualScope": {
       "type": "object",
       "properties": {
@@ -102,7 +239,7 @@
     {
       "if": {
         "required": ["schema_version"],
-        "properties": {"schema_version": {"enum": ["1.2", "1.3"]}}
+        "properties": {"schema_version": {"enum": ["1.2", "1.3", "1.4"]}}
       },
       "then": {
         "required": [
@@ -136,7 +273,7 @@
     {
       "if": {
         "required": ["schema_version"],
-        "properties": {"schema_version": {"const": "1.3"}}
+        "properties": {"schema_version": {"enum": ["1.3", "1.4"]}}
       },
       "then": {
         "properties": {
@@ -186,6 +323,28 @@
       }
     },
     {
+      "$comment": "1.4 puts money beside the token counters that were already there. A grade that calls itself 1.4 carries a receipt on every task and on the summary, and points at the ledger those receipts were read from. A pointer of null is allowed and means no ledger was kept for this run; a missing key is not allowed, because it would be indistinguishable from a reader that simply did not look.",
+      "if": {
+        "required": ["schema_version"],
+        "properties": {"schema_version": {"const": "1.4"}}
+      },
+      "then": {
+        "required": ["cost_ledger"],
+        "properties": {
+          "tasks": {
+            "items": {
+              "required": ["grading_cost"],
+              "properties": {"grading_cost": {"$ref": "#/$defs/costReceipt"}}
+            }
+          },
+          "summary": {
+            "required": ["grading_cost"],
+            "properties": {"grading_cost": {"$ref": "#/$defs/costReceipt"}}
+          }
+        }
+      }
+    },
+    {
       "if": {
         "required": ["schema_version"],
         "properties": {"schema_version": {"enum": ["1.0", "1.1", "1.2"]}}
@@ -219,7 +378,7 @@
     "summary"
   ],
   "properties": {
-    "schema_version": {"enum": ["1.0", "1.1", "1.2", "1.3"], "description": "1.0 = legacy item-level grade JSON. 1.1 = sign-aware backfill. 1.2 = lifecycle and explicit unpriced-cost provenance. 1.3 = judge_error is score-excluded and judge_error_rate remains required; headline scores are not directly comparable with 1.0-1.2."},
+    "schema_version": {"enum": ["1.0", "1.1", "1.2", "1.3", "1.4"], "description": "1.0 = legacy item-level grade JSON. 1.1 = sign-aware backfill. 1.2 = lifecycle and explicit unpriced-cost provenance. 1.3 = judge_error is score-excluded and judge_error_rate remains required; headline scores are not directly comparable with 1.0-1.2. 1.4 = every task carries a grading_cost receipt and the run points at the ledger those receipts came from; scores are unchanged from 1.3 and stay comparable with it."},
     "run_status": {"enum": ["partial", "final", "diagnostic"]},
     "expected_task_count": {"type": "integer", "minimum": 1},
     "expected_ordered_task_ids_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -391,6 +550,7 @@
     "graded_at": {"type": "string"},
     "graded_by": {"type": "string"},
     "graded_by_version": {"type": "string"},
+    "cost_ledger": {"$ref": "#/$defs/costLedgerReference"},
     "tasks": {
       "type": "array",
       "items": {
@@ -498,6 +658,7 @@
           "render_call_count": {"type": "integer", "minimum": 0},
           "render_total_latency_ms": {"type": "number", "minimum": 0},
           "usage_complete": {"type": "boolean"},
+          "grading_cost": {"$ref": "#/$defs/costReceipt"},
           "selected_deliverables": {"type": ["object", "null"]},
           "reference_files_excluded": {"type": "array", "items": {"type": "string"}},
           "selection_rule": {"type": ["string", "null"]},
@@ -530,7 +691,8 @@
           "additionalProperties": true
         },
         "wow": {"type": "object"},
-        "cost": {"type": "object"}
+        "cost": {"type": "object"},
+        "grading_cost": {"$ref": "#/$defs/costReceipt"}
       },
       "additionalProperties": true
     }

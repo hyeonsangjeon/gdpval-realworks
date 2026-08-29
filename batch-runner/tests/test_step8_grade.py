@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 import step8_grade as s8
+from core.cost_receipts import CostReceipt
 
 
 INFERENCE_SHA = "a" * 40
@@ -59,8 +60,9 @@ class _FakeLoader:
 class _FakeGrader:
     prompt_version = "v1"
 
-    def __init__(self, config, rubric_loader):
+    def __init__(self, config, rubric_loader, cost_recorder=None):
         self.calls = 0
+        self.cost_recorder = cost_recorder
         self.runtime_fingerprint = config["_runtime"][
             "azure_ai_runtime_fingerprint"
         ]
@@ -473,7 +475,7 @@ def test_force_overwrites(monkeypatch, tmp_path):
     code = s8.main()
     assert code == 0
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.3"
+    assert payload["schema_version"] == "1.4"
     assert all(
         isinstance(task["grading_wall_time_ms"], (int, float))
         and task["grading_wall_time_ms"] >= 0
@@ -534,7 +536,7 @@ def test_main_rejects_missing_or_secondary_grader_fingerprint(
     closed = []
 
     class UnboundGrader:
-        def __init__(self, config, rubric_loader):
+        def __init__(self, config, rubric_loader, cost_recorder=None):
             self.runtime_fingerprint = runtime_fingerprint
 
         def close(self):
@@ -1771,6 +1773,10 @@ def _seed_partial_grade(
             "judge_input_tokens": 0,
             "judge_output_tokens": 0,
             "usage_complete": True,
+            # Decided entirely by precheck above, so no judge call was made and
+            # the receipt is the one honest zero. A fixture partial keeps no
+            # ledger, hence the null pointer on the payload below.
+            "grading_cost": CostReceipt.free().as_dict(),
             "graded_at": "2026-05-27T00:00:00Z",
             "error": None,
         }
@@ -1824,6 +1830,7 @@ def _seed_partial_grade(
         "prompt": {"template": "prompts/grader_judge.md", "version": "v1"},
         "graded_at": "2026-05-27T00:00:00Z",
         "graded_by": "step8_grade.py",
+        "cost_ledger": None,
         "tasks": task_rows,
         "summary": s8._compute_summary(
             task_rows,
@@ -1875,7 +1882,7 @@ def _validate_resume_anchor_projection(
 
 def _matching_resume_identity() -> dict:
     return {
-        "schema_version": "1.3",
+        "schema_version": "1.4",
         "experiment_id": "exp003",
         "rubric": {"commit_sha": "a" * 40},
         "prompt": {"version": "v2.2"},
@@ -2957,7 +2964,7 @@ def test_time_budget_exit_7_writes_partial(monkeypatch, tmp_path, capsys):
     out = tmp_path / "data/grades/exp998_smoke_baseline_sample__gpt-5_4-pro__11e7900__v1.json"
     assert out.exists()
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.3"
+    assert payload["schema_version"] == "1.4"
     assert [task["task_id"] for task in payload["tasks"]] == ["task-001"]
     stderr = capsys.readouterr().err
     assert "provider_error:OSError" in stderr

@@ -26,6 +26,7 @@ import pytest
 
 import step8_grade as s8
 import step9_merge_shards as s9
+from core.cost_receipts import verify_export
 from core.grade_payload import validate_grade_payload
 from tests.test_step8_grade import (  # noqa: F401 -- _typed_azure_ai_route is an autouse fixture
     _FakeGrader,
@@ -72,7 +73,16 @@ def _grade_path(root: Path, index: int, count: int) -> Path:
 #     moments by construction, and even this harness drifts by a second when a
 #     run straddles a second boundary. Its merge rule is asserted directly in
 #     test_merge_takes_the_last_shard_completion_time rather than diffed here.
-_EXPECTED_DIVERGENCE = {"shard_provenance", "grading_wall_time_ms", "graded_at"}
+#   cost_ledger -- a pointer to the audit file sitting beside *this* grade, so a
+#     serial run and a merged run necessarily spell the path differently. What
+#     has to hold is asserted directly below: the merged grade points at a real
+#     trail that matches the digest it publishes for it.
+_EXPECTED_DIVERGENCE = {
+    "shard_provenance",
+    "grading_wall_time_ms",
+    "graded_at",
+    "cost_ledger",
+}
 
 
 def _run_grade(
@@ -136,6 +146,14 @@ def test_sharded_run_merges_into_a_serial_identical_payload(
     assert merged["run_status"] == "final"
     assert [task["task_id"] for task in merged["tasks"]] == _CORPUS
     assert _strip(merged) == _strip(serial)
+
+    # Stripped from the diff above, so pin it here instead: the merged grade
+    # must name an audit trail that actually sits beside it and still matches
+    # the digest it published. A pointer to a file nobody can check is the same
+    # as no pointer, and worse, because it reads like one.
+    trail = merged_path.with_name(merged["cost_ledger"]["path"])
+    assert trail.is_file()
+    assert verify_export(trail, merged["cost_ledger"]["sha256"])
 
     # The exact gate the workflow's merge step applies before it will publish a
     # merged file to data/grades/. Pinning it here means a drift in either step8
