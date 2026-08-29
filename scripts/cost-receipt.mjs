@@ -424,15 +424,30 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
     ? round(amounts.reduce((sum, amount) => sum + amount, 0), MONEY_DIGITS)
     : 0;
 
-  // The run total is only a total when every receipt is complete. One partial
-  // or unavailable receipt makes it a floor, and it is labelled as one rather
-  // than quietly rounded up into a headline number.
-  const completeRun = counts.complete === receipts.length;
+  // The run's state comes from the receipts' own states, not from whether a
+  // number fell out of them. `amounts` is empty whenever every measurable
+  // receipt has a $0 floor — which `measuredAmount` nulls on purpose, and which
+  // is the ordinary case when the model that was called is absent from the
+  // price table, as the Stage 3 judge is. Reading the state off `amounts` made
+  // such a run fall past `partial` all the way to `not_run`, telling the reader
+  // that a run of 17 graded tasks and 1784 calls had never happened.
+  //
+  // Work that genuinely never ran is not a hole in the run: it contributed
+  // nothing, so it neither drags the state down nor stops a total being a
+  // total. This mirrors `_summary_status` in
+  // batch-runner/core/cost_receipts.py, so the two summarisers cannot give
+  // different answers about the same receipts.
+  const ran = receipts.filter((entry) => entry.status !== 'not_run');
   let status;
-  if (completeRun) status = 'complete';
-  else if (amounts.length) status = 'partial';
-  else if (counts.unavailable) status = 'unavailable';
-  else status = 'not_run';
+  if (!ran.length) status = 'not_run';
+  else if (ran.every((entry) => entry.status === 'complete')) status = 'complete';
+  else if (ran.every((entry) => entry.status === 'unavailable')) status = 'unavailable';
+  else status = 'partial';
+
+  // The run total is only a total when everything that ran is complete. One
+  // partial or unavailable receipt makes it a floor, and it is labelled as one
+  // rather than quietly rounded up into a headline number.
+  const completeRun = status === 'complete';
 
   const reasons = [...new Set(receipts.flatMap((r) => r.missing_reasons))].sort();
   const priceTables = [...new Set(
