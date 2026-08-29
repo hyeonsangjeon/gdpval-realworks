@@ -1,17 +1,27 @@
 """Tests for the gold-ceiling analysis tool.
 
-The tool exists so that stage 1's report quotes a run rather than restating
-one. That only holds if three things are true, and each has a test here.
+The tool exists so that a stage's report quotes a run rather than restating
+one. That only holds if four things are true, and each has a test here.
 
 The thresholds have to be the specification's thresholds. They are written as
 constants in the script, so ``test_the_thresholds_are_the_ones_the_spec_states``
 holds them against the specification text: an acceptance bar loosened in the
 code and not in the document fails rather than passes quietly.
 
-The payload has to be the run that was pinned. Stage 2 will produce repeats and
+The payload has to be one of the pinned corpora. Stage 2 produces repeats and
 every run produces shards, all of them structurally identical and all of them
-wrong to read stage 1's number out of. The identity check refuses each, and
-refuses a payload whose graded count does not match the count it declares.
+wrong to read a stage's number out of. The identity check refuses each, refuses
+a payload whose graded count does not match the count it declares, and decides
+*which* corpus a payload is from its ordered-id fingerprint rather than from
+its size -- so stage 1's thirty and stage 3's hundred and eighty-five are both
+read, and neither can be mistaken for the other.
+
+The counting rules have to be the grader's counting rules. The second threshold
+counts ``model_did_right`` over unexcluded items whose score magnitude reaches
+the grader's own ``MAGNITUDE_THRESHOLD``, and for a penalty item that is the
+*opposite* of a ``pass`` verdict. `_model_did_right` restates that rule for the
+fixtures and ``test_the_helper_agrees_with_the_grader`` runs the real
+`core.grader._aggregate` over the same cases to keep the restatement honest.
 
 And the tool has to survive a fresh clone. ``batch-runner/scripts/`` is ignored
 with a per-file allow list, so a script added there works for whoever wrote it
@@ -31,6 +41,23 @@ from scripts import analyze_gold_ceiling as analysis
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SPEC_PATH = REPO_ROOT / "tasks/rebuilding_grading_task/300-gold-ceiling.md"
 TOOL_PATH = "batch-runner/scripts/analyze_gold_ceiling.py"
+
+
+def _model_did_right(verdict, max_score, score_excluded):
+    """The grader's own rule, from `core.grader._aggregate` lines 1352-1361.
+
+    Restated here rather than imported because the grader computes it while
+    building `ItemGrade` objects, not as a function a test can call. Restating
+    it is only safe because `test_the_helper_agrees_with_the_grader` runs the
+    real `_aggregate` over the same four cases and compares.
+    """
+    if verdict == "judge_error":
+        return False
+    if score_excluded:
+        return True
+    if (max_score or 0) < 0:
+        return verdict != "pass"
+    return verdict == "pass"
 
 
 def _item(**overrides):
@@ -53,6 +80,13 @@ def _item(**overrides):
         "score_excluded": False,
     }
     item.update(overrides)
+    # A real payload never carries a verdict without this flag beside it, and
+    # the analysis counts the flag. A fixture that omitted it would let a test
+    # assert a rate no run could produce.
+    if "model_did_right" not in overrides:
+        item["model_did_right"] = _model_did_right(
+            item["verdict"], item["max_score"], item["score_excluded"]
+        )
     return item
 
 
@@ -151,8 +185,8 @@ def test_the_thresholds_are_the_ones_the_spec_states():
     ) in spec
 
 
-def test_the_pinned_corpus_matches_the_grading_config():
-    """The 30 the tool insists on are the 30 the run was told to grade.
+def test_the_pinned_corpora_match_the_grading_configs():
+    """The tasks each corpus insists on are the tasks its run was told to grade.
 
     Recomputed through ``step8_grade``'s own function rather than by restating
     its formula here. The constant is compared against a field that function
@@ -160,23 +194,71 @@ def test_the_pinned_corpus_matches_the_grading_config():
     drift -- and it did: a newline-joined digest of these very ids sat in the
     constant and refused stage 1's own run, saying nothing about the corpus
     while looking exactly like a corpus mismatch.
+
+    Both corpora are checked, because the second was added by hand from a
+    measurement and a mistyped digit would refuse stage 3's own run the same
+    way.
     """
     import yaml
 
     from step8_grade import _ordered_task_ids_sha256
 
-    config = yaml.safe_load(
-        (
-            REPO_ROOT / "batch-runner/grading_configs/gold_ceiling_30_v2_sol_max.yaml"
-        ).read_text(encoding="utf-8")
+    for corpus in analysis.PINNED_CORPORA:
+        config = yaml.safe_load(
+            (
+                REPO_ROOT
+                / f"batch-runner/grading_configs/{corpus.config_name}.yaml"
+            ).read_text(encoding="utf-8")
+        )
+        pinned = config["rerun_identity"]["task_ids"]
+
+        assert len(pinned) == corpus.task_count, corpus.key
+        assert (
+            _ordered_task_ids_sha256(pinned) == corpus.ordered_task_ids_sha256
+        ), corpus.key
+
+
+def test_the_back_compatible_names_still_point_at_stage_one():
+    """Six call sites and the report's own blocks grew up around these."""
+    assert analysis.EXPECTED_TASK_COUNT == analysis.STAGE_ONE_CORPUS.task_count
+    assert (
+        analysis.EXPECTED_ORDERED_TASK_IDS_SHA256
+        == analysis.STAGE_ONE_CORPUS.ordered_task_ids_sha256
     )
-    pinned = config["rerun_identity"]["task_ids"]
-
-    assert len(pinned) == analysis.EXPECTED_TASK_COUNT
-    assert _ordered_task_ids_sha256(pinned) == analysis.EXPECTED_ORDERED_TASK_IDS_SHA256
 
 
-# ── Only stage 1's own run may be read as stage 1's number ─────────────────
+def test_stage_ones_thirty_are_the_first_thirty_of_stage_threes():
+    """The same-30 comparison rests on this, so it is checked rather than assumed.
+
+    `step9_merge_shards.py` normalises shards back into canonical corpus order
+    before writing, so a merged 185-task payload's first thirty entries are
+    stage 1's corpus -- *if* stage 1's config was itself cut from the front of
+    the same canonical order. That is a property of two YAML files, and this is
+    where it is established.
+    """
+    import yaml
+
+    from step8_grade import _ordered_task_ids_sha256
+
+    def ids(corpus):
+        return yaml.safe_load(
+            (
+                REPO_ROOT
+                / f"batch-runner/grading_configs/{corpus.config_name}.yaml"
+            ).read_text(encoding="utf-8")
+        )["rerun_identity"]["task_ids"]
+
+    thirty = ids(analysis.STAGE_ONE_CORPUS)
+    hundred_and_eighty_five = ids(analysis.STAGE_THREE_CORPUS)
+
+    assert hundred_and_eighty_five[:30] == thirty
+    assert (
+        _ordered_task_ids_sha256(hundred_and_eighty_five[:30])
+        == analysis.STAGE_ONE_CORPUS.ordered_task_ids_sha256
+    )
+
+
+# ── Only a pinned corpus's own run may be read as its number ───────────────
 
 
 def test_a_complete_pinned_run_is_accepted():
@@ -220,6 +302,60 @@ def test_a_different_corpus_is_refused():
     )
 
     assert any("ordered_task_ids" in problem for problem in problems)
+    assert any("stage1-30" in problem for problem in problems)
+    assert any("stage3-185" in problem for problem in problems)
+
+
+def test_the_185_task_corpus_is_read_without_a_flag():
+    """Stage 3's run is a first-class corpus, not something read past a warning.
+
+    ``--allow-any-run``'s own help says it is *never* for a number a report
+    will quote, and stage 3's report quotes every number in its payload. So the
+    corpus is pinned rather than waved through.
+    """
+    corpus = analysis.STAGE_THREE_CORPUS
+    payload = _payload(
+        expected_task_count=corpus.task_count,
+        expected_ordered_task_ids_sha256=corpus.ordered_task_ids_sha256,
+    )
+    payload["summary"]["graded_tasks"] = corpus.task_count
+
+    assert analysis._identity_problems(payload) == []
+    assert analysis.identify_corpus(payload) is corpus
+    assert analysis.analyze(payload)["identity"]["corpus"] == "stage3-185"
+
+
+def test_the_digest_decides_which_corpus_it_is_not_the_count():
+    """A 185-task digest carrying stage 1's count is a merge that lost tasks.
+
+    Matching on the count first would let this pass as stage 1 while holding
+    stage 3's fingerprint. Matching on the digest first names it: this is
+    stage 3's corpus, and 155 of it is missing.
+    """
+    corpus = analysis.STAGE_THREE_CORPUS
+    payload = _payload(
+        expected_task_count=30,
+        expected_ordered_task_ids_sha256=corpus.ordered_task_ids_sha256,
+    )
+
+    problems = analysis._identity_problems(payload)
+
+    assert any(
+        "expected_task_count is 30" in problem and "stage3-185" in problem
+        for problem in problems
+    ), problems
+
+
+def test_an_unpinned_payload_read_with_the_flag_says_it_is_unpinned(tmp_path, capsys):
+    """The readable report must not imply a corpus it could not identify."""
+    grade_file = tmp_path / "shard.json"
+    grade_file.write_text(
+        json.dumps(_payload(expected_ordered_task_ids_sha256="c" * 64))
+    )
+
+    analysis.main([str(grade_file), "--allow-any-run", "--shortfall-limit", "0"])
+
+    assert "unpinned corpus" in capsys.readouterr().out
 
 
 def test_a_run_that_graded_fewer_tasks_than_it_declared_is_refused():
@@ -243,7 +379,7 @@ def test_the_command_line_refuses_rather_than_reporting(tmp_path):
     with pytest.raises(SystemExit) as refused:
         analysis.main([str(grade_file)])
 
-    assert "not the run stage 1 pinned" in str(refused.value)
+    assert "is not a pinned corpus, fully graded" in str(refused.value)
 
 
 def test_the_refusal_can_be_overridden_on_purpose(tmp_path, capsys):
@@ -683,22 +819,186 @@ def test_a_long_occupation_does_not_run_off_the_page():
     assert max(len(line) for line in rendered.splitlines()) < 120
 
 
+def test_the_three_verdicts_line_up_in_one_column():
+    """Three gates decide the stage, so the eye should run down one column.
+
+    The bars are different lengths -- 'needs >= 90.0%' against 'needs < 0.02'
+    -- so writing the three lines by hand left PASS and MISS stepping across
+    the page. This is worth a test because it is the block every reader looks
+    at first, and because the padding is computed from the widest row, so a
+    fourth gate or a re-worded bar would silently break the alignment again.
+    """
+    rendered = analysis._render(
+        analysis.analyze(_payload(tasks=[_task("task-1")])), shortfall_limit=0
+    )
+
+    verdicts = [
+        line for line in rendered.splitlines() if line.endswith(("  PASS", "  MISS"))
+    ]
+    assert len(verdicts) == 3, verdicts
+
+    columns = {line.index("(") for line in verdicts}
+    assert len(columns) == 1, f"the bars start in different columns: {verdicts}"
+    columns = {len(line) for line in verdicts}
+    assert len(columns) == 1, f"the verdicts end in different columns: {verdicts}"
+
+
+def test_a_long_criterion_wraps_instead_of_stopping_mid_word():
+    """The criterion and the evidence are other people's prose, at any length.
+
+    The real corpus carries criteria past 300 characters and judge evidence
+    past 400. These used to be cut with a bare slice, which both ran off the
+    side of the page and stopped mid-word -- one real line ended at
+    'for YTD amor'. Wrapping keeps the sentence and keeps the width.
+    """
+    criterion = (
+        "Prepaid Summary totals are linked by formulas to the detailed tabs "
+        "(not hard-coded values), directly referencing the 1250 and 1251 "
+        "sheets for YTD amortization and April ending balances."
+    )
+    evidence = "Row header: " + ", ".join(f"Debit Adds {n}" for n in range(40))
+    task = _task(
+        "task-prose",
+        items=[
+            _item(
+                verdict="fail",
+                max_score=2,
+                awarded_score=0.0,
+                criterion=criterion,
+                evidence=evidence,
+            )
+        ],
+    )
+
+    rendered = analysis._render(
+        analysis.analyze(_payload(tasks=[task])), shortfall_limit=5
+    )
+
+    assert max(len(line) for line in rendered.splitlines()) < 120
+    # The sentence survives the wrap: joining the wrapped lines back up
+    # reproduces it, so nothing was dropped to make it fit.
+    flattened = " ".join(rendered.split())
+    assert criterion in flattened
+    assert "for YTD amortization and April ending balances." in flattened
+
+
+def test_prose_too_long_even_to_wrap_is_cut_on_a_word():
+    """A budget still applies -- but it ends on a word, not inside one."""
+    criterion = " ".join(f"clause{n}" for n in range(200))
+    task = _task(
+        "task-endless",
+        items=[_item(verdict="fail", max_score=2, awarded_score=0.0, criterion=criterion)],
+    )
+
+    rendered = analysis._render(
+        analysis.analyze(_payload(tasks=[task])), shortfall_limit=5
+    )
+
+    assert max(len(line) for line in rendered.splitlines()) < 120
+    assert "..." in rendered
+    # Cut between words, so no half-word is left behind.
+    assert "clause" in rendered
+    for line in rendered.splitlines():
+        for fragment in line.split():
+            if fragment.startswith("clause") and fragment != "clause":
+                assert fragment.removeprefix("clause").isdigit(), fragment
+
+
+def test_newlines_in_evidence_cannot_break_the_width_guarantee():
+    """Judge evidence arrives with newlines in it; they must not pass through.
+
+    A raw newline would split one logical line into two that the width check
+    never sees as over-long, so the collapse happens before the wrap.
+    """
+    evidence = "first line\n" + "x" * 300 + "\nlast line"
+    task = _task(
+        "task-newline",
+        items=[_item(verdict="fail", max_score=2, awarded_score=0.0, evidence=evidence)],
+    )
+
+    rendered = analysis._render(
+        analysis.analyze(_payload(tasks=[task])), shortfall_limit=5
+    )
+
+    assert max(len(line) for line in rendered.splitlines()) < 120
+    assert "first line" in rendered
+
+
 # ── What the second threshold is counting ─────────────────────────────────
+
+
+def test_the_helper_agrees_with_the_grader():
+    """The fixture's rule and the grader's rule, over every branch.
+
+    `_model_did_right` restates `core.grader._aggregate`. A restatement can
+    drift, and drift here would be invisible: every test in this file would
+    still pass, against a payload no run could produce. So the real thing is
+    run over the same cases and compared.
+    """
+    from core.grader import Grader, ItemGrade
+    from core.rubric_loader import TaskRubric
+
+    cases = [
+        ("pass", 5, False),
+        ("partial", 5, False),
+        ("fail", 5, False),
+        ("pass", -4, False),      # the penalty fired
+        ("fail", -4, False),      # the penalty was avoided
+        ("judge_error", 5, False),
+        ("pass", 5, True),
+    ]
+    graded = [
+        ItemGrade(
+            rubric_item_id="i",
+            criterion="c",
+            max_score=max_score,
+            awarded_score=0.0,
+            verdict=verdict,
+            decided_by="judge",
+            required=None,
+            evidence="",
+            score_excluded=excluded,
+        )
+        for verdict, max_score, excluded in cases
+    ]
+    Grader._aggregate(
+        graded,
+        TaskRubric(
+            task_id="t",
+            sector="s",
+            occupation="o",
+            prompt="p",
+            rubric_items=[],
+            rubric_pretty="",
+            reference_files=[],
+            gold_deliverable_files=[],
+        ),
+    )
+
+    for item, (verdict, max_score, excluded) in zip(graded, cases):
+        assert item.model_did_right == _model_did_right(
+            verdict, max_score, excluded
+        ), f"{verdict} at max_score={max_score}, excluded={excluded}"
 
 
 def test_required_items_counts_what_the_grader_counts():
     """Partial credit is a miss, and a negative maximum still qualifies.
 
     Both come from `core.grader`: an item is required iff its score magnitude
-    reaches ``MAGNITUDE_THRESHOLD``, and it is marked done right only on a
-    ``pass`` verdict.
+    reaches ``MAGNITUDE_THRESHOLD``, and it is marked done right on
+    ``model_did_right`` -- which for a penalty item is the *opposite* of a
+    ``pass`` verdict, because a penalty's verdict answers "did the deliverable
+    do this prohibited thing".
+
+    So the ``fail`` on the penalty below is a **pass** for this rate: the
+    deliverable avoided the trap. The retired spelling counted it as a miss.
     """
     task = _task(
         "task-1",
         items=[
             _item(criterion="required, passed", max_score=5, verdict="pass"),
             _item(criterion="required, partial", max_score=5, verdict="partial"),
-            _item(criterion="required penalty", max_score=-4, verdict="fail"),
+            _item(criterion="required penalty avoided", max_score=-4, verdict="fail"),
             _item(criterion="not required", max_score=3, verdict="partial"),
         ],
     )
@@ -706,9 +1006,133 @@ def test_required_items_counts_what_the_grader_counts():
     required = analysis.required_items(_payload(tasks=[task]))
 
     assert required["total"] == 3
-    assert required["passed"] == 1
-    assert required["rate"] == pytest.approx(1 / 3, abs=1e-4)
+    assert required["passed"] == 2
+    assert required["rate"] == pytest.approx(2 / 3, abs=1e-4)
     assert required["by_verdict"] == {"pass": 1, "partial": 1, "fail": 1}
+
+    assert required["penalty_items"] == 1
+    assert required["penalty_items_fired"] == 0
+
+    # And the retired spelling is reported beside it rather than erased, so a
+    # report whose earlier edition quoted the old number can see the move.
+    legacy = required["legacy_verdict_pass"]
+    assert legacy["passed"] == 1
+    assert legacy["rate"] == pytest.approx(1 / 3, abs=1e-4)
+    assert legacy["disagreements"] == 1
+    assert legacy["disagreeing_items"][0]["criterion"] == "required penalty avoided"
+
+
+def test_a_fired_penalty_is_a_miss_under_both_counts():
+    """The other half of the inversion, so the fix is not one-directional."""
+    task = _task(
+        "task-1",
+        items=[_item(criterion="penalty fired", max_score=-4, verdict="pass")],
+    )
+
+    required = analysis.required_items(_payload(tasks=[task]))
+
+    assert required["total"] == 1
+    assert required["passed"] == 0
+    assert required["penalty_items_fired"] == 1
+    # The retired spelling called this a success: `verdict == "pass"`.
+    assert required["legacy_verdict_pass"]["passed"] == 1
+    assert required["legacy_verdict_pass"]["disagreements"] == 1
+
+
+def test_an_excluded_item_leaves_the_denominator():
+    """`step8_grade.py:1386` counts only `not score_excluded`.
+
+    An excluded item is one the grader declined to score, so leaving it in the
+    denominator would put an item there that no deliverable could have moved.
+    The count is still reported, because a denominator that silently shrank is
+    how a rate improves without anything improving.
+    """
+    task = _task(
+        "task-1",
+        items=[
+            _item(criterion="scored", max_score=5, verdict="pass"),
+            _item(
+                criterion="the judge errored",
+                max_score=5,
+                verdict="judge_error",
+                score_excluded=True,
+            ),
+        ],
+    )
+
+    required = analysis.required_items(_payload(tasks=[task]))
+
+    assert required["total"] == 1
+    assert required["passed"] == 1
+    assert required["rate"] == 1.0
+    assert required["score_excluded"] == 1
+
+
+def test_an_item_with_no_flag_is_counted_and_named():
+    """A payload too old to carry the field must not read as total failure.
+
+    The grader defaults a missing flag to False, and this matches it so the
+    rate agrees -- but it says how many items it did that to, because a rate
+    computed over absent data should not look like a rate computed over data.
+    """
+    task = _task(
+        "task-1",
+        items=[_item(max_score=5, verdict="pass", model_did_right=None)],
+    )
+
+    required = analysis.required_items(_payload(tasks=[task]))
+
+    assert required["total"] == 1
+    assert required["passed"] == 0
+    assert required["unscorable"] == 1
+
+
+def test_a_recount_that_parts_from_the_run_says_so():
+    """Two answers to one question is a finding, not something to average.
+
+    The rate the gate is judged on is written by the grader. This tool
+    recomputes it from the same items, so agreement is the expected case and
+    disagreement means one of them is wrong.
+    """
+    agreeing = _payload(
+        tasks=[_task("task-1", items=[_item(max_score=5, verdict="pass")])],
+        summary={
+            **_payload()["summary"],
+            "wow": {**_payload()["summary"]["wow"], "critical_item_pass_rate": 1.0},
+        },
+    )
+    assert analysis.required_items(agreeing)["agrees_with_payload"] is True
+
+    # The payload claims 0.98; the items say 1.0.
+    assert analysis.required_items(
+        _payload(tasks=[_task("task-1", items=[_item(max_score=5, verdict="pass")])])
+    )["agrees_with_payload"] is False
+
+
+def test_the_disagreement_reaches_the_readable_report(tmp_path, capsys):
+    """A recount that parted from the run cannot be findable only in --json."""
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(
+        json.dumps(
+            _payload(
+                tasks=[
+                    _task(
+                        "task-1",
+                        items=[_item(max_score=5, verdict="pass")],
+                        pct=100.0,
+                        total_awarded=5.0,
+                        total_max=5,
+                    )
+                ]
+            )
+        )
+    )
+
+    analysis.main([str(grade_file), "--shortfall-limit", "0"])
+    printed = capsys.readouterr().out
+
+    assert "recount disagrees with the run's own 0.98" in printed
+    assert max(len(line) for line in printed.splitlines()) < 120
 
 
 def test_the_threshold_is_the_graders_own():
@@ -740,6 +1164,9 @@ def test_a_criterion_repeated_across_tasks_is_surfaced():
 
     required = analysis.required_items(_payload(tasks=tasks))
 
+    # Two of the three passed: `n=0` drew partial credit, `n=1` and `n=2`
+    # passed. Counted on `model_did_right`, which for these positive items is
+    # the same thing the verdict says.
     assert required["recurring_criteria"] == [
         {"criterion": shared, "tasks": 3, "passed": 2}
     ]
@@ -776,11 +1203,320 @@ def test_a_run_with_no_required_items_does_not_divide_by_zero():
 
     required = analysis.required_items(payload)
 
-    assert required == {
-        "total": 0,
-        "passed": 0,
-        "rate": None,
-        "by_verdict": {},
-        "recurring_criteria": [],
-    }
+    assert required["total"] == 0
+    assert required["passed"] == 0
+    assert required["rate"] is None
+    assert required["by_verdict"] == {}
+    assert required["recurring_criteria"] == []
+    assert required["penalty_items"] == 0
+    assert required["legacy_verdict_pass"]["rate"] is None
+    # No rate to compare, so no claim of agreement either.
+    assert required["agrees_with_payload"] is False
     analysis._render(analysis.analyze(payload), shortfall_limit=0)
+
+
+def test_a_rate_that_cannot_be_compared_is_not_reported_as_a_conflict():
+    """"Nothing to compare" and "the two disagree" are different findings.
+
+    `agrees_with_payload` is false in three situations and only one of them is
+    a conflict. Printing the conflict wording for the other two would put a
+    disagreement in the report that no two numbers ever had -- and in the case
+    where the run states no rate at all, would print the word `None` as if it
+    were the run's answer.
+    """
+    # A rate on the payload, nothing here to recount it against.
+    no_required = analysis._render(
+        analysis.analyze(_payload(tasks=[_task("task-1", items=[_item(max_score=1)])])),
+        shortfall_limit=0,
+    )
+    assert "disagrees" not in no_required
+    assert "no required items here to recount, so the run's own 0.98" in no_required
+
+    # A recount here, no rate on the payload to check it against.
+    no_payload_rate = analysis._render(
+        analysis.analyze(
+            _payload(
+                tasks=[_task("task-1", items=[_item(max_score=5, verdict="pass")])],
+                summary={**_payload()["summary"], "wow": {}},
+            )
+        ),
+        shortfall_limit=0,
+    )
+    assert "disagrees" not in no_payload_rate
+    assert "the run's own None" not in no_payload_rate
+    assert "states no critical-item rate of its own" in no_payload_rate
+
+
+# ── The breakdowns 304 asks for and the payload does not carry ─────────────
+
+
+def test_occupations_are_grouped_and_scored():
+    """Stage 1 reached 7 occupations of 44; stage 3 reaches all of them.
+
+    A sector average over nine buckets cannot show which of the newly-covered
+    occupations moved the ceiling, and the payload carries no occupation
+    breakdown at all -- so this computes one.
+    """
+    tasks = [
+        _task("task-1", occupation="Auditor", pct=90.0),
+        _task("task-2", occupation="Auditor", pct=70.0),
+        _task("task-3", occupation="Film Editor", pct=50.0),
+    ]
+
+    grouped = analysis.by_occupation(_payload(tasks=tasks))
+
+    assert set(grouped) == {"Auditor", "Film Editor"}
+    assert grouped["Auditor"]["task_count"] == 2
+    assert grouped["Auditor"]["avg_pct"] == pytest.approx(80.0)
+    assert grouped["Film Editor"]["avg_pct"] == pytest.approx(50.0)
+
+
+def test_an_unrecorded_occupation_gets_a_bucket_rather_than_vanishing():
+    """Dropping it would make the buckets sum to less than the corpus."""
+    grouped = analysis.by_occupation(
+        _payload(tasks=[_task("task-1", occupation=None, pct=40.0)])
+    )
+
+    assert grouped["unrecorded"]["task_count"] == 1
+
+
+def test_the_mean_is_macro_and_the_required_rate_is_micro():
+    """The two headline numbers aggregate differently, and both are recomputed.
+
+    `step8_grade.py` averages per-task percentages for the mean -- every task
+    weighs the same -- and pools required items for the rate, so a task with
+    four required items pulls four times as hard. A recomputation that picked
+    one style for both would be wrong twice, and would be wrong *quietly*: the
+    numbers would still look like numbers.
+    """
+    tasks = [
+        _task(
+            "task-1",
+            pct=100.0,
+            items=[_item(max_score=5, verdict="pass") for _ in range(4)],
+        ),
+        _task(
+            "task-2",
+            pct=0.0,
+            items=[_item(max_score=5, verdict="fail")],
+        ),
+    ]
+
+    block = analysis.subset_scores(_payload(tasks=tasks), ["task-1", "task-2"])
+
+    # Macro: the two tasks weigh the same.
+    assert block["avg_pct"] == pytest.approx(50.0)
+    # Micro: four passing items against one failing one.
+    assert block["required_items"] == 5
+    assert block["required_passed"] == 4
+    assert block["critical_item_pass_rate"] == pytest.approx(0.8)
+
+
+def test_a_task_in_error_is_out_of_the_mean_but_in_the_count():
+    """The grader averages over `[t for t in tasks if not t["error"]]`."""
+    tasks = [
+        _task("task-1", pct=80.0),
+        _task("task-2", pct=None, error="judge unreachable"),
+    ]
+
+    block = analysis.subset_scores(_payload(tasks=tasks), ["task-1", "task-2"])
+
+    assert block["task_count"] == 2
+    assert block["graded_tasks"] == 1
+    assert block["error_tasks"] == 1
+    assert block["avg_pct"] == pytest.approx(80.0)
+
+
+def test_the_unclamped_mean_is_reported_beside_the_clamped_one():
+    """One task in the 185 carries -380 points against a 50-point maximum.
+
+    `core.grader` floors `pct` at zero and keeps the real value in `pct_raw`.
+    Averaging only the clamped value cannot tell a fired penalty from an answer
+    that simply scored nothing, and the difference is the whole finding.
+    """
+    tasks = [
+        _task("task-1", pct=100.0, pct_raw=100.0),
+        _task("task-2", pct=0.0, pct_raw=-660.0),
+    ]
+
+    block = analysis.subset_scores(_payload(tasks=tasks), ["task-1", "task-2"])
+
+    assert block["avg_pct"] == pytest.approx(50.0)
+    assert block["avg_pct_raw"] == pytest.approx(-280.0)
+    assert block["tasks_clamped_at_zero"] == ["task-2"]
+
+
+def test_a_subset_can_be_taken_or_left():
+    """`304` promises the mean *with and without* the five declared limits."""
+    tasks = [
+        _task("aaaaaaaa-1111", pct=20.0),
+        _task("bbbbbbbb-2222", pct=80.0),
+        _task("cccccccc-3333", pct=90.0),
+    ]
+    payload = _payload(tasks=tasks)
+
+    only = analysis.subset_scores(payload, ["aaaaaaaa"])
+    without = analysis.subset_scores(payload, ["aaaaaaaa"], exclude=True)
+
+    assert only["matched"] == ["aaaaaaaa-1111"]
+    assert only["avg_pct"] == pytest.approx(20.0)
+    assert without["task_count"] == 2
+    assert without["avg_pct"] == pytest.approx(85.0)
+    assert without["excluded"] is True
+
+
+def test_a_prefix_matching_nothing_is_named_rather_than_absorbed():
+    """A subset that silently shrank would move a mean the report quotes."""
+    block = analysis.subset_scores(
+        _payload(tasks=[_task("aaaaaaaa-1111", pct=20.0)]), ["zzzzzzzz"]
+    )
+
+    assert block["missing"] == ["zzzzzzzz"]
+    assert block["matched"] == []
+    assert block["avg_pct"] is None
+
+
+def test_a_prefix_matching_two_tasks_is_refused_rather_than_guessed():
+    """The spec names tasks by eight characters; the payload holds UUIDs.
+
+    Eight hex characters over 185 tasks is not obviously collision-free, and a
+    prefix that matched two would double-count one of them into a mean.
+    """
+    payload = _payload(
+        tasks=[_task("aaaaaaaa-1111", pct=20.0), _task("aaaaaaaa-2222", pct=90.0)]
+    )
+
+    block = analysis.subset_scores(payload, ["aaaaaaaa"])
+
+    assert block["ambiguous"] == ["aaaaaaaa"]
+    assert block["matched"] == []
+
+
+def test_an_ambiguous_prefix_in_an_exclusion_is_not_called_left_out():
+    """Refusing to match puts a task on opposite sides of the two subsets.
+
+    "everything but those five" is built by dropping what `matched` holds, and
+    an ambiguous prefix never reaches `matched` -- so those tasks stay in the
+    mean this line prints. Labelling them "left out" would tell the reader the
+    five were taken out when two of them were not.
+    """
+    payload = _payload(
+        tasks=[
+            _task("aaaaaaaa-1111", pct=20.0),
+            _task("aaaaaaaa-2222", pct=90.0),
+            _task("bbbbbbbb-3333", pct=50.0),
+        ]
+    )
+
+    block = analysis.subset_scores(payload, ["aaaaaaaa"], exclude=True)
+
+    assert block["ambiguous"] == ["aaaaaaaa"]
+    assert block["matched"] == []
+    # Nothing was taken out, so the mean still spans all three.
+    assert block["task_count"] == 3
+
+    rendered = "\n".join(analysis._render_subset("everything but those five", block))
+    assert "left in rather than taken out" in rendered
+    assert "so left out" not in rendered
+
+
+def test_the_known_limit_ids_are_eight_characters_of_a_real_task():
+    """A typo in the pinned five would silently produce an empty subset.
+
+    The five are quoted from `300-gold-ceiling.md`'s declared input limits, and
+    each has to name a task the 185-corpus config actually grades.
+    """
+    import yaml
+
+    config = yaml.safe_load(
+        (
+            REPO_ROOT
+            / "batch-runner/grading_configs"
+            / f"{analysis.STAGE_THREE_CORPUS.config_name}.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    graded = config["rerun_identity"]["task_ids"]
+
+    for prefix in analysis.KNOWN_LIMIT_TASK_IDS:
+        hits = [task_id for task_id in graded if task_id.startswith(prefix)]
+        assert len(hits) == 1, f"{prefix} matched {len(hits)} of the 185"
+
+
+# ── The same thirty, compared like for like ────────────────────────────────
+
+
+def test_the_same_thirty_are_verified_before_they_are_reported():
+    """Withheld rather than wrong, if the first thirty are not stage 1's.
+
+    The comparison rests on `step9_merge_shards.py` normalising into canonical
+    order. That is an inference, so the thirty ids are hashed and the digest
+    has to be stage 1's -- otherwise nothing downstream could tell that the
+    "same 30" were a different 30.
+    """
+    block = analysis.stage_one_subset(
+        _payload(tasks=[_task(f"task-{n}", pct=50.0) for n in range(30)])
+    )
+
+    assert block["verified"] is False
+    assert "not stage 1's corpus" in block["reason"]
+    assert "avg_pct" not in block
+
+
+def test_the_same_thirty_are_scored_when_the_digest_matches():
+    """The real thirty, read from stage 1's own config."""
+    import yaml
+
+    thirty = yaml.safe_load(
+        (
+            REPO_ROOT
+            / "batch-runner/grading_configs"
+            / f"{analysis.STAGE_ONE_CORPUS.config_name}.yaml"
+        ).read_text(encoding="utf-8")
+    )["rerun_identity"]["task_ids"]
+
+    tasks = [_task(task_id, pct=80.0) for task_id in thirty]
+    tasks.append(_task("a-thirty-first-task", pct=10.0))
+
+    block = analysis.stage_one_subset(_payload(tasks=tasks))
+
+    assert block["verified"] is True
+    assert block["task_count"] == 30
+    # The thirty-first is outside the comparison, so it cannot move it.
+    assert block["avg_pct"] == pytest.approx(80.0)
+    assert (
+        block["ordered_task_ids_sha256"]
+        == analysis.STAGE_ONE_CORPUS.ordered_task_ids_sha256
+    )
+
+
+def test_a_payload_too_small_for_the_comparison_says_so():
+    block = analysis.stage_one_subset(_payload(tasks=[_task("task-1")]))
+
+    assert block["verified"] is False
+    assert "fewer than the 30" in block["reason"]
+
+
+def test_the_subsets_reach_the_readable_report(tmp_path, capsys):
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(
+        json.dumps(
+            _payload(
+                tasks=[
+                    _task(f"task-{n:02d}", pct=float(n), occupation=f"Job {n % 3}")
+                    for n in range(30)
+                ]
+            )
+        )
+    )
+
+    analysis.main([str(grade_file), "--shortfall-limit", "0"])
+    printed = capsys.readouterr().out
+
+    assert "By occupation (3)" in printed
+    assert "Subsets" in printed
+    assert "the same thirty stage 1 graded" in printed
+    assert "the five declared input limits" in printed
+    assert "everything but those five" in printed
+    # The withheld reason carries two 64-character fingerprints.
+    assert "withheld" in printed
+    assert max(len(line) for line in printed.splitlines()) < 120

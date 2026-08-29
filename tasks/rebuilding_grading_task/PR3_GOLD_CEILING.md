@@ -202,7 +202,7 @@
 
 <!-- generated: python batch-runner/scripts/analyze_gold_ceiling.py data/grades/_diagnostic/82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_30_v2_sol_max__cfg_d1bfc8217c9981d2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_c33d9d55703fbf5d__v2.2.json --shortfall-limit 12 -->
 ```text
-Gold ceiling — stage 1
+Gold ceiling — stage 1 -- the 30-task sample
 ============================================================
   experiment      exp_gold_baseline
   graded at       2026-08-28T18:41:32Z
@@ -214,8 +214,8 @@ Gold ceiling — stage 1
 Thresholds
 ------------------------------------------------------------
   mean score              82.87%   (needs >= 90.0%)   MISS
-  required-item pass      0.5714   (needs >= 0.95)   MISS
-  grader error rate       0.0014   (needs < 0.02)   PASS
+  required-item pass      0.5714   (needs >= 0.95)    MISS
+  grader error rate       0.0014   (needs < 0.02)     PASS
 
 Required items (|max score| >= 4)
 ------------------------------------------------------------
@@ -232,6 +232,28 @@ Scores
     Information                                          77.87%  n=3
     Manufacturing                                        84.27%  n=5
     Professional, Scientific, and Technical Services     80.46%  n=9
+
+By occupation (7)
+------------------------------------------------------------
+   77.87%  n=3    required 1/2  ·  Audio and Video Technicians
+   79.34%  n=4    required 0/2  ·  Computer and Information Systems Managers
+   81.36%  n=5    required 3/5  ·  Accountants and Auditors
+   83.98%  n=5    required 1/2  ·  Compliance Officers
+   84.27%  n=5    required 0/4  ·  Buyers and Purchasing Agents
+   84.64%  n=5    required 12/17  ·  Administrative Services Managers
+   87.99%  n=3    required 3/3  ·  Child, Family, and School Social Workers
+
+Subsets
+------------------------------------------------------------
+  82.87%   n=30   required 20/35  ·  the same thirty stage 1 graded
+  67.42%   n=1    required 0/0  ·  the five declared input limits
+      named but not in this payload:
+      a73fbc98, e222075d, 75401f7c
+      7de33b48
+  83.41%   n=29   required 20/35  ·  everything but those five
+      named but not in this payload:
+      a73fbc98, e222075d, 75401f7c
+      7de33b48
 
 Usage
 ------------------------------------------------------------
@@ -326,40 +348,48 @@ Shortfalls
       evidence   "char_count": 6532, "truncated": false
   -3.25 of 5  [partial, visual, decided by judge]  83d10b06-26d1-4636-a32c-23f92c57f30b
       criterion  Overall formatting and style of the deliverable
-      evidence   Bold headers and consistent font are visible, but entries run together across columns (e.g., “Corporate BanCorporate Loans” and “Cayman IslanWillett Bank Cayman”).
+      evidence   Bold headers and consistent font are visible, but entries run together across columns (e.g.,
+                 “Corporate BanCorporate Loans” and “Cayman IslanWillett Bank Cayman”).
   -2.75 of 5  [partial, visual, decided by judge]  c44e9b62-7cd8-4f72-8ad9-f8fbddb94083
       criterion  Highlights reductions consistently on the org chart with a legend or notation.
-      evidence   Several role boxes use blue outlines, but no visible legend or text explains that these outlines denote reductions.
+      evidence   Several role boxes use blue outlines, but no visible legend or text explains that these
+                 outlines denote reductions.
   -2.25 of 5  [partial, visual, decided by judge]  7bbfcfe9-132d-4194-82bb-d6f29d001b01
       criterion  Overall formatting and style of the deliverable
-      evidence   Bold headers and clear gridlines provide basic readability, but the excessive blank area, awkward scale, and uneven row spacing make the sheet look unfinished and poorly balanced.
+      evidence   Bold headers and clear gridlines provide basic readability, but the excessive blank area,
+                 awkward scale, and uneven row spacing make the sheet look unfinished and poorly balanced.
   -2.1 of 5  [partial, visual, decided by judge]  24d1e93f-9018-45d4-b522-ad89dfd78079
       criterion  Overall formatting and style of the deliverable
-      evidence   Clear blue title and a bordered 3-column table, but long assumption lines end abruptly at the right, all body text is italic, and most of the page is unused white space.
+      evidence   Clear blue title and a bordered 3-column table, but long assumption lines end abruptly at the
+                 right, all body text is italic, and most of the page is unused white space.
   -2.0 of 2  [fail, text, decided by judge]  15ddd28d-8445-4baa-ac7f-f41372e1344e
       criterion  The document length is between 2 and 3 pages (inclusive).
       evidence   "kind": "docx", "paragraph_count": 63, "table_count": 1, "section_count": 1
   -2.0 of 2  [fail, text, decided by judge]  17111c03-aac7-45c2-857d-c06d8223d6ad
-      criterion  The memo identifies the sender’s role as Administrative Services Manager (wording can vary but must clearly convey this role).
+      criterion  The memo identifies the sender’s role as Administrative Services Manager (wording can vary
+                 but must clearly convey this role).
       evidence   From: Your Name
   -2.0 of 2  [fail, text, decided by judge]  17111c03-aac7-45c2-857d-c06d8223d6ad
       criterion  No section/area appears in the Excel schedule that is not Section 1, 2, 3, or 4 (no extras).
-      evidence   SECTION 3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-,SECTION ,
+      evidence   SECTION 3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,, ,SECTION ,
   -2.0 of 2  [fail, text, decided by judge]  17111c03-aac7-45c2-857d-c06d8223d6ad
-      criterion  All dates or week ranges from 'TENTATIVE CLEANUP SCHEDULE.pdf' are represented in the Excel schedule (no omissions).
+      criterion  All dates or week ranges from 'TENTATIVE CLEANUP SCHEDULE.pdf' are represented in the Excel
+                 schedule (no omissions).
       evidence   2025-04-01 00:00:00
   -2.0 of 2  [fail, formatting, decided by judge]  2696757c-1f8a-4959-8f0d-f5597b9e70fc
-      criterion  Immediately after the 9.08(c)(3) test question, a regulatory citation appears identifying VA Servicer Handbook M26-4, Chapter 9, paragraph 9.08(c)(3),
+      criterion  Immediately after the 9.08(c)(3) test question, a regulatory citation appears identifying VA
+                 Servicer Handbook M26-4, Chapter 9, paragraph 9.08(c)(3), and the Chapter 9 publication date
+                 (August 12, 2024) (punctuation/formatting may vary).
       evidence   Regulatory Cita.on: VA Servicer Handbook M26-4, Chapter 9: VA Purchase, 9.08(c)(3), August
-12, 2024
-When the borrower has discharged
+                 12, 2024 When the borrower has discharged
   -2.0 of 2  [fail, text, decided by judge]  27e8912c-8bd5-44ba-ad87-64066ea05264
-      criterion  The checklist explicitly cites a foundation checklist from a credible source by naming the organization and the document title (accept phrasing like '
-      evidence   ~End of Assessment~
-Workstation Ergonomics Checklist 5
+      criterion  The checklist explicitly cites a foundation checklist from a credible source by naming the
+                 organization and the document title (accept phrasing like 'Based on' or 'Adapted from';
+                 including a source link is acceptable but not required).
+      evidence   ~End of Assessment~ Workstation Ergonomics Checklist 5
   -2.0 of 2  [fail, text, decided by judge]  36d567ba-e205-4313-9756-931c6e4691fe
-      criterion  The document visibly includes the exact title text: "Federal Applicant - Risk Assessment Tool"
+      criterion  The document visibly includes the exact title text: "Federal Applicant - Risk Assessment
+                 Tool"
       evidence   Federal Applicant – Risk Assessment Tool
   ... and 358 more (use --json for all of them)
 ```
@@ -373,7 +403,7 @@ Workstation Ergonomics Checklist 5
 
 <!-- generated: python batch-runner/scripts/analyze_gold_ceiling.py data/grades/_diagnostic/82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b/_superseded/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_30_v2_sol_max__cfg_d1bfc8217c9981d2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_8513975c188f31a6__v2.2.json --shortfall-limit 0 -->
 ```text
-Gold ceiling — stage 1
+Gold ceiling — stage 1 -- the 30-task sample
 ============================================================
   experiment      exp_gold_baseline
   graded at       2026-08-28T14:11:53Z
@@ -385,8 +415,8 @@ Gold ceiling — stage 1
 Thresholds
 ------------------------------------------------------------
   mean score              78.24%   (needs >= 90.0%)   MISS
-  required-item pass      0.5429   (needs >= 0.95)   MISS
-  grader error rate       0.0   (needs < 0.02)   PASS
+  required-item pass      0.5429   (needs >= 0.95)    MISS
+  grader error rate          0.0   (needs < 0.02)     PASS
 
 Required items (|max score| >= 4)
 ------------------------------------------------------------
@@ -403,6 +433,28 @@ Scores
     Information                                          56.21%  n=3
     Manufacturing                                        83.94%  n=5
     Professional, Scientific, and Technical Services     71.39%  n=9
+
+By occupation (7)
+------------------------------------------------------------
+   56.21%  n=3    required 1/2  ·  Audio and Video Technicians
+   59.53%  n=4    required 0/2  ·  Computer and Information Systems Managers
+   80.87%  n=5    required 3/5  ·  Accountants and Auditors
+   83.94%  n=5    required 0/4  ·  Buyers and Purchasing Agents
+   84.43%  n=5    required 1/2  ·  Compliance Officers
+   86.14%  n=5    required 12/17  ·  Administrative Services Managers
+   87.82%  n=3    required 2/3  ·  Child, Family, and School Social Workers
+
+Subsets
+------------------------------------------------------------
+  78.24%   n=30   required 19/35  ·  the same thirty stage 1 graded
+  3.23%    n=1    required 0/0  ·  the five declared input limits
+      named but not in this payload:
+      a73fbc98, e222075d, 75401f7c
+      7de33b48
+  80.82%   n=29   required 19/35  ·  everything but those five
+      named but not in this payload:
+      a73fbc98, e222075d, 75401f7c
+      7de33b48
 
 Usage
 ------------------------------------------------------------
