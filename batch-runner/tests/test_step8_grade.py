@@ -784,9 +784,16 @@ def test_track2_limit_three_mock_smoke(monkeypatch, tmp_path):
     assert payload["renderer_fingerprint"] == _RENDERER_FINGERPRINT
 
 
-def test_track2_incomplete_judge_error_stops_and_persists_diagnostic(
+def test_track2_runtime_failure_stops_and_persists_diagnostic(
     monkeypatch, tmp_path, capsys
 ):
+    """A task the grader itself gave up on halts the run, and says why.
+
+    This is the failure the halt exists for: the grader reported a transport
+    failure, so this task has no marks at all and the shard's total would be
+    a number no reader can interpret. The run stops, writes what it has as a
+    diagnostic, and keeps the details of a failed cleanup out of the log.
+    """
     _setup_workspace(tmp_path)
     _configure_track2(tmp_path)
     config_path = tmp_path / "grading_configs" / "default.yaml"
@@ -813,14 +820,13 @@ def test_track2_incomplete_judge_error_stops_and_persists_diagnostic(
             item.evidence = "BadRequestError: invalid prompt_cache_key"
             item.score_excluded = True
             item.judge_call_count = 1
-            item.usage_complete = False
             grade.total_awarded = 0.0
             grade.total_max = 0
             grade.pct = 0.0
             grade.pct_raw = 0.0
             grade.judge_call_count = 1
             grade.precheck_count = 0
-            grade.usage_complete = False
+            grade.error = "judge_transport_failure"
             return grade
 
         def close(self):
@@ -846,17 +852,89 @@ def test_track2_incomplete_judge_error_stops_and_persists_diagnostic(
         )
     )
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["tasks"][0]["error"] == "usage_incomplete"
+    assert payload["run_status"] == "diagnostic"
+    assert payload["tasks"][0]["error"] == "judge_transport_failure"
     assert payload["summary"]["graded_tasks"] == 0
     assert payload["summary"]["error_tasks"] == 1
     assert payload["summary"]["openai_compat"]["avg_score_pct"] is None
     assert payload["summary"]["openai_compat"]["ci_pct"] is None
     assert payload["summary"]["openai_compat"]["perfect_count"] == 0
     assert payload["summary"]["wow"]["judge_error_rate"] == 1.0
-    assert payload["summary"]["cost"]["usage_complete"] is False
     stderr = capsys.readouterr().err
     assert "provider_error:OSError" in stderr
     assert _SENSITIVE_CLEANUP_DETAIL not in stderr
+
+
+def test_track2_incomplete_usage_keeps_the_grades_and_finishes(
+    monkeypatch, tmp_path, capsys
+):
+    """An unknown bill is not a wrong mark, and must not throw the marks away.
+
+    The listening model answers without a prompt-cache breakdown, which used
+    to be read as unknown usage. One such item set ``usage_complete`` false on
+    its task, the task tripped the halt, and a 17-task shard exited on rc=6
+    with every one of its API calls already paid for — including the calls for
+    the sixteen tasks that had nothing wrong with them.
+
+    So the run now finishes. The task keeps its score and stays in every rate
+    the report quotes, and the one thing that really is unknown — what it cost
+    — is what the run refuses to publish, through ``summary.cost``.
+    """
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    config_path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["output"]["filename_template"] = (
+        "{exp_id}__{judge_slug}__{rubric_sha}__{prompt_v}.json"
+    )
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+
+    class _UnpriceableGrader(_FakeGrader):
+        def grade_task(self, task, deliverable_dir):
+            grade = super().grade_task(task, deliverable_dir)
+            grade.items[0].usage_complete = False
+            grade.usage_complete = False
+            return grade
+
+    monkeypatch.setattr(s8, "Grader", _UnpriceableGrader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() == 0
+    out = (
+        tmp_path
+        / "data/grades"
+        / (
+            "exp998_smoke_baseline_sample__gpt-5_4-pro__"
+            f"{_FakeLoader().rubric_sha}__v1.json"
+        )
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    task = payload["tasks"][0]
+
+    assert payload["run_status"] == "final"
+    assert task.get("error") in (None, "")
+    assert task["usage_complete"] is False
+    assert task["pct"] == 100.0
+    assert payload["summary"]["graded_tasks"] == len(payload["tasks"])
+    assert payload["summary"]["error_tasks"] == 0
+    # The mark survives everywhere a reader looks for it, including the
+    # breakdown that a stamped `error` used to drop the task out of.
+    assert payload["summary"]["openai_compat"]["avg_score_pct"] == 100.0
+    assert sum(
+        sector["task_count"]
+        for sector in payload["summary"]["wow"]["by_sector"].values()
+    ) == len(payload["tasks"])
+    # And the one thing that is genuinely unknown stays unpublished.
+    assert payload["summary"]["cost"]["usage_complete"] is False
+    assert "reported incomplete token usage" in capsys.readouterr().err
 
 
 def test_track2_runtime_error_allows_call_free_unscorable_selection():
@@ -1319,7 +1397,13 @@ def test_all_unscored_main_completes_without_formatting_null(
     assert "avg_pct=unscored" in capsys.readouterr().out
 
 
-def test_track2_incomplete_usage_is_runtime_failure():
+def test_track2_incomplete_usage_is_not_a_runtime_failure():
+    """The guard is about unreadable marks, not about an unknown bill.
+
+    Every field here that decides a score is sound: the item passed, it was
+    decided, it carries evidence. Only the token counts are missing. That
+    belongs to the cost claim, which ``usage_complete`` carries on its own.
+    """
     task = {
         "task_id": "task-001",
         "error": None,
@@ -1334,7 +1418,24 @@ def test_track2_incomplete_usage_is_runtime_failure():
         }],
     }
 
-    assert s8._track2_task_runtime_error(task) == "usage_incomplete"
+    assert s8._track2_task_runtime_error(task) is None
+
+
+def test_track2_unreadable_marks_still_stop_the_run():
+    """The other half of the split: what the guard is still for."""
+    unreadable = [
+        {"task_id": "t", "error": "judge_transport_failure", "items": []},
+        {"task_id": "t", "error": None, "items": "not-a-list"},
+        {"task_id": "t", "error": None, "items": ["not-an-object"]},
+        {
+            "task_id": "t",
+            "error": None,
+            "items": [{"verdict": "judge_error", "score_excluded": False}],
+        },
+    ]
+
+    for task in unreadable:
+        assert s8._track2_task_runtime_error(task) is not None, task
 
 
 def test_tasks_filter(monkeypatch, tmp_path):
@@ -2492,7 +2593,6 @@ def test_track2_resume_rejects_runtime_failure_before_grader(
     )
     payload = json.loads(out.read_text(encoding="utf-8"))
     payload["tasks"][0]["error"] = "judge_error"
-    payload["tasks"][0]["usage_complete"] = False
     payload["summary"] = s8._compute_summary(
         payload["tasks"],
         unpriced_models=["gpt-5.4-pro"],
@@ -2505,6 +2605,91 @@ def test_track2_resume_rejects_runtime_failure_before_grader(
 
     assert s8.main() != 0
     assert "runtime failures" in capsys.readouterr().err
+
+
+def test_track2_resume_accepts_a_chunk_whose_cost_is_unknown(
+    monkeypatch, tmp_path
+):
+    """The other end of the same fix: chunk two must be able to load chunk one.
+
+    A long shard grades in chunks, and each chunk reloads what the last one
+    wrote. If chunk one graded a task whose token counts never arrived, its
+    aggregate cost flag is legitimately false — and refusing to load that
+    payload would move the shard's death from the task to the next chunk
+    boundary, which is the same death with extra steps.
+    """
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+    out = _seed_partial_grade(
+        tmp_path, ["task-001", "task-002"], dict(_RENDERER_FINGERPRINT)
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    payload["tasks"][0]["usage_complete"] = False
+    payload["summary"] = s8._compute_summary(
+        payload["tasks"],
+        unpriced_models=["gpt-5.4-pro"],
+    )
+    assert payload["summary"]["cost"]["usage_complete"] is False
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() == 0
+    resumed = json.loads(out.read_text(encoding="utf-8"))
+    # The unknown cost is carried forward, not quietly healed by the resume.
+    assert resumed["summary"]["cost"]["usage_complete"] is False
+    assert len(resumed["tasks"]) == 3
+
+
+@pytest.mark.parametrize(
+    "flag", [None, "true", 1], ids=["missing", "string", "int"]
+)
+def test_track2_resume_rejects_a_chunk_that_will_not_say(
+    monkeypatch, tmp_path, capsys, flag
+):
+    """Loading a false flag is fine; loading no answer at all is not.
+
+    The merged total is a fold over every chunk's flag, so a value that is
+    absent, or that merely looks true, would silently become whatever `bool`
+    made of it. ``step9_merge_shards`` refuses the same three shapes.
+    """
+    _setup_workspace(tmp_path)
+    _configure_track2(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(
+        s8, "get_renderer_fingerprint", lambda: dict(_RENDERER_FINGERPRINT)
+    )
+
+    class _NeverConstruct:
+        def __init__(self, *args, **kwargs):
+            pytest.fail("Grader must not resume an unreadable cost flag")
+
+    monkeypatch.setattr(s8, "Grader", _NeverConstruct)
+    out = _seed_partial_grade(
+        tmp_path, ["task-001"], dict(_RENDERER_FINGERPRINT)
+    )
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    if flag is None:
+        payload["summary"]["cost"].pop("usage_complete", None)
+    else:
+        payload["summary"]["cost"]["usage_complete"] = flag
+    out.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--resume",
+    ])
+
+    assert s8.main() != 0
+    assert "aggregate usage flag" in capsys.readouterr().err
 
 
 def test_track2_valid_cache_hit_checks_fingerprint_and_skips(

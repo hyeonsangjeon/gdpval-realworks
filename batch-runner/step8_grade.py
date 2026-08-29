@@ -1095,8 +1095,20 @@ def _validate_grade_task_set(
         raise ValueError(
             f"existing grade contains runtime failures: {runtime_errors}"
         )
-    if existing["summary"]["cost"].get("usage_complete") is not True:
-        raise ValueError("existing grade has incomplete aggregate usage")
+    # A resumed chunk has to be able to load a payload whose cost total is
+    # legitimately incomplete, because an earlier chunk may have graded a task
+    # whose token counts never arrived. Those grades are still good; only the
+    # bill is unknown. What is still refused is a payload that will not say
+    # either way — the flag must be present and must be a boolean, so the fold
+    # that produces the run's total can never be handed a missing or
+    # truthy-ish value. `step9_merge_shards` demands exactly this of every
+    # shard it merges.
+    aggregate_usage = existing["summary"]["cost"].get("usage_complete")
+    if type(aggregate_usage) is not bool:
+        raise ValueError(
+            "existing grade aggregate usage flag is missing or not a boolean: "
+            f"{aggregate_usage!r}"
+        )
     return set(existing_ids)
 
 
@@ -1200,6 +1212,22 @@ def filter_tasks_for_config(
 
 
 def _track2_task_runtime_error(task: dict) -> str | None:
+    """Why this task's marks cannot be read, or ``None`` if they can.
+
+    Everything named here leaves the *score* unreadable: a task that already
+    carries a foreign error, items that are not a list, an item that is not an
+    object, or a judge error left sitting inside the score it should have been
+    excluded from. Any one of them stops the shard, because a number nobody
+    can read is worse than no number at all.
+
+    An incomplete token count is deliberately not on that list. It says
+    nothing about whether the marking was right — only that what the marking
+    cost is unknown. That is carried instead by the task's own
+    ``usage_complete``, which the aggregate folds into
+    ``summary.cost.usage_complete``, so the run still refuses to publish a
+    cost figure it cannot stand behind while the grades it *can* stand behind
+    survive.
+    """
     existing_error = task.get("error")
     if existing_error and existing_error not in {
         "all_items_score_excluded",
@@ -1220,10 +1248,6 @@ def _track2_task_runtime_error(task: dict) -> str | None:
         ):
             return "invalid_score_exclusion"
 
-    if task.get("usage_complete") is not True:
-        return "usage_incomplete"
-    if any(item.get("usage_complete") is not True for item in items):
-        return "usage_incomplete"
     return None
 
 
@@ -2331,6 +2355,21 @@ def main() -> int:
             runtime_error = _track2_task_runtime_error(row)
             if runtime_error is not None and not row.get("error"):
                 row["error"] = runtime_error
+            if runtime_error is None and row.get("usage_complete") is not True:
+                # Not an error, and deliberately not stamped as one: this
+                # task's marking is as good as every other task's, so it keeps
+                # its score and stays in the sector breakdown and the item
+                # rates. Only the bill is unknown, and this row's own
+                # `usage_complete: false` already says so — `summary.cost`
+                # folds it in, and the receipt for the task is filed partial.
+                # Said out loud here because a run that quietly stops being
+                # priceable is the thing worth noticing.
+                print(
+                    f"WARNING: {row['task_id']} reported incomplete token "
+                    "usage; its grades stand, but this run's cost total is "
+                    "no longer complete.",
+                    file=sys.stderr,
+                )
         task_payloads.append(row)
 
         print(
