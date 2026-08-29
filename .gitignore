@@ -92,6 +92,7 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/PR3_GOLD_CEILING.md
 !tasks/rebuilding_grading_task/PR3_VARIANCE.md
 !tasks/rebuilding_grading_task/PR3_REPORT.md
+!tasks/rebuilding_grading_task/304-full-gold-corpus.md
 
 *.parquet
 .huggingface/
