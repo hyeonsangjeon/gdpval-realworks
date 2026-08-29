@@ -1873,17 +1873,30 @@ def test_has_extractable_text_is_false_for_an_image(png_file):
 
 
 def test_has_extractable_text_is_none_for_a_file_it_cannot_speak_for(base_dir):
-    # A missing file, a medium text is not carried in, and a kind the tool has
-    # no reader for. None of the three is evidence that a file has no text.
+    # A missing file, a medium text is not carried in, and a file whose bytes
+    # are not text. None of the three is evidence that a file has no text.
     missing = base_dir / "nothing_here.pdf"
     audio = base_dir / "stems.wav"
     audio.write_bytes(b"\x00")
-    unknown = base_dir / "notes.rtf"
-    unknown.write_bytes(b"{\\rtf1}")
+    unknown = base_dir / "model.dwg"
+    unknown.write_bytes(b"AC1032\x00\x00\x00\x00binary drawing")
 
     assert has_extractable_text(missing) is None
     assert has_extractable_text(audio) is None
     assert has_extractable_text(unknown) is None
+
+
+def test_an_unmapped_extension_holding_text_is_spoken_for(base_dir):
+    """``.rtf`` is markup, and markup is text.
+
+    It used to answer ``None`` here, on the reasoning that the tool has no
+    reader for it. But ``None`` and ``True`` route identically -- only a
+    measured ``False`` escalates -- so the whole difference is what
+    ``read_content`` returns, and the file plainly holds the prose.
+    """
+    rtf = base_dir / "notes.rtf"
+    rtf.write_bytes(rb"{\rtf1\ansi Quarterly summary follows.\par}")
+    assert has_extractable_text(rtf) is True
 
 
 def test_has_extractable_text_is_none_when_it_could_not_reach_every_page(
