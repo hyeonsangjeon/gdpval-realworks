@@ -33,6 +33,7 @@ import {
   formatCostUsd,
   perDeliverableCell,
   receiptAmount,
+  runtimeLineAmount,
   summaryStatCell,
   summaryStatusLabel,
   summaryTotalCell,
@@ -1390,6 +1391,9 @@ function TaskDetailModal({
                 { field: 'grading_cost' as const, receipt: gradingCost, ran: gradingRan },
               ]).map(({ field, receipt, ran }) => {
                 const cell = costCell(receipt, field, { ran })
+                // Runtime is not a model call, so it is not one of the component
+                // lines. It gets its own, and only when something was charged.
+                const runtime = receipt ? runtimeLineAmount(receipt) : null
                 return (
                   <div key={field}>
                     <div className="flex justify-between gap-2 border-b border-dash-border-subtle py-1">
@@ -1403,7 +1407,7 @@ function TaskDetailModal({
                         {cell.text}
                       </span>
                     </div>
-                    {receipt && receipt.components.length > 0 && (
+                    {receipt && (receipt.components.length > 0 || runtime !== null) && (
                       // Keyed by field: the same stage can legitimately appear
                       // under both, e.g. a perception read the solver made and
                       // one the judge made, and they must not read as one line.
@@ -1441,7 +1445,7 @@ function TaskDetailModal({
                             </div>
                           )
                         })}
-                        {receipt.runtime_cost_usd !== null && (
+                        {runtime !== null && (
                           // Runtime is not a model call, so it is not one of the
                           // lines above. It is shown once here so the lines and
                           // the total agree without being added twice.
@@ -1454,7 +1458,7 @@ function TaskDetailModal({
                               className="font-mono text-dash-text-secondary"
                               title={COST_ESTIMATE_NOTE}
                             >
-                              {formatCostUsd(receipt.runtime_cost_usd)}
+                              {formatCostUsd(runtime)}
                             </span>
                           </div>
                         )}

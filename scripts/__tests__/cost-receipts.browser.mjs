@@ -24,7 +24,7 @@ import { preview } from 'vite'
 import {
   COST_CURRENCY,
   COST_RECEIPT_SCHEMA_VERSION,
-  ESTIMATE_BASIS,
+  projectCostReceipt,
   summarizeCostReceipts,
 } from '../cost-receipt.mjs'
 
@@ -41,32 +41,56 @@ const LEDGER_SHA = 'ab'.repeat(32)
 
 const usd = (value) => `$${value.toFixed(4)}`
 const literal = (value) => new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+/** Micro-dollars, so 0.25 − 0.01 never reaches an assertion as 0.24000000000000002. */
+const money = (value) => Number(value.toFixed(6))
 
 // ── Fixture builders ────────────────────────────────────────────────────────
+//
+// Everything below is in the shape batch-runner/core/cost_receipts.py writes,
+// not the shape the dashboard reads. The two differ, and the difference is the
+// point: the producer fills every money field on every status, so a step that
+// recorded nothing still emits `0.0`. `scenario()` runs these through the real
+// projector, which is what turns that placeholder into "no record" — a fixture
+// pre-written in the read shape would skip the conversion it exists to prove.
 
-function component(name, amount, status = 'complete') {
+/**
+ * One receipt line: what one stage, at one retry kind, cost.
+ *
+ * There is no per-line estimate. The producer puts an estimate on the receipt
+ * and nowhere else, so a line only ever reports what was confirmed.
+ */
+function component(stage, amount, { status = 'complete', retryKind = 'none' } = {}) {
+  const measured = status === 'complete' || status === 'partial'
   return {
-    name,
+    // Derived at the producer: first work carries its stage's name, anything
+    // that had to be done again is `retry`. The stage travels beside it, which
+    // is what keeps two stages that each retried from reading as one line.
+    name: retryKind === 'none' ? stage : 'retry',
+    stage,
+    retry_kind: retryKind,
     status,
-    estimated_cost_usd: amount,
-    known_cost_usd: amount,
-    model_calls: amount === null ? null : 1,
-    usage: amount === null ? null : { input_tokens: 1200, output_tokens: 340 },
+    known_cost_usd: amount ?? 0,
+    model_calls: measured ? 1 : 0,
+    usage: measured ? { input_tokens: 1200, output_tokens: 340 } : {},
+    missing_reasons: measured || status === 'not_run' ? [] : ['usage_absent'],
   }
 }
 
-function receipt({ status, estimated = null, known = null, components = [], missing = [] }) {
+function receipt({ status, known = 0, runtime = 0, components = [], missing = [] }) {
   return {
     schema_version: COST_RECEIPT_SCHEMA_VERSION,
     currency: COST_CURRENCY,
     status,
-    estimate_basis: ESTIMATE_BASIS,
-    estimated_cost_usd: estimated,
-    known_cost_usd: known,
-    model_cost_usd: known,
-    runtime_cost_usd: null,
-    model_calls: components.filter((entry) => entry.model_calls).length || null,
-    usage: null,
+    // Derived from status at the producer, never stored: only a complete
+    // receipt names a total, and there it equals known_cost_usd exactly.
+    estimated_cost_usd: status === 'complete' ? money(known) : null,
+    known_cost_usd: money(known),
+    model_cost_usd: money(known - runtime),
+    // A Decimal that starts at zero and sums the sandbox rows, so a task that
+    // never opened one reports 0 rather than absence.
+    runtime_cost_usd: money(runtime),
+    model_calls: components.reduce((sum, line) => sum + line.model_calls, 0),
+    usage: {},
     components,
     price_table_sha256: PRICE_TABLE_SHA,
     missing_reasons: missing,
@@ -77,7 +101,6 @@ function receipt({ status, estimated = null, known = null, components = [], miss
 const flat = (amount) =>
   receipt({
     status: 'complete',
-    estimated: amount,
     known: amount,
     components: [component('generation', amount)],
   })
@@ -113,24 +136,34 @@ function task(taskId, { sector, occupation, status = 'success', cost = null }) {
 function scenario(rows, { experimentId, successfulDeliverables }) {
   const succeeded = (row) => (row.status ?? 'success') === 'success'
 
+  // Both payloads are written by a projector in production — step 6 on the
+  // Python side, aggregate-grades.mjs on this one — so the fixtures go through
+  // the same one here. What the page receives is then exactly what it receives
+  // in a real run, with the producer's placeholder zeros already resolved.
+  const priced = rows.map((row) => ({
+    ...row,
+    solve: projectCostReceipt(row.solve ?? null, `${row.id} problem_solving_cost`),
+    grade: projectCostReceipt(row.grade ?? null, `${row.id} grading_cost`),
+  }))
+
   const solveSummary = summarizeCostReceipts(
-    rows.map((row) => ({ receipt: row.solve ?? null, succeeded: succeeded(row) })),
+    priced.map((row) => ({ receipt: row.solve, succeeded: succeeded(row) })),
     { successfulDeliverables },
   )
-  const gradedRows = rows.filter((row) => row.graded !== false)
+  const gradedRows = priced.filter((row) => row.graded !== false)
   const gradeSummary = summarizeCostReceipts(
-    gradedRows.map((row) => ({ receipt: row.grade ?? null, succeeded: succeeded(row) })),
+    gradedRows.map((row) => ({ receipt: row.grade, succeeded: succeeded(row) })),
     { successfulDeliverables },
   )
 
   const report = {
     short_id: SHORT_ID,
-    task_results: rows.map((row) =>
+    task_results: priced.map((row) =>
       task(row.id, {
         sector: row.sector,
         occupation: row.occupation,
         status: row.status ?? 'success',
-        cost: row.solve ?? null,
+        cost: row.solve,
       }),
     ),
     ...(solveSummary
@@ -230,18 +263,21 @@ const fullyPricedRows = () => [
     occupation: 'Accountant',
     solve: receipt({
       status: 'complete',
-      estimated: 0.25,
       known: 0.25,
+      // Charged for the sandbox, and charged once. It is not among the
+      // component lines below — those are model calls — so it is the one
+      // amount the breakdown would otherwise fail to account for.
+      runtime: 0.01,
       components: [
         component('generation', 0.2),
         component('self_qa', 0.03),
-        component('retry', 0.01),
-        component('runtime', 0.01),
+        // A retry belongs to the stage that retried. It displays as 재시도;
+        // the stage is what says which one.
+        component('generation', 0.01, { retryKind: 'semantic' }),
       ],
     }),
     grade: receipt({
       status: 'complete',
-      estimated: 0.12,
       known: 0.12,
       components: [component('grading', 0.1), component('perception', 0.02)],
     }),
@@ -274,23 +310,23 @@ const mixedRows = () => [
     id: 't-partial',
     sector: 'Health',
     occupation: 'Nurse',
+    // A sandbox ran and could not be priced. Nothing was charged for it, so
+    // there is no runtime amount — the receipt says so as `partial` plus a
+    // reason code, which is a different claim from "the sandbox was free".
     solve: receipt({
       status: 'partial',
       known: 0.1,
       missing: ['runtime_price_missing'],
       components: [
         component('generation', 0.1),
-        component('self_qa', null, 'not_run'),
-        component('runtime', null, 'unavailable'),
+        component('self_qa', null, { status: 'not_run' }),
       ],
     }),
-    // `runtime` on both sides of the same task: the sandbox the solver used,
-    // and the one the judge used. Same slug, different field, different money.
     grade: receipt({
       status: 'complete',
-      estimated: 0.02,
       known: 0.02,
-      components: [component('grading', 0.015), component('runtime', 0.005)],
+      runtime: 0.005,
+      components: [component('grading', 0.015)],
     }),
   },
   {
@@ -383,8 +419,9 @@ async function assertFullyPriced(page, solveSummary, gradeSummary) {
     literal(`cost_ledger.jsonl · sha256 ${LEDGER_SHA.slice(0, 12)}`),
   )
 
-  // Goal 5: generation / Self-QA / retry / runtime / grading / perception,
-  // then a total that is only a total because both halves are complete.
+  // Goal 5: generation / Self-QA / retry / grading / perception, the sandbox
+  // fee on its own line, then a total that is only a total because both halves
+  // are complete.
   const modal = await openTask(page, 't-complete')
   assert.equal(
     (await modal.locator('[data-cost-field="problem_solving_cost"]').innerText()).trim(),
@@ -394,7 +431,6 @@ async function assertFullyPriced(page, solveSummary, gradeSummary) {
     ['generation', '생성', '$0.2000', 'problem_solving_cost'],
     ['self_qa', 'Self-QA', '$0.0300', 'problem_solving_cost'],
     ['retry', '재시도', '$0.0100', 'problem_solving_cost'],
-    ['runtime', '실행 환경', '$0.0100', 'problem_solving_cost'],
     ['grading', '주 채점', '$0.1000', 'grading_cost'],
     ['perception', '판독', '$0.0200', 'grading_cost'],
   ]) {
@@ -404,6 +440,29 @@ async function assertFullyPriced(page, solveSummary, gradeSummary) {
     assert.match(text, literal(label), `component label mismatch: ${slug}`)
     assert.match(text, literal(amount), `component amount mismatch: ${slug}`)
   }
+
+  // A retry keeps the stage it belonged to. The row reads 재시도; the hover is
+  // what says which 재시도, and without it two stages that each had to repeat
+  // work would be two identical-looking lines.
+  assert.equal(
+    await modalComponent(modal, 'problem_solving_cost', 'retry')
+      .locator('span')
+      .first()
+      .getAttribute('title'),
+    '생성 · 품질 재시도',
+  )
+
+  // The sandbox fee is not a model call and gets no component line. It is
+  // shown once, beside them, which is what makes 0.20 + 0.03 + 0.01 + 0.01
+  // reconcile with the $0.2500 above without the fee being counted twice.
+  const runtime = modal.locator('[data-cost-runtime="problem_solving_cost"]')
+  assert.equal(await runtime.count(), 1, 'the sandbox fee has no line of its own')
+  assert.match(await runtime.innerText(), literal('$0.0100'))
+  // The grading half never opened a sandbox. The producer still writes 0 there,
+  // so a line gated on presence rather than on money would appear here reading
+  // 실행 환경 $0.0000 — on this task and on every other one in the dashboard.
+  assert.equal(await modal.locator('[data-cost-runtime="grading_cost"]').count(), 0)
+
   const combined = await readCell(modal.locator('[data-cost-field="combined"]'))
   assert.equal(combined.text, '$0.3700')
   assert.equal(combined.state, 'recorded')
@@ -444,21 +503,27 @@ async function assertMixed(page, solveSummary) {
   assert.match(column, /미가격 사유: price_table_missing, runtime_price_missing/)
   assert.match(column, /일부 기록됨/)
 
-  // `runtime` deliberately appears under both fields here — unpriced on the
-  // solve side, priced on the grading side. One slug, two line items, and they
-  // must not be read as one.
   const modal = await openTask(page, 't-partial')
   for (const [field, slug, text] of [
     ['problem_solving_cost', 'generation', '$0.1000'],
     ['problem_solving_cost', 'self_qa', '미수행'],
-    ['problem_solving_cost', 'runtime', '미확정'],
     ['grading_cost', 'grading', '$0.0150'],
-    ['grading_cost', 'runtime', '$0.0050'],
   ]) {
     const row = modalComponent(modal, field, slug)
     assert.equal(await row.count(), 1, `missing component row: ${field}/${slug}`)
     assert.match(await row.innerText(), literal(text), `component readout mismatch: ${field}/${slug}`)
   }
+
+  // The solve half ran a sandbox it could not price, so nothing was charged
+  // and there is no line. `실행 환경 $0.0000` here would say the sandbox was
+  // free, which is the opposite of what the ≥ and the reason code report.
+  assert.equal(await modal.locator('[data-cost-runtime="problem_solving_cost"]').count(), 0)
+  // The grading half did open one, and its $0.0050 is what makes the lines add
+  // up to the $0.0200 shown above them.
+  const runtime = modal.locator('[data-cost-runtime="grading_cost"]')
+  assert.equal(await runtime.count(), 1, 'a priced sandbox fee must be visible')
+  assert.match(await runtime.innerText(), literal('$0.0050'))
+
   // 0.10 solved + 0.02 graded, but the solve half is partial, so ≥.
   const combined = await readCell(modal.locator('[data-cost-field="combined"]'))
   assert.equal(combined.text, '≥ $0.1200')

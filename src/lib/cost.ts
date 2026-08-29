@@ -138,6 +138,26 @@ export function receiptAmount(receipt: CostReceipt): number | null {
   return receipt.estimated_cost_usd ?? receipt.known_cost_usd
 }
 
+/**
+ * The runtime fee, when there was one.
+ *
+ * The producer sums runtime rows into a `Decimal` that starts at zero, so
+ * every receipt carries `runtime_cost_usd` — a task that never opened a
+ * sandbox reports `0`, not absence. A line gated on presence alone would
+ * therefore appear on every task in the dashboard reading `실행 환경 $0.0000`.
+ *
+ * It is gated on "was anything charged" instead, which is the same rule the
+ * producer applies to component lines: a stage that made no call gets no line.
+ * Nothing is hidden by this. A zero runtime is still inside the task total,
+ * and with the line absent the component lines add up to that total exactly —
+ * which is the only reason the line exists.
+ */
+export function runtimeLineAmount(receipt: CostReceipt): number | null {
+  const amount = receipt.runtime_cost_usd
+  if (amount === null || amount === 0) return null
+  return amount
+}
+
 function withNote(text: string): string {
   return `${text} · ${COST_ESTIMATE_NOTE}`
 }
