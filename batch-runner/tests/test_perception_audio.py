@@ -3,14 +3,39 @@
 from __future__ import annotations
 
 import struct
+import typing
 import wave
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import typing_extensions
+from openai.types.responses.response_input_audio_param import (
+    InputAudio,
+    ResponseInputAudioParam,
+)
 
 from core.perception import AUDIO_CALL_CAP, AudioPerception, AudioVerdict
+from core.perception.audio import SUPPORTED_AUDIO_FORMATS
+
+
+def _sdk_keys(typed_dict: type) -> set[str]:
+    """The keys an ``openai`` request TypedDict declares.
+
+    Read through ``typing_extensions`` rather than ``__required_keys__``: the
+    SDK writes its annotations as strings and marks them with
+    ``typing_extensions.Required``, which the 3.10 stdlib does not resolve — it
+    reports every key as optional and ``__required_keys__`` comes back empty,
+    so a check built on it would pass against anything.
+    """
+    return set(typing_extensions.get_type_hints(typed_dict))
+
+
+def _sdk_audio_formats() -> set[str]:
+    """The container formats the SDK's ``InputAudio.format`` literal admits."""
+    hints = typing_extensions.get_type_hints(InputAudio)
+    return set(typing.get_args(hints["format"]))
 
 
 # ── Fakes ────────────────────────────────────────────────────────────
@@ -128,7 +153,21 @@ def test_a_reply_that_reports_no_tokens_at_all_is_not_counted(wav_file):
     assert v.usage_complete is False
 
 
-def test_request_shape_includes_audio_block(wav_file):
+def test_request_shape_matches_the_sdk_audio_content_part(wav_file):
+    """The audio block is checked against the SDK type, not against belief.
+
+    This assertion used to be written by hand, and it was wrong twice: it
+    accepted the payload under the key ``audio`` (the API requires
+    ``input_audio``) and it accepted ``flac``/``ogg``/``m4a``/``aac`` as
+    formats (the API takes ``mp3`` and ``wav``). Both mistakes are invisible
+    to a fake client, which accepts any keyword argument, so the suite stayed
+    green while every real audio call was rejected with a 400 before reaching
+    the model.
+
+    So the shape is read off ``ResponseInputAudioParam`` — the same generated
+    type the SDK serialises against — and a future change to the wire format
+    fails here instead of failing in a paid run.
+    """
     client = FakeClient(FakeResponses())
     ap = AudioPerception(client=client, deployment="gpt-audio-1.5")
     ap.judge(criterion="x", audio_path=str(wav_file))
@@ -139,9 +178,56 @@ def test_request_shape_includes_audio_block(wav_file):
     content = sent["input"][0]["content"]
     kinds = {b["type"] for b in content}
     assert {"input_text", "input_audio"}.issubset(kinds)
-    audio_block = next(b for b in content if b["type"] == "input_audio")
-    assert audio_block["audio"]["format"] in ("wav", "mp3", "flac", "ogg", "m4a", "aac")
-    assert audio_block["audio"]["data"]  # base64 non-empty
+
+    block = next(b for b in content if b["type"] == "input_audio")
+    assert set(block) == _sdk_keys(ResponseInputAudioParam), (
+        f"audio content part carries {sorted(block)}, but the SDK declares "
+        f"{sorted(_sdk_keys(ResponseInputAudioParam))}"
+    )
+    payload = block["input_audio"]
+    assert set(payload) == _sdk_keys(InputAudio)
+    assert payload["format"] in _sdk_audio_formats()
+    assert payload["data"]  # base64 non-empty
+
+
+def test_the_module_offers_exactly_the_formats_the_sdk_accepts():
+    """``SUPPORTED_AUDIO_FORMATS`` is the SDK's list, not a second opinion.
+
+    The refusal in ``judge`` is only as good as this tuple. If the API grows a
+    third format and this is not updated, clips it would have accepted get
+    turned away for free; if it shrinks and this is not updated, we go back to
+    paying for 400s.
+    """
+    assert set(SUPPORTED_AUDIO_FORMATS) == _sdk_audio_formats()
+
+
+def test_an_unsupported_container_is_refused_without_spending_a_call(tmp_path):
+    """A format the API will reject never becomes a request.
+
+    The call cap is three per task. Spending one of them on a container the
+    API refuses outright costs money and buys nothing, and — because the
+    rejection arrives as an exception from a call that *was* sent — it also
+    marks the item's usage incomplete, which is what aborts a Track 2 run.
+
+    Refusing here keeps all three properties right at once: no charge, the cap
+    intact, and usage that is complete at zero because nothing was sent.
+    """
+    clip = tmp_path / "stem.aiff"
+    clip.write_bytes(b"FORM\x00\x00\x00\x04AIFF")  # not decodable; ext is what matters
+    client = FakeClient(FakeResponses())
+    ap = AudioPerception(client=client)
+
+    verdict = ap.judge(criterion="x", audio_path=str(clip))
+
+    assert client.responses.calls == []
+    assert verdict.verdict == "judge_error"
+    assert verdict.judge_error == "unsupported_audio_format"
+    assert "aiff" in verdict.reasoning
+    assert ap.calls_used == 0
+    assert verdict.api_call_count == 0
+    assert verdict.usage_complete is True
+
+
 
 
 def test_call_cap_short_circuits(wav_file):
