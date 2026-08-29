@@ -27,6 +27,11 @@ on:
         required: false
         type: number
         default: 0
+      tasks:
+        description: "Grade only these task_ids (comma-separated; empty = all)"
+        required: false
+        type: string
+        default: ""
       dry_run:
         description: "Classify only, no LLM calls"
         required: false
@@ -92,6 +97,7 @@ jobs:
       GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+      GRADE_TASKS: ${{ inputs.tasks }}
       GRADE_DRY_RUN: ${{ inputs.dry_run }}
       GRADE_PAID_APPROVAL: ${{ inputs.paid_approval }}
       GRADE_RESUME: ${{ inputs.resume }}
@@ -159,6 +165,15 @@ jobs:
             echo "::error::tasks_limit must be an integer between 0 and 220"
             exit 1
           fi
+          # This value is spliced into an argv array and, downstream, into the
+          # digest that names an output directory. Quoting alone would make it
+          # safe to pass; matching it against the only shape a task_id ever has
+          # also makes it safe to *act* on, so a typo is a refusal here rather
+          # than an empty corpus or a stray flag several steps later.
+          if [[ -n "$GRADE_TASKS" ]] && [[ ! "$GRADE_TASKS" =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}(,[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12})*$ ]]; then
+            echo "::error::tasks must be a comma-separated list of task_id UUIDs"
+            exit 1
+          fi
           if [[ ! "$GRADE_RESUME_CHUNK" =~ ^(0|[1-9]|10)$ ]]; then
             echo "::error::resume_chunk must be between 0 and 10"
             exit 1
@@ -200,6 +215,12 @@ jobs:
           # subtree that nothing merges. Refuse the combination outright.
           if [[ "$GRADE_SHARD_COUNT" != "1" && "$GRADE_TASKS_LIMIT" != "0" ]]; then
             echo "::error::shard_count > 1 cannot be combined with tasks_limit"
+            exit 1
+          fi
+          # --tasks narrows the corpus the same way and forks the output the
+          # same way, so it is refused alongside sharding for the same reason.
+          if [[ "$GRADE_SHARD_COUNT" != "1" && -n "$GRADE_TASKS" ]]; then
+            echo "::error::shard_count > 1 cannot be combined with tasks"
             exit 1
           fi
           # Ten is the same cap step8_grade.py enforces (MAX_RUN_ORDINAL). A
@@ -342,6 +363,7 @@ jobs:
           GRADE_CONFIG: ${{ inputs.grading_config }}
           GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
           GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+          GRADE_TASKS: ${{ inputs.tasks }}
           GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
           GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
           GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
@@ -353,6 +375,7 @@ jobs:
             "  config=$GRADE_CONFIG" \
             "  inference_revision=${GRADE_INFERENCE_REVISION:-initial-main-resolution}" \
             "  tasks_limit=$GRADE_TASKS_LIMIT" \
+            "  tasks=${GRADE_TASKS:-<all>}" \
             "  resume_chunk=$GRADE_RESUME_CHUNK" \
             "  shard=$GRADE_SHARD_INDEX/$GRADE_SHARD_COUNT"
 
@@ -444,6 +467,7 @@ jobs:
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+      GRADE_TASKS: ${{ inputs.tasks }}
       HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
       GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
       GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
@@ -581,6 +605,9 @@ jobs:
           if [[ "$GRADE_TASKS_LIMIT" != "0" ]]; then
             ARGS+=(--limit "$GRADE_TASKS_LIMIT")
           fi
+          if [[ -n "$GRADE_TASKS" ]]; then
+            ARGS+=(--tasks "$GRADE_TASKS")
+          fi
           # Preview this shard's slice, not the whole corpus -- otherwise the
           # dry run's task count says nothing about what the paid run will do.
           if [[ "$GRADE_SHARD_COUNT" != "1" ]]; then
@@ -642,6 +669,7 @@ jobs:
       GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+      GRADE_TASKS: ${{ inputs.tasks }}
       GRADE_DRY_RUN: ${{ inputs.dry_run }}
       GRADE_PAID_APPROVAL: ${{ inputs.paid_approval }}
       GRADE_RESUME: ${{ inputs.resume }}
@@ -979,6 +1007,9 @@ jobs:
           if [[ "$GRADE_TASKS_LIMIT" != "0" ]]; then
             ARGS+=(--limit "$GRADE_TASKS_LIMIT")
           fi
+          if [[ -n "$GRADE_TASKS" ]]; then
+            ARGS+=(--tasks "$GRADE_TASKS")
+          fi
           # Shard flags change WHO grades WHAT, never what is in scope: the
           # payload still declares the full 220-task identity, so every shard
           # shares one cache key and step9 can prove the set is complete. The
@@ -1216,6 +1247,12 @@ jobs:
                   "inference_revision": os.environ["RESOLVED_INFERENCE_REVISION"],
                   "force": "false",
                   "tasks_limit": os.environ["GRADE_TASKS_LIMIT"],
+                  # Carried for the same reason as the ordinal below: the
+                  # scope narrowing is what put this run's output under
+                  # _diagnostic/<scope_sha>/, and a chunk that resumed without
+                  # it would grade the whole corpus into a different path,
+                  # abandoning the partial it was dispatched to finish.
+                  "tasks": os.environ["GRADE_TASKS"],
                   "dry_run": "false",
                   "paid_approval": os.environ["GRADE_PAID_APPROVAL"],
                   "resume": "true",
