@@ -162,8 +162,44 @@ function withNote(text: string): string {
   return `${text} · ${COST_ESTIMATE_NOTE}`
 }
 
+/**
+ * The closed set of reasons a receipt gives for not carrying a number, from
+ * §3.4 of the receipt spec. These are the only strings the producer emits.
+ *
+ * They are shown to a reader, not to a machine, and every other word on this
+ * screen is Korean — `미가격 사유: price_missing` is half a sentence. Each
+ * label says what happened, not what the field is called.
+ */
+const MISSING_REASON_LABELS: Record<string, string> = {
+  usage_absent: '응답에 사용량 없음',
+  usage_partial: '사용량 일부 누락',
+  price_missing: '가격표에 없는 모델',
+  call_reachability_unknown: '호출 도달 여부 불명',
+  runtime_cost_unattributable: '실행 환경 공유로 귀속 불가',
+  runtime_cost_unpriced: '실행 환경 단가 없음',
+  ledger_absent: '이 실행에 원장 없음',
+  stage_unsupported: '이 경로에 계측 없음',
+}
+
+/**
+ * Human reading of one reason slug.
+ *
+ * An unknown slug is shown as it arrived. The producer may add a ninth reason
+ * before this map hears about it, and printing the raw value is the honest
+ * failure: it is ugly enough to get fixed, whereas dropping it or calling it
+ * 알 수 없음 would quietly lose the only word that says what went wrong.
+ */
+export function missingReasonLabel(reason: string): string {
+  return MISSING_REASON_LABELS[reason] ?? reason
+}
+
+/** The same list, deduplicated by label and joined for display. */
+export function missingReasonText(reasons: string[]): string {
+  return [...new Set(reasons.map(missingReasonLabel))].join(', ')
+}
+
 function unpricedTitle(reasons: string[]): string {
-  return reasons.length ? `미가격 사유: ${reasons.join(', ')}` : '가격을 계산할 수 없음'
+  return reasons.length ? `미가격 사유: ${missingReasonText(reasons)}` : '가격을 계산할 수 없음'
 }
 
 /**

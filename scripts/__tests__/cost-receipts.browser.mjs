@@ -316,7 +316,7 @@ const mixedRows = () => [
     solve: receipt({
       status: 'partial',
       known: 0.1,
-      missing: ['runtime_price_missing'],
+      missing: ['runtime_cost_unpriced'],
       components: [
         component('generation', 0.1),
         component('self_qa', null, { status: 'not_run' }),
@@ -333,7 +333,7 @@ const mixedRows = () => [
     id: 't-unpriced',
     sector: 'Retail',
     occupation: 'Buyer',
-    solve: receipt({ status: 'unavailable', missing: ['price_table_missing'] }),
+    solve: receipt({ status: 'unavailable', missing: ['price_missing'] }),
   },
 ]
 
@@ -474,12 +474,16 @@ async function assertMixed(page, solveSummary) {
   const partial = await readCell(tableCell(page, 't-partial', 'problem_solving_cost'))
   assert.equal(partial.text, '≥ $0.1000')
   assert.equal(partial.state, 'floor')
-  assert.match(partial.title, /runtime_price_missing/)
+  // The reason is shown in the same language as the rest of the row. The raw
+  // slug must not reach the screen; if the label map ever loses this entry, the
+  // fallback prints `runtime_cost_unpriced` and this assertion catches it.
+  assert.match(partial.title, /실행 환경 단가 없음/)
+  assert.doesNotMatch(partial.title, /runtime_cost_unpriced/)
 
   const unpriced = await readCell(tableCell(page, 't-unpriced', 'problem_solving_cost'))
   assert.equal(unpriced.text, '미확정')
   assert.equal(unpriced.state, 'unpriced')
-  assert.match(unpriced.title, /price_table_missing/)
+  assert.match(unpriced.title, /가격표에 없는 모델/)
 
   const unpricedGrade = await readCell(tableCell(page, 't-complete', 'grading_cost'))
   assert.equal(unpricedGrade.text, '미확정')
@@ -500,7 +504,9 @@ async function assertMixed(page, solveSummary) {
   assert.equal(perDeliverable.state, 'unpriced')
 
   const column = await summaryColumn(page, 'problem_solving_cost').innerText()
-  assert.match(column, /미가격 사유: price_table_missing, runtime_price_missing/)
+  // Order follows the summariser, which sorts the slugs before they are
+  // translated — so the reading order is the slug order, not the Korean one.
+  assert.match(column, /미가격 사유: 가격표에 없는 모델, 실행 환경 단가 없음/)
   assert.match(column, /일부 기록됨/)
 
   const modal = await openTask(page, 't-partial')

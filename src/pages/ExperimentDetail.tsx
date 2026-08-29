@@ -31,6 +31,7 @@ import {
   costCell,
   costCellClass,
   formatCostUsd,
+  missingReasonText,
   perDeliverableCell,
   receiptAmount,
   runtimeLineAmount,
@@ -1233,7 +1234,7 @@ function CostSummaryCard({
                 </div>
                 {summary.missing_reasons.length > 0 && (
                   <p className="text-[11px] text-amber-400/80 pt-1">
-                    미가격 사유: {summary.missing_reasons.join(', ')}
+                    미가격 사유: {missingReasonText(summary.missing_reasons)}
                   </p>
                 )}
                 {ledger && (

@@ -212,7 +212,7 @@ def test_a_partial_receipt_keeps_the_part_it_did_confirm():
             "complete without an amount",
         ),
         (
-            {"status": "complete", "missing_reasons": ["price_table_missing"]},
+            {"status": "complete", "missing_reasons": ["price_missing"]},
             "reports missing components",
         ),
         (
@@ -403,7 +403,7 @@ def test_one_partial_receipt_makes_the_run_total_a_floor():
                     model_cost_usd=0.1,
                     runtime_cost_usd=None,
                     components=[],
-                    missing_reasons=["runtime_price_missing"],
+                    missing_reasons=["runtime_cost_unpriced"],
                 )
             ),
         ),
@@ -418,7 +418,7 @@ def test_one_partial_receipt_makes_the_run_total_a_floor():
     # A floor is not a total, and it is not divided into a per-unit headline.
     assert summary["estimated_cost_usd"] is None
     assert summary["cost_per_successful_deliverable_usd"] is None
-    assert summary["missing_reasons"] == ["runtime_price_missing"]
+    assert summary["missing_reasons"] == ["runtime_cost_unpriced"]
 
 
 def test_unavailable_receipts_are_counted_but_never_priced():

@@ -181,7 +181,7 @@ test('malformed receipts throw rather than reach the dashboard', () => {
       /complete without an amount/,
     ],
     [
-      { status: 'complete', missing_reasons: ['price_table_missing'] },
+      { status: 'complete', missing_reasons: ['price_missing'] },
       /reports missing components/,
     ],
     [
@@ -328,7 +328,7 @@ test('one partial receipt makes the run total a floor', () => {
         model_cost_usd: 0.1,
         runtime_cost_usd: null,
         components: [],
-        missing_reasons: ['runtime_price_missing'],
+        missing_reasons: ['runtime_cost_unpriced'],
       }))),
     ],
     { successfulDeliverables: 2 },
@@ -339,7 +339,7 @@ test('one partial receipt makes the run total a floor', () => {
   // A floor is not a total, and it is not divided into a per-unit headline.
   assert.equal(summary.estimated_cost_usd, null);
   assert.equal(summary.cost_per_successful_deliverable_usd, null);
-  assert.deepEqual(summary.missing_reasons, ['runtime_price_missing']);
+  assert.deepEqual(summary.missing_reasons, ['runtime_cost_unpriced']);
 });
 
 test('unavailable receipts are counted but never priced', () => {
@@ -463,4 +463,36 @@ test('unusable ledger pointers are rejected', () => {
   ]) {
     assert.throws(() => projectCostLedgerReference(value), /cost_ledger/);
   }
+});
+
+// ── Reason vocabulary ─────────────────────────────────────────────────────
+
+/**
+ * `missing_reasons` is a closed enum. The grade schema enforces it on the way
+ * in, the producer defines it, and the dashboard translates it — three copies
+ * of one list, which is exactly the shape that drifts.
+ *
+ * The dashboard's copy is TypeScript, so it is read as text rather than
+ * imported. That is uglier than an import and worth it: a ninth reason added
+ * to the schema fails here, at `node --test`, instead of reaching the screen
+ * as an untranslated slug next to Korean.
+ */
+test('every reason the schema allows has a Korean label', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const root = new URL('../../', import.meta.url);
+
+  const schema = JSON.parse(
+    await readFile(new URL('batch-runner/schemas/grade.schema.json', root), 'utf8'),
+  );
+  const allowed = schema.$defs.costMissingReason.enum;
+  assert.ok(allowed.length >= 8, 'the schema should still constrain the reasons');
+
+  const source = await readFile(new URL('src/lib/cost.ts', root), 'utf8');
+  const block = source.match(
+    /const MISSING_REASON_LABELS: Record<string, string> = \{([^}]*)\}/,
+  );
+  assert.ok(block, 'src/lib/cost.ts should still declare MISSING_REASON_LABELS');
+  const labelled = [...block[1].matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]);
+
+  assert.deepEqual([...labelled].sort(), [...allowed].sort());
 });
