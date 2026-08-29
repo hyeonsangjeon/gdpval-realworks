@@ -12,7 +12,7 @@ the sentence that denied it.
 
 * The standing instructions are a committed file. ``prompt.tool_template``
   names it in all nine settings files, the judge splits it and sends both
-  halves on every single call, and it is 6,263 characters long today.
+  halves on every single call, and it is 6,772 characters long today.
 * The task preview is cut to ``ToolCallingJudge.task_prompt_truncate``
   characters, which is 500, and every task in the committed catalogue is longer
   than that — so the cut is always taken in full.
@@ -387,21 +387,25 @@ def test_forgetting_the_opening_lowers_the_demand():
         characters_of_widest_scoring_line=1,
     ).input_tokens_one_call_must_cover(THREE)
     assert without < with_opening
-    assert with_opening - without == 2_655
+    assert with_opening - without == 2_824
 
 
 def test_leaving_the_scoring_line_out_of_the_opening_lowers_the_demand():
     """The piece this task added, priced on its own.
 
-    401 tokens a call does not sound like the finding. Multiplied by the calls
+    400 tokens a call does not sound like the finding. Multiplied by the calls
     the settings allow across 10,453 scoring lines it is the difference between
     a figure that is a ceiling and a figure that was printed as one.
+
+    The 1,202 characters removed here are 400.67 tokens at three characters a
+    token, so the figure the subtraction leaves behind is 400 or 401 depending
+    on where the whole sum's rounding-up lands. Both are the same finding.
     """
     whole = caps().input_tokens_one_call_must_cover(THREE)
     almost_without = caps(
         characters_of_widest_scoring_line=1
     ).input_tokens_one_call_must_cover(THREE)
-    assert whole - almost_without == 401
+    assert whole - almost_without == 400
 
 
 def test_a_longer_instruction_file_raises_the_demand_by_itself():
@@ -584,7 +588,7 @@ def test_the_committed_plan_still_records_the_bigger_number():
 
     matching = [p for p in result.cost_findings if "input per marking call" in p]
     assert len(matching) == 1
-    assert "535990" in matching[0]
+    assert "536159" in matching[0]
     assert "533334" in matching[0]
     assert matching[0] not in result.problems
 
@@ -656,7 +660,7 @@ def test_the_description_says_what_every_call_opens_with():
     opening = [line for line in lines if "opens with" in line]
     assert len(opening) == 1
     assert "prompts/grader_judge_v2.md" in opening[0]
-    assert "6263" in opening[0]
+    assert "6772" in opening[0]
 
 
 def test_the_description_says_the_figure_is_a_ceiling_once_the_width_is_known():
@@ -720,7 +724,7 @@ def test_the_written_out_form_carries_the_new_measurements():
     assert written_out["standing_instructions_read_from"] == (
         "prompts/grader_judge_v2.md"
     )
-    assert written_out["characters_of_standing_instructions"] == 6263
+    assert written_out["characters_of_standing_instructions"] == 6772
     assert written_out["characters_of_task_wording_shown"] == 500
     assert written_out["task_wording_width_named_by_the_settings"] == 500
     assert written_out["the_settings_width_is_ignored"] is False

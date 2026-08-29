@@ -37,7 +37,7 @@ import tempfile
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from core.media_types import GRADER_AUDIO_EXTENSIONS
 
@@ -78,6 +78,15 @@ _ZIP_NOISE_BASENAMES = ("._",)
 
 MAX_PAGES_DEFAULT = 200       # PDF page-iteration safety cap
 MAX_SHEETS = 100              # workbook safety cap
+
+#: Page geometry. A rubric asks "is it landscape", "is it letter size", "does
+#: it fit on one page" -- questions about the page, which a page count alone
+#: cannot answer. Measured pages are reported as one row per distinct size, so
+#: a uniform 200-page report costs one row and a document that turns landscape
+#: halfway costs two. Points are the PDF unit; inches are carried alongside
+#: because that is the unit rubrics are written in.
+MAX_PDF_PAGE_SIZE_GROUPS = 20
+PDF_POINTS_PER_INCH = 72.0
 RENDERER_VERSION_TIMEOUT_SEC = 10
 RENDERER_VERSION_MAX_CHARS = 200
 
@@ -100,9 +109,11 @@ READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
                 "enum": list(READ_DELIVERABLE_OPS),
                 "description": (
                     "Operation to perform. "
-                    "inspect_structure: file type + sheets/pages/slides summary. "
+                    "inspect_structure: file type, sheets/slides, page count "
+                    "and page size. "
                     "read_content: textual content (no truncation up to cap). "
-                    "inspect_formatting: cell fills/fonts/borders/charts/styles. "
+                    "inspect_formatting: cell fills/fonts/borders/charts/styles, "
+                    "plus page count and page size. "
                     "render_to_image: PNG (base64) of an allowed first/page surface. "
                     "probe_audio: sample-rate/channels/duration/peak/silence. "
                     "probe_video: codec/duration/resolution/fps."
@@ -146,6 +157,21 @@ MODEL_READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
             "op": {
                 "type": "string",
                 "enum": list(MODEL_READ_DELIVERABLE_OPS),
+                "description": (
+                    "inspect_structure: kind, size, sheets/slides, and for a "
+                    "document or PDF the page count "
+                    "(page_count, or converted_page_count for a .docx, which "
+                    "stores no pagination of its own) and the page size "
+                    "(width_pt/height_pt, width_in/height_in, orientation). "
+                    "How long a document is and which way its pages face are "
+                    "answerable ONLY from these fields: paragraph_count and "
+                    "char_count are lengths, not page counts, and must never "
+                    "be used as one. "
+                    "read_content: text. "
+                    "inspect_formatting: styles, fills, fonts, borders, and "
+                    "the same page count and page size. "
+                    "probe_audio / probe_video: media metadata."
+                ),
             },
             "path": {
                 "type": "string",
@@ -153,7 +179,14 @@ MODEL_READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
             },
             "scope": {
                 "type": ["object", "null"],
-                "description": "Optional op-specific content/formatting scope.",
+                "description": (
+                    "Optional op-specific content/formatting scope. To reach "
+                    "a file inside a .zip deliverable, pass "
+                    "{\"member\": \"<exact name from the listing>\"} to any "
+                    "op -- probe_audio for a stem, read_content for a "
+                    "document. An archive is a container of files this tool "
+                    "already reads, not an unreadable binary."
+                ),
                 "additionalProperties": True,
             },
         },
@@ -260,12 +293,62 @@ def _inspect_xlsx(p: Path) -> Dict[str, Any]:
     }
 
 
+@lru_cache(maxsize=64)
+def _cached_docx_page_count(identity: Tuple[str, int, int]) -> int:
+    """Lay a .docx out once per ``(path, size, mtime_ns)``.
+
+    Structure inspection and formatting inspection both want this number, a
+    judge asks for each more than once per file, and every Writer conversion
+    costs seconds. The key moves whenever the file does, so a cached count can
+    never outlive the bytes it was measured from.
+    """
+    source = Path(identity[0])
+    with tempfile.TemporaryDirectory(prefix="gdpval-grade-pagecount-") as temp:
+        return _pdf_page_count(_convert_office_to_pdf(source, Path(temp)))
+
+
+def _docx_converted_page_count(p: Path) -> Dict[str, Any]:
+    """How many pages this .docx lays out to, or why that is not knowable.
+
+    A .docx stores no pagination -- the count does not exist until a layout
+    engine computes one -- so this converts with the same LibreOffice the
+    render path uses and counts what came out. Reported under the render
+    path's name for the same reason it is the same number.
+
+    Six stage-1 rubric items asked "does it fit on one page" and were answered
+    from ``paragraph_count`` or ``char_count``, neither of which is a page
+    count. Five were marked down and the gold answers were the right length.
+
+    Never raises. A missing or failing converter costs the page count and
+    nothing else: the paragraph, table and style counts around it stay, and
+    the judge is told the number is unknown rather than handed a proxy.
+    """
+    try:
+        stat = p.stat()
+        return {
+            "converted_page_count": _cached_docx_page_count(
+                (str(p), stat.st_size, stat.st_mtime_ns)
+            )
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "converted_page_count": None,
+            "page_count_error": f"{type(exc).__name__}: {exc}",
+            "page_count_note": (
+                "page count unavailable for this document; paragraph_count "
+                "and char_count are lengths, not page counts, and cannot "
+                "stand in for one"
+            ),
+        }
+
+
 def _inspect_docx(p: Path) -> Dict[str, Any]:
     from docx import Document  # type: ignore
 
     doc = Document(str(p))
     return {
         "kind": "docx",
+        **_docx_converted_page_count(p),
         "paragraph_count": len(doc.paragraphs),
         "table_count": len(doc.tables),
         "section_count": len(doc.sections),
@@ -332,6 +415,15 @@ def _zip_entries(p: Path) -> Tuple[List[Dict[str, Any]], int, bool]:
     return entries, hidden, truncated
 
 
+#: Said in all three places a judge can meet an archive -- the tool schema it
+#: is given, the structure listing, and the text read -- because a judge that
+#: does not know a member can be opened reports the archive as unreadable.
+_ZIP_MEMBER_HINT = (
+    "open a member with scope={\"member\": \"<name>\"} on any op, "
+    "e.g. probe_audio for a .wav or read_content for a .docx"
+)
+
+
 def _inspect_zip(p: Path) -> Dict[str, Any]:
     entries, hidden, truncated = _zip_entries(p)
     return {
@@ -340,10 +432,7 @@ def _inspect_zip(p: Path) -> Dict[str, Any]:
         "entries": entries,
         "hidden_resource_fork_count": hidden,
         "truncated": truncated,
-        "note": (
-            "open a member with scope={\"member\": \"<name>\"} on any op, "
-            "e.g. probe_audio for a .wav or read_content for a .docx"
-        ),
+        "note": _ZIP_MEMBER_HINT,
     }
 
 
@@ -352,7 +441,10 @@ def _read_zip_text(p: Path, _scope: Dict[str, Any]) -> str:
 
     A judge that never learns about the member scope still has to be able to
     answer "does the archive contain a Bass stem in WAV format", so the listing
-    itself is the content of an archive.
+    itself is the content of an archive. The hint is repeated here rather than
+    left to ``inspect_structure`` alone because a judge that came straight to
+    ``read_content`` would otherwise see a list of names it has no stated way
+    to open, and conclude the files behind them are unreadable.
     """
     entries, hidden, truncated = _zip_entries(p)
     lines = [f"[Archive: {len(entries)} file(s)]"]
@@ -364,11 +456,12 @@ def _read_zip_text(p: Path, _scope: Dict[str, Any]) -> str:
         lines.append(f"... listing truncated at {MAX_ZIP_ENTRIES} entries")
     if hidden:
         lines.append(f"({hidden} macOS resource-fork entries hidden)")
+    lines.append(_ZIP_MEMBER_HINT)
     return "\n".join(lines)
 
 
 @contextmanager
-def _extracted_zip_member(p: Path, member: str) -> Any:
+def open_archive_member(p: Path, member: str) -> Any:
     """One member on disk, under its own suffix, for the length of one op.
 
     The name has to already be in the archive, so there is no path a caller can
@@ -417,18 +510,110 @@ def _extracted_zip_member(p: Path, member: str) -> Any:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def _orientation(width_pt: float, height_pt: float) -> str:
+    if width_pt > height_pt:
+        return "landscape"
+    if height_pt > width_pt:
+        return "portrait"
+    return "square"
+
+
+def _summarize_page_sizes(
+    rects: List[Tuple[float, float]],
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """Group measured page rectangles into one row per distinct size."""
+    grouped: Dict[Tuple[float, float], Dict[str, Any]] = {}
+    order: List[Tuple[float, float]] = []
+    for page_number, (width, height) in enumerate(rects, 1):
+        key = (round(float(width), 2), round(float(height), 2))
+        entry = grouped.get(key)
+        if entry is None:
+            grouped[key] = {
+                "width_pt": key[0],
+                "height_pt": key[1],
+                "width_in": round(key[0] / PDF_POINTS_PER_INCH, 2),
+                "height_in": round(key[1] / PDF_POINTS_PER_INCH, 2),
+                "orientation": _orientation(*key),
+                "page_count": 1,
+                "first_page": page_number,
+            }
+            order.append(key)
+        else:
+            entry["page_count"] += 1
+    kept = order[:MAX_PDF_PAGE_SIZE_GROUPS]
+    return [grouped[key] for key in kept], len(order) > len(kept)
+
+
+def _pdf_geometry(
+    rects: List[Tuple[float, float]], page_count: int
+) -> Dict[str, Any]:
+    """The page-geometry block both PDF ops report.
+
+    One stage-1 gold answer lost an orientation item because the only geometry
+    a judge could see was ``page_count: 1``. The page was 432x288 -- landscape,
+    exactly as the rubric asked -- and the answer was marked wrong for it.
+    """
+    sizes, truncated = _summarize_page_sizes(rects)
+    uniform = len(sizes) == 1 and not truncated
+    geometry: Dict[str, Any] = {
+        "pages_measured": len(rects),
+        "page_sizes": sizes,
+        "page_size_uniform": uniform,
+    }
+    if uniform:
+        geometry["orientation"] = sizes[0]["orientation"]
+    if truncated:
+        geometry["page_sizes_truncated"] = True
+    if len(rects) < page_count:
+        # Only the measured prefix is described. Say so rather than let
+        # "uniform" be read as a claim about pages nothing looked at.
+        geometry["pages_measured_capped"] = True
+    return geometry
+
+
+def _fitz_page_rects(doc: Any) -> List[Tuple[float, float]]:
+    rects: List[Tuple[float, float]] = []
+    for index in range(min(doc.page_count, MAX_PAGES_DEFAULT)):
+        rect = doc.load_page(index).rect
+        rects.append((float(rect.width), float(rect.height)))
+    return rects
+
+
+def _pdf_page_count(p: Path) -> int:
+    try:
+        import fitz  # type: ignore
+    except ImportError:
+        import pdfplumber  # type: ignore
+        with pdfplumber.open(p) as pdf:
+            return len(pdf.pages)
+    doc = fitz.open(str(p))
+    try:
+        return doc.page_count
+    finally:
+        doc.close()
+
+
 def _inspect_pdf(p: Path) -> Dict[str, Any]:
     try:
         import fitz  # type: ignore
     except ImportError:
         import pdfplumber  # type: ignore
         with pdfplumber.open(p) as pdf:
-            return {"kind": "pdf", "page_count": len(pdf.pages)}
+            rects = [
+                (float(page.width), float(page.height))
+                for page in pdf.pages[:MAX_PAGES_DEFAULT]
+            ]
+            return {
+                "kind": "pdf",
+                "page_count": len(pdf.pages),
+                **_pdf_geometry(rects, len(pdf.pages)),
+            }
     doc = fitz.open(str(p))
     try:
         return {
             "kind": "pdf",
             "page_count": doc.page_count,
+            **_pdf_geometry(_fitz_page_rects(doc), doc.page_count),
             "metadata": dict(doc.metadata or {}),
         }
     finally:
@@ -661,6 +846,199 @@ def _read_pptx_text(p: Path, _scope: Dict[str, Any]) -> str:
     return "\n\n".join(parts)
 
 
+# ── an empty read is a fact about the file, not about its content ────
+#
+# One stage-1 gold answer is a two-page scan. Its text layer is empty, so
+# ``read_content`` returned ``char_count: 0`` and ten rubric items were graded
+# "that content is absent" -- about a document that contains all ten things,
+# in ink, on pages the harness had already rendered twice. Nothing lied: the
+# tool said the text was empty and the judge read empty text as an empty
+# document. So the tool now says which of the two it means.
+
+
+#: Attached to every empty read. The distinction it draws is the whole of
+#: this section: "I could not read it here" and "it is not there" are
+#: different findings, and only one of them is a reason to fail an item.
+_EMPTY_READ_DISCLAIMER = (
+    "an empty text read means this file carries no extractable text, NOT "
+    "that the content is absent; grade absence only from a file that was "
+    "actually read"
+)
+
+#: For the kinds that hold no text at all, the op that does read them. A
+#: judge told only "unsupported" has been told the file is a dead end.
+_NON_TEXT_READ_ROUTES: Dict[str, str] = {
+    "audio": (
+        "call probe_audio for sample rate, channels, duration, peak level "
+        "and silence"
+    ),
+    "video": (
+        "call probe_video for codec, duration, resolution and frame rate"
+    ),
+    "image": (
+        "call inspect_structure for kind and size; an image is judged from "
+        "the rendered visual evidence the harness supplies, not from text"
+    ),
+}
+
+
+def _pdf_text_layer_facts(p: Path) -> Dict[str, Any]:
+    """Pages and embedded images of a PDF that yielded no text.
+
+    A scan and an empty file both read as zero characters. These two numbers
+    tell them apart: two pages carrying two images is a scan whose content is
+    in the images, and zero pages is a file with nothing in it.
+
+    Never raises -- this runs on the failure path of a read that already
+    returned nothing, and losing the read as well would leave the judge with
+    strictly less than it has today.
+    """
+    try:
+        import fitz  # type: ignore
+    except ImportError:
+        try:
+            import pdfplumber  # type: ignore
+
+            with pdfplumber.open(p) as pdf:
+                return {"page_count": len(pdf.pages)}
+        except Exception:  # noqa: BLE001
+            return {}
+    try:
+        doc = fitz.open(str(p))
+    except Exception:  # noqa: BLE001
+        return {}
+    try:
+        images = 0
+        for index in range(min(doc.page_count, MAX_PAGES_DEFAULT)):
+            images += len(doc.load_page(index).get_images(full=True))
+        return {"page_count": doc.page_count, "embedded_image_count": images}
+    except Exception:  # noqa: BLE001
+        return {}
+    finally:
+        doc.close()
+
+
+def _empty_read_report(p: Path, kind: str) -> Tuple[Dict[str, Any], str]:
+    """Structured facts and a note describing what an unreadable file is."""
+    if kind != "pdf":
+        return {"has_text_layer": False}, f"no extractable text -- {_EMPTY_READ_DISCLAIMER}"
+
+    facts: Dict[str, Any] = {"has_text_layer": False}
+    facts.update(_pdf_text_layer_facts(p))
+    images = facts.get("embedded_image_count")
+    pages = facts.get("page_count")
+    if images:
+        what = (
+            f"this PDF has no text layer: its {pages} page(s) carry {images} "
+            f"embedded image(s), so the content is in the page images -- it "
+            f"is a scan or an exported graphic, not an empty document"
+        )
+    elif pages == 0:
+        what = "this PDF has no pages"
+    else:
+        what = "this PDF has no text layer"
+    return facts, f"{what} -- {_EMPTY_READ_DISCLAIMER}"
+
+
+def _pdf_has_text(p: Path) -> Optional[bool]:
+    """Whether any page of a PDF yields a character. ``None`` if unknowable.
+
+    Returns on the first character found, so an ordinary document costs one
+    page. A scan costs every page, which is the only way to be sure of a
+    negative, and is cheap on pages whose content stream is one image draw.
+    """
+    try:
+        import fitz  # type: ignore
+    except ImportError:
+        import pdfplumber  # type: ignore
+
+        with pdfplumber.open(p) as pdf:
+            for page in pdf.pages[:MAX_PAGES_DEFAULT]:
+                if (page.extract_text() or "").strip():
+                    return True
+            return None if len(pdf.pages) > MAX_PAGES_DEFAULT else False
+
+    doc = fitz.open(str(p))
+    try:
+        for index in range(min(doc.page_count, MAX_PAGES_DEFAULT)):
+            if doc.load_page(index).get_text().strip():
+                return True
+        return None if doc.page_count > MAX_PAGES_DEFAULT else False
+    finally:
+        doc.close()
+
+
+def has_extractable_text(path: Union[str, Path]) -> Optional[bool]:
+    """Whether this file yields any text at all. ``None`` means unknowable.
+
+    Routing asks this, not the judge. A file with no text layer answers no
+    criterion from its text -- every question about its content is a question
+    about its pages -- and the grader uses that to hand the item to the render
+    and vision path instead of letting an empty read stand as an answer.
+
+    ``False`` is a positive claim and is only returned when the whole file was
+    examined. Anything unexamined, unsupported, or broken is ``None``: routing
+    must not escalate on a guess, and the caller treats the two differently.
+    """
+    p = Path(path)
+    if not p.is_file():
+        return None
+    kind = _kind_of(p)
+    if kind == "image":
+        # Not a failure to read. An image has no text layer by construction,
+        # which is exactly the fact routing wants.
+        return False
+    try:
+        if kind == "pdf":
+            return _pdf_has_text(p)
+        if kind == "docx":
+            return bool(_read_docx_text(p, {}).strip())
+        if kind == "pptx":
+            return bool(_read_pptx_text(p, {}).strip())
+        if kind == "xlsx":
+            return bool(_read_xlsx_text(p, {}).strip())
+        if kind in ("txt", "csv"):
+            return bool(p.read_text(encoding="utf-8", errors="replace").strip())
+    except Exception:  # noqa: BLE001
+        return None
+    # audio, video, zip, unknown: text is not the medium, and "this file has
+    # no text" would be read as a finding about a file nothing can read here.
+    return None
+
+
+def has_audio_content(path: Union[str, Path]) -> Optional[bool]:
+    """Whether there is anything here for the listening model to hear.
+
+    Routing asks this, and the interesting answer is the archive. A folder of
+    stems delivered as one ``.zip`` is an audio deliverable; the container
+    extension is a fact about packaging, not about the medium. Reading it as
+    a statement about the medium is how a stage-1 task made entirely of music
+    -- tempo, key, vocals, mix -- was graded end to end without a single
+    listening call.
+
+    ``True`` for an audio file or an archive holding one. ``False`` is a
+    positive claim and means the file was examined and carries no audio.
+    ``None`` is an admission -- missing file, unreadable archive, or a member
+    list that was cut short and may have stopped one entry before the audio --
+    so that routing never promotes on a guess.
+    """
+    p = Path(path)
+    if not p.is_file():
+        return None
+    kind = _kind_of(p)
+    if kind == "audio":
+        return True
+    if kind != "zip":
+        return False
+    try:
+        entries, _hidden, truncated = _zip_entries(p)
+    except Exception:  # noqa: BLE001
+        return None
+    if any(entry["kind"] == "audio" for entry in entries):
+        return True
+    return None if truncated else False
+
+
 def _op_read_content(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
     kind = _kind_of(p)
     if kind == "xlsx":
@@ -676,11 +1054,34 @@ def _op_read_content(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
     elif kind == "zip":
         text = _read_zip_text(p, scope)
     else:
-        return {"kind": kind, "text": "", "note": "binary or unsupported for text read"}
+        route = _NON_TEXT_READ_ROUTES.get(kind)
+        note = "this file holds no text"
+        if route:
+            note = f"{note}; {route}"
+        return {"kind": kind, "text": "", "char_count": 0, "truncated": False,
+                "has_text_layer": False,
+                "note": f"{note} -- {_EMPTY_READ_DISCLAIMER}"}
     truncated = len(text) > MAX_CONTENT_CHARS
     if truncated:
         text = text[:MAX_CONTENT_CHARS]
-    return {"kind": kind, "text": text, "char_count": len(text), "truncated": truncated}
+    result: Dict[str, Any] = {"kind": kind, "text": text,
+                              "char_count": len(text), "truncated": truncated}
+    notes: List[str] = []
+    if kind == "docx":
+        # The one required item stage 1 failed was failed here: 6,532
+        # characters were read as "longer than one page". Length is not
+        # layout, and the op that does lay the document out is named.
+        notes.append(
+            "char_count is a length, not a page count; call inspect_structure "
+            "for converted_page_count"
+        )
+    if not text.strip():
+        facts, empty_note = _empty_read_report(p, kind)
+        result.update(facts)
+        notes.append(empty_note)
+    if notes:
+        result["note"] = " | ".join(notes)
+    return result
 
 
 # ── inspect_formatting ───────────────────────────────────────────────
@@ -815,6 +1216,7 @@ def _format_docx(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
         styles[para.style.name] = styles.get(para.style.name, 0) + 1
     return {
         "kind": "docx",
+        **_docx_converted_page_count(p),
         "paragraph_count": len(doc.paragraphs),
         "table_count": len(doc.tables),
         "section_count": len(doc.sections),
@@ -859,6 +1261,7 @@ def _op_inspect_formatting(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
                     for f in page.get_fonts(full=False):
                         fonts.add(f[3])
                 return {"kind": "pdf", "page_count": doc.page_count,
+                        **_pdf_geometry(_fitz_page_rects(doc), doc.page_count),
                         "fonts": sorted(fonts)[:50]}
             finally:
                 doc.close()
@@ -1455,7 +1858,7 @@ def read_deliverable(
             member = scope.pop("member")
             if not isinstance(member, str) or not member:
                 raise InvalidScope("scope key 'member' must be a non-empty string")
-            with _extracted_zip_member(resolved, member) as member_path:
+            with open_archive_member(resolved, member) as member_path:
                 return _envelope_ok(fn(member_path, scope))
         data = fn(resolved, scope)
         return _envelope_ok(data)

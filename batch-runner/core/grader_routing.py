@@ -69,6 +69,22 @@ _AUDIO_KEYWORDS: tuple[str, ...] = (
     "audio", "sound", "music", "musical", "voice", "vocal", "mix", "mixing",
     "loudness", "loud", "silence", "silent", "clipping", "noise",
     "instrumentation",
+    # Added on stage-1 evidence, not on taste. Task 38889c3b delivers a
+    # 180 MB archive of music stems and is graded on tempo, key, vocals and
+    # effects; it scored 41.8/62 with ``perception_call_count: 0``. Every
+    # criterion below matched nothing above and was judged by reading a zip.
+    #
+    # The bar for adding one is that it names a property of sound and would
+    # be odd in a rubric about a report. "instrumental", "stem" and "track"
+    # were considered and rejected: "was instrumental in", "the delay stems
+    # from" and "on track" are ordinary business English. "key" was rejected
+    # outright. A word that slips through anyway is cheap -- a criterion that
+    # routes AUDIO against files holding no audio is demoted back to TEXT by
+    # ``resolve_runtime_routing`` before any model sees it.
+    "vocals", "tempo", "bpm", "harmonic", "harmony", "harmonies",
+    "melody", "melodic", "timbre", "audible", "audibly", "reverb",
+    "synth", "synths", "synthesizer", "synthesizers",
+    "waveform", "octave", "chord", "chords",
 )
 _FORMATTING_KEYWORDS: tuple[str, ...] = (
     "format", "formatted", "formatting", "style", "styles", "styling",
@@ -151,9 +167,24 @@ def classify_criterion(criterion_text: str) -> RoutingDecision:
 
 
 def resolve_runtime_routing(
-    criterion_text: str, selected_paths: Iterable[str]
+    criterion_text: str,
+    selected_paths: Iterable[str],
+    *,
+    selected_paths_have_text: bool | None = None,
+    selected_paths_have_audio: bool | None = None,
 ) -> RoutingDecision:
-    """Apply target-aware policy without changing criterion classification."""
+    """Apply target-aware policy without changing criterion classification.
+
+    ``selected_paths_have_text`` is the caller's answer to "does any selected
+    file yield a single character of text". The caller reads the files; this
+    module stays pure. ``None`` means unknown and changes nothing -- only a
+    measured ``False`` escalates.
+
+    ``selected_paths_have_audio`` is the same shape of answer to "is there
+    anything here to listen to", and is used only defensively: a measured
+    ``True`` stops the demotion below from stripping the listening model off a
+    criterion about sound. It can never promote a criterion on its own.
+    """
     decision = classify_criterion(criterion_text)
     suffixes = {
         suffix
@@ -166,17 +197,29 @@ def resolve_runtime_routing(
         and suffixes
         and suffixes.issubset({".doc", ".docx"})
     ):
-        return RoutingDecision(
+        decision = RoutingDecision(
             modality=Modality.FORMATTING,
             preferred_op="inspect_formatting",
             matched_keywords=decision.matched_keywords,
         )
-    if (
+    # A criterion about a mix has no meaning against a spreadsheet, so an
+    # AUDIO classification whose files carry no audio is demoted to the path
+    # that can actually answer it.
+    #
+    # Until now that test was the file extension alone, which reads a
+    # container as if it were a medium. A folder of stems delivered as one
+    # ``.zip`` is audio; ``.zip`` is disjoint from the audio extensions; and
+    # so every listening criterion on stage-1 task 38889c3b was demoted to
+    # TEXT and answered by reading an archive. The measured probe is what the
+    # extension was standing in for, so where it speaks it wins, and where it
+    # says nothing the extension test is unchanged.
+    elif (
         decision.modality is Modality.AUDIO
+        and selected_paths_have_audio is not True
         and suffixes
         and suffixes.isdisjoint(GRADER_AUDIO_EXTENSIONS)
     ):
-        return RoutingDecision(
+        decision = RoutingDecision(
             modality=Modality.TEXT,
             preferred_op="read_content",
             matched_keywords=decision.matched_keywords,
@@ -208,15 +251,43 @@ def resolve_runtime_routing(
     # selected file is renderable, which is exactly the set that currently
     # errors out. Nor can it answer from a partial view the way raising the
     # file cap would -- the text is handed over whole.
-    if (
+    elif (
         decision.modality is Modality.VISUAL
         and is_overall_style_criterion(criterion_text)
         and suffixes
         and suffixes.isdisjoint(GRADER_VISUAL_RENDER_EXTENSIONS)
     ):
-        return RoutingDecision(
+        decision = RoutingDecision(
             modality=Modality.TEXT,
             preferred_op="read_content",
+            matched_keywords=decision.matched_keywords,
+        )
+
+    # The mirror image of the demotions above, and the last rule because it
+    # judges the outcome of all of them: a file with no text in it answers
+    # nothing from its text.
+    #
+    # One stage-1 gold answer is a two-page scan. Ten rubric items about its
+    # contents routed TEXT, read zero characters, and were failed as "that
+    # content is absent" -- from a document that says all ten things, on pages
+    # the harness had already rendered for the task's other items. Reading is
+    # not the only way to see a page, so an item whose only files cannot be
+    # read goes to the path that looks at them.
+    #
+    # Three conditions keep this narrow. Only a measured ``False`` counts, so
+    # an unreadable or unsupported file cannot escalate on a guess. Only TEXT
+    # and FORMATTING escalate, because AUDIO and VISUAL already name what they
+    # need. And every selected file must be renderable, so escalating never
+    # trades a readable file for one nothing can look at.
+    if (
+        selected_paths_have_text is False
+        and decision.modality in (Modality.TEXT, Modality.FORMATTING)
+        and suffixes
+        and suffixes.issubset(GRADER_VISUAL_RENDER_EXTENSIONS)
+    ):
+        return RoutingDecision(
+            modality=Modality.VISUAL,
+            preferred_op="render_to_image",
             matched_keywords=decision.matched_keywords,
         )
     return decision

@@ -2076,3 +2076,205 @@ def test_unknown_tool_name_returns_envelope_error(deliverable_dir, task_and_item
     outputs = [m for m in second_input if isinstance(m, dict)
                and m.get("type") == "function_call_output"]
     assert outputs and "bad_function" in outputs[0]["output"]
+
+
+# ── audio_judge can reach a stem inside an archive ───────────────────
+#
+# The one stage-1 task made entirely of music ships its whole deliverable as a
+# single ``.zip`` of stems. Without ``member`` the listening model can only be
+# handed the archive itself, which is not a thing it can hear, so every
+# listening criterion on that task had to be answered some other way.
+
+class _RecordingAudio:
+    """Remembers the path it was handed and whether it still exists."""
+
+    def __init__(self):
+        self.paths: list[str] = []
+        self.existed: list[bool] = []
+        self.bytes_seen: list[bytes] = []
+
+    def judge(self, *, criterion: str, audio_path: str):
+        self.paths.append(audio_path)
+        self.existed.append(Path(audio_path).is_file())
+        self.bytes_seen.append(Path(audio_path).read_bytes())
+        return SimpleNamespace(
+            judge_error=None,
+            to_dict=lambda: {"verdict": "pass", "partial_score": 1.0},
+        )
+
+
+def _stems_archive(base_dir: Path, name: str = "stems.zip") -> Path:
+    import zipfile
+
+    archive = base_dir / name
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("Master.wav", b"RIFF....WAVEfmt master")
+        zf.writestr("Bass.wav", b"RIFF....WAVEfmt bass")
+        zf.writestr("notes.txt", b"session notes")
+    return archive
+
+
+def _audio_judge(judge, deliverable_dir, **kwargs):
+    return judge._dispatch_tool(
+        _fc("a1", "audio_judge", **kwargs),
+        deliverable_dir=str(deliverable_dir),
+        allowed_paths={kwargs["audio_path"]},
+    )
+
+
+def test_naming_a_member_hands_over_the_stem_and_not_the_archive(
+    deliverable_dir, task_and_item
+):
+    _stems_archive(deliverable_dir)
+    audio = _RecordingAudio()
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([])), model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    result = _audio_judge(
+        judge, deliverable_dir,
+        criterion="The Master track contains no vocals.",
+        audio_path="stems.zip", member="Master.wav",
+    )
+
+    assert result["ok"] is True
+    assert audio.bytes_seen == [b"RIFF....WAVEfmt master"]
+    # It got a real file on disk, not a handle or a buffer.
+    assert audio.existed == [True]
+    assert audio.paths[0].endswith(".wav")
+
+
+def test_the_extracted_stem_does_not_outlive_the_call(
+    deliverable_dir, task_and_item
+):
+    """Two 180 MB archives per task is why this is a context manager."""
+    _stems_archive(deliverable_dir)
+    audio = _RecordingAudio()
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([])), model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    _audio_judge(
+        judge, deliverable_dir, criterion="c",
+        audio_path="stems.zip", member="Bass.wav",
+    )
+
+    assert not Path(audio.paths[0]).exists()
+
+
+def test_omitting_member_still_hands_over_the_file_itself(
+    deliverable_dir, task_and_item
+):
+    (deliverable_dir / "clip.wav").write_bytes(b"RIFF....WAVEfmt clip")
+    audio = _RecordingAudio()
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([])), model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    result = _audio_judge(
+        judge, deliverable_dir, criterion="c", audio_path="clip.wav",
+    )
+
+    assert result["ok"] is True
+    assert audio.paths == [str(deliverable_dir / "clip.wav")]
+
+
+def test_a_null_member_is_the_same_as_none_at_all(
+    deliverable_dir, task_and_item
+):
+    """The schema types ``member`` nullable, so a model may send ``null``."""
+    (deliverable_dir / "clip.wav").write_bytes(b"RIFF....WAVEfmt clip")
+    audio = _RecordingAudio()
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([])), model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    result = _audio_judge(
+        judge, deliverable_dir, criterion="c",
+        audio_path="clip.wav", member=None,
+    )
+
+    assert result["ok"] is True
+    assert audio.paths == [str(deliverable_dir / "clip.wav")]
+
+
+def test_an_unknown_member_is_told_what_the_archive_holds(
+    deliverable_dir, task_and_item
+):
+    """The judge's own mistake to correct, so it gets a usable message.
+
+    ``public_task_error_text`` would return ``code:type`` and strip exactly
+    the member list that lets the next call succeed. ``read_deliverable``
+    surfaces ``str(exc)`` for the identical mistake made through ``scope``.
+    """
+    _stems_archive(deliverable_dir)
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([])), model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=_RecordingAudio(),
+    )
+
+    result = _audio_judge(
+        judge, deliverable_dir, criterion="c",
+        audio_path="stems.zip", member="Vocals.wav",
+    )
+
+    assert result["ok"] is False
+    assert result["error_type"] == "bad_scope"
+    assert "Master.wav" in result["error"]
+
+
+def test_a_member_that_is_not_a_string_is_a_bad_argument(
+    deliverable_dir, task_and_item
+):
+    _stems_archive(deliverable_dir)
+    audio = _RecordingAudio()
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([])), model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    result = _audio_judge(
+        judge, deliverable_dir, criterion="c",
+        audio_path="stems.zip", member=17,
+    )
+
+    assert result["ok"] is False
+    assert result["error_type"] == "bad_args"
+    assert audio.paths == []
+
+
+def test_member_cannot_be_used_to_reach_outside_the_allowlist(
+    deliverable_dir, task_and_item
+):
+    """The archive is still checked against the allowlist before extraction."""
+    _stems_archive(deliverable_dir)
+    audio = _RecordingAudio()
+    judge = ToolCallingJudge(
+        client=FakeClient(ScriptedResponses([])), model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    result = judge._dispatch_tool(
+        _fc("a1", "audio_judge", criterion="c",
+            audio_path="stems.zip", member="Master.wav"),
+        deliverable_dir=str(deliverable_dir),
+        allowed_paths={"other.wav"},
+    )
+
+    assert result["ok"] is False
+    assert audio.paths == []
+
+
+def test_the_schema_offers_member_without_demanding_it():
+    schema = ToolCallingJudge._audio_tool_schema()
+    params = schema["parameters"]
+
+    assert "member" in params["properties"]
+    assert params["required"] == ["criterion", "audio_path"]
+    # Nullable, because ``additionalProperties: False`` plus a non-nullable
+    # optional is how a model ends up unable to say "the whole file".
+    assert params["properties"]["member"]["type"] == ["string", "null"]

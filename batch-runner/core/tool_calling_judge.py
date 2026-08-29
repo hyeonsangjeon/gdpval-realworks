@@ -49,6 +49,7 @@ import math
 import re
 import time
 from collections.abc import Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -63,7 +64,9 @@ from core.rubric_loader import RubricItem, TaskRubric
 from core.tools import (
     MODEL_READ_DELIVERABLE_OPS,
     MODEL_READ_DELIVERABLE_TOOL_SCHEMA,
+    open_archive_member,
     read_deliverable,
+    ReadDeliverableError,
 )
 
 logger = logging.getLogger(__name__)
@@ -990,6 +993,17 @@ class ToolCallingJudge:
                 "properties": {
                     "criterion": {"type": "string"},
                     "audio_path": {"type": "string"},
+                    "member": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Optional. When audio_path is a .zip, the exact "
+                            "name of the audio member to listen to, taken "
+                            "from a read_deliverable inspect_structure "
+                            "listing. An archive of stems is audio that was "
+                            "delivered zipped; name the member and it is "
+                            "heard like any other file."
+                        ),
+                    },
                 },
                 "required": ["criterion", "audio_path"],
                 "additionalProperties": False,
@@ -1069,12 +1083,41 @@ class ToolCallingJudge:
                     "error": "audio_path does not resolve to a file",
                     "error_type": "bad_path",
                 }
+            # A stem inside an archive is audio the same way a page inside a
+            # PDF is a page. Without this the listening model could be handed
+            # nothing but a ``.zip``, which is not a thing it can hear, and
+            # the one stage-1 task made entirely of music had its whole
+            # deliverable packaged that way.
+            member = args.get("member")
+            if member is not None and not isinstance(member, str):
+                return {
+                    "ok": False,
+                    "error": "member must be a string",
+                    "error_type": "bad_args",
+                }
             try:
-                v = self.audio_perception.judge(
-                    criterion=args.get("criterion", ""),
-                    audio_path=str(resolved_audio_path),
+                source = (
+                    open_archive_member(resolved_audio_path, member)
+                    if member
+                    else nullcontext(resolved_audio_path)
                 )
+                with source as audio_file:
+                    v = self.audio_perception.judge(
+                        criterion=args.get("criterion", ""),
+                        audio_path=str(audio_file),
+                    )
                 return {"ok": v.judge_error is None, "data": v.to_dict()}
+            except ReadDeliverableError as exc:
+                # Naming a member that is not in the archive is the judge's
+                # own mistake to correct, so it gets the message -- which
+                # lists what the archive does hold. This is the same envelope
+                # ``read_deliverable`` returns for the same mistake made
+                # through ``scope={"member": ...}``.
+                return {
+                    "ok": False,
+                    "error": str(exc),
+                    "error_type": "bad_scope",
+                }
             except Exception as exc:  # noqa: BLE001
                 return {
                     "ok": False,

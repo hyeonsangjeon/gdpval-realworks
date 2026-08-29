@@ -143,6 +143,87 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **A task made entirely of music was graded without anything ever listening to
+  it.** Stage-1 task `38889c3b` delivers its whole answer as one 180 MB `.zip`
+  of audio stems and is marked on tempo, key, vocals, effects and mix. It
+  recorded `perception_call_count: 0` and scored 41.8 of 62. The cause is one
+  line of routing: an audio criterion whose files carry no audio is demoted to
+  the reading path, and the test for "carries audio" was the file extension.
+  `.zip` is not an audio extension, so every listening criterion on that task
+  was demoted and answered by reading an archive listing. A container is a fact
+  about packaging, not about the medium. New `has_audio_content()` opens the
+  archive and looks, and routing now keeps the listening model on a criterion
+  whose files really do hold audio. **Measured against that run's own recorded
+  routing, across all 1,428 items of the 30-task cohort: exactly 10 items move,
+  all of them on this one task, all of them to the listening path** (7 from the
+  reading path, 3 from the formatting path). Together they hold 18 points — 9.5
+  the task lost and 8.5 it already earned, which the change must not undo.
+  About 5.5 of the 9.5 are reachable; the
+  rest need more than the first 30 seconds, which `trim_seconds` in the frozen
+  grading config fixes, or need signal measurements no listening model performs.
+  The probe is used **defensively only** — it can stop a demotion, it can never
+  route a criterion on its own — so "the file is named correctly" on a music
+  task stays on the reading path instead of spending one of the three listening
+  calls a task is allowed.
+- **`audio_judge` could only be handed a whole file, so a stem inside an archive
+  was unreachable even once routing pointed at it.** The tool now takes an
+  optional `member`, extracts that one entry for the duration of the call, and
+  cleans it up afterwards; naming an entry that is not there returns the
+  archive's real contents so the next call can succeed, which is the same answer
+  `read_deliverable` gives for the same mistake.
+- **The blast radius is one file.** Across all 248 gold deliverable files the
+  new probe answers *yes* exactly once — the stems archive above. Every one of
+  the 146 Office deliverables answers *no*, because an `.xlsx` is a zip
+  container but not an archive of media, so the defect PR #93 fixed ("Sound
+  Technician fees" on a tour budget routing to audio) stays fixed and is now
+  pinned end-to-end rather than at the routing call alone. One gold `.zip` will
+  not open at all; the probe reports *unknown* rather than *no*, which leaves
+  the existing extension rule in charge instead of promoting towards a file
+  nothing can extract.
+- **An empty read was treated as proof the content was absent.** On stage-1
+  task `43dc9778` the judge read a two-page scan that has no text layer,
+  `read_content` returned `"text": "", "char_count": 0`, and **ten rubric items
+  about that document's contents were failed on that alone — 13 points** — for
+  a document that says all ten things, on pages the harness had already
+  rendered for the same task's other items. Reads that come back empty now say
+  *why* (no text layer, an unsupported kind, a genuinely empty file) and name
+  the op that can still answer, and the judge's standing instructions now say
+  that "I could not read it" is not "it is not there". A second, narrower net
+  routes an item whose files *all* fail to read to the path that looks at them
+  instead: only a *measured* "no text" counts, only text and formatting items
+  escalate, and every selected file must be renderable, so it can only fire
+  where the run currently produces `required_visual_render_target_unavailable`
+  anyway. **Measured across all 1,428 items of the 30-task gold cohort, that
+  escalation fires on none of them** — the one text-less file in the corpus is
+  always selected alongside a readable companion — so on this cohort the repair
+  is the honest empty result and the instruction that goes with it, and the
+  added vision cost is zero.
+- **"Does it fit on one page" was answered from a character count.** A `.docx`
+  stores no pagination — the number does not exist until something lays the
+  document out — so six stage-1 items asking about length were answered from
+  `paragraph_count` or `char_count`, and five were marked down against gold
+  answers that were the right length. `inspect_structure` now converts with the
+  same LibreOffice the render path uses and reports `converted_page_count`; a
+  missing converter costs that one number and nothing else. Separately, a gold
+  answer lost an orientation item because the only geometry a judge could see
+  was `page_count: 1` — the page was 432×288, landscape, exactly as asked — so
+  both PDF ops now report page sizes, orientation and whether the pages are
+  uniform.
+- **The judge's standing instructions got longer, so the marking cost envelope
+  was re-measured instead of left quoting the old length.** Telling the judge
+  what an empty read means, and which op can still answer, took the committed
+  `prompts/grader_judge_v2.md` from **6,263 to 6,772 characters**. That length
+  is not decoration: the file is read from disk and sent on every single
+  marking call, so it is counted into what one call can carry. The opening
+  every call carries rises from **2,656 to 2,825 tokens** and the demanded
+  input per call from **535,990 to 536,159**. Running the free check on this
+  branch and on `main` shows those figures are the *only* difference in its 98
+  lines of output — the same 14 problems, the same ceiling, the same approved
+  maximum, the same non-zero exit. The figures quoted in the earlier entries in
+  this section were correct when they were measured and are superseded by
+  these. Five cost tests failed on the old number and were corrected to the new
+  measurement rather than loosened: a length that has stopped matching the file
+  is precisely what those tests exist to catch.
 - **Every request was charged 1,068 characters for wording that renders to
   between 3,533 and 5,020, and 345 of the 1,068 were for wording no model ever
   reads.** `instruction_character_count` pays for everything a request carries
