@@ -922,9 +922,18 @@ def _render_subset(label: str, block: dict[str, Any]) -> list[str]:
             f"      before the floor at zero: {block['avg_pct_raw']}% "
             f"({len(block['tasks_clamped_at_zero'])} task(s) clamped)"
         )
+    # An ambiguous prefix is dropped from `matched`, so which side of the
+    # subset it lands on flips with the subset's own sense. Naming it "left
+    # out" of an exclusion would say the opposite of what happened: those
+    # tasks are still counted in the mean printed on this very line.
+    ambiguous_note = (
+        "matched more than one task, so left in rather than taken out"
+        if block.get("excluded")
+        else "matched more than one task, so left out"
+    )
     for field, note in (
         ("missing", "named but not in this payload"),
-        ("ambiguous", "matched more than one task, so left out"),
+        ("ambiguous", ambiguous_note),
     ):
         if block.get(field):
             out.append(f"      {note}:")
@@ -988,10 +997,23 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
         f"  {req['passed']} of {req['total']} passed"
         + ("" if req["rate"] is None else f"  ({req['rate']})")
     )
-    if not req["agrees_with_payload"]:
-        # Recomputed here and written by the grader there. If they part company
-        # the report has two answers to one question, and saying so is the only
-        # honest thing to print.
+    # Recomputed here and written by the grader there. If they part company the
+    # report has two answers to one question, and saying so is the only honest
+    # thing to print. But `agrees_with_payload` is false in three different
+    # situations and only one of them is a conflict: a missing rate on either
+    # side leaves nothing to compare, and calling that a disagreement invents
+    # one out of an absent field.
+    if req["payload_rate"] is None:
+        lines.append(
+            "  !! the run states no critical-item rate of its own, so this "
+            "recount is unchecked"
+        )
+    elif req["rate"] is None:
+        lines.append(
+            f"  !! no required items here to recount, so the run's own "
+            f"{req['payload_rate']} is unchecked"
+        )
+    elif not req["agrees_with_payload"]:
         lines.append(
             f"  !! recount disagrees with the run's own "
             f"{req['payload_rate']} — do not quote either until it is settled"

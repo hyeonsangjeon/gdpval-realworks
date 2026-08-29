@@ -1215,6 +1215,38 @@ def test_a_run_with_no_required_items_does_not_divide_by_zero():
     analysis._render(analysis.analyze(payload), shortfall_limit=0)
 
 
+def test_a_rate_that_cannot_be_compared_is_not_reported_as_a_conflict():
+    """"Nothing to compare" and "the two disagree" are different findings.
+
+    `agrees_with_payload` is false in three situations and only one of them is
+    a conflict. Printing the conflict wording for the other two would put a
+    disagreement in the report that no two numbers ever had -- and in the case
+    where the run states no rate at all, would print the word `None` as if it
+    were the run's answer.
+    """
+    # A rate on the payload, nothing here to recount it against.
+    no_required = analysis._render(
+        analysis.analyze(_payload(tasks=[_task("task-1", items=[_item(max_score=1)])])),
+        shortfall_limit=0,
+    )
+    assert "disagrees" not in no_required
+    assert "no required items here to recount, so the run's own 0.98" in no_required
+
+    # A recount here, no rate on the payload to check it against.
+    no_payload_rate = analysis._render(
+        analysis.analyze(
+            _payload(
+                tasks=[_task("task-1", items=[_item(max_score=5, verdict="pass")])],
+                summary={**_payload()["summary"], "wow": {}},
+            )
+        ),
+        shortfall_limit=0,
+    )
+    assert "disagrees" not in no_payload_rate
+    assert "the run's own None" not in no_payload_rate
+    assert "states no critical-item rate of its own" in no_payload_rate
+
+
 # ── The breakdowns 304 asks for and the payload does not carry ─────────────
 
 
@@ -1358,6 +1390,34 @@ def test_a_prefix_matching_two_tasks_is_refused_rather_than_guessed():
 
     assert block["ambiguous"] == ["aaaaaaaa"]
     assert block["matched"] == []
+
+
+def test_an_ambiguous_prefix_in_an_exclusion_is_not_called_left_out():
+    """Refusing to match puts a task on opposite sides of the two subsets.
+
+    "everything but those five" is built by dropping what `matched` holds, and
+    an ambiguous prefix never reaches `matched` -- so those tasks stay in the
+    mean this line prints. Labelling them "left out" would tell the reader the
+    five were taken out when two of them were not.
+    """
+    payload = _payload(
+        tasks=[
+            _task("aaaaaaaa-1111", pct=20.0),
+            _task("aaaaaaaa-2222", pct=90.0),
+            _task("bbbbbbbb-3333", pct=50.0),
+        ]
+    )
+
+    block = analysis.subset_scores(payload, ["aaaaaaaa"], exclude=True)
+
+    assert block["ambiguous"] == ["aaaaaaaa"]
+    assert block["matched"] == []
+    # Nothing was taken out, so the mean still spans all three.
+    assert block["task_count"] == 3
+
+    rendered = "\n".join(analysis._render_subset("everything but those five", block))
+    assert "left in rather than taken out" in rendered
+    assert "so left out" not in rendered
 
 
 def test_the_known_limit_ids_are_eight_characters_of_a_real_task():
