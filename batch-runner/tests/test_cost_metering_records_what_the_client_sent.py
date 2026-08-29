@@ -18,12 +18,15 @@ from core.cost_metering import (
     Attribution,
     CostRecorder,
     extract_usage,
+    read_reported_usage,
     resolved_model_of,
 )
 from core.cost_receipts import (
     BUCKET_GRADING,
     BUCKET_PROBLEM_SOLVING,
     REASON_CALL_REACHABILITY_UNKNOWN,
+    REASON_USAGE_ABSENT,
+    REASON_USAGE_PARTIAL,
     RETRY_SEMANTIC,
     STAGE_GENERATION,
     STAGE_GRADING,
@@ -33,6 +36,7 @@ from core.cost_receipts import (
     STATUS_PARTIAL,
     CostReceiptLedger,
     load_receipt_price_table,
+    price_call,
 )
 
 PRICE_TABLE = {
@@ -374,6 +378,150 @@ def test_a_negative_count_is_not_believed():
     usage = extract_usage({"usage": {"prompt_tokens": -5, "completion_tokens": 5}})
 
     assert usage.input_tokens is None
+
+
+# ── what a running tally is allowed to publish ───────────────────────────
+
+
+def _responses_bag(**usage_fields):
+    """A Responses-shaped reply whose usage block is exactly what was asked for."""
+    return _Bag(model="test-model", usage=_Bag(**usage_fields))
+
+
+def test_a_reply_without_a_cache_breakdown_is_still_a_complete_count():
+    """The bug this helper exists to fix.
+
+    ``gpt-audio-1.5`` answers without ``input_tokens_details``. Both counts
+    that decide the bill are present, so the tally is publishable — the reply
+    simply says nothing was served from cache. Reading that as *unknown usage*
+    is what failed a whole 17-task shard on rc=6 after it had already been
+    paid for.
+    """
+    reported = read_reported_usage(
+        _responses_bag(input_tokens=900, output_tokens=120)
+    )
+
+    assert reported.usage_complete is True
+    assert reported.input_tokens == 900
+    assert reported.output_tokens == 120
+    assert reported.cached_tokens == 0
+
+
+def test_a_breakdown_that_arrived_empty_is_read_the_same_way():
+    """An older SDK hands back the details object with nothing in it."""
+    reported = read_reported_usage(
+        _responses_bag(
+            input_tokens=900, output_tokens=120, input_tokens_details=_Bag()
+        )
+    )
+
+    assert reported.usage_complete is True
+    assert reported.cached_tokens == 0
+
+
+def test_a_breakdown_that_did_arrive_is_counted():
+    reported = read_reported_usage(
+        _responses_bag(
+            input_tokens=900,
+            output_tokens=120,
+            input_tokens_details=_Bag(cached_tokens=300),
+        )
+    )
+
+    assert reported.usage_complete is True
+    assert reported.cached_tokens == 300
+
+
+@pytest.mark.parametrize(
+    "usage_fields",
+    [
+        {"output_tokens": 120},                    # no input count
+        {"input_tokens": 900},                     # no output count
+        {"input_tokens": None, "output_tokens": 120},
+        {"input_tokens": True, "output_tokens": 120},   # a flag, not a count
+        {"input_tokens": -5, "output_tokens": 120},
+    ],
+    ids=["no-input", "no-output", "input-null", "input-flag", "input-negative"],
+)
+def test_a_missing_or_unbelievable_count_is_not_publishable(usage_fields):
+    assert read_reported_usage(_responses_bag(**usage_fields)).usage_complete is False
+
+
+def test_a_reply_with_no_usage_block_at_all_is_not_publishable():
+    assert read_reported_usage(_Bag(model="test-model")).usage_complete is False
+    assert read_reported_usage(_Bag(model="test-model", usage=None)).usage_complete is (
+        False
+    )
+
+
+def test_more_served_from_cache_than_was_sent_is_a_contradiction():
+    """Cached input is a part of the input, so it cannot exceed it.
+
+    One of the two numbers is wrong and there is no way to tell which, so
+    neither is trusted. ``price_call`` makes the same check before it will put
+    a number on a call.
+    """
+    reported = read_reported_usage(
+        _responses_bag(
+            input_tokens=10,
+            output_tokens=120,
+            input_tokens_details=_Bag(cached_tokens=99),
+        )
+    )
+
+    assert reported.usage_complete is False
+
+
+def test_the_helper_agrees_with_the_ledger_about_what_is_publishable(price_table):
+    """The anti-drift check, and the reason the rule lives in one place.
+
+    Three call sites keep running token totals, and each used to decide for
+    itself when a total was still worth publishing. All three invented a rule
+    stricter than the one the receipt ledger actually applies, which is how a
+    missing cache breakdown came to mean *unknown usage* in the judge while
+    meaning *nothing was cached* in the bill.
+
+    So the rule is not merely restated here — it is checked against
+    ``price_call``, the function that decides whether a call can be charged.
+    A shape the ledger is willing to price must be a shape the tally is
+    willing to publish, and the reverse. If either side moves, this fails.
+    """
+    price = price_table.lookup("azure", "test-model")
+    assert price is not None
+
+    shapes = [
+        _responses_bag(input_tokens=900, output_tokens=120),
+        _responses_bag(
+            input_tokens=900,
+            output_tokens=120,
+            input_tokens_details=_Bag(cached_tokens=300),
+        ),
+        _responses_bag(
+            input_tokens=900, output_tokens=120, input_tokens_details=_Bag()
+        ),
+        _responses_bag(input_tokens=900, output_tokens=0),
+        _responses_bag(output_tokens=120),
+        _responses_bag(input_tokens=900),
+        _responses_bag(
+            input_tokens=10,
+            output_tokens=120,
+            input_tokens_details=_Bag(cached_tokens=99),
+        ),
+        _Bag(model="test-model"),
+        _chat_reply(prompt=500, completion=60),
+    ]
+
+    for shape in shapes:
+        priced = price_call(price, extract_usage(shape))
+        ledger_is_happy = not {
+            REASON_USAGE_ABSENT,
+            REASON_USAGE_PARTIAL,
+        } & set(priced.missing_reasons)
+
+        assert read_reported_usage(shape).usage_complete is ledger_is_happy, (
+            f"the tally and the ledger disagree about {vars(shape)}: "
+            f"reasons={priced.missing_reasons}"
+        )
 
 
 def test_the_reply_names_the_model_that_is_priced():

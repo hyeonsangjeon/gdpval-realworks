@@ -34,6 +34,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
+from core.cost_metering import read_reported_usage
 from core.public_error import public_provider_error_text, public_task_error_text
 
 #: How many audio sub-judge calls one task gets when the marking settings
@@ -219,17 +220,11 @@ class AudioPerception:
                 temperature=0,
             )
             latency_ms = (time.perf_counter() - call_started) * 1000.0
-            usage = getattr(response, "usage", None)
-            usage_complete = usage is not None and all(
-                hasattr(usage, field_name)
-                for field_name in ("input_tokens", "output_tokens")
-            )
-            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
-            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-            details = getattr(usage, "input_tokens_details", None)
-            cached_tokens = int(getattr(details, "cached_tokens", 0) or 0)
-            if details is None or not hasattr(details, "cached_tokens"):
-                usage_complete = False
+            reported = read_reported_usage(response)
+            input_tokens = reported.input_tokens
+            output_tokens = reported.output_tokens
+            cached_tokens = reported.cached_tokens
+            usage_complete = reported.usage_complete
             text = getattr(response, "output_text", "") or ""
             payload = _parse_json_envelope(text)
             return AudioVerdict(

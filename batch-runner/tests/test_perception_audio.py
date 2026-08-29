@@ -16,27 +16,35 @@ from core.perception import AUDIO_CALL_CAP, AudioPerception, AudioVerdict
 # ── Fakes ────────────────────────────────────────────────────────────
 
 
+#: Lets a test say "this reply carried no usage block at all" without that
+#: being confused with "this test did not care about the usage block".
+_UNSET = object()
+
+
+def _default_usage() -> SimpleNamespace:
+    return SimpleNamespace(
+        input_tokens=70,
+        output_tokens=12,
+        input_tokens_details=SimpleNamespace(cached_tokens=5),
+    )
+
+
 class FakeResponses:
     def __init__(self, *, text: str = '{"verdict":"pass","partial_score":1.0,'
                  '"evidence":"voice clearly audible","confidence":0.8,'
                  '"reasoning":"no clipping"}',
-                 raise_with: Exception | None = None):
+                 raise_with: Exception | None = None,
+                 usage: Any = _UNSET):
         self.text = text
         self.raise_with = raise_with
+        self.usage = _default_usage() if usage is _UNSET else usage
         self.calls: list[dict[str, Any]] = []
 
     def create(self, **kwargs: Any) -> Any:
         self.calls.append(kwargs)
         if self.raise_with is not None:
             raise self.raise_with
-        return SimpleNamespace(
-            output_text=self.text,
-            usage=SimpleNamespace(
-                input_tokens=70,
-                output_tokens=12,
-                input_tokens_details=SimpleNamespace(cached_tokens=5),
-            ),
-        )
+        return SimpleNamespace(output_text=self.text, usage=self.usage)
 
 
 class FakeClient:
@@ -77,6 +85,47 @@ def test_happy_path_parses_verdict(wav_file):
     assert v.output_tokens == 12
     assert v.cached_tokens == 5
     assert v.usage_complete is True
+
+
+def test_a_reply_with_no_cache_breakdown_is_still_counted(wav_file):
+    """A reply without ``input_tokens_details`` is priced, not written off.
+
+    Both counts that decide the bill are present; the missing breakdown only
+    declines to say how much of the input came from cache. Cached input is a
+    *part* of the input, never an addition to it, so counting the whole thing
+    at the uncached rate can only overstate the bill -- and overstating is the
+    safe direction for a number the run has to stand behind.
+
+    What this test does **not** claim is that ``gpt-audio-1.5`` behaves this
+    way. Nobody knows: until the content-part key was corrected, every audio
+    call was rejected with a 400 before it reached the model, so no reply from
+    it has ever been observed. The rule is pinned here because the three sites
+    that keep running token totals share it, and a shared rule only stays
+    shared if each site is held to it.
+    """
+    client = FakeClient(
+        FakeResponses(usage=SimpleNamespace(input_tokens=70, output_tokens=12))
+    )
+    ap = AudioPerception(client=client)
+
+    v = ap.judge(criterion="voice is clear", audio_path=str(wav_file))
+
+    assert v.verdict == "pass"
+    assert v.input_tokens == 70
+    assert v.output_tokens == 12
+    assert v.cached_tokens == 0
+    assert v.usage_complete is True
+
+
+def test_a_reply_that_reports_no_tokens_at_all_is_not_counted(wav_file):
+    """The genuine unknown: a reply that says nothing about what it used."""
+    client = FakeClient(FakeResponses(usage=None))
+    ap = AudioPerception(client=client)
+
+    v = ap.judge(criterion="voice is clear", audio_path=str(wav_file))
+
+    assert v.verdict == "pass"
+    assert v.usage_complete is False
 
 
 def test_request_shape_includes_audio_block(wav_file):
