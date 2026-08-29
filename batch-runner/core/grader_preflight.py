@@ -99,6 +99,11 @@ def plan_task_runtime(
                     selected_paths_have_text=grader._selected_paths_have_text(
                         deliverable_path, target.paths
                     ),
+                    some_selected_path_lacks_text=(
+                        grader._some_selected_path_lacks_text(
+                            deliverable_path, target.paths
+                        )
+                    ),
                     selected_paths_have_audio=grader._selected_paths_have_audio(
                         deliverable_path, target.paths
                     ),
@@ -208,6 +213,9 @@ def plan_task_runtime(
             item.criterion,
             target_plan.selected_paths,
             selected_paths_have_text=grader._selected_paths_have_text(
+                deliverable_path, target_plan.selected_paths
+            ),
+            some_selected_path_lacks_text=grader._some_selected_path_lacks_text(
                 deliverable_path, target_plan.selected_paths
             ),
             selected_paths_have_audio=grader._selected_paths_have_audio(

@@ -570,3 +570,81 @@ def test_omitting_the_audio_probe_is_identical_to_not_knowing(
     assert resolve_runtime_routing(criterion, paths) == resolve_runtime_routing(
         criterion, paths, selected_paths_have_audio=None
     )
+
+
+# ── One readable file stops answering for the rest (task 79) ─────────
+#
+# The escalation above asks the bundle a single question -- "is there any text
+# here" -- and a bundle answers yes the moment one file yields a character.
+# A stage-3 task selected two PDFs: a two-page Loss Prevention flowchart
+# holding zero characters, page one being a single full-page image, and a
+# readable Missing Bank Deposits memo of 1,756 characters. The memo answered
+# for both. The item stayed TEXT, `perception_called` was false, the render
+# count was zero, and the flowchart -- which is a picture, and is what the
+# criterion was about -- was never looked at by anything. The task scored
+# 40.00%.
+#
+# A sibling that can be read is not evidence about the file that cannot, so
+# the file question is now asked alongside the bundle question. The same three
+# conditions still bound it.
+
+
+def test_a_picture_beside_a_readable_file_still_reaches_the_eyes():
+    decision = resolve_runtime_routing(
+        "The flowchart shows the escalation path for a suspected theft",
+        ["flowchart.pdf", "memo.pdf"],
+        selected_paths_have_text=True,
+        some_selected_path_lacks_text=True,
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.preferred_op == "render_to_image"
+
+
+def test_a_bundle_whose_files_can_all_be_read_is_left_alone():
+    """The common case must not be dragged to vision by the new question."""
+    decision = resolve_runtime_routing(
+        "The memo states the total contract value",
+        ["memo.pdf", "appendix.pdf"],
+        selected_paths_have_text=True,
+        some_selected_path_lacks_text=False,
+    )
+
+    assert decision.modality is Modality.TEXT
+
+
+def test_an_unanswerable_file_does_not_escalate_on_a_guess():
+    """``None`` is an admission, not a no. It must change nothing."""
+    decision = resolve_runtime_routing(
+        "The memo states the total contract value",
+        ["memo.pdf", "mystery.bin"],
+        selected_paths_have_text=True,
+        some_selected_path_lacks_text=None,
+    )
+
+    assert decision.modality is Modality.TEXT
+
+
+def test_the_new_question_still_obeys_the_renderable_condition():
+    """Escalating must never trade a readable file for an unviewable one."""
+    decision = resolve_runtime_routing(
+        "The notes state the total contract value",
+        ["memo.pdf", "recording.wav"],
+        selected_paths_have_text=True,
+        some_selected_path_lacks_text=True,
+    )
+
+    assert decision.modality is not Modality.VISUAL
+
+
+def test_omitting_the_new_question_changes_no_existing_decision():
+    """Every caller that never passes it must route exactly as before."""
+    for criterion, paths in (
+        ("The memo states the total contract value", ["memo.pdf"]),
+        ("The chart uses the brand colour palette", ["deck.pptx"]),
+        ("The narration is free of clipping", ["take.wav"]),
+        ("The document structure follows the template", ["report.docx"]),
+    ):
+        assert resolve_runtime_routing(criterion, paths) == resolve_runtime_routing(
+            criterion, paths, some_selected_path_lacks_text=None
+        )

@@ -61,6 +61,12 @@ MAX_CONTENT_CHARS = 200_000   # ``read_content`` text payload cap
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB before/after downsample
 MAX_CELLS_FORMATTING = 5_000  # inspect_formatting iterates capped cells
 
+#: Word revision limits. A copy-editing deliverable can carry thousands of
+#: tracked edits; the counts stay exact but the sampled bodies do not, so one
+#: heavily-marked document cannot flood a judge's context.
+MAX_COMMENTS_REPORTED = 50
+MAX_COMMENT_CHARS = 500
+
 #: Archive limits. A deliverable submitted as a ``.zip`` is a container of
 #: files the other ops already handle, so the archive is listed and single
 #: members can be opened through ``scope={"member": ...}``. Both numbers bound
@@ -176,7 +182,14 @@ MODEL_READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
                     "be used as one. "
                     "read_content: text. "
                     "inspect_formatting: styles, fills, fonts, borders, and "
-                    "the same page count and page size. "
+                    "the same page count and page size. For a .docx it also "
+                    "reports the editing marks: tracked_insertion_count, "
+                    "tracked_deletion_count, and comments (author, text, and "
+                    "the anchored_text each one is attached to). Whether a "
+                    "document carries Track Changes or reviewer comments is "
+                    "answerable ONLY from these fields -- read_content shows "
+                    "an insertion as ordinary text and omits a deletion "
+                    "altogether, so it can never witness either. "
                     "probe_audio / probe_video: media metadata."
                 ),
             },
@@ -851,6 +864,47 @@ def _read_xlsx_text(p: Path, scope: Dict[str, Any]) -> str:
     return "\n\n".join(parts)
 
 
+def _pdf_table_blocks(page: Any, page_number: int) -> List[str]:
+    """Each ruled table on the page, one row per line, cells kept apart.
+
+    ``extract_text`` reads a page the way a person's eye crosses it, which for
+    a table means the header row arrives as one run of prose and the body rows
+    as another. A criterion like "the report includes the grade for John Lewis
+    Childs School" is then unanswerable from a document that answers it plainly:
+    the school and its grade sit side by side on the page and land paragraphs
+    apart in the extraction, so the judge reads real evidence and correctly
+    concludes the grade is absent.
+
+    Emitting the rows keeps a record together, in the same ``|``-separated
+    shape ``_read_docx_text`` and ``_read_xlsx_text`` already use, so a table
+    reads the same whoever authored it.
+
+    The linear text stays as well. Table detection is a guess about ruling
+    lines, and a wrong guess must not be able to delete content -- the
+    structured view is added to the page, never substituted for it.
+    """
+    try:
+        tables = page.extract_tables()
+    except Exception:  # noqa: BLE001
+        # A malformed table costs its own rows and nothing else: the page's
+        # text is already collected and must survive a detector that trips.
+        return []
+
+    blocks: List[str] = []
+    for table in tables or []:
+        rows = [
+            " | ".join(
+                "" if cell is None else " ".join(str(cell).split())
+                for cell in row
+            )
+            for row in table
+            if row and any(cell not in (None, "") for cell in row)
+        ]
+        if rows:
+            blocks.append(f"[Table on page {page_number}]\n" + "\n".join(rows))
+    return blocks
+
+
 def _read_pdf_text(p: Path, scope: Dict[str, Any]) -> str:
     import pdfplumber  # type: ignore
 
@@ -864,6 +918,7 @@ def _read_pdf_text(p: Path, scope: Dict[str, Any]) -> str:
             txt = page.extract_text() or ""
             if txt.strip():
                 parts.append(f"[Page {i}]\n{txt.strip()}")
+            parts.extend(_pdf_table_blocks(page, i))
             if sum(len(x) for x in parts) > MAX_CONTENT_CHARS:
                 break
     return "\n\n".join(parts)
@@ -1255,6 +1310,23 @@ def _op_read_content(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
             "char_count is a length, not a page count; call inspect_structure "
             "for converted_page_count"
         )
+    if kind == "pdf" and text.strip():
+        # A page can hold real text *and* carry its numbers as pasted
+        # pictures, and extraction drops the pictures without saying so, so
+        # the read comes back looking complete. The corpus's worst-scoring
+        # gold deliverable is one such page: 572 characters of title, column
+        # headers and row labels, with every grade, percentage and ratio
+        # living in 30 embedded images. Reporting the count costs nothing and
+        # turns a silent omission into the disclosed gap the judge's rule
+        # about absence is already written to handle.
+        images = _pdf_text_layer_facts(p).get("embedded_image_count")
+        if images:
+            notes.append(
+                f"this PDF also carries {images} embedded image(s) whose "
+                "content is not in the text above; a value the criterion asks "
+                "for and you cannot find may be drawn inside one of them "
+                "rather than absent from the document"
+            )
     if not text.strip():
         facts, empty_note = _empty_read_report(p, kind)
         result.update(facts)
@@ -1385,6 +1457,98 @@ def _format_xlsx(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
     return {"kind": "xlsx", "sheets": sheets_meta}
 
 
+#: WordprocessingML namespace. Tracked revisions and comments live in the
+#: document XML and have no python-docx accessor, so they are read from there.
+_W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+def _docx_revisions_and_comments(p: Path) -> Dict[str, Any]:
+    """Tracked insertions, tracked deletions, and reviewer comments.
+
+    A copy-editing brief is graded on its marks: "substantive edits appear as
+    Track Changes insertions", "the .docx includes reviewer comments anchored
+    to specific text ranges". python-docx models none of this -- ``para.text``
+    silently folds an insertion into the running text and drops a deletion
+    entirely -- so a formatting report built from it can only describe a
+    marked-up document as though it were clean. The criteria are then
+    unanswerable, and an item nothing can see fails whatever the file contains.
+
+    The marks are in ``word/document.xml`` (``w:ins``, ``w:del``) and
+    ``word/comments.xml``, which is where this reads them.
+
+    Counts are exact. Comment bodies and their anchors are sampled and
+    truncated, because how many marks there are is the gradeable fact and a
+    thousand of them must not cost a judge its context.
+
+    A file that cannot be opened reports zeros rather than raising: this
+    enriches a formatting report that is useful without it, so it must never be
+    the reason the whole report fails.
+    """
+    blank: Dict[str, Any] = {
+        "tracked_insertion_count": 0,
+        "tracked_deletion_count": 0,
+        "comment_count": 0,
+        "comments": [],
+    }
+    import zipfile
+    from xml.etree import ElementTree
+
+    try:
+        with zipfile.ZipFile(p) as archive:
+            names = set(archive.namelist())
+            if "word/document.xml" not in names:
+                return blank
+            body = ElementTree.fromstring(archive.read("word/document.xml"))
+            comment_root = (
+                ElementTree.fromstring(archive.read("word/comments.xml"))
+                if "word/comments.xml" in names
+                else None
+            )
+    except Exception:  # noqa: BLE001
+        return blank
+
+    def q(tag: str) -> str:
+        return f"{{{_W_NS}}}{tag}"
+
+    # Walk the body once in document order, carrying the set of comment ranges
+    # that are currently open. Text seen while a range is open is that
+    # comment's anchor -- the "specific text range" the rubric asks about.
+    anchors: Dict[str, List[str]] = {}
+    open_ids: set[str] = set()
+    for element in body.iter():
+        tag = str(element.tag).rsplit("}", 1)[-1]
+        if tag == "commentRangeStart":
+            open_ids.add(element.get(q("id"), ""))
+        elif tag == "commentRangeEnd":
+            open_ids.discard(element.get(q("id"), ""))
+        elif tag in ("t", "delText") and open_ids and element.text:
+            for comment_id in open_ids:
+                anchors.setdefault(comment_id, []).append(element.text)
+
+    comments: List[Dict[str, Any]] = []
+    if comment_root is not None:
+        for comment in comment_root.findall(f".//{q('comment')}"):
+            comment_id = comment.get(q("id"), "")
+            text = "".join(
+                node.text or "" for node in comment.findall(f".//{q('t')}")
+            )
+            comments.append({
+                "id": comment_id,
+                "author": comment.get(q("author")),
+                "text": text.strip()[:MAX_COMMENT_CHARS],
+                "anchored_text": (
+                    " ".join(anchors.get(comment_id, [])).strip()[:MAX_COMMENT_CHARS]
+                ),
+            })
+
+    return {
+        "tracked_insertion_count": len(body.findall(f".//{q('ins')}")),
+        "tracked_deletion_count": len(body.findall(f".//{q('del')}")),
+        "comment_count": len(comments),
+        "comments": comments[:MAX_COMMENTS_REPORTED],
+    }
+
+
 def _format_docx(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
     from docx import Document  # type: ignore
 
@@ -1401,6 +1565,7 @@ def _format_docx(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
         "table_count": len(doc.tables),
         "section_count": len(doc.sections),
         "style_histogram": styles,
+        **_docx_revisions_and_comments(p),
     }
 
 

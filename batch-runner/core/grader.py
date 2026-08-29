@@ -689,6 +689,41 @@ class Grader:
             deliverable_path, paths, has_extractable_text, self._text_layer_cache
         )
 
+    def _some_selected_path_lacks_text(
+        self, deliverable_path: Path, paths: Iterable[str]
+    ) -> bool | None:
+        """Is any one of these files unable to yield a character of text?
+
+        The question above cannot answer this one. It stops at the first file
+        that yields text and reports the whole set as readable, so a picture
+        selected next to a readable document disappears behind it. Asking per
+        file is what lets the picture be looked at.
+
+        Same discipline as its sibling: a measured ``False`` from one file is
+        enough to say ``True`` here, ``None`` when no file gave a definite no
+        and at least one could not be answered for, and ``False`` only when
+        every file was examined and every one of them had text. It shares the
+        text-layer memo, so the extra question costs no extra reading.
+        """
+        seen_any = False
+        seen_unknown = False
+        for name in paths:
+            if not isinstance(name, str) or not name:
+                continue
+            seen_any = True
+            if name not in self._text_layer_cache:
+                self._text_layer_cache[name] = has_extractable_text(
+                    deliverable_path / name
+                )
+            answer = self._text_layer_cache[name]
+            if answer is False:
+                return True
+            if answer is None:
+                seen_unknown = True
+        if not seen_any or seen_unknown:
+            return None
+        return False
+
     def _selected_paths_have_audio(
         self, deliverable_path: Path, paths: Iterable[str]
     ) -> bool | None:
@@ -708,6 +743,9 @@ class Grader:
             item.criterion,
             plan.selected_paths,
             selected_paths_have_text=self._selected_paths_have_text(
+                deliverable_path, plan.selected_paths
+            ),
+            some_selected_path_lacks_text=self._some_selected_path_lacks_text(
                 deliverable_path, plan.selected_paths
             ),
             selected_paths_have_audio=self._selected_paths_have_audio(
@@ -735,6 +773,11 @@ class Grader:
                     target.paths,
                     selected_paths_have_text=self._selected_paths_have_text(
                         deliverable_path, target.paths
+                    ),
+                    some_selected_path_lacks_text=(
+                        self._some_selected_path_lacks_text(
+                            deliverable_path, target.paths
+                        )
                     ),
                     selected_paths_have_audio=self._selected_paths_have_audio(
                         deliverable_path, target.paths
