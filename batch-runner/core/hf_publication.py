@@ -30,6 +30,7 @@ from core.result_fingerprint import (
     validate_inference_result_fingerprint,
 )
 from core.result_projection import project_result_row
+from core.cost_projection import COST_LEDGER_PUBLICATION_PATH
 from core.cost_projection import project_cost_ledger_reference
 from core.repository_identity import validate_hf_dataset_repo_id
 from core.repository_identity import validate_experiment_id
@@ -64,8 +65,9 @@ DELETE_PATTERNS = [
 #: The audit sidecar publishes under one fixed name. ``self_report.json``
 #: declares the path, but the declaration is payload — and managed paths drive
 #: remote deletion, so a payload that could name its own managed path could
-#: name someone else's file. The name is pinned here instead.
-COST_LEDGER_PATH = "cost_ledger.jsonl"
+#: name someone else's file. The name is pinned at the projection layer, where
+#: the step that stages the file reads it from too.
+COST_LEDGER_PATH = COST_LEDGER_PUBLICATION_PATH
 DEFAULT_PUBLICATION_RECEIPT_PATH = Path("workspace/publication_receipt.json")
 _PUBLICATION_RECEIPT_FIELDS = frozenset({
     "repo_id",

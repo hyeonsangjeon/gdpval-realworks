@@ -1,6 +1,8 @@
+import ast
 import json
 import hashlib
 import os
+import re
 import stat
 import tempfile
 from collections import Counter
@@ -2345,3 +2347,34 @@ def test_load_publication_identity_rejects_mixed_scope(
 
     with pytest.raises(ValueError, match=message):
         load_publication_identity(prepared_path, inference_path)
+
+def _step7_literal_list(name: str) -> list[str]:
+    """Pull one of the mirrored pattern lists out of the step 7 shell script."""
+    script = Path(__file__).resolve().parents[1] / "step7_upload_hf.sh"
+    match = re.search(
+        rf"^{name} = (\[[^\]]*\])$",
+        script.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    assert match is not None, f"step7_upload_hf.sh no longer defines {name}"
+    return ast.literal_eval(match.group(1))
+
+
+@pytest.mark.parametrize(
+    ("mirrored", "constant"),
+    [
+        ("INCLUDE", hf_publication.INCLUDE_PATTERNS),
+        ("IGNORE", hf_publication.IGNORE_PATTERNS),
+        ("DELETE", hf_publication.DELETE_PATTERNS),
+    ],
+)
+def test_step7_mirrors_the_publication_patterns(mirrored, constant):
+    """The upload script's copy of the patterns must equal the real ones.
+
+    step7_upload_hf.sh restates all three lists and aborts if they differ from
+    the module's, which is a good guard and a sharp edge: a pattern added on
+    one side and not the other stops every upload, including experiments that
+    have nothing to do with the change. The guard fires at upload time, after
+    a paid run. This fires here.
+    """
+    assert _step7_literal_list(mirrored) == constant

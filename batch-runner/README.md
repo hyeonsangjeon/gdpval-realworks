@@ -428,7 +428,7 @@ experiment YAML
   -> workspace/step1_tasks_prepared.json
   -> workspace/step2_inference_{progress,results}_<condition>.json
   -> workspace/result.json + results/<experiment_id>/
-  -> workspace/upload/{data,deliverable_files,inference_provenance.json,self_report.json}
+  -> workspace/upload/{cost_ledger.jsonl,data,deliverable_files,inference_provenance.json,self_report.json}
   -> result PR (report.md) + Hugging Face allowlist + Actions artifact
 ```
 

@@ -6,8 +6,8 @@
 #   HF_TOKEN=hf_xxx ./step7_upload_hf.sh [repo_id]  # repo override
 #   HF_TOKEN=hf_xxx ./step7_upload_hf.sh --test      # smoke/subset prepared scope 게시
 #
-# 업로드 대상: README.md, data/train-*.parquet, deliverable_files/**,
-#               inference_provenance.json, self_report.json
+# 업로드 대상: README.md, cost_ledger.jsonl, data/train-*.parquet,
+#               deliverable_files/**, inference_provenance.json, self_report.json
 # 제외 대상: .cache/, train/, dataset_dict.json 등 캐시 아티팩트
 # Step 0 validated HEAD를 CAS parent로 사용하며 reference_files/**는 그대로 유지
 
@@ -142,6 +142,7 @@ from core.repo_bootstrapper import (
 
 INCLUDE = [
   "README.md",
+  "cost_ledger.jsonl",
   "data/train-*.parquet",
   "deliverable_files/**",
   "inference_provenance.json",
@@ -158,6 +159,7 @@ IGNORE = [
   "dataset_info.json",
 ]
 DELETE = [
+  "cost_ledger.jsonl",
   "data/**",
   "deliverable_files/**",
   "inference_provenance.json",

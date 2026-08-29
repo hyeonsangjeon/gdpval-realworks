@@ -16,11 +16,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import step6_report
 from core.cost_projection import (
+    COST_LEDGER_PUBLICATION_PATH,
     COST_RECEIPT_SCHEMA_VERSION,
     ESTIMATE_BASIS,
     build_cost_summaries,
     project_cost_ledger_reference,
     project_cost_receipt,
+    stage_cost_ledger,
     successful_deliverable_count,
     summarize_cost_receipts,
     verify_cost_ledger,
@@ -589,6 +591,59 @@ def test_ledger_verification_tolerates_a_pointer_without_the_file(tmp_path):
     assert verify_cost_ledger(reference, tmp_path / "cost_ledger.jsonl") == reference
 
 
+# ── Staging the ledger for publication ────────────────────────────────────
+#
+# Step 2 names its export after the condition it recorded. Publication pins
+# one name for the whole repository. These two facts have to be reconciled
+# somewhere, and it is here, on the way into the upload directory.
+
+
+def _workspace_ledger(tmp_path, name="cost_ledger_condition_a.jsonl"):
+    """A Step 2 export sitting where Step 2 leaves it, plus its pointer."""
+    source = tmp_path / "workspace"
+    source.mkdir()
+    export = source / name
+    export.write_bytes(b'{"call_id": "task-a:generation:0"}\n')
+    digest = hashlib.sha256(export.read_bytes()).hexdigest()
+    return source, tmp_path / "upload", {"path": name, "sha256": digest}
+
+
+def test_staging_publishes_the_producer_export_under_the_pinned_name(tmp_path):
+    source, upload, reference = _workspace_ledger(tmp_path)
+
+    staged = stage_cost_ledger(reference, source, upload)
+
+    assert staged == {
+        "path": COST_LEDGER_PUBLICATION_PATH,
+        "sha256": reference["sha256"],
+    }
+    published = upload / COST_LEDGER_PUBLICATION_PATH
+    assert published.read_bytes() == (source / reference["path"]).read_bytes()
+
+
+def test_staging_publishes_no_pointer_when_the_export_is_absent(tmp_path):
+    source, upload, reference = _workspace_ledger(tmp_path)
+    (source / reference["path"]).unlink()
+
+    # A pointer with nothing behind it is worse than no pointer: publication
+    # rejects it, and a reader who got past that would chase a missing file.
+    assert stage_cost_ledger(reference, source, upload) is None
+    assert not upload.exists()
+
+
+def test_staging_refuses_an_export_edited_since_the_run(tmp_path):
+    source, upload, reference = _workspace_ledger(tmp_path)
+    (source / reference["path"]).write_bytes(b'{"call_id": "task-b:grading:0"}\n')
+
+    with pytest.raises(ValueError, match="digest does not match"):
+        stage_cost_ledger(reference, source, upload)
+    assert not (upload / COST_LEDGER_PUBLICATION_PATH).exists()
+
+
+def test_staging_of_nothing_stages_nothing(tmp_path):
+    assert stage_cost_ledger(None, tmp_path, tmp_path / "upload") is None
+
+
 # ── Step 6 report ─────────────────────────────────────────────────────────
 #
 # ``self_report.json`` is a byte copy of ``report_data.json``, so whatever
@@ -640,6 +695,59 @@ def test_report_rejects_a_receipt_it_cannot_read():
     data = _report_input(_row("task-a", problem_solving_cost=_receipt(currency="KRW")))
     with pytest.raises(ValueError, match="task-a"):
         step6_report._compute_cost_summaries(data)
+
+
+def _step6_workspace(tmp_path, monkeypatch, name="cost_ledger_condition_a.jsonl"):
+    """A workspace holding a Step 2 export and an upload area to stage into."""
+    (tmp_path / "upload").mkdir(parents=True)
+    export = tmp_path / name
+    export.write_bytes(b'{"call_id": "task-a:generation:0"}\n')
+    monkeypatch.setattr(step6_report, "WORKSPACE_DIR", tmp_path)
+    digest = hashlib.sha256(export.read_bytes()).hexdigest()
+    return {"cost_ledger": {"path": name, "sha256": digest}}
+
+
+def test_report_publishes_the_ledger_under_the_name_the_upload_expects(
+    tmp_path, monkeypatch
+):
+    # Step 2 names the export after its condition; the Hub repository holds
+    # one, under the name the publication allowlist already knows.
+    data = _step6_workspace(tmp_path, monkeypatch)
+
+    ledger = step6_report._report_cost_ledger(data, publishing=True)
+
+    assert ledger["path"] == "cost_ledger.jsonl"
+    assert ledger["sha256"] == data["cost_ledger"]["sha256"]
+    assert (tmp_path / "upload" / "cost_ledger.jsonl").is_file()
+
+
+def test_report_drops_a_pointer_it_cannot_stage(tmp_path, monkeypatch, capsys):
+    data = _step6_workspace(tmp_path, monkeypatch)
+    (tmp_path / data["cost_ledger"]["path"]).unlink()
+
+    assert step6_report._report_cost_ledger(data, publishing=True) is None
+    assert "publishing no ledger pointer" in capsys.readouterr().out
+
+
+def test_report_leaves_the_pointer_alone_when_it_is_not_publishing(
+    tmp_path, monkeypatch
+):
+    # Reporting over someone else's result: nothing is being uploaded, so the
+    # pointer describes the file it always described.
+    data = _step6_workspace(tmp_path, monkeypatch)
+
+    ledger = step6_report._report_cost_ledger(data, publishing=False)
+
+    assert ledger == data["cost_ledger"]
+    assert not (tmp_path / "upload" / "cost_ledger.jsonl").exists()
+
+
+def test_report_refuses_a_ledger_edited_since_the_run(tmp_path, monkeypatch):
+    data = _step6_workspace(tmp_path, monkeypatch)
+    (tmp_path / data["cost_ledger"]["path"]).write_bytes(b'{"call_id": "other"}\n')
+
+    with pytest.raises(ValueError, match="digest does not match"):
+        step6_report._report_cost_ledger(data, publishing=True)
 
 
 def test_markdown_labels_every_amount_as_an_estimate():

@@ -865,27 +865,29 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
   assert.match(step6Text, /"narrative_model": narrative\.get\("model"\)/)
   assert.match(step6Text, /"narrative_reasoning_effort": narrative\.get\("reasoning_effort"\)/)
 
+  const includePatterns = [
+    'README.md',
+    'cost_ledger.jsonl',
+    'data/train-*.parquet',
+    'deliverable_files/**',
+    'inference_provenance.json',
+    'self_report.json',
+  ]
+  const deletePatterns = [
+    'cost_ledger.jsonl',
+    'data/**',
+    'deliverable_files/**',
+    'inference_provenance.json',
+    'self_report.json',
+    'step2_inference_results.json',
+  ]
   assert.deepEqual(
     extractPythonStringList(publicationText, 'INCLUDE_PATTERNS'),
-    [
-      'README.md',
-      'cost_ledger.jsonl',
-      'data/train-*.parquet',
-      'deliverable_files/**',
-      'inference_provenance.json',
-      'self_report.json',
-    ],
+    includePatterns,
   )
   assert.deepEqual(
     extractPythonStringList(publicationText, 'DELETE_PATTERNS'),
-    [
-      'cost_ledger.jsonl',
-      'data/**',
-      'deliverable_files/**',
-      'inference_provenance.json',
-      'self_report.json',
-      'step2_inference_results.json',
-    ],
+    deletePatterns,
   )
   assert.match(fillText, /validate_source_projection_rows\(/)
   assert.match(bootstrapText, /errors\.extend\(validate_source_projection_rows\(df, manifest_path\)\)/)
@@ -904,26 +906,12 @@ test('report, publication, and artifact destinations follow Step 6 and Step 7', 
   assert.match(publicationText, /prepared fingerprint mismatch/)
   assert.match(publicationText, /result fingerprint mismatch/)
   assert.match(publicationText, /result task set mismatch/)
-  assert.deepEqual(
-    extractPythonStringList(step7Text, 'INCLUDE'),
-    [
-      'README.md',
-      'data/train-*.parquet',
-      'deliverable_files/**',
-      'inference_provenance.json',
-      'self_report.json',
-    ],
-  )
-  assert.deepEqual(
-    extractPythonStringList(step7Text, 'DELETE'),
-    [
-      'data/**',
-      'deliverable_files/**',
-      'inference_provenance.json',
-      'self_report.json',
-      'step2_inference_results.json',
-    ],
-  )
+  // step7_upload_hf.sh restates both lists and aborts the upload when they
+  // differ from the module's. Checking the mirror against the same expectation,
+  // rather than against a second copy of it, means a pattern added on one side
+  // can no longer pass here and then stop the upload after a paid run.
+  assert.deepEqual(extractPythonStringList(step7Text, 'INCLUDE'), includePatterns)
+  assert.deepEqual(extractPythonStringList(step7Text, 'DELETE'), deletePatterns)
   assert.match(step7Text, /if INCLUDE_PATTERNS != INCLUDE:/)
   assert.match(step7Text, /if DELETE_PATTERNS != DELETE:/)
   assert.match(publicationText, /validate_inference_provenance\(/)

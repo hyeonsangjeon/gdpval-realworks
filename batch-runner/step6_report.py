@@ -40,6 +40,7 @@ from core.cost_projection import (  # noqa: E402
     build_cost_summaries,
     project_cost_ledger_reference,
     project_cost_receipt,
+    stage_cost_ledger,
     successful_deliverable_count,
     verify_cost_ledger,
 )
@@ -474,12 +475,33 @@ def _compute_cost_summaries(data: dict) -> dict:
     )
 
 
-def _report_cost_ledger(data: dict) -> dict | None:
-    """Resolve the audit-sidecar pointer, re-hashing the file when it is here."""
+def _report_cost_ledger(data: dict, *, publishing: bool) -> dict | None:
+    """Resolve the audit-sidecar pointer, staging the file when publishing.
+
+    Step 2 names its export after the condition it recorded; a published
+    repository holds one ledger under one fixed name. When this run owns the
+    workspace it is producing that repository, so the file is copied across
+    under the published name and the pointer is rewritten to match — the two
+    have to agree or publication refuses the upload.
+
+    Otherwise — reporting over a result that came from somewhere else — the
+    pointer is carried through as it stands, verified if the file happens to
+    be here. Nothing is being published, so nothing needs renaming.
+    """
     reference = project_cost_ledger_reference(data.get("cost_ledger"))
     if reference is None:
         return None
-    return verify_cost_ledger(reference, WORKSPACE_DIR / "upload" / reference["path"])
+    if not publishing:
+        return verify_cost_ledger(reference, WORKSPACE_DIR / reference["path"])
+    staged = stage_cost_ledger(
+        reference, WORKSPACE_DIR, WORKSPACE_DIR / "upload"
+    )
+    if staged is None:
+        print(
+            f"   ⚠️  Cost ledger {reference['path']} is not in the workspace; "
+            "publishing no ledger pointer"
+        )
+    return staged
 
 
 def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dict]]:
@@ -1416,6 +1438,10 @@ def generate_report(
     workspace_owned = result_path.resolve() == (
         WORKSPACE_DIR / "result.json"
     ).resolve()
+    # The same gate self_report.json is staged behind, and for the same
+    # reason: the upload directory is created by the pipeline, so its absence
+    # means no upload is being assembled and nothing should be staged into it.
+    publishing = workspace_owned and (WORKSPACE_DIR / "upload").exists()
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1424,7 +1450,7 @@ def generate_report(
     execution_metrics = _compute_execution_metrics(data)
     agentic_metrics = _compute_agentic_metrics(data)
     cost_summaries = _compute_cost_summaries(data)
-    cost_ledger = _report_cost_ledger(data)
+    cost_ledger = _report_cost_ledger(data, publishing=publishing)
     sector_breakdown = _compute_sector_breakdown(data)
     manifest = _load_manifest_safe() if workspace_owned else None
     task_results, error_tasks = _build_task_results(data, manifest=manifest)

@@ -23,10 +23,20 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+import shutil
 from pathlib import Path
 
 COST_RECEIPT_SCHEMA_VERSION = "cost-receipt-v1"
 COST_CURRENCY = "USD"
+
+#: The one name the audit sidecar is published under.
+#:
+#: The producer names its export after the condition it recorded, which is
+#: right for a workspace that may hold several. A published repository holds
+#: one, and both its readers and the publication allowlist need a name that
+#: can be stated before the run exists. The rename happens once, on the way
+#: into the upload directory, and the digest is checked across it.
+COST_LEDGER_PUBLICATION_PATH = "cost_ledger.jsonl"
 
 #: Amounts are usage estimates, not billed figures. Carried in every summary
 #: so the disclaimer cannot be lost between the report and the dashboard.
@@ -357,6 +367,40 @@ def verify_cost_ledger(reference: dict | None, ledger_path: Path) -> dict | None
     if digest.hexdigest() != reference["sha256"]:
         raise ValueError("cost ledger digest does not match the recorded sha256")
     return reference
+
+
+def stage_cost_ledger(
+    reference: dict | None,
+    source_dir: Path,
+    upload_dir: Path,
+) -> dict | None:
+    """Copy the audit sidecar into the upload area under its published name.
+
+    Returns the pointer a published result should carry, or ``None``.
+
+    ``None`` when the export is not on this machine, which is the honest
+    answer rather than a convenient one: the pointer would name a file that
+    is not going to be uploaded, and publication refuses that — correctly,
+    because it sends a reader after a receipt nobody published. Dropping the
+    pointer loses a cross-reference; keeping it loses the upload.
+
+    The digest is re-checked against the bytes being copied, so a ledger
+    edited between the run and the upload stops here instead of being
+    published under a digest that no longer describes it.
+    """
+    if reference is None:
+        return None
+    source = Path(source_dir) / reference["path"]
+    if not source.is_file():
+        return None
+    verify_cost_ledger(reference, source)
+    destination = Path(upload_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination / COST_LEDGER_PUBLICATION_PATH)
+    return {
+        "path": COST_LEDGER_PUBLICATION_PATH,
+        "sha256": reference["sha256"],
+    }
 
 
 def _percentile(values: list[float], percentile: float):

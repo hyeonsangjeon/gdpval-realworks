@@ -112,11 +112,14 @@ def _cost_ledger_reference(inference: dict) -> dict | None:
     The digest is the whole point of the pointer, so it is checked here as
     well as at publication: a mismatch caught in the workspace costs nothing,
     the same mismatch caught after upload costs a retraction.
+
+    The export sits beside the other Step 2 outputs, not in the upload area —
+    it is staged there later, under its published name, by Step 6.
     """
     reference = project_cost_ledger_reference(inference.get("cost_ledger"))
     if reference is None:
         return None
-    return verify_cost_ledger(reference, WORKSPACE_DIR / "upload" / reference["path"])
+    return verify_cost_ledger(reference, WORKSPACE_DIR / reference["path"])
 
 
 def _write_json_outputs(data: dict, *paths: Path) -> None:
