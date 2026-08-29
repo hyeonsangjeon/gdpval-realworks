@@ -12,6 +12,62 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The grading rebuild (v2) is complete, and the first thing it established is
+  that a perfect answer does not score 100.** The rebuild ran in three parts.
+  PR1 fixed a sign error in the score arithmetic. PR2 rebuilt the judge around
+  tool calls, so a verdict has to be grounded in something the judge actually
+  opened rather than in a text extract handed to it up front; the batch judge,
+  the tier fan-out and the character-capped extract are gone, and `Grader` now
+  refuses to be constructed against a configuration that is not tool-calling.
+  PR3 asked whether the result can be trusted, and answered in four parts.
+
+  Grading the benchmark's own reference answers — the thirty-task gold subset,
+  the same files a model is asked to match — returns **82.87%**, not the ≥90%
+  the specification expected. Classifying that shortfall the way the
+  specification requires produced **no grader defects at all**: the lost points
+  are a reading tool that still cannot see everything inside a deliverable
+  (about 46 points, recoverable) and reference answers that do not literally
+  satisfy their own rubric (at least 57 points, not recoverable by any code
+  change here). Two reading-tool holes were fixed mid-stage and the run
+  repeated, moving 78.24% → 82.87%; fixing the rest raises the ceiling to about
+  84–85%. **Published model scores should therefore be read against ~83%, not
+  against 100.** Full evidence in
+  `tasks/rebuilding_grading_task/PR3_GOLD_CEILING.md`.
+
+  Re-grading exp003's 220 tasks under v2 **inverted** v1's headline diagnosis:
+  the formatting gap did not collapse, it widened from −25.5pp to −46.0pp. What
+  v1 read as "the hybrid judge over-rejects" was the opposite — the smaller
+  judge could not see the deliverable and was lenient about what it could not
+  read. Report in `data/grades/_validation/PR3_EXP003_REVALIDATION.md`.
+
+  Repeating that gold grading three times, changing nothing, put the corpus
+  mean at **82.87 · 83.07 · 83.25%** — a spread of 0.37pp — and cleared all
+  three stability gates the specification set: worst per-task deviation
+  **4.02pp** (ceiling 5), judge error rate **0.09%** (ceiling 2), bootstrap 95%
+  confidence interval **7.26pp** wide (ceiling 10). The ~83% ceiling is
+  therefore a property of the grader, not of one lucky run. Two limits are
+  recorded rather than smoothed over. The confidence-interval gate turns out to
+  measure how far the thirty tasks sit from each other rather than how far a
+  repeat moves — resampling runs alone gives 0.86pp, an order of magnitude
+  narrower — so passing it is not evidence of repeat stability. And chasing the
+  single worst-moving task found a defect the gold-ceiling stage had observed
+  but not explained: an item the judge fails to answer is dropped from the
+  denominator as well as the numerator, so **the maximum score itself changes
+  between runs** (three of thirty tasks). That task's 7.05pp swing came entirely
+  from its maximum moving 22 → 24 — the points awarded were 18.6 both times.
+  Whether to keep that rule is an owner decision, logged as a follow-up. Report
+  in `tasks/rebuilding_grading_task/PR3_VARIANCE.md`.
+
+  One item is deliberately left open. The cost-budget re-estimate (302) was
+  built on a three-task projection, and real 220-task and repeated 30-task runs
+  have since replaced that projection with measurements. Re-answering it is not
+  a cost question but a choice of which grading configuration every published
+  score is based on, so it stays with the owner rather than being decided here.
+
+  The v2 judge code, prompt (`prompts/grader_judge.md` v2.2), configurations
+  and grade JSON are all on `main`; the v1 grade files are preserved unmodified
+  alongside them.
+
 - **Three more run places, two of which change only the program driving the
   work.** The comparison covered five places, all of which take Python from
   the model and run it somewhere. Products that drive the whole task

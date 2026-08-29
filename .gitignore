@@ -52,6 +52,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/build_gdpval_task_catalog.py
 !batch-runner/scripts/build_gold_deliverable_manifest.py
 !batch-runner/scripts/analyze_gold_ceiling.py
+!batch-runner/scripts/analyze_variance.py
 
 
 # Experiment report HTML (skews GitHub language stats)
@@ -86,6 +87,8 @@ tasks/0822_saturday/*
 !tasks/rebuilding_grading_task/
 tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/PR3_GOLD_CEILING.md
+!tasks/rebuilding_grading_task/PR3_VARIANCE.md
+!tasks/rebuilding_grading_task/PR3_REPORT.md
 
 *.parquet
 .huggingface/

@@ -37,17 +37,17 @@
 | 204 | [modality routing](./204-perception-routing.md) | ✅ (this commit) |
 | 205 | [vision perception (gpt-5.4 vision)](./205-vision-judge.md) | ✅ (this commit) |
 | 206 | [audio perception (gpt-audio-1.5)](./206-audio-judge.md) | ✅ (this commit) |
-| 207 | [legacy removal](./207-legacy-removal.md) | ⚠️ PARTIAL (this commit) — config archive only; code strip deferred |
+| 207 | [legacy removal](./207-legacy-removal.md) | ✅ DONE — config archive + **code strip 완료**. 264행이 PARTIAL 사유로 적은 `_use_batch`/`_tier_judges`/`_summarize_deliverables`/`deliverable_extract_max_chars`와 `core/grader_batch.py`는 모두 제거됨; `Grader`는 tool-calling 설정이 아니면 생성을 거부하고(`core/grader.py:284`), `tests/test_grader.py:875-896`이 그 심볼들의 부재를 검사한다. 인수 grep이 아직 걸리는 것은 (a) 207 자신의 지시 3번이 만든 `_archive_v1/`, (b) 제거 사실을 적은 주석, (c) `core/azure_ai_clients.py:788`의 Azure 배포 허용목록 방어 분기 1건뿐 — 셋 다 legacy 채점 경로가 아니다. (c)는 후속 항목으로 등록. 근거는 [PR3_REPORT.md](./PR3_REPORT.md). |
 | 208 | [config schema + validator 업데이트](./208-config-schema-update.md) | ✅ (this commit) |
 
 ### PR3 — Validation Gates (새 세션, PR2 후)
 
 | # | task | 상태 |
 |---|---|---|
-| 300 | [gold-ceiling test](./300-gold-ceiling.md) | ⚠️ PARTIAL — v2 path live-verified on 3-task smoke (run `26677864500`, judge_error 1.19%, evidence tool-grounded). Gold-subset run pending. See [PR3_SMOKE_FINDINGS.md](./PR3_SMOKE_FINDINGS.md). |
+| 300 | [gold-ceiling test](./300-gold-ceiling.md) | ✅ DONE — **작업 완료, 결과는 임계값 미달.** 정답 30과제 실행 완료: 평균 **82.87%** (기준 90%), 필수 항목 통과율 **0.5714** (기준 0.95), 채점기 오류율 **0.14%** (기준 <2%, 통과). 명세대로 미달을 분류한 결과 **grader 결함은 0건**이고, 손실은 도구 결함(약 46점 회복 가능)과 입력 결함(정답이 자기 채점표를 문자 그대로는 못 지킴)이다. 읽기 도구 결함 2건을 고쳐 78.24% → 82.87%로 한 번 재실행했으며, 남은 도구 결함을 모두 고쳐도 상한은 84~85%다. 즉 **정답의 천장은 약 83%**이고 90%는 채점기 수정으로 넘을 수 있는 벽이 아니다. 보고서 [PR3_GOLD_CEILING.md](./PR3_GOLD_CEILING.md). |
 | 301 | [exp003 재채점 + formatting 격차 붕괴 + bare-CSV evidence](./301-exp003-revalidation.md) | ✅ DONE — 220 재채점 완료 + 분석 완료. **formatting 격차는 붕괴하지 않고 -25.5pp → -46.0pp로 확대**; v1의 "hybrid over-rejects" 진단이 뒤집힘 (mini가 못 봐서 관대했던 것). bare-CSV 판별은 통과. 보고서는 `tasks/**` privacy 규칙(`5349cbf`) 때문에 [data/grades/_validation/PR3_EXP003_REVALIDATION.md](../../data/grades/_validation/PR3_EXP003_REVALIDATION.md)에 위치. |
 | 302 | [cost budget 재추정](./302-cost-budget-recheck.md) | ⚠️ 미해결이지만 **전제가 낡음** — 당시 projection은 N=3 smoke 기준이었고, 그 뒤 220-task 실주행이 이미 끝났다. PR3_SMOKE_FINDINGS.md의 A/B/C는 그 낡은 projection 위에 서 있으므로 그대로 답할 수 없음. 실측 기준으로 다시 세워야 함 (owner gate). |
-| 303 | [variance + bootstrap CI + judge_error rate](./303-variance-and-error.md) | ⏸ 301이 220-task baseline을 냈으므로 spec상 선행 조건은 해소. 아래 R1이 3회 중 1회를 겸하므로 실제 추가 dispatch는 2회 → owner 승인 대기. |
+| 303 | [variance + bootstrap CI + judge_error rate](./303-variance-and-error.md) | ✅ DONE — **세 임계값 모두 통과.** 정답 30과제를 아무것도 바꾸지 않고 3회 채점: 과제별 점수 표준편차 **4.02pp** (기준 ≤5pp), judge 오류율 **0.09%** (4/4,299, 기준 <2%), 평균의 95% 신뢰구간 폭 **7.26pp** (기준 <10pp). 코퍼스 평균은 **82.87 · 83.07 · 83.25%**로 폭 0.37pp — 300의 82.87%는 그날의 운이 아니다. 명세는 exp003 부분집합을 적었으나 실제로 인용되는 숫자가 300의 82.87%이므로 대상을 정답 30과제로 바꿨고, 300의 채택된 실행이 1회차를 겸해 신규 dispatch는 2회였다. 부수 발견: `judge_error` 항목이 `score_excluded`가 되어 **분모(만점)에서도 빠지므로 실행마다 만점이 달라진다** (30과제 중 3과제). 가장 크게 움직인 과제의 7.05pp는 전부 만점 22→24 변화이고 받은 점수는 18.6으로 동일 — 300이 `17111c03`에서 이유를 특정 못한 채 남겨 둔 관찰과 원인이 같다. 소유자 결정 항목으로 등록. 보고서 [PR3_VARIANCE.md](./PR3_VARIANCE.md). |
 
 ## 다음 순서 (PR3 이후)
 
@@ -261,7 +261,7 @@ dispatch 명령·canary 절차·acceptance는 board 카드
 | perception 클래스 의존성 주입 방향 | `client`을 생성자에 inject (클래스 내부 생성 X) | main judge가 Responses API 클라이언트 소유 + 테스트에서 FakeClient 제공 용이 |
 | audio deployment 누락 처리 | `judge()` 호출 시점에 endpoint env 체크, 누락이면 `judge_error=endpoint_missing` graceful return | import-time hard fail 피하고 audio 항목에서만 결속 (main judge는 계속 동작) |
 | grade-run.yml default config 교체 타이밍 | 2026-07-26 `default_v2_sol_max.yaml`로 전환 완료 | dry-run 기본, 명시적 paid 승인, protected `grading` environment를 함께 적용. 이전 5.4 config는 비교·재현용으로 보존. |
-| 207 legacy 주니케이션 범위 | **조건부 PARTIAL**: v1 sweep/tier configs (`validation_*`, `tiered_*`, `_sweep_template`, `recommended_*`) 명시 아카이브 + README + `_archive_v1/README.md`. **하지만** `core/grader.py`의 `_use_batch`/`_tier_judges`/`_summarize_deliverables`/`deliverable_extract_max_chars` 코드 렌더링 변경 없음. `core/grader_batch.py`도 올. | `default_gpt5pro.yaml`은 현재 default가 아니라 historical comparison identity로 보존. legacy 코드 제거는 별도 cleanup PR에서 기존 historical config 재현성과 함께 처리. |
+| 207 legacy 주니케이션 범위 | **조건부 PARTIAL** → **이후 해소됨 (PR3에서 확인)**: v1 sweep/tier configs (`validation_*`, `tiered_*`, `_sweep_template`, `recommended_*`) 명시 아카이브 + README + `_archive_v1/README.md`. **하지만** `core/grader.py`의 `_use_batch`/`_tier_judges`/`_summarize_deliverables`/`deliverable_extract_max_chars` 코드 렌더링 변경 없음. `core/grader_batch.py`도 올. | `default_gpt5pro.yaml`은 현재 default가 아니라 historical comparison identity로 보존. legacy 코드 제거는 별도 cleanup PR에서 기존 historical config 재현성과 함께 처리. **→ 그 cleanup은 실제로 이루어졌다.** 위 넷과 `core/grader_batch.py`는 현재 저장소에 없고 `tests/test_grader.py:875-896`이 부재를 검사한다. 이 행은 당시 결정의 기록으로 남기며, 현재 상태는 207 행을 본다. |
 
 ## 작업 흐름 (자동, 사용자 개입 없음)
 
