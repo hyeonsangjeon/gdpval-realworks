@@ -570,9 +570,75 @@ def _read_money(value: Any) -> Decimal | None:
     return parsed
 
 
+def _read_identity(value: Any) -> str | None:
+    """Read one identity field, keeping "not recorded" distinct from "empty".
+
+    Every falsy spelling — absent key, ``null``, empty string — comes back as
+    ``None``, because a receipt that names its model as ``""`` is making a
+    claim it cannot support. Only a non-empty string is treated as something
+    the run actually observed.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _identity_of(call: Mapping[str, Any]) -> tuple[str | None, ...]:
+    """The call identity a receipt line is grouped by.
+
+    Ordered widest-to-narrowest so that sorted output reads sensibly. Kept as a
+    tuple of optionals rather than a formatted string because two calls that
+    differ only in a field one of them never recorded are genuinely different
+    lines, and flattening them to text would hide that.
+    """
+    return (
+        _read_identity(call.get("provider")),
+        _read_identity(call.get("deployment")),
+        _read_identity(call.get("requested_model")),
+        _read_identity(call.get("resolved_model")),
+        _read_identity(call.get("api_version")),
+    )
+
+
+def _component_key(component: "ReceiptComponent") -> tuple[str | None, ...]:
+    """The identity two receipt lines must share before they may be added up.
+
+    Deliberately the same seven fields :func:`build_receipt` groups on, so that
+    summing published receipts lands on the same lines a single run would have
+    produced. Two lines differing in any one of them stay two lines.
+    """
+    return (
+        component.stage,
+        component.retry_kind,
+        component.provider,
+        component.deployment,
+        component.requested_model,
+        component.resolved_model,
+        component.api_version,
+    )
+
+
+def _component_order(item: tuple[Sequence[str | None], Any]) -> tuple[str, ...]:
+    """Sort key for component groups, tolerating unrecorded identity fields.
+
+    ``None`` and ``str`` do not compare in Python 3, and a run that recorded no
+    deployment is exactly the case this change exists to keep visible — so it
+    must not be the case that crashes the sort. Unrecorded sorts first.
+    """
+    return tuple("" if value is None else str(value) for value in item[0])
+
+
 @dataclass(frozen=True)
 class ReceiptComponent:
-    """One line of a receipt: what one stage, at one retry kind, cost."""
+    """One line of a receipt: what one stage, at one retry kind, cost.
+
+    A line is also pinned to *one* call identity. Two models called at the same
+    stage are two lines, never one summed line, because a single line carrying
+    two models' tokens cannot be priced by any table: the tokens belong to
+    entries with different rates. This is why ``perception`` used to arrive as
+    one unpriceable row when a visual reader and an audio reader had both run.
+    """
 
     stage: str
     retry_kind: str
@@ -581,6 +647,11 @@ class ReceiptComponent:
     known_cost_usd: Decimal
     usage: dict[str, int | None]
     missing_reasons: tuple[str, ...] = ()
+    provider: str | None = None
+    deployment: str | None = None
+    requested_model: str | None = None
+    resolved_model: str | None = None
+    api_version: str | None = None
 
     @property
     def name(self) -> str:
@@ -606,6 +677,11 @@ class ReceiptComponent:
             "known_cost_usd": _money(self.known_cost_usd),
             "usage": dict(self.usage),
             "missing_reasons": list(self.missing_reasons),
+            "provider": self.provider,
+            "deployment": self.deployment,
+            "requested_model": self.requested_model,
+            "resolved_model": self.resolved_model,
+            "api_version": self.api_version,
         }
 
     @classmethod
@@ -625,6 +701,14 @@ class ReceiptComponent:
             missing_reasons=tuple(sorted(_decode_reasons(
                 payload.get("missing_reasons")
             ))),
+            # Absent on receipts published before identity was recorded. Read
+            # back as None rather than defaulted, so an old line stays visibly
+            # unattributed instead of being credited to whatever ran last.
+            provider=_read_identity(payload.get("provider")),
+            deployment=_read_identity(payload.get("deployment")),
+            requested_model=_read_identity(payload.get("requested_model")),
+            resolved_model=_read_identity(payload.get("resolved_model")),
+            api_version=_read_identity(payload.get("api_version")),
         )
 
 
@@ -766,8 +850,10 @@ CREATE TABLE IF NOT EXISTS cost_calls (
     stage               TEXT NOT NULL,
     retry_kind          TEXT NOT NULL,
     provider            TEXT NOT NULL,
+    deployment          TEXT,
     requested_model     TEXT NOT NULL,
     resolved_model      TEXT,
+    api_version         TEXT,
     state               TEXT NOT NULL,
     input_tokens        INTEGER,
     cached_input_tokens INTEGER,
@@ -802,8 +888,10 @@ _CALL_COLUMNS = (
     "stage",
     "retry_kind",
     "provider",
+    "deployment",
     "requested_model",
     "resolved_model",
+    "api_version",
     "state",
     "input_tokens",
     "cached_input_tokens",
@@ -825,6 +913,16 @@ _RUNTIME_COLUMNS = (
     "attribution",
     "runtime_cost_usd",
     "missing_reasons",
+)
+
+#: The columns that say *whose* call a row is. Singled out from the rest
+#: because they are the only ones a local row can know more about than an
+#: arriving export does: a reservation records identity before the request
+#: goes out, whereas an export written by a build from before identity was
+#: recorded carries nothing in these fields at all. Merging must fill them in,
+#: never blank them out.
+_IDENTITY_COLUMNS = frozenset(
+    {"provider", "deployment", "requested_model", "resolved_model", "api_version"}
 )
 
 
@@ -865,7 +963,38 @@ class CostReceiptLedger:
         self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.execute("PRAGMA synchronous=FULL")
         self._connection.executescript(_SCHEMA)
+        self._migrate_columns()
         self._connection.commit()
+
+    def _migrate_columns(self) -> None:
+        """Add columns a ledger written by an older round does not have yet.
+
+        ``CREATE TABLE IF NOT EXISTS`` leaves an existing table exactly as it
+        was, so a resumed run reopening its predecessor's ledger would find the
+        old column set and fail on the first read that names a new one. Adding
+        them here keeps a round-2 process able to read round 1 — which is the
+        whole point of the ledger surviving between rounds.
+
+        Only ever additive, and only for nullable columns. A row written before
+        the column existed reads back ``NULL``, which is the truthful answer:
+        that run did not record it. Filling it in with a guess is what this
+        change exists to stop.
+        """
+        for table, columns in (
+            ("cost_calls", _CALL_COLUMNS),
+            ("cost_runtime", _RUNTIME_COLUMNS),
+        ):
+            present = {
+                str(row["name"])
+                for row in self._connection.execute(
+                    f"PRAGMA table_info({table})"
+                ).fetchall()
+            }
+            for column in columns:
+                if column not in present:
+                    self._connection.execute(
+                        f"ALTER TABLE {table} ADD COLUMN {column} TEXT"
+                    )
 
     # -- lifecycle -------------------------------------------------------
 
@@ -893,6 +1022,8 @@ class CostReceiptLedger:
         retry_kind: str,
         provider: str,
         requested_model: str,
+        deployment: str | None = None,
+        api_version: str | None = None,
         request_sha256: str | None = None,
         note: str | None = None,
     ) -> str:
@@ -900,6 +1031,19 @@ class CostReceiptLedger:
 
         Written before the request, so that a crash between here and the reply
         leaves evidence rather than silence.
+
+        ``deployment`` and ``api_version`` describe the route the request took,
+        and both are recorded here rather than at settle time because both are
+        known before it leaves. They exist because ``requested_model`` alone is
+        ambiguous: on Azure that string is a deployment alias, on a direct
+        provider it is a model name, and a reader holding only the string
+        cannot tell which — nor which API contract produced the reply that
+        ``resolved_model`` came from. Pricing keys off the resolved model, so
+        anything that leaves the reader guessing at these is what turns a
+        priceable call into an unpriceable one.
+
+        Both stay ``None`` where the caller does not know. A recorded ``None``
+        says "not captured"; it is not a claim that the concept did not apply.
         """
         _require(stage in STAGES, f"unknown stage {stage!r}")
         _require(retry_kind in RETRY_KINDS, f"unknown retry kind {retry_kind!r}")
@@ -916,8 +1060,9 @@ class CostReceiptLedger:
             return call_id
         self._connection.execute(
             "INSERT INTO cost_calls (call_id, run_id, task_id, stage, "
-            "retry_kind, provider, requested_model, state, missing_reasons, "
-            "request_sha256, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)",
+            "retry_kind, provider, deployment, requested_model, api_version, "
+            "state, missing_reasons, request_sha256, note) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)",
             (
                 call_id,
                 self.run_id,
@@ -925,7 +1070,9 @@ class CostReceiptLedger:
                 stage,
                 retry_kind,
                 str(provider),
+                None if deployment is None else str(deployment),
                 str(requested_model),
+                None if api_version is None else str(api_version),
                 STATE_RESERVED,
                 request_sha256,
                 note,
@@ -1248,7 +1395,7 @@ class CostReceiptLedger:
                         )
                     ),
                     tuple(
-                        _import_value(record, column)
+                        _promoted_value(record, existing, column)
                         for column in _CALL_COLUMNS
                         if column != "call_id"
                     )
@@ -1344,8 +1491,14 @@ def build_receipt(
     Abandoned calls contribute nothing and cost nothing — they never went out.
     Reserved-but-unsettled calls contribute nothing but *do* cost the receipt
     its ``complete`` status, because whether they were billed is unknown.
+
+    Lines are grouped by stage, retry kind *and* call identity. Grouping on the
+    stage alone was what turned a ``perception`` line into an unpriceable lump
+    the moment two different readers ran under it: one row of summed tokens
+    belonging to two models with two different rates, which no table can price
+    and no reader can take apart afterwards.
     """
-    per_component: dict[tuple[str, str], dict[str, Any]] = {}
+    per_component: dict[tuple[str | None, ...], dict[str, Any]] = {}
     reasons: set[str] = set()
     model_cost = Decimal(0)
     model_calls = 0
@@ -1357,7 +1510,8 @@ def build_receipt(
             continue
         stage = str(call.get("stage") or "")
         retry_kind = str(call.get("retry_kind") or RETRY_NONE)
-        key = (stage, retry_kind)
+        identity = _identity_of(call)
+        key = (stage, retry_kind, *identity)
         bucket = per_component.setdefault(
             key,
             {
@@ -1408,15 +1562,20 @@ def build_receipt(
     status = STATUS_PARTIAL if reasons else STATUS_COMPLETE
     components = tuple(
         ReceiptComponent(
-            stage=stage,
-            retry_kind=retry_kind,
+            stage=key[0] or "",
+            retry_kind=key[1] or RETRY_NONE,
             status=STATUS_PARTIAL if data["reasons"] else STATUS_COMPLETE,
             model_calls=data["model_calls"],
             known_cost_usd=data["known_cost_usd"],
             usage=data["usage"],
             missing_reasons=tuple(sorted(data["reasons"])),
+            provider=key[2],
+            deployment=key[3],
+            requested_model=key[4],
+            resolved_model=key[5],
+            api_version=key[6],
         )
-        for (stage, retry_kind), data in sorted(per_component.items())
+        for key, data in sorted(per_component.items(), key=_component_order)
     )
     return CostReceipt(
         status=status,
@@ -1461,6 +1620,7 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
     model_calls = 0
     totals = empty_usage()
     sha = None
+    merged: dict[tuple[str | None, ...], dict[str, Any]] = {}
     for receipt in contributing:
         reasons.update(receipt.missing_reasons)
         known += receipt.known_cost_usd
@@ -1473,6 +1633,26 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
             if value is None:
                 continue
             totals[name] = (totals[name] or 0) + int(value)
+        for component in receipt.components:
+            bucket = merged.setdefault(
+                _component_key(component),
+                {
+                    "model_calls": 0,
+                    "known_cost_usd": Decimal(0),
+                    "usage": empty_usage(),
+                    "reasons": set(),
+                    "statuses": set(),
+                },
+            )
+            bucket["model_calls"] += component.model_calls
+            bucket["known_cost_usd"] += component.known_cost_usd
+            bucket["reasons"].update(component.missing_reasons)
+            bucket["statuses"].add(component.status)
+            for name in bucket["usage"]:
+                value = component.usage.get(name)
+                if value is None:
+                    continue
+                bucket["usage"][name] = (bucket["usage"][name] or 0) + int(value)
     return CostReceipt(
         status=_summary_status(contributing),
         known_cost_usd=known,
@@ -1480,9 +1660,42 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
         runtime_cost_usd=runtime_cost,
         model_calls=model_calls,
         usage=totals,
+        components=tuple(
+            ReceiptComponent(
+                stage=key[0] or "",
+                retry_kind=key[1] or RETRY_NONE,
+                status=_merged_component_status(data["statuses"]),
+                model_calls=data["model_calls"],
+                known_cost_usd=data["known_cost_usd"],
+                usage=data["usage"],
+                missing_reasons=tuple(sorted(data["reasons"])),
+                provider=key[2],
+                deployment=key[3],
+                requested_model=key[4],
+                resolved_model=key[5],
+                api_version=key[6],
+            )
+            for key, data in sorted(merged.items(), key=_component_order)
+        ),
         price_table_sha256=sha,
         missing_reasons=tuple(sorted(reasons)),
     )
+
+
+def _merged_component_status(statuses: set[str]) -> str:
+    """The status of one summary line, from the per-task lines behind it.
+
+    Mirrors :func:`_summary_status` one level down: all-complete stays
+    complete, all-unavailable stays unavailable, and any mixture is partial.
+    Collapsing a mixture to ``complete`` would let one priced task hide an
+    unpriced one; collapsing it to ``unavailable`` would throw away a real
+    floor that was measured.
+    """
+    if statuses and statuses <= {STATUS_COMPLETE}:
+        return STATUS_COMPLETE
+    if statuses and statuses <= {STATUS_UNAVAILABLE}:
+        return STATUS_UNAVAILABLE
+    return STATUS_PARTIAL
 
 
 def _summary_status(contributing: Sequence[CostReceipt]) -> str:
@@ -1549,6 +1762,24 @@ def _import_value(record: Mapping[str, Any], column: str) -> Any:
     value = record.get(column)
     if column == "missing_reasons":
         return json.dumps(sorted(_decode_reasons(value)))
+    return value
+
+
+def _promoted_value(
+    record: Mapping[str, Any], existing: sqlite3.Row, column: str
+) -> Any:
+    """One column's value when a reserved row is promoted by an import.
+
+    Everything the arriving export knows wins, because it watched the call end
+    and this process only watched it leave. Identity is the exception: it is
+    written at reservation time, so the local row can hold a provider and a
+    deployment that an export from a build predating those columns simply does
+    not carry. Letting the blank win there would delete a fact to make room for
+    the absence of one.
+    """
+    value = _import_value(record, column)
+    if value is None and column in _IDENTITY_COLUMNS:
+        return existing[column]
     return value
 
 

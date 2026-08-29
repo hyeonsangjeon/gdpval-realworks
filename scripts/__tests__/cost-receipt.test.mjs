@@ -114,6 +114,14 @@ test('a component keeps its stage and retry kind', () => {
     model_calls: 3,
     usage: { input_tokens: 1200 },
     missing_reasons: [],
+    // This line was written before identity was recorded. It reads back
+    // unattributed rather than defaulted — the truthful answer, and the one
+    // that keeps an old receipt from being credited to whatever ran last.
+    provider: null,
+    deployment: null,
+    requested_model: null,
+    resolved_model: null,
+    api_version: null,
   });
 });
 
@@ -279,6 +287,65 @@ test('the same stage and retry kind twice is rejected', () => {
       components: [line, { ...line }],
     })),
     /duplicate component keys/,
+  );
+});
+
+test('two models read under one stage stay two lines', () => {
+  // The case this reader used to reject. Grading a deliverable with a picture
+  // and a recording in it calls a vision model and an audio model, both under
+  // `perception`. Keyed on the stage alone the second is a duplicate; summed
+  // into the first it is a row of tokens belonging to two price rates, which
+  // no table can price and no reader can take apart afterwards.
+  const projected = projectCostReceipt(receipt({
+    estimated_cost_usd: 0.2,
+    known_cost_usd: 0.2,
+    model_cost_usd: 0.2,
+    runtime_cost_usd: null,
+    components: [
+      component({
+        name: 'perception', stage: 'perception',
+        known_cost_usd: 0.1, model_calls: 1,
+        provider: 'azure', resolved_model: 'gpt-5.4',
+      }),
+      component({
+        name: 'perception', stage: 'perception',
+        known_cost_usd: 0.1, model_calls: 1,
+        provider: 'azure', resolved_model: 'gpt-audio-1.5',
+      }),
+    ],
+  }));
+  assert.deepEqual(
+    projected.components.map((line) => line.resolved_model),
+    ['gpt-5.4', 'gpt-audio-1.5'],
+  );
+});
+
+test('an unrecorded identity field reads back as null, not as a default', () => {
+  const [line] = projectCostReceipt(receipt({
+    components: [component({ provider: 'azure', deployment: '  gold-judge  ' })],
+  })).components;
+  assert.equal(line.provider, 'azure');
+  // Trimmed, because the surrounding whitespace is not part of the name.
+  assert.equal(line.deployment, 'gold-judge');
+  // Written before identity was recorded. Reads back unattributed rather than
+  // credited to whatever else was on the receipt.
+  assert.equal(line.requested_model, null);
+  assert.equal(line.resolved_model, null);
+  assert.equal(line.api_version, null);
+});
+
+test('an identity long enough to be prose is rejected', () => {
+  assert.throws(
+    () => projectCostReceipt(receipt({
+      components: [component({ deployment: 'x'.repeat(129) })],
+    })),
+    /too long to be an identifier/,
+  );
+  assert.throws(
+    () => projectCostReceipt(receipt({
+      components: [component({ provider: 7 })],
+    })),
+    /must be a string/,
   );
 });
 

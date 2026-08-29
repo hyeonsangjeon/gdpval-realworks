@@ -48,6 +48,8 @@ __all__ = [
     "CostRecorder",
     "MeteredClient",
     "ReportedUsage",
+    "api_version_of",
+    "deployment_of",
     "extract_usage",
     "open_cost_recorder",
     "read_reported_usage",
@@ -105,6 +107,30 @@ def _get(container: Any, name: str) -> Any:
     if isinstance(container, Mapping):
         return container.get(name)
     return getattr(container, name, None)
+
+
+def _probe(container: Any, name: str) -> Any:
+    """Ask an object for an attribute, accepting "no answer" as an answer.
+
+    Kept separate from :func:`_get` because this one reads *clients*, and a
+    client is entitled to be hostile about attribute access. Step 2's typed
+    Azure route wraps its client in a proxy that turns every failed lookup into
+    a ``RuntimeError`` so provider exceptions cannot leak — which defeats
+    ``getattr``'s default and would let a metering question kill the call it was
+    only watching.
+
+    Metering observes; it does not participate. So a container that refuses to
+    answer is recorded as having said nothing, which is what ``None`` means
+    everywhere else in this module. It never means the value was empty.
+    """
+    if container is None:
+        return None
+    if isinstance(container, Mapping):
+        return container.get(name)
+    try:
+        return getattr(container, name)
+    except Exception:
+        return None
 
 
 def _first_int(container: Any, *names: str) -> int | None:
@@ -239,6 +265,49 @@ def resolved_model_of(response: Any, fallback: str) -> str:
     return fallback
 
 
+def api_version_of(client: Any) -> str | None:
+    """The API version this client will put on the wire, if it has one.
+
+    Read off the client rather than asked of the caller, because the client is
+    what actually sends it: ``AzureOpenAI.__init__`` resolves the argument (or
+    ``OPENAI_API_VERSION``) and keeps the result in ``_api_version``, and that
+    resolved value is the one on every request. A direct provider has no such
+    concept and correctly answers ``None``.
+
+    Recorded because ``resolved_model`` alone does not say which API contract
+    produced it, and two contracts can name the same model differently.
+    """
+    found = _probe(client, "_api_version")
+    if isinstance(found, str) and found.strip():
+        return found.strip()
+    return None
+
+
+def deployment_of(client: Any, requested: str | None) -> str | None:
+    """The deployment a request is routed to, where that is knowable.
+
+    Not an inference — this is the SDK's own routing rule. ``AzureOpenAI``
+    builds ``…/openai/deployments/{name}/…`` from the client-level
+    ``azure_deployment`` when one was given, and otherwise from the per-request
+    ``model`` argument. So on Azure the string a caller passes as the model IS
+    the deployment, which is precisely the ambiguity that makes a receipt
+    carrying only ``requested_model`` unpriceable: the reader cannot tell
+    whether they are holding an alias or a model name.
+
+    Anything that is not an Azure client answers ``None``, because it has no
+    deployment. ``None`` here means "does not apply or was not observed" — it
+    never means the deployment was empty.
+    """
+    pinned = _probe(client, "_azure_deployment")
+    if isinstance(pinned, str) and pinned.strip():
+        return pinned.strip()
+    # Presence only. The endpoint itself is never read out or recorded.
+    if _probe(client, "_azure_endpoint") is None:
+        return None
+    text = (requested or "").strip()
+    return text or None
+
+
 # ── The recorder ─────────────────────────────────────────────────────────
 
 
@@ -331,6 +400,8 @@ class CostRecorder:
         provider: str,
         model: str | None = None,
         stage: str | None = None,
+        deployment: str | None = None,
+        api_version: str | None = None,
     ) -> "MeteredClient":
         """Wrap a provider client so its calls record themselves.
 
@@ -339,6 +410,12 @@ class CostRecorder:
         perception reader sharing the judge's client still lands in its own
         component: the two get two wrappers around one connection, and the
         task in scope is taken from the enclosing block either way.
+
+        ``deployment`` and ``api_version`` are overrides. Left unset — which is
+        the normal case — both are read off the client itself, since the client
+        is what puts them on the wire and asking the caller to restate them
+        invites the two drifting apart. Pass one only where the caller knows
+        something the client object does not.
         """
         if stage is not None and stage not in STAGES:
             raise ValueError(f"unknown stage {stage!r}")
@@ -348,6 +425,8 @@ class CostRecorder:
             provider=str(provider),
             default_model=model,
             stage=stage,
+            deployment=deployment,
+            api_version=api_version,
         )
 
     def record_call(
@@ -357,6 +436,8 @@ class CostRecorder:
         requested_model: str,
         response: Any,
         attribution: Attribution | None = None,
+        deployment: str | None = None,
+        api_version: str | None = None,
     ) -> str | None:
         """File a call that has already happened.
 
@@ -364,6 +445,11 @@ class CostRecorder:
         wrapped. Reserves and settles in one go, which means it cannot show a
         request that left and never came back — use :meth:`meter` where the
         call can be intercepted.
+
+        Nothing here can see the client, so ``deployment`` and ``api_version``
+        are the caller's to supply. Unsupplied, they are recorded as unknown
+        rather than filled in from the request — a caller owning its own
+        transport is exactly the caller whose routing we cannot observe.
         """
         target = attribution or self.current()
         if target is None:
@@ -376,6 +462,8 @@ class CostRecorder:
             retry_kind=target.retry_kind,
             provider=provider,
             requested_model=requested_model,
+            deployment=deployment,
+            api_version=api_version,
         )
         self.ledger.settle(
             call_id,
@@ -459,12 +547,20 @@ class MeteredClient:
         provider: str,
         default_model: str | None = None,
         stage: str | None = None,
+        deployment: str | None = None,
+        api_version: str | None = None,
     ):
         object.__setattr__(self, "_inner", inner)
         object.__setattr__(self, "_recorder", recorder)
         object.__setattr__(self, "_provider", provider)
         object.__setattr__(self, "_default_model", default_model)
         object.__setattr__(self, "_stage", stage)
+        object.__setattr__(self, "_deployment", deployment)
+        # Resolved once, because a client's API version does not change between
+        # calls. An explicit argument wins; otherwise the client is asked.
+        object.__setattr__(
+            self, "_api_version", api_version or api_version_of(inner)
+        )
         object.__setattr__(self, "last_call_id", None)
 
     # -- the two request surfaces ----------------------------------------
@@ -529,6 +625,13 @@ class MeteredClient:
             or object.__getattribute__(self, "_default_model")
             or ""
         )
+        inner = object.__getattribute__(self, "_inner")
+        # Per call, because on Azure the deployment can be the request's own
+        # ``model`` argument — one wrapper around one connection can legitimately
+        # address two deployments.
+        deployment = object.__getattribute__(
+            self, "_deployment"
+        ) or deployment_of(inner, requested)
         call_id = recorder._next_call_id(attribution)
         recorder.ledger.reserve(
             call_id=call_id,
@@ -537,6 +640,8 @@ class MeteredClient:
             retry_kind=attribution.retry_kind,
             provider=object.__getattribute__(self, "_provider"),
             requested_model=requested,
+            deployment=deployment,
+            api_version=object.__getattribute__(self, "_api_version"),
         )
         object.__setattr__(self, "last_call_id", call_id)
         response = call(**kwargs)

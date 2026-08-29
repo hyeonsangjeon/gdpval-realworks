@@ -74,7 +74,12 @@
           "type": "array",
           "uniqueItems": true,
           "items": {"$ref": "#/$defs/costMissingReason"}
-        }
+        },
+        "provider": {"type": ["string", "null"], "minLength": 1},
+        "deployment": {"type": ["string", "null"], "minLength": 1},
+        "requested_model": {"type": ["string", "null"], "minLength": 1},
+        "resolved_model": {"type": ["string", "null"], "minLength": 1},
+        "api_version": {"type": ["string", "null"], "minLength": 1}
       }
     },
     "costReceipt": {
