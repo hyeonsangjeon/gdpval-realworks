@@ -418,18 +418,29 @@ def _reference_basenames(reference_files: list[str], reference_file_urls: list[s
     return names
 
 
+# An extension only asks for a format when it is written on its own -- "as a
+# single .pdf", "deliver one .xlsx". Written against a name it is naming a file
+# instead: "pm duties final.pdf", "territory_fit_report_ref_(3).xlsx". The
+# patterns below reach across the whole task with ``.*``, and _norm has already
+# folded the prompt and every rubric line into one line, so without this the
+# ``.pdf`` of a reference input the task was told to read against satisfies
+# ``final.*\.pdf`` from a trigger word several sentences away. Requiring a space
+# in front is what separates the two readings.
+_STANDALONE = r"(?<!\S)"
+
+
 def _required_primary_extensions(text: str) -> set[str]:
     low = _norm(text)
     exts: set[str] = set()
     strong_patterns = [
-        (r"(single|exactly one|final|primary|deliverable).*\.pdf|single pdf|exactly one .*pdf", {".pdf"}),
-        (r"(single|exactly one|final|primary|deliverable).*\.docx|single microsoft word|single word file", WORD_EXTENSIONS),
-        (r"(single|exactly one|final|primary|deliverable).*\.xlsx|single excel workbook|single workbook", SPREADSHEET_EXTENSIONS),
-        (r"(single|exactly one|final|primary|deliverable).*\.pptx|single powerpoint|single presentation", PRESENTATION_EXTENSIONS),
-        (r"(single|all content|deliverable).*\.zip|single \.zip|single zip", {".zip"}),
+        (rf"(single|exactly one|final|primary|deliverable).*{_STANDALONE}\.pdf|single pdf|exactly one .*pdf", {".pdf"}),
+        (rf"(single|exactly one|final|primary|deliverable).*{_STANDALONE}\.docx|single microsoft word|single word file", WORD_EXTENSIONS),
+        (rf"(single|exactly one|final|primary|deliverable).*{_STANDALONE}\.xlsx|single excel workbook|single workbook", SPREADSHEET_EXTENSIONS),
+        (rf"(single|exactly one|final|primary|deliverable).*{_STANDALONE}\.pptx|single powerpoint|single presentation", PRESENTATION_EXTENSIONS),
+        (rf"(single|all content|deliverable).*{_STANDALONE}\.zip|single \.zip|single zip", {".zip"}),
         (r"(audio file|wav file|delivered audio|deliverable audio)", AUDIO_EXTENSIONS),
-        (r"(final deliverable).*\.mp4|final .*mp4|mp4 video|final composited video|final video", VIDEO_EXTENSIONS),
-        (r"python notebook|\.ipynb|notebook file", {".ipynb"}),
+        (rf"(final deliverable).*{_STANDALONE}\.mp4|final .*mp4|mp4 video|final composited video|final video", VIDEO_EXTENSIONS),
+        (rf"python notebook|{_STANDALONE}\.ipynb|notebook file", {".ipynb"}),
     ]
     for pattern, matched in strong_patterns:
         if re.search(pattern, low):
