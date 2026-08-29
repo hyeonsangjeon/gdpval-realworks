@@ -88,14 +88,20 @@ def test_happy_path_parses_verdict(wav_file):
 
 
 def test_a_reply_with_no_cache_breakdown_is_still_counted(wav_file):
-    """What ``gpt-audio-1.5`` actually sends back, and what it used to cost.
+    """A reply without ``input_tokens_details`` is priced, not written off.
 
-    The listening model answers without ``input_tokens_details``. Both counts
-    that decide the bill are there; the reply is simply saying that nothing
-    was served from cache. Reading the absent breakdown as *unknown usage* set
-    ``usage_complete`` false on every audio item, and the run's token guard
-    turns one such item into a failed shard -- after the whole shard has been
-    paid for.
+    Both counts that decide the bill are present; the missing breakdown only
+    declines to say how much of the input came from cache. Cached input is a
+    *part* of the input, never an addition to it, so counting the whole thing
+    at the uncached rate can only overstate the bill -- and overstating is the
+    safe direction for a number the run has to stand behind.
+
+    What this test does **not** claim is that ``gpt-audio-1.5`` behaves this
+    way. Nobody knows: until the content-part key was corrected, every audio
+    call was rejected with a 400 before it reached the model, so no reply from
+    it has ever been observed. The rule is pinned here because the three sites
+    that keep running token totals share it, and a shared rule only stays
+    shared if each site is held to it.
     """
     client = FakeClient(
         FakeResponses(usage=SimpleNamespace(input_tokens=70, output_tokens=12))
