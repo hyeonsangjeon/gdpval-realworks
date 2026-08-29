@@ -261,7 +261,13 @@ export function projectCostReceipt(value, field = 'cost receipt') {
   // A line is identified by the pair, not by its label. Generation that had to
   // be redone and Self-QA that had to be redone both display as 재시도, and
   // rejecting the second as a duplicate would throw away a real charge.
-  const keys = components.map((component) => `${component.stage} ${component.retry_kind}`);
+  // The separator is a NUL, which cannot occur inside a slug, so no pair of
+  // values can spell another pair's key. Written as the `\0` escape rather
+  // than as the byte itself, so the file stays plain text to grep, to diff,
+  // and to anyone reading the change.
+  const keys = components.map(
+    (component) => `${component.stage}\0${component.retry_kind}`,
+  );
   if (keys.length !== new Set(keys).size) {
     fail(field, 'carries duplicate component keys');
   }
