@@ -354,6 +354,65 @@ test('unavailable receipts are counted but never priced', () => {
   assert.equal(summary.known_cost_usd, 0);
 });
 
+test('a run against a model with no published price stays partial, not not_run', () => {
+  // The shape Stage 3 actually produced. `azure:gpt-5.6-sol` is absent from
+  // experiments/execution_envelope/model_price_table.json, so every judge call
+  // settles `price_missing` and the receipt's known floor is $0 — the contract
+  // working, since the calls and their tokens are kept and only the USD is
+  // refused. `measuredAmount` then nulls that floor so no reader takes it for
+  // "so far it has cost nothing", which leaves the run with nothing measured.
+  //
+  // Nothing measured is not nothing done. Deciding the run's state from the
+  // amounts sent this past `partial` to `not_run`, which renders as 미채점
+  // beside 17 graded tasks and 1784 calls.
+  const unpriced = projectCostReceipt(unmeasured('partial', {
+    model_calls: 114,
+    usage: { input_tokens: 3142728, output_tokens: 46245 },
+    missing_reasons: ['price_missing'],
+    components: [
+      component({
+        name: 'grading',
+        stage: 'grading',
+        status: 'partial',
+        known_cost_usd: 0,
+        model_calls: 113,
+        missing_reasons: ['price_missing'],
+      }),
+    ],
+  }));
+
+  const summary = summarizeCostReceipts([row(unpriced), row(unpriced)]);
+
+  assert.equal(summary.status, 'partial');
+  assert.equal(summary.partial_tasks, 2);
+  assert.equal(summary.not_run_tasks, 0);
+  assert.equal(summary.measured_tasks, 0);
+  // No figure was measured, so none is offered. The run is still not erased.
+  assert.equal(summary.estimated_cost_usd, null);
+  assert.deepEqual(summary.missing_reasons, ['price_missing']);
+});
+
+test('work that never ran does not stop the rest being a total', () => {
+  // cost_receipts.py drops not_run receipts before deciding the summary's
+  // status, so a run where one task was skipped and the rest priced cleanly is
+  // complete. Agreeing with it matters more than either answer alone: the
+  // dashboard reads this summariser and the report reads that one, off the
+  // same file.
+  const summary = summarizeCostReceipts(
+    [
+      row(projectCostReceipt(receipt())),
+      row(projectCostReceipt(unmeasured('not_run'))),
+    ],
+    { successfulDeliverables: 1 },
+  );
+
+  assert.equal(summary.status, 'complete');
+  assert.equal(summary.not_run_tasks, 1);
+  assert.equal(summary.known_cost_usd, 0.25);
+  assert.equal(summary.estimated_cost_usd, 0.25);
+  assert.equal(summary.cost_per_successful_deliverable_usd, 0.25);
+});
+
 test('failed-task cost is reported beside the total, not removed from it', () => {
   const summary = summarizeCostReceipts(
     [
