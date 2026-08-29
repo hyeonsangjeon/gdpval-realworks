@@ -409,6 +409,38 @@ def _validated_final_envelope(
     return verdict, partial, confidence
 
 
+#: ``audio_judge`` refusals the judge can put right by asking again. Each one
+#: is a bad argument -- a path outside the allowlist, a path that is not a
+#: file, a member that is not in the archive, a ``member`` that is not a
+#: string -- and the tool answers with the message that says so, including
+#: the archive's actual contents. The judge is meant to read that and retry,
+#: so these must not end the item.
+_CORRECTABLE_AUDIO_ERROR_TYPES = frozenset({"bad_path", "bad_args", "bad_scope"})
+
+
+def _unanswerable_audio_reason(result: Mapping[str, Any]) -> Optional[str]:
+    """Why the listening model could not answer, or ``None`` if the judge asked wrong.
+
+    The distinction this draws is who has to act. A bad path is the judge's
+    to fix and it has what it needs to fix it. A sub-judge that ran and
+    returned an error, a sub-judge that was never configured, an exception on
+    the way -- none of those get better by asking again in the same way, and
+    none of them say anything about the deliverable.
+    """
+    if result.get("ok"):
+        return None
+    error_type = result.get("error_type")
+    if isinstance(error_type, str) and error_type in _CORRECTABLE_AUDIO_ERROR_TYPES:
+        return None
+    data = result.get("data")
+    if isinstance(data, Mapping):
+        # The sub-judge itself ran and reported why it could not answer;
+        # carry its own word for it rather than inventing a second vocabulary.
+        detail = data.get("judge_error") or "unknown"
+        return f"audio_perception_failed:{detail}"
+    return f"audio_perception_failed:{error_type or 'unknown'}"
+
+
 def _finalization_retry_reason(
     final_text: str,
     response: Any,
@@ -614,6 +646,13 @@ class ToolCallingJudge:
         usage_complete = prepass.usage_complete
         final_text = ""
         judge_error: Optional[str] = None
+        # What the listening model did for this item, kept apart from the
+        # tool-call tally because the two answer different questions. The
+        # tally says how many times it was asked; these say whether it ever
+        # actually answered. An item that asked and never got an answer
+        # cannot be marked from what it heard.
+        audio_answered = False
+        audio_unanswerable: Optional[str] = None
         finalization_only = False
         finalization_retries_used = 0
 
@@ -773,6 +812,12 @@ class ToolCallingJudge:
                     )
                     if tool_name == "audio_judge":
                         self._accumulate_perception_result(prepass, result)
+                        if result.get("ok"):
+                            audio_answered = True
+                        else:
+                            reason = _unanswerable_audio_reason(result)
+                            if reason is not None and audio_unanswerable is None:
+                                audio_unanswerable = reason
                     messages.append(self._function_call_output_message(fc, result))
                 # Loop again to let the model react to the tool outputs.
                 continue
@@ -812,6 +857,20 @@ class ToolCallingJudge:
             break
         else:
             judge_error = "max_iterations_exceeded"
+
+        # The listening model was asked and never answered, and no later
+        # attempt recovered. Whatever the judge wrote about this criterion, it
+        # did not write it from having heard the audio -- so the item is a
+        # judge error and is excluded from the score, exactly as a failed
+        # visual prepass already is. Scoring it instead would take marks off a
+        # deliverable for a failure on the grader's own side, which reads as
+        # the work being wrong when nothing about the work is known.
+        #
+        # An attempt that failed and then succeeded is not an error: the run
+        # heard the audio in the end, which is the only thing the mark depends
+        # on. Only "asked, never heard" excludes.
+        if judge_error is None and audio_unanswerable is not None and not audio_answered:
+            judge_error = audio_unanswerable
 
         return self._build_result(
             item=item,
