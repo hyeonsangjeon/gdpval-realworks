@@ -40,7 +40,23 @@ entries land under a fresh dated heading the day they merge to `main`.
   judge could not see the deliverable and was lenient about what it could not
   read. Report in `data/grades/_validation/PR3_EXP003_REVALIDATION.md`.
 
-  <!-- FILL: 303 sentence -->
+  Repeating that gold grading three times, changing nothing, put the corpus
+  mean at **82.87 · 83.07 · 83.25%** — a spread of 0.37pp — and cleared all
+  three stability gates the specification set: worst per-task deviation
+  **4.02pp** (ceiling 5), judge error rate **0.09%** (ceiling 2), bootstrap 95%
+  confidence interval **7.26pp** wide (ceiling 10). The ~83% ceiling is
+  therefore a property of the grader, not of one lucky run. Two limits are
+  recorded rather than smoothed over. The confidence-interval gate turns out to
+  measure how far the thirty tasks sit from each other rather than how far a
+  repeat moves — resampling runs alone gives 0.86pp, an order of magnitude
+  narrower — so passing it is not evidence of repeat stability. And chasing the
+  single worst-moving task found a defect the gold-ceiling stage had observed
+  but not explained: an item the judge fails to answer is dropped from the
+  denominator as well as the numerator, so **the maximum score itself changes
+  between runs** (three of thirty tasks). That task's 7.05pp swing came entirely
+  from its maximum moving 22 → 24 — the points awarded were 18.6 both times.
+  Whether to keep that rule is an owner decision, logged as a follow-up. Report
+  in `tasks/rebuilding_grading_task/PR3_VARIANCE.md`.
 
   One item is deliberately left open. The cost-budget re-estimate (302) was
   built on a three-task projection, and real 220-task and repeated 30-task runs

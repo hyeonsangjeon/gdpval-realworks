@@ -23,7 +23,16 @@
 | judge 오류율 | < **2%** | 도구 호출 경로가 답을 못 내는 비율. 1단계와 같은 기준 |
 | 평균의 95% 신뢰구간 폭 | < **10.0**pp | 이 코퍼스로 낸 평균값에 붙는 불확실성의 크기 |
 
-<!-- FILL: 한 줄 결론 -->
+**셋 다 통과했다.** 가장 심하게 움직인 과제의 표준편차 **4.02**pp, judge 오류율
+**0.09%**, 신뢰구간 폭 **7.26**pp.
+
+코퍼스 평균은 세 번 모두 83% 근처에 떨어졌다 — **82.87% · 83.07% · 83.25%**,
+가장 먼 두 값의 차이가 **0.37**pp다. 그러므로 1단계의 82.87%는 그날의 운이 아니고,
+"이 항목에서 2.0점을 잃었다"는 1단계의 문장들은 잡음이 아닌 것을 읽고 있었다.
+
+다만 **평균이 잠잠한 것과 과제 하나하나가 잠잠한 것은 다르다.** 30개 중 4개는
+5pp 넘게 벌어진 폭 안에서 움직였고, 그 사실은 평균 어디에도 나타나지 않는다.
+아래의 나머지는 대부분 그 차이에 관한 것이다.
 
 ## 명세와 달라진 점 — 하나, 그리고 그 이유
 
@@ -90,7 +99,17 @@
 **보고는 하되 판정에는 쓰지 않는다.** 아래 결과 블록의 `azure route` 줄이 세
 실행이 실제로 지나간 경로 전부다.
 
-<!-- FILL: 관측된 경로 지문 목록 -->
+세 실행이 관측한 경로 지문은 **둘이고, 세 실행 모두 같은 둘이다.**
+
+```
+4883551d5001c23b50b24d0f2290fc01a6febacf73374667fce8a0c7111de517
+5df8d48b6568d7a6ae41c99f61044cdab00e6cdee4cbc1ac4960efcf3881e5e7
+```
+
+즉 이번에는 얼리지 않은 항목이 실제로도 움직이지 않았다. **그렇다고 얼렸어야
+했다는 뜻은 아니다.** 이 셋이 같은 둘을 본 것은 세 번 다 shard 3개로 같은 30과제를
+같은 방식으로 나눴기 때문이고, 과제 수나 shard 수가 달라지면 조합도 달라진다.
+얼렸다면 이번 세 번은 통과했겠지만 그 다음 실행이 아무 결함 없이 걸렸을 것이다.
 
 ## 방법
 
@@ -131,7 +150,115 @@
 
 ## 결과
 
-<!-- FILL: generated block -->
+<!-- generated: python batch-runner/scripts/analyze_variance.py data/grades/_diagnostic/82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_30_v2_sol_max__cfg_d1bfc8217c9981d2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_c33d9d55703fbf5d__v2.2.json data/grades/_diagnostic/82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b/_repeats/run-002/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_30_v2_sol_max__cfg_d1bfc8217c9981d2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_c33d9d55703fbf5d__v2.2.json data/grades/_diagnostic/82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b/_repeats/run-003/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_30_v2_sol_max__cfg_d1bfc8217c9981d2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_c33d9d55703fbf5d__v2.2.json -->
+```text
+Repeat variance — stage 2
+====================================================================
+  run 1    data/grades/_diagnostic/82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_30_v2_sol_max__cfg_d1bfc8217c9981d2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_c33d9d55703fbf5d__v2.2.json
+  run 2    data/grades/_diagnostic/82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b/_repeats/run-002/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_30_v2_sol_max__cfg_d1bfc8217c9981d2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_c33d9d55703fbf5d__v2.2.json
+  run 3    data/grades/_diagnostic/82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b/_repeats/run-003/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_30_v2_sol_max__cfg_d1bfc8217c9981d2__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_c33d9d55703fbf5d__v2.2.json
+
+  task list       82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b
+  grader source   c33d9d55703fbf5de5f988d427e34efd44d7a73306412caac88a753bad16ff4e
+  judge           gpt-5.6-sol (effort max, temperature 0, seed 42)
+  grading config  gold_ceiling_30_v2_sol_max / d1bfc8217c9981d2
+  prompt          prompts/grader_judge.md v2.2
+  renderer        LibreOffice 24.2.7.2 420(Build:2), pymupdf 1.28.2
+  gold revision   11e7900cdcac61bc4daf59e65feb238acda98fbf
+
+Thresholds
+--------------------------------------------------------------------
+  runs compared           3   (needs >= 3)   PASS
+  worst task stdev        4.0221pp   (needs <= 5.0pp)   PASS
+  judge error rate        0.0009   (needs < 0.02)   PASS
+  95% CI width            7.257pp   (needs < 10.0pp)   PASS
+
+Corpus mean
+--------------------------------------------------------------------
+  per run                 82.8733%, 83.0727%, 83.2457%
+  across runs             83.0639%
+  spread / stdev          0.3723pp / 0.1863pp
+
+95% confidence interval on the corpus mean (bootstrap)
+--------------------------------------------------------------------
+  tasks and runs         [79.19%, 86.447%]   width 7.257pp
+  tasks only             [79.1943%, 86.5178%]   width 7.3235pp
+  runs only              [82.627%, 83.489%]   width 0.862pp
+  10000 resamples, seed 20260828, sampled with replacement
+
+Per-task stability
+--------------------------------------------------------------------
+  stdev across 30 task(s): worst 4.0221pp, mean 1.1042pp, median 0.6681pp
+  scored identically in every run: 1 task(s)
+  over the 5.0pp ceiling: none
+
+Least stable tasks
+--------------------------------------------------------------------
+  stdev  4.0221pp  range   7.05pp  a328feea-47db-4856-b4be-2bdc63dd88fb
+      84.55%, 77.50%, 84.38%  ·  Administrative Services Managers
+  stdev  3.2843pp  range   5.86pp  f84ea6ac-8f9f-428c-b96c-d0884e30f7c7
+      86.57%, 92.07%, 86.21%  ·  Administrative Services Managers
+  stdev  3.1755pp  range   6.28pp  dfb4e0cd-a0b7-454e-b943-0dd586c2764c
+      72.09%, 69.77%, 76.05%  ·  Compliance Officers
+  stdev  3.0672pp  range   5.51pp  ee09d943-5a11-430a-b7a2-971b4e9b01b5
+      82.15%, 76.64%, 81.73%  ·  Accountants and Auditors
+  stdev  1.6782pp  range   3.17pp  f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb
+      84.68%, 87.85%, 87.22%  ·  Audio and Video Technicians
+  stdev  1.5363pp  range   3.06pp  38889c3b-e3d4-49c8-816a-3cc8e5313aba
+      67.42%, 69.19%, 66.13%  ·  Audio and Video Technicians
+  stdev  1.4737pp  range   2.94pp  a74ead3b-f67d-4b1c-9116-f6bb81b29d4f
+      74.71%, 76.00%, 77.65%  ·  Child, Family, and School Social Workers
+  stdev  1.4087pp  range   2.44pp  2696757c-1f8a-4959-8f0d-f5597b9e70fc
+      92.68%, 95.12%, 95.12%  ·  Compliance Officers
+  stdev   1.355pp  range   2.62pp  83d10b06-26d1-4636-a32c-23f92c57f30b
+      66.90%, 69.52%, 68.81%  ·  Accountants and Auditors
+  stdev  1.3437pp  range   2.67pp  c357f0e2-963d-4eb7-a6fa-3078fe55b3ba
+      49.29%, 50.36%, 47.69%  ·  Computer and Information Systems Managers
+  ... and 20 more (use --json for all of them)
+
+Judge errors
+--------------------------------------------------------------------
+  run 1    2/1433 = 0.0014   PASS
+  run 2    0/1433 = 0.0   PASS
+  run 3    2/1433 = 0.0014   PASS
+  pooled   4/4299 = 0.0009
+
+Usage per run
+--------------------------------------------------------------------
+  run 1  graded at 2026-08-28T18:41:32Z
+      judge calls         3735 (3631 main, 104 perception)
+        mixed              1
+        visual             103
+      main tokens         in 27299254, out 1392576, cached 13103993
+      perception tokens   in 266033, out 37479
+      judge latency       26264.17s, usage complete True
+      estimated cost      UNKNOWN — not every model used has a published price
+      unpriced models     ['gpt-5.6-sol', 'gpt-audio-1.5']
+      azure route         4883551d5001c23b50b24d0f2290fc01a6febacf73374667fce8a0c7111de517
+      azure route         5df8d48b6568d7a6ae41c99f61044cdab00e6cdee4cbc1ac4960efcf3881e5e7
+  run 2  graded at 2026-08-28T22:38:04Z
+      judge calls         3738 (3634 main, 104 perception)
+        mixed              1
+        visual             103
+      main tokens         in 26689319, out 1393484, cached 12709773
+      perception tokens   in 266033, out 42022
+      judge latency       24833.42s, usage complete True
+      estimated cost      UNKNOWN — not every model used has a published price
+      unpriced models     ['gpt-5.6-sol', 'gpt-audio-1.5']
+      azure route         4883551d5001c23b50b24d0f2290fc01a6febacf73374667fce8a0c7111de517
+      azure route         5df8d48b6568d7a6ae41c99f61044cdab00e6cdee4cbc1ac4960efcf3881e5e7
+  run 3  graded at 2026-08-29T01:22:18Z
+      judge calls         3766 (3662 main, 104 perception)
+        mixed              1
+        visual             103
+      main tokens         in 27266562, out 1385129, cached 13001172
+      perception tokens   in 266033, out 42267
+      judge latency       24433.4s, usage complete True
+      estimated cost      UNKNOWN — not every model used has a published price
+      unpriced models     ['gpt-5.6-sol', 'gpt-audio-1.5']
+      azure route         4883551d5001c23b50b24d0f2290fc01a6febacf73374667fce8a0c7111de517
+      azure route         5df8d48b6568d7a6ae41c99f61044cdab00e6cdee4cbc1ac4960efcf3881e5e7
+```
 
 ## 읽는 법
 
@@ -191,4 +318,159 @@ published price`라고 나온다. 결과 파일의 `pricing_complete`가 `false`
 
 ## 판정
 
-<!-- FILL -->
+| 기준 | 결과 | |
+|---|---|---|
+| 과제별 점수 표준편차 ≤ 5.0pp | **4.0221**pp | 통과 |
+| judge 오류율 < 2% | **0.09%** (4 / 4,299) | 통과 |
+| 평균의 95% 신뢰구간 폭 < 10.0pp | **7.257**pp | 통과 |
+
+**세 기준 모두 통과했으므로 303은 닫힌다.** 명세가 오류율 초과에 대비해 적어 둔
+사다리(`reasoning_effort` medium → high, 그래도 안 되면 도구 호출 cap 조정)는
+쓸 일이 없었다. 참고로 쓸 수도 없었다 — 이 채점의 `reasoning_effort`는 이미
+`max`이고, 사다리의 첫 칸은 올릴 자리가 없다. 초과했다면 두 번째 칸부터
+시작해야 했을 것이다.
+
+### 이 통과가 보증하는 것
+
+**코퍼스 평균은 인용해도 된다.** 세 번의 평균이 82.87 · 83.07 · 83.25%로 폭
+0.37pp 안에 들어왔고, 실행만 다시 뽑은 신뢰구간도 0.86pp다. 1단계가 낸
+"정답의 천장은 약 83%"는 반복해도 같은 자리에 있다.
+
+세 값이 계속 오른 것은 눈에 띄지만 **추세로 읽을 근거가 없다.** 세 숫자가 우연히
+오름차순으로 놓일 확률은 3분의 1이다.
+
+### 이 통과가 보증하지 않는 것 — 기준 자체의 한계
+
+**과제 하나의 점수는 같은 신뢰를 갖지 않는다.** 30개 중 4개가 5pp보다 넓은 폭
+안에서 움직였다.
+
+| 과제 | 세 번의 점수 | 폭 | 표준편차 |
+|---|---|---|---|
+| `a328feea` (행정서비스 관리자) | 84.55 · 77.50 · 84.38 | **7.05**pp | 4.02 |
+| `dfb4e0cd` (준법감시 담당자) | 72.09 · 69.77 · 76.05 | **6.28**pp | 3.18 |
+| `f84ea6ac` (행정서비스 관리자) | 86.57 · 92.07 · 86.21 | **5.86**pp | 3.28 |
+| `ee09d943` (회계사·감사) | 82.15 · 76.64 · 81.73 | **5.51**pp | 3.07 |
+
+넷 다 기준을 통과했다. **그런데 통과한 방식을 봐야 한다.** 값 세 개의 표준편차는
+아무리 커도 폭을 √3으로 나눈 값을 넘지 못한다. 즉 **"표준편차 ≤ 5pp"는 3회
+반복에서 폭 8.66pp까지를 허용한다.** 같은 답안이 같은 채점기에서 8.66점 움직여도
+이 기준은 통과라고 말한다.
+
+이건 도구가 봐준 것이 아니라 명세가 고른 통계량이 그런 성질을 갖는다는 뜻이다.
+그래서 위 블록의 `Least stable tasks`는 표준편차와 **폭을 나란히** 적는다. 판정은
+명세대로 표준편차로 하되, 읽는 사람이 실제 움직임을 볼 수 있어야 하기 때문이다.
+
+실용적인 결론은 이렇다. **코퍼스 단위 숫자는 ±0.2pp 수준으로 믿어도 되고,
+과제 하나의 점수는 ±3pp 정도를 달고 읽어야 한다.** 1단계 보고서가 손실을
+항목 유형별 **합계**로 셌기 때문에 그 결론들은 이 구분의 안전한 쪽에 있다.
+
+### 나머지 26개는 매우 안정적이다
+
+위 넷을 빼면 그림이 다르다. 30개의 표준편차는 **중앙값 0.67pp**이고, 한 과제는
+세 번 모두 **완전히 같은 점수**를 받았다. 흔들림은 코퍼스 전체에 퍼져 있는 성질이
+아니라 소수 과제에 몰려 있다.
+
+### 1단계가 예고한 것이 그대로 나왔다
+
+넷이 아무 데서나 나온 것이 아니다. 1단계 보고서의 「(바) 채점 판단의 흔들림」은
+읽기 도구를 고치기 전후 두 실행을 비교하면서 흔들린 과제 셋을 이름으로 지목했고,
+그중 **점수가 가장 크게 움직인 둘**이 `dfb4e0cd`(−5.49점)와 `f84ea6ac`(−5.24점)다.
+**둘 다 이번 넷 안에 있다.** 그 절은 이렇게 끝난다.
+
+> 여기 미리 드러난 폭이 이미 2단계의 임계값(표준편차 5점)에 닿아 있다는 점은
+> 기록해 둘 값어치가 있다.
+
+**닿았다. 4.02pp로 넘지는 않았다.** 두 실행에서 읽은 예고를 세 실행이 확인한
+셈이고, 예고와 확인이 서로 다른 데이터에서 나왔다는 점에서 우연으로 보기 어렵다.
+
+원인은 그러나 하나가 아니고, 갈라 보면 **가장 크게 움직인 하나는 채점이 흔들린
+것조차 아니다.**
+
+#### 첫째 — 답할 수 없는 질문 하나가 과제 전체를 흔든다
+
+`a328feea`와 `f84ea6ac`는 둘 다 Word 문서에 **"한 쪽 안에 들어가는가"**를 묻는
+항목을 갖고 있다. 1단계가 특정한 바로 그 자리다 — 서식 검사는 Word 문서의 쪽 수를
+돌려주지 않고, 채점기는 글자 수로 쪽 수를 맞혀야 한다.
+
+`f84ea6ac`에서는 그 항목(5점)이 `fail` · `partial` · `fail`로 갈렸다. 폭 5.86pp
+중 **5.17pp가 이 항목 하나에서 나온다.**
+
+`a328feea`는 더 분명하다. 항목 16개 중 **딱 하나만 움직였고**, 그 하나가 쪽 수
+항목이다.
+
+| | 쪽 수 항목의 판정 | 받은 점수 | 만점 | 백분율 |
+|---|---|---|---|---|
+| 1회차 | `judge_error` | 18.6 | **22** | 84.55% |
+| 2회차 | `fail` | 18.6 | **24** | 77.50% |
+| 3회차 | `partial` | 20.25 | 24 | 84.38% |
+
+**1·2회차는 받은 점수가 18.6으로 똑같다.** 7.05pp 차이는 전부 **만점이 달라서**
+생겼다. 이 보고서의 대표 숫자(표준편차 4.02pp)를 정한 과제가 이것이다.
+
+#### 채점기가 답을 못 내면 그 항목은 만점에서 빠진다
+
+왜 만점이 움직이는가. `core/grader.py:1250-1252`가 만점을 이렇게 센다.
+
+```python
+scored_items = [it for it in items if not it.score_excluded]
+total_awarded = sum(it.awarded_score for it in scored_items)
+total_max = sum(max(0, it.max_score) for it in scored_items)
+```
+
+그리고 `judge_error`는 **반드시** `score_excluded`가 된다 (`grader.py:1240-1241`,
+스키마도 이를 강제한다 — `grade_payload.py:93`).
+
+**의도는 옳다.** 채점기가 제 잘못으로 답을 못 냈는데 그 벌을 답안이 받으면 안
+되므로, 그 항목은 분자에서도 분모에서도 빠진다.
+
+**그런데 부작용이 있다.** 실행마다 실패하는 자리가 다르므로 **실행마다 만점이
+달라진다.** 30과제 중 3과제에서 실제로 그렇게 됐고, 만점이 움직인 자리는 판정
+실패 4건의 위치와 **정확히 일치한다** — 빠진 점수도 그 항목의 배점과 정확히 같다.
+채점 항목 수는 세 번 모두 1,433개로 같았다. 결과적으로 서로 다른 실행의 백분율은
+**같은 만점 위에서 잰 값이 아니다.**
+
+여기에 이상한 순서가 따라온다. 위 표에서 **채점기가 실패한 1회차(84.55%)가
+"못 했다"고 판정한 2회차(77.50%)보다 높다.** 받은 점수는 같은데도 그렇다. 즉
+채점기가 답을 못 내는 쪽이 답안에 더 유리하다.
+
+이것은 1단계가 열어 둔 관찰을 닫는다. 1단계는 `17111c03`에서 "만점이 61에서
+60으로 바뀌었다 ... 같은 채점표에서 채점 항목의 총합이 실행마다 달라졌다는
+뜻이다"라고 적고 이유를 특정하지 못했다. **이유가 이것이다** — 그 과제는 1·3회차에
+1점짜리 항목에서 판정 실패가 났고 2회차에는 나지 않았다. 같은 일이 `43dc9778`에도
+3회차에만 일어났다(2점).
+
+[후속 항목](./PR3_REPORT.md#후속-항목)에 등록했다. 고르는 문제이지 버그는
+아니다 — 지금 방식은 답안을 보호하고, 대안(실패 항목을 0점으로 세기)은 분모를
+고정하는 대신 채점기의 실패를 답안에 떠넘긴다. 다만 **어느 쪽을 고르든, 실행마다
+만점이 달라진다는 사실은 백분율을 비교하는 쪽에 알려져 있어야 한다.**
+
+#### 둘째 — 다 보고도 갈리는 판단
+
+`dfb4e0cd`와 `ee09d943`에는 위 설명이 통하지 않는다. 둘 다 만점이 고정돼 있고,
+움직인 항목이 쪽 수 같은 "볼 수 없는 것"이 아니다.
+
+`dfb4e0cd`는 1단계가 이미 확인한 대로 엑셀 하나짜리 과제이고 **시각 채점 호출이
+0회**다. 세 실행에서 움직인 항목 3개는 전부 표의 값을 확인하는 항목이다 — 예를
+들어 "모든 데이터 행에 지출 구분이 들어 있는가"가 `partial` · `fail` · `pass`로
+갈렸다. 같은 파일, 같은 증거, 같은 프롬프트다.
+
+`ee09d943`도 같은 성질이다. 2점짜리 항목 둘 — **"4월 시산표의 순이익이
+448,342.40인가"** 같은 산술 확인 — 이 `pass` · `fail` · `pass`로 갈렸다. 숫자
+하나를 맞춰 보는 항목이고, 답은 실행과 무관하게 정해져 있다.
+
+**여기서 움직이는 것은 채점기의 눈이 아니라 판단 자체이고, 도구를 고쳐도 줄지
+않는다.** 이쪽이 반복 채점의 바닥값이다.
+
+#### 그래서 무엇을 하면 무엇이 줄어드는가
+
+넷 중 **둘은 고칠 수 있고 둘은 바닥값이다.** 후속 항목 1번(서식 검사가 Word
+문서의 쪽 수를 보고하게 한다)을 적용하면 첫째 부류가 줄고, 그와 함께 이 보고서의
+대표 숫자인 4.02pp도 내려갈 가능성이 높다 — 그 숫자를 정한 항목이 정확히 그
+쪽 수 항목이기 때문이다. 남는 것이 진짜 바닥값이고, 그때 다시 재면 둘이 갈린다.
+
+### judge 오류는 실행마다 다른 자리에서 난다
+
+오류 수는 2 · 0 · 2건이었다. 세 번 다 같은 자리에서 나지 않았다는 뜻이고,
+**판정 실패 자체가 재현되지 않는 사건**이라는 것을 보여 준다. 비율이 0.09%로
+기준의 22분의 1이므로 조치 대상은 아니지만, 오류를 "특정 과제의 성질"로 다루면
+안 된다는 점은 기록해 둔다.
