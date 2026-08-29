@@ -2037,3 +2037,313 @@ def test_has_audio_content_answers_before_the_cut_when_it_can(
     monkeypatch.setattr(read_deliverable_module, "MAX_ZIP_ENTRIES", 2)
 
     assert has_audio_content(p) is True
+
+
+# ── A table's rows reach the judge (task 78) ─────────────────────────
+
+
+def _ruled_table_pdf(path: Path) -> Path:
+    """A PDF whose only content is a grid-ruled table."""
+    pytest.importorskip("reportlab")
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+
+    data = [
+        ["Elementary School", "Overall Niche Grade", "Percent Proficient Math"],
+        ["John Lewis Childs School", "A-", "71%"],
+        ["Hillside Grade School", "B+", "58%"],
+    ]
+    table = Table(data)
+    table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.black)]))
+    SimpleDocTemplate(str(path), pagesize=letter).build([table])
+    return path
+
+
+def test_a_ruled_tables_row_reaches_the_judge_intact(base_dir):
+    """A school and its grade arrive on one line, not in separate paragraphs.
+
+    Read as flowing text, a ruled table's header arrives as one run of prose
+    and its first column as another, so "the report includes the grade for
+    John Lewis Childs School" is unanswerable from a document that states it
+    plainly, and the judge fails the item on evidence that is honestly empty.
+
+    This does not claim to be the fix for the corpus's worst-scoring task. It
+    was written believing that, and measuring 94925f49 against the real file
+    disproved it: extraction recovers the row label but the value cell comes
+    back empty, because that deliverable's grades are pictures rather than
+    text. See ``test_a_pdf_whose_values_are_pictures_says_so``. What this
+    earns is narrower and still worth having -- a table whose cells really are
+    text now reaches the judge as rows instead of as two unrelated paragraphs.
+    """
+    _ruled_table_pdf(base_dir / "schools.pdf")
+
+    result = read_deliverable("read_content", "schools.pdf", base_dir=str(base_dir))
+
+    assert result["ok"] is True
+    text = result["data"]["text"]
+    row = next(
+        (ln for ln in text.splitlines() if "John Lewis Childs School" in ln and "|" in ln),
+        None,
+    )
+    assert row is not None, f"no table row for the school in:\n{text}"
+    assert "A-" in row
+    assert "71%" in row
+
+
+def test_a_pdf_with_no_table_reads_exactly_as_before(base_dir, pdf_file):
+    """Detection is a guess; a page it does not fire on must be untouched."""
+    result = read_deliverable("read_content", pdf_file.name, base_dir=str(base_dir))
+
+    assert result["ok"] is True
+    assert "[Table on page" not in result["data"]["text"]
+    assert result["data"]["text"].strip()
+
+
+def test_a_table_detector_that_trips_still_yields_the_page_text(base_dir, monkeypatch):
+    """One bad table costs its own rows, never the page it sits on."""
+    _ruled_table_pdf(base_dir / "schools.pdf")
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "_pdf_table_blocks",
+        lambda *_a, **_kw: [],
+    )
+
+    result = read_deliverable("read_content", "schools.pdf", base_dir=str(base_dir))
+
+    assert result["ok"] is True
+    assert "John Lewis Childs School" in result["data"]["text"]
+    assert "[Table on page" not in result["data"]["text"]
+
+
+def test_a_raising_table_detector_is_caught_not_propagated(base_dir):
+    """``extract_tables`` raising must not fail the read."""
+    class Tripwire:
+        def extract_tables(self):
+            raise RuntimeError("malformed table")
+
+    assert read_deliverable_module._pdf_table_blocks(Tripwire(), 1) == []
+
+
+# ── Word editing marks (task 80) ─────────────────────────────────────
+
+
+_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+_MARKED_BODY = f"""<w:p><w:ins w:id="101" w:author="Editor" w:date="2026-01-01T00:00:00Z">
+<w:r><w:t>an inserted sentence</w:t></w:r></w:ins></w:p>
+<w:p><w:del w:id="102" w:author="Editor" w:date="2026-01-01T00:00:00Z">
+<w:r><w:delText>a removed sentence</w:delText></w:r></w:del></w:p>
+<w:p><w:commentRangeStart w:id="1"/><w:r><w:t>the sentence under review</w:t></w:r>
+<w:commentRangeEnd w:id="1"/><w:r><w:commentReference w:id="1"/></w:r></w:p>"""
+
+_COMMENTS_XML = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:comments xmlns:w="{_W}">
+<w:comment w:id="1" w:author="Dana Reviewer" w:date="2026-01-01T00:00:00Z" w:initials="DR">
+<w:p><w:r><w:t>Tighten this claim.</w:t></w:r></w:p></w:comment></w:comments>"""
+
+
+def _marked_up_docx(path: Path) -> Path:
+    """A .docx carrying two tracked edits and one anchored comment.
+
+    python-docx cannot author revision markup, so the package is built with it
+    and then respliced: the marks go into ``word/document.xml`` and the comment
+    into a ``word/comments.xml`` part, exactly where Word puts them. The result
+    stays loadable by python-docx, which is what ``_format_docx`` opens first.
+    """
+    import zipfile
+
+    from docx import Document
+
+    scratch = path.with_suffix(".clean.docx")
+    doc = Document()
+    doc.add_paragraph("an untouched sentence")
+    doc.save(str(scratch))
+
+    with zipfile.ZipFile(scratch) as src:
+        parts = {name: src.read(name) for name in src.namelist()}
+
+    parts["word/document.xml"] = parts["word/document.xml"].replace(
+        b"</w:body>", _MARKED_BODY.encode("utf-8") + b"</w:body>"
+    )
+    parts["word/comments.xml"] = _COMMENTS_XML.encode("utf-8")
+    parts["[Content_Types].xml"] = parts["[Content_Types].xml"].replace(
+        b"</Types>",
+        b'<Override PartName="/word/comments.xml" ContentType="application/vnd'
+        b'.openxmlformats-officedocument.wordprocessingml.comments+xml"/></Types>',
+    )
+    rels = "word/_rels/document.xml.rels"
+    parts[rels] = parts[rels].replace(
+        b"</Relationships>",
+        b'<Relationship Id="rIdComments" Type="http://schemas.openxmlformats.org'
+        b'/officeDocument/2006/relationships/comments" Target="comments.xml"/>'
+        b"</Relationships>",
+    )
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as out:
+        for name, blob in parts.items():
+            out.writestr(name, blob)
+    scratch.unlink()
+    return path
+
+
+def test_tracked_insertions_and_deletions_are_counted(base_dir):
+    """"Substantive edits appear as Track Changes insertions" is gradeable.
+
+    Task 5d0feb24 (38.28%) is a copy-editing brief whose rubric asks for
+    exactly this. Before this, the formatting report described a marked-up
+    document as though it were clean, so the item failed whatever the file
+    contained.
+    """
+    _marked_up_docx(base_dir / "edited.docx")
+
+    result = read_deliverable(
+        "inspect_formatting", "edited.docx", base_dir=str(base_dir)
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["tracked_insertion_count"] == 1
+    assert result["data"]["tracked_deletion_count"] == 1
+
+
+def test_a_reviewer_comment_carries_its_author_and_what_it_points_at(base_dir):
+    """The rubric asks for comments "anchored to specific text ranges"."""
+    _marked_up_docx(base_dir / "edited.docx")
+
+    data = read_deliverable(
+        "inspect_formatting", "edited.docx", base_dir=str(base_dir)
+    )["data"]
+
+    assert data["comment_count"] == 1
+    comment = data["comments"][0]
+    assert comment["author"] == "Dana Reviewer"
+    assert comment["text"] == "Tighten this claim."
+    assert comment["anchored_text"] == "the sentence under review"
+
+
+def test_a_clean_document_reports_zero_marks_rather_than_omitting_them(
+    base_dir, docx_file
+):
+    """Zero is an answer. A missing field is not, and reads as "unknown"."""
+    data = read_deliverable(
+        "inspect_formatting", docx_file.name, base_dir=str(base_dir)
+    )["data"]
+
+    assert data["tracked_insertion_count"] == 0
+    assert data["tracked_deletion_count"] == 0
+    assert data["comment_count"] == 0
+    assert data["comments"] == []
+
+
+def test_an_unreadable_package_reports_zero_instead_of_failing_the_report(base_dir):
+    """This enriches a report that is useful without it."""
+    broken = base_dir / "broken.docx"
+    broken.write_bytes(b"not a zip")
+
+    marks = read_deliverable_module._docx_revisions_and_comments(broken)
+
+    assert marks["tracked_insertion_count"] == 0
+    assert marks["comment_count"] == 0
+
+
+def test_the_tool_schema_tells_the_judge_where_the_edit_marks_live(base_dir):
+    """A field the judge is never told about is a field it will not ask for."""
+    description = MODEL_READ_DELIVERABLE_TOOL_SCHEMA["parameters"]["properties"][
+        "op"
+    ]["description"]
+
+    assert "tracked_insertion_count" in description
+    assert "tracked_deletion_count" in description
+    assert "anchored_text" in description
+
+
+# ── A picture in a text page is disclosed, not dropped (task 81) ─────
+
+
+def _pdf_with_text_and_pictures(path: Path, pictures: int = 3) -> Path:
+    """A page that reads as text but keeps some of its content in images."""
+    pytest.importorskip("reportlab")
+    pymupdf = pytest.importorskip("pymupdf")
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(path))
+    c.drawString(100, 750, "School Reports")
+    c.drawString(100, 730, "Elementary School   Overall Grade   Percent Proficient")
+    c.drawString(100, 710, "John Lewis Childs School")
+    c.save()
+
+    doc = pymupdf.open(str(path))
+    page = doc.load_page(0)
+    swatch = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 8, 8))
+    swatch.set_rect(swatch.irect, (10, 40, 90))
+    png = swatch.tobytes("png")
+    for i in range(pictures):
+        top = 600 - (i * 40)
+        page.insert_image(pymupdf.Rect(100, top, 260, top + 30), stream=png)
+    staged = path.with_suffix(".staged.pdf")
+    doc.save(str(staged), deflate=True)
+    doc.close()
+    staged.replace(path)
+    return path
+
+
+def test_a_pdf_whose_values_are_pictures_says_so(base_dir):
+    """The read admits the images exist instead of reading as complete.
+
+    This is the real shape of the corpus's worst-scoring task. 94925f49
+    scored 15.85% with 49 of 56 items failed, and its deliverable is a single
+    page carrying 572 characters -- the title, the column headers and the
+    school names -- with every grade, percentage and teacher-student ratio
+    drawn inside 30 embedded images. Nothing in the old result said so, so a
+    judge asking "what grade did this school get" received a confident,
+    complete-looking read with no grade in it and failed the item for a value
+    the document does state.
+
+    The tool already knew the count; it only reported it when the read came
+    back empty, which is the one case this file is not. Saying it turns a
+    silent omission into the disclosed gap the prompt's rule about absence is
+    already written to handle.
+    """
+    _pdf_with_text_and_pictures(base_dir / "reports.pdf", pictures=3)
+
+    result = read_deliverable("read_content", "reports.pdf", base_dir=str(base_dir))
+
+    assert result["ok"] is True
+    data = result["data"]
+    assert "School Reports" in data["text"]
+    assert data["char_count"] > 0
+    note = data.get("note", "")
+    assert "3 embedded image" in note, note
+    assert "not in the text above" in note
+
+
+def test_a_pdf_that_is_all_text_is_not_accused_of_hiding_anything(base_dir):
+    """No images, no note. The disclosure must not fire on every PDF.
+
+    An unconditional warning would teach the judge to discount a complete
+    read, which costs more accuracy than the omission it was added to fix.
+    """
+    _sized_pdf(base_dir / "plain.pdf", [(612, 792)])
+
+    result = read_deliverable("read_content", "plain.pdf", base_dir=str(base_dir))
+
+    assert result["ok"] is True
+    assert "embedded image" not in result["data"].get("note", "")
+
+
+def test_a_scan_still_gets_the_stronger_no_text_layer_report(base_dir):
+    """An empty read keeps its own wording; the two notes do not collide."""
+    pymupdf = pytest.importorskip("pymupdf")
+    path = base_dir / "scan.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page()
+    swatch = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 8, 8))
+    swatch.set_rect(swatch.irect, (200, 200, 200))
+    page.insert_image(page.rect, stream=swatch.tobytes("png"))
+    doc.save(str(path))
+    doc.close()
+
+    data = read_deliverable("read_content", "scan.pdf", base_dir=str(base_dir))["data"]
+
+    assert data["has_text_layer"] is False
+    assert "no text layer" in data["note"]

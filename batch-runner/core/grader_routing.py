@@ -172,6 +172,7 @@ def resolve_runtime_routing(
     *,
     selected_paths_have_text: bool | None = None,
     selected_paths_have_audio: bool | None = None,
+    some_selected_path_lacks_text: bool | None = None,
 ) -> RoutingDecision:
     """Apply target-aware policy without changing criterion classification.
 
@@ -179,6 +180,12 @@ def resolve_runtime_routing(
     file yield a single character of text". The caller reads the files; this
     module stays pure. ``None`` means unknown and changes nothing -- only a
     measured ``False`` escalates.
+
+    ``some_selected_path_lacks_text`` answers the narrower question "is any one
+    of these files unreadable", which the first signal cannot express: it
+    collapses a bundle to a single yes the moment one file yields a character,
+    so a picture delivered alongside a readable sibling reports as readable.
+    Same rules -- only a measured ``True`` escalates, ``None`` changes nothing.
 
     ``selected_paths_have_audio`` is the same shape of answer to "is there
     anything here to listen to", and is used only defensively: a measured
@@ -279,8 +286,15 @@ def resolve_runtime_routing(
     # and FORMATTING escalate, because AUDIO and VISUAL already name what they
     # need. And every selected file must be renderable, so escalating never
     # trades a readable file for one nothing can look at.
+    #
+    # The bundle question and the file question are both asked, because one
+    # readable file used to answer for all of them. A stage-3 task selected a
+    # two-page flowchart holding zero characters -- one full-page image -- next
+    # to a readable memo; the bundle reported "yes, there is text here", the
+    # item stayed TEXT, and the flowchart was never rendered or looked at. A
+    # sibling that can be read is not evidence about the file that cannot.
     if (
-        selected_paths_have_text is False
+        (selected_paths_have_text is False or some_selected_path_lacks_text is True)
         and decision.modality in (Modality.TEXT, Modality.FORMATTING)
         and suffixes
         and suffixes.issubset(GRADER_VISUAL_RENDER_EXTENSIONS)

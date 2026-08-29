@@ -198,3 +198,92 @@ def test_the_preflight_leaves_a_readable_document_on_the_text_path(tmp_path, typ
     assert plan["judge_routes"] == {"text": 1}
     assert plan["planned_render_calls"] == 0
     assert plan["errors"] == []
+
+
+# ── The complement: which file, not whether any file (task 79) ───────
+#
+# ``_selected_paths_have_text`` is right about its own question and wrong as
+# the only question. Stage 3 selected a two-page Loss Prevention flowchart
+# carrying zero characters -- page one is a single full-page image -- next to
+# a readable 1,756-character memo. The bundle answered "yes, there is text",
+# the item stayed on the text path, and the flowchart was never rendered or
+# looked at by anything. ``_some_selected_path_lacks_text`` asks per file, on
+# the same memo, so the picture is seen without re-reading the memo.
+
+
+def test_a_picture_beside_a_readable_file_is_reported(tmp_path, scan):
+    (tmp_path / "memo.txt").write_text("The deposit was never banked.")
+
+    surface = _probe_surface()
+    assert surface._selected_paths_have_text(
+        tmp_path, ["memo.txt", scan.name]
+    ) is True
+    assert surface._some_selected_path_lacks_text(
+        tmp_path, ["memo.txt", scan.name]
+    ) is True
+
+
+def test_every_file_readable_is_a_finding_of_no_gap(tmp_path, typed):
+    (tmp_path / "memo.txt").write_text("The deposit was never banked.")
+
+    answer = _probe_surface()._some_selected_path_lacks_text(
+        tmp_path, ["memo.txt", typed.name]
+    )
+
+    assert answer is False
+
+
+def test_a_definite_gap_outranks_a_file_it_cannot_speak_for(tmp_path, scan):
+    """A measured no is enough; an unknown alongside it changes nothing."""
+    (tmp_path / "mystery.bin").write_bytes(b"\x00\x01\x02")
+
+    answer = _probe_surface()._some_selected_path_lacks_text(
+        tmp_path, [scan.name, "mystery.bin"]
+    )
+
+    assert answer is True
+
+
+def test_an_unknown_with_no_definite_gap_admits_it(tmp_path, typed):
+    (tmp_path / "mystery.bin").write_bytes(b"\x00\x01\x02")
+
+    answer = _probe_surface()._some_selected_path_lacks_text(
+        tmp_path, [typed.name, "mystery.bin"]
+    )
+
+    assert answer is None
+
+
+def test_a_missing_file_is_not_a_gap_in_the_deliverable(tmp_path):
+    """Absent is unknowable, not empty -- the same rule as its sibling."""
+    answer = _probe_surface()._some_selected_path_lacks_text(
+        tmp_path, ["never_written.pdf"]
+    )
+
+    assert answer is None
+
+
+def test_no_selected_paths_is_not_a_finding_here_either(tmp_path):
+    surface = _probe_surface()
+    assert surface._some_selected_path_lacks_text(tmp_path, []) is None
+    assert surface._some_selected_path_lacks_text(tmp_path, ["", None]) is None
+
+
+def test_the_two_questions_share_one_read_of_each_file(tmp_path, monkeypatch):
+    """Asking twice must not open the file twice."""
+    (tmp_path / "notes.txt").write_text("readable")
+    opened: list[str] = []
+
+    import core.grader as grader_module
+
+    monkeypatch.setattr(
+        grader_module,
+        "has_extractable_text",
+        lambda path: (opened.append(str(path)), True)[1],
+    )
+
+    grader = _probe_surface()
+    grader._selected_paths_have_text(tmp_path, ["notes.txt"])
+    grader._some_selected_path_lacks_text(tmp_path, ["notes.txt"])
+
+    assert len(opened) == 1

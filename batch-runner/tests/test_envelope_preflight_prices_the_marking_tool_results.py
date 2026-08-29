@@ -329,9 +329,9 @@ def test_the_real_check_measures_the_scoring_line_instead_of_being_told():
     assert widest > 0, "a width of zero would price the scoring line at nothing"
 
 
-@pytest.mark.parametrize("raised_to", [536_159, 1_000_000])
+@pytest.mark.parametrize("raised_to", [536_191, 1_000_000])
 def test_raising_the_number_to_the_limit_settles_this_rule(raised_to):
-    """536159 is the whole demand: 533334 of tool results, 2825 of opening."""
+    """536191 is the whole demand: 533334 of tool results, 2857 of opening."""
     plan = load_plan(PLAN_PATH)
     plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = raised_to
     result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)

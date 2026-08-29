@@ -143,6 +143,70 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **Three ways a judge could be shown a deliverable and still not see what was
+  in it.** All three were found by taking the lowest-scoring gold answers in the
+  185-task corpus and opening the real files, rather than reasoning about what
+  the reading tool ought to do.
+
+  *A file that could not be read hid behind one that could.* The escalation
+  added earlier — an item whose files yield no text goes to the path that looks
+  at them — asked whether *any* selected file had text. That collapses a bundle
+  to a single yes the moment one file yields a character. Task `f9f82549`
+  selects a two-page incident flowchart whose pages hold **0 characters**,
+  because page one is a single full-page image, alongside a readable memo. The
+  bundle answered "yes, there is text here", the item stayed on the reading
+  path, and the flowchart was never rendered or looked at. The narrower question
+  — "is any one of these files unreadable" — is now asked as well, and either
+  one escalating is enough. It shares the same per-file memo, so asking twice
+  costs no extra reading, and a file that nothing could answer for still cannot
+  escalate on a guess.
+
+  *A read came back looking complete when the values were pictures.* Task
+  `94925f49`, the lowest-scoring gold answer in the corpus at **15.85%**, is one
+  PDF page holding a school-performance table. Extraction returns 572 characters
+  — the title, the column headers and the row labels — and **every grade,
+  percentage and ratio the rubric asks about is absent from the entire text
+  layer**, living instead in **30 embedded images**. Nothing said so, so the read
+  looked complete and the missing values read as absent from the document. A
+  non-empty PDF read now reports how many embedded images it did not extract,
+  which turns a silent omission into the disclosed gap the judge's existing rule
+  about absence already handles. This is disclosure, not extraction: no
+  threshold is guessed, and a PDF that really is all text is not accused of
+  hiding anything.
+
+  *Tracked changes and reviewer comments were invisible.* Task `5d0feb24`
+  (**38.28%**) is marked on edits it carries as Word revision marks. The real
+  file holds **48 insertions and 10 deletions**; a content read returns 4,218
+  characters with no trace of any of them, so reading could never witness the
+  thing being graded. `inspect_formatting` now reports insertion and deletion
+  counts, and reviewer comments with the text they are anchored to — capped at
+  50 comments and 500 characters each — and the judge's standing instructions
+  now say to ask for it on a `.docx`. Without that line the judge would never
+  learn the question was available.
+
+- **A PDF table reached the judge as unrelated paragraphs.** A ruled table's row
+  now arrives as one line, instead of the label and the value becoming separate
+  paragraphs several lines apart. This is general robustness and nothing more.
+  It was written believing it was the fix for `94925f49`, and measuring that
+  task against the real file **disproved that**: extraction recovers the row
+  labels, but the value cells come back empty, because those grades are
+  pictures. The disclosure above is what addresses that task; this entry claims
+  only what it earns.
+
+- **The marking cost envelope was re-measured rather than left quoting the old
+  length.** Telling the judge that `inspect_formatting` can now report Track
+  Changes took `prompts/grader_judge_v2.md` from **6,772 to 6,866 characters**,
+  and the longer tool description moved the opening every marking call carries
+  from **2,825 to 2,857 tokens** and the demanded input per call from **536,159
+  to 536,191**. That file is read from disk and sent on every single call, so
+  its length is counted into what one call can carry. Five cost tests failed on
+  the old numbers and were corrected to the freshly measured ones rather than
+  loosened — the guard exists so that nobody can widen what every call carries
+  without the recorded ceiling moving with it, and a guard that gets relaxed
+  when it fires is not a guard. The tool-results half, 533,334 tokens, did not
+  move and was left alone. The figures quoted in the earlier entries in this
+  section were correct when they were measured and are superseded by these.
+
 - **A task made entirely of music was graded without anything ever listening to
   it.** Stage-1 task `38889c3b` delivers its whole answer as one 180 MB `.zip`
   of audio stems and is marked on tempo, key, vocals, effects and mix. It

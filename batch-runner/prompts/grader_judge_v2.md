@@ -56,7 +56,7 @@ read-only. Use the smallest op that answers your question.
 |---|---|
 | `inspect_structure` | first call to learn what's in the file (sheet/page/slide count, kind) |
 | `read_content` | when criterion talks about **what** is written (values, columns, sentences) |
-| `inspect_formatting` | when criterion talks about **how** it looks (style, fills, borders, layout, merged cells, charts) |
+| `inspect_formatting` | when criterion talks about **how** it looks (style, fills, borders, layout, merged cells, charts), and for a `.docx` whether it carries Track Changes insertions/deletions or reviewer comments |
 | `probe_audio` | when criterion is about audio (sample rate, duration, peak/clipping, silence ratio) |
 | `probe_video` | when criterion is about video metadata (codec, resolution, fps, duration) |
 
