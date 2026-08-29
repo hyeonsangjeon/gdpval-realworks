@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read a gold-ceiling grade payload and answer the questions stage 1 asks.
+"""Read a gold-ceiling grade payload and answer the questions the specs ask.
 
 Why this exists
 ---------------
@@ -10,7 +10,14 @@ the actual bill. Every one of those is already in the grade payload. Copying
 them into a report by hand is where a report stops matching its run -- so this
 reads them out, and the report quotes this.
 
-Two of the six need work the payload does not do for you:
+``304-full-gold-corpus.md`` asks the same six of a corpus six times the size,
+and three more that only make sense once there is a bigger corpus to ask them
+of: the mean per occupation, the mean of the same thirty tasks stage 1 graded
+so the two runs can be compared like for like, and the mean with the five
+known-limit tasks held out. Those three are the ``by_occupation`` and
+``subsets`` blocks.
+
+Two of the original six need work the payload does not do for you:
 
 * **Image and audio call counts separately.** ``summary.cost`` carries one
   ``total_perception_calls``. Which of those looked at a picture and which
@@ -21,12 +28,15 @@ Two of the six need work the payload does not do for you:
   evidence the judge recorded, sorted so the largest losses come first, which
   is the input a person needs to classify them.
 
-It also refuses a payload that is not stage 1's corpus, fully graded. A number
-read out of the wrong file is worse than no number, and the four things it
-checks -- task count, ordered-id fingerprint, graded count and run status --
-are the ones that differ when somebody points this at a shard or at a
-different corpus. A stage 2 repeat passes them, and should: it is the same
-thirty tasks graded again, which is exactly what stage 2 needs to read.
+It also refuses a payload that is not one of the corpora pinned below, fully
+graded. A number read out of the wrong file is worse than no number, and the
+things it checks -- the ordered-id fingerprint, the task count, the graded
+count and the run status -- are the ones that differ when somebody points this
+at a single shard or at a corpus nobody pinned. The fingerprint decides *which*
+corpus a payload is, so stage 1's thirty and stage 3's hundred and eighty-five
+are both read without a flag, and neither can be mistaken for the other. A
+stage 2 repeat passes too, and should: it is the same thirty tasks graded
+again, which is exactly what stage 2 needs to read.
 
 Usage
 -----
@@ -42,9 +52,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import textwrap
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 # The three numbers stage 1 is accepted or rejected on, from
 # `tasks/rebuilding_grading_task/300-gold-ceiling.md` lines 17-19 and 24-26.
@@ -66,30 +77,81 @@ JUDGE_ERROR_RATE_CEILING = 0.02
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.grader import MAGNITUDE_THRESHOLD as REQUIRED_ITEM_MIN_ABS_SCORE  # noqa: E402
+from step8_grade import _ordered_task_ids_sha256  # noqa: E402
 
-# What the specification pinned. A payload disagreeing with either is some
-# other run, and reading stage 1's numbers out of it would be a mistake no
+# What the specification pinned. A payload disagreeing with a known corpus is
+# some other run, and reading a stage's numbers out of it would be a mistake no
 # reader could detect afterwards.
-EXPECTED_TASK_COUNT = 30
-
-# The 30 pinned task ids, fingerprinted the way the grader fingerprints them.
 #
-# This is compared against `expected_ordered_task_ids_sha256` in the payload,
-# and that field is written by `step8_grade._ordered_task_ids_sha256`, which
-# hashes `json.dumps(ids, ensure_ascii=False, separators=(",", ":"))` -- a
-# compact JSON array. So this constant has to be the compact-JSON digest of
-# the same ids in the same order; any other encoding of the identical list
+# The digest is compared against `expected_ordered_task_ids_sha256` in the
+# payload, and that field is written by `step8_grade._ordered_task_ids_sha256`,
+# which hashes `json.dumps(ids, ensure_ascii=False, separators=(",", ":"))` --
+# a compact JSON array. So each digest here has to be the compact-JSON digest
+# of the same ids in the same order; any other encoding of the identical list
 # produces a different digest and refuses the very run it was written for.
 #
 # That is not hypothetical. An earlier pass pinned the newline-joined digest
-# of these exact ids, `09ce9245...`, and it refused stage 1's own run. Both
+# of stage 1's exact ids, `09ce9245...`, and it refused stage 1's own run. Both
 # digests cover the same thirty ids in the same order -- only the separator
 # differs -- so the mismatch says nothing whatsoever about the corpus, which
-# is what made it slow to read. `test_the_pinned_corpus_matches_the_grading_
-# config` now recomputes this through the grader's own function rather than
-# restating the formula, so the two can no longer drift apart in silence.
-EXPECTED_ORDERED_TASK_IDS_SHA256 = (
-    "82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b"
+# is what made it slow to read. `test_the_pinned_corpora_match_the_grading_
+# configs` now recomputes both through the grader's own function rather than
+# restating the formula, so they can no longer drift apart in silence.
+
+
+class PinnedCorpus(NamedTuple):
+    """A corpus this tool is allowed to report numbers for."""
+
+    key: str
+    label: str
+    config_name: str
+    task_count: int
+    ordered_task_ids_sha256: str
+
+
+STAGE_ONE_CORPUS = PinnedCorpus(
+    key="stage1-30",
+    label="stage 1 -- the 30-task sample",
+    config_name="gold_ceiling_30_v2_sol_max",
+    task_count=30,
+    ordered_task_ids_sha256=(
+        "82d14ac9bf9c3ad37920fb781ee961f5e20805c52618df0d0cdb9d5e677a7e8b"
+    ),
+)
+
+STAGE_THREE_CORPUS = PinnedCorpus(
+    key="stage3-185",
+    label="stage 3 -- the whole 185-task gold population",
+    config_name="gold_ceiling_185_v2_sol_max",
+    task_count=185,
+    ordered_task_ids_sha256=(
+        "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18"
+    ),
+)
+
+#: Every corpus this tool will report on. Stage 3 is listed here rather than
+#: read through `--allow-any-run` on purpose: that flag's own help says it is
+#: never for a number a report will quote, so reaching for it to produce the
+#: stage 3 report would have made the report's provenance exactly as weak as
+#: the flag warns. A corpus a report quotes belongs in this tuple, where the
+#: identity check still applies to it.
+PINNED_CORPORA: tuple[PinnedCorpus, ...] = (STAGE_ONE_CORPUS, STAGE_THREE_CORPUS)
+
+# Kept as module-level names because the payload identity check, the report's
+# generated blocks and the tests all grew up around stage 1 being *the* corpus.
+EXPECTED_TASK_COUNT = STAGE_ONE_CORPUS.task_count
+EXPECTED_ORDERED_TASK_IDS_SHA256 = STAGE_ONE_CORPUS.ordered_task_ids_sha256
+
+#: The five tasks `304-full-gold-corpus.md` declared as known input limits
+#: *before* the paid run, so their effect on the mean is separated rather than
+#: argued about afterwards. Four of them arrive with stage 3's widening; only
+#: `38889c3b` was inside stage 1's sample.
+KNOWN_LIMIT_TASK_IDS: tuple[str, ...] = (
+    "38889c3b",
+    "a73fbc98",
+    "e222075d",
+    "75401f7c",
+    "7de33b48",
 )
 
 # What a finished run is allowed to call itself. Both spellings mean the same
@@ -106,7 +168,27 @@ COMPLETE_RUN_STATUSES = frozenset({"final", "diagnostic"})
 
 
 class NotTheRunThatWasPinned(SystemExit):
-    """The payload is readable but is not stage 1's run."""
+    """The payload is readable but is not one of the pinned runs."""
+
+
+def identify_corpus(payload: dict[str, Any]) -> PinnedCorpus | None:
+    """Which pinned corpus this payload claims to be, or ``None``.
+
+    Matched on the ordered-id digest rather than on the task count, because
+    the digest names the exact ids in the exact order while the count is
+    satisfied by any corpus of the same size. Stage 3 dropping one task and
+    gaining another would keep 185 and change the digest, and it is the digest
+    that has to refuse it.
+
+    The count is then checked *against the matched corpus* rather than used to
+    find it, so a payload carrying stage 3's digest and stage 1's count is a
+    contradiction this reports instead of resolving.
+    """
+    digest = payload.get("expected_ordered_task_ids_sha256")
+    for corpus in PINNED_CORPORA:
+        if digest == corpus.ordered_task_ids_sha256:
+            return corpus
+    return None
 
 
 def _identity_problems(payload: dict[str, Any]) -> list[str]:
@@ -120,24 +202,33 @@ def _identity_problems(payload: dict[str, Any]) -> list[str]:
             "only its own slice while declaring the whole corpus"
         )
 
-    count = payload.get("expected_task_count")
-    if count != EXPECTED_TASK_COUNT:
-        problems.append(
-            f"expected_task_count is {count!r}, not {EXPECTED_TASK_COUNT}"
+    corpus = identify_corpus(payload)
+    if corpus is None:
+        known = ", ".join(
+            f"{item.key} ({item.task_count} tasks, "
+            f"{item.ordered_task_ids_sha256[:12]}...)"
+            for item in PINNED_CORPORA
         )
-
-    ordered = payload.get("expected_ordered_task_ids_sha256")
-    if ordered != EXPECTED_ORDERED_TASK_IDS_SHA256:
         problems.append(
             "expected_ordered_task_ids_sha256 is "
-            f"{ordered!r}, not the pinned {EXPECTED_ORDERED_TASK_IDS_SHA256}"
+            f"{payload.get('expected_ordered_task_ids_sha256')!r}, which is "
+            f"not a pinned corpus -- known: {known}"
+        )
+        return problems
+
+    count = payload.get("expected_task_count")
+    if count != corpus.task_count:
+        problems.append(
+            f"expected_task_count is {count!r}, but the ordered-id digest is "
+            f"{corpus.key}'s, which pins {corpus.task_count}"
         )
 
     graded = (payload.get("summary") or {}).get("graded_tasks")
-    if graded != EXPECTED_TASK_COUNT:
+    if graded != corpus.task_count:
         problems.append(
-            f"summary.graded_tasks is {graded!r}, so {EXPECTED_TASK_COUNT} "
-            "tasks were pinned but a different number was graded"
+            f"summary.graded_tasks is {graded!r}, so {corpus.task_count} "
+            f"tasks were pinned by {corpus.key} but a different number was "
+            "graded"
         )
 
     return problems
@@ -271,20 +362,51 @@ def per_task(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _counts_toward_required_rate(item: dict[str, Any]) -> bool:
+    """The run's own test for an item the second threshold counts.
+
+    Both halves are `step8_grade.py`'s, at the line that fills
+    ``critical_item_pass_rate``::
+
+        if not score_excluded and _is_critical_item(item.get("max_score")):
+
+    An excluded item is one the grader decided not to score at all, so counting
+    it would put an item in the denominator that no answer could have moved.
+    """
+    if item.get("score_excluded"):
+        return False
+    maximum = item.get("max_score")
+    return maximum is not None and abs(maximum) >= REQUIRED_ITEM_MIN_ABS_SCORE
+
+
 def required_items(payload: dict[str, Any]) -> dict[str, Any]:
     """What the second threshold is actually counting.
 
-    `core/grader.py` calls an item required when ``|max_score| >= 4`` and marks
-    it passed only on a ``pass`` verdict, so partial credit counts against the
-    rate exactly as hard as a flat failure does. Whether 0.95 is a reachable
-    bar therefore depends entirely on which items clear that width and how
-    subjective they are -- neither of which the rate itself shows.
+    An item is required when ``|max_score| >= 4`` and the grader did not
+    exclude it from scoring, and it passes when ``model_did_right`` is true --
+    **not** when the verdict is ``pass``. That distinction is the whole reason
+    this function was rewritten, and `step8_grade.py` states it at the point of
+    use: the legacy spelling was *"both wrong-threshold and wrong-sign"*, and
+    the sign is what bites here.
 
-    So this reports the denominator: how many items, split by verdict, and the
-    criteria that recur across tasks. A criterion appearing in most of the
-    thirty rubrics is a criterion whose wording sets the threshold, and a
-    reader deciding whether a missed gate is a grader defect or a metric
-    artefact needs to see it rather than take the claim on trust.
+    A penalty item carries a negative maximum -- "reviews articles behind a
+    paywall", "uses footage with identifiable faces". Its verdict answers *did
+    the deliverable do this thing*, so a verdict of ``pass`` on a penalty means
+    the penalty **fired** and the answer was marked down. Reading ``pass`` as
+    success therefore inverts every penalty item: the answers that avoided the
+    trap are counted as failures and the ones that fell in are counted as
+    successes.
+
+    Stage 1's thirty tasks contained no negative required items at all, so the
+    two spellings returned the same 0.5714 and the defect was invisible. The
+    185-task corpus contains 54 of them across 8 tasks -- 15% of the
+    denominator -- and 38 sit in one task. So this reports both rates and the
+    items they disagree on, rather than quietly swapping one number for the
+    other in a report whose earlier edition quoted the old one.
+
+    ``rate`` is the run's definition, because it is the number the gate is
+    judged on and a report must not print a second opinion beside it under the
+    same name.
     """
     rows: list[dict[str, Any]] = []
     for task in payload.get("tasks") or []:
@@ -299,16 +421,43 @@ def required_items(payload: dict[str, Any]) -> dict[str, Any]:
                     "max_score": maximum,
                     "awarded_score": item.get("awarded_score"),
                     "verdict": item.get("verdict"),
+                    "score_excluded": bool(item.get("score_excluded")),
+                    "model_did_right": item.get("model_did_right"),
+                    "counted": _counts_toward_required_rate(item),
                 }
             )
 
-    by_verdict = Counter(str(row["verdict"]) for row in rows)
-    by_criterion = Counter(row["criterion"] for row in rows)
-    passed = by_verdict.get("pass", 0)
+    counted = [row for row in rows if row["counted"]]
+    passed = sum(1 for row in counted if bool(row["model_did_right"]))
+
+    # The retired definition, over the denominator it used: no exclusion filter.
+    legacy_passed = sum(1 for row in rows if row["verdict"] == "pass")
+
+    disagreements = [
+        row
+        for row in counted
+        if bool(row["model_did_right"]) != (row["verdict"] == "pass")
+    ]
+
+    # An item with no `model_did_right` cannot be scored by the run's rule, and
+    # defaulting it to False the way the grader does would read a payload too
+    # old to carry the field as a total failure. Counted and reported instead.
+    unscorable = [row for row in counted if row["model_did_right"] is None]
+
+    penalties = [row for row in counted if row["max_score"] < 0]
+
+    by_verdict = Counter(str(row["verdict"]) for row in counted)
+    by_criterion = Counter(row["criterion"] for row in counted)
+
+    payload_rate = ((payload.get("summary") or {}).get("wow") or {}).get(
+        "critical_item_pass_rate"
+    )
+    rate = None if not counted else round(passed / len(counted), 4)
+
     return {
-        "total": len(rows),
+        "total": len(counted),
         "passed": passed,
-        "rate": None if not rows else round(passed / len(rows), 4),
+        "rate": rate,
         "by_verdict": dict(by_verdict.most_common()),
         "recurring_criteria": [
             {
@@ -316,14 +465,238 @@ def required_items(payload: dict[str, Any]) -> dict[str, Any]:
                 "tasks": count,
                 "passed": sum(
                     1
-                    for row in rows
-                    if row["criterion"] == criterion and row["verdict"] == "pass"
+                    for row in counted
+                    if row["criterion"] == criterion
+                    and bool(row["model_did_right"])
                 ),
             }
             for criterion, count in by_criterion.most_common()
             if count > 1
         ],
+        "score_excluded": len(rows) - len(counted),
+        "unscorable": len(unscorable),
+        "penalty_items": len(penalties),
+        "penalty_items_fired": sum(
+            1 for row in penalties if not bool(row["model_did_right"])
+        ),
+        "legacy_verdict_pass": {
+            "total": len(rows),
+            "passed": legacy_passed,
+            "rate": None if not rows else round(legacy_passed / len(rows), 4),
+            "disagreements": len(disagreements),
+            "disagreeing_items": sorted(
+                (
+                    {
+                        "task_id": row["task_id"],
+                        "criterion": row["criterion"],
+                        "max_score": row["max_score"],
+                        "verdict": row["verdict"],
+                        "model_did_right": row["model_did_right"],
+                    }
+                    for row in disagreements
+                ),
+                key=lambda row: (str(row["task_id"]), str(row["criterion"])),
+            ),
+        },
+        # The rate the gate is judged on is written by the grader, not by this
+        # tool. If the two disagree, one of them is wrong and the report must
+        # not pick a side silently.
+        "payload_rate": payload_rate,
+        "agrees_with_payload": (
+            payload_rate is not None
+            and rate is not None
+            and abs(rate - float(payload_rate)) <= 0.0001
+        ),
     }
+
+
+def _aggregate(tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    """Score a group of tasks the way the run scores the whole corpus.
+
+    The two headline numbers are aggregated differently and a recomputation
+    that picks one style for both is wrong twice:
+
+    * ``avg_pct`` is a **macro** mean -- the mean of each task's ``pct``, over
+      tasks that did not error. Every task weighs the same regardless of how
+      many rubric items it carries. `step8_grade.py` computes it as
+      ``sum(pcts) / len(pcts)`` over ``[t for t in tasks if not t["error"]]``.
+    * ``critical_item_pass_rate`` is a **micro** rate -- required items passed
+      over required items counted, pooled across tasks, so a task with forty
+      required items pulls forty times as hard as a task with one.
+
+    ``avg_pct_raw`` is the same macro mean over ``pct_raw``, which the grader
+    writes before clamping ``pct`` into [0, 100]. The two differ only where
+    penalties drove a task below zero, and there the clamped mean cannot tell a
+    fired penalty from an answer that simply scored nothing. One task in the
+    185 carries -380 points of penalties against a 50-point maximum, so this is
+    a real distinction on this corpus rather than a defensive one.
+    """
+    scored = [task for task in tasks if not task.get("error")]
+
+    pcts = [
+        float(task["pct"]) for task in scored if task.get("pct") is not None
+    ]
+    raws = [
+        float(task["pct_raw"])
+        for task in scored
+        if task.get("pct_raw") is not None
+    ]
+
+    counted = [
+        item
+        for task in tasks
+        for item in (task.get("items") or [])
+        if _counts_toward_required_rate(item)
+    ]
+    passed = sum(1 for item in counted if bool(item.get("model_did_right")))
+
+    clamped = [
+        str(task.get("task_id"))
+        for task in scored
+        if task.get("pct") is not None
+        and task.get("pct_raw") is not None
+        and abs(float(task["pct_raw"]) - float(task["pct"])) > 1e-9
+    ]
+
+    return {
+        "task_count": len(tasks),
+        "graded_tasks": len(scored),
+        "error_tasks": len(tasks) - len(scored),
+        "avg_pct": round(sum(pcts) / len(pcts), 2) if pcts else None,
+        "avg_pct_raw": round(sum(raws) / len(raws), 2) if raws else None,
+        "required_items": len(counted),
+        "required_passed": passed,
+        "critical_item_pass_rate": (
+            round(passed / len(counted), 4) if counted else None
+        ),
+        "tasks_clamped_at_zero": clamped,
+    }
+
+
+def by_occupation(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Per-occupation means, the breakdown `304` asks for and the payload lacks.
+
+    The payload carries ``wow.by_sector`` and nothing by occupation, yet
+    occupation is where stage 3's widening actually happened: stage 1 reached 7
+    of 44 occupations against all 9 sectors' worth of 4. A sector average over
+    nine buckets cannot show which of the 37 newly-covered occupations moved
+    the ceiling.
+    """
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for task in payload.get("tasks") or []:
+        groups[str(task.get("occupation") or "unrecorded")].append(task)
+    return {name: _aggregate(tasks) for name, tasks in sorted(groups.items())}
+
+
+def _match_task_ids(
+    payload: dict[str, Any], wanted: tuple[str, ...] | list[str]
+) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    """Resolve id prefixes against the payload, refusing ambiguity.
+
+    The specification names tasks by their first eight characters while the
+    payload carries full UUIDs, so these have to be matched by prefix. A prefix
+    that matches two tasks would silently double-count one and a prefix that
+    matches none would silently shrink the subset, and either would move a mean
+    the report quotes -- so both are returned rather than absorbed.
+    """
+    tasks = payload.get("tasks") or []
+    matched: list[dict[str, Any]] = []
+    missing: list[str] = []
+    ambiguous: list[str] = []
+    for prefix in wanted:
+        hits = [
+            task for task in tasks if str(task.get("task_id")).startswith(prefix)
+        ]
+        if not hits:
+            missing.append(prefix)
+        elif len(hits) > 1:
+            ambiguous.append(prefix)
+        else:
+            matched.append(hits[0])
+    return matched, missing, ambiguous
+
+
+def subset_scores(
+    payload: dict[str, Any],
+    task_ids: tuple[str, ...] | list[str],
+    *,
+    exclude: bool = False,
+) -> dict[str, Any]:
+    """Re-score the corpus over a subset, or over everything but a subset.
+
+    `304-full-gold-corpus.md` promises the mean *with and without* the five
+    declared input limits, so that their share is separated rather than argued
+    about after the fact. Recomputing it needs the run's own two aggregation
+    styles, which is why this goes through `_aggregate` rather than averaging
+    the per-task percentages a second way.
+    """
+    matched, missing, ambiguous = _match_task_ids(payload, task_ids)
+    matched_ids = {id(task) for task in matched}
+
+    if exclude:
+        selected = [
+            task
+            for task in (payload.get("tasks") or [])
+            if id(task) not in matched_ids
+        ]
+    else:
+        selected = matched
+
+    block = _aggregate(selected)
+    block["requested"] = list(task_ids)
+    block["matched"] = [str(task.get("task_id")) for task in matched]
+    block["missing"] = missing
+    block["ambiguous"] = ambiguous
+    block["excluded"] = exclude
+    return block
+
+
+def stage_one_subset(payload: dict[str, Any]) -> dict[str, Any]:
+    """How stage 1's thirty tasks scored inside this run.
+
+    Stage 1's corpus is the first thirty of stage 3's in the same order, and
+    `step9_merge_shards.py` normalises shards back into canonical corpus order
+    before writing, so the first thirty entries of a merged payload *are* those
+    tasks. That is an inference about ordering, though, and a report should not
+    rest a comparison on one -- so it is checked: the thirty ids are hashed
+    with the grader's own function and the digest has to be stage 1's pinned
+    `82d14ac9...`.
+
+    If it is not, ``verified`` is false and the numbers are withheld. A
+    same-30 comparison drawn from the wrong thirty tasks is worse than no
+    comparison, because nothing downstream could tell.
+    """
+    tasks = payload.get("tasks") or []
+    corpus = STAGE_ONE_CORPUS
+
+    if len(tasks) < corpus.task_count:
+        return {
+            "verified": False,
+            "reason": (
+                f"payload holds {len(tasks)} tasks, fewer than the "
+                f"{corpus.task_count} stage 1 pinned"
+            ),
+        }
+
+    first = tasks[: corpus.task_count]
+    digest = _ordered_task_ids_sha256(
+        [str(task.get("task_id")) for task in first]
+    )
+    if digest != corpus.ordered_task_ids_sha256:
+        return {
+            "verified": False,
+            "reason": (
+                f"the first {corpus.task_count} tasks hash to {digest}, not "
+                f"stage 1's {corpus.ordered_task_ids_sha256} -- so they are "
+                "not stage 1's corpus in stage 1's order"
+            ),
+            "ordered_task_ids_sha256": digest,
+        }
+
+    block = _aggregate(first)
+    block["verified"] = True
+    block["ordered_task_ids_sha256"] = digest
+    return block
 
 
 def _tasks_with_errors(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -375,9 +748,12 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
 
     shortfalls = items_below_full_marks(payload)
     graded_items = sum(len(task.get("items") or []) for task in payload.get("tasks") or [])
+    corpus = identify_corpus(payload)
 
     return {
         "identity": {
+            "corpus": None if corpus is None else corpus.key,
+            "corpus_label": None if corpus is None else corpus.label,
             "experiment_id": payload.get("experiment_id"),
             "run_status": payload.get("run_status"),
             "graded_at": payload.get("graded_at"),
@@ -407,6 +783,7 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
             "judge_pass_rate": wow.get("judge_pass_rate"),
             "precheck_pass_rate": wow.get("precheck_pass_rate"),
             "by_sector": wow.get("by_sector"),
+            "by_occupation": by_occupation(payload),
             "score_density_histogram": wow.get("score_density_histogram"),
         },
         "usage": {
@@ -439,6 +816,17 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
         },
         "per_task": per_task(payload),
         "required_items": required_items(payload),
+        "subsets": {
+            # `304` asks for the mean with and without the five declared input
+            # limits, and for the same thirty tasks stage 1 measured. All three
+            # go through the run's own aggregation so they can sit in one table
+            # beside the headline number without a footnote about arithmetic.
+            "stage_one_same_thirty": stage_one_subset(payload),
+            "known_limits_only": subset_scores(payload, KNOWN_LIMIT_TASK_IDS),
+            "without_known_limits": subset_scores(
+                payload, KNOWN_LIMIT_TASK_IDS, exclude=True
+            ),
+        },
     }
 
 
@@ -471,10 +859,83 @@ def _wrapped_ids(task_ids: list[str], *, per_line: int = 3, indent: str = " " * 
     ]
 
 
+def _wrapped_prose(
+    text: str,
+    *,
+    indent: str,
+    width: int = 110,
+    first_indent: str | None = None,
+) -> list[str]:
+    """A sentence down the page rather than off the side of it.
+
+    The readable report is checked line by line for width, because a report
+    somebody has to scroll sideways to read is one they stop reading.
+    """
+    return textwrap.wrap(
+        text,
+        width=width,
+        initial_indent=indent if first_indent is None else first_indent,
+        subsequent_indent=indent,
+    ) or [(indent if first_indent is None else first_indent) + text]
+
+
+def _labelled_prose(label: str, text: str | None, *, budget: int) -> list[str]:
+    """A labelled sentence, wrapped under a hanging indent.
+
+    The criterion and the judge's evidence are free text written by other
+    people, so they arrive at any length and with newlines in them. They used
+    to be cut with a bare slice, which both ran off the side of the page and
+    stopped mid-word; this collapses the whitespace, cuts on a word boundary
+    if it must cut at all, and lets the rest wrap underneath the label.
+    """
+    body = " ".join((text or "").split())
+    if not body:
+        return []
+    if len(body) > budget:
+        body = textwrap.shorten(body, width=budget, placeholder=" ...")
+    return _wrapped_prose(
+        body, indent=" " * 17, first_indent=f"      {label:<9}  "
+    )
+
+
+def _render_subset(label: str, block: dict[str, Any]) -> list[str]:
+    """One subset's line, or the reason there isn't one.
+
+    A withheld subset prints why it was withheld. Printing nothing would read
+    the same as a subset that scored nothing. The reason carries two 64-character
+    fingerprints, so it is wrapped rather than run off the side of the page.
+    """
+    if block.get("verified") is False:
+        return [f"  {label}"] + _wrapped_prose(
+            f"withheld — {block.get('reason')}", indent=" " * 6
+        )
+
+    pct = "n/a" if block["avg_pct"] is None else f"{block['avg_pct']}%"
+    out = [
+        f"  {pct:<8} n={block['task_count']:<4d} "
+        f"required {block['required_passed']}/{block['required_items']}"
+        f"  ·  {label}"
+    ]
+
+    if block.get("avg_pct_raw") is not None and block["avg_pct_raw"] != block["avg_pct"]:
+        out.append(
+            f"      before the floor at zero: {block['avg_pct_raw']}% "
+            f"({len(block['tasks_clamped_at_zero'])} task(s) clamped)"
+        )
+    for field, note in (
+        ("missing", "named but not in this payload"),
+        ("ambiguous", "matched more than one task, so left out"),
+    ):
+        if block.get(field):
+            out.append(f"      {note}:")
+            out.extend(_wrapped_ids(block[field]))
+    return out
+
+
 def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
     lines: list[str] = []
     identity = report["identity"]
-    lines.append("Gold ceiling — stage 1")
+    lines.append(f"Gold ceiling — {identity['corpus_label'] or 'unpinned corpus'}")
     lines.append("=" * 60)
     lines.append(f"  experiment      {identity['experiment_id']}")
     lines.append(f"  graded at       {identity['graded_at']}")
@@ -513,6 +974,36 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
         f"  {req['passed']} of {req['total']} passed"
         + ("" if req["rate"] is None else f"  ({req['rate']})")
     )
+    if not req["agrees_with_payload"]:
+        # Recomputed here and written by the grader there. If they part company
+        # the report has two answers to one question, and saying so is the only
+        # honest thing to print.
+        lines.append(
+            f"  !! recount disagrees with the run's own "
+            f"{req['payload_rate']} — do not quote either until it is settled"
+        )
+    if req["score_excluded"]:
+        lines.append(
+            f"  not scored              {req['score_excluded']} item(s) the "
+            "grader excluded, kept out of the denominator"
+        )
+    if req["unscorable"]:
+        lines.append(
+            f"  unscorable              {req['unscorable']} counted item(s) "
+            "carry no model_did_right"
+        )
+    if req["penalty_items"]:
+        lines.append(
+            f"  penalties               {req['penalty_items']} item(s) with a "
+            f"negative maximum, {req['penalty_items_fired']} of them fired"
+        )
+    legacy = req["legacy_verdict_pass"]
+    if legacy["disagreements"]:
+        lines.append(
+            f"  retired 'verdict == pass' spelling would say "
+            f"{legacy['passed']} of {legacy['total']} ({legacy['rate']}), "
+            f"differing on {legacy['disagreements']} item(s)"
+        )
     if req["by_verdict"]:
         verdicts = ", ".join(f"{n} {v}" for v, n in req["by_verdict"].items())
         lines.append(f"  verdicts                {verdicts}")
@@ -539,6 +1030,34 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
             f"    {sector:<52} {block.get('avg_pct')}%  "
             f"n={block.get('task_count')}"
         )
+    lines.append("")
+
+    occupations = scores["by_occupation"] or {}
+    if occupations:
+        lines.append(f"By occupation ({len(occupations)})")
+        lines.append("-" * 60)
+        for name, block in sorted(
+            occupations.items(),
+            key=lambda pair: (
+                pair[1]["avg_pct"] is None,
+                pair[1]["avg_pct"],
+                pair[0],
+            ),
+        ):
+            pct = "  n/a" if block["avg_pct"] is None else f"{block['avg_pct']:6.2f}"
+            lines.append(
+                f"  {pct}%  n={block['task_count']:<3d}  "
+                f"required {block['required_passed']}/{block['required_items']}"
+                f"  ·  {name[:44]}"
+            )
+        lines.append("")
+
+    subsets = report["subsets"]
+    lines.append("Subsets")
+    lines.append("-" * 60)
+    lines.extend(_render_subset("the same thirty stage 1 graded", subsets["stage_one_same_thirty"]))
+    lines.extend(_render_subset("the five declared input limits", subsets["known_limits_only"]))
+    lines.extend(_render_subset("everything but those five", subsets["without_known_limits"]))
     lines.append("")
 
     usage = report["usage"]
@@ -629,11 +1148,15 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
             f"[{row['verdict']}, {row['routing_modality']}, "
             f"decided by {row['decided_by']}]  {row['task_id']}"
         )
-        lines.append(f"      criterion  {(row['criterion'] or '')[:150]}")
-        lines.append(f"      evidence   {(row['evidence'] or '')[:220]}")
+        lines.extend(_labelled_prose("criterion", row["criterion"], budget=300))
+        lines.extend(_labelled_prose("evidence", row["evidence"], budget=400))
         if row["selection_status"] != "ok":
-            lines.append(
-                f"      selection  {row['selection_status']}: {row['selection_error']}"
+            lines.extend(
+                _labelled_prose(
+                    "selection",
+                    f"{row['selection_status']}: {row['selection_error']}",
+                    budget=300,
+                )
             )
     remaining = len(short["items"]) - shortfall_limit
     if remaining > 0:
@@ -660,9 +1183,9 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-any-run",
         action="store_true",
         help=(
-            "skip the check that this payload is stage 1's corpus, fully "
-            "graded. Use to look inside a single shard or another corpus, "
-            "never for a number a report will quote"
+            "skip the check that this payload is one of the pinned corpora, "
+            "fully graded. Use to look inside a single shard, never for a "
+            "number a report will quote"
         ),
     )
     args = parser.parse_args(argv)
@@ -673,7 +1196,7 @@ def main(argv: list[str] | None = None) -> int:
         problems = _identity_problems(payload)
         if problems:
             raise NotTheRunThatWasPinned(
-                f"{args.grade_file} is not the run stage 1 pinned:\n  - "
+                f"{args.grade_file} is not a pinned corpus, fully graded:\n  - "
                 + "\n  - ".join(problems)
                 + "\nPass --allow-any-run to read it anyway."
             )
