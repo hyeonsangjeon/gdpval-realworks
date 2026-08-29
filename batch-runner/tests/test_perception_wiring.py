@@ -133,6 +133,13 @@ def test_grader_wires_perception_subjudges():
     assert getattr(
         tj.vision_perception.before_upstream_call, "__self__", None
     ) is grader
+    # Audio too, and this line is the one that was missing. The three readers
+    # share one client and therefore one token-per-minute allowance, so a
+    # spacer two of them honour paces nothing. It went unnoticed because a
+    # mistyped content part meant no audio request ever reached a model.
+    assert getattr(
+        tj.audio_perception.before_upstream_call, "__self__", None
+    ) is grader
     raw_cache_key = json.dumps(
         (
             "exp003_GPT52Chat_baseline_runner_exec",

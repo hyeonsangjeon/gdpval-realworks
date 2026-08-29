@@ -32,7 +32,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from core.cost_metering import read_reported_usage
 from core.public_error import public_provider_error_text, public_task_error_text
@@ -180,6 +180,14 @@ class AudioPerception:
     deployment: str = "gpt-audio-1.5"
     call_cap: int = AUDIO_CALL_CAP
     trim_seconds: int = AUDIO_TRIM_SECONDS
+    #: Zero-argument rate-limit guard, invoked immediately before every
+    #: request. The grader passes its own TPM spacer here, the same one the
+    #: main judge and the vision sub-judge get. Audio went without it for as
+    #: long as this class has existed, which was invisible because a mistyped
+    #: content part meant no audio request ever reached a model to be
+    #: throttled; with the shape corrected, an unguarded reader is a reader
+    #: that can spend a shard's remaining budget on 429s.
+    before_upstream_call: Optional[Callable[[], None]] = None
 
     _calls_used: int = field(default=0, init=False)
 
@@ -230,6 +238,8 @@ class AudioPerception:
                 judge_error="unsupported_audio_format",
             )
         b64 = base64.b64encode(data).decode("ascii")
+        if self.before_upstream_call is not None:
+            self.before_upstream_call()
         self._calls_used += 1
         call_started = time.perf_counter()
         input_tokens = 0

@@ -154,6 +154,21 @@ def test_compute_summary_includes_perception_in_total_cost_volume():
     assert cost["unpriced_models"] == ["gpt-5.6-sol", "gpt-audio-1.5"]
 
 
+def _without_interval_checkpoint(tmp_path: Path):
+    """Leave the time-budget save as the only one that can fail.
+
+    ``partial_save_max_interval_sec`` defaults to 900s, and a test that fakes
+    the clock forward to trip the budget trips the interval as well — so the
+    periodic checkpoint saves first, and a test aimed at the time-budget save
+    would be exercising the periodic one instead. Switching it off keeps the
+    two paths testable apart.
+    """
+    path = tmp_path / "grading_configs" / "default.yaml"
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["output"]["partial_save_max_interval_sec"] = 0
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+
 def _setup_workspace(tmp_path: Path):
     (tmp_path / "experiments").mkdir(parents=True, exist_ok=True)
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
@@ -3192,6 +3207,7 @@ def test_time_budget_partial_persistence_failure_never_requests_resume(
     monkeypatch, tmp_path, failure_mode
 ):
     _setup_workspace(tmp_path)
+    _without_interval_checkpoint(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
     monkeypatch.setattr(s8, "Grader", _FakeGrader)
@@ -3215,6 +3231,61 @@ def test_time_budget_partial_persistence_failure_never_requests_resume(
 
     assert rc == 5
     assert rc != 7
+
+
+@pytest.mark.parametrize("interval_sec, first_save", [(900, 1), (0, 3)])
+def test_a_finished_task_reaches_disk_on_the_clock_not_the_count(
+    monkeypatch, tmp_path, interval_sec, first_save
+):
+    """Shard 4's loss, reduced to the smallest run that reproduces it.
+
+    ``partial_save_every_n_tasks`` is 10 and a shard holds seventeen tasks, so
+    a chunk that dies before its tenth has never written anything down — which
+    is how run 33239148807 graded six tasks over five hours and left an empty
+    output directory behind. The interval save is what makes a finished task
+    durable on wall-clock time instead of on a task count it may never reach.
+
+    Parametrised against the same run with the interval switched off, because
+    the assertion that matters is the difference between them: without it the
+    first thing written is the finished run, and everything before that is
+    only in memory.
+    """
+    _setup_workspace(tmp_path)
+    if interval_sec == 0:
+        _without_interval_checkpoint(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
+    monkeypatch.setattr(s8, "Grader", _FakeGrader)
+
+    # Every reading of the clock advances it past the interval, so the save is
+    # due after each task. The budget is out of reach, so nothing else stops
+    # the loop and the run ends by grading all three.
+    elapsed = {"t": 0.0}
+
+    def tick():
+        elapsed["t"] += 1000.0
+        return elapsed["t"]
+
+    monkeypatch.setattr(s8.time, "monotonic", tick)
+    monkeypatch.setenv("GRADER_TIME_BUDGET_SEC", "1000000000")
+
+    saved: list[int] = []
+    real_save = s8._save_json
+
+    def record(path, payload):
+        saved.append(len(payload["tasks"]))
+        real_save(path, payload)
+
+    monkeypatch.setattr(s8, "_save_json", record)
+    monkeypatch.setattr("sys.argv", [
+        "step8_grade.py", "exp998_smoke_baseline_sample",
+        "--config", "grading_configs/default.yaml", "--force",
+    ])
+
+    assert s8.main() == 0
+    assert saved, "the run wrote nothing at all"
+    assert saved[0] == first_save
+    assert saved[-1] == 3, "the completed run is written whichever way it got there"
 
 
 def test_atomic_save_failure_preserves_existing_file(monkeypatch, tmp_path):
@@ -3373,7 +3444,11 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert "refs/heads/main" in validate_inputs["run"]
     assert "GRADE_TASKS_LIMIT" in validate_inputs["run"]
     assert "git rev-parse HEAD" in verify_checkout["run"]
-    assert "refs/remotes/origin/main" in verify_checkout["run"]
+    assert 'git diff --name-only "$GITHUB_SHA" "$HEAD_SHA"' in verify_checkout["run"], (
+        "the dispatched revision is pinned by the content of the grading "
+        "inputs, not by the branch tip, which sibling shards move constantly; "
+        "see test_a_sibling_shards_commit_cannot_kill_a_chunk.py"
+    )
     assert "required input must be a regular non-symlink file" in verify_checkout["run"]
     assert all(
         "${{ inputs." not in step.get("run", "")

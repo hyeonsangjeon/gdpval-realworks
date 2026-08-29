@@ -16,6 +16,7 @@ import json
 import math
 import os
 import re
+import signal
 import sys
 import tempfile
 import time
@@ -37,12 +38,14 @@ from core.cost_receipts import (
     BUCKET_GRADING,
     STATUS_COMPLETE,
     CostReceipt,
+    CostReceiptLedger,
     ledger_reference,
     summarise_receipts,
 )
 from core.experiment_config import ExperimentConfig
 from core.grader import (
     Grader,
+    GradingDeadlineExceeded,
     _is_critical_item,
     grader_transport_options,
     resolve_tool_prompt_path,
@@ -329,6 +332,24 @@ def _repo_relative_grade_file(out_path: Path) -> str:
     if not value or any(char in value for char in ("\r", "\n")):
         raise ValueError("grade output path is not safe for GITHUB_OUTPUT")
     return value
+
+
+def _exit_on_signal(signum: int, _frame: Any) -> None:
+    """Leave through ``SystemExit`` so the exit handlers get to run.
+
+    GitHub sends SIGTERM when a job passes its ``timeout-minutes``. Python's
+    default disposition for it kills the process where it stands, which skips
+    ``atexit`` — and the cost ledger's final export is an ``atexit`` handler,
+    because a run that is being killed is precisely the run that never reached
+    a save. Raising ``SystemExit`` instead unwinds normally and lets the export
+    happen. The code is the conventional ``128 + signal`` so that nothing
+    downstream can read a cancellation as a clean finish.
+    """
+    print(
+        f"[signal] received {signum}; unwinding so exit handlers can run",
+        file=sys.stderr,
+    )
+    sys.exit(128 + signum)
 
 
 def _write_github_output(name: str, value: str) -> None:
@@ -2141,13 +2162,55 @@ def main() -> int:
     # which tasks are already done — so the round is read off the ledger's size.
     cost_ledger_path = out_path.with_name(out_path.stem + ".cost_ledger.sqlite3")
     cost_export_path = out_path.with_name(out_path.stem + ".cost_ledger.jsonl")
+    cost_run_id = f"{args.experiment_yaml_name}|{config_hash}|{grader_source_hash}"
+
+    # The paragraph above describes a ledger that outlives its chunk, and on a
+    # developer's machine it does. In CI it did not: every chunk gets a fresh
+    # runner with an empty workspace, so the sqlite3 a previous chunk filled in
+    # was gone before the next one looked for it, and each chunk opened an
+    # empty ledger and exported only its own calls. What does survive is the
+    # JSONL, which the workflow commits beside the grade file — so that is what
+    # the ledger is rebuilt from here.
+    #
+    # This has to happen *before* the recorder is opened. ``continue_rounds``
+    # reads the round number off the ledger's size, and the round is folded
+    # into every call identifier; a ledger seeded afterwards would hand this
+    # chunk identifiers the previous one had already used, and importing those
+    # later would look like a contradiction rather than a duplicate.
+    if cost_export_path.is_file() and not cost_ledger_path.exists():
+        try:
+            seed = CostReceiptLedger(cost_ledger_path, run_id=cost_run_id)
+            try:
+                recovered = seed.import_jsonl(cost_export_path)
+            finally:
+                seed.close()
+            print(
+                f"[cost] recovered {recovered} records from "
+                f"{cost_export_path.name}",
+                file=sys.stderr,
+            )
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            print(
+                f"[cost] ledger recovery from {cost_export_path.name} failed "
+                f"({type(exc).__name__}); this chunk's receipts will cover "
+                "this chunk only",
+                file=sys.stderr,
+            )
+
     cost_recorder, cost_ledger_note = open_cost_recorder(
         cost_ledger_path,
-        run_id=f"{args.experiment_yaml_name}|{config_hash}|{grader_source_hash}",
+        run_id=cost_run_id,
         continue_rounds=True,
     )
     if cost_ledger_note:
         print(f"[cost] {cost_ledger_note}", file=sys.stderr)
+
+    # The ledger is a sqlite database, and exporting one that has been closed
+    # raises rather than returning nothing. Both facts below exist to keep the
+    # export strictly before the close on every path out of this function; see
+    # ``close_grader`` for why the ordering is not obvious.
+    ledger_closed = False
+    last_ledger_digest: str | None = None
 
     def cost_ledger_pointer() -> dict[str, str] | None:
         """Export the ledger and return the pointer a saved grade carries.
@@ -2169,6 +2232,72 @@ def main() -> int:
             )
             return None
         return ledger_reference(cost_export_path.name, digest)
+
+    def flush_cost_ledger() -> None:
+        """Put the ledger on disk wherever this run ends, including badly.
+
+        Exporting at each save is right for the pointer a saved grade carries
+        and wrong for keeping the record, because a run that never saves never
+        exports. Shard 4 of the first Stage 3 attempt is the case: it graded
+        six tasks over five hours, hit the job's own timeout inside the
+        seventh, saved nothing — ``partial_save_every_n_tasks`` is 10 — and
+        left no artifact behind, so five hours of paid calls are recorded
+        nowhere at all.
+
+        This runs on every return, on an unhandled exception, and on the
+        SIGTERM a cancelled job arrives as. It publishes the path and digest as
+        step outputs too, so the workflow can preserve them without having to
+        guess where they are.
+
+        It refuses to run once the ledger is shut. ``atexit`` unwinds in
+        reverse order of registration, so on the paths that do not go through
+        ``finish`` — the crash and the cancellation, which are the ones this
+        exists for — ``close_grader`` runs first and closes the database out
+        from under this. Exporting then raises ``ProgrammingError`` and prints
+        an export failure, which is both the wrong outcome (nothing is
+        written) and the wrong message (it reads as loss on the normal path,
+        where the ledger is already safely on disk). The flush is therefore
+        performed by ``close_grader`` immediately before it closes, and this
+        guard makes the later call a silent no-op.
+        """
+        nonlocal last_ledger_digest
+        if cost_recorder is None or ledger_closed:
+            return
+        try:
+            digest = cost_recorder.ledger.export_jsonl(cost_export_path)
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            print(
+                f"[cost] final ledger export failed ({type(exc).__name__})",
+                file=sys.stderr,
+            )
+            return
+        if digest == last_ledger_digest:
+            # Already reported, and nothing has been recorded since. Saying it
+            # twice invites the reader to look for two ledgers.
+            return
+        last_ledger_digest = digest
+        print(
+            f"[cost] ledger → {cost_export_path.name} sha256={digest}",
+            file=sys.stderr,
+        )
+        try:
+            _write_github_output(
+                "cost_ledger_file", _repo_relative_grade_file(cost_export_path)
+            )
+            _write_github_output("cost_ledger_sha256", digest)
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            print(
+                f"[cost] could not publish the ledger pointer "
+                f"({type(exc).__name__})",
+                file=sys.stderr,
+            )
+
+    atexit.register(flush_cost_ledger)
+    for _signum in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(_signum, _exit_on_signal)
+        except (ValueError, OSError):  # not the main thread, or unsupported
+            pass
 
     def grading_receipt(task_id: str) -> dict:
         """This task's grading receipt, or an explicit reason there is none.
@@ -2200,11 +2329,14 @@ def main() -> int:
             file=sys.stderr,
         )
         if cost_recorder is not None:
+            flush_cost_ledger()
+            ledger_closed = True
             cost_recorder.ledger.close()
         return 4
 
     def close_grader() -> None:
         nonlocal grader
+        nonlocal ledger_closed
         active_grader = grader
         grader = None
         try:
@@ -2220,6 +2352,20 @@ def main() -> int:
         # After the judge, never before: closing the ledger first would leave
         # a client that is still being shut down writing to a closed database.
         if cost_recorder is not None:
+            # The last chance to export, and on a crash or a cancellation the
+            # only one. This function is registered with ``atexit`` after
+            # ``flush_cost_ledger`` and so unwinds before it, which means a run
+            # that does not reach ``finish`` arrives here with the ledger still
+            # unexported. Flushing from inside the close is what makes the
+            # ordering true by construction instead of by registration order.
+            try:
+                flush_cost_ledger()
+            except BaseException as exc:
+                print(
+                    f"ERROR: cost ledger export failed: {type(exc).__name__}",
+                    file=sys.stderr,
+                )
+            ledger_closed = True
             try:
                 cost_recorder.ledger.close()
             except BaseException as exc:
@@ -2267,16 +2413,132 @@ def main() -> int:
     # for tighter chunks, or longer for self-hosted runners).
     time_budget_sec = int(os.getenv("GRADER_TIME_BUDGET_SEC", "14400"))
     grade_loop_start = time.monotonic()
+
+    # A finished task belongs on disk within this long, whatever the task
+    # count says. ``partial_save_every_n_tasks`` counts tasks, and a shard
+    # holds seventeen of them, so the first checkpoint of a default run falls
+    # after the tenth — which shard 4 of the first Stage 3 attempt never
+    # reached. It finished six, spent four more hours inside the seventh, and
+    # was killed with an empty output directory. Six tasks were graded and
+    # paid for twice.
+    partial_save_max_interval_sec = float(
+        config.get("output", {}).get("partial_save_max_interval_sec", 900)
+    )
+    last_partial_save = grade_loop_start
+    # Seeded from the loop's own start rather than a second reading of the
+    # clock. They denote the same instant, and taking it once means the
+    # budget and the checkpoint interval are measured from a common origin
+    # instead of from two points a few microseconds apart.
+
+    def out_of_time() -> bool:
+        return (
+            time_budget_sec > 0
+            and (time.monotonic() - grade_loop_start) > time_budget_sec
+        )
+
+    # Installed here rather than passed to the constructor because the budget
+    # is measured from the loop, not from the judge's setup. The grader calls
+    # this between rubric items and between split children, so the budget is
+    # reachable from inside a task instead of only between tasks.
+    grader.should_stop = out_of_time
+
     GRADE_EXIT_RESUME = 7  # contract with grade-run.yml's auto-trigger step
     GRADE_EXIT_PERSISTENCE_FAILURE = 5
     GRADE_EXIT_RUNTIME_FAILURE = 6
 
+    prompt_version = grader.prompt_version
+
+    def build_payload(run_status: str) -> dict:
+        return _build_grade_payload(
+            args.experiment_yaml_name,
+            inf_results,
+            config,
+            config_hash,
+            loader,
+            prompt_version,
+            task_payloads,
+            grader_source_hash,
+            inference_repo_id,
+            inference_revision,
+            azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
+            azure_ai_routes=azure_ai_routes,
+            run_status=run_status,
+            expected_task_ids=expected_task_ids,
+            exp_config=exp_config,
+            source_experiment_id=args.source_experiment_id,
+            renderer_fingerprint=renderer_fingerprint,
+            cost_ledger=cost_ledger_pointer(),
+        )
+
+    def save_checkpoint(run_status: str, *, verify: bool = True) -> None:
+        """Write the tasks finished so far, and prove the file readable.
+
+        ``verify`` re-reads and compares because the paths that end the run
+        get one chance at persistence; the periodic checkpoint skips it, since
+        another one follows shortly and a torn write there costs minutes
+        rather than the chunk.
+        """
+        nonlocal last_partial_save
+        payload = build_payload(run_status)
+        _validate_schema(payload)
+        _save_json(out_path, payload)
+        if verify:
+            persisted = _load_existing_grade(out_path)
+            _validate_schema(persisted)
+            if persisted != payload:
+                raise ValueError(f"persisted {run_status} does not match payload")
+        last_partial_save = time.monotonic()
+
     def finish(code: int) -> int:
         try:
-            close_grader()
+            flush_cost_ledger()
         finally:
-            atexit.unregister(grader_exit_cleanup)
+            try:
+                close_grader()
+            finally:
+                atexit.unregister(grader_exit_cleanup)
         return code
+
+    def out_of_time_exit(note: str) -> int:
+        """Stop, keep what is finished, and say whether resuming is worth it.
+
+        Exit 7 asks the workflow for another paid chunk, and that is only
+        honest if this chunk moved the shard forward. A chunk that finished
+        nothing would hand the next one the same first task and the same
+        result, charging for the loop each time — so it stops the shard
+        instead and leaves a human to look at the task that is eating the
+        budget.
+
+        The elapsed time is read here rather than taken from the caller so
+        that the loop asks the clock once per task, in ``out_of_time``. A
+        second read alongside it is not merely redundant: it moves the
+        decision one tick later than the number that gets reported for it.
+        """
+        elapsed_sec = time.monotonic() - grade_loop_start
+        graded_count = len(task_payloads)
+        remaining = len(shard_tasks) - graded_count
+        if graded_count <= initial_completed_count:
+            print(
+                f"[time-guard] {note}; no new task completed in this chunk; "
+                "refusing to request another paid resume",
+                file=sys.stderr,
+            )
+            return finish(GRADE_EXIT_PERSISTENCE_FAILURE)
+        print(
+            f"\n[time-guard] {note}: elapsed {elapsed_sec/60:.1f}min > budget "
+            f"{time_budget_sec/60:.0f}min; graded={graded_count}/{len(shard_tasks)} "
+            f"remaining={remaining}. Saving partial and requesting resume.",
+            file=sys.stderr,
+        )
+        try:
+            save_checkpoint("partial")
+            print(f"[time-guard] partial saved → {out_path}", file=sys.stderr)
+        except Exception as save_exc:
+            import traceback
+            print(f"[time-guard] partial save FAILED: {save_exc}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            return finish(GRADE_EXIT_PERSISTENCE_FAILURE)
+        return finish(GRADE_EXIT_RESUME)
 
     for idx, task_result in enumerate(shard_tasks, start=1):
         # Resume skip
@@ -2284,62 +2546,21 @@ def main() -> int:
             continue
 
         # Time-budget pre-check (before starting an expensive judge call)
-        elapsed_sec = time.monotonic() - grade_loop_start
-        if time_budget_sec > 0 and elapsed_sec > time_budget_sec:
-            graded_count = len(task_payloads)
-            remaining = len(shard_tasks) - graded_count
-            if graded_count <= initial_completed_count:
-                print(
-                    "[time-guard] no new task completed in this chunk; "
-                    "refusing to request another paid resume",
-                    file=sys.stderr,
-                )
-                return finish(GRADE_EXIT_PERSISTENCE_FAILURE)
-            print(
-                f"\n[time-guard] elapsed {elapsed_sec/60:.1f}min > budget "
-                f"{time_budget_sec/60:.0f}min; graded={graded_count}/{len(shard_tasks)} "
-                f"remaining={remaining}. Saving partial and requesting resume.",
-                file=sys.stderr,
-            )
-            try:
-                partial = _build_grade_payload(
-                    args.experiment_yaml_name,
-                    inf_results,
-                    config,
-                    config_hash,
-                    loader,
-                    grader.prompt_version,
-                    task_payloads,
-                    grader_source_hash,
-                    inference_repo_id,
-                    inference_revision,
-                    azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
-                    azure_ai_routes=azure_ai_routes,
-                    run_status="partial",
-                    expected_task_ids=expected_task_ids,
-                    exp_config=exp_config,
-                    source_experiment_id=args.source_experiment_id,
-                    renderer_fingerprint=renderer_fingerprint,
-                    cost_ledger=cost_ledger_pointer(),
-                )
-                _validate_schema(partial)
-                _save_json(out_path, partial)
-                persisted = _load_existing_grade(out_path)
-                _validate_schema(persisted)
-                if persisted != partial:
-                    raise ValueError("persisted partial does not match payload")
-                print(f"[time-guard] partial saved → {out_path}", file=sys.stderr)
-            except Exception as save_exc:
-                import traceback
-                print(f"[time-guard] partial save FAILED: {save_exc}", file=sys.stderr)
-                traceback.print_exc(file=sys.stderr)
-                return finish(GRADE_EXIT_PERSISTENCE_FAILURE)
-            return finish(GRADE_EXIT_RESUME)
+        if out_of_time():
+            return out_of_time_exit("between tasks")
 
         task = loader.load(task_result["task_id"])
         deliverable_dir = resolve_deliverable_dir(task_result)
         task_started = time.perf_counter()
-        grade = grader.grade_task(task, deliverable_dir)
+        try:
+            grade = grader.grade_task(task, deliverable_dir)
+        except GradingDeadlineExceeded as expired:
+            # The task is dropped whole, not saved half-marked: an unfinished
+            # task would be scored on the items it got through, and the ones
+            # it never reached would read as failures. Whatever it spent is
+            # in the ledger, and the next chunk marks it from the start.
+            print(f"[time-guard] {expired}", file=sys.stderr)
+            return out_of_time_exit(f"inside {task.task_id}")
         grading_wall_time_ms = (time.perf_counter() - task_started) * 1000.0
         row = _task_to_dict(
             grade,
@@ -2379,32 +2600,7 @@ def main() -> int:
 
         if runtime_error is not None:
             try:
-                diagnostic = _build_grade_payload(
-                    args.experiment_yaml_name,
-                    inf_results,
-                    config,
-                    config_hash,
-                    loader,
-                    grader.prompt_version,
-                    task_payloads,
-                    grader_source_hash,
-                    inference_repo_id,
-                    inference_revision,
-                    azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
-                    azure_ai_routes=azure_ai_routes,
-                    run_status="diagnostic",
-                    expected_task_ids=expected_task_ids,
-                    exp_config=exp_config,
-                    source_experiment_id=args.source_experiment_id,
-                    renderer_fingerprint=renderer_fingerprint,
-                    cost_ledger=cost_ledger_pointer(),
-                )
-                _validate_schema(diagnostic)
-                _save_json(out_path, diagnostic)
-                persisted = _load_existing_grade(out_path)
-                _validate_schema(persisted)
-                if persisted != diagnostic:
-                    raise ValueError("persisted diagnostic does not match payload")
+                save_checkpoint("diagnostic")
             except Exception as save_exc:
                 print(
                     f"ERROR: Track 2 runtime diagnostic save failed: {save_exc}",
@@ -2418,30 +2614,14 @@ def main() -> int:
             )
             return finish(GRADE_EXIT_RUNTIME_FAILURE)
 
-        if partial_every > 0 and idx % partial_every == 0:
+        due_by_count = partial_every > 0 and idx % partial_every == 0
+        due_by_clock = (
+            partial_save_max_interval_sec > 0
+            and (time.monotonic() - last_partial_save) > partial_save_max_interval_sec
+        )
+        if due_by_count or due_by_clock:
             try:
-                partial = _build_grade_payload(
-                    args.experiment_yaml_name,
-                    inf_results,
-                    config,
-                    config_hash,
-                    loader,
-                    grader.prompt_version,
-                    task_payloads,
-                    grader_source_hash,
-                    inference_repo_id,
-                    inference_revision,
-                    azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
-                    azure_ai_routes=azure_ai_routes,
-                    run_status="partial",
-                    expected_task_ids=expected_task_ids,
-                    exp_config=exp_config,
-                    source_experiment_id=args.source_experiment_id,
-                    renderer_fingerprint=renderer_fingerprint,
-                    cost_ledger=cost_ledger_pointer(),
-                )
-                _validate_schema(partial)
-                _save_json(out_path, partial)
+                save_checkpoint("partial", verify=False)
             except Exception as save_exc:
                 import traceback
                 print(
@@ -2455,26 +2635,7 @@ def main() -> int:
                 traceback.print_exc(file=sys.stderr)
                 raise
 
-    final = _build_grade_payload(
-        args.experiment_yaml_name,
-        inf_results,
-        config,
-        config_hash,
-        loader,
-        grader.prompt_version,
-        task_payloads,
-        grader_source_hash,
-        inference_repo_id,
-        inference_revision,
-        azure_ai_runtime_fingerprint=azure_ai_runtime_fingerprint,
-        azure_ai_routes=azure_ai_routes,
-        run_status=emitted_run_status,
-        expected_task_ids=expected_task_ids,
-        exp_config=exp_config,
-        source_experiment_id=args.source_experiment_id,
-        renderer_fingerprint=renderer_fingerprint,
-        cost_ledger=cost_ledger_pointer(),
-    )
+    final = build_payload(emitted_run_status)
     _validate_schema(final)
     _save_json(out_path, final)
 
