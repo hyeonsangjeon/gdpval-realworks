@@ -321,3 +321,252 @@ def test_inventory_counts():
     counts = inventory([c for c, _ in CASES])
     # 5 visual, 3 audio, 1 formatting, 3 text per the CASES table
     assert counts == {"visual": 5, "audio": 3, "formatting": 1, "text": 3}
+
+
+# ── A file with no text answers nothing from its text ────────────────
+#
+# Stage 1 graded one gold answer that is a two-page scan. Ten rubric items
+# about its contents routed TEXT, read zero characters, and were failed as
+# "that content is absent" -- about a document that says all ten things, on
+# pages the harness had already rendered for the same task's other items.
+#
+# The escalation below is the fix, and these tests pin the three conditions
+# that keep it from doing harm: it fires only on a measured ``False``, only
+# from the two modalities that were asking for text, and only when every
+# selected file can actually be rendered.
+
+
+def test_a_text_criterion_escalates_when_no_selected_file_has_text():
+    decision = resolve_runtime_routing(
+        "The memo states the total contract value",
+        ["scan.pdf"],
+        selected_paths_have_text=False,
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.preferred_op == "render_to_image"
+
+
+def test_a_formatting_criterion_escalates_on_the_same_evidence():
+    # FORMATTING escalates for the same reason TEXT does: `inspect_formatting`
+    # on a scan reports the page box and nothing about the layout drawn on it.
+    decision = resolve_runtime_routing(
+        "The document structure follows the required template",
+        ["scan.pdf"],
+        selected_paths_have_text=False,
+    )
+
+    assert decision.modality is Modality.VISUAL
+
+
+def test_an_unknown_text_layer_escalates_nothing():
+    # ``None`` is what the probe returns for a file it could not examine in
+    # full -- unsupported kind, read error, page cap. Escalating on it would
+    # trade a readable file for a render on a guess.
+    decision = resolve_runtime_routing(
+        "The memo states the total contract value",
+        ["report.pdf"],
+        selected_paths_have_text=None,
+    )
+
+    assert decision.modality is Modality.TEXT
+    assert decision.preferred_op == "read_content"
+
+
+def test_a_file_that_has_text_is_never_escalated():
+    decision = resolve_runtime_routing(
+        "The memo states the total contract value",
+        ["report.pdf"],
+        selected_paths_have_text=True,
+    )
+
+    assert decision.modality is Modality.TEXT
+
+
+def test_escalation_needs_every_selected_file_to_be_renderable():
+    # ``.txt`` has no renderer. Escalating a set containing one would promise
+    # a render the prepass refuses, which is a guaranteed harness error --
+    # strictly worse than the empty read this rule exists to replace.
+    decision = resolve_runtime_routing(
+        "The memo states the total contract value",
+        ["scan.pdf", "appendix.txt"],
+        selected_paths_have_text=False,
+    )
+
+    assert decision.modality is Modality.TEXT
+
+
+def test_escalation_needs_a_selected_file_at_all():
+    decision = resolve_runtime_routing(
+        "The memo states the total contract value",
+        [],
+        selected_paths_have_text=False,
+    )
+
+    assert decision.modality is Modality.TEXT
+
+
+def test_an_audio_criterion_on_its_own_medium_is_not_escalated():
+    # ``.wav`` is not renderable, so the escalation cannot reach an item that
+    # is already pointed at the sense that answers it.
+    decision = resolve_runtime_routing(
+        "The mix has no clipping",
+        ["stems.wav"],
+        selected_paths_have_text=False,
+    )
+
+    assert decision.modality is Modality.AUDIO
+    assert decision.preferred_op == "probe_audio"
+
+
+def test_an_escalated_decision_keeps_its_matched_keywords():
+    # Mirrors ``test_downgraded_visual_keeps_its_matched_keywords``: moving an
+    # item changes where the judge looks, not what the criterion was found to
+    # be asking for.
+    criterion = "The document structure follows the required template"
+    decision = resolve_runtime_routing(
+        criterion, ["scan.pdf"], selected_paths_have_text=False
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.matched_keywords == classify_criterion(criterion).matched_keywords
+    assert decision.matched_keywords != ()
+
+
+@pytest.mark.parametrize("criterion,_expected", CASES)
+@pytest.mark.parametrize(
+    "paths",
+    [[], ["deliverable"], ["notes.txt"], ["report.pdf"], ["mix.wav"],
+     ["book.xlsx", "slides.pptx"]],
+)
+def test_omitting_the_probe_is_identical_to_not_knowing(criterion, _expected, paths):
+    """The new argument's default must be inert.
+
+    The three pre-existing rules were rewritten from separate ``return``
+    statements into one ``if``/``elif`` chain to make room for the escalation.
+    That is only safe if no two of them could ever have fired together, which
+    is an argument about code rather than a fact about it -- so it is asserted
+    here across every criterion and target shape the module is tested with.
+    """
+    assert resolve_runtime_routing(criterion, paths) == resolve_runtime_routing(
+        criterion, paths, selected_paths_have_text=None
+    )
+
+
+# ── An archive of stems is audio ─────────────────────────────────────
+#
+# ``resolve_runtime_routing`` demotes an AUDIO criterion whose files carry no
+# audio, because a question about a mix has no meaning against a spreadsheet.
+# The test for that was the file extension, which reads a container as if it
+# were a medium: the stage-1 music task ships one ``.zip``, ``.zip`` is not an
+# audio extension, and so all ten of its listening criteria were demoted to
+# TEXT and answered by reading an archive. ``selected_paths_have_audio`` is the
+# measured fact the extension was standing in for.
+
+_STEMS = ["DEJA VU  STEMS .zip"]
+_MIX_CRITERION = "The Master track contains no vocals (instrumental-only)."
+
+
+def test_an_archive_that_holds_audio_keeps_its_listening_route():
+    decision = resolve_runtime_routing(
+        _MIX_CRITERION, _STEMS, selected_paths_have_audio=True
+    )
+
+    assert decision.modality is Modality.AUDIO
+    assert decision.preferred_op == "probe_audio"
+
+
+def test_an_archive_with_no_audio_in_it_is_still_demoted():
+    decision = resolve_runtime_routing(
+        _MIX_CRITERION, _STEMS, selected_paths_have_audio=False
+    )
+
+    assert decision.modality is Modality.TEXT
+
+
+def test_an_archive_it_could_not_open_is_still_demoted():
+    """``None`` is an admission and must not be read as a yes.
+
+    One gold deliverable is a ``.zip`` that will not open. Promoting on that
+    would hand the listening model a file nothing can extract.
+    """
+    decision = resolve_runtime_routing(
+        _MIX_CRITERION, _STEMS, selected_paths_have_audio=None
+    )
+
+    assert decision.modality is Modality.TEXT
+
+
+def test_a_wav_never_needed_the_probe_and_still_does_not():
+    for probe in (True, False, None):
+        decision = resolve_runtime_routing(
+            _MIX_CRITERION, ["master.wav"], selected_paths_have_audio=probe
+        )
+        assert decision.modality is Modality.AUDIO
+
+
+def test_finding_audio_cannot_promote_a_criterion_that_is_not_about_sound():
+    """The probe is defensive only. It stops a demotion; it never routes.
+
+    Otherwise every item on a music task -- including "the filename is
+    correct" -- would be sent to a listening model.
+    """
+    decision = resolve_runtime_routing(
+        "The deliverable is named DEJA VU STEMS.",
+        _STEMS,
+        selected_paths_have_audio=True,
+    )
+
+    assert decision.modality is Modality.TEXT
+
+
+def test_finding_audio_does_not_disturb_a_visual_criterion():
+    decision = resolve_runtime_routing(
+        "The chart colors are legible.",
+        ["deck.pptx", "master.wav"],
+        selected_paths_have_audio=True,
+    )
+
+    assert decision.modality is Modality.VISUAL
+
+
+@pytest.mark.parametrize("criterion", [
+    "The Master track contains no vocals (instrumental-only).",
+    "The Master track tempo is 140 BPM (± 1 BPM).",
+    "From the beginning through 1:22, the harmonic key centers on G major.",
+    "At least one time-based effect is audibly evident in the tails.",
+    "The Bass sound is created using one of the referenced synth families.",
+])
+def test_the_music_criteria_that_matched_nothing_now_classify_audio(criterion):
+    """Verbatim from the stage-1 rubric that scored 0 on every one of them."""
+    assert classify_criterion(criterion).modality is Modality.AUDIO
+
+
+@pytest.mark.parametrize("criterion", [
+    "The delay stems from a supplier issue.",
+    "She was instrumental in closing the deal.",
+    "Revenue is on track for Q3.",
+    "The report lists the key findings.",
+    "The chord of the argument is consistent",
+])
+def test_ordinary_business_english_is_not_mistaken_for_music(criterion):
+    """The words rejected while choosing the additions, kept as a guard.
+
+    The last one is deliberate: "chord" IS an audio keyword, and this shows
+    what happens when one slips through. It classifies AUDIO and is then
+    demoted by the file it points at, which is why a stray hit costs nothing.
+    """
+    assert resolve_runtime_routing(
+        criterion, ["report.docx"], selected_paths_have_audio=False
+    ).modality is not Modality.AUDIO
+
+
+@pytest.mark.parametrize("criterion,_expected", CASES)
+@pytest.mark.parametrize("paths", [[], ["deliverable"], ["stems.zip"],
+                                   ["master.wav"], ["report.pdf"]])
+def test_omitting_the_audio_probe_is_identical_to_not_knowing(
+    criterion, _expected, paths
+):
+    assert resolve_runtime_routing(criterion, paths) == resolve_runtime_routing(
+        criterion, paths, selected_paths_have_audio=None
+    )

@@ -13,7 +13,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Callable, Iterable, Literal, Optional
 
 from core.azure_ai_clients import (
     AzureAIClientFactory,
@@ -37,6 +37,7 @@ from core.grader_routing import (
     resolve_runtime_routing,
 )
 from core.rubric_loader import RubricItem, TaskRubric
+from core.tools import has_audio_content, has_extractable_text
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +280,14 @@ class Grader:
                 / 1000.0
             )
             self._last_judge_call_at: float | None = None
+            #: Per-task memos for the two routing probes, reset at the top of
+            #: every ``grade_task``. ``grader_preflight`` builds a Grader
+            #: through ``object.__new__`` and never runs this method, so it
+            #: sets its own; there is no lazy default on purpose, because a
+            #: missing memo should surface as an error rather than as a probe
+            #: silently repeated once per rubric item.
+            self._text_layer_cache: dict[str, bool | None] = {}
+            self._audio_content_cache: dict[str, bool | None] = {}
 
             # Task 207 — the tool-calling judge is the only grading path.
             # The legacy text-extract / batch / tier-routing paths are gone,
@@ -334,6 +343,11 @@ class Grader:
         # PR3 (0531) — reset per-task perception call caps before each task.
         # __init__ guarantees _tool_judge exists, so this is the only path.
         self._tool_judge.reset_perception()
+        # Every rubric item of a task asks about the same files, so the
+        # routing probes are answered once per file per task rather than
+        # once per item. Cleared here for the same reason the caps are.
+        self._text_layer_cache = {}
+        self._audio_content_cache = {}
         return self._grade_task_with_selector(task, deliverable_path, files)
 
 
@@ -353,6 +367,7 @@ class Grader:
                 selection,
                 item,
                 plan_targets_for_criterion(selection, item.criterion),
+                deliverable_path,
             )
             for item in task.rubric_items
         ]
@@ -557,14 +572,72 @@ class Grader:
             grade.error = "no_deliverables"
         return grade
 
+    def _any_selected_path(
+        self,
+        deliverable_path: Path,
+        paths: Iterable[str],
+        probe: Callable[[Path], "bool | None"],
+        memo: dict[str, bool | None],
+    ) -> bool | None:
+        """Ask one yes/no question of a set of files, once per file per task.
+
+        ``True`` as soon as one file answers yes, ``False`` only if every one
+        was examined and none did, and ``None`` the moment a file cannot be
+        answered for. Routing acts on the definite answers alone, so a file
+        the probe cannot speak for must not be allowed to look like a no.
+
+        The probes are I/O, which is why they live here and not in
+        ``grader_routing``: that module is pure and stays that way.
+        """
+        seen_unknown = False
+        seen_any = False
+        for name in paths:
+            if not isinstance(name, str) or not name:
+                continue
+            seen_any = True
+            if name not in memo:
+                memo[name] = probe(deliverable_path / name)
+            answer = memo[name]
+            if answer:
+                return True
+            if answer is None:
+                seen_unknown = True
+        if not seen_any or seen_unknown:
+            return None
+        return False
+
+    def _selected_paths_have_text(
+        self, deliverable_path: Path, paths: Iterable[str]
+    ) -> bool | None:
+        """Does any of these files yield a single character of text?"""
+        return self._any_selected_path(
+            deliverable_path, paths, has_extractable_text, self._text_layer_cache
+        )
+
+    def _selected_paths_have_audio(
+        self, deliverable_path: Path, paths: Iterable[str]
+    ) -> bool | None:
+        """Is any of these files audio, or an archive that holds audio?"""
+        return self._any_selected_path(
+            deliverable_path, paths, has_audio_content, self._audio_content_cache
+        )
+
     def _runtime_criterion_plan(
         self,
         selection: DeliverableSelection,
         item: RubricItem,
         plan: CriterionTargetPlan,
+        deliverable_path: Path,
     ) -> _RuntimeCriterionPlan:
         item_decision = resolve_runtime_routing(
-            item.criterion, plan.selected_paths
+            item.criterion,
+            plan.selected_paths,
+            selected_paths_have_text=self._selected_paths_have_text(
+                deliverable_path, plan.selected_paths
+            ),
+            selected_paths_have_audio=self._selected_paths_have_audio(
+                deliverable_path, plan.selected_paths
+            ),
         )
         target_decisions: dict[str, RoutingDecision] = {}
         raw_visual_paths: list[str] = []
@@ -582,7 +655,16 @@ class Grader:
                 target = target_by_id.get(target_id)
                 if target is None:
                     continue
-                decision = resolve_runtime_routing(item.criterion, target.paths)
+                decision = resolve_runtime_routing(
+                    item.criterion,
+                    target.paths,
+                    selected_paths_have_text=self._selected_paths_have_text(
+                        deliverable_path, target.paths
+                    ),
+                    selected_paths_have_audio=self._selected_paths_have_audio(
+                        deliverable_path, target.paths
+                    ),
+                )
                 target_decisions[target_id] = decision
                 if decision.modality is Modality.VISUAL:
                     raw_visual_paths.extend(target.paths)

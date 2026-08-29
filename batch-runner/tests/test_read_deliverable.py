@@ -18,6 +18,8 @@ from core.tools import (
     READ_DELIVERABLE_OPS,
     READ_DELIVERABLE_TOOL_SCHEMA,
     RendererDependencyError,
+    has_audio_content,
+    has_extractable_text,
     read_deliverable,
 )
 
@@ -220,6 +222,236 @@ def test_inspect_structure_pdf(base_dir, pdf_file):
     assert r["ok"] is True
     assert r["data"]["kind"] == "pdf"
     assert r["data"]["page_count"] == 1
+
+
+# ── page count and page size ─────────────────────────────────────────
+#
+# Six stage-1 rubric items asked how long a document was and one asked which
+# way its pages faced. Every one of them was answered from a number that is
+# not the answer -- paragraph_count, char_count, or a bare page_count with no
+# geometry beside it -- and five of the seven were marked down against gold
+# answers that were the right length and the right orientation.
+
+
+def _sized_pdf(path: Path, sizes) -> Path:
+    """A PDF whose pages have exactly the given (width_pt, height_pt)."""
+    pytest.importorskip("reportlab")
+    from reportlab.pdfgen import canvas
+
+    document = canvas.Canvas(str(path))
+    for width, height in sizes:
+        document.setPageSize((width, height))
+        document.drawString(20, 20, "page")
+        document.showPage()
+    document.save()
+    return path
+
+
+@pytest.fixture(autouse=True)
+def _clear_page_count_cache():
+    """The layout cache is keyed on a real path, and tmp_path is per-test."""
+    read_deliverable_module._cached_docx_page_count.cache_clear()
+    yield
+    read_deliverable_module._cached_docx_page_count.cache_clear()
+
+
+def test_inspect_structure_docx_reports_the_laid_out_page_count(
+    base_dir, docx_file, monkeypatch
+):
+    """The number already existed on the render path; now the judge sees it."""
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "_convert_office_to_pdf",
+        lambda source, out_dir: _fake_convert_to_pdf(source, out_dir, pages=3),
+    )
+    r = read_deliverable("inspect_structure", docx_file.name, base_dir=str(base_dir))
+    assert r["ok"] is True
+    assert r["data"]["converted_page_count"] == 3
+    # It is reported under the render path's name because it is the same
+    # number: a .docx stores no pagination, so both come from a conversion.
+    assert "page_count_error" not in r["data"]
+    # and it is an addition, not a replacement
+    assert r["data"]["paragraph_count"] >= 2
+    assert r["data"]["table_count"] == 0
+
+
+def test_inspect_formatting_docx_reports_the_laid_out_page_count(
+    base_dir, docx_file, monkeypatch
+):
+    monkeypatch.setattr(
+        read_deliverable_module,
+        "_convert_office_to_pdf",
+        lambda source, out_dir: _fake_convert_to_pdf(source, out_dir, pages=2),
+    )
+    r = read_deliverable("inspect_formatting", docx_file.name, base_dir=str(base_dir))
+    assert r["ok"] is True
+    assert r["data"]["converted_page_count"] == 2
+    assert "style_histogram" in r["data"]
+
+
+def test_docx_page_count_says_unknown_rather_than_failing_the_inspection(
+    base_dir, docx_file, monkeypatch
+):
+    """No Writer costs the page count and nothing else.
+
+    The alternative -- letting the conversion raise through
+    ``inspect_structure`` -- would trade six mis-answered items for a whole
+    op that reports nothing about any document.
+    """
+    monkeypatch.setattr(read_deliverable_module, "_find_soffice", lambda: None)
+    r = read_deliverable("inspect_structure", docx_file.name, base_dir=str(base_dir))
+    assert r["ok"] is True
+    assert r["data"]["converted_page_count"] is None
+    assert "LibreOffice" in r["data"]["page_count_error"]
+    assert "not page counts" in r["data"]["page_count_note"]
+    assert "inspection_error" not in r["data"]
+    assert r["data"]["paragraph_count"] >= 2
+
+
+def test_docx_page_count_is_laid_out_once_per_file(
+    base_dir, docx_file, monkeypatch
+):
+    """A judge asks twice; LibreOffice is charged once."""
+    conversions = []
+
+    def counting_convert(source: Path, out_dir: Path) -> Path:
+        conversions.append(source)
+        return _fake_convert_to_pdf(source, out_dir, pages=2)
+
+    monkeypatch.setattr(
+        read_deliverable_module, "_convert_office_to_pdf", counting_convert
+    )
+    for op in ("inspect_structure", "inspect_formatting", "inspect_structure"):
+        assert read_deliverable(
+            op, docx_file.name, base_dir=str(base_dir)
+        )["data"]["converted_page_count"] == 2
+    assert len(conversions) == 1
+
+
+def test_docx_page_count_is_laid_out_again_when_the_file_changes(
+    base_dir, docx_file, monkeypatch
+):
+    """The cache key is the bytes, not the name."""
+    pages = [2]
+
+    def counting_convert(source: Path, out_dir: Path) -> Path:
+        return _fake_convert_to_pdf(source, out_dir, pages=pages[0])
+
+    monkeypatch.setattr(
+        read_deliverable_module, "_convert_office_to_pdf", counting_convert
+    )
+    first = read_deliverable(
+        "inspect_structure", docx_file.name, base_dir=str(base_dir)
+    )
+    assert first["data"]["converted_page_count"] == 2
+
+    from docx import Document
+    document = Document(str(docx_file))
+    document.add_paragraph("A third page's worth of new body text.")
+    document.save(docx_file)
+    os.utime(docx_file, (0, 0))  # force a distinct mtime, not a faster clock
+    pages[0] = 5
+
+    second = read_deliverable(
+        "inspect_structure", docx_file.name, base_dir=str(base_dir)
+    )
+    assert second["data"]["converted_page_count"] == 5
+
+
+def test_read_content_docx_refuses_to_be_read_as_a_page_count(
+    base_dir, docx_file
+):
+    """The one required item stage 1 failed was failed on this surface."""
+    r = read_deliverable("read_content", docx_file.name, base_dir=str(base_dir))
+    assert r["ok"] is True
+    assert r["data"]["char_count"] > 0
+    assert "not a page count" in r["data"]["note"]
+    assert "converted_page_count" in r["data"]["note"]
+
+
+def test_inspect_structure_pdf_reports_page_size_and_orientation(base_dir):
+    """432x288 is landscape. The gold answer said so and was marked wrong."""
+    pytest.importorskip("fitz")
+    path = _sized_pdf(base_dir / "landscape.pdf", [(432, 288)])
+    r = read_deliverable("inspect_structure", path.name, base_dir=str(base_dir))
+    assert r["ok"] is True
+    data = r["data"]
+    assert data["page_count"] == 1
+    assert data["pages_measured"] == 1
+    assert data["page_size_uniform"] is True
+    assert data["orientation"] == "landscape"
+    assert data["page_sizes"] == [{
+        "width_pt": 432.0,
+        "height_pt": 288.0,
+        "width_in": 6.0,
+        "height_in": 4.0,
+        "orientation": "landscape",
+        "page_count": 1,
+        "first_page": 1,
+    }]
+
+
+def test_inspect_formatting_pdf_reports_page_size(base_dir):
+    pytest.importorskip("fitz")
+    path = _sized_pdf(base_dir / "portrait.pdf", [(612, 792)])
+    r = read_deliverable("inspect_formatting", path.name, base_dir=str(base_dir))
+    assert r["ok"] is True
+    assert r["data"]["orientation"] == "portrait"
+    assert r["data"]["page_sizes"][0]["width_in"] == 8.5
+    assert r["data"]["page_sizes"][0]["height_in"] == 11.0
+    assert "fonts" in r["data"]
+
+
+def test_pdf_page_sizes_group_by_size_not_by_page(base_dir):
+    """A uniform report costs one row; a document that turns costs two."""
+    pytest.importorskip("fitz")
+    path = _sized_pdf(
+        base_dir / "mixed.pdf",
+        [(612, 792), (612, 792), (792, 612), (612, 792)],
+    )
+    r = read_deliverable("inspect_structure", path.name, base_dir=str(base_dir))
+    assert r["ok"] is True
+    data = r["data"]
+    assert data["page_count"] == 4
+    assert data["page_size_uniform"] is False
+    # No single orientation is claimed when there is not one.
+    assert "orientation" not in data
+    assert [(row["orientation"], row["page_count"], row["first_page"])
+            for row in data["page_sizes"]] == [
+        ("portrait", 3, 1), ("landscape", 1, 3)]
+
+
+def test_pdf_geometry_never_claims_uniform_beyond_what_it_measured():
+    """A capped scan describes its prefix and says that it did."""
+    geometry = read_deliverable_module._pdf_geometry(
+        [(612.0, 792.0)] * read_deliverable_module.MAX_PAGES_DEFAULT,
+        page_count=900,
+    )
+    assert geometry["pages_measured"] == read_deliverable_module.MAX_PAGES_DEFAULT
+    assert geometry["pages_measured_capped"] is True
+    assert geometry["page_sizes"][0]["page_count"] == (
+        read_deliverable_module.MAX_PAGES_DEFAULT
+    )
+
+
+def test_pdf_geometry_flags_a_truncated_size_list_instead_of_claiming_uniform():
+    limit = read_deliverable_module.MAX_PDF_PAGE_SIZE_GROUPS
+    geometry = read_deliverable_module._pdf_geometry(
+        [(600.0 + n, 800.0) for n in range(limit + 3)], page_count=limit + 3
+    )
+    assert len(geometry["page_sizes"]) == limit
+    assert geometry["page_sizes_truncated"] is True
+    assert geometry["page_size_uniform"] is False
+
+
+def test_model_schema_tells_the_judge_where_a_page_count_comes_from():
+    """The full schema's descriptions never reach the model; this one does."""
+    description = MODEL_READ_DELIVERABLE_TOOL_SCHEMA[
+        "parameters"
+    ]["properties"]["op"]["description"]
+    assert "converted_page_count" in description
+    assert "orientation" in description
+    assert "char_count" in description and "not page counts" in description
 
 
 # ── read_content ─────────────────────────────────────────────────────
@@ -1291,6 +1523,39 @@ def test_an_archive_reads_as_its_own_listing(base_dir, zip_file):
     assert "audio" in r["data"]["text"]
 
 
+def test_every_place_a_judge_meets_an_archive_says_a_member_can_be_opened(
+    base_dir, zip_file
+):
+    """The listing was reachable; the way to open what it lists was not.
+
+    A stage-1 gold answer of five WAV stems scored 2 of 62 because thirty-four
+    items were answered "binary or unsupported" about files nothing opened.
+    The member scope existed by then -- it was just never said anywhere the
+    judge reads, so all three of those places say it now.
+    """
+    hint = "scope={\"member\""
+
+    structure = read_deliverable(
+        "inspect_structure", zip_file.name, base_dir=str(base_dir)
+    )
+    assert hint in structure["data"]["note"]
+
+    content = read_deliverable(
+        "read_content", zip_file.name, base_dir=str(base_dir)
+    )
+    assert hint in content["data"]["text"]
+    # and it comes after the listing, not instead of it
+    assert content["data"]["text"].index("STEMS/MASTER.wav") < content[
+        "data"
+    ]["text"].index(hint)
+
+    scope_description = MODEL_READ_DELIVERABLE_TOOL_SCHEMA[
+        "parameters"
+    ]["properties"]["scope"]["description"]
+    assert "member" in scope_description
+    assert ".zip" in scope_description
+
+
 def test_resource_forks_are_hidden_but_counted(base_dir, zip_file):
     """Five real stems and five ``._`` twins reads as ten files of nothing.
 
@@ -1362,7 +1627,7 @@ def test_a_member_keeps_its_extension_while_being_read(base_dir, zip_file):
     ``tmpXXXX`` is a member no op can identify -- the container would be open
     and its contents still unreadable.
     """
-    with read_deliverable_module._extracted_zip_member(
+    with read_deliverable_module.open_archive_member(
         zip_file, "STEMS/MASTER.wav"
     ) as extracted:
         assert extracted.suffix == ".wav"
@@ -1472,3 +1737,290 @@ def test_a_corrupt_archive_reports_the_failure_instead_of_reading_empty(
     # inspect_structure keeps its own contract: it never raises, it annotates.
     assert structure["ok"] is True
     assert "inspection_error" in structure["data"]
+
+
+# ── "I could not read it" is not "it is not there" ───────────────────
+#
+# Stage 1 graded a two-page scan. ``read_content`` returned ``char_count: 0``,
+# and ten rubric items were failed as "that content is absent" -- about a
+# document that says all ten things, in ink. Nothing lied: the tool said the
+# text was empty and the judge read empty text as an empty document. So the
+# tool now says which of the two it means, and routing (tested separately in
+# ``test_perception_routing.py``) hands the item to the path that looks at the
+# page instead of the one that reads it.
+
+
+@pytest.fixture
+def scanned_pdf(base_dir: Path) -> Path:
+    """Two pages of image and not one character of text."""
+    pytest.importorskip("reportlab")
+    pytest.importorskip("PIL")
+    from PIL import Image
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
+    photo = base_dir / "page_image.png"
+    Image.new("RGB", (64, 64), color="white").save(photo)
+    p = base_dir / "scan.pdf"
+    document = canvas.Canvas(str(p))
+    for _ in range(2):
+        document.drawImage(ImageReader(str(photo)), 40, 40, width=200, height=200)
+        document.showPage()
+    document.save()
+    return p
+
+
+def test_read_content_of_a_scan_reports_a_missing_text_layer(base_dir, scanned_pdf):
+    pytest.importorskip("fitz")
+    r = read_deliverable("read_content", scanned_pdf.name, base_dir=str(base_dir))
+
+    assert r["ok"] is True
+    data = r["data"]
+    assert data["char_count"] == 0
+    assert data["has_text_layer"] is False
+    # The two numbers that tell a scan apart from an empty file.
+    assert data["page_count"] == 2
+    assert data["embedded_image_count"] >= 2
+    assert read_deliverable_module._EMPTY_READ_DISCLAIMER in data["note"]
+    assert "scan" in data["note"]
+
+
+def test_an_empty_text_file_is_reported_as_unreadable_not_as_absent(base_dir):
+    empty = base_dir / "blank.txt"
+    empty.write_text("   \n", encoding="utf-8")
+
+    r = read_deliverable("read_content", empty.name, base_dir=str(base_dir))
+
+    assert r["ok"] is True
+    assert r["data"]["has_text_layer"] is False
+    assert read_deliverable_module._EMPTY_READ_DISCLAIMER in r["data"]["note"]
+
+
+def test_a_file_that_holds_no_text_names_the_op_that_does_read_it(base_dir):
+    # Previously: "binary or unsupported for text read" -- which tells a judge
+    # the file is a dead end, when in fact one call away is every fact the
+    # criterion is asking about.
+    for name, expected_op in (
+        ("clip.wav", "probe_audio"),
+        ("clip.mp4", "probe_video"),
+    ):
+        (base_dir / name).write_bytes(b"\x00\x01\x02")
+        r = read_deliverable("read_content", name, base_dir=str(base_dir))
+        assert r["ok"] is True
+        assert r["data"]["char_count"] == 0
+        assert r["data"]["has_text_layer"] is False
+        assert expected_op in r["data"]["note"]
+        assert read_deliverable_module._EMPTY_READ_DISCLAIMER in r["data"]["note"]
+
+
+def test_an_image_read_points_at_the_visual_evidence_instead(base_dir, png_file):
+    r = read_deliverable("read_content", png_file.name, base_dir=str(base_dir))
+
+    assert r["ok"] is True
+    assert r["data"]["has_text_layer"] is False
+    assert "rendered visual evidence" in r["data"]["note"]
+
+
+def test_an_empty_docx_carries_both_notes(base_dir):
+    """The length note and the empty note answer different wrong readings."""
+    pytest.importorskip("docx")
+    from docx import Document
+
+    p = base_dir / "blank.docx"
+    Document().save(p)
+
+    r = read_deliverable("read_content", p.name, base_dir=str(base_dir))
+
+    note = r["data"]["note"]
+    assert "not a page count" in note
+    assert read_deliverable_module._EMPTY_READ_DISCLAIMER in note
+
+
+def test_the_empty_read_report_survives_a_broken_pdf(base_dir):
+    """It runs on the failure path of a read that already returned nothing.
+
+    Raising here would lose the read as well, leaving the judge with strictly
+    less than it had before this section existed.
+    """
+    broken = base_dir / "truncated.pdf"
+    broken.write_bytes(b"%PDF-1.4\nnot actually a pdf")
+
+    facts, note = read_deliverable_module._empty_read_report(broken, "pdf")
+
+    assert facts == {"has_text_layer": False}
+    assert read_deliverable_module._EMPTY_READ_DISCLAIMER in note
+
+
+# ── has_extractable_text: False is a claim, None is an admission ─────
+
+
+def test_has_extractable_text_is_true_for_a_document_with_words(
+    base_dir, docx_file, txt_file, pdf_file
+):
+    for path in (docx_file, txt_file, pdf_file):
+        assert has_extractable_text(path) is True, path.name
+
+
+def test_has_extractable_text_is_false_for_a_scan(base_dir, scanned_pdf):
+    pytest.importorskip("fitz")
+    assert has_extractable_text(scanned_pdf) is False
+
+
+def test_has_extractable_text_is_false_for_an_image(png_file):
+    # Not a failure to read. An image has no text layer by construction, and
+    # that is exactly the fact routing wants.
+    assert has_extractable_text(png_file) is False
+
+
+def test_has_extractable_text_is_none_for_a_file_it_cannot_speak_for(base_dir):
+    # A missing file, a medium text is not carried in, and a kind the tool has
+    # no reader for. None of the three is evidence that a file has no text.
+    missing = base_dir / "nothing_here.pdf"
+    audio = base_dir / "stems.wav"
+    audio.write_bytes(b"\x00")
+    unknown = base_dir / "notes.rtf"
+    unknown.write_bytes(b"{\\rtf1}")
+
+    assert has_extractable_text(missing) is None
+    assert has_extractable_text(audio) is None
+    assert has_extractable_text(unknown) is None
+
+
+def test_has_extractable_text_is_none_when_it_could_not_reach_every_page(
+    base_dir, scanned_pdf, monkeypatch
+):
+    """A partial look is not a finding.
+
+    ``False`` escalates an item to the render path, so it may only be returned
+    when the whole file was examined. The page cap is monkeypatched rather than
+    building a 201-page fixture: the cap's value is not what is under test, the
+    behaviour at it is.
+    """
+    pytest.importorskip("fitz")
+    monkeypatch.setattr(read_deliverable_module, "MAX_PAGES_DEFAULT", 1)
+
+    assert has_extractable_text(scanned_pdf) is None
+
+
+def test_has_extractable_text_stops_at_the_first_page_that_has_text(
+    base_dir, monkeypatch
+):
+    """An ordinary document costs one page, not all of them."""
+    pytest.importorskip("reportlab")
+    pytest.importorskip("fitz")
+    from reportlab.pdfgen import canvas
+
+    p = base_dir / "long.pdf"
+    document = canvas.Canvas(str(p))
+    for page in range(5):
+        document.drawString(100, 750, f"page {page}")
+        document.showPage()
+    document.save()
+
+    monkeypatch.setattr(read_deliverable_module, "MAX_PAGES_DEFAULT", 1)
+
+    # Capped at one page and still True: the answer came from page one.
+    assert has_extractable_text(p) is True
+
+
+# ── has_audio_content: a container is not a medium ───────────────────
+#
+# The stage-1 music task delivers its whole answer as one 180 MB ``.zip`` of
+# stems. Routing decided there was no audio because the extension said ``.zip``,
+# so the task was graded on tempo, key and vocals without the listening model
+# being invoked once. This probe is what routing asks instead.
+
+
+def _archive(base_dir, name, members):
+    import zipfile
+
+    p = base_dir / name
+    with zipfile.ZipFile(p, "w") as archive:
+        for member, payload in members.items():
+            archive.writestr(member, payload)
+    return p
+
+
+def test_has_audio_content_is_true_for_an_audio_file(base_dir):
+    p = base_dir / "master.wav"
+    p.write_bytes(b"\x00")
+
+    assert has_audio_content(p) is True
+
+
+def test_has_audio_content_is_true_for_an_archive_of_stems(base_dir):
+    p = _archive(base_dir, "stems.zip", {
+        "STEMS/README.txt": "five stems",
+        "STEMS/SYNTHS .wav": b"\x00",
+    })
+
+    assert has_audio_content(p) is True
+
+
+def test_has_audio_content_is_false_for_an_archive_of_documents(base_dir):
+    """A claim, not an admission. Nothing in here is for listening to."""
+    p = _archive(base_dir, "code.zip", {
+        "src/main.py": "print(1)",
+        "README.md": "# notes",
+    })
+
+    assert has_audio_content(p) is False
+
+
+def test_has_audio_content_ignores_the_resource_forks_macos_leaves(base_dir):
+    """``__MACOSX/._SYNTHS .wav`` is a few hundred bytes of metadata.
+
+    It is filtered out of every listing the tool produces, so treating it as
+    audio would promote a criterion to a model that has nothing to hear.
+    """
+    p = _archive(base_dir, "forks.zip", {
+        "STEMS/notes.txt": "no audio here",
+        "__MACOSX/STEMS/._SYNTHS .wav": b"\x00",
+    })
+
+    assert has_audio_content(p) is False
+
+
+def test_has_audio_content_is_false_for_a_document(base_dir):
+    p = base_dir / "report.pdf"
+    p.write_bytes(b"%PDF-1.4\n")
+
+    assert has_audio_content(p) is False
+
+
+def test_has_audio_content_is_none_for_a_file_that_is_not_there(base_dir):
+    assert has_audio_content(base_dir / "never_written.zip") is None
+
+
+def test_has_audio_content_is_none_for_an_archive_it_cannot_open(base_dir):
+    """One gold deliverable really is this: a ``.zip`` that is not one."""
+    p = base_dir / "broken.zip"
+    p.write_bytes(b"not actually a zip file")
+
+    assert has_audio_content(p) is None
+
+
+def test_has_audio_content_is_none_when_the_listing_was_cut_short(
+    base_dir, monkeypatch
+):
+    """A list that stopped early may have stopped one entry before the audio.
+
+    ``False`` would be a claim about members nobody looked at, and the caller
+    reads ``False`` and ``None`` differently on purpose.
+    """
+    p = _archive(base_dir, "many.zip", {f"f{i}.txt": "x" for i in range(5)})
+    monkeypatch.setattr(read_deliverable_module, "MAX_ZIP_ENTRIES", 2)
+
+    assert has_audio_content(p) is None
+
+
+def test_has_audio_content_answers_before_the_cut_when_it_can(
+    base_dir, monkeypatch
+):
+    """Truncation only matters if the audio was not already found."""
+    p = _archive(base_dir, "front.zip", {
+        "a.wav": b"\x00", "b.txt": "x", "c.txt": "x", "d.txt": "x",
+    })
+    monkeypatch.setattr(read_deliverable_module, "MAX_ZIP_ENTRIES", 2)
+
+    assert has_audio_content(p) is True

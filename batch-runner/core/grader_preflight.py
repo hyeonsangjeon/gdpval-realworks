@@ -17,6 +17,11 @@ def _planner(config: dict) -> Grader:
     """Build only the local precheck surface; never initialize an API client."""
     grader = object.__new__(Grader)
     grader.config = config
+    # ``__init__`` never runs here, so the per-task memos the routing probes
+    # write through have to be created by hand. A preflight plans one task,
+    # so one memo for its lifetime is the same scope ``grade_task`` gives it.
+    grader._text_layer_cache = {}
+    grader._audio_content_cache = {}
     return grader
 
 
@@ -88,7 +93,16 @@ def plan_task_runtime(
                     if visual_error is None:
                         visual_error = f"{target_id}: missing target"
                     continue
-                decision = resolve_runtime_routing(item.criterion, target.paths)
+                decision = resolve_runtime_routing(
+                    item.criterion,
+                    target.paths,
+                    selected_paths_have_text=grader._selected_paths_have_text(
+                        deliverable_path, target.paths
+                    ),
+                    selected_paths_have_audio=grader._selected_paths_have_audio(
+                        deliverable_path, target.paths
+                    ),
+                )
                 child_routes.append(decision.modality.value)
                 if decision.modality is Modality.VISUAL:
                     planned_names, child_visual_error = (
@@ -181,8 +195,24 @@ def plan_task_runtime(
                 continue
             precheck_fallbacks += 1
 
+        # The probes are passed here for the same reason this module exists: a
+        # preflight that predicts a route the run will not take is not a check.
+        # It matters in one direction specifically. An item escalated to VISUAL
+        # at run time is the item whose paths must pass
+        # ``validate_planned_visual_names``, and skipping that check here would
+        # let a path the run cannot render reach the run unflagged -- a gate
+        # that fails open on exactly the case it was added to catch. The audio
+        # probe is what keeps ``planned_audio_calls`` and the budget check
+        # below counting the calls the run will really make.
         decision = resolve_runtime_routing(
-            item.criterion, target_plan.selected_paths
+            item.criterion,
+            target_plan.selected_paths,
+            selected_paths_have_text=grader._selected_paths_have_text(
+                deliverable_path, target_plan.selected_paths
+            ),
+            selected_paths_have_audio=grader._selected_paths_have_audio(
+                deliverable_path, target_plan.selected_paths
+            ),
         )
         routes[decision.modality.value] += 1
         supported: list[str] = []
