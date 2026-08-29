@@ -50,6 +50,13 @@ AUDIO_CALL_CAP = 3
 #: than keeping a second copy.
 AUDIO_TRIM_SECONDS = 30
 
+#: The only container formats the Responses API accepts on an ``input_audio``
+#: content part (``openai.types.responses.response_input_audio_param.InputAudio``
+#: types ``format`` as ``Literal["mp3", "wav"]``). Anything else is rejected
+#: with a 400 before the model is reached, so a clip that cannot be presented
+#: as one of these is refused here rather than paid for and bounced.
+SUPPORTED_AUDIO_FORMATS = ("mp3", "wav")
+
 
 @dataclass(frozen=True)
 class AudioVerdict:
@@ -110,12 +117,23 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
 
     Uses PyAV (wheel bundles ffmpeg per env audit). Falls back to
     sending the raw file if PyAV cannot decode (e.g. exotic codec).
+
+    The file is only handed over untouched when it is *known* to be short
+    enough and already carries a format the API accepts. A clip whose
+    duration the container does not report is re-encoded rather than sent
+    whole: "no duration" is not "short", and a studio stem that declines to
+    say how long it is would otherwise go out at its full size.
     """
+    fmt = _guess_format(path)
+
+    def raw() -> Tuple[bytes, str]:
+        with open(path, "rb") as fh:
+            return fh.read(), fmt
+
     try:
         import av  # type: ignore
     except ImportError:
-        with open(path, "rb") as fh:
-            return fh.read(), _guess_format(path)
+        return raw()
 
     try:
         container = av.open(path)
@@ -123,9 +141,12 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
             stream = container.streams.audio[0]
             duration_s = (float(container.duration) / 1_000_000.0
                           if container.duration else None)
-            if duration_s is None or duration_s <= max_seconds:
-                with open(path, "rb") as fh:
-                    return fh.read(), _guess_format(path)
+            if (
+                duration_s is not None
+                and duration_s <= max_seconds
+                and fmt in SUPPORTED_AUDIO_FORMATS
+            ):
+                return raw()
             # Re-encode head slice to WAV in memory.
             import io
             buf = io.BytesIO()
@@ -145,8 +166,7 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
         finally:
             container.close()
     except Exception:
-        with open(path, "rb") as fh:
-            return fh.read(), _guess_format(path)
+        return raw()
 
 
 def _guess_format(path: str) -> str:
@@ -196,6 +216,19 @@ class AudioPerception:
                 reasoning=f"audio preparation failed: {type(exc).__name__}",
                 judge_error=public_task_error_text(exc),
             )
+        if fmt not in SUPPORTED_AUDIO_FORMATS:
+            # Refused before the call, not after it. The API rejects an
+            # unsupported container outright, so sending it spends a slot from
+            # ``call_cap`` and buys a 400. No call goes out, so nothing is
+            # billed and the usage this verdict reports — zero — is complete.
+            return AudioVerdict(
+                verdict="judge_error",
+                partial_score=0.0,
+                evidence="",
+                confidence=0.0,
+                reasoning=f"unsupported audio format: {fmt}",
+                judge_error="unsupported_audio_format",
+            )
         b64 = base64.b64encode(data).decode("ascii")
         self._calls_used += 1
         call_started = time.perf_counter()
@@ -213,7 +246,7 @@ class AudioPerception:
                             {"type": "input_text",
                              "text": f"{_AUDIO_PROMPT_HEADER}\n\nCriterion:\n{criterion}"},
                             {"type": "input_audio",
-                             "audio": {"data": b64, "format": fmt}},
+                             "input_audio": {"data": b64, "format": fmt}},
                         ],
                     }
                 ],
