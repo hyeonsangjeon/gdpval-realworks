@@ -360,6 +360,24 @@ def test_every_allowed_shard_count_covers_the_corpus_exactly_once(shard_count):
 MEAN_TASK_MINUTES = 19.44
 P90_TASK_MINUTES = 32.7
 
+#: GitHub-hosted runners are killed here no matter what ``timeout-minutes``
+#: says. Every number below is a share of this one.
+PLATFORM_HARD_KILL_MINUTES = 360
+
+#: Checkout, pip install and the HuggingFace download, before grading opens.
+#: Run 33286656393: job opened 01:53:41Z, the grading step opened 01:57:55Z.
+SETUP_MINUTES_BEFORE_GRADING = 4.2
+
+#: How far past its budget a chunk can run before it is able to stop. Since
+#: #77 and #279 the guard is checked between rubric items and between split
+#: children (core/grader.py::_check_should_stop), so the overrun is one item,
+#: not one task. Longest item measured, run 33286656393: task 9e39df84 items
+#: 36 -> 37, 04:24:48Z -> 04:36:48Z.
+LONGEST_RUBRIC_ITEM_MINUTES = 12.0
+
+#: Partial save, commit, auto-retrigger, after the guard has fired.
+SAVE_AND_COMMIT_MINUTES = 2.0
+
 
 def _workflow_numbers() -> dict[str, int]:
     """Read the three timing limits out of grade-run.yml.
@@ -380,43 +398,69 @@ def _workflow_numbers() -> dict[str, int]:
     }
 
 
+def test_the_job_timeout_stays_under_the_platforms_own_kill():
+    """``timeout-minutes`` above 360 would be a number nobody honours.
+
+    The platform measures its 6 hours from when the job starts, which is
+    earlier than when our first step runs, so the gap is reserve rather than
+    slack to be spent.
+    """
+    limits = _workflow_numbers()
+    assert limits["timeout_min"] < PLATFORM_HARD_KILL_MINUTES
+
+
 def test_a_chunk_can_always_save_before_the_runner_kills_it():
     """The time budget must fire far enough ahead of the job timeout.
 
-    The budget is a *pre-check*: step8_grade.py tests the clock before starting
-    a task, never during one. So a chunk can begin its last task at one second
-    under budget and then run for that task's full duration. The gap between
-    budget and timeout therefore has to be wider than a task, or a shard is
-    killed mid-judgement having saved nothing and having paid for everything.
+    A chunk that is killed by the runner has paid for everything and saved
+    nothing, so the budget has to leave room for the whole tail of the job:
+    the setup that ran before grading opened, the one rubric item a chunk can
+    still be inside when the guard fires, and the save and commit afterwards.
 
-    Checked at p90 rather than at the mean, because the mean is not the case
-    that kills a job.
+    That middle term used to be a whole *task* -- p90 32.7 minutes -- because
+    the guard was a pre-check tested only between tasks. #77 and #279 moved it
+    inside a task, and one item is what a chunk can now be committed to when
+    the clock runs out. That is the whole reason the budget is allowed this
+    close to the wall.
     """
     limits = _workflow_numbers()
 
     assert limits["budget_min"] < limits["timeout_min"]
-    headroom = limits["timeout_min"] - limits["budget_min"]
-    assert headroom > P90_TASK_MINUTES, (
-        f"only {headroom} min between the {limits['budget_min']} min budget and "
-        f"the {limits['timeout_min']} min timeout; a p90 task is "
-        f"{P90_TASK_MINUTES} min"
+
+    worst_case = (
+        SETUP_MINUTES_BEFORE_GRADING
+        + limits["budget_min"]
+        + LONGEST_RUBRIC_ITEM_MINUTES
+        + SAVE_AND_COMMIT_MINUTES
+    )
+    assert worst_case <= limits["timeout_min"], (
+        f"{SETUP_MINUTES_BEFORE_GRADING} min of setup plus a "
+        f"{limits['budget_min']} min budget plus a "
+        f"{LONGEST_RUBRIC_ITEM_MINUTES} min item plus "
+        f"{SAVE_AND_COMMIT_MINUTES} min of saving is {worst_case} min, "
+        f"past the {limits['timeout_min']} min timeout"
     )
 
 
 def test_the_widest_shard_finishes_inside_the_auto_resume_cap():
-    """A shard is expected to outlast one chunk; it must not outlast ten.
+    """A shard may outlast one chunk; it must not outlast ten.
 
-    11 shards is the workflow's own cap, so the largest shard is 17 tasks, and
-    at the measured mean that is about 5.5 hours against a 4 hour chunk. Going
-    over is normal -- the auto-resume exists for it. What is not survivable is
-    needing more chunks than the resume cap allows, because the run would then
-    stop halfway with the money spent.
+    11 shards is the workflow's own cap, so the largest shard is 17 tasks. At
+    the measured mean that now fits inside a single chunk, which is why the
+    check below is made at p90 instead: going over one chunk is normal and the
+    auto-resume exists for it. What is not survivable is needing more chunks
+    than the resume cap allows, because the run would then stop halfway with
+    the money spent.
     """
     limits = _workflow_numbers()
     largest = max(len(_pinned()[index::11]) for index in range(11))
     assert largest == 17
 
-    minutes = largest * MEAN_TASK_MINUTES
+    assert largest * MEAN_TASK_MINUTES <= limits["budget_min"], (
+        "the mean-paced shard no longer fits one chunk; check at the mean again"
+    )
+
+    minutes = largest * P90_TASK_MINUTES
     chunks = math.ceil(minutes / limits["budget_min"])
 
     assert minutes > limits["budget_min"], (
