@@ -681,19 +681,33 @@ jobs:
       LANG: C.UTF-8
       PIP_CACHE_DIR: /root/.cache/pip
     # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
-    # extended. We set 350min so step8_grade.py's internal 5h time guard (env
-    # GRADER_TIME_BUDGET_SEC=18000) trips first, partial-saves, and exits 7,
-    # leaving 50min of headroom.
+    # extended. Everything below is that 360 divided up, so that step8_grade.py's
+    # own guard (env GRADER_TIME_BUDGET_SEC) always trips first, partial-saves,
+    # and exits 7 -- rather than the runner killing the job having paid for
+    # everything and saved nothing.
     #
-    # That headroom is sized by the p90 task, not by the commit steps. The
-    # budget is a pre-check, so a chunk may enter its last task one second
-    # under budget and then run for that task's whole duration; if the gap is
-    # narrower than a task, the job is killed mid-judgement having paid for
-    # everything and saved nothing. 50min clears the measured p90 of 32.7min
-    # and still leaves more than the ~16min a real shard spends outside
-    # grading. test_a_chunk_can_always_save_before_the_runner_kills_it reads
-    # both numbers straight out of this file and fails if that stops holding.
-    timeout-minutes: 350
+    #   360   platform hard kill, not extendable
+    #   -5    reserved, because the platform measures from job start and we do
+    #         not control the handoff before our first step runs
+    #   ---
+    #   355   timeout-minutes, below
+    #   -4.2  setup: checkout, pip install, HF download. Measured on run
+    #         33286656393: job opened 01:53:41Z, grading opened 01:57:55Z.
+    #   -12   the guard is a between-units check, so a chunk can be up to one
+    #         rubric item past its budget before it can stop. Longest item
+    #         measured, same run: 12.0min (task 9e39df84 items 36 -> 37,
+    #         04:24:48Z -> 04:36:48Z).
+    #   -2    partial save, commit, auto-retrigger after the guard fires
+    #   ---
+    #   336   GRADER_TIME_BUDGET_SEC = 20160, below
+    #
+    # The 12 used to be 32.7 -- the p90 *task*, not item -- because the guard
+    # used to be checked only between tasks. #77 and #279 moved it inside a
+    # task (core/grader.py::_check_should_stop, called between rubric items and
+    # between split children), which is what lets the budget be this close to
+    # the wall. test_a_chunk_can_always_save_before_the_runner_kills_it reads
+    # these numbers straight out of this file and fails if that stops holding.
+    timeout-minutes: 355
 
     steps:
 
@@ -1014,7 +1028,11 @@ jobs:
           # would refingerprint the grader and orphan the ten shards already
           # on main. This file is not in that hash, so the wall clock is the
           # one dial that can be turned without invalidating a paid run.
-          GRADER_TIME_BUDGET_SEC: "18000"
+          #
+          # 20160 = 336min, derived from the platform's 360 in the
+          # timeout-minutes comment above. It is the largest budget that can
+          # still stop and save, not a figure anybody chose for a task.
+          GRADER_TIME_BUDGET_SEC: "20160"
         run: |
           cd batch-runner
           ARGS=(
