@@ -169,11 +169,39 @@ entries land under a fresh dated heading the day they merge to `main`.
   the grader and orphan the ten shards already graded, committed and paid for.
   `.github/workflows/**` is in neither the `batch-runner` tree nor the config,
   so the wall clock is the only dial that can turn without invalidating a run
-  in progress. `GRADER_TIME_BUDGET_SEC` goes 14400 → **18000** (5h) and
-  `timeout-minutes` 320 → **350**, which keeps the existing contract: the
-  budget-to-timeout gap is 50 min, still wider than the measured p90 task of
-  32.7 min, because the budget is a pre-check and a chunk may enter its last
-  task one second under it.
+  in progress.
+
+  That dial has now moved three times against the same task, which is worth
+  recording as a progression rather than as a final number.
+  `GRADER_TIME_BUDGET_SEC` went 14400 → **18000** (5h) with `timeout-minutes`
+  320 → 350; the task then ran **5h10m and stopped three rubric items short of
+  57**, so the budget went to **20160** (336 min) with the timeout at 355. This
+  entry takes it to **20280** (338 min) and the timeout to **359**, which is
+  where it stops: 338 is the remainder after the platform's non-extendable 360
+  gives up one minute of reserve, 6.3 for setup, 12 for the single rubric item
+  a chunk can still be inside when the guard fires, and 2 to save and commit.
+
+  The 20160 step had a defect this fixes. Its setup allowance, 4.2 min, came
+  from one run — 33286656393, which sits near the fast end. Measured across
+  all ten grade jobs the spread is **2.85 to 6.27 min**, and at the worst of
+  those the arithmetic closed at 356.3 min against a 355 min timeout: a
+  slow-setup chunk could be killed *while saving*. Taking the worst rather
+  than a sample is what moves the timeout to 359.
+
+  20700 (345 min) was considered and rejected. It fits the path where the
+  guard fires after `9e39df84` finishes, but not the path where it fires
+  inside it — there the job reaches 6.3 + 345 + 12 + 2 = **365 min**, past the
+  platform kill, and a platform kill does not run the `always()` steps that
+  upload the cost ledger. 338 is the last value whose worst case (358.3 min)
+  lands inside the timeout on both paths.
+
+  Whether 338 is *enough* is not asserted, because nobody has measured it. The
+  same run's own pacing brackets the task at **334 to 346 min** depending on
+  which stretch's per-item rate is used, and the budget sits inside that
+  bracket. `test_the_budget_is_the_most_the_platform_allows_not_the_most_the_task_needs`
+  asserts only the end the arithmetic supports, and says in its docstring that
+  a third shortfall should be read as this task being ungradeable under the
+  pre-registered settings — not as a number needing another nudge.
 
   Four tests carry the reasoning rather than the numbers. Two assert that the
   workflow cannot enter the grader source hash — one structurally, one by

@@ -687,19 +687,23 @@ jobs:
     # everything and saved nothing.
     #
     #   360   platform hard kill, not extendable
-    #   -5    reserved, because the platform measures from job start and we do
-    #         not control the handoff before our first step runs
+    #   -1    reserved, so timeout-minutes fires first and the job is stopped
+    #         by us rather than by the platform
     #   ---
-    #   355   timeout-minutes, below
-    #   -4.2  setup: checkout, pip install, HF download. Measured on run
-    #         33286656393: job opened 01:53:41Z, grading opened 01:57:55Z.
+    #   359   timeout-minutes, below
+    #   -6.3  setup: checkout, pip install, HF download. Worst of the ten
+    #         grade jobs measured to date, not one sample -- the spread is
+    #         2.85 to 6.27min, and the 4.2 this line used to carry was run
+    #         33286656393 alone, which sits near the fast end. At 4.2 the
+    #         arithmetic below closed with 356.3min against a 355min timeout,
+    #         i.e. a slow-setup run could be killed while saving.
     #   -12   the guard is a between-units check, so a chunk can be up to one
     #         rubric item past its budget before it can stop. Longest item
-    #         measured, same run: 12.0min (task 9e39df84 items 36 -> 37,
-    #         04:24:48Z -> 04:36:48Z).
+    #         measured, run 33286656393: 12.0min (task 9e39df84 items
+    #         36 -> 37, 04:24:48Z -> 04:36:48Z).
     #   -2    partial save, commit, auto-retrigger after the guard fires
     #   ---
-    #   336   GRADER_TIME_BUDGET_SEC = 20160, below
+    #   338   GRADER_TIME_BUDGET_SEC = 20280, below
     #
     # The 12 used to be 32.7 -- the p90 *task*, not item -- because the guard
     # used to be checked only between tasks. #77 and #279 moved it inside a
@@ -707,7 +711,7 @@ jobs:
     # between split children), which is what lets the budget be this close to
     # the wall. test_a_chunk_can_always_save_before_the_runner_kills_it reads
     # these numbers straight out of this file and fails if that stops holding.
-    timeout-minutes: 355
+    timeout-minutes: 359
 
     steps:
 
@@ -1029,10 +1033,21 @@ jobs:
           # on main. This file is not in that hash, so the wall clock is the
           # one dial that can be turned without invalidating a paid run.
           #
-          # 20160 = 336min, derived from the platform's 360 in the
+          # 20280 = 338min, derived from the platform's 360 in the
           # timeout-minutes comment above. It is the largest budget that can
-          # still stop and save, not a figure anybody chose for a task.
-          GRADER_TIME_BUDGET_SEC: "20160"
+          # still stop and save, not a figure anybody chose for a task. The
+          # previous 20160 came from the same arithmetic carrying a setup
+          # figure taken from a single fast run; re-measured across all ten
+          # grade jobs the worst setup is 6.27min, which both moves this up
+          # and is why timeout-minutes moved to 359.
+          #
+          # It cannot go further. 20700 (345min) was considered and rejected:
+          # on the path where the guard fires *inside* 9e39df84 rather than
+          # after it, the job would reach 6.3 + 345 + 12 + 2 = 365min, past
+          # the platform kill, and a hard kill takes the cost-ledger upload
+          # with it. 338 is the last value whose worst case (358.3min) still
+          # lands inside the timeout on both the success and the failure path.
+          GRADER_TIME_BUDGET_SEC: "20280"
         run: |
           cd batch-runner
           ARGS=(
