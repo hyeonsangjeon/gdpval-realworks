@@ -681,10 +681,19 @@ jobs:
       LANG: C.UTF-8
       PIP_CACHE_DIR: /root/.cache/pip
     # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
-    # extended. We set 320min so step8_grade.py's internal 4h time guard (env
-    # GRADER_TIME_BUDGET_SEC=14400) trips first, partial-saves, and exits 7,
-    # leaving ~40min headroom for the commit + retrigger steps below.
-    timeout-minutes: 320
+    # extended. We set 350min so step8_grade.py's internal 5h time guard (env
+    # GRADER_TIME_BUDGET_SEC=18000) trips first, partial-saves, and exits 7,
+    # leaving 50min of headroom.
+    #
+    # That headroom is sized by the p90 task, not by the commit steps. The
+    # budget is a pre-check, so a chunk may enter its last task one second
+    # under budget and then run for that task's whole duration; if the gap is
+    # narrower than a task, the job is killed mid-judgement having paid for
+    # everything and saved nothing. 50min clears the measured p90 of 32.7min
+    # and still leaves more than the ~16min a real shard spends outside
+    # grading. test_a_chunk_can_always_save_before_the_runner_kills_it reads
+    # both numbers straight out of this file and fails if that stops holding.
+    timeout-minutes: 350
 
     steps:
 
@@ -981,10 +990,31 @@ jobs:
           # pipe-style stdout triggers full-buffer mode and the log looks
           # frozen for many minutes between flushes.
           PYTHONUNBUFFERED: "1"
-          # 4-hour internal time budget. step8_grade.py partial-saves and
+          # 5-hour internal time budget. step8_grade.py partial-saves and
           # exits 7 when this trips, letting the workflow self-retrigger
-          # below before the 320-min job timeout-kills the runner.
-          GRADER_TIME_BUDGET_SEC: "14400"
+          # below before the 350-min job timeout-kills the runner.
+          #
+          # Was 4h (14400). Resume granularity is one whole task, so a task
+          # that cannot be graded inside a single chunk can never be graded
+          # at all: the next chunk restarts it from nothing and stalls in the
+          # same place. Gold shard 4 hit exactly that on task 9e39df84, 57
+          # rubric items of a Manufacturing deliverable. Eleven of its
+          # grading calls exhausted the config's 2400-token per-item output
+          # budget without emitting parseable final text
+          # (empty_final_text:max_output_tokens), and the resulting
+          # retry-without-tools cycles took 4h18m of the chunk's 4h21m. It
+          # reached 168 model calls against the ~146 that six finished tasks
+          # on the same shard predict for 57 items -- near the end, and out
+          # of time. The chunk then exited 5 rather than 7, because a chunk
+          # that completed no task refuses to buy another one on the same
+          # terms; that guard is right and stays.
+          #
+          # The per-item cap is not the lever here: it lives in the grading
+          # config, which compute_grader_source_hash covers, so moving it
+          # would refingerprint the grader and orphan the ten shards already
+          # on main. This file is not in that hash, so the wall clock is the
+          # one dial that can be turned without invalidating a paid run.
+          GRADER_TIME_BUDGET_SEC: "18000"
         run: |
           cd batch-runner
           ARGS=(
