@@ -42,8 +42,11 @@ TOTAL_TASKS = 7
 SUCCESS_TASKS = 5
 ERROR_TASKS = 2
 
-# Copied from the real receipt in run 33302056462 rather than invented, so the
-# fixture cannot drift into a shape the producer never emits.
+# Copied field-for-field from the receipt Step 2 wrote in run 33302056462 --
+# one task, a generation call and a Self-QA call, both against a model the
+# price table had no entry for -- so the fixture cannot drift into a shape the
+# producer never emits. Only `price_table_sha256` is substituted, since the
+# real digest pins a file this test has no reason to depend on.
 RECEIPT = {
     "schema_version": "cost-receipt-v1",
     "status": "partial",
@@ -54,9 +57,9 @@ RECEIPT = {
     "runtime_cost_usd": 0.0,
     "model_calls": 2,
     "usage": {
-        "input_tokens": 3949,
+        "input_tokens": 5794,
         "cached_input_tokens": 0,
-        "output_tokens": 6910,
+        "output_tokens": 7000,
         "reasoning_tokens": 1775,
     },
     "components": [
@@ -74,7 +77,22 @@ RECEIPT = {
                 "reasoning_tokens": 1775,
             },
             "missing_reasons": ["price_missing"],
-        }
+        },
+        {
+            "name": "self_qa",
+            "stage": "self_qa",
+            "retry_kind": "none",
+            "status": "partial",
+            "model_calls": 1,
+            "known_cost_usd": 0.0,
+            "usage": {
+                "input_tokens": 1845,
+                "cached_input_tokens": 0,
+                "output_tokens": 90,
+                "reasoning_tokens": 0,
+            },
+            "missing_reasons": ["price_missing"],
+        },
     ],
     "price_table_sha256": "d" * 64,
     "missing_reasons": ["price_missing"],
