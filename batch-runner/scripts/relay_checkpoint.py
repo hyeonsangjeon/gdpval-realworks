@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Iterable
@@ -21,13 +22,17 @@ from huggingface_hub import (
 )
 from huggingface_hub.utils import HfHubHTTPError
 
-from core.inference_manifest import (
+BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
+if str(BATCH_RUNNER_ROOT) not in sys.path:
+    sys.path.insert(0, str(BATCH_RUNNER_ROOT))
+
+from core.inference_manifest import (  # noqa: E402
     STEP2_RESULT_STATUSES,
     canonical_deliverable_path,
     canonical_task_id,
     validate_step2_progress_results,
 )
-from core.repository_identity import validate_hf_dataset_repo_id
+from core.repository_identity import validate_hf_dataset_repo_id  # noqa: E402
 
 
 CHECKPOINT_SCHEMA = "relay-checkpoint-v2"
