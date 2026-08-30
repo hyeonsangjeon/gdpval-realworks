@@ -67,6 +67,14 @@ PUBLISHED_METERS = {
         "cached_input": Decimal("0.25"),
         "output": Decimal("15.00"),
     },
+    # The snapshot a request for deployment "gpt-5.4" actually resolves to. It
+    # bills on the family meters above, because Azure publishes no dated meter
+    # for 5.4 at all -- see test_a_5_4_snapshot_has_no_meter_of_its_own.
+    "azure:gpt-5.4-2026-03-05": {
+        "input": Decimal("2.50"),
+        "cached_input": Decimal("0.25"),
+        "output": Decimal("15.00"),
+    },
     "azure:gpt-5.4-mini": {
         "input": Decimal("0.75"),
         "cached_input": Decimal("0.075"),
@@ -249,6 +257,105 @@ def test_the_models_we_refuse_to_guess_at_stay_absent(table, model):
     entry = raw["models_deliberately_not_priced"][f"azure:{model}"]
     assert entry["why_unpriced"].strip()
     assert entry["what_would_settle_it"].strip()
+
+
+def test_the_resolved_snapshot_is_priceable_and_prices_as_its_family(table):
+    """A request for 'gpt-5.4' comes back naming a snapshot, and lookup is exact.
+
+    Run 33302056462 -- the exp026c cost smoke -- asked for deployment
+    ``gpt-5.4``, and the reply named ``gpt-5.4-2026-03-05``. Pricing reads the
+    model the *reply* reports, and ``ReceiptPriceTable.lookup`` matches the whole
+    string with no prefix rule, so the snapshot fell through to
+    ``price_missing`` and two paid calls produced no figure.
+
+    The fix is a key, not a rule. Stripping a date suffix in code would make the
+    table silently price any future snapshot off its family, which is exactly
+    the nearest-neighbour behaviour the table exists to refuse.
+    """
+    family = table.lookup("azure", "gpt-5.4")
+    snapshot = table.lookup("azure", "gpt-5.4-2026-03-05")
+    assert snapshot is not None, "the snapshot the deployment resolves to must be priceable"
+    assert (
+        snapshot.input_usd_per_million,
+        snapshot.cached_input_usd_per_million,
+        snapshot.output_usd_per_million,
+        snapshot.reasoning_billed_as,
+    ) == (
+        family.input_usd_per_million,
+        family.cached_input_usd_per_million,
+        family.output_usd_per_million,
+        family.reasoning_billed_as,
+    )
+    # Still exact-match: a neighbouring snapshot nobody has evidence for stays
+    # unpriced rather than inheriting these rates.
+    assert table.lookup("azure", "gpt-5.4-2026-03-06") is None
+    assert table.lookup("azure", "gpt-5.4-2027-01-01") is None
+
+
+def test_a_5_4_snapshot_has_no_meter_of_its_own(table):
+    """The snapshot key is evidence-backed, not a convenience alias.
+
+    Azure publishes 76 meters in the 5.4 family and none of them carries a date.
+    That absence only means something because the same product does carry dated
+    meters where a snapshot bills separately -- 18 of them, all ``chat-latest``.
+    So the family meter is not a substitute for a snapshot meter; it is the only
+    published meter a 5.4 snapshot call can bill against.
+
+    Asserted on the recorded reasoning rather than by calling the API, because a
+    test that reaches the network would fail for reasons that have nothing to do
+    with this repository. The query that re-checks it is written in the entry.
+    """
+    raw = json.loads(PRICE_TABLE_PATH.read_text(encoding="utf-8"))
+    entry = raw["providers"]["azure:gpt-5.4-2026-03-05"]
+    assert entry["resolved_snapshot_of"] == "gpt-5.4"
+    assert entry["why_this_key_exists"].strip()
+    assert "chat-latest" in entry["why_the_family_meter_is_the_right_one"]
+    # The meters named must be the family's, not invented snapshot-shaped ones.
+    assert entry["meters"] == raw["providers"]["azure:gpt-5.4"]["meters"]
+
+
+def test_data_zone_is_recorded_as_two_price_points(table):
+    """Each Data Zone row must be a pairing some region actually bills.
+
+    Before 2026-08-30 this block held one 5.4 Data Zone row reading 3.00 input /
+    0.30 cached / 16.50 output. Azure publishes two Data Zone price points for
+    5.4 -- 2.75 / 0.275 / 16.50 across 14 AMER and EMEA regions, and 3.00 / 0.30
+    / 18.00 across 9 APAC regions -- and that row took its input from one group
+    and its output from the other. No region bills that combination.
+
+    It changed no published figure, because every priced entry here is Global
+    and every Global rate re-verified exact. It is the fallback a reader would
+    apply the moment the open zone premise resolves, which is the one time a
+    wrong alternative does damage.
+    """
+    meters = json.loads(PRICE_TABLE_PATH.read_text(encoding="utf-8"))["azure_published_meters"]
+    rows = meters["gpt-5.4"]
+    assert "standard_data_zone" not in rows, "the mixed row must not come back"
+    assert rows["standard_data_zone_amer_emea"] == {
+        "input": "2.75",
+        "cached_input": "0.275",
+        "output": "16.50",
+    }
+    assert rows["standard_data_zone_apac"] == {
+        "input": "3.00",
+        "cached_input": "0.30",
+        "output": "18.00",
+    }
+    # Both Data Zone groups are a flat multiple of Global. A row that is not a
+    # flat multiple is the signature of the defect this test was written for.
+    glob = rows["standard_global"]
+    for row, factor in (
+        (rows["standard_data_zone_amer_emea"], Decimal("1.1")),
+        (rows["standard_data_zone_apac"], Decimal("1.2")),
+    ):
+        for kind in ("input", "cached_input", "output"):
+            assert Decimal(row[kind]) == Decimal(glob[kind]) * factor, kind
+    # The live entries are Global, so nothing above is what anything was billed
+    # at. Guard that, so a future edit cannot quietly move an entry to a zone.
+    for key, entry in json.loads(
+        PRICE_TABLE_PATH.read_text(encoding="utf-8")
+    )["providers"].items():
+        assert entry["zone"] == "global", key
 
 
 def test_the_runtime_block_is_empty_and_says_why():

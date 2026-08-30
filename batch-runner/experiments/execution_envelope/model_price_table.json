@@ -59,8 +59,32 @@
       "zone": "global",
       "context_tier": "under 272k",
       "premises": [
-        "The deployment is a Global one, not a Data Zone one. Nothing in this repository or in any published artifact records the deployment's zone, so this is stated rather than proven. If it is a Data Zone deployment the correct meters are 3.00 input, 0.30 cached input, 16.50 output.",
+        "The deployment is a Global one, not a Data Zone one. Nothing in this repository or in any published artifact records the deployment's zone, so this is stated rather than proven. If it is a Data Zone deployment the correct meters depend on the region, because Azure publishes two Data Zone price points for 5.4: 2.75 input, 0.275 cached input, 16.50 output across 14 US and European regions, and 3.00 input, 0.30 cached input, 18.00 output across 9 Asia-Pacific regions. Both are 1.1x and 1.2x Global respectively. See azure_published_meters.gpt-5.4.",
         "No single request sends more than 272,000 input tokens. Azure prices 5.4 in two context tiers split at that figure, and the receipt records tokens per task rather than per call, so this cannot be read off the receipt. It CAN be read off the per-call cost ledger, which the inference workflow does publish. If a request crosses 272k the correct meters are 5.00 input, 0.50 cached input, 22.50 output."
+      ]
+    },
+    "azure:gpt-5.4-2026-03-05": {
+      "input_usd_per_million": "2.50",
+      "cached_input_usd_per_million": "0.25",
+      "output_usd_per_million": "15.00",
+      "reasoning_billed_as": "output",
+      "source": "https://prices.azure.com/api/retail/prices — meters '5.4 inp Gl 1M Tokens', '5.4 cd inp Gl 1M Tokens', '5.4 opt Gl 1M Tokens'; productName 'Azure OpenAI GPT5', type Consumption",
+      "last_reviewed": "2026-08-30",
+      "currency": "USD",
+      "unit": "per 1,000,000 tokens",
+      "meters": {
+        "input": "5.4 inp Gl 1M Tokens",
+        "cached_input": "5.4 cd inp Gl 1M Tokens",
+        "output": "5.4 opt Gl 1M Tokens"
+      },
+      "tier": "standard",
+      "zone": "global",
+      "context_tier": "under 272k",
+      "resolved_snapshot_of": "gpt-5.4",
+      "why_this_key_exists": "A request for deployment 'gpt-5.4' comes back naming 'gpt-5.4-2026-03-05', and lookup is exact — core/cost_receipts.py prices on the model the reply reports, with no prefix match and no nearest neighbour. Without this key the snapshot is price_missing. Run 33302056462 is that exact failure: two paid calls, both unpriceable, receipt partial.",
+      "why_the_family_meter_is_the_right_one": "Not assumed from the name. Azure publishes 76 meters in the 5.4 family (retrieved 2026-08-30, productName 'Azure OpenAI GPT5', all 8 pages) and not one of them carries a date. That absence is only meaningful because the same product DOES carry dated meters where a snapshot is billed separately: 18 of them, all 'chat-latest', e.g. 'chat-latest 08062026 inp Gl 1M Tokens'. So Azure expresses snapshot-specific pricing when it exists, and expresses none for 5.4. The family meter is therefore not a substitute for a snapshot meter — it is the only published meter a 5.4 snapshot call can bill against. Re-check with one query: $filter=productName eq 'Azure OpenAI GPT5', then look for a 5.4 meter containing a year.",
+      "premises": [
+        "Same two premises as azure:gpt-5.4, which this key bills identically to. See that entry."
       ]
     },
     "azure:gpt-5.4-mini": {
@@ -113,9 +137,9 @@
     "axes_open": {
       "zone": {
         "status": "unresolved",
-        "spread": "Data Zone is 1.1x to 1.2x Global depending on the rate kind.",
+        "spread": "Data Zone is 1.1x to 1.2x Global depending on the rate kind. Quantified 2026-08-30 for 5.4: Global is 2.50 / 0.25 / 15.00 uniformly across all 25 regions; Data Zone is 2.75 / 0.275 / 16.50 in 14 AMER and EMEA regions (a flat 1.1x) and 3.00 / 0.30 / 18.00 in 9 APAC regions (a flat 1.2x). So the answer moves by 10% or 20%, and which of the two depends on the region as well as the zone.",
         "why_it_cannot_be_read": "Global versus Data Zone is a property of the deployment, chosen when the deployment was created. It is not in the response, not in the config, and not in any published artifact. azure_ai_routes.endpoint_kind ('direct-v1') describes the shape of the API surface, not the zone. core/config.py holds no region or zone token at all.",
-        "what_would_settle_it": "One statement from whoever owns the deployment, or recording the deployment's SKU alongside the resolved model at call time.",
+        "what_would_settle_it": "One statement from whoever owns the deployment naming its zone and its region, or recording the deployment's SKU and region alongside the resolved model at call time. The region is needed as well as the zone, because Data Zone is not one price.",
         "handling": "Stated as a premise on each entry rather than left silent, because a receipt that is 10% wrong AND says which way is a smaller problem than one that is 10% wrong and says nothing."
       },
       "context_tier": {
@@ -152,17 +176,21 @@
   "azure_published_meters": {
     "why_this_block_exists": "The rates actually in use are a small selection out of a large published matrix. Recording the whole matrix means a reviewer can check not only that a chosen rate is real, but that the right one was chosen — and it means the alternatives are already here when a premise turns out to be wrong.",
     "retrieved": "2026-08-29",
+    "re_verified": "2026-08-30, by re-fetching all 8 pages of productName 'Azure OpenAI GPT5' (7,235 rows) and pairing each rate kind per armRegionName rather than reading rate kinds independently. Rows re-checked and confirmed exact: every gpt-5.4 Global row, both gpt-5.4 long-context Global rows, priority Global and Data Zone, batch Global and Data Zone, all of gpt-5.4-mini, gpt-5.4-nano, and gpt-5.4-pro. Rows re-checked and found wrong: the two gpt-5.4 standard Data Zone rows, now corrected and split — see data_zone_is_two_price_points_not_one. Rows NOT re-checked in this pass: execution_environment and audio, which are separate products and were left as retrieved on 2026-08-29.",
     "currency": "USD",
     "unit": "per 1,000,000 tokens unless stated otherwise",
     "gpt-5.4": {
       "standard_global": {"input": "2.50", "cached_input": "0.25", "output": "15.00"},
-      "standard_data_zone": {"input": "3.00", "cached_input": "0.30", "output": "16.50"},
+      "standard_data_zone_amer_emea": {"input": "2.75", "cached_input": "0.275", "output": "16.50"},
+      "standard_data_zone_apac": {"input": "3.00", "cached_input": "0.30", "output": "18.00"},
       "standard_global_long_context": {"input": "5.00", "cached_input": "0.50", "output": "22.50"},
-      "standard_data_zone_long_context": {"input": "6.00", "cached_input": "0.60", "output": "24.75"},
+      "standard_data_zone_long_context_amer_emea": {"input": "5.50", "cached_input": "0.55", "output": "24.75"},
+      "standard_data_zone_long_context_apac": {"input": "6.00", "cached_input": "0.60", "output": "27.00"},
       "priority_global": {"input": "5.00", "cached_input": "0.50", "output": "30.00"},
       "priority_data_zone": {"input": "5.50", "cached_input": "0.55", "output": "33.00"},
       "batch_global": {"input": "1.25", "cached_input": "0.13", "output": "7.50"},
-      "batch_data_zone": {"input": "1.375", "cached_input": "0.143", "output": "8.25"}
+      "batch_data_zone": {"input": "1.375", "cached_input": "0.143", "output": "8.25"},
+      "data_zone_is_two_price_points_not_one": "Corrected 2026-08-30. Azure prices a 5.4 Data Zone deployment differently depending on which region it sits in, and the two rows recorded here before this correction each combined the input and cached-input of one group with the output of the other, producing a pair of rates no region actually bills. The groups, read off armRegionName: AMER/EMEA (centralus, eastus, eastus2, francecentral, germanywestcentral, northcentralus, northeurope, polandcentral, southcentralus, spaincentral, swedencentral, westeurope, westus, westus3) and APAC (australiaeast, centralindia, eastasia, japaneast, japanwest, jioindiawest, koreacentral, southeastasia, southindia). Global is uniform at one price across all 25 regions, which is why no Global row needs splitting. Nothing in this repository billed at either Data Zone rate — every priced entry is Global — so no published figure changes. What changes is the fallback a reader would apply if the open zone premise resolves to Data Zone."
     },
     "gpt-5.4-mini": {
       "standard_global": {"input": "0.75", "cached_input": "0.075", "output": "4.50"}
