@@ -466,15 +466,36 @@ def summarize_cost_receipts(
     # The run total is only a total when every receipt is complete. One
     # partial or unavailable receipt makes it a floor, and it is labelled as
     # one rather than quietly rounded up into a headline number.
-    complete_run = counts["complete"] == len(receipts)
-    if complete_run:
+    #
+    # The status comes from the receipts themselves, never from whether any of
+    # them produced a number. `_measured_amount` deliberately drops the
+    # placeholder zero a non-complete receipt carries, so a run whose every
+    # call went to a model the price table does not list leaves `amounts`
+    # empty -- and reading the status off that emptiness reported a run that
+    # made real paid calls as `not_run`. Measuring nothing is not the same as
+    # doing nothing, and "no record" is the exact misreading the four statuses
+    # exist to prevent.
+    #
+    # A task that never ran contributes nothing rather than holing the run, so
+    # it is set aside before the vote instead of dragging a fully priced run
+    # down to `partial` and hiding its estimate and per-deliverable figure.
+    #
+    # This is not a rule invented here. It is the one already carried by
+    # `core/cost_receipts.py._summary_status` and, since #270, by
+    # `scripts/cost-receipt.mjs`. All three summarise the same receipts for the
+    # same run, so they must not disagree about them.
+    contributing = [
+        receipt for receipt in receipts if receipt["status"] != "not_run"
+    ]
+    if not contributing:
+        status = "not_run"
+    elif all(receipt["status"] == "complete" for receipt in contributing):
         status = "complete"
-    elif amounts:
-        status = "partial"
-    elif counts["unavailable"]:
+    elif all(receipt["status"] == "unavailable" for receipt in contributing):
         status = "unavailable"
     else:
-        status = "not_run"
+        status = "partial"
+    complete_run = status == "complete"
 
     reasons = sorted({
         reason

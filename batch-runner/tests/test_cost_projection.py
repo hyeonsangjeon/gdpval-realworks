@@ -434,6 +434,98 @@ def test_unavailable_receipts_are_counted_but_never_priced():
     assert summary["known_cost_usd"] == 0.0
 
 
+def test_a_run_that_priced_nothing_still_reports_that_it_ran():
+    """Measuring nothing is not the same as doing nothing.
+
+    Shape taken from the exp026c cost smoke (run 33302056462): one task, a
+    generation call and a Self-QA call, real token usage on both — and a model
+    the price table had no entry for, so every amount came back unpriced.
+    Deriving the run status from "did any amount survive" instead of from the
+    receipts turned that into ``not_run``, which reads as "no record" and is
+    the single misreading the four statuses exist to prevent.
+    """
+    receipt = project_cost_receipt(
+        _receipt(
+            status="partial",
+            estimated_cost_usd=None,
+            known_cost_usd=0.0,
+            model_cost_usd=0.0,
+            runtime_cost_usd=0.0,
+            model_calls=2,
+            components=[
+                _component(
+                    name="generation",
+                    stage="generation",
+                    status="partial",
+                    known_cost_usd=0.0,
+                    model_calls=1,
+                ),
+                _component(
+                    name="self_qa",
+                    stage="self_qa",
+                    status="partial",
+                    known_cost_usd=0.0,
+                    model_calls=1,
+                ),
+            ],
+            missing_reasons=["price_missing"],
+        )
+    )
+    rows = [_row("task-a", problem_solving_cost=receipt)]
+    summary = summarize_cost_receipts(
+        rows,
+        "problem_solving_cost",
+        successful_deliverables=successful_deliverable_count(rows),
+    )
+    assert summary["status"] == "partial"
+    assert summary["partial_tasks"] == 1
+    assert summary["not_run_tasks"] == 0
+    # Nothing was confirmed, so nothing is claimed: no floor to stand on, no
+    # headline total, no per-unit figure. `partial` says exactly that, and says
+    # it about a run that did happen.
+    assert summary["measured_tasks"] == 0
+    assert summary["known_cost_usd"] == 0.0
+    assert summary["estimated_cost_usd"] is None
+    assert summary["cost_per_successful_deliverable_usd"] is None
+    assert summary["missing_reasons"] == ["price_missing"]
+
+
+def test_a_task_that_never_ran_does_not_hole_an_otherwise_complete_run():
+    """A ``not_run`` receipt abstains from the status vote instead of spoiling it.
+
+    A task that died before its first model call has nothing to price, and it
+    is not evidence that the tasks which did run were priced badly. Counting it
+    as a dissenting voice dropped a fully priced run to ``partial`` and took
+    its total and per-deliverable figure down with it.
+    """
+    rows = [
+        _row("task-a", problem_solving_cost=project_cost_receipt(_receipt())),
+        _row(
+            "task-b",
+            status="error",
+            deliverable_files=[],
+            problem_solving_cost=project_cost_receipt(_unmeasured("not_run")),
+        ),
+    ]
+    summary = summarize_cost_receipts(
+        rows,
+        "problem_solving_cost",
+        successful_deliverables=successful_deliverable_count(rows),
+    )
+    assert summary["status"] == "complete"
+    assert summary["complete_tasks"] == 1
+    assert summary["not_run_tasks"] == 1
+    assert summary["known_cost_usd"] == 0.25
+    assert summary["estimated_cost_usd"] == 0.25
+    # One deliverable, one priced task: the figure is the whole cost, not the
+    # cost divided by a task that never started.
+    assert summary["cost_per_successful_deliverable_usd"] == 0.25
+    # The failed task is still reported as failed — it just brought no money
+    # with it, and none is invented for it.
+    assert summary["failed_task_count"] == 1
+    assert summary["failed_task_cost_usd"] == 0.0
+
+
 def test_failed_task_cost_is_reported_beside_the_total_not_removed_from_it():
     rows = [
         _row("task-a", problem_solving_cost=project_cost_receipt(_receipt())),
