@@ -764,6 +764,58 @@ def test_markdown_says_no_record_rather_than_zero_for_an_unpriced_figure():
     markdown = step6_report._build_markdown(report)
     assert "| Average per task | no record |" in markdown
     assert "unavailable — nothing was recorded" in markdown
+    # The headline row is the one a reader takes as *the* number, so it is held
+    # to the same standard as the rows beneath it.
+    assert "| Recorded so far | no record |" in markdown
+
+
+def test_markdown_does_not_head_a_run_that_priced_nothing_with_a_zero():
+    """A run that paid for two model calls must not head its table with $0.
+
+    Run 33302056462 -- the exp026c cost smoke -- called the model twice against
+    `gpt-5.4-2026-03-05`, a snapshot the price table had no entry for. Every
+    component came back a placeholder zero, the projector nulled them all, and
+    the summariser's `known_cost_usd` fell out as a sum over an empty set: 0.0.
+
+    Every other money row in that table is None and prints "no record". This
+    one printed "$0.0000" -- the same string a genuinely free run prints -- in
+    the single row a reader reads as the answer. Two paid calls read as free,
+    directly beside "Not priced | price_missing".
+
+    Held here rather than in the producer because `known_cost_usd` is published
+    and consumed elsewhere; only how this row reads it changes.
+    """
+    unpriceable = _unmeasured("partial", missing_reasons=["price_missing"])
+    report = _report_data(_report_input(_row("task-a", problem_solving_cost=unpriceable)))
+    markdown = step6_report._build_markdown(report)
+
+    assert "| Recorded so far | no record |" in markdown
+    assert "| Recorded so far | $0.0000 |" not in markdown
+    # `Failed tasks | 0 ($0.0000)` is left alone: zero failed tasks did cost
+    # zero. Its unpriced variant -- failures whose receipts carry no amount,
+    # printing `2 ($0.0000)` -- is the same defect as this one, but the summary
+    # exposes no count of *measured* failures, so the report cannot tell the
+    # two apart without a new producer field. core/cost_projection.py is a
+    # grader source-hash input and frozen while shards are in flight.
+    # Coverage counts receipts, not amounts, so on its own it reads as a fully
+    # accounted run. The row that disambiguates it must be present.
+    assert "| Coverage | 1 / 1 tasks (100.0%) |" in markdown
+    assert "| Priced | 0 / 1 receipts |" in markdown
+    assert "| Not priced | price_missing |" in markdown
+
+
+def test_markdown_leaves_a_fully_priced_report_exactly_as_it_was():
+    """The unpriced-run fix must not add a row to reports that were already fine.
+
+    `Priced` exists to resolve a contradiction between coverage and the amounts.
+    A run with nothing to contradict must print what it printed before, so that
+    an existing experiment's report does not change because of this change.
+    """
+    report = _report_data(_report_input(_row("task-a", problem_solving_cost=_receipt())))
+    markdown = step6_report._build_markdown(report)
+
+    assert "| Total | $0.2500 |" in markdown
+    assert "| Priced |" not in markdown
 
 
 def test_markdown_omits_the_cost_section_for_an_uninstrumented_run():
