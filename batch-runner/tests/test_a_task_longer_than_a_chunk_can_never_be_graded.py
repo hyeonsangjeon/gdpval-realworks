@@ -6,31 +6,47 @@ from zero. That makes the chunk budget a hard floor rather than a preference:
 if a single task cannot be graded inside one chunk, no number of chunks will
 ever grade it, and each attempt pays the full price of the attempt.
 
-Gold shard 4 of 11 found the floor. Task ``9e39df84`` -- 57 rubric items of a
-Manufacturing deliverable -- ran for 4h21m of a 4h budget and completed
-nothing. Eleven of its grading calls exhausted the config's 2400-token
-per-item output budget without returning parseable final text
-(``empty_final_text:max_output_tokens``); the retry-without-tools cycles that
-followed accounted for 4h18m of the 4h21m. The chunk exited 5, not 7 --
-a chunk that finished no task declines to buy another one on identical terms.
-That refusal is correct and is not what this file changes.
+Gold shard 4 of 11 found the floor, and then four attempts found the ceiling.
+Task ``9e39df84`` is 57 rubric items of a Manufacturing deliverable. Eleven of
+its grading calls exhaust the config's 2400-token per-item output budget
+without returning parseable final text (``empty_final_text:max_output_tokens``)
+and the retry-without-tools cycles that follow are most of its runtime. Every
+attempt ended the same way: the guard fired at a rubric-item boundary inside
+the task, no task completed, and the chunk exited 5 rather than 7 -- a chunk
+that finished nothing declines to buy another one on identical terms. That
+refusal is correct and is not what this file is about.
 
-The 5h budget that answer bought was not enough either. On the second attempt
-the same task ran 5h10m and stopped three items short of finishing, so the
-budget moved a second time -- this time to the largest figure the platform
-leaves room for, which is not a figure chosen to fit the task. Whether it fits
-is recorded below as a projection with its arithmetic shown, not asserted:
-the two attempts bracket the answer rather than settling it, and a test that
-claimed otherwise would be claiming to know something nobody has measured.
+    attempt  run           budget  grading ran  items done  stopped starting
+    1        33273207562   240     261.3        45          46
+    2        33286656393   300     310.4        54          55  feb54fa4
+    3        33301041542   336     348.0        54          55  feb54fa4
+    4        33316285562   338     346.0        55          56  b0e21451
 
-What could change at all is the subject of the first test:
-``compute_grader_source_hash`` covers ``batch-runner`` and the grading config,
-and ``.github/workflows`` is in neither. The per-item token cap lives in the
-grading config, so raising *that* would have refingerprinted the grader and
-orphaned the ten shards already paid for and committed. The workflow's timing
-dials are the only ones that can move without invalidating a run in progress,
-and ``GRADER_TIME_BUDGET_SEC`` is the only cost-shaped environment variable
-the grading code reads at all.
+Three raises bought nine items, and the third bought none at all: attempts 2
+and 3 stopped at the same item having done the same 54, 37.6 min apart. The
+pace is what moves, not the work -- 5.75, 5.81, 6.29 and 6.44 min an item
+across the four. So the honest quantity is not "how long the task takes" but
+"how long a full pass costs at each pace that has actually been observed",
+which is what ``MEASURED_FULL_PASS_MINUTES`` holds.
+
+Two of those four passes fit in the window the platform allows. The two most
+recent do not, by 7 and 15 min, and no budget can buy that back: the window is
+the 360 min runner kill less setup and less the save at the end, and it is
+already fully spent. That is the conclusion the previous revision of this file
+pre-registered as the reading it would accept -- "if a third attempt also falls
+short, the honest reading is that this task cannot be graded under the
+pre-registered settings, not that some number here needs nudging again".
+
+What could have changed is the subject of the first tests, and none of it
+helps. ``compute_grader_source_hash`` covers ``batch-runner`` and the grading
+config; ``.github/workflows`` is in neither, so the clock could move without
+orphaning the ten shards already paid for. The per-item token cap that causes
+the retries lives in the grading config, so raising *that* refingerprints the
+grader. Skipping the task or moving it down the order is refused by the pinned
+rerun identity. The clock was the only lever, and it is now at its stop.
+
+The cost of stopping here is not one task. ``9e39df84`` is 7th of 17 in its
+shard, so the ten after it have never been reached at all.
 
 Nothing here calls a model or a network.
 """
@@ -41,28 +57,45 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 import step8_grade as s8
+from tests.test_full_gold_corpus_contract import (
+    PLATFORM_HARD_KILL_MINUTES,
+    SAVE_AND_COMMIT_MINUTES,
+    SETUP_MINUTES_BEFORE_GRADING,
+)
 
 BATCH_ROOT = Path(s8.__file__).resolve().parent
 REPO_ROOT = BATCH_ROOT.parent
 WORKFLOW = REPO_ROOT / ".github/workflows/grade-run.yml"
+FULL_CONFIG_PATH = BATCH_ROOT / "grading_configs/gold_ceiling_185_v2_sol_max.yaml"
 
-#: The longest a single task has been watched to run without finishing.
-#: Attempt one, run ``33273207562`` on a 240 min budget: grading opened
-#: 20:35:14Z, the guard fired 00:56:34Z, 261.3 min, reached item 46 of 57.
-#: Attempt two, run ``33286656393`` on a 300 min budget: grading opened
-#: 01:57:55Z, the guard fired 07:08:20Z, 310.4 min, reached item 54 of 57.
-#: A budget at or under this figure is known to buy nothing, because an
-#: abandoned task leaves no partial behind and restarts from item 1.
-OBSERVED_LONGEST_TASK_MINUTES = 310
+#: The task that stalled shard 4, and where it sits in that shard's slice.
+STALLED_TASK_ID = "9e39df84-ac57-4c9b-a2e3-12b8abf2c797"
+STALLED_TASK_RUBRIC_ITEMS = 57
+SHARD_COUNT = 11
+STALLED_TASK_SHARD_INDEX = 4
 
-#: What the three unreached items are expected to cost, from the rate the same
-#: run was measuring as it ran out of time. Items 34 -> 41 took 83.2 min
-#: (11.9 a piece); items 41 -> 54 took 103.9 min (8.0 a piece). Three more at
-#: either rate is 24 to 36 min on top of the 310.4 already watched.
-PROJECTED_TASK_MINUTES_LOW = 334
-PROJECTED_TASK_MINUTES_HIGH = 346
+#: The longest a single task has been watched to run without finishing --
+#: attempt 3, which spent 348.0 min to complete the same 54 items attempt 2
+#: completed in 310.4. A budget at or under this figure is known to have bought
+#: nothing, because an abandoned task leaves no partial behind and restarts
+#: from item 1.
+OBSERVED_LONGEST_TASK_MINUTES = 348
+
+#: What one complete pass at all 57 items costs, at each pace measured, in
+#: attempt order. Each entry is (minutes watched / items completed) * 57 --
+#: a measured rate extended over the whole task, not a guess about it:
+#:
+#:     1  261.3 / 45 = 5.81 -> 331
+#:     2  310.4 / 54 = 5.75 -> 328
+#:     3  348.0 / 54 = 6.44 -> 367
+#:     4  346.0 / 55 = 6.29 -> 359
+#:
+#: They are kept in order because the order is the finding: the two that fit
+#: are the two oldest.
+MEASURED_FULL_PASS_MINUTES = (331, 328, 367, 359)
 
 
 def _workflow_budget_minutes() -> int:
@@ -72,8 +105,22 @@ def _workflow_budget_minutes() -> int:
     return int(budget.group(1)) // 60
 
 
+def _grading_window_minutes() -> float:
+    """The most grading time the platform can ever allow, whatever the budget.
+
+    The job dies at 360 min no matter what is asked for. Setup happens before
+    grading opens and the partial save happens after it closes, so neither is
+    time the grader can spend. What is left is the whole of the lever.
+    """
+    return (
+        PLATFORM_HARD_KILL_MINUTES
+        - SETUP_MINUTES_BEFORE_GRADING
+        - SAVE_AND_COMMIT_MINUTES
+    )
+
+
 def test_a_workflow_file_cannot_enter_the_grader_source_hash():
-    """The invariant that made this fix possible at all.
+    """The invariant that made the three raises possible at all.
 
     Every path the hash digests is resolved against ``batch-runner`` and
     rejected if it escapes. ``.github/workflows/grade-run.yml`` escapes, so no
@@ -94,7 +141,6 @@ def test_the_grader_hash_is_blind_to_the_workflows_directory():
     working tree dirty.
     """
     config_path = "grading_configs/gold_ceiling_185_v2_sol_max.yaml"
-    import yaml
 
     config = yaml.safe_load((BATCH_ROOT / config_path).read_text(encoding="utf-8"))
 
@@ -113,49 +159,74 @@ def test_the_grader_hash_is_blind_to_the_workflows_directory():
     assert WORKFLOW.read_bytes() == original
 
 
-def test_the_chunk_budget_outlasts_every_chunk_that_has_been_watched_fail():
-    """The floor, stated as a number that a revert would trip over.
+def test_the_platform_cannot_give_this_task_the_time_its_recent_pace_needs():
+    """The conclusion, as arithmetic rather than as a judgement call.
 
-    Not a performance target -- a correctness one. At or below this line the
-    task that stalled shard 4 is ungradeable rather than slow, and every retry
-    spends a chunk's worth of judging to learn nothing. This says the budget
-    clears what has already been observed. It does not say the task fits;
-    that is the next test's business.
+    Not "the budget is too small" -- the budget is already every minute the
+    runner leaves over. At the pace of either recent attempt a full pass wants
+    more grading time than the runner exists for, so there is no value of
+    ``GRADER_TIME_BUDGET_SEC`` that finishes the task and still saves. Raising
+    it further would only move where inside the task the money is lost.
+
+    If this test ever goes red it means a pass got cheaper -- the per-item cap
+    was raised, the retries stopped, or the judge got faster -- and the whole
+    conclusion should be re-derived rather than patched.
     """
-    budget = _workflow_budget_minutes()
+    window = _grading_window_minutes()
+    recent = MEASURED_FULL_PASS_MINUTES[-2:]
 
-    assert budget > OBSERVED_LONGEST_TASK_MINUTES, (
-        f"a {budget} min chunk cannot finish a task already measured at "
-        f"{OBSERVED_LONGEST_TASK_MINUTES} min; --resume restarts an "
-        "unfinished task from nothing, so it would stall here forever"
+    assert min(recent) > window, (
+        f"a full pass at the recent pace costs {min(recent)}-{max(recent)} min "
+        f"of grading, and the runner can only ever offer {window:.1f} min "
+        f"({PLATFORM_HARD_KILL_MINUTES} less {SETUP_MINUTES_BEFORE_GRADING} "
+        f"setup less {SAVE_AND_COMMIT_MINUTES} save); no budget closes that gap"
     )
 
 
-def test_the_budget_is_the_most_the_platform_allows_not_the_most_the_task_needs():
-    """The uncomfortable half, written down rather than left to be rediscovered.
+def test_the_two_earliest_paces_would_have_fitted_so_this_is_a_lottery():
+    """The other half, so the conclusion is not overstated.
 
-    The projection straddles the budget: the optimistic end fits, the
-    pessimistic end does not. Nobody can widen the budget past the platform's
-    own kill, and every dial that would make the task itself cheaper sits in
-    the hashed grading config. So if a third attempt also falls short, the
-    honest reading is that this task cannot be graded under the pre-registered
-    settings -- not that some number here needs nudging again.
+    The task is not intrinsically too big. At the pace of the first two
+    attempts a full pass fits inside the window with room over, and a fifth
+    attempt that happened to draw that pace would finish. What is being
+    recorded is that the pace is not ours to choose and that half the observed
+    draws lose, at roughly six hours of paid judging a draw.
 
-    The assertion is deliberately the weak one. Asserting the budget clears
-    the high end would be asserting something false; asserting it clears the
-    low end is what the arithmetic actually supports.
+    Kept as a test rather than a comment because if the early figures are ever
+    revised the claim "half the draws would have won" stops holding, and the
+    decision that rests on it should be revisited.
+    """
+    window = _grading_window_minutes()
+    early = MEASURED_FULL_PASS_MINUTES[:2]
+
+    assert max(early) < window, (
+        f"a full pass at the early pace cost {min(early)}-{max(early)} min, "
+        f"inside the {window:.1f} min window; if that is no longer true then "
+        "the task never fitted and this file should say so plainly"
+    )
+
+
+def test_the_budget_is_at_its_stop_and_is_not_what_failed():
+    """Guards the number in both directions at once.
+
+    Below: the budget must stay under what a full pass most recently cost, so
+    nobody can read the current setting as sufficient and conclude the task
+    merely needs one more run.
+
+    Above: it must stay inside the window, so a later raise that would push the
+    job past the platform kill -- and take the ``always()`` cost-ledger upload
+    with it -- fails here instead of in production.
     """
     budget = _workflow_budget_minutes()
+    window = _grading_window_minutes()
 
-    assert budget >= PROJECTED_TASK_MINUTES_LOW - 2, (
-        f"a {budget} min chunk is short even of the optimistic "
-        f"{PROJECTED_TASK_MINUTES_LOW} min projection; a third attempt would "
-        "be bought knowing it cannot succeed"
+    assert budget < MEASURED_FULL_PASS_MINUTES[-1], (
+        f"a {budget} min budget is being presented as enough for a pass last "
+        f"measured at {MEASURED_FULL_PASS_MINUTES[-1]} min"
     )
-    assert budget < PROJECTED_TASK_MINUTES_HIGH, (
-        "the budget now covers the pessimistic projection too -- if that is "
-        "real rather than a stale constant, this test has become the wrong "
-        "shape and the caveat above should go"
+    assert budget <= window, (
+        f"a {budget} min budget exceeds the {window:.1f} min the runner can "
+        "offer; the chunk would be killed mid-save and the ledger lost"
     )
 
 
@@ -190,9 +261,68 @@ def test_the_per_item_cap_still_lives_where_it_refingerprints_the_grader():
     it out of the config and into the workflow, the trade-off recorded above
     stops being true and this test should be revisited rather than deleted.
     """
-    config = (BATCH_ROOT / "grading_configs/gold_ceiling_185_v2_sol_max.yaml").read_text(
-        encoding="utf-8"
-    )
+    config = FULL_CONFIG_PATH.read_text(encoding="utf-8")
 
     assert "per_item_max_output_tokens: 2400" in config
     assert "per_item_max_output_tokens" not in WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_the_pinned_list_refuses_both_ways_round_the_stalled_task():
+    """The two escape routes that do not exist, checked against the code.
+
+    Dropping the task shortens the list and trips the count; moving it to the
+    end keeps the count and trips the identity. Either would have turned a
+    loss of eleven tasks into a loss of one, and the pin is deliberately
+    stricter than that -- a run that graded a different set, or the same set in
+    a different order, is a different measurement wearing this one's name.
+
+    Both are asserted here so that a later loosening of the pin shows up as a
+    decision rather than as a shard that quietly grades fifteen of seventeen.
+    """
+    config = yaml.safe_load(FULL_CONFIG_PATH.read_text(encoding="utf-8"))
+    identity = config["rerun_identity"]
+    pinned = list(identity["task_ids"])
+    assert STALLED_TASK_ID in pinned
+
+    common = dict(
+        experiment_id=identity["experiment_id"],
+        rubric_commit_sha=identity["rubric_commit_sha"],
+        inference_revision=identity["inference_revision"],
+    )
+
+    s8._validate_pinned_rerun_identity(config, task_ids=pinned, **common)
+
+    without = [task_id for task_id in pinned if task_id != STALLED_TASK_ID]
+    with pytest.raises(ValueError, match="pinned rerun identity mismatch"):
+        s8._validate_pinned_rerun_identity(config, task_ids=without, **common)
+
+    moved_last = without + [STALLED_TASK_ID]
+    assert len(moved_last) == len(pinned)
+    with pytest.raises(ValueError, match="mismatch for task_ids"):
+        s8._validate_pinned_rerun_identity(config, task_ids=moved_last, **common)
+
+
+def test_losing_this_task_strands_the_ten_behind_it():
+    """Why the loss is eleven tasks and not one.
+
+    The shard is a stride of the pinned list and is graded in that order, so
+    every resume meets ``9e39df84`` before anything after it. Six tasks ahead
+    of it are done and banked; the ten behind it have never been started.
+
+    This is the number that decides whether the shard is worth another attempt,
+    so it is derived from the committed config rather than quoted from a run
+    log -- if the stride or the pin ever changes, the figure changes with it.
+    """
+    config = yaml.safe_load(FULL_CONFIG_PATH.read_text(encoding="utf-8"))
+    pinned = list(config["rerun_identity"]["task_ids"])
+
+    shard = pinned[STALLED_TASK_SHARD_INDEX::SHARD_COUNT]
+    position = shard.index(STALLED_TASK_ID)
+
+    assert position == 6, (
+        f"{STALLED_TASK_ID[:8]} is no longer 7th in shard "
+        f"{STALLED_TASK_SHARD_INDEX}; the count of stranded tasks below is stale"
+    )
+    assert len(shard) - position - 1 == 10, (
+        "the number of tasks stranded behind the stalled one has changed"
+    )

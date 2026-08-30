@@ -195,21 +195,47 @@ entries land under a fresh dated heading the day they merge to `main`.
   upload the cost ledger. 338 is the last value whose worst case (358.3 min)
   lands inside the timeout on both paths.
 
-  Whether 338 is *enough* is not asserted, because nobody has measured it. The
-  same run's own pacing brackets the task at **334 to 346 min** depending on
-  which stretch's per-item rate is used, and the budget sits inside that
-  bracket. `test_the_budget_is_the_most_the_platform_allows_not_the_most_the_task_needs`
-  asserts only the end the arithmetic supports, and says in its docstring that
-  a third shortfall should be read as this task being ungradeable under the
-  pre-registered settings — not as a number needing another nudge.
+  338 has now been measured, and it is not enough. Run `33316285562` graded
+  **55 of 57 items in 346.0 min** and the guard stopped it starting item 56 —
+  one item further than the two attempts before it, two items short of done,
+  rc=5 again. Across four attempts the work does not move but the pace does:
+  **5.75, 5.81, 6.29 and 6.44 min an item**, which extend over the whole task
+  to full passes of **328, 331, 359 and 367 min**. Against that the platform
+  offers at most `360 − 6.3 setup − 2 save = 351.7 min` of grading, whatever
+  the budget says. The two oldest paces fit; the two most recent miss by 7 and
+  15 min, and no value of `GRADER_TIME_BUDGET_SEC` closes a gap in the runner's
+  own lifetime — raising it further only moves where inside the task the money
+  is lost.
 
-  Four tests carry the reasoning rather than the numbers. Two assert that the
+  So the task is not too big; the pace is not ours to choose. Two of four
+  observed draws would have finished, at roughly six hours of paid judging a
+  draw. Both halves are asserted, because stating only the first would read as
+  "impossible" and only the second as "try again":
+  `test_the_platform_cannot_give_this_task_the_time_its_recent_pace_needs` and
+  `test_the_two_earliest_paces_would_have_fitted_so_this_is_a_lottery`.
+
+  The cost of stopping is **eleven tasks, not one**. `9e39df84` is 7th of 17 in
+  its shard and the shard is graded in pinned order, so every resume meets it
+  before the ten after it, which have never been started.
+  `test_losing_this_task_strands_the_ten_behind_it` derives that from the
+  committed config rather than from a run log.
+
+  Both ways round it are refused, and the refusals are now covered rather than
+  assumed: dropping the task shortens the list and trips `task_count`, moving
+  it to the end keeps the count and trips `task_ids`
+  (`test_the_pinned_list_refuses_both_ways_round_the_stalled_task`). Loosening
+  either pin would let a shard grade fifteen of seventeen and still call itself
+  complete. The remaining structural fix is a runner without the 360-minute
+  kill, which is out of scope here and is recorded, not taken.
+
+  Nine tests carry the reasoning rather than the numbers. Two assert that the
   workflow cannot enter the grader source hash — one structurally, one by
   taking the hash twice with the workflow rewritten in between and restoring it
-  in `finally`. One states the floor as `budget > 261 min`, the figure task
-  `9e39df84` actually consumed, so a revert fails with the reason rather than a
-  bare inequality. The last pins the 2400 cap to the config, so that if it ever
-  moves into the workflow the trade-off recorded above is revisited instead of
+  in `finally`. One holds the budget from both sides at once: under what a pass
+  last cost, so the setting cannot be read as sufficient, and inside the
+  window, so a later raise fails here instead of by losing a ledger in
+  production. One pins the 2400 cap to the config, so that if it ever moves
+  into the workflow the trade-off recorded above is revisited instead of
   silently becoming false.
 
 - **Three ways a judge could be shown a deliverable and still not see what was
