@@ -5,10 +5,15 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
-from core.agentic_budget import AgenticBudgetLedger
-from core.agentic_endpoints import compute_paired_endpoints
+BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
+if str(BATCH_RUNNER_ROOT) not in sys.path:
+    sys.path.insert(0, str(BATCH_RUNNER_ROOT))
+
+from core.agentic_budget import AgenticBudgetLedger  # noqa: E402
+from core.agentic_endpoints import compute_paired_endpoints  # noqa: E402
 
 
 FULL_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
