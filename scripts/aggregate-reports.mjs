@@ -5,7 +5,8 @@
 // and generate public/generated/reports-index.json
 
 import { readdir, readFile, writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const RESULTS_DIR = join(ROOT, 'batch-runner', 'results');
@@ -29,10 +30,34 @@ async function fetchReportData(dirName, reportPath) {
 }
 
 // Extract short_id from directory name
-// exp003_GPT52Chat_baseline_runner_exec -> exp003
-function extractShortId(dirName) {
-  const match = dirName.match(/^(exp\d+)/);
+//   exp003_GPT52Chat_baseline_runner_exec -> exp003
+//   exp026c_cost_receipt_smoke            -> exp026c
+//
+// The trailing [a-z]* is what keeps a variant suffix distinct. Without it every
+// exp026* directory collapses onto `exp026`, which is destructive twice over:
+// generateCrossExperiment() keys the sector matrix by short_id, so the later
+// report silently overwrites the real exp026's cells; and
+// src/lib/runtimeNoteBenchmark.ts requires exactly one report per pinned id, so
+// the runtime note degrades to `invalid`.
+//
+// Every directory that exists today is `exp\d+_...`, so [a-z]* matches empty and
+// every current short_id is byte-identical to what the narrower pattern produced.
+export function extractShortId(dirName) {
+  const match = dirName.match(/^(exp\d+[a-z]*)/);
   return match ? match[1] : null;
+}
+
+// Group directory names by the short_id they resolve to and return only the
+// groups holding more than one directory. Pure and side-effect free so the
+// collision rule can be tested without touching the filesystem or the network.
+export function findShortIdCollisions(dirNames) {
+  const byShortId = new Map();
+  for (const dirName of dirNames) {
+    const shortId = extractShortId(dirName);
+    if (!shortId) continue;
+    byShortId.set(shortId, [...(byShortId.get(shortId) ?? []), dirName]);
+  }
+  return [...byShortId.entries()].filter(([, dirs]) => dirs.length > 1);
 }
 
 // Load all reports
@@ -40,6 +65,7 @@ async function loadAllReports() {
   const subdirs = await readdir(RESULTS_DIR, { withFileTypes: true });
   const reports = [];
   const errors = [];
+  const loadedDirs = [];
 
   for (const subdir of subdirs) {
     if (!subdir.isDirectory()) continue;
@@ -66,6 +92,7 @@ async function loadAllReports() {
       indexEntry.short_id = shortId;
 
       reports.push(indexEntry);
+      loadedDirs.push(subdir.name);
     } catch (err) {
       errors.push(`${subdir.name}: ${err.message}`);
     }
@@ -74,6 +101,22 @@ async function loadAllReports() {
   if (errors.length > 0) {
     console.warn(`Warning: ${errors.length} reports failed to load:`);
     errors.forEach(e => console.warn(`   ${e}`));
+  }
+
+  // Two reports sharing a short_id is silently destructive rather than merely
+  // redundant: generateCrossExperiment() writes sectorMap[sector][short_id], so
+  // whichever report is processed last overwrites the other's sector cells, and
+  // the dashboard then renders one experiment's numbers under both names. Fail
+  // here rather than emit a quietly wrong index.
+  const collisions = findShortIdCollisions(loadedDirs);
+  if (collisions.length > 0) {
+    const detail = collisions
+      .map(([id, dirs]) => `  ${id} <- ${dirs.join(' , ')}`)
+      .join('\n');
+    throw new Error(
+      `duplicate short_id across batch-runner/results directories:\n${detail}\n` +
+        'Rename one of the directories so each report has a distinct short_id.',
+    );
   }
 
   // Sort by date (newest first)
@@ -172,4 +215,9 @@ async function main() {
   }
 }
 
-main();
+// Only run the aggregation when invoked directly, so scripts/__tests__/ can
+// import the pure helpers above without triggering a full run (which reads the
+// filesystem and falls back to the network).
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main();
+}
