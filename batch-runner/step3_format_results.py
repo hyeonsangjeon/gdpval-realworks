@@ -312,8 +312,14 @@ def format_results():
     }
     # Conditional, like every other opt-in block: an experiment with no cost
     # instrumentation publishes no cost keys at all.
-    for field, summary in cost_summaries.items():
-        final_json.setdefault("cost_summary", {})[field] = summary
+    # NOT `summary` as the loop name: that is the inference summary bound at the
+    # top of this function and still needed below for the task counts. Rebinding
+    # it here left every line after this point reading a cost receipt -- which
+    # has no "total" -- so the report crashed on the first run that produced a
+    # receipt, and would have printed a receipt's numbers as task counts if it
+    # had not. See tests/test_step3_cost_summary_does_not_shadow_task_counts.py.
+    for field, cost_summary in cost_summaries.items():
+        final_json.setdefault("cost_summary", {})[field] = cost_summary
     if cost_ledger:
         final_json["cost_ledger"] = cost_ledger
 
