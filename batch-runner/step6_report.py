@@ -828,6 +828,19 @@ def _build_markdown(rd: dict) -> str:
         cost = cost_summary.get(field)
         if not cost:
             continue
+        # Every other money row below arrives as None when nothing could be
+        # priced, so each renders "no record". `known_cost_usd` alone is forced
+        # to 0.0 by the producer -- it is a sum over an empty set -- which left
+        # the one row a reader takes as *the* number as the one row reading as
+        # free. The exp026c smoke (run 33302056462) made two paid model calls
+        # against a model the price table had no entry for and printed
+        # "$0.0000" here, directly beside "Not priced | price_missing".
+        #
+        # Decided off `measured_tasks`, not off the amount, because the amount
+        # cannot tell "priced, and it was free" apart from "never priced". The
+        # dashboard's summaryTotalCell already splits it on the same field; the
+        # producer's number is not touched, only how this row reads it.
+        recorded = cost["known_cost_usd"] if cost["measured_tasks"] else None
         lines += [
             f"## {label}",
             "",
@@ -836,8 +849,17 @@ def _build_markdown(rd: dict) -> str:
             "| Metric | Value |",
             "|--------|-------|",
             f"| Coverage | {cost['receipt_tasks']} / {cost['total_tasks']} tasks ({cost['coverage_pct']}%) |",
+        ]
+        # Coverage counts receipts, not amounts, so a run can be at 100% with
+        # nothing priced. Only shown when the two disagree, which leaves a
+        # fully-priced report byte-identical to what it printed before.
+        if cost["measured_tasks"] != cost["receipt_tasks"]:
+            lines.append(
+                f"| Priced | {cost['measured_tasks']} / {cost['receipt_tasks']} receipts |"
+            )
+        lines += [
             f"| Receipt status | {_COST_STATUS_LABELS[cost['status']]} |",
-            f"| {'Total' if cost['status'] == 'complete' else 'Recorded so far'} | {_cost_money(cost['known_cost_usd'])} |",
+            f"| {'Total' if cost['status'] == 'complete' else 'Recorded so far'} | {_cost_money(recorded)} |",
             f"| Average per task | {_cost_money(cost['avg_cost_usd'])} |",
             f"| Median | {_cost_money(cost['median_cost_usd'])} |",
             f"| P95 | {_cost_money(cost['p95_cost_usd'])} |",
