@@ -143,6 +143,47 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **A task that takes longer than one chunk could never be graded, only paid
+  for repeatedly.** `--resume` harvests *completed* `task_id`s from the partial
+  on disk, so resume granularity is one whole task. A task abandoned part-way
+  leaves nothing behind and the next chunk starts it from zero. That turns the
+  chunk budget from a preference into a floor: below it, the task is not slow,
+  it is ungradeable, and every attempt spends a chunk's worth of judging to
+  learn nothing.
+
+  Gold shard 4 of 11 found the floor. Task `9e39df84` — 57 rubric items of a
+  Manufacturing deliverable — ran **4h21m against the 4h budget and completed
+  nothing**. Eleven of its grading calls exhausted the config's 2400-token
+  per-item output budget without returning parseable final text
+  (`empty_final_text:max_output_tokens`), and the retry-without-tools cycles
+  that followed account for **4h18m of the 4h21m** — 99% of the chunk's wall
+  clock, measured from the run's own log timestamps. It reached 168 model calls
+  against the ~146 that the six finished tasks on the same shard predict for 57
+  items, so it stopped near the end rather than early. The chunk then exited 5
+  rather than 7: a chunk that finished no task declines to request another paid
+  resume on identical terms. That refusal is correct and is unchanged here — it
+  is the reason the loss was one chunk instead of ten.
+
+  The per-item token cap is not the lever. It lives in the grading config,
+  which `compute_grader_source_hash` covers, so moving it would refingerprint
+  the grader and orphan the ten shards already graded, committed and paid for.
+  `.github/workflows/**` is in neither the `batch-runner` tree nor the config,
+  so the wall clock is the only dial that can turn without invalidating a run
+  in progress. `GRADER_TIME_BUDGET_SEC` goes 14400 → **18000** (5h) and
+  `timeout-minutes` 320 → **350**, which keeps the existing contract: the
+  budget-to-timeout gap is 50 min, still wider than the measured p90 task of
+  32.7 min, because the budget is a pre-check and a chunk may enter its last
+  task one second under it.
+
+  Four tests carry the reasoning rather than the numbers. Two assert that the
+  workflow cannot enter the grader source hash — one structurally, one by
+  taking the hash twice with the workflow rewritten in between and restoring it
+  in `finally`. One states the floor as `budget > 261 min`, the figure task
+  `9e39df84` actually consumed, so a revert fails with the reason rather than a
+  bare inequality. The last pins the 2400 cap to the config, so that if it ever
+  moves into the workflow the trade-off recorded above is revisited instead of
+  silently becoming false.
+
 - **Three ways a judge could be shown a deliverable and still not see what was
   in it.** All three were found by taking the lowest-scoring gold answers in the
   185-task corpus and opening the real files, rather than reasoning about what
