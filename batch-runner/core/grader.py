@@ -11,7 +11,7 @@ import logging
 import os
 import re
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Iterable, Literal, Optional
 
@@ -209,6 +209,12 @@ class ItemGrade:
     render_call_count: int = 0
     render_total_latency_ms: float = 0.0
     usage_complete: bool = True
+    #: This item wanted pictures, the task could not afford them all, and it
+    #: was put back on the path it would have taken before the unreadable-file
+    #: escalation existed. The verdict below is a real verdict, read off a
+    #: readable file -- but it was read where a picture was preferred, and a
+    #: reader comparing it against another run needs to know that.
+    visual_budget_downgraded: bool = False
 
 
 @dataclass
@@ -251,6 +257,12 @@ class TaskGrade:
     render_call_count: int = 0
     render_total_latency_ms: float = 0.0
     usage_complete: bool = True
+    #: The visual budget this task could not meet, when it was met by giving
+    #: up pictures rather than by giving up the task. ``None`` on every task
+    #: that never came near the cap. The string is the shortfall as it was
+    #: originally measured, so the size of what was given up is on the record
+    #: even though the items below carry real scores.
+    visual_budget_fallback: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -262,6 +274,11 @@ class _RuntimeCriterionPlan:
     visual_preflight_error: Optional[str]
     supported_visual_call_count: int
     requires_visual: bool
+    #: Set only on a plan that was rebuilt to fit inside the task visual
+    #: budget, and only on the items the rebuild actually moved off the
+    #: render path. Carried onto the item's grade so the payload says which
+    #: verdicts were reached without the pictures they asked for.
+    visual_budget_downgraded: bool = False
 
 
 class Grader:
@@ -534,6 +551,17 @@ class Grader:
             for item in task.rubric_items
         ]
         visual_budget_error = self._task_visual_budget_error(runtime_plans)
+        visual_budget_fallback: str | None = None
+        if visual_budget_error:
+            runtime_plans, visual_budget_error, visual_budget_fallback = (
+                self._relax_to_fit_visual_budget(
+                    selection,
+                    task,
+                    runtime_plans,
+                    deliverable_path,
+                    visual_budget_error,
+                )
+            )
 
         items: list[ItemGrade] = []
         judge_call_count = 0
@@ -768,6 +796,13 @@ class Grader:
             items.append(ig)
 
         grade = self._aggregate(items, task)
+        grade.visual_budget_fallback = visual_budget_fallback
+        for item_grade, runtime_plan in zip(items, runtime_plans):
+            # Positional for the same reason the loop above is: ``items`` is a
+            # prefix of the rubric in canonical order, restored chunks
+            # included, and ``runtime_plans`` is built from the same list.
+            if runtime_plan.visual_budget_downgraded:
+                item_grade.visual_budget_downgraded = True
         grade.judge_call_count = judge_call_count
         grade.precheck_count = precheck_count
         grade.judge_total_latency_ms = round(judge_total_latency_ms, 2)
@@ -901,15 +936,37 @@ class Grader:
         item: RubricItem,
         plan: CriterionTargetPlan,
         deliverable_path: Path,
+        *,
+        escalate_readable_siblings: bool = True,
     ) -> _RuntimeCriterionPlan:
+        """Decide where one rubric item is judged, and what that will cost.
+
+        ``escalate_readable_siblings=False`` withholds one signal and one
+        only: "is any single selected file unreadable", the per-file question
+        added so a picture delivered beside a readable memo is still looked
+        at. Withholding it puts an item back on the path it took before that
+        question existed -- read the sibling that can be read.
+
+        It is the exact knob the budget fallback needs, because the two
+        signals split on exactly the case that matters. A bundle where
+        *something* can be read still has a text route to fall back to. A
+        bundle where *nothing* can be read has none, and there
+        ``selected_paths_have_text`` is still ``False`` and still escalates,
+        so this cannot resurrect the defect task 64 fixed: reading zero
+        characters and calling the content absent.
+        """
         item_decision = resolve_runtime_routing(
             item.criterion,
             plan.selected_paths,
             selected_paths_have_text=self._selected_paths_have_text(
                 deliverable_path, plan.selected_paths
             ),
-            some_selected_path_lacks_text=self._some_selected_path_lacks_text(
-                deliverable_path, plan.selected_paths
+            some_selected_path_lacks_text=(
+                self._some_selected_path_lacks_text(
+                    deliverable_path, plan.selected_paths
+                )
+                if escalate_readable_siblings
+                else None
             ),
             selected_paths_have_audio=self._selected_paths_have_audio(
                 deliverable_path, plan.selected_paths
@@ -944,6 +1001,8 @@ class Grader:
                         self._some_selected_path_lacks_text(
                             deliverable_path, target.paths
                         )
+                        if escalate_readable_siblings
+                        else None
                     ),
                     selected_paths_have_audio=self._selected_paths_have_audio(
                         deliverable_path, target.paths
@@ -1024,6 +1083,83 @@ class Grader:
         return (
             "task_visual_budget_exceeded:"
             f"required_calls={required},cap={cap}"
+        )
+
+    def _relax_to_fit_visual_budget(
+        self,
+        selection: DeliverableSelection,
+        task: TaskRubric,
+        runtime_plans: list[_RuntimeCriterionPlan],
+        deliverable_path: Path,
+        visual_budget_error: str,
+    ) -> tuple[list[_RuntimeCriterionPlan], str | None, str | None]:
+        """Give up pictures before giving up the task.
+
+        A task over its visual budget excludes every item that wanted a
+        picture, and a task with nothing left to score is dropped from the
+        corpus entirely -- not scored zero, *dropped*: ``_aggregate`` sets
+        ``all_items_score_excluded`` and the analysers count only tasks
+        without an error. Stage 3's task 43dc9778 asked for 134 renders
+        against a cap of 72 and left a 67-item, 87%-scoring task out of a
+        185-task corpus. Silently, because a corpus of 184 looks like a
+        corpus.
+
+        The item that escalated only because one of its files carries no
+        text layer has somewhere else to go: the readable sibling it was
+        selected beside. So when the budget cannot be met, ask what the task
+        would have cost without that escalation, and if that fits, grade it.
+        A partial verdict on a readable file beats no verdict at all, and it
+        is exactly the verdict this benchmark produced before the escalation
+        was added.
+
+        Two properties make this safe to do automatically. It cannot invent a
+        text verdict where there is no text -- an item whose files *all* lack
+        a text layer still escalates, because that signal is left switched on
+        (see ``_runtime_criterion_plan``). And it does not depend on rubric
+        order: nothing here spends the budget on the first N items and starves
+        the rest, which would make a task's score depend on how its rubric was
+        written and is not a thing a fingerprinted benchmark may do.
+
+        Returns the plans to grade with, the budget error that still applies
+        to them, and the shortfall to record on the task.
+        """
+        relaxed = [
+            self._runtime_criterion_plan(
+                selection,
+                item,
+                strict.target_plan,
+                deliverable_path,
+                escalate_readable_siblings=False,
+            )
+            for item, strict in zip(task.rubric_items, runtime_plans)
+        ]
+        strict_demand = sum(
+            plan.supported_visual_call_count for plan in runtime_plans
+        )
+        relaxed_demand = sum(plan.supported_visual_call_count for plan in relaxed)
+        if relaxed_demand >= strict_demand:
+            # Nothing to give up: every render this task wants is wanted by a
+            # criterion that names something visual. Failing closed is right.
+            return runtime_plans, visual_budget_error, None
+        marked = [
+            replace(plan, visual_budget_downgraded=True)
+            if strict.requires_visual and not plan.requires_visual
+            else plan
+            for plan, strict in zip(relaxed, runtime_plans)
+        ]
+        logger.warning(
+            "%s: %s; regrading %d item(s) without the unreadable-file "
+            "escalation (%d renders -> %d)",
+            task.task_id,
+            visual_budget_error,
+            sum(1 for plan in marked if plan.visual_budget_downgraded),
+            strict_demand,
+            relaxed_demand,
+        )
+        return (
+            marked,
+            self._task_visual_budget_error(marked),
+            visual_budget_error,
         )
 
     @staticmethod

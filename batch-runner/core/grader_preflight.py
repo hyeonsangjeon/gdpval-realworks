@@ -38,6 +38,127 @@ def plan_task_runtime(
     selection = grader._select_deliverables(task, deliverable_path, files)
     file_map = grader._relative_file_map(deliverable_path, files)
 
+    pass_args = (grader, task, deliverable_path, selection, file_map, visual_file_cap)
+    planned = _plan_pass(*pass_args, escalate_readable_siblings=True)
+
+    visual_config = (
+        (config.get("judge") or {}).get("perception") or {}
+    ).get("visual") or {}
+    audio_config = (
+        (config.get("judge") or {}).get("perception") or {}
+    ).get("audio") or {}
+    visual_cap = visual_config.get("call_cap_per_task")
+    audio_cap = audio_config.get("call_cap_per_task")
+
+    visual_budget_fallback: str | None = None
+    if (
+        isinstance(visual_cap, int)
+        and planned["planned_visual_calls"] > visual_cap
+    ):
+        # The same trade the paid run makes, for the same reason, so the
+        # rehearsal keeps predicting it: see
+        # ``Grader._relax_to_fit_visual_budget``. Planning it twice costs a
+        # second pass over local files and nothing else, and only on a task
+        # that was already over budget.
+        relaxed = _plan_pass(*pass_args, escalate_readable_siblings=False)
+        if relaxed["planned_visual_calls"] < planned["planned_visual_calls"]:
+            for relaxed_item, strict_item in zip(
+                relaxed["item_plans"], planned["item_plans"]
+            ):
+                if strict_item["requires_visual"] and not relaxed_item[
+                    "requires_visual"
+                ]:
+                    relaxed_item["visual_budget_downgraded"] = True
+            visual_budget_fallback = (
+                "task visual budget exceeded: "
+                f"planned={planned['planned_visual_calls']}, cap={visual_cap}"
+            )
+            planned = relaxed
+
+    routes = planned["routes"]
+    planned_main_judgments = planned["planned_main_judgments"]
+    planned_visual_calls = planned["planned_visual_calls"]
+    planned_audio_calls = planned["planned_audio_calls"]
+    item_plans = planned["item_plans"]
+    errors = planned["errors"]
+    unsupported_visual_paths = sorted(set(planned["unsupported_visual_paths"]))
+
+    if (
+        isinstance(visual_cap, int)
+        and planned_visual_calls > visual_cap
+    ):
+        budget_error = (
+            "task visual budget exceeded: "
+            f"planned={planned_visual_calls}, cap={visual_cap}"
+        )
+        errors.append(budget_error)
+        for item_plan in item_plans:
+            if (
+                item_plan.get("outcome") == "judge"
+                and item_plan.get("planned_render_calls", 0) > 0
+            ):
+                planned_main_judgments -= item_plan["planned_main_judgments"]
+                planned_visual_calls -= item_plan["planned_render_calls"]
+                planned_audio_calls -= item_plan["planned_audio_calls"]
+                item_plan.update({
+                    "outcome": "preflight_error",
+                    "preflight_error": budget_error,
+                    "planned_main_judgments": 0,
+                    "planned_render_calls": 0,
+                    "planned_audio_calls": 0,
+                    "planned_perception_calls": 0,
+                })
+    if isinstance(audio_cap, int) and planned_audio_calls > audio_cap:
+        errors.append(
+            "task audio budget exceeded: "
+            f"planned={planned_audio_calls}, cap={audio_cap}"
+        )
+    if planned_audio_calls:
+        if not audio_config.get("model"):
+            errors.append("audio routes require configured audio perception")
+        errors.append(
+            "audio perception calls are model-selected and cannot be exact: "
+            f"routes={planned_audio_calls}"
+        )
+
+    return {
+        "task_id": task.task_id,
+        "selection": selection.to_dict(),
+        "rubric_items": len(task.rubric_items),
+        "precheck_candidates": planned["precheck_candidates"],
+        "precheck_resolved": planned["precheck_resolved"],
+        "precheck_fallbacks": planned["precheck_fallbacks"],
+        "judge_routes": dict(sorted(routes.items())),
+        "planned_main_judgments": planned_main_judgments,
+        "planned_render_calls": planned_visual_calls,
+        "planned_audio_calls": planned_audio_calls,
+        "planned_perception_calls": planned_visual_calls + planned_audio_calls,
+        "visual_call_cap": visual_cap,
+        "audio_call_cap": audio_cap,
+        "visual_budget_fallback": visual_budget_fallback,
+        "unsupported_visual_paths": unsupported_visual_paths,
+        "errors": errors,
+        "items": item_plans,
+    }
+
+
+def _plan_pass(
+    grader: Grader,
+    task: TaskRubric,
+    deliverable_path: Path,
+    selection: Any,
+    file_map: dict[str, Path],
+    visual_file_cap: int,
+    *,
+    escalate_readable_siblings: bool,
+) -> dict[str, Any]:
+    """One routing pass over a task's rubric, with no budget applied.
+
+    Split out from ``plan_task_runtime`` so the budget fallback can ask what
+    the same task would have cost on the pre-escalation routing, exactly as
+    the paid run does. ``escalate_readable_siblings`` is the same single knob
+    ``Grader._runtime_criterion_plan`` takes and means the same thing there.
+    """
     routes: Counter[str] = Counter()
     precheck_candidates = 0
     precheck_resolved = 0
@@ -69,6 +190,11 @@ def plan_task_runtime(
             "planned_render_calls": 0,
             "planned_audio_calls": 0,
             "planned_perception_calls": 0,
+            # Whether this item asked for pictures at all, before any cap
+            # zeroed the count. The budget fallback compares the two passes
+            # on this and nothing else.
+            "requires_visual": False,
+            "visual_budget_downgraded": False,
         }
 
         if target_plan.target_scope == "selection_error":
@@ -103,6 +229,8 @@ def plan_task_runtime(
                         grader._some_selected_path_lacks_text(
                             deliverable_path, target.paths
                         )
+                        if escalate_readable_siblings
+                        else None
                     ),
                     selected_paths_have_audio=grader._selected_paths_have_audio(
                         deliverable_path, target.paths
@@ -114,6 +242,7 @@ def plan_task_runtime(
                 child_routes.append(decision.modality.value)
                 if decision.modality is Modality.VISUAL:
                     child_render = decision.render_targets(target.paths)
+                    item_plan["requires_visual"] = bool(child_render)
                     planned_names, child_visual_error = (
                         ToolCallingJudge.validate_planned_visual_names(
                             child_render, visual_file_cap
@@ -219,8 +348,12 @@ def plan_task_runtime(
             selected_paths_have_text=grader._selected_paths_have_text(
                 deliverable_path, target_plan.selected_paths
             ),
-            some_selected_path_lacks_text=grader._some_selected_path_lacks_text(
-                deliverable_path, target_plan.selected_paths
+            some_selected_path_lacks_text=(
+                grader._some_selected_path_lacks_text(
+                    deliverable_path, target_plan.selected_paths
+                )
+                if escalate_readable_siblings
+                else None
             ),
             selected_paths_have_audio=grader._selected_paths_have_audio(
                 deliverable_path, target_plan.selected_paths
@@ -237,6 +370,7 @@ def plan_task_runtime(
             # escalated item is narrower than the selection. Counting the
             # selection here would predict a budget the run never spends.
             render_targets = decision.render_targets(target_plan.selected_paths)
+            item_plan["requires_visual"] = bool(render_targets)
             planned_names, visual_error = (
                 ToolCallingJudge.validate_planned_visual_names(
                     render_targets, visual_file_cap
@@ -280,70 +414,17 @@ def plan_task_runtime(
         })
         item_plans.append(item_plan)
 
-    unsupported_visual_paths = sorted(set(unsupported_visual_paths))
-    visual_config = (
-        (config.get("judge") or {}).get("perception") or {}
-    ).get("visual") or {}
-    audio_config = (
-        (config.get("judge") or {}).get("perception") or {}
-    ).get("audio") or {}
-    visual_cap = visual_config.get("call_cap_per_task")
-    if (
-        isinstance(visual_cap, int)
-        and planned_visual_calls > visual_cap
-    ):
-        budget_error = (
-            "task visual budget exceeded: "
-            f"planned={planned_visual_calls}, cap={visual_cap}"
-        )
-        errors.append(budget_error)
-        for item_plan in item_plans:
-            if (
-                item_plan.get("outcome") == "judge"
-                and item_plan.get("planned_render_calls", 0) > 0
-            ):
-                planned_main_judgments -= item_plan["planned_main_judgments"]
-                planned_visual_calls -= item_plan["planned_render_calls"]
-                planned_audio_calls -= item_plan["planned_audio_calls"]
-                item_plan.update({
-                    "outcome": "preflight_error",
-                    "preflight_error": budget_error,
-                    "planned_main_judgments": 0,
-                    "planned_render_calls": 0,
-                    "planned_audio_calls": 0,
-                    "planned_perception_calls": 0,
-                })
-    audio_cap = audio_config.get("call_cap_per_task")
-    if isinstance(audio_cap, int) and planned_audio_calls > audio_cap:
-        errors.append(
-            "task audio budget exceeded: "
-            f"planned={planned_audio_calls}, cap={audio_cap}"
-        )
-    if planned_audio_calls:
-        if not audio_config.get("model"):
-            errors.append("audio routes require configured audio perception")
-        errors.append(
-            "audio perception calls are model-selected and cannot be exact: "
-            f"routes={planned_audio_calls}"
-        )
-
     return {
-        "task_id": task.task_id,
-        "selection": selection.to_dict(),
-        "rubric_items": len(task.rubric_items),
+        "routes": routes,
         "precheck_candidates": precheck_candidates,
         "precheck_resolved": precheck_resolved,
         "precheck_fallbacks": precheck_fallbacks,
-        "judge_routes": dict(sorted(routes.items())),
         "planned_main_judgments": planned_main_judgments,
-        "planned_render_calls": planned_visual_calls,
+        "planned_visual_calls": planned_visual_calls,
         "planned_audio_calls": planned_audio_calls,
-        "planned_perception_calls": planned_visual_calls + planned_audio_calls,
-        "visual_call_cap": visual_cap,
-        "audio_call_cap": audio_cap,
         "unsupported_visual_paths": unsupported_visual_paths,
         "errors": errors,
-        "items": item_plans,
+        "item_plans": item_plans,
     }
 
 
@@ -383,6 +464,15 @@ def summarize_cohort(task_plans: list[dict[str, Any]]) -> dict[str, Any]:
             for task in task_plans
             for path in task["unsupported_visual_paths"]
         }),
+        # Named, not counted. A task that gave up pictures to stay in the
+        # corpus is a task whose score means something slightly different
+        # from its neighbours', and the whole point of the preflight is that
+        # nobody has to read 185 task blocks to find out which ones.
+        "visual_budget_fallback_task_ids": [
+            task["task_id"]
+            for task in task_plans
+            if task.get("visual_budget_fallback")
+        ],
         "errors": [
             f"{task['task_id']}: {error}"
             for task in task_plans

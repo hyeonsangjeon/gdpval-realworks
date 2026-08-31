@@ -632,7 +632,8 @@
                 "perception_total_latency_ms": {"type": "number", "minimum": 0},
                 "render_call_count": {"type": "integer", "minimum": 0},
                 "render_total_latency_ms": {"type": "number", "minimum": 0},
-                "usage_complete": {"type": "boolean"}
+                "usage_complete": {"type": "boolean"},
+                "visual_budget_downgraded": {"type": "boolean", "description": "This item routed to the render path only because one of its selected files carries no text layer, the task could not afford every such render inside `judge.perception.visual.call_cap_per_task`, and it was put back on the text path it would have taken before that escalation existed. The verdict is a real verdict read off a readable file, not an exclusion — but it was read where a picture was preferred. See the task-level `visual_budget_fallback` for the shortfall that triggered it."}
               },
               "additionalProperties": true
             }
@@ -665,6 +666,7 @@
           "selection_status": {"type": ["string", "null"]},
           "selection_error": {"type": ["string", "null"]},
           "error": {"type": ["string", "null"]},
+          "visual_budget_fallback": {"type": ["string", "null"], "description": "Present when this task's planned renders exceeded `judge.perception.visual.call_cap_per_task` and the task was graded anyway, by dropping the unreadable-file escalation on the items that had a readable file to fall back to. The string is the shortfall as originally measured (`task_visual_budget_exceeded:required_calls=N,cap=M`), so the size of what was given up survives even though the items below carry real scores. Null on every task that never came near the cap. Without this fallback such a task excludes every item, reports `all_items_score_excluded`, and is dropped from the corpus mean entirely."},
           "graded_at": {"type": "string"}
         },
         "additionalProperties": true
