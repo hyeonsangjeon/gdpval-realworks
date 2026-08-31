@@ -128,6 +128,14 @@ class CodeInterpreterRunner:
     #: it must be dropped from the code first.
     REFERENCE_FILE_PROMPT_SECTIONS = ("file_structure",)
 
+    #: Which prompt sections this run place puts in its **first** request past
+    #: the rendered prompt and the reference files. None: this runner builds
+    #: its request from ``render_prompt`` and the structure summary alone, and
+    #: has no ``_augment_prompt``. Empty is a *claim*, not an omission — the
+    #: preflight refuses a run place that declares nothing, because nothing
+    #: looking is not the same as the claim holding.
+    FIRST_REQUEST_EXTRA_SECTIONS: tuple[str, ...] = ()
+
     DEFAULT_PROMPT = "code_interpreter_occupation_codegen"
 
     def __init__(

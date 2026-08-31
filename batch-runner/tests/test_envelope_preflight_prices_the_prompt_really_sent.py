@@ -22,7 +22,7 @@ So the figure is a render now. Each run place's prompt file is resolved the way
 ``core/executor.py`` resolves it, rendered through ``fixed_prompt_characters``
 with that place's own ``condition_a.prompt`` block and the widest occupation
 name in the committed catalogue, and the plan is refused where it charges less
-than came back. The container's request comes to 5,020 characters — not 1,068.
+than came back. The container's render comes to 5,020 characters — not 1,068.
 No test in this file types 5,020, 3,867 or 3,533: every one of them renders.
 
 Where a settings file names a prompt and the runner declares a different
@@ -31,13 +31,17 @@ default, both are rendered and the longer charged. That is not indecision:
 and reaches straight past it on the subprocess branch, so which one a run place
 takes is settled by wiring this cannot read back.
 
-One thing stays outside the figure, and stays named rather than implied.
-``SandboxRunner._augment_prompt`` adds a deliverable contract section, a
-dependency hint and a skills manual the committed settings switch off to the
-container's first request. Those are outside what ``render_prompt`` produces, so
-the demand made of the container is smaller than the container's real request.
-This rule under-demands there; it never lets a plan claim more than the render
-proved.
+The render is not everything the first request carries. ``_augment_prompt``
+builds a deliverable contract, a dependency hint and a skills manual, lays them
+out with the task, and hands the result to ``render_prompt`` **as** the task —
+and ``fixed_prompt_characters`` renders with a one-character stand-in task on
+purpose, so its stand-in was replacing all three. Each runner now declares what
+it adds, in ``FIRST_REQUEST_EXTRA_SECTIONS``, and
+``core/first_request_sections.py`` measures it through the same builders a real
+attempt uses. The container's first request comes to 7,307 characters: the 5,020
+it renders to plus 2,287 its runner built beforehand. A runner that declares
+nothing is refused rather than charged nothing. No test here types 7,307 or
+2,287 either.
 
 Nothing here calls a model, runs a container, or spends anything.
 """
@@ -61,6 +65,7 @@ from core.execution_envelope_preflight import (  # noqa: E402
     _check_instruction_length,
     _prompt_files_a_run_place_might_send,
     _runner_default_prompt_name,
+    _runner_first_request_extra_sections,
     conditions_from_plan,
     load_plan,
     run_envelope_preflight,
@@ -69,6 +74,7 @@ from core.execution_envelope_tasks import (  # noqa: E402
     load_task_catalog,
     widest_occupation,
 )
+from core.first_request_sections import first_request_section_budget  # noqa: E402
 from core.prompt_loader import (  # noqa: E402
     fixed_prompt_characters,
     load_prompt,
@@ -146,8 +152,8 @@ def _prompt_data(environment: str) -> dict:
     return load_prompt(names[0])
 
 
-def _sent(environment: str) -> int:
-    """What this run place's first request renders to, task aside."""
+def _renders_to(environment: str) -> int:
+    """What this run place's prompt file renders to, task and sections aside."""
     return sum(
         fixed_prompt_characters(
             _prompt_data(environment),
@@ -155,6 +161,36 @@ def _sent(environment: str) -> int:
             occupation=WIDEST_OCCUPATION,
         ).values()
     )
+
+
+def _built_before_the_render(
+    environment: str,
+    settings: dict | None = None,
+    prompt_name: str | None = None,
+) -> int:
+    """What this run place's runner adds to the first request past the render.
+
+    Worked out through the same production function the rule uses, from the
+    same settings, so it cannot drift from what the rule charges without one of
+    the two failing.
+    """
+    settings = _settings(environment) if settings is None else settings
+    sandbox = (settings.get("execution") or {}).get("sandbox") or {}
+    declared = _runner_first_request_extra_sections(environment)
+    assert declared is not None, environment
+    if prompt_name is None:
+        prompt_name = _prompt_files_a_run_place_might_send(environment, settings)[0]
+    return first_request_section_budget(
+        declared,
+        prompt_name=prompt_name,
+        max_skills=sandbox.get("max_skills", 5),
+        contract_config=sandbox.get("contract"),
+    ).characters
+
+
+def _sent(environment: str) -> int:
+    """What this run place's first request comes to, the task's own words aside."""
+    return _renders_to(environment) + _built_before_the_render(environment)
 
 
 THE_THREE_RUN_PLACES = (
@@ -178,7 +214,7 @@ def test_the_figure_is_a_render_and_not_a_tally_of_written_down_lengths(environm
         experiment_prompt=_wrapping(environment),
     )
     whole = len(rendered["system_message"]) + len(rendered["user_prompt"])
-    assert _sent(environment) == whole - len(task)
+    assert _renders_to(environment) == whole - len(task)
 
 
 @pytest.mark.parametrize("environment", THE_THREE_RUN_PLACES)
@@ -194,7 +230,7 @@ def test_the_tasks_own_words_are_left_out_however_long_they_are(environment):
         )
         whole = len(rendered["system_message"]) + len(rendered["user_prompt"])
         figures.add(whole - length)
-    assert figures == {_sent(environment)}
+    assert figures == {_renders_to(environment)}
 
 
 @pytest.mark.parametrize("environment", THE_THREE_RUN_PLACES)
@@ -210,7 +246,7 @@ def test_wording_added_to_the_committed_prompt_file_moves_the_figure(environment
             occupation=WIDEST_OCCUPATION,
         ).values()
     )
-    assert after == _sent(environment) + len(added)
+    assert after == _renders_to(environment) + len(added)
 
 
 @pytest.mark.parametrize("environment", THE_THREE_RUN_PLACES)
@@ -226,7 +262,7 @@ def test_wording_added_to_a_run_places_own_settings_moves_the_figure(environment
             occupation=WIDEST_OCCUPATION,
         ).values()
     )
-    assert after == _sent(environment) + len(added)
+    assert after == _renders_to(environment) + len(added)
 
 
 @pytest.mark.parametrize("environment", THE_THREE_RUN_PLACES)
@@ -284,7 +320,7 @@ def test_a_wider_occupation_name_makes_a_wider_prompt(environment):
             occupation="x",
         ).values()
     )
-    grew_by = _sent(environment) - narrow
+    grew_by = _renders_to(environment) - narrow
     per_mention = len(WIDEST_OCCUPATION) - len("x")
     assert grew_by > 0
     assert grew_by % per_mention == 0, "the name goes in a whole number of times"
@@ -335,6 +371,11 @@ def test_the_widest_candidate_prompt_file_is_the_one_charged(tmp_path):
     """Two candidates, and the demand is the longer — worked out here, not read."""
     a_narrower_prompt = "code_interpreter_occupation_codegen"
     wrapping = _wrapping("docker_container")
+    settings = copy.deepcopy(_settings("docker_container"))
+    settings["execution"]["sandbox"]["prompt_name"] = a_narrower_prompt
+
+    # Both halves of each candidate, because the runner's own sections are part
+    # of what a candidate costs and are read off the candidate's section order.
     narrower, its_own = (
         sum(
             fixed_prompt_characters(
@@ -343,12 +384,11 @@ def test_the_widest_candidate_prompt_file_is_the_one_charged(tmp_path):
                 occupation=WIDEST_OCCUPATION,
             ).values()
         )
+        + _built_before_the_render("docker_container", settings, prompt_name=name)
         for name in (a_narrower_prompt, _runner_default_prompt_name("docker_container"))
     )
     assert narrower < its_own, "the two candidates have to differ for this to prove it"
 
-    settings = copy.deepcopy(_settings("docker_container"))
-    settings["execution"]["sandbox"]["prompt_name"] = a_narrower_prompt
     (tmp_path / "experiments").mkdir()
     (tmp_path / "experiments" / "container.yaml").write_text(
         yaml.safe_dump(settings), encoding="utf-8"
@@ -358,7 +398,7 @@ def test_the_widest_candidate_prompt_file_is_the_one_charged(tmp_path):
 
     refusals = _problems_for("docker_container", plan, root=tmp_path)
     assert len(refusals) == 1, "charging the narrower of the two is not enough"
-    assert f"renders to {its_own} characters" in refusals[0]
+    assert f"come to {its_own} characters" in refusals[0]
     assert its_own - narrower == int(
         refusals[0].split(" characters short")[0].split("— ")[-1]
     )
@@ -394,7 +434,7 @@ def test_one_character_below_what_a_run_place_sends_is_refused(environment):
     refusals = _problems_for(environment, _priced_at(sends - 1))
     assert len(refusals) == 1
     assert refusals[0].startswith(environment)
-    assert f"renders to {sends} characters" in refusals[0]
+    assert f"come to {sends} characters" in refusals[0]
     assert f"charges {sends - 1} characters" in refusals[0]
     assert "1 characters short" in refusals[0]
 
@@ -428,7 +468,7 @@ def test_a_refusal_names_the_prompt_file_and_says_what_the_figure_is_made_of():
     refused = _problems(_priced_at(1))
     container = next(p for p in refused if p.startswith("docker_container"))
     assert "prompts/sandbox_occupation_codegen.yaml" in container
-    assert f"renders to {_sent('docker_container')} characters" in container
+    assert f"come to {_sent('docker_container')} characters" in container
     assert "the wording the committed prompt file wraps the task in" in container
     assert "the standing instruction the committed prompt file holds" in container
     assert "the wording this run place's own settings add around it" in container

@@ -104,6 +104,28 @@ def _parse_entry(entry: SectionEntry):
     raise ValueError(f"invalid prompt section entry (want str or mapping): {entry!r}")
 
 
+def enabled_section_ids(section_order: List[SectionEntry]) -> List[str]:
+    """The ids :func:`assemble_sections` will ask a provider for, in order.
+
+    Entries with ``enabled: false`` are left out, because a spec that switches a
+    section off is a spec whose requests do not carry it. A malformed entry
+    raises here for the same reason it raises there.
+
+    Read by ``core/first_request_sections.py``: what a run place puts in its
+    first request past the rendered prompt depends on which of these the spec
+    leaves on, and reading the spec is the only way to know. Unknown ids are
+    *not* rejected here — that is :func:`assemble_sections`'s refusal to make,
+    against the provider table, and making it twice would put two answers in
+    the repository for one question.
+    """
+    ids: List[str] = []
+    for entry in section_order:
+        sid, enabled = _parse_entry(entry)
+        if enabled:
+            ids.append(sid)
+    return ids
+
+
 def assemble_sections(section_order: List[SectionEntry], ctx: SectionContext) -> str:
     """Render ``section_order`` against ``ctx`` and join non-empty blocks with blank lines.
 

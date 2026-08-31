@@ -20,7 +20,7 @@ measurement, which is precisely the thing nothing complains about.
 
 The measurement that made this worth doing: set every ``rubric_item_count`` in
 the committed catalogue to zero and the ceiling for the planned comparison falls
-from **364.00 to 94.16 United States dollars** — 269.84 of it gone, about three
+from **364.24 to 94.40 United States dollars** — 269.84 of it gone, about three
 quarters — because marking is charged per scoring line and a task with no
 scoring lines is marked for free. Four things had a chance to notice and none
 did. The loader takes any whole number. The no-scores check is asked a different
@@ -203,13 +203,47 @@ def test_zeroing_the_scoring_lines_takes_three_quarters_off_the_ceiling():
         task["rubric_item_count"] = 0
     zeroed = _ceiling_usd(_loaded(payload))
 
-    assert _as_money(real) == "364.00"
-    assert _as_money(zeroed) == "94.16"
+    assert _as_money(real) == "364.24"
+    assert _as_money(zeroed) == "94.40"
 
     lost = real - zeroed
     assert lost > real * Decimal("0.7"), (
         f"the marking half should be most of the ceiling; {real} fell to "
         f"{zeroed}"
+    )
+
+
+def test_the_prose_that_quotes_those_figures_quotes_the_current_ones():
+    """The docstring next to the rule says the same numbers the rule costs.
+
+    ``catalog_number_problems`` justifies itself with a measurement, and a
+    measurement written into prose does not recompute. It went stale exactly
+    once already: raising the container's instruction count moved the ceiling,
+    and the docstring went on quoting the figure from before. Nothing read it,
+    so nothing objected — the assertions above caught the change only because
+    they happen to pin the same two numbers.
+
+    So the prose is read here instead of trusted. This is not style: a reader
+    deciding whether the rule is worth its complexity is being shown what it
+    saves, and a number from a previous release is a wrong answer to that
+    question.
+    """
+    real = _ceiling_usd(load_task_catalog())
+
+    payload = _catalogue()
+    for task in payload["tasks"]:
+        task["rubric_item_count"] = 0
+    zeroed = _ceiling_usd(_loaded(payload))
+
+    prose = catalog_number_problems.__doc__
+    assert prose is not None
+    quoted = (
+        f"falls from {_as_money(real)} to {_as_money(zeroed)} United States "
+        f"dollars — {_as_money(real - zeroed)} of it gone"
+    )
+    assert quoted in " ".join(prose.split()), (
+        "core/execution_envelope_tasks.py's docstring no longer quotes what "
+        f"the ceiling really does; it should say {quoted!r}"
     )
 
 
