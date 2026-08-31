@@ -583,7 +583,18 @@ def test_the_setting_sits_where_this_module_looks_for_it(path):
 
 
 def test_the_committed_plan_still_records_the_bigger_number():
+    """The wording, checked where the plan can no longer draw it.
+
+    The committed plan states the whole figure now, so the free check says
+    nothing about it — which is the outcome this rule was for, and which leaves
+    this test nowhere to read the wording from. So the plan is lowered here to
+    what it used to say. What has to survive is that the note names both halves:
+    the 533334 the tool results carry and the 536191 they come to once the
+    opening is added, because a note showing only the first would understate
+    itself by exactly the amount this rule exists to count.
+    """
     plan = load_plan(PLAN_PATH)
+    plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = 10_000
     result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
 
     matching = [p for p in result.cost_findings if "input per marking call" in p]
@@ -600,9 +611,18 @@ def test_the_only_thing_this_rule_moved_is_that_one_line(monkeypatch):
     counted before this rule. Everything else in the report — the ceiling, the
     other problems, which run places are blocked — has to come out identical,
     or this change did something beyond what it claims.
+
+    Both runs use a plan lowered to the old flat 10,000, because the difference
+    this rule makes is only visible in a note, and the committed plan covers the
+    figure so draws no note at all.
     """
-    plan = load_plan(PLAN_PATH)
-    with_opening = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+
+    def lowered():
+        plan = load_plan(PLAN_PATH)
+        plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = 10_000
+        return plan
+
+    with_opening = run_envelope_preflight(lowered(), root=BATCH_RUNNER_ROOT)
 
     import core.execution_envelope_grading_cost as grading_cost
 
@@ -611,7 +631,7 @@ def test_the_only_thing_this_rule_moved_is_that_one_line(monkeypatch):
         "input_tokens_the_conversation_opens_with",
         lambda self, characters_per_token: 0,
     )
-    without = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
+    without = run_envelope_preflight(lowered(), root=BATCH_RUNNER_ROOT)
 
     assert with_opening.may_start == without.may_start
     assert len(with_opening.cost_findings) == len(without.cost_findings)
@@ -647,7 +667,7 @@ def test_this_rule_does_not_touch_the_ceiling(monkeypatch):
     after = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
 
     assert before.total_usd == after.cost.total_usd
-    assert str(before.total_usd) == "364.23468750"
+    assert str(before.total_usd) == "7608.4048453125"
 
 
 # ---------------------------------------------------------------------------

@@ -101,8 +101,10 @@ UNPRICED_SOUND_MODEL = "gpt-audio-1.5"
 #
 # It has to be raised whenever the arithmetic learns to count something it was
 # missing before, which is the opposite of a warning sign: the total rising
-# means a real cost stopped being invisible.
-APPROVED_ENOUGH = 500
+# means a real cost stopped being invisible. It was 500 until the marking sum
+# stopped stating 10,000 tokens of input a call and started stating the 536,191
+# the marking settings permit, which took the worked-out total past 7,600.
+APPROVED_ENOUGH = 10_000
 
 # The Azure resource this comparison is pinned to, matching the plan. Used to
 # build a settings environment in which the Azure run place is correctly
@@ -169,28 +171,28 @@ def _apart_from_the_sound_model_and_absent_inputs(result):
     being available when the marking check began reporting a gap between what
     the plan counts and what the marking settings allow.
 
-    Two things are left in it, and they are left for opposite reasons.
+    Two things are left in it, and they are left for the same reason: no
+    measurement exists anywhere in this repository that would settle either.
 
-    The first is one model: ``gpt-audio-1.5``, which marking may call to listen
-    to sound. It has never been called once, so how much it would send and write
-    back has never been measured, and it has no published price, so even a
-    measurement would not produce an amount. Neither fact can be fixed by
-    writing a number into the plan — a number nobody measured is not evidence,
-    and a zero would say the calls are free.
+    Both are about one model: ``gpt-audio-1.5``, which marking may call to
+    listen to sound. It has never been called once, so how much it would send
+    and write back has never been measured, and it has no published price, so
+    even a measurement would not produce an amount. Neither fact can be fixed
+    by writing a number into the plan — a number nobody measured is not
+    evidence, and a zero would say the calls are free.
 
     Both checks report that one, from opposite ends: the marking check compares
     the plan against the marking settings, and the cost check refuses to price a
     model it has no price for. So the notes appear in two lists, and setting
     aside only ``grading_ceiling_problems`` would leave half of them behind.
 
-    The second is the opposite case: ``grading_input_tokens_per_call`` is
-    written at 10,000 and the marking settings permit 533,334. That one *is*
-    measurable, it is measured, and the plan keeps the low number deliberately
-    so the check has something to report — patching the plan quietly would leave
-    nobody able to see what the check caught. It is set aside here for the same
-    reason as the sound model and for no other: these tests are about something
-    else. It is asserted on by name just below, and held in place by
-    tests/test_envelope_preflight_prices_the_marking_tool_results.py.
+    A third used to be set aside here and no longer is.
+    ``grading_input_tokens_per_call`` was written at 10,000 while the marking
+    settings permitted 536,191, and the plan kept the low number deliberately so
+    the check had something to report. The plan now states the measured figure,
+    the check is silent about it, and tests/test_the_marking_call_ceiling_is_
+    reached.py holds it there. Nothing was weakened to achieve that: the note
+    stopped appearing because the thing it reported stopped being true.
 
     Leaving the gap in would make these tests fail for a reason none of them is
     about. Weakening either check to make them pass would be far worse — every
@@ -234,7 +236,7 @@ def test_a_ready_plan_reports_the_marking_gap_and_nothing_of_its_own(plan):
     result = _ready_preflight(_approved(plan))
 
     assert _apart_from_the_sound_model_and_absent_inputs(result) == []
-    assert len(result.grading_ceiling_problems) == 3
+    assert len(result.grading_ceiling_problems) == 2
     assert result.may_start is False
 
     set_aside = [
@@ -242,7 +244,7 @@ def test_a_ready_plan_reports_the_marking_gap_and_nothing_of_its_own(plan):
         for note in result.all_problems
         if note not in result.missing_input_file_problems
     ]
-    assert len(set_aside) == 5
+    assert len(set_aside) == 4
 
     about_the_sound_model = [
         note
@@ -253,11 +255,11 @@ def test_a_ready_plan_reports_the_marking_gap_and_nothing_of_its_own(plan):
         note for note in set_aside if "input per marking call" in note
     ]
     assert len(about_the_sound_model) == 4
-    assert len(about_the_input_figure) == 1
-    # Nothing else. Every set-aside note is one of the two named above.
-    assert len(about_the_sound_model) + len(about_the_input_figure) == len(
-        set_aside
-    )
+    # The plan now states what one marking call can carry, so nothing is set
+    # aside on that account any more.
+    assert about_the_input_figure == []
+    # Nothing else. Every set-aside note is about the sound model.
+    assert len(about_the_sound_model) == len(set_aside)
 
 
 def test_only_files_that_are_absent_are_ever_set_aside(plan):
@@ -287,22 +289,26 @@ def test_what_is_left_of_the_marking_gap_is_named_item_by_item(plan):
     a thousand tokens, and neither kind of perception at all. Those four are
     closed and must stay closed.
 
-    Two remain, and they are not the same kind of thing. The sound model is the
-    one no measurement exists for. The input-per-call figure is measurable, is
-    measured, and is left low in the plan on purpose so that the check has
-    something to show — which is only defensible while a test names it out
-    loud. This is that test.
+    A fifth is closed now too: the sum stated 10,000 tokens of input a call
+    where the marking settings permit 536,191. It was left open on purpose while
+    nothing in the plan could reach the figure, and it is shut by the plan
+    stating the figure rather than by the check being quietened — so this test
+    now insists it is gone, and that the number it used to show is gone with it.
+
+    One remains, and it is not the same kind of thing. The sound model is the
+    one no measurement exists for, so nothing that can be written in this
+    repository would settle it.
     """
     result = _ready_preflight(_approved(plan))
     left = " | ".join(result.grading_ceiling_problems)
 
     assert UNPRICED_SOUND_MODEL in left
-    assert "input per marking call" in left
-    assert "533334" in left, "the figure has to be shown, not just complained of"
     for closed in (
         "marking calls per scoring line",
         "reading pictures",
         "tokens of reply",
+        "input per marking call",
+        "533334",
     ):
         assert closed not in left
 

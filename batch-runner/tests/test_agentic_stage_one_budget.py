@@ -722,13 +722,31 @@ def test_choosing_a_row_reports_the_limit_each_task_would_be_stopped_by(
     The amount says what could be spent. The limit says what would actually
     stop a run, and it is built from the same figures the amount came from, so
     the two cannot drift apart.
+
+    The approved amount here is asked for rather than typed, and that is the
+    point of this paragraph. It used to be a flat 1,000 — comfortably above the
+    115.81 this row priced at while the shared assumptions still claimed a
+    marking call sends a flat 10,000 tokens of input. When that claim was
+    replaced by the 536,191 the committed marking settings actually permit one
+    call to carry, this row went to 2,530.53 and the flat 1,000 started
+    refusing it. Nothing about stage one had changed; a number written down by
+    hand had simply stopped describing the thing it was chosen to clear.
+
+    So it is derived instead: price the row, approve exactly that, and the
+    money question is settled by construction however the assumptions move
+    next. Exactly the price is enough because the refusal is written ``>``,
+    not ``>=`` — an approver who signs off the quoted figure has signed off
+    the run.
     """
     plan = copy.deepcopy(stage_one_plan)
     plan["cost"]["chosen_settings"] = {
         "tool_calls_per_attempt": 4,
         "max_output_tokens_per_turn": 2_048,
     }
-    plan["cost"]["approved_maximum_usd"] = 1_000
+
+    priced = _preflight(plan, catalog, assumptions)
+    assert priced.chosen is not None
+    plan["cost"]["approved_maximum_usd"] = priced.chosen.most_it_could_cost_usd
 
     result = _preflight(plan, catalog, assumptions)
 

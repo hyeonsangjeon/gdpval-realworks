@@ -582,20 +582,26 @@ def _committed_plan_problems(plan=None) -> list[str]:
 
 
 def test_the_committed_plan_now_counts_everything_that_can_be_measured():
-    """The closed findings stay closed, and the two open ones are named.
+    """The closed findings stay closed, and the open one is named.
 
     This test used to assert that all five findings were present. Raising the
     plan's numbers to meet the limits is what its own instructions said would
     make it pass, and that is what happened — so it pins the other side: the
     ones that were closed must stay closed.
 
-    Two are open. The sound model is not a number left too low but a model that
+    Four are closed. The fourth was the input size per marking call, which
+    unlike the rest *could* be worked out — from the read tool's payload cap,
+    the number of results the settings let pile up, the committed instruction
+    file and the widest scoring line in the benchmark — and was left below it
+    on purpose while nothing in the plan reached the figure. The plan reaches it
+    now, so the check is silent about it. It did not stop being checked: the
+    parametrised test below puts the old number back and requires the note to
+    return.
+
+    One is open. The sound model is not a number left too low but a model that
     has never been called once, so nothing exists to measure, and that has no
-    published price, so a measurement would not produce an amount either. The
-    input size per marking call is the opposite kind of gap: it *can* be worked
-    out, from the read tool's payload cap and the number of results the
-    settings let pile up, and the plan is still below it. Both are reported and
-    neither is treated as free.
+    published price, so a measurement would not produce an amount either. It is
+    reported and it is not treated as free.
     """
     joined = " | ".join(_committed_plan_problems())
 
@@ -604,7 +610,7 @@ def test_the_committed_plan_now_counts_everything_that_can_be_measured():
     assert "reading pictures" not in joined
     assert "listening to sound" in joined
     assert "it is not zero" in joined
-    assert "tokens of input per marking call" in joined
+    assert "tokens of input per marking call" not in joined
 
 
 @pytest.mark.parametrize(
@@ -615,6 +621,11 @@ def test_the_committed_plan_now_counts_everything_that_can_be_measured():
             "grading_output_tokens_per_call",
             1000,
             "tokens of reply per marking call",
+        ),
+        (
+            "grading_input_tokens_per_call",
+            10_000,
+            "tokens of input per marking call",
         ),
     ],
 )

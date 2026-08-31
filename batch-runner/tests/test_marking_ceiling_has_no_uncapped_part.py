@@ -137,9 +137,21 @@ def assumptions(**overrides) -> CostAssumptions:
     return CostAssumptions.from_mapping(stated)
 
 
-def every_line_of_the_report() -> list[str]:
-    """The whole advance check, as a person reading it would see it."""
-    result = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
+def every_line_of_the_report(*, input_tokens_per_call: int | None = None) -> list[str]:
+    """The whole advance check, as a person reading it would see it.
+
+    ``input_tokens_per_call`` lowers the plan's marking figure before the check
+    runs. The committed plan states what one marking call can carry, so the
+    note about it no longer appears; a test that needs to read that note has to
+    put the plan back where it was rather than have the check keep printing
+    something untrue.
+    """
+    plan = load_plan(PLAN_PATH)
+    if input_tokens_per_call is not None:
+        plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = (
+            input_tokens_per_call
+        )
+    result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
     return (
         list(describe_preflight(result))
         + list(result.cost_findings)
@@ -196,9 +208,13 @@ def test_the_report_still_claims_a_largest_possible_bill():
 
 
 def test_the_marking_refusal_accounts_for_the_scoring_line_it_carries():
-    """The figure demanded includes the width, and says where it came from."""
+    """The figure demanded includes the width, and says where it came from.
+
+    Read off a plan lowered to the old flat figure, since the committed plan
+    covers the demand and so draws no note to read.
+    """
     widest = widest_scoring_line_characters(the_catalog())
-    report = every_line_of_the_report()
+    report = every_line_of_the_report(input_tokens_per_call=10_000)
 
     matching = [
         line for line in report if "tokens of input per marking call" in line
@@ -394,16 +410,24 @@ def test_the_real_check_hands_the_catalogue_down_rather_than_shrugging():
     site ever stopped passing it, every one of these refusals would fire on the
     committed plan and the check would report a missing measurement instead of
     the amount — so this pins that it does not.
+
+    The "never measured" half is read off the committed plan, because that is
+    the report a person is actually handed. The half that needs the width
+    printed is read off a plan lowered to the old flat figure: the committed
+    plan covers the demand, so the note carrying the width is not drawn, and a
+    check that had quietly stopped reaching the catalogue would look the same
+    from there.
     """
-    report = every_line_of_the_report()
+    committed = every_line_of_the_report()
+    lowered = every_line_of_the_report(input_tokens_per_call=10_000)
 
     assert not any(
         "how wide the scoring line being judged can be was never measured"
         in line
-        for line in report
+        for line in committed + lowered
     ), "the real check did not reach the catalogue, so the width went down as unmeasured"
     assert any(
-        "characters of the widest scoring line" in line for line in report
+        "characters of the widest scoring line" in line for line in lowered
     )
 
 

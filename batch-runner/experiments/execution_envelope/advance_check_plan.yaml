@@ -580,38 +580,46 @@ cost:
     # the settings permit, and it is the settings that decide the bill.
     grading_calls_per_rubric_item: 11.0
 
-    # The same three runs averaged 4,745 tokens of input per marking call
-    # (398,629 tokens over 84 calls). 10,000 is used, a little over twice that.
-    #
-    # This comment used to say that no settings file could pin this number down,
-    # because how much is sent follows the answer being marked. That was wrong,
-    # and the number below is left as it is so the free check can say so out
-    # loud rather than the mistake being quietly tidied away.
+    # This was 10,000 for a long time, taken from three recorded runs that
+    # averaged 4,745 tokens of input per marking call (398,629 over 84 calls).
+    # An average is not a ceiling, and 10,000 turned out to be 1.865 per cent
+    # of what the settings permit. The comment here used to say no settings
+    # file could pin the number down, because how much is sent follows the
+    # answer being marked. Both halves of that were wrong.
     #
     # The judge never sees the answer whole. It asks for pieces through the
-    # read_deliverable tool, and two limits bound what those pieces come to:
+    # read_deliverable tool, and every part of what a call carries is pinned:
     #   * core/tools/read_deliverable.py hands back at most MAX_CONTENT_CHARS
     #     (200,000) characters in one result — every content read ends with
     #     text[:MAX_CONTENT_CHARS];
     #   * grading_configs/default_v2.yaml sets per_item_call_cap: 8, so at most
-    #     eight results can pile up for one scoring line.
-    # Every result stays in the conversation and every later turn sends it
-    # again, so one call can carry 8 x 200,000 characters — 533,334 tokens at
-    # the three-characters-per-token ratio above. 10,000 is 1.87 per cent of it.
+    #     eight results can pile up for one scoring line, and every later turn
+    #     sends them all again — 8 x 200,000 / 3 = 533,334 tokens;
+    #   * every call also opens with prompts/grader_judge_v2.md (6,866
+    #     characters), the 500 characters of the task the judge is shown, and
+    #     the widest scoring line in the benchmark (1,203 characters) —
+    #     2,857 tokens.
     #
-    # core/execution_envelope_grading_cost.py now works that out and refuses
-    # this plan. Three things would settle it, and paying more is only one:
-    #   1. raise the number below to 533,334 — the ceiling then reads about
-    #      7,568 US dollars rather than 364, which is the honest figure;
-    #   2. lower per_item_call_cap in the marking settings, which lowers the
-    #      requirement in proportion;
-    #   3. lower MAX_CONTENT_CHARS, which is a code change and not a setting.
+    # 533,334 + 2,857 = 536,191. The number below is not typed from that
+    # arithmetic: core/execution_envelope_grading_cost.py builds it out of the
+    # marking settings, the committed instruction file and the task catalogue,
+    # and test_the_marking_call_ceiling_is_reached.py rebuilds it the same way
+    # and fails if the number below stops reaching it. Widen per_item_call_cap,
+    # MAX_CONTENT_CHARS, the instruction file or the widest scoring line and
+    # the test says so; none of them can be raised past this figure quietly.
     #
-    # One caveat the check states itself: what the conversation opens with — the
-    # standing instructions, the scoring line, the first 500 characters of the
-    # task — is capped by nothing, so 533,334 is a floor on the largest a call
-    # can be, not the largest itself.
-    grading_input_tokens_per_call: 10000
+    # This is the number that moves the marking line from 215.87 US dollars to
+    # 6,011.21 and the whole ceiling from 364.23 to 7,608.40. Nothing about the
+    # marking run changed — the settings always allowed this. Only the sum
+    # stopped understating it.
+    #
+    # The sum charges this flat: all 11 calls at the full pile-up, when call
+    # one carries no tool results at all and only the last four can carry
+    # eight. 88 result-slots are charged where 52 are reachable, so this is
+    # 1.686 times what a call-by-call count would give. That is deliberate and
+    # it is stated rather than hidden: a ceiling may be more careful than the
+    # thing it bounds, and may not fall short of it.
+    grading_input_tokens_per_call: 536191
 
     # How long one marking reply may run. Read from the same settings file,
     # which sets 2,400. This was 1,000 on the reasoning that "a marking call
