@@ -1121,6 +1121,33 @@ def _runner_sends_a_fresh_request_per_turn(environment: str) -> bool | None:
     return bool(declared)
 
 
+def _turn_count_the_cost_sum_would_use(
+    written: Mapping[str, Any], environment: str
+) -> int | None:
+    """The turn count this plan really hands the cost sum, or ``None`` for none.
+
+    ``None`` is returned for every turn count
+    :meth:`core.execution_envelope_cost.CostAssumptions.from_mapping` and
+    :func:`core.execution_envelope_cost.estimate_cost_ceiling` would refuse:
+    nothing written for this run place, something written that will not come to
+    a whole number, or a number below one — an attempt asks the model at least
+    once, so ``0`` is not a smaller number of turns, it is not a number of turns.
+
+    Those refusals are made over there and are not repeated here. What this is
+    for is the sentence a refusal here is allowed to write about what a wrong
+    cap is *worth*: that sentence divides by the turn count, and a turn count
+    nobody could read gives no divisor at all. Reading one anyway — the old
+    ``1`` — put the cheapest possible answer into the plan's mouth, which is
+    the same mistake in the same direction as pricing an unreadable file at
+    nothing.
+    """
+    try:
+        count = int(written.get(environment))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return count if count >= 1 else None
+
+
 def _check_the_plan_knows_what_one_cap_covers(
     plan: Mapping[str, Any],
 ) -> list[str]:
@@ -1154,6 +1181,15 @@ def _check_the_plan_knows_what_one_cap_covers(
     the same rule :func:`_check_grading_assumptions_match_the_settings` applies
     to a plan that marks answers but names no marking settings.
 
+    **What the refusal is allowed to say the mistake is worth.** Each refusal
+    carries a clause pricing itself, and that clause divides by the plan's turn
+    count. Where no turn count can be read the clause says so, by way of
+    :func:`_turn_count_the_cost_sum_would_use`, rather than reading ``1`` and
+    reporting that nothing moves. The two are not near each other: a plan
+    writing ``"eight"`` really allows eight turns and is worth the difference
+    named above, and reporting it as the quiet case would put the cheapest
+    answer of the range into the mouth of a plan that never gave one.
+
     **One thing here cannot be checked from this repository at all**, and the
     refusal must not pretend otherwise. That the Azure request is a single call
     carrying a single cap is readable, and is read. Whether the service honours
@@ -1175,18 +1211,25 @@ def _check_the_plan_knows_what_one_cap_covers(
         if fresh_each_turn is False:
             continue
 
-        try:
-            claimed_turns = int(turns.get(environment))  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            claimed_turns = 1
-        cost_note = (
-            f"at the {claimed_turns} turns this plan allows that divides the "
-            f"answer charge by {claimed_turns}"
-            if claimed_turns > 1
-            else "at the 1 turn this plan allows it changes no figure today, "
-            "but the turn count is read from the settings and rises the "
-            "moment they do"
-        )
+        claimed_turns = _turn_count_the_cost_sum_would_use(turns, environment)
+        if claimed_turns is None:
+            cost_note = (
+                "what that is worth cannot be worked out here, because the "
+                f"plan's turn count for {environment} is not one the cost sum "
+                "could use either — and a worth nobody could work out is not a "
+                "worth of nothing"
+            )
+        elif claimed_turns > 1:
+            cost_note = (
+                f"at the {claimed_turns} turns this plan allows that divides "
+                f"the answer charge by {claimed_turns}"
+            )
+        else:
+            cost_note = (
+                "at the 1 turn this plan allows it changes no figure today, "
+                "but the turn count is read from the settings and rises the "
+                "moment they do"
+            )
 
         if fresh_each_turn is None:
             problems.append(

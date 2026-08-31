@@ -3430,7 +3430,7 @@ Agentic Sandbox V2 1단계 계획서는 이 숫자들을 **자기가 따로 적�
 
 | 무엇 | 어떻게 풀리나 |
 |---|---|
-| **#292 · #294 · #295 병합** | **유료 shard 지문이 걸려 있습니다.** `core/` 아래 파일이 `compute_grader_source_hash`의 입력이라 주석 한 줄도 지문을 움직입니다. 남은 과제가 끝나거나 재고정 확인을 받아야 합니다 |
+| **#292 · #294 · #295 · #296 병합** | **유료 shard 지문이 걸려 있습니다.** `core/` 아래 파일이 `compute_grader_source_hash`의 입력이라 주석 한 줄도 지문을 움직입니다. 남은 과제가 끝나거나 재고정 확인을 받아야 합니다 |
 | ~~채점 호출 한 번의 입력 크기~~ | **닫힘.** 10,000 → 536,191 토큰 |
 | ~~컨테이너 첫 요청에 덧붙는 세 조각~~ | **닫힘 (#292).** 5,020 → 7,307자 |
 | 오류·경고 줄에 실행 중 적히는 영어 문장 | **미리 알 수 없습니다.** 비워 놓고 재므로 실제는 더 깁니다 (13.19에 기록) |
@@ -3579,8 +3579,158 @@ azure_code_interpreter [read the file]                  reference_files/bb09…/
 
 | 무엇 | 어떻게 풀리나 |
 |---|---|
-| **#292 · #294 · #295 병합** | **유료 shard 지문이 걸려 있습니다.** 이번 수정도 `core/` 파일 두 개를 건드리므로 `compute_grader_source_hash`가 다시 움직입니다 |
+| **#292 · #294 · #295 · #296 병합** | **유료 shard 지문이 걸려 있습니다.** 이번 수정도 `core/` 파일 두 개를 건드리므로 `compute_grader_source_hash`가 다시 움직입니다 |
 | ~~불일치가 통과로 기록되는 문제~~ | **닫힘 (#295).** 네 번째 상태를 만들었습니다 |
+| 나머지 | 13.28의 표 그대로입니다. 이번 수정으로 풀린 것은 없습니다 |
+
+**전체 비교 실험이 실행되지 않았으므로 이 작업은 차단됨으로 유지합니다.**
+
+### 13.30 읽을 수 없는 "모델 호출 횟수"를, **"1번"이라고 읽고 "돈은 안 움직인다"고 적었습니다** (2026-08-31 수정, #296)
+
+#### 한 줄 요약
+
+거부 문장은 스스로 **"이 실수가 얼마짜리인가"** 를 함께 적습니다. 그 금액은
+계획서에 적힌 **모델 호출 횟수로 나눠서** 나옵니다. 그런데 그 횟수를 못 읽으면
+조용히 **1로 읽고 있었습니다.** 1은 이 계산에서 **"돈이 하나도 안 움직인다"**
+는 뜻입니다. 즉 **못 읽은 것을 가장 싼 답으로 바꿔치기**하고 있었습니다.
+
+#### 재현 — 계획서에 적힐 수 있는 11가지를 실제 생산 코드로 돌렸습니다
+
+`_check_the_plan_knows_what_one_cap_covers`를 그대로 부르고, 붙는 금액 문장만
+잘라낸 것입니다. `n`은 거부 개수(= 실행이 막히는가)입니다.
+
+**고치기 전 — 11가지가 전부 똑같은 한 문장이었습니다.**
+
+| 계획서에 적힌 것 | 진짜 뜻 | n | 보고 문장 |
+|---|---|---|---|
+| `1` | 정말 1번 | 1 | *at the **1 turn** … changes no figure today* |
+| `8` | 정말 8번 | 1 | 위와 **글자 하나까지 같음** |
+| `"eight"` | 정말 **8번** | 1 | 위와 **글자 하나까지 같음** |
+| `0` | 횟수가 아님 | 1 | 위와 **글자 하나까지 같음** |
+| `-3` | 횟수가 아님 | 1 | 위와 **글자 하나까지 같음** |
+| `True` | `int(True)` = 1 | 1 | 위와 같음 |
+| `1.9` | `int(1.9)` = 1 | 1 | 위와 같음 |
+| `None` | 안 적혔음 | 1 | 위와 **글자 하나까지 같음** |
+| `{}` | 안 적혔음 | 1 | 위와 **글자 하나까지 같음** |
+| 블록 자체가 글자 | 못 읽음 | 1 | 위와 **글자 하나까지 같음** |
+| 키가 아예 없음 | 안 적혔음 | 1 | 위와 **글자 하나까지 같음** |
+
+**가장 나쁜 줄은 `"eight"` 입니다.** 이건 정말 8번을 허용하는 계획서입니다.
+이 함수의 docstring이 스스로 적어 둔 대로, 이 참/거짓 하나가 뒤집히면 자리
+하나에서 **14.06달러와 54.20달러의 차이** — *"승인해 달라는 전체 금액보다도
+그 자체로 더 큰"* — 가 납니다. 그걸 **"오늘은 어떤 숫자도 안 움직입니다"**
+라고 보고하고 있었습니다.
+
+```python
+try:
+    claimed_turns = int(turns.get(environment, 1))
+except (TypeError, ValueError):
+    claimed_turns = 1          # ← 못 읽으면 가장 싼 답
+```
+
+#### 어디까지가 문제이고, 어디부터는 문제가 아닌가
+
+**실행은 이 11가지 전부에서 막혔고, 지금도 막힙니다.** `n`이 전부 1입니다.
+게다가 이 규칙 말고도 두 곳이 따로 거부합니다.
+
+| 누가 | 무엇을 거부하나 |
+|---|---|
+| `CostAssumptions.from_mapping` | `int()`이 안 되는 값, **1보다 작은 수** (*"모든 시도는 모델을 최소 한 번은 부른다"*) |
+| `estimate_cost_ceiling` | 그 자리의 횟수가 **아예 안 적힌** 경우 |
+
+그러므로 이것은 **"돈이 새는 구멍"이 아니라 "적히는 내용이 틀린 것"** 입니다.
+13.29(#295)와 정확히 같은 모양이고, 같은 이유로 고칠 값어치가 있습니다 —
+**청구서를 승인하려는 사람이 읽는 문장**이기 때문입니다.
+
+#### 무엇을 고쳤나
+
+`_turn_count_the_cost_sum_would_use`를 새로 만들었습니다. **비용 합계가 거부할
+값이면 정확히 그때만** `None`을 돌려줍니다. 새 기준을 하나 더 만든 게 아니라,
+**저쪽의 기준을 그대로 읽어 온 것**입니다.
+
+```python
+count = int(written.get(environment))       # 안 되면 None
+return count if count >= 1 else None        # 0은 "더 적은 횟수"가 아니라 "횟수가 아님"
+```
+
+문장은 셋으로 갈립니다.
+
+| 읽힌 값 | 붙는 문장 |
+|---|---|
+| 2 이상 | *at the **8 turns** this plan allows that divides the answer charge by **8*** |
+| 정확히 1 | *at the 1 turn … changes no figure today* (예전 문장 **그대로**) |
+| 못 읽음 | ***what that is worth cannot be worked out here** … and a worth nobody could work out is **not a worth of nothing*** |
+
+고친 뒤 같은 11가지입니다.
+
+```
+"eight"      n=1  what that is worth cannot be worked out here, because …
+0            n=1  what that is worth cannot be worked out here, because …
+-3           n=1  what that is worth cannot be worked out here, because …
+None / {}    n=1  what that is worth cannot be worked out here, because …
+블록이 글자   n=1  what that is worth cannot be worked out here, because …
+키가 없음     n=1  what that is worth cannot be worked out here, because …
+8            n=1  at the 8 turns this plan allows that divides the answer charge by 8
+1            n=1  at the 1 turn this plan allows it changes no figure today  ← 그대로
+True / 1.9   n=1  at the 1 turn this plan allows it changes no figure today  ← 일부러 그대로
+```
+
+#### 일부러 안 고친 것 — `True`와 `1.9`
+
+이 둘은 지금도 **1**이라고 보고합니다. 비용 합계가 `int(value)`로 **정말 1을
+저장하기 때문**입니다. 여기서만 거부하면 보고서와 청구서가 서로 다른 말을
+하게 됩니다. **"새로운 기준이나 조건이 기존 실험에 영향을 미치면 안 된다"**
+는 규칙을 여기에 그대로 적용했고, 그 사실을 테스트로 못박았습니다
+(`test_a_boolean_is_read_the_way_the_cost_sum_reads_it`,
+`test_a_whole_number_written_as_a_float_is_read_the_way_the_cost_sum_reads_it`).
+
+#### 예정에 없던 발견 — 이 저장소의 테스트가 이 결함을 **이름으로 축복하고** 있었습니다
+
+```python
+def test_an_unreadable_turn_count_falls_back_to_the_quiet_wording(turns):
+    """A broken turn count is somebody else's refusal; this one must not crash."""
+```
+
+**옳은 절반**(안 죽는다, 거부는 그대로 나온다)은 그대로 두고, **틀린 절반**
+(안심시키는 문장을 쓴다)만 뒤집었습니다. 이름도 바꿨습니다 —
+`test_an_unreadable_turn_count_does_not_borrow_the_quiet_wording`.
+
+#### 차단 동작은 한 줄도 안 바뀌었습니다
+
+읽을 수 있든 없든, 11가지 전부에서 거부 개수가 **1개 그대로**입니다.
+`test_the_refusal_count_is_unchanged_for_every_turn_count`가 11가지를 모두
+돌면서 개수와 문장 앞부분을 **글자 그대로** 확인합니다.
+실제 커밋된 계획서는 여전히 거부가 **0개**입니다.
+
+#### 확인한 것
+
+- 새 테스트 **13개** + 이름·내용을 뒤집은 기존 테스트 1개 (지운 테스트 **0개**).
+  이 파일의 함수는 43 → **56개**, 실제 실행 항목은 53 → **92개**
+- 전체 묶음은 5,975 → **6,014개 통과** (정확히 +39, 실패 0, 건너뜀 6개, 12분 35초)
+- **실패할 수 있다는 증명**: 옛 동작을 **메모리에서만** 되살리면 `"eight"`에
+  안심시키는 문장이 되돌아오고, **그때도 거부 개수는 똑같다**는 것까지 확인합니다
+  — 이것이 이 결함이 그동안 눈에 안 띈 이유입니다
+  (`test_the_old_fallback_would_be_caught_if_it_came_back`)
+- 여기서 "못 읽는다"고 부르는 값 6가지를 **비용 합계도 전부 거부한다**는 것을
+  따로 확인합니다(`test_the_cost_sum_refuses_every_turn_count_this_calls_unreadable`).
+  1~8은 반대 방향으로 확인합니다 — **여기서 읽은 값이 곧 청구되는 값**
+- `mypy core/` 오류 **170개, 파일 32개** — 기준선과 같음
+- `node --test` 184개 중 183개 통과, 1개 건너뜀, 실패 0
+- `npm run build`(tsc + vite) 정상 — 6.08초, 오류 0
+- 모델 호출 0회, 채점 실행 0회, 승인한 금액 없음, 로그인 없음.
+  **차단은 하나도 풀리지 않았습니다**
+
+#### 비용 상한은 움직이지 않았습니다
+
+13.28의 울타리 친 표는 그대로입니다. 이 수정은 **문장만** 바꿨고 돈을 세는 곳을
+건드리지 않았으며, `test_the_spec_quotes_the_live_ceiling.py`가 매번 확인합니다.
+
+#### 남은 차단 조건
+
+| 무엇 | 어떻게 풀리나 |
+|---|---|
+| **#292 · #294 · #295 · #296 병합** | **유료 shard 지문이 걸려 있습니다.** 이번 수정도 `core/` 파일 하나를 건드리므로 `compute_grader_source_hash`가 다시 움직입니다 |
+| ~~못 읽은 호출 횟수를 1로 읽던 문제~~ | **닫힘 (#296).** 못 읽으면 못 읽었다고 적습니다 |
 | 나머지 | 13.28의 표 그대로입니다. 이번 수정으로 풀린 것은 없습니다 |
 
 **전체 비교 실험이 실행되지 않았으므로 이 작업은 차단됨으로 유지합니다.**
