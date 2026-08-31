@@ -373,12 +373,13 @@ grading_config: "grading_configs/default_v2.yaml"
 # purpose, because an unstated guess is how a cost ceiling ends up wrong in the
 # direction that costs money.
 cost:
-  # The owner has 3,700 United States dollars of Azure credit each month and
-  # explicitly approved using it for these benchmark runs on 2026-08-28. Cost
-  # calculations remain visible, but an estimate above a prior amount, a model
-  # without a published price, or a missing first-use measurement no longer
-  # blocks this plan. Fixed task, call, retry, token, and timeout limits still
-  # bound the five-task run.
+  # The owner has a monthly allowance of Azure credit and explicitly approved
+  # using it for these benchmark runs on 2026-08-28. The exact amount is
+  # account information, so it is kept in the owner's private records and not
+  # written here. Cost calculations remain visible, but an estimate above a
+  # prior amount, a model without a published price, or a missing first-use
+  # measurement no longer blocks this plan. Fixed task, call, retry, token, and
+  # timeout limits still bound the five-task run.
   policy: "record_cost_findings_only"
   approved_maximum_usd: null
   owner_approval:
