@@ -1506,25 +1506,38 @@ def _audio_item() -> RubricItem:
 
 
 class _DeafAudio:
-    """A listening model that is asked and never answers."""
+    """A listening model that is asked and never answers.
 
-    def __init__(self, judge_error: str = "provider_error:BadRequestError"):
+    ``failure_detail`` is left out of the payload entirely unless one is
+    given, so the default double keeps producing the exact shape recorded
+    before that field existed -- which is also the shape a resume replays.
+    """
+
+    def __init__(
+        self,
+        judge_error: str = "provider_error:BadRequestError",
+        failure_detail: str | None = None,
+    ):
         self.judge_error = judge_error
+        self.failure_detail = failure_detail
         self.calls = 0
 
     def judge(self, **kwargs):
         self.calls += 1
+        payload = {
+            "verdict": "judge_error", "partial_score": 0.0,
+            "evidence": "", "confidence": 0.0,
+            "reasoning": "audio call failed: BadRequestError",
+            "judge_error": self.judge_error,
+            "api_call_count": 1, "input_tokens": 0,
+            "output_tokens": 0, "cached_tokens": 0,
+            "latency_ms": 267.64, "usage_complete": False,
+        }
+        if self.failure_detail is not None:
+            payload["failure_detail"] = self.failure_detail
         return SimpleNamespace(
             judge_error=self.judge_error,
-            to_dict=lambda: {
-                "verdict": "judge_error", "partial_score": 0.0,
-                "evidence": "", "confidence": 0.0,
-                "reasoning": "audio call failed: BadRequestError",
-                "judge_error": self.judge_error,
-                "api_call_count": 1, "input_tokens": 0,
-                "output_tokens": 0, "cached_tokens": 0,
-                "latency_ms": 267.64, "usage_complete": False,
-            },
+            to_dict=lambda: dict(payload),
         )
 
 
@@ -1581,6 +1594,57 @@ def test_a_listening_call_that_never_answers_is_not_scored_as_a_failure(
     assert result.perception_called is True
     assert result.perception_call_count == 1
     assert result.usage_complete is False
+
+
+def test_a_refused_listening_call_says_why_on_the_way_out(
+    tmp_path, task_and_item,
+):
+    """The other half of the row above, and the part run ``33374220483`` lacked.
+
+    That run refused every listening call it made and said only
+    ``provider_error:BadRequestError`` and ``audio_unavailable:provider_400``
+    about all fifteen of them. Grouping a corpus needs a vocabulary that
+    small; fixing a run needs the sentence beside it. So the sub-judge's own
+    account of the refusal travels through the judge untouched and lands on
+    the item, and the next run is planned from the artifact rather than
+    bought to find out.
+    """
+    task, _ = task_and_item
+    (tmp_path / "stems.zip").write_bytes(b"PK\x03\x04fake")
+    detail = (
+        "audio call failed: BadRequestError (status=400, format=wav,"
+        " source_suffix=none, bytes=961324, b64_bytes=1281766)"
+    )
+    audio = _DeafAudio(failure_detail=detail)
+
+    client = FakeClient(ScriptedResponses([
+        _response(output=[_fc(
+            "audio-call", "audio_judge",
+            criterion=_audio_item().criterion, audio_path="stems.zip",
+        )], in_tok=20, out_tok=3, cached_tok=2),
+        _response(output=[_final(json.dumps({
+            "verdict": "fail", "partial_score": 0.0,
+            "evidence": "audio call failed: BadRequestError",
+            "confidence": 0.78, "reasoning": "could not verify",
+        }))], in_tok=25, out_tok=4, cached_tok=3),
+    ]))
+    judge = ToolCallingJudge(
+        client=client, model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    result = judge.judge_item(
+        task=task, item=_audio_item(), deliverable_dir=str(tmp_path),
+        file_names=["stems.zip"],
+    )
+
+    assert result.judge_error == (
+        "audio_perception_failed:provider_error:BadRequestError"
+    )
+    assert result.perception_error_detail == detail, (
+        "carried whole -- an abridged detail is a detail that has to be "
+        "checked against the source, which is the problem this replaces"
+    )
 
 
 def test_a_listening_call_the_judge_asked_wrong_stays_the_judge_s_to_fix(
@@ -1690,6 +1754,76 @@ def test_a_listening_call_that_recovers_leaves_no_error(tmp_path, task_and_item)
     # to say the token count is complete.
     assert result.perception_call_count == 2
     assert result.usage_complete is False
+
+
+def test_an_item_the_run_heard_keeps_no_account_of_the_failed_try(
+    tmp_path, task_and_item,
+):
+    """The detail says why an item ended, so an item that did not end has none.
+
+    The failed attempt is real, it is on the bill, and ``usage_complete``
+    above already says the run cannot vouch for its token count. But the
+    audio was heard on the retry and the mark comes from hearing it. A
+    refusal recorded on this row would send a reader looking for a cause of
+    something that never happened.
+    """
+    task, _ = task_and_item
+    (tmp_path / "clip.wav").write_bytes(b"RIFFfake")
+
+    class _FlakyAudio:
+        def __init__(self):
+            self.calls = 0
+
+        def judge(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return _DeafAudio(
+                    "provider_error:APITimeoutError",
+                    failure_detail="audio call failed: APITimeoutError (...)",
+                ).judge()
+            return SimpleNamespace(
+                judge_error=None,
+                to_dict=lambda: {
+                    "verdict": "pass", "partial_score": 1.0,
+                    "evidence": "no vocal content in the master",
+                    "confidence": 0.9, "reasoning": "heard",
+                    "judge_error": None, "failure_detail": None,
+                    "api_call_count": 1,
+                    "input_tokens": 70, "output_tokens": 12,
+                    "cached_tokens": 5, "latency_ms": 14.0,
+                    "usage_complete": True,
+                },
+            )
+
+    audio = _FlakyAudio()
+    client = FakeClient(ScriptedResponses([
+        _response(output=[_fc(
+            "audio-call", "audio_judge",
+            criterion=_audio_item().criterion, audio_path="clip.wav",
+        )], in_tok=20, out_tok=3, cached_tok=2),
+        _response(output=[_fc(
+            "audio-call-2", "audio_judge",
+            criterion=_audio_item().criterion, audio_path="clip.wav",
+        )], in_tok=20, out_tok=3, cached_tok=2),
+        _response(output=[_final(json.dumps({
+            "verdict": "pass", "partial_score": 1.0,
+            "evidence": "no vocal content in the master",
+            "confidence": 0.9, "reasoning": "heard on the retry",
+        }))], in_tok=25, out_tok=4, cached_tok=3),
+    ]))
+    judge = ToolCallingJudge(
+        client=client, model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    result = judge.judge_item(
+        task=task, item=_audio_item(), deliverable_dir=str(tmp_path),
+        file_names=["clip.wav"],
+    )
+
+    assert audio.calls == 2
+    assert result.judge_error is None
+    assert result.perception_error_detail is None
 
 
 def test_model_cannot_call_render_to_image(deliverable_dir, task_and_item):

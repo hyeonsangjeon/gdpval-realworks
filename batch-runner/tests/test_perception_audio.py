@@ -481,7 +481,13 @@ def test_audio_preparation_oserror_is_class_only(monkeypatch, wav_file):
     ).judge(criterion="x", audio_path=str(wav_file))
 
     assert verdict.judge_error == "task_execution_error:OSError"
-    assert verdict.reasoning == "audio preparation failed: OSError"
+    # The class name and the file's own suffix, and nothing else. The suffix
+    # is this module's measurement of the path it was handed, not anything the
+    # exception said, and it is here because a preparation failure is usually
+    # about the container -- see the suffix-less case in
+    # test_a_refused_listening_call_says_why.py.
+    assert verdict.reasoning == "audio preparation failed: OSError (suffix=.wav)"
+    assert verdict.failure_detail == verdict.reasoning
     assert sensitive not in str(verdict.to_dict())
 
 

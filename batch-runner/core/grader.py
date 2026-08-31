@@ -188,6 +188,11 @@ class ItemGrade:
     perception_called: bool = False
     tools_used: Optional[list[str]] = None
     visual_provenance: list[dict] = field(default_factory=list)
+    #: Why a perception sub-judge could not answer, when that is what ended
+    #: the item. ``evidence`` carries the kind of failure and this carries the
+    #: cause, because a run that produced fifteen listening errors and two
+    #: distinct strings between them cannot be acted on.
+    perception_error_detail: Optional[str] = None
     target_scope: Optional[str] = None
     target_ids: Optional[list[str]] = None
     child_grades: Optional[list[dict]] = None
@@ -1436,6 +1441,7 @@ class Grader:
                     "perception_called": child.perception_called,
                     "tools_used": list(child.tools_used or []),
                     "visual_provenance": list(child.visual_provenance),
+                    "perception_error_detail": child.perception_error_detail,
                     "score_excluded": child.score_excluded,
                     "judge_call_count": child.judge_call_count,
                     "judge_input_tokens": child.judge_input_tokens,
@@ -1529,6 +1535,18 @@ class Grader:
                 for child in child_items
                 for provenance in child.visual_provenance
             ],
+            # The first child that failed on perception, so the parent row is
+            # actionable without opening ``child_grades``. Every child keeps
+            # its own; this is a pointer to the story, not a summary of all of
+            # them.
+            perception_error_detail=next(
+                (
+                    child.perception_error_detail
+                    for child in child_items
+                    if child.perception_error_detail
+                ),
+                None,
+            ),
             child_grades=child_grades,
             score_excluded=(verdict == "judge_error"),
             judge_call_count=sum(child.judge_call_count for child in child_items),
@@ -2059,6 +2077,7 @@ class Grader:
             perception_called=result.perception_called,
             tools_used=list(result.tools_used),
             visual_provenance=list(result.visual_provenance),
+            perception_error_detail=result.perception_error_detail,
             score_excluded=result.score_excluded,
             judge_call_count=result.main_api_call_count,
             judge_input_tokens=result.input_tokens,

@@ -56,7 +56,11 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from core.cost_metering import read_reported_usage
-from core.public_error import public_provider_error_text, public_task_error_text
+from core.public_error import (
+    public_provider_error_text,
+    public_task_error,
+    public_task_error_text,
+)
 
 #: The largest number of listening criteria any one task in the gold corpus
 #: carries, so that the cap is a backstop against a runaway rather than a
@@ -189,6 +193,14 @@ class AudioVerdict:
     confidence: float
     reasoning: str
     judge_error: Optional[str] = None
+    #: Why the call could not be answered, in enough detail to act on, and
+    #: built only from what this module itself computed -- the exception's
+    #: type name, the status the provider returned, and the shape of what was
+    #: sent. Never the provider's message body and never the endpoint, so it
+    #: is publishable under the same rule as ``judge_error``; and never the
+    #: sub-judge's prose, which lives in ``reasoning`` and is not published.
+    #: ``None`` on a verdict that was actually reached.
+    failure_detail: Optional[str] = None
     api_call_count: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -204,6 +216,7 @@ class AudioVerdict:
             "confidence": self.confidence,
             "reasoning": self.reasoning,
             "judge_error": self.judge_error,
+            "failure_detail": self.failure_detail,
             "api_call_count": self.api_call_count,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
@@ -408,6 +421,10 @@ class AudioPerception:
             confidence=0.0,
             reasoning=reason,
             judge_error=judge_error,
+            # Every ``reason`` reaching here is written by this module out of
+            # its own counters, so the same sentence that explains the refusal
+            # in a log is the one the payload can carry.
+            failure_detail=reason,
         )
 
     def judge(
@@ -439,13 +456,19 @@ class AudioPerception:
         try:
             data, fmt = _trim_audio_bytes(audio_path, self.trim_seconds)
         except Exception as exc:  # noqa: BLE001
+            detail = (
+                f"audio preparation failed:"
+                f" {public_task_error(exc)['error_type']}"
+                f" (suffix={os.path.splitext(audio_path)[1].lower() or 'none'})"
+            )
             return AudioVerdict(
                 verdict="judge_error",
                 partial_score=0.0,
                 evidence="",
                 confidence=0.0,
-                reasoning=f"audio preparation failed: {type(exc).__name__}",
+                reasoning=detail,
                 judge_error=public_task_error_text(exc),
+                failure_detail=detail,
             )
         if fmt not in SUPPORTED_AUDIO_FORMATS:
             # Refused before the call, not after it. The API rejects an
@@ -536,16 +559,35 @@ class AudioPerception:
                 # the remainder refused honestly by name rather than after two
                 # more identical bounces.
                 self._blocked_reason = f"provider_{status}"
+            # Facts, not an inference. ``format`` is what the request claimed
+            # and ``source_suffix`` is what the file was called, so a reader
+            # can see for themselves whether the bytes were re-encoded on the
+            # way out -- and can see the case that needs seeing, a file with
+            # no extension going out labelled ``wav`` because
+            # ``_guess_format`` defaults to it. Both byte counts are here
+            # because a 413 is about the encoded one and a malformed
+            # container is about the other.
+            #
+            # The type name comes through ``public_task_error`` rather than
+            # from ``type(exc)`` directly, so it is the same string
+            # ``judge_error`` beside it is allowed to publish and cannot be a
+            # second, laxer route to the same field. That projection drops any
+            # class not named like an exception, which is what stops a
+            # dynamically built type from carrying a value out in its name.
+            detail = (
+                f"audio call failed: {public_task_error(exc)['error_type']}"
+                f" (status={status}, format={fmt},"
+                f" source_suffix={os.path.splitext(audio_path)[1].lower() or 'none'},"
+                f" bytes={len(data)}, b64_bytes={len(b64)})"
+            )
             return AudioVerdict(
                 verdict="judge_error",
                 partial_score=0.0,
                 evidence="",
                 confidence=0.0,
-                reasoning=(
-                    f"audio call failed: {type(exc).__name__}"
-                    f" (status={status}, format={fmt}, b64_bytes={len(b64)})"
-                ),
+                reasoning=detail,
                 judge_error=public_provider_error_text(exc),
+                failure_detail=detail,
                 api_call_count=1,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
