@@ -74,7 +74,7 @@
     "template": "prompts/grader_judge.md",
     "version": "v2.2"
   },
-  "graded_at": "2026-08-31T15:30:07Z",
+  "graded_at": "2026-08-31T22:23:29Z",
   "graded_by": "step8_grade.py",
   "graded_by_version": "0.1.0",
   "cost_ledger": {
