@@ -42,6 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from step8_grade import (  # noqa: E402
     compute_grader_source_hash,
+    hash_config,
     resolve_grade_output_path,
 )
 from scripts import stage3_partial_inventory as inventory  # noqa: E402
@@ -63,12 +64,23 @@ OLD_SOURCE_HASH = (
     "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
 )
 
-#: Identity inputs shared by the old run and any re-run. Everything here is
-#: deliberately held constant -- the corpus, the rubric, the prompt and the
-#: config are the same, which is what makes the two comparable at all. The
-#: grader source hash is the single field that moves, and so the single field
-#: that has to keep them apart.
-CONFIG_HASH = "b3609ec13f8fa51e"
+#: Identity inputs shared by the old run and any re-run. The corpus, the
+#: rubric and the prompt are held constant, which is what makes the two
+#: comparable at all.
+#:
+#: The config is **not** constant any more, and that is why there are two
+#: hashes here rather than one. Raising the audio task cap from three to 32
+#: moved ``gold_ceiling_185_v2_sol_max.yaml``, so the re-run differs from the
+#: 174 in two identity fields, not one: the config hash and the grader source
+#: hash. Both are part of the same repair -- the cap was starving 11 tasks
+#: while the endpoint was refusing every call -- but a comparison between the
+#: two runs has to say so rather than imply the code alone moved.
+#:
+#: ``OLD_CONFIG_HASH`` stays a literal because it is what the 174's paths on
+#: disk actually carry. ``NEW_CONFIG_HASH`` is derived, so that if the config
+#: moves again this file notices instead of quietly comparing a real path
+#: against an invented one.
+OLD_CONFIG_HASH = "b3609ec13f8fa51e"
 RUBRIC_SHA = "11e7900cdcac61bc4daf59e65feb238acda98fbf"
 PROMPT_VERSION = "v2.2"
 EXPERIMENT_ID = "exp_gold_baseline"
@@ -175,7 +187,11 @@ def test_the_moved_fingerprint_puts_the_rerun_on_a_different_path(full):
             full,
             experiment_id=EXPERIMENT_ID,
             judge_slug="gpt-5-6-sol",
-            config_hash=CONFIG_HASH,
+            config_hash=(
+                OLD_CONFIG_HASH
+                if source_hash == OLD_SOURCE_HASH
+                else hash_config(str(FULL))
+            ),
             rubric_sha=RUBRIC_SHA,
             rubric_short_sha=RUBRIC_SHA[:7],
             prompt_version=PROMPT_VERSION,
@@ -211,7 +227,11 @@ def test_the_rerun_needs_no_ordinal_bump_to_be_a_distinct_run(full):
             full,
             experiment_id=EXPERIMENT_ID,
             judge_slug="gpt-5-6-sol",
-            config_hash=CONFIG_HASH,
+            config_hash=(
+                OLD_CONFIG_HASH
+                if source_hash == OLD_SOURCE_HASH
+                else hash_config(str(FULL))
+            ),
             rubric_sha=RUBRIC_SHA,
             rubric_short_sha=RUBRIC_SHA[:7],
             prompt_version=PROMPT_VERSION,
@@ -232,22 +252,37 @@ def test_the_cost_ledger_separates_the_two_runs_without_being_told(full):
     """The second separation: money.
 
     ``step8_grade.py`` builds its ledger run id as
-    ``experiment|config_hash|grader_source_hash``. Only the last part moves,
-    and it moves on its own -- so the re-run's spend cannot be appended to the
-    174's ledger totals by an operator who forgot a flag. The formula is
-    reproduced here rather than imported because it is a one-line f-string at
-    a call site; if it moves, this test's own comment is the thing that tells
-    the next reader where it went.
+    ``experiment|config_hash|grader_source_hash``, so the re-run's spend cannot
+    be appended to the 174's ledger totals by an operator who forgot a flag.
+    The formula is reproduced here rather than imported because it is a
+    one-line f-string at a call site; if it moves, this test's own comment is
+    the thing that tells the next reader where it went.
+
+    Two of the three fields move, not one. This test used to build both ids
+    from a single ``CONFIG_HASH`` literal and then assert that their first two
+    fields matched -- which was true by construction and therefore checked
+    nothing, while its comment claimed the runs "differ by more than the
+    grader fix" would be caught. Raising the audio cap moved the config too,
+    so the claim is now stated as what it is: both fields moved, both moved as
+    part of the same repair, and either alone is enough to keep the ledgers
+    apart.
     """
     new_hash = compute_grader_source_hash(FULL, full)
-    old_run_id = f"{EXPERIMENT_ID}|{CONFIG_HASH}|{OLD_SOURCE_HASH}"
-    new_run_id = f"{EXPERIMENT_ID}|{CONFIG_HASH}|{new_hash}"
+    new_config_hash = hash_config(str(FULL))
+    old_run_id = f"{EXPERIMENT_ID}|{OLD_CONFIG_HASH}|{OLD_SOURCE_HASH}"
+    new_run_id = f"{EXPERIMENT_ID}|{new_config_hash}|{new_hash}"
 
     assert old_run_id != new_run_id
-    assert old_run_id.rsplit("|", 1)[0] == new_run_id.rsplit("|", 1)[0], (
-        "the experiment and config must still match; if they do not, the two "
-        "runs differ by more than the grader fix and are not comparable"
+    assert new_run_id.split("|")[0] == old_run_id.split("|")[0] == EXPERIMENT_ID
+
+    # Either difference alone separates the ledgers, so neither is load-bearing
+    # on its own -- which is what makes the separation robust to one of them
+    # being reverted later.
+    assert new_config_hash != OLD_CONFIG_HASH, (
+        "the audio call cap is back at its old value; the 11 tasks that ask "
+        "for more than three listening calls are starved again"
     )
+    assert new_hash != OLD_SOURCE_HASH
 
 
 def test_a_rerun_shard_cannot_merge_with_the_shards_it_replaces(full, tmp_path, capsys):

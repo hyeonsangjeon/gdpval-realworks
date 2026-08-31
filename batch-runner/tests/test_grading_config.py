@@ -308,7 +308,20 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
         "df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c"
     )
     assert rerun["rubric"]["revision"] == identity["rubric_commit_sha"]
-    assert hash_config(str(rerun_path)) == "0aebaaa2d0e51d74"
+    # Was 0aebaaa2d0e51d74 until the audio call cap moved from 3 to 32.
+    #
+    # Repinning a completed study's config needs a reason better than "the
+    # test went red", and here it is: no audio call has ever succeeded in
+    # this pipeline, because every one went to an endpoint that does not
+    # accept audio. The cap was consulted before the call, so it did change
+    # which *error* an over-cap item recorded -- cap_exceeded rather than
+    # provider_error -- but both are judge_error and both score zero. No
+    # published number in any exp003 payload could have moved with this
+    # value. This config follows default_v2_mini.yaml by the equality
+    # assertion below, and that file is a live template, so it could not be
+    # frozen; gold_ceiling_30_v2_sol_max.yaml, which nothing forces, was
+    # left at its old hash instead.
+    assert hash_config(str(rerun_path)) == "cada0fd1406f5340"
 
     for key in ("config_name", "description"):
         baseline.pop(key)
@@ -321,16 +334,24 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
 @pytest.mark.parametrize(
     ("filename", "expected_task_count", "expected_hash", "expected_task_ids_sha256"),
     [
+        # Both hashes moved when the audio call cap went from 3 to 32; see the
+        # note on the mini rerun's pin above for why repinning a finished
+        # study is defensible here and what was frozen instead. These two
+        # follow default_v2_sol_max.yaml because the modality-equality
+        # assertion at the foot of this test couples them to it, and that file
+        # is grade-run.yml's default config -- the one a dispatch gets when it
+        # names none. A live default cannot be held at a starving cap by two
+        # completed reruns.
         (
             "regrade_exp003_v2_sol_max_score_excluded.yaml",
             220,
-            "71c325eee0e48c13",
+            "26fd8822e42e0f82",  # was 71c325eee0e48c13
             "df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c",
         ),
         (
             "validation_exp003_v2_sol_max_anchor4.yaml",
             4,
-            "7f3c7c2e542cf580",
+            "56d3912c29a79f59",  # was 7f3c7c2e542cf580
             "29d5623a5cec85eb38f21fb73a2f3b06c66ed6a5fd6fd95948b979cd70a70bc9",
         ),
     ],

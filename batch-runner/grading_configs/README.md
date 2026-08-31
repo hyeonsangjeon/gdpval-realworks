@@ -93,7 +93,7 @@ not mutate or partially regrade the payload.
 The approved future exp003 full rerun is fixed to:
 
 - config: `regrade_exp003_v2_mini_score_excluded.yaml`
-- config hash: `0aebaaa2d0e51d74`
+- config hash: `cada0fd1406f5340`
 - rubric commit: `11e7900cdcac61bc4daf59e65feb238acda98fbf`
 - inference revision: `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`
 - expected task count: `220`
@@ -107,13 +107,57 @@ The pinned Sol Max identities are:
 
 | purpose | config | config hash | tasks |
 |---|---|---|---:|
-| full rerun | `regrade_exp003_v2_sol_max_score_excluded.yaml` | `71c325eee0e48c13` | 220 |
-| paid anchor | `validation_exp003_v2_sol_max_anchor4.yaml` | `7f3c7c2e542cf580` | 4 |
+| full rerun | `regrade_exp003_v2_sol_max_score_excluded.yaml` | `26fd8822e42e0f82` | 220 |
+| paid anchor | `validation_exp003_v2_sol_max_anchor4.yaml` | `56d3912c29a79f59` | 4 |
 
 Both pin rubric commit `11e7900cdcac61bc4daf59e65feb238acda98fbf`
 and inference revision `9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f`.
 Their audio block remains the production `gpt-audio-1.5` configuration with a
-three-call task cap and 30-second trim, and their visual task cap remains 72.
+32-call task cap and 30-second trim, and their visual task cap remains 72.
+
+### Config hashes that committed payloads still carry
+
+A grade payload's filename embeds `cfg_<config hash>` as it stood when the run
+was dispatched. Raising the audio task cap from three to 32 moved five of those
+hashes, so the table below is what a reader needs to resolve an older filename
+back to the file that produced it. Nothing in the code parses `cfg_` back out
+of a path; this is the only place the mapping is written down.
+
+| config | hash at dispatch | hash now | committed payloads |
+|---|---|---|---:|
+| `gold_ceiling_30_v2_sol_max.yaml` | `d1bfc8217c9981d2` | `07b374d4599f7733` | 12 |
+| `regrade_exp003_v2_sol_max_score_excluded.yaml` | `71c325eee0e48c13` | `26fd8822e42e0f82` | 4 |
+| `gold_smoke_audio_v2_sol_max.yaml` | `ddacb72418fc5400` | `67e0836c459114ee` | 3 |
+| `gold_ceiling_185_v2_sol_max.yaml` | `b3609ec13f8fa51e` | `f9c5f7bab9bd1530` | 2 |
+| `validation_exp003_v2_sol_max_anchor4.yaml` | `7f3c7c2e542cf580` | `56d3912c29a79f59` | 1 |
+| `regrade_exp003_v2_mini_score_excluded.yaml` | `0aebaaa2d0e51d74` | `cada0fd1406f5340` | 0 |
+
+`gold_ceiling_30_v2_sol_max.yaml` heads that table, and it was very nearly left
+out of it. The argument for freezing it was that it carries the most committed
+payloads of any config, that it is the Stage 1 measurement already published,
+and that a config should change only if a future run will use it. Two checked-in
+contracts refused that. `tests/test_gold_ceiling_contract.py` and
+`tests/test_full_gold_corpus_contract.py` require the 30-task sample, the
+185-task full run and the production default to carry byte-identical `judge`
+blocks, allowing only `config_name`, `description` and `rerun_identity` to
+differ. They exist because Stage 1's 82.87 per cent is the number Stage 3's
+result is placed next to, and two ceilings measured under different perception
+caps are not comparable. Freezing one config was therefore never available: the
+30-task sample is not a retired artefact but the control the later stages are
+read against, and Stage 1 has already been re-run once for exactly that reason.
+
+The rest of the table moved for plainer reasons. `default_v2_sol_max.yaml` is
+`grade-run.yml`'s default config and `default_v2_mini.yaml` its mini
+counterpart, both live templates that any future dispatch picks up; and
+`tests/test_grading_config.py` couples the two exp003 reruns to those defaults
+by an audio-block equality assertion, so they move together or not at all.
+
+None of the moved payloads can have scored differently for it. Every audio
+call this pipeline ever made was sent to the Responses endpoint, which does not
+accept an `input_audio` content part, so all of them were refused with a 400
+before a model heard anything. The cap is consulted before the call, so it did
+decide whether an over-cap item recorded `cap_exceeded` or `provider_error` —
+but both are `judge_error` and both score zero.
 
 The mini reference below is not like-for-like. Its tracked payload uses schema
 `1.0`, has no top-level `config_name` or `grader_source_hash`, and all 220 tasks

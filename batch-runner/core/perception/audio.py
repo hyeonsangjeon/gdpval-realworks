@@ -15,26 +15,35 @@ Design notes (task 206):
 * The client is injected from the typed grader route like in
     ``VisionPerception`` — no endpoint lookup or client construction occurs
     inside this class.
-* Duration trim: only the first 30 seconds of the file are sent. If
-  the audio is longer than 30 s the head-only slice keeps cost
-  bounded; the main judge still has access to full-clip statistics
-  via ``read_deliverable(op='probe_audio', ...)``.
-* Per-task call cap = 3 (audio items are rarer than visual; smaller
-  cap is safer). The cap counts *listens*, not attempts: a request the
-  provider refused before running the model gives its slot back, because
-  the cap bounds what a task spends and a refused request spent nothing.
-  A separate failure budget is what keeps that refund from turning a bad
-  endpoint into one doomed request per criterion. See
+* Endpoint: **Chat Completions**, not Responses. Audio is the one modality
+  the two endpoints disagree about. ``ResponseInputContentParam`` is a union
+  of text, image and file only, so a Responses request carrying audio is
+  refused with a 400 before any model hears it; the audio content part
+  belongs to ``ChatCompletionContentPartParam``. See
+  ``tests/test_audio_goes_to_the_endpoint_that_accepts_it.py``.
+* Duration trim: only the first 30 seconds of the file are sent, re-encoded
+  to 16 kHz mono. The head-only slice keeps cost bounded; the main judge
+  still has access to full-clip statistics via
+  ``read_deliverable(op='probe_audio', ...)``.
+* Per-task call cap = 32, which is the most listening criteria any one task
+  in the gold corpus carries. The cap counts *listens*, not attempts: a
+  request the provider refused before running the model gives its slot back,
+  because the cap bounds what a task spends and a refused request spent
+  nothing. A separate failure budget is what keeps that refund from turning
+  a bad endpoint into one doomed request per criterion. See
   ``tests/test_a_failed_audio_call_does_not_cost_the_task_its_turn.py``
   for why the distinction is load-bearing -- the paid smoke on run
   ``33363059548`` reported ``cap_exceeded`` on tasks that had never
-  successfully listened to anything.
-* Graceful fallback: missing deployment, decode error, or Responses
-  API exception all return ``judge_error`` rather than raising.
+  successfully listened to anything, because every request was going to an
+  endpoint that could not accept one.
+* Graceful fallback: missing deployment, decode error, or provider
+  exception all return ``judge_error`` rather than raising.
 * No sampling parameters. Neither the main judge nor ``VisionPerception``
-  sends ``temperature`` or ``seed``; this module used to be the single
-  exception, and was also the only caller whose every request came back
-  400.
+  sends ``temperature`` or ``seed``, and this module no longer does either.
+  Chat Completions would accept ``temperature``, so this is a consistency
+  choice rather than a constraint -- but it is also the smallest request
+  that can do the job, which is what a path with no successful call in its
+  history should be sending.
 """
 
 from __future__ import annotations
@@ -49,12 +58,25 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from core.cost_metering import read_reported_usage
 from core.public_error import public_provider_error_text, public_task_error_text
 
-#: How many audio sub-judge calls one task gets when the marking settings
-#: name no number of their own. Not a hard ceiling: ``call_cap_per_task``
-#: under ``judge.perception.audio`` replaces it, and the grader passes
-#: whatever it finds there on every construction. The free cost check reads
-#: it from here too, so moving it moves the ceiling with it.
-AUDIO_CALL_CAP = 3
+#: The largest number of listening criteria any one task in the gold corpus
+#: carries, so that the cap is a backstop against a runaway rather than a
+#: silent truncation of the marking. Counted by classifying all 8,816 rubric
+#: criteria through :func:`core.grader_routing.classify_criterion`: 29 of the
+#: 220 tasks ask to be listened to at all, 150 criteria in total, and the
+#: worst single task (``ff85ee58``) asks 32 times.
+#:
+#: It used to be 3, on the stated grounds that "audio items are rarer than
+#: visual". That was measured and is wrong: 3 covers the median task but
+#: starves 11 tasks outright, and the shortfall was already recorded against
+#: one of them in ``scripts/stage3_partial_inventory.py`` ("10 listening
+#: criteria vs AUDIO_CALL_CAP=3"). An item over the cap never places a call,
+#: so it is scored ``judge_error`` on a deliverable that may well satisfy it.
+#:
+#: Not a hard ceiling: ``call_cap_per_task`` under ``judge.perception.audio``
+#: replaces it, and the grader passes whatever it finds there on every
+#: construction. The free cost check reads it from here too, so moving it
+#: moves the ceiling with it.
+AUDIO_CALL_CAP = 32
 
 #: Seconds of audio sent to the model per call when the marking settings name
 #: no ``trim_seconds`` of their own. A longer clip costs more to send, so this
@@ -62,28 +84,51 @@ AUDIO_CALL_CAP = 3
 #: than keeping a second copy.
 AUDIO_TRIM_SECONDS = 30
 
-#: The only container formats the Responses API accepts on an ``input_audio``
-#: content part (``openai.types.responses.response_input_audio_param.InputAudio``
-#: types ``format`` as ``Literal["mp3", "wav"]``). Anything else is rejected
+#: What the head slice is re-encoded to. The source is whatever the
+#: deliverable happens to carry — the two video deliverables in this corpus
+#: are 48 kHz stereo — and the encoder used to preserve that, which made a
+#: 30-second clip 5.76 MB of PCM and 7.68 MB once base64'd, per call.
+#:
+#: Nothing any criterion in this corpus asks about survives only above 8 kHz
+#: or only in the stereo difference. They ask whether a voiceover is audible,
+#: whether music is present and in what style, whether a named sound effect
+#: lands on a named shot, and whether cuts fall on downbeats. 16 kHz mono
+#: carries all of that and is 6x smaller to send, which is what makes raising
+#: ``AUDIO_CALL_CAP`` from 3 to 32 affordable: the worst task's traffic goes
+#: to 41 MB rather than 246 MB.
+AUDIO_SAMPLE_RATE_HZ = 16_000
+AUDIO_LAYOUT = "mono"
+
+#: The only container formats an ``input_audio`` content part accepts
+#: (``openai.types.chat.chat_completion_content_part_input_audio_param``
+#: types ``format`` as ``Literal["wav", "mp3"]``). Anything else is rejected
 #: with a 400 before the model is reached, so a clip that cannot be presented
 #: as one of these is refused here rather than paid for and bounced.
 SUPPORTED_AUDIO_FORMATS = ("mp3", "wav")
 
+#: Of those, the ones already compressed. A short clip in one of these is
+#: sent untouched: re-encoding it to 16 kHz PCM would make it *larger*, since
+#: 30 s of mp3 is a few hundred KB and the same 30 s of PCM is 960 KB. A
+#: short ``.wav`` gets no such exemption — it is exactly the case the downmix
+#: is for, and a 30-second 48 kHz stereo deliverable would otherwise slip
+#: through the shortcut at 5.76 MB a call.
+COMPRESSED_AUDIO_FORMATS = ("mp3",)
+
 #: Largest base64 payload this class will put on the wire.
 #:
-#: The paid smoke on run ``33363059548`` had every audio request bounce with a
-#: 400 and left two candidates standing, because a 400 body is not visible
-#: without buying another call. One was ``temperature``, now gone. The other is
-#: request size, and this is what rules it out: 30 s of 48 kHz stereo PCM is
-#: ~5.5 MB raw and ~7.3 MB base64, so a clip anywhere near this limit is
-#: already anomalous. Refused here rather than sent, on the same reasoning as
-#: the format check below it -- a request that will bounce still costs the
-#: wall-clock of bouncing, and the refusal names itself where a 400 does not.
+#: Not the reason the paid smoke on run ``33363059548`` saw a 400 on every
+#: request. That was the endpoint: audio was going to Responses, whose content
+#: union has no audio member, so the request was malformed at any size. Size
+#: was one of two candidates standing at the time, and it is now ruled out
+#: rather than guarded against — 30 s at 16 kHz mono is 960 KB raw and
+#: ~1.28 MB base64, two orders below this limit, and even the pre-downmix
+#: 48 kHz stereo payload was 7.68 MB.
 #:
-#: The point is not that this fires. It is that after it exists, the next
-#: smoke has three distinguishable outcomes -- a verdict (it was
-#: ``temperature``), ``audio_payload_too_large`` (it was size), or a 400 still
-#: (it was neither, and the guessing stops).
+#: It stays because it is cheap and it names itself. A clip that somehow
+#: arrives near 20 MB is anomalous whatever produced it, and a request that
+#: will bounce still costs the wall-clock of bouncing. What it must not be
+#: read as is a diagnosis: if this ever fires, it says the clip was huge, not
+#: that size was ever what broke the listening path.
 AUDIO_MAX_REQUEST_BYTES = 20 * 1024 * 1024
 
 #: How many failed attempts one task will make before it stops trying.
@@ -91,9 +136,9 @@ AUDIO_MAX_REQUEST_BYTES = 20 * 1024 * 1024
 #: Separate from ``call_cap`` because the two bound different things. The call
 #: cap bounds *spend*, and a request the provider rejected without running the
 #: model did not spend anything. This bounds *wall-clock*, which a refunded
-#: call would otherwise leave unbounded: without it, a task with fourteen
-#: audio criteria facing a flaky endpoint makes fourteen doomed requests
-#: instead of three.
+#: call would otherwise leave unbounded: without it, a task with 32 audio
+#: criteria facing a flaky endpoint makes 32 doomed requests instead of three.
+#: Raising the cap to 32 is what makes this the load-bearing one of the pair.
 #:
 #: In practice this is only ever reached by 429s. Every other rejection is
 #: deterministic for the task -- same clip, same request shape, same answer --
@@ -113,6 +158,11 @@ _UNBILLED_STATUS = frozenset({400, 401, 403, 404, 413, 415, 422, 429})
 #: a malformed request stays malformed and a missing deployment stays missing.
 #: Retrying buys another identical bounce; 429 is the one that is worth
 #: waiting out, which is why it is in the set above and not this one.
+#:
+#: Worth reading beside the defect that motivated it: a wrong *endpoint* is
+#: deterministic for every task, not just this one, so this short-circuit
+#: would have turned 21 refusals into 2 and saved nothing else. It bounds the
+#: damage of a bad call; it cannot tell you the call was bad.
 _DETERMINISTIC_STATUS = frozenset({400, 401, 403, 404, 413, 415, 422})
 
 
@@ -184,6 +234,30 @@ def _parse_json_envelope(text: str) -> Dict[str, Any]:
     return json.loads(t)
 
 
+def _first_choice_text(response: Any) -> str:
+    """Pull the assistant text out of a Chat Completions response.
+
+    The Responses API offers a flattened ``output_text``; Chat Completions
+    does not, and an audio-capable deployment may answer either in
+    ``message.content`` or — when it has been asked for spoken output — in
+    ``message.audio.transcript``. We ask for ``modalities=["text"]`` so the
+    first is what should arrive, but reading both means a deployment
+    configured otherwise degrades to a parse failure rather than a silent
+    empty verdict.
+    """
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        return ""
+    message = getattr(choices[0], "message", None)
+    if message is None:
+        return ""
+    content = getattr(message, "content", None)
+    if content:
+        return str(content)
+    audio = getattr(message, "audio", None)
+    return str(getattr(audio, "transcript", "") or "") if audio else ""
+
+
 def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
                       ) -> Tuple[bytes, str]:
     """Read a file and return ``(bytes, format)`` trimmed to ``max_seconds``.
@@ -192,10 +266,11 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
     sending the raw file if PyAV cannot decode (e.g. exotic codec).
 
     The file is only handed over untouched when it is *known* to be short
-    enough and already carries a format the API accepts. A clip whose
-    duration the container does not report is re-encoded rather than sent
-    whole: "no duration" is not "short", and a studio stem that declines to
-    say how long it is would otherwise go out at its full size.
+    enough and already carries a compressed format the API accepts. A clip
+    whose duration the container does not report is re-encoded rather than
+    sent whole: "no duration" is not "short", and a studio stem that declines
+    to say how long it is would otherwise go out at its full size. Nor does a
+    short ``.wav`` qualify — see ``COMPRESSED_AUDIO_FORMATS``.
     """
     fmt = _guess_format(path)
 
@@ -211,26 +286,40 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
     try:
         container = av.open(path)
         try:
-            stream = container.streams.audio[0]
+            # Existence probe: a container with no audio stream raises
+            # IndexError here and falls through to sending the file whole.
+            container.streams.audio[0]
             duration_s = (float(container.duration) / 1_000_000.0
                           if container.duration else None)
             if (
                 duration_s is not None
                 and duration_s <= max_seconds
-                and fmt in SUPPORTED_AUDIO_FORMATS
+                and fmt in COMPRESSED_AUDIO_FORMATS
             ):
                 return raw()
-            # Re-encode head slice to WAV in memory.
+            # Re-encode head slice to WAV in memory, downmixed to 16 kHz mono
+            # rather than kept at whatever the source carried. See
+            # AUDIO_SAMPLE_RATE_HZ for why that loses nothing this corpus asks
+            # about and why it is what makes a cap of 32 affordable.
             import io
             buf = io.BytesIO()
             out = av.open(buf, mode="w", format="wav")
-            out_stream = out.add_stream("pcm_s16le", rate=stream.sample_rate)
-            out_stream.layout = stream.layout
+            out_stream = out.add_stream("pcm_s16le", rate=AUDIO_SAMPLE_RATE_HZ)
+            out_stream.layout = AUDIO_LAYOUT
+            resampler = av.AudioResampler(
+                format="s16", layout=AUDIO_LAYOUT, rate=AUDIO_SAMPLE_RATE_HZ,
+            )
             for frame in container.decode(audio=0):
                 t = float(frame.pts * frame.time_base) if frame.pts else 0.0
                 if t > max_seconds:
                     break
-                for packet in out_stream.encode(frame):
+                for resampled in resampler.resample(frame):
+                    for packet in out_stream.encode(resampled):
+                        out.mux(packet)
+            # Drain the resampler before the encoder: PyAV buffers whole
+            # output frames, so the tail of the slice is still inside it.
+            for resampled in resampler.resample(None):
+                for packet in out_stream.encode(resampled):
                     out.mux(packet)
             for packet in out_stream.encode():
                 out.mux(packet)
@@ -394,19 +483,20 @@ class AudioPerception:
         cached_tokens = 0
         usage_complete = False
         try:
-            response = self.client.responses.create(
+            response = self.client.chat.completions.create(
                 model=self.deployment,
-                input=[
+                messages=[
                     {
                         "role": "user",
                         "content": [
-                            {"type": "input_text",
+                            {"type": "text",
                              "text": f"{_AUDIO_PROMPT_HEADER}\n\nCriterion:\n{criterion}"},
                             {"type": "input_audio",
                              "input_audio": {"data": b64, "format": fmt}},
                         ],
                     }
                 ],
+                modalities=["text"],
             )
             latency_ms = (time.perf_counter() - call_started) * 1000.0
             reported = read_reported_usage(response)
@@ -414,7 +504,7 @@ class AudioPerception:
             output_tokens = reported.output_tokens
             cached_tokens = reported.cached_tokens
             usage_complete = reported.usage_complete
-            text = getattr(response, "output_text", "") or ""
+            text = _first_choice_text(response)
             payload = _parse_json_envelope(text)
             return AudioVerdict(
                 verdict=str(payload.get("verdict", "fail")),
