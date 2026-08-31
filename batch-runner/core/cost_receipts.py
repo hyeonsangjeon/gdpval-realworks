@@ -1518,17 +1518,94 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
         runtime_cost_usd=runtime_cost,
         model_calls=model_calls,
         usage=totals,
+        components=_merge_components(contributing),
         price_table_sha256=_one_table(tables, None),
         missing_reasons=tuple(sorted(reasons)),
     )
 
 
-def _summary_status(contributing: Sequence[CostReceipt]) -> str:
+def _summary_status(
+    contributing: Sequence[CostReceipt | ReceiptComponent],
+) -> str:
+    """What a set of already-settled states adds up to.
+
+    Written for receipts and reused verbatim for the lines inside one, because
+    it is the same question asked one level down: a whole of parts is whole
+    only if every part is, and has no record only if no part has one.
+    """
     if all(receipt.status == STATUS_COMPLETE for receipt in contributing):
         return STATUS_COMPLETE
     if all(receipt.status == STATUS_UNAVAILABLE for receipt in contributing):
         return STATUS_UNAVAILABLE
     return STATUS_PARTIAL
+
+
+def _merge_components(
+    contributing: Sequence[CostReceipt],
+) -> tuple[ReceiptComponent, ...]:
+    """Carry the receipts' own lines up to the summary, rolled by their key.
+
+    Without this the summary published one figure for a whole run and no
+    account of what it was spent on — and, worse, said so in a way a reader
+    cannot tell from the truth. An empty list is what a run that never called
+    a model carries, so a run of thousands of judge and perception calls and a
+    run that made none published the same field. The tasks in the same file
+    attributed every one of those calls; only the line above them said nothing.
+
+    A line is keyed by ``(stage, retry_kind)`` and not by its displayed name,
+    because generation that had to be redone and Self-QA that had to be redone
+    both display as 재시도 and are not one line. That is the same key
+    :func:`CostReceiptLedger.receipt_for` builds a task's lines under, and the
+    same one :func:`core.cost_projection.project_cost_receipt` rejects
+    duplicates of, so the merged list is unique by construction.
+
+    The count is bounded by the vocabulary rather than by the run: five stages
+    and five retry kinds give at most twenty-five lines, under the thirty-two a
+    published receipt may carry. Both readers that hand rows to
+    :func:`summarise_receipts` — a resumed grade file and a shard merge — put
+    them through ``grade.schema.json`` first, and that schema pins both
+    vocabularies to those five values.
+
+    Inside a line the rule is the one this module already applies to receipts:
+    work that did not happen contributed nothing, so it is set aside rather
+    than counted against the rest; what is left is whole only if all of it is.
+    """
+    lines: dict[tuple[str, str], list[ReceiptComponent]] = {}
+    for receipt in contributing:
+        for entry in receipt.components:
+            lines.setdefault((entry.stage, entry.retry_kind), []).append(entry)
+
+    merged: list[ReceiptComponent] = []
+    for (stage, retry_kind), entries in sorted(lines.items()):
+        counted = [entry for entry in entries if entry.status != STATUS_NOT_RUN]
+        known = Decimal(0)
+        model_calls = 0
+        reasons: set[str] = set()
+        usage = empty_usage()
+        for entry in counted:
+            known += entry.known_cost_usd
+            model_calls += entry.model_calls
+            reasons.update(entry.missing_reasons)
+            for name in usage:
+                value = entry.usage.get(name)
+                if value is None:
+                    # Absent is not zero, exactly as it is not zero one level
+                    # up. A line that never said what it used does not get to
+                    # add nothing and leave the sum reading as a full count.
+                    continue
+                usage[name] = (usage[name] or 0) + int(value)
+        merged.append(
+            ReceiptComponent(
+                stage=stage,
+                retry_kind=retry_kind,
+                status=_summary_status(counted) if counted else STATUS_NOT_RUN,
+                model_calls=model_calls,
+                known_cost_usd=known,
+                usage=usage,
+                missing_reasons=tuple(sorted(reasons)),
+            )
+        )
+    return tuple(merged)
 
 
 def ledger_reference(path: str | Path, sha256: str) -> dict[str, str]:
