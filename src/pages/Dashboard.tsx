@@ -102,7 +102,15 @@ export default function Dashboard() {
 
   // Calculate KPIs
   const bestRate = displayExperiments.length > 0 ? Math.max(...displayExperiments.map((e) => e.success_rate_pct)) : 0
-  const bestQA = displayExperiments.length > 0 ? Math.max(...displayExperiments.map((e) => e.avg_qa_score)) : 0
+  // "Best" over the runs that measured a score. A run whose tasks all errored
+  // carries null, and `Math.max` reads a null as 0 — harmless for the maximum
+  // itself, but it means a board with nothing but unmeasured runs would announce
+  // a best score of 0.00 rather than admitting it has none. When at least one
+  // run measured something this is the same maximum it always was.
+  const measuredQaScores = displayExperiments
+    .map((e) => e.avg_qa_score)
+    .filter((v): v is number => v != null)
+  const bestQA = measuredQaScores.length > 0 ? Math.max(...measuredQaScores) : null
   // Keep global benchmark copy stable even when debug mode reveals subsets.
   const totalTasks = OFFICIAL_TASK_COUNT
 
@@ -186,7 +194,7 @@ export default function Dashboard() {
           {[
             {
               label: 'Best Self-QA',
-              value: bestQA.toFixed(2),
+              value: bestQA == null ? '—' : bestQA.toFixed(2),
               unit: 'out of 10',
               tooltip: tooltipTexts.kpi.bestQaScore,
               valueColor: 'text-amber-400',

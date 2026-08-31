@@ -45,6 +45,7 @@ from core.cost_projection import (  # noqa: E402
     verify_cost_ledger,
 )
 from core.execution_metrics import bounded_count, bounded_duration_ms  # noqa: E402
+from core.measurement_display import render_measured  # noqa: E402
 from core.prepared_fingerprint import FINGERPRINT_RE  # noqa: E402
 from core.result_fingerprint import RESULT_FINGERPRINT_RE  # noqa: E402
 from core.publication_generation import validate_publication_generation  # noqa: E402
@@ -198,18 +199,29 @@ def _compute_summary(data: dict) -> dict:
     scores = [r["qa_score"] for r in results if r.get("qa_score") is not None]
     latencies = [r["latency_ms"] for r in results if r.get("latency_ms")]
 
+    # Nothing scored and nothing timed are not scores of zero and times of
+    # zero. A run where every task errored has no average to report, and
+    # writing 0.0 for it publishes the bottom of the scale as an observation:
+    # the report then reads as a model that failed every rubric item in no
+    # time at all. ``step3_format_results.py`` has always written None here.
+    #
+    # ``success_rate_pct`` deliberately keeps its 0.0. Its fallback fires only
+    # when ``total_tasks`` is 0, which is printed right beside it, so the
+    # reader can see there was nothing to divide. The two above are the
+    # dishonest ones precisely because ``total_tasks: 220`` sits next to them
+    # and says the opposite.
     return {
         "total_tasks": total,
         "success_count": success_count,
         "success_rate_pct": round(success_count / total * 100, 1) if total else 0.0,
         "error_count": error_count,
         "retried_count": retried_count,
-        "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
-        "min_qa_score": min(scores) if scores else 0,
-        "max_qa_score": max(scores) if scores else 0,
-        "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else 0,
-        "max_latency_ms": round(max(latencies)) if latencies else 0,
-        "total_latency_ms": round(sum(latencies)) if latencies else 0,
+        "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else None,
+        "min_qa_score": min(scores) if scores else None,
+        "max_qa_score": max(scores) if scores else None,
+        "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else None,
+        "max_latency_ms": round(max(latencies)) if latencies else None,
+        "total_latency_ms": round(sum(latencies)) if latencies else None,
     }
 
 
@@ -436,8 +448,12 @@ def _compute_sector_breakdown(data: dict) -> list[dict]:
             "total": b["total"],
             "success": b["success"],
             "success_rate_pct": round(b["success"] / b["total"] * 100, 1) if b["total"] else 0.0,
-            "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
-            "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else 0,
+            # Same distinction as ``_compute_summary``: a sector whose tasks all
+            # errored has nothing to average, and a sector row reading 0.00 with
+            # a task count beside it is a claim about the model, not about the
+            # data being absent.
+            "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else None,
+            "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else None,
         })
     return breakdown
 
@@ -960,6 +976,7 @@ def _build_markdown(rd: dict) -> str:
         ]
 
     # 3. Key Metrics
+    total_llm_ms = summary["total_latency_ms"]
     lines += [
         "## Key Metrics",
         "",
@@ -969,12 +986,13 @@ def _build_markdown(rd: dict) -> str:
         f"| Success | {summary['success_count']} ({summary['success_rate_pct']}%) |",
         f"| Errors | {summary['error_count']} |",
         f"| Retried Tasks | {summary['retried_count']} |",
-        f"| Avg QA Score | {summary['avg_qa_score']}/10 |",
-        f"| Min QA Score | {summary['min_qa_score']}/10 |",
-        f"| Max QA Score | {summary['max_qa_score']}/10 |",
-        f"| Avg Latency | {summary['avg_latency_ms']:,}ms |",
-        f"| Max Latency | {summary['max_latency_ms']:,}ms |",
-        f"| Total LLM Time | {summary['total_latency_ms'] // 1000}s |",
+        f"| Avg QA Score | {render_measured(summary['avg_qa_score'], '/10')} |",
+        f"| Min QA Score | {render_measured(summary['min_qa_score'], '/10')} |",
+        f"| Max QA Score | {render_measured(summary['max_qa_score'], '/10')} |",
+        f"| Avg Latency | {render_measured(summary['avg_latency_ms'], 'ms', ',')} |",
+        f"| Max Latency | {render_measured(summary['max_latency_ms'], 'ms', ',')} |",
+        f"| Total LLM Time | "
+        f"{render_measured(total_llm_ms // 1000 if total_llm_ms is not None else None, 's')} |",
         "",
     ]
 
@@ -1058,7 +1076,8 @@ def _build_markdown(rd: dict) -> str:
         for s in sector_breakdown:
             lines.append(
                 f"| {s['sector'][:40]} | {s['total']} | {s['success']} | "
-                f"{s['success_rate_pct']}% | {s['avg_qa_score']}/10 | {s['avg_latency_ms']:,}ms |"
+                f"{s['success_rate_pct']}% | {render_measured(s['avg_qa_score'], '/10')} | "
+                f"{render_measured(s['avg_latency_ms'], 'ms', ',')} |"
             )
         lines.append("")
 
@@ -1199,7 +1218,8 @@ def _build_html(rd: dict) -> str:
         sector_rows += (
             f"<tr><td>{esc(s['sector'])}</td><td>{s['total']}</td>"
             f"<td>{s['success']}</td><td>{s['success_rate_pct']}%</td>"
-            f"<td>{s['avg_qa_score']}/10</td><td>{s['avg_latency_ms']:,}ms</td></tr>\n"
+            f"<td>{render_measured(s['avg_qa_score'], '/10')}</td>"
+            f"<td>{render_measured(s['avg_latency_ms'], 'ms', ',')}</td></tr>\n"
         )
 
     # Task rows
@@ -1341,7 +1361,7 @@ def _build_html(rd: dict) -> str:
     </div>
     <div class="card">
       <div class="label">Avg QA Score</div>
-      <div class="value">{summary['avg_qa_score']}</div>
+      <div class="value">{render_measured(summary['avg_qa_score'])}</div>
       <div class="sub">out of 10</div>
     </div>
     <div class="card">
@@ -1357,7 +1377,7 @@ def _build_html(rd: dict) -> str:
     {resume_card}
     <div class="card">
       <div class="label">Avg Latency</div>
-      <div class="value">{summary['avg_latency_ms']:,}</div>
+      <div class="value">{render_measured(summary['avg_latency_ms'], '', ',')}</div>
       <div class="sub">ms</div>
     </div>
   </div>
@@ -1634,8 +1654,8 @@ def generate_report(
     print(f"\n   Tasks: {summary['total_tasks']}  "
           f"Success: {summary['success_count']} ({summary['success_rate_pct']}%)  "
           f"Errors: {summary['error_count']}")
-    print(f"   Avg QA: {summary['avg_qa_score']}/10  "
-          f"Avg Latency: {summary['avg_latency_ms']:,}ms")
+    print(f"   Avg QA: {render_measured(summary['avg_qa_score'], '/10')}  "
+          f"Avg Latency: {render_measured(summary['avg_latency_ms'], 'ms', ',')}")
     if "narrative_error" in rd:
         print(f"\n   ⚠️  Narrative error: {rd['narrative_error']}")
 

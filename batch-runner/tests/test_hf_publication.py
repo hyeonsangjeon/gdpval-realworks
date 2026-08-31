@@ -236,18 +236,21 @@ def _narrative_identity_kwargs() -> dict:
 
 
 def _report_summary(**overrides) -> dict:
+    # The default identity's one task carries no qa_score and no latency, so
+    # every measured field here is absent rather than zero. Tests that want
+    # real figures override them.
     summary = {
         "total_tasks": 1,
         "success_count": 1,
         "success_rate_pct": 100.0,
         "error_count": 0,
         "retried_count": 0,
-        "avg_qa_score": 0.0,
-        "min_qa_score": 0,
-        "max_qa_score": 0,
-        "avg_latency_ms": 0,
-        "max_latency_ms": 0,
-        "total_latency_ms": 0,
+        "avg_qa_score": None,
+        "min_qa_score": None,
+        "max_qa_score": None,
+        "avg_latency_ms": None,
+        "max_latency_ms": None,
+        "total_latency_ms": None,
     }
     summary.update(overrides)
     return summary

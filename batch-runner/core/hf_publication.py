@@ -903,6 +903,12 @@ def _publication_summary(results: tuple[PublicationTaskResult, ...]) -> dict:
             result.qa_score for result in results if result.qa_score is not None
         ]
         latencies = [result.latency_ms for result in results if result.latency_ms]
+        # Kept identical to ``step6_report._compute_summary`` on purpose: the
+        # caller below compares this against the summary block step 6 wrote and
+        # refuses to publish on any difference. Nothing scored and nothing timed
+        # are absences here for the same reason they are there -- and if only
+        # one of the two producers said so, a run where every task errored would
+        # stop being publishable rather than start being described honestly.
         return {
             "total_tasks": total,
             "success_count": success_count,
@@ -911,14 +917,14 @@ def _publication_summary(results: tuple[PublicationTaskResult, ...]) -> dict:
             ),
             "error_count": error_count,
             "retried_count": retried_count,
-            "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
-            "min_qa_score": min(scores) if scores else 0,
-            "max_qa_score": max(scores) if scores else 0,
+            "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else None,
+            "min_qa_score": min(scores) if scores else None,
+            "max_qa_score": max(scores) if scores else None,
             "avg_latency_ms": (
-                round(sum(latencies) / len(latencies)) if latencies else 0
+                round(sum(latencies) / len(latencies)) if latencies else None
             ),
-            "max_latency_ms": round(max(latencies)) if latencies else 0,
-            "total_latency_ms": round(sum(latencies)) if latencies else 0,
+            "max_latency_ms": round(max(latencies)) if latencies else None,
+            "total_latency_ms": round(sum(latencies)) if latencies else None,
         }
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("inference report summary values are invalid") from exc

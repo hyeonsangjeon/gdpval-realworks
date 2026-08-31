@@ -40,6 +40,7 @@ import {
   summaryStatusLabel,
   summaryTotalCell,
 } from '../lib/cost'
+import { fmtScore } from '../lib/format'
 import { getJournalLinksForExperiment, lensLabels } from '../data/journalLinks'
 
 // ── Color helpers ──
@@ -64,6 +65,19 @@ function formatDuration(ms: number | null | undefined) {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return `${minutes}m ${seconds}s`
+}
+
+/**
+ * "N.Ns", or an em dash when nothing was ever timed.
+ *
+ * Deliberately not formatDuration above, which switches units below a second.
+ * These summary rows have always rendered plain seconds, so keeping the same
+ * expression means a run that did measure prints exactly what it printed
+ * before and only the absent case changes.
+ */
+function secondsOrDash(ms: number | null | undefined, digits: number) {
+  if (ms == null) return '—'
+  return `${(ms / 1000).toFixed(digits)}s`
 }
 
 // Grade-derived scope wins over the meta-recorded scope when a grade row
@@ -324,10 +338,18 @@ function ExperimentDetail() {
             },
             { label: 'Errors', value: summary?.error_count, color: '#ef4444' },
             { label: 'Retried', value: summary?.retried_count, color: '#f59e0b' },
-            { label: 'Avg QA', value: summary?.avg_qa_score?.toFixed(1), color: '#6366f1' },
+            {
+              label: 'Avg QA',
+              value: summary?.avg_qa_score == null ? '—' : summary.avg_qa_score.toFixed(1),
+              color: '#6366f1',
+            },
             {
               label: 'Avg Latency',
-              value: `${((summary?.avg_latency_ms ?? 0) / 1000).toFixed(1)}s`,
+              // `?? 0` here used to print "0.0s" for a run that never timed
+              // anything, which reads as a run that finished instantly.
+              value: summary?.avg_latency_ms == null
+                ? '—'
+                : `${(summary.avg_latency_ms / 1000).toFixed(1)}s`,
               color: '#8b5cf6',
             },
             {
@@ -425,12 +447,12 @@ function ExperimentDetail() {
                   { label: 'Success', value: `${summary.success_count} (${summary.success_rate_pct}%)` },
                   { label: 'Errors', value: summary.error_count },
                   { label: 'Retried Tasks', value: summary.retried_count },
-                  { label: 'Avg QA Score', value: `${summary.avg_qa_score}/10` },
-                  { label: 'Min QA Score', value: `${summary.min_qa_score}/10` },
-                  { label: 'Max QA Score', value: `${summary.max_qa_score}/10` },
-                  { label: 'Avg Latency', value: `${(summary.avg_latency_ms / 1000).toFixed(1)}s` },
-                  { label: 'Max Latency', value: `${(summary.max_latency_ms / 1000).toFixed(1)}s` },
-                  { label: 'Total LLM Time', value: `${(summary.total_latency_ms / 1000).toFixed(0)}s` },
+                  { label: 'Avg QA Score', value: fmtScore(summary.avg_qa_score) },
+                  { label: 'Min QA Score', value: fmtScore(summary.min_qa_score) },
+                  { label: 'Max QA Score', value: fmtScore(summary.max_qa_score) },
+                  { label: 'Avg Latency', value: secondsOrDash(summary.avg_latency_ms, 1) },
+                  { label: 'Max Latency', value: secondsOrDash(summary.max_latency_ms, 1) },
+                  { label: 'Total LLM Time', value: secondsOrDash(summary.total_latency_ms, 0) },
                 ].map((m, i) => (
                   <div key={i}>
                     <div className="text-[10px] text-dash-text-muted uppercase mb-0.5">{m.label}</div>
@@ -836,10 +858,10 @@ function ExperimentDetail() {
                         {s.success_rate_pct.toFixed(1)}%
                       </td>
                       <td className="px-3 py-2 text-right font-mono" style={{ color: qaColor(s.avg_qa_score) }}>
-                        {s.avg_qa_score.toFixed(1)}/10
+                        {fmtScore(s.avg_qa_score, 1)}
                       </td>
                       <td className="px-3 py-2 text-right font-mono text-dash-text-muted">
-                        {(s.avg_latency_ms / 1000).toFixed(1)}s
+                        {secondsOrDash(s.avg_latency_ms, 1)}
                       </td>
                     </tr>
                   ))}
