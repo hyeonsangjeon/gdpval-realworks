@@ -167,13 +167,30 @@ def test_request_shape_matches_the_sdk_audio_content_part(wav_file):
     So the shape is read off ``ResponseInputAudioParam`` — the same generated
     type the SDK serialises against — and a future change to the wire format
     fails here instead of failing in a paid run.
+
+    ``temperature`` was the third mistake of that family, and the paid smoke
+    on run ``33363059548`` is what exposed it: every audio request bounced
+    with a 400 while the same run's 223 judge calls, on the same client and
+    the same API version, went out without one and were answered. This module
+    was the only place in the whole grading path that sent it — the main
+    judge does not, and ``VisionPerception`` does not.
+
+    The honest statement of what is pinned here: nothing in this repository
+    can prove ``gpt-audio-1.5`` rejects ``temperature``, because reading a 400
+    body costs a paid call. What is provable is that audio was the outlier,
+    and this test now holds it to the convention the rest of the path already
+    follows. If the next smoke returns a verdict, that was the cause.
     """
     client = FakeClient(FakeResponses())
     ap = AudioPerception(client=client, deployment="gpt-audio-1.5")
     ap.judge(criterion="x", audio_path=str(wav_file))
     sent = client.responses.calls[0]
     assert sent["model"] == "gpt-audio-1.5"
-    assert sent["temperature"] == 0
+    assert "temperature" not in sent, (
+        "audio is sending a sampling parameter no other call in the grading "
+        "path sends; that asymmetry is the leading explanation for the 400s "
+        "the paid smoke recorded"
+    )
     assert "seed" not in sent
     content = sent["input"][0]["content"]
     kinds = {b["type"] for b in content}
