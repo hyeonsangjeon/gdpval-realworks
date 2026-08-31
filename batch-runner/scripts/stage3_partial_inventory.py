@@ -42,6 +42,11 @@ from typing import Any
 BATCH_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = BATCH_ROOT.parent
 
+# So ``python scripts/stage3_partial_inventory.py`` works from batch-runner as
+# the report documents it, not only under pytest, whose rootdir is already here.
+if str(BATCH_ROOT) not in sys.path:
+    sys.path.insert(0, str(BATCH_ROOT))
+
 CONFIG_PATH = BATCH_ROOT / "grading_configs/gold_ceiling_185_v2_sol_max.yaml"
 
 #: The output directory is named after the ordered-task-ids digest, so the
@@ -350,6 +355,75 @@ def _score_facts(manifest_tasks: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+#: Container extensions that hold a video stream. Disjoint from the grader's
+#: audio extensions, which is the whole of the defect below.
+VIDEO_EXTENSIONS = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
+
+
+def _items_scored_without_listening() -> list[dict[str, Any]]:
+    """Items about sound that a judge answered without hearing anything.
+
+    ``has_audio_content`` returned ``False`` for every video container, and
+    ``False`` is a positive claim that the file was examined and holds no
+    audio, so ``resolve_runtime_routing`` demoted the criterion to TEXT. A
+    demoted item is still scored -- demotion is not exclusion -- so "we did
+    not listen" was recorded as "the work is bad".
+
+    The signature is taken from the payloads: a video in ``selected_paths``,
+    ``routing_modality`` of ``text``, and a criterion the router itself still
+    classifies as AUDIO. That last clause is a live call rather than a frozen
+    keyword list, deliberately: if the classifier changes, this count changes
+    with it and the rebuild-and-diff test says so, which is the behaviour
+    wanted from a record that is supposed to track the code.
+
+    Fixed by PR #276 -- which moves the grader fingerprint, so these two tasks
+    stay wrong in this measurement and can only be corrected by a re-run.
+    """
+    from core.grader_routing import Modality, classify_criterion
+
+    affected: list[dict[str, Any]] = []
+    for index in range(SHARD_COUNT):
+        path = SHARD_DIR / f"shard-{index:03d}-of-{SHARD_COUNT:03d}.json"
+        if not path.exists():
+            continue
+        for task in json.loads(path.read_text(encoding="utf-8"))["tasks"]:
+            demoted = [
+                item
+                for item in task.get("items", [])
+                if any(
+                    str(p).lower().endswith(VIDEO_EXTENSIONS)
+                    for p in (item.get("selected_paths") or [])
+                )
+                and item.get("routing_modality") == "text"
+                and classify_criterion(item["criterion"]).modality
+                is Modality.AUDIO
+            ]
+            if not demoted:
+                continue
+            affected.append(
+                {
+                    "task_id": task["task_id"],
+                    "shard_index": index,
+                    "occupation": task.get("occupation"),
+                    "pct_as_recorded": task.get("pct"),
+                    "items_demoted": len(demoted),
+                    "points_not_awarded": round(
+                        sum(
+                            (item.get("max_score") or 0)
+                            - (item.get("awarded_score") or 0)
+                            for item in demoted
+                        ),
+                        2,
+                    ),
+                    "total_max": task.get("total_max"),
+                    "rubric_item_ids": [
+                        item["rubric_item_id"] for item in demoted
+                    ],
+                }
+            )
+    return sorted(affected, key=lambda entry: entry["task_id"])
+
+
 def _collect_shards(task_ids: list[str]) -> list[dict[str, Any]]:
     shards: list[dict[str, Any]] = []
     for index in range(SHARD_COUNT):
@@ -532,6 +606,23 @@ def build_inventory() -> dict[str, Any]:
             "attempts": list(SHARD4_ATTEMPTS),
         },
         "what_the_174_say": facts,
+        "known_grading_defects": {
+            "audio_criteria_scored_without_listening": {
+                "tasks": _items_scored_without_listening(),
+                "fixed_by": "PR #276",
+                "correctable_here": False,
+                "note": (
+                    "A video container was read as proof of silence, so "
+                    "criteria about sound were demoted to TEXT and answered "
+                    "by a judge that could not hear. Demotion is not "
+                    "exclusion: these items were scored, not withheld, so "
+                    "the affected tasks read lower than they were measured "
+                    "to be. The fix touches core/ and moves the grader "
+                    "fingerprint, which is why it cannot be applied to this "
+                    "measurement -- only a re-run corrects it."
+                ),
+            }
+        },
         "interpretation_limits": [
             "The 11 missing tasks are not a random sample. They are one "
             "stalled task plus the ten queued behind it in a single stride "
@@ -549,6 +640,11 @@ def build_inventory() -> dict[str, Any]:
             "task.",
             "known_usd is null because gpt-5.6-sol has no published price. "
             "Absent price is not zero cost.",
+            "Two of the 174 were graded with a known defect: criteria about "
+            "sound on a video deliverable were routed to a judge that could "
+            "not hear, and scored rather than excluded. Their recorded "
+            "percentages are floors, not measurements. See "
+            "known_grading_defects.",
         ],
         "cost": {
             "settlement": "partial",

@@ -682,12 +682,65 @@
       "occupations_in_corpus": 44
     }
   },
+  "known_grading_defects": {
+    "audio_criteria_scored_without_listening": {
+      "tasks": [
+        {
+          "task_id": "75401f7c-396d-406d-b08e-938874ad1045",
+          "shard_index": 3,
+          "occupation": "Film and Video Editors",
+          "pct_as_recorded": 26.34,
+          "items_demoted": 14,
+          "points_not_awarded": 18.0,
+          "total_max": 56,
+          "rubric_item_ids": [
+            "134e5bd1-2074-4687-a225-37819eb29865",
+            "6dd42ec4-11de-45e5-8b3e-20c86eab6fb1",
+            "c6c27a14-cf81-4bb5-937d-1908f1ac0a83",
+            "e51c08f5-39a3-4588-95e8-6341ab474b69",
+            "57e2f2b8-fd6d-4d8d-9458-fdae49ccc203",
+            "0a1fb17a-8c75-4fb2-ac8b-a20c13876db7",
+            "936785a1-ea92-4503-8547-84eff37a5ca2",
+            "43781d5c-e137-49fe-9ca2-9f0307b43170",
+            "7deec440-37dd-4d75-8948-87e354c99998",
+            "1c815e30-446e-408d-9ccf-204dab90b868",
+            "f6487bbe-c777-471d-841d-601b9f5f8467",
+            "f2ebaaee-99ad-476c-9c3f-337e0c8b9145",
+            "2dc4ad9d-adec-4fd8-9e63-09bdb4eba89c",
+            "b3eaaf48-0145-46c7-809d-b281ab53dca9"
+          ]
+        },
+        {
+          "task_id": "e222075d-5d62-4757-ae3c-e34b0846583b",
+          "shard_index": 2,
+          "occupation": "Film and Video Editors",
+          "pct_as_recorded": 16.17,
+          "items_demoted": 7,
+          "points_not_awarded": 10.3,
+          "total_max": 60,
+          "rubric_item_ids": [
+            "40d91fde-7dd6-460d-bfac-8f73e1c7e153",
+            "22e55d93-8ca4-443f-985a-8fc170b42177",
+            "3b2c3fc7-b7a3-4399-b331-3e8993b08b24",
+            "d943c3de-b84e-46df-a161-0f00b8740cdc",
+            "a0fe8796-7033-4221-960f-338d9391924d",
+            "998640ff-fbc7-4438-a5b4-38b2af4aa8a4",
+            "7561cb8d-4275-447b-9b6a-5f59940ef0c7"
+          ]
+        }
+      ],
+      "fixed_by": "PR #276",
+      "correctable_here": false,
+      "note": "A video container was read as proof of silence, so criteria about sound were demoted to TEXT and answered by a judge that could not hear. Demotion is not exclusion: these items were scored, not withheld, so the affected tasks read lower than they were measured to be. The fix touches core/ and moves the grader fingerprint, which is why it cannot be applied to this measurement -- only a re-run corrects it."
+    }
+  },
   "interpretation_limits": [
     "The 11 missing tasks are not a random sample. They are one stalled task plus the ten queued behind it in a single stride shard, so the gap is structural rather than statistical.",
     "a73fbc98 is one of the five input limits published before the run as expected to pull the ceiling down, and it is among the missing. Any mean over the 174 is therefore biased upward relative to the 185 it stands in for.",
     "One task carries a judge error (all_items_score_excluded) and has no score, so 174 entries yield 173 scores. Both means are reported; neither is the corpus figure.",
     "No sector and no occupation is lost entirely -- the 174 still span 9 of 9 and 44 of 44. That bounds the damage; it does not make the set complete, since eleven occupations each lost a task.",
-    "known_usd is null because gpt-5.6-sol has no published price. Absent price is not zero cost."
+    "known_usd is null because gpt-5.6-sol has no published price. Absent price is not zero cost.",
+    "Two of the 174 were graded with a known defect: criteria about sound on a video deliverable were routed to a judge that could not hear, and scored rather than excluded. Their recorded percentages are floors, not measurements. See known_grading_defects."
   ],
   "cost": {
     "settlement": "partial",

@@ -19,8 +19,9 @@ is closed:
     step9 merge, cross-hash  refuses shards graded by superseded code
     the analyzer             refuses any payload that is not a finished run
     the frozen inventory     still says BLOCKED_PARTIAL and still counts 11
+    the frozen inventory     still names the two tasks that were graded deaf
 
-The guards are pre-existing; only the last is new. That is deliberate. This
+The guards are pre-existing; only the last two are new. That is deliberate. This
 file's job is to make the existing behaviour expensive to remove by accident,
 because the failure it prevents is silent -- a merged-looking payload with a
 plausible mean, eleven tasks short, and nothing on its face to say so.
@@ -253,6 +254,113 @@ def test_the_inventory_refuses_to_read_as_a_finished_measurement():
 
     assert document["cost"]["known_usd"] is None, (
         "an unpriced judge must not settle to a number; $0 would read as free"
+    )
+
+
+def test_the_known_audio_defect_is_recorded_rather_than_absorbed():
+    """The two tasks whose scores are floors, named in the artifact.
+
+    A container-probing bug read a video deliverable as silent, so criteria
+    about sound were demoted to TEXT and answered by a judge that cannot hear.
+    Demotion is not exclusion -- ``score_excluded`` would have withheld those
+    items, but these were scored, and scored by something deaf. Both tasks
+    therefore read lower than they were measured to be.
+
+    This is asserted because the tempting thing to do with a known defect of
+    bounded size (at most +0.29pp on the corpus mean) is to note it in a commit
+    message and move on. The two tasks are Film and Video Editors, and they sit
+    in the sector that the report otherwise ranks last, so a reader drawing
+    conclusions per-sector needs the defect attached to the number.
+
+    ``correctable_here`` is the load-bearing claim: the fix moves the grader
+    source hash, so it cannot be applied to this measurement. Only a re-run
+    corrects these two, and anything asserting otherwise is proposing to mix
+    two graders inside one corpus.
+    """
+    document = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    defect = document["known_grading_defects"][
+        "audio_criteria_scored_without_listening"
+    ]
+
+    assert defect["correctable_here"] is False, (
+        "a defect that moves the grader fingerprint cannot be corrected "
+        "inside the measurement it damaged; only a re-run can"
+    )
+    assert defect["tasks"], (
+        "the defect block no longer names any task; either the detector "
+        "broke or the shards changed, and a silent zero here would erase a "
+        "caveat the report depends on"
+    )
+
+    for task in defect["tasks"]:
+        assert task["items_demoted"] > 0
+        assert task["points_not_awarded"] > 0
+        assert task["pct_as_recorded"] is not None
+        assert task["total_max"] > 0
+
+    affected = {task["task_id"][:8] for task in defect["tasks"]}
+    assert affected == {"75401f7c", "e222075d"}, (
+        f"the set of deaf-graded tasks moved to {sorted(affected)}; the "
+        "report quotes these two by id, percentage and points, so it has to "
+        "be re-derived rather than have the assertion widened"
+    )
+
+
+def test_the_audio_defect_cannot_overturn_the_headline_number():
+    """Bounding the defect, so the caveat cannot be used to dismiss the run.
+
+    The report states the ceiling is missed on two of three criteria. A known
+    scoring defect is exactly the kind of thing that gets stretched into "so
+    the measurement is worthless" -- so the bound is recomputed here from the
+    shards rather than quoted from the prose: even crediting every demoted
+    item in full, the mean moves by a third of a point and no verdict changes.
+
+    The bound is pinned to the figure the report prints rather than to a loose
+    ceiling. A loose one is nearly unfalsifiable -- two tasks out of 173 cannot
+    move a mean by more than 1.16pp even going from zero to full marks -- so a
+    threshold test would pass while the quoted number drifted away from it.
+
+    Each task's withheld points are converted to that task's own percentage
+    before averaging. Pooling them into one denominator is wrong whenever the
+    two rubrics differ in size, which here understates the effect by half.
+    """
+    document = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    defect = document["known_grading_defects"][
+        "audio_criteria_scored_without_listening"
+    ]
+
+    lost = {
+        task["task_id"]: (task["points_not_awarded"], task["total_max"])
+        for task in defect["tasks"]
+    }
+    assert lost, "no affected task to bound; see the defect test above"
+
+    scores, gained_pct = [], 0.0
+    for path in _shard_paths():
+        for task in json.loads(path.read_text(encoding="utf-8"))["tasks"]:
+            # The errored task records pct 0.0 over a total_max of 0 rather
+            # than a null, so dropping it needs the error field; filtering on
+            # pct would average a non-score into the mean.
+            if task.get("error"):
+                continue
+            scores.append(task["pct"])
+            points, maximum = lost.get(task["task_id"], (0.0, 0.0))
+            if maximum:
+                gained_pct += 100.0 * points / maximum
+
+    assert len(scores) == EXPECTED_GRADED - 1, "one task carries a judge error"
+
+    mean = sum(scores) / len(scores)
+    best_case = mean + gained_pct / len(scores)
+
+    assert round(mean, 2) == 80.19, f"the reported mean moved to {mean:.2f}"
+    assert round(best_case, 2) == 80.48, (
+        f"the defect's upper bound is now {best_case:.2f}%, not the 80.48% "
+        "the report prints; re-derive the figure before changing this"
+    )
+    assert best_case < 90.0, (
+        "even at its most generous the defect does not reach the 90% gold "
+        "ceiling; if this fails the headline verdict has changed"
     )
 
 
