@@ -1249,11 +1249,12 @@ def has_audio_content(path: Union[str, Path]) -> Optional[bool]:
     -- tempo, key, vocals, mix -- was graded end to end without a single
     listening call.
 
-    ``True`` for an audio file or an archive holding one. ``False`` is a
-    positive claim and means the file was examined and carries no audio.
-    ``None`` is an admission -- missing file, unreadable archive, or a member
-    list that was cut short and may have stopped one entry before the audio --
-    so that routing never promotes on a guess.
+    ``True`` for an audio file, an archive holding one, or a video whose
+    container carries an audio track. ``False`` is a positive claim and means
+    the file was examined and carries no audio. ``None`` is an admission --
+    missing file, unreadable archive, absent decoder, or a member list that was
+    cut short and may have stopped one entry before the audio -- so that
+    routing never promotes on a guess.
     """
     p = Path(path)
     if not p.is_file():
@@ -1261,6 +1262,18 @@ def has_audio_content(path: Union[str, Path]) -> Optional[bool]:
     kind = _kind_of(p)
     if kind == "audio":
         return True
+    if kind == "video":
+        # The same mistake as the ``.zip`` above, one container along. A reel
+        # is delivered as ``.mp4``; ``.mp4`` is disjoint from the audio
+        # extensions; so "the sound effect is audible during the opening
+        # shot" was demoted to TEXT and answered by a judge that had read the
+        # file's metadata and could not hear it. It scored zero -- not
+        # excluded, *failed* -- on evidence reading ``"audio_tracks": 1``.
+        #
+        # That count is the honest answer to this question and was already
+        # being computed one call away.
+        count = _video_audio_track_count(p)
+        return None if count is None else count > 0
     if kind != "zip":
         return False
     try:
@@ -2096,6 +2109,30 @@ def _op_probe_audio(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
     info = _probe_audio_impl(p, basic=False)
     info["kind"] = "audio"
     return info
+
+
+def _video_audio_track_count(p: Path) -> Optional[int]:
+    """How many audio streams a video container carries, or ``None``.
+
+    Deliberately not routed through ``_probe_video_impl``: that helper returns
+    early when a container has no *video* stream, which would report ``None``
+    for a file that is nothing but sound. Counting the audio streams directly
+    answers the question that was asked.
+    """
+    try:
+        import av  # type: ignore
+    except ImportError:
+        return None
+    try:
+        container = av.open(str(p))
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        return len(container.streams.audio)
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        container.close()
 
 
 def _probe_video_impl(p: Path, basic: bool = False) -> Dict[str, Any]:
