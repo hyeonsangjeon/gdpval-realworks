@@ -5637,4 +5637,4 @@ skip 개수는 이 장비의 **Docker·seccomp 사용 가능 여부**에 따라 
 하나도 풀리지 않았습니다. 전체 비교 실험이 실행되지 않았으므로 이 작업은
 **차단됨**으로 유지합니다.
 
-- PR: **(열린 뒤 기록)** — 열림, **병합 안 함**. 기반은 `wt/measuring-nothing-is-not-doing-nothing`(#319).
+- PR: **#320** — 열림, **병합 안 함**. 기반은 `wt/measuring-nothing-is-not-doing-nothing`(#319).
