@@ -870,6 +870,31 @@ class Grader:
             deliverable_path, paths, has_audio_content, self._audio_content_cache
         )
 
+    def _paths_without_text(
+        self, deliverable_path: Path, paths: Iterable[str]
+    ) -> tuple[str, ...]:
+        """Which of these files measurably yield no text at all.
+
+        The question above answers *whether* one of them does; this answers
+        *which*, because that is what decides where the pictures are spent. A
+        file the probe cannot speak for is not in the answer, for the same
+        reason it cannot escalate: rendering on a guess is what the ``None``
+        rule exists to prevent. Order follows the selection so the render set
+        reads the way the deliverable does, and shares the text-layer memo, so
+        asking costs nothing a run was not already paying.
+        """
+        without: list[str] = []
+        for name in paths:
+            if not isinstance(name, str) or not name or name in without:
+                continue
+            if name not in self._text_layer_cache:
+                self._text_layer_cache[name] = has_extractable_text(
+                    deliverable_path / name
+                )
+            if self._text_layer_cache[name] is False:
+                without.append(name)
+        return tuple(without)
+
     def _runtime_criterion_plan(
         self,
         selection: DeliverableSelection,
@@ -887,6 +912,9 @@ class Grader:
                 deliverable_path, plan.selected_paths
             ),
             selected_paths_have_audio=self._selected_paths_have_audio(
+                deliverable_path, plan.selected_paths
+            ),
+            paths_without_text=self._paths_without_text(
                 deliverable_path, plan.selected_paths
             ),
         )
@@ -920,13 +948,17 @@ class Grader:
                     selected_paths_have_audio=self._selected_paths_have_audio(
                         deliverable_path, target.paths
                     ),
+                    paths_without_text=self._paths_without_text(
+                        deliverable_path, target.paths
+                    ),
                 )
                 target_decisions[target_id] = decision
                 if decision.modality is Modality.VISUAL:
-                    raw_visual_paths.extend(target.paths)
+                    child_render = decision.render_targets(target.paths)
+                    raw_visual_paths.extend(child_render)
                     planned_names, child_error = (
                         self._tool_judge.validate_planned_visual_names(
-                            target.paths, visual_file_cap
+                            child_render, visual_file_cap
                         )
                     )
                     supported_visual_paths.extend(planned_names)
@@ -935,10 +967,11 @@ class Grader:
                             f"{target_id}: {child_error}"
                         )
         elif item_decision.modality is Modality.VISUAL:
-            raw_visual_paths.extend(plan.selected_paths)
+            item_render = item_decision.render_targets(plan.selected_paths)
+            raw_visual_paths.extend(item_render)
             supported_visual_paths, visual_preflight_error = (
                 self._tool_judge.validate_planned_visual_names(
-                    plan.selected_paths, visual_file_cap
+                    item_render, visual_file_cap
                 )
             )
 
@@ -1114,7 +1147,9 @@ class Grader:
                 if target_id in target_by_id and target_id in visual_target_ids
                 for expected_paths in [
                     self._tool_judge.planned_supported_visual_names(
-                        target_by_id[target_id].paths
+                        runtime_plan.target_decisions[target_id].render_targets(
+                            target_by_id[target_id].paths
+                        )
                     )
                 ]
             )
@@ -1130,7 +1165,9 @@ class Grader:
                     continue
                 child_decision = runtime_plan.target_decisions[target_id]
                 child_prepass = (
-                    visual_prepass.subset(list(target.paths))
+                    visual_prepass.subset(
+                        child_decision.render_targets(target.paths)
+                    )
                     if child_decision.modality is Modality.VISUAL else None
                 )
                 child_grades.append({
@@ -1235,7 +1272,11 @@ class Grader:
                 list(target.paths),
                 reference_file_names,
                 visual_prepass=(
-                    visual_prepass.subset(list(target.paths))
+                    visual_prepass.subset(
+                        runtime_plan.target_decisions[target_id].render_targets(
+                            target.paths
+                        )
+                    )
                     if visual_prepass is not None
                     and target_id in visual_target_ids else None
                 ),

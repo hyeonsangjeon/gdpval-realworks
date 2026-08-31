@@ -44,6 +44,13 @@ class RoutingDecision:
     modality: Modality
     preferred_op: str
     matched_keywords: tuple[str, ...]
+    #: Which of the selected files this decision wants looked at, when that
+    #: is narrower than all of them. ``None`` -- the ordinary case -- means
+    #: all of them, and is what every criterion that names something visual
+    #: gets: a question about a chart's colours is a question about the
+    #: whole deliverable. Only the unreadable-file escalation below sets
+    #: this, because only it is grounded in a property of particular files.
+    render_paths: tuple[str, ...] | None = None
 
     def to_prompt_hint(self) -> dict[str, str]:
         """Render into the placeholders consumed by ``grader_judge_v2.md``."""
@@ -51,6 +58,17 @@ class RoutingDecision:
             "routing_modality": self.modality.value,
             "routing_preferred_op": self.preferred_op,
         }
+
+    def render_targets(self, selected_paths: Iterable[str]) -> list[str]:
+        """The files to render for this decision, in selection order.
+
+        Every caller that turns a VISUAL decision into pictures goes through
+        here -- the task budget, the per-item cap check, the free preflight
+        and the prepass the judge actually runs. They have to agree: the
+        judge cross-checks what it rendered against what was planned, and a
+        budget that counts a file nobody renders is not a budget.
+        """
+        return list(self.render_paths) if self.render_paths else list(selected_paths)
 
 
 # Ordered: visual > audio > formatting > text. First hit wins.
@@ -173,6 +191,7 @@ def resolve_runtime_routing(
     selected_paths_have_text: bool | None = None,
     selected_paths_have_audio: bool | None = None,
     some_selected_path_lacks_text: bool | None = None,
+    paths_without_text: Iterable[str] | None = None,
 ) -> RoutingDecision:
     """Apply target-aware policy without changing criterion classification.
 
@@ -187,16 +206,20 @@ def resolve_runtime_routing(
     so a picture delivered alongside a readable sibling reports as readable.
     Same rules -- only a measured ``True`` escalates, ``None`` changes nothing.
 
+    ``paths_without_text`` names *which* files those are. It decides nothing on
+    its own; it is what the escalation below hands back as ``render_paths`` so
+    that only the unreadable files are looked at.
+
     ``selected_paths_have_audio`` is the same shape of answer to "is there
     anything here to listen to", and is used only defensively: a measured
     ``True`` stops the demotion below from stripping the listening model off a
     criterion about sound. It can never promote a criterion on its own.
     """
     decision = classify_criterion(criterion_text)
+    paths = [path for path in selected_paths if isinstance(path, str) and path]
     suffixes = {
         suffix
-        for path in selected_paths
-        if isinstance(path, str) and path
+        for path in paths
         if (suffix := Path(path).suffix.lower())
     }
     if (
@@ -293,16 +316,34 @@ def resolve_runtime_routing(
     # to a readable memo; the bundle reported "yes, there is text here", the
     # item stayed TEXT, and the flowchart was never rendered or looked at. A
     # sibling that can be read is not evidence about the file that cannot.
+    #
+    # What escalates and what gets looked at are two different sets, and
+    # conflating them cost a whole task its score. Stage 3's task 43dc9778
+    # delivers a two-page scan next to a 17-page readable return, and all 67 of
+    # its rubric items select both. Escalating on the scan and then rendering
+    # the bundle asks for 67x2 = 134 pictures against a task budget of 72: over
+    # budget, every item excluded, 87.36% to 0.00%. The escalation was right and
+    # the render scope was wrong. The reason a file escalates is a fact about
+    # that file, so that file is what gets rendered -- 67 calls, inside the
+    # budget, and the readable sibling is still handed to the judge to read.
     if (
         (selected_paths_have_text is False or some_selected_path_lacks_text is True)
         and decision.modality in (Modality.TEXT, Modality.FORMATTING)
         and suffixes
         and suffixes.issubset(GRADER_VISUAL_RENDER_EXTENSIONS)
     ):
+        unreadable = set(paths_without_text or ())
+        narrowed = tuple(path for path in paths if path in unreadable)
         return RoutingDecision(
             modality=Modality.VISUAL,
             preferred_op="render_to_image",
             matched_keywords=decision.matched_keywords,
+            # Narrower or nothing. An unnamed set, or one covering every
+            # selected file, is the default the field already means, and
+            # saying it twice is a second thing to keep in step.
+            render_paths=(
+                narrowed if 0 < len(narrowed) < len(paths) else None
+            ),
         )
     return decision
 
