@@ -627,6 +627,26 @@ def _stride_layout_candidates(
     if sorted(actual) != sorted(required):
         return
 
+    # Try the identity layout first: input i is stride shard i. Callers pass
+    # shards in filename order (shard-000, shard-001, ...), which *is* stride
+    # order, so this is the answer virtually every time -- and one hash check
+    # settles it. Only when it is wrong does the exhaustive search below run,
+    # which is the only place the cap belongs.
+    #
+    # Without this the cap refused merges whose answer was the first thing
+    # worth trying. 185 tasks over 11 shards is a 17x9 + 16x2 profile, i.e.
+    # 9! * 2! = 725,760 candidates against a 200,000 cap sized for the 9-way
+    # split this docstring still cites (4! * 5! = 2,880). The cap was never
+    # re-derived when the split moved to 11, and the failure was invisible
+    # because the incomplete-union guard fires first: no run had ever
+    # presented a complete corpus to reconstruct.
+    #
+    # This weakens nothing. The caller verifies every candidate against
+    # expected_ordered_task_ids_sha256, so a wrong identity guess fails that
+    # check and falls through to the search exactly as before.
+    if actual == required:
+        yield tuple(range(shard_count))
+
     indices_by_size: dict[int, list[int]] = {}
     for shard_index, size in enumerate(required):
         indices_by_size.setdefault(size, []).append(shard_index)
