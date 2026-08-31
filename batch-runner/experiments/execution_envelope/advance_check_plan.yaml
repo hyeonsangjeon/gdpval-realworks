@@ -408,22 +408,43 @@ cost:
     # thousand characters of wording it wraps every task in, which is the great
     # majority of what is sent.
     #
-    # 5020 is the widest of the three, measured rather than typed: the container
-    # sends prompts/sandbox_occupation_codegen.yaml, which renders to 571
-    # characters of standing instruction and 3725 of wording around the task,
-    # with 724 more from its own condition_a.prompt suffix. The other two come
-    # to 3867 and 3533. The occupation is written into those templates up to
-    # three times, so they are rendered with the longest name in the catalogue.
-    # The free check builds all three through the same renderer a real attempt
-    # uses and refuses this plan if the number here is lower — nothing below is
-    # copied from anything, so editing the prompt files moves the demand.
+    # 5020 was the widest render of the three, measured rather than typed: the
+    # container sends prompts/sandbox_occupation_codegen.yaml, which renders to
+    # 571 characters of standing instruction and 3725 of wording around the
+    # task, with 724 more from its own condition_a.prompt suffix. The other two
+    # render to 3867 and 3533. The occupation is written into those templates up
+    # to three times, so they are rendered with the longest name in the
+    # catalogue.
     #
-    # Still outside this figure: SandboxRunner._augment_prompt adds a
-    # deliverable contract section and a dependency hint to the container's
-    # first request, and a skills manual its settings currently switch off.
-    # Those are the next thing to price. Their absence makes the container's
-    # demand smaller than its real first request, never larger.
-    instruction_character_count: 5020
+    # That render is not all the container sends. SandboxRunner._augment_prompt
+    # builds a deliverable contract, a dependency hint and a skills manual,
+    # lays them out with the task, and hands the result to render_prompt *as*
+    # the task — and the renderer measures with a one-character stand-in task,
+    # so none of it was ever counted. 5020 was therefore smaller than the
+    # container's real first request, which is the one direction a ceiling may
+    # not be wrong in.
+    #
+    # 7307 is 5020 plus the 2287 those sections come to, also measured rather
+    # than typed: 1365 characters of deliverable contract and 922 of dependency
+    # hint. The skills manual is 0 because exp031's execution.sandbox.max_skills
+    # is 0; deleting that line falls back to the executor's own default of 5,
+    # which puts 7028 characters back and this figure would have to rise with it. Two of the three read the task's own words,
+    # and the catalogue holds a task's length but not its text, so they are
+    # built from the widest wording their own committed tables can produce —
+    # over-charging the real container by a wide margin, in the direction a
+    # ceiling is allowed to be wrong in.
+    #
+    # The free check builds all of it through the same functions a real attempt
+    # uses — core/prompt_loader.py for the render, core/first_request_sections.py
+    # for the three sections — and refuses this plan if the number here is
+    # lower. Nothing above is copied from anything, so editing the prompt files,
+    # the contract tables, the dependency tables or the skill packs moves the
+    # demand and this figure has to follow.
+    #
+    # Still outside this figure, and charged elsewhere in this same sum: the
+    # task's own words (per task, from the catalogue's prompt_character_count)
+    # and the reference files (per file, at REFERENCE_FILE_CHARACTER_CAP).
+    instruction_character_count: 7307
 
     # The most times the model may be asked again inside one attempt while it
     # is still working with its tools.

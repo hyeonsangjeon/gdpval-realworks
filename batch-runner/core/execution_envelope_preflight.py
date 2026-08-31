@@ -92,6 +92,7 @@ from core.execution_environment_readiness import (
     build_readiness_report,
 )
 from core.file_preview import reference_file_prompt_budget
+from core.first_request_sections import first_request_section_budget
 from core.prompt_loader import fixed_prompt_characters, load_prompt
 
 PLAN_VERSION = "execution-envelope-advance-check-v1"
@@ -1236,6 +1237,37 @@ def _runner_reference_file_prompt_sections(
     return tuple(str(section) for section in declared)
 
 
+def _runner_first_request_extra_sections(
+    environment: str,
+) -> tuple[str, ...] | None:
+    """Which prompt sections this run place adds to its **first** request.
+
+    The companion to :func:`_runner_reference_file_prompt_sections`, and read
+    the same way: off the runner class named in ``RUNNER_CLASS_BY_ENVIRONMENT``,
+    never decided here from the mode name.
+
+    What it names is the wording a runner builds *before* the prompt file is
+    rendered and hands to ``render_prompt`` as the task — which is why
+    :func:`core.prompt_loader.fixed_prompt_characters`, rendering with a
+    one-character stand-in task, cannot see any of it. An empty tuple is a
+    claim, and a true one for two of the three places: it says the runner adds
+    nothing there. ``None`` means no runner said anything at all, which
+    :func:`_check_instruction_length` turns into a refusal rather than into a
+    zero.
+    """
+    named = RUNNER_CLASS_BY_ENVIRONMENT.get(environment)
+    if named is None:
+        return None
+    module_name, class_name = named
+    try:
+        module = import_module(module_name)
+        runner = getattr(module, class_name)
+        declared = getattr(runner, "FIRST_REQUEST_EXTRA_SECTIONS")
+    except (AttributeError, ImportError):
+        return None
+    return tuple(str(section) for section in declared)
+
+
 def _check_the_plan_prices_what_the_files_add_to_the_prompt(
     loaded_settings: Mapping[str, Mapping[str, Any]],
 ) -> list[str]:
@@ -1867,14 +1899,36 @@ def _check_instruction_length(
     :func:`_check_the_plan_counts_every_call_the_container_makes`. Only the
     cheap direction is refused.
 
-    **What the figure does not cover.** ``SandboxRunner._augment_prompt`` adds
-    further sections to the container's first request — a deliverable contract
-    section, a dependency hint, and a skills manual its committed settings
-    currently switch off. Those are outside what ``render_prompt`` produces and
-    outside this figure, and they are recorded as the next thing to price
-    rather than left implied. What that means is a container demand smaller than
-    the container's real first request, so this rule under-demands there; it
-    never lets a plan claim more than the render proved.
+    **What the render cannot see, and what is added to it.** A runner may put
+    wording in its first request that never passes through ``render_prompt`` as
+    wording at all. ``SandboxRunner._augment_prompt`` builds a deliverable
+    contract, a dependency hint and a skills manual, lays them out with the
+    task, and hands the **result** to ``render_prompt`` as the task — so
+    ``fixed_prompt_characters``, which renders with a one-character stand-in
+    task on purpose, replaces all of it with that one character. For a long time
+    this rule charged the render alone, and the container's demand was therefore
+    smaller than the container's real first request.
+
+    Each runner now declares what it adds, in ``FIRST_REQUEST_EXTRA_SECTIONS``,
+    and :func:`core.first_request_sections.first_request_section_budget` builds
+    those sections through the same functions a real attempt builds them with
+    and measures what they come to. A run place whose runner declares nothing is
+    refused, on the rule
+    :func:`_check_the_plan_prices_what_the_files_add_to_the_prompt` already
+    applies: nothing looked, and nothing looking is not the same as the claim
+    holding. An empty declaration is not that — it is a runner saying it adds
+    none of them, which for Azure and the host process is true.
+
+    Two of those sections read the task's own words, and the catalogue records a
+    task's length but not its text, so they are driven to the widest their own
+    committed tables can produce. That over-charges the container, in the
+    direction a ceiling is allowed to be wrong in, and it leaves no wording that
+    can be added to those tables without moving the bill.
+
+    What stays outside this figure is the task's own words and its reference
+    files, both charged per task and per file elsewhere in the same sum;
+    ``core/first_request_sections.py`` names each of them and says where, and
+    refuses a section that is in neither list.
     """
     problems: list[str] = []
     files = plan.get("experiment_files")
@@ -1899,6 +1953,7 @@ def _check_instruction_length(
                 "checked"
             )
             continue
+        extra_sections = _runner_first_request_extra_sections(environment)
         try:
             settings = yaml.safe_load(
                 (root / str(relative)).read_text(encoding="utf-8")
@@ -1912,19 +1967,56 @@ def _check_instruction_length(
                     "that is does not declare DEFAULT_PROMPT, so which prompt "
                     "file it sends is not written down anywhere here"
                 )
+            if extra_sections is None:
+                # An empty tuple would be a claim, and a true one for two of the
+                # three places. ``None`` is silence, and pricing silence at
+                # nothing is how the container's own sections went uncharged for
+                # as long as they did.
+                raise ValueError(
+                    "the runner registered for this run place does not declare "
+                    "FIRST_REQUEST_EXTRA_SECTIONS, so what it puts in its first "
+                    "request past the rendered prompt is not written down "
+                    "anywhere here, and a figure nothing checked is not a "
+                    "figure that holds"
+                )
+            sandbox = _dig(settings, ("execution", "sandbox"))
+            # ``core/executor.py`` passes ``opts.get("max_skills", 5)``, so a
+            # settings file that leaves the key out has the skills manual on.
+            # Defaulting to nothing here would price it out of a run that sends
+            # it. A value that is not a whole number cannot be handed to
+            # ``SkillsRegistry.select`` at all, so it is refused rather than
+            # rounded into something.
+            max_skills = sandbox.get("max_skills", 5)
+            if isinstance(max_skills, bool) or not isinstance(max_skills, int):
+                raise ValueError(
+                    f"execution.sandbox.max_skills is {max_skills!r}, which is "
+                    "not a whole number of skills, so how much skills manual "
+                    "the first request carries cannot be worked out"
+                )
             measured = {
-                candidate: fixed_prompt_characters(
-                    load_prompt(candidate),
-                    experiment_prompt=_dig(settings, ("condition_a",)).get("prompt"),
-                    occupation=occupation,
+                candidate: (
+                    fixed_prompt_characters(
+                        load_prompt(candidate),
+                        experiment_prompt=_dig(settings, ("condition_a",)).get(
+                            "prompt"
+                        ),
+                        occupation=occupation,
+                    ),
+                    first_request_section_budget(
+                        extra_sections,
+                        prompt_name=candidate,
+                        max_skills=max_skills,
+                        contract_config=sandbox.get("contract"),
+                    ),
                 )
                 for candidate in candidates
             }
         except Exception as unreadable:  # noqa: BLE001 - anything here is a refusal
             # A missing settings file, a prompt file that is not there, wording
-            # that will not render: every one of them leaves the request
-            # unpriceable. Caught broadly and turned into a refusal rather than
-            # allowed to pass this rule by falling through it.
+            # that will not render, a skills directory that cannot be read:
+            # every one of them leaves the request unpriceable. Caught broadly
+            # and turned into a refusal rather than allowed to pass this rule by
+            # falling through it.
             problems.append(
                 f"{environment}'s cost is charged "
                 f"{assumptions.instruction_character_count} characters for "
@@ -1934,22 +2026,37 @@ def _check_instruction_length(
             )
             continue
 
-        name = max(measured, key=lambda candidate: sum(measured[candidate].values()))
-        widths = measured[name]
-        characters = sum(widths.values())
+        name = max(
+            measured,
+            key=lambda candidate: (
+                sum(measured[candidate][0].values()) + measured[candidate][1].characters
+            ),
+        )
+        widths, budget = measured[name]
+        characters = sum(widths.values()) + budget.characters
         if assumptions.instruction_character_count >= characters:
             continue
         short_by = characters - assumptions.instruction_character_count
+        parts: list[tuple[str, int]] = list(widths.items())
+        parts.extend(
+            (f"{section} built by the runner before the render", width)
+            for section, width in budget.per_section.items()
+        )
         made_of = ", ".join(
             f"{width} characters of {what}"
-            for what, width in sorted(widths.items(), key=lambda pair: -pair[1])
+            for what, width in sorted(parts, key=lambda pair: -pair[1])
             if width
+        )
+        left_out = "".join(
+            f"; {section} adds nothing because {why}"
+            for section, why in sorted(budget.silent.items())
         )
         problems.append(
             f"{environment} sends prompts/{name}.yaml wrapped in its own "
-            f"condition_a.prompt wording, which core/prompt_loader.py renders "
+            f"condition_a.prompt wording, plus whatever its runner declares it "
+            f"builds before that is rendered; together they come "
             f"to {characters} characters before the task's own words are added "
-            f"({made_of}), but the plan's cost sum charges "
+            f"({made_of}){left_out}, but the plan's cost sum charges "
             f"{assumptions.instruction_character_count} characters for that "
             f"part of every request — {short_by} characters short, on every "
             "call this comparison makes"
