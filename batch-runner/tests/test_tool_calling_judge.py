@@ -408,9 +408,32 @@ def test_empty_final_retry_budget_exhaustion_stays_fail_closed(
     assert len(client.responses.calls) == 2
 
 
-def test_finalization_retry_uses_configured_max_effort(
+# ── The retry that ran out of room must not want more of what filled it ──
+#
+# Task 85. The retry keeps the same ``max_output_tokens`` as the attempt
+# before it -- deliberately, because that cap is what the run's cost ceiling
+# is priced against. So on ``empty_final_text:max_output_tokens`` the retry is
+# handed exactly the budget the first attempt just exhausted. Stage 3 ran
+# ``reasoning.effort: max`` beside ``finalization_reasoning_effort: max`` and
+# ``max_output_tokens: 2400``: the call whose whole job was "stop thinking and
+# write the envelope" thought as hard as the one that overflowed, under the
+# same budget, and wrote no envelope either. Two full output budgets, one
+# judge_error, twelve minutes.
+#
+# The distinction the fix draws is between running out of room and getting
+# the answer wrong. Only the first is a reason to think less.
+
+
+def test_a_retry_after_exhausting_the_budget_stops_thinking_and_writes(
     deliverable_dir, task_and_item
 ):
+    """The configured effort is held down for the one reason that earned it.
+
+    ``max`` on the first call, because that is what the config asked for and
+    the item is genuinely hard. ``low`` on the retry, because the retry is
+    forbidden tools, has the evidence already, and needs room to write a
+    short JSON envelope -- not room to reason its way to the same overflow.
+    """
     task, item = task_and_item
     empty = _response(
         out_tok=2400,
@@ -423,7 +446,7 @@ def test_finalization_retry_uses_configured_max_effort(
             "partial_score": 1.0,
             "evidence": "validated from prior evidence",
             "confidence": 0.9,
-            "reasoning": "finalized with max effort",
+            "reasoning": "finalized once it stopped reasoning",
         }))],
     )
     client = FakeClient(ScriptedResponses([empty, final]))
@@ -444,7 +467,134 @@ def test_finalization_retry_uses_configured_max_effort(
 
     assert result.verdict == "pass"
     assert client.responses.calls[0]["reasoning"] == {"effort": "max"}
-    assert client.responses.calls[1]["reasoning"] == {"effort": "max"}
+    assert client.responses.calls[1]["reasoning"] == {"effort": "low"}
+    # The budget itself is untouched. Moving it would move what the run costs
+    # and what the cost ceiling was pre-registered against; the room was
+    # always enough for an envelope, and the fix is about what fills it.
+    assert client.responses.calls[1]["max_output_tokens"] == 2400
+
+
+def test_the_ceiling_never_raises_an_effort_a_config_set_lower(
+    deliverable_dir, task_and_item
+):
+    """Held down, never pushed up.
+
+    A config that set the retry to ``none`` wanted no reasoning at all, and
+    ``none`` already spends nothing on the thing that overflowed. Reading the
+    rule as "use low here" would make this call think more than it was told
+    to.
+    """
+    task, item = task_and_item
+    empty = _response(
+        out_tok=2400,
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+    )
+    final = _response(
+        output=[_final(json.dumps({
+            "verdict": "pass",
+            "partial_score": 1.0,
+            "evidence": "validated from prior evidence",
+            "confidence": 0.9,
+            "reasoning": "finalized without reasoning",
+        }))],
+    )
+    client = FakeClient(ScriptedResponses([empty, final]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.6-sol",
+        prompt_template=PROMPT_TEMPLATE,
+        reasoning_effort="max",
+        finalization_reasoning_effort="none",
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "pass"
+    assert client.responses.calls[1]["reasoning"] == {"effort": "none"}
+
+
+def test_the_ceiling_applies_to_the_legacy_call_shape_too(
+    deliverable_dir, task_and_item, monkeypatch
+):
+    """The fallback path sends its own reasoning block, and grades with it.
+
+    ``responses.create`` is called twice per iteration when the SDK rejects
+    the modern kwargs: once to fail, once in the legacy shape. That second
+    call is a real graded call, so a fix that only touched the modern shape
+    would leave the defect live on every run that trips the fallback.
+    """
+    task, item = task_and_item
+    final_payload = json.dumps({
+        "verdict": "pass",
+        "partial_score": 1.0,
+        "evidence": "validated from prior evidence",
+        "confidence": 0.9,
+        "reasoning": "finalized on the legacy shape",
+    })
+    empty = _response(
+        out_tok=2400,
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+    )
+    final = _response(output=[_final(final_payload)])
+
+    class RejectsModernKwargs(ScriptedResponses):
+        """Rejects only the modern shape, exactly as the live SDK does."""
+
+        def create(self, **kwargs: Any) -> Any:
+            if "prompt_cache_key" in kwargs:
+                self.calls.append(kwargs)
+                raise TypeError("unexpected keyword argument 'prompt_cache_key'")
+            return super().create(**kwargs)
+
+    client = FakeClient(RejectsModernKwargs([empty, final]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.6-sol",
+        prompt_template=PROMPT_TEMPLATE,
+        reasoning_effort="max",
+        finalization_reasoning_effort="max",
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "pass"
+    legacy = [c for c in client.responses.calls if "prompt_cache_key" not in c]
+    assert len(legacy) == 2
+    assert legacy[0]["reasoning"] == {"effort": "max"}
+    assert legacy[1]["reasoning"] == {"effort": "low"}
+    assert "tools" not in legacy[1]
+
+
+def test_the_effort_ceiling_is_decided_by_the_reason_alone():
+    """The rule stated once, against every reason that reaches it.
+
+    The three retry reasons above it in ``_finalization_retry_reason`` are the
+    complete set, so this is the whole decision table. ``None`` is there
+    because a caller that never retried must not be handed a downgrade.
+    """
+    ceiling = tool_calling_judge_module._finalization_effort
+
+    assert ceiling("max", "empty_final_text:max_output_tokens") == "low"
+    # Produced text, got the shape wrong: more thought is the repair.
+    assert ceiling("max", "final_json_parse_failed") == "max"
+    assert ceiling("max", "invalid_final_envelope") == "max"
+    # Empty for a reason that is not the budget -- a filtered or cut-off
+    # response. Nothing says effort caused it, so nothing is taken away.
+    assert ceiling("max", "empty_final_text:content_filter") == "max"
+    assert ceiling("max", "empty_final_text:unknown") == "max"
+    assert ceiling("max", None) == "max"
 
 
 def test_semantic_invalid_final_retries_once_with_configured_max_effort(

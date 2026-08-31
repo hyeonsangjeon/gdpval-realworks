@@ -79,6 +79,21 @@ _FINALIZATION_RETRY_PROMPT = (
     "required valid JSON verdict envelope."
 )
 
+#: Every reasoning effort the judge accepts, cheapest first. Ordered so a
+#: ceiling can be applied without ever raising an effort a config chose to
+#: set lower.
+_REASONING_EFFORTS = ("none", "low", "medium", "high", "xhigh", "max")
+
+#: The one retry reason that says the room ran out rather than the answer
+#: went wrong: the first attempt spent its whole output budget and left no
+#: text behind.
+_OUT_OF_ROOM_RETRY_REASON = "empty_final_text:max_output_tokens"
+
+#: Ceiling on the retry's reasoning when the room ran out. Effort is the
+#: thing that consumed the budget, so the retry has to want less of it than
+#: the attempt that overflowed.
+_OUT_OF_ROOM_EFFORT_CEILING = "low"
+
 
 def _bounded_prompt_cache_key(value: str) -> str:
     if len(value) <= _PROMPT_CACHE_KEY_MAX_CHARS:
@@ -460,6 +475,37 @@ def _finalization_retry_reason(
     return None
 
 
+def _finalization_effort(configured: str, retry_reason: Optional[str]) -> str:
+    """How hard the finalization retry is allowed to think.
+
+    The retry exists to turn evidence already gathered into a short JSON
+    envelope. It keeps the same ``max_output_tokens`` as the attempt before
+    it, because that cap is what the run's cost ceiling is priced against --
+    so on ``empty_final_text:max_output_tokens`` the retry is handed exactly
+    the budget the first attempt just exhausted. Spending it on reasoning
+    again writes no envelope for a second time, and the item costs two full
+    output budgets to produce nothing.
+
+    So that one reason, and only that one, holds the effort down: the retry
+    is forbidden tools and asked for a fixed short shape, and what it needs
+    is room to write it. Every other reason -- unparseable JSON, an envelope
+    missing a field -- means the model did produce text under this budget and
+    got the shape wrong, and there more thought is the repair, so the
+    configured effort stands.
+
+    Held down, never pushed up: a config that deliberately set ``"none"``
+    keeps ``"none"``.
+    """
+    if retry_reason != _OUT_OF_ROOM_RETRY_REASON:
+        return configured
+    try:
+        ceiling = _REASONING_EFFORTS.index(_OUT_OF_ROOM_EFFORT_CEILING)
+        chosen = _REASONING_EFFORTS.index(configured)
+    except ValueError:
+        return configured
+    return _REASONING_EFFORTS[min(chosen, ceiling)]
+
+
 # ----------------------------------------------------------------------
 # Judge
 # ----------------------------------------------------------------------
@@ -492,7 +538,9 @@ class ToolCallingJudge:
                      missing or malformed after evidence is ready.
         finalization_reasoning_effort: reasoning effort used for the bounded
                  no-tools finalization retry. Defaults to ``"low"`` for
-                 existing configs.
+                 existing configs. Held down to ``"low"`` when the retry was
+                 triggered by the first attempt exhausting
+                 ``max_output_tokens`` — see ``_finalization_effort``.
         vision_perception:       optional ``VisionPerception`` instance.
                      For VISUAL items the harness renders and
                      invokes it before the first main request;
@@ -547,9 +595,7 @@ class ToolCallingJudge:
         if self.finalization_retries < 0:
             raise ValueError("finalization_retries must be non-negative")
         self.finalization_retries = min(self.finalization_retries, 1)
-        if self.finalization_reasoning_effort not in {
-            "none", "low", "medium", "high", "xhigh", "max"
-        }:
+        if self.finalization_reasoning_effort not in _REASONING_EFFORTS:
             raise ValueError("finalization_reasoning_effort is invalid")
         invalid_ops = set(self.model_read_ops) - set(MODEL_READ_DELIVERABLE_OPS)
         if invalid_ops:
@@ -663,6 +709,10 @@ class ToolCallingJudge:
         audio_unanswerable: Optional[str] = None
         finalization_only = False
         finalization_retries_used = 0
+        # Which failure sent us into finalization, kept because the answer to
+        # "how hard should the retry think" depends on it. See
+        # ``_finalization_effort``.
+        finalization_retry_reason: Optional[str] = None
 
         while iterations < self.max_iterations + (
             finalization_retries_used if finalization_only else 0
@@ -692,7 +742,10 @@ class ToolCallingJudge:
                     create_kwargs.pop("tools")
                     create_kwargs.pop("parallel_tool_calls")
                     create_kwargs["reasoning"] = {
-                        "effort": self.finalization_reasoning_effort
+                        "effort": _finalization_effort(
+                            self.finalization_reasoning_effort,
+                            finalization_retry_reason,
+                        )
                     }
                 # PR3 step 1b — context_management server-side compaction.
                 # The SDK signature exposes a dict shape but Azure's
@@ -730,7 +783,10 @@ class ToolCallingJudge:
                         model=self.model,
                         input=messages,
                         reasoning={
-                            "effort": self.finalization_reasoning_effort
+                            "effort": _finalization_effort(
+                                self.finalization_reasoning_effort,
+                                finalization_retry_reason,
+                            )
                             if finalization_only
                             else self.reasoning_effort
                         },
@@ -861,6 +917,7 @@ class ToolCallingJudge:
                 })
                 finalization_retries_used += 1
                 finalization_only = True
+                finalization_retry_reason = retry_reason
                 continue
             break
         else:
