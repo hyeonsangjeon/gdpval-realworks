@@ -104,6 +104,7 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/309-task-internal-checkpoint.md
 !tasks/rebuilding_grading_task/310-second-audio-smoke-fail-closed.md
 !tasks/rebuilding_grading_task/311-third-audio-smoke-pass.md
+!tasks/rebuilding_grading_task/312-fourth-audio-smoke-pass.md
 
 *.parquet
 .huggingface/
