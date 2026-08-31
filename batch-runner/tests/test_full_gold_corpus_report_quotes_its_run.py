@@ -21,6 +21,12 @@ so stage 1 and stage 3 are comparable, the sector and occupation breakdown, the
 mean with and without the five declared limits, a classification of every
 shortfall, the per-modality judging counts, and a bill that says unpriced
 instead of free.
+
+The last group goes the other way, holding the *specification* to the run. The
+run turned up a sixth limit nobody predicted, and the value of the five that
+were predicted rests entirely on their having been written down first -- so the
+line between what was foreseen and what was found is checked as a line, not
+left to whoever edits the table next.
 """
 
 import collections
@@ -626,3 +632,160 @@ def test_the_specification_points_at_the_report():
     spec = SPEC_PATH.read_text(encoding="utf-8")
 
     assert "PR3_FULL_GOLD_CORPUS.md" in spec
+
+
+# ── The sixth limit was found, not foreseen ────────────────────────────────
+
+
+#: Where the specification stops pre-registering and starts recording. Anything
+#: above this line was written before money was spent; anything below it was
+#: not.
+POST_RUN_HEADING = "#### 실행 후 추가"
+
+
+def test_the_sixth_limit_is_recorded_below_the_pre_registration_not_inside_it(
+    payload,
+):
+    """A limit found afterwards must not be filed among the five foreseen.
+
+    The 「알려진 입력 한계 (실행 전 공개)」 section says in its own first line
+    why it exists: predicting a limit and explaining one after the fact are
+    worth different amounts as evidence. Editing `0e386e32` into that table
+    would quietly convert the second into the first, and every later reader
+    would see six predictions where there were five.
+
+    So the task is identified here the way the report identifies it -- as the
+    corpus's only zero -- and the split is checked from both sides.
+    """
+    spec = SPEC_PATH.read_text(encoding="utf-8")
+
+    zeros = [task for task in payload["tasks"] if task["pct"] == 0]
+    assert len(zeros) == 1, (
+        f"{len(zeros)} tasks scored zero; this check assumes the one the "
+        "specification records. Re-read the run before editing the spec."
+    )
+    sixth = zeros[0]
+
+    assert POST_RUN_HEADING in spec, (
+        "the specification has no post-run section, so a limit discovered by "
+        f"the run ({sixth['task_id']}) has nowhere to go that is not the "
+        "pre-registered table"
+    )
+    foreseen, found = spec.split(POST_RUN_HEADING, 1)
+
+    short = sixth["task_id"][:8]
+    assert short not in foreseen, (
+        f"{short} appears above {POST_RUN_HEADING!r}, among the limits "
+        "declared before the run. It was not declared before the run -- the "
+        "planner cannot open a file, which is the whole reason it was missed."
+    )
+    assert short in found, (
+        f"{short} is the only task that scored nothing and the specification "
+        "does not record it at all"
+    )
+
+    for value, label in (
+        (len(sixth["items"] or []), "the number of rubric items it lost"),
+        (sixth["total_max"], "the points it lost"),
+    ):
+        assert str(value) in found, (
+            f"the post-run section does not state {label} ({value})"
+        )
+
+
+def test_the_specification_separates_the_five_from_the_six(payload, report):
+    """Both subtractions, so the foreseen and the found stay distinguishable.
+
+    Holding out the five answers the pre-registered disclosure. Holding out all
+    six answers a different question -- how much of the shortfall is known
+    limits of any kind -- and only the first was promised in advance. Publishing
+    one without the other lets a reader mistake which is which.
+    """
+    spec = SPEC_PATH.read_text(encoding="utf-8")
+
+    zeros = [task for task in payload["tasks"] if task["pct"] == 0]
+    assert len(zeros) == 1
+    held_out = tuple(analysis.KNOWN_LIMIT_TASK_IDS) + (zeros[0]["task_id"][:8],)
+
+    remaining = [
+        task
+        for task in payload["tasks"]
+        if not str(task["task_id"]).startswith(held_out)
+    ]
+    without_six = round(
+        sum(task["pct"] for task in remaining) / len(remaining), 2
+    )
+
+    for value in (
+        report["gates"]["mean_score_pct"]["value"],
+        report["subsets"]["without_known_limits"]["avg_pct"],
+        without_six,
+    ):
+        assert f"{value:.2f}" in spec, (
+            f"the specification does not state {value:.2f}, so the effect of "
+            "holding out the foreseen limits cannot be told apart from the "
+            "effect of holding out the one that was not foreseen"
+        )
+
+    assert str(len(remaining)) in spec, (
+        f"the specification does not say how many tasks are left ({len(remaining)}) "
+        "once all six are held out"
+    )
+
+
+# ── The spec's claim about the READMEs has to be true of the READMEs ───────
+
+
+def test_the_coverage_the_spec_quotes_is_the_coverage_the_readmes_publish():
+    """The 「문서 정정」 section quotes both READMEs; both quotes must resolve.
+
+    This paragraph used to assert the opposite -- that the READMEs said "11
+    sectors, 55 occupations" and were wrong. They did not and were not; the
+    correction had already landed. A claim about another file is worth no more
+    than a check that reads that file, so this reads them.
+
+    `README.md` wraps the phrase across two lines, so whitespace is collapsed
+    before matching. A reflow must not be able to fail this.
+    """
+    spec = SPEC_PATH.read_text(encoding="utf-8")
+
+    quotes = {
+        "README.md": "220 tasks across 9 industry sectors and 44 occupations",
+        "README_KR.md": "9개 산업, 44개 직종, 220개 태스크",
+    }
+
+    for name, phrase in quotes.items():
+        assert phrase in spec, (
+            f"the specification no longer quotes {name} as {phrase!r}; update "
+            "this check together with the paragraph"
+        )
+        published = " ".join(
+            (REPO_ROOT / name).read_text(encoding="utf-8").split()
+        )
+        assert phrase in published, (
+            f"the specification attributes {phrase!r} to {name} and {name} "
+            "does not say it. Either the README changed or the specification "
+            "is describing a file it did not read."
+        )
+
+
+def test_the_file_the_spec_declines_to_correct_is_still_untracked():
+    """`CLAUDE.md` is left alone because no reader of the repository sees it.
+
+    That is the entire argument, and it stops holding the moment the file is
+    committed. If it ever is, the paragraph has to change from "not ours to
+    correct" to a correction.
+    """
+    tracked = subprocess.run(
+        ["git", "ls-files", "--", "CLAUDE.md"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert not tracked.stdout.strip(), (
+        "CLAUDE.md is tracked now, so the specification's reason for leaving "
+        'its "11 sectors, 55 occupations" alone -- that nobody reading the '
+        "repository can see it -- is no longer true"
+    )
