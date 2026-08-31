@@ -439,6 +439,7 @@ def summarize_cost_receipts(
     receipts = []
     failed_amount = 0.0
     failed_count = 0
+    failed_measured = 0
     for row in rows:
         receipt = row.get(field)
         if not isinstance(receipt, dict):
@@ -448,6 +449,13 @@ def summarize_cost_receipts(
             failed_count += 1
             amount = _receipt_amount(receipt)
             if amount is not None:
+                # Counted, not just added. Two failures against a model the
+                # price table has no entry for contribute nothing here, and the
+                # sum they leave behind is 0.0 -- the same number a failure that
+                # genuinely made no model call leaves behind. The amount alone
+                # cannot tell those apart, so the count of failures that could
+                # be priced is published beside it.
+                failed_measured += 1
                 failed_amount += amount
     if not receipts:
         return None
@@ -557,6 +565,10 @@ def summarize_cost_receipts(
         # Failed work costs real money. It is reported beside the total, not
         # netted out of it.
         "failed_task_count": failed_count,
+        # How many of those failures could be priced at all. Without it the
+        # amount below is unreadable: $0 means "these failures were free" and
+        # "these failures were never priced" at the same time.
+        "failed_measured_tasks": failed_measured,
         "failed_task_cost_usd": round(failed_amount, _MONEY_DIGITS),
         "components": components,
         "price_table_sha256": price_tables[0] if len(price_tables) == 1 else None,

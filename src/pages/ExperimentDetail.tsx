@@ -30,6 +30,7 @@ import {
   componentLabel,
   costCell,
   costCellClass,
+  failedTaskCostCell,
   formatCostUsd,
   missingReasonText,
   perDeliverableCell,
@@ -1216,16 +1217,22 @@ function CostSummaryCard({
                   </div>
                 ))}
                 {/* Failed work costs money. It sits beside the total, not inside it. */}
-                <div className="flex justify-between gap-2 py-1">
-                  <span className="text-dash-text-muted">실패 작업 비용</span>
-                  <span
-                    className="font-mono text-amber-400"
-                    title={`${COST_FIELD_LABELS[field]}: 실패한 작업에도 비용이 들었습니다. 총액에서 빼지 않았습니다. · ${COST_ESTIMATE_NOTE}`}
-                    data-cost-stat="실패 작업 비용"
-                  >
-                    {summary.failed_task_count}건 · {formatCostUsd(summary.failed_task_cost_usd)}
-                  </span>
-                </div>
+                {(() => {
+                  const failedCell = failedTaskCostCell(summary)
+                  return (
+                    <div className="flex justify-between gap-2 py-1">
+                      <span className="text-dash-text-muted">실패 작업 비용</span>
+                      <span
+                        className="font-mono text-amber-400"
+                        title={`${COST_FIELD_LABELS[field]}: 실패한 작업에도 비용이 들었습니다. 총액에서 빼지 않았습니다. · ${failedCell.title}`}
+                        data-cost-stat="실패 작업 비용"
+                        data-cost-state={failedCell.state}
+                      >
+                        {summary.failed_task_count}건 · {failedCell.text}
+                      </span>
+                    </div>
+                  )
+                })()}
                 <div className="flex justify-between gap-2 py-1 text-[11px]">
                   <span className="text-dash-text-muted">기록 범위</span>
                   <span className="font-mono text-dash-text-secondary">

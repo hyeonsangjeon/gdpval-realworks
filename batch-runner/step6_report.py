@@ -750,6 +750,39 @@ def _cost_money(value) -> str:
     return "no record" if value is None else f"${value:,.4f}"
 
 
+def _failed_task_cost(cost: dict) -> str:
+    """``N (amount)`` for failed work, with the amount honestly qualified.
+
+    The number on its own is ambiguous in the one direction that matters. A
+    failure that asked no model really did cost nothing, and a failure billed
+    against a model absent from the price table also arrives as nothing --
+    `_receipt_amount` returns None and the sum it never joined stays 0.0. Both
+    printed `($0.0000)`. Which one a reader is looking at is decided by the
+    count of failures that could be priced, never by the amount.
+
+    A run whose failures were all priced prints exactly what it printed before,
+    and so does a run with no failures at all: zero failures did cost zero.
+    """
+    failed = cost["failed_task_count"]
+    # Absent on reports published before this count existed. There the amount
+    # is trustworthy only when the whole run was priced, since a fully priced
+    # run cannot contain an unpriced failure.
+    measured = cost.get("failed_measured_tasks")
+    if measured is None:
+        measured = failed if cost["measured_tasks"] == cost["receipt_tasks"] else 0
+    if failed == 0 or measured == failed:
+        return f"{failed} ({_cost_money(cost['failed_task_cost_usd'])})"
+    if measured == 0:
+        return f"{failed} (no record)"
+    # Some priced, some not: what is shown is a floor, and the reader is told
+    # how much of the row it covers -- the same disclosure the `Priced` row
+    # above makes about the run.
+    return (
+        f"{failed} ({_cost_money(cost['failed_task_cost_usd'])}, "
+        f"{measured} / {failed} priced)"
+    )
+
+
 def _build_markdown(rd: dict) -> str:
     meta = rd["meta"]
     summary = rd["summary"]
@@ -871,10 +904,7 @@ def _build_markdown(rd: dict) -> str:
                 f"{_cost_money(cost['cost_per_successful_deliverable_usd'])} |"
             )
         # Failed work is reported, never netted out of the total.
-        lines.append(
-            f"| Failed tasks | {cost['failed_task_count']} "
-            f"({_cost_money(cost['failed_task_cost_usd'])}) |"
-        )
+        lines.append(f"| Failed tasks | {_failed_task_cost(cost)} |")
         if cost["missing_reasons"]:
             lines.append(f"| Not priced | {', '.join(cost['missing_reasons'])} |")
         lines.append("")

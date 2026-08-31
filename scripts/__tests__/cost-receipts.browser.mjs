@@ -452,10 +452,14 @@ async function assertFullyPriced(page, solveSummary, gradeSummary) {
   // Goal 8: the failed task's cost is stated beside the total, not netted out.
   assert.equal(solveSummary.failed_task_count, 1)
   assert.equal(solveSummary.failed_task_cost_usd, 0.04)
-  assert.equal(
-    (await summaryStat(page, 'problem_solving_cost', '실패 작업 비용').innerText()).trim(),
-    '1건 · $0.0400',
+  // Every failure on this run was priced, so the amount is the amount and the
+  // row reads exactly as it did before the measured-failure count existed.
+  assert.equal(solveSummary.failed_measured_tasks, 1)
+  const failedCost = await readCell(
+    summaryStat(page, 'problem_solving_cost', '실패 작업 비용'),
   )
+  assert.equal(failedCost.text, '1건 · $0.0400')
+  assert.equal(failedCost.state, 'recorded')
 
   // The audit sidecar is named on screen with a truncated digest.
   assert.match(
@@ -618,6 +622,21 @@ async function assertRanButUnpriced(page, solveSummary) {
   const total = await readCell(summaryStat(page, 'problem_solving_cost', '총액'))
   assert.equal(total.text, '미확정')
   assert.equal(total.state, 'unpriced')
+
+  // The failed-task row, under the same rule as the headline above it.
+  // `t-never-started` failed carrying a `not_run` receipt, whose money fields
+  // arrive as 0.0 like every other status. Summed on its own that reads as a
+  // failure that cost nothing, and this row printed `1건 · $0.0000` — the
+  // producer's own docstring for that receipt is "Not free — it did not
+  // happen." An amount is shown only when the failures behind it were priced.
+  assert.equal(solveSummary.failed_task_count, 1)
+  assert.equal(solveSummary.failed_measured_tasks, 0)
+  const failedCost = await readCell(
+    summaryStat(page, 'problem_solving_cost', '실패 작업 비용'),
+  )
+  assert.equal(failedCost.text, '1건 · 미확정')
+  assert.equal(failedCost.state, 'unpriced')
+  assert.doesNotMatch(failedCost.text, /\$0\.0000/)
 }
 
 async function assertLegacy(page) {

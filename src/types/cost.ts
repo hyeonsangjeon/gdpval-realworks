@@ -125,6 +125,15 @@ export interface CostSummary {
   cost_per_successful_deliverable_usd: number | null
   /** Failed work costs money. Reported beside the total, never netted out of it. */
   failed_task_count: number
+  /**
+   * How many failed tasks could be priced at all.
+   *
+   * Optional because reports published before this count existed do not carry
+   * it. Without it `failed_task_cost_usd` is ambiguous: $0 is what a failure
+   * that asked no model costs, and also what a failure billed against an
+   * unpriced model contributes.
+   */
+  failed_measured_tasks?: number
   failed_task_cost_usd: number
   components: CostComponentTotal[]
   price_table_sha256: string | null

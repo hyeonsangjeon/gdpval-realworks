@@ -1171,6 +1171,9 @@ test('processGradesFile reports the cost of tasks the grader failed on', () => {
   assert.equal(summary.known_cost_usd, 0.03);
   assert.equal(summary.failed_task_count, 1);
   assert.equal(summary.failed_task_cost_usd, 0.01);
+  // The count that makes the amount above readable. Recomputed here rather
+  // than read from the payload, so a published grade file never needs it.
+  assert.equal(summary.failed_measured_tasks, 1);
   assert.equal(out.tasks[1].error, true);
   assert.equal(out.tasks[1].grading_cost.known_cost_usd, 0.01);
 });

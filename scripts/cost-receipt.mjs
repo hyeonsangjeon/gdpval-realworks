@@ -402,6 +402,7 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
   const receipts = [];
   let failedAmount = 0;
   let failedCount = 0;
+  let failedMeasured = 0;
   for (const row of rows) {
     const receipt = row?.receipt;
     if (!isPlainObject(receipt)) continue;
@@ -409,7 +410,17 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
     if (!row.succeeded) {
       failedCount += 1;
       const amount = receiptAmount(receipt);
-      if (amount !== null) failedAmount += amount;
+      if (amount !== null) {
+        // Counted, not just added. Two failures against a model the price
+        // table has no entry for contribute nothing here, and the sum they
+        // leave behind is 0 -- the same number a failure that genuinely made
+        // no model call leaves behind. The amount alone cannot tell those
+        // apart, so the count of failures that could be priced is published
+        // beside it. Mirrors `summarize_cost_receipts` in
+        // batch-runner/core/cost_projection.py.
+        failedMeasured += 1;
+        failedAmount += amount;
+      }
     }
   }
   if (!receipts.length) return null;
@@ -482,6 +493,10 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
     // Failed work costs real money. It is reported beside the total, not
     // netted out of it.
     failed_task_count: failedCount,
+    // How many of those failures could be priced at all. Without it the amount
+    // below is unreadable: $0 means "these failures were free" and "these
+    // failures were never priced" at the same time.
+    failed_measured_tasks: failedMeasured,
     failed_task_cost_usd: round(failedAmount, MONEY_DIGITS),
     components: aggregateComponents(receipts),
     price_table_sha256: priceTables.length === 1 ? priceTables[0] : null,

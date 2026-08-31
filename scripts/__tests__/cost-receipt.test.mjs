@@ -434,7 +434,77 @@ test('failed-task cost is reported beside the total, not removed from it', () =>
   assert.equal(summary.known_cost_usd, 0.65);
   assert.equal(summary.failed_task_count, 1);
   assert.equal(summary.failed_task_cost_usd, 0.4);
+  // Every failure here was priced, so the amount is the amount.
+  assert.equal(summary.failed_measured_tasks, 1);
   assert.equal(summary.successful_deliverables, 1);
+});
+
+test('a failure billed against an unpriced model is not counted as measured', () => {
+  // Mirrors test_a_failure_billed_against_an_unpriced_model_is_not_counted_as_measured.
+  //
+  // Two failures against a model the price table has no entry for contribute
+  // nothing to the sum, and the sum they never joined stays 0 — the same
+  // number two free failures leave behind. Only the count separates them.
+  const unpriced = () =>
+    row(projectCostReceipt(unmeasured('partial', { missing_reasons: ['price_missing'] })), {
+      succeeded: false,
+    });
+  const summary = summarizeCostReceipts([unpriced(), unpriced()]);
+
+  assert.equal(summary.failed_task_count, 2);
+  assert.equal(summary.failed_measured_tasks, 0);
+  assert.equal(summary.failed_task_cost_usd, 0);
+});
+
+test('a genuinely free failure stays apart from one that was never priced', () => {
+  // The discrimination the count exists for, asserted as a pair. Both report
+  // failed_task_cost_usd === 0; if failed_measured_tasks ever stops telling
+  // them apart, a paid failure reads as a free one.
+  const free = summarizeCostReceipts([
+    row(
+      projectCostReceipt(receipt({
+        estimated_cost_usd: 0,
+        known_cost_usd: 0,
+        model_cost_usd: 0,
+        runtime_cost_usd: 0,
+        model_calls: 0,
+        components: [],
+      })),
+      { succeeded: false },
+    ),
+  ]);
+  const neverPriced = summarizeCostReceipts([
+    row(projectCostReceipt(unmeasured('partial', { missing_reasons: ['price_missing'] })), {
+      succeeded: false,
+    }),
+  ]);
+
+  assert.equal(free.failed_task_cost_usd, 0);
+  assert.equal(neverPriced.failed_task_cost_usd, 0);
+  assert.equal(free.failed_task_count, 1);
+  assert.equal(neverPriced.failed_task_count, 1);
+  assert.equal(free.failed_measured_tasks, 1);
+  assert.equal(neverPriced.failed_measured_tasks, 0);
+});
+
+test('a partly priced set of failures reports how much of it was priced', () => {
+  const summary = summarizeCostReceipts([
+    row(
+      projectCostReceipt(receipt({
+        estimated_cost_usd: 0.4,
+        known_cost_usd: 0.4,
+        model_cost_usd: 0.4,
+      })),
+      { succeeded: false },
+    ),
+    row(projectCostReceipt(unmeasured('partial', { missing_reasons: ['price_missing'] })), {
+      succeeded: false,
+    }),
+  ]);
+
+  assert.equal(summary.failed_task_count, 2);
+  assert.equal(summary.failed_measured_tasks, 1);
+  assert.equal(summary.failed_task_cost_usd, 0.4);
 });
 
 test('components aggregate across tasks', () => {
