@@ -1124,11 +1124,30 @@ def _validate_grade_task_set(
     # that produces the run's total can never be handed a missing or
     # truthy-ish value. `step9_merge_shards` demands exactly this of every
     # shard it merges.
+    #
+    # The rows are checked as well as the aggregate, and the rows are the ones
+    # that matter: `_compute_summary` recomputes `summary.cost.usage_complete`
+    # from these rows and never reads the aggregate loaded here, so a payload
+    # that carries a tidy boolean at the top and silence underneath would sail
+    # through a check on the aggregate alone. Refusing here rather than folding
+    # the silence in costs nothing — this chunk has not graded anything yet —
+    # and says which row is at fault instead of quietly marking the run's whole
+    # cost total unknown for the rest of its life.
     aggregate_usage = existing["summary"]["cost"].get("usage_complete")
     if type(aggregate_usage) is not bool:
         raise ValueError(
             "existing grade aggregate usage flag is missing or not a boolean: "
             f"{aggregate_usage!r}"
+        )
+    silent_rows = [
+        (task["task_id"], task.get("usage_complete"))
+        for task in existing["tasks"]
+        if type(task.get("usage_complete")) is not bool
+    ]
+    if silent_rows:
+        raise ValueError(
+            "existing grade task usage flag is missing or not a boolean: "
+            f"{silent_rows}"
         )
     return set(existing_ids)
 
@@ -1516,8 +1535,14 @@ def _compute_summary(
         )
         render_calls += int(task.get("render_call_count", 0))
         render_latency_ms += float(task.get("render_total_latency_ms", 0.0))
-        usage_complete = usage_complete and bool(
-            task.get("usage_complete", True)
+        # A row that does not answer has not said yes. The counters just above
+        # default a missing token count to 0, so a silent row makes the total
+        # smaller; if its silence also read as "complete", the run would
+        # publish a figure it never measured and claim it was whole. `is True`
+        # rather than `bool(...)`: a `1` or a `"true"` that arrived from
+        # somewhere is not this producer's boolean either.
+        usage_complete = usage_complete and (
+            task.get("usage_complete") is True
         )
 
         # The sector breakdown is defined over graded tasks, so its task counts
