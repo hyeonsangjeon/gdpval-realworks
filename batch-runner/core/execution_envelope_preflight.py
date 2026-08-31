@@ -52,10 +52,12 @@ from core.execution_envelope_cost import (
     CostAssumptions,
     ModelPrice,
     REFERENCE_FILE_CHARACTER_CAP,
+    check_approved_maximum,
     check_cost_ceiling,
     describe_cost_ceiling,
     estimate_cost_ceiling,
     load_price_table,
+    read_approved_maximum,
 )
 from core.execution_envelope_grading_cost import (
     check_assumptions_cover_the_caps,
@@ -125,7 +127,6 @@ class EnvelopePreflight:
     approved_maximum_usd: Decimal | None = None
     cost_policy: str = COST_POLICY_BLOCK
     cost_findings: list[str] = field(default_factory=list)
-    available_monthly_credit_usd: Decimal | None = None
     azure: AzureConnectionDiagnosis | None = None
     grading_ceiling_problems: list[str] = field(default_factory=list)
     """Ways the marking half of the cost sum sits below what marking allows.
@@ -184,11 +185,6 @@ class EnvelopePreflight:
             "cost_policy": self.cost_policy,
             "cost_findings": list(self.cost_findings),
             "cost_findings_block_execution": self.cost_policy == COST_POLICY_BLOCK,
-            "available_monthly_credit_usd": (
-                str(self.available_monthly_credit_usd)
-                if self.available_monthly_credit_usd is not None
-                else None
-            ),
             "problems": self.all_problems,
             "grading_ceiling_problems": list(self.grading_ceiling_problems),
             "marking_half_is_a_ceiling": not self.grading_ceiling_problems,
@@ -1707,7 +1703,20 @@ def run_envelope_preflight(
 
     owner_approval = cost_block.get("owner_approval")
     owner_approval = owner_approval if isinstance(owner_approval, Mapping) else {}
-    available_monthly_credit_usd: Decimal | None = None
+    if "available_monthly_credit_usd" in owner_approval:
+        # Refused rather than ignored. This file is published, and a number
+        # sitting here unread is an invitation to keep it up to date. What the
+        # owner approved is recorded by the two flags below; how much money is
+        # left in their account is not a setting for a run, and no check here
+        # is entitled to read it.
+        problems.append(
+            "cost.owner_approval.available_monthly_credit_usd is not read by "
+            "any check and must not be written here: an account's remaining "
+            "monthly credit is account information and this plan is published. "
+            "Remove the key. What the owner approved is recorded by "
+            "cost.owner_approval.paid_model_calls and "
+            "cost.owner_approval.unpriced_audio_measurement"
+        )
     if cost_policy == COST_POLICY_RECORD_ONLY:
         if owner_approval.get("paid_model_calls") is not True:
             problems.append(
@@ -1719,26 +1728,17 @@ def run_envelope_preflight(
                 "cost.policy records cost findings without blocking, but the "
                 "owner did not approve measuring the unpriced audio model"
             )
-        raw_credit = owner_approval.get("available_monthly_credit_usd")
-        try:
-            available_monthly_credit_usd = Decimal(str(raw_credit))
-        except Exception:
-            problems.append(
-                "cost.owner_approval.available_monthly_credit_usd must be a "
-                "number greater than zero"
-            )
-        else:
-            if available_monthly_credit_usd <= 0:
-                problems.append(
-                    "cost.owner_approval.available_monthly_credit_usd must be "
-                    "greater than zero"
-                )
 
     ceiling: CostCeiling | None = None
     grading_ceiling_problems: list[str] = []
     cost_findings: list[str] = []
     approved_raw = cost_block.get("approved_maximum_usd")
     approved: Decimal | None = None
+    if approved_raw is not None:
+        # Read here rather than inside the ceiling branch below, so that what
+        # the summary reports as the approved amount is what the plan writes
+        # down, whether or not the other half of the sum could be worked out.
+        approved, _ = read_approved_maximum(approved_raw)
     if conditions and loaded_catalog is not None:
         try:
             assumptions = CostAssumptions.from_mapping(
@@ -1780,11 +1780,16 @@ def run_envelope_preflight(
                         ),
                     )
                 )
-                if approved_raw is not None:
-                    try:
-                        approved = Decimal(str(approved_raw))
-                    except Exception:
-                        approved = None
+
+    if cost_policy == COST_POLICY_BLOCK and ceiling is None:
+        # The approved amount is normally judged on the way to comparing it
+        # against the worked-out ceiling. When no ceiling could be worked out
+        # that comparison never happens, and the only check that this policy's
+        # stopping figure exists and is a real amount went with it. A failure
+        # in the other half of the sum is not a reason to stop asking: a plan
+        # that says "stop on cost" with no amount, a negative one, or an
+        # infinite one must not reach a run place.
+        cost_findings.extend(check_approved_maximum(approved_raw))
 
     if cost_policy == COST_POLICY_BLOCK:
         problems.extend(cost_findings)
@@ -1820,7 +1825,6 @@ def run_envelope_preflight(
         approved_maximum_usd=approved,
         cost_policy=cost_policy,
         cost_findings=cost_findings,
-        available_monthly_credit_usd=available_monthly_credit_usd,
         azure=azure,
         grading_ceiling_problems=grading_ceiling_problems,
         input_files=input_files,
@@ -2305,11 +2309,6 @@ def describe_preflight(result: EnvelopePreflight) -> list[str]:
             "cost policy: record findings only; cost estimates, missing prices, "
             "and missing measurements do not stop this owner-approved run"
         )
-        if result.available_monthly_credit_usd is not None:
-            lines.append(
-                "available monthly credit recorded by the owner: "
-                f"{result.available_monthly_credit_usd} United States dollars"
-            )
         if result.cost_findings:
             lines.append(
                 f"cost findings to measure and review after the run: "

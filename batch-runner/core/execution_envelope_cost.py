@@ -871,6 +871,60 @@ def estimate_cost_ceiling(
     )
 
 
+def read_approved_maximum(value: Any) -> tuple[Decimal | None, list[str]]:
+    """Turn a written approved amount into a number, or say why it is not one.
+
+    Shared so that two callers looking at the same written value cannot come to
+    different conclusions about it. The missing case is deliberately left to the
+    caller, because what is worth saying about a missing amount depends on
+    whether there is a worked-out ceiling to say it against.
+
+    ``.inf`` and ``.nan`` are ordinary YAML, so both reach here as real values.
+    Neither is an amount anyone approved: an infinite limit permits every bill,
+    and comparing a not-a-number against zero raises rather than answers. Both
+    are refused by name instead of being allowed to pass or to crash.
+    """
+    try:
+        approved = Decimal(str(value))
+    except Exception:
+        return None, [
+            f"the largest amount that may be spent, {value!r}, is not a number"
+        ]
+    if not approved.is_finite():
+        return None, [
+            f"the largest amount that may be spent, {value!r}, is not a "
+            "definite amount of money"
+        ]
+    if approved <= 0:
+        return None, [
+            "the largest amount that may be spent must be greater than zero"
+        ]
+    return approved, []
+
+
+def check_approved_maximum(approved_maximum_usd: Any | None) -> list[str]:
+    """Faults in the approved amount itself, with no ceiling to compare it to.
+
+    ``check_cost_ceiling`` already does this on the way to comparing the amount
+    against a worked-out ceiling. It is separated out for the case where no
+    ceiling could be worked out at all: a policy that stops a run on cost still
+    has to say whether the figure it would stop at is usable, and skipping the
+    question because the other half of the sum failed is how a run with no
+    approved amount, a negative one, or an infinite one gets to start.
+
+    Missing, not a number, not a definite amount, and not above zero are all
+    faults. None of them is read as zero dollars.
+    """
+    if approved_maximum_usd is None:
+        return [
+            "nobody has written down the largest amount that may be spent, and "
+            "no ceiling could be worked out to check one against, so this "
+            "run's only cost limit is missing"
+        ]
+    _, faults = read_approved_maximum(approved_maximum_usd)
+    return faults
+
+
 def check_cost_ceiling(
     ceiling: CostCeiling,
     *,
@@ -909,18 +963,9 @@ def check_cost_ceiling(
             "against"
         )
         return problems
-    try:
-        approved = Decimal(str(approved_maximum_usd))
-    except Exception:
-        problems.append(
-            f"the largest amount that may be spent, {approved_maximum_usd!r}, "
-            "is not a number"
-        )
-        return problems
-    if approved <= 0:
-        problems.append(
-            "the largest amount that may be spent must be greater than zero"
-        )
+    approved, faults = read_approved_maximum(approved_maximum_usd)
+    if approved is None:
+        problems.extend(faults)
         return problems
     if ceiling.total_usd > approved:
         problems.append(

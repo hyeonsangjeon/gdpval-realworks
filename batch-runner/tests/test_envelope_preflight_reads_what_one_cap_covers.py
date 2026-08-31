@@ -756,9 +756,9 @@ def test_that_one_flip_stays_visible_without_a_per_run_dollar_threshold(catalog)
     committed_total, _ = _ceiling(catalog)
     flipped_total, _ = _ceiling(catalog, {ENVIRONMENT_AZURE_CODE_INTERPRETER: False})
     assert plan["cost"]["approved_maximum_usd"] is None
-    assert Decimal(
-        str(plan["cost"]["owner_approval"]["available_monthly_credit_usd"])
-    ) == Decimal("3700.0")
+    assert (
+        "available_monthly_credit_usd" not in plan["cost"]["owner_approval"]
+    )
     assert flipped_total - committed_total == Decimal("50.17600000")
 
 

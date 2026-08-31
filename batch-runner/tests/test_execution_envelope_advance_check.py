@@ -1464,8 +1464,85 @@ def test_a_missing_approved_amount_is_a_refusal(plan, catalog):
     )
 
 
-def test_the_committed_plan_records_the_credit_backed_owner_decision(plan):
-    """The old per-run dollar refusal is replaced by the owner's decision."""
+def _no_ceiling_can_be_worked_out(plan):
+    """Break the sums the ceiling is built from, leaving the amount readable.
+
+    The point of the tests below is the amount, not the assumptions: this makes
+    the ceiling half of the comparison fail so that the amount half is left on
+    its own, which is the situation the amount used to go unchecked in.
+    """
+    plan = copy.deepcopy(plan)
+    plan["cost"]["assumptions"] = {"input_tokens_per_task": "not a number"}
+    return plan
+
+
+@pytest.mark.parametrize(
+    "amount, expected",
+    [
+        (None, "no ceiling could be worked out"),
+        (-12, "must be greater than zero"),
+        ("lots", "is not a number"),
+        (float("inf"), "is not a definite amount of money"),
+        (float("nan"), "is not a definite amount of money"),
+    ],
+)
+def test_the_amount_is_still_checked_when_no_ceiling_could_be_worked_out(
+    plan, amount, expected
+):
+    """A failure in one half of the sum must not silence the other half.
+
+    The approved amount is normally judged on the way to comparing it against
+    the worked-out ceiling. When the ceiling cannot be worked out at all, that
+    comparison never happens — and with it went the only check that a policy
+    which stops runs on cost has a usable figure to stop at. A plan saying
+    "stop on cost" with no amount, a negative one, or one that is not a
+    definite amount of money must not reach a run place.
+    """
+    broken = _no_ceiling_can_be_worked_out(_approved(plan, amount))
+
+    result = _ready_preflight(broken)
+
+    assert result.cost is None, "the ceiling was supposed to fail here"
+    assert result.may_start is False
+    assert any(expected in note for note in result.all_problems), (
+        result.all_problems
+    )
+
+
+@pytest.mark.parametrize("amount", (float("inf"), float("nan")))
+def test_an_amount_that_is_not_a_definite_sum_of_money_is_refused(plan, amount):
+    """``.inf`` and ``.nan`` are ordinary YAML, so both arrive as real values.
+
+    Neither is an amount anyone approved. An infinite limit permits every bill
+    a run could produce, and comparing a not-a-number against zero raises
+    instead of answering, which used to end the check with an uncaught error
+    rather than a refusal. Both are refused by name.
+    """
+    result = _ready_preflight(_approved(plan, amount))
+
+    assert result.cost is not None, "the ceiling was supposed to work here"
+    assert result.may_start is False
+    assert any(
+        "is not a definite amount of money" in note
+        for note in result.all_problems
+    ), result.all_problems
+
+
+def test_an_unpriced_model_is_still_unpriced_when_the_amount_is_refused(plan):
+    """Refusing the amount must not turn a missing price into nothing owed."""
+    result = _ready_preflight(_approved(plan, float("inf")))
+
+    assert result.cost is not None
+    assert result.cost.unpriced_models, "the sound model has no price"
+    assert result.cost.total_usd > 0
+
+
+def test_the_committed_plan_records_the_owner_decision_without_a_balance(plan):
+    """The old per-run dollar refusal is replaced by the owner's decision.
+
+    The decision is the two flags. How much credit the account has left is not
+    part of it, is not written here, and no check reads it.
+    """
     cost = plan["cost"]
     approval = cost["owner_approval"]
 
@@ -1474,7 +1551,6 @@ def test_the_committed_plan_records_the_credit_backed_owner_decision(plan):
     assert approval == {
         "approved_on": "2026-08-28",
         "paid_model_calls": True,
-        "available_monthly_credit_usd": 3700.00,
         "unpriced_audio_measurement": True,
     }
 
@@ -1487,7 +1563,6 @@ def test_record_only_cost_findings_do_not_block_the_owner_approved_run(plan):
     assert result.cost_policy == COST_POLICY_RECORD_ONLY
     assert result.cost_findings
     assert set(result.cost_findings).isdisjoint(result.all_problems)
-    assert result.available_monthly_credit_usd == Decimal("3700.0")
     assert result.readiness.paid_model_calls_approved is True
     assert all(
         note in result.missing_input_file_problems for note in result.all_problems
@@ -1508,8 +1583,16 @@ def test_record_only_cost_policy_requires_the_exact_owner_approval(plan, field):
     assert any(field in note or "audio model" in note for note in result.all_problems)
 
 
-@pytest.mark.parametrize("credit", (None, 0, -1, "not-a-number"))
-def test_record_only_cost_policy_requires_a_positive_monthly_credit(plan, credit):
+@pytest.mark.parametrize("credit", (None, 0, -1, "not-a-number", 1234.56))
+def test_a_monthly_credit_written_into_the_plan_is_refused(plan, credit):
+    """Refused rather than ignored, and refused whatever the value is.
+
+    A positive figure is in the list on purpose, and it is a made-up one. The
+    objection is not that the number is wrong, it is that an account's
+    remaining balance is account information, this file is published, and
+    nothing here reads it. A number left sitting unread would be an invitation
+    to keep it up to date, so no real balance is written even in a test.
+    """
     plan = copy.deepcopy(plan)
     plan["cost"]["owner_approval"]["available_monthly_credit_usd"] = credit
 
@@ -1517,8 +1600,29 @@ def test_record_only_cost_policy_requires_a_positive_monthly_credit(plan, credit
 
     assert result.may_start is False
     assert any(
-        "available_monthly_credit_usd" in note for note in result.all_problems
+        "available_monthly_credit_usd" in note and "must not be written" in note
+        for note in result.all_problems
     )
+
+
+def test_record_only_starts_from_two_flags_with_no_amount_and_no_balance(plan):
+    """The whole point of the policy: approval is flags, not money.
+
+    Neither an approved per-run amount nor an account balance is written, and
+    the cost block contributes nothing to the reasons this plan cannot start.
+    """
+    plan = copy.deepcopy(plan)
+
+    result = _ready_preflight(plan)
+
+    assert result.cost_policy == COST_POLICY_RECORD_ONLY
+    assert plan["cost"]["approved_maximum_usd"] is None
+    assert "available_monthly_credit_usd" not in plan["cost"]["owner_approval"]
+    assert not any(
+        "largest amount that may be spent" in note
+        or "available_monthly_credit_usd" in note
+        for note in result.all_problems
+    ), result.all_problems
 
 
 def test_record_only_cost_policy_does_not_hide_a_missing_grading_config(plan):
@@ -1993,7 +2097,8 @@ def test_the_check_refuses_today_and_says_why():
     assert "AZURE_AI_ROUTE_PROFILE is not set" in finished.stdout
     assert "FOUNDRY_PROJECT_ENDPOINT is not set" in finished.stdout
     assert "record findings only" in finished.stdout
-    assert "3700.0 United States dollars" in finished.stdout
+    assert "cost findings to measure and review after the run" in finished.stdout
+    assert "monthly credit" not in finished.stdout
 
 
 # ── The Azure run place must reach the deployment that was pinned ─────────
