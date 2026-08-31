@@ -483,18 +483,39 @@ def summarize_cost_receipts(
     ]
     known_total = round(sum(amounts), _MONEY_DIGITS) if amounts else 0.0
 
-    # The run total is only a total when every receipt is complete. One
-    # partial or unavailable receipt makes it a floor, and it is labelled as
-    # one rather than quietly rounded up into a headline number.
-    complete_run = counts["complete"] == len(receipts)
-    if complete_run:
+    # The run's state comes from the receipts' own states, not from whether a
+    # number fell out of them. `amounts` is empty whenever every measurable
+    # receipt sits at a $0 floor — which `_measured_amount` above nulls on
+    # purpose, and which is the ordinary case when the model that was called is
+    # absent from the price table. Reading the state off `amounts` made such a
+    # run fall past `partial` all the way to `not_run`: two tasks, two paid
+    # calls, real tokens on both, published as work that never happened.
+    #
+    # Work that genuinely never ran is not a hole in the run. It contributed
+    # nothing, so it neither drags the state down nor stops a total being a
+    # total — where `counts["complete"] == len(receipts)` counted it against the
+    # run and withheld a figure every receipt underneath it supported.
+    #
+    # A total is still only a total when every receipt that ran is complete. One
+    # partial or unavailable receipt makes it a floor, and it is labelled as one
+    # rather than quietly rounded up into a headline number.
+    #
+    # This is the rule `core.cost_receipts._summary_status` and
+    # `scripts/cost-receipt.mjs` already apply to the same receipts. Three
+    # summarisers read one set of receipts; they must not give three answers
+    # about it.
+    contributing = [
+        receipt for receipt in receipts if receipt["status"] != "not_run"
+    ]
+    if not contributing:
+        status = "not_run"
+    elif all(receipt["status"] == "complete" for receipt in contributing):
         status = "complete"
-    elif amounts:
-        status = "partial"
-    elif counts["unavailable"]:
+    elif all(receipt["status"] == "unavailable" for receipt in contributing):
         status = "unavailable"
     else:
-        status = "not_run"
+        status = "partial"
+    complete_run = status == "complete"
     if rows_without_a_receipt and status == "complete":
         # Every receipt the run does carry is whole, but the run is not: some
         # task's cost was never recorded at all. Judging completeness against
