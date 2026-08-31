@@ -900,6 +900,49 @@ class ToolCallingJudge:
             if p is not None and hasattr(p, "reset"):
                 p.reset()
 
+    def perception_spend(self) -> dict:
+        """What this task has charged against its per-task perception caps.
+
+        Counts only. Read after a task stops early so the chunk that finishes
+        it can start from the same place rather than from zero.
+        """
+        spend = {}
+        if self.vision_perception is not None:
+            spend["vision"] = int(getattr(self.vision_perception, "calls_used", 0))
+        if self.audio_perception is not None:
+            spend["audio"] = int(getattr(self.audio_perception, "calls_used", 0))
+            spend["audio_failures"] = int(
+                getattr(self.audio_perception, "failures_used", 0)
+            )
+        return spend
+
+    def restore_perception_spend(self, spent: dict) -> None:
+        """Charge a resumed task for the looking an earlier chunk already did.
+
+        Called straight after :meth:`reset_perception`, which a resume still
+        has to run first -- the caches are keyed per task and the sub-judges
+        must not carry a previous task's images into this one. What the reset
+        must not throw away is the *spend*, and this puts it back.
+
+        Missing keys mean an unwired sub-judge, not zero spend, so an absent
+        key leaves the counter alone rather than clearing it.
+        """
+        if not spent:
+            return
+        vision = self.vision_perception
+        if vision is not None and "vision" in spent:
+            restore = getattr(vision, "restore_spend", None)
+            if callable(restore):
+                restore(spent["vision"])
+        audio = self.audio_perception
+        if audio is not None and "audio" in spent:
+            restore = getattr(audio, "restore_spend", None)
+            if callable(restore):
+                restore(
+                    spent["audio"],
+                    failures_used=int(spent.get("audio_failures") or 0),
+                )
+
     # ------------------------------------------------------------------
     # Prompt / tools
     # ------------------------------------------------------------------

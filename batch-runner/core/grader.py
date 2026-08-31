@@ -11,7 +11,7 @@ import logging
 import os
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Literal, Optional
 
@@ -38,6 +38,11 @@ from core.grader_routing import (
     resolve_runtime_routing,
 )
 from core.rubric_loader import RubricItem, TaskRubric
+from core.task_checkpoint import (
+    CheckpointRejected,
+    TaskProgress,
+    TaskProgressDraft,
+)
 from core.tools import has_audio_content, has_extractable_text
 
 logger = logging.getLogger(__name__)
@@ -60,7 +65,20 @@ class GradingDeadlineExceeded(RuntimeError):
     attempt did: one task held the loop for four hours past a four-hour
     budget, the job hit ``timeout-minutes`` at five hours twenty, and six
     finished tasks went down with it.
+
+    ``progress`` carries what the task had finished when the clock ran out,
+    for the one task where "mark it from the beginning" does not terminate:
+    ``9e39df84`` is longer than a chunk, so four paid attempts each stopped
+    around item 50 of 57 and each began again at item one. The driver decides
+    whether to keep it — the exception's own contract is unchanged, and a
+    driver that ignores ``progress`` behaves exactly as before.
     """
+
+    def __init__(
+        self, *args, progress: "TaskProgressDraft | None" = None
+    ) -> None:
+        super().__init__(*args)
+        self.progress = progress
 
 
 def grader_transport_options(config: dict) -> dict[str, object]:
@@ -333,6 +351,13 @@ class Grader:
             #: silently repeated once per rubric item.
             self._text_layer_cache: dict[str, bool | None] = {}
             self._audio_content_cache: dict[str, bool | None] = {}
+            #: Set while a task is being marked, to a zero-argument callable
+            #: returning what that task has finished so far. Read only by
+            #: ``_check_should_stop``, on its way to raising. ``None`` outside
+            #: a task, and read with a default because the ``object.__new__``
+            #: path above never gets here — an absent supplier means "no
+            #: checkpoint", which is the behaviour that predates it.
+            self._progress_draft: Optional[Callable[[], TaskProgressDraft]] = None
 
             # Task 207 — the tool-calling judge is the only grading path.
             # The legacy text-extract / batch / tier-routing paths are gone,
@@ -398,35 +423,98 @@ class Grader:
         """
         if self.should_stop is None or not self.should_stop():
             return
+        draft = getattr(self, "_progress_draft", None)
         raise GradingDeadlineExceeded(
-            f"grading deadline reached during {task_id} while starting {unit}"
+            f"grading deadline reached during {task_id} while starting {unit}",
+            progress=draft() if callable(draft) else None,
         )
 
-    def grade_task(self, task: TaskRubric, deliverable_dir: str) -> TaskGrade:
+    @staticmethod
+    def _restore_items(progress: TaskProgress, task: TaskRubric) -> list[ItemGrade]:
+        """Rebuild the items an earlier chunk finished, as objects again.
+
+        Reconstruction is strict on purpose. ``ItemGrade`` is inside the
+        graded source fingerprint, so a checkpoint written against a different
+        shape has already been refused by ``load_checkpoint``; if one ever
+        reaches here anyway, it must announce itself rather than arrive as a
+        ``TypeError`` from a dataclass constructor forty frames from anything
+        that explains it.
+        """
+        restored: list[ItemGrade] = []
+        for position, stored in enumerate(progress.completed_items):
+            try:
+                restored.append(ItemGrade(**stored))
+            except TypeError as exc:
+                raise CheckpointRejected(
+                    f"{task.task_id} item {position} does not fit the current "
+                    f"ItemGrade: {exc}"
+                ) from exc
+        return restored
+
+    def grade_task(
+        self,
+        task: TaskRubric,
+        deliverable_dir: str,
+        *,
+        resume_from: Optional[TaskProgress] = None,
+    ) -> TaskGrade:
         deliverable_path = Path(deliverable_dir)
         files = self._list_files(deliverable_path)
 
         # PR3 (0531) — reset per-task perception call caps before each task.
         # __init__ guarantees _tool_judge exists, so this is the only path.
         self._tool_judge.reset_perception()
+        if resume_from is not None:
+            # The reset above still has to happen: the sub-judges cache images
+            # and transcripts per task, and carrying the previous task's into
+            # this one is a different bug. What must survive it is the spend.
+            # Caps are per task; an unlucky task that took three chunks must
+            # not get three times the looking its neighbour got.
+            self._tool_judge.restore_perception_spend(
+                resume_from.perception_spent
+            )
         # Every rubric item of a task asks about the same files, so the
         # routing probes are answered once per file per task rather than
         # once per item. Cleared here for the same reason the caps are.
+        #
+        # Not restored on resume, unlike the caps: these two probes read local
+        # bytes, cost nothing and answer the same way every time, so paying
+        # them again changes the clock and not the marking.
         self._text_layer_cache = {}
         self._audio_content_cache = {}
-        if self._cost_recorder is None:
-            return self._grade_task_with_selector(task, deliverable_path, files)
+        try:
+            if self._cost_recorder is None:
+                return self._grade_task_with_selector(
+                    task, deliverable_path, files, resume_from=resume_from
+                )
 
-        # Everything this call spends — judge turns, retries inside the
-        # judge, and the perception reads it delegates — belongs to one
-        # task's marking bill.
-        with self._cost_recorder.attributed(
-            task_id=task.task_id, stage=STAGE_GRADING
-        ):
-            return self._grade_task_with_selector(task, deliverable_path, files)
+            # Everything this call spends — judge turns, retries inside the
+            # judge, and the perception reads it delegates — belongs to one
+            # task's marking bill.
+            #
+            # A task spanning chunks opens this window once per chunk and so
+            # leaves more than one run of ledger rows. That is right and it
+            # adds up: the ledger is keyed by grade file rather than by
+            # process, a resumed chunk reopens it, and ``receipt_for`` sums
+            # every row a task id has regardless of which round wrote it.
+            with self._cost_recorder.attributed(
+                task_id=task.task_id, stage=STAGE_GRADING
+            ):
+                return self._grade_task_with_selector(
+                    task, deliverable_path, files, resume_from=resume_from
+                )
+        finally:
+            # The draft closes over this task's items. Left installed, it
+            # would hand the next task a stale one.
+            self._progress_draft = None
 
     def _grade_task_with_selector(
-        self, task: TaskRubric, deliverable_path: Path, files: list[Path]
+        self,
+        task: TaskRubric,
+        deliverable_path: Path,
+        files: list[Path],
+        *,
+        resume_from: Optional[TaskProgress] = None,
     ) -> TaskGrade:
         """Tool-calling path with deterministic deliverable selection.
 
@@ -454,8 +542,58 @@ class Grader:
         judge_input_tokens = 0
         judge_output_tokens = 0
         judge_cached_tokens = 0
+        resumed_at = 0
 
-        for item, runtime_plan in zip(task.rubric_items, runtime_plans):
+        if resume_from is not None:
+            items = self._restore_items(resume_from, task)
+            resumed_at = len(items)
+            # Only the prechecks. The other five tallies here are handed to
+            # ``_aggregate_tool_instrumentation`` below and then overwritten
+            # by it, because per-item instrumentation is the task-level truth
+            # — and those per-item fields are inside the restored ``items``,
+            # so an earlier chunk's judge calls, tokens and latency come back
+            # on their own. A precheck resolves an item without a judge call
+            # and is counted nowhere per-item, so it is the one number that
+            # would be lost.
+            precheck_count = resume_from.precheck_count
+            logger.info(
+                "%s: resuming after %d/%d items from checkpoint",
+                task.task_id,
+                resumed_at,
+                len(task.rubric_items),
+            )
+
+        def draft() -> TaskProgressDraft:
+            """This task's progress, as of right now. Never a grade.
+
+            Built only on the way out through ``GradingDeadlineExceeded``.
+            ``items`` here is a prefix of the rubric in canonical order — the
+            loop appends one per iteration and never skips — which is the
+            shape ``load_checkpoint`` insists on before it will resume from
+            one.
+            """
+            return TaskProgressDraft(
+                completed_items=tuple(asdict(ig) for ig in items),
+                perception_spent=self._tool_judge.perception_spend(),
+                precheck_count=precheck_count,
+            )
+
+        # Positional, not by item id: ``load_checkpoint`` has already proved
+        # the stored items are a prefix of this rubric in this order, and
+        # slicing says so directly. Skipping by a set of ids would quietly do
+        # the wrong thing for a rubric that repeats one.
+        remaining = list(
+            zip(task.rubric_items[resumed_at:], runtime_plans[resumed_at:])
+        )
+
+        # Installed rather than caught at the call sites. ``_check_should_stop``
+        # is the only thing that raises the deadline, and it is called from
+        # both this loop and the split-children loop several frames down;
+        # attaching the draft where the exception is born covers both, and the
+        # next one someone adds. ``grade_task`` clears it on the way out.
+        self._progress_draft = draft
+
+        for item, runtime_plan in remaining:
             self._check_should_stop(task.task_id, f"item {item.rubric_item_id}")
             mode, pattern_id = self._classify(item)
             plan = runtime_plan.target_plan

@@ -1109,6 +1109,8 @@ jobs:
           EXPECTED_GRADE_STATUS: ${{ steps.grade.outputs.rc == '7' && 'partial' || steps.grade.outputs.grade_status }}
           COST_LEDGER_FILE: ${{ steps.grade.outputs.cost_ledger_file }}
           COST_LEDGER_SHA256: ${{ steps.grade.outputs.cost_ledger_sha256 }}
+          GRADE_PROGRESS_FILE: ${{ steps.grade.outputs.grade_progress_file }}
+          GRADE_PROGRESS_SHA256: ${{ steps.grade.outputs.grade_progress_sha256 }}
         run: |
           GRADE_FILE="${{ steps.grade.outputs.grade_file }}"
           if [[ -z "$GRADE_FILE" || ! -f "$GRADE_FILE" ]]; then
@@ -1181,6 +1183,42 @@ jobs:
             echo "[cost] committing ledger $COST_LEDGER_FILE ($LEDGER_BLOB_SHA)"
           else
             echo "::warning::this grade carries no cost ledger; its per-call costs will not survive the run"
+          fi
+          # The finished items of a task the clock cut in half, when there are
+          # any. Committed for exactly the reason the ledger above is: the next
+          # chunk gets a fresh runner, and a file left only in this workspace
+          # is gone before it looks. Without this the progress would be written
+          # perfectly and read by nobody, and `9e39df84` would keep restarting
+          # at item one on every paid chunk.
+          #
+          # Absent on almost every run. Only a chunk that ran out of time
+          # *inside* a task publishes one, so silence here is the normal case
+          # and not worth a warning.
+          if [[ -n "$GRADE_PROGRESS_FILE" ]]; then
+            # Two patterns rather than one, because the directory depth varies:
+            # a sharded run's partial lives under `_shards/<name>/`, a plain
+            # one directly in `data/grades/`, and their `_progress/` folders
+            # sit beside each one. A single glob tight enough for the first
+            # rejects the second, and rejecting here is `exit 1` -- failing a
+            # whole paid chunk over a file it was right to write.
+            if [[ "$GRADE_PROGRESS_FILE" == /* || "$GRADE_PROGRESS_FILE" == *$'\n'* || "$GRADE_PROGRESS_FILE" == *..* || "$GRADE_PROGRESS_FILE" != data/grades/* || "$GRADE_PROGRESS_FILE" != */_progress/*.json || ! -f "$GRADE_PROGRESS_FILE" || -L "$GRADE_PROGRESS_FILE" ]]; then
+              echo "::error::resolved task progress path is invalid: $GRADE_PROGRESS_FILE"
+              exit 1
+            fi
+            PROGRESS_BLOB_SHA="$(python - "$GRADE_PROGRESS_FILE" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+          PY
+          )"
+            if [[ "$PROGRESS_BLOB_SHA" != "$GRADE_PROGRESS_SHA256" ]]; then
+              echo "::error::task progress on disk does not match the digest step8 published"
+              exit 1
+            fi
+            git add -- "$GRADE_PROGRESS_FILE"
+            echo "[progress] committing task progress $GRADE_PROGRESS_FILE ($PROGRESS_BLOB_SHA)"
           fi
           if git diff --staged --quiet; then
             if [[ "${{ steps.grade.outputs.rc }}" == "7" ]]; then
