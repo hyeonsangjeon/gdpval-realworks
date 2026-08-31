@@ -583,6 +583,24 @@ class CostCeiling:
     both must, since a missing number is not a zero.
     """
 
+    perception_of_unknown_price: list[str] = field(default_factory=list)
+    """Kinds of perception whose model has no published price.
+
+    The sibling of :attr:`perception_of_unknown_size`, and the other way to
+    reach the same zero: there the price is known and the size is not, here the
+    size may well be known and the price is not. A kind can be in both, and
+    then it is named in both, because being told only that the size was never
+    measured invites the reader to think measuring it would produce a figure.
+    """
+
+    grading_model_with_no_price: str | None = None
+    """The marking model, when no published price was found for it.
+
+    ``None`` means marking's figure has nothing missing from it. The name is
+    carried rather than worked out from ``grading_usd == 0``, because a figure
+    of zero is exactly the thing this is here to stop anyone reading as a fact.
+    """
+
     @property
     def running_usd(self) -> Decimal:
         return sum(
@@ -605,18 +623,47 @@ class CostCeiling:
             + self.perception_model_calls
         )
 
+    def what_the_totals_leave_out(self) -> list[str]:
+        """Why the two totals are lower than the most this could cost.
+
+        Empty means nothing is missing from them. Otherwise each entry names
+        one thing that was counted in :attr:`total_model_calls` and put into no
+        dollar figure anywhere — a call with no money against it.
+
+        Both the readable lines and the written-out answer are built from this
+        one list, so a reader and a machine cannot be told different things
+        about the same totals.
+        """
+        reasons: list[str] = []
+        if self.unpriced_models:
+            reasons.append(
+                "no published price was found for "
+                + ", ".join(self.unpriced_models)
+            )
+        if self.perception_of_unknown_size:
+            reasons.append(
+                "how much "
+                + ", ".join(self.perception_of_unknown_size)
+                + " sends and writes back was never measured"
+            )
+        return reasons
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "environments": [entry.as_dict() for entry in self.environments],
             "grading": {
                 "most_model_calls": self.grading_model_calls,
                 "most_it_could_cost_usd": _money(self.grading_usd),
+                "model_with_no_published_price": self.grading_model_with_no_price,
             },
             "grading_perception": {
                 "most_model_calls": self.perception_model_calls,
                 "most_it_could_cost_usd": _money(self.perception_usd),
                 "kinds_whose_size_is_unknown": list(
                     self.perception_of_unknown_size
+                ),
+                "kinds_whose_price_is_unknown": list(
+                    self.perception_of_unknown_price
                 ),
             },
             "most_model_calls_in_total": self.total_model_calls,
@@ -627,6 +674,10 @@ class CostCeiling:
             "safety_multiplier": str(self.safety_multiplier),
             "most_the_whole_thing_could_cost_usd": _money(self.total_usd),
             "models_with_no_published_price": list(self.unpriced_models),
+            # Beside the totals rather than only in the parts, because a reader
+            # who takes the total and nothing else is exactly the reader this
+            # is for.
+            "what_the_totals_leave_out": self.what_the_totals_leave_out(),
         }
 
 
@@ -738,10 +789,13 @@ def estimate_cost_ceiling(
     perception_usd = Decimal(0)
     perception_calls = 0
     perception_unknown: list[str] = []
+    perception_unpriced: list[str] = []
+    grading_model_with_no_price: str | None = None
     if assumptions.grading_required:
         grading_price = price_table.get(assumptions.grading_model)
         if grading_price is None:
             unpriced.add(assumptions.grading_model)
+            grading_model_with_no_price = assumptions.grading_model
         graded_task_ids: set[str] = set()
         for conditions in conditions_by_environment.values():
             graded_task_ids.update(conditions.task_ids)
@@ -779,6 +833,14 @@ def estimate_cost_ceiling(
             price = price_table.get(perception.model)
             if price is None:
                 unpriced.add(perception.model)
+                # Named here as well as in ``unpriced_models`` so the line that
+                # prints this figure can say which kind of perception the
+                # missing money belongs to. "gpt-audio-1.5 has no price" does
+                # not tell a reader that the listening calls are the ones with
+                # nothing against them.
+                perception_unpriced.append(
+                    f"{perception.modality} ({perception.model})"
+                )
             if not perception.size_is_known:
                 # Say which kind, not just which model. A reader who is told
                 # "gpt-5.4" learns nothing about which of its two jobs is the
@@ -804,6 +866,8 @@ def estimate_cost_ceiling(
         perception_usd=perception_usd,
         perception_model_calls=perception_calls,
         perception_of_unknown_size=perception_unknown,
+        perception_of_unknown_price=perception_unpriced,
+        grading_model_with_no_price=grading_model_with_no_price,
     )
 
 
@@ -868,19 +932,40 @@ def check_cost_ceiling(
 
 
 def describe_cost_ceiling(ceiling: CostCeiling) -> list[str]:
-    """A few readable lines a person can check the arithmetic against."""
+    """A few readable lines a person can check the arithmetic against.
+
+    Every money line here is headed "at most". Where a figure had calls counted
+    against it that could not be turned into money, the line says so beside the
+    figure. Two things can do that — a model nobody has published a price for,
+    and a perception call nobody has measured — and both come out as the same
+    zero, which is why neither may be left to speak for itself.
+    """
     lines: list[str] = []
     for entry in ceiling.environments:
-        lines.append(
+        line = (
             f"{entry.environment}: at most {entry.model_calls} model calls, "
             f"at most {_money(entry.usd)} United States dollars "
             f"(deployment {entry.deployment}, model {entry.resolved_model})"
         )
+        if entry.resolved_model in ceiling.unpriced_models:
+            line += (
+                " — but no published price was found for "
+                f"{entry.resolved_model}, so every one of those calls is in "
+                "the count and in no figure"
+            )
+        lines.append(line)
     if ceiling.grading_model_calls:
-        lines.append(
+        line = (
             f"grading: at most {ceiling.grading_model_calls} model calls, "
             f"at most {_money(ceiling.grading_usd)} United States dollars"
         )
+        if ceiling.grading_model_with_no_price is not None:
+            line += (
+                " — but no published price was found for "
+                f"{ceiling.grading_model_with_no_price}, so every one of those "
+                "calls is in the count and in no figure"
+            )
+        lines.append(line)
     if ceiling.perception_model_calls:
         line = (
             "grading, looking and listening: at most "
@@ -897,6 +982,23 @@ def describe_cost_ceiling(ceiling: CostCeiling) -> list[str]:
                 + " is not in that figure at all, because how much it sends was "
                 "never measured"
             )
+        if ceiling.perception_of_unknown_price:
+            # The other way to the same zero. Said separately because a kind
+            # that is missing both would otherwise leave a reader thinking a
+            # measurement is all that stands between here and a figure.
+            if ceiling.perception_of_unknown_size:
+                line += (
+                    " — and no published price was found for "
+                    + ", ".join(ceiling.perception_of_unknown_price)
+                    + ", so measuring it would not produce a figure either"
+                )
+            else:
+                line += (
+                    " — but no published price was found for "
+                    + ", ".join(ceiling.perception_of_unknown_price)
+                    + ", so every one of those calls is in the count and in "
+                    "no figure"
+                )
         lines.append(line)
     lines.append(
         f"before the safety multiplier: "
@@ -906,4 +1008,15 @@ def describe_cost_ceiling(ceiling: CostCeiling) -> list[str]:
         f"after multiplying by {ceiling.safety_multiplier}: "
         f"{_money(ceiling.total_usd)} United States dollars"
     )
+    left_out = ceiling.what_the_totals_leave_out()
+    if left_out:
+        # The parts already say this on their own lines. It is repeated on the
+        # totals because the totals are what gets quoted, and a reader who
+        # takes the last line and stops is the reader who most needs telling.
+        lines.append(
+            "WARNING: both totals above are lower than the most this could "
+            "cost, because " + "; and ".join(left_out) + ". Those calls are "
+            "counted in the model-call figures above "
+            f"({ceiling.total_model_calls} in total) and in none of the money"
+        )
     return lines

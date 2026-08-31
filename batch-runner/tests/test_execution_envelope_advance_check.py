@@ -15,8 +15,10 @@ import os
 import re
 import subprocess
 import sys
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -28,6 +30,7 @@ if str(BATCH_RUNNER_ROOT) not in sys.path:
 
 from core.execution_envelope_cost import (  # noqa: E402
     CostAssumptions,
+    ModelPrice,
     REFERENCE_FILE_CHARACTER_CAP,
     check_cost_ceiling,
     describe_cost_ceiling,
@@ -944,6 +947,440 @@ def test_the_written_out_sum_and_the_readable_lines_both_show_perception(
     assert "looking and listening" in printed
     assert "audio (gpt-5.4)" in printed
     assert "never measured" in printed
+
+
+# ── A missing price must not make the totals look smaller in silence ───────
+#
+# Three separate things can put calls into the count and no money against
+# them: a run place whose model has no published price, a marking model with
+# no published price, and a perception kind that is either unmeasured or
+# unpriced. All three come out as the same zero, and a zero drags both totals
+# *down*. Until this section existed the report named only the unmeasured one,
+# and even that only inside the perception line — never beside the totals a
+# reader actually quotes.
+
+
+PRICED = "priced-model"
+UNPRICED = "no-price-model"
+
+#: Two prices, so a test can say which model is missing rather than emptying
+#: the whole table. Emptying it proves only that nothing is priced, which is
+#: not the state this defect lives in.
+ONE_PRICED_MODEL = {
+    PRICED: ModelPrice(
+        model=PRICED,
+        input_usd_per_million=Decimal("1.25"),
+        output_usd_per_million=Decimal("5.00"),
+    )
+}
+
+
+def _ceiling_with_one_thing_unpriced(
+    catalog,
+    *,
+    run_place_model=PRICED,
+    grading_model=PRICED,
+    perception=None,
+):
+    """A whole ceiling where exactly the named part has no published price.
+
+    Built through ``estimate_cost_ceiling`` rather than by constructing a
+    ``CostCeiling`` by hand, because a hand-built one would let these tests
+    agree with a producer that had stopped filling the fields in.
+    """
+    mapping = {
+        "characters_per_token": 3,
+        "instruction_character_count": 0,
+        "tool_loop_max_model_turns": {"host_python_process": 1},
+        "output_tokens_capped_per_attempt": {"host_python_process": False},
+        "max_tool_result_tokens_per_turn": {"host_python_process": 0},
+        "safety_multiplier": 1,
+        "grading_required": True,
+        "grading_model": grading_model,
+        "grading_calls_per_rubric_item": 1,
+        "grading_input_tokens_per_call": 1000,
+        "grading_output_tokens_per_call": 100,
+    }
+    if perception is not None:
+        mapping["grading_perception"] = perception
+    return estimate_cost_ceiling(
+        conditions_by_environment={
+            "host_python_process": _conditions(
+                resolved_model=run_place_model, deployment=run_place_model
+            )
+        },
+        tasks_by_id=catalog.by_task_id(),
+        assumptions=CostAssumptions.from_mapping(mapping),
+        prices=ONE_PRICED_MODEL,
+    )
+
+
+def _priced_vision(model=PRICED):
+    return {
+        "vision": {
+            "model": model,
+            "calls_per_task": 2,
+            "input_tokens_per_call": 1000,
+            "output_tokens_per_call": 100,
+        }
+    }
+
+
+def _warnings(ceiling):
+    return [
+        line
+        for line in describe_cost_ceiling(ceiling)
+        if line.startswith("WARNING")
+    ]
+
+
+def test_a_fully_priced_ceiling_says_nothing_is_missing_from_its_totals(catalog):
+    """The quiet case, so the loud cases mean something.
+
+    A warning that is always printed is not a warning. This pins the state in
+    which the totals really are the most this could cost, and shows the report
+    stays silent about it.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(
+        catalog, perception=_priced_vision()
+    )
+
+    assert ceiling.unpriced_models == []
+    assert ceiling.perception_of_unknown_price == []
+    assert ceiling.perception_of_unknown_size == []
+    assert ceiling.grading_model_with_no_price is None
+    assert ceiling.what_the_totals_leave_out() == []
+    assert _warnings(ceiling) == []
+    assert ceiling.total_usd > 0
+    assert ceiling.as_dict()["what_the_totals_leave_out"] == []
+
+
+def test_an_unpriced_run_place_model_is_named_beside_its_own_zero(catalog):
+    """The run-place line prints a call count and a nothing. Say why.
+
+    Reading "at most 1 model calls, at most 0.00 United States dollars" as a
+    fact about a real run place is exactly the mistake available here, and
+    nothing on that line used to stop it.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(
+        catalog, run_place_model=UNPRICED, perception=_priced_vision()
+    )
+
+    (entry,) = ceiling.environments
+    assert entry.model_calls > 0
+    assert entry.usd == 0
+    assert ceiling.unpriced_models == [UNPRICED]
+
+    (line,) = [
+        line
+        for line in describe_cost_ceiling(ceiling)
+        if line.startswith("host_python_process")
+    ]
+    assert "no published price was found for " + UNPRICED in line
+    assert "in the count and in no figure" in line
+
+
+def test_an_unpriced_marking_model_is_named_beside_its_own_zero(catalog):
+    """The same for marking, which is the largest figure on the page.
+
+    The marking half is thousands of calls on the committed plan. Losing it to
+    a missing price is the single biggest way these totals can fall, and the
+    old report showed the fall with no explanation anywhere.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(
+        catalog, grading_model=UNPRICED, perception=_priced_vision()
+    )
+
+    assert ceiling.grading_model_calls > 0
+    assert ceiling.grading_usd == 0
+    assert ceiling.grading_model_with_no_price == UNPRICED
+
+    (line,) = [
+        line
+        for line in describe_cost_ceiling(ceiling)
+        if line.startswith("grading: ")
+    ]
+    assert "no published price was found for " + UNPRICED in line
+    assert "in the count and in no figure" in line
+    assert ceiling.as_dict()["grading"]["model_with_no_published_price"] == UNPRICED
+
+
+def test_an_unpriced_perception_model_is_named_even_when_its_size_is_known(
+    catalog,
+):
+    """The gap this section was opened by: a measured kind with no price.
+
+    ``perception_of_unknown_size`` is empty here, because the size *was*
+    measured. Before this field existed that emptiness silenced the line
+    completely — a priced-looking figure of zero with no caveat of any kind.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(
+        catalog, perception=_priced_vision(UNPRICED)
+    )
+
+    assert ceiling.perception_model_calls > 0
+    assert ceiling.perception_usd == 0
+    assert ceiling.perception_of_unknown_size == []
+    assert ceiling.perception_of_unknown_price == [f"vision ({UNPRICED})"]
+
+    (line,) = [
+        line
+        for line in describe_cost_ceiling(ceiling)
+        if line.startswith("grading, looking and listening")
+    ]
+    assert f"no published price was found for vision ({UNPRICED})" in line
+    assert "in the count and in no figure" in line
+    assert "never measured" not in line
+
+    written = ceiling.as_dict()["grading_perception"]
+    assert written["kinds_whose_price_is_unknown"] == [f"vision ({UNPRICED})"]
+    assert written["kinds_whose_size_is_unknown"] == []
+
+
+def test_a_perception_kind_missing_both_is_told_it_is_missing_both(catalog):
+    """Being told only about the measurement invites the wrong repair.
+
+    A reader who hears the size was never measured will go and measure it, and
+    arrive back at the same zero. The line has to say the price is missing too,
+    in so many words.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(
+        catalog,
+        perception={
+            "vision": {
+                "model": UNPRICED,
+                "calls_per_task": 1,
+                "input_tokens_per_call": None,
+                "output_tokens_per_call": None,
+            }
+        },
+    )
+
+    assert ceiling.perception_of_unknown_size == [f"vision ({UNPRICED})"]
+    assert ceiling.perception_of_unknown_price == [f"vision ({UNPRICED})"]
+
+    (line,) = [
+        line
+        for line in describe_cost_ceiling(ceiling)
+        if line.startswith("grading, looking and listening")
+    ]
+    assert "never measured" in line
+    assert "no published price was found" in line
+    assert "measuring it would not produce a figure either" in line
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"run_place_model": UNPRICED, "perception": _priced_vision()},
+        {"grading_model": UNPRICED, "perception": _priced_vision()},
+        {"perception": _priced_vision(UNPRICED)},
+    ],
+    ids=["run place", "marking", "perception"],
+)
+def test_every_way_to_lose_a_price_warns_beside_the_totals(catalog, kwargs):
+    """Whichever part loses its price, the totals must say they are short.
+
+    The parts already say it on their own lines. This is about the last two
+    lines on the page, because a total is what gets carried into a message
+    asking somebody to approve a bill.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(catalog, **kwargs)
+
+    (warning,) = _warnings(ceiling)
+    assert "lower than the most this could cost" in warning
+    assert "no published price was found for " + UNPRICED in warning
+    assert str(ceiling.total_model_calls) in warning
+    assert ceiling.what_the_totals_leave_out() == [
+        "no published price was found for " + UNPRICED
+    ]
+
+
+def test_the_warning_arrives_after_both_totals_it_is_about(catalog):
+    """Order is the whole point: a caveat under a number is read, above it is not."""
+    lines = describe_cost_ceiling(
+        _ceiling_with_one_thing_unpriced(
+            catalog, grading_model=UNPRICED, perception=_priced_vision()
+        )
+    )
+
+    before = next(
+        i for i, line in enumerate(lines) if line.startswith("before the safety")
+    )
+    after = next(
+        i for i, line in enumerate(lines) if line.startswith("after multiplying by")
+    )
+    warning = next(i for i, line in enumerate(lines) if line.startswith("WARNING"))
+    assert before < after < warning
+
+
+def test_a_model_missing_from_two_places_is_named_once_in_the_warning(catalog):
+    """The two reasons are separate; the model is not, so it is said once.
+
+    An unpriced perception model lands in ``unpriced_models`` *and* in
+    ``perception_of_unknown_price``. Building the warning from both lists
+    would print the same model name twice and read like two problems.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(
+        catalog,
+        perception={
+            "vision": {
+                "model": UNPRICED,
+                "calls_per_task": 1,
+                "input_tokens_per_call": None,
+                "output_tokens_per_call": None,
+            }
+        },
+    )
+
+    (warning,) = _warnings(ceiling)
+    assert warning.count("no published price was found") == 1
+    assert "never measured" in warning
+    assert ceiling.what_the_totals_leave_out() == [
+        "no published price was found for " + UNPRICED,
+        f"how much vision ({UNPRICED}) sends and writes back was never measured",
+    ]
+
+
+def test_the_printed_lines_and_the_written_answer_cannot_disagree(catalog):
+    """One derivation, two audiences. A person and a script get the same list."""
+    ceiling = _ceiling_with_one_thing_unpriced(
+        catalog, grading_model=UNPRICED, perception=_priced_vision()
+    )
+
+    reasons = ceiling.what_the_totals_leave_out()
+    assert ceiling.as_dict()["what_the_totals_leave_out"] == reasons
+    (warning,) = _warnings(ceiling)
+    for reason in reasons:
+        assert reason in warning
+
+
+def test_the_totals_really_do_fall_when_a_price_goes_missing(catalog):
+    """The defect itself, stated as arithmetic rather than as wording.
+
+    This is why silence was not merely unhelpful. A missing price does not
+    leave the figure alone; it makes it *smaller*, so the report was at its
+    least alarming exactly when it knew least.
+    """
+    priced = _ceiling_with_one_thing_unpriced(
+        catalog, perception=_priced_vision()
+    )
+    unpriced = _ceiling_with_one_thing_unpriced(
+        catalog, grading_model=UNPRICED, perception=_priced_vision()
+    )
+
+    assert unpriced.total_model_calls == priced.total_model_calls
+    assert unpriced.total_usd < priced.total_usd
+    assert _warnings(priced) == []
+    assert len(_warnings(unpriced)) == 1
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"run_place_model": UNPRICED, "perception": _priced_vision()},
+        {"grading_model": UNPRICED, "perception": _priced_vision()},
+        {"perception": _priced_vision(UNPRICED)},
+    ],
+    ids=["run place", "marking", "perception"],
+)
+def test_what_stops_a_run_is_unchanged_by_any_of_this(catalog, kwargs):
+    """Wording moved; the refusal did not.
+
+    ``check_cost_ceiling`` is not touched by this fix, and it already refused
+    every one of these. Pinning that here is what keeps a reporting change from
+    turning into a new condition on runs that used to be allowed or refused.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(catalog, **kwargs)
+
+    problems = check_cost_ceiling(ceiling, approved_maximum_usd=1000)
+    assert [note for note in problems if "no published price" in note]
+
+    allowed = _ceiling_with_one_thing_unpriced(
+        catalog, perception=_priced_vision()
+    )
+    assert not [
+        note
+        for note in check_cost_ceiling(allowed, approved_maximum_usd=1000)
+        if "no published price" in note
+    ]
+
+
+def test_the_old_silence_would_be_caught_if_it_came_back(catalog):
+    """A check nobody has seen fail is not different from one that cannot.
+
+    The old behaviour is restored in memory only — the producer is left alone
+    and the derivation it feeds is emptied. What comes back is the report as it
+    was: a total that fell by more than half, printed with nothing beside it.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(
+        catalog, grading_model=UNPRICED, perception=_priced_vision()
+    )
+    priced = _ceiling_with_one_thing_unpriced(
+        catalog, perception=_priced_vision()
+    )
+    assert ceiling.total_usd * 2 < priced.total_usd
+
+    with patch.object(
+        type(ceiling), "what_the_totals_leave_out", lambda self: []
+    ):
+        old_lines = describe_cost_ceiling(ceiling)
+
+    assert not [line for line in old_lines if line.startswith("WARNING")]
+    # And the money it prints is the same money — which is what made this
+    # survivable for so long. Nothing was wrong with the arithmetic; the
+    # arithmetic was being asked a question it could not answer, and answered
+    # anyway.
+    assert [line for line in old_lines if line.startswith("after multiplying by")] == [
+        line
+        for line in describe_cost_ceiling(ceiling)
+        if line.startswith("after multiplying by")
+    ]
+
+
+def test_the_old_silence_on_a_measured_but_unpriced_kind_would_be_caught(catalog):
+    """The third cause, the one nothing in this repository used to name.
+
+    An unmeasured kind was already called out on its own line. A *measured* one
+    whose model has no price reached the same zero down a path with no wording
+    on it at all, and emptying the new list here is precisely that old state.
+    """
+    ceiling = _ceiling_with_one_thing_unpriced(
+        catalog, perception=_priced_vision(UNPRICED)
+    )
+    old = replace(ceiling, perception_of_unknown_price=[], unpriced_models=[])
+
+    (line,) = [
+        line
+        for line in describe_cost_ceiling(old)
+        if line.startswith("grading, looking and listening")
+    ]
+    assert "at most 0.00 United States dollars" in line
+    assert "no published price" not in line
+    assert not [
+        line for line in describe_cost_ceiling(old) if line.startswith("WARNING")
+    ]
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"run_place_model": UNPRICED, "perception": _priced_vision()},
+        {"grading_model": UNPRICED, "perception": _priced_vision()},
+        {"perception": _priced_vision(UNPRICED)},
+    ],
+    ids=["run place", "marking", "perception"],
+)
+def test_the_missing_price_is_never_reported_as_a_price_of_zero(catalog, kwargs):
+    """No line may show the zero on its own.
+
+    Whichever part is unpriced, the figure printed for it is 0.00. That string
+    appearing without a caveat on the same line is the whole defect, so it is
+    asserted directly rather than through any one wording.
+    """
+    for line in describe_cost_ceiling(_ceiling_with_one_thing_unpriced(catalog, **kwargs)):
+        if "at most 0.00 United States dollars" in line:
+            assert "no published price was found" in line, line
 
 
 @pytest.mark.parametrize(

@@ -3734,3 +3734,182 @@ def test_an_unreadable_turn_count_falls_back_to_the_quiet_wording(turns):
 | 나머지 | 13.28의 표 그대로입니다. 이번 수정으로 풀린 것은 없습니다 |
 
 **전체 비교 실험이 실행되지 않았으므로 이 작업은 차단됨으로 유지합니다.**
+
+### 13.31 가격이 없으면 합계가 **더 작아지는데**, 아무 말도 안 하고 있었습니다 (2026-08-31 수정, #299)
+
+#### 한 줄 요약
+
+보고서 맨 아래 두 줄은 **"이게 최대 금액입니다"** 라는 뜻으로 읽힙니다. 그런데
+**값을 못 매긴 호출은 0원으로 세어 그 두 줄에 그냥 들어가 있었고, 그 사실을
+어디에도 안 적었습니다.** 값을 모르면 청구서가 **더 커** 보여야 하는데
+**더 작아** 보였습니다.
+
+#### 왜 이게 위험한가 — 방향이 반대입니다
+
+모르는 것을 0으로 세면, **모를수록 안심되는 숫자**가 나옵니다. 승인을 요청받은
+사람은 "생각보다 싸네" 하고 통과시킵니다. 이 저장소가 13.28~13.30에서 계속
+고쳐 온 것과 **정확히 같은 모양**입니다.
+
+#### 재현 — 실제 생산 코드로 4가지 상태를 돌렸습니다
+
+`estimate_cost_ceiling` → `describe_cost_ceiling`을 그대로 부른 것입니다.
+과제 1개, 안전 계수 1배, 가격표는 모델 하나만 넣었습니다.
+
+**고치기 전**
+
+| 계획서 상태 | 실행 자리 줄 | 채점 줄 | 보는·듣는 줄 | 안전 계수 전 합계 |
+|---|---|---|---|---|
+| 전부 가격 있음 | 0.01 | 0.45 | 0.35 | **0.80** |
+| 실행 자리 모델 가격 없음 | **0.00**, 설명 없음 | 0.45 | 0.35 | 0.80 |
+| 채점 모델 가격 없음 | 0.01 | **0.00**, 설명 없음 | 0.35 | **0.36** ← 55% 떨어짐 |
+| 보는 모델 가격 없음 (크기는 잼) | 0.01 | 0.45 | **0.00**, 설명 **전혀 없음** | 0.45 |
+
+셋 다 `0.00`을 찍으면서 **그 줄에도, 합계 줄에도 한 마디도 없었습니다.**
+
+#### 원인은 셋인데, 저장소는 그중 **하나**만 말하고 있었습니다
+
+| 원인 | 고치기 전 |
+|---|---|
+| 보는·듣는 쪽 **크기를 안 쟀다** | 그 줄에만 적혀 있었음 (합계 줄엔 없음) |
+| 어떤 모델에 **공표된 가격이 없다** | 어디에도 없음 |
+| **크기는 쟀는데 가격이 없다** | 어디에도 없음 — 이번에 새로 찾은 것 |
+
+세 번째가 가장 조용했습니다. "크기를 안 쟀다"는 말조차 안 나오니, 읽는 사람은
+**아무 문제가 없다고 읽습니다.**
+
+#### 무엇을 고쳤나 — **새 기준을 만들지 않았습니다**
+
+이미 있던 규칙을 **나머지 두 원인까지 넓힌 것**입니다. 원래 규칙은
+`describe_preflight`에 이렇게 있었습니다.
+
+```python
+if result.grading_ceiling_problems:
+    lines.append("WARNING: the marking figure above is not a ceiling — … "
+                 "so every total here is too low. See the problems below.")
+```
+
+즉 **"채점 쪽이 덜 세어졌으면 합계 옆에 그렇게 적는다"** 는 규칙이 이미
+있었습니다. 이번에는 같은 규칙을 **가격이 없는 경우**와 **크기를 안 잰 경우**
+에도 적용했습니다.
+
+새로 만든 것은 필드 두 개와 유도 함수 하나입니다.
+
+| 이름 | 하는 일 |
+|---|---|
+| `perception_of_unknown_price` | 크기는 쟀지만 **가격이 없는** 보는·듣는 종류 |
+| `grading_model_with_no_price` | **채점 모델**에 가격이 없을 때 그 이름 |
+| `what_the_totals_leave_out()` | 합계에서 빠진 이유 목록 — **사람이 읽는 줄과 기계가 읽는 답이 여기 하나에서 나옵니다** |
+
+`grading_model_with_no_price`를 `grading_usd == 0`으로 되짚지 않고 **이름을 직접
+들고 다닙니다.** 0이라는 숫자를 사실로 읽는 것이 바로 이 결함이기 때문입니다.
+
+**고친 뒤 같은 4가지**
+
+```
+실행 자리 가격 없음
+  host_python_process: … at most 0.00 … — but no published price was found for
+  no-price-model, so every one of those calls is in the count and in no figure
+  WARNING: both totals above are lower than the most this could cost, because …
+  Those calls are counted in the model-call figures above (79 in total) and in
+  none of the money
+
+채점 가격 없음
+  grading: at most 71 model calls, at most 0.00 … — but no published price was
+  found for no-price-model, so every one of those calls is in the count and in
+  no figure
+
+보는 모델 가격 없음 (크기는 잼)
+  grading, looking and listening: … at most 0.00 … — but no published price was
+  found for vision (no-price-model), so every one of those calls is in the count
+  and in no figure
+```
+
+크기와 가격이 **둘 다** 없으면 두 문장이 같이 붙습니다. 뒤 문장이
+*"measuring it would not produce a figure either"* 로 끝나는데, **"재기만 하면
+숫자가 나온다"** 고 오해하고 헛수고하지 말라는 뜻입니다.
+
+#### 실제 커밋된 계획서에서는 이렇게 보입니다
+
+```
+grading, looking and listening: at most 1125 model calls, at most 54.00 …
+  — but audio (gpt-audio-1.5) is not in that figure at all, because how much it
+  sends was never measured
+  — and no published price was found for audio (gpt-audio-1.5), so measuring it
+  would not produce a figure either
+before the safety multiplier: 6086.73 United States dollars
+after multiplying by 1.25: 7608.41 United States dollars
+WARNING: both totals above are lower than the most this could cost, because no
+published price was found for gpt-audio-1.5; and how much audio (gpt-audio-1.5)
+sends and writes back was never measured. Those calls are counted in the
+model-call figures above (10136 in total) and in none of the money
+```
+
+**앞의 여섯 줄 숫자는 하나도 안 움직였습니다.** 마지막 줄이 새로 생긴 것입니다.
+
+#### 차단 동작은 한 줄도 안 바뀌었습니다
+
+`check_cost_ceiling`은 **손대지 않았습니다.** 위 4가지 중 가격이 없는 3가지는
+고치기 전에도 후에도 똑같이 `no published price was found…` 를 냅니다.
+`test_what_stops_a_run_is_unchanged_by_any_of_this`가 세 경우 모두에서 이를
+확인하고, 전부 가격이 있는 경우에는 그 문구가 **안 나온다**는 반대 방향까지
+확인합니다.
+
+그리고 **2026-08-28 소유자 결정대로 비용은 기록 전용입니다.** 계획서에
+`policy: record_cost_findings_only`, `unpriced_audio_measurement: true`가
+적혀 있고, 이번 수정은 그것을 **되살리지 않았습니다.** 32.23 / 364 달러를
+실행 차단 상한으로 부활시키지 않았습니다.
+
+#### 일부러 안 고친 것
+
+소리 채점(`gpt-audio-1.5`)에 가격이 없고 크기도 안 잰 것 **자체**는 이번에
+안 고쳤습니다. 소유자가 2026-08-28에 그 상태로 진행하기로 **명시적으로 승인**
+했기 때문입니다. 이번 수정은 **그 사실이 합계 옆에 보이게 만든 것뿐**입니다.
+
+#### 기존 테스트 두 개를 **좁혔습니다** (지운 것 0개)
+
+| 테스트 | 무엇이 바뀌었나 |
+|---|---|
+| `test_the_printed_total_says_it_is_too_low_while_marking_is_uncounted` | `len(warnings) == 1` → **`"marking figure"`가 든 경고를 골라서** 확인. 경고를 **세는** 방식이면 다른 원인을 찾아낸 것이 회귀처럼 보입니다 |
+| `test_no_caveat_is_printed_once_the_marking_half_is_a_ceiling` | "경고가 하나도 없다" → **"채점 경고만 없다"**. 커밋된 계획서는 소리 쪽 이유로 여전히 합계가 짧으므로, 무조건 침묵을 요구하면 **방금 고친 결함을 다시 불러오라는 뜻**이 됩니다 |
+
+둘 다 **원래 의도는 그대로**고, 세는 대신 **내용을 보게** 만든 것입니다.
+
+#### 실패할 수 있다는 증명 — 두 방향
+
+1. `test_the_old_silence_would_be_caught_if_it_came_back` — 옛 동작을 **메모리
+   에서만** 되살리면 경고가 사라지고, **그때 찍히는 돈은 똑같습니다.** 이것이
+   이 결함이 오래 살아남은 이유입니다. 산수는 틀린 적이 없고, 대답할 수 없는
+   질문에 대답을 한 것뿐입니다.
+2. `test_the_old_silence_on_a_measured_but_unpriced_kind_would_be_caught` —
+   새로 찾은 세 번째 원인만 되살리면 `0.00`이 **아무 설명 없이** 다시 찍힙니다.
+
+여기에 `test_the_totals_really_do_fall_when_a_price_goes_missing`이 **결함
+자체를 산수로** 못박습니다. 호출 수는 같은데 금액만 떨어진다는 것입니다.
+
+#### 확인한 것
+
+- 새 테스트 **14개 함수 / 실행 항목 20개**, 좁힌 기존 테스트 2개, 지운 것 **0개**
+  (이 파일의 함수 96 → **110개**)
+- 봉투 관련 형제 파일 전체 **484개 통과**
+- 문구 감시(`test_marking_ceiling_has_no_uncapped_part.py`) + 명세서 상한 감시
+  **271개 통과** — 새 문구는 금지된 7개 표현을 하나도 안 씁니다
+- `mypy core/` 오류 **170개 / 파일 32개** — 기준선과 동일
+- 모델 호출 0회, 채점 실행 0회, 승인한 금액 없음, 로그인 없음
+
+#### 비용 상한은 움직이지 않았습니다
+
+13.28의 울타리 친 표는 그대로입니다. `estimate_cost_ceiling`의 **산수는 한 줄도
+안 건드렸고**, 새 필드는 전부 **덧붙이기**입니다.
+`test_the_spec_quotes_the_live_ceiling.py`가 `total_usd`를 직접 읽으므로 이
+수정이 그 숫자를 움직일 수 없습니다.
+
+#### 남은 차단 조건
+
+| 무엇 | 어떻게 풀리나 |
+|---|---|
+| **#292 · #294 · #295 · #297 · #299 병합** | **유료 shard 지문이 걸려 있습니다.** 이번 수정도 `core/` 파일 하나를 건드리므로 `compute_grader_source_hash`가 다시 움직입니다 |
+| ~~가격이 없으면 합계가 조용히 작아지던 문제~~ | **닫힘 (#299).** 값을 못 매긴 호출이 있으면 합계 옆에 그렇게 적습니다 |
+| 소리 채점의 가격·크기 자체 | **소유자가 2026-08-28에 그대로 진행하기로 승인.** 이번 수정 대상이 아닙니다 |
+| 나머지 | 13.28의 표 그대로입니다. 이번 수정으로 풀린 것은 없습니다 |
+
+**전체 비교 실험이 실행되지 않았으므로 이 작업은 차단됨으로 유지합니다.**

@@ -714,23 +714,37 @@ def test_the_printed_total_says_it_is_too_low_while_marking_is_uncounted():
     possible bill. Reporting the shortfall further down the page and leaving
     the total to read as final is how a known-low number gets quoted as a
     ceiling.
+
+    This names the warning it means rather than counting the warnings, because
+    the marking settings are only one of the reasons these totals can be short
+    and a count would make finding another reason look like a regression.
     """
     result = preflight_on_the_committed_plan()
     assert result.grading_ceiling_problems
     warnings = [
         line for line in describe_preflight(result) if line.startswith("WARNING")
     ]
-    assert len(warnings) == 1
-    assert "not a ceiling" in warnings[0]
-    assert "too low" in warnings[0]
+    about_marking = [line for line in warnings if "marking figure" in line]
+    assert len(about_marking) == 1
+    assert "not a ceiling" in about_marking[0]
+    assert "too low" in about_marking[0]
 
 
 def test_no_caveat_is_printed_once_the_marking_half_is_a_ceiling():
-    """The warning must disappear when it stops being true, and only then."""
+    """The warning must disappear when it stops being true, and only then.
+
+    Only the marking warning is asserted away. The committed plan's totals are
+    also short for a reason that has nothing to do with the marking settings —
+    the listening model has no published price and its size was never measured
+    — so that warning is expected to stay, and a blanket assertion of silence
+    here would quietly demand that the other defect come back.
+    """
     result = replace(preflight_on_the_committed_plan(), grading_ceiling_problems=[])
-    assert not [
+    warnings = [
         line for line in describe_preflight(result) if line.startswith("WARNING")
     ]
+    assert not [line for line in warnings if "marking figure" in line]
+    assert [line for line in warnings if "lower than the most this could cost" in line]
 
 
 def test_the_written_answer_says_whether_the_marking_half_is_a_ceiling():
