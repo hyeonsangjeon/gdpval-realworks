@@ -6421,4 +6421,4 @@ headline fields absent`를 추가해 막았습니다. 변이 시험이 없었으
 
 - 이 항목은 §13.43과 **같은 계열**입니다. §13.43은 채점 파일이 사라졌고, 여기서는
   **실험 보고서**가 사라졌습니다. 둘 다 "빠진 걸 빼고 계속하면 아무도 모른다"는 같은 모양입니다.
-- PR: **PR_NUMBER** — **병합 안 함**. 기반은 `wt/a-rejected-grade-must-not-vanish`(#326).
+- PR: **#329** — **병합 안 함**. 기반은 `wt/a-rejected-grade-must-not-vanish`(#326).
