@@ -20,12 +20,22 @@ description: |
 
   Why these two, and why the list grew by one. The smoke was pinned to
   `75401f7c` on the theory that a bundle carrying .mp3, .mp4 and .wav is the
-  cheapest exercise of the Responses API `input_audio` shape. The 174-task
-  partial run then found the defect that theory was guessing at, and named its
-  full blast radius: exactly two tasks had audio criteria demoted to TEXT and
-  scored by a judge that could not hear -- `75401f7c` (14 items, 18.0 of 56)
-  and `e222075d` (7 items, 10.3 of 60). Both are Film and Video Editors, which
-  is why they are corpus-adjacent; consecutive rows share an occupation.
+  cheapest exercise of the `input_audio` shape. That sentence used to say
+  "the Responses API `input_audio` shape", which was wrong: audio is the one
+  modality the two endpoints disagree about. `ResponseInputContentParam` is a
+  union of text, image and file only, so a Responses request carrying audio is
+  refused 400 before any model hears it -- which is exactly how the first two
+  paid smokes failed, in half a second, with zero perception tokens. Audio
+  belongs to `ChatCompletionContentPartParam`, and core/perception/audio.py
+  has sent it to Chat Completions since #302. The third smoke (run
+  33381143279) is the first whose audio calls settled: 19 of them, all
+  resolved against gpt-audio-1.5, 8,448 input and 1,411 output tokens.
+  The 174-task partial run then found the defect that theory was guessing at,
+  and named its full blast radius: exactly two tasks had audio criteria
+  demoted to TEXT and scored by a judge that could not hear -- `75401f7c`
+  (14 items, 18.0 of 56) and `e222075d` (7 items, 10.3 of 60). Both are Film
+  and Video Editors, which is why they are corpus-adjacent; consecutive rows
+  share an occupation.
 
   A smoke covering one of the two would leave the other's regression unproven
   while costing most of what covering both costs, so the pin is now the
