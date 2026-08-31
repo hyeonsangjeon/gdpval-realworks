@@ -3430,7 +3430,7 @@ Agentic Sandbox V2 1단계 계획서는 이 숫자들을 **자기가 따로 적�
 
 | 무엇 | 어떻게 풀리나 |
 |---|---|
-| **#292 · #294 병합** | **유료 shard 지문이 걸려 있습니다.** `core/` 아래 파일이 `compute_grader_source_hash`의 입력이라 주석 한 줄도 지문을 움직입니다. 남은 과제가 끝나거나 재고정 확인을 받아야 합니다 |
+| **#292 · #294 · #295 병합** | **유료 shard 지문이 걸려 있습니다.** `core/` 아래 파일이 `compute_grader_source_hash`의 입력이라 주석 한 줄도 지문을 움직입니다. 남은 과제가 끝나거나 재고정 확인을 받아야 합니다 |
 | ~~채점 호출 한 번의 입력 크기~~ | **닫힘.** 10,000 → 536,191 토큰 |
 | ~~컨테이너 첫 요청에 덧붙는 세 조각~~ | **닫힘 (#292).** 5,020 → 7,307자 |
 | 오류·경고 줄에 실행 중 적히는 영어 문장 | **미리 알 수 없습니다.** 비워 놓고 재므로 실제는 더 깁니다 (13.19에 기록) |
@@ -3438,5 +3438,149 @@ Agentic Sandbox V2 1단계 계획서는 이 숫자들을 **자기가 따로 적�
 | Azure 실행 조건 5개 | 이번 수정과 무관하게 그대로입니다 |
 | 측정 안 된 소리 듣기 호출 크기 | **무료로는 못 풉니다.** 실제 유료 호출을 한 번 해야 크기를 알 수 있습니다 |
 | 가격 없는 모델(`gpt-audio-1.5`) | **무료로는 못 풉니다.** 외부 가격표가 나와야 합니다 |
+
+**전체 비교 실험이 실행되지 않았으므로 이 작업은 차단됨으로 유지합니다.**
+
+### 13.29 "읽고 비교했는데 틀렸다"를 답으로 적습니다 (2026-08-31 수정, #295)
+
+#### 한 줄 요약
+
+입력 파일 지문 검사는 계획서가 **엉뚱한 파일**을 지목하면 예전부터 제대로
+잡아서 실행을 막았습니다. 그런데 **그 사실을 기록에 남기지 않았습니다.**
+틀린 파일도 맞은 파일과 **똑같은 상태**로 적혔습니다.
+
+#### 재현 — 계획서가 엉뚱한 파일을 지목한 상황
+
+고치기 전, 실제 생산 코드 경로로 돌린 결과입니다.
+
+```
+problems            : 1        ← 차단은 제대로 됩니다
+everything_was_read : True
+fully_checked       : 2 of 2   ← 틀린 파일이 여기 들어 있습니다
+[read the file] Costs.xlsx — 64/64 — read from …   ← 결과가 없습니다
+```
+
+`_check_one_written_fingerprint`는 지문이 **맞든 틀리든** 같은 자리로
+떨어졌습니다.
+
+```python
+if real != fingerprint and pinned_by_construction:
+    problems.append(...)        # 여기까지는 맞습니다
+elif real != fingerprint:
+    problems.append(...)
+return InputFileCheck(state=INPUT_FILE_READ, characters_compared=64, ...)
+#                            ^^^^^^^^^^^^^^^ 틀린 경우에도 이 값
+```
+
+그래서 이 기록에서 만들어지는 것이 전부 틀렸습니다.
+
+| 무엇 | 틀린 파일에 대해 뭐라고 했나 |
+|---|---|
+| `InputFileCheck.fully_checked` | **참** (`state == INPUT_FILE_READ`) |
+| `InputFileVerification.everything_was_read` | **참** |
+| `as_dict()` (밖으로 나가는 기록) | `state: "read the file"`, `64 of 64` |
+| 사람이 읽는 줄 | `2 of 2 … read off this machine and compared in full` |
+
+마지막 줄이 특히 나쁩니다. 그 함수의 docstring이 **"청구서를 승인하려는 사람이
+읽는다"** 고 스스로 밝혀 놓았는데, 그 사람에게 보여 준 문장이 저것이었습니다.
+
+상수 자체의 설명문도 이미 어긋나 있었습니다.
+
+```python
+#: The real file was read and all 64 characters agreed.
+INPUT_FILE_READ = "read the file"
+```
+
+**"agreed"라고 적어 놓고, 안 맞을 때도 이 값을 돌려주고 있었습니다.**
+
+#### 이 파일이 스스로 적어 둔 원칙을 어기고 있었습니다
+
+`verify_input_file_versions`의 docstring입니다.
+
+> 아무도 비교하지 않은 지문은 증거가 아니고, 그걸 조용히 넘어가는 검사는
+> 하지도 않은 일을 했다고 주장하는 것이다.
+
+한 칸 옆의 경우가 빠져 있었습니다. **여기서는 일을 했습니다. 빠진 건 답입니다.**
+
+#### 무엇을 고쳤나 — 네 번째 상태
+
+```python
+#: 파일을 읽었고 64자가 **안 맞았다**. 64자 전부 비교했으니 검사가 모자란 게
+#: 아니라 답이 나온 것이고, 그 답이 "아니오"다.
+INPUT_FILE_DISAGREED = "read the file and it disagreed"
+```
+
+- `characters_compared`는 **64 그대로** 둡니다. 실제로 64자 다 비교했으니까요.
+  0으로 낮추면 "이 기계는 알 수 없었다"는 **다른 답**이 되어 버립니다.
+- `fully_checked`(비교했고 맞았다)에서 빠집니다.
+- `everything_was_read`는 **말 그대로 "읽었나"** 를 뜻하도록 문서를 고쳤고,
+  동작은 한 글자도 안 바뀝니다(틀린 파일도 읽기는 읽었으니 참).
+- 사람들이 실제로 묻는 질문에는 새 이름을 붙였습니다 — `everything_agreed`.
+
+고친 뒤 같은 재현입니다.
+
+```
+problems 1 | everything_was_read True | everything_agreed False
+           | agreed 1/2 | disagreements 1
+    [read the file and it disagreed] Costs.xlsx — 64/64
+```
+
+#### 예정에 없던 발견 — 기존 테스트가 실제로 이 버그를 통과시키고 있었습니다
+
+새 테스트를 넣고 돌리자 **기존 테스트 하나가 깨졌습니다.**
+
+`test_the_written_report_carries_the_per_file_state`는 진짜 계획서를 작은
+시험용 데이터 폴더에 대고 돌립니다. 그 폴더에는 진짜 데이터 파일 대신
+대역(stand-in) 파일이 들어 있습니다. 그러니 **그 실행은 진짜로 불일치를 하나
+만들고 있었습니다.**
+
+```
+azure_code_interpreter [read the file and it disagreed] data/train-00000-of-00001.parquet
+azure_code_interpreter [read the file]                  reference_files/901e…/Acquisition Criteria (2).pdf
+azure_code_interpreter [read the file]                  reference_files/bb09…/Work Time Study - Source.xlsx
+```
+
+고치기 전에는 첫 줄도 `read the file`이었습니다. 즉 **이 저장소의 테스트는
+지금까지 계속 이 결함을 눈앞에 두고 통과하고 있었습니다.** 그 테스트를 넓히지
+않고, 이제 그 불일치를 **반드시 나와야 하는 것으로** 못박았습니다.
+
+#### 차단 동작은 한 줄도 바꾸지 않았습니다
+
+불일치는 예전에도 `problems`에 들어가 실행을 막았고, 지금도 똑같이 막습니다.
+바뀐 것은 **적히는 내용**뿐입니다. "새로운 기준이나 조건이 기존 실험에 영향을
+미치면 안 된다"는 규칙에 걸리지 않도록, 회귀 테스트로 이것을 직접 고정했습니다
+(`test_a_disagreement_still_stops_the_run_exactly_as_before`).
+
+#### 확인한 것
+
+- 새 회귀 테스트 **11개** + 고쳐 세운 기존 테스트 1개 (지운 테스트 0개).
+  이 파일은 32개 → 43개가 됐고, 전체 묶음도 5,964 → **5,975개**로 정확히
+  11개만 늘었습니다
+- **실패할 수 있다는 증명**: 옛 기록을 메모리에서 되살리면
+  (`state`를 `INPUT_FILE_READ`로 되돌리면) `everything_agreed`가 참이 되고
+  `disagreements`가 비고 `fully_checked`가 3이 되는 것을 직접 확인합니다.
+  그리고 **그때도 `problems`는 똑같다**는 것까지 확인합니다 — 이것이 이 결함이
+  그동안 눈에 안 띈 이유입니다
+- "복사본이 없다"(`folder name only` / `not checked`)는 새 상태에 **휩쓸리지
+  않습니다.** 둘은 해결 방법이 다릅니다 — 하나는 공짜로 내려받으면 풀리고,
+  하나는 계획서를 고쳐야 풀립니다
+- `mypy core/` 오류 **170개, 파일 32개** — 기준선과 같음
+- 전체 pytest **5,975개 통과, 6개 건너뜀, 실패 0** (11분 52초)
+- `node --test` 184개 중 183개 통과, 1개 건너뜀, 실패 0
+- `npm run build`(tsc + vite) 정상 — 6.07초, 오류 0
+- 모델 호출 0회, 채점 실행 0회, 승인한 금액 없음. **차단은 하나도 풀리지 않았습니다**
+
+#### 비용 상한은 움직이지 않았습니다
+
+13.28의 울타리 친 표는 그대로입니다. 이 수정은 돈을 세는 곳을 건드리지 않았고,
+`test_the_spec_quotes_the_live_ceiling.py`가 그걸 매번 확인합니다.
+
+#### 남은 차단 조건
+
+| 무엇 | 어떻게 풀리나 |
+|---|---|
+| **#292 · #294 · #295 병합** | **유료 shard 지문이 걸려 있습니다.** 이번 수정도 `core/` 파일 두 개를 건드리므로 `compute_grader_source_hash`가 다시 움직입니다 |
+| ~~불일치가 통과로 기록되는 문제~~ | **닫힘 (#295).** 네 번째 상태를 만들었습니다 |
+| 나머지 | 13.28의 표 그대로입니다. 이번 수정으로 풀린 것은 없습니다 |
 
 **전체 비교 실험이 실행되지 않았으므로 이 작업은 차단됨으로 유지합니다.**

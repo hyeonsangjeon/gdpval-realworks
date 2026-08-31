@@ -2156,22 +2156,40 @@ def describe_input_file_checks(result: EnvelopePreflight) -> list[str]:
     authorise a bill needs to see the difference between a fingerprint that was
     compared against the file and one that was taken on trust, and that
     difference is invisible in a list that only shows problems.
+
+    There is a third answer, and it is the one that matters most: compared, and
+    it disagreed. That is said out loud here rather than left to be inferred
+    from a count, because "2 of 2 read and compared in full" is read as
+    reassurance even when one of the two turned out to be a different file.
     """
     lines: list[str] = []
     for environment, verification in sorted(result.input_files.items()):
         if not verification.checks:
             lines.append(f"{environment}: no input fingerprint was written down")
             continue
-        read = len(verification.fully_checked)
-        lines.append(
-            f"{environment}: {read} of {len(verification.checks)} input file(s) "
-            "read off this machine and compared in full"
+        agreed = len(verification.fully_checked)
+        summary = (
+            f"{environment}: {agreed} of {len(verification.checks)} input "
+            "file(s) read off this machine, compared in full, and agreed"
         )
+        disagreed = verification.disagreements
+        if disagreed:
+            summary += (
+                f"; {len(disagreed)} was read and turned out to be a different "
+                "file"
+                if len(disagreed) == 1
+                else f"; {len(disagreed)} were read and turned out to be "
+                "different files"
+            )
+        lines.append(summary)
         for check in verification.checks:
-            lines.append(
+            line = (
                 f"    [{check.state}] {check.path} "
                 f"— {check.characters_compared} of 64 characters compared"
             )
+            if check.disagreed:
+                line += " and they do not match"
+            lines.append(line)
     return lines
 
 
