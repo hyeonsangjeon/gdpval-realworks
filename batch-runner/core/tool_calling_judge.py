@@ -349,6 +349,11 @@ class ToolCallingResult:
     usage_complete: bool = True
     score_excluded: bool = False
     visual_provenance: List[Dict[str, Any]] = field(default_factory=list)
+    #: What the perception sub-judge said about its own failure, when the item
+    #: ended as a perception error. ``judge_error`` names the kind so a corpus
+    #: can be grouped by it; this says why so the next run can be fixed. See
+    #: :py:func:`_unanswerable_audio_detail`.
+    perception_error_detail: Optional[str] = None
 
 
 # ----------------------------------------------------------------------
@@ -454,6 +459,35 @@ def _unanswerable_audio_reason(result: Mapping[str, Any]) -> Optional[str]:
         detail = data.get("judge_error") or "unknown"
         return f"audio_perception_failed:{detail}"
     return f"audio_perception_failed:{error_type or 'unknown'}"
+
+
+def _unanswerable_audio_detail(result: Mapping[str, Any]) -> Optional[str]:
+    """The sub-judge's own account of the refusal, if it left one.
+
+    ``_unanswerable_audio_reason`` answers *what kind* of failure this was,
+    in a small controlled vocabulary that a whole corpus can be grouped by --
+    and that vocabulary is the reason it cannot also answer *why*. Stage 3's
+    audio smoke ended with two values, ``audio_unavailable:provider_400`` and
+    ``provider_error:BadRequestError``, repeated fifteen times between them
+    and saying nothing that could be acted on. Widening the vocabulary to fix
+    that would trade one problem for a worse one: per-call byte counts in
+    ``judge_error`` turn two clean groups into fifteen singletons.
+
+    So the detail travels beside the reason rather than inside it. It exists
+    only where the sub-judge itself ran and built one -- ``AudioVerdict.
+    failure_detail``, assembled out of this harness's own measurements and
+    never the provider's message body. Everywhere else the reason already is
+    the whole story (``no_audio_judge`` needs no elaboration), and ``None``
+    says so honestly.
+    """
+    if _unanswerable_audio_reason(result) is None:
+        return None
+    data = result.get("data")
+    if isinstance(data, Mapping):
+        detail = data.get("failure_detail")
+        if isinstance(detail, str) and detail.strip():
+            return detail
+    return None
 
 
 def _finalization_retry_reason(
@@ -707,6 +741,10 @@ class ToolCallingJudge:
         # cannot be marked from what it heard.
         audio_answered = False
         audio_unanswerable: Optional[str] = None
+        # Kept in step with ``audio_unanswerable`` -- same first-failure-wins
+        # rule -- because a reason and a detail from two different failures
+        # would describe neither.
+        audio_unanswerable_detail: Optional[str] = None
         finalization_only = False
         finalization_retries_used = 0
         # Which failure sent us into finalization, kept because the answer to
@@ -882,6 +920,9 @@ class ToolCallingJudge:
                             reason = _unanswerable_audio_reason(result)
                             if reason is not None and audio_unanswerable is None:
                                 audio_unanswerable = reason
+                                audio_unanswerable_detail = (
+                                    _unanswerable_audio_detail(result)
+                                )
                     messages.append(self._function_call_output_message(fc, result))
                 # Loop again to let the model react to the tool outputs.
                 continue
@@ -934,8 +975,13 @@ class ToolCallingJudge:
         # An attempt that failed and then succeeded is not an error: the run
         # heard the audio in the end, which is the only thing the mark depends
         # on. Only "asked, never heard" excludes.
+        perception_error_detail: Optional[str] = None
         if judge_error is None and audio_unanswerable is not None and not audio_answered:
             judge_error = audio_unanswerable
+            # Only here. A detail attached to an item that ended for some
+            # other reason, or that heard the audio on a later attempt, would
+            # be describing something that did not decide the item.
+            perception_error_detail = audio_unanswerable_detail
 
         return self._build_result(
             item=item,
@@ -952,6 +998,7 @@ class ToolCallingJudge:
             main_api_call_count=main_api_call_count,
             visual_prepass=prepass,
             usage_complete=usage_complete,
+            perception_error_detail=perception_error_detail,
         )
 
     def reset_perception(self) -> None:
@@ -1692,6 +1739,7 @@ class ToolCallingJudge:
         main_api_call_count: int = 0,
         visual_prepass: Optional[VisualPrepassResult] = None,
         usage_complete: bool = True,
+        perception_error_detail: Optional[str] = None,
     ) -> ToolCallingResult:
         tools_used = list(tools_used or [])
         prepass = visual_prepass or VisualPrepassResult()
@@ -1710,6 +1758,7 @@ class ToolCallingJudge:
             "render_total_latency_ms": prepass.render_total_latency_ms,
             "usage_complete": usage_complete and prepass.usage_complete,
             "visual_provenance": prepass.to_provenance(),
+            "perception_error_detail": perception_error_detail,
         }
         if judge_error is not None or not final_text.strip():
             return ToolCallingResult(
