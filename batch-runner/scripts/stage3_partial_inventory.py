@@ -51,6 +51,16 @@ CONFIG_PATH = BATCH_ROOT / "grading_configs/gold_ceiling_185_v2_sol_max.yaml"
 
 #: The output directory is named after the ordered-task-ids digest, so the
 #: corpus identity is in the path rather than only in the payloads.
+#:
+#: Every hash spelled out below is a *historical* one: this is where the 174
+#: already-graded shards sit on disk, and that path can never change again.
+#: Two of its fields have since moved in the working tree — ``cfg_`` because
+#: the audio call cap went from 3 to 32, and ``src_`` because the listening
+#: call was repaired — so recomputing either from the current files would
+#: point this script at a directory that does not exist. Anyone tempted to
+#: replace these literals with a call to ``hash_config`` or
+#: ``compute_grader_source_hash`` is looking at the one place in this
+#: repository where a stale hash is the correct hash.
 CORPUS_DIGEST = "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18"
 SHARD_DIR = (
     REPO_ROOT
@@ -88,7 +98,17 @@ STALLED_TASK_SHARD_INDEX = 4
 #: ceiling down, so which of them landed in the graded set decides the
 #: direction of the bias in any average taken over less than 185.
 KNOWN_INPUT_LIMITS: dict[str, str] = {
-    "38889c3b": "10 listening criteria vs AUDIO_CALL_CAP=3 (gold is one .zip)",
+    # Kept as published, with what has since been learned appended rather than
+    # substituted. Both audio entries were pre-registered as *input* limits --
+    # properties of the deliverable the grader could not help -- and both turned
+    # out to be grader defects instead. The cap has been raised to 32 and the
+    # listening call now goes to the endpoint that accepts audio, so neither
+    # should reappear in a run made after that fix; a pre-registration is
+    # evidence about what was expected, so it is annotated, not rewritten.
+    "38889c3b": (
+        "10 listening criteria vs AUDIO_CALL_CAP=3 (gold is one .zip); "
+        "cap since raised to 32"
+    ),
     "a73fbc98": "102 render targets vs a cap of 72",
     "e222075d": "required_visual_render_target_unavailable",
     "75401f7c": "required_visual_render_target_unavailable",

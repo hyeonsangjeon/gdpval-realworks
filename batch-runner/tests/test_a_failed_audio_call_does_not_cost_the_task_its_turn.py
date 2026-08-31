@@ -7,12 +7,22 @@ strings and no verdicts::
     audio_perception_failed:provider_error:BadRequestError   x3 per task
     audio_perception_failed:cap_exceeded                     everything after
 
-The second line is the defect this module is about. ``AUDIO_CALL_CAP = 3`` is
-a per-task budget, ``_calls_used`` was incremented before the request, and a
-request that raised never gave the slot back. So three rejections exhausted a
-task's entire audio budget and every remaining criterion was refused without
-being attempted: ``e222075d`` got one of its seven criteria tried, and the
-other six were marked against a budget that had bought nothing.
+The first line has since been explained and removed at its source: audio was
+being sent to the Responses API, whose content union is text, image and file
+and has no audio member, so every request was malformed at any size and no
+model ever heard a second of the corpus. That fix lives in
+``core/perception/audio.py`` and is guarded by
+``tests/test_audio_goes_to_the_endpoint_that_accepts_it.py``.
+
+The second line is the defect this module is about, and it survives the
+explanation of the first. ``AUDIO_CALL_CAP`` is a per-task budget,
+``_calls_used`` was incremented before the request, and a request that raised
+never gave the slot back. So three rejections exhausted a task's entire audio
+budget and every remaining criterion was refused without being attempted:
+``e222075d`` got one of its seven criteria tried, and the other six were
+marked against a budget that had bought nothing. Nothing in that accounting
+depends on *why* the three failed, which is why correcting the endpoint
+retires none of it.
 
 Two things are wrong there and they are worth separating.
 
@@ -20,7 +30,7 @@ Two things are wrong there and they are worth separating.
 a request the provider refused before running the model spent nothing. It is
 also, per ``305-resume-granularity.md``, a fairness instrument -- every task
 gets the same number of listens so every task is marked with the same
-instrument -- and a task that listened zero times has not used its three.
+instrument -- and a task that listened zero times has not used its budget.
 
 **The report is wrong, which is worse.** ``cap_exceeded`` says the task used
 its budget. Read off the artifact it means "we listened three times and
@@ -34,14 +44,16 @@ So the fix is two-sided, and both sides are held here:
   timeout or a 5xx -- which may have been billed for work nobody saw -- stays
   charged;
 * a rejection that will recur identically for the rest of the task stops it
-  once, by name, instead of after two more identical bounces.
+  once, by name, instead of after 31 more identical bounces.
 
 The refund alone would be a regression. Handing the slot back on every
-failure turns a flaky endpoint into fourteen doomed requests where there were
-three, so the refund only exists alongside a bounded failure budget and the
-short-circuit. The negative controls below are the ones that matter most:
-successes must still hit the cap, or the fairness property the cap was for is
-gone.
+failure turns a flaky endpoint into a doomed request per criterion, so the
+refund only exists alongside a bounded failure budget and the short-circuit.
+Raising the cap from three to 32 is what makes that pairing load-bearing
+rather than merely tidy: the worst case it prevents grew by the same factor
+the cap did. The negative controls below are the ones that matter most:
+successes must still stop at the cap, or the fairness property the cap was
+for is gone.
 
 Nothing here calls a model.
 
@@ -54,6 +66,7 @@ import struct
 import sys
 import wave
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -89,10 +102,27 @@ class BadRequestError(ProviderError):
         super().__init__(400)
 
 
-class _Responses:
+def _reply():
+    """A Chat Completions reply, in the shape ``_first_choice_text`` reads.
+
+    Not the flattened ``output_text`` the Responses API offers. Spelling it
+    out this way is deliberate: a double that answered both shapes would let a
+    return to the wrong endpoint go on passing here, which is exactly how the
+    suite missed the defect the first time.
+    """
+    body = (
+        '{"verdict": "pass", "partial_score": 1.0, "evidence": "clear",'
+        ' "confidence": 0.9, "reasoning": "audible"}'
+    )
+    message = SimpleNamespace(content=body, audio=None)
+    return SimpleNamespace(choices=[SimpleNamespace(message=message)],
+                           usage=None)
+
+
+class _Completions:
     """Answers ``n_ok`` requests, then raises ``error_factory`` forever.
 
-    Defaults to raising immediately, which is the smoke's endpoint.
+    Defaults to raising immediately, which is what the smoke saw.
     """
 
     def __init__(self, *, n_ok: int = 0, error_factory=BadRequestError) -> None:
@@ -103,21 +133,20 @@ class _Responses:
     def create(self, **kwargs):
         self.calls.append(kwargs)
         if len(self.calls) <= self._n_ok:
-            return _Reply()
+            return _reply()
         raise self._error_factory()
 
 
-class _Reply:
-    output_text = (
-        '{"verdict": "pass", "partial_score": 1.0, "evidence": "clear",'
-        ' "confidence": 0.9, "reasoning": "audible"}'
-    )
-    usage = None
-
-
 class _Client:
-    def __init__(self, responses) -> None:
-        self.responses = responses
+    """Offers Chat Completions and nothing else.
+
+    It carries no ``responses`` attribute on purpose, so a call routed back to
+    the endpoint that cannot accept audio raises ``AttributeError`` here
+    rather than being quietly answered by a fake.
+    """
+
+    def __init__(self, completions) -> None:
+        self.chat = SimpleNamespace(completions=completions)
 
 
 @pytest.fixture
@@ -146,13 +175,13 @@ def _judge_n(perception: AudioPerception, path: Path, n: int) -> list:
 
 def test_a_provider_rejection_gives_the_call_slot_back(wav_file):
     """A 400 is not a listen, so it does not spend one."""
-    responses = _Responses()
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions()
+    perception = AudioPerception(client=_Client(completions))
 
     verdict = perception.judge(criterion="c", audio_path=str(wav_file))
 
     assert verdict.judge_error == "provider_error:BadRequestError"
-    assert len(responses.calls) == 1, "the call was made"
+    assert len(completions.calls) == 1, "the call was made"
     assert perception.calls_used == 0, (
         "a request the provider refused before running the model spent "
         "nothing; charging it against a spending cap takes a criterion's "
@@ -170,8 +199,8 @@ def test_a_failure_that_may_have_been_billed_stays_charged(wav_file, status):
     one criterion; under-charging costs money that never reaches the ledger,
     and only one of those two errors is recoverable.
     """
-    responses = _Responses(error_factory=lambda: ProviderError(status))
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions(error_factory=lambda: ProviderError(status))
+    perception = AudioPerception(client=_Client(completions))
 
     perception.judge(criterion="c", audio_path=str(wav_file))
 
@@ -187,17 +216,22 @@ def test_a_failure_that_may_have_been_billed_stays_charged(wav_file, status):
 def test_the_smoke_scenario_now_names_what_actually_happened(wav_file):
     """The headline: replay ``75401f7c``'s fourteen criteria against a 400.
 
-    Before, this produced three requests and eleven ``cap_exceeded`` -- a
-    report of a budget spent, on a task that never heard anything. Now it
-    produces one request and thirteen refusals that say the model was
-    unavailable, which is what was true.
+    Under the cap of three in force at the time, this produced three requests
+    and eleven ``cap_exceeded`` -- a report of a budget spent, on a task that
+    never heard anything. Now it produces one request and thirteen refusals
+    that say the model was unavailable, which is what was true.
+
+    The cap that replaced it is 32, so the arithmetic of the old failure is
+    worth restating at the new size: without the short-circuit this task would
+    make fourteen doomed requests instead of three, and ``ff85ee58``, which
+    has 32 listening criteria, would make 32.
     """
-    responses = _Responses()
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions()
+    perception = AudioPerception(client=_Client(completions))
 
     verdicts = _judge_n(perception, wav_file, 14)
 
-    assert len(responses.calls) == 1, (
+    assert len(completions.calls) == 1, (
         "the same clip in the same shape gets the same 400; the other "
         "thirteen requests buy nothing but wall-clock"
     )
@@ -217,12 +251,12 @@ def test_the_smoke_scenario_now_names_what_actually_happened(wav_file):
 
 def test_a_missing_deployment_stops_the_task_the_same_way(wav_file):
     """404 is deterministic for the same reason 400 is: it will not change."""
-    responses = _Responses(error_factory=lambda: ProviderError(404))
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions(error_factory=lambda: ProviderError(404))
+    perception = AudioPerception(client=_Client(completions))
 
     verdicts = _judge_n(perception, wav_file, 5)
 
-    assert len(responses.calls) == 1
+    assert len(completions.calls) == 1
     assert all(v.judge_error == "audio_unavailable:provider_404"
                for v in verdicts[1:])
 
@@ -232,14 +266,15 @@ def test_a_rate_limit_is_worth_retrying_but_not_forever(wav_file):
 
     So it is refunded like the others but does not stop the task -- and the
     failure budget is what keeps "does not stop the task" from meaning
-    "retries once per criterion for the rest of the rubric".
+    "retries once per criterion for the rest of the rubric". At a cap of 32
+    that difference is 32 attempts against three.
     """
-    responses = _Responses(error_factory=lambda: ProviderError(429))
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions(error_factory=lambda: ProviderError(429))
+    perception = AudioPerception(client=_Client(completions))
 
     verdicts = _judge_n(perception, wav_file, 12)
 
-    assert len(responses.calls) == AUDIO_FAILURE_BUDGET, (
+    assert len(completions.calls) == AUDIO_FAILURE_BUDGET, (
         "a throttled endpoint gets a bounded number of attempts, not one per "
         "criterion"
     )
@@ -255,15 +290,15 @@ def test_the_task_boundary_clears_the_block(wav_file):
     the block outlived it, one bad deliverable would silence the audio path
     for a whole shard.
     """
-    responses = _Responses()
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions()
+    perception = AudioPerception(client=_Client(completions))
     _judge_n(perception, wav_file, 3)
-    assert len(responses.calls) == 1
+    assert len(completions.calls) == 1
 
     perception.reset()
     perception.judge(criterion="next task", audio_path=str(wav_file))
 
-    assert len(responses.calls) == 2, "the next task gets its own attempt"
+    assert len(completions.calls) == 2, "the next task gets its own attempt"
 
 
 # ── the negative controls: what must not have been weakened ──────────
@@ -274,19 +309,24 @@ def test_successful_listens_still_stop_at_the_cap(wav_file):
 
     This is the control that matters. Everything above hands slots back, and
     a refund written one line too broadly would hand back the successful ones
-    too -- at which point a task with fourteen audio criteria listens fourteen
-    times while its neighbour listens three, and the two are no longer marked
-    with the same instrument. ``305`` states that invariant as B-1.
+    too -- at which point a task with 40 audio criteria listens 40 times while
+    its neighbour listens twice, and the two are no longer marked with the
+    same instrument. ``305`` states that invariant as B-1.
+
+    The cap is read from the constant rather than written out, because what
+    this pins is that the number is honoured. The number itself is pinned
+    against the corpus that chose it in ``test_perception_audio``.
     """
-    responses = _Responses(n_ok=99)
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions(n_ok=99)
+    perception = AudioPerception(client=_Client(completions))
 
-    verdicts = _judge_n(perception, wav_file, 8)
+    verdicts = _judge_n(perception, wav_file, AUDIO_CALL_CAP + 2)
 
-    assert len(responses.calls) == AUDIO_CALL_CAP == 3
-    assert perception.calls_used == 3
-    assert [v.verdict for v in verdicts[:3]] == ["pass", "pass", "pass"]
-    assert all(v.judge_error == "cap_exceeded" for v in verdicts[3:]), (
+    assert len(completions.calls) == AUDIO_CALL_CAP
+    assert perception.calls_used == AUDIO_CALL_CAP
+    assert all(v.verdict == "pass" for v in verdicts[:AUDIO_CALL_CAP])
+    assert all(v.judge_error == "cap_exceeded"
+               for v in verdicts[AUDIO_CALL_CAP:]), (
         "a task that really did use its listens is told exactly that; "
         "cap_exceeded keeps its meaning by only ever being true"
     )
@@ -295,51 +335,54 @@ def test_successful_listens_still_stop_at_the_cap(wav_file):
 def test_a_recovered_endpoint_still_owes_its_earlier_failures_nothing(wav_file):
     """Refunded failures must not add up to extra listens.
 
-    Two 429s then successes: the task still gets three listens, not five. The
-    failure budget and the call cap are separate counters precisely so that
-    spending one cannot top up the other.
+    Two 429s then successes: the task still gets its cap, not its cap plus
+    two. The failure budget and the call cap are separate counters precisely
+    so that spending one cannot top up the other.
     """
-    responses = _Responses()
+    completions = _Completions()
 
     def create(**kwargs):
-        responses.calls.append(kwargs)
-        if len(responses.calls) <= 2:
+        completions.calls.append(kwargs)
+        if len(completions.calls) <= 2:
             raise ProviderError(429)
-        return _Reply()
+        return _reply()
 
-    responses.create = create  # type: ignore[method-assign]
-    perception = AudioPerception(client=_Client(responses))
+    completions.create = create  # type: ignore[method-assign]
+    perception = AudioPerception(client=_Client(completions))
 
-    verdicts = _judge_n(perception, wav_file, 9)
+    verdicts = _judge_n(perception, wav_file, AUDIO_CALL_CAP + 4)
 
     assert perception.calls_used == AUDIO_CALL_CAP
-    assert sum(1 for v in verdicts if v.verdict == "pass") == 3, (
-        "three listens, the same as a task whose endpoint never faltered"
+    assert sum(1 for v in verdicts if v.verdict == "pass") == AUDIO_CALL_CAP, (
+        "the same number of listens as a task whose endpoint never faltered"
     )
 
 
-# ── the size candidate, named rather than guessed at ─────────────────
+# ── the size candidate, ruled out rather than guarded against ────────
 
 
 def test_an_oversized_payload_is_refused_by_name_and_never_sent(
     wav_file, monkeypatch
 ):
-    """The second 400 candidate, made distinguishable from the first.
+    """The other candidate for the smoke's 400, kept as a guard once ruled out.
 
-    A 400 body is not readable without buying a call, so the smoke could not
-    say whether ``temperature`` or request size caused it. After this, the
-    next smoke has three distinguishable outcomes rather than one ambiguous
-    one: a verdict, this named refusal, or a 400 that is neither.
+    A 400 body is not readable without buying a call, so at the time the smoke
+    ran, request size and the endpoint both fitted the evidence. The endpoint
+    is now known to be the cause -- the Responses content union has no audio
+    member, so the request was malformed at any size -- and this check earns
+    its place on a different argument: a payload the class can measure on its
+    own side of the wire should be named here rather than sent and refused,
+    because a provider's 400 will not say which of the two it was.
     """
     monkeypatch.setattr(
         "core.perception.audio.AUDIO_MAX_REQUEST_BYTES", 128
     )
-    responses = _Responses(n_ok=99)
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions(n_ok=99)
+    perception = AudioPerception(client=_Client(completions))
 
     verdicts = _judge_n(perception, wav_file, 4)
 
-    assert responses.calls == [], "nothing oversized goes on the wire"
+    assert completions.calls == [], "nothing oversized goes on the wire"
     assert verdicts[0].judge_error == "audio_payload_too_large"
     assert "128" in verdicts[0].reasoning, "the refusal states the limit it hit"
     assert all(v.judge_error == "audio_unavailable:payload_too_large"
@@ -353,37 +396,45 @@ def test_an_oversized_payload_is_refused_by_name_and_never_sent(
 def test_the_size_limit_leaves_an_ordinary_clip_alone(wav_file):
     """Negative control: the guard must not become the failure it prevents.
 
-    Thirty seconds of 48 kHz stereo is ~7.3 MB base64. A limit set anywhere
-    near real payloads would refuse every clip and look, from the artifact,
-    exactly like the outage it was written to rule out.
+    A limit set anywhere near real payloads would refuse every clip and look,
+    from the artifact, exactly like the outage it was written to rule out.
+    Thirty seconds re-encoded to 16 kHz mono is ~1.28 MB of base64, and the
+    untouched studio stems that shape replaced were ~7.7 MB, so the limit sits
+    an order of magnitude clear of both.
     """
     assert AUDIO_MAX_REQUEST_BYTES >= 16 * 1024 * 1024
 
-    responses = _Responses(n_ok=99)
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions(n_ok=99)
+    perception = AudioPerception(client=_Client(completions))
 
     verdict = perception.judge(criterion="c", audio_path=str(wav_file))
 
     assert verdict.verdict == "pass"
-    assert len(responses.calls) == 1
+    assert len(completions.calls) == 1
 
 
 def test_no_sampling_parameter_reaches_the_audio_model(wav_file):
     """The convention the rest of the grading path already follows.
 
     Neither the main judge nor ``VisionPerception`` sends ``temperature`` or
-    ``seed`` to the Responses API. Audio was the only caller that did, and it
-    is the only caller whose every request was rejected. Pinned here as well
-    as in ``test_perception_audio`` because that module checks the shape of
-    the content part and this one checks what the call is allowed to carry
-    around it.
+    ``seed``, and audio was the only caller that did. It was suspected of
+    being a third defect and it was not one: Chat Completions accepts
+    ``temperature`` on an audio-capable deployment, and the requests were
+    failing for a reason that had nothing to do with it. Dropping it is a
+    consistency argument rather than a fix -- a path with no successful call
+    anywhere in its history should send the smallest request that can do the
+    job.
+
+    Pinned here as well as in ``test_perception_audio`` because that module
+    checks the shape of the content part and this one checks what the call is
+    allowed to carry around it.
     """
-    responses = _Responses(n_ok=99)
-    perception = AudioPerception(client=_Client(responses))
+    completions = _Completions(n_ok=99)
+    perception = AudioPerception(client=_Client(completions))
 
     perception.judge(criterion="c", audio_path=str(wav_file))
 
-    sent = responses.calls[0]
+    sent = completions.calls[0]
     assert "temperature" not in sent
     assert "seed" not in sent
     assert "top_p" not in sent

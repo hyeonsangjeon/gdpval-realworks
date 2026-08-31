@@ -607,9 +607,10 @@ cost:
     # calls_per_task is read from the marking settings and checked against them.
     # The token counts cannot be: neither a picture's size nor a clip's length
     # is fixed by any setting here. Worse, neither perception call sets a limit
-    # on the reply at all — core/perception/vision.py and core/perception/audio.py
-    # both call the Responses API without max_output_tokens — so the numbers
-    # below are measurements of what happened, never promises about what can.
+    # on the reply at all — core/perception/vision.py calls the Responses API
+    # and core/perception/audio.py calls Chat Completions, and neither passes
+    # max_output_tokens — so the numbers below are measurements of what
+    # happened, never promises about what can.
     grading_perception:
       vision:
         model: "gpt-5.4"
@@ -627,13 +628,32 @@ cost:
       audio:
         model: "gpt-audio-1.5"
         # grading_configs/default_v2.yaml: perception.audio.call_cap_per_task.
-        calls_per_task: 3
+        #
+        # Was 3, because that setting said 3 until the cap was raised to 32.
+        # Three was never a measured demand: counted across the checked-in
+        # 220-task inventory, 11 tasks ask for more listening than that, and
+        # the worst asks for 32. This figure only ever mirrors the setting, so
+        # it moves when the setting moves.
+        #
+        # It changes no amount. Both token counts below are null and this
+        # model has no published price, so sound contributes nothing to the
+        # worked-out total either way. What moves is how many calls of unknown
+        # cost the plan admits are possible — which is the honest direction for
+        # an unknown to move in.
+        calls_per_task: 32
         # Deliberately not filled in. Across every committed grading run, 116
         # scoring lines were routed to sound and the sound model was called
         # **zero** times, so there is no measurement to draw on — not one billed
         # call exists. `null` makes the check refuse. Writing a number here
         # would be inventing evidence, and writing 0 would say the calls are
         # free, which is the exact mistake this whole file exists to prevent.
+        #
+        # Zero successful calls is now understood rather than merely observed:
+        # every one of them was sent to an endpoint whose content union has no
+        # audio member, so each was refused with a 400 before a model heard it.
+        # The request now goes to Chat Completions, which accepts it — but a
+        # path that has been repaired and not yet run is still a path nobody
+        # has measured, so these stay null until a real call reports usage.
         #
         # This model also has no published price, so even a measured token count
         # would not produce an amount.
