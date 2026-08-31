@@ -94,6 +94,7 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/PR3_GOLD_CEILING.md
 !tasks/rebuilding_grading_task/PR3_VARIANCE.md
 !tasks/rebuilding_grading_task/PR3_REPORT.md
+!tasks/rebuilding_grading_task/PR3_FULL_GOLD_CORPUS.md
 !tasks/rebuilding_grading_task/304-full-gold-corpus.md
 !tasks/rebuilding_grading_task/304-B-partial-blocked.md
 !tasks/rebuilding_grading_task/305-resume-granularity.md
@@ -105,6 +106,13 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/310-second-audio-smoke-fail-closed.md
 !tasks/rebuilding_grading_task/311-third-audio-smoke-pass.md
 !tasks/rebuilding_grading_task/312-fourth-audio-smoke-pass.md
+
+# The grading run writes a sqlite mirror of the cost ledger beside every grade
+# file. The published record is the .jsonl next to it; the database is a local
+# working copy, tens of megabytes of it. The workflow only ever stages the two
+# files it names, but a hand-published result is staged by hand -- as in #322 --
+# so the by-product is named here rather than left to whoever is typing.
+data/grades/**/*.cost_ledger.sqlite3
 
 *.parquet
 .huggingface/
