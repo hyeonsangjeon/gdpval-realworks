@@ -1084,7 +1084,14 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
             lines.append(
                 f"  {pct}%  n={block['task_count']:<3d}  "
                 f"required {block['required_passed']}/{block['required_items']}"
-                f"  ·  {name[:44]}"
+                # Printed whole. The name is the last field on the line, so
+                # clipping it buys no alignment, and at 44 characters two of
+                # this corpus's occupations -- the wholesale sales
+                # representatives, technical and non-technical -- render as the
+                # same string. A breakdown whose job is to say *which*
+                # occupation drags the ceiling down cannot have two rows a
+                # reader is unable to tell apart.
+                f"  ·  {name}"
             )
         lines.append("")
 
@@ -1144,7 +1151,8 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
         maximum = "?" if row["total_max"] is None else f"{row['total_max']:.0f}"
         lines.append(
             f"  {row['task_id']}  {pct}%  {awarded}/{maximum}"
-            f"  ·  {(row['occupation'] or 'occupation unrecorded')[:44]}"
+            # Whole, for the same reason as the occupation breakdown above.
+            f"  ·  {row['occupation'] or 'occupation unrecorded'}"
         )
         notes = [
             f"{row['items_below_full_marks']}/{row['items']} item(s) below max",
