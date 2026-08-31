@@ -440,12 +440,24 @@ def summarize_cost_receipts(
     failed_amount = 0.0
     failed_count = 0
     failed_measured = 0
+    rows_without_a_receipt = 0
     for row in rows:
+        failed = row.get("status") != "success"
         receipt = row.get(field)
         if not isinstance(receipt, dict):
+            # No receipt at all is a hole in the record, not a task that cost
+            # nothing -- and if that task also failed, it is still a failure.
+            # Skipping the row outright counted it in `total_tasks` and in the
+            # coverage denominator while subtracting it from the failure count,
+            # so the same table could read "1 / 2 tasks (50.0%)" beside
+            # "Failed tasks | 0" and disagree with itself about whether a
+            # second task existed.
+            rows_without_a_receipt += 1
+            if failed:
+                failed_count += 1
             continue
         receipts.append(receipt)
-        if row.get("status") != "success":
+        if failed:
             failed_count += 1
             amount = _receipt_amount(receipt)
             if amount is not None:
@@ -483,6 +495,20 @@ def summarize_cost_receipts(
         status = "unavailable"
     else:
         status = "not_run"
+    if rows_without_a_receipt and status == "complete":
+        # Every receipt the run does carry is whole, but the run is not: some
+        # task's cost was never recorded at all. Judging completeness against
+        # `len(receipts)` asks only "is what I kept consistent?", which the
+        # rows that were dropped can never answer. So a two-task run holding
+        # one $0.42 receipt announced "Receipt status: complete" and headed the
+        # table "Total | $0.4200" -- a total over half a run.
+        #
+        # Only `complete` moves. A run already reading partial, unavailable or
+        # not_run is already not claiming to be whole, and a run where every
+        # row carries a receipt reaches none of this, so no fully-recorded
+        # experiment changes what it says.
+        status = "partial"
+        complete_run = False
 
     reasons = sorted({
         reason

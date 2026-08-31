@@ -403,11 +403,26 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
   let failedAmount = 0;
   let failedCount = 0;
   let failedMeasured = 0;
+  let rowsWithoutAReceipt = 0;
   for (const row of rows) {
+    const failed = !row?.succeeded;
     const receipt = row?.receipt;
-    if (!isPlainObject(receipt)) continue;
+    if (!isPlainObject(receipt)) {
+      // No receipt at all is a hole in the record, not a task that cost
+      // nothing -- and if that task also failed, it is still a failure.
+      // `costReceiptsByTask` in scripts/aggregate-grades.mjs hands this
+      // function a null receipt for every graded task the payload has no
+      // `grading_cost` for, so this is the ordinary shape, not an edge case.
+      // Skipping the row outright counted it in `total_tasks` and in the
+      // coverage denominator while subtracting it from the failure count.
+      // Mirrors `summarize_cost_receipts` in
+      // batch-runner/core/cost_projection.py.
+      rowsWithoutAReceipt += 1;
+      if (failed) failedCount += 1;
+      continue;
+    }
     receipts.push(receipt);
-    if (!row.succeeded) {
+    if (failed) {
       failedCount += 1;
       const amount = receiptAmount(receipt);
       if (amount !== null) {
@@ -454,6 +469,18 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
   else if (ran.every((entry) => entry.status === 'complete')) status = 'complete';
   else if (ran.every((entry) => entry.status === 'unavailable')) status = 'unavailable';
   else status = 'partial';
+  if (rowsWithoutAReceipt && status === 'complete') {
+    // Every receipt the run does carry is whole, but the run is not: some
+    // task's cost was never recorded at all. Judging completeness against the
+    // receipts alone asks only "is what I kept consistent?", which the rows
+    // that were dropped can never answer.
+    //
+    // Only `complete` moves. A run already reading partial, unavailable or
+    // not_run is already not claiming to be whole, and a run where every row
+    // carries a receipt reaches none of this, so no published experiment
+    // changes what the dashboard says about it.
+    status = 'partial';
+  }
 
   // The run total is only a total when everything that ran is complete. One
   // partial or unavailable receipt makes it a floor, and it is labelled as one

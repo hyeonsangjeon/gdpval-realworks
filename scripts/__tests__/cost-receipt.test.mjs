@@ -573,6 +573,99 @@ test('coverage reports the rows that carry no receipt at all', () => {
   assert.equal(summary.coverage_pct, 25);
 });
 
+// ── A row with no receipt is a hole, not a task that cost zero ────────────
+//
+// `costReceiptsByTask` in scripts/aggregate-grades.mjs only records a task
+// whose `grading_cost` projects non-null, then `gradingCostSummary` maps over
+// *every* raw task. A graded run where some tasks carry a cost and others do
+// not is therefore the ordinary shape here, not an edge case — and every such
+// task that also errored was subtracted from the failure count while still
+// counting in `total_tasks`.
+
+test('a failed row with no receipt is still counted as a failure', () => {
+  const summary = summarizeCostReceipts([
+    row(projectCostReceipt(receipt())),
+    row(null, { succeeded: false }),
+  ]);
+
+  assert.equal(summary.failed_task_count, 1);
+  // Nothing is invented about what it cost: it joins neither the amount nor
+  // the count of failures that could be priced.
+  assert.equal(summary.failed_measured_tasks, 0);
+  assert.equal(summary.failed_task_cost_usd, 0);
+});
+
+test('a successful row with no receipt is not counted as a failure', () => {
+  // The negative control. A missing cost record says nothing about whether the
+  // work succeeded, so the branch that rescues the failing row must not
+  // conjure a failure out of the quiet one.
+  const summary = summarizeCostReceipts([
+    row(projectCostReceipt(receipt())),
+    row(null),
+  ]);
+
+  assert.equal(summary.failed_task_count, 0);
+  assert.equal(summary.total_tasks, 2);
+  assert.equal(summary.receipt_tasks, 1);
+});
+
+test('a row with no receipt stops the run reading as complete', () => {
+  const summary = summarizeCostReceipts(
+    [row(projectCostReceipt(receipt())), row(null, { succeeded: false })],
+    { successfulDeliverables: 1 },
+  );
+
+  assert.equal(summary.status, 'partial');
+  // A floor is published as a floor: the recorded amount stays, the headline
+  // total and the per-unit figure do not.
+  assert.equal(summary.known_cost_usd, 0.25);
+  assert.equal(summary.estimated_cost_usd, null);
+  assert.equal(summary.cost_per_successful_deliverable_usd, null);
+});
+
+test('only a complete run is downgraded by a missing receipt', () => {
+  // partial, unavailable and not_run already decline to claim the run is
+  // whole, so the downgrade has nothing to add to them. Pinning each one keeps
+  // a later edit from widening the branch into runs it never meant to touch.
+  const cases = [
+    ['partial', unmeasured('partial', { known_cost_usd: 0.1 })],
+    ['unavailable', unmeasured('unavailable')],
+    ['not_run', unmeasured('not_run')],
+  ];
+  for (const [expected, projected] of cases) {
+    const summary = summarizeCostReceipts([
+      row(projectCostReceipt(projected)),
+      row(null, { succeeded: false }),
+    ]);
+    assert.equal(summary.status, expected);
+  }
+});
+
+test('a run where every row carries a receipt is unchanged', () => {
+  // The published-experiment guarantee: with no hole the branch is
+  // unreachable, so a fully recorded run keeps its total and its per-unit
+  // figure.
+  const summary = summarizeCostReceipts(
+    [row(projectCostReceipt(receipt())), row(projectCostReceipt(receipt()))],
+    { successfulDeliverables: 2 },
+  );
+
+  assert.equal(summary.status, 'complete');
+  assert.equal(summary.estimated_cost_usd, 0.5);
+  assert.equal(summary.cost_per_successful_deliverable_usd, 0.25);
+  assert.equal(summary.failed_task_count, 0);
+});
+
+test('a run where no row carries a receipt is still no record', () => {
+  // Already asserted above for the summary as a whole; repeated here as the
+  // boundary of this change, because a run of nothing but holes must keep
+  // rendering as "no record" rather than as a partial run that cost nothing.
+  assert.equal(
+    summarizeCostReceipts([row(null), row(null, { succeeded: false })]),
+    null,
+  );
+});
+
 // ── Ledger reference ──────────────────────────────────────────────────────
 
 test('the ledger reference normalises to path and digest', () => {

@@ -261,7 +261,14 @@ async function openTask(page, taskId) {
 
 // ── Scenarios ───────────────────────────────────────────────────────────────
 
-/** Everything priced: a real zero, a failed task that still cost money. */
+/**
+ * Every solving cost priced: a real zero, a failed task that still cost money.
+ *
+ * The grading half is deliberately not: `t-zero` was graded and the judge
+ * recorded nothing, which is the only way to test 기록 없음 against 미채점. So
+ * this scenario also carries the contrast between a field whose every row has
+ * a receipt and a field with a hole in it.
+ */
 const fullyPricedRows = () => [
   {
     id: 't-complete',
@@ -444,10 +451,27 @@ async function assertFullyPriced(page, solveSummary, gradeSummary) {
     assert.equal(cell.state, 'recorded')
   }
 
-  assert.equal(gradeSummary.estimated_cost_usd, 0.13)
+  // The grading half of this scenario is not fully recorded, and the page now
+  // says so. `t-zero` was graded and the judge wrote no cost for it, which is
+  // the 기록 없음 cell asserted above -- so $0.1300 covers two of the three
+  // graded tasks and is a floor, not a total. It read `$0.1300 · 총액` until
+  // the summariser stopped judging completeness against only the receipts it
+  // kept; the cell right beside it said the third task's cost was unknown.
+  assert.equal(gradeSummary.total_tasks, 3)
+  assert.equal(gradeSummary.receipt_tasks, 2)
+  assert.equal(gradeSummary.status, 'partial')
+  assert.equal(gradeSummary.estimated_cost_usd, null)
+  assert.equal(gradeSummary.known_cost_usd, 0.13)
   const gradeTotal = await readCell(summaryStat(page, 'grading_cost', '총액'))
-  assert.equal(gradeTotal.text, usd(gradeSummary.estimated_cost_usd))
-  assert.equal(gradeTotal.state, 'recorded')
+  assert.equal(gradeTotal.text, `≥ ${usd(gradeSummary.known_cost_usd)}`)
+  assert.equal(gradeTotal.state, 'floor')
+  assert.match(gradeTotal.title, /3건 중 2건만 가격이 계산되어/)
+
+  // The problem-solving half has a receipt on every row, so it is untouched:
+  // still a total, still `recorded`. That contrast is the point -- one payload,
+  // two fields, and only the one with a hole in it is downgraded.
+  assert.equal(solveSummary.status, 'complete')
+  assert.equal(solveSummary.receipt_tasks, solveSummary.total_tasks)
 
   // Goal 8: the failed task's cost is stated beside the total, not netted out.
   assert.equal(solveSummary.failed_task_count, 1)
