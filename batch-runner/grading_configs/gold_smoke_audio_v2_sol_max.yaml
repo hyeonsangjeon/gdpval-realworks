@@ -1,14 +1,15 @@
 schema_version: "2.0"
 config_name: "gold_smoke_audio_v2_sol_max"
 description: |
-  The one-task smoke that proves the audio path before the 185-task full run,
-  spec tasks/rebuilding_grading_task/304-full-gold-corpus.md.
+  The two-task smoke that proves the audio path before the 185-task full run,
+  spec tasks/rebuilding_grading_task/304-full-gold-corpus.md and the re-run
+  conditions in 306-rerun-conditions.md.
 
   Runtime semantics are byte-for-byte those of gold_ceiling_185_v2_sol_max --
   same judge, same reasoning effort, same tool ops and caps, same perception
   models, same critical rule, same scoring, same prompts, same rate-limit
   guard. Only the identity differs: the config name and a pinned corpus of
-  one. Anything else would make the smoke predict something other than the run
+  two. Anything else would make the smoke predict something other than the run
   it is meant to de-risk.
 
   Why a separate config rather than a narrower dispatch: a config that pins
@@ -17,10 +18,27 @@ description: |
   pin is what makes a re-run's identity checkable, and relaxing it to buy a
   smoke would cost more than the smoke is worth.
 
-  Why this task: its reference bundle carries .mp3, .mp4 and .wav, so it is
-  the cheapest one that exercises the Responses API `input_audio` shape. It
-  sits at corpus position 47, which is also why --limit could never have
-  reached it cheaply -- `--limit n` takes the first n tasks in corpus order.
+  Why these two, and why the list grew by one. The smoke was pinned to
+  `75401f7c` on the theory that a bundle carrying .mp3, .mp4 and .wav is the
+  cheapest exercise of the Responses API `input_audio` shape. The 174-task
+  partial run then found the defect that theory was guessing at, and named its
+  full blast radius: exactly two tasks had audio criteria demoted to TEXT and
+  scored by a judge that could not hear -- `75401f7c` (14 items, 18.0 of 56)
+  and `e222075d` (7 items, 10.3 of 60). Both are Film and Video Editors, which
+  is why they are corpus-adjacent; consecutive rows share an occupation.
+
+  A smoke covering one of the two would leave the other's regression unproven
+  while costing most of what covering both costs, so the pin is now the
+  measured set rather than the guessed one. It is derived, not asserted:
+  tests/test_the_audio_smoke_covers_what_the_defect_damaged.py re-reads the
+  defect block in stage3_partial_inventory.json and fails if this list and
+  that one ever disagree.
+
+  Order is not a preference. step8_grade.py refuses a pinned list that does
+  not follow canonical source order, so `e222075d` (corpus position 46) is
+  listed before `75401f7c` (47). That ordering is also why --limit could never
+  have reached either one cheaply -- `--limit n` takes the first n tasks in
+  corpus order.
 
   The pinned list is a proper subset of the source corpus, so step8_grade.py
   classes the scope as `subset` and forks the output into
@@ -28,7 +46,7 @@ description: |
   whatever this one does, including when it fails.
 rerun_identity:
   experiment_id: "exp_gold_baseline"
-  expected_task_count: 1
+  expected_task_count: 2
   # The dataset commit the rubric is read from. The same commit stages 1 and 2
   # were frozen to, so the two measurements are of the same corpus.
   rubric_commit_sha: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
@@ -42,6 +60,7 @@ rerun_identity:
   # outright, and step8_grade.py keeps every such run out of the published path
   # on that basis alone.
   task_ids:
+    - "e222075d-5d62-4757-ae3c-e34b0846583b"
     - "75401f7c-396d-406d-b08e-938874ad1045"
 
 judge:
