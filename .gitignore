@@ -53,6 +53,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/build_gold_deliverable_manifest.py
 !batch-runner/scripts/analyze_gold_ceiling.py
 !batch-runner/scripts/analyze_variance.py
+!batch-runner/scripts/stage3_partial_inventory.py
 
 
 # Experiment report HTML (skews GitHub language stats)
@@ -93,6 +94,9 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/PR3_VARIANCE.md
 !tasks/rebuilding_grading_task/PR3_REPORT.md
 !tasks/rebuilding_grading_task/304-full-gold-corpus.md
+!tasks/rebuilding_grading_task/304-B-partial-blocked.md
+!tasks/rebuilding_grading_task/305-resume-granularity.md
+!tasks/rebuilding_grading_task/stage3_partial_inventory.json
 
 *.parquet
 .huggingface/
