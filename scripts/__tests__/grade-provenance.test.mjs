@@ -32,7 +32,17 @@ function gradePayload(overrides = {}) {
       total_tasks: 1,
       graded_tasks: 1,
       error_tasks: 0,
-      openai_compat: {},
+      // Schema 1.3 rejects a payload that omits any of these six, and every
+      // published 1.0-1.2 file carries them; this fixture is about provenance
+      // badging, so it just needs a headline that could exist.
+      openai_compat: {
+        avg_score_pct: 50,
+        ci_pct: 4.2,
+        perfect_count: 0,
+        partial_count: 1,
+        zero_count: 0,
+        inconsistent_count: 0,
+      },
       wow: {},
     },
     tasks: [{ task_id: 't1', pct: 50, error: null }],

@@ -14,6 +14,20 @@ import { readFile } from 'node:fs/promises';
 import { isPublishableGrade, processGradesFile } from '../aggregate-grades.mjs';
 import { gradeIdentityFromRaw } from '../grade-identity.mjs';
 
+// Every published schema 1.0-1.2 grade file carries all six headline keys, and
+// schema 1.3 rejects a payload that omits any of them, so an empty
+// `openai_compat` was a shape no real grade file has ever had. The fixtures
+// that borrow this are about identity, publishability and coverage; none of
+// them assert on the headline, they just need one that could exist.
+const HEADLINE = {
+  avg_score_pct: 50,
+  ci_pct: 4.2,
+  perfect_count: 0,
+  partial_count: 1,
+  zero_count: 0,
+  inconsistent_count: 0,
+};
+
 test('gradeIdentityFromRaw supports top-level, legacy meta, filename fallback, source pointer, and dummy', () => {
   assert.deepEqual(gradeIdentityFromRaw('ignored.json', {
     experiment_id: 'exp-top',
@@ -54,7 +68,7 @@ test('processGradesFile treats v1 as real even when contradictory legacy dummy m
     _meta: { is_dummy: true },
     inference_model: 'gpt-5.2-chat',
     judge: { model: 'gpt-5.4' },
-    summary: { total_tasks: 0, graded_tasks: 0, error_tasks: 0, openai_compat: {}, wow: {} },
+    summary: { total_tasks: 0, graded_tasks: 0, error_tasks: 0, openai_compat: { ...HEADLINE }, wow: {} },
     tasks: [],
   };
   const out = processGradesFile('exp-v1-real__judge__rubric__v1.json', raw);
@@ -73,7 +87,7 @@ test('processGradesFile routes current schema 1.2 through item-level grading', (
       total_tasks: 0,
       graded_tasks: 0,
       error_tasks: 0,
-      openai_compat: {},
+      openai_compat: { ...HEADLINE },
       wow: {},
     },
     tasks: [],
@@ -434,7 +448,7 @@ for (const [runStatus, gradeStatus] of [
         total_tasks: 3,
         graded_tasks: 1,
         error_tasks: 0,
-        openai_compat: {},
+        openai_compat: { ...HEADLINE },
         wow: {},
       },
       tasks: [{ task_id: 't1', pct: 50, error: null }],
@@ -463,7 +477,7 @@ test('processGradesFile carries the source provenance gap onto a publishable gra
       total_tasks: 1,
       graded_tasks: 1,
       error_tasks: 0,
-      openai_compat: {},
+      openai_compat: { ...HEADLINE },
       wow: {},
     },
     tasks: [{ task_id: 't1', pct: 50, error: null }],
@@ -911,7 +925,7 @@ test('processGradesFile measures coverage against the inference corpus', () => {
     experiment_id: 'exp-corpus',
     inference_model: 'gpt-5.2-chat',
     judge: { model: 'gpt-5.4-mini' },
-    summary: { total_tasks: 3, graded_tasks: 3, error_tasks: 0, openai_compat: {}, wow: {} },
+    summary: { total_tasks: 3, graded_tasks: 3, error_tasks: 0, openai_compat: { ...HEADLINE }, wow: {} },
     tasks: [],
   };
   const corpus = new Map([['exp-corpus', 220]]);
@@ -934,7 +948,7 @@ test('processGradesFile marks a full-corpus grade complete', () => {
     experiment_id: 'exp-corpus',
     inference_model: 'gpt-5.2-chat',
     judge: { model: 'gpt-5.6-sol' },
-    summary: { total_tasks: 220, graded_tasks: 215, error_tasks: 5, openai_compat: {}, wow: {} },
+    summary: { total_tasks: 220, graded_tasks: 215, error_tasks: 5, openai_compat: { ...HEADLINE }, wow: {} },
     tasks: [],
   };
   const corpus = new Map([['exp-corpus', 220]]);
@@ -954,7 +968,7 @@ test('processGradesFile leaves coverage unknown when the experiment has no repor
     experiment_id: 'exp-unreported',
     inference_model: 'gpt-5.2-chat',
     judge: { model: 'gpt-5.4' },
-    summary: { total_tasks: 10, graded_tasks: 10, error_tasks: 0, openai_compat: {}, wow: {} },
+    summary: { total_tasks: 10, graded_tasks: 10, error_tasks: 0, openai_compat: { ...HEADLINE }, wow: {} },
     tasks: [],
   };
 
