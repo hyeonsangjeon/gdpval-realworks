@@ -275,10 +275,35 @@ class AudioPerception:
     def calls_used(self) -> int:
         return self._calls_used
 
+    @property
+    def failures_used(self) -> int:
+        """Attempts this task has already burned on rejected calls."""
+        return self._failures_used
+
     def reset(self) -> None:
         self._calls_used = 0
         self._failures_used = 0
         self._blocked_reason = None
+
+    def restore_spend(self, calls_used: int, *, failures_used: int = 0) -> None:
+        """Re-charge a resumed task for what an earlier chunk already spent.
+
+        Both counters, for the same reason: they are per *task*, and a task
+        long enough to span chunks crosses the ``reset`` boundary mid-rubric.
+        Restoring only the calls would hand a resumed task a fresh failure
+        budget on every attempt, so a file the model keeps rejecting gets
+        retried three times per chunk forever instead of three times per task.
+
+        ``_blocked_reason`` is deliberately *not* restored. It is a sentence,
+        and the checkpoint holds only numbers -- see ``305``'s rule that
+        nothing on disk should read like a finding. The cost of leaving it out
+        is bounded and visible: a deterministic rejection re-latches on the
+        first criterion of the new chunk, from one call that is never billed.
+        """
+        self._calls_used = max(0, min(int(calls_used), self.call_cap))
+        self._failures_used = max(
+            0, min(int(failures_used), self.failure_budget)
+        )
 
     def _refuse(self, reason: str, judge_error: str) -> "AudioVerdict":
         """A verdict for a criterion no call was made for.

@@ -67,7 +67,7 @@ class _FakeGrader:
             "azure_ai_runtime_fingerprint"
         ]
 
-    def grade_task(self, task, deliverable_dir):
+    def grade_task(self, task, deliverable_dir, *, resume_from=None):
         from core.grader import ItemGrade, TaskGrade
 
         self.calls += 1
@@ -826,8 +826,10 @@ def test_track2_runtime_failure_stops_and_persists_diagnostic(
             super().__init__(*args, **kwargs)
             grader_instance["grader"] = self
 
-        def grade_task(self, task, deliverable_dir):
-            grade = super().grade_task(task, deliverable_dir)
+        def grade_task(self, task, deliverable_dir, *, resume_from=None):
+            grade = super().grade_task(
+                task, deliverable_dir, resume_from=resume_from
+            )
             item = grade.items[0]
             item.verdict = "judge_error"
             item.decided_by = "judge"
@@ -907,8 +909,10 @@ def test_track2_incomplete_usage_keeps_the_grades_and_finishes(
     monkeypatch.setattr(s8, "RubricLoader", _FakeLoader)
 
     class _UnpriceableGrader(_FakeGrader):
-        def grade_task(self, task, deliverable_dir):
-            grade = super().grade_task(task, deliverable_dir)
+        def grade_task(self, task, deliverable_dir, *, resume_from=None):
+            grade = super().grade_task(
+                task, deliverable_dir, resume_from=resume_from
+            )
             grade.items[0].usage_complete = False
             grade.usage_complete = False
             return grade
@@ -1367,7 +1371,7 @@ def test_all_unscored_main_completes_without_formatting_null(
     )
 
     class _AllUnscoredGrader(_FakeGrader):
-        def grade_task(self, task, deliverable_dir):
+        def grade_task(self, task, deliverable_dir, *, resume_from=None):
             from core.grader import ItemGrade, TaskGrade
 
             self.calls += 1
