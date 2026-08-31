@@ -97,6 +97,7 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/304-B-partial-blocked.md
 !tasks/rebuilding_grading_task/305-resume-granularity.md
 !tasks/rebuilding_grading_task/306-rerun-conditions.md
+!tasks/rebuilding_grading_task/307-audio-smoke-result.md
 !tasks/rebuilding_grading_task/stage3_partial_inventory.json
 
 *.parquet
