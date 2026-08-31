@@ -1344,17 +1344,27 @@ def build_receipt(
     Abandoned calls contribute nothing and cost nothing — they never went out.
     Reserved-but-unsettled calls contribute nothing but *do* cost the receipt
     its ``complete`` status, because whether they were billed is unknown.
+
+    ``price_table_sha256`` is what the *caller* has open, which is not always
+    what priced these rows: a resumed round opens the ledger with today's price
+    file and finds rows settled under yesterday's. Each row already records the
+    table it was priced against, so the rows are asked first and the argument is
+    used only where they say nothing.
     """
     per_component: dict[tuple[str, str], dict[str, Any]] = {}
     reasons: set[str] = set()
     model_cost = Decimal(0)
     model_calls = 0
     totals = empty_usage()
+    tables_named_by_rows: set[str] = set()
 
     for call in calls:
         state = str(call.get("state") or "")
         if state == STATE_ABANDONED:
             continue
+        stated = call.get("price_table_sha256")
+        if stated:
+            tables_named_by_rows.add(str(stated))
         stage = str(call.get("stage") or "")
         retry_kind = str(call.get("retry_kind") or RETRY_NONE)
         key = (stage, retry_kind)
@@ -1426,9 +1436,32 @@ def build_receipt(
         model_calls=model_calls,
         usage=totals,
         components=components,
-        price_table_sha256=price_table_sha256,
+        price_table_sha256=_one_table(tables_named_by_rows, price_table_sha256),
         missing_reasons=tuple(sorted(reasons)),
     )
+
+
+def _one_table(named: set[str], fallback: str | None) -> str | None:
+    """The table these rows were priced under, or nothing if they disagree.
+
+    The fingerprint is a claim a reader can act on: fetch those bytes, re-price
+    the usage, and the amount should come back. That only holds while there is
+    one table behind the amount. Where two rows name different ones, naming
+    either turns the receipt into a claim its own money disproves, so the
+    honest answer is that it is not known -- which is what
+    :func:`core.cost_projection.summarize_cost_receipts` has always said in the
+    same situation.
+
+    Rows that name nothing are not a disagreement. Ledgers written before the
+    column existed, and ledgers opened with no price list at all, leave it null
+    on every row; there the caller's own table is the only statement available
+    and stays the answer.
+    """
+    if len(named) == 1:
+        return next(iter(named))
+    if named:
+        return None
+    return fallback
 
 
 def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
@@ -1445,6 +1478,10 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
     is a real floor. A run with no record at all has no floor, and reporting one
     of ``$0`` invites exactly the reading — "so far it has cost nothing" — that
     the four statuses exist to prevent.
+
+    The price-table fingerprint survives only where the tasks agree on it. A
+    summary that names one table for money computed under two would be
+    contradicted by the very bytes it points at.
     """
     contributing = [
         receipt
@@ -1460,14 +1497,15 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
     runtime_cost = Decimal(0)
     model_calls = 0
     totals = empty_usage()
-    sha = None
+    tables: set[str] = set()
     for receipt in contributing:
         reasons.update(receipt.missing_reasons)
         known += receipt.known_cost_usd
         model_cost += receipt.model_cost_usd
         runtime_cost += receipt.runtime_cost_usd
         model_calls += receipt.model_calls
-        sha = sha or receipt.price_table_sha256
+        if receipt.price_table_sha256:
+            tables.add(receipt.price_table_sha256)
         for name in totals:
             value = receipt.usage.get(name)
             if value is None:
@@ -1480,7 +1518,7 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
         runtime_cost_usd=runtime_cost,
         model_calls=model_calls,
         usage=totals,
-        price_table_sha256=sha,
+        price_table_sha256=_one_table(tables, None),
         missing_reasons=tuple(sorted(reasons)),
     )
 
