@@ -3620,8 +3620,14 @@ def _run_inference_impl(
         try:
             while True:
                 if qa_attempts > 0:
+                    # The denominator is the setting itself, not one more than
+                    # it. `qa_attempts` counts answers already reviewed and
+                    # found wanting, and the loop below breaks the moment it
+                    # reaches `qa_max_retries` -- so a run written as 2 gets
+                    # two answers, not three. Printing `/3` there promised a
+                    # third attempt that the guard never allows.
                     print(f"\n      🔄 Re-executing task "
-                          f"(QA attempt {qa_attempts + 1}/{qa_max_retries + 1})...",
+                          f"(QA attempt {qa_attempts + 1}/{qa_max_retries})...",
                           end=" ", flush=True)
 
                     # 재실행 전: 현재 best 파일 백업 후 task_dir 비우기

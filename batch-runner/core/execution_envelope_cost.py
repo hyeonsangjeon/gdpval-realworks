@@ -410,6 +410,16 @@ def max_attempt_counts(
 
     When the cap on answer length covers a whole attempt rather than each turn
     inside it, the answer is counted once per attempt.
+
+    The self-review term is deliberately one replacement too generous, and is
+    left that way. ``self_review_max_attempts`` is how many answers the loop in
+    step2_run_inference.py may produce in all -- it stops as soon as the number
+    it has reviewed reaches that -- so N of them means N answers, of which the
+    first is already counted above as the first attempt. Counting N
+    replacements on top therefore bills for N + 1 answers where at most N can
+    happen. That is the safe direction for a ceiling: it can only ever refuse a
+    run that would have fit, never wave through one that would not. Anyone
+    tempted to net the extra answer out should read that sentence again first.
     """
     if tool_loop_max_model_turns < 1:
         raise ValueError("every attempt asks the model at least once")

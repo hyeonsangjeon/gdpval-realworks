@@ -526,7 +526,11 @@ WHAT_THE_SETTING_DOES: Mapping[str, str] = {
     "condition_a.prompt.body": "the wording put between that and the task",
     "condition_a.prompt.suffix": "the wording put after the task",
     "condition_a.qa.enabled": "whether the model reviews its own answer",
-    "condition_a.qa.max_retries": "how many times it may answer again",
+    # Not "how many times it may answer again". step2_run_inference.py counts
+    # answers already reviewed and breaks the moment that count reaches this
+    # setting, so a run written as 2 produces two answers and replaces the
+    # first one once, and a run written as 1 replaces nothing at all.
+    "condition_a.qa.max_retries": "how many answers it may produce in all",
     "condition_a.qa.model": "which model reviews the answer",
     "condition_a.qa.min_score": "the mark the answer has to reach",
     "condition_a.qa.prompt": "the wording the reviewer is given",

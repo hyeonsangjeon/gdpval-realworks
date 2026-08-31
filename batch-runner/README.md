@@ -260,7 +260,7 @@ condition_a:
     deployment: "gpt-5.2-chat"
   qa:
     enabled: true
-    max_retries: 3
+    max_retries: 3    # answers in all, not extra tries: 3 → 2 replacements, 1 → none
     min_score: 6
 
 execution:
