@@ -560,6 +560,16 @@
       "cost_ledgers": 0,
       "in_scope": false,
       "why": "graded at a superseded grader source hash; not comparable at item level and refused by step9_merge_shards as a contract identity mismatch"
+    },
+    {
+      "dir": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2",
+      "grader_source_hash": [
+        "79c2f5035c4aa826355134dd87cdb8fbc320e5a1cc5fde0d8ecf91957f4eabc6"
+      ],
+      "shard_files": 11,
+      "cost_ledgers": 11,
+      "in_scope": false,
+      "why": "graded at a superseded grader source hash; not comparable at item level and refused by step9_merge_shards as a contract identity mismatch"
     }
   ],
   "blocking_task": {
