@@ -130,24 +130,39 @@ def test_a_refused_audio_call_reports_its_usage_as_incomplete(wav_file):
     once a reply has been read, so a call that raises reports ``False`` — it
     was sent, and this process cannot say what it cost.
 
-    That is the honest reading for a timeout. For a 400 it overstates the
-    doubt, since a rejected request is not billed; the distinction is noted
-    here rather than acted on, because with the request shape corrected this
-    path stops being reached and narrowing it would weaken the same check for
-    the failures where the doubt is real.
+    That is the honest reading for a timeout, and this fake is a timeout in
+    every respect that matters: it raises an exception carrying no status
+    code, so nothing can establish that the provider refused it before
+    running the model. A call in that state stays counted against the task's
+    cap for the same reason its usage stays incomplete — it may have been
+    billed, and the safe direction is to assume it was.
+
+    The 400s the smoke actually hit *do* carry a status, and
+    ``test_a_provider_rejection_gives_the_call_slot_back`` covers that side.
+    Both branches exist because the difference between them is the difference
+    between a call that cost nothing and a call nobody can account for.
     """
     client = _Client(_RejectingResponses())
-    verdict = AudioPerception(client=client).judge(
+    perception = AudioPerception(client=client)
+    verdict = perception.judge(
         criterion="the mix is free of clipping", audio_path=str(wav_file)
     )
 
     assert isinstance(verdict, AudioVerdict)
     assert verdict.verdict == "judge_error"
     assert verdict.judge_error == "provider_error:BadRequestError"
-    assert verdict.reasoning == "audio call failed: BadRequestError"
+    assert verdict.reasoning.startswith("audio call failed: BadRequestError")
+    assert "status=None" in verdict.reasoning, (
+        "the failure must say what it knew about the request, so the next "
+        "paid smoke does not need a fourth one to tell two causes apart"
+    )
     assert verdict.api_call_count == 1
     assert (verdict.input_tokens, verdict.output_tokens) == (0, 0)
     assert verdict.usage_complete is False
+    assert perception.calls_used == 1, (
+        "an exception with no status may have been billed and must stay "
+        "charged; only a provable pre-inference rejection is refunded"
+    )
 
 
 # ── hop 2: the prepass ───────────────────────────────────────────────

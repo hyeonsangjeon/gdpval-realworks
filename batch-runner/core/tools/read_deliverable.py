@@ -2163,9 +2163,52 @@ def _probe_video_impl(p: Path, basic: bool = False) -> Dict[str, Any]:
             "duration_s": duration_s,
             "audio_tracks": len(container.streams.audio),
             "video_tracks": len(container.streams.video),
+            "audio": _audio_stream_summary(container),
         }
     finally:
         container.close()
+
+
+def _audio_stream_summary(container: Any) -> Optional[Dict[str, Any]]:
+    """How a video container's first audio stream is encoded, or ``None``.
+
+    A video probe used to answer with two track counts and nothing else, so a
+    criterion like "the audio sample rate is 44.1 kHz or 48 kHz" reached a
+    judge that had no way to know and marked it failed rather than excluded.
+
+    That is the same defect PR #276 fixed one field over. There, a container
+    reporting ``"audio_tracks": 1`` was sent to a judge that could not listen;
+    the count was right there in the evidence and unusable. Here the count is
+    right there and the *rate* is missing, so the criterion fails on a fact
+    the file states plainly. Fixing the routing and leaving this would have
+    meant the same bug survived in the field next door.
+
+    The field names deliberately match ``_probe_audio_impl`` so the judge sees
+    one vocabulary whether the sound arrived in a ``.wav`` or an ``.mp4``.
+    """
+    try:
+        streams = container.streams.audio
+    except Exception:  # noqa: BLE001
+        return None
+    if not streams:
+        return None
+    stream = streams[0]
+
+    def _field(name: str) -> Any:
+        # Each read is guarded separately: a container can describe its rate
+        # and not its channel layout, and one missing attribute must not turn
+        # the whole summary back into the silence this replaced.
+        try:
+            return getattr(stream, name, None)
+        except Exception:  # noqa: BLE001
+            return None
+
+    codec = _field("codec")
+    return {
+        "sample_rate": _field("sample_rate"),
+        "channels": _field("channels"),
+        "codec": getattr(codec, "name", None) if codec else None,
+    }
 
 
 def _op_probe_video(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
