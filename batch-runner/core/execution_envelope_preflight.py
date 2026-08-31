@@ -1444,6 +1444,11 @@ def _compare_one_experiment_file(
 
     qa = condition_a.get("qa")
     qa = qa if isinstance(qa, Mapping) else {}
+    # An absent or empty self-review block really does mean no self-review:
+    # :mod:`core.experiment_config` builds no ``QAConfig`` at all unless the
+    # block holds something. So silence here may be read as "off" — which is
+    # why this one setting keeps its default, and the attempt count below
+    # does not.
     enabled = bool(qa.get("enabled", False))
     if enabled != conditions.self_review_enabled:
         problems.append(
@@ -1451,36 +1456,79 @@ def _compare_one_experiment_file(
             "review of its own answer, but the shared conditions "
             f"{'turn it on' if conditions.self_review_enabled else 'turn it off'}"
         )
-    qa_attempts = int(qa.get("max_retries", 0) or 0)
-    if qa_attempts != conditions.self_review_max_attempts:
+    written_qa_attempts = qa.get("max_retries")
+    if qa and written_qa_attempts is None:
         problems.append(
-            f"{label} allows {qa_attempts} self-review attempts, but the "
-            f"shared conditions allow {conditions.self_review_max_attempts}"
+            f"{label} has a self-review block that does not say how many "
+            "self-review attempts it allows, so it would fall back to a "
+            "built-in default rather than the "
+            f"{conditions.self_review_max_attempts} the shared conditions fix"
+        )
+    elif written_qa_attempts is not None and (
+        int(written_qa_attempts) != conditions.self_review_max_attempts
+    ):
+        problems.append(
+            f"{label} allows {written_qa_attempts} self-review attempts, but "
+            f"the shared conditions allow {conditions.self_review_max_attempts}"
         )
 
     execution = settings.get("execution")
     execution = execution if isinstance(execution, Mapping) else {}
     expected_mode = EXECUTION_MODE_BY_ENVIRONMENT.get(environment)
-    if expected_mode is not None and execution.get("mode") != expected_mode:
+    written_mode = execution.get("mode")
+    if expected_mode is not None and written_mode is None:
         problems.append(
-            f"{label} runs in {execution.get('mode')!r} mode, but this run "
+            f"{label} does not say which mode it runs in, so it would fall "
+            "back to a built-in default rather than the "
+            f"{expected_mode!r} this run place is reached through"
+        )
+    elif expected_mode is not None and written_mode != expected_mode:
+        problems.append(
+            f"{label} runs in {written_mode!r} mode, but this run "
             f"place is reached through {expected_mode!r}"
         )
     timeout = execution.get("timeout")
-    if int(timeout or 0) != conditions.per_task_timeout_seconds:
+    if timeout is None:
+        problems.append(
+            f"{label} does not say how long one task may take, so it would "
+            "fall back to a built-in default rather than the "
+            f"{conditions.per_task_timeout_seconds} seconds the shared "
+            "conditions fix"
+        )
+    elif int(timeout) != conditions.per_task_timeout_seconds:
         problems.append(
             f"{label} allows one task {timeout!r} seconds, but the shared "
             f"conditions allow {conditions.per_task_timeout_seconds}"
         )
-    retries = int(execution.get("max_retries", 0) or 0)
-    if retries != conditions.retry_max_attempts:
+    retries = execution.get("max_retries")
+    if retries is None:
+        problems.append(
+            f"{label} does not say how many attempts it allows after a "
+            "network failure, a server error, or a timeout, so it would fall "
+            "back to a built-in default rather than the "
+            f"{conditions.retry_max_attempts} the shared conditions fix"
+        )
+    elif int(retries) != conditions.retry_max_attempts:
         problems.append(
             f"{label} allows {retries} attempts after a network failure, a "
             "server error, or a timeout, but the shared conditions allow "
             f"{conditions.retry_max_attempts}"
         )
-    resume_rounds = int(execution.get("resume_max_rounds", 0) or 0)
-    if resume_rounds != 0:
+    resume_rounds = execution.get("resume_max_rounds")
+    if resume_rounds is None:
+        # The one that used to pass in silence. Nought is both what this
+        # comparison requires and what an absent key used to be read as, so a
+        # file that never mentioned re-running failed tasks looked exactly
+        # like a file that had forbidden it.
+        problems.append(
+            f"{label} does not say whether failed tasks are re-run in extra "
+            "rounds, so it would fall back to a built-in default rather than "
+            "the 0 this comparison requires. Extra rounds would give this run "
+            "place more attempts than another depending on how its errors "
+            "happened to fall, so the file has to say 0 rather than leave it "
+            "to a default."
+        )
+    elif int(resume_rounds) != 0:
         problems.append(
             f"{label} allows {resume_rounds} extra rounds of re-running failed "
             "tasks. That would give this run place more attempts than another "
