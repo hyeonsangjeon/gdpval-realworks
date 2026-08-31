@@ -246,6 +246,60 @@ test('malformed receipts throw rather than reach the dashboard', () => {
   }
 });
 
+// ── Two bounds, because they are two quantities ───────────────────────────
+test('an honest token total is not out of range', () => {
+  // 21,688,749 input tokens across 2,337 marking calls is what one published
+  // shard recorded — about nine thousand tokens of rubric and deliverable per
+  // call. Both readers refused that figure while the calls behind it used two
+  // hundredths of a percent of the same allowance, because one constant
+  // bounded both fields and it had been sized for the smaller one.
+  const projected = projectCostReceipt(receipt({
+    model_calls: 2337,
+    usage: { input_tokens: 21_688_749, output_tokens: 400 },
+    components: [component({ model_calls: 2337, usage: { input_tokens: 21_688_749 } })],
+  }));
+  assert.equal(projected.model_calls, 2337);
+  assert.equal(projected.usage.input_tokens, 21_688_749);
+  assert.equal(projected.components[0].usage.input_tokens, 21_688_749);
+});
+
+test('the calls bound did not move when the token bound did', () => {
+  // The half that could have gone unnoticed. Raising one shared constant would
+  // have taken model_calls with it, and no published payload would have shown
+  // it: real call counts are four thousand times under the bound either way.
+  assert.doesNotThrow(() => projectCostReceipt(receipt({ model_calls: 10_000_000 })));
+  assert.throws(
+    () => projectCostReceipt(receipt({ model_calls: 10_000_001 })),
+    /model_calls is out of range/,
+  );
+  assert.throws(
+    () => projectCostReceipt(receipt({ model_calls: Number.MAX_SAFE_INTEGER })),
+    /model_calls is out of range/,
+  );
+});
+
+test('the token bound is where this reader stops agreeing with the file', () => {
+  // Not a guess about how large a run gets — a property of the format. Above
+  // MAX_SAFE_INTEGER a JSON integer does not survive JSON.parse: the file says
+  // one number and this reader holds another, with Number.isInteger satisfied
+  // the whole way, so nothing downstream would notice. The bound is the last
+  // integer both sides still read the same, and cost_projection.py is pinned
+  // to it for that reason.
+  const parsed = JSON.parse('{"n":9007199254740993}');
+  assert.equal(String(parsed.n), '9007199254740992');  // the file said ...93
+  assert.equal(Number.isInteger(parsed.n), true);      // and the guard says yes
+
+  const exact = Number.MAX_SAFE_INTEGER;
+  assert.equal(JSON.parse(`{"n":${exact}}`).n, exact);
+  assert.doesNotThrow(
+    () => projectCostReceipt(receipt({ usage: { input_tokens: exact } })),
+  );
+  assert.throws(
+    () => projectCostReceipt(receipt({ usage: { input_tokens: exact + 1 } })),
+    /usage.input_tokens is out of range/,
+  );
+});
+
 test('two retries from different stages are two lines', () => {
   // Both derive the name `retry` from the producer. Rejecting the second as a
   // duplicate would drop a call that really was billed.

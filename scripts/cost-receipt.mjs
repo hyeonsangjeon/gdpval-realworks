@@ -75,7 +75,23 @@ const MAX_MISSING_REASONS = 32;
 // float noise never reaches the screen.
 const MONEY_DIGITS = 6;
 const MAX_COST_USD = 1_000_000;
-const MAX_COUNT = 10_000_000;
+
+// How many times a run called a model. Thousands, by construction — tasks
+// times stages times the retries a run is allowed. The largest published to
+// date is 2,346, which is 0.02% of this.
+const MAX_MODEL_CALLS = 10_000_000;
+
+// How many tokens those calls carried, which is neither the same quantity nor
+// the same scale: the 2,346 calls above carried 21,688,749 input tokens
+// between them.
+//
+// This is the bound the mirror side actually motivates. Above Number
+// .MAX_SAFE_INTEGER a JSON integer does not survive JSON.parse — the file can
+// say 9007199254740993 and this reader will hold 9007199254740992, with
+// Number.isInteger saying yes to it the whole way. So the ceiling is where
+// this reader stops agreeing with the file about what the file says, and the
+// Python side is pinned to the same 2**53 - 1 for that reason.
+const MAX_TOKENS = Number.MAX_SAFE_INTEGER;
 
 function fail(field, detail) {
   throw new Error(`${field} ${detail}`);
@@ -100,11 +116,17 @@ function costAmount(value, field) {
   return round(value, MONEY_DIGITS);
 }
 
-/** A non-negative bounded integer, or null when absent. */
-function costCount(value, field) {
+/**
+ * A non-negative integer within `limit`, or null when absent.
+ *
+ * The bound is a parameter because a run's calls and the tokens those calls
+ * carried are four orders of magnitude apart, and one bound covering both is
+ * the smaller one under a general name.
+ */
+function costCount(value, field, limit) {
   if (value === null || value === undefined) return null;
   if (!Number.isInteger(value)) fail(field, 'must be an integer');
-  if (value < 0 || value > MAX_COUNT) fail(field, 'is out of range');
+  if (value < 0 || value > limit) fail(field, 'is out of range');
   return value;
 }
 
@@ -116,7 +138,7 @@ function costUsage(value, field) {
   const usage = {};
   for (const key of keys.sort()) {
     if (!SLUG.test(key)) fail(field, 'carries an invalid key');
-    usage[key] = costCount(value[key], `${field}.${key}`);
+    usage[key] = costCount(value[key], `${field}.${key}`, MAX_TOKENS);
   }
   return usage;
 }
@@ -209,7 +231,7 @@ function projectComponent(value, field) {
     retry_kind: retryKind,
     status,
     known_cost_usd: known,
-    model_calls: costCount(value.model_calls, `${field}.model_calls`),
+    model_calls: costCount(value.model_calls, `${field}.model_calls`, MAX_MODEL_CALLS),
     usage: costUsage(value.usage, `${field}.usage`),
     missing_reasons: missingReasons(value.missing_reasons, `${field}.missing_reasons`),
   };
@@ -303,7 +325,7 @@ export function projectCostReceipt(value, field = 'cost receipt') {
     known_cost_usd: known,
     model_cost_usd: modelCost,
     runtime_cost_usd: runtimeCost,
-    model_calls: costCount(value.model_calls, `${field}.model_calls`),
+    model_calls: costCount(value.model_calls, `${field}.model_calls`, MAX_MODEL_CALLS),
     usage: costUsage(value.usage, `${field}.usage`),
     components,
     price_table_sha256: priceTableSha256(value.price_table_sha256, `${field}.price_table_sha256`),

@@ -613,12 +613,19 @@ def test_nothing_else_about_a_published_summary_moves():
 def test_no_published_summary_changes_whether_the_reader_accepts_it():
     """The other half of the control, and the one that could have bitten.
 
-    Eight of the twenty-one published summaries are already rejected by
-    ``project_cost_receipt`` -- their honest token totals exceed the
-    ``_MAX_COUNT`` sanity bound, which is a separate defect and is not fixed
-    here. What matters for this change is that it moves none of them: the
-    thirteen the reader accepted before are the thirteen it accepts after, and
-    the eight it refused it still refuses, on the same figure.
+    What this asserts is that carrying the lines up does not move a single
+    reader verdict: whichever summaries ``project_cost_receipt`` accepted with
+    an empty ``components`` are exactly the ones it accepts with the lines in
+    place, and any it refuses it refuses on the same figure one level down.
+
+    It is written as a comparison rather than a count on purpose. When this
+    first landed, eight of the twenty-one were refused -- their honest token
+    totals crossed a sanity bound sized for a much smaller quantity -- and this
+    test passed anyway, because eight before and eight after is no change.
+    That bound has since been separated from the one it was sharing (#112) and
+    all twenty-one are accepted, and this test passes for the same reason it
+    did then. A test that had pinned thirteen would have failed at that fix
+    while nothing about this change moved.
     """
     accepted_before = accepted_after = 0
     for _path, _field, receipts in _published_receipt_sets():

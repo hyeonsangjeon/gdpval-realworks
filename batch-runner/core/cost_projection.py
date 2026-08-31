@@ -90,7 +90,27 @@ _LEDGER_CHUNK_BYTES = 1024 * 1024
 # float noise never reaches the screen.
 _MONEY_DIGITS = 6
 _MAX_COST_USD = 1_000_000.0
-_MAX_COUNT = 10_000_000
+
+#: How many times a run called a model. Thousands, by construction — tasks
+#: times stages times the retries a run is allowed. The largest published to
+#: date is 2,346, which is 0.02% of this.
+_MAX_MODEL_CALLS = 10_000_000
+
+#: How many tokens those calls carried, which is neither the same quantity nor
+#: the same scale: the 2,346 calls above carried 21,688,749 input tokens
+#: between them, and an ordinary marking call is nine thousand tokens of rubric
+#: and deliverable.
+#:
+#: Bounded where a count stops meaning one thing to every reader of this
+#: contract, rather than at a size someone guessed a run would not reach. The
+#: guessed kind of bound is what this constant used to be, and a real shard
+#: crossed it. Above ``2**53 - 1`` a JSON integer no longer survives
+#: ``JSON.parse``: ``scripts/cost-receipt.mjs`` and the dashboard would read a
+#: different number than the file holds, and ``Number.isInteger`` would still
+#: say yes to it. So this is a bound on being read back correctly, not on being
+#: plausible — the module cannot know how large an honest run is, and the last
+#: time it assumed, it was wrong.
+_MAX_TOKENS = 2**53 - 1
 
 
 def _fail(field: str, detail: str) -> None:
@@ -111,13 +131,26 @@ def _cost_amount(value, field: str):
     return round(amount, _MONEY_DIGITS)
 
 
-def _cost_count(value, field: str):
-    """Return a non-negative bounded integer, or ``None`` when absent."""
+def _cost_count(value, field: str, limit: int):
+    """Return a non-negative integer within ``limit``, or ``None`` when absent.
+
+    The bound arrives as an argument rather than being fixed here, because the
+    two kinds of field that reach this function are not one quantity. A run's
+    calls and the tokens those calls carried differ by four orders of magnitude
+    on real runs, so a single bound covering both is really the smaller one
+    wearing a general name — which is how an honest 21,688,749-token shard came
+    to be refused as out of range while the 2,337 calls behind it used two
+    hundredths of a percent of the same allowance.
+
+    Naming the bound at each call site is the part that keeps that from coming
+    back: a reader can see which quantity is being bounded without having to
+    know that ``usage`` and ``model_calls`` share a helper.
+    """
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
         _fail(field, "must be an integer")
-    if value < 0 or value > _MAX_COUNT:
+    if value < 0 or value > limit:
         _fail(field, "is out of range")
     return value
 
@@ -133,7 +166,7 @@ def _cost_usage(value, field: str) -> dict:
     for key, raw in value.items():
         if not isinstance(key, str) or _SLUG.fullmatch(key) is None:
             _fail(field, "carries an invalid key")
-        usage[key] = _cost_count(raw, f"{field}.{key}")
+        usage[key] = _cost_count(raw, f"{field}.{key}", _MAX_TOKENS)
     return dict(sorted(usage.items()))
 
 
@@ -227,7 +260,9 @@ def _project_component(value, field: str) -> dict:
         "retry_kind": retry_kind,
         "status": status,
         "known_cost_usd": known,
-        "model_calls": _cost_count(value.get("model_calls"), f"{field}.model_calls"),
+        "model_calls": _cost_count(
+            value.get("model_calls"), f"{field}.model_calls", _MAX_MODEL_CALLS
+        ),
         "usage": _cost_usage(value.get("usage"), f"{field}.usage"),
         "missing_reasons": _missing_reasons(
             value.get("missing_reasons"), f"{field}.missing_reasons"
@@ -321,7 +356,9 @@ def project_cost_receipt(value, field: str = "cost receipt"):
         "known_cost_usd": known,
         "model_cost_usd": model_cost,
         "runtime_cost_usd": runtime_cost,
-        "model_calls": _cost_count(value.get("model_calls"), f"{field}.model_calls"),
+        "model_calls": _cost_count(
+            value.get("model_calls"), f"{field}.model_calls", _MAX_MODEL_CALLS
+        ),
         "usage": _cost_usage(value.get("usage"), f"{field}.usage"),
         "components": components,
         "price_table_sha256": _price_table_sha256(
