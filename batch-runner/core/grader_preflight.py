@@ -107,16 +107,20 @@ def plan_task_runtime(
                     selected_paths_have_audio=grader._selected_paths_have_audio(
                         deliverable_path, target.paths
                     ),
+                    paths_without_text=grader._paths_without_text(
+                        deliverable_path, target.paths
+                    ),
                 )
                 child_routes.append(decision.modality.value)
                 if decision.modality is Modality.VISUAL:
+                    child_render = decision.render_targets(target.paths)
                     planned_names, child_visual_error = (
                         ToolCallingJudge.validate_planned_visual_names(
-                            target.paths, visual_file_cap
+                            child_render, visual_file_cap
                         )
                     )
                     unsupported_visual_paths.extend(
-                        sorted(set(target.paths) - set(planned_names))
+                        sorted(set(child_render) - set(planned_names))
                     )
                     if child_visual_error is not None and visual_error is None:
                         visual_error = (
@@ -221,26 +225,33 @@ def plan_task_runtime(
             selected_paths_have_audio=grader._selected_paths_have_audio(
                 deliverable_path, target_plan.selected_paths
             ),
+            paths_without_text=grader._paths_without_text(
+                deliverable_path, target_plan.selected_paths
+            ),
         )
         routes[decision.modality.value] += 1
         supported: list[str] = []
         visual_error: str | None = None
         if decision.modality is Modality.VISUAL:
+            # The run renders what the decision asks for, which for an
+            # escalated item is narrower than the selection. Counting the
+            # selection here would predict a budget the run never spends.
+            render_targets = decision.render_targets(target_plan.selected_paths)
             planned_names, visual_error = (
                 ToolCallingJudge.validate_planned_visual_names(
-                    target_plan.selected_paths, visual_file_cap
+                    render_targets, visual_file_cap
                 )
             )
             if visual_error is not None:
                 errors.append(f"{item.rubric_item_id}: {visual_error}")
                 unsupported_visual_paths.extend(
-                    sorted(set(target_plan.selected_paths) - set(planned_names))
+                    sorted(set(render_targets) - set(planned_names))
                 )
             else:
                 supported = planned_names
                 planned_visual_calls += len(supported)
                 unsupported_visual_paths.extend(
-                    sorted(set(target_plan.selected_paths) - set(supported))
+                    sorted(set(render_targets) - set(supported))
                 )
         if visual_error is None:
             item_main_judgments = 1

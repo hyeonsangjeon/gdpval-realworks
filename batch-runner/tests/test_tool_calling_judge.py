@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from core.grader_routing import Modality, RoutingDecision
 from core.rubric_loader import RubricItem, TaskRubric
 from core.tool_calling_judge import (
     ToolCallingJudge,
@@ -1137,6 +1138,134 @@ def test_invalid_vision_verdict_is_blocked_before_main_judge(
     assert result.perception_called is True
     assert result.main_api_call_count == 0
     assert client.responses.calls == []
+
+
+def test_an_escalated_bundle_renders_only_the_file_that_needs_it(
+    deliverable_dir, task_and_item, monkeypatch
+):
+    """The judge must render what the budget counted, and read the rest.
+
+    A bundle-scope item is handed no prepass -- ``judge_item`` builds its own
+    from the file list -- so a render set narrowed in the plan and nowhere
+    else would be narrowed everywhere except where the pictures are actually
+    taken, and the consistency check inside would then fail every item the
+    narrowing had just saved. The sibling is not withheld from the judge: it
+    is not rendered, and it is still a file the judge is told it may read.
+    """
+    task, item = task_and_item
+    (deliverable_dir / "scan.pdf").write_bytes(b"%PDF-1.4\n%stub\n")
+    pytest.importorskip("PIL")
+    from PIL import Image
+    image = io.BytesIO()
+    Image.new("RGB", (8, 8), color="blue").save(image, format="PNG")
+    image_b64 = base64.b64encode(image.getvalue()).decode("ascii")
+
+    rendered: list[str] = []
+
+    def fake_read(op, path, *, base_dir, scope=None):
+        rendered.append(path)
+        return {
+            "ok": True,
+            "data": {
+                "kind": "image_png_base64",
+                "source_kind": "pdf",
+                "scope": dict(scope or {}),
+                "source_page_count": 2,
+                "converted_page_count": 1,
+                "renderer": {"converter": "pymupdf"},
+                "byte_size": len(image.getvalue()),
+                "base64": image_b64,
+            },
+        }
+
+    monkeypatch.setattr(tool_calling_judge_module, "read_deliverable", fake_read)
+
+    client = FakeClient(ScriptedResponses([_response(output=[_final(json.dumps({
+        "verdict": "pass", "partial_score": 1.0,
+        "evidence": "the scanned page states the value",
+        "confidence": 0.9, "reasoning": "looked at the page",
+        "tool_calls_made": 0,
+    }))])]))
+    judge = ToolCallingJudge(client=client, model="gpt-5.4",
+                             prompt_template=PROMPT_TEMPLATE,
+                             vision_perception=StubVision())
+
+    result = judge.judge_item(
+        task=task, item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx", "scan.pdf"],
+        routing_decision=RoutingDecision(
+            modality=Modality.VISUAL,
+            preferred_op="render_to_image",
+            matched_keywords=(),
+            render_paths=("scan.pdf",),
+        ),
+    )
+
+    assert rendered == ["scan.pdf"]
+    assert result.judge_error is None
+    assert result.render_call_count == 1
+    assert result.verdict == "pass"
+    assert "report.xlsx" in json.dumps(client.responses.calls[0], sort_keys=True)
+
+
+def test_a_visual_item_that_narrows_nothing_still_renders_the_bundle(
+    deliverable_dir, task_and_item, monkeypatch
+):
+    """The default is unchanged, and it is the ordinary case.
+
+    Every criterion that names something visual arrives with no render set of
+    its own, and asks for every selected file exactly as it did before.
+    """
+    task, item = task_and_item
+    (deliverable_dir / "scan.pdf").write_bytes(b"%PDF-1.4\n%stub\n")
+    pytest.importorskip("PIL")
+    from PIL import Image
+    image = io.BytesIO()
+    Image.new("RGB", (8, 8), color="blue").save(image, format="PNG")
+    image_b64 = base64.b64encode(image.getvalue()).decode("ascii")
+
+    rendered: list[str] = []
+
+    def fake_read(op, path, *, base_dir, scope=None):
+        rendered.append(path)
+        return {
+            "ok": True,
+            "data": {
+                "kind": "image_png_base64",
+                "source_kind": Path(path).suffix.lstrip("."),
+                "scope": dict(scope or {}),
+                "converted_page_count": 1,
+                "renderer": {"converter": "libreoffice"},
+                "byte_size": len(image.getvalue()),
+                "base64": image_b64,
+            },
+        }
+
+    monkeypatch.setattr(tool_calling_judge_module, "read_deliverable", fake_read)
+
+    client = FakeClient(ScriptedResponses([_response(output=[_final(json.dumps({
+        "verdict": "pass", "partial_score": 1.0, "evidence": "both surfaces",
+        "confidence": 0.9, "reasoning": "looked at both", "tool_calls_made": 0,
+    }))])]))
+    judge = ToolCallingJudge(client=client, model="gpt-5.4",
+                             prompt_template=PROMPT_TEMPLATE,
+                             vision_perception=StubVision())
+
+    result = judge.judge_item(
+        task=task, item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx", "scan.pdf"],
+        routing_decision=RoutingDecision(
+            modality=Modality.VISUAL,
+            preferred_op="render_to_image",
+            matched_keywords=("chart",),
+        ),
+    )
+
+    assert rendered == ["report.xlsx", "scan.pdf"]
+    assert result.judge_error is None
+    assert result.render_call_count == 2
 
 
 def test_routing_modality_text_omits_perception_tools(deliverable_dir, task_and_item):

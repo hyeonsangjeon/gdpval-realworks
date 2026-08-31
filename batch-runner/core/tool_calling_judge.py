@@ -599,13 +599,21 @@ class ToolCallingJudge:
         )
         prepass = visual_prepass or VisualPrepassResult()
         if decision.modality.value == "visual":
+            # What to look at is not the same list as what to read. A bundle
+            # can hold one file with no text layer next to a readable one, and
+            # the routing escalates on the first without conceding the second:
+            # the pictures are of the file that needs them, the whole bundle
+            # stays within reach of ``read_deliverable``. ``render_targets``
+            # is the same call the task budget and the free preflight make,
+            # which is what keeps the cross-check below honest.
+            visual_file_names = decision.render_targets(file_names)
             if visual_prepass is None:
                 prepass = self.preflight_visual(
                     item=item,
                     deliverable_dir=deliverable_dir,
-                    file_names=file_names,
+                    file_names=visual_file_names,
                 )
-            expected_paths = self.planned_supported_visual_names(file_names)
+            expected_paths = self.planned_supported_visual_names(visual_file_names)
             observed_paths = [entry.path for entry in prepass.entries]
             if prepass.judge_error is None and observed_paths != expected_paths:
                 prepass.judge_error = (
