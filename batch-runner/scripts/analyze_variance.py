@@ -90,6 +90,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import math
 import random
@@ -412,6 +413,178 @@ def bootstrap_mean_ci(
     }
 
 
+# ── Did the same item get the same answer? ─────────────────────────────────
+
+
+def per_item_answers(
+    runs: list[dict[str, Any]],
+) -> dict[tuple[str, str], dict[str, dict[str, Any]]]:
+    """Each rubric item's answer, keyed by ``(task_id, rubric_item_id)``.
+
+    The pair is the key rather than the item id alone because a rubric item id
+    is only unique inside its task; two tasks may carry the same criterion. The
+    inner mapping is by run label, so a caller can see which run is missing an
+    item rather than only that one is.
+
+    Position within ``items`` is deliberately *not* the key. Comparing the
+    fourth item of one run with the fourth of another would still line up
+    perfectly if the grader had reordered them, and would then report the
+    difference between two unrelated criteria as instability.
+    """
+    answers: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
+    for run in runs:
+        for task in run["payload"].get("tasks") or []:
+            task_id = str(task.get("task_id"))
+            for item in task.get("items") or []:
+                key = (task_id, str(item.get("rubric_item_id")))
+                answers.setdefault(key, {})[run["label"]] = item
+    return answers
+
+
+def item_stability(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """How often one item got one answer, and how much of the churn cancels.
+
+    Why this is not the same question as per-task stability
+    ------------------------------------------------------
+    Everything else in this file measures how far the *score* moved. This
+    measures how far the *judgements* moved, and the two can disagree
+    completely: item flips in opposite directions sum to nearly nothing, so a
+    corpus mean can sit still while a large minority of the individual verdicts
+    behind it would have read differently on a second run. A reader who quotes
+    one item's ``fail`` as a fact about a deliverable is relying on this number,
+    not on the corpus mean, and until now nothing reported it.
+
+    ``cancelled_pct`` is what makes that concrete. For each pair of runs the
+    gross movement is the total absolute change in awarded points and the net
+    movement is the size of their sum; the fraction of the gross that never
+    reaches the net is how much of the disagreement hid itself by being
+    symmetric. A high figure is not reassurance -- it is the reason the
+    reassuring number upstream cannot be taken at face value.
+
+    Points, not percentage points
+    -----------------------------
+    The movement is summed in raw rubric points because that is what an item
+    awards. It is deliberately not converted into corpus percentage points: a
+    task's ``pct`` normalises by that task's own maximum, so points from
+    different tasks do not share a scale and a total in "pp" would be a number
+    with no referent. The corpus mean's own spread is reported separately and
+    is the right number for that question.
+
+    Split by ``decided_by``
+    -----------------------
+    A judge that answers differently twice is expected and is what the rate is
+    for. A deterministic route -- a precheck -- that answers differently twice
+    is a defect, and averaging the two together would let the second hide
+    inside the first. They are counted apart so that a nonzero precheck row is
+    visible on its own line even when it is one item in a thousand.
+
+    Items missing from a run
+    ------------------------
+    An item absent from any run is excluded from every rate and listed instead.
+    Silently comparing whichever runs happen to hold it would quietly change
+    the denominator between one item and the next, and an item that only one
+    run graded has no agreement to measure.
+    """
+    labels = [run["label"] for run in runs]
+    answers = per_item_answers(runs)
+
+    complete: list[tuple[tuple[str, str], dict[str, dict[str, Any]]]] = []
+    incomplete: list[dict[str, Any]] = []
+    for key, by_label in sorted(answers.items()):
+        missing = [label for label in labels if label not in by_label]
+        if missing:
+            incomplete.append(
+                {"task_id": key[0], "rubric_item_id": key[1], "missing_from": missing}
+            )
+        else:
+            complete.append((key, by_label))
+
+    by_route: dict[str, dict[str, int]] = {}
+    movers: list[dict[str, Any]] = []
+    verdict_changed = score_changed = 0
+
+    for key, by_label in complete:
+        verdicts = [by_label[label].get("verdict") for label in labels]
+        scores = [float(by_label[label].get("awarded_score") or 0.0) for label in labels]
+        route = str(by_label[labels[0]].get("decided_by"))
+
+        flipped = len(set(verdicts)) > 1
+        moved = len(set(scores)) > 1
+        verdict_changed += flipped
+        score_changed += moved
+
+        row = by_route.setdefault(
+            route, {"items": 0, "verdict_changed": 0, "score_changed": 0}
+        )
+        row["items"] += 1
+        row["verdict_changed"] += flipped
+        row["score_changed"] += moved
+
+        if moved or flipped:
+            movers.append(
+                {
+                    "task_id": key[0],
+                    "rubric_item_id": key[1],
+                    "decided_by": route,
+                    "verdict_by_run": verdicts,
+                    "awarded_by_run": [round(value, 4) for value in scores],
+                    "max_score": by_label[labels[0]].get("max_score"),
+                    "range_points": round(max(scores) - min(scores), 4),
+                    "criterion": by_label[labels[0]].get("criterion"),
+                }
+            )
+
+    movers.sort(
+        key=lambda row: (-row["range_points"], row["task_id"], row["rubric_item_id"])
+    )
+
+    pairs: list[dict[str, Any]] = []
+    for left, right in itertools.combinations(labels, 2):
+        gross = net = 0.0
+        changed = 0
+        for _key, by_label in complete:
+            delta = float(by_label[left].get("awarded_score") or 0.0) - float(
+                by_label[right].get("awarded_score") or 0.0
+            )
+            if delta:
+                changed += 1
+            gross += abs(delta)
+            net += delta
+        net = abs(net)
+        pairs.append(
+            {
+                "runs": [left, right],
+                "items_changed": changed,
+                "gross_points_moved": round(gross, 4),
+                "net_points_moved": round(net, 4),
+                # No movement at all is perfect agreement, not total
+                # cancellation; 0/0 has to read as "nothing cancelled".
+                "cancelled_pct": (
+                    0.0 if gross == 0 else round(100.0 * (1.0 - net / gross), 2)
+                ),
+            }
+        )
+
+    compared = len(complete)
+    return {
+        "items_compared": compared,
+        "items_incomplete": incomplete,
+        "verdict_changed": verdict_changed,
+        "verdict_changed_pct": (
+            None if not compared else round(100.0 * verdict_changed / compared, 2)
+        ),
+        "score_changed": score_changed,
+        "score_changed_pct": (
+            None if not compared else round(100.0 * score_changed / compared, 2)
+        ),
+        "by_decided_by": by_route,
+        "pairs": pairs,
+        # Every changed item, as `per_task` does; the readable report shows the
+        # worst few and points at `--json` for the rest.
+        "changed_items": movers,
+    }
+
+
 # ── How often did the judge fail to answer? ────────────────────────────────
 
 
@@ -618,6 +791,7 @@ def analyze(
             "tasks_only": tasks_only,
             "runs_only": runs_only,
         },
+        "item_stability": item_stability(runs),
         "judge_errors": errors,
         "usage": usage_by_run(runs),
     }
@@ -751,6 +925,65 @@ def _render(report: dict[str, Any], *, mover_limit: int) -> str:
     remaining = len(stability["per_task"]) - mover_limit
     if remaining > 0:
         lines.append(f"  ... and {remaining} more (use --json for all of them)")
+    lines.append("")
+
+    items = report["item_stability"]
+    lines.append("Per-item agreement")
+    lines.append("-" * 68)
+    compared = items["items_compared"]
+    lines.append(
+        f"  same verdict in every run     "
+        f"{compared - items['verdict_changed']}/{compared}   "
+        f"changed {items['verdict_changed']} ({items['verdict_changed_pct']}%)"
+    )
+    lines.append(
+        f"  same awarded score            "
+        f"{compared - items['score_changed']}/{compared}   "
+        f"changed {items['score_changed']} ({items['score_changed_pct']}%)"
+    )
+    for route, row in sorted(items["by_decided_by"].items()):
+        lines.append(
+            f"    decided by {route:<12} {row['items']:>5} item(s), "
+            f"verdict changed {row['verdict_changed']}, "
+            f"score changed {row['score_changed']}"
+        )
+    if items["items_incomplete"]:
+        lines.append(
+            f"  not graded by every run       "
+            f"{len(items['items_incomplete'])} item(s), excluded from the rates"
+        )
+    lines.append("")
+    lines.append("  How much of the movement cancels out")
+    for pair in items["pairs"]:
+        left, right = pair["runs"]
+        lines.append(
+            f"    {left} vs {right}   "
+            f"{pair['items_changed']:>4} item(s) moved   "
+            f"gross {pair['gross_points_moved']:>8}pt   "
+            f"net {pair['net_points_moved']:>7}pt   "
+            f"cancelled {pair['cancelled_pct']}%"
+        )
+    lines.append(
+        "  Points are rubric points, not corpus pp — a task's pct normalises "
+        "by its own maximum."
+    )
+    lines.append("")
+
+    lines.append("Items that answered differently")
+    lines.append("-" * 68)
+    for row in items["changed_items"][:mover_limit]:
+        verdicts = " -> ".join(str(value) for value in row["verdict_by_run"])
+        awarded = " -> ".join(f"{value:g}" for value in row["awarded_by_run"])
+        lines.append(
+            f"  range {row['range_points']:>6}pt of {row['max_score']}   "
+            f"{row['task_id']}  {row['rubric_item_id']}"
+        )
+        lines.append(f"      {verdicts}   ·   {awarded}")
+    remaining_items = len(items["changed_items"]) - mover_limit
+    if remaining_items > 0:
+        lines.append(
+            f"  ... and {remaining_items} more (use --json for all of them)"
+        )
     lines.append("")
 
     errors = report["judge_errors"]

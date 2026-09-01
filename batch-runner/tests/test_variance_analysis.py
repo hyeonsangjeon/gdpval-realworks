@@ -37,7 +37,7 @@ def _task(task_id: str, pct: float, *, judge_items: int = 2, errors: int = 0):
     for index in range(judge_items):
         items.append(
             {
-                "item_id": f"{task_id}-{index}",
+                "rubric_item_id": f"{task_id}-{index}",
                 "decided_by": "judge",
                 "verdict": "judge_error" if index < errors else "pass",
                 "awarded_score": 0 if index < errors else 4,
@@ -441,7 +441,7 @@ def test_the_error_rate_counts_only_items_the_judge_decided(tmp_path):
     for run in runs:
         run["payload"]["tasks"][0]["items"].append(
             {
-                "item_id": "prechecked",
+                "rubric_item_id": "prechecked",
                 "decided_by": "precheck",
                 "verdict": "fail",
                 "awarded_score": 0,
@@ -499,6 +499,212 @@ def test_the_rate_is_pooled_across_runs(tmp_path):
     assert errors["pooled_judge_errors"] == 1
     assert errors["pooled_judge_items"] == 180
     assert errors["pooled_rate"] == variance.canonical_rate(1, 180)
+
+
+# ── Did the same item get the same answer? ─────────────────────────────────
+#
+# Everything above measures how far the *score* moved. These measure how far
+# the *judgements* moved, which is a different question with a different
+# answer: opposite flips sum to nearly nothing, so a corpus mean can sit
+# perfectly still while a large minority of the verdicts under it would have
+# read differently on a second run. A reader who quotes one item's "fail" as a
+# fact about a deliverable is relying on these numbers and not on that mean.
+
+
+def _item(run, task_index, item_index):
+    """The one item every test below reaches for."""
+    return run["payload"]["tasks"][task_index]["items"][item_index]
+
+
+def test_items_that_never_moved_are_reported_as_full_agreement(tmp_path):
+    runs = _three_runs(tmp_path, [STEADY, STEADY, STEADY])
+
+    items = variance.item_stability(runs)
+
+    assert items["items_compared"] == 2 * gold.EXPECTED_TASK_COUNT
+    assert items["verdict_changed"] == 0
+    assert items["score_changed"] == 0
+    assert items["changed_items"] == []
+
+
+def test_an_item_that_flipped_is_counted_once_and_not_once_per_run(tmp_path):
+    """Three runs disagreeing about one item is one unstable item, not three."""
+    runs = _three_runs(tmp_path, [STEADY, STEADY, STEADY])
+    _item(runs[1], 0, 0).update({"verdict": "fail", "awarded_score": 0})
+    _item(runs[2], 0, 0).update({"verdict": "partial", "awarded_score": 2})
+
+    items = variance.item_stability(runs)
+
+    assert items["verdict_changed"] == 1
+    assert items["score_changed"] == 1
+    assert len(items["changed_items"]) == 1
+    assert items["changed_items"][0]["verdict_by_run"] == ["pass", "fail", "partial"]
+
+
+def test_a_score_that_moved_under_an_unchanged_verdict_is_still_counted(tmp_path):
+    """The two rates are separate because the payload can move one alone.
+
+    A judge that says "partial" twice and awards 1.6 then 1.8 has changed its
+    answer. Counting only verdicts would call that item stable, and on the real
+    corpus this is the larger of the two effects -- 13.75% of items moved their
+    score against 6.98% that flipped a verdict.
+    """
+    runs = _three_runs(tmp_path, [STEADY, STEADY, STEADY])
+    for run, awarded in zip(runs, (1.6, 1.8, 1.6)):
+        _item(run, 0, 0).update({"verdict": "partial", "awarded_score": awarded})
+
+    items = variance.item_stability(runs)
+
+    assert items["verdict_changed"] == 0
+    assert items["score_changed"] == 1
+
+
+def test_opposite_movements_cancel_in_the_total_but_not_in_the_count(tmp_path):
+    """The finding this section exists for, as a test.
+
+    Two items move by the same amount in opposite directions. The corpus is
+    unchanged -- net zero -- and every score-level number upstream will say so.
+    Two items still answered differently, and `cancelled_pct` is what stops the
+    net zero from being read as agreement.
+    """
+    runs = _three_runs(tmp_path, [STEADY, STEADY, STEADY])
+    _item(runs[1], 0, 0).update({"verdict": "fail", "awarded_score": 0})
+    _item(runs[1], 0, 1).update({"verdict": "pass", "awarded_score": 8})
+
+    items = variance.item_stability(runs)
+    first_pair = next(
+        pair for pair in items["pairs"] if pair["runs"] == ["run 1", "run 2"]
+    )
+
+    assert first_pair["net_points_moved"] == 0.0
+    assert first_pair["gross_points_moved"] == 8.0
+    assert first_pair["cancelled_pct"] == 100.0
+    # ... and the count refuses to round that off to "nothing happened".
+    assert first_pair["items_changed"] == 2
+    assert items["score_changed"] == 2
+
+
+def test_perfect_agreement_is_not_reported_as_total_cancellation(tmp_path):
+    """Nothing moved and everything cancelled are opposite facts.
+
+    Both leave a net of zero, so the ratio has to be told which it is looking
+    at. 0/0 reading as 100% would print the alarming figure on the calmest
+    possible evidence.
+    """
+    runs = _three_runs(tmp_path, [STEADY, STEADY, STEADY])
+
+    items = variance.item_stability(runs)
+
+    assert all(pair["gross_points_moved"] == 0.0 for pair in items["pairs"])
+    assert all(pair["cancelled_pct"] == 0.0 for pair in items["pairs"])
+
+
+def test_items_are_matched_by_identity_and_not_by_position(tmp_path):
+    """Reordering a task's items is not the grader changing its mind.
+
+    Matching on position would line the two lists up regardless and report the
+    difference between two unrelated criteria as instability.
+    """
+    runs = _three_runs(tmp_path, [STEADY, STEADY, STEADY])
+    _item(runs[0], 0, 0)["awarded_score"] = 1
+    _item(runs[0], 0, 1)["awarded_score"] = 3
+    reordered = list(reversed(runs[1]["payload"]["tasks"][0]["items"]))
+    runs[1]["payload"]["tasks"][0]["items"] = reordered
+    _item(runs[1], 0, 0)["awarded_score"] = 3
+    _item(runs[1], 0, 1)["awarded_score"] = 1
+    _item(runs[2], 0, 0)["awarded_score"] = 1
+    _item(runs[2], 0, 1)["awarded_score"] = 3
+
+    items = variance.item_stability(runs)
+
+    assert items["score_changed"] == 0
+
+
+def test_one_criterion_in_two_tasks_is_two_items(tmp_path):
+    """A rubric item id is unique inside its task and not across the corpus."""
+    runs = _three_runs(tmp_path, [STEADY, STEADY, STEADY])
+    for run in runs:
+        for task_index in (0, 1):
+            _item(run, task_index, 0)["rubric_item_id"] = "shared"
+    _item(runs[1], 0, 0).update({"verdict": "fail", "awarded_score": 0})
+
+    items = variance.item_stability(runs)
+
+    assert items["items_compared"] == 2 * gold.EXPECTED_TASK_COUNT
+    assert items["score_changed"] == 1
+
+
+def test_an_item_one_run_never_graded_is_listed_rather_than_compared(tmp_path):
+    """An item only some runs hold has no agreement to measure.
+
+    Comparing whichever runs happen to carry it would move the denominator
+    from one item to the next, so it leaves the rates and is named instead.
+    """
+    runs = _three_runs(tmp_path, [STEADY, STEADY, STEADY])
+    dropped = _item(runs[2], 0, 0)["rubric_item_id"]
+    del runs[2]["payload"]["tasks"][0]["items"][0]
+
+    items = variance.item_stability(runs)
+
+    assert items["items_compared"] == 2 * gold.EXPECTED_TASK_COUNT - 1
+    assert items["items_incomplete"] == [
+        {
+            "task_id": "task-000",
+            "rubric_item_id": dropped,
+            "missing_from": ["run 3"],
+        }
+    ]
+
+
+def test_a_precheck_that_disagrees_is_counted_apart_from_the_judge(tmp_path):
+    """A deterministic route changing its mind is a defect, not a rate.
+
+    Pooled with the judge it would be one item in a thousand and invisible. On
+    its own row it cannot be missed even when the judge's own churn is large.
+    """
+    runs = _three_runs(tmp_path, [STEADY, STEADY, STEADY])
+    for run in runs:
+        run["payload"]["tasks"][0]["items"].append(
+            {
+                "rubric_item_id": "prechecked",
+                "decided_by": "precheck",
+                "verdict": "pass",
+                "awarded_score": 4,
+                "max_score": 4,
+            }
+        )
+    runs[1]["payload"]["tasks"][0]["items"][-1].update(
+        {"verdict": "fail", "awarded_score": 0}
+    )
+    _item(runs[2], 1, 0).update({"verdict": "fail", "awarded_score": 0})
+
+    items = variance.item_stability(runs)
+
+    assert items["by_decided_by"]["precheck"] == {
+        "items": 1,
+        "verdict_changed": 1,
+        "score_changed": 1,
+    }
+    assert items["by_decided_by"]["judge"]["verdict_changed"] == 1
+
+
+def test_the_report_carries_the_per_item_agreement(tmp_path, capsys):
+    """The numbers are of no use in a dict nobody prints."""
+    paths = [
+        _write(
+            tmp_path,
+            _payload(STEADY, graded_at=f"2026-08-2{ordinal}T0{ordinal}:00:00Z"),
+            ordinal=ordinal,
+        )
+        for ordinal in (1, 2, 3)
+    ]
+    variance.main([str(path) for path in paths])
+
+    printed = capsys.readouterr().out
+
+    assert "Per-item agreement" in printed
+    assert "same verdict in every run" in printed
+    assert "How much of the movement cancels out" in printed
 
 
 # ── The command line ───────────────────────────────────────────────────────
