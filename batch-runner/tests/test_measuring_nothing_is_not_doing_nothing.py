@@ -39,7 +39,7 @@ arithmetic under test is the producer's.
 
 import itertools
 import json
-import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -449,27 +449,36 @@ def test_no_payload_on_disk_carries_a_summary_this_function_wrote():
     ``core.cost_receipts.summarise_receipts``, which has always applied the
     rule this change ports. The receipts above are therefore real evidence of
     the shape, and the blast radius on committed files is still zero.
+
+    Committed means tracked, not present. This walked the directory tree, which
+    also reaches build output: ``public/generated/reports-index.json`` carries
+    three run summaries fetched from HuggingFace, and ``dist/`` carries a copy
+    of the same file. Both are ignored, neither is in a clone, and running
+    ``npm run build`` before ``pytest`` was enough to fail this on a claim about
+    what a clone contains. ``git ls-files`` is the set the sentence is about.
     """
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*.json"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+    ).stdout.split("\0")
+
     found = []
-    for directory, subdirs, files in os.walk(REPO_ROOT):
-        subdirs[:] = [name for name in subdirs
-                      if name not in {".git", "node_modules", "__pycache__"}]
-        for name in files:
-            if not name.endswith(".json"):
-                continue
-            path = Path(directory) / name
-            try:
-                doc = json.loads(path.read_text("utf-8"))
-            except (ValueError, UnicodeDecodeError, OSError):
-                continue
-            stack = [doc]
-            while stack:
-                node = stack.pop()
-                if isinstance(node, dict):
-                    if "receipt_tasks" in node and "coverage_pct" in node:
-                        found.append(path)
-                        break
-                    stack.extend(node.values())
-                elif isinstance(node, list):
-                    stack.extend(node)
-    assert not found, f"a committed payload now carries a run-level summary: {found}"
+    for name in tracked:
+        if not name:
+            continue
+        path = REPO_ROOT / name
+        try:
+            doc = json.loads(path.read_text("utf-8"))
+        except (ValueError, UnicodeDecodeError, OSError):
+            continue
+        stack = [doc]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                if "receipt_tasks" in node and "coverage_pct" in node:
+                    found.append(path)
+                    break
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+    assert found == [], f"a committed payload now carries a run-level summary: {found}"

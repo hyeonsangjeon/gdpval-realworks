@@ -15,6 +15,8 @@ import {
   ESTIMATE_BASIS,
   projectCostLedgerReference,
   projectCostReceipt,
+  projectCostSummaries,
+  projectCostSummary,
   summarizeCostReceipts,
 } from '../cost-receipt.mjs';
 
@@ -994,4 +996,279 @@ test('every reason the schema allows has a Korean label', async () => {
   const labelled = [...block[1].matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]);
 
   assert.deepEqual([...labelled].sort(), [...allowed].sort());
+});
+
+// ── A summary this build did not compute ──────────────────────────────────
+//
+// `summarizeCostReceipts` above is sound because it did the arithmetic. The
+// other producer of the same shape is `build_cost_summaries` in
+// batch-runner/core/cost_projection.py, and what it writes travels inside
+// `report_data.json` — fetched unauthenticated from HuggingFace for all 26
+// experiments, since no results directory carries a local copy. Until this
+// projector existed the aggregator spread that object into the published index
+// verbatim and the dashboard rendered it as money.
+
+function summaryFixture(overrides = {}) {
+  return {
+    schema_version: COST_RECEIPT_SCHEMA_VERSION,
+    currency: 'USD',
+    estimate_basis: ESTIMATE_BASIS,
+    status: 'complete',
+    total_tasks: 4,
+    receipt_tasks: 4,
+    measured_tasks: 4,
+    coverage_pct: 100,
+    complete_tasks: 4,
+    partial_tasks: 0,
+    unavailable_tasks: 0,
+    not_run_tasks: 0,
+    known_cost_usd: 1.2,
+    estimated_cost_usd: 1.2,
+    avg_cost_usd: 0.3,
+    median_cost_usd: 0.3,
+    p95_cost_usd: 0.3,
+    max_cost_usd: 0.3,
+    successful_deliverables: 4,
+    cost_per_successful_deliverable_usd: 0.3,
+    failed_task_count: 0,
+    failed_task_cost_usd: 0,
+    components: [],
+    price_table_sha256: null,
+    missing_reasons: [],
+    ...overrides,
+  };
+}
+
+const refuses = (overrides, pattern) => assert.throws(
+  () => projectCostSummary(summaryFixture(overrides)),
+  pattern,
+);
+
+test('a well-formed summary passes through with its figures intact', () => {
+  const projected = projectCostSummary(summaryFixture());
+  assert.equal(projected.status, 'complete');
+  assert.equal(projected.estimated_cost_usd, 1.2);
+  assert.equal(projected.known_cost_usd, 1.2);
+  assert.equal(projected.receipt_tasks, 4);
+  assert.equal(projected.estimate_basis, ESTIMATE_BASIS);
+});
+
+test('no summary at all stays no summary', () => {
+  assert.equal(projectCostSummary(null), null);
+  assert.equal(projectCostSummary(undefined), null);
+  assert.equal(projectCostSummaries(null), null);
+  assert.equal(projectCostSummaries({ problem_solving_cost: null }), null);
+});
+
+// ── the biconditional, in both directions ─────────────────────────────────
+//
+// `estimated_cost_usd = known_total if complete_run else None` in the Python,
+// `completeRun ? knownTotal : null` in the mirror above, and `complete_run` is
+// exactly `status === 'complete'`. Each direction is a different lie, so each
+// is refused separately.
+
+test('a run that is not complete may not name a total', () => {
+  // What the dashboard does with this is the reason: `summaryTotalCell` gates
+  // on `estimated_cost_usd !== null`, never on the status printed beside it,
+  // so $0.5000 renders as settled under a card corner reading 일부 기록됨.
+  refuses(
+    { status: 'partial', complete_tasks: 3, partial_tasks: 1 },
+    /is partial but carries a total/,
+  );
+  refuses(
+    { status: 'unavailable', complete_tasks: 0, unavailable_tasks: 4, known_cost_usd: 0 },
+    /is unavailable but carries a total/,
+  );
+});
+
+test('a complete run must name the total it is complete about', () => {
+  // `undefined !== null` is true, so an absent field passes the dashboard's
+  // gate and `formatCostUsd(undefined)` reaches `undefined.toFixed`. The
+  // experiment page goes down with a TypeError; nothing renders at all.
+  const missing = summaryFixture();
+  delete missing.estimated_cost_usd;
+  assert.throws(() => projectCostSummary(missing), /is complete without a total/);
+  refuses({ estimated_cost_usd: null }, /is complete without a total/);
+});
+
+test('a complete run may not estimate something other than what it knows', () => {
+  refuses({ estimated_cost_usd: 9.9 }, /its total is not what it knows/);
+});
+
+test('a summary with no known total at all is refused', () => {
+  const missing = summaryFixture();
+  delete missing.known_cost_usd;
+  assert.throws(() => projectCostSummary(missing), /known_cost_usd is required/);
+});
+
+// ── the counts have to be the same counts ─────────────────────────────────
+
+test('the status buckets must add up to the receipts they sort', () => {
+  // Each receipt lands in exactly one bucket, so the buckets are the receipts
+  // counted a second way. Disagreement is the only evidence that something
+  // rewrote one side without the other.
+  refuses({ complete_tasks: 3 }, /buckets that do not add up/);
+  refuses({ not_run_tasks: 1 }, /buckets that do not add up/);
+});
+
+test('a bucket that is absent is not read as a zero', () => {
+  const missing = summaryFixture();
+  delete missing.partial_tasks;
+  assert.throws(() => projectCostSummary(missing), /partial_tasks is required/);
+});
+
+test('a run cannot hold more receipts than it has tasks', () => {
+  refuses({ total_tasks: 2 }, /more receipts than it has tasks/);
+});
+
+test('a run cannot price more tasks than it holds receipts for', () => {
+  refuses({ measured_tasks: 5, total_tasks: 6 }, /prices more tasks than it holds/);
+});
+
+test('coverage has to be a percentage', () => {
+  refuses({ coverage_pct: 101 }, /coverage_pct must be a percentage/);
+  refuses({ coverage_pct: -1 }, /coverage_pct must be a percentage/);
+  refuses({ coverage_pct: null }, /coverage_pct must be a percentage/);
+  refuses({ coverage_pct: '100' }, /coverage_pct must be a percentage/);
+});
+
+test('failures cannot outnumber the tasks that could have failed', () => {
+  refuses({ failed_task_count: 5 }, /more failures than it has tasks/);
+});
+
+test('priced failures cannot outnumber the failures', () => {
+  refuses(
+    { failed_task_count: 1, failed_measured_tasks: 2 },
+    /prices more failures than it counted/,
+  );
+});
+
+// `failed_measured_tasks` is optional in src/types/cost.ts because reports
+// published before the count existed do not carry it — including all three of
+// the real ones. Absent must stay absent: a zero invented here would tell
+// `failedTaskCostCell` that the failures were priced and cost nothing.
+test('a summary from before the priced-failure count existed keeps its silence', () => {
+  const older = summaryFixture();
+  delete older.failed_measured_tasks;
+  const projected = projectCostSummary(older);
+  assert.equal('failed_measured_tasks' in projected, false);
+
+  const newer = projectCostSummary(summaryFixture({ failed_task_count: 2, failed_measured_tasks: 1 }));
+  assert.equal(newer.failed_measured_tasks, 1);
+});
+
+// ── the header both sides agree on ────────────────────────────────────────
+
+test('a summary from another schema or another currency is refused', () => {
+  refuses({ schema_version: 'cost-receipt-v2' }, /schema_version cost-receipt-v1/);
+  refuses({ currency: 'KRW' }, /denominated in USD/);
+  refuses({ status: 'done' }, /status must be one of/);
+  assert.throws(() => projectCostSummary('1.20'), /must be an object/);
+  assert.throws(() => projectCostSummary([summaryFixture()]), /must be an object/);
+});
+
+test('a component list is held to the same rules a receipt holds it to', () => {
+  const line = {
+    name: 'grading', stage: 'grading', retry_kind: 'none', status: 'complete',
+    known_cost_usd: 0.6, model_calls: 1, usage: {}, missing_reasons: [],
+  };
+  assert.equal(projectCostSummary(summaryFixture({ components: [line] })).components.length, 1);
+  refuses({ components: [line, { ...line }] }, /duplicate component keys/);
+  refuses({ components: {} }, /components must be a list/);
+});
+
+test('an unknown cost field is named rather than dropped', () => {
+  // The two ways a cost stops being shown — never recorded, and recorded under
+  // a name the dashboard does not read — look identical on screen.
+  assert.throws(
+    () => projectCostSummaries({ grading_cost: summaryFixture(), perception_cost: summaryFixture() }),
+    /unknown cost field: perception_cost/,
+  );
+});
+
+test('a wrapper keeps each field under its own name', () => {
+  const both = projectCostSummaries({
+    problem_solving_cost: summaryFixture(),
+    grading_cost: summaryFixture({ known_cost_usd: 0.4, estimated_cost_usd: 0.4 }),
+  });
+  assert.equal(both.problem_solving_cost.known_cost_usd, 1.2);
+  assert.equal(both.grading_cost.known_cost_usd, 0.4);
+});
+
+// ── acceptance: the rules must not be stricter than the producers ─────────
+
+/**
+ * Everything `summarizeCostReceipts` builds has to survive the projector.
+ *
+ * These are two independent implementations of one contract — one computes a
+ * summary, the other decides whether to believe one — and the interesting
+ * failure is not a bad payload getting through but a good one being refused. A
+ * rule that is one degree too strict fails the Pages build on real data, and it
+ * fails it for every experiment at once.
+ */
+test('every summary the summariser produces is one the projector accepts', () => {
+  const line = (status, cost) => ({
+    receipt: {
+      status,
+      known_cost_usd: cost,
+      model_calls: 1,
+      usage: { input_tokens: 100 },
+      missing_reasons: status === 'complete' ? [] : ['usage_absent'],
+      components: [{
+        name: 'generation', stage: 'generation', retry_kind: 'none',
+        status: status === 'complete' ? 'complete' : 'partial',
+        known_cost_usd: cost, model_calls: 1, usage: {}, missing_reasons: [],
+      }],
+    },
+    succeeded: true,
+  });
+
+  const corpus = {
+    'a complete run': [line('complete', 0.5), line('complete', 0.25)],
+    'one unknown row': [line('complete', 0.5), line('partial', 0.25)],
+    'nothing recorded': [line('unavailable', 0), line('unavailable', 0)],
+    'nothing asked for': [line('not_run', 0), line('not_run', 0)],
+    'a mixture': [line('complete', 0.5), line('partial', 0.25), line('unavailable', 0), line('not_run', 0)],
+    'a row with no receipt': [line('complete', 0.5), { receipt: null, succeeded: true }],
+    'a failure that cost money': [line('complete', 0.5), { ...line('complete', 0.25), succeeded: false }],
+  };
+
+  for (const [name, rows] of Object.entries(corpus)) {
+    const summary = summarizeCostReceipts(rows);
+    assert.ok(summary, `${name} should produce a summary`);
+    const projected = projectCostSummary(JSON.parse(JSON.stringify(summary)), name);
+    assert.equal(projected.status, summary.status, name);
+    assert.equal(projected.estimated_cost_usd, summary.estimated_cost_usd, name);
+    assert.equal(projected.known_cost_usd, summary.known_cost_usd, name);
+    assert.equal(projected.receipt_tasks, summary.receipt_tasks, name);
+  }
+});
+
+/**
+ * And so does every summary sitting in the published index right now.
+ *
+ * Three of the twenty-six reports carry one. They came off HuggingFace, not out
+ * of this repository, which is the entire reason the projector exists — so they
+ * are the one corpus worth reading from disk rather than constructing.
+ */
+test('every cost summary in the published index is accepted', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const index = JSON.parse(
+    await readFile(new URL('../../public/generated/reports-index.json', import.meta.url), 'utf8'),
+  );
+  let seen = 0;
+  for (const report of index.reports ?? []) {
+    if (!report.cost_summary && !report.cost_ledger) continue;
+    seen += 1;
+    const summaries = projectCostSummaries(report.cost_summary, report.short_id ?? 'report');
+    projectCostLedgerReference(report.cost_ledger, report.short_id ?? 'report');
+    for (const summary of Object.values(summaries ?? {})) {
+      assert.equal(
+        summary.estimated_cost_usd !== null,
+        summary.status === 'complete',
+        'the published index should already obey the biconditional',
+      );
+    }
+  }
+  assert.ok(seen >= 3, `expected at least the 3 known cost-carrying reports, saw ${seen}`);
 });
