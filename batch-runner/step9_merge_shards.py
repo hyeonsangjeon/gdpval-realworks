@@ -89,6 +89,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
+from core.cost_projection import repo_relative_ledger_path
 from core.cost_receipts import (
     BUCKET_GRADING,
     CostReceiptLedger,
@@ -101,6 +102,7 @@ from step8_grade import (
     _batch_runner_root,
     _compute_summary,
     _ordered_task_ids_sha256,
+    _repo_root,
     _save_json,
 )
 
@@ -1179,11 +1181,44 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _resolve_shard_ledger(
+    shard_path: Path, pointer_path: str, repo_root: Path
+) -> Path | None:
+    """Find the export a shard's ledger pointer names, or ``None``.
+
+    A pointer written today is a path from a repository root, so that is what
+    it is joined to. Which root, though, is not one fixed directory: shards are
+    graded on separate runners and are only in one checkout together once the
+    merging job has downloaded them, and a shard that was never moved still has
+    a root of its own. So the pointer is tried against the root this merge is
+    running in and then against each directory above the shard file, nearest
+    first -- the walk that also resolves the bare filenames written before this
+    field was a path at all, since the shard's own directory is the first
+    ancestor tried and a sibling is where those files are.
+
+    Guessing is safe here only because the guess is checked: the caller puts
+    every candidate through ``verify_export`` against the digest the shard
+    itself published, so a file found at the wrong root cannot pass for the
+    right one.
+    """
+    if not pointer_path or ".." in pointer_path.split("/"):
+        return None
+    candidates = [repo_root / pointer_path]
+    parent = shard_path.resolve().parent
+    candidates.extend(directory / pointer_path
+                      for directory in (parent, *parent.parents))
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def merge_shard_cost_ledgers(
     shard_paths: Sequence[Path],
     payloads: Sequence[dict],
     out_path: Path,
     *,
+    repo_root: Path | None = None,
     warn: Callable[[str], None] | None = None,
 ) -> dict[str, str] | None:
     """Fold every shard's grading ledger into one beside the merged grade.
@@ -1199,10 +1234,16 @@ def merge_shard_cost_ledgers(
     quietly omits a shard reads as though that shard had spent nothing, which
     is exactly the reading this whole mechanism exists to prevent. The per-task
     receipts are unaffected; they travel in the rows.
+
+    Also ``None`` when the merged export lands outside the repository, because
+    the pointer published for it is a repository path and there would be none
+    to publish. ``repo_root`` says which repository; it defaults to the one
+    this process is running in, derived exactly as step8 derives it.
     """
     emit = warn if warn is not None else (
         lambda message: print(f"WARNING: {message}", file=sys.stderr)
     )
+    root = Path(repo_root) if repo_root is not None else _repo_root()
 
     exports: list[Path] = []
     for shard_path, payload in zip(shard_paths, payloads):
@@ -1213,11 +1254,13 @@ def merge_shard_cost_ledgers(
                 "grade will not claim one."
             )
             return None
-        export = shard_path.with_name(str(pointer.get("path") or ""))
-        if not export.is_file():
+        claimed = str(pointer.get("path") or "")
+        export = _resolve_shard_ledger(shard_path, claimed, root)
+        if export is None:
             emit(
-                f"{shard_path} points at a cost ledger that is not beside it "
-                f"({export.name}); the merged grade will not claim one."
+                f"{shard_path} points at a cost ledger ({claimed or 'no path'}) "
+                f"that is neither under {root} nor above the shard; the merged "
+                "grade will not claim one."
             )
             return None
         if not verify_export(export, str(pointer.get("sha256") or "")):
@@ -1247,7 +1290,14 @@ def merge_shard_cost_ledgers(
         return None
     finally:
         ledger.close()
-    return ledger_reference(merged_export.name, digest)
+    relative = repo_relative_ledger_path(merged_export, root)
+    if relative is None:
+        emit(
+            f"the merged cost ledger ({merged_export}) is outside the "
+            "repository; the merged grade will not claim one."
+        )
+        return None
+    return ledger_reference(relative, digest)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

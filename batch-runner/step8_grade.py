@@ -42,6 +42,7 @@ from core.cost_receipts import (
     ledger_reference,
     summarise_receipts,
 )
+from core.cost_projection import repo_relative_ledger_path
 from core.experiment_config import ExperimentConfig
 from core.grader import (
     Grader,
@@ -392,6 +393,18 @@ def _repo_relative_grade_file(out_path: Path) -> str:
     if not value or any(char in value for char in ("\r", "\n")):
         raise ValueError("grade output path is not safe for GITHUB_OUTPUT")
     return value
+
+
+def _repo_root() -> Path:
+    """The root a published ledger pointer is relative to.
+
+    Derived exactly as ``_repo_relative_grade_file`` derives it, and kept
+    beside it so the two cannot drift: a pointer written against one root and
+    read against another is the defect this is here to close, not a new way to
+    reintroduce it.
+    """
+    cwd = Path.cwd().resolve()
+    return cwd.parent if cwd.name == "batch-runner" else cwd
 
 
 def _exit_on_signal(signum: int, _frame: Any) -> None:
@@ -2405,6 +2418,14 @@ def main() -> int:
         stood when that partial was written. A failed export returns ``None``:
         a grade that cannot point at its own audit trail says so, instead of
         carrying a digest of something else.
+
+        A ledger written outside the repository returns ``None`` for the same
+        reason. The field is a *relative repository path* — that is what this
+        file's schema says, what ``cost_projection`` validates, and what
+        ``cost-receipt.mjs`` re-derives — and for a long while what went into
+        it was ``Path.name``, a bare filename that resolved from nowhere. A
+        local run writing its ledger somewhere else has no repository path to
+        give, and a name is not a smaller version of one.
         """
         if cost_recorder is None:
             return None
@@ -2416,7 +2437,15 @@ def main() -> int:
                 file=sys.stderr,
             )
             return None
-        return ledger_reference(cost_export_path.name, digest)
+        relative = repo_relative_ledger_path(cost_export_path, _repo_root())
+        if relative is None:
+            print(
+                f"[cost] ledger is outside the repository ({cost_export_path});"
+                " the grade will not claim one",
+                file=sys.stderr,
+            )
+            return None
+        return ledger_reference(relative, digest)
 
     def flush_cost_ledger() -> None:
         """Put the ledger on disk wherever this run ends, including badly.

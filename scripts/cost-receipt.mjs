@@ -65,7 +65,32 @@ const RETRY_NONE = 'none';
 const SLUG = /^[a-z][a-z0-9_]{0,47}$/;
 const REASON_CODE = /^[a-z][a-z0-9_.:-]{0,63}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
-const LEDGER_PATH = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}(\/[A-Za-z0-9][A-Za-z0-9._-]{0,127})*$/;
+
+// How long one path component may be. Not a taste decision: 255 bytes is
+// `NAME_MAX` on every filesystem this runs on, so a longer component cannot
+// name a file that exists, and a bound below it would reject real names. The
+// names here are run identities — experiment, judge, config hash, rubric SHA,
+// inference SHA, grader source hash — and the longest under `data/grades`
+// today is 254 bytes. The 128 this used to be excluded seven of them.
+//
+// Kept in step with `_MAX_LEDGER_NAME` / `_MAX_LEDGER_PATH_LENGTH` in
+// `core/cost_projection.py`: the two validators read the same published files,
+// so a payload either side refuses is a payload neither may publish.
+const MAX_LEDGER_NAME = 255;
+
+// And how long the whole path may be, which the per-component bound does not
+// imply: nesting is what grows it. A published ledger sits under
+// `data/grades`, up to five directories down for a repeat of a shard of a
+// diagnostic run; the longest that exists today is 348 bytes.
+const MAX_LEDGER_PATH_LENGTH = 512;
+
+// The leading character is narrower than the rest so that `..` and a segment
+// that could be read as a command-line option are both out. It admits `_`
+// because the directories these paths run through are `_shards`, `_repeats`
+// and `_diagnostic` — which never came up while the field held a bare
+// filename, and is most of what it holds now.
+const LEDGER_SEGMENT = `[A-Za-z0-9_][A-Za-z0-9._-]{0,${MAX_LEDGER_NAME - 1}}`;
+const LEDGER_PATH = new RegExp(`^${LEDGER_SEGMENT}(/${LEDGER_SEGMENT})*$`);
 
 const MAX_COMPONENTS = 32;
 const MAX_USAGE_KEYS = 32;
@@ -388,7 +413,8 @@ export function projectCostLedgerReference(value, field = 'cost_ledger') {
   if (value === null || value === undefined) return null;
   if (!isPlainObject(value)) fail(field, 'must be an object');
   const { path, sha256 } = value;
-  if (typeof path !== 'string' || !LEDGER_PATH.test(path)) {
+  if (typeof path !== 'string' || !LEDGER_PATH.test(path)
+      || path.length > MAX_LEDGER_PATH_LENGTH) {
     fail(field, 'path must be a relative repository path');
   }
   if (path.split('/').includes('..')) fail(field, 'path must not traverse parents');

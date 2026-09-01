@@ -73,10 +73,10 @@ def _grade_path(root: Path, index: int, count: int) -> Path:
 #     moments by construction, and even this harness drifts by a second when a
 #     run straddles a second boundary. Its merge rule is asserted directly in
 #     test_merge_takes_the_last_shard_completion_time rather than diffed here.
-#   cost_ledger -- a pointer to the audit file sitting beside *this* grade, so a
-#     serial run and a merged run necessarily spell the path differently. What
-#     has to hold is asserted directly below: the merged grade points at a real
-#     trail that matches the digest it publishes for it.
+#   cost_ledger -- a pointer to the audit file this grade was read from, and a
+#     serial run and a merged run necessarily spell it differently. What has to
+#     hold is asserted directly below: the merged grade points, from the
+#     repository root, at a real trail that matches the digest it publishes.
 _EXPECTED_DIVERGENCE = {
     "shard_provenance",
     "grading_wall_time_ms",
@@ -139,7 +139,15 @@ def test_sharded_run_merges_into_a_serial_identical_payload(
     serial, _ = _run_grade(monkeypatch, tmp_path / "serial" / "batch-runner")
     assert serial["run_status"] == "final"
 
-    merged_path = tmp_path / "merged.json"
+    merge_root = tmp_path / "merge" / "batch-runner"
+    merge_root.mkdir(parents=True)
+    _setup_workspace(merge_root)
+    merged_path = merge_root / "data" / "grades" / "merged.json"
+    # The merge job has a checkout of its own: it downloads every shard
+    # artifact into it and writes the merged grade under ``data/grades``. Where
+    # it runs is part of the contract now, because the ledger pointer is a path
+    # from the repository root and a root is what it needs to be relative to.
+    monkeypatch.chdir(merge_root)
     assert s9.main([*shard_files, "--output", str(merged_path)]) == 0
     merged = json.loads(merged_path.read_text(encoding="utf-8"))
 
@@ -148,10 +156,15 @@ def test_sharded_run_merges_into_a_serial_identical_payload(
     assert _strip(merged) == _strip(serial)
 
     # Stripped from the diff above, so pin it here instead: the merged grade
-    # must name an audit trail that actually sits beside it and still matches
-    # the digest it published. A pointer to a file nobody can check is the same
-    # as no pointer, and worse, because it reads like one.
-    trail = merged_path.with_name(merged["cost_ledger"]["path"])
+    # must name an audit trail that resolves from the repository root and still
+    # matches the digest it published. A pointer to a file nobody can find is
+    # the same as no pointer, and worse, because it reads like one -- which is
+    # what the field held until this was fixed, a bare filename that resolved
+    # from nowhere on all thirty-eight grade files carrying it.
+    assert merged["cost_ledger"]["path"] == (
+        "batch-runner/data/grades/merged.cost_ledger.jsonl"
+    )
+    trail = tmp_path / "merge" / merged["cost_ledger"]["path"]
     assert trail.is_file()
     assert verify_export(trail, merged["cost_ledger"]["sha256"])
 

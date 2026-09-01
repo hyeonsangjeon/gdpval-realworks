@@ -11,6 +11,7 @@
  */
 
 import { readdir, readFile, writeFile, mkdir, access } from 'fs/promises';
+import { statSync } from 'fs';
 import { join, extname, basename } from 'path';
 import { gradeIdentityFromRaw } from './grade-identity.mjs';
 import { classifyTaskOutcome, summarizeOutcomes } from './selection-outcome.mjs';
@@ -798,6 +799,27 @@ export function isPublishableGrade(result) {
   );
 }
 
+// A published `cost_ledger.path` has to name a file this repository actually
+// holds. The field is defined as a relative repository path — in the grade
+// schema, in `core/cost_projection.py`, and in `projectCostLedgerReference`
+// above — and for a long while both grading writers put `Path.name` in it: a
+// bare filename. None of the thirty-eight grade files carrying the field
+// resolved from the repository root; the sidecars were sitting beside their
+// grades several directories down, and the record built here drops the
+// directory, so the one reader that could have reconstructed the location is
+// the one reader that cannot.
+//
+// Checked here rather than in `processGradesFile` because this is the layer
+// that knows the payload came off this disk. A pointer that resolves nowhere
+// is worse than no pointer: it reads as an audit trail that exists.
+function ledgerIsOnDisk(relativePath) {
+  try {
+    return statSync(join(ROOT, relativePath)).isFile();
+  } catch {
+    return false;
+  }
+}
+
 // Separates the two reasons a grade file can be absent from the index, because
 // only one of them is a decision:
 //
@@ -829,6 +851,16 @@ export function collectGrades(
       );
     } catch (err) {
       failures.push({ file, message: err?.message ?? String(err) });
+      continue;
+    }
+    const ledgerPath = processed?.cost_ledger?.path;
+    if (ledgerPath && !ledgerIsOnDisk(ledgerPath)) {
+      failures.push({
+        file,
+        message: `cost_ledger points at ${ledgerPath}, which is not a file in `
+          + 'this repository; the pointer must be a path from the repository '
+          + 'root, not a bare filename',
+      });
       continue;
     }
     if (!isPublishableGrade(processed)) {
