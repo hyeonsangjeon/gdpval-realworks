@@ -66,6 +66,20 @@ export interface CostComponent {
   usage: CostUsage | null
   /** Reason codes, never prose. Empty unless something went unpriced. */
   missing_reasons: string[]
+  /**
+   * Whose calls this line is. Optional throughout: every receipt published
+   * before these were recorded simply omits them, and `null` says "this run
+   * did not record it" rather than naming a default.
+   *
+   * They exist because `requested_model` alone cannot be looked up in a price
+   * table — on Azure that string is a deployment alias, elsewhere it is a
+   * model name, and nothing in the string says which.
+   */
+  provider?: string | null
+  deployment?: string | null
+  requested_model?: string | null
+  resolved_model?: string | null
+  api_version?: string | null
 }
 
 export interface CostReceipt {

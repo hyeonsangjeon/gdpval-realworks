@@ -139,6 +139,14 @@ def test_a_component_keeps_its_stage_and_retry_kind():
         "model_calls": 3,
         "usage": {"input_tokens": 1200},
         "missing_reasons": [],
+        # This line was written before identity was recorded. It reads back
+        # unattributed rather than defaulted — the truthful answer, and the one
+        # that keeps an old receipt from being credited to whatever ran last.
+        "provider": None,
+        "deployment": None,
+        "requested_model": None,
+        "resolved_model": None,
+        "api_version": None,
     }
 
 

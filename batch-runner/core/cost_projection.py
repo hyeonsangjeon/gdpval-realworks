@@ -86,6 +86,25 @@ _MAX_USAGE_KEYS = 32
 _MAX_MISSING_REASONS = 32
 _LEDGER_CHUNK_BYTES = 1024 * 1024
 
+#: Who made the calls behind one receipt line, in the order a reader scans:
+#: provider, then the route, then the two model names, then the contract.
+#: Together these are what lets a price table be looked up without guessing —
+#: ``requested_model`` alone is an alias on Azure and a model name elsewhere,
+#: and nothing in the string says which.
+_COMPONENT_IDENTITY = (
+    "provider",
+    "deployment",
+    "requested_model",
+    "resolved_model",
+    "api_version",
+)
+
+# Not slug-checked: these are the provider's vocabulary, not ours, and a
+# pattern tight enough to be worth having would reject the next new deployment
+# name. Bounded instead, because the only real risk on a published payload is
+# something long enough to be prose.
+_MAX_IDENTITY_LENGTH = 128
+
 # Micro-dollars. Fine enough for a single cheap call, coarse enough that
 # float noise never reaches the screen.
 _MONEY_DIGITS = 6
@@ -234,6 +253,13 @@ def _project_component(value, field: str) -> dict:
     show one label per row. All three travel: the derived name is what a reader
     displays, and the pair is what identifies the row, because two stages that
     each had to retry both derive the name ``retry`` and are not the same line.
+
+    Call identity travels beside them, unvalidated beyond being a non-empty
+    string, because it names things this repository does not own: a deployment
+    alias and an API version are the provider's vocabulary, and a projection
+    that insisted on a known shape would reject the first new one. Absent stays
+    ``None``, which reads as "this run did not record it" — the state every
+    receipt published before this change is honestly in.
     """
     if not isinstance(value, dict):
         _fail(field, "must be an object")
@@ -254,7 +280,7 @@ def _project_component(value, field: str) -> dict:
         status,
         f"{field}.known_cost_usd",
     )
-    return {
+    projected = {
         "name": name,
         "stage": stage,
         "retry_kind": retry_kind,
@@ -268,6 +294,21 @@ def _project_component(value, field: str) -> dict:
             value.get("missing_reasons"), f"{field}.missing_reasons"
         ),
     }
+    for column in _COMPONENT_IDENTITY:
+        projected[column] = _identity_text(value.get(column), f"{field}.{column}")
+    return projected
+
+
+def _identity_text(value, field: str):
+    """One identity field, kept only when it says something."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        _fail(field, "must be a string")
+    text = value.strip()
+    if len(text) > _MAX_IDENTITY_LENGTH:
+        _fail(field, "is too long to be an identifier")
+    return text or None
 
 
 def project_cost_receipt(value, field: str = "cost receipt"):
@@ -317,10 +358,21 @@ def project_cost_receipt(value, field: str = "cost receipt"):
         _project_component(item, f"{field}.components[{index}]")
         for index, item in enumerate(raw_components)
     ]
-    # A line is identified by the pair, not by its label. Generation that had to
-    # be redone and Self-QA that had to be redone both display as 재시도, and
-    # rejecting the second as a duplicate would throw away a real charge.
-    keys = [(component["stage"], component["retry_kind"]) for component in components]
+    # A line is identified by the pair *and* by whose call it was. Generation
+    # that had to be redone and Self-QA that had to be redone both display as
+    # 재시도, and rejecting the second as a duplicate would throw away a real
+    # charge. So would rejecting the second of two models read under one
+    # perception stage — which is why identity is part of the key rather than
+    # decoration on it. Two lines that agree on all seven really are one line
+    # the producer failed to add up.
+    keys = [
+        (
+            component["stage"],
+            component["retry_kind"],
+            *(component.get(column) for column in _COMPONENT_IDENTITY),
+        )
+        for component in components
+    ]
     if len(keys) != len(set(keys)):
         _fail(field, "carries duplicate component keys")
 

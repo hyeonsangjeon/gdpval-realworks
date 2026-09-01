@@ -71,6 +71,28 @@ const MAX_COMPONENTS = 32;
 const MAX_USAGE_KEYS = 32;
 const MAX_MISSING_REASONS = 32;
 
+/**
+ * Whose calls one receipt line is, in the order a reader scans: provider, then
+ * the route, then the two model names, then the contract.
+ *
+ * Together these are what lets a price table be looked up without guessing.
+ * `requested_model` alone is a deployment alias on Azure and a model name
+ * elsewhere, and nothing in the string says which.
+ */
+const COMPONENT_IDENTITY = [
+  'provider',
+  'deployment',
+  'requested_model',
+  'resolved_model',
+  'api_version',
+];
+
+// Not slug-checked: these are the provider's vocabulary, not ours, and a
+// pattern tight enough to be worth having would reject the next new deployment
+// name. Bounded instead, because the only real risk on a published payload is
+// something long enough to be prose.
+const MAX_IDENTITY_LENGTH = 128;
+
 // Micro-dollars. Fine enough for a single cheap call, coarse enough that
 // float noise never reaches the screen.
 const MONEY_DIGITS = 6;
@@ -203,7 +225,22 @@ function measuredAmount(amount, status, field) {
  * label per row. All three travel: the derived name is what a reader displays,
  * and the pair is what identifies the row, because two stages that each had to
  * retry both derive the name `retry` and are not the same line.
+ *
+ * Call identity travels beside them, unvalidated beyond being a bounded
+ * non-empty string, because it names things this repository does not own: a
+ * deployment alias and an API version are the provider's vocabulary, and a
+ * reader that insisted on a known shape would reject the first new one. Absent
+ * stays `null`, which reads as "this run did not record it" — the state every
+ * receipt published before this change is honestly in.
  */
+function identityText(value, field) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') fail(field, 'must be a string');
+  const text = value.trim();
+  if (text.length > MAX_IDENTITY_LENGTH) fail(field, 'is too long to be an identifier');
+  return text || null;
+}
+
 function projectComponent(value, field) {
   if (!isPlainObject(value)) fail(field, 'must be an object');
   if (typeof value.name !== 'string' || !SLUG.test(value.name)) {
@@ -225,7 +262,7 @@ function projectComponent(value, field) {
     status,
     `${field}.known_cost_usd`,
   );
-  return {
+  const projected = {
     name: value.name,
     stage,
     retry_kind: retryKind,
@@ -235,6 +272,10 @@ function projectComponent(value, field) {
     usage: costUsage(value.usage, `${field}.usage`),
     missing_reasons: missingReasons(value.missing_reasons, `${field}.missing_reasons`),
   };
+  for (const column of COMPONENT_IDENTITY) {
+    projected[column] = identityText(value[column], `${field}.${column}`);
+  }
+  return projected;
 }
 
 /**
@@ -280,15 +321,24 @@ export function projectCostReceipt(value, field = 'cost receipt') {
   const components = rawComponents.map(
     (item, index) => projectComponent(item, `${field}.components[${index}]`),
   );
-  // A line is identified by the pair, not by its label. Generation that had to
-  // be redone and Self-QA that had to be redone both display as 재시도, and
-  // rejecting the second as a duplicate would throw away a real charge.
-  // The separator is a NUL, which cannot occur inside a slug, so no pair of
-  // values can spell another pair's key. Written as the `\0` escape rather
-  // than as the byte itself, so the file stays plain text to grep, to diff,
-  // and to anyone reading the change.
-  const keys = components.map(
-    (component) => `${component.stage}\0${component.retry_kind}`,
+  // A line is identified by the pair *and* by whose call it was. Generation
+  // that had to be redone and Self-QA that had to be redone both display as
+  // 재시도, and rejecting the second as a duplicate would throw away a real
+  // charge. So would rejecting the second of two models read under one
+  // perception stage — which is why identity is part of the key rather than
+  // decoration on it. Two lines that agree on all seven really are one line
+  // the producer failed to add up.
+  //
+  // Serialised as JSON rather than joined on a separator: identity fields are
+  // free text from the provider, not slugs, so no chosen byte is guaranteed
+  // absent from them — and `null` must not key the same as the four-letter
+  // string, since one means unrecorded and the other is a name.
+  const keys = components.map((component) =>
+    JSON.stringify([
+      component.stage,
+      component.retry_kind,
+      ...COMPONENT_IDENTITY.map((column) => component[column] ?? null),
+    ]),
   );
   if (keys.length !== new Set(keys).size) {
     fail(field, 'carries duplicate component keys');

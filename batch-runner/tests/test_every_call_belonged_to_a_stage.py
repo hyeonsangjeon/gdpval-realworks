@@ -26,8 +26,13 @@ receipts already roll the lines up:
 
 Those two produce a run-summary document. ``summarise_receipts`` returns a
 ``CostReceipt``, so its lines have to be ``ReceiptComponent`` objects, folded on
-the ``(stage, retry_kind)`` pair that :meth:`CostReceiptLedger.receipt_for`
-buckets a task's own calls under.
+the same key :meth:`CostReceiptLedger.receipt_for` buckets a task's own calls
+under: the ``(stage, retry_kind)`` pair *and the identity of whoever was
+called* -- provider, deployment, requested and resolved model, API version.
+Stage stays how a reader groups and reads the result; it is not what a row is.
+Two models called under one stage carry two rates, so a single row of their
+summed tokens is a figure no price table can reproduce and no reader can take
+apart again.
 
 Everything below is built through a real ``CostReceiptLedger`` priced by a real
 ``load_receipt_price_table``, or read off the receipts actually published under
@@ -148,11 +153,60 @@ def _keys(receipt):
     return [(line.stage, line.retry_kind) for line in receipt.components]
 
 
+def _lines(receipt, stage, retry_kind=RETRY_NONE):
+    """Every line at this stage -- one per model that was called under it."""
+    return [
+        entry
+        for entry in receipt.components
+        if (entry.stage, entry.retry_kind) == (stage, retry_kind)
+    ]
+
+
 def _line(receipt, stage, retry_kind=RETRY_NONE):
-    for entry in receipt.components:
-        if (entry.stage, entry.retry_kind) == (stage, retry_kind):
-            return entry
-    raise AssertionError(f"no {stage}/{retry_kind} line in {_keys(receipt)}")
+    """The one line at this stage, when the stage only ever called one model.
+
+    A stage is not a line. It is a stage's worth of lines, one per model
+    identity, and most of the fixtures below run a single model so the two
+    coincide. Where they do not, this refuses rather than silently returning
+    whichever line sorted first -- a helper that answers a question with a
+    different question's answer is how a breakdown gets asserted into looking
+    right while reading wrong. Ask :func:`_lines` or :func:`_stage` instead.
+    """
+    found = _lines(receipt, stage, retry_kind)
+    if not found:
+        raise AssertionError(f"no {stage}/{retry_kind} line in {_keys(receipt)}")
+    if len(found) > 1:
+        models = [entry.resolved_model for entry in found]
+        raise AssertionError(
+            f"{stage}/{retry_kind} is {len(found)} lines, one per model {models}; "
+            "use _lines() for the models or _stage() for the rollup"
+        )
+    return found[0]
+
+
+def _stage(receipt, stage, retry_kind=RETRY_NONE):
+    """The stage's own totals, rolled up across whatever models it called.
+
+    Stage stayed an aggregation dimension when the line became a model, so a
+    reader asking "what did grading cost" still gets one answer -- it is just
+    computed from the lines rather than stored as one. Whole only if all of it
+    is, which is the same rule one level up.
+    """
+    found = _lines(receipt, stage, retry_kind)
+    assert found, f"no {stage}/{retry_kind} line in {_keys(receipt)}"
+    reasons = {reason for entry in found for reason in entry.missing_reasons}
+    return {
+        "status": (
+            STATUS_COMPLETE
+            if all(entry.status == STATUS_COMPLETE for entry in found)
+            else STATUS_PARTIAL
+        ),
+        "model_calls": sum(entry.model_calls for entry in found),
+        "known_cost_usd": sum(
+            (entry.known_cost_usd for entry in found), Decimal(0)
+        ),
+        "missing_reasons": tuple(sorted(reasons)),
+    }
 
 
 # -- The field a reader actually sees ---------------------------------------
@@ -373,9 +427,20 @@ def test_an_idle_line_does_not_drag_the_stage_it_shares_a_key_with():
 # -- A line is whole only if all of it is -----------------------------------
 
 
-def test_one_unpriced_call_holds_its_own_stage_to_partial(tmp_path, prices):
-    """And leaves the other stage alone. A hole is a hole in one line, not in
-    the whole breakdown."""
+def test_one_unpriced_call_lands_on_the_model_that_could_not_be_priced(
+    tmp_path, prices
+):
+    """A hole belongs to whoever made it, not to everyone standing near it.
+
+    Three calls: one grading call to a model the table prices, one grading call
+    to a model it does not, and one perception call. The unpriced call is the
+    only thing here that cannot be settled.
+
+    Grading is therefore two lines, because two models were called under it and
+    their tokens carry different rates. Summing them into one row is what this
+    change exists to stop: a single ``grading`` row of two calls and $30 is a
+    number no table can reproduce and no reader can take apart afterwards.
+    """
     summary = summarise_receipts(
         _run(
             tmp_path,
@@ -387,14 +452,79 @@ def test_one_unpriced_call_holds_its_own_stage_to_partial(tmp_path, prices):
             },
         )
     )
-    grading = _line(summary, STAGE_GRADING)
-    assert grading.status == STATUS_PARTIAL
-    assert grading.missing_reasons == (REASON_PRICE_MISSING,)
-    # The floor is still a floor: the one call that could be priced is in it.
-    assert grading.known_cost_usd == Decimal(PER_CALL_USD)
-    assert grading.model_calls == 2
+    by_model = {line.resolved_model: line for line in _lines(summary, STAGE_GRADING)}
+    assert sorted(by_model) == sorted([PRICED, UNPRICED])
+
+    # The model that could be priced keeps its own figure whole. Nothing about
+    # the other call makes this one less known than it is.
+    assert by_model[PRICED].status == STATUS_COMPLETE
+    assert by_model[PRICED].known_cost_usd == Decimal(PER_CALL_USD)
+    assert by_model[PRICED].model_calls == 1
+    assert by_model[PRICED].missing_reasons == ()
+
+    # The model that could not is `partial` and says why. It is $0 because
+    # nothing is invented for it -- but a $0 that carries `price_missing` and a
+    # `partial` status cannot be read as "this call was free".
+    assert by_model[UNPRICED].status == STATUS_PARTIAL
+    assert by_model[UNPRICED].missing_reasons == (REASON_PRICE_MISSING,)
+    assert by_model[UNPRICED].known_cost_usd == Decimal(0)
+    assert by_model[UNPRICED].model_calls == 1
+
+    # Rolled back up, the stage reads exactly as it did when it was one row:
+    # partial, two calls, and a floor holding the one call that could be priced.
+    grading = _stage(summary, STAGE_GRADING)
+    assert grading["status"] == STATUS_PARTIAL
+    assert grading["missing_reasons"] == (REASON_PRICE_MISSING,)
+    assert grading["known_cost_usd"] == Decimal(PER_CALL_USD)
+    assert grading["model_calls"] == 2
+
+    # And the stage that had nothing to do with it is left alone.
     assert _line(summary, STAGE_PERCEPTION).status == STATUS_COMPLETE
     assert _line(summary, STAGE_PERCEPTION).missing_reasons == ()
+
+    # Fail-closed, unchanged: one unsettled call anywhere makes the run partial.
+    assert summary.status == STATUS_PARTIAL
+    assert summary.missing_reasons == (REASON_PRICE_MISSING,)
+
+
+def test_a_reader_and_a_listener_under_one_stage_are_not_one_price(
+    tmp_path, prices
+):
+    """The defect this keying exists for, at the summary level.
+
+    ``perception`` is the stage where two models genuinely run: a visual
+    sub-judge and an audio one. Keyed on the stage alone their tokens land in a
+    single row -- added together despite carrying different rates, so the row
+    is unpriceable going in and cannot be separated again coming out.
+
+    Here the listener is the unpriced one, which is the real configuration:
+    ``gpt-audio-1.5`` is deliberately absent from the price table while the
+    visual judge is priced. The reader's figure must survive that intact.
+    """
+    summary = summarise_receipts(
+        _run(
+            tmp_path,
+            prices,
+            {
+                "t-0": [
+                    (STAGE_PERCEPTION, RETRY_NONE),
+                    (STAGE_PERCEPTION, RETRY_NONE, UNPRICED),
+                ]
+            },
+        )
+    )
+    lines = {line.resolved_model: line for line in _lines(summary, STAGE_PERCEPTION)}
+    assert sorted(lines) == sorted([PRICED, UNPRICED])
+    assert lines[PRICED].known_cost_usd == Decimal(PER_CALL_USD)
+    assert lines[PRICED].status == STATUS_COMPLETE
+    assert lines[UNPRICED].status == STATUS_PARTIAL
+    assert lines[UNPRICED].missing_reasons == (REASON_PRICE_MISSING,)
+
+    # Both read 1,000,000 tokens in. Under one row that is 2,000,000 at one
+    # rate, which is the wrong number twice over.
+    assert lines[PRICED].usage["input_tokens"] == 1_000_000
+    assert lines[UNPRICED].usage["input_tokens"] == 1_000_000
+    assert _stage(summary, STAGE_PERCEPTION)["status"] == STATUS_PARTIAL
 
 
 def test_a_stage_with_no_record_at_all_stays_unavailable():
@@ -473,13 +603,27 @@ def test_a_line_that_never_said_what_it_used_does_not_add_a_zero():
 def test_the_whole_vocabulary_fits_under_the_published_cap():
     """The guard that makes this change safe to publish.
 
-    A receipt may carry thirty-two lines. Every line is one of five stages at
-    one of five retry kinds, so a run cannot produce more than twenty-five
-    however many tasks it graded. If a sixth stage or a sixth retry kind is
-    ever added, this fails here rather than at a consumer rejecting a payload
-    that has already been paid for.
+    A receipt may carry thirty-two lines. The vocabulary alone -- five stages
+    at five retry kinds -- accounts for twenty-five of them however many tasks
+    the run graded. If a sixth stage or a sixth retry kind is ever added, this
+    fails here rather than at a consumer rejecting a payload that has already
+    been paid for.
+
+    What the vocabulary no longer bounds on its own is the line count, because
+    a line is a stage *and an identity*: a stage reached by two models is two
+    lines. So the headroom above is what a run has to spend on identity, and
+    seven is not much. It is enough for what the configs actually name -- one
+    judge under ``grading``, at most the two sub-judges under ``perception``,
+    one generator under ``generation`` and ``self_qa`` -- and a stage that ever
+    fanned out to many models would need the cap raised rather than the fan-out
+    hidden back inside one unpriceable row.
     """
-    assert len(STAGES) * len(RETRY_KINDS) <= _MAX_COMPONENTS
+    vocabulary = len(STAGES) * len(RETRY_KINDS)
+    assert vocabulary <= _MAX_COMPONENTS
+    assert _MAX_COMPONENTS - vocabulary == 7, (
+        "the headroom a run has for extra model identities moved; if that is "
+        "deliberate, say so here and check the consumers still accept it"
+    )
 
 
 def test_a_run_that_touched_every_pair_still_publishes_and_projects():
