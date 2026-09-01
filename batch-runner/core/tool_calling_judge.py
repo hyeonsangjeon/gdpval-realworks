@@ -552,6 +552,14 @@ class ToolCallingJudge:
     Args:
         client:                  object with ``.responses.create(**kwargs)``
                                  (Azure OpenAI Responses client or a fake).
+        retry_client:            optional second connection to the same
+                     deployment, used only for the finalization
+                     retry. Grading meters its clients per receipt
+                     line, so the retry needs its own wrapper to
+                     be billed as a retry instead of vanishing
+                     into the attempt it repairs. ``None`` when
+                     grading runs unmetered — the retry then
+                     falls back to ``client``.
         model:                   deployment name (e.g. ``"gpt-5.6-sol"``).
         prompt_template:         contents of ``prompts/grader_judge_v2.md``
                                  — must contain a ``<!-- ===SPLIT=== -->``
@@ -609,6 +617,7 @@ class ToolCallingJudge:
     finalization_retries: int = 1
     finalization_reasoning_effort: str = "low"
     model_read_ops: Tuple[str, ...] = MODEL_READ_DELIVERABLE_OPS
+    retry_client: Any = None
     vision_perception: Any = None
     audio_perception: Any = None
     task_prompt_truncate: int = 500
@@ -798,7 +807,9 @@ class ToolCallingJudge:
                     ]
                 call_started = time.perf_counter()
                 main_api_call_count += 1
-                response = self.client.responses.create(**create_kwargs)
+                response = self._upstream_client(
+                    is_retry=finalization_only
+                ).responses.create(**create_kwargs)
                 main_latency_ms += (time.perf_counter() - call_started) * 1000.0
             except TypeError as exc:
                 if call_started is not None:
@@ -832,7 +843,9 @@ class ToolCallingJudge:
                     )
                     if not finalization_only:
                         fallback_kwargs["tools"] = tools
-                    response = self.client.responses.create(**fallback_kwargs)
+                    response = self._upstream_client(
+                        is_retry=finalization_only
+                    ).responses.create(**fallback_kwargs)
                     main_latency_ms += (
                         time.perf_counter() - call_started
                     ) * 1000.0
@@ -1337,6 +1350,25 @@ class ToolCallingJudge:
     def _guard_upstream_call(self) -> None:
         if self.before_upstream_call is not None:
             self.before_upstream_call()
+
+    def _upstream_client(self, *, is_retry: bool) -> Any:
+        """The connection this call should be billed through.
+
+        Both clients talk to the same deployment; they differ only in the
+        receipt line their spend lands on. The finalization retry is a second
+        attempt at the same rubric item, so its money belongs on a ``retry``
+        row rather than inside the row for the attempt it is repairing —
+        otherwise "what did retrying cost" is a figure hidden inside a bigger
+        one. The solving side already avoids that: ``step2_run_inference.py``
+        opens the Self-QA loop's later attempts under their own retry kind.
+
+        ``retry_client`` is absent whenever grading runs unmetered, so the
+        retry falls back to the one client it has. Turning cost recording off
+        must not stop the judge from retrying.
+        """
+        if is_retry and self.retry_client is not None:
+            return self.retry_client
+        return self.client
 
     @staticmethod
     def _accumulate_perception_result(
