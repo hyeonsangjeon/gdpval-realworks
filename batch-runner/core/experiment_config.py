@@ -55,7 +55,10 @@ class PromptConfig:
 class QAConfig:
     """Self-QA configuration — LLM inspects its own output"""
     enabled: bool = False
-    max_retries: int = 2           # Number of retries on QA failure
+    # Answers in all, not retries on top of the first one. step2_run_inference
+    # stops as soon as the number of answers it has reviewed reaches this, so
+    # 2 buys one replacement and 1 buys none.
+    max_retries: int = 2
     model: Optional[str] = None    # None = same model as generation
     min_score: int = 6             # QA fails if score is below this (1-10)
     prompt: str = ""               # QA prompt template

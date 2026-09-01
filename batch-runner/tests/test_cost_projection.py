@@ -460,7 +460,128 @@ def test_failed_task_cost_is_reported_beside_the_total_not_removed_from_it():
     assert summary["known_cost_usd"] == 0.65
     assert summary["failed_task_count"] == 1
     assert summary["failed_task_cost_usd"] == 0.4
+    # Every failure here was priced, so the amount is the amount.
+    assert summary["failed_measured_tasks"] == 1
     assert summary["successful_deliverables"] == 1
+
+
+def test_a_failure_billed_against_an_unpriced_model_is_not_counted_as_measured():
+    """The count that makes ``failed_task_cost_usd`` readable.
+
+    A failure billed against a model the price table has no entry for arrives
+    with no amount, so it contributes nothing to the sum. The sum it never
+    joined stays ``0.0`` -- which is also what a failure that asked no model
+    leaves behind. The amount alone cannot tell those apart; the count of
+    failures that could be priced is what does.
+    """
+    unpriced = project_cost_receipt(
+        _unmeasured("partial", missing_reasons=["price_missing"])
+    )
+    summary = summarize_cost_receipts(
+        [
+            _row("task-a", status="error", problem_solving_cost=unpriced),
+            _row("task-b", status="error", problem_solving_cost=unpriced),
+        ],
+        "problem_solving_cost",
+    )
+    assert summary["failed_task_count"] == 2
+    assert summary["failed_measured_tasks"] == 0
+    # The zero is still published -- it is the sum of nothing -- but it is no
+    # longer the only thing a reader has to go on.
+    assert summary["failed_task_cost_usd"] == 0.0
+
+
+def test_a_genuinely_free_failure_stays_apart_from_one_that_was_never_priced():
+    """The discrimination the count exists for, asserted as a pair.
+
+    ``CostReceipt.free()`` is the one honest ``$0``: a verdict reached by rule,
+    with no model asked. It and the unpriced failure above both report
+    ``failed_task_cost_usd == 0.0``. Only ``failed_measured_tasks`` separates
+    them, and if it ever stops doing so a paid failure reads as a free one.
+    """
+    free = project_cost_receipt(
+        _receipt(
+            status="complete",
+            estimated_cost_usd=0.0,
+            known_cost_usd=0.0,
+            model_cost_usd=0.0,
+            runtime_cost_usd=0.0,
+            model_calls=0,
+            components=[],
+        )
+    )
+    unpriced = project_cost_receipt(
+        _unmeasured("partial", missing_reasons=["price_missing"])
+    )
+
+    free_summary = summarize_cost_receipts(
+        [_row("task-a", status="error", problem_solving_cost=free)],
+        "problem_solving_cost",
+    )
+    unpriced_summary = summarize_cost_receipts(
+        [_row("task-a", status="error", problem_solving_cost=unpriced)],
+        "problem_solving_cost",
+    )
+
+    assert free_summary["failed_task_cost_usd"] == 0.0
+    assert unpriced_summary["failed_task_cost_usd"] == 0.0
+    assert free_summary["failed_task_count"] == unpriced_summary["failed_task_count"] == 1
+    assert free_summary["failed_measured_tasks"] == 1
+    assert unpriced_summary["failed_measured_tasks"] == 0
+
+
+def test_a_partly_priced_set_of_failures_reports_how_much_of_it_was_priced():
+    """One priced failure and one not: the amount is a floor, and says so."""
+    priced = project_cost_receipt(
+        _receipt(estimated_cost_usd=0.4, known_cost_usd=0.4, model_cost_usd=0.4)
+    )
+    unpriced = project_cost_receipt(
+        _unmeasured("partial", missing_reasons=["price_missing"])
+    )
+    summary = summarize_cost_receipts(
+        [
+            _row("task-a", status="error", problem_solving_cost=priced),
+            _row("task-b", status="error", problem_solving_cost=unpriced),
+        ],
+        "problem_solving_cost",
+    )
+    assert summary["failed_task_count"] == 2
+    assert summary["failed_measured_tasks"] == 1
+    assert summary["failed_task_cost_usd"] == 0.4
+
+
+def test_a_run_with_no_failures_reports_zero_measured_failures():
+    """Zero failures did cost zero, and nothing about that changed."""
+    summary = summarize_cost_receipts(
+        [_row("task-a", problem_solving_cost=project_cost_receipt(_receipt()))],
+        "problem_solving_cost",
+    )
+    assert summary["failed_task_count"] == 0
+    assert summary["failed_measured_tasks"] == 0
+    assert summary["failed_task_cost_usd"] == 0.0
+
+
+def test_a_failure_that_never_ran_is_not_counted_as_a_free_one():
+    """``not_run`` is not zero, and the failed-task row must not say it is.
+
+    ``CostReceipt.not_run`` is documented as "This pipeline did not run. Not
+    free -- it did not happen." Its money fields still arrive as ``0.0``, so
+    before the count existed this row printed ``1 ($0.0000)`` and claimed a
+    task the producer refuses to call free was free.
+    """
+    summary = summarize_cost_receipts(
+        [
+            _row(
+                "task-a",
+                status="error",
+                problem_solving_cost=project_cost_receipt(_unmeasured("not_run")),
+            )
+        ],
+        "problem_solving_cost",
+    )
+    assert summary["failed_task_count"] == 1
+    assert summary["failed_measured_tasks"] == 0
+    assert step6_report._failed_task_cost(summary) == "1 (no record)"
 
 
 def test_a_success_with_nothing_to_grade_is_not_a_deliverable():
@@ -792,16 +913,112 @@ def test_markdown_does_not_head_a_run_that_priced_nothing_with_a_zero():
     assert "| Recorded so far | no record |" in markdown
     assert "| Recorded so far | $0.0000 |" not in markdown
     # `Failed tasks | 0 ($0.0000)` is left alone: zero failed tasks did cost
-    # zero. Its unpriced variant -- failures whose receipts carry no amount,
-    # printing `2 ($0.0000)` -- is the same defect as this one, but the summary
-    # exposes no count of *measured* failures, so the report cannot tell the
-    # two apart without a new producer field. core/cost_projection.py is a
-    # grader source-hash input and frozen while shards are in flight.
+    # zero. Its unpriced variant -- failures whose receipts carry no amount --
+    # is the same defect as this one, and is now resolved the same way, by
+    # `failed_measured_tasks` on the summary. See the four rendering cases in
+    # `test_markdown_failed_task_cost_*` below.
     # Coverage counts receipts, not amounts, so on its own it reads as a fully
     # accounted run. The row that disambiguates it must be present.
     assert "| Coverage | 1 / 1 tasks (100.0%) |" in markdown
     assert "| Priced | 0 / 1 receipts |" in markdown
     assert "| Not priced | price_missing |" in markdown
+
+
+def _failed_row(task_id: str, receipt: dict) -> dict:
+    return _row(
+        task_id,
+        status="error",
+        deliverable_files=[],
+        problem_solving_cost=project_cost_receipt(receipt),
+    )
+
+
+def _failed_markdown(*rows) -> str:
+    return step6_report._build_markdown(_report_data(_report_input(*rows)))
+
+
+def test_markdown_failed_task_cost_prints_the_amount_when_every_failure_was_priced():
+    """The unchanged case. A priced failure printed its amount and still does."""
+    priced = _receipt(estimated_cost_usd=0.4, known_cost_usd=0.4, model_cost_usd=0.4)
+    markdown = _failed_markdown(_failed_row("task-a", priced))
+    assert "| Failed tasks | 1 ($0.4000) |" in markdown
+
+
+def test_markdown_failed_task_cost_says_no_record_when_none_could_be_priced():
+    """The defect, in the row a reader reads as the answer.
+
+    Two failures billed against a model with no price entry printed
+    ``2 ($0.0000)`` -- indistinguishable from two failures that were free.
+    """
+    unpriced = _unmeasured("partial", missing_reasons=["price_missing"])
+    markdown = _failed_markdown(
+        _failed_row("task-a", unpriced), _failed_row("task-b", unpriced)
+    )
+    assert "| Failed tasks | 2 (no record) |" in markdown
+    assert "| Failed tasks | 2 ($0.0000) |" not in markdown
+
+
+def test_markdown_failed_task_cost_discloses_how_much_of_a_mixed_row_was_priced():
+    """One priced, one not: an amount that is a floor says how far it reaches."""
+    priced = _receipt(estimated_cost_usd=0.4, known_cost_usd=0.4, model_cost_usd=0.4)
+    unpriced = _unmeasured("partial", missing_reasons=["price_missing"])
+    markdown = _failed_markdown(
+        _failed_row("task-a", priced), _failed_row("task-b", unpriced)
+    )
+    assert "| Failed tasks | 2 ($0.4000, 1 / 2 priced) |" in markdown
+
+
+def test_markdown_keeps_a_genuinely_free_failure_reading_as_zero():
+    """The other half of the discrimination, at the rendering layer.
+
+    ``CostReceipt.free()`` is the one honest ``$0``. It must keep printing
+    ``$0.0000`` while the unpriced failure above prints ``no record`` -- before
+    this change both printed the same string, one of them falsely.
+    """
+    free = _receipt(
+        estimated_cost_usd=0.0,
+        known_cost_usd=0.0,
+        model_cost_usd=0.0,
+        runtime_cost_usd=0.0,
+        model_calls=0,
+        components=[],
+    )
+    markdown = _failed_markdown(_failed_row("task-a", free))
+    assert "| Failed tasks | 1 ($0.0000) |" in markdown
+
+
+def test_markdown_failed_task_row_is_unchanged_for_a_run_with_no_failures():
+    """Zero failures did cost zero, and this change must not dress that up."""
+    markdown = _failed_markdown(_row("task-a", problem_solving_cost=_receipt()))
+    assert "| Failed tasks | 0 ($0.0000) |" in markdown
+
+
+def test_markdown_reads_a_report_published_before_the_measured_count_existed():
+    """Back-compatibility, in the direction that cannot lie.
+
+    ``problem_solving_cost`` summaries are read from an already-published
+    ``report_data.json``, so old payloads have no ``failed_measured_tasks``. A
+    fully priced run cannot contain an unpriced failure, so there the amount is
+    exact; anything less than fully priced is treated as unmeasured rather than
+    as a zero.
+    """
+    priced = _receipt(estimated_cost_usd=0.4, known_cost_usd=0.4, model_cost_usd=0.4)
+    summary = summarize_cost_receipts(
+        [_failed_row("task-a", priced)], "problem_solving_cost"
+    )
+    legacy = {k: v for k, v in summary.items() if k != "failed_measured_tasks"}
+    assert legacy["measured_tasks"] == legacy["receipt_tasks"]
+    assert step6_report._failed_task_cost(legacy) == "1 ($0.4000)"
+
+    # Same row on a run that was not fully priced: the amount is not trusted.
+    unpriced = _unmeasured("partial", missing_reasons=["price_missing"])
+    mixed = summarize_cost_receipts(
+        [_failed_row("task-a", priced), _row("task-b", problem_solving_cost=project_cost_receipt(unpriced))],
+        "problem_solving_cost",
+    )
+    legacy_mixed = {k: v for k, v in mixed.items() if k != "failed_measured_tasks"}
+    assert legacy_mixed["measured_tasks"] != legacy_mixed["receipt_tasks"]
+    assert step6_report._failed_task_cost(legacy_mixed) == "1 (no record)"
 
 
 def test_markdown_leaves_a_fully_priced_report_exactly_as_it_was():

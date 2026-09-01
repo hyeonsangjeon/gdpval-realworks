@@ -261,7 +261,14 @@ async function openTask(page, taskId) {
 
 // ── Scenarios ───────────────────────────────────────────────────────────────
 
-/** Everything priced: a real zero, a failed task that still cost money. */
+/**
+ * Every solving cost priced: a real zero, a failed task that still cost money.
+ *
+ * The grading half is deliberately not: `t-zero` was graded and the judge
+ * recorded nothing, which is the only way to test 기록 없음 against 미채점. So
+ * this scenario also carries the contrast between a field whose every row has
+ * a receipt and a field with a hole in it.
+ */
 const fullyPricedRows = () => [
   {
     id: 't-complete',
@@ -444,18 +451,39 @@ async function assertFullyPriced(page, solveSummary, gradeSummary) {
     assert.equal(cell.state, 'recorded')
   }
 
-  assert.equal(gradeSummary.estimated_cost_usd, 0.13)
+  // The grading half of this scenario is not fully recorded, and the page now
+  // says so. `t-zero` was graded and the judge wrote no cost for it, which is
+  // the 기록 없음 cell asserted above -- so $0.1300 covers two of the three
+  // graded tasks and is a floor, not a total. It read `$0.1300 · 총액` until
+  // the summariser stopped judging completeness against only the receipts it
+  // kept; the cell right beside it said the third task's cost was unknown.
+  assert.equal(gradeSummary.total_tasks, 3)
+  assert.equal(gradeSummary.receipt_tasks, 2)
+  assert.equal(gradeSummary.status, 'partial')
+  assert.equal(gradeSummary.estimated_cost_usd, null)
+  assert.equal(gradeSummary.known_cost_usd, 0.13)
   const gradeTotal = await readCell(summaryStat(page, 'grading_cost', '총액'))
-  assert.equal(gradeTotal.text, usd(gradeSummary.estimated_cost_usd))
-  assert.equal(gradeTotal.state, 'recorded')
+  assert.equal(gradeTotal.text, `≥ ${usd(gradeSummary.known_cost_usd)}`)
+  assert.equal(gradeTotal.state, 'floor')
+  assert.match(gradeTotal.title, /3건 중 2건만 가격이 계산되어/)
+
+  // The problem-solving half has a receipt on every row, so it is untouched:
+  // still a total, still `recorded`. That contrast is the point -- one payload,
+  // two fields, and only the one with a hole in it is downgraded.
+  assert.equal(solveSummary.status, 'complete')
+  assert.equal(solveSummary.receipt_tasks, solveSummary.total_tasks)
 
   // Goal 8: the failed task's cost is stated beside the total, not netted out.
   assert.equal(solveSummary.failed_task_count, 1)
   assert.equal(solveSummary.failed_task_cost_usd, 0.04)
-  assert.equal(
-    (await summaryStat(page, 'problem_solving_cost', '실패 작업 비용').innerText()).trim(),
-    '1건 · $0.0400',
+  // Every failure on this run was priced, so the amount is the amount and the
+  // row reads exactly as it did before the measured-failure count existed.
+  assert.equal(solveSummary.failed_measured_tasks, 1)
+  const failedCost = await readCell(
+    summaryStat(page, 'problem_solving_cost', '실패 작업 비용'),
   )
+  assert.equal(failedCost.text, '1건 · $0.0400')
+  assert.equal(failedCost.state, 'recorded')
 
   // The audit sidecar is named on screen with a truncated digest.
   assert.match(
@@ -618,6 +646,21 @@ async function assertRanButUnpriced(page, solveSummary) {
   const total = await readCell(summaryStat(page, 'problem_solving_cost', '총액'))
   assert.equal(total.text, '미확정')
   assert.equal(total.state, 'unpriced')
+
+  // The failed-task row, under the same rule as the headline above it.
+  // `t-never-started` failed carrying a `not_run` receipt, whose money fields
+  // arrive as 0.0 like every other status. Summed on its own that reads as a
+  // failure that cost nothing, and this row printed `1건 · $0.0000` — the
+  // producer's own docstring for that receipt is "Not free — it did not
+  // happen." An amount is shown only when the failures behind it were priced.
+  assert.equal(solveSummary.failed_task_count, 1)
+  assert.equal(solveSummary.failed_measured_tasks, 0)
+  const failedCost = await readCell(
+    summaryStat(page, 'problem_solving_cost', '실패 작업 비용'),
+  )
+  assert.equal(failedCost.text, '1건 · 미확정')
+  assert.equal(failedCost.state, 'unpriced')
+  assert.doesNotMatch(failedCost.text, /\$0\.0000/)
 }
 
 async function assertLegacy(page) {

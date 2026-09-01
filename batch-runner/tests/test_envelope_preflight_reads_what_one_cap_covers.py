@@ -72,6 +72,7 @@ if str(BATCH_RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
 import core.sandbox_runner as sandbox_module  # noqa: E402
+import core.execution_envelope_preflight as preflight_module  # noqa: E402
 from core.code_interpreter import CodeInterpreterRunner  # noqa: E402
 from core.execution_envelope_cost import (  # noqa: E402
     CostAssumptions,
@@ -106,6 +107,19 @@ PLAN_PATH = (
 
 THE_CLAIM = "output_tokens_capped_per_attempt"
 REFUSAL_OPENING = "one cap on answer length covers a whole"
+
+#: The clause a refusal carries when the plan's turn count really is 1, and the
+#: mistake therefore moves no money until the settings change.
+QUIET_WORDING = "changes no figure today"
+
+#: The clause it carries when no turn count could be read, and what the mistake
+#: is worth is therefore not known — which is not the same as it being nothing.
+NO_WORTH_KNOWN = "cannot be worked out here"
+
+#: Everything a plan can write where a turn count belongs that the cost sum
+#: would refuse: nothing at all, something that will not come to a whole
+#: number, and numbers below the one turn every attempt takes.
+TURN_COUNTS_THE_SUM_REFUSES = ("eight", None, {}, [], 0, -3)
 
 
 def _plan(capped: dict | None = None, turns: dict | None = None) -> dict:
@@ -426,14 +440,24 @@ def test_the_committed_container_turn_count_is_the_one_that_says_nothing_moves()
     assert "changes no figure today" in problem
 
 
-@pytest.mark.parametrize("turns", ["eight", None, {}])
-def test_an_unreadable_turn_count_falls_back_to_the_quiet_wording(turns):
-    """A broken turn count is somebody else's refusal; this one must not crash."""
+@pytest.mark.parametrize("turns", TURN_COUNTS_THE_SUM_REFUSES)
+def test_an_unreadable_turn_count_does_not_borrow_the_quiet_wording(turns):
+    """A broken turn count must not crash this — and must not read as cheap.
+
+    The half of the old expectation that was right is kept: a turn count the
+    cost sum will refuse is somebody else's refusal, and this rule still has to
+    finish and still has to produce its own. What is refused now is the rest of
+    it. ``"eight"`` is a plan that really allows eight turns, and reporting it
+    with the sentence written for a plan that allows one told a reader the
+    largest divisor in the sum was worth nothing today.
+    """
     problem = _refusals(
         {ENVIRONMENT_DOCKER_CONTAINER: True},
         {ENVIRONMENT_DOCKER_CONTAINER: turns},
     )[0]
-    assert "changes no figure today" in problem
+    assert NO_WORTH_KNOWN in problem
+    assert QUIET_WORDING not in problem
+    assert "divides the answer charge" not in problem
 
 
 def test_a_missing_turn_count_block_does_not_stop_the_refusal():
@@ -441,13 +465,254 @@ def test_a_missing_turn_count_block_does_not_stop_the_refusal():
     plan["cost"]["assumptions"].pop("tool_loop_max_model_turns")
     problems = _check_the_plan_knows_what_one_cap_covers(plan)
     assert len(problems) == 1
-    assert "changes no figure today" in problems[0]
+    assert NO_WORTH_KNOWN in problems[0]
+    assert QUIET_WORDING not in problems[0]
 
 
 def test_a_missing_claim_block_leaves_nothing_to_refuse():
     plan = load_plan(PLAN_PATH)
     plan["cost"]["assumptions"].pop(THE_CLAIM)
     assert _check_the_plan_knows_what_one_cap_covers(plan) == []
+
+
+# ── A turn count nobody can read is priced as unknown, not as one ────────
+
+
+def test_a_word_where_a_number_should_be_is_not_priced_as_one_turn():
+    """``"eight"`` is a plan that really allows eight turns.
+
+    This is the case the old wording got worst. Eight turns is the largest
+    divisor the sum uses and the one the docstring prices at the difference
+    between 14.06 and 54.20 dollars for a single run place. Reporting it with
+    the sentence written for a plan that allows one turn told the reader that
+    the most expensive mistake available here moved no money today.
+    """
+    problem = _refusals(
+        {ENVIRONMENT_DOCKER_CONTAINER: True},
+        {ENVIRONMENT_DOCKER_CONTAINER: "eight"},
+    )[0]
+    assert NO_WORTH_KNOWN in problem
+    assert QUIET_WORDING not in problem
+    assert "divides the answer charge by 8" not in problem
+    assert ENVIRONMENT_DOCKER_CONTAINER in problem
+
+
+def test_zero_turns_is_not_a_smaller_number_of_turns():
+    """``0`` is not a cheaper plan, it is not a turn count.
+
+    Every attempt asks the model at least once, which is why
+    :meth:`CostAssumptions.from_mapping` refuses it outright rather than
+    charging for nothing. A refusal here that priced it as the quiet case
+    would have been agreeing with a figure the sum will not even compute.
+    """
+    problem = _refusals(
+        {ENVIRONMENT_DOCKER_CONTAINER: True},
+        {ENVIRONMENT_DOCKER_CONTAINER: 0},
+    )[0]
+    assert NO_WORTH_KNOWN in problem
+    assert QUIET_WORDING not in problem
+
+
+def test_a_negative_turn_count_is_refused_the_same_way():
+    problem = _refusals(
+        {ENVIRONMENT_DOCKER_CONTAINER: True},
+        {ENVIRONMENT_DOCKER_CONTAINER: -3},
+    )[0]
+    assert NO_WORTH_KNOWN in problem
+    assert QUIET_WORDING not in problem
+
+
+@pytest.mark.parametrize(
+    ("turns", "expected", "unwanted"),
+    [
+        (1, QUIET_WORDING, NO_WORTH_KNOWN),
+        (0, NO_WORTH_KNOWN, QUIET_WORDING),
+    ],
+)
+def test_the_boundary_between_one_and_none_is_exactly_one(
+    turns, expected, unwanted
+):
+    """The line sits between 0 and 1, on both sides, in one place.
+
+    Kept as a single parametrised pair so the two halves cannot drift apart:
+    whichever way the helper's ``>= 1`` is later edited, one of these fails.
+    """
+    problem = _refusals(
+        {ENVIRONMENT_DOCKER_CONTAINER: True},
+        {ENVIRONMENT_DOCKER_CONTAINER: turns},
+    )[0]
+    assert expected in problem
+    assert unwanted not in problem
+
+
+def test_a_whole_number_written_as_a_float_is_read_the_way_the_cost_sum_reads_it():
+    """``1.9`` is reported as 1 because 1 is what the sum will charge for.
+
+    This is deliberately *not* refused. The sum does ``int(value)`` and stores
+    ``1``, so a refusal saying "at the 1 turn this plan allows" is describing
+    the figure that will really be used. Refusing it here instead would invent
+    a standard the sum does not hold, which is the mistake this whole rule is
+    written to avoid making in the other direction.
+    """
+    plan = _plan(
+        {ENVIRONMENT_DOCKER_CONTAINER: True},
+        {ENVIRONMENT_DOCKER_CONTAINER: 1.9},
+    )
+    assumptions = CostAssumptions.from_mapping(plan["cost"]["assumptions"])
+    assert assumptions.tool_loop_max_model_turns[ENVIRONMENT_DOCKER_CONTAINER] == 1
+
+    problem = _check_the_plan_knows_what_one_cap_covers(plan)[0]
+    assert QUIET_WORDING in problem
+    assert NO_WORTH_KNOWN not in problem
+
+
+def test_a_boolean_is_read_the_way_the_cost_sum_reads_it():
+    """Same reasoning as the float: ``int(True)`` is ``1`` over there too."""
+    plan = _plan(
+        {ENVIRONMENT_DOCKER_CONTAINER: True},
+        {ENVIRONMENT_DOCKER_CONTAINER: True},
+    )
+    assumptions = CostAssumptions.from_mapping(plan["cost"]["assumptions"])
+    assert assumptions.tool_loop_max_model_turns[ENVIRONMENT_DOCKER_CONTAINER] == 1
+
+    problem = _check_the_plan_knows_what_one_cap_covers(plan)[0]
+    assert QUIET_WORDING in problem
+    assert NO_WORTH_KNOWN not in problem
+
+
+def test_a_turn_count_block_that_is_not_a_block_at_all():
+    """The settings can hold a line of text where a block belongs.
+
+    ``_dig`` hands back an empty mapping for anything that is not one, so
+    nothing crashes; what matters is that nothing is read out of it either.
+    """
+    plan = _plan({ENVIRONMENT_DOCKER_CONTAINER: True})
+    plan["cost"]["assumptions"]["tool_loop_max_model_turns"] = "see the runbook"
+    problems = _check_the_plan_knows_what_one_cap_covers(plan)
+    assert len(problems) == 1
+    assert NO_WORTH_KNOWN in problems[0]
+    assert QUIET_WORDING not in problems[0]
+
+
+def test_the_place_with_no_runner_also_gets_the_honest_worth():
+    """The two halves of a refusal are built separately and both must hold.
+
+    A run place with no runner registered takes the other branch of the
+    refusal — nothing in this repository looked at all — and that branch
+    carries the same priced clause. An unreadable turn count there must not
+    get the reassuring half back through the side door.
+    """
+    for environment in (
+        ENVIRONMENT_AGENTIC_SANDBOX_V2,
+        ENVIRONMENT_CODEX_BUILT_IN_AGENT,
+    ):
+        problem = _refusals({environment: True}, {environment: "eight"})[0]
+        assert "nothing in this repository says" in problem
+        assert NO_WORTH_KNOWN in problem
+        assert QUIET_WORDING not in problem
+
+
+@pytest.mark.parametrize("turns", TURN_COUNTS_THE_SUM_REFUSES + (1, 2, 8, 1.9, True))
+def test_the_refusal_count_is_unchanged_for_every_turn_count(turns):
+    """What is refused did not move — only what the refusal says.
+
+    A plan claiming the wrong cap was blocked before this change and is
+    blocked after it, at every turn count a plan can write, readable or not.
+    The opening of the sentence is asserted byte for byte so that a later
+    edit to the priced clause cannot quietly reword the part other readers
+    match on.
+    """
+    problems = _refusals(
+        {ENVIRONMENT_DOCKER_CONTAINER: True},
+        {ENVIRONMENT_DOCKER_CONTAINER: turns},
+    )
+    assert len(problems) == 1
+    assert REFUSAL_OPENING in problems[0]
+
+
+def test_the_old_fallback_would_be_caught_if_it_came_back():
+    """A check nobody has watched fail is not different from one that cannot.
+
+    The old reading is put back in memory only. Two things are asserted: the
+    reassuring sentence returns for a plan that really allows eight turns,
+    and the number of refusals is *identical* either way — which is exactly
+    why this went unnoticed. Nothing was blocked or unblocked by it; the only
+    casualty was what the approver was told.
+    """
+    honest = _refusals(
+        {ENVIRONMENT_DOCKER_CONTAINER: True},
+        {ENVIRONMENT_DOCKER_CONTAINER: "eight"},
+    )
+    with patch.object(
+        preflight_module,
+        "_turn_count_the_cost_sum_would_use",
+        lambda written, environment: 1,
+    ):
+        old = _refusals(
+            {ENVIRONMENT_DOCKER_CONTAINER: True},
+            {ENVIRONMENT_DOCKER_CONTAINER: "eight"},
+        )
+
+    assert QUIET_WORDING in old[0]
+    assert NO_WORTH_KNOWN not in old[0]
+    assert len(old) == len(honest) == 1
+
+
+@pytest.mark.parametrize("turns", TURN_COUNTS_THE_SUM_REFUSES)
+def test_the_cost_sum_refuses_every_turn_count_this_calls_unreadable(turns):
+    """The boundary drawn here is the sum's boundary, not a second one.
+
+    If this rule called something unreadable that the sum would happily
+    charge for, the report and the bill would disagree — a new standard
+    invented in a checker, which is the thing the owner's rule forbids.
+
+    Which kind of refusal comes out is not the point and is not pinned: a
+    word raises :class:`ValueError` from ``int``, a thing that is not a
+    number at all raises :class:`TypeError`, and a number below one raises
+    :class:`ValueError` from the plan's own rule. What is pinned is that
+    none of them get through.
+    """
+    plan = _plan(turns={ENVIRONMENT_DOCKER_CONTAINER: turns})
+    with pytest.raises((TypeError, ValueError)):
+        CostAssumptions.from_mapping(plan["cost"]["assumptions"])
+
+
+def test_a_missing_turn_count_is_refused_by_the_sum_as_well(catalog):
+    """The one unreadable case the parser cannot see: the key simply absent.
+
+    ``from_mapping`` keeps whatever run places are written, so a plan missing
+    one is only caught when the sum reaches for it. It is still caught.
+    """
+    plan = _plan()
+    plan["cost"]["assumptions"]["tool_loop_max_model_turns"].pop(
+        ENVIRONMENT_DOCKER_CONTAINER
+    )
+    assumptions = CostAssumptions.from_mapping(plan["cost"]["assumptions"])
+    with pytest.raises(ValueError):
+        estimate_cost_ceiling(
+            conditions_by_environment=conditions_from_plan(plan),
+            tasks_by_id=catalog.by_task_id(),
+            assumptions=assumptions,
+        )
+
+
+@pytest.mark.parametrize("turns", [1, 2, 3, 4, 5, 6, 7, 8])
+def test_the_helper_agrees_with_the_cost_sum_on_every_number_it_accepts(turns):
+    """The other side of the same boundary: what is accepted here is charged.
+
+    Read back off the parser rather than compared to the literal, so the two
+    are pinned to each other and not to a number written twice.
+    """
+    plan = _plan(turns={ENVIRONMENT_DOCKER_CONTAINER: turns})
+    assumptions = CostAssumptions.from_mapping(plan["cost"]["assumptions"])
+    charged = assumptions.tool_loop_max_model_turns[ENVIRONMENT_DOCKER_CONTAINER]
+    assert (
+        preflight_module._turn_count_the_cost_sum_would_use(
+            plan["cost"]["assumptions"]["tool_loop_max_model_turns"],
+            ENVIRONMENT_DOCKER_CONTAINER,
+        )
+        == charged
+    )
 
 
 # ── What the mistake is actually worth, priced ───────────────────────────
@@ -491,9 +756,9 @@ def test_that_one_flip_stays_visible_without_a_per_run_dollar_threshold(catalog)
     committed_total, _ = _ceiling(catalog)
     flipped_total, _ = _ceiling(catalog, {ENVIRONMENT_AZURE_CODE_INTERPRETER: False})
     assert plan["cost"]["approved_maximum_usd"] is None
-    assert Decimal(
-        str(plan["cost"]["owner_approval"]["available_monthly_credit_usd"])
-    ) == Decimal("3700.0")
+    assert (
+        "available_monthly_credit_usd" not in plan["cost"]["owner_approval"]
+    )
     assert flipped_total - committed_total == Decimal("50.17600000")
 
 

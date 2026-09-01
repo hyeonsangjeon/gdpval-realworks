@@ -99,10 +99,21 @@ export default function TrendView({ experiments }: TrendViewProps) {
     ? [Math.max(0, Math.floor(Math.min(...chartData.map((d) => d.successRate)) / 5) * 5 - 5), 100]
     : [0, 100]
 
-  const qaScoreDomain: [number, number] = chartData.length > 0
+  // Only runs that actually measured a score get a say in where the axis
+  // starts. A run whose tasks all errored carries null, and `Math.min` turns a
+  // null into 0 — which would drag the floor of every chart down to zero and
+  // make every other experiment look worse than it did yesterday. Recharts
+  // already draws a gap rather than a point for the null itself; this keeps the
+  // gap from moving the ruler too. When every run measured something this is
+  // the same list it always was, so the axis is unchanged.
+  const measuredQaScores = chartData
+    .map((d) => d.qaScore)
+    .filter((v): v is number => v != null)
+
+  const qaScoreDomain: [number, number] = measuredQaScores.length > 0
     ? [
-        Math.max(0, Math.floor(Math.min(...chartData.map((d) => d.qaScore)) * 2) / 2 - 0.5),
-        Math.min(10, Math.ceil(Math.max(...chartData.map((d) => d.qaScore)) * 2) / 2 + 0.5),
+        Math.max(0, Math.floor(Math.min(...measuredQaScores) * 2) / 2 - 0.5),
+        Math.min(10, Math.ceil(Math.max(...measuredQaScores) * 2) / 2 + 0.5),
       ]
     : [0, 7]
 

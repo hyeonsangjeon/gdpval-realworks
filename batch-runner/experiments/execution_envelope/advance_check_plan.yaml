@@ -385,8 +385,12 @@ cost:
   owner_approval:
     approved_on: "2026-08-28"
     paid_model_calls: true
-    available_monthly_credit_usd: 3700.00
     unpriced_audio_measurement: true
+    # No account balance belongs here. What the owner approved is the two flags
+    # above; how much credit is left in the account is account information, it
+    # is not a setting for a run, this file is published, and no check reads
+    # it. The free check refuses a plan that writes
+    # available_monthly_credit_usd under owner_approval.
 
   assumptions:
     # How many characters of wording are counted as one token. English text

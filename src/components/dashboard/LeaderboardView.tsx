@@ -40,7 +40,10 @@ function getRateColor(rate: number): string {
   return 'text-red-400'
 }
 
-function getQAColor(score: number): string {
+function getQAColor(score: number | null): string {
+  // A run that scored nothing gets the neutral grey the dash sits in, not the
+  // red that means "scored badly".
+  if (score == null) return 'text-dash-text-muted'
   if (score >= 7) return 'text-emerald-400'
   if (score >= 5) return 'text-amber-400'
   return 'text-red-400'
@@ -53,6 +56,19 @@ function getExpColor(shortId: string): string {
 function getModeBadge(mode: string) {
   const badge = MODE_BADGES[mode] || { label: mode, icon: '⚙️' }
   return badge
+}
+
+/**
+ * The colour for a cell with no value behind it — either this experiment never
+ * ran that sector, or it ran it and nothing in it was scored. Both used to
+ * fall through `?? 0` and get painted the coldest, worst colour on the scale,
+ * which reads as a measured failure rather than an absent measurement.
+ */
+function getAbsentCellColor(isDark: boolean): { bg: string; text: string } {
+  return {
+    bg: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+    text: isDark ? '#6b7280' : '#9ca3af',
+  }
 }
 
 /** Continuous heatmap color: red → amber → emerald  (70 → 100%) */
@@ -315,7 +331,7 @@ export default function LeaderboardView({
                     <td
                       className={`px-4 py-3 text-right font-mono font-semibold ${getQAColor(exp.avg_qa_score)}`}
                     >
-                      {exp.avg_qa_score.toFixed(2)}
+                      {exp.avg_qa_score == null ? '—' : exp.avg_qa_score.toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-right text-dash-text-secondary font-mono">
                       {exp.success_count}/{exp.total_tasks}
@@ -455,14 +471,18 @@ export default function LeaderboardView({
                   {filtered.map((exp) => {
                     const cellData = sectorMatrix[sector]?.[exp.short_id]
                     const value = heatmapMode === 'qa'
-                      ? (cellData?.avg_qa_score ?? 0)
-                      : (cellData?.success_rate_pct ?? 0)
-                    const { bg, text } = heatmapMode === 'qa'
-                      ? getQAHeatmapColor(value, isDark)
-                      : getHeatmapColor(value, isDark)
-                    const displayValue = heatmapMode === 'qa'
-                      ? value.toFixed(1)
-                      : (value % 1 === 0 ? `${value}%` : `${value.toFixed(1)}%`)
+                      ? (cellData?.avg_qa_score ?? null)
+                      : (cellData?.success_rate_pct ?? null)
+                    const { bg, text } = value == null
+                      ? getAbsentCellColor(isDark)
+                      : heatmapMode === 'qa'
+                        ? getQAHeatmapColor(value, isDark)
+                        : getHeatmapColor(value, isDark)
+                    const displayValue = value == null
+                      ? '—'
+                      : heatmapMode === 'qa'
+                        ? value.toFixed(1)
+                        : (value % 1 === 0 ? `${value}%` : `${value.toFixed(1)}%`)
                     const cellKey = `${sector}-${exp.short_id}`
                     const isHovered = hoveredCell === cellKey
                     return (

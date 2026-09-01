@@ -206,8 +206,14 @@ export interface SectorBreakdown {
   total: number
   success: number
   success_rate_pct: number
-  avg_qa_score: number
-  avg_latency_ms: number
+  /**
+   * null when this sector produced no scored task at all — every one of its
+   * tasks errored. That is not a sector that scored zero, and rendering it as
+   * 0 says the model failed every rubric item here.
+   */
+  avg_qa_score: number | null
+  /** null when nothing in this sector recorded a latency. Not a 0ms sector. */
+  avg_latency_ms: number | null
 }
 
 export interface ResumeRound {
@@ -248,15 +254,23 @@ export interface ReportMeta {
 export interface ReportSummary {
   total_tasks: number
   success_count: number
+  /**
+   * Kept non-null on purpose. Its 0 fallback fires only when total_tasks is 0,
+   * which is printed right beside it, so a reader can see there was nothing to
+   * divide. The six below are the ones a reader cannot check that way.
+   */
   success_rate_pct: number
   error_count: number
   retried_count: number
-  avg_qa_score: number
-  min_qa_score: number
-  max_qa_score: number
-  avg_latency_ms: number
-  max_latency_ms: number
-  total_latency_ms: number
+  // null means never measured, not measured at zero. A run whose tasks all
+  // errored has no average to report; step 6 writes null and every surface
+  // renders an em dash rather than the bottom of the scale.
+  avg_qa_score: number | null
+  min_qa_score: number | null
+  max_qa_score: number | null
+  avg_latency_ms: number | null
+  max_latency_ms: number | null
+  total_latency_ms: number | null
   // v2 manifest fields (optional — v1 self_reports do not include these)
   active_policy?: string | null
   policy_counts?: Record<string, number> | null
@@ -315,7 +329,8 @@ export interface ExperimentEntry {
   execution_mode: string
   condition: string
   success_rate_pct: number
-  avg_qa_score: number
+  /** null when the run measured no score at all — see ReportSummary. */
+  avg_qa_score: number | null
   total_tasks: number
   success_count: number
   retried_count?: number
@@ -328,7 +343,8 @@ export interface SectorMatrix {
   [sector: string]: {
     [short_id: string]: {
       success_rate_pct: number
-      avg_qa_score: number
+      /** null when the sector ran but scored nothing. */
+      avg_qa_score: number | null
       success: number
       total: number
     }

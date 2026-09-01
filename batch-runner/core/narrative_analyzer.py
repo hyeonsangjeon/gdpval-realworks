@@ -26,6 +26,7 @@ from core.azure_ai_clients import (
     AzureAIWorkload,
 )
 from core.llm_client import ManagedAzureAIClient, create_typed_azure_client
+from core.measurement_display import NOT_MEASURED, render_measured
 
 logger = logging.getLogger(__name__)
 
@@ -379,9 +380,43 @@ class NarrativeAnalyzer:
 
         sector_lines = "\n".join(
             f"  - {s['sector']}: {s['success']}/{s['total']} success "
-            f"(avg QA {s['avg_qa_score']:.1f}/10, avg latency {s['avg_latency_ms']}ms)"
+            f"(avg QA {render_measured(s['avg_qa_score'], '/10', '.1f')}, "
+            f"avg latency {render_measured(s['avg_latency_ms'], 'ms')})"
             for s in sector_breakdown
         )
+
+        # The dash is a table convention everywhere else in this report. Here it
+        # is read by something that will turn it into published prose, so it is
+        # spelled out: a narrator handed a bare dash for a score guesses, and
+        # the guess it reaches for is zero -- which is the exact sentence this
+        # whole change exists to keep out of the report.
+        absent = [
+            key
+            for key in (
+                "avg_qa_score",
+                "min_qa_score",
+                "max_qa_score",
+                "avg_latency_ms",
+                "max_latency_ms",
+                "total_latency_ms",
+            )
+            if summary.get(key) is None
+        ]
+        absent += [
+            f"{s['sector']}.{key}"
+            for s in sector_breakdown
+            for key in ("avg_qa_score", "avg_latency_ms")
+            if s.get(key) is None
+        ]
+        unmeasured_note = ""
+        if absent:
+            unmeasured_note = (
+                f'\nNote: "{NOT_MEASURED}" below means that figure was never '
+                "measured, because no task produced one -- not that it came out "
+                "at zero. Do not describe it as a low score, a fast run, or a "
+                "poor result. Say the measurement is absent and why, if the "
+                "errors above explain it.\n"
+            )
 
         user_prompt = f"""You are a technical evaluator reviewing an LLM experiment run.
 
@@ -396,9 +431,9 @@ Summary:
   - Success: {summary['success_count']} ({summary['success_rate_pct']}%)
   - Errors: {summary['error_count']}
   - Retried tasks: {summary['retried_count']}
-  - Avg QA score: {summary['avg_qa_score']}/10 (min {summary['min_qa_score']}, max {summary['max_qa_score']})
-  - Avg latency: {summary['avg_latency_ms']}ms
-
+  - Avg QA score: {render_measured(summary['avg_qa_score'], '/10')} (min {render_measured(summary['min_qa_score'])}, max {render_measured(summary['max_qa_score'])})
+  - Avg latency: {render_measured(summary['avg_latency_ms'], 'ms')}
+{unmeasured_note}
 Sector breakdown:
 {sector_lines}
 

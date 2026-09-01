@@ -34,6 +34,30 @@ const ITEM_LEVEL_STRICT_VERSIONS = ['1.3', '1.4'];
 // feature existed, cost keys or not.
 const COST_RECEIPT_VERSIONS = ['1.4'];
 
+// Every version the rich projection accepts has to be claimed by one of the
+// two validators below, and the assertion runs at import rather than in a
+// test so it cannot be skipped. 1.3 and 1.4 each joined ITEM_LEVEL_VERSIONS
+// in their own change; a third one added the same way but left out of both
+// lists would be read with no headline check at all, and the missing value
+// would arrive at the projection as `undefined` — the one shape the historical
+// check below was written without.
+const HISTORICAL_HEADLINE_VERSIONS = ['1.0', '1.1', '1.2'];
+{
+  const claimed = new Set([
+    ...ITEM_LEVEL_STRICT_VERSIONS,
+    ...HISTORICAL_HEADLINE_VERSIONS,
+  ]);
+  const unclaimed = ITEM_LEVEL_VERSIONS.filter((v) => !claimed.has(v));
+  if (unclaimed.length > 0) {
+    throw new Error(
+      `grade schema version(s) ${unclaimed.join(', ')} are read by the item-level `
+        + 'projection but validated by neither validateScoreExcludedGrade nor '
+        + 'validateHistoricalHeadline. Add each one to a validator list before '
+        + 'adding it to ITEM_LEVEL_VERSIONS.',
+    );
+  }
+}
+
 const ROOT = new URL('..', import.meta.url).pathname;
 const GRADES_DIR = join(ROOT, 'data', 'grades');
 const OUTPUT_DIR = join(ROOT, 'public', 'generated');
@@ -333,11 +357,59 @@ function validateScoreExcludedGrade(raw) {
   }
 }
 
+// Pre-1.3 payloads are checked for PRESENCE, never for arithmetic. Six of the
+// eighteen item-level grade files published today have
+// perfect + partial + zero != graded_tasks, which is exactly why 1.0-1.2 are
+// read loosely: applying the strict sum here would reject six real experiments.
+// "The key has to be there" costs those six nothing — the whole published
+// corpus carries all six keys already — and it is the only thing standing
+// between an absent headline and the projection's `: 0`.
 function validateHistoricalHeadline(raw) {
-  if (!['1.0', '1.1', '1.2'].includes(raw?.schema_version)) return;
+  const version = raw?.schema_version;
+  if (!HISTORICAL_HEADLINE_VERSIONS.includes(version)) return;
+
   const openaiCompat = raw?.summary?.openai_compat;
+  if (
+    !openaiCompat
+    || typeof openaiCompat !== 'object'
+    || Array.isArray(openaiCompat)
+  ) {
+    throw new Error(`schema ${version} headline summary is missing or invalid`);
+  }
+  // Null is rejected below with the message this check has always used. Absent
+  // is rejected here, because `undefined === null` is false and every
+  // downstream reader treats the two the same way except the one that turns
+  // absence into a score of zero.
+  for (const field of [
+    'avg_score_pct',
+    'ci_pct',
+    'perfect_count',
+    'partial_count',
+    'zero_count',
+    'inconsistent_count',
+  ]) {
+    if (!(field in openaiCompat)) {
+      throw new Error(`schema ${version} headline ${field} is missing`);
+    }
+  }
   if (openaiCompat?.avg_score_pct === null || openaiCompat?.ci_pct === null) {
     throw new Error('schema 1.0-1.2 headline must remain numeric');
+  }
+  if (
+    !Number.isFinite(openaiCompat.avg_score_pct)
+    || !Number.isFinite(openaiCompat.ci_pct)
+  ) {
+    throw new Error(`schema ${version} headline must remain numeric`);
+  }
+  for (const field of [
+    'perfect_count',
+    'partial_count',
+    'zero_count',
+    'inconsistent_count',
+  ]) {
+    if (!Number.isInteger(openaiCompat[field]) || openaiCompat[field] < 0) {
+      throw new Error(`schema ${version} ${field} is invalid`);
+    }
   }
 }
 
@@ -549,11 +621,16 @@ function processV1GradesFile(
       total_tasks: totalTasks,
       graded_tasks: gradedTasks,
       error_tasks: errorTasks,
-      avg_score_pct: openaiCompat.avg_score_pct === null
-        ? null
-        : typeof openaiCompat.avg_score_pct === 'number'
-          ? openaiCompat.avg_score_pct
-          : 0,
+      // Both validators above reject a headline this reader cannot trust, so
+      // in practice only a real number arrives here. The fall-through is still
+      // written as null rather than 0 because it is the last thing between a
+      // missing value and the dashboard, and every consumer of this field —
+      // GradesSummary, GradingAnalysisView, GradeDetail — already renders null
+      // as an em dash. A zero would be indistinguishable from a run that
+      // genuinely scored nothing.
+      avg_score_pct: typeof openaiCompat.avg_score_pct === 'number'
+        ? openaiCompat.avg_score_pct
+        : null,
       ci_pct: typeof openaiCompat.ci_pct === 'number' ? openaiCompat.ci_pct : null,
       perfect_score: openaiCompat.perfect_count ?? 0,
       partial_score: openaiCompat.partial_count ?? 0,
@@ -604,6 +681,48 @@ export function isPublishableGrade(result) {
   return !['grading_partial', 'grading_diagnostic'].includes(
     result?.grade_status,
   );
+}
+
+// Separates the two reasons a grade file can be absent from the index, because
+// only one of them is a decision:
+//
+//   excluded — the grader itself labelled the run grading_partial or
+//              grading_diagnostic. Not for publication, on purpose.
+//   failures — the file could not be parsed, or a validator refused it. Nobody
+//              decided that. The run is real and its absence is a hole.
+//
+// Every entry is attempted before the caller is told anything, so one run names
+// every broken file rather than stopping at the first. `main` throws when
+// `failures` is non-empty; see the comment at the throw site for why silence
+// there was worse than a crash.
+export function collectGrades(
+  entries,
+  taskQaByExperiment = new Map(),
+  corpusByExperiment = new Map(),
+) {
+  const results = [];
+  const failures = [];
+  const excluded = [];
+  for (const { file, content } of entries) {
+    let processed;
+    try {
+      processed = processGradesFile(
+        file,
+        JSON.parse(content),
+        taskQaByExperiment,
+        corpusByExperiment,
+      );
+    } catch (err) {
+      failures.push({ file, message: err?.message ?? String(err) });
+      continue;
+    }
+    if (!isPublishableGrade(processed)) {
+      excluded.push({ file, status: processed.grade_status });
+      continue;
+    }
+    results.push(processed);
+  }
+  return { results, failures, excluded };
 }
 
 // ── reports-index lookups ─────────────────────────────────────────────────
@@ -682,20 +801,32 @@ async function main() {
   console.log(`ℹ️  task_qa lookup built: ${taskQaByExperiment.size} experiment(s), ${totalQaTasks} task(s)`);
   console.log(`ℹ️  corpus lookup built: ${corpusByExperiment.size} experiment(s)`);
 
-  const results = [];
+  const entries = [];
   for (const file of jsonFiles) {
-    const content = await readFile(join(GRADES_DIR, file), 'utf-8');
-    try {
-      const data = JSON.parse(content);
-      const processed = processGradesFile(file, data, taskQaByExperiment, corpusByExperiment);
-      if (!isPublishableGrade(processed)) {
-        console.warn(`⚠️  ${file} is ${processed.grade_status}; excluded from dashboard`);
-        continue;
-      }
-      results.push(processed);
-    } catch (err) {
-      console.error(`⚠️  ${file} 파싱 실패:`, err.message);
-    }
+    entries.push({ file, content: await readFile(join(GRADES_DIR, file), 'utf-8') });
+  }
+  const { results, failures, excluded } = collectGrades(
+    entries,
+    taskQaByExperiment,
+    corpusByExperiment,
+  );
+  for (const { file, status } of excluded) {
+    console.warn(`⚠️  ${file} is ${status}; excluded from dashboard`);
+  }
+  if (failures.length > 0) {
+    const detail = failures.map(({ file, message }) => `  ${file}: ${message}`).join('\n');
+    // This used to be `console.error(...)` inside the loop, so a grade file the
+    // validators refused was written to the log and then dropped: the build
+    // stayed green and grades-index.json came out one experiment shorter, which
+    // is indistinguishable from a corpus that never had that experiment in it.
+    // The same instinct is already written down in aggregate-reports.mjs, at
+    // the throw for duplicate short_ids -- "fail here rather than emit a quietly
+    // wrong index". Throwing reaches main().catch below and exits non-zero, so
+    // deploy.yml stops instead of publishing the hole.
+    throw new Error(
+      `${failures.length} of ${jsonFiles.length} grade file(s) could not be read:\n${detail}\n`
+        + 'Fix or remove the file. Publishing the remaining files would hide it.',
+    );
   }
 
   await mkdir(OUTPUT_DIR, { recursive: true });
