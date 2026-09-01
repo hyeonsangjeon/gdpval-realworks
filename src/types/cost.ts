@@ -100,12 +100,31 @@ export interface CostReceipt {
   missing_reasons: string[]
 }
 
+/**
+ * One component of a run's cost, rolled across every task that carried it.
+ *
+ * Keyed the same way one task's own line is: by stage, retry kind and call
+ * identity, never by `name`. `name` is derived from the first two, so folding
+ * by it summed a generation retry into a Self-QA one and a visual reader's
+ * tokens into an audio reader's — a row at no rate any price table holds.
+ */
 export interface CostComponentTotal {
+  /** The label to display. Derived by the producer, carried, not re-derived. */
   name: string
+  stage: string
+  retry_kind: string
+  /** Optional exactly as on `CostComponent`: absent means "not recorded". */
+  provider?: string | null
+  deployment?: string | null
+  requested_model?: string | null
+  resolved_model?: string | null
+  api_version?: string | null
   tasks: number
   known_cost_usd: number
   complete_tasks: number
   model_calls: number
+  /** Why *this* row went unpriced. Empty unless something did. */
+  missing_reasons: string[]
   status: 'complete' | 'partial'
 }
 

@@ -102,23 +102,55 @@ const RETRY_KIND_LABELS: Record<string, string> = {
 }
 
 /**
- * What a component row is, in full: which stage it belongs to and, when it was
- * not a first attempt, why it happened again. Two stages that each had to
- * retry are two rows both labelled 재시도, and this is what tells them apart.
+ * What a component row is, in full: which stage it belongs to, when it was not
+ * a first attempt why it happened again, and — when the run recorded it —
+ * which model's call it was. Two stages that each had to retry are two rows
+ * both labelled 재시도; a visual reader and an audio reader that both ran are
+ * two rows both labelled 판독. Stage and retry reason tell the first pair
+ * apart and the model tells the second, so a row is never two rows a reader
+ * cannot distinguish.
  */
 export function componentDetail(component: CostComponent): string {
   const stage = componentLabel(component.stage)
-  if (component.retry_kind === 'none') return stage
-  const reason = RETRY_KIND_LABELS[component.retry_kind] ?? component.retry_kind
-  return `${stage} · ${reason}`
+  const model =
+    component.resolved_model ?? component.requested_model ?? component.deployment
+  const parts = [stage]
+  if (component.retry_kind !== 'none') {
+    parts.push(RETRY_KIND_LABELS[component.retry_kind] ?? component.retry_kind)
+  }
+  // Absent stays absent. Every receipt published before call identity was
+  // recorded omits it, and inventing a name here would put one model's label
+  // on another model's tokens.
+  if (model) parts.push(model)
+  return parts.join(' · ')
 }
 
 /**
- * A row is identified by its stage and retry kind, not by its label, because
- * two stages that each had to retry both display as 재시도.
+ * A row is identified by its stage, its retry kind *and whose call it was* —
+ * never by its label.
+ *
+ * Stage and retry kind alone are not enough. Both perception models derive the
+ * same pair, so grading a deliverable holding a picture and a recording gave
+ * two rows one React key and left the reader two rows it could not tell apart.
+ * These are the same seven fields the producer groups a task's lines under and
+ * `projectCostReceipt` rejects duplicates of, so on any valid payload the key
+ * is unique.
+ *
+ * Each part is percent-encoded before joining, so a `:` inside a deployment
+ * alias cannot make two different rows produce one key.
  */
 export function componentKey(component: CostComponent): string {
-  return `${component.stage}:${component.retry_kind}`
+  return [
+    component.stage,
+    component.retry_kind,
+    component.provider ?? '',
+    component.deployment ?? '',
+    component.requested_model ?? '',
+    component.resolved_model ?? '',
+    component.api_version ?? '',
+  ]
+    .map(encodeURIComponent)
+    .join(':')
 }
 
 /** Four decimal places, matching the existing conservative-cost readouts. */

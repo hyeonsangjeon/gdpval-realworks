@@ -630,10 +630,18 @@ def test_components_aggregate_across_tasks():
     assert summary["components"] == [
         {
             "name": "generation",
+            "stage": "generation",
+            "retry_kind": "none",
+            "provider": None,
+            "deployment": None,
+            "requested_model": None,
+            "resolved_model": None,
+            "api_version": None,
             "tasks": 2,
             "known_cost_usd": 0.5,
             "complete_tasks": 2,
             "model_calls": 6,
+            "missing_reasons": [],
             "status": "complete",
         },
     ]
@@ -641,8 +649,13 @@ def test_components_aggregate_across_tasks():
 
 def test_two_retries_in_one_task_are_one_task_in_the_component_total():
     # `tasks` sits beside the amount as "how many tasks paid this". A task that
-    # retried twice paid it once; counting the lines would make that column
-    # exceed the number of tasks in the run.
+    # retried twice paid each of these once; counting the lines would make that
+    # column exceed the number of tasks in the run.
+    #
+    # They are two rows, not one. Generation's retry and Self-QA's retry both
+    # display as 재시도, and folding them by that label summed a $0.15 charge
+    # into a $0.05 one and published `retry | $0.20 | 3 calls` — a row over two
+    # stages that no reader can take apart again.
     receipt = project_cost_receipt(
         _receipt(
             estimated_cost_usd=0.2,
@@ -667,13 +680,40 @@ def test_two_retries_in_one_task_are_one_task_in_the_component_total():
     assert summary["components"] == [
         {
             "name": "retry",
+            "stage": "generation",
+            "retry_kind": "infrastructure",
+            "provider": None,
+            "deployment": None,
+            "requested_model": None,
+            "resolved_model": None,
+            "api_version": None,
             "tasks": 1,
-            "known_cost_usd": 0.2,
+            "known_cost_usd": 0.15,
             "complete_tasks": 1,
-            "model_calls": 3,
+            "model_calls": 2,
+            "missing_reasons": [],
+            "status": "complete",
+        },
+        {
+            "name": "retry",
+            "stage": "self_qa",
+            "retry_kind": "semantic",
+            "provider": None,
+            "deployment": None,
+            "requested_model": None,
+            "resolved_model": None,
+            "api_version": None,
+            "tasks": 1,
+            "known_cost_usd": 0.05,
+            "complete_tasks": 1,
+            "model_calls": 1,
+            "missing_reasons": [],
             "status": "complete",
         },
     ]
+    # The guard this test was written for still holds: one task, and no row
+    # claiming more tasks paid it than the run contains.
+    assert all(row["tasks"] == 1 for row in summary["components"])
 
 
 # ── Ledger reference ──────────────────────────────────────────────────────

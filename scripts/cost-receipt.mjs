@@ -418,45 +418,105 @@ function receiptAmount(receipt) {
     : receipt.estimated_cost_usd;
 }
 
+/**
+ * The identity two run-summary lines must share before they may be added up.
+ *
+ * The same seven fields `projectCostReceipt` rejects duplicates of and
+ * `core.cost_receipts._component_key` groups a task's own lines under, so that
+ * the producer, this reader and the Python summariser all land on the same
+ * rows. Not `name`: `name` is *derived* from the first two — every retry at
+ * every stage derives `retry`, and both a visual reader and an audio reader
+ * derive `perception` — so it cannot tell those rows apart by construction.
+ */
+function summaryComponentKey(component) {
+  return JSON.stringify([
+    component.stage,
+    component.retry_kind,
+    ...COMPONENT_IDENTITY.map((column) => component[column] ?? null),
+  ]);
+}
+
 function aggregateComponents(receipts) {
   const totals = new Map();
   for (const receipt of receipts) {
-    // Roll one receipt's lines up by displayed name before touching the run
-    // totals. A task whose generation and Self-QA both had to be redone carries
-    // two 재시도 lines but is still one task, and counting it twice would make
-    // the coverage figure beside the row a fiction.
+    // Roll one receipt's lines up before touching the run totals. A task whose
+    // generation and Self-QA both had to be redone carries two 재시도 lines but
+    // is still one task, and counting it twice would make the coverage figure
+    // beside the row a fiction.
+    //
+    // Rolled by the line's own seven-field identity, not by the label it
+    // displays under. Folding by `name` was that same double-count guard turned
+    // into a merge: generation's retry and Self-QA's retry both display as
+    // 재시도, so one run published a single $0.190047 / 4-call 재시도 row over a
+    // $0.178985 / 2-call generation retry and a $0.011062 / 2-call Self-QA
+    // retry. Under `perception` it is worse than untidy — a visual reader and
+    // an audio reader carry different rates, and their summed tokens are a row
+    // no price table can reproduce and no reader can take apart again.
+    //
+    // Mirrors `summarize_cost_receipts` in batch-runner/core/cost_projection.py.
     const rolled = new Map();
     for (const component of receipt.components) {
-      if (!rolled.has(component.name)) {
-        rolled.set(component.name, { known_cost_usd: 0, model_calls: 0, complete: true });
+      const key = summaryComponentKey(component);
+      if (!rolled.has(key)) {
+        rolled.set(key, {
+          // Carried, not re-derived: the label is the producer's to choose,
+          // and this reader only displays it.
+          name: component.name,
+          known_cost_usd: 0,
+          model_calls: 0,
+          missing_reasons: new Set(),
+          complete: true,
+        });
       }
-      const entry = rolled.get(component.name);
+      const entry = rolled.get(key);
       if (component.known_cost_usd !== null) entry.known_cost_usd += component.known_cost_usd;
       if (component.model_calls) entry.model_calls += component.model_calls;
+      for (const reason of component.missing_reasons) entry.missing_reasons.add(reason);
       if (component.status !== 'complete') entry.complete = false;
     }
-    for (const [name, entry] of rolled) {
-      if (!totals.has(name)) {
-        totals.set(name, {
-          name,
+    for (const [key, entry] of rolled) {
+      if (!totals.has(key)) {
+        const [stage, retryKind, ...identity] = JSON.parse(key);
+        totals.set(key, {
+          name: entry.name,
+          stage,
+          retry_kind: retryKind,
+          ...Object.fromEntries(COMPONENT_IDENTITY.map((column, index) => [
+            column,
+            identity[index],
+          ])),
           tasks: 0,
           known_cost_usd: 0,
           complete_tasks: 0,
           model_calls: 0,
+          // Why a row could not be priced belongs beside the row. Kept only at
+          // the run level, "no rate published for this model" arrived detached
+          // from which model, which is the one thing a reader needs to act on
+          // it.
+          missing_reasons: new Set(),
         });
       }
-      const bucket = totals.get(name);
+      const bucket = totals.get(key);
       bucket.tasks += 1;
       if (entry.complete) bucket.complete_tasks += 1;
       bucket.known_cost_usd += entry.known_cost_usd;
       bucket.model_calls += entry.model_calls;
+      for (const reason of entry.missing_reasons) bucket.missing_reasons.add(reason);
     }
   }
+  // Unrecorded identity sorts first, which is the state every receipt
+  // published before call identity existed is honestly in.
+  const order = (bucket) => JSON.stringify([
+    bucket.stage,
+    bucket.retry_kind,
+    ...COMPONENT_IDENTITY.map((column) => bucket[column] ?? ''),
+  ]);
   return [...totals.values()]
-    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .sort((a, b) => (order(a) < order(b) ? -1 : order(a) > order(b) ? 1 : 0))
     .map((bucket) => ({
       ...bucket,
       known_cost_usd: round(bucket.known_cost_usd, MONEY_DIGITS),
+      missing_reasons: [...bucket.missing_reasons].sort(),
       status: bucket.complete_tasks === bucket.tasks ? 'complete' : 'partial',
     }));
 }
