@@ -154,8 +154,25 @@
     "azure:gpt-5.6-sol": {
       "used_for": "the Track 2 grading judge and its visual perception calls",
       "official_price_exists": true,
-      "why_unpriced": "Not because Azure is silent — Azure publishes 24 meters for this model. Because nothing available says which of them applies. Two axes are open at once: the zone, as for every model here, and the context tier, and for 5.6-sol the context tier is the worse of the two. Azure names those tiers only 'short context' and 'long context' and publishes no threshold for either, so no token measurement can settle the question — there is nothing to compare a measurement against. Nor would one blanket answer serve: across the 86 graded tasks whose receipts were read on 2026-08-29, per-task input ranged from 76,600 tokens over 32 calls to 6,150,162 tokens over 177 calls, an eighty-fold spread, and a tool-calling judge's conversation grows with every turn within a task. Picking a tier would move the answer by 2x on input and 1.5x on output. That is the guess this table exists to refuse.",
-      "what_would_settle_it": "Publish the grading-side per-call cost ledger (it is written next to the grade file and then dies with the runner), and establish the 5.6-sol context threshold. With both, the tier becomes arithmetic instead of a choice.",
+      "why_unpriced": "Not because Azure is silent — Azure publishes 24 meters for this model. Because nothing available says which of them applies. Three axes are open. The context tier: Azure names the tiers only 'short context' and 'long context' and publishes no threshold for either, so unlike 5.4 — whose 272,000 split is published, and which is therefore settled by measuring requests — there is nothing here to compare a measurement against. The zone, as for every model in this table. And cache writes: 5.6-sol bills them where 5.4 does not, and the receipt records cached-input tokens but no cache-write count, so that meter could not be applied even with the other two settled. Pricing under three open axes is the guess this table exists to refuse.",
+      "what_would_settle_it": "Azure publishing the 5.6-sol context threshold; the deployment's zone; and a cache-write count on the receipt. This field used to name two conditions, the first being to publish the grading-side per-call cost ledger, which it described as dying with the runner. That one is now met — the ledgers are committed beside their grade files — and what it bought is recorded in measured_from_committed_ledgers. It narrowed the tier question without closing it.",
+      "measured_from_committed_ledgers": {
+        "as_of": "2026-09-01",
+        "what_changed": "Grading ledgers have been committed next to their grade files since PRs #272 and #327, so the per-call figures this entry once called unavailable can now be read straight off main. Re-reading them also corrected an inference: the superseded text argued the tier was open because per-task input ranged from 76,600 tokens over 32 calls to 6,150,162 over 177, an eighty-fold spread. The tier is a property of one request, and a per-task total sums many requests, so that spread never bore on the tier at all. The per-call spread is the one that does.",
+        "ledgers": 29,
+        "rows": 67571,
+        "distinct_calls": 45043,
+        "duplicate_rows": 22528,
+        "why_rows_exceed_calls": "Both the eleven per-shard ledgers and the merged ledger built from them are committed, so every call in the merged run is on disk twice. Counting rows would have inflated the call count by half. These figures count distinct call_id, and the duplicate total is exactly the merged ledger's 22,528 rows — every merged row matches a shard row by call_id, so the merge neither invented a call nor dropped one.",
+        "gpt_5_6_sol_calls": 44875,
+        "max_single_request_input_tokens": 226701,
+        "calls_over_128k": 26,
+        "calls_over_200k": 3,
+        "calls_over_272k": 0,
+        "what_it_settles": "Nothing, on its own. Azure publishes no 5.6-sol threshold, so these numbers still have nothing to be compared against, and the model stays unpriced.",
+        "what_it_bounds": "How much the tier can cost. No committed request reaches the 272,000 split Azure publishes for the 5.4 sibling, and 44,849 of 44,875 calls are under 128,000. Across the 185-task gold-ceiling run's 22,503 5.6-sol calls, at standard global rates with cache writes unbilled, the whole tier axis spans $549.50 to $980.84 rather than an open-ended multiple. That span covers the 5.6-sol calls only: the same run's 25 gpt-audio-1.5 calls are unpriced for their own reasons and are not inside it.",
+        "recomputed_by": "tests/test_the_grading_ledger_no_longer_dies_with_the_runner.py"
+      },
       "consequence": "Every grading receipt stays partial with missing_reason price_missing. Call counts and token counts are all preserved; only the rate is absent."
     },
     "azure:gpt-audio-1.5": {
