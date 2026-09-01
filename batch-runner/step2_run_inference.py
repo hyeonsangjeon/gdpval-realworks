@@ -61,7 +61,7 @@ from core.execution_metrics import (
     bounded_count,
     bounded_duration_ms,
 )
-from core.cost_metering import open_cost_recorder
+from core.cost_metering import ROUTE_IDENTITY_ATTRIBUTE, open_cost_recorder
 from core.cost_receipts import (
     BUCKET_PROBLEM_SOLVING,
     REASON_LEDGER_ABSENT,
@@ -204,6 +204,18 @@ class _RedactedAzureAICallProxy:
 
 class _RedactedAzureAIClient(_RedactedAzureAICallProxy):
     """Non-owning provider-error boundary for a verified managed client."""
+
+    def __getattr__(self, name: str):
+        if name == ROUTE_IDENTITY_ATTRIBUTE:
+            # Handed back whole rather than proxied. What it carries is a
+            # routing rule and the name of an API contract — no endpoint, no
+            # account, no credential — so there is nothing here for the
+            # boundary to redact. Wrapping it would hand the cost meter a
+            # proxy instead of the declaration, and every metered call on the
+            # v1 route would go back to recording no deployment and no API
+            # version, which is the state this boundary accidentally caused.
+            return self._get_raw_attribute(name)
+        return super().__getattr__(name)
 
     @property
     def route(self):
