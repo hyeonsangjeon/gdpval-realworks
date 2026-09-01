@@ -1,0 +1,196 @@
+schema_version: "2.0"
+config_name: "cost_smoke_exp026c_v2_gpt54"
+description: |
+  The one-task grading smoke whose receipt settles to a NUMBER.
+
+  Purpose: the problem-solving half of the cost ledger now produces a real
+  figure (exp026c run 33308053974 -> $0.285513, status `complete`). This config
+  is the grading half's equivalent: the smallest run that proves a grading
+  receipt can reach `complete` rather than `partial`, end to end, on real data.
+
+  Runtime semantics are default_v2's -- same judge family and reasoning effort,
+  same tool ops and caps, same critical rule, same scoring, same prompts, same
+  rate-limit guard. Three things differ, each of them required to make the
+  receipt settle:
+
+    1. `rerun_identity` pins the corpus, the rubric commit and the inference
+       revision, so the run's identity is checkable afterwards. default_v2 pins
+       none of them.
+    2. `rubric.revision` is a commit SHA, not `"main"`. An unpinned rubric makes
+       the same config grade a different corpus tomorrow, which would make any
+       cost number unreproducible.
+    3. Every model-bearing block carries an explicit `deployment`. default_v2
+       sets `deployment` on the judge but omits it on both perception
+       sub-judges, so those two calls' identity was never recorded.
+
+  ── Why every billable call here is priceable ─────────────────────────────
+  Pricing looks up `provider:resolved_model` on an EXACT match
+  (core/cost_receipts.py:232) against the `providers` block of
+  experiments/execution_envelope/model_price_table.json. As of PR #286 the
+  priced Azure keys are: gpt-5.4, gpt-5.4-2026-03-05, gpt-5.4-mini,
+  gpt-5.4-nano.
+
+  Deployment `gpt-5.4` answers with resolved model `gpt-5.4-2026-03-05` -- the
+  snapshot that PR #286 added a key for, verified on real ledger rows from run
+  33308053974 (6/6 rows priced, zero `price_missing`). Both the judge and the
+  visual perception sub-judge therefore bill against a priced key.
+
+  ── The one unpriced path, and why it stays ───────────────────────────────
+  `perception.audio.model` is gpt-audio-1.5, which is deliberately NOT priced
+  (models_deliberately_not_priced). It is kept, unchanged from default_v2,
+  because removing it would change routing semantics rather than cost.
+
+  It never fires on this corpus. The single pinned task routes exactly one
+  criterion to perception, and that criterion is VISUAL. Checked across five
+  independent published grade files for this same task_id:
+
+      rubric item a64588ed-db04-4b8b-b3b8-3674ddcf10d1
+        routing_modality: visual   (5 of 5 runs)
+        perception_call_count: 1   (5 of 5 runs)
+      audio-routed items: 0        (5 of 5 runs)
+
+  Routing is decided from the rubric criterion, which is a property of the
+  task, not of the deliverable -- so this holds for exp026c's deliverable too.
+
+  If audio ever did fire, the receipt would go `partial` with reason
+  `price_missing` rather than guess a rate. That is the intended fail-closed
+  behaviour, not a gap to paper over.
+
+  ── This config alone does NOT fork into _diagnostic/ ─────────────────────
+  step8_grade.py:1231 classes a pinned selection as `complete` when it covers
+  the whole source corpus, and only `subset` forks the output. exp026c's corpus
+  IS one task, so the pin here is `complete` -- the grade would land on the
+  published dashboard path.
+
+  That is not what this run is for. To force the diagnostic fork, dispatch with
+  `tasks_limit: 1`. It satisfies the pinned-selection guard (which permits 0 or
+  exactly len(task_ids)) and sets `diagnostic_run` via step8_grade.py:1932, so
+  the output goes to `_diagnostic/<scope_sha>/` and the public path is
+  untouched. No workflow edit is needed -- `tasks_limit` is already a
+  workflow_dispatch input on grade-run.yml.
+
+  ── Expected spend, measured rather than guessed ──────────────────────────
+  Summed judge + perception tokens for this exact task_id from five published
+  grade files, repriced at gpt-5.4 rates (2.50 / 0.25 / 15.00 per million):
+
+      config                       calls    input     cached    output    USD
+      default_v2_mini              127+1   2834829    913152    43822   $5.69
+      validation_v2_mini_cohort10  137+1   3088707    975104    46096   $6.22
+      validation_v2_mini_cohort3   136+1   3193116   1075712    47667   $6.28
+      regrade_v2_sol_max (a)       116+1   4216415   1705874    56192   $7.55
+      regrade_v2_sol_max (b)       111+1   4022367   1507061    55560   $7.50
+
+  Treat ~$7.55 as the ceiling and expect materially less. Those runs graded
+  exp003's deliverable for this task; exp026c's deliverable is a minimal
+  Sample.xlsx with 488 characters of deliverable text, and per-call input is
+  dominated by deliverable content. The rubric (38 items) and task prompt are
+  identical, so the call COUNT should be comparable while the token count
+  should not.
+
+  The headline this buys: grading one task costs roughly 20x what solving it
+  did ($0.285513). That ratio is itself a finding worth publishing, and it is
+  the reason this smoke is worth its own spend.
+
+rerun_identity:
+  experiment_id: "exp026c_cost_receipt_smoke"
+  expected_task_count: 1
+  # The frozen openai/gdpval commit every other pinned config in this
+  # directory reads its rubric from. The pinned task was graded at this
+  # revision by exp003, so the rubric is known to resolve here.
+  rubric_commit_sha: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  # HyeonSang/exp026c_cost_receipt_smoke, written by step 7 of run
+  # 33308053974 at 2026-08-30T11:14:14Z. Before that run the repo held only
+  # its bootstrap commit, so this is the first and only revision carrying
+  # inference results.
+  inference_revision: "0d1d6df224d71aec23a0199ba1e7b272044b500b"
+  # Deliberately absent: allow_legacy_missing_provenance. Run 33308053974
+  # published workspace/upload/inference_provenance.json with
+  # schema_version azure-ai-inference-provenance-v2 and a populated
+  # azure_ai_routes block, so nothing needs forgiving.
+  task_ids:
+    - "83d10b06-26d1-4636-a32c-23f92c57f30b"
+
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.4"
+  deployment: "gpt-5.4"
+  api_version: "2025-04-01-preview"
+  timeout_sec: 600
+  reasoning:
+    effort: "medium"
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 2400
+
+  tools:
+    read_deliverable:
+      env: "exp011_subprocess"
+      ops:
+        - inspect_structure
+        - read_content
+        - inspect_formatting
+        - probe_audio
+        - probe_video
+      read_only: true
+      per_item_call_cap: 8
+      max_iterations: 10
+
+  perception:
+    visual:
+      model: "gpt-5.4"
+      # default_v2 omits this. Without it the visual sub-judge's deployment
+      # never reaches the receipt, so a priced row cannot be traced back to
+      # the deployment that produced it.
+      deployment: "gpt-5.4"
+      vision: true
+      call_cap_per_task: 72
+    audio:
+      model: "gpt-audio-1.5"
+      deployment: "gpt-audio-1.5"
+      call_cap_per_task: 3
+      trim_seconds: 30
+
+  critical:
+    rule: "abs_max_score_threshold"
+    threshold: 4
+    sign_aware: true
+
+  scoring:
+    sign_aware_pct: true
+    handle_nonpositive_total_max: "explicit"
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  # Must equal rerun_identity.rubric_commit_sha (step8_grade.py:646).
+  revision: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v2"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  task_prompt_truncate_chars: 500
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  tool_template: "prompts/grader_judge_v2.md"
+  version: "v2.2"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__judge_{judge_slug}__{config_name}__cfg_{config_hash}__rubric_{rubric_sha}__inference_{inference_sha}__src_{grader_source_hash_short}__{prompt_v}.json"
