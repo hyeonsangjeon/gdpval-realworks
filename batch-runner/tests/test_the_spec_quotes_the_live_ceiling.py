@@ -261,9 +261,29 @@ def test_the_multiplier_the_block_assumes_is_the_one_in_force(measured):
 # is never written — and insists the failure is noticed.
 
 
+def quoted_line(text: str, name: str) -> tuple[str, str, str]:
+    """One row of the block as the document writes it: line, calls, amount.
+
+    Read, never typed. These mutations used to spell the row out in full —
+    ``text.replace("| `perception` | 1125 | 54.00 |\\n", "")`` — which meant a
+    genuine re-measure quietly turned them into no-ops. The replace would find
+    nothing, the text would come back unchanged, and a test whose whole job is
+    to prove the comparison can fail would have stopped proving it. The
+    ``assert mutated != text`` line below is what caught that, and it stays.
+
+    So the row comes out of the document, and the mutation is built from it.
+    """
+    for line in text.splitlines():
+        match = ROW.match(line.strip())
+        if match is not None and match.group(1) == name:
+            return line, match.group(2), match.group(3)
+    raise AssertionError(f"the ceiling block does not quote `{name}`")
+
+
 def test_a_single_wrong_digit_is_caught(measured):
     text = read_specification()
-    broken = text.replace("| `grading` | 8811 |", "| `grading` | 8812 |")
+    line, calls, usd = quoted_line(text, "grading")
+    broken = text.replace(line, f"| `grading` | {int(calls) + 1} | {usd} |")
     assert broken != text, "the mutation did not apply, so it proves nothing"
     notes = disagreements(quoted_rows(broken), measured)
     assert any("`grading` model calls" in note for note in notes), notes
@@ -271,7 +291,9 @@ def test_a_single_wrong_digit_is_caught(measured):
 
 def test_a_wrong_amount_is_caught(measured):
     text = read_specification()
-    broken = text.replace("6011.20562625", "6011.20562626")
+    line, calls, usd = quoted_line(text, "grading")
+    nudged = usd[:-1] + ("2" if usd.endswith("1") else "1")
+    broken = text.replace(line, f"| `grading` | {calls} | {nudged} |")
     assert broken != text
     notes = disagreements(quoted_rows(broken), measured)
     assert any("`grading` United States dollars" in note for note in notes), notes
@@ -284,7 +306,8 @@ def test_the_figure_this_repository_used_to_carry_is_caught_if_it_returns(measur
     an older copy of the document.
     """
     text = read_specification()
-    stale = text.replace("| `total` | 10136 | 7608.4048453125 |", "| `total` | 10136 | 364.23468750 |")
+    line, calls, _ = quoted_line(text, "total")
+    stale = text.replace(line, f"| `total` | {calls} | 364.23468750 |")
     assert stale != text
     notes = disagreements(quoted_rows(stale), measured)
     assert any("`total` United States dollars" in note for note in notes), notes
@@ -292,7 +315,8 @@ def test_the_figure_this_repository_used_to_carry_is_caught_if_it_returns(measur
 
 def test_a_dropped_line_is_caught_rather_than_read_as_a_cheaper_ceiling(measured):
     text = read_specification()
-    thinner = text.replace("| `perception` | 1125 | 54.00 |\n", "")
+    line, _, _ = quoted_line(text, "perception")
+    thinner = text.replace(line + "\n", "")
     assert thinner != text
     notes = disagreements(quoted_rows(thinner), measured)
     assert any("`perception`" in note and "not quoted" in note for note in notes), notes
