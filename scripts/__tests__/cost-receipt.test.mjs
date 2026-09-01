@@ -926,8 +926,41 @@ test('unusable ledger pointers are rejected', () => {
     { path: '/etc/passwd', sha256: 'b'.repeat(64) },
     { path: 'cost_ledger.jsonl', sha256: 'short' },
     { sha256: 'b'.repeat(64) },
+    // A component longer than NAME_MAX cannot name a file that exists.
+    { path: `data/grades/${'a'.repeat(256)}.jsonl`, sha256: 'b'.repeat(64) },
+    // Nor can a path this deep be one of ours; the bound is 512.
+    { path: `${Array(200).fill('dir').join('/')}/l.jsonl`, sha256: 'b'.repeat(64) },
+    // A leading dot or dash stays out even though `_` was let in.
+    { path: 'data/grades/.hidden/l.jsonl', sha256: 'b'.repeat(64) },
+    { path: 'data/grades/-oh/l.jsonl', sha256: 'b'.repeat(64) },
   ]) {
     assert.throws(() => projectCostLedgerReference(value), /cost_ledger/);
+  }
+});
+
+// The field is a path from the repository root, and every real one runs through
+// `_shards`, `_repeats` or `_diagnostic`. The pattern used to require each
+// component to start with `[A-Za-z0-9]`, which never mattered while both
+// writers emitted a bare filename and rejects essentially every real path now
+// that they do not. The per-component bound moved with it: the old 128
+// excluded seven run-identity filenames that exist on disk, and 255 is NAME_MAX
+// rather than a preference. Kept in step with `core/cost_projection.py`, which
+// carries the same two constants and the same reasoning.
+test('the paths published grades actually carry are accepted', () => {
+  const suffix = '.cost_ledger.jsonl';
+  // 239 bytes all in: the longest single component under data/grades today.
+  const longest = 'a'.repeat(239 - suffix.length) + suffix;
+  for (const path of [
+    'data/grades/_shards/stem/shard-004-of-011.cost_ledger.jsonl',
+    'data/grades/_repeats/stem/r2.cost_ledger.jsonl',
+    'data/grades/_diagnostic/' + 'a'.repeat(64) + '/g.cost_ledger.jsonl',
+    `data/grades/${longest}`,
+  ]) {
+    assert.deepEqual(
+      projectCostLedgerReference({ path, sha256: 'b'.repeat(64) }),
+      { path, sha256: 'b'.repeat(64) },
+      path,
+    );
   }
 });
 

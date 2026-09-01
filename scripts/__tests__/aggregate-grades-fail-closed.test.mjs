@@ -436,3 +436,115 @@ test('the real script still exits 0 and publishes when every file is readable', 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+// ── 6. a pointer that names no file is not an audit trail ────────────────
+
+// `cost_ledger.path` is where a grade says its per-call bill lives, and the
+// schema, `core/cost_projection.py` and `projectCostLedgerReference` all define
+// it as a path from the repository root. Both grading writers put `Path.name`
+// in it instead — a bare filename — so all thirty-eight grade files carrying
+// the field named a file that resolved from nowhere. Twenty-nine of them sat
+// beside their own grade, several directories down; the dashboard record built
+// from the payload drops the directory, so the reader that most needed the
+// location was the one that could not reconstruct it.
+//
+// The writers are fixed, so this guard is about the corpus not rotting back.
+// It is free today in the strictest sense: none of the nineteen top-level
+// grade files the aggregator reads carries the field at all.
+
+// A real 1.4 payload rather than a fixture, because what is being checked is
+// the shape the writers actually emit.
+const REAL_DIAGNOSTIC_GRADE = join(
+  SCRIPTS_DIR, '..', 'data', 'grades', '_diagnostic',
+  '8e8569d557634ee40e29c456fdaa057cdedc7084fac61444a5a02c3152d1b809',
+  'exp_gold_baseline__judge_gpt-5_6-sol__gold_smoke_audio_v2_sol_max'
+  + '__cfg_7392238d5f21a1f8'
+  + '__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf'
+  + '__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf'
+  + '__src_e23d7898c04f6b63__v2.2.json',
+);
+
+async function realGradeWithLedger() {
+  const raw = JSON.parse(await readFile(REAL_DIAGNOSTIC_GRADE, 'utf-8'));
+  assert.equal(raw.schema_version, '1.4');
+  assert.ok(raw.cost_ledger?.path, 'the sample grade lost its ledger pointer');
+  // As written on disk: a bare filename, which is the defect itself.
+  assert.ok(!raw.cost_ledger.path.includes('/'));
+  return raw;
+}
+
+test('collectGrades refuses a grade whose ledger pointer names no file here', async () => {
+  const raw = await realGradeWithLedger();
+
+  const { results, failures, excluded } = collectGrades([
+    entry('bare-name.json', raw),
+  ]);
+
+  assert.equal(results.length, 0);
+  assert.equal(excluded.length, 0, 'a broken pointer is a failure, not a choice');
+  assert.deepEqual(failures.map((f) => f.file), ['bare-name.json']);
+  assert.match(failures[0].message, /not a file in this repository/);
+  assert.match(failures[0].message, /not a bare filename/);
+});
+
+test('collectGrades accepts the same grade once the pointer is a path', async () => {
+  const raw = await realGradeWithLedger();
+  const bare = raw.cost_ledger.path;
+  raw.cost_ledger.path = [
+    'data/grades/_diagnostic',
+    '8e8569d557634ee40e29c456fdaa057cdedc7084fac61444a5a02c3152d1b809',
+    bare,
+  ].join('/');
+
+  const { failures, excluded } = collectGrades([entry('as-a-path.json', raw)]);
+
+  assert.equal(failures.length, 0, JSON.stringify(failures));
+  // Still not published — it is a diagnostic run — but excluded by the
+  // decision the grader recorded, which is the distinction section 4 draws.
+  assert.deepEqual(excluded.map((e) => e.status), ['grading_diagnostic']);
+});
+
+test('the real script exits non-zero on a pointer that resolves nowhere', async () => {
+  const raw = await realGradeWithLedger();
+  raw.run_status = 'final';
+  raw.experiment_id = 'exp-dangling-ledger';
+
+  const root = await scratchTree({ 'dangling.json': raw });
+  try {
+    const { code, stderr } = await runAggregate(root);
+    assert.equal(code, 1, 'a dangling audit pointer must fail the build');
+    assert.match(stderr, /dangling\.json/);
+    assert.match(stderr, /not a file in this repository/);
+    assert.equal(
+      existsSync(join(root, 'public', 'generated', 'grades-index.json')),
+      false,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('the real script publishes when the pointer names a file that is there', async () => {
+  const raw = await realGradeWithLedger();
+  raw.run_status = 'final';
+  raw.experiment_id = 'exp-real-ledger';
+  raw.cost_ledger.path = 'data/grades/sidecar.cost_ledger.jsonl';
+
+  const root = await scratchTree({ 'good.json': raw });
+  try {
+    // The sidecar the pointer names, put where the pointer says it is. This is
+    // the arrangement the workflow's `git add` of the export produces.
+    await writeFile(
+      join(root, 'data', 'grades', 'sidecar.cost_ledger.jsonl'), '', 'utf-8',
+    );
+    const { code, stdout, stderr } = await runAggregate(root);
+    assert.equal(code, 0, stderr);
+    const index = JSON.parse(
+      await readFile(join(root, 'public', 'generated', 'grades-index.json'), 'utf-8'),
+    );
+    assert.deepEqual(index.map((r) => r.experiment_id), ['exp-real-ledger']);
+    assert.match(stdout, /Aggregated 1 grade file\(s\)/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

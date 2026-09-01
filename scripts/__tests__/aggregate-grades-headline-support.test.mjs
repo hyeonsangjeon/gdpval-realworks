@@ -333,17 +333,16 @@ test('no 1.3 or 1.4 file on disk fails the check the aggregator now enforces', a
     try {
       record = processGradesFile(path, raw);
     } catch (err) {
-      // Seven of these files already fail an unrelated pre-existing check —
-      // their `cost_ledger.path` is a run-identity filename longer than the
-      // 128-character segment cap in cost-receipt.mjs — and they only reach
-      // a validator at all because this test walks the diagnostic and shard
-      // directories the aggregator itself never reads. That is a real latent
-      // trap for anyone publishing one by copying it up to data/grades, and
-      // it is not this change: what has to hold here is that the headline
-      // check adds nothing to the list.
+      // Nothing in the corpus reaches this today. Seven of these files used to,
+      // on an unrelated pre-existing check — their `cost_ledger.path` is a
+      // run-identity filename longer than the 128-character segment cap that
+      // used to be in cost-receipt.mjs, which is now the 255 of NAME_MAX — and
+      // they only reach a validator at all because this test walks the
+      // diagnostic and shard directories the aggregator itself never reads.
+      // The branch stays so that a file that starts failing names itself.
       assert.doesNotMatch(err.message, /is not the average of its/, path);
       assert.doesNotMatch(err.message, /scored task pct is missing or invalid/, path);
-      otherFailures.add(err.message);
+      otherFailures.add(`${path}: ${err.message}`);
       continue;
     }
     const got = record.summary.headline_support;
@@ -352,8 +351,8 @@ test('no 1.3 or 1.4 file on disk fails the check the aggregator now enforces', a
   assert.ok(checked >= 75, `expected the 1.3/1.4 corpus, checked ${checked}`);
   assert.deepEqual(
     [...otherFailures],
-    ['cost_ledger path must be a relative repository path'],
-    'a new kind of failure appeared in the 1.3/1.4 corpus',
+    [],
+    'a strict-tier grade stopped projecting',
   );
   // Two-decimal rounding and nothing else, which is why the tolerance can sit
   // five times above it and still be twenty-five times below the defect.

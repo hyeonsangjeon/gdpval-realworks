@@ -107,7 +107,13 @@ def _grade_one(ledger, task_id, *, sequence=0, settle=True):
 
 
 def _shard_on_disk(tmp_path, price_table, index, task_ids):
-    """Write one shard grade file plus the ledger export it points at."""
+    """Write one shard grade file plus the ledger export it points at.
+
+    The pointer is a path from the repository root -- here ``tmp_path`` -- and
+    not the bare filename it used to be, because a bare filename is a name the
+    merge cannot resolve from anywhere except the one directory it happens to
+    be sitting in.
+    """
     directory = tmp_path / f"shard{index}"
     directory.mkdir()
     ledger = _ledger(directory, "ledger.sqlite3", price_table, run_id=f"run-{index}")
@@ -117,10 +123,20 @@ def _shard_on_disk(tmp_path, price_table, index, task_ids):
         digest = ledger.export_jsonl(directory / "grade.cost_ledger.jsonl")
     finally:
         ledger.close()
-    payload = {"cost_ledger": {"path": "grade.cost_ledger.jsonl", "sha256": digest}}
+    payload = {
+        "cost_ledger": {
+            "path": f"shard{index}/grade.cost_ledger.jsonl",
+            "sha256": digest,
+        }
+    }
     shard_path = directory / "grade.json"
     shard_path.write_text(json.dumps(payload), encoding="utf-8")
     return shard_path, payload
+
+
+def _export_of(tmp_path: Path, payload: dict) -> Path:
+    """The file a pointer names, resolved the way the merge resolves it."""
+    return tmp_path / payload["cost_ledger"]["path"]
 
 
 def _merged_rows(export: Path) -> list[dict]:
@@ -141,12 +157,13 @@ def test_the_merged_trail_holds_every_shards_calls(tmp_path, price_table):
         [first[0], second[0]],
         [first[1], second[1]],
         out,
+        repo_root=tmp_path,
         warn=warnings.append,
     )
 
     assert warnings == []
     assert pointer is not None
-    export = out.with_name(pointer["path"])
+    export = _export_of(tmp_path, {"cost_ledger": pointer})
     calls = [row for row in _merged_rows(export) if row.get("call_id")]
     assert {row["task_id"] for row in calls} == {"task-a", "task-b", "task-c"}
 
@@ -159,11 +176,16 @@ def test_the_merged_pointer_can_be_checked_against_the_file_it_names(
     out = tmp_path / "merged.json"
 
     pointer = s9.merge_shard_cost_ledgers(
-        [first[0], second[0]], [first[1], second[1]], out, warn=lambda _m: None
+        [first[0], second[0]], [first[1], second[1]], out,
+        repo_root=tmp_path, warn=lambda _m: None,
     )
 
     assert pointer is not None
-    assert verify_export(out.with_name(pointer["path"]), pointer["sha256"])
+    # Resolved from the root the pointer is relative to, which is the whole
+    # point of the field: a reader holding the grade and the repository can
+    # find the trail without knowing where the grade file itself sits.
+    assert verify_export(_export_of(tmp_path, {"cost_ledger": pointer}),
+                         pointer["sha256"])
 
 
 def test_the_same_shard_folded_in_twice_is_still_one_bill(tmp_path, price_table):
@@ -172,12 +194,13 @@ def test_the_same_shard_folded_in_twice_is_still_one_bill(tmp_path, price_table)
     out = tmp_path / "merged.json"
 
     once = s9.merge_shard_cost_ledgers(
-        [shard[0]], [shard[1]], out, warn=lambda _m: None
+        [shard[0]], [shard[1]], out, repo_root=tmp_path, warn=lambda _m: None
     )
     twice = s9.merge_shard_cost_ledgers(
         [shard[0], shard[0]],
         [shard[1], shard[1]],
         tmp_path / "merged2.json",
+        repo_root=tmp_path,
         warn=lambda _m: None,
     )
 
@@ -196,6 +219,7 @@ def test_a_shard_with_no_pointer_stops_the_merged_trail(tmp_path, price_table):
         [good[0], blind],
         [good[1], {"cost_ledger": None}],
         tmp_path / "merged.json",
+        repo_root=tmp_path,
         warn=warnings.append,
     )
 
@@ -207,15 +231,16 @@ def test_a_pointer_to_a_file_that_is_gone_stops_the_merged_trail(
     tmp_path, price_table
 ):
     shard_path, payload = _shard_on_disk(tmp_path, price_table, 0, ["task-a"])
-    shard_path.with_name(payload["cost_ledger"]["path"]).unlink()
+    _export_of(tmp_path, payload).unlink()
 
     warnings: list[str] = []
     pointer = s9.merge_shard_cost_ledgers(
-        [shard_path], [payload], tmp_path / "merged.json", warn=warnings.append
+        [shard_path], [payload], tmp_path / "merged.json",
+        repo_root=tmp_path, warn=warnings.append,
     )
 
     assert pointer is None
-    assert any("not beside it" in message for message in warnings)
+    assert any("neither under" in message for message in warnings)
 
 
 def test_a_trail_that_no_longer_matches_its_digest_stops_the_merge(
@@ -223,7 +248,7 @@ def test_a_trail_that_no_longer_matches_its_digest_stops_the_merge(
 ):
     """An edited audit trail is worth less than no audit trail at all."""
     shard_path, payload = _shard_on_disk(tmp_path, price_table, 0, ["task-a"])
-    export = shard_path.with_name(payload["cost_ledger"]["path"])
+    export = _export_of(tmp_path, payload)
     rows = _merged_rows(export)
     for row in rows:
         if row.get("call_id"):
@@ -235,7 +260,8 @@ def test_a_trail_that_no_longer_matches_its_digest_stops_the_merge(
 
     warnings: list[str] = []
     pointer = s9.merge_shard_cost_ledgers(
-        [shard_path], [payload], tmp_path / "merged.json", warn=warnings.append
+        [shard_path], [payload], tmp_path / "merged.json",
+        repo_root=tmp_path, warn=warnings.append,
     )
 
     assert pointer is None
@@ -256,8 +282,8 @@ def test_two_shards_that_disagree_about_one_call_stop_the_merged_trail(
     first_path, first = _shard_on_disk(tmp_path, price_table, 0, ["task-a"])
     second_path, second = _shard_on_disk(tmp_path, price_table, 1, ["task-a"])
     # Same run identity on both sides, so the call identifiers collide.
-    forged = second_path.with_name(second["cost_ledger"]["path"])
-    rows = _merged_rows(first_path.with_name(first["cost_ledger"]["path"]))
+    forged = _export_of(tmp_path, second)
+    rows = _merged_rows(_export_of(tmp_path, first))
     for row in rows:
         if row.get("call_id"):
             row["output_tokens"] = 999_999
@@ -274,6 +300,7 @@ def test_two_shards_that_disagree_about_one_call_stop_the_merged_trail(
         [first_path, second_path],
         [first, second],
         tmp_path / "merged.json",
+        repo_root=tmp_path,
         warn=warnings.append,
     )
 

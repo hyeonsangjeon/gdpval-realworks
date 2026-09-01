@@ -182,9 +182,12 @@ def _shard(tmp_path: Path, index: int, task_id: str) -> tuple[Path, dict]:
 def test_the_merge_finds_a_ledger_that_was_committed_beside_its_shard(tmp_path):
     """What the workflow's ``git add`` of the export buys.
 
-    ``merge_shard_cost_ledgers`` resolves each pointer relative to the shard
-    JSON, which on the merging runner means the checkout. This is the only
-    arrangement in which it returns a pointer at all.
+    The pointer a shard publishes is a path from the repository root, and the
+    merge resolves it against the root it is running in. Shards that were
+    graded on separate runners and never moved into one checkout keep roots of
+    their own, so each directory above the shard file is tried too -- which is
+    also how the bare filenames written before this field was a path at all
+    still resolve, since the shard's own directory is the first one tried.
     """
     warnings: list[str] = []
     first = _shard(tmp_path, 0, "task-a")
@@ -193,7 +196,7 @@ def test_the_merge_finds_a_ledger_that_was_committed_beside_its_shard(tmp_path):
 
     pointer = merge_shard_cost_ledgers(
         [first[0], second[0]], [first[1], second[1]], out_path,
-        warn=warnings.append,
+        repo_root=tmp_path, warn=warnings.append,
     )
 
     assert warnings == []
@@ -202,7 +205,59 @@ def test_the_merge_finds_a_ledger_that_was_committed_beside_its_shard(tmp_path):
     records = [json.loads(line) for line in
                merged.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert {r["task_id"] for r in records} == {"task-a", "task-b"}
+    # Resolved from the root, not from beside the grade: that is the whole
+    # contract, and here the two happen to name the same file.
     assert pointer["path"] == merged.name
+    assert (tmp_path / pointer["path"]).is_file()
+
+
+def test_a_merged_ledger_outside_the_repository_is_no_pointer_at_all(tmp_path):
+    """The field is a repository path, so there is nothing honest to write.
+
+    A local merge writing somewhere outside the checkout has no repository
+    path to give, and a bare filename is not a smaller version of one -- it is
+    what the field held for its whole life, and none of the thirty-eight grade
+    files carrying it named a file anybody could find.
+    """
+    warnings: list[str] = []
+    first = _shard(tmp_path, 0, "task-a")
+    second = _shard(tmp_path, 1, "task-b")
+
+    pointer = merge_shard_cost_ledgers(
+        [first[0], second[0]], [first[1], second[1]], tmp_path / "final.json",
+        repo_root=tmp_path / "elsewhere", warn=warnings.append,
+    )
+
+    assert pointer is None
+    assert any("outside the repository" in message for message in warnings)
+
+
+def test_a_shard_ledger_a_directory_down_is_named_from_the_root(tmp_path):
+    """The shape every real published pointer has: a path, not a name.
+
+    Shards land in ``data/grades/_shards/<stem>/``, several directories below
+    the root, and the merged grade lands in ``data/grades/``. Nothing about
+    either is reconstructible from a filename.
+    """
+    shards = tmp_path / "data" / "grades" / "_shards" / "stem"
+    shards.mkdir(parents=True)
+    first = _shard(shards, 0, "task-a")
+    second = _shard(shards, 1, "task-b")
+    for shard_path, payload in (first, second):
+        payload["cost_ledger"]["path"] = (
+            f"data/grades/_shards/stem/{shard_path.stem}.cost_ledger.jsonl"
+        )
+        shard_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    out_path = tmp_path / "data" / "grades" / "final.json"
+    pointer = merge_shard_cost_ledgers(
+        [first[0], second[0]], [first[1], second[1]], out_path,
+        repo_root=tmp_path, warn=lambda message: pytest.fail(message),
+    )
+
+    assert pointer is not None
+    assert pointer["path"] == "data/grades/final.cost_ledger.jsonl"
+    assert (tmp_path / pointer["path"]).is_file()
 
 
 def test_an_uncommitted_ledger_makes_the_merged_grade_claim_none(tmp_path):
@@ -219,11 +274,11 @@ def test_an_uncommitted_ledger_makes_the_merged_grade_claim_none(tmp_path):
 
     pointer = merge_shard_cost_ledgers(
         [first[0], second[0]], [first[1], second[1]], tmp_path / "final.json",
-        warn=warnings.append,
+        repo_root=tmp_path, warn=warnings.append,
     )
 
     assert pointer is None
-    assert any("not beside it" in message for message in warnings)
+    assert any("neither under" in message for message in warnings)
 
 
 # ── being killed is not an excuse ────────────────────────────────────────

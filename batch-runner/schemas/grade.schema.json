@@ -140,7 +140,11 @@
       "additionalProperties": false,
       "required": ["path", "sha256"],
       "properties": {
-        "path": {"type": "string", "minLength": 1},
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the audit JSONL sidecar is, as a path from the repository root -- not a bare filename. A pointer that resolves nowhere reads as an audit trail that exists, so scripts/aggregate-grades.mjs refuses to publish a grade whose pointer names no file here."
+        },
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
     },

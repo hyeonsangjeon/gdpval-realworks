@@ -79,7 +79,28 @@ _RETRY_NONE = "none"
 _SLUG = re.compile(r"[a-z][a-z0-9_]{0,47}")
 _REASON_CODE = re.compile(r"[a-z][a-z0-9_.:-]{0,63}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-_LEDGER_PATH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}(/[A-Za-z0-9][A-Za-z0-9._-]{0,127})*")
+
+# How long one path component may be. Not a taste decision: 255 bytes is
+# ``NAME_MAX`` on every filesystem this runs on, so a longer component cannot
+# name a file that exists, and a bound below it would reject real names. The
+# names here are run identities -- experiment, judge, config hash, rubric SHA,
+# inference SHA, grader source hash -- and the longest under ``data/grades``
+# today is 254 bytes. The 128 this used to be excluded seven of them.
+_MAX_LEDGER_NAME = 255
+
+# And how long the whole path may be, which the per-component bound does not
+# imply: nesting is what grows it. A published ledger sits under
+# ``data/grades``, up to five directories down for a repeat of a shard of a
+# diagnostic run; the longest that exists today is 348 bytes.
+_MAX_LEDGER_PATH_LENGTH = 512
+
+# The leading character is narrower than the rest so that ``..`` and a segment
+# that could be read as a command-line option are both out. It admits ``_``
+# because the directories these paths run through are ``_shards``,
+# ``_repeats`` and ``_diagnostic`` -- which never came up while the field held
+# a bare filename, and is most of what it holds now.
+_LEDGER_SEGMENT = rf"[A-Za-z0-9_][A-Za-z0-9._-]{{0,{_MAX_LEDGER_NAME - 1}}}"
+_LEDGER_PATH = re.compile(rf"{_LEDGER_SEGMENT}(/{_LEDGER_SEGMENT})*")
 
 _MAX_COMPONENTS = 32
 _MAX_USAGE_KEYS = 32
@@ -427,7 +448,11 @@ def project_cost_ledger_reference(value, field: str = "cost_ledger"):
     if not isinstance(value, dict):
         _fail(field, "must be an object")
     path = value.get("path")
-    if not isinstance(path, str) or _LEDGER_PATH.fullmatch(path) is None:
+    if (
+        not isinstance(path, str)
+        or _LEDGER_PATH.fullmatch(path) is None
+        or len(path) > _MAX_LEDGER_PATH_LENGTH
+    ):
         _fail(field, "path must be a relative repository path")
     if ".." in path.split("/"):
         _fail(field, "path must not traverse parents")
@@ -435,6 +460,32 @@ def project_cost_ledger_reference(value, field: str = "cost_ledger"):
     if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
         _fail(field, "sha256 must be a sha256 digest")
     return {"path": path, "sha256": digest}
+
+
+def repo_relative_ledger_path(ledger_path: Path, repo_root: Path) -> str | None:
+    """The repository path a published pointer may name, or ``None``.
+
+    A grade's ledger pointer is defined -- here, in ``cost-receipt.mjs``, and
+    in the grade schema -- as a *relative repository path*, and for a long
+    while what the two grading writers put in it was ``Path.name``: a bare
+    filename. Every one of the 38 grade files carrying the field named a file
+    that resolved from nowhere. The sidecars were there, beside their grades,
+    several directories down; nothing in the payload said so, and the record
+    the dashboard builds from it drops the directory, so the one reader that
+    could have reconstructed it is the one reader that cannot.
+
+    ``None`` when the ledger is not inside the repository at all -- a local
+    run writing somewhere else. It is the same answer as a failed export: a
+    result that cannot point at its own audit trail says so, rather than
+    carrying a name that points at nothing. Callers that want the pointer
+    regardless must say which root the path is relative to.
+    """
+    try:
+        relative = Path(ledger_path).resolve().relative_to(Path(repo_root).resolve())
+    except ValueError:
+        return None
+    text = relative.as_posix()
+    return text if _LEDGER_PATH.fullmatch(text) else None
 
 
 def verify_cost_ledger(reference: dict | None, ledger_path: Path) -> dict | None:
