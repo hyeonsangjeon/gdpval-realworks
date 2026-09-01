@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 
 import pytest
 import yaml
@@ -3750,13 +3751,21 @@ def _run_grade_workflow_input_preflight(**overrides):
         "GRADE_RUN_ORDINAL": "1",
         **overrides,
     }
-    return subprocess.run(
-        ["bash", "-c", validate_step["run"]],
-        check=False,
-        capture_output=True,
-        env=env,
-        text=True,
-    )
+    with tempfile.TemporaryDirectory() as step_outputs:
+        # Every step GitHub runs is handed a writable GITHUB_OUTPUT, and this
+        # one writes the experiment name's single-component form to it. Run
+        # without one, the script would die on the unbound variable under
+        # `set -u` -- before reaching the check under test. Set last and
+        # unconditionally: `env` opens with os.environ, and under CI that
+        # already carries a GITHUB_OUTPUT belonging to the job running pytest.
+        env["GITHUB_OUTPUT"] = str(Path(step_outputs) / "step_output")
+        return subprocess.run(
+            ["bash", "-c", validate_step["run"]],
+            check=False,
+            capture_output=True,
+            env=env,
+            text=True,
+        )
 
 
 @pytest.mark.parametrize(
@@ -3799,6 +3808,15 @@ def _run_grade_workflow_input_preflight(**overrides):
             "GRADE_SHARD_INDEX": "2",
             "GRADE_RUN_ORDINAL": "3",
         },
+        # A config that sits in a directory. The run-place comparison keeps its
+        # three beside each other in experiments/execution_envelope/, and #335
+        # taught batch-run.yml this same name -- so anything that can be run
+        # has to be gradable too, or stage 4 pays for runs it cannot mark.
+        {
+            "GRADE_EXPERIMENT_YAML": (
+                "execution_envelope/exp030_envelope_host_python_process"
+            )
+        },
     ],
 )
 def test_grade_workflow_input_preflight_accepts_valid_dispatch(overrides):
@@ -3814,6 +3832,15 @@ def test_grade_workflow_input_preflight_accepts_valid_dispatch(overrides):
         ({"GITHUB_WORKFLOW_SHA": "b" * 40}, "workflow and event SHA"),
         ({"GRADE_EXPERIMENT_YAML": "../escape"}, "experiment_yaml"),
         ({"GRADE_EXPERIMENT_YAML": "exp.yaml"}, "experiment_yaml"),
+        # One directory is the most there is, and '__' is what that separator
+        # becomes wherever the name has to be a single component. A name
+        # carrying '__' of its own could flatten onto a neighbour's stem, and
+        # the paid approval below is inherited by matching that stem.
+        ({"GRADE_EXPERIMENT_YAML": "a/b/c"}, "experiment_yaml"),
+        (
+            {"GRADE_EXPERIMENT_YAML": "execution_envelope__exp030"},
+            "experiment_yaml",
+        ),
         ({"GRADE_CONFIG": "../config.yaml"}, "grading_config"),
         ({"GRADE_INFERENCE_REVISION": "A" * 40}, "inference_revision"),
         ({"GRADE_FORCE": "yes"}, "GRADE_FORCE"),
