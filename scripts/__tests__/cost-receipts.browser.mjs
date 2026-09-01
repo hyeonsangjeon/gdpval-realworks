@@ -65,7 +65,7 @@ const money = (value) => Number(value.toFixed(6))
  * There is no per-line estimate. The producer puts an estimate on the receipt
  * and nowhere else, so a line only ever reports what was confirmed.
  */
-function component(stage, amount, { status = 'complete', retryKind = 'none' } = {}) {
+function component(stage, amount, { status = 'complete', retryKind = 'none', model = null } = {}) {
   const measured = status === 'complete' || status === 'partial'
   return {
     // Derived at the producer: first work carries its stage's name, anything
@@ -79,6 +79,10 @@ function component(stage, amount, { status = 'complete', retryKind = 'none' } = 
     model_calls: measured ? 1 : 0,
     usage: measured ? { input_tokens: 1200, output_tokens: 340 } : {},
     missing_reasons: measured || status === 'not_run' ? [] : ['usage_absent'],
+    // Absent on every receipt published before call identity was recorded, so
+    // absent here by default. Named when two lines share a stage and a retry
+    // kind and only the model tells them apart.
+    ...(model ? { provider: 'azure', resolved_model: model } : {}),
   }
 }
 
@@ -292,7 +296,17 @@ const fullyPricedRows = () => [
     grade: receipt({
       status: 'complete',
       known: 0.12,
-      components: [component('grading', 0.1), component('perception', 0.02)],
+      components: [
+        component('grading', 0.1),
+        // A deliverable holding a picture and a recording is read by two
+        // models under one stage. Both lines display 판독 and both are first
+        // attempts, so nothing but the model separates them — and their rates
+        // differ, which makes a single row of their sum a figure no price
+        // table can reproduce. Two lines, $0.0200 between them, so every other
+        // amount on this task is unchanged.
+        component('perception', 0.015, { model: 'sees-things' }),
+        component('perception', 0.005, { model: 'hears-things' }),
+      ],
     }),
   },
   // Graded, but the judge recorded no cost: 기록 없음, not $0.
@@ -504,7 +518,6 @@ async function assertFullyPriced(page, solveSummary, gradeSummary) {
     ['self_qa', 'Self-QA', '$0.0300', 'problem_solving_cost'],
     ['retry', '재시도', '$0.0100', 'problem_solving_cost'],
     ['grading', '주 채점', '$0.1000', 'grading_cost'],
-    ['perception', '판독', '$0.0200', 'grading_cost'],
   ]) {
     const row = modalComponent(modal, field, slug)
     assert.equal(await row.count(), 1, `missing component row: ${field}/${slug}`)
@@ -512,6 +525,43 @@ async function assertFullyPriced(page, solveSummary, gradeSummary) {
     assert.match(text, literal(label), `component label mismatch: ${slug}`)
     assert.match(text, literal(amount), `component amount mismatch: ${slug}`)
   }
+
+  // The two readers stay two rows, and stay two rows a reader can act on.
+  // Keyed by name they were one $0.0200 line at a rate neither model charges;
+  // keyed by name in React they were two rows sharing one key. The stage and
+  // retry kind are identical here, so the model is the whole difference.
+  const perception = modalComponent(modal, 'grading_cost', 'perception')
+  assert.equal(await perception.count(), 2, 'the two readers merged into one row')
+  const readers = await perception.evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const [label, amount] = node.querySelectorAll('span')
+      return {
+        title: label.getAttribute('title'),
+        text: label.textContent.trim(),
+        amount: amount.textContent.trim(),
+        key: node.getAttribute('data-cost-component-key'),
+      }
+    }),
+  )
+  assert.deepEqual(
+    readers.map((reader) => reader.amount),
+    ['$0.0150', '$0.0050'],
+  )
+  // Both read 판독 on the row itself; the hover is what says which reader.
+  assert.deepEqual(
+    readers.map((reader) => reader.text),
+    ['· 판독', '· 판독'],
+  )
+  assert.deepEqual(
+    readers.map((reader) => reader.title),
+    ['판독 · sees-things', '판독 · hears-things'],
+  )
+  // And two distinct React keys, which is what the merged label cost them.
+  assert.equal(
+    new Set(readers.map((reader) => reader.key)).size,
+    2,
+    `both readers share one key: ${readers.map((reader) => reader.key)}`,
+  )
 
   // A retry keeps the stage it belonged to. The row reads 재시도; the hover is
   // what says which 재시도, and without it two stages that each had to repeat

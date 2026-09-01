@@ -514,6 +514,36 @@ def _receipt_amount(receipt: dict):
     return amount if amount is not None else receipt["estimated_cost_usd"]
 
 
+def _summary_component_key(component: dict) -> tuple:
+    """The identity two run-summary lines must share before they may be added.
+
+    The same seven fields :func:`project_cost_receipt` rejects duplicates of a
+    few lines above and :func:`core.cost_receipts._component_key` groups a
+    task's own lines under, so that the producer, this summariser and the
+    dashboard all land on the same rows.
+
+    Not ``name``. ``name`` is *derived* from the first two — every retry at
+    every stage derives ``retry``, and both a visual reader and an audio reader
+    derive ``perception`` — so it cannot tell those rows apart by construction.
+    """
+    return (
+        component["stage"],
+        component["retry_kind"],
+        *(component.get(column) for column in _COMPONENT_IDENTITY),
+    )
+
+
+def _summary_component_order(item: tuple) -> tuple:
+    """Sort key for summary lines, tolerating unrecorded identity fields.
+
+    ``None`` and ``str`` do not compare in Python 3, and a run that recorded no
+    deployment is the ordinary state of every receipt published before call
+    identity existed — so it must not be the state that crashes the sort.
+    Unrecorded sorts first. Mirrors ``core.cost_receipts._component_order``.
+    """
+    return tuple("" if value is None else str(value) for value in item[0])
+
+
 def summarize_cost_receipts(
     rows: list[dict],
     field: str,
@@ -630,44 +660,79 @@ def summarize_cost_receipts(
         for receipt in receipts
         if receipt["price_table_sha256"]
     })
-    component_totals: dict[str, dict] = {}
+    component_totals: dict[tuple, dict] = {}
     for receipt in receipts:
-        # Roll one receipt's lines up by displayed name before touching the run
-        # totals. A task whose generation and Self-QA both had to be redone
-        # carries two 재시도 lines but is still one task, and counting it twice
-        # would make the coverage figure beside the row a fiction.
-        rolled: dict[str, dict] = {}
+        # Roll one receipt's lines up before touching the run totals. A task
+        # whose generation and Self-QA both had to be redone carries two 재시도
+        # lines but is still one task, and counting it twice would make the
+        # coverage figure beside the row a fiction.
+        #
+        # Rolled by the line's own seven-field identity, not by the label it
+        # displays under. Folding by `name` was that same double-count guard
+        # turned into a merge: generation's retry and Self-QA's retry both
+        # display as 재시도, so one run published a single $0.190047 / 4-call
+        # 재시도 row over a $0.178985 / 2-call generation retry and a $0.011062
+        # / 2-call Self-QA retry. Under `perception` it is worse than untidy --
+        # a visual reader and an audio reader carry different rates, and their
+        # summed tokens are a row no price table can reproduce and no reader
+        # can take apart again.
+        #
+        # The count of rows this can produce is bounded by the run's own
+        # config, not by its size: five stages times five retry kinds, and a
+        # stage is only reached by the models named for it. Grading lands near
+        # twenty rows, inference near ten.
+        rolled: dict[tuple, dict] = {}
         for component in receipt["components"]:
             entry = rolled.setdefault(
-                component["name"],
-                {"known_cost_usd": 0.0, "model_calls": 0, "complete": True},
+                _summary_component_key(component),
+                {
+                    # Carried, not re-derived: the label is the producer's to
+                    # choose, and this reader only displays it.
+                    "name": component["name"],
+                    "known_cost_usd": 0.0,
+                    "model_calls": 0,
+                    "missing_reasons": set(),
+                    "complete": True,
+                },
             )
             amount = component["known_cost_usd"]
             if amount is not None:
                 entry["known_cost_usd"] += amount
             if component["model_calls"]:
                 entry["model_calls"] += component["model_calls"]
+            entry["missing_reasons"].update(component["missing_reasons"])
             if component["status"] != "complete":
                 entry["complete"] = False
-        for name, entry in rolled.items():
-            bucket = component_totals.setdefault(
-                name,
-                {
-                    "name": name,
+        for key, entry in rolled.items():
+            bucket = component_totals.get(key)
+            if bucket is None:
+                bucket = component_totals[key] = {
+                    "name": entry["name"],
+                    "stage": key[0],
+                    "retry_kind": key[1],
+                    **dict(zip(_COMPONENT_IDENTITY, key[2:])),
                     "tasks": 0,
                     "known_cost_usd": 0.0,
                     "complete_tasks": 0,
                     "model_calls": 0,
-                },
-            )
+                    # Why a row could not be priced belongs beside the row.
+                    # Kept only at the run level, "no rate published for this
+                    # model" arrived detached from which model, which is the
+                    # one thing a reader needs to act on it.
+                    "missing_reasons": set(),
+                }
             bucket["tasks"] += 1
             if entry["complete"]:
                 bucket["complete_tasks"] += 1
             bucket["known_cost_usd"] += entry["known_cost_usd"]
             bucket["model_calls"] += entry["model_calls"]
+            bucket["missing_reasons"].update(entry["missing_reasons"])
     components = []
-    for bucket in sorted(component_totals.values(), key=lambda item: item["name"]):
+    for _, bucket in sorted(
+        component_totals.items(), key=_summary_component_order
+    ):
         bucket["known_cost_usd"] = round(bucket["known_cost_usd"], _MONEY_DIGITS)
+        bucket["missing_reasons"] = sorted(bucket["missing_reasons"])
         bucket["status"] = (
             "complete" if bucket["complete_tasks"] == bucket["tasks"] else "partial"
         )
