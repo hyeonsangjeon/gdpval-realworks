@@ -268,6 +268,23 @@ class TaskGrade:
     #: originally measured, so the size of what was given up is on the record
     #: even though the items below carry real scores.
     visual_budget_fallback: Optional[str] = None
+    #: How much of the rubric was never read, and what the task scores when
+    #: that unread weight is counted against it rather than removed.
+    #:
+    #: ``pct`` above divides by ``total_max``, which is the weight of the
+    #: items that *were* judged -- so an item the judge failed on leaves the
+    #: denominator as well as the numerator, and the percentage goes up. The
+    #: two fields below say by how much, and the third says what the task
+    #: would have scored had it not. They are equal to ``pct`` and zero on
+    #: every task the grader read all the way through, which is most of them;
+    #: they exist for the ones it did not.
+    #:
+    #: ``pct_full_denominator`` is ``None`` only on a record graded before
+    #: these existed, where the movement cannot be recovered from the field
+    #: alone. It can still be recomputed from ``items``.
+    score_excluded_items: int = 0
+    score_excluded_max: float = 0.0
+    pct_full_denominator: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -1790,6 +1807,30 @@ class Grader:
         total_awarded = sum(it.awarded_score for it in scored_items)
         total_max = sum(max(0, it.max_score) for it in scored_items)
         pct = (total_awarded / total_max * 100.0) if total_max else 0.0
+        # An excluded item leaves the numerator and the denominator together,
+        # so a rubric the grader could not finish reading is scored out of
+        # less than the rubric is worth -- and the percentage rises. Two tasks
+        # that earned the same points report different scores, the one whose
+        # grading failed reporting the higher. On the published 30-task
+        # cohort, a328feea earned 18.6 points and read 84.55% out of 22 after
+        # two items were excluded; out of the rubric's full 24 the same 18.6
+        # points is 77.50%. Fourteen tasks of the 185-task corpus were scored
+        # against a denominator that had moved this way.
+        #
+        # Neither figure is wrong. They are the two ends of what is known.
+        # ``pct`` divides by what was read, which assumes an unread item would
+        # have scored like the items that were read. ``pct_full_denominator``
+        # divides by the whole rubric, which assumes an unread item would have
+        # scored nothing. The task's true percentage lies between them, and is
+        # a single number only when nothing was excluded, where they are
+        # equal. Which of the two is published is not decided here.
+        excluded_items = [it for it in items if it.score_excluded]
+        score_excluded_max = sum(max(0, it.max_score) for it in excluded_items)
+        full_max = total_max + score_excluded_max
+        pct_full_denominator = (
+            max(0.0, min(100.0, total_awarded / full_max * 100.0))
+            if full_max else 0.0
+        )
         # PR1 task 102 — preserve un-clamped pct for diagnostics BEFORE the
         # [0,100] clamp below. pct_raw can be < 0 when negative penalties
         # dominate (catastrophic violation), or > 100 if a judge over-awards.
@@ -1844,6 +1885,9 @@ class Grader:
             judge_output_tokens=0,
             error=("all_items_score_excluded" if items and not scored_items else None),
             pct_raw=round(pct_raw, 2),
+            score_excluded_items=len(excluded_items),
+            score_excluded_max=score_excluded_max,
+            pct_full_denominator=round(pct_full_denominator, 2),
         )
 
     def _absent_judge_item(self, item: RubricItem) -> ItemGrade:

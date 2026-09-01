@@ -674,6 +674,9 @@
           "selection_error": {"type": ["string", "null"]},
           "error": {"type": ["string", "null"]},
           "visual_budget_fallback": {"type": ["string", "null"], "description": "Present when this task's planned renders exceeded `judge.perception.visual.call_cap_per_task` and the task was graded anyway, by dropping the unreadable-file escalation on the items that had a readable file to fall back to. The string is the shortfall as originally measured (`task_visual_budget_exceeded:required_calls=N,cap=M`), so the size of what was given up survives even though the items below carry real scores. Null on every task that never came near the cap. Without this fallback such a task excludes every item, reports `all_items_score_excluded`, and is dropped from the corpus mean entirely."},
+          "score_excluded_items": {"type": "integer", "minimum": 0, "description": "How many rubric items the judge could not decide, and which were therefore dropped from this task's score. Every such item carries verdict `judge_error`. 0 on a task the grader read all the way through."},
+          "score_excluded_max": {"type": "number", "minimum": 0, "description": "The positive rubric weight those excluded items were worth, which left `total_max` along with them. This is the amount by which this task's denominator moved: it was scored out of `total_max` when the rubric is worth `total_max + score_excluded_max`."},
+          "pct_full_denominator": {"type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "`total_awarded` over the rubric's full weight (`total_max + score_excluded_max`) instead of over the part that was read. Equal to `pct` whenever nothing was excluded. When something was, the pair brackets what is actually known: `pct` divides by what was read, which assumes an unread item would have scored like the items that were read; this field assumes it would have scored nothing. The task's true percentage lies between them, so an excluded item raises `pct` — the score goes UP when grading fails. Null only on a record graded before this field existed; it can still be recomputed from `items`."},
           "graded_at": {"type": "string"}
         },
         "additionalProperties": true
@@ -700,6 +703,18 @@
           "additionalProperties": true
         },
         "wow": {"type": "object"},
+        "score_exclusions": {
+          "type": "object",
+          "description": "What `openai_compat.avg_score_pct` gains from rubric items the judge could not decide. Such an item is dropped from both the numerator and the denominator, so a task whose grading partly failed is scored out of less than its rubric is worth and reports a HIGHER percentage than the same points would earn out of the full rubric. Counted over the tasks the headline averages (those without an `error`); a task whose every item was excluded is already outside that set and is counted in `error_tasks`. All fields are 0 — and `avg_score_pct_lift` is exactly 0 — on a run where every rubric was read to the end.",
+          "properties": {
+            "tasks_with_excluded_items": {"type": "integer", "minimum": 0, "description": "How many scored tasks had at least one item excluded, i.e. how many of the published per-task percentages are divided by a moved denominator."},
+            "excluded_items": {"type": "integer", "minimum": 0, "description": "Total excluded rubric items across those tasks."},
+            "excluded_max_score": {"type": "number", "minimum": 0, "description": "The positive rubric weight that left the denominators, summed over the run."},
+            "avg_score_pct_full_denominator": {"type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "The same average with every excluded item counted at full weight and zero award. The pessimistic end of what is known: it assumes an unread item would have earned nothing, where `avg_score_pct` assumes it would have earned at the rate of the items that were read. The run's true average lies between the two. Recomputed from `items`, so a grade file written before the per-task `pct_full_denominator` field existed reports the same number when re-summarised."},
+            "avg_score_pct_lift": {"type": ["number", "null"], "description": "`avg_score_pct` minus `avg_score_pct_full_denominator` — how many points of the headline are owed to rubric items that were never read. Exactly 0 when nothing was excluded."}
+          },
+          "additionalProperties": true
+        },
         "cost": {"type": "object"},
         "grading_cost": {"$ref": "#/$defs/costReceipt"}
       },
