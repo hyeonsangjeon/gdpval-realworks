@@ -27,6 +27,7 @@ Nothing here calls a model, downloads anything, or spends anything.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import sys
 from pathlib import Path
@@ -45,6 +46,7 @@ from core.execution_envelope_preflight import (  # noqa: E402
 )
 from core.execution_envelope_tasks import (  # noqa: E402
     DATASET_DATA_FILE,
+    INPUT_FILE_DISAGREED,
     INPUT_FILE_FOLDER_NAME_ONLY,
     INPUT_FILE_NOT_CHECKED,
     INPUT_FILE_READ,
@@ -482,6 +484,15 @@ def test_the_report_shows_how_each_file_was_checked_even_when_all_is_well(
 
 
 def test_the_written_report_carries_the_per_file_state(small_benchmark):
+    """Every recorded state is one of the four this module can produce.
+
+    Pointing the real plan at the small benchmark's root means one of its
+    pinned files — the dataset's own data file — is found, read, and turns out
+    to be the stand-in rather than the pinned revision. So this run really does
+    produce a disagreement, and that is asserted rather than merely tolerated:
+    until the disagreeing state existed, this exact case was written down as
+    ``read the file``, indistinguishable from a file that checked out.
+    """
     dataset_root, _, _, _ = small_benchmark
     plan = load_plan(PLAN_PATH)
 
@@ -491,14 +502,19 @@ def test_the_written_report_carries_the_per_file_state(small_benchmark):
 
     written = result.as_dict()["input_files"]
     assert written
+    seen = set()
     for environment, entry in written.items():
         assert "checks" in entry, environment
         for check in entry["checks"]:
             assert check["state"] in {
                 INPUT_FILE_READ,
+                INPUT_FILE_DISAGREED,
                 INPUT_FILE_FOLDER_NAME_ONLY,
                 INPUT_FILE_NOT_CHECKED,
             }
+            seen.add((check["path"], check["state"]))
+
+    assert (DATASET_DATA_FILE, INPUT_FILE_DISAGREED) in seen
 
 
 def test_files_nobody_could_read_are_named_apart_but_still_refuse_a_start(
@@ -723,3 +739,227 @@ def test_half_a_fingerprint_swapped_for_another_real_one_is_caught(
                 missed.append(f"{key} second half from {donor[:8]}")
 
     assert missed == []
+
+
+# ── Compared, and it disagreed, is its own answer ───────────────────────────
+#
+# The check has always caught a plan that pins the wrong file: the mismatch
+# goes into ``problems`` and the run does not start. What it did not do was
+# *record* the mismatch. A disagreeing file came back with the same state as a
+# matching one — "read the file", 64 of 64 characters compared, read from
+# <path> — so every summary built from those records counted it as checked.
+#
+# That is the failure this module's own docstring warns about, one case over:
+# "a check that stayed quiet about it would be claiming to have done work it
+# did not do". Here the work was done. The answer was the part that went
+# missing.
+
+
+def _disagreeing(benchmark):
+    """A plan that pins a real fingerprint of some entirely different file."""
+    dataset_root, catalog, task_ids, honest = benchmark
+    path = sorted(key for key in honest if key.startswith("reference_files/"))[0]
+    tampered = dict(honest)
+    tampered[path] = hashlib.sha256(b"a completely different file\n").hexdigest()
+    result = verify_input_file_versions(tampered, task_ids, catalog, dataset_root)
+    return path, result
+
+
+def test_a_disagreement_is_not_counted_as_a_fingerprint_that_checked_out(
+    small_benchmark,
+):
+    """The regression itself.
+
+    Before this was fixed, ``fully_checked`` held both files and
+    ``everything_agreed`` did not exist — the only summary available said two
+    of two, for a plan pinning a file that is not the one it names.
+    """
+    path, result = _disagreeing(small_benchmark)
+
+    assert len(result.checks) == 3
+    assert path not in [check.path for check in result.fully_checked]
+    assert len(result.fully_checked) == 2
+    assert [check.path for check in result.disagreements] == [path]
+    assert not result.everything_agreed
+
+
+def test_the_record_says_which_file_it_actually_read(small_benchmark):
+    path, result = _disagreeing(small_benchmark)
+    check = {item.path: item for item in result.checks}[path]
+
+    assert check.state == INPUT_FILE_DISAGREED
+    assert check.disagreed
+    assert not check.fully_checked
+
+
+def test_all_sixty_four_characters_are_still_reported_as_compared(small_benchmark):
+    """Honest about the effort as well as the answer.
+
+    Rounding ``characters_compared`` down to 0 on a disagreement would be the
+    opposite error: it would say the machine could not tell, when it could and
+    did. The count is what was compared; the state is what came of it.
+    """
+    path, result = _disagreeing(small_benchmark)
+    check = {item.path: item for item in result.checks}[path]
+
+    assert check.characters_compared == 64
+    assert check.was_read
+
+
+def test_being_able_to_read_every_file_is_kept_apart_from_liking_the_answer(
+    small_benchmark,
+):
+    """Two questions, two properties, and the names have to mean it.
+
+    ``everything_was_read`` is about whether this machine could look. A plan
+    pinning the wrong file reads every byte of it, so the honest answer there
+    is yes — which is exactly why it must not be the property anybody uses to
+    decide the inputs are sound.
+    """
+    _, result = _disagreeing(small_benchmark)
+
+    assert result.everything_was_read
+    assert not result.everything_agreed
+
+
+def test_the_honest_plan_still_answers_yes_to_both(small_benchmark):
+    """The other side of the pair, so neither property is quietly always-False."""
+    result = _verify(small_benchmark)
+
+    assert result.everything_was_read
+    assert result.everything_agreed
+    assert result.disagreements == ()
+    assert all(check.state == INPUT_FILE_READ for check in result.checks)
+
+
+def test_a_disagreement_still_stops_the_run_exactly_as_before(small_benchmark):
+    """No behaviour was changed — only what gets written down about it.
+
+    This check has always blocked. If recording the outcome had also changed
+    whether it blocks, that would be a new condition acting on work already
+    under way, which is not what this fix is for.
+    """
+    path, result = _disagreeing(small_benchmark)
+
+    assert any("describes some other file" in note for note in result.problems)
+    assert result.missing_copies == ()
+    assert any(path in note for note in result.all_notes)
+
+
+def test_a_copy_that_was_only_pointed_at_also_records_the_disagreement(
+    small_benchmark, tmp_path, no_download_cache
+):
+    """The hedged branch, where nothing promises which revision the folder holds.
+
+    The wording of that problem is deliberately softer — it says the two
+    disagree rather than naming a culprit. The recorded state is not softer,
+    because the fingerprint is unproven either way.
+    """
+    _, catalog, task_ids, honest = small_benchmark
+    path = "inputs/Costs.xlsx"
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "inputs").mkdir(parents=True)
+    (elsewhere / path).write_bytes(b"some other revision of the costs\n")
+    catalog = TaskCatalog(
+        schema_version=catalog.schema_version,
+        dataset_repo_id=catalog.dataset_repo_id,
+        dataset_revision=catalog.dataset_revision,
+        dataset_file_sha256=catalog.dataset_file_sha256,
+        tasks=(_task("task-one", (path,)),),
+    )
+    written = {
+        f"{catalog.dataset_repo_id}@{catalog.dataset_revision}": (
+            catalog.dataset_file_sha256
+        ),
+        path: UNRELATED_FINGERPRINT,
+    }
+
+    result = verify_input_file_versions(written, ("task-one",), catalog, elsewhere)
+    check = {item.path: item for item in result.checks}[path]
+
+    assert not path_carries_its_own_fingerprint(path)
+    assert check.state == INPUT_FILE_DISAGREED
+    assert any("do not describe the same file" in note for note in result.problems)
+
+
+def test_not_having_the_file_is_still_a_different_answer_from_disagreeing(
+    small_benchmark, tmp_path, no_download_cache
+):
+    """The new state must not swallow the two that already existed.
+
+    "I could not check" and "I checked and it is wrong" are different findings
+    with different remedies — one is cleared by downloading the benchmark for
+    nothing, the other by fixing the plan.
+    """
+    result = _verify(small_benchmark, root=tmp_path / "nowhere")
+
+    assert result.disagreements == ()
+    assert {check.state for check in result.checks} <= {
+        INPUT_FILE_FOLDER_NAME_ONLY,
+        INPUT_FILE_NOT_CHECKED,
+    }
+    assert result.missing_copies
+    assert not result.everything_was_read
+
+
+def test_the_published_record_carries_the_disagreement(small_benchmark):
+    """``as_dict`` is what anything downstream reads, so it has to say it too."""
+    path, result = _disagreeing(small_benchmark)
+
+    written = result.as_dict()
+    by_path = {check["path"]: check for check in written["checks"]}
+
+    assert by_path[path]["state"] == INPUT_FILE_DISAGREED
+    assert by_path[path]["characters_compared"] == 64
+    assert written["problems"]
+
+
+def test_the_printed_summary_does_not_read_as_reassurance(small_benchmark):
+    """What a person about to authorise a bill actually sees.
+
+    The old line was "2 of 2 input file(s) read off this machine and compared
+    in full" — every word of it true, and the wrong impression entirely.
+    """
+    path, verification = _disagreeing(small_benchmark)
+    result = dataclasses.replace(
+        run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT),
+        input_files={"docker_container": verification},
+    )
+
+    lines = describe_input_file_checks(result)
+    summary = lines[0]
+    for_that_file = [line for line in lines if path in line]
+
+    assert "2 of 3" in summary
+    assert "turned out to be a different file" in summary
+    assert len(for_that_file) == 1
+    assert INPUT_FILE_DISAGREED in for_that_file[0]
+    assert "do not match" in for_that_file[0]
+
+
+def test_the_old_record_would_be_caught_if_it_came_back(small_benchmark):
+    """Proof that the tests above can fail.
+
+    The regression is one word wide: return ``INPUT_FILE_READ`` instead of
+    ``INPUT_FILE_DISAGREED`` and every assertion in this section goes quiet
+    again. Rebuilding that record here, in memory, and insisting the summaries
+    turn back into the misleading ones is what makes those assertions evidence
+    rather than decoration.
+    """
+    path, result = _disagreeing(small_benchmark)
+    as_it_used_to_be = dataclasses.replace(
+        result,
+        checks=tuple(
+            dataclasses.replace(check, state=INPUT_FILE_READ)
+            if check.disagreed
+            else check
+            for check in result.checks
+        ),
+    )
+
+    assert as_it_used_to_be.everything_agreed
+    assert as_it_used_to_be.disagreements == ()
+    assert len(as_it_used_to_be.fully_checked) == 3
+    # and the problem was there the whole time, which is why this went unnoticed
+    assert as_it_used_to_be.problems == result.problems
+    assert path in "".join(as_it_used_to_be.problems)

@@ -730,9 +730,15 @@ REFERENCE_PATH_FINGERPRINT_LENGTH = 32
 # The one data file the pinned dataset revision ships its tasks in.
 DATASET_DATA_FILE = "data/train-00000-of-00001.parquet"
 
-# How thoroughly one written fingerprint was checked.
+# How thoroughly one written fingerprint was checked, and what came of it.
 #: The real file was read and all 64 characters agreed.
 INPUT_FILE_READ = "read the file"
+#: The real file was read and the 64 characters did **not** agree. All 64 were
+#: compared, so this is not a gap in the checking — it is an answer, and the
+#: answer is no. Kept apart from :data:`INPUT_FILE_READ` because a record
+#: saying "read the file, 64 of 64 characters compared" and nothing else reads
+#: as a pass, and this is the opposite of a pass.
+INPUT_FILE_DISAGREED = "read the file and it disagreed"
 #: No copy of the file was reachable, so only the 32 characters the folder name
 #: repeats could be compared. The other 32 stand unchecked.
 INPUT_FILE_FOLDER_NAME_ONLY = "folder name only"
@@ -770,7 +776,23 @@ class InputFileCheck:
 
     @property
     def fully_checked(self) -> bool:
+        """Compared against real bytes **and** agreed.
+
+        A disagreement is not a fully checked fingerprint. Every one of its 64
+        characters was compared, which is why :attr:`characters_compared` still
+        says 64 — but the thing being asked is whether the written value is
+        proven right, and for a disagreement it is proven wrong.
+        """
         return self.state == INPUT_FILE_READ
+
+    @property
+    def was_read(self) -> bool:
+        """Real bytes were read for this file, whatever the comparison said."""
+        return self.state in (INPUT_FILE_READ, INPUT_FILE_DISAGREED)
+
+    @property
+    def disagreed(self) -> bool:
+        return self.state == INPUT_FILE_DISAGREED
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -820,7 +842,23 @@ class InputFileVerification:
         return tuple(check for check in self.checks if not check.fully_checked)
 
     @property
+    def disagreements(self) -> tuple[InputFileCheck, ...]:
+        """Files that were read and turned out to be some other file."""
+        return tuple(check for check in self.checks if check.disagreed)
+
+    @property
     def everything_was_read(self) -> bool:
+        """Real bytes were read for every fingerprint. **Not a pass.**
+
+        This says the machine was able to look, not that it liked what it saw.
+        A plan pinning the wrong file reads every byte of it and still fails;
+        the question that answers is :attr:`everything_agreed`.
+        """
+        return bool(self.checks) and all(check.was_read for check in self.checks)
+
+    @property
+    def everything_agreed(self) -> bool:
+        """Every fingerprint was compared against real bytes and matched."""
         return bool(self.checks) and not self.not_fully_checked
 
     def as_dict(self) -> dict[str, Any]:
@@ -979,6 +1017,19 @@ def _check_one_written_fingerprint(
                 "Either that folder holds a different revision of the benchmark "
                 "or the written fingerprint is wrong; either way the two do "
                 "not describe the same file"
+            )
+        if real != fingerprint:
+            # All 64 characters were compared, so the count below is honest —
+            # but the record has to carry the answer as well as the effort.
+            # Returning the same state as a match would leave a plan pinning
+            # the wrong file looking, in every summary built from these
+            # records, exactly like a plan that checked out.
+            return InputFileCheck(
+                path=path,
+                written=fingerprint,
+                state=INPUT_FILE_DISAGREED,
+                characters_compared=64,
+                note=f"read from {copy}, and it is {real}",
             )
         return InputFileCheck(
             path=path,

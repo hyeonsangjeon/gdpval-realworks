@@ -246,6 +246,60 @@ test('malformed receipts throw rather than reach the dashboard', () => {
   }
 });
 
+// ── Two bounds, because they are two quantities ───────────────────────────
+test('an honest token total is not out of range', () => {
+  // 21,688,749 input tokens across 2,337 marking calls is what one published
+  // shard recorded — about nine thousand tokens of rubric and deliverable per
+  // call. Both readers refused that figure while the calls behind it used two
+  // hundredths of a percent of the same allowance, because one constant
+  // bounded both fields and it had been sized for the smaller one.
+  const projected = projectCostReceipt(receipt({
+    model_calls: 2337,
+    usage: { input_tokens: 21_688_749, output_tokens: 400 },
+    components: [component({ model_calls: 2337, usage: { input_tokens: 21_688_749 } })],
+  }));
+  assert.equal(projected.model_calls, 2337);
+  assert.equal(projected.usage.input_tokens, 21_688_749);
+  assert.equal(projected.components[0].usage.input_tokens, 21_688_749);
+});
+
+test('the calls bound did not move when the token bound did', () => {
+  // The half that could have gone unnoticed. Raising one shared constant would
+  // have taken model_calls with it, and no published payload would have shown
+  // it: real call counts are four thousand times under the bound either way.
+  assert.doesNotThrow(() => projectCostReceipt(receipt({ model_calls: 10_000_000 })));
+  assert.throws(
+    () => projectCostReceipt(receipt({ model_calls: 10_000_001 })),
+    /model_calls is out of range/,
+  );
+  assert.throws(
+    () => projectCostReceipt(receipt({ model_calls: Number.MAX_SAFE_INTEGER })),
+    /model_calls is out of range/,
+  );
+});
+
+test('the token bound is where this reader stops agreeing with the file', () => {
+  // Not a guess about how large a run gets — a property of the format. Above
+  // MAX_SAFE_INTEGER a JSON integer does not survive JSON.parse: the file says
+  // one number and this reader holds another, with Number.isInteger satisfied
+  // the whole way, so nothing downstream would notice. The bound is the last
+  // integer both sides still read the same, and cost_projection.py is pinned
+  // to it for that reason.
+  const parsed = JSON.parse('{"n":9007199254740993}');
+  assert.equal(String(parsed.n), '9007199254740992');  // the file said ...93
+  assert.equal(Number.isInteger(parsed.n), true);      // and the guard says yes
+
+  const exact = Number.MAX_SAFE_INTEGER;
+  assert.equal(JSON.parse(`{"n":${exact}}`).n, exact);
+  assert.doesNotThrow(
+    () => projectCostReceipt(receipt({ usage: { input_tokens: exact } })),
+  );
+  assert.throws(
+    () => projectCostReceipt(receipt({ usage: { input_tokens: exact + 1 } })),
+    /usage.input_tokens is out of range/,
+  );
+});
+
 test('two retries from different stages are two lines', () => {
   // Both derive the name `retry` from the producer. Rejecting the second as a
   // duplicate would drop a call that really was billed.
@@ -434,7 +488,77 @@ test('failed-task cost is reported beside the total, not removed from it', () =>
   assert.equal(summary.known_cost_usd, 0.65);
   assert.equal(summary.failed_task_count, 1);
   assert.equal(summary.failed_task_cost_usd, 0.4);
+  // Every failure here was priced, so the amount is the amount.
+  assert.equal(summary.failed_measured_tasks, 1);
   assert.equal(summary.successful_deliverables, 1);
+});
+
+test('a failure billed against an unpriced model is not counted as measured', () => {
+  // Mirrors test_a_failure_billed_against_an_unpriced_model_is_not_counted_as_measured.
+  //
+  // Two failures against a model the price table has no entry for contribute
+  // nothing to the sum, and the sum they never joined stays 0 — the same
+  // number two free failures leave behind. Only the count separates them.
+  const unpriced = () =>
+    row(projectCostReceipt(unmeasured('partial', { missing_reasons: ['price_missing'] })), {
+      succeeded: false,
+    });
+  const summary = summarizeCostReceipts([unpriced(), unpriced()]);
+
+  assert.equal(summary.failed_task_count, 2);
+  assert.equal(summary.failed_measured_tasks, 0);
+  assert.equal(summary.failed_task_cost_usd, 0);
+});
+
+test('a genuinely free failure stays apart from one that was never priced', () => {
+  // The discrimination the count exists for, asserted as a pair. Both report
+  // failed_task_cost_usd === 0; if failed_measured_tasks ever stops telling
+  // them apart, a paid failure reads as a free one.
+  const free = summarizeCostReceipts([
+    row(
+      projectCostReceipt(receipt({
+        estimated_cost_usd: 0,
+        known_cost_usd: 0,
+        model_cost_usd: 0,
+        runtime_cost_usd: 0,
+        model_calls: 0,
+        components: [],
+      })),
+      { succeeded: false },
+    ),
+  ]);
+  const neverPriced = summarizeCostReceipts([
+    row(projectCostReceipt(unmeasured('partial', { missing_reasons: ['price_missing'] })), {
+      succeeded: false,
+    }),
+  ]);
+
+  assert.equal(free.failed_task_cost_usd, 0);
+  assert.equal(neverPriced.failed_task_cost_usd, 0);
+  assert.equal(free.failed_task_count, 1);
+  assert.equal(neverPriced.failed_task_count, 1);
+  assert.equal(free.failed_measured_tasks, 1);
+  assert.equal(neverPriced.failed_measured_tasks, 0);
+});
+
+test('a partly priced set of failures reports how much of it was priced', () => {
+  const summary = summarizeCostReceipts([
+    row(
+      projectCostReceipt(receipt({
+        estimated_cost_usd: 0.4,
+        known_cost_usd: 0.4,
+        model_cost_usd: 0.4,
+      })),
+      { succeeded: false },
+    ),
+    row(projectCostReceipt(unmeasured('partial', { missing_reasons: ['price_missing'] })), {
+      succeeded: false,
+    }),
+  ]);
+
+  assert.equal(summary.failed_task_count, 2);
+  assert.equal(summary.failed_measured_tasks, 1);
+  assert.equal(summary.failed_task_cost_usd, 0.4);
 });
 
 test('components aggregate across tasks', () => {
@@ -501,6 +625,99 @@ test('coverage reports the rows that carry no receipt at all', () => {
   assert.equal(summary.total_tasks, 4);
   assert.equal(summary.receipt_tasks, 1);
   assert.equal(summary.coverage_pct, 25);
+});
+
+// ── A row with no receipt is a hole, not a task that cost zero ────────────
+//
+// `costReceiptsByTask` in scripts/aggregate-grades.mjs only records a task
+// whose `grading_cost` projects non-null, then `gradingCostSummary` maps over
+// *every* raw task. A graded run where some tasks carry a cost and others do
+// not is therefore the ordinary shape here, not an edge case — and every such
+// task that also errored was subtracted from the failure count while still
+// counting in `total_tasks`.
+
+test('a failed row with no receipt is still counted as a failure', () => {
+  const summary = summarizeCostReceipts([
+    row(projectCostReceipt(receipt())),
+    row(null, { succeeded: false }),
+  ]);
+
+  assert.equal(summary.failed_task_count, 1);
+  // Nothing is invented about what it cost: it joins neither the amount nor
+  // the count of failures that could be priced.
+  assert.equal(summary.failed_measured_tasks, 0);
+  assert.equal(summary.failed_task_cost_usd, 0);
+});
+
+test('a successful row with no receipt is not counted as a failure', () => {
+  // The negative control. A missing cost record says nothing about whether the
+  // work succeeded, so the branch that rescues the failing row must not
+  // conjure a failure out of the quiet one.
+  const summary = summarizeCostReceipts([
+    row(projectCostReceipt(receipt())),
+    row(null),
+  ]);
+
+  assert.equal(summary.failed_task_count, 0);
+  assert.equal(summary.total_tasks, 2);
+  assert.equal(summary.receipt_tasks, 1);
+});
+
+test('a row with no receipt stops the run reading as complete', () => {
+  const summary = summarizeCostReceipts(
+    [row(projectCostReceipt(receipt())), row(null, { succeeded: false })],
+    { successfulDeliverables: 1 },
+  );
+
+  assert.equal(summary.status, 'partial');
+  // A floor is published as a floor: the recorded amount stays, the headline
+  // total and the per-unit figure do not.
+  assert.equal(summary.known_cost_usd, 0.25);
+  assert.equal(summary.estimated_cost_usd, null);
+  assert.equal(summary.cost_per_successful_deliverable_usd, null);
+});
+
+test('only a complete run is downgraded by a missing receipt', () => {
+  // partial, unavailable and not_run already decline to claim the run is
+  // whole, so the downgrade has nothing to add to them. Pinning each one keeps
+  // a later edit from widening the branch into runs it never meant to touch.
+  const cases = [
+    ['partial', unmeasured('partial', { known_cost_usd: 0.1 })],
+    ['unavailable', unmeasured('unavailable')],
+    ['not_run', unmeasured('not_run')],
+  ];
+  for (const [expected, projected] of cases) {
+    const summary = summarizeCostReceipts([
+      row(projectCostReceipt(projected)),
+      row(null, { succeeded: false }),
+    ]);
+    assert.equal(summary.status, expected);
+  }
+});
+
+test('a run where every row carries a receipt is unchanged', () => {
+  // The published-experiment guarantee: with no hole the branch is
+  // unreachable, so a fully recorded run keeps its total and its per-unit
+  // figure.
+  const summary = summarizeCostReceipts(
+    [row(projectCostReceipt(receipt())), row(projectCostReceipt(receipt()))],
+    { successfulDeliverables: 2 },
+  );
+
+  assert.equal(summary.status, 'complete');
+  assert.equal(summary.estimated_cost_usd, 0.5);
+  assert.equal(summary.cost_per_successful_deliverable_usd, 0.25);
+  assert.equal(summary.failed_task_count, 0);
+});
+
+test('a run where no row carries a receipt is still no record', () => {
+  // Already asserted above for the summary as a whole; repeated here as the
+  // boundary of this change, because a run of nothing but holes must keep
+  // rendering as "no record" rather than as a partial run that cost nothing.
+  assert.equal(
+    summarizeCostReceipts([row(null), row(null, { succeeded: false })]),
+    null,
+  );
 });
 
 // ── Ledger reference ──────────────────────────────────────────────────────

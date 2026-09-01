@@ -427,6 +427,53 @@ export function perDeliverableCell(summary: CostSummary): CostCell {
   }
 }
 
+/**
+ * Cost of failed work, honestly labelled.
+ *
+ * The amount on its own is ambiguous in the one direction that matters. A
+ * failure that asked no model really did cost nothing, and a failure billed
+ * against a model the price table has no entry for also contributes nothing.
+ * Both arrive here as `0`. Which one the reader is looking at is decided by
+ * how many failures could be priced, never by the amount.
+ */
+export function failedTaskCostCell(summary: CostSummary): CostCell {
+  const failed = summary.failed_task_count
+  const amount = summary.failed_task_cost_usd
+  // Absent on reports published before this count existed. There the amount is
+  // trustworthy only when the whole run was priced, since a fully priced run
+  // cannot contain an unpriced failure.
+  const measured =
+    summary.failed_measured_tasks ??
+    (summary.measured_tasks === summary.receipt_tasks ? failed : 0)
+
+  if (failed === 0 || measured === failed) {
+    return {
+      state: 'recorded',
+      text: formatCostUsd(amount),
+      title: withNote(`실패한 작업 비용: ${formatCostUsd(amount)}`),
+      isAmount: true,
+    }
+  }
+  if (measured === 0) {
+    return {
+      state: 'unpriced',
+      text: '미확정',
+      title:
+        `실패한 ${failed}건 모두 가격이 계산되지 않았습니다. ` +
+        '$0이 아니라, 얼마가 들었는지 알 수 없다는 뜻입니다.',
+      isAmount: false,
+    }
+  }
+  return {
+    state: 'floor',
+    text: `≥ ${formatCostUsd(amount)}`,
+    title: withNote(
+      `실패한 ${failed}건 중 ${measured}건만 가격이 계산되어 총액이 아니라 최소값입니다.`,
+    ),
+    isAmount: true,
+  }
+}
+
 /** Muted for state words, normal for money — a state word is not a number. */
 export function costCellClass(cell: CostCell): string {
   switch (cell.state) {

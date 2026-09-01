@@ -75,7 +75,23 @@ const MAX_MISSING_REASONS = 32;
 // float noise never reaches the screen.
 const MONEY_DIGITS = 6;
 const MAX_COST_USD = 1_000_000;
-const MAX_COUNT = 10_000_000;
+
+// How many times a run called a model. Thousands, by construction — tasks
+// times stages times the retries a run is allowed. The largest published to
+// date is 2,346, which is 0.02% of this.
+const MAX_MODEL_CALLS = 10_000_000;
+
+// How many tokens those calls carried, which is neither the same quantity nor
+// the same scale: the 2,346 calls above carried 21,688,749 input tokens
+// between them.
+//
+// This is the bound the mirror side actually motivates. Above Number
+// .MAX_SAFE_INTEGER a JSON integer does not survive JSON.parse — the file can
+// say 9007199254740993 and this reader will hold 9007199254740992, with
+// Number.isInteger saying yes to it the whole way. So the ceiling is where
+// this reader stops agreeing with the file about what the file says, and the
+// Python side is pinned to the same 2**53 - 1 for that reason.
+const MAX_TOKENS = Number.MAX_SAFE_INTEGER;
 
 function fail(field, detail) {
   throw new Error(`${field} ${detail}`);
@@ -100,11 +116,17 @@ function costAmount(value, field) {
   return round(value, MONEY_DIGITS);
 }
 
-/** A non-negative bounded integer, or null when absent. */
-function costCount(value, field) {
+/**
+ * A non-negative integer within `limit`, or null when absent.
+ *
+ * The bound is a parameter because a run's calls and the tokens those calls
+ * carried are four orders of magnitude apart, and one bound covering both is
+ * the smaller one under a general name.
+ */
+function costCount(value, field, limit) {
   if (value === null || value === undefined) return null;
   if (!Number.isInteger(value)) fail(field, 'must be an integer');
-  if (value < 0 || value > MAX_COUNT) fail(field, 'is out of range');
+  if (value < 0 || value > limit) fail(field, 'is out of range');
   return value;
 }
 
@@ -116,7 +138,7 @@ function costUsage(value, field) {
   const usage = {};
   for (const key of keys.sort()) {
     if (!SLUG.test(key)) fail(field, 'carries an invalid key');
-    usage[key] = costCount(value[key], `${field}.${key}`);
+    usage[key] = costCount(value[key], `${field}.${key}`, MAX_TOKENS);
   }
   return usage;
 }
@@ -209,7 +231,7 @@ function projectComponent(value, field) {
     retry_kind: retryKind,
     status,
     known_cost_usd: known,
-    model_calls: costCount(value.model_calls, `${field}.model_calls`),
+    model_calls: costCount(value.model_calls, `${field}.model_calls`, MAX_MODEL_CALLS),
     usage: costUsage(value.usage, `${field}.usage`),
     missing_reasons: missingReasons(value.missing_reasons, `${field}.missing_reasons`),
   };
@@ -303,7 +325,7 @@ export function projectCostReceipt(value, field = 'cost receipt') {
     known_cost_usd: known,
     model_cost_usd: modelCost,
     runtime_cost_usd: runtimeCost,
-    model_calls: costCount(value.model_calls, `${field}.model_calls`),
+    model_calls: costCount(value.model_calls, `${field}.model_calls`, MAX_MODEL_CALLS),
     usage: costUsage(value.usage, `${field}.usage`),
     components,
     price_table_sha256: priceTableSha256(value.price_table_sha256, `${field}.price_table_sha256`),
@@ -402,14 +424,40 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
   const receipts = [];
   let failedAmount = 0;
   let failedCount = 0;
+  let failedMeasured = 0;
+  let rowsWithoutAReceipt = 0;
   for (const row of rows) {
+    const failed = !row?.succeeded;
     const receipt = row?.receipt;
-    if (!isPlainObject(receipt)) continue;
+    if (!isPlainObject(receipt)) {
+      // No receipt at all is a hole in the record, not a task that cost
+      // nothing -- and if that task also failed, it is still a failure.
+      // `costReceiptsByTask` in scripts/aggregate-grades.mjs hands this
+      // function a null receipt for every graded task the payload has no
+      // `grading_cost` for, so this is the ordinary shape, not an edge case.
+      // Skipping the row outright counted it in `total_tasks` and in the
+      // coverage denominator while subtracting it from the failure count.
+      // Mirrors `summarize_cost_receipts` in
+      // batch-runner/core/cost_projection.py.
+      rowsWithoutAReceipt += 1;
+      if (failed) failedCount += 1;
+      continue;
+    }
     receipts.push(receipt);
-    if (!row.succeeded) {
+    if (failed) {
       failedCount += 1;
       const amount = receiptAmount(receipt);
-      if (amount !== null) failedAmount += amount;
+      if (amount !== null) {
+        // Counted, not just added. Two failures against a model the price
+        // table has no entry for contribute nothing here, and the sum they
+        // leave behind is 0 -- the same number a failure that genuinely made
+        // no model call leaves behind. The amount alone cannot tell those
+        // apart, so the count of failures that could be priced is published
+        // beside it. Mirrors `summarize_cost_receipts` in
+        // batch-runner/core/cost_projection.py.
+        failedMeasured += 1;
+        failedAmount += amount;
+      }
     }
   }
   if (!receipts.length) return null;
@@ -443,6 +491,18 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
   else if (ran.every((entry) => entry.status === 'complete')) status = 'complete';
   else if (ran.every((entry) => entry.status === 'unavailable')) status = 'unavailable';
   else status = 'partial';
+  if (rowsWithoutAReceipt && status === 'complete') {
+    // Every receipt the run does carry is whole, but the run is not: some
+    // task's cost was never recorded at all. Judging completeness against the
+    // receipts alone asks only "is what I kept consistent?", which the rows
+    // that were dropped can never answer.
+    //
+    // Only `complete` moves. A run already reading partial, unavailable or
+    // not_run is already not claiming to be whole, and a run where every row
+    // carries a receipt reaches none of this, so no published experiment
+    // changes what the dashboard says about it.
+    status = 'partial';
+  }
 
   // The run total is only a total when everything that ran is complete. One
   // partial or unavailable receipt makes it a floor, and it is labelled as one
@@ -482,6 +542,10 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
     // Failed work costs real money. It is reported beside the total, not
     // netted out of it.
     failed_task_count: failedCount,
+    // How many of those failures could be priced at all. Without it the amount
+    // below is unreadable: $0 means "these failures were free" and "these
+    // failures were never priced" at the same time.
+    failed_measured_tasks: failedMeasured,
     failed_task_cost_usd: round(failedAmount, MONEY_DIGITS),
     components: aggregateComponents(receipts),
     price_table_sha256: priceTables.length === 1 ? priceTables[0] : null,

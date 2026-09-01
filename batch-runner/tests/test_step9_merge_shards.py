@@ -139,6 +139,17 @@ def _normalised_tasks(raw_corpus: dict, limit: int | None = None) -> list[dict]:
         # and it is the one the merge has to keep: an old row must not merge
         # into a total as though it were free.
         task["grading_cost"] = CostReceipt.unavailable().as_dict()
+        # Same corpus, same vintage, opposite migration -- and the difference
+        # is what each field is for. `grading_cost` is a claim about money that
+        # nobody measured, so it stays unavailable. `usage_complete` is the
+        # row's statement that its own token counts arrived, and `_build_reference`
+        # below is standing up "the payload a single serial run would have
+        # produced" -- a run today, whose every row carries this as `True`
+        # straight out of `TaskGrade`. Leaving it off would not make the fixture
+        # more honest, it would make it a payload no producer writes, and the
+        # aggregate fold would read the whole reference run as incomplete
+        # before a single merge assertion got to run.
+        task["usage_complete"] = True
     return tasks
 
 

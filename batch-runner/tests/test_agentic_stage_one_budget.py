@@ -348,13 +348,10 @@ def test_the_shared_plan_records_cost_without_a_per_run_threshold(
 
     assert shared_plan["cost"]["approved_maximum_usd"] is None
     assert shared_plan["cost"]["policy"] == "record_cost_findings_only"
-    assert Decimal(
-        str(
-            shared_plan["cost"]["owner_approval"][
-                "available_monthly_credit_usd"
-            ]
-        )
-    ) == Decimal("3700.0")
+    assert (
+        "available_monthly_credit_usd"
+        not in shared_plan["cost"]["owner_approval"]
+    )
     assert ceiling.total_usd > 0
 
     findings = check_cost_ceiling(
@@ -369,7 +366,7 @@ def test_the_plan_says_cost_findings_are_recorded_after_owner_approval():
     """A reader sees the current decision instead of the superseded amount."""
     text = SHARED_PLAN_PATH.read_text(encoding="utf-8")
     assert 'policy: "record_cost_findings_only"' in text
-    assert "available_monthly_credit_usd: 3700.00" in text
+    assert "paid_model_calls: true" in text
     assert "unpriced_audio_measurement: true" in text
 
 
