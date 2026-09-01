@@ -876,11 +876,18 @@ class TestFix3RunTaskWithQA:
             ),
         )
 
-        s2.run_inference(
-            condition_key="condition_a",
-            resume=False,
-            resume_max_rounds=0,
-        )
+        # The one task here errors with no deliverable, so the run leaves
+        # nothing any later step can use — and Step 2 now stops on that with
+        # code 1 rather than handing Step 4 a parquet it cannot fill. The
+        # guard is the last thing the run does, so every file read below has
+        # already been written by the time it fires.
+        with pytest.raises(SystemExit) as exit_info:
+            s2.run_inference(
+                condition_key="condition_a",
+                resume=False,
+                resume_max_rounds=0,
+            )
+        assert exit_info.value.code == 1
 
         progress = _read_progress(workspace)
         final_path = workspace / "step2_inference_results.json"

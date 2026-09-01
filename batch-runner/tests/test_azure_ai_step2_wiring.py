@@ -385,6 +385,19 @@ def _run(resume=False, mode=None, wall_timeout=None):
     )
 
 
+def _run_that_produced_nothing(**kwargs):
+    """Run Step 2 over a task that leaves no deliverable, and take the exit.
+
+    A run where not one task wrote deliverable text or a deliverable file now
+    stops at Step 2 with code 1, rather than handing Step 4 a parquet it
+    cannot fill. The guard is the last thing the run does, so every artifact
+    these tests then read has already been written.
+    """
+    with pytest.raises(SystemExit) as exit_info:
+        _run(**kwargs)
+    assert exit_info.value.code == 1
+
+
 def _write_valid_typed_checkpoint(path):
     routes = [_route(
         fingerprint=_planned_fingerprint("inference", "main-model")
@@ -2137,7 +2150,7 @@ def test_typed_main_provider_error_is_redacted_by_client_proxy(
     monkeypatch.setattr(step2, "create_typed_azure_client", _typed_client)
     monkeypatch.setattr(step2, "TaskExecutor", CoreTaskExecutor)
 
-    _run(mode="json_renderer")
+    _run_that_produced_nothing(mode="json_renderer")
 
     stdout = capsys.readouterr().out
     progress_text = (
@@ -2248,7 +2261,7 @@ def test_typed_code_interpreter_response_error_uses_canonical_model_and_redacts(
     monkeypatch.setattr(step2, "create_typed_azure_client", _typed_client)
     monkeypatch.setattr(step2, "TaskExecutor", CoreTaskExecutor)
 
-    _run(mode="code_interpreter")
+    _run_that_produced_nothing(mode="code_interpreter")
 
     stdout = capsys.readouterr().out
     progress = (

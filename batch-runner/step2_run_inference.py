@@ -2508,6 +2508,55 @@ def _validate_result_task_set(
         raise ValueError("final result task IDs differ from ordered task set")
 
 
+def _nothing_to_submit_report(results: List[dict]) -> Optional[List[str]]:
+    """The lines to print when a run left nothing any later step can use.
+
+    ``None`` — the ordinary answer — means at least one task wrote deliverable
+    text or a deliverable file. That includes runs where most tasks failed: an
+    errored task can still leave a usable deliverable behind, so refusing on
+    "some task failed" would reject work the pipeline accepts today.
+
+    The report is for the one case where every row is empty. That is exactly
+    the set of runs ``fill_parquet`` already rejects, since it counts a row as
+    filled on text or files without consulting ``status`` at all.
+
+    "Empty" is deliberately spelled the way ``fill_parquet`` spells it —
+    plain truthiness, no ``.strip()`` — so the two cannot drift apart. A
+    stricter reading here would stop runs that Step 4 accepts today, which is
+    the one thing this guard must never do.
+    """
+    if not results:
+        return None
+    if any(
+        result.get("deliverable_text") or result.get("deliverable_files")
+        for result in results
+    ):
+        return None
+
+    reasons: dict[str, int] = {}
+    for result in results:
+        reason = str(result.get("error") or "").strip() or (
+            f"no error recorded (status: {result.get('status', 'unknown')})"
+        )
+        reasons[reason] = reasons.get(reason, 0) + 1
+
+    lines = [
+        "",
+        f"{'='*60}",
+        f"❌ Step 2 produced nothing: {len(results)} task(s) ran and not one "
+        "left deliverable text or a deliverable file.",
+        "   What the tasks reported:",
+    ]
+    for reason, count in sorted(reasons.items(), key=lambda item: (-item[1], item[0])):
+        lines.append(f"     {count}× {reason}")
+    lines.append(
+        "   Stopping here. Carrying on would fail at Step 4 instead, with the "
+        "cause two steps behind it."
+    )
+    lines.append(f"{'='*60}")
+    return lines
+
+
 def validate_restored_checkpoint(condition_key: str = "condition_a") -> dict:
     """Validate a restored relay checkpoint without constructing a model client."""
     prepared_path = WORKSPACE_DIR / "step1_tasks_prepared.json"
@@ -4166,6 +4215,28 @@ def _run_inference_impl(
         )
     print(f"   Problem-solving:    {solving_line}")
     print(f"{'='*60}")
+
+    # ── Did this run produce anything at all? ──
+    #
+    # Until now a run where every task came back empty still returned 0. The
+    # workflow walked on to Step 3, and Step 4 was the first thing to notice —
+    # "Nothing was filled" — two steps from the cause, naming neither the
+    # cause nor the tasks. The five-task advance check on the Azure
+    # code-interpreter route was exactly that shape: five refused calls, a
+    # green Step 2, and a Step 4 failure that said nothing about a 403.
+    #
+    # This runs last on purpose. Everything above has already been written —
+    # results file, legacy copy, cost ledger, receipts — so the evidence of
+    # the empty run survives for whoever reads the artifacts.
+    #
+    # Exit 1, not EXIT_CHECKPOINT: this is not a relay and must not be read as
+    # one. batch-run.yml hands the code to relay_checkpoint.py, which treats
+    # only 42 as a checkpoint, and "Verify Step 2a success" then fails the job.
+    empty_run_report = _nothing_to_submit_report(results)
+    if empty_run_report is not None:
+        for line in empty_run_report:
+            print(line)
+        sys.exit(1)
 
 
 def main():

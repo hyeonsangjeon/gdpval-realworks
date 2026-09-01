@@ -460,6 +460,7 @@
     "source_azure_ai_provenance_status": {
       "enum": [
         "runtime-verified",
+        "runtime-unverified",
         "verified-sidecar",
         "legacy-missing",
         "local-runtime",
