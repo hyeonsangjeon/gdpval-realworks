@@ -21,7 +21,7 @@ from core.azure_ai_clients import (
     canonical_deployment,
     grader_route_workloads,
 )
-from core.cost_receipts import STAGE_GRADING, STAGE_PERCEPTION
+from core.cost_receipts import RETRY_SEMANTIC, STAGE_GRADING, STAGE_PERCEPTION
 from core.llm_client import ManagedAzureAIClient, create_typed_azure_client
 from core.public_error import public_provider_error_text
 from core.deliverable_selector import (
@@ -353,19 +353,30 @@ class Grader:
         # is written, which is what keeps an unmetered run reporting an
         # absent ledger rather than a smaller bill.
         #
-        # Two wrappers, one connection. The judge's own calls follow whatever
-        # stage is in scope; the perception readers share this client but are
-        # pinned to their own stage, so a visual read taken mid-grading lands
-        # in its own component of the marking receipt instead of disappearing
-        # into the judge's.
+        # Three wrappers, one connection. The judge's own calls follow
+        # whatever stage is in scope; the perception readers share this client
+        # but are pinned to their own stage, so a visual read taken
+        # mid-grading lands in its own component of the marking receipt
+        # instead of disappearing into the judge's. The third is pinned one
+        # level down: the judge's finalization retry is the same stage done
+        # again, and billing it through its own wrapper is what keeps "what
+        # did the retry cost" a figure a reader can find rather than a share
+        # of the main line nobody can separate out.
         self._cost_recorder = cost_recorder
         self._perception_client = client
+        self._retry_client = None
         if cost_recorder is not None:
             self.client = cost_recorder.meter(
                 client, provider="azure", model=deployment
             )
             self._perception_client = cost_recorder.meter(
                 client, provider="azure", stage=STAGE_PERCEPTION
+            )
+            self._retry_client = cost_recorder.meter(
+                client,
+                provider="azure",
+                model=deployment,
+                retry_kind=RETRY_SEMANTIC,
             )
 
         try:
@@ -2038,6 +2049,7 @@ class Grader:
 
         return ToolCallingJudge(
             client=self.client,
+            retry_client=self._retry_client,
             model=self.model,
             prompt_template=tool_prompt,
             reasoning_effort=(judge_cfg.get("reasoning") or {})

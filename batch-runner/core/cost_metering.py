@@ -513,6 +513,7 @@ class CostRecorder:
         provider: str,
         model: str | None = None,
         stage: str | None = None,
+        retry_kind: str | None = None,
         deployment: str | None = None,
         api_version: str | None = None,
     ) -> "MeteredClient":
@@ -524,6 +525,15 @@ class CostRecorder:
         component: the two get two wrappers around one connection, and the
         task in scope is taken from the enclosing block either way.
 
+        ``retry_kind`` pins the same way, for the same reason one step down.
+        A second attempt is not a second stage — it is the same stage done
+        again — but it is its own line, and a caller that knows it is about to
+        retry can say so by reaching for a wrapper that says so. Without this
+        the retry lands in the line of the attempt it is repairing, and "what
+        did retrying cost" becomes unanswerable: the figure is inside a bigger
+        one. Only the judge's finalization retry uses it; the Self-QA loop
+        knows its own attempt number and opens a scope instead.
+
         ``deployment`` and ``api_version`` are overrides. Left unset — which is
         the normal case — both are read off the client itself, since the client
         is what puts them on the wire and asking the caller to restate them
@@ -532,12 +542,15 @@ class CostRecorder:
         """
         if stage is not None and stage not in STAGES:
             raise ValueError(f"unknown stage {stage!r}")
+        if retry_kind is not None and retry_kind not in RETRY_KINDS:
+            raise ValueError(f"unknown retry kind {retry_kind!r}")
         return MeteredClient(
             client,
             recorder=self,
             provider=str(provider),
             default_model=model,
             stage=stage,
+            retry_kind=retry_kind,
             deployment=deployment,
             api_version=api_version,
         )
@@ -637,7 +650,9 @@ class MeteredClient:
     ``stage`` pins calls to one stage regardless of the scope they run in,
     which lets two wrappers around one connection file into two different
     components — the judge's own calls and the perception reads it shares its
-    client with.
+    client with. ``retry_kind`` pins the same way and composes with it, so the
+    judge's finalization retry is a third wrapper on that same connection and
+    a third line on the receipt.
 
     When a call raises, the reservation is deliberately *left standing* rather
     than cleaned up. A request that timed out may well have been served and
@@ -660,6 +675,7 @@ class MeteredClient:
         provider: str,
         default_model: str | None = None,
         stage: str | None = None,
+        retry_kind: str | None = None,
         deployment: str | None = None,
         api_version: str | None = None,
     ):
@@ -668,6 +684,7 @@ class MeteredClient:
         object.__setattr__(self, "_provider", provider)
         object.__setattr__(self, "_default_model", default_model)
         object.__setattr__(self, "_stage", stage)
+        object.__setattr__(self, "_retry_kind", retry_kind)
         object.__setattr__(self, "_deployment", deployment)
         # Resolved once, because a client's API version does not change between
         # calls. An explicit argument wins; otherwise the client is asked.
@@ -724,12 +741,17 @@ class MeteredClient:
             # home for it would corrupt both totals.
             return call(**kwargs)
 
-        pinned = object.__getattribute__(self, "_stage")
-        if pinned is not None and pinned != attribution.stage:
+        pinned_stage = object.__getattribute__(self, "_stage")
+        pinned_retry = object.__getattribute__(self, "_retry_kind")
+        stage = attribution.stage if pinned_stage is None else pinned_stage
+        retry_kind = (
+            attribution.retry_kind if pinned_retry is None else pinned_retry
+        )
+        if stage != attribution.stage or retry_kind != attribution.retry_kind:
             attribution = Attribution(
                 task_id=attribution.task_id,
-                stage=pinned,
-                retry_kind=attribution.retry_kind,
+                stage=stage,
+                retry_kind=retry_kind,
                 attempt_index=attribution.attempt_index,
             )
 
