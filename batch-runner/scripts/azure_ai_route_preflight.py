@@ -18,6 +18,7 @@ from core.azure_ai_clients import (  # noqa: E402
     FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV,
     AzureAIRouteSettings,
     AzureAIWorkload,
+    EndpointKind,
     preflight_routes,
     verify_route_tokens,
 )
@@ -184,6 +185,72 @@ def _append_github_output(raw_path: object, encoded: str) -> None:
         os.close(directory_fd)
 
 
+def _token_evidence(
+    workloads: Sequence[tuple[AzureAIWorkload, str]],
+    settings: AzureAIRouteSettings,
+) -> list[str]:
+    """Say what acquiring a token did and did not establish.
+
+    This is the last gate in ``batch-run.yml`` before Step 2a spends money, so
+    a green tick here is read as "the routes will work". It is not that, and
+    exp032 is the run that proves the difference: this step passed, and then
+    all five of its tasks came back ``PermissionDeniedError (http 403)`` from
+    the project-scoped Code Interpreter route.
+
+    Two independent reasons the check could not have seen it. Audiences are
+    deduplicated -- ``verify_route_tokens`` collects ``token_scope`` into a
+    set, and the project-scoped and account-scoped routes share one audience,
+    so several routes collapse into a single ``get_token``. And a token is
+    issued by the control plane, which does not consult the data-plane role
+    assignment that returns the 403; no endpoint is contacted at all.
+
+    Neither is a defect to repair here. Acquiring an identical token once per
+    route would prove nothing the first one did not, and calling the endpoint
+    would make a free check a paid one. What was missing is this: the run
+    never said which of its routes went unexercised, so nothing warned anyone
+    before the money was spent. The detail goes to stderr and the gap itself
+    goes out as a ``::warning::`` annotation, which reaches the run summary
+    instead of the middle of a step log. Neither goes to stdout, which is the
+    records contract that step 2 and step 8 consume unchanged.
+
+    The record count is deduplicated on ``(workload, deployment)``, the same
+    identity ``preflight_routes`` deduplicates on, so the number stated here
+    is the number of records this run emitted and not a larger one.
+    """
+    identities = sorted(
+        {(workload, deployment.strip()) for workload, deployment in workloads}
+    )
+    selections = [settings.select(workload) for workload, _ in identities]
+    audiences = sorted({selection.token_scope for selection in selections})
+    unexercised = sorted(
+        {
+            f"{selection.workload.value}={selection.endpoint.kind.value}"
+            for selection in selections
+        }
+    )
+    detail = (
+        f"this token check issued {len(audiences)} token(s), one per distinct "
+        f"audience, covering {len(identities)} typed route record(s), and "
+        "called no endpoint. It therefore does not establish that these "
+        f"routes will answer a call: {', '.join(unexercised)}."
+    )
+    if any(
+        selection.endpoint.kind is EndpointKind.PROJECT
+        for selection in selections
+    ):
+        detail += (
+            " A project-scoped route whose identity holds no project-level "
+            "role is issued a token by the control plane and then refuses "
+            "every call with http 403; exp032 passed this step and lost all "
+            "five of its tasks that way."
+        )
+    return [
+        f"token audiences: {', '.join(audiences)}",
+        f"token check covered: {', '.join(unexercised)}",
+        f"::warning::{detail}",
+    ]
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -195,7 +262,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--verify-token",
         action="store_true",
-        help="Also acquire an ai.azure.com token from DefaultAzureCredential",
+        help=(
+            "Also acquire a token per audience from DefaultAzureCredential. "
+            "Proves the control plane will issue a token; proves nothing "
+            "about whether a route will answer a call"
+        ),
     )
     return parser
 
@@ -232,6 +303,10 @@ def main(
                 verify_route_tokens(workloads, settings=settings)
         except Exception:
             parser.error("Azure AI route token verification failed")
+        # Only after it passed. A green token check is the thing that gets
+        # over-read, so the scope of what it proved is printed with it.
+        for line in _token_evidence(workloads, settings):
+            print(line, file=sys.stderr)
 
     encoded = json.dumps(records, sort_keys=True, separators=(",", ":"))
     output_path = values.get("GITHUB_OUTPUT", "")
