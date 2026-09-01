@@ -87,9 +87,33 @@ description: |
   identical, so the call COUNT should be comparable while the token count
   should not.
 
-  The headline this buys: grading one task costs roughly 20x what solving it
-  did ($0.285513). That ratio is itself a finding worth publishing, and it is
-  the reason this smoke is worth its own spend.
+  The headline this buys: the per-task price of grading set against the
+  per-task price of solving, both measured on the same task rather than
+  estimated. That ratio is itself a finding worth publishing, and it is the
+  reason this smoke is worth its own spend.
+
+  ── What it actually cost, and where the estimate above missed ────────────
+  Everything above this line is the pre-run prediction, kept as written. The
+  run happened (graded_at 2026-09-01T05:25:41Z) and settled at $0.753121,
+  status `complete`, on 84 calls -- 83 judge + 1 visual perception, 0 audio.
+
+      predicted                            measured
+      ~$7.55 ceiling, "materially less"    $0.753121      (~10x under)
+      call count comparable (112-138)      84             (below the range)
+      audio never fires                    0 audio calls  (as predicted)
+      grading is roughly 20x solving       2.64x
+
+  The first two misses share one cause, and it is the cause this file already
+  named without following through. Those five runs graded exp003's deliverable;
+  exp026c's is a minimal Sample.xlsx with 488 characters of deliverable text.
+  That argument was applied to the token count and then not carried into the
+  dollar figure or the ratio built on it. A smaller deliverable is also cheaper
+  to read per call and takes fewer tool calls to read, so it moved all three.
+
+  2.64x is $0.753121 / $0.285513 on one task, n=1. What that number may and may
+  not be used for: tasks/rebuilding_grading_task/316-two-halves-of-one-cost.md.
+  The solving half's receipt is
+  batch-runner/results/exp026c_cost_receipt_smoke/report/report.md.
 
 rerun_identity:
   experiment_id: "exp026c_cost_receipt_smoke"
