@@ -1633,6 +1633,7 @@ def run_envelope_preflight(
     docker_daemon_available: bool | None = None,
     docker_image_available: bool | None = None,
     azure_route_profile: str | None = None,
+    azure_route_served: bool | None = None,
     environ: Mapping[str, str] | None = None,
     dataset_root: Path | None = None,
 ) -> EnvelopePreflight:
@@ -1816,6 +1817,7 @@ def run_envelope_preflight(
         docker_daemon_available=docker_daemon_available,
         docker_image_available=docker_image_available,
         azure_route_profile=azure_route_profile,
+        azure_route_served=azure_route_served,
         docker_run_setting=(plan.get("container") or {}).get("use_docker"),
         environ=readiness_environ,
     )
