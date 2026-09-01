@@ -116,8 +116,17 @@ jobs:
           require 'yaml'
 
           name = ENV.fetch('EXPERIMENT_YAML')
-          valid_name = name.match?(/\A[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\z/) &&
-            !name.include?('..') && !name.end_with?('.', '.lock')
+          # One optional directory, because experiments are kept in one.
+          # experiments/execution_envelope/ holds the run-place comparison's
+          # three configs beside the plan that names them, and a name without a
+          # separator cannot reach any of them. Each part still has to begin
+          # with a letter or a digit, so a leading dot, a leading dash and a
+          # leading separator are all still refused, '..' is refused twice
+          # over, and one separator is the most there is: nothing addressable
+          # here reaches outside batch-runner/experiments.
+          valid_name = name.match?(
+            %r{\A[A-Za-z0-9][A-Za-z0-9_.-]{0,99}(/[A-Za-z0-9][A-Za-z0-9_.-]{0,99})?\z}
+          ) && !name.include?('..') && !name.end_with?('.', '.lock')
           abort('invalid experiment YAML name') unless valid_name
           path = File.join('batch-runner', 'experiments', "#{name}.yaml")
           abort("experiment YAML not found: #{path}") unless File.file?(path)
