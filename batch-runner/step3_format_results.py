@@ -26,7 +26,10 @@ from core.cost_projection import (
     successful_deliverable_count,
     verify_cost_ledger,
 )
-from core.inference_manifest import build_inference_provenance
+from core.inference_manifest import (
+    azure_ai_provenance_status,
+    build_inference_provenance,
+)
 from core.prepared_fingerprint import validate_prepared_fingerprint
 from core.result_fingerprint import validate_inference_result_fingerprint
 from core.publication_generation import validate_publication_generation
@@ -293,7 +296,10 @@ def format_results():
         "execution_mode": inference.get("execution_mode", ""),
         "model": inference.get("model", ""),
         "azure_ai_routes": inference.get("azure_ai_routes", []),
-        "azure_ai_provenance_status": "runtime-verified",
+        "azure_ai_provenance_status": azure_ai_provenance_status(
+            inference.get("azure_ai_routes", []),
+            summary,
+        ),
         "started_at": inference.get("started_at"),
         "completed_at": inference.get("completed_at"),
         "duration": duration,

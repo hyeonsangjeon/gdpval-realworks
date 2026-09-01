@@ -40,6 +40,13 @@ STEP2_RESULT_STATUSES = frozenset({
 #: written grade is validated against; ``tests/test_step8_grade.py`` proves the
 #: two still agree.
 GOLD_PROVENANCE_STATUS = "gold-corpus"
+#: The three values Step 3 can reach on its own. The other two in the schema
+#: are written elsewhere: ``gold-corpus`` above, and ``legacy-missing`` or
+#: ``verified-sidecar`` by ``scripts/download_inference_from_hf.py`` when an
+#: already-published run is pulled back down.
+RUNTIME_VERIFIED_PROVENANCE_STATUS = "runtime-verified"
+RUNTIME_UNVERIFIED_PROVENANCE_STATUS = "runtime-unverified"
+LOCAL_RUNTIME_PROVENANCE_STATUS = "local-runtime"
 _ROUTE_KEYS = {
     "endpoint_kind",
     "profile",
@@ -304,6 +311,47 @@ def validate_execution_route_binding(
             "non-Code-Interpreter provenance contains a Code Interpreter route"
         )
     return mode
+
+
+def azure_ai_provenance_status(routes: Any, summary: Any) -> str:
+    """Report whether an Azure AI route was shown to answer, rather than assume it.
+
+    Step 3 used to write ``runtime-verified`` as a literal, so every run said
+    its Azure routes had been verified at runtime -- including the runs where
+    no route ever answered. exp032 is the case that proves it: all five of its
+    tasks came back ``PermissionDeniedError (http 403)`` from the
+    project-scoped Code Interpreter route, and the ``result.json`` it wrote
+    still called that route runtime-verified.
+
+    ``azure_ai_routes`` cannot fix this by itself. Those records are built from
+    resolved settings in ``core/azure_ai_clients.py``, so they describe the
+    route that was *selected* and never the one that replied; a run with a
+    perfect route list and five refusals produces exactly the same array as a
+    run with five successes. Only the outcome separates them, which is why the
+    outcome is what this reads.
+
+    A completed task is the evidence, because no task completes without a
+    served response. Note the limit of that: it covers the *execution* route
+    only. The narrative route is exercised later, in Step 6, which has not run
+    when this is written, so this value says nothing about it.
+
+    Fail closed on anything unrecognised. A false ``runtime-verified`` is a
+    provenance record that lies; a false ``runtime-unverified`` is a cautious
+    label on a good run, and the two are not the same size of mistake.
+    """
+    # A run with no typed routes is not an unverified Azure run, it is a run
+    # that made no typed Azure claim at all -- which is the same thing
+    # step8_grade.py already assumes when the key is missing entirely.
+    if routes is None or routes == []:
+        return LOCAL_RUNTIME_PROVENANCE_STATUS
+    if not isinstance(routes, list) or not isinstance(summary, dict):
+        return RUNTIME_UNVERIFIED_PROVENANCE_STATUS
+    success = summary.get("success")
+    # ``isinstance(True, int)`` is True in Python, and a summary carrying
+    # ``success: true`` is a malformed summary, not one successful task.
+    if isinstance(success, bool) or not isinstance(success, int) or success <= 0:
+        return RUNTIME_UNVERIFIED_PROVENANCE_STATUS
+    return RUNTIME_VERIFIED_PROVENANCE_STATUS
 
 
 def _ordered_task_ids_sha256(task_ids: list[str]) -> str:
