@@ -106,6 +106,7 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/310-second-audio-smoke-fail-closed.md
 !tasks/rebuilding_grading_task/311-third-audio-smoke-pass.md
 !tasks/rebuilding_grading_task/312-fourth-audio-smoke-pass.md
+!tasks/rebuilding_grading_task/313-lost-chunk-cost.md
 !tasks/rebuilding_grading_task/314-full-185-regrade-evidence.md
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
