@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       experiment_yaml:
-        description: "Experiment YAML name (without .yaml)"
+        description: "Experiment YAML name under batch-runner/experiments/, without .yaml (may name one directory, e.g. execution_envelope/exp030_envelope_host_python_process)"
         required: true
         type: string
       grading_config:
@@ -91,6 +91,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       approval_inherited: ${{ steps.inherit.outputs.approval_inherited }}
+      experiment_slug: ${{ steps.validate.outputs.experiment_slug }}
     env:
       GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
@@ -107,6 +108,7 @@ jobs:
       GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}
     steps:
       - name: Validate workflow context and inputs
+        id: validate
         shell: bash
         run: |
           set -euo pipefail
@@ -129,12 +131,37 @@ jobs:
             exit 1
           fi
 
+          # One optional directory, because experiments are kept in one:
+          # experiments/execution_envelope/ holds the run-place comparison's
+          # three configs beside the plan that names them, and a name with no
+          # separator cannot reach any of them. Each part still opens with a
+          # letter or a digit, so a leading dot, a leading dash and a leading
+          # separator are all still refused, '..' is refused twice over, and
+          # one separator is the most there is: nothing addressable here
+          # reaches outside batch-runner/experiments. This is the rule
+          # batch-run.yml applies to the same name, so a config that can be
+          # run can also be graded.
+          #
+          # '__' is refused on top of it, because that is what the separator
+          # becomes wherever the name has to be a single component -- the
+          # grade filename, the shard directory beneath it, and the artifacts
+          # uploaded at the end. That flattening is injective only while no
+          # name carries '__' of its own, and the paid approval below is
+          # inherited by matching that flattened stem, so two names collapsing
+          # onto one stem would hand one experiment's approval to another.
           if (( ${#GRADE_EXPERIMENT_YAML} < 1 || ${#GRADE_EXPERIMENT_YAML} > 128 )) ||
-             [[ ! "$GRADE_EXPERIMENT_YAML" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] ||
+             [[ ! "$GRADE_EXPERIMENT_YAML" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9][A-Za-z0-9._-]{0,99})?$ ]] ||
+             [[ "$GRADE_EXPERIMENT_YAML" == *".."* ]] ||
+             [[ "$GRADE_EXPERIMENT_YAML" == *"__"* ]] ||
+             [[ "$GRADE_EXPERIMENT_YAML" == *. || "$GRADE_EXPERIMENT_YAML" == *.lock ]] ||
              [[ "$GRADE_EXPERIMENT_YAML" == *.yaml || "$GRADE_EXPERIMENT_YAML" == *.yml ]]; then
-            echo "::error::experiment_yaml must be a safe extensionless basename (1-128 characters)"
+            echo "::error::experiment_yaml must be a safe extensionless name (1-128 characters), at most one directory deep, carrying neither '..' nor '__'"
             exit 1
           fi
+          # The one-component form of the name, for the places that need one.
+          # GitHub expressions have no replace(), so it is computed here and
+          # read from this step's outputs by everything downstream.
+          echo "experiment_slug=${GRADE_EXPERIMENT_YAML//\//__}" >> "$GITHUB_OUTPUT"
           if (( ${#GRADE_CONFIG} < 1 || ${#GRADE_CONFIG} > 128 )) ||
              [[ ! "$GRADE_CONFIG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$ ]]; then
             echo "::error::grading_config must be a safe YAML basename (1-128 characters)"
@@ -248,6 +275,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The experiment's name as one component, which is the form the shard
+          # directory stems below are written in.
+          GRADE_EXPERIMENT_SLUG: ${{ steps.validate.outputs.experiment_slug }}
           # The identity the grade job commits partials under. Kept in lockstep
           # with the `git config user.email` in the commit step below.
           GRADE_BOT_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
@@ -318,7 +348,7 @@ jobs:
           MATCH=""
           while IFS= read -r stem; do
             [[ -n "$stem" ]] || continue
-            [[ "$stem" == "${GRADE_EXPERIMENT_YAML}__"* ]] || continue
+            [[ "$stem" == "${GRADE_EXPERIMENT_SLUG}__"* ]] || continue
             [[ "$stem" == *"__${CONFIG_NAME}__"* ]] || continue
             [[ "$stem" == *"__inference_${GRADE_INFERENCE_REVISION}__"* ]] || continue
             candidate="data/grades/_shards/${stem}/${SHARD_FILE}"
@@ -665,6 +695,11 @@ jobs:
       actions: write  # required for the auto-resume workflow dispatch
     env:
       GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
+      # The same name as one component. An experiment may sit in a directory,
+      # and a GitHub artifact name may not contain a separator, so the two
+      # uploads at the end of this job are named with this instead. Computed
+      # once in validate-request, because GitHub expressions cannot replace.
+      GRADE_EXPERIMENT_SLUG: ${{ needs.validate-request.outputs.experiment_slug }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_INFERENCE_REVISION: ${{ inputs.inference_revision }}
       GRADE_FORCE: ${{ inputs.force }}
@@ -1698,7 +1733,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cost-ledger-${{ env.GRADE_EXPERIMENT_YAML }}${{ inputs.shard_count > 1 && format('-shard{0}of{1}', inputs.shard_index, inputs.shard_count) || '' }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: cost-ledger-${{ env.GRADE_EXPERIMENT_SLUG }}${{ inputs.shard_count > 1 && format('-shard{0}of{1}', inputs.shard_index, inputs.shard_count) || '' }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             data/grades/**/*.cost_ledger.jsonl
             data/grades/**/*.cost_ledger.sqlite3
@@ -1712,7 +1747,8 @@ jobs:
           # Shards are separate workflow runs, so the names cannot collide --
           # but a downloaded bundle is unreadable without knowing which slice it
           # holds, and the merging shard carries the final on top of its own.
-          name: grade-${{ env.GRADE_EXPERIMENT_YAML }}${{ inputs.shard_count > 1 && format('-shard{0}of{1}', inputs.shard_index, inputs.shard_count) || '' }}
+          # The slug, not the name: an artifact name may not contain '/'.
+          name: grade-${{ env.GRADE_EXPERIMENT_SLUG }}${{ inputs.shard_count > 1 && format('-shard{0}of{1}', inputs.shard_index, inputs.shard_count) || '' }}
           path: |
             ${{ steps.grade.outputs.grade_file }}
             ${{ steps.merge_shards.outputs.grade_file }}

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import ast
 import subprocess
+import tempfile
 import textwrap
 from pathlib import Path
 
@@ -108,10 +109,20 @@ BASELINE = {
 
 def _validate(**overrides: str) -> subprocess.CompletedProcess:
     """The real step, run against a dispatch that differs in one field."""
-    return subprocess.run(
-        ["bash", "-c", _step(VALIDATE_STEP)["run"]],
-        capture_output=True, text=True, env={**BASELINE, **overrides},
-    )
+    # Every step GitHub runs is handed a writable GITHUB_OUTPUT, and this one
+    # writes the experiment name's single-component form to it. Run without
+    # one, the script would die on the unbound variable under `set -u` --
+    # before reaching the check any test below is actually about.
+    with tempfile.TemporaryDirectory() as step_outputs:
+        return subprocess.run(
+            ["bash", "-c", _step(VALIDATE_STEP)["run"]],
+            capture_output=True, text=True,
+            env={
+                **BASELINE,
+                "GITHUB_OUTPUT": str(Path(step_outputs) / "step_output"),
+                **overrides,
+            },
+        )
 
 
 def test_the_baseline_dispatch_is_accepted():

@@ -224,6 +224,59 @@ def _config_name_slug(config_name: Any) -> str:
     return slug
 
 
+# One directory, because experiments are kept in one: the run-place comparison
+# holds its three configs in `experiments/execution_envelope/`. Each part has to
+# open with a letter or a digit, so a leading dot, a leading dash and a leading
+# separator are all refused, and '..' cannot be written at all.
+_EXPERIMENT_NAME_RE = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}(?:/[A-Za-z0-9][A-Za-z0-9._-]{0,99})?"
+)
+
+# What the separator becomes where the name has to be one component.
+EXPERIMENT_PATH_SEPARATOR_SLUG = "__"
+
+
+def _experiment_path_slug(experiment_id: Any) -> str:
+    """The experiment's name, as a single filesystem component.
+
+    An experiment may be grouped into a directory, so the name arriving here
+    can carry a separator -- while a grade filename, the shard directory under
+    it and the GitHub artifact the workflow uploads must each be one component.
+    The separator becomes ``__``.
+
+    That flattening is only safe while it is injective, and it is injective
+    only while no name carries ``__`` of its own: were one to, it could land on
+    a neighbour's grade file, and `grade-run.yml` inherits a paid approval by
+    matching this stem, so two names collapsing onto one stem would hand one
+    experiment's approval to another. A name containing ``__`` is therefore
+    refused rather than flattened. `grade-run.yml` refuses the same names at
+    dispatch; this is the half that holds when step 8 is run directly.
+
+    Surrounding whitespace is refused rather than trimmed. `load_experiment_yaml`
+    opens the name as given, so trimming here would validate one name and open
+    another.
+    """
+    if not isinstance(experiment_id, str) or not experiment_id.strip():
+        raise ValueError("experiment name must be a non-empty string")
+    name = experiment_id
+    if EXPERIMENT_PATH_SEPARATOR_SLUG in name:
+        raise ValueError(
+            f"experiment name must not contain {EXPERIMENT_PATH_SEPARATOR_SLUG!r}: "
+            "it is what a directory separator becomes, and two names must not "
+            f"flatten onto one file (got {name!r})"
+        )
+    if not _EXPERIMENT_NAME_RE.fullmatch(name) or name.endswith(
+        (".", ".lock", ".yaml", ".yml")
+    ):
+        raise ValueError(
+            "experiment name must be one path part, or two separated by '/', "
+            "each opening with a letter or a digit and made of letters, "
+            "digits, '.', '_' and '-', and must not bring the '.yaml' this "
+            f"step adds (got {name!r})"
+        )
+    return name.replace("/", EXPERIMENT_PATH_SEPARATOR_SLUG)
+
+
 def resolve_grade_output_path(
     config: dict,
     *,
@@ -272,7 +325,7 @@ def resolve_grade_output_path(
             f"run_ordinal must satisfy 1 <= ordinal <= {MAX_RUN_ORDINAL}"
         )
     out_name = config["output"]["filename_template"].format(
-        exp_id=experiment_id,
+        exp_id=_experiment_path_slug(experiment_id),
         judge_slug=judge_slug,
         config_name=_config_name_slug(config.get("config_name")),
         config_hash=config_hash,
@@ -1160,6 +1213,12 @@ def _validate_grade_task_set(
 
 
 def load_experiment_yaml(experiment_yaml_name: str) -> ExperimentConfig:
+    # Checked before the file is opened, not after. The name may carry one
+    # directory -- `experiments/execution_envelope/` holds the run-place
+    # comparison's configs -- and this is the only place it becomes a path, so
+    # a name that could climb out of `experiments/` is refused here rather than
+    # at the far end, where the grade filename is built. Same rule, one reading.
+    _experiment_path_slug(experiment_yaml_name)
     path = Path("experiments") / f"{experiment_yaml_name}.yaml"
     return ExperimentConfig.from_yaml(str(path))
 
