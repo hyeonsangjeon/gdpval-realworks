@@ -7,10 +7,12 @@ and found wanting, then breaks as soon as that count reaches
 number of replacements it buys is one less than the number written.
 
 That matters beyond wording. Twenty-nine of the thirty-two self-review blocks
-in batch-runner/experiments/ carry ``max_retries: 1`` -- eleven of them under a
-comment reading "max regeneration attempts on QA failure" -- and one is exactly
-the value that buys no regeneration at all: the answer is produced, reviewed,
-marked ``qa_failed``, and never replaced.
+in batch-runner/experiments/ carry ``max_retries: 1``, and one is exactly the
+value that buys no regeneration at all: the answer is produced, reviewed,
+marked ``qa_failed``, and never replaced. Eleven of them used to sit under a
+comment reading "max regeneration attempts on QA failure", which promised the
+one thing the value cannot do; those now say what they buy, kept honest by
+test_the_self_qa_comment_says_what_the_value_buys.py.
 
 These tests pin the arithmetic against the shipped loop rather than restating
 it, and pin the three places that describe the setting to a wording that
