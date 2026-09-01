@@ -25,6 +25,7 @@ import {
   COST_ESTIMATE_NOTE,
   COST_FIELD_LABELS,
   combinedTaskCost,
+  componentAmountText,
   componentDetail,
   componentKey,
   componentLabel,
@@ -35,6 +36,7 @@ import {
   missingReasonText,
   perDeliverableCell,
   receiptAmount,
+  receiptComponents,
   runtimeLineAmount,
   summaryStatCell,
   summaryStatusLabel,
@@ -1261,11 +1263,16 @@ function CostSummaryCard({
                     {summary.receipt_tasks} / {summary.total_tasks}건 ({summary.coverage_pct}%)
                   </span>
                 </div>
-                {summary.missing_reasons.length > 0 && (
-                  <p className="text-[11px] text-amber-400/80 pt-1">
-                    미가격 사유: {missingReasonText(summary.missing_reasons)}
-                  </p>
-                )}
+                {(() => {
+                  // Gated on the text, not on `missing_reasons.length`: the
+                  // reader already guards the list, and a second raw `.length`
+                  // beside it would be the one place still able to throw.
+                  const reasons = missingReasonText(summary.missing_reasons)
+                  if (!reasons) return null
+                  return (
+                    <p className="text-[11px] text-amber-400/80 pt-1">미가격 사유: {reasons}</p>
+                  )
+                })()}
                 {ledger && (
                   <p className="text-[10px] text-dash-text-faint font-mono pt-1 break-all">
                     🧾 {ledger.path} · sha256 {ledger.sha256.slice(0, 12)}…
@@ -1424,6 +1431,11 @@ function TaskDetailModal({
                 // Runtime is not a model call, so it is not one of the component
                 // lines. It gets its own, and only when something was charged.
                 const runtime = receipt ? runtimeLineAmount(receipt) : null
+                // `components` is read through the accessor, not off the object.
+                // It arrives on an unvalidated fetch, and a `components` that is
+                // not an array made `.length` undefined and `.map` a TypeError,
+                // which the error boundary in App.tsx turned into a blank page.
+                const components = receipt ? receiptComponents(receipt) : []
                 return (
                   <div key={field}>
                     <div className="flex justify-between gap-2 border-b border-dash-border-subtle py-1">
@@ -1437,19 +1449,13 @@ function TaskDetailModal({
                         {cell.text}
                       </span>
                     </div>
-                    {receipt && (receipt.components.length > 0 || runtime !== null) && (
+                    {receipt && (components.length > 0 || runtime !== null) && (
                       // Keyed by field: the same stage can legitimately appear
                       // under both, e.g. a perception read the solver made and
                       // one the judge made, and they must not read as one line.
                       <div className="pl-3 pt-1 space-y-0.5" data-cost-components={field}>
-                        {receipt.components.map((component) => {
-                          const amount = component.known_cost_usd
-                          const text =
-                            component.status === 'not_run'
-                              ? '미수행'
-                              : amount === null
-                                ? '미확정'
-                                : formatCostUsd(amount)
+                        {components.map((component) => {
+                          const text = componentAmountText(component)
                           return (
                             <div
                               // Two stages that each had to retry are two rows

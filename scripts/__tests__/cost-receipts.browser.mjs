@@ -41,6 +41,7 @@ const reportsPath = new URL('../../public/generated/reports-index.json', import.
 const ESTIMATE_NOTE = '사용량 기준 예상 비용이며 Azure 청구서 금액이 아님'
 const SHORT_ID = 'exp027'
 const GRADES_GLOB = '**/generated/grades-index.json*'
+const REPORTS_INDEX_GLOB = '**/generated/reports-index.json*'
 const REPORT_GLOB = '**/resolve/main/self_report.json*'
 const PRICE_TABLE_SHA = '9f'.repeat(32)
 const LEDGER_SHA = 'ab'.repeat(32)
@@ -743,6 +744,255 @@ async function assertLegacy(page) {
   )
 }
 
+// ── The payload nothing validated ───────────────────────────────────────────
+//
+// Everything above goes through `projectCostReceipt`, because in production
+// both of those payloads do. The per-task *solving* receipt does not.
+// `aggregate-reports.mjs` strips `task_results` from the index — `const {
+// task_results: _ignored, ...indexEntry } = data` — so the detail page fetches
+// that array from HuggingFace at read time and hands it to `src/lib/cost.ts`
+// unchecked. The grading half of the same displayed row is validated at build
+// time. Two halves of one line, two different contracts.
+//
+// It did not fail small. A receipt whose amount arrived as the string "0.04"
+// reached `formatCostUsd`, `.toFixed` was not a function, and the error
+// boundary in `src/App.tsx` replaced the whole experiment page with "Something
+// went wrong" — every task, every score, every summary lost over one field on
+// one receipt. React catches that throw, so it never reaches `pageerror`;
+// `consoleErrors` below is what sees it.
+//
+// So these fixtures are written in the read shape and served raw. Running them
+// through the projector would be testing the one path that is already safe.
+
+/** A well-formed receipt in the shape the page reads, with one field made hostile. */
+const unchecked = (overrides) => ({
+  schema_version: COST_RECEIPT_SCHEMA_VERSION,
+  currency: COST_CURRENCY,
+  status: 'complete',
+  estimated_cost_usd: 0.04,
+  known_cost_usd: 0.04,
+  model_cost_usd: 0.04,
+  runtime_cost_usd: 0,
+  model_calls: 1,
+  usage: {},
+  components: [
+    {
+      name: 'generation',
+      stage: 'generation',
+      retry_kind: 'none',
+      status: 'complete',
+      known_cost_usd: 0.04,
+      model_calls: 1,
+      usage: {},
+      missing_reasons: [],
+    },
+  ],
+  price_table_sha256: PRICE_TABLE_SHA,
+  missing_reasons: [],
+  ...overrides,
+})
+
+const uncheckedLine = (overrides) => ({ ...unchecked({}).components[0], ...overrides })
+
+/**
+ * Each case: what arrives, and what the reader is owed instead of a blank page.
+ *
+ * `cell` is the task row's solving-cost cell. `breakdown` is the component
+ * block inside the drawer — `null` when the block must not be drawn at all,
+ * because a breakdown nobody can read is no breakdown, not a crash.
+ */
+const MALFORMED = [
+  {
+    name: 'the amount arrives as a string',
+    cost: unchecked({ estimated_cost_usd: '0.04', known_cost_usd: '0.04' }),
+    cell: { text: '미확정', state: 'unpriced' },
+    breakdown: /생성.*\$0\.0400/s,
+  },
+  {
+    name: 'both amount fields are absent',
+    cost: (() => {
+      const value = unchecked({})
+      delete value.estimated_cost_usd
+      delete value.known_cost_usd
+      return value
+    })(),
+    cell: { text: '미확정', state: 'unpriced' },
+    breakdown: /생성.*\$0\.0400/s,
+  },
+  {
+    name: 'the estimate is broken and the fallback is not stepped onto',
+    cost: unchecked({ estimated_cost_usd: '0.04' }),
+    cell: { text: '미확정', state: 'unpriced' },
+    breakdown: /생성.*\$0\.0400/s,
+  },
+  {
+    name: 'components is null',
+    cost: unchecked({ components: null }),
+    cell: { text: '$0.0400', state: 'recorded' },
+    breakdown: null,
+  },
+  {
+    name: 'components is a string',
+    cost: unchecked({ components: 'nope' }),
+    cell: { text: '$0.0400', state: 'recorded' },
+    breakdown: null,
+  },
+  {
+    name: 'the runtime fee is a string',
+    cost: unchecked({ runtime_cost_usd: '0.5' }),
+    cell: { text: '$0.0400', state: 'recorded' },
+    breakdown: /생성.*\$0\.0400/s,
+    // No line rather than `실행 환경 $0.5000`: the fee is unreadable, and a
+    // number taken off an unreadable field is the thing being prevented.
+    runtimeLines: 0,
+  },
+  {
+    name: 'a component amount is a string',
+    cost: unchecked({ components: [uncheckedLine({ known_cost_usd: '0.04' })] }),
+    cell: { text: '$0.0400', state: 'recorded' },
+    breakdown: /생성.*미확정/s,
+  },
+  {
+    name: 'a component name is not a name',
+    // `componentLabel` split the slug on `_`, which on a number is a
+    // TypeError in the same boundary as a bad amount.
+    cost: unchecked({ components: [uncheckedLine({ name: 42, stage: 42 })] }),
+    cell: { text: '$0.0400', state: 'recorded' },
+    breakdown: /\?.*\$0\.0400/s,
+  },
+  {
+    name: 'missing_reasons is null on a receipt that priced nothing',
+    cost: unchecked({
+      status: 'unavailable',
+      estimated_cost_usd: null,
+      known_cost_usd: null,
+      missing_reasons: null,
+    }),
+    cell: { text: '미확정', state: 'unpriced', title: /가격을 계산할 수 없음/ },
+    breakdown: /생성.*\$0\.0400/s,
+  },
+  {
+    name: 'the status is a word nobody publishes',
+    cost: unchecked({ status: 'weird' }),
+    cell: { text: '미확정', state: 'unpriced' },
+    breakdown: /생성.*\$0\.0400/s,
+  },
+  {
+    name: 'control: a well-formed receipt',
+    cost: unchecked({ runtime_cost_usd: 0.005, known_cost_usd: 0.045, estimated_cost_usd: 0.045 }),
+    cell: { text: '$0.0450', state: 'recorded' },
+    breakdown: /생성.*\$0\.0400/s,
+    runtimeLines: 1,
+  },
+]
+
+/** The report payload the runtime fetch returns, built without a projector. */
+const uncheckedReport = (cost, summary) => ({
+  short_id: SHORT_ID,
+  task_results: [
+    task('t-unchecked', { sector: 'Manufacturing', occupation: 'Industrial Engineer', cost }),
+  ],
+  ...(summary ? { cost_summary: summary } : {}),
+})
+
+async function assertMalformed(page, load, consoleErrors) {
+  for (const testCase of MALFORMED) {
+    consoleErrors.length = 0
+    await load({ report: uncheckedReport(testCase.cost), grade: null }, { graded: false })
+
+    // The whole point: the page is still a page. Every other assertion here is
+    // worthless if this one is only passing because the boundary rendered.
+    assert.equal(
+      await page.locator('[data-testid="error-boundary"]').count(),
+      0,
+      `${testCase.name}: the error boundary replaced the page`,
+    )
+    assert.equal(await taskRow(page, 't-unchecked').count(), 1, `${testCase.name}: no task row`)
+
+    const cell = await readCell(tableCell(page, 't-unchecked', 'problem_solving_cost'))
+    assert.equal(cell.text, testCase.cell.text, testCase.name)
+    assert.equal(cell.state, testCase.cell.state, testCase.name)
+    if (testCase.cell.title) assert.match(cell.title, testCase.cell.title, testCase.name)
+    // Whatever the cell says, it never says the run was free.
+    if (cell.state !== 'recorded') assert.doesNotMatch(cell.text, /\$/, testCase.name)
+
+    const modal = await openTask(page, 't-unchecked')
+    const breakdown = modal.locator('[data-cost-components="problem_solving_cost"]')
+    if (testCase.breakdown === null) {
+      assert.equal(await breakdown.count(), 0, `${testCase.name}: drew an unreadable breakdown`)
+    } else {
+      assert.equal(await breakdown.count(), 1, `${testCase.name}: no breakdown`)
+      assert.match(await breakdown.innerText(), testCase.breakdown, testCase.name)
+    }
+    if (testCase.runtimeLines !== undefined) {
+      assert.equal(
+        await modal.locator('[data-cost-runtime="problem_solving_cost"]').count(),
+        testCase.runtimeLines,
+        `${testCase.name}: runtime line count`,
+      )
+    }
+    assert.doesNotMatch(await modal.innerText(), /NaN|undefined|\[object Object\]/, testCase.name)
+    await page.keyboard.press('Escape')
+
+    assert.deepEqual(consoleErrors, [], `${testCase.name}: the page logged an error`)
+  }
+}
+
+/**
+ * The run-level half of the same gap.
+ *
+ * `aggregate-reports.mjs` validates `cost_summary` and omits it when there is
+ * nothing to write, and `applyReportIndexSnapshot` merged the built entry over
+ * the fetched report with a spread. A spread only overwrites keys the entry
+ * has, and 23 of the 26 published reports carry no summary in the index — so
+ * for those the object fetched from HuggingFace came through unchecked and
+ * reached `summaryTotalCell`. The forged figure below must not appear
+ * anywhere, and the card must fall back to 기록 없음.
+ */
+async function assertUncheckedRunSummary(page, load, consoleErrors) {
+  consoleErrors.length = 0
+  const forged = {
+    problem_solving_cost: {
+      schema_version: COST_RECEIPT_SCHEMA_VERSION,
+      currency: COST_CURRENCY,
+      status: 'complete',
+      total_tasks: 1,
+      receipt_tasks: 1,
+      measured_tasks: 1,
+      coverage_pct: 100,
+      complete_tasks: 1,
+      partial_tasks: 0,
+      unavailable_tasks: 0,
+      not_run_tasks: 0,
+      known_cost_usd: '999.0',
+      estimated_cost_usd: '999.0',
+      avg_cost_usd: null,
+      median_cost_usd: null,
+      p95_cost_usd: null,
+      max_cost_usd: null,
+      successful_deliverables: 1,
+      cost_per_successful_deliverable_usd: null,
+      failed_task_count: 0,
+      failed_task_cost_usd: 0,
+      components: [],
+      price_table_sha256: null,
+      missing_reasons: [],
+    },
+  }
+  await load(
+    { report: uncheckedReport(unchecked({}), forged), grade: null },
+    { graded: false, validated: false },
+  )
+
+  assert.equal(await page.locator('[data-testid="error-boundary"]').count(), 0)
+  assert.doesNotMatch(await page.locator('body').innerText(), /999/)
+
+  const absent = summaryColumn(page, 'problem_solving_cost').locator('[data-cost-state="absent"]')
+  assert.equal(await absent.count(), 1, 'an unvalidated summary must read as no record')
+  assert.match(await absent.innerText(), /^기록 없음/)
+  assert.deepEqual(consoleErrors, [])
+}
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -768,9 +1018,18 @@ async function main() {
   })
   const page = await context.newPage()
 
+  // The boundary in App.tsx swallows the throw, so a page destroyed by one bad
+  // field never reaches `pageerror` — React reports it here instead. Collected
+  // for every scenario, not just the malformed ones: a well-formed payload that
+  // starts logging errors is also a regression.
+  const consoleErrors = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+
   // Installed once, before the first navigation, so the HuggingFace request is
   // never actually made. `served` is swapped between loads.
-  const served = { report: null, grade: null, graded: true }
+  const served = { report: null, grade: null, graded: true, validated: true }
   await page.route(REPORT_GLOB, (route) =>
     route.fulfill({
       status: 200,
@@ -783,9 +1042,51 @@ async function main() {
     route.fulfill({ json: served.graded ? [served.grade] : [] }),
   )
 
-  const load = async ({ report, grade }, { graded = true } = {}) => {
-    Object.assign(served, { report, grade, graded })
+  // The run-level solving summary is served on the *index entry*, not only on
+  // the fetched report, because that is where it lives in production: all 26
+  // published reports are fetched from HuggingFace at build time by the same
+  // URL the page uses at read time, `aggregate-reports.mjs` runs the summary
+  // through `projectCostSummaries`, and the checked copy is written to
+  // `reports-index.json`. Serving it only on the fetch — which is what this
+  // harness used to do — describes a report whose HuggingFace copy is richer
+  // than the built index, and no published report is in that state.
+  //
+  // The fetched report still carries its own copy, so the merge precedence is
+  // exercised rather than assumed: both halves are present and the validated
+  // one has to be the one that reaches the screen.
+  await page.route(REPORTS_INDEX_GLOB, (route) => {
+    const index = JSON.parse(JSON.stringify(reportsIndex))
+    const target = index.reports.find((report) => report.short_id === SHORT_ID)
+    delete target.cost_summary
+    delete target.cost_ledger
+    if (served.validated) {
+      if (served.report?.cost_summary) target.cost_summary = served.report.cost_summary
+      if (served.report?.cost_ledger) target.cost_ledger = served.report.cost_ledger
+    }
+    route.fulfill({ json: index })
+  })
+
+  // `validated: false` is the one case production can still reach: an index
+  // entry with no summary next to a fetched report that has one. It means the
+  // build never checked that object, and it must not be shown.
+  const load = async ({ report, grade }, { graded = true, validated = true } = {}) => {
+    Object.assign(served, { report, grade, graded, validated })
     await page.goto(`${base}/experiments/${SHORT_ID}`)
+
+    // Whichever arrives first. Waiting only for the cost card reports a page
+    // destroyed by one bad field as a 30-second timeout on the element that is
+    // missing, which names the symptom; the boundary is the reason, and it is
+    // already on screen. `catch` on both because the loser of the race keeps
+    // waiting and would reject into nothing.
+    const boundary = page.locator('[data-testid="error-boundary"]')
+    const quiet = (promise) => promise.catch(() => {})
+    await Promise.race([
+      quiet(page.locator('[data-testid="cost-summary"]').waitFor()),
+      quiet(boundary.waitFor()),
+    ])
+    if (await boundary.count()) {
+      throw new Error(`the error boundary replaced the page: ${await boundary.innerText()}`)
+    }
     await page.locator('[data-testid="cost-summary"]').waitFor()
   }
 
@@ -809,6 +1110,9 @@ async function main() {
     assert.equal(legacy.solveSummary, null, 'a run with no receipts must summarise to null')
     await load(legacy, { graded: false })
     await assertLegacy(page)
+
+    await assertMalformed(page, load, consoleErrors)
+    await assertUncheckedRunSummary(page, load, consoleErrors)
   } finally {
     await context.close()
     await browser.close()
