@@ -116,12 +116,13 @@ def shard_task_ids(payload: dict, label: str) -> list[str]:
 
 
 #: How long a stem may go without a new commit before the relay is called
-#: stopped. A healthy chunk is capped by ``GRADER_TIME_BUDGET_SEC=14400`` (4h)
+#: stopped. A healthy chunk is capped by ``GRADER_TIME_BUDGET_SEC=18000`` (5h)
 #: in ``grade-run.yml``, after which the shard partial-saves, commits, and
 #: re-dispatches itself, so the longest legitimate silence is one chunk plus
-#: queueing and dependency install. Eight hours is roughly double that -- late
-#: enough never to interrupt a slow-but-working run, early enough that a broken
-#: relay is found the same day rather than the next time somebody looks.
+#: queueing and dependency install -- about five and a half hours. Eight hours
+#: leaves roughly two and a half hours of margin on top of that: late enough
+#: never to interrupt a slow-but-working run, early enough that a broken relay
+#: is found the same day rather than the next time somebody looks.
 STALE_AFTER_HOURS_DEFAULT = 8.0
 
 #: ``grade-run.yml`` writes ``printf 'shard-%03d-of-%03d.json'``.

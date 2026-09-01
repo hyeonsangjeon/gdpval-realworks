@@ -294,15 +294,30 @@ def test_a_plan_that_marks_nothing_is_not_asked():
 # ── The committed plan, and the amount that was hidden ────────────────────
 
 
-def test_the_committed_plan_records_this_finding_today():
-    """The finding stays visible under the owner's record-only policy."""
+def test_the_committed_plan_has_since_answered_this_finding():
+    """The plan states 536,191 now, so the finding is gone from the report.
+
+    It was left unanswered here on purpose, so the free check would say the
+    gap out loud rather than the mistake being quietly tidied away. It has
+    since been answered: ``test_the_marking_call_ceiling_is_reached.py`` holds
+    the plan at the measured figure. What this test still owns is the wording —
+    put the old number back and the finding must return, saying 533334, and
+    must stay a recorded finding rather than becoming something that stops a
+    run.
+    """
     plan = load_plan(PLAN_PATH)
     result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+    assert [p for p in result.cost_findings if "input per marking call" in p] == []
 
-    matching = [p for p in result.cost_findings if "input per marking call" in p]
+    plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = 10_000
+    undercounted = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+
+    matching = [
+        p for p in undercounted.cost_findings if "input per marking call" in p
+    ]
     assert len(matching) == 1
     assert "533334" in matching[0]
-    assert matching[0] not in result.problems
+    assert matching[0] not in undercounted.problems
 
 
 def test_the_real_check_measures_the_scoring_line_instead_of_being_told():
@@ -312,12 +327,15 @@ def test_the_real_check_measures_the_scoring_line_instead_of_being_told():
     hand. This is the test that stops that round number from being the only
     one anybody ever looks at: the real check has to reach the committed
     catalogue, take the widest scoring line across all 220 tasks, and put that
-    in front of the reader.
+    in front of the reader. The plan is lowered here so the finding fires and
+    the width can be read out of it; the committed plan covers the width and
+    so says nothing.
     """
     catalog = load_task_catalog()
     widest = widest_scoring_line_characters(catalog)
 
     plan = load_plan(PLAN_PATH)
+    plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = 10_000
     result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
     matching = [p for p in result.cost_findings if "input per marking call" in p]
 
@@ -340,25 +358,37 @@ def test_raising_the_number_to_the_limit_settles_this_rule(raised_to):
 
 
 def test_what_the_flat_number_was_keeping_off_the_ceiling():
-    """Not a complaint about tidiness. It is thousands of dollars.
+    """Not a complaint about tidiness. It was thousands of dollars.
 
-    The plan's own approved maximum is 32.23. The figures here are what the
-    check would put in front of somebody being asked to approve a run.
+    Under the record-only cost policy neither figure stops anything. Both are
+    what the check would put in front of somebody deciding whether to start a
+    run, and the difference between them is why the plan was not left as it
+    was: the old flat 10,000 was holding more than twenty times the whole
+    ceiling out of sight.
     """
     plan = load_plan(PLAN_PATH)
-    as_written = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT).cost.total_usd
-
-    plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = (
-        read_grading_caps(COMMITTED_MARKING_SETTINGS)
-        .input_tokens_carried_by_tool_results(THREE)
-    )
     at_the_limit = run_envelope_preflight(
         plan, root=BATCH_RUNNER_ROOT
     ).cost.total_usd
 
-    assert at_the_limit > as_written * 20, (
-        f"as written {as_written}, at the limit {at_the_limit}"
+    plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = 10_000
+    as_written_before = run_envelope_preflight(
+        plan, root=BATCH_RUNNER_ROOT
+    ).cost.total_usd
+
+    assert at_the_limit > as_written_before * 20, (
+        f"as the plan used to read {as_written_before}, "
+        f"at the limit {at_the_limit}"
     )
+    # And the limit leg is the plan as committed, not a number typed here.
+    assert load_plan(PLAN_PATH)["cost"]["assumptions"][
+        "grading_input_tokens_per_call"
+    ] == read_grading_caps(
+        COMMITTED_MARKING_SETTINGS,
+        widest_scoring_line_characters=widest_scoring_line_characters(
+            load_task_catalog()
+        ),
+    ).input_tokens_one_call_must_cover(THREE)
 
 
 def test_the_plan_no_longer_claims_the_number_cannot_be_pinned():

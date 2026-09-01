@@ -139,6 +139,17 @@ def _normalised_tasks(raw_corpus: dict, limit: int | None = None) -> list[dict]:
         # and it is the one the merge has to keep: an old row must not merge
         # into a total as though it were free.
         task["grading_cost"] = CostReceipt.unavailable().as_dict()
+        # Same corpus, same vintage, opposite migration -- and the difference
+        # is what each field is for. `grading_cost` is a claim about money that
+        # nobody measured, so it stays unavailable. `usage_complete` is the
+        # row's statement that its own token counts arrived, and `_build_reference`
+        # below is standing up "the payload a single serial run would have
+        # produced" -- a run today, whose every row carries this as `True`
+        # straight out of `TaskGrade`. Leaving it off would not make the fixture
+        # more honest, it would make it a payload no producer writes, and the
+        # aggregate fold would read the whole reference run as incomplete
+        # before a single merge assertion got to run.
+        task["usage_complete"] = True
     return tasks
 
 
@@ -382,6 +393,92 @@ def test_nine_way_split_is_uneven_as_the_spec_requires(
     sizes = sorted(len(shard["tasks"]) for shard in shards)
     assert sizes == [24] * 5 + [25] * 4
     assert sum(sizes) == 220
+
+
+# ---------------------------------------------------------------------------
+# the 11-way split
+#
+# Every other case in this file splits 220 nine ways. That is the shape the
+# layout-reconstruction cap was sized for, and splitting it nine ways is the
+# only shape the suite ever exercised -- so when the Gold ceiling run moved to
+# 185 tasks over 11 shards, nothing here noticed that the merge could no longer
+# run at all. It failed for the first time in production, at the last and
+# cheapest step, after every shard had been paid for.
+#
+# These cases pin the shape that actually ships.
+# ---------------------------------------------------------------------------
+
+
+GOLD_TASK_COUNT = 185
+GOLD_SHARD_COUNT = 11
+
+
+@pytest.fixture(scope="session")
+def gold_reference_payload(raw_corpus: dict, anchor_provenance: dict) -> dict:
+    """185-task ``final`` payload -- the shape the Gold ceiling run submits."""
+    return _build_reference(
+        raw_corpus,
+        anchor_provenance,
+        _normalised_tasks(raw_corpus, limit=GOLD_TASK_COUNT),
+    )
+
+
+def test_eleven_way_split_is_past_the_layout_search_cap() -> None:
+    """The arithmetic the merge used to die on, asserted on its own.
+
+    Without this the next test's PASS is unattributable: it would be equally
+    consistent with "the search is fast enough". It is not -- the search is
+    refused outright. 185 over 11 is 17x9 + 16x2, so 9! * 2! = 725,760
+    candidate layouts against a cap of 200,000 chosen for 4! * 5! = 2,880.
+    """
+    sizes = s9._stride_sizes(GOLD_TASK_COUNT, GOLD_SHARD_COUNT)
+    assert sorted(sizes) == [16] * 2 + [17] * 9
+    assert sum(sizes) == GOLD_TASK_COUNT
+    candidates = math.factorial(9) * math.factorial(2)
+    assert candidates == 725_760
+    assert candidates > s9.MAX_CANDIDATE_LAYOUTS
+
+
+def test_eleven_way_stride_merge_needs_no_explicit_order(
+    gold_reference_payload: dict,
+) -> None:
+    """185 over 11 must merge on the plain call, with no order supplied.
+
+    This is the exact invocation the workflow makes. It exits non-zero and
+    writes nothing unless the canonical order can be resolved without an
+    exhaustive search.
+    """
+    shards = make_shards(gold_reference_payload, GOLD_SHARD_COUNT)
+    assert sorted(len(shard["tasks"]) for shard in shards) == [16] * 2 + [17] * 9
+
+    merged = merge(shards)
+
+    assert merged["run_status"] == "final"
+    assert [task["task_id"] for task in merged["tasks"]] == [
+        task["task_id"] for task in gold_reference_payload["tasks"]
+    ]
+
+
+def test_eleven_way_merge_checks_its_first_guess_rather_than_trusting_it(
+    gold_reference_payload: dict,
+) -> None:
+    """Out of order, the obvious layout is wrong -- and must not be used.
+
+    Resolving the order without a search means trying the layout the caller's
+    own argument order implies. That shortcut is only sound because the result
+    is still verified against ``expected_ordered_task_ids_sha256``. Shuffle the
+    inputs and the shortcut is wrong, and the merge must refuse rather than
+    emit a payload whose task order contradicts its declared identity.
+
+    The workflow always passes shards in ascending index order, so this is not
+    reachable in production; it is asserted to keep the shortcut honest.
+    """
+    shards = make_shards(gold_reference_payload, GOLD_SHARD_COUNT)
+    shards[0], shards[3] = shards[3], shards[0]
+
+    with pytest.raises(s9.ShardMergeError) as excinfo:
+        merge(shards)
+    assert "canonical corpus order" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------

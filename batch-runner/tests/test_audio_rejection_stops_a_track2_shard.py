@@ -9,11 +9,23 @@ message::
 
 The task had already been graded (40.9 of 62). What stopped the run was not
 the grade but an integrity check, and what tripped that check was three audio
-sub-judge calls that the provider refused. The cause was a malformed request:
-the content part put its payload under ``audio`` where the Responses API
-requires ``input_audio``, so every audio call ever made by this pipeline was
-rejected with a 400 before it reached a model. The suite did not catch it
-because the audio test asserted the key by hand, and asserted it wrong.
+sub-judge calls that the provider refused. The cause was a malformed request,
+and the first account of it here was only half right: it named the content
+part's key, which had put the payload under ``audio`` where an ``input_audio``
+part was required. Correcting the key did not fix anything, because the
+endpoint was wrong underneath it. ``ResponseInputContentParam`` is a union of
+text, image and file, and has no audio member at all — so a Responses request
+carrying audio in *any* spelling is refused with a 400 before a model hears a
+second of it. Audio belongs to Chat Completions. Every audio call this
+pipeline has ever made was rejected, and there is no successful one in any
+committed grade payload.
+
+The suite did not catch it because the audio test asserted the key by hand and
+asserted it wrong; and then, once the key was corrected, went on passing while
+every call still failed, because it read the shape off a same-named type in
+the Responses namespace that is not a member of that endpoint's content union.
+The generalised guard is now in
+``tests/test_audio_goes_to_the_endpoint_that_accepts_it.py``.
 
 The shape itself is pinned in ``test_perception_audio``. What this module
 pins is the *consequence* — the chain that turned one refused call into a
@@ -35,7 +47,8 @@ set, and this module is where the set is held together — each of the three
 has its own tests, but none of them can see what the other two do to the
 same failure:
 
-* the request carries ``input_audio``, so the call is not refused at all;
+* the request carries ``input_audio`` **and goes to Chat Completions**, which
+  is the endpoint that accepts it, so the call is not refused at all;
 * an item the listening model never answered is a ``judge_error`` and leaves
   the score, instead of being marked as a fault in the deliverable;
 * an unknown token count no longer stops the run, because it says nothing
@@ -68,7 +81,7 @@ from core.tool_calling_judge import (  # noqa: E402
 )
 
 
-class _RejectingResponses:
+class _RejectingCompletions:
     """A provider that refuses the request, the way a 400 arrives in-process."""
 
     def __init__(self) -> None:
@@ -91,8 +104,22 @@ class BadRequestError(Exception):
 
 
 class _Client:
-    def __init__(self, responses) -> None:
-        self.responses = responses
+    """Offers Chat Completions only, like the real client the reader uses.
+
+    It carries no ``responses`` attribute on purpose. This double used to
+    expose one, which meant the shard-death chain below could be reproduced
+    against an endpoint that was itself the bug — the refusal being asserted
+    was the one the fix removes, arriving for a reason the test could not
+    see. Now the refusal has to be the provider's answer to a well-formed
+    request, which is the failure this module is actually about: a call that
+    genuinely fails still reports its usage as unknown, and that flag still
+    travels, but it no longer kills the shard.
+    """
+
+    def __init__(self, completions) -> None:
+        from types import SimpleNamespace
+
+        self.chat = SimpleNamespace(completions=completions)
 
 
 @pytest.fixture
@@ -130,24 +157,39 @@ def test_a_refused_audio_call_reports_its_usage_as_incomplete(wav_file):
     once a reply has been read, so a call that raises reports ``False`` — it
     was sent, and this process cannot say what it cost.
 
-    That is the honest reading for a timeout. For a 400 it overstates the
-    doubt, since a rejected request is not billed; the distinction is noted
-    here rather than acted on, because with the request shape corrected this
-    path stops being reached and narrowing it would weaken the same check for
-    the failures where the doubt is real.
+    That is the honest reading for a timeout, and this fake is a timeout in
+    every respect that matters: it raises an exception carrying no status
+    code, so nothing can establish that the provider refused it before
+    running the model. A call in that state stays counted against the task's
+    cap for the same reason its usage stays incomplete — it may have been
+    billed, and the safe direction is to assume it was.
+
+    The 400s the smoke actually hit *do* carry a status, and
+    ``test_a_provider_rejection_gives_the_call_slot_back`` covers that side.
+    Both branches exist because the difference between them is the difference
+    between a call that cost nothing and a call nobody can account for.
     """
-    client = _Client(_RejectingResponses())
-    verdict = AudioPerception(client=client).judge(
+    client = _Client(_RejectingCompletions())
+    perception = AudioPerception(client=client)
+    verdict = perception.judge(
         criterion="the mix is free of clipping", audio_path=str(wav_file)
     )
 
     assert isinstance(verdict, AudioVerdict)
     assert verdict.verdict == "judge_error"
     assert verdict.judge_error == "provider_error:BadRequestError"
-    assert verdict.reasoning == "audio call failed: BadRequestError"
+    assert verdict.reasoning.startswith("audio call failed: BadRequestError")
+    assert "status=None" in verdict.reasoning, (
+        "the failure must say what it knew about the request, so the next "
+        "paid smoke does not need a fourth one to tell two causes apart"
+    )
     assert verdict.api_call_count == 1
     assert (verdict.input_tokens, verdict.output_tokens) == (0, 0)
     assert verdict.usage_complete is False
+    assert perception.calls_used == 1, (
+        "an exception with no status may have been billed and must stay "
+        "charged; only a provable pre-inference rejection is refunded"
+    )
 
 
 # ── hop 2: the prepass ───────────────────────────────────────────────
@@ -162,7 +204,7 @@ def test_the_prepass_takes_the_incomplete_flag_from_any_one_tool_result(
     never restores the flag. This is why the real task reported three audio
     calls with zero tokens against 111 grading calls that all reported usage.
     """
-    client = _Client(_RejectingResponses())
+    client = _Client(_RejectingCompletions())
     refused = AudioPerception(client=client).judge(
         criterion="x", audio_path=str(wav_file)
     ).to_dict()

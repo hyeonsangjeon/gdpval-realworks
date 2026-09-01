@@ -1,0 +1,130 @@
+name: Grader Hash Freeze
+
+# One file merged under batch-runner/core/ while eleven shards are grading is
+# the most expensive mistake this repository can make, and the cheapest one to
+# make by accident. Every shard stamps the grader source hash it ran under;
+# step9_merge_shards lists that field among the ten identity invariants the
+# shards must agree on, and step9 only starts once every shard has finished.
+# So a mid-run merge is green, the shards keep running, the bill is paid in
+# full, and the union is refused about sixty hours later with nothing to
+# salvage. It has nearly happened three times: PR #302, #303 and the current
+# queue each moved the fingerprint between a smoke and its dispatch.
+#
+# This workflow does not stop that merge. A check is advisory unless branch
+# protection requires it, and a pull request that was green yesterday can be
+# merged today. What it does is make the trap red at the moment somebody is
+# looking at it, which is the difference between "we forgot" and "we decided".
+#
+# It is deliberately outside batch-runner/. compute_grader_source_hash rejects
+# any source path outside that directory, so nothing this workflow adds can
+# itself move a fingerprint -- otherwise the guard against needing a new smoke
+# would have required a new smoke.
+
+on:
+  pull_request:
+    paths:
+      - "batch-runner/step8_grade.py"
+      - "batch-runner/core/**"
+      - "batch-runner/prompts/**"
+      - "batch-runner/grading_configs/**"
+      - "batch-runner/schemas/grade.schema.json"
+      - "batch-runner/requirements.txt"
+      - "batch-runner/scripts/download_inference_from_hf.py"
+      # So the guard is exercised by its own changes.
+      - "batch-runner/scripts/check_grader_hash_freeze.py"
+      - ".github/workflows/grader-hash-freeze.yml"
+  # Answers "is a freeze in effect right now?" without opening a pull request.
+  # There is no diff to inspect, so it probes with a known hash-moving path.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: grader-hash-freeze-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  freeze-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Collect the paths this pull request changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PR:-}" ]; then
+            # workflow_dispatch. Probe with a path that always moves the hash
+            # so the result reports the freeze state rather than "no diff".
+            echo '["batch-runner/core/grader.py"]' > changed.json
+            echo "manual run: probing with batch-runner/core/grader.py"
+          else
+            gh api "repos/${REPO}/pulls/${PR}/files" --paginate \
+              --jq '[.[].filename]' | jq -s 'add' > changed.json
+          fi
+          echo "changed paths:"
+          jq -r '.[]' changed.json
+
+      - name: Collect grade runs that have not finished
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Base repository, always -- github.repository on a pull_request
+          # event is the base, so a fork PR cannot point this at its own
+          # quiet fork and come back clear.
+          gh api "repos/${REPO}/actions/workflows/grade-run.yml/runs?per_page=50" \
+            --jq '[.workflow_runs[]
+                   | select(.status != "completed")
+                   | {id: .id, status: .status, url: .html_url}]' > runs_bare.json
+
+          # A run's job list is what separates a paid run from a dry one, but
+          # only once you read the conclusions. The jobs API lists *skipped*
+          # jobs too, so a paid run contains a `grade-dry-run` entry and a dry
+          # run contains a `grade` entry; presence proves nothing either way.
+          # It also reports display names rather than job keys, which is why
+          # approve-paid arrives as "Approve paid Sol Max grading (...)".
+          #
+          # If the jobs API declines to answer, the field is left absent and
+          # the checker treats the run as paid.
+          jq -c '.[]' runs_bare.json | while read -r run; do
+            id=$(echo "$run" | jq -r '.id')
+            if jobs=$(gh api "repos/${REPO}/actions/runs/${id}/jobs" \
+                        --paginate --jq '[.jobs[] | {name, conclusion}]' 2>/dev/null); then
+              echo "$run" | jq --argjson j "$(echo "$jobs" | jq -s 'add')" \
+                '. + {jobs: $j}'
+            else
+              echo "::warning::could not list jobs for run ${id}; treating it as paid"
+              echo "$run"
+            fi
+          done | jq -s '.' > runs.json
+
+          echo "in-flight grade runs:"
+          cat runs.json
+
+      - name: Decide
+        run: |
+          set -euo pipefail
+          python3 batch-runner/scripts/check_grader_hash_freeze.py \
+            --changed-paths changed.json \
+            --runs runs.json | tee decision.txt
+
+      - name: Explain the result in the job summary
+        if: always()
+        run: |
+          {
+            echo '## Grader hash freeze'
+            echo
+            echo '```'
+            cat decision.txt 2>/dev/null || echo 'the check did not get as far as a decision'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

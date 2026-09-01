@@ -53,6 +53,8 @@ batch-runner/scripts/*
 !batch-runner/scripts/build_gold_deliverable_manifest.py
 !batch-runner/scripts/analyze_gold_ceiling.py
 !batch-runner/scripts/analyze_variance.py
+!batch-runner/scripts/stage3_partial_inventory.py
+!batch-runner/scripts/check_grader_hash_freeze.py
 
 
 # Experiment report HTML (skews GitHub language stats)
@@ -92,7 +94,28 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/PR3_GOLD_CEILING.md
 !tasks/rebuilding_grading_task/PR3_VARIANCE.md
 !tasks/rebuilding_grading_task/PR3_REPORT.md
+!tasks/rebuilding_grading_task/PR3_FULL_GOLD_CORPUS.md
 !tasks/rebuilding_grading_task/304-full-gold-corpus.md
+!tasks/rebuilding_grading_task/304-B-partial-blocked.md
+!tasks/rebuilding_grading_task/305-resume-granularity.md
+!tasks/rebuilding_grading_task/306-rerun-conditions.md
+!tasks/rebuilding_grading_task/307-audio-smoke-result.md
+!tasks/rebuilding_grading_task/stage3_partial_inventory.json
+!tasks/rebuilding_grading_task/308-vision-render-target-decision.md
+!tasks/rebuilding_grading_task/309-task-internal-checkpoint.md
+!tasks/rebuilding_grading_task/310-second-audio-smoke-fail-closed.md
+!tasks/rebuilding_grading_task/311-third-audio-smoke-pass.md
+!tasks/rebuilding_grading_task/312-fourth-audio-smoke-pass.md
+!tasks/rebuilding_grading_task/313-lost-chunk-cost.md
+!tasks/rebuilding_grading_task/314-full-185-regrade-evidence.md
+!tasks/rebuilding_grading_task/315-repeat-variation-prereg.md
+
+# The grading run writes a sqlite mirror of the cost ledger beside every grade
+# file. The published record is the .jsonl next to it; the database is a local
+# working copy, tens of megabytes of it. The workflow only ever stages the two
+# files it names, but a hand-published result is staged by hand -- as in #322 --
+# so the by-product is named here rather than left to whoever is typing.
+data/grades/**/*.cost_ledger.sqlite3
 
 *.parquet
 .huggingface/

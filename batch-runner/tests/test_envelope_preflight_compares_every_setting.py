@@ -74,6 +74,7 @@ from core.execution_environment_readiness import (  # noqa: E402
     ENVIRONMENT_DOCKER_CONTAINER,
     EXECUTION_MODE_BY_ENVIRONMENT,
 )
+from core.experiment_config import ExperimentConfig  # noqa: E402
 from core.prompt_sections import DEFAULT_SECTIONS  # noqa: E402
 from core.sandbox_runner import SandboxRunner  # noqa: E402
 from core.skills_registry import SkillsRegistry  # noqa: E402
@@ -979,3 +980,359 @@ def test_the_number_this_module_claims_is_the_number_it_reaches(plan, copied_roo
         f"reaches {len(noticed)} of {len(settings)}. Update both."
     )
     assert "execution.sandbox.max_skills" in noticed
+
+
+# ---------------------------------------------------------------------------
+# A setting the file never mentions
+# ---------------------------------------------------------------------------
+#
+# Every rule above changes a setting and asks whether the check compares it.
+# There is a second question, and the check used to answer it wrongly: what
+# happens when a file never mentions a setting at all.
+#
+# The check read an absent key as nought. The runtime does not.
+# ``core.experiment_config`` fills a silent file in with its own defaults, and
+# for two of these settings that default is not nought — so a file that never
+# mentioned re-running failed tasks was read as forbidding it, passed, and then
+# re-ran them three times. Silence and the required value were the same 0, so
+# the rule written to stop exactly that could not see it.
+#
+# The other three were refused either way, but the refusal named a number the
+# file did not hold, which sends whoever reads it looking for a line that is
+# not there.
+
+# What the runtime fills in here is not what a check reading silence as nought
+# would assume. These are the two that used to pass.
+SETTINGS_WHERE_SILENCE_USED_TO_PASS = (
+    ("execution", "resume_max_rounds"),
+    ("condition_a", "qa", "max_retries"),
+)
+
+# Every setting a run place has to write down rather than leave to a default.
+SETTINGS_THAT_HAVE_TO_BE_WRITTEN_DOWN = SETTINGS_WHERE_SILENCE_USED_TO_PASS + (
+    ("execution", "max_retries"),
+    ("execution", "timeout"),
+    ("execution", "mode"),
+)
+
+
+def _delete_from_one_run_place(root: Path, relative: str, path: tuple) -> object:
+    """Take a setting out of one file, so it reads as one that never had it.
+
+    The mirror of :func:`_change_one_run_place`. Changing a value asks whether
+    the check compares it. Taking it out asks the harder question — whether the
+    check can tell a file that forbids something from a file that never
+    mentioned it.
+    """
+    target = root / relative
+    document = yaml.safe_load(target.read_text(encoding="utf-8"))
+    node = document
+    for key in path[:-1]:
+        node = node[key]
+    removed = node.pop(path[-1])
+    target.write_text(
+        yaml.safe_dump(document, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    return removed
+
+
+def _what_the_runtime_would_do(root: Path, relative: str) -> ExperimentConfig:
+    """The same file, read by the loader the real run uses.
+
+    Not a second opinion written here — :mod:`core.experiment_config` is what
+    turns one of these files into a run, so what it says a silent file means is
+    what a silent file means.
+    """
+    return ExperimentConfig.from_dict(
+        yaml.safe_load((root / relative).read_text(encoding="utf-8"))
+    )
+
+
+def test_the_runtime_fills_in_what_a_silent_file_leaves_out(plan, copied_root):
+    """The disagreement this is all about, read out of both real paths.
+
+    Nothing is typed from memory: the defaults come back through
+    ``ExperimentConfig.from_dict``. If the loader ever starts reading silence
+    as nought, this fails and the rules below become unnecessary — which is the
+    point of measuring it rather than asserting it.
+    """
+    relative = _settings_file_of_one_run_place(plan)
+    for path in SETTINGS_THAT_HAVE_TO_BE_WRITTEN_DOWN:
+        root = copied_root
+        original = yaml.safe_load((root / relative).read_text(encoding="utf-8"))
+        _delete_from_one_run_place(root, relative, path)
+        run = _what_the_runtime_would_do(root, relative)
+        settled = {
+            ("execution", "resume_max_rounds"): run.execution.resume_max_rounds,
+            ("execution", "max_retries"): run.execution.max_retries,
+            ("execution", "timeout"): run.execution.timeout,
+            ("execution", "mode"): run.execution.mode,
+            ("condition_a", "qa", "max_retries"): (
+                run.condition_a.qa.max_retries if run.condition_a.qa else None
+            ),
+        }[path]
+        (root / relative).write_text(
+            yaml.safe_dump(original, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+        if path in SETTINGS_WHERE_SILENCE_USED_TO_PASS:
+            assert settled not in (0, None), (
+                f"{'.'.join(path)} left out settles at {settled!r}, which the "
+                "comparison requires to be 0. If the loader now reads silence "
+                "as nought this is no longer a hole — say so here."
+            )
+        else:
+            assert settled == {
+                ("execution", "max_retries"): 3,
+                ("execution", "timeout"): None,
+                ("execution", "mode"): "subprocess",
+            }[path]
+
+
+@pytest.mark.parametrize(
+    "path,what_the_refusal_has_to_mention",
+    [
+        (("execution", "resume_max_rounds"), "re-run"),
+        (("condition_a", "qa", "max_retries"), "self-review"),
+        (("execution", "max_retries"), "network failure"),
+        (("execution", "timeout"), "how long one task may take"),
+        (("execution", "mode"), "which mode it runs in"),
+    ],
+)
+def test_a_setting_a_file_never_mentions_is_refused(
+    plan, copied_root, path, what_the_refusal_has_to_mention
+):
+    """Leaving it out is refused, and the refusal says what was left out.
+
+    A refusal that only says the numbers disagree is no use to somebody whose
+    file has no such number to look at.
+    """
+    relative = _settings_file_of_one_run_place(plan)
+    _delete_from_one_run_place(copied_root, relative, path)
+    refusals = _refusals(plan, copied_root)
+
+    assert refusals, (
+        f"a file that never mentions {'.'.join(path)} was accepted. The "
+        "runtime would fill it in with a default, so what ran would not be "
+        "what was compared."
+    )
+    assert any("does not say" in one for one in refusals), (
+        f"the refusals for a missing {'.'.join(path)} do not say it is "
+        f"missing: {refusals}"
+    )
+    assert any(
+        what_the_refusal_has_to_mention in one for one in refusals
+    ), f"no refusal names what was left out: {refusals}"
+
+
+def test_no_refusal_names_a_number_the_file_does_not_hold(plan, copied_root):
+    """The three that were refused anyway said 0, or None, or nothing.
+
+    ``execution.max_retries`` left out was refused with "allows 0 attempts",
+    and 0 appears nowhere in the file. Whoever went looking for it found the
+    key absent and the refusal unexplained.
+    """
+    relative = _settings_file_of_one_run_place(plan)
+    for path, stale in (
+        (("execution", "max_retries"), "allows 0 attempts"),
+        (("execution", "timeout"), "allows one task None seconds"),
+        (("execution", "resume_max_rounds"), "allows 0 extra rounds"),
+        (("condition_a", "qa", "max_retries"), "allows 0 self-review attempts"),
+    ):
+        root = copied_root
+        original = yaml.safe_load((root / relative).read_text(encoding="utf-8"))
+        _delete_from_one_run_place(root, relative, path)
+        refusals = _refusals(plan, root)
+        (root / relative).write_text(
+            yaml.safe_dump(original, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+        assert not any(stale in one for one in refusals), (
+            f"with {'.'.join(path)} absent, a refusal still quotes {stale!r} "
+            f"as though the file held it: {refusals}"
+        )
+
+
+def test_no_self_review_block_at_all_is_read_as_off_and_left_alone(
+    plan, copied_root
+):
+    """The boundary the fix must not cross.
+
+    An absent self-review block really does mean no self-review — the loader
+    builds no ``QAConfig`` at all unless the block holds something. So this one
+    absence is not a hole, and refusing it would be a false alarm on a file
+    that is doing exactly what the shared conditions ask.
+
+    Taken out of every run place, not one, so nothing here is answered by the
+    separate rule that holds the files against each other. What is left is the
+    rule this work added, and it has to stay quiet.
+    """
+    for relative in plan["experiment_files"].values():
+        _delete_from_one_run_place(copied_root, str(relative), ("condition_a", "qa"))
+        run = _what_the_runtime_would_do(copied_root, str(relative))
+        assert run.condition_a.qa is None, (
+            "this test rests on the loader building no self-review at all "
+            "from a missing block; it now builds one, so the rule needs "
+            "revisiting"
+        )
+
+    assert _refusals(plan, copied_root) == [], (
+        "files with no self-review block were refused, but the runtime reads "
+        "that as no self-review, which is what the shared conditions ask for"
+    )
+
+
+def test_an_empty_self_review_block_is_read_the_way_the_runtime_reads_it(
+    plan, copied_root
+):
+    """``qa: {}`` too — the loader tests the block for content, not presence."""
+    for relative in plan["experiment_files"].values():
+        _change_one_run_place(
+            copied_root, str(relative), ("condition_a", "qa"), {}
+        )
+        assert (
+            _what_the_runtime_would_do(copied_root, str(relative)).condition_a.qa
+            is None
+        )
+
+    assert _refusals(plan, copied_root) == []
+
+
+def test_one_run_place_dropping_the_block_is_still_a_difference(
+    plan, copied_root
+):
+    """Quiet about the absence is not quiet about the disagreement.
+
+    The rule above must not become a licence to leave the block out of one file
+    and not the others. That is caught by the rule that holds the run places
+    against each other, and it stays caught.
+    """
+    relative = _settings_file_of_one_run_place(plan)
+    _delete_from_one_run_place(copied_root, relative, ("condition_a", "qa"))
+
+    refusals = _refusals(plan, copied_root)
+    assert any(
+        "condition_a.qa.enabled" in one and "disagree" in one for one in refusals
+    ), refusals
+    assert not any("does not say how many self-review" in one for one in refusals), (
+        "the missing-setting rule fired on a block the runtime reads as no "
+        f"self-review at all: {refusals}"
+    )
+
+
+def test_a_self_review_block_that_says_nothing_useful_is_still_refused(
+    plan, copied_root
+):
+    """Present but silent is the case the truthiness guard must still catch.
+
+    A block holding anything at all makes the loader build a self-review with
+    its own two attempts. So ``qa`` with a model in it and no attempt count is
+    a run that reviews itself twice while the shared conditions allow none.
+    """
+    relative = _settings_file_of_one_run_place(plan)
+    _change_one_run_place(
+        copied_root, relative, ("condition_a", "qa"), {"model": None}
+    )
+
+    run = _what_the_runtime_would_do(copied_root, relative)
+    assert run.condition_a.qa is not None
+    assert run.condition_a.qa.max_retries == 2
+
+    refusals = _refusals(plan, copied_root)
+    assert any(
+        "does not say how many self-review attempts" in one for one in refusals
+    ), refusals
+
+
+def test_the_old_reading_could_not_tell_the_two_files_apart(plan, copied_root):
+    """Proof that this can fail, and proof of why it did not fail before.
+
+    The reading the check used to do is written out here rather than patched
+    back in, so this test keeps standing once the line it is about is gone. It
+    gives the same answer for a file that forbids extra rounds and a file that
+    never mentions them. The runtime gives answers three rounds apart.
+    """
+    relative = _settings_file_of_one_run_place(plan)
+    forbids = yaml.safe_load((copied_root / relative).read_text(encoding="utf-8"))
+    _delete_from_one_run_place(
+        copied_root, relative, ("execution", "resume_max_rounds")
+    )
+    never_mentions = yaml.safe_load(
+        (copied_root / relative).read_text(encoding="utf-8")
+    )
+
+    def as_the_check_used_to_read_it(document):
+        execution = document.get("execution", {})
+        return int(execution.get("resume_max_rounds", 0) or 0)
+
+    assert forbids["execution"]["resume_max_rounds"] == 0
+    assert "resume_max_rounds" not in never_mentions["execution"]
+    assert as_the_check_used_to_read_it(forbids) == 0
+    assert as_the_check_used_to_read_it(never_mentions) == 0, (
+        "the old reading is supposed to be blind to the difference; if it is "
+        "not, this test no longer proves anything"
+    )
+
+    assert ExperimentConfig.from_dict(forbids).execution.resume_max_rounds == 0
+    assert (
+        ExperimentConfig.from_dict(never_mentions).execution.resume_max_rounds == 3
+    )
+
+    refusals = _refusals(plan, copied_root)
+    assert any("re-run" in one and "does not say" in one for one in refusals), (
+        "the check still cannot tell them apart: " f"{refusals}"
+    )
+
+
+def test_the_refusal_does_not_claim_to_know_what_the_default_is(
+    plan, copied_root
+):
+    """It says a default would decide it, not what the default is.
+
+    The numbers live in :mod:`core.experiment_config`. Copying them here would
+    make a second place to change them, and a wrong second place is worse than
+    none — it would name a value confidently while the loader used another.
+    """
+    relative = _settings_file_of_one_run_place(plan)
+    for path in SETTINGS_THAT_HAVE_TO_BE_WRITTEN_DOWN:
+        root = copied_root
+        original = yaml.safe_load((root / relative).read_text(encoding="utf-8"))
+        _delete_from_one_run_place(root, relative, path)
+        said = [one for one in _refusals(plan, root) if "does not say" in one]
+        (root / relative).write_text(
+            yaml.safe_dump(original, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+        assert said, f"nothing was said about a missing {'.'.join(path)}"
+        for one in said:
+            assert "fall back to a built-in default" in one or (
+                "fall back to a default" in one
+            ), one
+            assert "the built-in default is" not in one, one
+            assert "which is 3" not in one, one
+
+
+def test_the_committed_files_still_say_all_of_it(plan):
+    """The three real files are unaffected, so no existing run changes.
+
+    This is the owner's standing rule — a new condition must not reach back
+    into an experiment already agreed. The rule only bites a file that leaves
+    one of these out, and none of them does.
+    """
+    for environment, relative in plan["experiment_files"].items():
+        document = yaml.safe_load(
+            (BATCH_RUNNER_ROOT / relative).read_text(encoding="utf-8")
+        )
+        for path in SETTINGS_THAT_HAVE_TO_BE_WRITTEN_DOWN:
+            node = document
+            for key in path:
+                assert isinstance(node, dict) and key in node, (
+                    f"{environment} ({relative}) leaves out {'.'.join(path)}, "
+                    "so this rule would newly refuse a file that was already "
+                    "agreed. It has to be written into the file first."
+                )
+                node = node[key]

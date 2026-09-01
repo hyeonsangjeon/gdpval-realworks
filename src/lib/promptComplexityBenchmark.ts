@@ -70,7 +70,23 @@ export type PromptComplexityBenchmarkSelection =
 
 const roundToOneDecimal = (value: number) => Math.round(value * 10) / 10
 
-function isValidBenchmarkReport(shortId: PromptComplexityReportId, report: ReportIndexEntry) {
+/**
+ * A report that has been through {@link isValidBenchmarkReport} — in particular
+ * one whose `avg_qa_score` was actually measured.
+ *
+ * `summary.avg_qa_score` is `number | null` in general, because a run whose
+ * tasks all errored has no average to report. The rows below read it as a plain
+ * number, and this type is what makes that safe rather than lucky: such a run
+ * fails the guard, lands in `invalidIds`, and never reaches the row builder.
+ */
+type ValidatedBenchmarkReport = ReportIndexEntry & {
+  summary: ReportIndexEntry['summary'] & { avg_qa_score: number }
+}
+
+function isValidBenchmarkReport(
+  shortId: PromptComplexityReportId,
+  report: ReportIndexEntry,
+): report is ValidatedBenchmarkReport {
   const { meta, summary } = report
   if (!meta || !summary) return false
   if (typeof meta.condition_name !== 'string' || typeof meta.execution_mode !== 'string') return false
@@ -83,7 +99,9 @@ function isValidBenchmarkReport(shortId: PromptComplexityReportId, report: Repor
   if (!Number.isInteger(totalTasks) || totalTasks <= 0) return false
   if (!Number.isInteger(successCount) || successCount < 0 || successCount > totalTasks) return false
   if (!Number.isFinite(successRate) || successRate < 0 || successRate > 100) return false
-  if (!Number.isFinite(avgQaScore) || avgQaScore < 0 || avgQaScore > 10) return false
+  // Number.isFinite(null) is already false, so an unmeasured score has always
+  // been rejected here. Spelling the null out keeps that deliberate.
+  if (avgQaScore == null || !Number.isFinite(avgQaScore) || avgQaScore < 0 || avgQaScore > 10) return false
 
   return Math.abs(successRate - roundToOneDecimal((successCount / totalTasks) * 100)) < 0.05
 }
@@ -101,15 +119,23 @@ export function selectPromptComplexityBenchmark(
 
   if (missingIds.length > 0) return { status: 'missing', missingIds }
 
+  // Kept as it validates, so the row builder below reads the same object the
+  // guard just approved instead of looking it up again and losing what the
+  // guard proved about it.
+  const validated = new Map<PromptComplexityReportId, ValidatedBenchmarkReport>()
   const invalidIds = PROMPT_COMPLEXITY_REPORT_IDS.filter((shortId) => {
     const matches = matchingReports.get(shortId) ?? []
-    return matches.length !== 1 || !isValidBenchmarkReport(shortId, matches[0])
+    if (matches.length !== 1) return true
+    const report = matches[0]
+    if (!isValidBenchmarkReport(shortId, report)) return true
+    validated.set(shortId, report)
+    return false
   })
 
   if (invalidIds.length > 0) return { status: 'invalid', invalidIds }
 
   const rows = PROMPT_COMPLEXITY_REPORT_IDS.map((shortId) => {
-    const report = matchingReports.get(shortId)![0]
+    const report = validated.get(shortId)!
     return {
       shortId,
       condition: report.meta.condition_name,

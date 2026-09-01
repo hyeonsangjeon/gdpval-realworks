@@ -51,6 +51,13 @@ from core.grader import (
     resolve_tool_prompt_path,
 )
 from core.grade_payload import canonical_rate, validate_grade_payload
+from core.task_checkpoint import (
+    CheckpointRejected,
+    build_progress,
+    discard_checkpoint,
+    load_checkpoint,
+    write_checkpoint,
+)
 from core.inference_manifest import (
     GOLD_PROVENANCE_STATUS,
     canonical_task_id,
@@ -1124,11 +1131,30 @@ def _validate_grade_task_set(
     # that produces the run's total can never be handed a missing or
     # truthy-ish value. `step9_merge_shards` demands exactly this of every
     # shard it merges.
+    #
+    # The rows are checked as well as the aggregate, and the rows are the ones
+    # that matter: `_compute_summary` recomputes `summary.cost.usage_complete`
+    # from these rows and never reads the aggregate loaded here, so a payload
+    # that carries a tidy boolean at the top and silence underneath would sail
+    # through a check on the aggregate alone. Refusing here rather than folding
+    # the silence in costs nothing — this chunk has not graded anything yet —
+    # and says which row is at fault instead of quietly marking the run's whole
+    # cost total unknown for the rest of its life.
     aggregate_usage = existing["summary"]["cost"].get("usage_complete")
     if type(aggregate_usage) is not bool:
         raise ValueError(
             "existing grade aggregate usage flag is missing or not a boolean: "
             f"{aggregate_usage!r}"
+        )
+    silent_rows = [
+        (task["task_id"], task.get("usage_complete"))
+        for task in existing["tasks"]
+        if type(task.get("usage_complete")) is not bool
+    ]
+    if silent_rows:
+        raise ValueError(
+            "existing grade task usage flag is missing or not a boolean: "
+            f"{silent_rows}"
         )
     return set(existing_ids)
 
@@ -1516,8 +1542,14 @@ def _compute_summary(
         )
         render_calls += int(task.get("render_call_count", 0))
         render_latency_ms += float(task.get("render_total_latency_ms", 0.0))
-        usage_complete = usage_complete and bool(
-            task.get("usage_complete", True)
+        # A row that does not answer has not said yes. The counters just above
+        # default a missing token count to 0, so a silent row makes the total
+        # smaller; if its silence also read as "complete", the run would
+        # publish a figure it never measured and claim it was whole. `is True`
+        # rather than `bool(...)`: a `1` or a `"true"` that arrived from
+        # somewhere is not this producer's boolean either.
+        usage_complete = usage_complete and (
+            task.get("usage_complete") is True
         )
 
         # The sector breakdown is defined over graded tasks, so its task counts
@@ -2313,6 +2345,97 @@ def main() -> int:
             task_id, BUCKET_GRADING, when_empty=STATUS_COMPLETE
         ).as_dict()
 
+    def record_task_progress(
+        task, rubric_item_ids: list[str], draft, resumed_items: int
+    ) -> int:
+        """Keep the finished items of a task the clock interrupted.
+
+        Returns how many items this chunk added, which is what
+        ``out_of_time_exit`` uses to decide whether asking for another paid
+        chunk is honest. Zero on every path that does not write a file, so a
+        chunk that could not save progress does not get credit for it.
+
+        Three refusals, and all three end the same way — no file, no credit,
+        the task marked from item one next time:
+
+        * no draft, because the grader that raised predates this or was built
+          through a path that never installed one;
+        * no forward motion, so the next chunk would read back exactly what
+          this one read in and the loop would repeat at full price;
+        * a draft holding the whole rubric, which is a finished task and
+          belongs in the partial as a grade. ``load_checkpoint`` refuses one
+          too; refusing to write it as well means the contradiction never
+          reaches disk in the first place.
+
+        Failure to write is reported and swallowed. A chunk that graded real
+        items must not lose them to a full disk in the progress directory —
+        the partial is the thing that has to persist, and it already has.
+        """
+        if draft is None:
+            return 0
+        completed = len(draft.completed_items)
+        advanced = completed - resumed_items
+        if advanced <= 0:
+            return 0
+        if completed >= len(rubric_item_ids):
+            print(
+                f"[progress] {task.task_id}: refusing to file a complete "
+                "rubric as progress",
+                file=sys.stderr,
+            )
+            return 0
+        try:
+            path = write_checkpoint(
+                out_path,
+                build_progress(
+                    task_id=task.task_id,
+                    grader_source_hash=grader_source_hash,
+                    rubric_item_ids=rubric_item_ids,
+                    draft=draft,
+                ),
+            )
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            print(
+                f"[progress] {task.task_id}: could not save progress "
+                f"({type(exc).__name__}); the task will be graded whole next "
+                "chunk",
+                file=sys.stderr,
+            )
+            return 0
+        print(
+            f"[progress] {task.task_id}: {completed}/{len(rubric_item_ids)} "
+            f"items kept (+{advanced} this chunk) → {path.name}",
+            file=sys.stderr,
+        )
+        try:
+            # Published for the same reason the ledger is: a chunk gets a
+            # fresh runner, so a file that is not committed does not exist by
+            # the time the next chunk looks for it.
+            _write_github_output(
+                "grade_progress_file", _repo_relative_grade_file(path)
+            )
+            _write_github_output("grade_progress_sha256", digest)
+        except (OSError, ValueError) as exc:
+            published = os.getenv("GITHUB_OUTPUT")
+            print(
+                f"[progress] could not publish the progress pointer "
+                f"({type(exc).__name__}); the file is on disk at {path}",
+                file=sys.stderr,
+            )
+            if published:
+                # Under a workflow an unpublished pointer means an uncommitted
+                # file, and an uncommitted file is gone before the next chunk
+                # runs. Asking for a paid resume on the strength of progress
+                # that will not be there is the dishonest half of this.
+                print(
+                    "[progress] no pointer means no commit; this chunk does "
+                    "not count as having moved",
+                    file=sys.stderr,
+                )
+                return 0
+        return advanced
+
     try:
         config["_runtime"] = {
             "experiment_id": args.experiment_yaml_name,
@@ -2499,7 +2622,7 @@ def main() -> int:
                 atexit.unregister(grader_exit_cleanup)
         return code
 
-    def out_of_time_exit(note: str) -> int:
+    def out_of_time_exit(note: str, *, items_advanced: int = 0) -> int:
         """Stop, keep what is finished, and say whether resuming is worth it.
 
         Exit 7 asks the workflow for another paid chunk, and that is only
@@ -2509,6 +2632,15 @@ def main() -> int:
         instead and leaves a human to look at the task that is eating the
         budget.
 
+        ``items_advanced`` is the second way forward. One task in the gold
+        corpus is longer than a chunk: ``9e39df84`` has 57 items and four paid
+        attempts stopped at 45, 54, 54 and 55 of them. Measured in whole
+        tasks every one of those chunks finished nothing, so this guard was
+        right to refuse — and the shard could never finish, because refusing
+        was also the only answer available. A chunk that left more graded
+        items behind than it started with has moved, and the next chunk starts
+        from them rather than from item one.
+
         The elapsed time is read here rather than taken from the caller so
         that the loop asks the clock once per task, in ``out_of_time``. A
         second read alongside it is not merely redundant: it moves the
@@ -2517,13 +2649,19 @@ def main() -> int:
         elapsed_sec = time.monotonic() - grade_loop_start
         graded_count = len(task_payloads)
         remaining = len(shard_tasks) - graded_count
-        if graded_count <= initial_completed_count:
+        if graded_count <= initial_completed_count and items_advanced <= 0:
             print(
                 f"[time-guard] {note}; no new task completed in this chunk; "
                 "refusing to request another paid resume",
                 file=sys.stderr,
             )
             return finish(GRADE_EXIT_PERSISTENCE_FAILURE)
+        if graded_count <= initial_completed_count:
+            print(
+                f"[time-guard] {note}; no task finished, but {items_advanced} "
+                "more rubric items are on disk than this chunk started with",
+                file=sys.stderr,
+            )
         print(
             f"\n[time-guard] {note}: elapsed {elapsed_sec/60:.1f}min > budget "
             f"{time_budget_sec/60:.0f}min; graded={graded_count}/{len(shard_tasks)} "
@@ -2551,16 +2689,60 @@ def main() -> int:
 
         task = loader.load(task_result["task_id"])
         deliverable_dir = resolve_deliverable_dir(task_result)
+        rubric_item_ids = [item.rubric_item_id for item in task.rubric_items]
+
+        # Items an earlier chunk finished inside this same task, if it left
+        # any. ``None`` is the ordinary case — first attempt, nothing on disk.
+        resume_progress = None
+        try:
+            resume_progress = load_checkpoint(
+                out_path,
+                task_id=task.task_id,
+                grader_source_hash=grader_source_hash,
+                rubric_item_ids=rubric_item_ids,
+            )
+        except CheckpointRejected as refused:
+            # Said out loud. A refused checkpoint means a fingerprint or a
+            # rubric moved under a paid run, and the task is about to be
+            # re-marked from item one at full price; that is the correct
+            # answer and an expensive one, so it does not happen quietly.
+            print(
+                f"[progress] {task.task_id}: {refused.reason}; "
+                "grading the task whole",
+                file=sys.stderr,
+            )
+        resumed_items = (
+            len(resume_progress.completed_items) if resume_progress else 0
+        )
+        if resumed_items:
+            print(
+                f"[progress] {task.task_id}: resuming after {resumed_items}/"
+                f"{len(rubric_item_ids)} items",
+                file=sys.stderr,
+            )
+
         task_started = time.perf_counter()
         try:
-            grade = grader.grade_task(task, deliverable_dir)
+            grade = grader.grade_task(
+                task, deliverable_dir, resume_from=resume_progress
+            )
         except GradingDeadlineExceeded as expired:
-            # The task is dropped whole, not saved half-marked: an unfinished
-            # task would be scored on the items it got through, and the ones
-            # it never reached would read as failures. Whatever it spent is
-            # in the ledger, and the next chunk marks it from the start.
+            # The task is still dropped whole rather than saved half-marked:
+            # an unfinished task scored on the items it got through would read
+            # as failing the ones it never reached. What changes is that the
+            # finished items are kept beside the partial instead of thrown
+            # away, so the next chunk continues from them. Whatever this chunk
+            # spent is in the ledger either way, because it was spent.
             print(f"[time-guard] {expired}", file=sys.stderr)
-            return out_of_time_exit(f"inside {task.task_id}")
+            advanced = record_task_progress(
+                task, rubric_item_ids, expired.progress, resumed_items
+            )
+            return out_of_time_exit(
+                f"inside {task.task_id}", items_advanced=advanced
+            )
+        # Graded whole. The progress file described an unfinished task and now
+        # describes nothing, so it goes.
+        discard_checkpoint(out_path, task.task_id)
         grading_wall_time_ms = (time.perf_counter() - task_started) * 1000.0
         row = _task_to_dict(
             grade,

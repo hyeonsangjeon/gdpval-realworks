@@ -46,6 +46,75 @@ def _has_word(text: str, *words: str) -> bool:
     return False
 
 
+# 1) Explicit extension tokens / unambiguous format words (highest signal).
+#    Each entry: ext, HIGH-confidence words (literal type tokens), MEDIUM
+#    words (format nouns that might instead refer to an *input* file).
+_EXPLICIT_EXTENSION_RULES = [
+    (".xlsx", ("xlsx",), ("excel", "workbook", "spreadsheet"), "Excel/spreadsheet requested"),
+    (".pptx", ("pptx",), ("powerpoint", "slide deck", "slides", "deck", "presentation"), "PowerPoint/slides requested"),
+    (".docx", ("docx",), ("word document", "word doc"), "Word document requested"),
+    (".pdf", ("pdf",), (), "PDF requested"),
+    (".csv", ("csv",), (), "CSV requested"),
+    (".tsv", ("tsv",), (), "TSV requested"),
+    (".json", ("json",), (), "JSON requested"),
+    (".mp4", ("mp4",), ("video", "animation", "screencast", "montage"), "Video requested"),
+    (".mp3", ("mp3",), (), "MP3 audio requested"),
+    (".wav", ("wav",), (), "WAV audio requested"),
+    (".zip", ("zip",), ("archive", "bundle"), "Archive requested"),
+    (".md", ("markdown",), (), "Markdown requested"),
+    (".html", ("html",), ("webpage", "web page"), "HTML requested"),
+]
+
+# 2) Softer deliverable nouns -> a likely (medium-confidence) type, unless an
+#    explicit type already covered it.
+_DELIVERABLE_NOUN_RULES = [
+    ((".docx",), ("memo", "letter", "report", "write-up", "writeup", "essay",
+                  "cover letter", "meeting notes", "minutes", "brief"),
+     "Prose deliverable (memo/report/letter)"),
+    ((".pdf",), ("flyer", "one-pager", "one pager", "brochure", "poster",
+                 "form", "datasheet", "fact sheet", "factsheet", "handout"),
+     "Print/layout deliverable"),
+    ((".png",), ("logo", "icon", "chart", "graph", "diagram", "screenshot",
+                 "infographic", "storyboard", "mockup", "wireframe",
+                 "figure", "plot", "image"),
+     "Graphic/image deliverable"),
+    ((".wav",), ("audio", "podcast", "voiceover", "voice-over", "soundtrack",
+                 "song", "music", "jingle", "narration"),
+     "Audio deliverable"),
+    ((".xlsx",), ("model", "tracker", "budget", "schedule", "roster",
+                  "dashboard", "pivot", "ledger"),
+     "Tabular deliverable"),
+]
+
+
+def detection_vocabulary() -> List[str]:
+    """Every word :func:`_detect_extensions` can match, deduped, order-stable.
+
+    Worked out from the two tables above on every call rather than written out
+    again here, so adding a word moves whatever holds a figure against this
+    instead of leaving a stale one behind.
+
+    Read by ``core/first_request_sections.py``, which drives
+    :func:`infer_deliverable_contract` to the widest contract these tables can
+    produce so a cost ceiling can be built on it. A copy kept in that module
+    would go stale silently, and the bill would then be understated by whatever
+    the copy missed.
+    """
+    words: List[str] = []
+    seen: Set[str] = set()
+    for _ext, high_words, med_words, _note in _EXPLICIT_EXTENSION_RULES:
+        for word in (*high_words, *med_words):
+            if word not in seen:
+                seen.add(word)
+                words.append(word)
+    for _exts, nouns, _note in _DELIVERABLE_NOUN_RULES:
+        for word in nouns:
+            if word not in seen:
+                seen.add(word)
+                words.append(word)
+    return words
+
+
 def _detect_extensions(text: str) -> List[Dict]:
     """Return ordered ext detections: list of {ext, confidence, note}."""
     t = text.lower()
@@ -58,51 +127,13 @@ def _detect_extensions(text: str) -> List[Dict]:
         seen.add(ext)
         hits.append({"ext": ext, "confidence": confidence, "note": note})
 
-    # 1) Explicit extension tokens / unambiguous format words (highest signal).
-    #    Each entry: ext, HIGH-confidence words (literal type tokens), MEDIUM
-    #    words (format nouns that might instead refer to an *input* file).
-    explicit = [
-        (".xlsx", ("xlsx",), ("excel", "workbook", "spreadsheet"), "Excel/spreadsheet requested"),
-        (".pptx", ("pptx",), ("powerpoint", "slide deck", "slides", "deck", "presentation"), "PowerPoint/slides requested"),
-        (".docx", ("docx",), ("word document", "word doc"), "Word document requested"),
-        (".pdf", ("pdf",), (), "PDF requested"),
-        (".csv", ("csv",), (), "CSV requested"),
-        (".tsv", ("tsv",), (), "TSV requested"),
-        (".json", ("json",), (), "JSON requested"),
-        (".mp4", ("mp4",), ("video", "animation", "screencast", "montage"), "Video requested"),
-        (".mp3", ("mp3",), (), "MP3 audio requested"),
-        (".wav", ("wav",), (), "WAV audio requested"),
-        (".zip", ("zip",), ("archive", "bundle"), "Archive requested"),
-        (".md", ("markdown",), (), "Markdown requested"),
-        (".html", ("html",), ("webpage", "web page"), "HTML requested"),
-    ]
-    for ext, high_words, med_words, note in explicit:
+    for ext, high_words, med_words, note in _EXPLICIT_EXTENSION_RULES:
         if _has_word(t, *high_words):
             add(ext, "high", note)
         elif med_words and _has_word(t, *med_words):
             add(ext, "medium", note)
 
-    # 2) Softer deliverable nouns -> a likely (medium-confidence) type, unless an
-    #    explicit type already covered it.
-    noun_rules = [
-        ((".docx",), ("memo", "letter", "report", "write-up", "writeup", "essay",
-                      "cover letter", "meeting notes", "minutes", "brief"),
-         "Prose deliverable (memo/report/letter)"),
-        ((".pdf",), ("flyer", "one-pager", "one pager", "brochure", "poster",
-                     "form", "datasheet", "fact sheet", "factsheet", "handout"),
-         "Print/layout deliverable"),
-        ((".png",), ("logo", "icon", "chart", "graph", "diagram", "screenshot",
-                     "infographic", "storyboard", "mockup", "wireframe",
-                     "figure", "plot", "image"),
-         "Graphic/image deliverable"),
-        ((".wav",), ("audio", "podcast", "voiceover", "voice-over", "soundtrack",
-                     "song", "music", "jingle", "narration"),
-         "Audio deliverable"),
-        ((".xlsx",), ("model", "tracker", "budget", "schedule", "roster",
-                      "dashboard", "pivot", "ledger"),
-         "Tabular deliverable"),
-    ]
-    for exts, words, note in noun_rules:
+    for exts, words, note in _DELIVERABLE_NOUN_RULES:
         if _has_word(t, *words):
             for ext in exts:
                 add(ext, "medium", note)

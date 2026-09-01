@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from core.grader_routing import Modality, RoutingDecision
 from core.rubric_loader import RubricItem, TaskRubric
 from core.tool_calling_judge import (
     ToolCallingJudge,
@@ -407,9 +408,32 @@ def test_empty_final_retry_budget_exhaustion_stays_fail_closed(
     assert len(client.responses.calls) == 2
 
 
-def test_finalization_retry_uses_configured_max_effort(
+# ── The retry that ran out of room must not want more of what filled it ──
+#
+# Task 85. The retry keeps the same ``max_output_tokens`` as the attempt
+# before it -- deliberately, because that cap is what the run's cost ceiling
+# is priced against. So on ``empty_final_text:max_output_tokens`` the retry is
+# handed exactly the budget the first attempt just exhausted. Stage 3 ran
+# ``reasoning.effort: max`` beside ``finalization_reasoning_effort: max`` and
+# ``max_output_tokens: 2400``: the call whose whole job was "stop thinking and
+# write the envelope" thought as hard as the one that overflowed, under the
+# same budget, and wrote no envelope either. Two full output budgets, one
+# judge_error, twelve minutes.
+#
+# The distinction the fix draws is between running out of room and getting
+# the answer wrong. Only the first is a reason to think less.
+
+
+def test_a_retry_after_exhausting_the_budget_stops_thinking_and_writes(
     deliverable_dir, task_and_item
 ):
+    """The configured effort is held down for the one reason that earned it.
+
+    ``max`` on the first call, because that is what the config asked for and
+    the item is genuinely hard. ``low`` on the retry, because the retry is
+    forbidden tools, has the evidence already, and needs room to write a
+    short JSON envelope -- not room to reason its way to the same overflow.
+    """
     task, item = task_and_item
     empty = _response(
         out_tok=2400,
@@ -422,7 +446,7 @@ def test_finalization_retry_uses_configured_max_effort(
             "partial_score": 1.0,
             "evidence": "validated from prior evidence",
             "confidence": 0.9,
-            "reasoning": "finalized with max effort",
+            "reasoning": "finalized once it stopped reasoning",
         }))],
     )
     client = FakeClient(ScriptedResponses([empty, final]))
@@ -443,7 +467,134 @@ def test_finalization_retry_uses_configured_max_effort(
 
     assert result.verdict == "pass"
     assert client.responses.calls[0]["reasoning"] == {"effort": "max"}
-    assert client.responses.calls[1]["reasoning"] == {"effort": "max"}
+    assert client.responses.calls[1]["reasoning"] == {"effort": "low"}
+    # The budget itself is untouched. Moving it would move what the run costs
+    # and what the cost ceiling was pre-registered against; the room was
+    # always enough for an envelope, and the fix is about what fills it.
+    assert client.responses.calls[1]["max_output_tokens"] == 2400
+
+
+def test_the_ceiling_never_raises_an_effort_a_config_set_lower(
+    deliverable_dir, task_and_item
+):
+    """Held down, never pushed up.
+
+    A config that set the retry to ``none`` wanted no reasoning at all, and
+    ``none`` already spends nothing on the thing that overflowed. Reading the
+    rule as "use low here" would make this call think more than it was told
+    to.
+    """
+    task, item = task_and_item
+    empty = _response(
+        out_tok=2400,
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+    )
+    final = _response(
+        output=[_final(json.dumps({
+            "verdict": "pass",
+            "partial_score": 1.0,
+            "evidence": "validated from prior evidence",
+            "confidence": 0.9,
+            "reasoning": "finalized without reasoning",
+        }))],
+    )
+    client = FakeClient(ScriptedResponses([empty, final]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.6-sol",
+        prompt_template=PROMPT_TEMPLATE,
+        reasoning_effort="max",
+        finalization_reasoning_effort="none",
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "pass"
+    assert client.responses.calls[1]["reasoning"] == {"effort": "none"}
+
+
+def test_the_ceiling_applies_to_the_legacy_call_shape_too(
+    deliverable_dir, task_and_item, monkeypatch
+):
+    """The fallback path sends its own reasoning block, and grades with it.
+
+    ``responses.create`` is called twice per iteration when the SDK rejects
+    the modern kwargs: once to fail, once in the legacy shape. That second
+    call is a real graded call, so a fix that only touched the modern shape
+    would leave the defect live on every run that trips the fallback.
+    """
+    task, item = task_and_item
+    final_payload = json.dumps({
+        "verdict": "pass",
+        "partial_score": 1.0,
+        "evidence": "validated from prior evidence",
+        "confidence": 0.9,
+        "reasoning": "finalized on the legacy shape",
+    })
+    empty = _response(
+        out_tok=2400,
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+    )
+    final = _response(output=[_final(final_payload)])
+
+    class RejectsModernKwargs(ScriptedResponses):
+        """Rejects only the modern shape, exactly as the live SDK does."""
+
+        def create(self, **kwargs: Any) -> Any:
+            if "prompt_cache_key" in kwargs:
+                self.calls.append(kwargs)
+                raise TypeError("unexpected keyword argument 'prompt_cache_key'")
+            return super().create(**kwargs)
+
+    client = FakeClient(RejectsModernKwargs([empty, final]))
+    judge = ToolCallingJudge(
+        client=client,
+        model="gpt-5.6-sol",
+        prompt_template=PROMPT_TEMPLATE,
+        reasoning_effort="max",
+        finalization_reasoning_effort="max",
+    )
+
+    result = judge.judge_item(
+        task=task,
+        item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx"],
+    )
+
+    assert result.verdict == "pass"
+    legacy = [c for c in client.responses.calls if "prompt_cache_key" not in c]
+    assert len(legacy) == 2
+    assert legacy[0]["reasoning"] == {"effort": "max"}
+    assert legacy[1]["reasoning"] == {"effort": "low"}
+    assert "tools" not in legacy[1]
+
+
+def test_the_effort_ceiling_is_decided_by_the_reason_alone():
+    """The rule stated once, against every reason that reaches it.
+
+    The three retry reasons above it in ``_finalization_retry_reason`` are the
+    complete set, so this is the whole decision table. ``None`` is there
+    because a caller that never retried must not be handed a downgrade.
+    """
+    ceiling = tool_calling_judge_module._finalization_effort
+
+    assert ceiling("max", "empty_final_text:max_output_tokens") == "low"
+    # Produced text, got the shape wrong: more thought is the repair.
+    assert ceiling("max", "final_json_parse_failed") == "max"
+    assert ceiling("max", "invalid_final_envelope") == "max"
+    # Empty for a reason that is not the budget -- a filtered or cut-off
+    # response. Nothing says effort caused it, so nothing is taken away.
+    assert ceiling("max", "empty_final_text:content_filter") == "max"
+    assert ceiling("max", "empty_final_text:unknown") == "max"
+    assert ceiling("max", None) == "max"
 
 
 def test_semantic_invalid_final_retries_once_with_configured_max_effort(
@@ -1139,6 +1290,134 @@ def test_invalid_vision_verdict_is_blocked_before_main_judge(
     assert client.responses.calls == []
 
 
+def test_an_escalated_bundle_renders_only_the_file_that_needs_it(
+    deliverable_dir, task_and_item, monkeypatch
+):
+    """The judge must render what the budget counted, and read the rest.
+
+    A bundle-scope item is handed no prepass -- ``judge_item`` builds its own
+    from the file list -- so a render set narrowed in the plan and nowhere
+    else would be narrowed everywhere except where the pictures are actually
+    taken, and the consistency check inside would then fail every item the
+    narrowing had just saved. The sibling is not withheld from the judge: it
+    is not rendered, and it is still a file the judge is told it may read.
+    """
+    task, item = task_and_item
+    (deliverable_dir / "scan.pdf").write_bytes(b"%PDF-1.4\n%stub\n")
+    pytest.importorskip("PIL")
+    from PIL import Image
+    image = io.BytesIO()
+    Image.new("RGB", (8, 8), color="blue").save(image, format="PNG")
+    image_b64 = base64.b64encode(image.getvalue()).decode("ascii")
+
+    rendered: list[str] = []
+
+    def fake_read(op, path, *, base_dir, scope=None):
+        rendered.append(path)
+        return {
+            "ok": True,
+            "data": {
+                "kind": "image_png_base64",
+                "source_kind": "pdf",
+                "scope": dict(scope or {}),
+                "source_page_count": 2,
+                "converted_page_count": 1,
+                "renderer": {"converter": "pymupdf"},
+                "byte_size": len(image.getvalue()),
+                "base64": image_b64,
+            },
+        }
+
+    monkeypatch.setattr(tool_calling_judge_module, "read_deliverable", fake_read)
+
+    client = FakeClient(ScriptedResponses([_response(output=[_final(json.dumps({
+        "verdict": "pass", "partial_score": 1.0,
+        "evidence": "the scanned page states the value",
+        "confidence": 0.9, "reasoning": "looked at the page",
+        "tool_calls_made": 0,
+    }))])]))
+    judge = ToolCallingJudge(client=client, model="gpt-5.4",
+                             prompt_template=PROMPT_TEMPLATE,
+                             vision_perception=StubVision())
+
+    result = judge.judge_item(
+        task=task, item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx", "scan.pdf"],
+        routing_decision=RoutingDecision(
+            modality=Modality.VISUAL,
+            preferred_op="render_to_image",
+            matched_keywords=(),
+            render_paths=("scan.pdf",),
+        ),
+    )
+
+    assert rendered == ["scan.pdf"]
+    assert result.judge_error is None
+    assert result.render_call_count == 1
+    assert result.verdict == "pass"
+    assert "report.xlsx" in json.dumps(client.responses.calls[0], sort_keys=True)
+
+
+def test_a_visual_item_that_narrows_nothing_still_renders_the_bundle(
+    deliverable_dir, task_and_item, monkeypatch
+):
+    """The default is unchanged, and it is the ordinary case.
+
+    Every criterion that names something visual arrives with no render set of
+    its own, and asks for every selected file exactly as it did before.
+    """
+    task, item = task_and_item
+    (deliverable_dir / "scan.pdf").write_bytes(b"%PDF-1.4\n%stub\n")
+    pytest.importorskip("PIL")
+    from PIL import Image
+    image = io.BytesIO()
+    Image.new("RGB", (8, 8), color="blue").save(image, format="PNG")
+    image_b64 = base64.b64encode(image.getvalue()).decode("ascii")
+
+    rendered: list[str] = []
+
+    def fake_read(op, path, *, base_dir, scope=None):
+        rendered.append(path)
+        return {
+            "ok": True,
+            "data": {
+                "kind": "image_png_base64",
+                "source_kind": Path(path).suffix.lstrip("."),
+                "scope": dict(scope or {}),
+                "converted_page_count": 1,
+                "renderer": {"converter": "libreoffice"},
+                "byte_size": len(image.getvalue()),
+                "base64": image_b64,
+            },
+        }
+
+    monkeypatch.setattr(tool_calling_judge_module, "read_deliverable", fake_read)
+
+    client = FakeClient(ScriptedResponses([_response(output=[_final(json.dumps({
+        "verdict": "pass", "partial_score": 1.0, "evidence": "both surfaces",
+        "confidence": 0.9, "reasoning": "looked at both", "tool_calls_made": 0,
+    }))])]))
+    judge = ToolCallingJudge(client=client, model="gpt-5.4",
+                             prompt_template=PROMPT_TEMPLATE,
+                             vision_perception=StubVision())
+
+    result = judge.judge_item(
+        task=task, item=item,
+        deliverable_dir=str(deliverable_dir),
+        file_names=["report.xlsx", "scan.pdf"],
+        routing_decision=RoutingDecision(
+            modality=Modality.VISUAL,
+            preferred_op="render_to_image",
+            matched_keywords=("chart",),
+        ),
+    )
+
+    assert rendered == ["report.xlsx", "scan.pdf"]
+    assert result.judge_error is None
+    assert result.render_call_count == 2
+
+
 def test_routing_modality_text_omits_perception_tools(deliverable_dir, task_and_item):
     task, item = task_and_item
     client = FakeClient(ScriptedResponses([_response(output=[_final(json.dumps({
@@ -1227,25 +1506,38 @@ def _audio_item() -> RubricItem:
 
 
 class _DeafAudio:
-    """A listening model that is asked and never answers."""
+    """A listening model that is asked and never answers.
 
-    def __init__(self, judge_error: str = "provider_error:BadRequestError"):
+    ``failure_detail`` is left out of the payload entirely unless one is
+    given, so the default double keeps producing the exact shape recorded
+    before that field existed -- which is also the shape a resume replays.
+    """
+
+    def __init__(
+        self,
+        judge_error: str = "provider_error:BadRequestError",
+        failure_detail: str | None = None,
+    ):
         self.judge_error = judge_error
+        self.failure_detail = failure_detail
         self.calls = 0
 
     def judge(self, **kwargs):
         self.calls += 1
+        payload = {
+            "verdict": "judge_error", "partial_score": 0.0,
+            "evidence": "", "confidence": 0.0,
+            "reasoning": "audio call failed: BadRequestError",
+            "judge_error": self.judge_error,
+            "api_call_count": 1, "input_tokens": 0,
+            "output_tokens": 0, "cached_tokens": 0,
+            "latency_ms": 267.64, "usage_complete": False,
+        }
+        if self.failure_detail is not None:
+            payload["failure_detail"] = self.failure_detail
         return SimpleNamespace(
             judge_error=self.judge_error,
-            to_dict=lambda: {
-                "verdict": "judge_error", "partial_score": 0.0,
-                "evidence": "", "confidence": 0.0,
-                "reasoning": "audio call failed: BadRequestError",
-                "judge_error": self.judge_error,
-                "api_call_count": 1, "input_tokens": 0,
-                "output_tokens": 0, "cached_tokens": 0,
-                "latency_ms": 267.64, "usage_complete": False,
-            },
+            to_dict=lambda: dict(payload),
         )
 
 
@@ -1302,6 +1594,57 @@ def test_a_listening_call_that_never_answers_is_not_scored_as_a_failure(
     assert result.perception_called is True
     assert result.perception_call_count == 1
     assert result.usage_complete is False
+
+
+def test_a_refused_listening_call_says_why_on_the_way_out(
+    tmp_path, task_and_item,
+):
+    """The other half of the row above, and the part run ``33374220483`` lacked.
+
+    That run refused every listening call it made and said only
+    ``provider_error:BadRequestError`` and ``audio_unavailable:provider_400``
+    about all fifteen of them. Grouping a corpus needs a vocabulary that
+    small; fixing a run needs the sentence beside it. So the sub-judge's own
+    account of the refusal travels through the judge untouched and lands on
+    the item, and the next run is planned from the artifact rather than
+    bought to find out.
+    """
+    task, _ = task_and_item
+    (tmp_path / "stems.zip").write_bytes(b"PK\x03\x04fake")
+    detail = (
+        "audio call failed: BadRequestError (status=400, format=wav,"
+        " source_suffix=none, bytes=961324, b64_bytes=1281766)"
+    )
+    audio = _DeafAudio(failure_detail=detail)
+
+    client = FakeClient(ScriptedResponses([
+        _response(output=[_fc(
+            "audio-call", "audio_judge",
+            criterion=_audio_item().criterion, audio_path="stems.zip",
+        )], in_tok=20, out_tok=3, cached_tok=2),
+        _response(output=[_final(json.dumps({
+            "verdict": "fail", "partial_score": 0.0,
+            "evidence": "audio call failed: BadRequestError",
+            "confidence": 0.78, "reasoning": "could not verify",
+        }))], in_tok=25, out_tok=4, cached_tok=3),
+    ]))
+    judge = ToolCallingJudge(
+        client=client, model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    result = judge.judge_item(
+        task=task, item=_audio_item(), deliverable_dir=str(tmp_path),
+        file_names=["stems.zip"],
+    )
+
+    assert result.judge_error == (
+        "audio_perception_failed:provider_error:BadRequestError"
+    )
+    assert result.perception_error_detail == detail, (
+        "carried whole -- an abridged detail is a detail that has to be "
+        "checked against the source, which is the problem this replaces"
+    )
 
 
 def test_a_listening_call_the_judge_asked_wrong_stays_the_judge_s_to_fix(
@@ -1411,6 +1754,76 @@ def test_a_listening_call_that_recovers_leaves_no_error(tmp_path, task_and_item)
     # to say the token count is complete.
     assert result.perception_call_count == 2
     assert result.usage_complete is False
+
+
+def test_an_item_the_run_heard_keeps_no_account_of_the_failed_try(
+    tmp_path, task_and_item,
+):
+    """The detail says why an item ended, so an item that did not end has none.
+
+    The failed attempt is real, it is on the bill, and ``usage_complete``
+    above already says the run cannot vouch for its token count. But the
+    audio was heard on the retry and the mark comes from hearing it. A
+    refusal recorded on this row would send a reader looking for a cause of
+    something that never happened.
+    """
+    task, _ = task_and_item
+    (tmp_path / "clip.wav").write_bytes(b"RIFFfake")
+
+    class _FlakyAudio:
+        def __init__(self):
+            self.calls = 0
+
+        def judge(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return _DeafAudio(
+                    "provider_error:APITimeoutError",
+                    failure_detail="audio call failed: APITimeoutError (...)",
+                ).judge()
+            return SimpleNamespace(
+                judge_error=None,
+                to_dict=lambda: {
+                    "verdict": "pass", "partial_score": 1.0,
+                    "evidence": "no vocal content in the master",
+                    "confidence": 0.9, "reasoning": "heard",
+                    "judge_error": None, "failure_detail": None,
+                    "api_call_count": 1,
+                    "input_tokens": 70, "output_tokens": 12,
+                    "cached_tokens": 5, "latency_ms": 14.0,
+                    "usage_complete": True,
+                },
+            )
+
+    audio = _FlakyAudio()
+    client = FakeClient(ScriptedResponses([
+        _response(output=[_fc(
+            "audio-call", "audio_judge",
+            criterion=_audio_item().criterion, audio_path="clip.wav",
+        )], in_tok=20, out_tok=3, cached_tok=2),
+        _response(output=[_fc(
+            "audio-call-2", "audio_judge",
+            criterion=_audio_item().criterion, audio_path="clip.wav",
+        )], in_tok=20, out_tok=3, cached_tok=2),
+        _response(output=[_final(json.dumps({
+            "verdict": "pass", "partial_score": 1.0,
+            "evidence": "no vocal content in the master",
+            "confidence": 0.9, "reasoning": "heard on the retry",
+        }))], in_tok=25, out_tok=4, cached_tok=3),
+    ]))
+    judge = ToolCallingJudge(
+        client=client, model="gpt-5.4",
+        prompt_template=PROMPT_TEMPLATE, audio_perception=audio,
+    )
+
+    result = judge.judge_item(
+        task=task, item=_audio_item(), deliverable_dir=str(tmp_path),
+        file_names=["clip.wav"],
+    )
+
+    assert audio.calls == 2
+    assert result.judge_error is None
+    assert result.perception_error_detail is None
 
 
 def test_model_cannot_call_render_to_image(deliverable_dir, task_and_item):

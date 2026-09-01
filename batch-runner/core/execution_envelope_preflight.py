@@ -52,10 +52,12 @@ from core.execution_envelope_cost import (
     CostAssumptions,
     ModelPrice,
     REFERENCE_FILE_CHARACTER_CAP,
+    check_approved_maximum,
     check_cost_ceiling,
     describe_cost_ceiling,
     estimate_cost_ceiling,
     load_price_table,
+    read_approved_maximum,
 )
 from core.execution_envelope_grading_cost import (
     check_assumptions_cover_the_caps,
@@ -92,6 +94,7 @@ from core.execution_environment_readiness import (
     build_readiness_report,
 )
 from core.file_preview import reference_file_prompt_budget
+from core.first_request_sections import first_request_section_budget
 from core.prompt_loader import fixed_prompt_characters, load_prompt
 
 PLAN_VERSION = "execution-envelope-advance-check-v1"
@@ -124,7 +127,6 @@ class EnvelopePreflight:
     approved_maximum_usd: Decimal | None = None
     cost_policy: str = COST_POLICY_BLOCK
     cost_findings: list[str] = field(default_factory=list)
-    available_monthly_credit_usd: Decimal | None = None
     azure: AzureConnectionDiagnosis | None = None
     grading_ceiling_problems: list[str] = field(default_factory=list)
     """Ways the marking half of the cost sum sits below what marking allows.
@@ -183,11 +185,6 @@ class EnvelopePreflight:
             "cost_policy": self.cost_policy,
             "cost_findings": list(self.cost_findings),
             "cost_findings_block_execution": self.cost_policy == COST_POLICY_BLOCK,
-            "available_monthly_credit_usd": (
-                str(self.available_monthly_credit_usd)
-                if self.available_monthly_credit_usd is not None
-                else None
-            ),
             "problems": self.all_problems,
             "grading_ceiling_problems": list(self.grading_ceiling_problems),
             "marking_half_is_a_ceiling": not self.grading_ceiling_problems,
@@ -529,7 +526,11 @@ WHAT_THE_SETTING_DOES: Mapping[str, str] = {
     "condition_a.prompt.body": "the wording put between that and the task",
     "condition_a.prompt.suffix": "the wording put after the task",
     "condition_a.qa.enabled": "whether the model reviews its own answer",
-    "condition_a.qa.max_retries": "how many times it may answer again",
+    # Not "how many times it may answer again". step2_run_inference.py counts
+    # answers already reviewed and breaks the moment that count reaches this
+    # setting, so a run written as 2 produces two answers and replaces the
+    # first one once, and a run written as 1 replaces nothing at all.
+    "condition_a.qa.max_retries": "how many answers it may produce in all",
     "condition_a.qa.model": "which model reviews the answer",
     "condition_a.qa.min_score": "the mark the answer has to reach",
     "condition_a.qa.prompt": "the wording the reviewer is given",
@@ -1120,6 +1121,33 @@ def _runner_sends_a_fresh_request_per_turn(environment: str) -> bool | None:
     return bool(declared)
 
 
+def _turn_count_the_cost_sum_would_use(
+    written: Mapping[str, Any], environment: str
+) -> int | None:
+    """The turn count this plan really hands the cost sum, or ``None`` for none.
+
+    ``None`` is returned for every turn count
+    :meth:`core.execution_envelope_cost.CostAssumptions.from_mapping` and
+    :func:`core.execution_envelope_cost.estimate_cost_ceiling` would refuse:
+    nothing written for this run place, something written that will not come to
+    a whole number, or a number below one — an attempt asks the model at least
+    once, so ``0`` is not a smaller number of turns, it is not a number of turns.
+
+    Those refusals are made over there and are not repeated here. What this is
+    for is the sentence a refusal here is allowed to write about what a wrong
+    cap is *worth*: that sentence divides by the turn count, and a turn count
+    nobody could read gives no divisor at all. Reading one anyway — the old
+    ``1`` — put the cheapest possible answer into the plan's mouth, which is
+    the same mistake in the same direction as pricing an unreadable file at
+    nothing.
+    """
+    try:
+        count = int(written.get(environment))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return count if count >= 1 else None
+
+
 def _check_the_plan_knows_what_one_cap_covers(
     plan: Mapping[str, Any],
 ) -> list[str]:
@@ -1153,6 +1181,15 @@ def _check_the_plan_knows_what_one_cap_covers(
     the same rule :func:`_check_grading_assumptions_match_the_settings` applies
     to a plan that marks answers but names no marking settings.
 
+    **What the refusal is allowed to say the mistake is worth.** Each refusal
+    carries a clause pricing itself, and that clause divides by the plan's turn
+    count. Where no turn count can be read the clause says so, by way of
+    :func:`_turn_count_the_cost_sum_would_use`, rather than reading ``1`` and
+    reporting that nothing moves. The two are not near each other: a plan
+    writing ``"eight"`` really allows eight turns and is worth the difference
+    named above, and reporting it as the quiet case would put the cheapest
+    answer of the range into the mouth of a plan that never gave one.
+
     **One thing here cannot be checked from this repository at all**, and the
     refusal must not pretend otherwise. That the Azure request is a single call
     carrying a single cap is readable, and is read. Whether the service honours
@@ -1174,18 +1211,25 @@ def _check_the_plan_knows_what_one_cap_covers(
         if fresh_each_turn is False:
             continue
 
-        try:
-            claimed_turns = int(turns.get(environment))  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            claimed_turns = 1
-        cost_note = (
-            f"at the {claimed_turns} turns this plan allows that divides the "
-            f"answer charge by {claimed_turns}"
-            if claimed_turns > 1
-            else "at the 1 turn this plan allows it changes no figure today, "
-            "but the turn count is read from the settings and rises the "
-            "moment they do"
-        )
+        claimed_turns = _turn_count_the_cost_sum_would_use(turns, environment)
+        if claimed_turns is None:
+            cost_note = (
+                "what that is worth cannot be worked out here, because the "
+                f"plan's turn count for {environment} is not one the cost sum "
+                "could use either — and a worth nobody could work out is not a "
+                "worth of nothing"
+            )
+        elif claimed_turns > 1:
+            cost_note = (
+                f"at the {claimed_turns} turns this plan allows that divides "
+                f"the answer charge by {claimed_turns}"
+            )
+        else:
+            cost_note = (
+                "at the 1 turn this plan allows it changes no figure today, "
+                "but the turn count is read from the settings and rises the "
+                "moment they do"
+            )
 
         if fresh_each_turn is None:
             problems.append(
@@ -1231,6 +1275,37 @@ def _runner_reference_file_prompt_sections(
         module = import_module(module_name)
         runner = getattr(module, class_name)
         declared = getattr(runner, "REFERENCE_FILE_PROMPT_SECTIONS")
+    except (AttributeError, ImportError):
+        return None
+    return tuple(str(section) for section in declared)
+
+
+def _runner_first_request_extra_sections(
+    environment: str,
+) -> tuple[str, ...] | None:
+    """Which prompt sections this run place adds to its **first** request.
+
+    The companion to :func:`_runner_reference_file_prompt_sections`, and read
+    the same way: off the runner class named in ``RUNNER_CLASS_BY_ENVIRONMENT``,
+    never decided here from the mode name.
+
+    What it names is the wording a runner builds *before* the prompt file is
+    rendered and hands to ``render_prompt`` as the task — which is why
+    :func:`core.prompt_loader.fixed_prompt_characters`, rendering with a
+    one-character stand-in task, cannot see any of it. An empty tuple is a
+    claim, and a true one for two of the three places: it says the runner adds
+    nothing there. ``None`` means no runner said anything at all, which
+    :func:`_check_instruction_length` turns into a refusal rather than into a
+    zero.
+    """
+    named = RUNNER_CLASS_BY_ENVIRONMENT.get(environment)
+    if named is None:
+        return None
+    module_name, class_name = named
+    try:
+        module = import_module(module_name)
+        runner = getattr(module, class_name)
+        declared = getattr(runner, "FIRST_REQUEST_EXTRA_SECTIONS")
     except (AttributeError, ImportError):
         return None
     return tuple(str(section) for section in declared)
@@ -1369,6 +1444,11 @@ def _compare_one_experiment_file(
 
     qa = condition_a.get("qa")
     qa = qa if isinstance(qa, Mapping) else {}
+    # An absent or empty self-review block really does mean no self-review:
+    # :mod:`core.experiment_config` builds no ``QAConfig`` at all unless the
+    # block holds something. So silence here may be read as "off" — which is
+    # why this one setting keeps its default, and the attempt count below
+    # does not.
     enabled = bool(qa.get("enabled", False))
     if enabled != conditions.self_review_enabled:
         problems.append(
@@ -1376,36 +1456,79 @@ def _compare_one_experiment_file(
             "review of its own answer, but the shared conditions "
             f"{'turn it on' if conditions.self_review_enabled else 'turn it off'}"
         )
-    qa_attempts = int(qa.get("max_retries", 0) or 0)
-    if qa_attempts != conditions.self_review_max_attempts:
+    written_qa_attempts = qa.get("max_retries")
+    if qa and written_qa_attempts is None:
         problems.append(
-            f"{label} allows {qa_attempts} self-review attempts, but the "
-            f"shared conditions allow {conditions.self_review_max_attempts}"
+            f"{label} has a self-review block that does not say how many "
+            "self-review attempts it allows, so it would fall back to a "
+            "built-in default rather than the "
+            f"{conditions.self_review_max_attempts} the shared conditions fix"
+        )
+    elif written_qa_attempts is not None and (
+        int(written_qa_attempts) != conditions.self_review_max_attempts
+    ):
+        problems.append(
+            f"{label} allows {written_qa_attempts} self-review attempts, but "
+            f"the shared conditions allow {conditions.self_review_max_attempts}"
         )
 
     execution = settings.get("execution")
     execution = execution if isinstance(execution, Mapping) else {}
     expected_mode = EXECUTION_MODE_BY_ENVIRONMENT.get(environment)
-    if expected_mode is not None and execution.get("mode") != expected_mode:
+    written_mode = execution.get("mode")
+    if expected_mode is not None and written_mode is None:
         problems.append(
-            f"{label} runs in {execution.get('mode')!r} mode, but this run "
+            f"{label} does not say which mode it runs in, so it would fall "
+            "back to a built-in default rather than the "
+            f"{expected_mode!r} this run place is reached through"
+        )
+    elif expected_mode is not None and written_mode != expected_mode:
+        problems.append(
+            f"{label} runs in {written_mode!r} mode, but this run "
             f"place is reached through {expected_mode!r}"
         )
     timeout = execution.get("timeout")
-    if int(timeout or 0) != conditions.per_task_timeout_seconds:
+    if timeout is None:
+        problems.append(
+            f"{label} does not say how long one task may take, so it would "
+            "fall back to a built-in default rather than the "
+            f"{conditions.per_task_timeout_seconds} seconds the shared "
+            "conditions fix"
+        )
+    elif int(timeout) != conditions.per_task_timeout_seconds:
         problems.append(
             f"{label} allows one task {timeout!r} seconds, but the shared "
             f"conditions allow {conditions.per_task_timeout_seconds}"
         )
-    retries = int(execution.get("max_retries", 0) or 0)
-    if retries != conditions.retry_max_attempts:
+    retries = execution.get("max_retries")
+    if retries is None:
+        problems.append(
+            f"{label} does not say how many attempts it allows after a "
+            "network failure, a server error, or a timeout, so it would fall "
+            "back to a built-in default rather than the "
+            f"{conditions.retry_max_attempts} the shared conditions fix"
+        )
+    elif int(retries) != conditions.retry_max_attempts:
         problems.append(
             f"{label} allows {retries} attempts after a network failure, a "
             "server error, or a timeout, but the shared conditions allow "
             f"{conditions.retry_max_attempts}"
         )
-    resume_rounds = int(execution.get("resume_max_rounds", 0) or 0)
-    if resume_rounds != 0:
+    resume_rounds = execution.get("resume_max_rounds")
+    if resume_rounds is None:
+        # The one that used to pass in silence. Nought is both what this
+        # comparison requires and what an absent key used to be read as, so a
+        # file that never mentioned re-running failed tasks looked exactly
+        # like a file that had forbidden it.
+        problems.append(
+            f"{label} does not say whether failed tasks are re-run in extra "
+            "rounds, so it would fall back to a built-in default rather than "
+            "the 0 this comparison requires. Extra rounds would give this run "
+            "place more attempts than another depending on how its errors "
+            "happened to fall, so the file has to say 0 rather than leave it "
+            "to a default."
+        )
+    elif int(resume_rounds) != 0:
         problems.append(
             f"{label} allows {resume_rounds} extra rounds of re-running failed "
             "tasks. That would give this run place more attempts than another "
@@ -1584,7 +1707,20 @@ def run_envelope_preflight(
 
     owner_approval = cost_block.get("owner_approval")
     owner_approval = owner_approval if isinstance(owner_approval, Mapping) else {}
-    available_monthly_credit_usd: Decimal | None = None
+    if "available_monthly_credit_usd" in owner_approval:
+        # Refused rather than ignored. This file is published, and a number
+        # sitting here unread is an invitation to keep it up to date. What the
+        # owner approved is recorded by the two flags below; how much money is
+        # left in their account is not a setting for a run, and no check here
+        # is entitled to read it.
+        problems.append(
+            "cost.owner_approval.available_monthly_credit_usd is not read by "
+            "any check and must not be written here: an account's remaining "
+            "monthly credit is account information and this plan is published. "
+            "Remove the key. What the owner approved is recorded by "
+            "cost.owner_approval.paid_model_calls and "
+            "cost.owner_approval.unpriced_audio_measurement"
+        )
     if cost_policy == COST_POLICY_RECORD_ONLY:
         if owner_approval.get("paid_model_calls") is not True:
             problems.append(
@@ -1596,26 +1732,17 @@ def run_envelope_preflight(
                 "cost.policy records cost findings without blocking, but the "
                 "owner did not approve measuring the unpriced audio model"
             )
-        raw_credit = owner_approval.get("available_monthly_credit_usd")
-        try:
-            available_monthly_credit_usd = Decimal(str(raw_credit))
-        except Exception:
-            problems.append(
-                "cost.owner_approval.available_monthly_credit_usd must be a "
-                "number greater than zero"
-            )
-        else:
-            if available_monthly_credit_usd <= 0:
-                problems.append(
-                    "cost.owner_approval.available_monthly_credit_usd must be "
-                    "greater than zero"
-                )
 
     ceiling: CostCeiling | None = None
     grading_ceiling_problems: list[str] = []
     cost_findings: list[str] = []
     approved_raw = cost_block.get("approved_maximum_usd")
     approved: Decimal | None = None
+    if approved_raw is not None:
+        # Read here rather than inside the ceiling branch below, so that what
+        # the summary reports as the approved amount is what the plan writes
+        # down, whether or not the other half of the sum could be worked out.
+        approved, _ = read_approved_maximum(approved_raw)
     if conditions and loaded_catalog is not None:
         try:
             assumptions = CostAssumptions.from_mapping(
@@ -1657,11 +1784,16 @@ def run_envelope_preflight(
                         ),
                     )
                 )
-                if approved_raw is not None:
-                    try:
-                        approved = Decimal(str(approved_raw))
-                    except Exception:
-                        approved = None
+
+    if cost_policy == COST_POLICY_BLOCK and ceiling is None:
+        # The approved amount is normally judged on the way to comparing it
+        # against the worked-out ceiling. When no ceiling could be worked out
+        # that comparison never happens, and the only check that this policy's
+        # stopping figure exists and is a real amount went with it. A failure
+        # in the other half of the sum is not a reason to stop asking: a plan
+        # that says "stop on cost" with no amount, a negative one, or an
+        # infinite one must not reach a run place.
+        cost_findings.extend(check_approved_maximum(approved_raw))
 
     if cost_policy == COST_POLICY_BLOCK:
         problems.extend(cost_findings)
@@ -1697,7 +1829,6 @@ def run_envelope_preflight(
         approved_maximum_usd=approved,
         cost_policy=cost_policy,
         cost_findings=cost_findings,
-        available_monthly_credit_usd=available_monthly_credit_usd,
         azure=azure,
         grading_ceiling_problems=grading_ceiling_problems,
         input_files=input_files,
@@ -1867,14 +1998,36 @@ def _check_instruction_length(
     :func:`_check_the_plan_counts_every_call_the_container_makes`. Only the
     cheap direction is refused.
 
-    **What the figure does not cover.** ``SandboxRunner._augment_prompt`` adds
-    further sections to the container's first request — a deliverable contract
-    section, a dependency hint, and a skills manual its committed settings
-    currently switch off. Those are outside what ``render_prompt`` produces and
-    outside this figure, and they are recorded as the next thing to price
-    rather than left implied. What that means is a container demand smaller than
-    the container's real first request, so this rule under-demands there; it
-    never lets a plan claim more than the render proved.
+    **What the render cannot see, and what is added to it.** A runner may put
+    wording in its first request that never passes through ``render_prompt`` as
+    wording at all. ``SandboxRunner._augment_prompt`` builds a deliverable
+    contract, a dependency hint and a skills manual, lays them out with the
+    task, and hands the **result** to ``render_prompt`` as the task — so
+    ``fixed_prompt_characters``, which renders with a one-character stand-in
+    task on purpose, replaces all of it with that one character. For a long time
+    this rule charged the render alone, and the container's demand was therefore
+    smaller than the container's real first request.
+
+    Each runner now declares what it adds, in ``FIRST_REQUEST_EXTRA_SECTIONS``,
+    and :func:`core.first_request_sections.first_request_section_budget` builds
+    those sections through the same functions a real attempt builds them with
+    and measures what they come to. A run place whose runner declares nothing is
+    refused, on the rule
+    :func:`_check_the_plan_prices_what_the_files_add_to_the_prompt` already
+    applies: nothing looked, and nothing looking is not the same as the claim
+    holding. An empty declaration is not that — it is a runner saying it adds
+    none of them, which for Azure and the host process is true.
+
+    Two of those sections read the task's own words, and the catalogue records a
+    task's length but not its text, so they are driven to the widest their own
+    committed tables can produce. That over-charges the container, in the
+    direction a ceiling is allowed to be wrong in, and it leaves no wording that
+    can be added to those tables without moving the bill.
+
+    What stays outside this figure is the task's own words and its reference
+    files, both charged per task and per file elsewhere in the same sum;
+    ``core/first_request_sections.py`` names each of them and says where, and
+    refuses a section that is in neither list.
     """
     problems: list[str] = []
     files = plan.get("experiment_files")
@@ -1899,6 +2052,7 @@ def _check_instruction_length(
                 "checked"
             )
             continue
+        extra_sections = _runner_first_request_extra_sections(environment)
         try:
             settings = yaml.safe_load(
                 (root / str(relative)).read_text(encoding="utf-8")
@@ -1912,19 +2066,56 @@ def _check_instruction_length(
                     "that is does not declare DEFAULT_PROMPT, so which prompt "
                     "file it sends is not written down anywhere here"
                 )
+            if extra_sections is None:
+                # An empty tuple would be a claim, and a true one for two of the
+                # three places. ``None`` is silence, and pricing silence at
+                # nothing is how the container's own sections went uncharged for
+                # as long as they did.
+                raise ValueError(
+                    "the runner registered for this run place does not declare "
+                    "FIRST_REQUEST_EXTRA_SECTIONS, so what it puts in its first "
+                    "request past the rendered prompt is not written down "
+                    "anywhere here, and a figure nothing checked is not a "
+                    "figure that holds"
+                )
+            sandbox = _dig(settings, ("execution", "sandbox"))
+            # ``core/executor.py`` passes ``opts.get("max_skills", 5)``, so a
+            # settings file that leaves the key out has the skills manual on.
+            # Defaulting to nothing here would price it out of a run that sends
+            # it. A value that is not a whole number cannot be handed to
+            # ``SkillsRegistry.select`` at all, so it is refused rather than
+            # rounded into something.
+            max_skills = sandbox.get("max_skills", 5)
+            if isinstance(max_skills, bool) or not isinstance(max_skills, int):
+                raise ValueError(
+                    f"execution.sandbox.max_skills is {max_skills!r}, which is "
+                    "not a whole number of skills, so how much skills manual "
+                    "the first request carries cannot be worked out"
+                )
             measured = {
-                candidate: fixed_prompt_characters(
-                    load_prompt(candidate),
-                    experiment_prompt=_dig(settings, ("condition_a",)).get("prompt"),
-                    occupation=occupation,
+                candidate: (
+                    fixed_prompt_characters(
+                        load_prompt(candidate),
+                        experiment_prompt=_dig(settings, ("condition_a",)).get(
+                            "prompt"
+                        ),
+                        occupation=occupation,
+                    ),
+                    first_request_section_budget(
+                        extra_sections,
+                        prompt_name=candidate,
+                        max_skills=max_skills,
+                        contract_config=sandbox.get("contract"),
+                    ),
                 )
                 for candidate in candidates
             }
         except Exception as unreadable:  # noqa: BLE001 - anything here is a refusal
             # A missing settings file, a prompt file that is not there, wording
-            # that will not render: every one of them leaves the request
-            # unpriceable. Caught broadly and turned into a refusal rather than
-            # allowed to pass this rule by falling through it.
+            # that will not render, a skills directory that cannot be read:
+            # every one of them leaves the request unpriceable. Caught broadly
+            # and turned into a refusal rather than allowed to pass this rule by
+            # falling through it.
             problems.append(
                 f"{environment}'s cost is charged "
                 f"{assumptions.instruction_character_count} characters for "
@@ -1934,22 +2125,37 @@ def _check_instruction_length(
             )
             continue
 
-        name = max(measured, key=lambda candidate: sum(measured[candidate].values()))
-        widths = measured[name]
-        characters = sum(widths.values())
+        name = max(
+            measured,
+            key=lambda candidate: (
+                sum(measured[candidate][0].values()) + measured[candidate][1].characters
+            ),
+        )
+        widths, budget = measured[name]
+        characters = sum(widths.values()) + budget.characters
         if assumptions.instruction_character_count >= characters:
             continue
         short_by = characters - assumptions.instruction_character_count
+        parts: list[tuple[str, int]] = list(widths.items())
+        parts.extend(
+            (f"{section} built by the runner before the render", width)
+            for section, width in budget.per_section.items()
+        )
         made_of = ", ".join(
             f"{width} characters of {what}"
-            for what, width in sorted(widths.items(), key=lambda pair: -pair[1])
+            for what, width in sorted(parts, key=lambda pair: -pair[1])
             if width
+        )
+        left_out = "".join(
+            f"; {section} adds nothing because {why}"
+            for section, why in sorted(budget.silent.items())
         )
         problems.append(
             f"{environment} sends prompts/{name}.yaml wrapped in its own "
-            f"condition_a.prompt wording, which core/prompt_loader.py renders "
+            f"condition_a.prompt wording, plus whatever its runner declares it "
+            f"builds before that is rendered; together they come "
             f"to {characters} characters before the task's own words are added "
-            f"({made_of}), but the plan's cost sum charges "
+            f"({made_of}){left_out}, but the plan's cost sum charges "
             f"{assumptions.instruction_character_count} characters for that "
             f"part of every request — {short_by} characters short, on every "
             "call this comparison makes"
@@ -2049,22 +2255,40 @@ def describe_input_file_checks(result: EnvelopePreflight) -> list[str]:
     authorise a bill needs to see the difference between a fingerprint that was
     compared against the file and one that was taken on trust, and that
     difference is invisible in a list that only shows problems.
+
+    There is a third answer, and it is the one that matters most: compared, and
+    it disagreed. That is said out loud here rather than left to be inferred
+    from a count, because "2 of 2 read and compared in full" is read as
+    reassurance even when one of the two turned out to be a different file.
     """
     lines: list[str] = []
     for environment, verification in sorted(result.input_files.items()):
         if not verification.checks:
             lines.append(f"{environment}: no input fingerprint was written down")
             continue
-        read = len(verification.fully_checked)
-        lines.append(
-            f"{environment}: {read} of {len(verification.checks)} input file(s) "
-            "read off this machine and compared in full"
+        agreed = len(verification.fully_checked)
+        summary = (
+            f"{environment}: {agreed} of {len(verification.checks)} input "
+            "file(s) read off this machine, compared in full, and agreed"
         )
+        disagreed = verification.disagreements
+        if disagreed:
+            summary += (
+                f"; {len(disagreed)} was read and turned out to be a different "
+                "file"
+                if len(disagreed) == 1
+                else f"; {len(disagreed)} were read and turned out to be "
+                "different files"
+            )
+        lines.append(summary)
         for check in verification.checks:
-            lines.append(
+            line = (
                 f"    [{check.state}] {check.path} "
                 f"— {check.characters_compared} of 64 characters compared"
             )
+            if check.disagreed:
+                line += " and they do not match"
+            lines.append(line)
     return lines
 
 
@@ -2089,11 +2313,6 @@ def describe_preflight(result: EnvelopePreflight) -> list[str]:
             "cost policy: record findings only; cost estimates, missing prices, "
             "and missing measurements do not stop this owner-approved run"
         )
-        if result.available_monthly_credit_usd is not None:
-            lines.append(
-                "available monthly credit recorded by the owner: "
-                f"{result.available_monthly_credit_usd} United States dollars"
-            )
         if result.cost_findings:
             lines.append(
                 f"cost findings to measure and review after the run: "

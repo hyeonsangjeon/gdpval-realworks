@@ -25,45 +25,44 @@ import os
 import sys
 from pathlib import Path
 
-import yaml
-
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
 from core.execution_environment_readiness import (  # noqa: E402
     COMPARISON_SAME_GENERATED_CODE,
-    ModelRunConditions,
     build_readiness_report,
     describe_environment,
     measure_docker_availability,
 )
 
-
-def _load_plan(path: Path) -> dict:
-    text = path.read_text(encoding="utf-8")
-    loaded = yaml.safe_load(text)
-    if not isinstance(loaded, dict):
-        raise ValueError("the plan file must contain a mapping at the top level")
-    return loaded
-
-
-def _conditions_from_plan(plan: dict) -> dict[str, ModelRunConditions]:
-    raw = plan.get("model_run_conditions")
-    if raw is None:
-        return {}
-    if not isinstance(raw, dict):
-        raise ValueError("model_run_conditions must be a mapping")
-    shared = raw.get("shared")
-    per_environment = raw.get("by_environment")
-    if not isinstance(per_environment, dict):
-        raise ValueError("model_run_conditions.by_environment must be a mapping")
-    resolved: dict[str, ModelRunConditions] = {}
-    for environment, override in per_environment.items():
-        merged = dict(shared or {})
-        merged.update(dict(override or {}))
-        resolved[str(environment)] = ModelRunConditions.from_mapping(merged)
-    return resolved
+# Read the plan with the reader the rest of the repository reads it with.
+#
+# This file used to carry its own private pair of these two functions. They
+# started as copies of the ones here, and then only one copy was maintained:
+# f728b24 made `resource` a required run condition and taught
+# core.execution_envelope_preflight.conditions_from_plan to fill it in from the
+# azure_connection block, exactly as the plan asks in the comment standing
+# where the field would otherwise be written. The copy in this file was left
+# behind, so the documented command
+#
+#     python scripts/check_execution_environment_readiness.py \
+#         --plan experiments/execution_envelope/advance_check_plan.yaml
+#
+# stopped on "model run conditions are missing required entries: resource"
+# before a single readiness rule was reached. Thirteen test files kept driving
+# the maintained copy against that same plan and stayed green, so the free gate
+# standing in front of a paid run was broken for weeks with nothing to say so.
+#
+# Importing rather than re-fixing is the point: a third behaviour would be a
+# third thing to keep in step. The maintained copy also knows something this
+# one never did — a run place whose model does not come from the pinned
+# Microsoft Foundry resource has to name its own, because there is nothing
+# there for it to inherit.
+from core.execution_envelope_preflight import (  # noqa: E402
+    conditions_from_plan,
+    load_plan,
+)
 
 
 def main() -> int:
@@ -100,7 +99,7 @@ def main() -> int:
 
     plan: dict = {}
     if args.plan is not None:
-        plan = _load_plan(args.plan)
+        plan = load_plan(args.plan)
 
     docker_daemon: bool | None = None
     docker_image: bool | None = None
@@ -116,7 +115,7 @@ def main() -> int:
     # A plan that names the key but lists no run place is a mistake worth
     # reporting, so it is passed through rather than turned into "no plan".
     conditions = (
-        _conditions_from_plan(plan) if "model_run_conditions" in plan else None
+        conditions_from_plan(plan) if "model_run_conditions" in plan else None
     )
 
     report = build_readiness_report(

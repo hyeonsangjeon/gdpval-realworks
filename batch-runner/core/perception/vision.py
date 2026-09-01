@@ -205,6 +205,17 @@ class VisionPerception:
         self._calls_used = 0
         self._cache.clear()
 
+    def restore_spend(self, calls_used: int) -> None:
+        """Re-charge a resumed task for what an earlier chunk already looked at.
+
+        ``reset`` runs at every task boundary, and a task that spans chunks
+        crosses that boundary mid-rubric. Without this, a task resumed twice
+        gets its cap back twice and sees nine images where the task graded
+        beside it in one sitting saw three -- the same rubric marked with a
+        different instrument. The cap is per task, not per attempt.
+        """
+        self._calls_used = max(0, min(int(calls_used), self.call_cap))
+
     def judge(
         self,
         *,

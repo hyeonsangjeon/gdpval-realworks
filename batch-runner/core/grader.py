@@ -11,7 +11,7 @@ import logging
 import os
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Iterable, Literal, Optional
 
@@ -38,6 +38,11 @@ from core.grader_routing import (
     resolve_runtime_routing,
 )
 from core.rubric_loader import RubricItem, TaskRubric
+from core.task_checkpoint import (
+    CheckpointRejected,
+    TaskProgress,
+    TaskProgressDraft,
+)
 from core.tools import has_audio_content, has_extractable_text
 
 logger = logging.getLogger(__name__)
@@ -60,7 +65,20 @@ class GradingDeadlineExceeded(RuntimeError):
     attempt did: one task held the loop for four hours past a four-hour
     budget, the job hit ``timeout-minutes`` at five hours twenty, and six
     finished tasks went down with it.
+
+    ``progress`` carries what the task had finished when the clock ran out,
+    for the one task where "mark it from the beginning" does not terminate:
+    ``9e39df84`` is longer than a chunk, so four paid attempts each stopped
+    around item 50 of 57 and each began again at item one. The driver decides
+    whether to keep it — the exception's own contract is unchanged, and a
+    driver that ignores ``progress`` behaves exactly as before.
     """
+
+    def __init__(
+        self, *args, progress: "TaskProgressDraft | None" = None
+    ) -> None:
+        super().__init__(*args)
+        self.progress = progress
 
 
 def grader_transport_options(config: dict) -> dict[str, object]:
@@ -170,6 +188,11 @@ class ItemGrade:
     perception_called: bool = False
     tools_used: Optional[list[str]] = None
     visual_provenance: list[dict] = field(default_factory=list)
+    #: Why a perception sub-judge could not answer, when that is what ended
+    #: the item. ``evidence`` carries the kind of failure and this carries the
+    #: cause, because a run that produced fifteen listening errors and two
+    #: distinct strings between them cannot be acted on.
+    perception_error_detail: Optional[str] = None
     target_scope: Optional[str] = None
     target_ids: Optional[list[str]] = None
     child_grades: Optional[list[dict]] = None
@@ -191,6 +214,12 @@ class ItemGrade:
     render_call_count: int = 0
     render_total_latency_ms: float = 0.0
     usage_complete: bool = True
+    #: This item wanted pictures, the task could not afford them all, and it
+    #: was put back on the path it would have taken before the unreadable-file
+    #: escalation existed. The verdict below is a real verdict, read off a
+    #: readable file -- but it was read where a picture was preferred, and a
+    #: reader comparing it against another run needs to know that.
+    visual_budget_downgraded: bool = False
 
 
 @dataclass
@@ -233,6 +262,12 @@ class TaskGrade:
     render_call_count: int = 0
     render_total_latency_ms: float = 0.0
     usage_complete: bool = True
+    #: The visual budget this task could not meet, when it was met by giving
+    #: up pictures rather than by giving up the task. ``None`` on every task
+    #: that never came near the cap. The string is the shortfall as it was
+    #: originally measured, so the size of what was given up is on the record
+    #: even though the items below carry real scores.
+    visual_budget_fallback: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -244,6 +279,11 @@ class _RuntimeCriterionPlan:
     visual_preflight_error: Optional[str]
     supported_visual_call_count: int
     requires_visual: bool
+    #: Set only on a plan that was rebuilt to fit inside the task visual
+    #: budget, and only on the items the rebuild actually moved off the
+    #: render path. Carried onto the item's grade so the payload says which
+    #: verdicts were reached without the pictures they asked for.
+    visual_budget_downgraded: bool = False
 
 
 class Grader:
@@ -333,6 +373,13 @@ class Grader:
             #: silently repeated once per rubric item.
             self._text_layer_cache: dict[str, bool | None] = {}
             self._audio_content_cache: dict[str, bool | None] = {}
+            #: Set while a task is being marked, to a zero-argument callable
+            #: returning what that task has finished so far. Read only by
+            #: ``_check_should_stop``, on its way to raising. ``None`` outside
+            #: a task, and read with a default because the ``object.__new__``
+            #: path above never gets here — an absent supplier means "no
+            #: checkpoint", which is the behaviour that predates it.
+            self._progress_draft: Optional[Callable[[], TaskProgressDraft]] = None
 
             # Task 207 — the tool-calling judge is the only grading path.
             # The legacy text-extract / batch / tier-routing paths are gone,
@@ -398,35 +445,98 @@ class Grader:
         """
         if self.should_stop is None or not self.should_stop():
             return
+        draft = getattr(self, "_progress_draft", None)
         raise GradingDeadlineExceeded(
-            f"grading deadline reached during {task_id} while starting {unit}"
+            f"grading deadline reached during {task_id} while starting {unit}",
+            progress=draft() if callable(draft) else None,
         )
 
-    def grade_task(self, task: TaskRubric, deliverable_dir: str) -> TaskGrade:
+    @staticmethod
+    def _restore_items(progress: TaskProgress, task: TaskRubric) -> list[ItemGrade]:
+        """Rebuild the items an earlier chunk finished, as objects again.
+
+        Reconstruction is strict on purpose. ``ItemGrade`` is inside the
+        graded source fingerprint, so a checkpoint written against a different
+        shape has already been refused by ``load_checkpoint``; if one ever
+        reaches here anyway, it must announce itself rather than arrive as a
+        ``TypeError`` from a dataclass constructor forty frames from anything
+        that explains it.
+        """
+        restored: list[ItemGrade] = []
+        for position, stored in enumerate(progress.completed_items):
+            try:
+                restored.append(ItemGrade(**stored))
+            except TypeError as exc:
+                raise CheckpointRejected(
+                    f"{task.task_id} item {position} does not fit the current "
+                    f"ItemGrade: {exc}"
+                ) from exc
+        return restored
+
+    def grade_task(
+        self,
+        task: TaskRubric,
+        deliverable_dir: str,
+        *,
+        resume_from: Optional[TaskProgress] = None,
+    ) -> TaskGrade:
         deliverable_path = Path(deliverable_dir)
         files = self._list_files(deliverable_path)
 
         # PR3 (0531) — reset per-task perception call caps before each task.
         # __init__ guarantees _tool_judge exists, so this is the only path.
         self._tool_judge.reset_perception()
+        if resume_from is not None:
+            # The reset above still has to happen: the sub-judges cache images
+            # and transcripts per task, and carrying the previous task's into
+            # this one is a different bug. What must survive it is the spend.
+            # Caps are per task; an unlucky task that took three chunks must
+            # not get three times the looking its neighbour got.
+            self._tool_judge.restore_perception_spend(
+                resume_from.perception_spent
+            )
         # Every rubric item of a task asks about the same files, so the
         # routing probes are answered once per file per task rather than
         # once per item. Cleared here for the same reason the caps are.
+        #
+        # Not restored on resume, unlike the caps: these two probes read local
+        # bytes, cost nothing and answer the same way every time, so paying
+        # them again changes the clock and not the marking.
         self._text_layer_cache = {}
         self._audio_content_cache = {}
-        if self._cost_recorder is None:
-            return self._grade_task_with_selector(task, deliverable_path, files)
+        try:
+            if self._cost_recorder is None:
+                return self._grade_task_with_selector(
+                    task, deliverable_path, files, resume_from=resume_from
+                )
 
-        # Everything this call spends — judge turns, retries inside the
-        # judge, and the perception reads it delegates — belongs to one
-        # task's marking bill.
-        with self._cost_recorder.attributed(
-            task_id=task.task_id, stage=STAGE_GRADING
-        ):
-            return self._grade_task_with_selector(task, deliverable_path, files)
+            # Everything this call spends — judge turns, retries inside the
+            # judge, and the perception reads it delegates — belongs to one
+            # task's marking bill.
+            #
+            # A task spanning chunks opens this window once per chunk and so
+            # leaves more than one run of ledger rows. That is right and it
+            # adds up: the ledger is keyed by grade file rather than by
+            # process, a resumed chunk reopens it, and ``receipt_for`` sums
+            # every row a task id has regardless of which round wrote it.
+            with self._cost_recorder.attributed(
+                task_id=task.task_id, stage=STAGE_GRADING
+            ):
+                return self._grade_task_with_selector(
+                    task, deliverable_path, files, resume_from=resume_from
+                )
+        finally:
+            # The draft closes over this task's items. Left installed, it
+            # would hand the next task a stale one.
+            self._progress_draft = None
 
     def _grade_task_with_selector(
-        self, task: TaskRubric, deliverable_path: Path, files: list[Path]
+        self,
+        task: TaskRubric,
+        deliverable_path: Path,
+        files: list[Path],
+        *,
+        resume_from: Optional[TaskProgress] = None,
     ) -> TaskGrade:
         """Tool-calling path with deterministic deliverable selection.
 
@@ -446,6 +556,17 @@ class Grader:
             for item in task.rubric_items
         ]
         visual_budget_error = self._task_visual_budget_error(runtime_plans)
+        visual_budget_fallback: str | None = None
+        if visual_budget_error:
+            runtime_plans, visual_budget_error, visual_budget_fallback = (
+                self._relax_to_fit_visual_budget(
+                    selection,
+                    task,
+                    runtime_plans,
+                    deliverable_path,
+                    visual_budget_error,
+                )
+            )
 
         items: list[ItemGrade] = []
         judge_call_count = 0
@@ -454,8 +575,58 @@ class Grader:
         judge_input_tokens = 0
         judge_output_tokens = 0
         judge_cached_tokens = 0
+        resumed_at = 0
 
-        for item, runtime_plan in zip(task.rubric_items, runtime_plans):
+        if resume_from is not None:
+            items = self._restore_items(resume_from, task)
+            resumed_at = len(items)
+            # Only the prechecks. The other five tallies here are handed to
+            # ``_aggregate_tool_instrumentation`` below and then overwritten
+            # by it, because per-item instrumentation is the task-level truth
+            # — and those per-item fields are inside the restored ``items``,
+            # so an earlier chunk's judge calls, tokens and latency come back
+            # on their own. A precheck resolves an item without a judge call
+            # and is counted nowhere per-item, so it is the one number that
+            # would be lost.
+            precheck_count = resume_from.precheck_count
+            logger.info(
+                "%s: resuming after %d/%d items from checkpoint",
+                task.task_id,
+                resumed_at,
+                len(task.rubric_items),
+            )
+
+        def draft() -> TaskProgressDraft:
+            """This task's progress, as of right now. Never a grade.
+
+            Built only on the way out through ``GradingDeadlineExceeded``.
+            ``items`` here is a prefix of the rubric in canonical order — the
+            loop appends one per iteration and never skips — which is the
+            shape ``load_checkpoint`` insists on before it will resume from
+            one.
+            """
+            return TaskProgressDraft(
+                completed_items=tuple(asdict(ig) for ig in items),
+                perception_spent=self._tool_judge.perception_spend(),
+                precheck_count=precheck_count,
+            )
+
+        # Positional, not by item id: ``load_checkpoint`` has already proved
+        # the stored items are a prefix of this rubric in this order, and
+        # slicing says so directly. Skipping by a set of ids would quietly do
+        # the wrong thing for a rubric that repeats one.
+        remaining = list(
+            zip(task.rubric_items[resumed_at:], runtime_plans[resumed_at:])
+        )
+
+        # Installed rather than caught at the call sites. ``_check_should_stop``
+        # is the only thing that raises the deadline, and it is called from
+        # both this loop and the split-children loop several frames down;
+        # attaching the draft where the exception is born covers both, and the
+        # next one someone adds. ``grade_task`` clears it on the way out.
+        self._progress_draft = draft
+
+        for item, runtime_plan in remaining:
             self._check_should_stop(task.task_id, f"item {item.rubric_item_id}")
             mode, pattern_id = self._classify(item)
             plan = runtime_plan.target_plan
@@ -630,6 +801,13 @@ class Grader:
             items.append(ig)
 
         grade = self._aggregate(items, task)
+        grade.visual_budget_fallback = visual_budget_fallback
+        for item_grade, runtime_plan in zip(items, runtime_plans):
+            # Positional for the same reason the loop above is: ``items`` is a
+            # prefix of the rubric in canonical order, restored chunks
+            # included, and ``runtime_plans`` is built from the same list.
+            if runtime_plan.visual_budget_downgraded:
+                item_grade.visual_budget_downgraded = True
         grade.judge_call_count = judge_call_count
         grade.precheck_count = precheck_count
         grade.judge_total_latency_ms = round(judge_total_latency_ms, 2)
@@ -732,23 +910,73 @@ class Grader:
             deliverable_path, paths, has_audio_content, self._audio_content_cache
         )
 
+    def _paths_without_text(
+        self, deliverable_path: Path, paths: Iterable[str]
+    ) -> tuple[str, ...]:
+        """Which of these files measurably yield no text at all.
+
+        The question above answers *whether* one of them does; this answers
+        *which*, because that is what decides where the pictures are spent. A
+        file the probe cannot speak for is not in the answer, for the same
+        reason it cannot escalate: rendering on a guess is what the ``None``
+        rule exists to prevent. Order follows the selection so the render set
+        reads the way the deliverable does, and shares the text-layer memo, so
+        asking costs nothing a run was not already paying.
+        """
+        without: list[str] = []
+        for name in paths:
+            if not isinstance(name, str) or not name or name in without:
+                continue
+            if name not in self._text_layer_cache:
+                self._text_layer_cache[name] = has_extractable_text(
+                    deliverable_path / name
+                )
+            if self._text_layer_cache[name] is False:
+                without.append(name)
+        return tuple(without)
+
     def _runtime_criterion_plan(
         self,
         selection: DeliverableSelection,
         item: RubricItem,
         plan: CriterionTargetPlan,
         deliverable_path: Path,
+        *,
+        escalate_readable_siblings: bool = True,
     ) -> _RuntimeCriterionPlan:
+        """Decide where one rubric item is judged, and what that will cost.
+
+        ``escalate_readable_siblings=False`` withholds one signal and one
+        only: "is any single selected file unreadable", the per-file question
+        added so a picture delivered beside a readable memo is still looked
+        at. Withholding it puts an item back on the path it took before that
+        question existed -- read the sibling that can be read.
+
+        It is the exact knob the budget fallback needs, because the two
+        signals split on exactly the case that matters. A bundle where
+        *something* can be read still has a text route to fall back to. A
+        bundle where *nothing* can be read has none, and there
+        ``selected_paths_have_text`` is still ``False`` and still escalates,
+        so this cannot resurrect the defect task 64 fixed: reading zero
+        characters and calling the content absent.
+        """
         item_decision = resolve_runtime_routing(
             item.criterion,
             plan.selected_paths,
             selected_paths_have_text=self._selected_paths_have_text(
                 deliverable_path, plan.selected_paths
             ),
-            some_selected_path_lacks_text=self._some_selected_path_lacks_text(
-                deliverable_path, plan.selected_paths
+            some_selected_path_lacks_text=(
+                self._some_selected_path_lacks_text(
+                    deliverable_path, plan.selected_paths
+                )
+                if escalate_readable_siblings
+                else None
             ),
             selected_paths_have_audio=self._selected_paths_have_audio(
+                deliverable_path, plan.selected_paths
+            ),
+            paths_without_text=self._paths_without_text(
                 deliverable_path, plan.selected_paths
             ),
         )
@@ -778,17 +1006,23 @@ class Grader:
                         self._some_selected_path_lacks_text(
                             deliverable_path, target.paths
                         )
+                        if escalate_readable_siblings
+                        else None
                     ),
                     selected_paths_have_audio=self._selected_paths_have_audio(
+                        deliverable_path, target.paths
+                    ),
+                    paths_without_text=self._paths_without_text(
                         deliverable_path, target.paths
                     ),
                 )
                 target_decisions[target_id] = decision
                 if decision.modality is Modality.VISUAL:
-                    raw_visual_paths.extend(target.paths)
+                    child_render = decision.render_targets(target.paths)
+                    raw_visual_paths.extend(child_render)
                     planned_names, child_error = (
                         self._tool_judge.validate_planned_visual_names(
-                            target.paths, visual_file_cap
+                            child_render, visual_file_cap
                         )
                     )
                     supported_visual_paths.extend(planned_names)
@@ -797,10 +1031,11 @@ class Grader:
                             f"{target_id}: {child_error}"
                         )
         elif item_decision.modality is Modality.VISUAL:
-            raw_visual_paths.extend(plan.selected_paths)
+            item_render = item_decision.render_targets(plan.selected_paths)
+            raw_visual_paths.extend(item_render)
             supported_visual_paths, visual_preflight_error = (
                 self._tool_judge.validate_planned_visual_names(
-                    plan.selected_paths, visual_file_cap
+                    item_render, visual_file_cap
                 )
             )
 
@@ -853,6 +1088,83 @@ class Grader:
         return (
             "task_visual_budget_exceeded:"
             f"required_calls={required},cap={cap}"
+        )
+
+    def _relax_to_fit_visual_budget(
+        self,
+        selection: DeliverableSelection,
+        task: TaskRubric,
+        runtime_plans: list[_RuntimeCriterionPlan],
+        deliverable_path: Path,
+        visual_budget_error: str,
+    ) -> tuple[list[_RuntimeCriterionPlan], str | None, str | None]:
+        """Give up pictures before giving up the task.
+
+        A task over its visual budget excludes every item that wanted a
+        picture, and a task with nothing left to score is dropped from the
+        corpus entirely -- not scored zero, *dropped*: ``_aggregate`` sets
+        ``all_items_score_excluded`` and the analysers count only tasks
+        without an error. Stage 3's task 43dc9778 asked for 134 renders
+        against a cap of 72 and left a 67-item, 87%-scoring task out of a
+        185-task corpus. Silently, because a corpus of 184 looks like a
+        corpus.
+
+        The item that escalated only because one of its files carries no
+        text layer has somewhere else to go: the readable sibling it was
+        selected beside. So when the budget cannot be met, ask what the task
+        would have cost without that escalation, and if that fits, grade it.
+        A partial verdict on a readable file beats no verdict at all, and it
+        is exactly the verdict this benchmark produced before the escalation
+        was added.
+
+        Two properties make this safe to do automatically. It cannot invent a
+        text verdict where there is no text -- an item whose files *all* lack
+        a text layer still escalates, because that signal is left switched on
+        (see ``_runtime_criterion_plan``). And it does not depend on rubric
+        order: nothing here spends the budget on the first N items and starves
+        the rest, which would make a task's score depend on how its rubric was
+        written and is not a thing a fingerprinted benchmark may do.
+
+        Returns the plans to grade with, the budget error that still applies
+        to them, and the shortfall to record on the task.
+        """
+        relaxed = [
+            self._runtime_criterion_plan(
+                selection,
+                item,
+                strict.target_plan,
+                deliverable_path,
+                escalate_readable_siblings=False,
+            )
+            for item, strict in zip(task.rubric_items, runtime_plans)
+        ]
+        strict_demand = sum(
+            plan.supported_visual_call_count for plan in runtime_plans
+        )
+        relaxed_demand = sum(plan.supported_visual_call_count for plan in relaxed)
+        if relaxed_demand >= strict_demand:
+            # Nothing to give up: every render this task wants is wanted by a
+            # criterion that names something visual. Failing closed is right.
+            return runtime_plans, visual_budget_error, None
+        marked = [
+            replace(plan, visual_budget_downgraded=True)
+            if strict.requires_visual and not plan.requires_visual
+            else plan
+            for plan, strict in zip(relaxed, runtime_plans)
+        ]
+        logger.warning(
+            "%s: %s; regrading %d item(s) without the unreadable-file "
+            "escalation (%d renders -> %d)",
+            task.task_id,
+            visual_budget_error,
+            sum(1 for plan in marked if plan.visual_budget_downgraded),
+            strict_demand,
+            relaxed_demand,
+        )
+        return (
+            marked,
+            self._task_visual_budget_error(marked),
+            visual_budget_error,
         )
 
     @staticmethod
@@ -976,7 +1288,9 @@ class Grader:
                 if target_id in target_by_id and target_id in visual_target_ids
                 for expected_paths in [
                     self._tool_judge.planned_supported_visual_names(
-                        target_by_id[target_id].paths
+                        runtime_plan.target_decisions[target_id].render_targets(
+                            target_by_id[target_id].paths
+                        )
                     )
                 ]
             )
@@ -992,7 +1306,9 @@ class Grader:
                     continue
                 child_decision = runtime_plan.target_decisions[target_id]
                 child_prepass = (
-                    visual_prepass.subset(list(target.paths))
+                    visual_prepass.subset(
+                        child_decision.render_targets(target.paths)
+                    )
                     if child_decision.modality is Modality.VISUAL else None
                 )
                 child_grades.append({
@@ -1097,7 +1413,11 @@ class Grader:
                 list(target.paths),
                 reference_file_names,
                 visual_prepass=(
-                    visual_prepass.subset(list(target.paths))
+                    visual_prepass.subset(
+                        runtime_plan.target_decisions[target_id].render_targets(
+                            target.paths
+                        )
+                    )
                     if visual_prepass is not None
                     and target_id in visual_target_ids else None
                 ),
@@ -1121,6 +1441,7 @@ class Grader:
                     "perception_called": child.perception_called,
                     "tools_used": list(child.tools_used or []),
                     "visual_provenance": list(child.visual_provenance),
+                    "perception_error_detail": child.perception_error_detail,
                     "score_excluded": child.score_excluded,
                     "judge_call_count": child.judge_call_count,
                     "judge_input_tokens": child.judge_input_tokens,
@@ -1214,6 +1535,18 @@ class Grader:
                 for child in child_items
                 for provenance in child.visual_provenance
             ],
+            # The first child that failed on perception, so the parent row is
+            # actionable without opening ``child_grades``. Every child keeps
+            # its own; this is a pointer to the story, not a summary of all of
+            # them.
+            perception_error_detail=next(
+                (
+                    child.perception_error_detail
+                    for child in child_items
+                    if child.perception_error_detail
+                ),
+                None,
+            ),
             child_grades=child_grades,
             score_excluded=(verdict == "judge_error"),
             judge_call_count=sum(child.judge_call_count for child in child_items),
@@ -1744,6 +2077,7 @@ class Grader:
             perception_called=result.perception_called,
             tools_used=list(result.tools_used),
             visual_provenance=list(result.visual_provenance),
+            perception_error_detail=result.perception_error_detail,
             score_excluded=result.score_excluded,
             judge_call_count=result.main_api_call_count,
             judge_input_tokens=result.input_tokens,

@@ -230,6 +230,14 @@ class SubprocessRunner:
         "available_files",
     )
 
+    #: Which prompt sections this run place puts in its **first** request past
+    #: the rendered prompt and the reference files. None: ``run`` builds the
+    #: three reference-file blocks inline and sends the task, and there is no
+    #: deliverable contract, dependency hint or skills manual anywhere in this
+    #: module. Empty is a *claim*, not an omission — see the note on
+    #: ``CodeInterpreterRunner.FIRST_REQUEST_EXTRA_SECTIONS``.
+    FIRST_REQUEST_EXTRA_SECTIONS: tuple[str, ...] = ()
+
     DEFAULT_PROMPT = "subprocess_occupation_codegen"
 
     def __init__(

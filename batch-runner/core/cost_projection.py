@@ -109,7 +109,27 @@ _MAX_IDENTITY_LENGTH = 128
 # float noise never reaches the screen.
 _MONEY_DIGITS = 6
 _MAX_COST_USD = 1_000_000.0
-_MAX_COUNT = 10_000_000
+
+#: How many times a run called a model. Thousands, by construction — tasks
+#: times stages times the retries a run is allowed. The largest published to
+#: date is 2,346, which is 0.02% of this.
+_MAX_MODEL_CALLS = 10_000_000
+
+#: How many tokens those calls carried, which is neither the same quantity nor
+#: the same scale: the 2,346 calls above carried 21,688,749 input tokens
+#: between them, and an ordinary marking call is nine thousand tokens of rubric
+#: and deliverable.
+#:
+#: Bounded where a count stops meaning one thing to every reader of this
+#: contract, rather than at a size someone guessed a run would not reach. The
+#: guessed kind of bound is what this constant used to be, and a real shard
+#: crossed it. Above ``2**53 - 1`` a JSON integer no longer survives
+#: ``JSON.parse``: ``scripts/cost-receipt.mjs`` and the dashboard would read a
+#: different number than the file holds, and ``Number.isInteger`` would still
+#: say yes to it. So this is a bound on being read back correctly, not on being
+#: plausible — the module cannot know how large an honest run is, and the last
+#: time it assumed, it was wrong.
+_MAX_TOKENS = 2**53 - 1
 
 
 def _fail(field: str, detail: str) -> None:
@@ -130,13 +150,26 @@ def _cost_amount(value, field: str):
     return round(amount, _MONEY_DIGITS)
 
 
-def _cost_count(value, field: str):
-    """Return a non-negative bounded integer, or ``None`` when absent."""
+def _cost_count(value, field: str, limit: int):
+    """Return a non-negative integer within ``limit``, or ``None`` when absent.
+
+    The bound arrives as an argument rather than being fixed here, because the
+    two kinds of field that reach this function are not one quantity. A run's
+    calls and the tokens those calls carried differ by four orders of magnitude
+    on real runs, so a single bound covering both is really the smaller one
+    wearing a general name — which is how an honest 21,688,749-token shard came
+    to be refused as out of range while the 2,337 calls behind it used two
+    hundredths of a percent of the same allowance.
+
+    Naming the bound at each call site is the part that keeps that from coming
+    back: a reader can see which quantity is being bounded without having to
+    know that ``usage`` and ``model_calls`` share a helper.
+    """
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
         _fail(field, "must be an integer")
-    if value < 0 or value > _MAX_COUNT:
+    if value < 0 or value > limit:
         _fail(field, "is out of range")
     return value
 
@@ -152,7 +185,7 @@ def _cost_usage(value, field: str) -> dict:
     for key, raw in value.items():
         if not isinstance(key, str) or _SLUG.fullmatch(key) is None:
             _fail(field, "carries an invalid key")
-        usage[key] = _cost_count(raw, f"{field}.{key}")
+        usage[key] = _cost_count(raw, f"{field}.{key}", _MAX_TOKENS)
     return dict(sorted(usage.items()))
 
 
@@ -253,7 +286,9 @@ def _project_component(value, field: str) -> dict:
         "retry_kind": retry_kind,
         "status": status,
         "known_cost_usd": known,
-        "model_calls": _cost_count(value.get("model_calls"), f"{field}.model_calls"),
+        "model_calls": _cost_count(
+            value.get("model_calls"), f"{field}.model_calls", _MAX_MODEL_CALLS
+        ),
         "usage": _cost_usage(value.get("usage"), f"{field}.usage"),
         "missing_reasons": _missing_reasons(
             value.get("missing_reasons"), f"{field}.missing_reasons"
@@ -373,7 +408,9 @@ def project_cost_receipt(value, field: str = "cost receipt"):
         "known_cost_usd": known,
         "model_cost_usd": model_cost,
         "runtime_cost_usd": runtime_cost,
-        "model_calls": _cost_count(value.get("model_calls"), f"{field}.model_calls"),
+        "model_calls": _cost_count(
+            value.get("model_calls"), f"{field}.model_calls", _MAX_MODEL_CALLS
+        ),
         "usage": _cost_usage(value.get("usage"), f"{field}.usage"),
         "components": components,
         "price_table_sha256": _price_table_sha256(
@@ -491,15 +528,35 @@ def summarize_cost_receipts(
     receipts = []
     failed_amount = 0.0
     failed_count = 0
+    failed_measured = 0
+    rows_without_a_receipt = 0
     for row in rows:
+        failed = row.get("status") != "success"
         receipt = row.get(field)
         if not isinstance(receipt, dict):
+            # No receipt at all is a hole in the record, not a task that cost
+            # nothing -- and if that task also failed, it is still a failure.
+            # Skipping the row outright counted it in `total_tasks` and in the
+            # coverage denominator while subtracting it from the failure count,
+            # so the same table could read "1 / 2 tasks (50.0%)" beside
+            # "Failed tasks | 0" and disagree with itself about whether a
+            # second task existed.
+            rows_without_a_receipt += 1
+            if failed:
+                failed_count += 1
             continue
         receipts.append(receipt)
-        if row.get("status") != "success":
+        if failed:
             failed_count += 1
             amount = _receipt_amount(receipt)
             if amount is not None:
+                # Counted, not just added. Two failures against a model the
+                # price table has no entry for contribute nothing here, and the
+                # sum they leave behind is 0.0 -- the same number a failure that
+                # genuinely made no model call leaves behind. The amount alone
+                # cannot tell those apart, so the count of failures that could
+                # be priced is published beside it.
+                failed_measured += 1
                 failed_amount += amount
     if not receipts:
         return None
@@ -515,18 +572,53 @@ def summarize_cost_receipts(
     ]
     known_total = round(sum(amounts), _MONEY_DIGITS) if amounts else 0.0
 
-    # The run total is only a total when every receipt is complete. One
-    # partial or unavailable receipt makes it a floor, and it is labelled as
-    # one rather than quietly rounded up into a headline number.
-    complete_run = counts["complete"] == len(receipts)
-    if complete_run:
+    # The run's state comes from the receipts' own states, not from whether a
+    # number fell out of them. `amounts` is empty whenever every measurable
+    # receipt sits at a $0 floor — which `_measured_amount` above nulls on
+    # purpose, and which is the ordinary case when the model that was called is
+    # absent from the price table. Reading the state off `amounts` made such a
+    # run fall past `partial` all the way to `not_run`: two tasks, two paid
+    # calls, real tokens on both, published as work that never happened.
+    #
+    # Work that genuinely never ran is not a hole in the run. It contributed
+    # nothing, so it neither drags the state down nor stops a total being a
+    # total — where `counts["complete"] == len(receipts)` counted it against the
+    # run and withheld a figure every receipt underneath it supported.
+    #
+    # A total is still only a total when every receipt that ran is complete. One
+    # partial or unavailable receipt makes it a floor, and it is labelled as one
+    # rather than quietly rounded up into a headline number.
+    #
+    # This is the rule `core.cost_receipts._summary_status` and
+    # `scripts/cost-receipt.mjs` already apply to the same receipts. Three
+    # summarisers read one set of receipts; they must not give three answers
+    # about it.
+    contributing = [
+        receipt for receipt in receipts if receipt["status"] != "not_run"
+    ]
+    if not contributing:
+        status = "not_run"
+    elif all(receipt["status"] == "complete" for receipt in contributing):
         status = "complete"
-    elif amounts:
-        status = "partial"
-    elif counts["unavailable"]:
+    elif all(receipt["status"] == "unavailable" for receipt in contributing):
         status = "unavailable"
     else:
-        status = "not_run"
+        status = "partial"
+    complete_run = status == "complete"
+    if rows_without_a_receipt and status == "complete":
+        # Every receipt the run does carry is whole, but the run is not: some
+        # task's cost was never recorded at all. Judging completeness against
+        # `len(receipts)` asks only "is what I kept consistent?", which the
+        # rows that were dropped can never answer. So a two-task run holding
+        # one $0.42 receipt announced "Receipt status: complete" and headed the
+        # table "Total | $0.4200" -- a total over half a run.
+        #
+        # Only `complete` moves. A run already reading partial, unavailable or
+        # not_run is already not claiming to be whole, and a run where every
+        # row carries a receipt reaches none of this, so no fully-recorded
+        # experiment changes what it says.
+        status = "partial"
+        complete_run = False
 
     reasons = sorted({
         reason
@@ -609,6 +701,10 @@ def summarize_cost_receipts(
         # Failed work costs real money. It is reported beside the total, not
         # netted out of it.
         "failed_task_count": failed_count,
+        # How many of those failures could be priced at all. Without it the
+        # amount below is unreadable: $0 means "these failures were free" and
+        # "these failures were never priced" at the same time.
+        "failed_measured_tasks": failed_measured,
         "failed_task_cost_usd": round(failed_amount, _MONEY_DIGITS),
         "components": components,
         "price_table_sha256": price_tables[0] if len(price_tables) == 1 else None,

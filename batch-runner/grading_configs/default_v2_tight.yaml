@@ -57,7 +57,7 @@ judge:
       call_cap_per_task: 72  # checked-in 220 inventory: max 68 supported calls
     audio:
       model: "gpt-audio-1.5"
-      call_cap_per_task: 3
+      call_cap_per_task: 32  # checked-in 220 inventory: max 32 listening criteria
       trim_seconds: 30
 
   critical:

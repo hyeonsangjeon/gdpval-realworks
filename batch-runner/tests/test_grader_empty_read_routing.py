@@ -21,7 +21,8 @@ from pathlib import Path
 import pytest
 
 from core.grader import Grader
-from core.grader_preflight import _planner, plan_task_runtime
+from core.grader_preflight import _planner, plan_task_runtime, summarize_cohort
+from core.grader_routing import Modality, resolve_runtime_routing
 from core.rubric_loader import RubricItem, TaskRubric
 
 
@@ -65,6 +66,20 @@ def typed(tmp_path: Path) -> Path:
     from reportlab.pdfgen import canvas
 
     p = tmp_path / "Scan.pdf"
+    document = canvas.Canvas(str(p))
+    document.drawString(100, 750, "The total contract value is 4,200 USD.")
+    document.showPage()
+    document.save()
+    return p
+
+
+@pytest.fixture
+def sibling(tmp_path: Path) -> Path:
+    """A readable file under its own name, to be selected beside the scan."""
+    pytest.importorskip("reportlab")
+    from reportlab.pdfgen import canvas
+
+    p = tmp_path / "Return.pdf"
     document = canvas.Canvas(str(p))
     document.drawString(100, 750, "The total contract value is 4,200 USD.")
     document.showPage()
@@ -287,3 +302,258 @@ def test_the_two_questions_share_one_read_of_each_file(tmp_path, monkeypatch):
     grader._some_selected_path_lacks_text(tmp_path, ["notes.txt"])
 
     assert len(opened) == 1
+
+
+# ── Which files escalated is which files get looked at (task 83) ─────
+#
+# Escalating and rendering are two different sets, and treating them as one
+# cost a whole task its score. Stage 3's task 43dc9778 delivers a two-page
+# scan beside a 17-page readable return, and all 67 of its rubric items
+# select both files. Every item escalated on the scan -- correctly, that is
+# the rule above doing its job -- and then asked for the bundle: 67 x 2 = 134
+# renders against a task visual budget of 72. Over budget, all 67 items
+# excluded, ``all_items_score_excluded``, 87.36% to 0.00%.
+#
+# The escalation was right and the render scope was wrong. What makes a file
+# escalate is a fact about that file, so that file is what gets rendered.
+
+
+def test_the_probe_names_the_file_that_cannot_be_read(tmp_path, scan, sibling):
+    answer = _probe_surface()._paths_without_text(
+        tmp_path, ["Return.pdf", "Scan.pdf"]
+    )
+
+    assert answer == ("Scan.pdf",)
+
+
+def test_a_file_the_probe_cannot_speak_for_is_not_named(tmp_path, scan):
+    """Same discipline as everywhere else here: only a measured no counts.
+
+    An unknown named in the render set would spend a picture on a guess,
+    which is what the ``None`` rule exists to prevent.
+    """
+    (tmp_path / "mystery.bin").write_bytes(b"\x00\x01\x02")
+
+    answer = _probe_surface()._paths_without_text(
+        tmp_path, ["Scan.pdf", "mystery.bin", "never_written.pdf"]
+    )
+
+    assert answer == ("Scan.pdf",)
+
+
+def test_only_the_unreadable_file_is_planned_for_rendering():
+    decision = resolve_runtime_routing(
+        _CONTENT_ITEM.criterion,
+        ["Return.pdf", "Scan.pdf"],
+        selected_paths_have_text=True,
+        some_selected_path_lacks_text=True,
+        paths_without_text=("Scan.pdf",),
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.render_paths == ("Scan.pdf",)
+    assert decision.render_targets(["Return.pdf", "Scan.pdf"]) == ["Scan.pdf"]
+
+
+def test_a_set_where_nothing_can_be_read_is_not_narrowed():
+    """Narrower or nothing.
+
+    When every selected file lacks text the render set is the selection, and
+    recording that twice is a second thing to keep in step with the first.
+    """
+    decision = resolve_runtime_routing(
+        _CONTENT_ITEM.criterion,
+        ["Flowchart.pdf", "Scan.pdf"],
+        selected_paths_have_text=False,
+        paths_without_text=("Flowchart.pdf", "Scan.pdf"),
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.render_paths is None
+    assert decision.render_targets(["Flowchart.pdf", "Scan.pdf"]) == [
+        "Flowchart.pdf",
+        "Scan.pdf",
+    ]
+
+
+def test_a_criterion_that_names_a_picture_still_asks_for_the_whole_bundle():
+    """The narrowing belongs to the escalation, not to VISUAL in general.
+
+    "Do the chart colours match the palette" is a question about the
+    deliverable. Answering it from one file of two would be answering a
+    different question, and nothing about that item's routing depends on
+    which of its files happens to carry a text layer.
+    """
+    decision = resolve_runtime_routing(
+        "The chart colors match the brand palette.",
+        ["Return.pdf", "Scan.pdf"],
+        selected_paths_have_text=True,
+        some_selected_path_lacks_text=True,
+        paths_without_text=("Scan.pdf",),
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.render_paths is None
+
+
+def test_an_escalation_that_names_no_files_asks_for_all_of_them():
+    """The answer is optional, and its absence is not a narrowing.
+
+    A caller that measures ``some_selected_path_lacks_text`` without saying
+    which file it was gets exactly the behaviour that shipped before this.
+    """
+    decision = resolve_runtime_routing(
+        _CONTENT_ITEM.criterion,
+        ["Return.pdf", "Scan.pdf"],
+        selected_paths_have_text=True,
+        some_selected_path_lacks_text=True,
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.render_paths is None
+
+
+def test_one_scan_no_longer_spends_a_whole_task_visual_budget(
+    tmp_path, scan, sibling
+):
+    """The regression, at the scale that fits in a test.
+
+    Measured on the code this replaces, these same three items planned
+    ``task visual budget exceeded: planned=6, cap=4``, rendered nothing, and
+    took every item down with them -- the shape of ``planned=134, cap=72`` on
+    the real task. Each item now plans the scan alone.
+    """
+    items = [
+        RubricItem(f"r{index}", _CONTENT_ITEM.criterion, 2, None)
+        for index in range(3)
+    ]
+
+    plan = plan_task_runtime(
+        {"judge": {"perception": {"visual": {"call_cap_per_task": 4}}}},
+        _task("Produce Scan.pdf and Return.pdf.", items),
+        tmp_path,
+    )
+
+    assert plan["judge_routes"] == {"visual": 3}
+    assert [item["planned_visual_paths"] for item in plan["items"]] == [
+        ["Scan.pdf"],
+        ["Scan.pdf"],
+        ["Scan.pdf"],
+    ]
+    assert plan["planned_render_calls"] == 3
+    assert plan["errors"] == []
+
+
+# ── Give up pictures before giving up the task (task 84) ─────────────
+#
+# The narrowing above takes 43dc9778 from 134 renders to 67 and back inside
+# its budget of 72, so that task is fixed. The failure mode is not: any task
+# whose escalated items outnumber its visual budget still excludes every one
+# of them, reports ``all_items_score_excluded``, and is then dropped from the
+# corpus by every analyser -- ``_aggregate`` in the grader, ``_aggregate`` in
+# ``analyze_gold_ceiling.py`` and ``step8_grade.py`` all count only tasks
+# without an error. Not a zero in the mean. A silently shorter corpus.
+#
+# An item that escalated only because one of its files carries no text layer
+# has somewhere else to go: the readable file it was selected beside. That is
+# the verdict this benchmark produced before the escalation existed, and it
+# beats no verdict at all.
+
+
+def test_over_budget_is_replanned_onto_the_readable_file(
+    tmp_path, scan, sibling
+):
+    """Measured both ways on the same five items and the same cap of two.
+
+    Before: ``planned=5, cap=2``, zero renders, zero judgments, every item a
+    preflight error -- the shape that empties a task. After: five text
+    judgments, no error, and the shortfall recorded rather than paid.
+    """
+    items = [
+        RubricItem(f"r{index}", _CONTENT_ITEM.criterion, 2, None)
+        for index in range(5)
+    ]
+
+    plan = plan_task_runtime(
+        {"judge": {"perception": {"visual": {"call_cap_per_task": 2}}}},
+        _task("Produce Scan.pdf and Return.pdf.", items),
+        tmp_path,
+    )
+
+    assert plan["judge_routes"] == {"text": 5}
+    assert plan["planned_main_judgments"] == 5
+    assert plan["planned_render_calls"] == 0
+    assert plan["errors"] == []
+    assert plan["visual_budget_fallback"] == (
+        "task visual budget exceeded: planned=5, cap=2"
+    )
+    assert all(item["visual_budget_downgraded"] for item in plan["items"])
+
+
+def test_a_budget_that_fits_is_left_alone(tmp_path, scan, sibling):
+    """The fallback is a last resort, not a preference.
+
+    Same five items, a cap that covers them, and nothing about the plan
+    changes: the pictures are what the escalation asked for.
+    """
+    items = [
+        RubricItem(f"r{index}", _CONTENT_ITEM.criterion, 2, None)
+        for index in range(5)
+    ]
+
+    plan = plan_task_runtime(
+        {"judge": {"perception": {"visual": {"call_cap_per_task": 5}}}},
+        _task("Produce Scan.pdf and Return.pdf.", items),
+        tmp_path,
+    )
+
+    assert plan["judge_routes"] == {"visual": 5}
+    assert plan["planned_render_calls"] == 5
+    assert plan["visual_budget_fallback"] is None
+    assert not any(item["visual_budget_downgraded"] for item in plan["items"])
+
+
+def test_nothing_readable_is_not_replanned_onto_nothing(tmp_path, scan):
+    """The rehearsal fails closed wherever the paid run does.
+
+    Both selected files are pictures, so there is no text route to fall back
+    to and the escalation must stand. Answering these from a read would be
+    the task-64 defect: zero characters reported as absent content.
+    """
+    (tmp_path / "Return.pdf").write_bytes((tmp_path / "Scan.pdf").read_bytes())
+    items = [
+        RubricItem(f"r{index}", _CONTENT_ITEM.criterion, 2, None)
+        for index in range(5)
+    ]
+
+    plan = plan_task_runtime(
+        {"judge": {"perception": {"visual": {"call_cap_per_task": 2}}}},
+        _task("Produce Scan.pdf and Return.pdf.", items),
+        tmp_path,
+    )
+
+    assert plan["visual_budget_fallback"] is None
+    assert plan["planned_render_calls"] == 0
+    assert plan["planned_main_judgments"] == 0
+    assert plan["errors"] == [
+        "task visual budget exceeded: planned=10, cap=2"
+    ]
+
+
+def test_the_cohort_summary_names_the_task_that_gave_up_pictures(
+    tmp_path, scan, sibling
+):
+    """185 task blocks is not a place to notice this by reading."""
+    items = [
+        RubricItem(f"r{index}", _CONTENT_ITEM.criterion, 2, None)
+        for index in range(5)
+    ]
+    config = {"judge": {"perception": {"visual": {"call_cap_per_task": 2}}}}
+
+    summary = summarize_cohort([
+        plan_task_runtime(
+            config, _task("Produce Scan.pdf and Return.pdf.", items), tmp_path
+        )
+    ])
+
+    assert summary["visual_budget_fallback_task_ids"] == ["task-1"]

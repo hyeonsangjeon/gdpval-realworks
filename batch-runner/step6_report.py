@@ -45,6 +45,7 @@ from core.cost_projection import (  # noqa: E402
     verify_cost_ledger,
 )
 from core.execution_metrics import bounded_count, bounded_duration_ms  # noqa: E402
+from core.measurement_display import render_measured  # noqa: E402
 from core.prepared_fingerprint import FINGERPRINT_RE  # noqa: E402
 from core.result_fingerprint import RESULT_FINGERPRINT_RE  # noqa: E402
 from core.publication_generation import validate_publication_generation  # noqa: E402
@@ -198,18 +199,29 @@ def _compute_summary(data: dict) -> dict:
     scores = [r["qa_score"] for r in results if r.get("qa_score") is not None]
     latencies = [r["latency_ms"] for r in results if r.get("latency_ms")]
 
+    # Nothing scored and nothing timed are not scores of zero and times of
+    # zero. A run where every task errored has no average to report, and
+    # writing 0.0 for it publishes the bottom of the scale as an observation:
+    # the report then reads as a model that failed every rubric item in no
+    # time at all. ``step3_format_results.py`` has always written None here.
+    #
+    # ``success_rate_pct`` deliberately keeps its 0.0. Its fallback fires only
+    # when ``total_tasks`` is 0, which is printed right beside it, so the
+    # reader can see there was nothing to divide. The two above are the
+    # dishonest ones precisely because ``total_tasks: 220`` sits next to them
+    # and says the opposite.
     return {
         "total_tasks": total,
         "success_count": success_count,
         "success_rate_pct": round(success_count / total * 100, 1) if total else 0.0,
         "error_count": error_count,
         "retried_count": retried_count,
-        "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
-        "min_qa_score": min(scores) if scores else 0,
-        "max_qa_score": max(scores) if scores else 0,
-        "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else 0,
-        "max_latency_ms": round(max(latencies)) if latencies else 0,
-        "total_latency_ms": round(sum(latencies)) if latencies else 0,
+        "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else None,
+        "min_qa_score": min(scores) if scores else None,
+        "max_qa_score": max(scores) if scores else None,
+        "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else None,
+        "max_latency_ms": round(max(latencies)) if latencies else None,
+        "total_latency_ms": round(sum(latencies)) if latencies else None,
     }
 
 
@@ -436,8 +448,12 @@ def _compute_sector_breakdown(data: dict) -> list[dict]:
             "total": b["total"],
             "success": b["success"],
             "success_rate_pct": round(b["success"] / b["total"] * 100, 1) if b["total"] else 0.0,
-            "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
-            "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else 0,
+            # Same distinction as ``_compute_summary``: a sector whose tasks all
+            # errored has nothing to average, and a sector row reading 0.00 with
+            # a task count beside it is a claim about the model, not about the
+            # data being absent.
+            "avg_qa_score": round(sum(scores) / len(scores), 2) if scores else None,
+            "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else None,
         })
     return breakdown
 
@@ -750,6 +766,39 @@ def _cost_money(value) -> str:
     return "no record" if value is None else f"${value:,.4f}"
 
 
+def _failed_task_cost(cost: dict) -> str:
+    """``N (amount)`` for failed work, with the amount honestly qualified.
+
+    The number on its own is ambiguous in the one direction that matters. A
+    failure that asked no model really did cost nothing, and a failure billed
+    against a model absent from the price table also arrives as nothing --
+    `_receipt_amount` returns None and the sum it never joined stays 0.0. Both
+    printed `($0.0000)`. Which one a reader is looking at is decided by the
+    count of failures that could be priced, never by the amount.
+
+    A run whose failures were all priced prints exactly what it printed before,
+    and so does a run with no failures at all: zero failures did cost zero.
+    """
+    failed = cost["failed_task_count"]
+    # Absent on reports published before this count existed. There the amount
+    # is trustworthy only when the whole run was priced, since a fully priced
+    # run cannot contain an unpriced failure.
+    measured = cost.get("failed_measured_tasks")
+    if measured is None:
+        measured = failed if cost["measured_tasks"] == cost["receipt_tasks"] else 0
+    if failed == 0 or measured == failed:
+        return f"{failed} ({_cost_money(cost['failed_task_cost_usd'])})"
+    if measured == 0:
+        return f"{failed} (no record)"
+    # Some priced, some not: what is shown is a floor, and the reader is told
+    # how much of the row it covers -- the same disclosure the `Priced` row
+    # above makes about the run.
+    return (
+        f"{failed} ({_cost_money(cost['failed_task_cost_usd'])}, "
+        f"{measured} / {failed} priced)"
+    )
+
+
 def _build_markdown(rd: dict) -> str:
     meta = rd["meta"]
     summary = rd["summary"]
@@ -828,6 +877,19 @@ def _build_markdown(rd: dict) -> str:
         cost = cost_summary.get(field)
         if not cost:
             continue
+        # Every other money row below arrives as None when nothing could be
+        # priced, so each renders "no record". `known_cost_usd` alone is forced
+        # to 0.0 by the producer -- it is a sum over an empty set -- which left
+        # the one row a reader takes as *the* number as the one row reading as
+        # free. The exp026c smoke (run 33302056462) made two paid model calls
+        # against a model the price table had no entry for and printed
+        # "$0.0000" here, directly beside "Not priced | price_missing".
+        #
+        # Decided off `measured_tasks`, not off the amount, because the amount
+        # cannot tell "priced, and it was free" apart from "never priced". The
+        # dashboard's summaryTotalCell already splits it on the same field; the
+        # producer's number is not touched, only how this row reads it.
+        recorded = cost["known_cost_usd"] if cost["measured_tasks"] else None
         lines += [
             f"## {label}",
             "",
@@ -836,8 +898,17 @@ def _build_markdown(rd: dict) -> str:
             "| Metric | Value |",
             "|--------|-------|",
             f"| Coverage | {cost['receipt_tasks']} / {cost['total_tasks']} tasks ({cost['coverage_pct']}%) |",
+        ]
+        # Coverage counts receipts, not amounts, so a run can be at 100% with
+        # nothing priced. Only shown when the two disagree, which leaves a
+        # fully-priced report byte-identical to what it printed before.
+        if cost["measured_tasks"] != cost["receipt_tasks"]:
+            lines.append(
+                f"| Priced | {cost['measured_tasks']} / {cost['receipt_tasks']} receipts |"
+            )
+        lines += [
             f"| Receipt status | {_COST_STATUS_LABELS[cost['status']]} |",
-            f"| {'Total' if cost['status'] == 'complete' else 'Recorded so far'} | {_cost_money(cost['known_cost_usd'])} |",
+            f"| {'Total' if cost['status'] == 'complete' else 'Recorded so far'} | {_cost_money(recorded)} |",
             f"| Average per task | {_cost_money(cost['avg_cost_usd'])} |",
             f"| Median | {_cost_money(cost['median_cost_usd'])} |",
             f"| P95 | {_cost_money(cost['p95_cost_usd'])} |",
@@ -849,10 +920,7 @@ def _build_markdown(rd: dict) -> str:
                 f"{_cost_money(cost['cost_per_successful_deliverable_usd'])} |"
             )
         # Failed work is reported, never netted out of the total.
-        lines.append(
-            f"| Failed tasks | {cost['failed_task_count']} "
-            f"({_cost_money(cost['failed_task_cost_usd'])}) |"
-        )
+        lines.append(f"| Failed tasks | {_failed_task_cost(cost)} |")
         if cost["missing_reasons"]:
             lines.append(f"| Not priced | {', '.join(cost['missing_reasons'])} |")
         lines.append("")
@@ -908,6 +976,7 @@ def _build_markdown(rd: dict) -> str:
         ]
 
     # 3. Key Metrics
+    total_llm_ms = summary["total_latency_ms"]
     lines += [
         "## Key Metrics",
         "",
@@ -917,12 +986,13 @@ def _build_markdown(rd: dict) -> str:
         f"| Success | {summary['success_count']} ({summary['success_rate_pct']}%) |",
         f"| Errors | {summary['error_count']} |",
         f"| Retried Tasks | {summary['retried_count']} |",
-        f"| Avg QA Score | {summary['avg_qa_score']}/10 |",
-        f"| Min QA Score | {summary['min_qa_score']}/10 |",
-        f"| Max QA Score | {summary['max_qa_score']}/10 |",
-        f"| Avg Latency | {summary['avg_latency_ms']:,}ms |",
-        f"| Max Latency | {summary['max_latency_ms']:,}ms |",
-        f"| Total LLM Time | {summary['total_latency_ms'] // 1000}s |",
+        f"| Avg QA Score | {render_measured(summary['avg_qa_score'], '/10')} |",
+        f"| Min QA Score | {render_measured(summary['min_qa_score'], '/10')} |",
+        f"| Max QA Score | {render_measured(summary['max_qa_score'], '/10')} |",
+        f"| Avg Latency | {render_measured(summary['avg_latency_ms'], 'ms', ',')} |",
+        f"| Max Latency | {render_measured(summary['max_latency_ms'], 'ms', ',')} |",
+        f"| Total LLM Time | "
+        f"{render_measured(total_llm_ms // 1000 if total_llm_ms is not None else None, 's')} |",
         "",
     ]
 
@@ -1006,7 +1076,8 @@ def _build_markdown(rd: dict) -> str:
         for s in sector_breakdown:
             lines.append(
                 f"| {s['sector'][:40]} | {s['total']} | {s['success']} | "
-                f"{s['success_rate_pct']}% | {s['avg_qa_score']}/10 | {s['avg_latency_ms']:,}ms |"
+                f"{s['success_rate_pct']}% | {render_measured(s['avg_qa_score'], '/10')} | "
+                f"{render_measured(s['avg_latency_ms'], 'ms', ',')} |"
             )
         lines.append("")
 
@@ -1147,7 +1218,8 @@ def _build_html(rd: dict) -> str:
         sector_rows += (
             f"<tr><td>{esc(s['sector'])}</td><td>{s['total']}</td>"
             f"<td>{s['success']}</td><td>{s['success_rate_pct']}%</td>"
-            f"<td>{s['avg_qa_score']}/10</td><td>{s['avg_latency_ms']:,}ms</td></tr>\n"
+            f"<td>{render_measured(s['avg_qa_score'], '/10')}</td>"
+            f"<td>{render_measured(s['avg_latency_ms'], 'ms', ',')}</td></tr>\n"
         )
 
     # Task rows
@@ -1289,7 +1361,7 @@ def _build_html(rd: dict) -> str:
     </div>
     <div class="card">
       <div class="label">Avg QA Score</div>
-      <div class="value">{summary['avg_qa_score']}</div>
+      <div class="value">{render_measured(summary['avg_qa_score'])}</div>
       <div class="sub">out of 10</div>
     </div>
     <div class="card">
@@ -1305,7 +1377,7 @@ def _build_html(rd: dict) -> str:
     {resume_card}
     <div class="card">
       <div class="label">Avg Latency</div>
-      <div class="value">{summary['avg_latency_ms']:,}</div>
+      <div class="value">{render_measured(summary['avg_latency_ms'], '', ',')}</div>
       <div class="sub">ms</div>
     </div>
   </div>
@@ -1582,8 +1654,8 @@ def generate_report(
     print(f"\n   Tasks: {summary['total_tasks']}  "
           f"Success: {summary['success_count']} ({summary['success_rate_pct']}%)  "
           f"Errors: {summary['error_count']}")
-    print(f"   Avg QA: {summary['avg_qa_score']}/10  "
-          f"Avg Latency: {summary['avg_latency_ms']:,}ms")
+    print(f"   Avg QA: {render_measured(summary['avg_qa_score'], '/10')}  "
+          f"Avg Latency: {render_measured(summary['avg_latency_ms'], 'ms', ',')}")
     if "narrative_error" in rd:
         print(f"\n   ⚠️  Narrative error: {rd['narrative_error']}")
 

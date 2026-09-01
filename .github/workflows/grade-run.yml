@@ -681,10 +681,37 @@ jobs:
       LANG: C.UTF-8
       PIP_CACHE_DIR: /root/.cache/pip
     # GH Actions hosted runners have a HARD 6h (360min) timeout that cannot be
-    # extended. We set 320min so step8_grade.py's internal 4h time guard (env
-    # GRADER_TIME_BUDGET_SEC=14400) trips first, partial-saves, and exits 7,
-    # leaving ~40min headroom for the commit + retrigger steps below.
-    timeout-minutes: 320
+    # extended. Everything below is that 360 divided up, so that step8_grade.py's
+    # own guard (env GRADER_TIME_BUDGET_SEC) always trips first, partial-saves,
+    # and exits 7 -- rather than the runner killing the job having paid for
+    # everything and saved nothing.
+    #
+    #   360   platform hard kill, not extendable
+    #   -1    reserved, so timeout-minutes fires first and the job is stopped
+    #         by us rather than by the platform
+    #   ---
+    #   359   timeout-minutes, below
+    #   -6.3  setup: checkout, pip install, HF download. Worst of the ten
+    #         grade jobs measured to date, not one sample -- the spread is
+    #         2.85 to 6.27min, and the 4.2 this line used to carry was run
+    #         33286656393 alone, which sits near the fast end. At 4.2 the
+    #         arithmetic below closed with 356.3min against a 355min timeout,
+    #         i.e. a slow-setup run could be killed while saving.
+    #   -12   the guard is a between-units check, so a chunk can be up to one
+    #         rubric item past its budget before it can stop. Longest item
+    #         measured, run 33286656393: 12.0min (task 9e39df84 items
+    #         36 -> 37, 04:24:48Z -> 04:36:48Z).
+    #   -2    partial save, commit, auto-retrigger after the guard fires
+    #   ---
+    #   338   GRADER_TIME_BUDGET_SEC = 20280, below
+    #
+    # The 12 used to be 32.7 -- the p90 *task*, not item -- because the guard
+    # used to be checked only between tasks. #77 and #279 moved it inside a
+    # task (core/grader.py::_check_should_stop, called between rubric items and
+    # between split children), which is what lets the budget be this close to
+    # the wall. test_a_chunk_can_always_save_before_the_runner_kills_it reads
+    # these numbers straight out of this file and fails if that stops holding.
+    timeout-minutes: 359
 
     steps:
 
@@ -981,10 +1008,46 @@ jobs:
           # pipe-style stdout triggers full-buffer mode and the log looks
           # frozen for many minutes between flushes.
           PYTHONUNBUFFERED: "1"
-          # 4-hour internal time budget. step8_grade.py partial-saves and
+          # 5-hour internal time budget. step8_grade.py partial-saves and
           # exits 7 when this trips, letting the workflow self-retrigger
-          # below before the 320-min job timeout-kills the runner.
-          GRADER_TIME_BUDGET_SEC: "14400"
+          # below before the 350-min job timeout-kills the runner.
+          #
+          # Was 4h (14400). Resume granularity is one whole task, so a task
+          # that cannot be graded inside a single chunk can never be graded
+          # at all: the next chunk restarts it from nothing and stalls in the
+          # same place. Gold shard 4 hit exactly that on task 9e39df84, 57
+          # rubric items of a Manufacturing deliverable. Eleven of its
+          # grading calls exhausted the config's 2400-token per-item output
+          # budget without emitting parseable final text
+          # (empty_final_text:max_output_tokens), and the resulting
+          # retry-without-tools cycles took 4h18m of the chunk's 4h21m. It
+          # reached 168 model calls against the ~146 that six finished tasks
+          # on the same shard predict for 57 items -- near the end, and out
+          # of time. The chunk then exited 5 rather than 7, because a chunk
+          # that completed no task refuses to buy another one on the same
+          # terms; that guard is right and stays.
+          #
+          # The per-item cap is not the lever here: it lives in the grading
+          # config, which compute_grader_source_hash covers, so moving it
+          # would refingerprint the grader and orphan the ten shards already
+          # on main. This file is not in that hash, so the wall clock is the
+          # one dial that can be turned without invalidating a paid run.
+          #
+          # 20280 = 338min, derived from the platform's 360 in the
+          # timeout-minutes comment above. It is the largest budget that can
+          # still stop and save, not a figure anybody chose for a task. The
+          # previous 20160 came from the same arithmetic carrying a setup
+          # figure taken from a single fast run; re-measured across all ten
+          # grade jobs the worst setup is 6.27min, which both moves this up
+          # and is why timeout-minutes moved to 359.
+          #
+          # It cannot go further. 20700 (345min) was considered and rejected:
+          # on the path where the guard fires *inside* 9e39df84 rather than
+          # after it, the job would reach 6.3 + 345 + 12 + 2 = 365min, past
+          # the platform kill, and a hard kill takes the cost-ledger upload
+          # with it. 338 is the last value whose worst case (358.3min) still
+          # lands inside the timeout on both the success and the failure path.
+          GRADER_TIME_BUDGET_SEC: "20280"
         run: |
           cd batch-runner
           ARGS=(
@@ -1046,6 +1109,8 @@ jobs:
           EXPECTED_GRADE_STATUS: ${{ steps.grade.outputs.rc == '7' && 'partial' || steps.grade.outputs.grade_status }}
           COST_LEDGER_FILE: ${{ steps.grade.outputs.cost_ledger_file }}
           COST_LEDGER_SHA256: ${{ steps.grade.outputs.cost_ledger_sha256 }}
+          GRADE_PROGRESS_FILE: ${{ steps.grade.outputs.grade_progress_file }}
+          GRADE_PROGRESS_SHA256: ${{ steps.grade.outputs.grade_progress_sha256 }}
         run: |
           GRADE_FILE="${{ steps.grade.outputs.grade_file }}"
           if [[ -z "$GRADE_FILE" || ! -f "$GRADE_FILE" ]]; then
@@ -1118,6 +1183,74 @@ jobs:
             echo "[cost] committing ledger $COST_LEDGER_FILE ($LEDGER_BLOB_SHA)"
           else
             echo "::warning::this grade carries no cost ledger; its per-call costs will not survive the run"
+          fi
+          # The finished items of a task the clock cut in half, when there are
+          # any. Committed for exactly the reason the ledger above is: the next
+          # chunk gets a fresh runner, and a file left only in this workspace
+          # is gone before it looks. Without this the progress would be written
+          # perfectly and read by nobody, and `9e39df84` would keep restarting
+          # at item one on every paid chunk.
+          #
+          # Absent on almost every run. Only a chunk that ran out of time
+          # *inside* a task publishes one, so silence here is the normal case
+          # and not worth a warning.
+          if [[ -n "$GRADE_PROGRESS_FILE" ]]; then
+            # Two patterns rather than one, because the directory depth varies:
+            # a sharded run's partial lives under `_shards/<name>/`, a plain
+            # one directly in `data/grades/`, and their `_progress/` folders
+            # sit beside each one. A single glob tight enough for the first
+            # rejects the second, and rejecting here is `exit 1` -- failing a
+            # whole paid chunk over a file it was right to write.
+            if [[ "$GRADE_PROGRESS_FILE" == /* || "$GRADE_PROGRESS_FILE" == *$'\n'* || "$GRADE_PROGRESS_FILE" == *..* || "$GRADE_PROGRESS_FILE" != data/grades/* || "$GRADE_PROGRESS_FILE" != */_progress/*.json || ! -f "$GRADE_PROGRESS_FILE" || -L "$GRADE_PROGRESS_FILE" ]]; then
+              echo "::error::resolved task progress path is invalid: $GRADE_PROGRESS_FILE"
+              exit 1
+            fi
+            PROGRESS_BLOB_SHA="$(python - "$GRADE_PROGRESS_FILE" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+          PY
+          )"
+            if [[ "$PROGRESS_BLOB_SHA" != "$GRADE_PROGRESS_SHA256" ]]; then
+              echo "::error::task progress on disk does not match the digest step8 published"
+              exit 1
+            fi
+            git add -- "$GRADE_PROGRESS_FILE"
+            echo "[progress] committing task progress $GRADE_PROGRESS_FILE ($PROGRESS_BLOB_SHA)"
+          fi
+          # The mirror of the block above, and the case it forgot. When a later
+          # chunk finishes the task the checkpoint described, step8 deletes the
+          # checkpoint -- correctly, since it now describes nothing. But an
+          # earlier chunk *committed* that file, so the delete lands on a
+          # tracked path, and every `git add` in this step names a path that
+          # still exists. The removal therefore stays unstaged, `git commit`
+          # succeeds, and the `git pull --rebase` below refuses to run:
+          #
+          #   error: cannot pull with rebase: You have unstaged changes.
+          #   Process completed with exit code 128.
+          #
+          # That is what killed run 33422393221 after it had graded all 17 of
+          # shard 4's tasks. Nothing was wrong with the grade; the shard's four
+          # hours of paid work reached the publish step and failed there, and
+          # the result had to be recovered from the uploaded artifact instead.
+          #
+          # Scoped two ways rather than `git add -A`: only tracked deletions
+          # (`--deleted`), and only under this grade's own `_progress/`
+          # directory with this grade's own stem. Eleven shards share that
+          # directory -- their checkpoints differ only by the stem prefix -- so
+          # an unscoped stage here could commit a sibling's deletion on the
+          # strength of a filesystem this runner never wrote.
+          PROGRESS_DIR="$(dirname "$GRADE_FILE")/_progress"
+          GRADE_STEM="$(basename "${GRADE_FILE%.json}")"
+          FINISHED_CHECKPOINTS="$(git ls-files --deleted -- "$PROGRESS_DIR" | grep -F "/${GRADE_STEM}__" || true)"
+          if [[ -n "$FINISHED_CHECKPOINTS" ]]; then
+            while IFS= read -r gone; do
+              [[ -z "$gone" ]] && continue
+              git add -- "$gone"
+              echo "[progress] staging the removal of a finished task's checkpoint: $gone"
+            done <<< "$FINISHED_CHECKPOINTS"
           fi
           if git diff --staged --quiet; then
             if [[ "${{ steps.grade.outputs.rc }}" == "7" ]]; then
@@ -1395,6 +1528,55 @@ jobs:
           PY
 
           git add -- "$FINAL_FILE"
+
+          # The merged payload names its own cost ledger and carries that
+          # file's digest. step9 writes the ledger beside the grade, but until
+          # now only the grade was staged -- so the run that produced the first
+          # complete 185 published a payload pointing at a file no clone of
+          # this repository contains. Nothing failed: the pointer is honest
+          # about a file that simply is not there, which is the shape of
+          # provenance defect that reads as fine until somebody tries to check
+          # the cost and cannot.
+          #
+          # Named, not globbed, and derived the same way step9 derives it
+          # (`out_path.stem + ".cost_ledger.jsonl"`). The sqlite3 sibling is
+          # deliberately left alone: no ledger database has ever been tracked
+          # here, and the JSONL export is the reviewable form.
+          MERGED_LEDGER="${FINAL_FILE%.json}.cost_ledger.jsonl"
+          CLAIMED_LEDGER_SHA="$(python - "$FINAL_FILE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print((payload.get("cost_ledger") or {}).get("sha256") or "")
+          PY
+          )"
+          if [[ -n "$CLAIMED_LEDGER_SHA" ]]; then
+            # Fail closed rather than publish the pointer alone. A merged grade
+            # whose ledger is missing or has drifted is not a smaller version
+            # of a good one -- it is a claim with nothing behind it, and the
+            # merge is cheap to redo compared with trusting it.
+            if [[ ! -f "$MERGED_LEDGER" || -L "$MERGED_LEDGER" ]]; then
+              echo "::error::merged payload claims a cost ledger that is not on disk: $MERGED_LEDGER"
+              exit 1
+            fi
+            LEDGER_BLOB_SHA="$(python - "$MERGED_LEDGER" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+          PY
+          )"
+            if [[ "$LEDGER_BLOB_SHA" != "$CLAIMED_LEDGER_SHA" ]]; then
+              echo "::error::merged cost ledger on disk does not match the digest the payload claims"
+              exit 1
+            fi
+            git add -- "$MERGED_LEDGER"
+            echo "[merge] committing merged cost ledger $MERGED_LEDGER ($LEDGER_BLOB_SHA)"
+          fi
+
           if git diff --staged --quiet; then
             echo "[merge] identical merge is already on main (another shard won the race)"
           else

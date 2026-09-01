@@ -143,6 +143,101 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **A task that takes longer than one chunk could never be graded, only paid
+  for repeatedly.** `--resume` harvests *completed* `task_id`s from the partial
+  on disk, so resume granularity is one whole task. A task abandoned part-way
+  leaves nothing behind and the next chunk starts it from zero. That turns the
+  chunk budget from a preference into a floor: below it, the task is not slow,
+  it is ungradeable, and every attempt spends a chunk's worth of judging to
+  learn nothing.
+
+  Gold shard 4 of 11 found the floor. Task `9e39df84` — 57 rubric items of a
+  Manufacturing deliverable — ran **4h21m against the 4h budget and completed
+  nothing**. Eleven of its grading calls exhausted the config's 2400-token
+  per-item output budget without returning parseable final text
+  (`empty_final_text:max_output_tokens`), and the retry-without-tools cycles
+  that followed account for **4h18m of the 4h21m** — 99% of the chunk's wall
+  clock, measured from the run's own log timestamps. It reached 168 model calls
+  against the ~146 that the six finished tasks on the same shard predict for 57
+  items, so it stopped near the end rather than early. The chunk then exited 5
+  rather than 7: a chunk that finished no task declines to request another paid
+  resume on identical terms. That refusal is correct and is unchanged here — it
+  is the reason the loss was one chunk instead of ten.
+
+  The per-item token cap is not the lever. It lives in the grading config,
+  which `compute_grader_source_hash` covers, so moving it would refingerprint
+  the grader and orphan the ten shards already graded, committed and paid for.
+  `.github/workflows/**` is in neither the `batch-runner` tree nor the config,
+  so the wall clock is the only dial that can turn without invalidating a run
+  in progress.
+
+  That dial has now moved three times against the same task, which is worth
+  recording as a progression rather than as a final number.
+  `GRADER_TIME_BUDGET_SEC` went 14400 → **18000** (5h) with `timeout-minutes`
+  320 → 350; the task then ran **5h10m and stopped three rubric items short of
+  57**, so the budget went to **20160** (336 min) with the timeout at 355. This
+  entry takes it to **20280** (338 min) and the timeout to **359**, which is
+  where it stops: 338 is the remainder after the platform's non-extendable 360
+  gives up one minute of reserve, 6.3 for setup, 12 for the single rubric item
+  a chunk can still be inside when the guard fires, and 2 to save and commit.
+
+  The 20160 step had a defect this fixes. Its setup allowance, 4.2 min, came
+  from one run — 33286656393, which sits near the fast end. Measured across
+  all ten grade jobs the spread is **2.85 to 6.27 min**, and at the worst of
+  those the arithmetic closed at 356.3 min against a 355 min timeout: a
+  slow-setup chunk could be killed *while saving*. Taking the worst rather
+  than a sample is what moves the timeout to 359.
+
+  20700 (345 min) was considered and rejected. It fits the path where the
+  guard fires after `9e39df84` finishes, but not the path where it fires
+  inside it — there the job reaches 6.3 + 345 + 12 + 2 = **365 min**, past the
+  platform kill, and a platform kill does not run the `always()` steps that
+  upload the cost ledger. 338 is the last value whose worst case (358.3 min)
+  lands inside the timeout on both paths.
+
+  338 has now been measured, and it is not enough. Run `33316285562` graded
+  **55 of 57 items in 346.0 min** and the guard stopped it starting item 56 —
+  one item further than the two attempts before it, two items short of done,
+  rc=5 again. Across four attempts the work does not move but the pace does:
+  **5.75, 5.81, 6.29 and 6.44 min an item**, which extend over the whole task
+  to full passes of **328, 331, 359 and 367 min**. Against that the platform
+  offers at most `360 − 6.3 setup − 2 save = 351.7 min` of grading, whatever
+  the budget says. The two oldest paces fit; the two most recent miss by 7 and
+  15 min, and no value of `GRADER_TIME_BUDGET_SEC` closes a gap in the runner's
+  own lifetime — raising it further only moves where inside the task the money
+  is lost.
+
+  So the task is not too big; the pace is not ours to choose. Two of four
+  observed draws would have finished, at roughly six hours of paid judging a
+  draw. Both halves are asserted, because stating only the first would read as
+  "impossible" and only the second as "try again":
+  `test_the_platform_cannot_give_this_task_the_time_its_recent_pace_needs` and
+  `test_the_two_earliest_paces_would_have_fitted_so_this_is_a_lottery`.
+
+  The cost of stopping is **eleven tasks, not one**. `9e39df84` is 7th of 17 in
+  its shard and the shard is graded in pinned order, so every resume meets it
+  before the ten after it, which have never been started.
+  `test_losing_this_task_strands_the_ten_behind_it` derives that from the
+  committed config rather than from a run log.
+
+  Both ways round it are refused, and the refusals are now covered rather than
+  assumed: dropping the task shortens the list and trips `task_count`, moving
+  it to the end keeps the count and trips `task_ids`
+  (`test_the_pinned_list_refuses_both_ways_round_the_stalled_task`). Loosening
+  either pin would let a shard grade fifteen of seventeen and still call itself
+  complete. The remaining structural fix is a runner without the 360-minute
+  kill, which is out of scope here and is recorded, not taken.
+
+  Nine tests carry the reasoning rather than the numbers. Two assert that the
+  workflow cannot enter the grader source hash — one structurally, one by
+  taking the hash twice with the workflow rewritten in between and restoring it
+  in `finally`. One holds the budget from both sides at once: under what a pass
+  last cost, so the setting cannot be read as sufficient, and inside the
+  window, so a later raise fails here instead of by losing a ledger in
+  production. One pins the 2400 cap to the config, so that if it ever moves
+  into the workflow the trade-off recorded above is revisited instead of
+  silently becoming false.
+
 - **Three ways a judge could be shown a deliverable and still not see what was
   in it.** All three were found by taking the lowest-scoring gold answers in the
   185-task corpus and opening the real files, rather than reasoning about what

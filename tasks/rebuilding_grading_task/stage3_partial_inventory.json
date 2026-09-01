@@ -1,0 +1,760 @@
+{
+  "document": "stage3-partial-inventory",
+  "status": "BLOCKED_PARTIAL",
+  "not_a_final_result": "174 of 185 tasks are graded. No merged final payload exists and none may be produced: step9_merge_shards refuses a short union and --force does not override it. Any average quoted from this inventory describes 174 tasks, not the gold corpus.",
+  "corpus": {
+    "config": "batch-runner/grading_configs/gold_ceiling_185_v2_sol_max.yaml",
+    "expected_task_count": 185,
+    "ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+    "shard_count": 11,
+    "shard_dir": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2",
+    "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+  },
+  "identity_agreement": {
+    "fields": {
+      "experiment_id": [
+        "\"exp_gold_baseline\""
+      ],
+      "schema_version": [
+        "\"1.4\""
+      ],
+      "expected_task_count": [
+        "185"
+      ],
+      "expected_ordered_task_ids_sha256": [
+        "\"cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18\""
+      ],
+      "grader_source_hash": [
+        "\"955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a\""
+      ],
+      "source_inference_revision": [
+        "\"11e7900cdcac61bc4daf59e65feb238acda98fbf\""
+      ],
+      "source_inference_repo_id": [
+        "\"openai/gdpval\""
+      ]
+    },
+    "all_shards_agree": true,
+    "ledger_run_ids": [
+      "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+    ],
+    "single_run_ordinal": true
+  },
+  "coverage": {
+    "graded": 174,
+    "expected": 185,
+    "missing": 11,
+    "missing_task_ids": [
+      "9e39df84-ac57-4c9b-a2e3-12b8abf2c797",
+      "40a99a31-42d6-4f23-b3ec-8f591afe25b6",
+      "8077e700-2b31-402d-bd09-df4d33c39653",
+      "60221cd0-686e-4a08-985e-d9bb2fa18501",
+      "9a0d8d36-6233-4c76-9107-0d1f783c7340",
+      "a079d38f-c529-436a-beca-3e291f9e62a3",
+      "2d06bc0a-89c6-4e89-9417-5ffe725c1bc6",
+      "a73fbc98-90d4-4134-a54f-2b1d0c838791",
+      "a69be28f-9a84-47c9-992e-b90446cdca9d",
+      "bb863dd9-31c2-4f64-911a-ce11f457143b",
+      "0e386e32-df20-4d1f-b536-7159bc409ad5"
+    ],
+    "missing_tasks": [
+      {
+        "task_id": "9e39df84-ac57-4c9b-a2e3-12b8abf2c797",
+        "sector": "Manufacturing",
+        "occupation": "First-Line Supervisors of Production and Operating Workers",
+        "known_input_limit": null,
+        "cause": "the task the chunk cannot finish"
+      },
+      {
+        "task_id": "40a99a31-42d6-4f23-b3ec-8f591afe25b6",
+        "sector": "Manufacturing",
+        "occupation": "Industrial Engineers",
+        "known_input_limit": null,
+        "cause": "queued behind the stalled task; never started"
+      },
+      {
+        "task_id": "8077e700-2b31-402d-bd09-df4d33c39653",
+        "sector": "Manufacturing",
+        "occupation": "Mechanical Engineers",
+        "known_input_limit": null,
+        "cause": "queued behind the stalled task; never started"
+      },
+      {
+        "task_id": "60221cd0-686e-4a08-985e-d9bb2fa18501",
+        "sector": "Information",
+        "occupation": "News Analysts, Reporters, and Journalists",
+        "known_input_limit": null,
+        "cause": "queued behind the stalled task; never started"
+      },
+      {
+        "task_id": "9a0d8d36-6233-4c76-9107-0d1f783c7340",
+        "sector": "Finance and Insurance",
+        "occupation": "Personal Financial Advisors",
+        "known_input_limit": null,
+        "cause": "queued behind the stalled task; never started"
+      },
+      {
+        "task_id": "a079d38f-c529-436a-beca-3e291f9e62a3",
+        "sector": "Information",
+        "occupation": "Producers and Directors",
+        "known_input_limit": null,
+        "cause": "queued behind the stalled task; never started"
+      },
+      {
+        "task_id": "2d06bc0a-89c6-4e89-9417-5ffe725c1bc6",
+        "sector": "Real Estate and Rental and Leasing",
+        "occupation": "Real Estate Brokers",
+        "known_input_limit": null,
+        "cause": "queued behind the stalled task; never started"
+      },
+      {
+        "task_id": "a73fbc98-90d4-4134-a54f-2b1d0c838791",
+        "sector": "Government",
+        "occupation": "Recreation Workers",
+        "known_input_limit": "102 render targets vs a cap of 72",
+        "cause": "queued behind the stalled task; never started"
+      },
+      {
+        "task_id": "a69be28f-9a84-47c9-992e-b90446cdca9d",
+        "sector": "Wholesale Trade",
+        "occupation": "Sales Managers",
+        "known_input_limit": null,
+        "cause": "queued behind the stalled task; never started"
+      },
+      {
+        "task_id": "bb863dd9-31c2-4f64-911a-ce11f457143b",
+        "sector": "Wholesale Trade",
+        "occupation": "Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products",
+        "known_input_limit": null,
+        "cause": "queued behind the stalled task; never started"
+      },
+      {
+        "task_id": "0e386e32-df20-4d1f-b536-7159bc409ad5",
+        "sector": "Professional, Scientific, and Technical Services",
+        "occupation": "Software Developers",
+        "known_input_limit": null,
+        "cause": "queued behind the stalled task; never started"
+      }
+    ],
+    "duplicate_task_ids": []
+  },
+  "shards": [
+    {
+      "shard_index": 0,
+      "state": "COMPLETE",
+      "owned_tasks": 17,
+      "present_tasks": 17,
+      "graded_tasks": 17,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-000-of-011.json",
+        "bytes": 1431655,
+        "sha256": "8e4147dda8c933490d44eb1fb8b49ad383e658d51c61dd483889bc697c579ff5",
+        "committed_in": "8cfbab1073572e4452f4d741b2a952cd52b76f86"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-000-of-011.cost_ledger.jsonl",
+        "rows": 1761,
+        "declared_sha256": "da1005caf70751dc2cafd8f95d217e4070511a8ca028d977de9bd1b907220fda",
+        "actual_sha256": "da1005caf70751dc2cafd8f95d217e4070511a8ca028d977de9bd1b907220fda",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 1,
+      "state": "COMPLETE",
+      "owned_tasks": 17,
+      "present_tasks": 17,
+      "graded_tasks": 17,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-001-of-011.json",
+        "bytes": 1528732,
+        "sha256": "f8500acfe35f07e7ac454e9870a7a2f48299c91a583a1001da276289540494de",
+        "committed_in": "b43016110326f15a09c4eacf1806ad9ff219a45f"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-001-of-011.cost_ledger.jsonl",
+        "rows": 2012,
+        "declared_sha256": "153e9056a811492fd1043733313fc250156986f817c66e19ae51b4f7d29dd86f",
+        "actual_sha256": "153e9056a811492fd1043733313fc250156986f817c66e19ae51b4f7d29dd86f",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 2,
+      "state": "COMPLETE",
+      "owned_tasks": 17,
+      "present_tasks": 17,
+      "graded_tasks": 17,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-002-of-011.json",
+        "bytes": 1650700,
+        "sha256": "e1f467af2977f4ab62321a1c87815ab9134805ea3689b5698400efe35ce14ca4",
+        "committed_in": "f3c556be0e3885fa0a47fb3995449eb3aff40207"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-002-of-011.cost_ledger.jsonl",
+        "rows": 2337,
+        "declared_sha256": "77963be17f3606debda5dcd990fe6a948e70bb8b32d95e27a8aad7cdb7058802",
+        "actual_sha256": "77963be17f3606debda5dcd990fe6a948e70bb8b32d95e27a8aad7cdb7058802",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 3,
+      "state": "COMPLETE",
+      "owned_tasks": 17,
+      "present_tasks": 17,
+      "graded_tasks": 16,
+      "error_tasks": 1,
+      "error_task_ids": [
+        "43dc9778-450b-4b46-b77e-b6d82b202035"
+      ],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-003-of-011.json",
+        "bytes": 1647114,
+        "sha256": "95acbede5b0a1209a0a52fddc26bcaacd976f01cd38009d890c4553bf1234de8",
+        "committed_in": "e500a4c745c57d279e9ed99d78699387ca452b97"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-003-of-011.cost_ledger.jsonl",
+        "rows": 2069,
+        "declared_sha256": "47b8ff45be737541f127f61464698df0de4c545a1d461ddb770fb89422274036",
+        "actual_sha256": "47b8ff45be737541f127f61464698df0de4c545a1d461ddb770fb89422274036",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 4,
+      "state": "SHORT",
+      "owned_tasks": 17,
+      "present_tasks": 6,
+      "graded_tasks": 6,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [
+        "9e39df84-ac57-4c9b-a2e3-12b8abf2c797",
+        "40a99a31-42d6-4f23-b3ec-8f591afe25b6",
+        "8077e700-2b31-402d-bd09-df4d33c39653",
+        "60221cd0-686e-4a08-985e-d9bb2fa18501",
+        "9a0d8d36-6233-4c76-9107-0d1f783c7340",
+        "a079d38f-c529-436a-beca-3e291f9e62a3",
+        "2d06bc0a-89c6-4e89-9417-5ffe725c1bc6",
+        "a73fbc98-90d4-4134-a54f-2b1d0c838791",
+        "a69be28f-9a84-47c9-992e-b90446cdca9d",
+        "bb863dd9-31c2-4f64-911a-ce11f457143b",
+        "0e386e32-df20-4d1f-b536-7159bc409ad5"
+      ],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-004-of-011.json",
+        "bytes": 506636,
+        "sha256": "6fe6fc9c46a063833a00cc2da05e9a79dfee4c9aa554af417b773163622c2efd",
+        "committed_in": "819232381b4e69ea80326fc86fa18235a1232199"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-004-of-011.cost_ledger.jsonl",
+        "rows": 797,
+        "declared_sha256": "4fba7e3d4c1205c8e76c3c60591b313d660bf6782681bed8a2ca6d24c668eebc",
+        "actual_sha256": "4fba7e3d4c1205c8e76c3c60591b313d660bf6782681bed8a2ca6d24c668eebc",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 5,
+      "state": "COMPLETE",
+      "owned_tasks": 17,
+      "present_tasks": 17,
+      "graded_tasks": 17,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-005-of-011.json",
+        "bytes": 1621385,
+        "sha256": "f5b238a0104cafa75d340fbd677843ac819fd4df3d2a219857445443619ee787",
+        "committed_in": "37e2991b6b6f606f7af203a714b446645fa9b43d"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-005-of-011.cost_ledger.jsonl",
+        "rows": 1880,
+        "declared_sha256": "55b3546059aaafe293ec77f88b21e57847aff03cdc1f68849b444a4c3c9f55c3",
+        "actual_sha256": "55b3546059aaafe293ec77f88b21e57847aff03cdc1f68849b444a4c3c9f55c3",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 6,
+      "state": "COMPLETE",
+      "owned_tasks": 17,
+      "present_tasks": 17,
+      "graded_tasks": 17,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-006-of-011.json",
+        "bytes": 1545423,
+        "sha256": "d8210841b25b33fc3cbad4edc687e26b74edc73004f8740206f2ad50ae8d8aec",
+        "committed_in": "a99d5a8e94314c1c5e27460c0bbc64d75eef1ed2"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-006-of-011.cost_ledger.jsonl",
+        "rows": 1877,
+        "declared_sha256": "17c7a55935079665071b4477cca49c8b01f2895b1a1bd88a2525e1e700c3d3d7",
+        "actual_sha256": "17c7a55935079665071b4477cca49c8b01f2895b1a1bd88a2525e1e700c3d3d7",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 7,
+      "state": "COMPLETE",
+      "owned_tasks": 17,
+      "present_tasks": 17,
+      "graded_tasks": 17,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-007-of-011.json",
+        "bytes": 1646377,
+        "sha256": "cbc852345efb8cbfc0d8bb161a41dc551891cc38fcce6596d0c92b2a4c3956b4",
+        "committed_in": "9e72670cae4c789e99646218d23d3ccf703af4c1"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-007-of-011.cost_ledger.jsonl",
+        "rows": 2346,
+        "declared_sha256": "80c5f219ed39f4236f25c1175046cc81a56c174dc8563b2d931437a609f2a01d",
+        "actual_sha256": "80c5f219ed39f4236f25c1175046cc81a56c174dc8563b2d931437a609f2a01d",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 8,
+      "state": "COMPLETE",
+      "owned_tasks": 17,
+      "present_tasks": 17,
+      "graded_tasks": 17,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-008-of-011.json",
+        "bytes": 1669990,
+        "sha256": "15653c076896fe0be18269c23e715bcab4a074e8b98f30a4c206ad47ac72b19f",
+        "committed_in": "4fcc64d4ef32a3542650ac4562df0b9617f7eacb"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-008-of-011.cost_ledger.jsonl",
+        "rows": 1965,
+        "declared_sha256": "da9b29c83e3c945a7b553be1ea7693d45073bfe8fbc73838078af7f32e0868aa",
+        "actual_sha256": "da9b29c83e3c945a7b553be1ea7693d45073bfe8fbc73838078af7f32e0868aa",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 9,
+      "state": "COMPLETE",
+      "owned_tasks": 16,
+      "present_tasks": 16,
+      "graded_tasks": 16,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-009-of-011.json",
+        "bytes": 1703566,
+        "sha256": "7d52fcc730a5ff4daaad0bd8b2a87770293fd7cae2826346de9f4c38de893a01",
+        "committed_in": "9ed529871fe7add2221ce4c25a4eaae1863c6423"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-009-of-011.cost_ledger.jsonl",
+        "rows": 2267,
+        "declared_sha256": "adb900e6264ca8112215dfc7986c76c27d0f82a6d4fcb4333cd53f428f7e75fe",
+        "actual_sha256": "adb900e6264ca8112215dfc7986c76c27d0f82a6d4fcb4333cd53f428f7e75fe",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    },
+    {
+      "shard_index": 10,
+      "state": "COMPLETE",
+      "owned_tasks": 16,
+      "present_tasks": 16,
+      "graded_tasks": 16,
+      "error_tasks": 0,
+      "error_task_ids": [],
+      "missing_task_ids": [],
+      "run_status": "partial",
+      "identity": {
+        "experiment_id": "exp_gold_baseline",
+        "schema_version": "1.4",
+        "expected_task_count": 185,
+        "expected_ordered_task_ids_sha256": "cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18",
+        "grader_source_hash": "955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a",
+        "source_inference_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+        "source_inference_repo_id": "openai/gdpval"
+      },
+      "grade_file": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-010-of-011.json",
+        "bytes": 1720028,
+        "sha256": "544d5ad6ab548ff6a375d78186566161ba91dbd53fde87330a49c1bcaa70fc9d",
+        "committed_in": "fc37056d085e7c2f4235d84367457d720ac831d2"
+      },
+      "cost_ledger": {
+        "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-010-of-011.cost_ledger.jsonl",
+        "rows": 2089,
+        "declared_sha256": "827e6dba6ee99aa96903a25e5bdcb8111d2ff2c6bfa4e7c00ea008de93824741",
+        "actual_sha256": "827e6dba6ee99aa96903a25e5bdcb8111d2ff2c6bfa4e7c00ea008de93824741",
+        "sha256_agrees": true,
+        "ledger_run_ids": [
+          "exp_gold_baseline|b3609ec13f8fa51e|955be41edc4aff191952123e37538266aa28508786aa82693055269538d8b67a"
+        ]
+      }
+    }
+  ],
+  "superseded_sibling_dirs": [
+    {
+      "dir": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_ce7d4978bce9effc__v2.2",
+      "grader_source_hash": [
+        "ce7d4978bce9effc113708caca10a705d215eaf0cd8a759aa3bcc759799f0338"
+      ],
+      "shard_files": 9,
+      "cost_ledgers": 0,
+      "in_scope": false,
+      "why": "graded at a superseded grader source hash; not comparable at item level and refused by step9_merge_shards as a contract identity mismatch"
+    },
+    {
+      "dir": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2",
+      "grader_source_hash": [
+        "79c2f5035c4aa826355134dd87cdb8fbc320e5a1cc5fde0d8ecf91957f4eabc6"
+      ],
+      "shard_files": 11,
+      "cost_ledgers": 11,
+      "in_scope": false,
+      "why": "graded at a superseded grader source hash; not comparable at item level and refused by step9_merge_shards as a contract identity mismatch"
+    }
+  ],
+  "blocking_task": {
+    "task_id": "9e39df84-ac57-4c9b-a2e3-12b8abf2c797",
+    "shard_index": 4,
+    "position_in_shard": 7,
+    "shard_size": 17,
+    "stranded_behind_it": 10,
+    "attempts": [
+      {
+        "attempt": 1,
+        "run_id": 33273207562,
+        "head_sha": "81923238",
+        "budget_minutes": 240,
+        "grading_minutes": 261.3,
+        "items_done": 45,
+        "stopped_starting_item": 46,
+        "exit_code": 5,
+        "grade_artifact": {
+          "id": 9723977397,
+          "bytes": 45713,
+          "sha256": "3c8f6d6d708d15b8155f7acab7fcc393d5f99eb03d446e5c0c2b48c9dcce065a"
+        },
+        "cost_ledger_artifact": {
+          "id": 9723977244,
+          "bytes": 1251769,
+          "sha256": "d1604262fe017aedbb9c22aa3fb2021938c0a1b7bd569c881bd4b99d4ec8175b"
+        }
+      },
+      {
+        "attempt": 2,
+        "run_id": 33286656393,
+        "head_sha": "58746336",
+        "budget_minutes": 300,
+        "grading_minutes": 310.4,
+        "items_done": 54,
+        "stopped_starting_item": 55,
+        "exit_code": 5,
+        "grade_artifact": {
+          "id": 9728162524,
+          "bytes": 45713,
+          "sha256": "ece78e0d1575af74b69a9cc99cf8ef84f1d67cb9187dbfd4cb408606f76e0579"
+        },
+        "cost_ledger_artifact": {
+          "id": 9728162271,
+          "bytes": 1293205,
+          "sha256": "bf3feb918380ec0cde49d7236b7a5b3585a30367d69addfc5421811f016e75d3"
+        }
+      },
+      {
+        "attempt": 3,
+        "run_id": 33301041542,
+        "head_sha": "e0009577",
+        "budget_minutes": 336,
+        "grading_minutes": 348.0,
+        "items_done": 54,
+        "stopped_starting_item": 55,
+        "exit_code": 5,
+        "grade_artifact": {
+          "id": 9733433886,
+          "bytes": 45713,
+          "sha256": "325216149defc336579e3c29d9c0d23bf70a69e9b0ac94902da897059faf2fe2"
+        },
+        "cost_ledger_artifact": {
+          "id": 9733433692,
+          "bytes": 1292266,
+          "sha256": "2468cc88d620e984d20c8c93549e6db146a7c398f75b950eaadcd50d6c4490f1"
+        }
+      },
+      {
+        "attempt": 4,
+        "run_id": 33316285562,
+        "head_sha": "8c968526",
+        "budget_minutes": 338,
+        "grading_minutes": 346.0,
+        "items_done": 55,
+        "stopped_starting_item": 56,
+        "exit_code": 5,
+        "grade_artifact": {
+          "id": 9738079160,
+          "bytes": 45713,
+          "sha256": "196f0c99d5a05a9fbc66c4093c31264a3fa8cef393656153d1f0bbb40d75b14b"
+        },
+        "cost_ledger_artifact": {
+          "id": 9738078986,
+          "bytes": 1294161,
+          "sha256": "1230417baab109f2f6fdc8cc7a7158188c15332a39ed829f326e725a1620d26a"
+        }
+      }
+    ]
+  },
+  "what_the_174_say": {
+    "graded_entries": 174,
+    "scored_tasks": 173,
+    "judge_errors": [
+      {
+        "task_id": "43dc9778-450b-4b46-b77e-b6d82b202035",
+        "error": "all_items_score_excluded"
+      }
+    ],
+    "mean_pct_over_scored": 80.19,
+    "mean_pct_counting_errors_as_zero": 79.73,
+    "median_pct": 84.42,
+    "min_pct": 0.0,
+    "max_pct": 100.0,
+    "points_awarded": 10714.0,
+    "points_available": 13220.0,
+    "rubric_items_scored": 8231,
+    "critical_fail_tasks": 90,
+    "critical_fail_means": "at least one item of |max_score| >= 4 where the model did not do the right thing -- not a count of severe failures",
+    "judge_error_rate_pct": 0.57,
+    "perception_calls": 580,
+    "usage_incomplete_tasks": [
+      "38889c3b-e3d4-49c8-816a-3cc8e5313aba"
+    ],
+    "breadth": {
+      "sectors_graded": 9,
+      "sectors_in_corpus": 9,
+      "occupations_graded": 44,
+      "occupations_in_corpus": 44
+    }
+  },
+  "known_grading_defects": {
+    "audio_criteria_scored_without_listening": {
+      "tasks": [
+        {
+          "task_id": "75401f7c-396d-406d-b08e-938874ad1045",
+          "shard_index": 3,
+          "occupation": "Film and Video Editors",
+          "pct_as_recorded": 26.34,
+          "items_demoted": 14,
+          "points_not_awarded": 18.0,
+          "total_max": 56,
+          "rubric_item_ids": [
+            "134e5bd1-2074-4687-a225-37819eb29865",
+            "6dd42ec4-11de-45e5-8b3e-20c86eab6fb1",
+            "c6c27a14-cf81-4bb5-937d-1908f1ac0a83",
+            "e51c08f5-39a3-4588-95e8-6341ab474b69",
+            "57e2f2b8-fd6d-4d8d-9458-fdae49ccc203",
+            "0a1fb17a-8c75-4fb2-ac8b-a20c13876db7",
+            "936785a1-ea92-4503-8547-84eff37a5ca2",
+            "43781d5c-e137-49fe-9ca2-9f0307b43170",
+            "7deec440-37dd-4d75-8948-87e354c99998",
+            "1c815e30-446e-408d-9ccf-204dab90b868",
+            "f6487bbe-c777-471d-841d-601b9f5f8467",
+            "f2ebaaee-99ad-476c-9c3f-337e0c8b9145",
+            "2dc4ad9d-adec-4fd8-9e63-09bdb4eba89c",
+            "b3eaaf48-0145-46c7-809d-b281ab53dca9"
+          ]
+        },
+        {
+          "task_id": "e222075d-5d62-4757-ae3c-e34b0846583b",
+          "shard_index": 2,
+          "occupation": "Film and Video Editors",
+          "pct_as_recorded": 16.17,
+          "items_demoted": 7,
+          "points_not_awarded": 10.3,
+          "total_max": 60,
+          "rubric_item_ids": [
+            "40d91fde-7dd6-460d-bfac-8f73e1c7e153",
+            "22e55d93-8ca4-443f-985a-8fc170b42177",
+            "3b2c3fc7-b7a3-4399-b331-3e8993b08b24",
+            "d943c3de-b84e-46df-a161-0f00b8740cdc",
+            "a0fe8796-7033-4221-960f-338d9391924d",
+            "998640ff-fbc7-4438-a5b4-38b2af4aa8a4",
+            "7561cb8d-4275-447b-9b6a-5f59940ef0c7"
+          ]
+        }
+      ],
+      "fixed_by": "PR #276",
+      "correctable_here": false,
+      "note": "A video container was read as proof of silence, so criteria about sound were demoted to TEXT and answered by a judge that could not hear. Demotion is not exclusion: these items were scored, not withheld, so the affected tasks read lower than they were measured to be. The fix touches core/ and moves the grader fingerprint, which is why it cannot be applied to this measurement -- only a re-run corrects it."
+    }
+  },
+  "interpretation_limits": [
+    "The 11 missing tasks are not a random sample. They are one stalled task plus the ten queued behind it in a single stride shard, so the gap is structural rather than statistical.",
+    "a73fbc98 is one of the five input limits published before the run as expected to pull the ceiling down, and it is among the missing. Any mean over the 174 is therefore biased upward relative to the 185 it stands in for.",
+    "One task carries a judge error (all_items_score_excluded) and has no score, so 174 entries yield 173 scores. Both means are reported; neither is the corpus figure.",
+    "No sector and no occupation is lost entirely -- the 174 still span 9 of 9 and 44 of 44. That bounds the damage; it does not make the set complete, since eleven occupations each lost a task.",
+    "known_usd is null because gpt-5.6-sol has no published price. Absent price is not zero cost.",
+    "Two of the 174 were graded with a known defect: criteria about sound on a video deliverable were routed to a judge that could not hear, and scored rather than excluded. Their recorded percentages are floors, not measurements. See known_grading_defects."
+  ],
+  "cost": {
+    "settlement": "partial",
+    "known_usd": null,
+    "reason": "gpt-5.6-sol has no published price; every judge call is recorded with usage but no USD. Absent price is not zero cost -- do not render this as $0."
+  }
+}

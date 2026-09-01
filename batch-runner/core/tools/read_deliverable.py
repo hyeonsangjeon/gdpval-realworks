@@ -1249,11 +1249,12 @@ def has_audio_content(path: Union[str, Path]) -> Optional[bool]:
     -- tempo, key, vocals, mix -- was graded end to end without a single
     listening call.
 
-    ``True`` for an audio file or an archive holding one. ``False`` is a
-    positive claim and means the file was examined and carries no audio.
-    ``None`` is an admission -- missing file, unreadable archive, or a member
-    list that was cut short and may have stopped one entry before the audio --
-    so that routing never promotes on a guess.
+    ``True`` for an audio file, an archive holding one, or a video whose
+    container carries an audio track. ``False`` is a positive claim and means
+    the file was examined and carries no audio. ``None`` is an admission --
+    missing file, unreadable archive, absent decoder, or a member list that was
+    cut short and may have stopped one entry before the audio -- so that
+    routing never promotes on a guess.
     """
     p = Path(path)
     if not p.is_file():
@@ -1261,6 +1262,18 @@ def has_audio_content(path: Union[str, Path]) -> Optional[bool]:
     kind = _kind_of(p)
     if kind == "audio":
         return True
+    if kind == "video":
+        # The same mistake as the ``.zip`` above, one container along. A reel
+        # is delivered as ``.mp4``; ``.mp4`` is disjoint from the audio
+        # extensions; so "the sound effect is audible during the opening
+        # shot" was demoted to TEXT and answered by a judge that had read the
+        # file's metadata and could not hear it. It scored zero -- not
+        # excluded, *failed* -- on evidence reading ``"audio_tracks": 1``.
+        #
+        # That count is the honest answer to this question and was already
+        # being computed one call away.
+        count = _video_audio_track_count(p)
+        return None if count is None else count > 0
     if kind != "zip":
         return False
     try:
@@ -2098,6 +2111,30 @@ def _op_probe_audio(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
     return info
 
 
+def _video_audio_track_count(p: Path) -> Optional[int]:
+    """How many audio streams a video container carries, or ``None``.
+
+    Deliberately not routed through ``_probe_video_impl``: that helper returns
+    early when a container has no *video* stream, which would report ``None``
+    for a file that is nothing but sound. Counting the audio streams directly
+    answers the question that was asked.
+    """
+    try:
+        import av  # type: ignore
+    except ImportError:
+        return None
+    try:
+        container = av.open(str(p))
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        return len(container.streams.audio)
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        container.close()
+
+
 def _probe_video_impl(p: Path, basic: bool = False) -> Dict[str, Any]:
     try:
         import av  # type: ignore
@@ -2126,9 +2163,52 @@ def _probe_video_impl(p: Path, basic: bool = False) -> Dict[str, Any]:
             "duration_s": duration_s,
             "audio_tracks": len(container.streams.audio),
             "video_tracks": len(container.streams.video),
+            "audio": _audio_stream_summary(container),
         }
     finally:
         container.close()
+
+
+def _audio_stream_summary(container: Any) -> Optional[Dict[str, Any]]:
+    """How a video container's first audio stream is encoded, or ``None``.
+
+    A video probe used to answer with two track counts and nothing else, so a
+    criterion like "the audio sample rate is 44.1 kHz or 48 kHz" reached a
+    judge that had no way to know and marked it failed rather than excluded.
+
+    That is the same defect PR #276 fixed one field over. There, a container
+    reporting ``"audio_tracks": 1`` was sent to a judge that could not listen;
+    the count was right there in the evidence and unusable. Here the count is
+    right there and the *rate* is missing, so the criterion fails on a fact
+    the file states plainly. Fixing the routing and leaving this would have
+    meant the same bug survived in the field next door.
+
+    The field names deliberately match ``_probe_audio_impl`` so the judge sees
+    one vocabulary whether the sound arrived in a ``.wav`` or an ``.mp4``.
+    """
+    try:
+        streams = container.streams.audio
+    except Exception:  # noqa: BLE001
+        return None
+    if not streams:
+        return None
+    stream = streams[0]
+
+    def _field(name: str) -> Any:
+        # Each read is guarded separately: a container can describe its rate
+        # and not its channel layout, and one missing attribute must not turn
+        # the whole summary back into the silence this replaced.
+        try:
+            return getattr(stream, name, None)
+        except Exception:  # noqa: BLE001
+            return None
+
+    codec = _field("codec")
+    return {
+        "sample_rate": _field("sample_rate"),
+        "channels": _field("channels"),
+        "codec": getattr(codec, "name", None) if codec else None,
+    }
 
 
 def _op_probe_video(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:

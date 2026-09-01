@@ -79,6 +79,21 @@ _FINALIZATION_RETRY_PROMPT = (
     "required valid JSON verdict envelope."
 )
 
+#: Every reasoning effort the judge accepts, cheapest first. Ordered so a
+#: ceiling can be applied without ever raising an effort a config chose to
+#: set lower.
+_REASONING_EFFORTS = ("none", "low", "medium", "high", "xhigh", "max")
+
+#: The one retry reason that says the room ran out rather than the answer
+#: went wrong: the first attempt spent its whole output budget and left no
+#: text behind.
+_OUT_OF_ROOM_RETRY_REASON = "empty_final_text:max_output_tokens"
+
+#: Ceiling on the retry's reasoning when the room ran out. Effort is the
+#: thing that consumed the budget, so the retry has to want less of it than
+#: the attempt that overflowed.
+_OUT_OF_ROOM_EFFORT_CEILING = "low"
+
 
 def _bounded_prompt_cache_key(value: str) -> str:
     if len(value) <= _PROMPT_CACHE_KEY_MAX_CHARS:
@@ -334,6 +349,11 @@ class ToolCallingResult:
     usage_complete: bool = True
     score_excluded: bool = False
     visual_provenance: List[Dict[str, Any]] = field(default_factory=list)
+    #: What the perception sub-judge said about its own failure, when the item
+    #: ended as a perception error. ``judge_error`` names the kind so a corpus
+    #: can be grouped by it; this says why so the next run can be fixed. See
+    #: :py:func:`_unanswerable_audio_detail`.
+    perception_error_detail: Optional[str] = None
 
 
 # ----------------------------------------------------------------------
@@ -441,6 +461,35 @@ def _unanswerable_audio_reason(result: Mapping[str, Any]) -> Optional[str]:
     return f"audio_perception_failed:{error_type or 'unknown'}"
 
 
+def _unanswerable_audio_detail(result: Mapping[str, Any]) -> Optional[str]:
+    """The sub-judge's own account of the refusal, if it left one.
+
+    ``_unanswerable_audio_reason`` answers *what kind* of failure this was,
+    in a small controlled vocabulary that a whole corpus can be grouped by --
+    and that vocabulary is the reason it cannot also answer *why*. Stage 3's
+    audio smoke ended with two values, ``audio_unavailable:provider_400`` and
+    ``provider_error:BadRequestError``, repeated fifteen times between them
+    and saying nothing that could be acted on. Widening the vocabulary to fix
+    that would trade one problem for a worse one: per-call byte counts in
+    ``judge_error`` turn two clean groups into fifteen singletons.
+
+    So the detail travels beside the reason rather than inside it. It exists
+    only where the sub-judge itself ran and built one -- ``AudioVerdict.
+    failure_detail``, assembled out of this harness's own measurements and
+    never the provider's message body. Everywhere else the reason already is
+    the whole story (``no_audio_judge`` needs no elaboration), and ``None``
+    says so honestly.
+    """
+    if _unanswerable_audio_reason(result) is None:
+        return None
+    data = result.get("data")
+    if isinstance(data, Mapping):
+        detail = data.get("failure_detail")
+        if isinstance(detail, str) and detail.strip():
+            return detail
+    return None
+
+
 def _finalization_retry_reason(
     final_text: str,
     response: Any,
@@ -458,6 +507,37 @@ def _finalization_retry_reason(
     if _validated_final_envelope(parsed) is None:
         return "invalid_final_envelope"
     return None
+
+
+def _finalization_effort(configured: str, retry_reason: Optional[str]) -> str:
+    """How hard the finalization retry is allowed to think.
+
+    The retry exists to turn evidence already gathered into a short JSON
+    envelope. It keeps the same ``max_output_tokens`` as the attempt before
+    it, because that cap is what the run's cost ceiling is priced against --
+    so on ``empty_final_text:max_output_tokens`` the retry is handed exactly
+    the budget the first attempt just exhausted. Spending it on reasoning
+    again writes no envelope for a second time, and the item costs two full
+    output budgets to produce nothing.
+
+    So that one reason, and only that one, holds the effort down: the retry
+    is forbidden tools and asked for a fixed short shape, and what it needs
+    is room to write it. Every other reason -- unparseable JSON, an envelope
+    missing a field -- means the model did produce text under this budget and
+    got the shape wrong, and there more thought is the repair, so the
+    configured effort stands.
+
+    Held down, never pushed up: a config that deliberately set ``"none"``
+    keeps ``"none"``.
+    """
+    if retry_reason != _OUT_OF_ROOM_RETRY_REASON:
+        return configured
+    try:
+        ceiling = _REASONING_EFFORTS.index(_OUT_OF_ROOM_EFFORT_CEILING)
+        chosen = _REASONING_EFFORTS.index(configured)
+    except ValueError:
+        return configured
+    return _REASONING_EFFORTS[min(chosen, ceiling)]
 
 
 # ----------------------------------------------------------------------
@@ -492,7 +572,9 @@ class ToolCallingJudge:
                      missing or malformed after evidence is ready.
         finalization_reasoning_effort: reasoning effort used for the bounded
                  no-tools finalization retry. Defaults to ``"low"`` for
-                 existing configs.
+                 existing configs. Held down to ``"low"`` when the retry was
+                 triggered by the first attempt exhausting
+                 ``max_output_tokens`` — see ``_finalization_effort``.
         vision_perception:       optional ``VisionPerception`` instance.
                      For VISUAL items the harness renders and
                      invokes it before the first main request;
@@ -547,9 +629,7 @@ class ToolCallingJudge:
         if self.finalization_retries < 0:
             raise ValueError("finalization_retries must be non-negative")
         self.finalization_retries = min(self.finalization_retries, 1)
-        if self.finalization_reasoning_effort not in {
-            "none", "low", "medium", "high", "xhigh", "max"
-        }:
+        if self.finalization_reasoning_effort not in _REASONING_EFFORTS:
             raise ValueError("finalization_reasoning_effort is invalid")
         invalid_ops = set(self.model_read_ops) - set(MODEL_READ_DELIVERABLE_OPS)
         if invalid_ops:
@@ -599,13 +679,21 @@ class ToolCallingJudge:
         )
         prepass = visual_prepass or VisualPrepassResult()
         if decision.modality.value == "visual":
+            # What to look at is not the same list as what to read. A bundle
+            # can hold one file with no text layer next to a readable one, and
+            # the routing escalates on the first without conceding the second:
+            # the pictures are of the file that needs them, the whole bundle
+            # stays within reach of ``read_deliverable``. ``render_targets``
+            # is the same call the task budget and the free preflight make,
+            # which is what keeps the cross-check below honest.
+            visual_file_names = decision.render_targets(file_names)
             if visual_prepass is None:
                 prepass = self.preflight_visual(
                     item=item,
                     deliverable_dir=deliverable_dir,
-                    file_names=file_names,
+                    file_names=visual_file_names,
                 )
-            expected_paths = self.planned_supported_visual_names(file_names)
+            expected_paths = self.planned_supported_visual_names(visual_file_names)
             observed_paths = [entry.path for entry in prepass.entries]
             if prepass.judge_error is None and observed_paths != expected_paths:
                 prepass.judge_error = (
@@ -653,8 +741,16 @@ class ToolCallingJudge:
         # cannot be marked from what it heard.
         audio_answered = False
         audio_unanswerable: Optional[str] = None
+        # Kept in step with ``audio_unanswerable`` -- same first-failure-wins
+        # rule -- because a reason and a detail from two different failures
+        # would describe neither.
+        audio_unanswerable_detail: Optional[str] = None
         finalization_only = False
         finalization_retries_used = 0
+        # Which failure sent us into finalization, kept because the answer to
+        # "how hard should the retry think" depends on it. See
+        # ``_finalization_effort``.
+        finalization_retry_reason: Optional[str] = None
 
         while iterations < self.max_iterations + (
             finalization_retries_used if finalization_only else 0
@@ -684,7 +780,10 @@ class ToolCallingJudge:
                     create_kwargs.pop("tools")
                     create_kwargs.pop("parallel_tool_calls")
                     create_kwargs["reasoning"] = {
-                        "effort": self.finalization_reasoning_effort
+                        "effort": _finalization_effort(
+                            self.finalization_reasoning_effort,
+                            finalization_retry_reason,
+                        )
                     }
                 # PR3 step 1b — context_management server-side compaction.
                 # The SDK signature exposes a dict shape but Azure's
@@ -722,7 +821,10 @@ class ToolCallingJudge:
                         model=self.model,
                         input=messages,
                         reasoning={
-                            "effort": self.finalization_reasoning_effort
+                            "effort": _finalization_effort(
+                                self.finalization_reasoning_effort,
+                                finalization_retry_reason,
+                            )
                             if finalization_only
                             else self.reasoning_effort
                         },
@@ -818,6 +920,9 @@ class ToolCallingJudge:
                             reason = _unanswerable_audio_reason(result)
                             if reason is not None and audio_unanswerable is None:
                                 audio_unanswerable = reason
+                                audio_unanswerable_detail = (
+                                    _unanswerable_audio_detail(result)
+                                )
                     messages.append(self._function_call_output_message(fc, result))
                 # Loop again to let the model react to the tool outputs.
                 continue
@@ -853,6 +958,7 @@ class ToolCallingJudge:
                 })
                 finalization_retries_used += 1
                 finalization_only = True
+                finalization_retry_reason = retry_reason
                 continue
             break
         else:
@@ -869,8 +975,13 @@ class ToolCallingJudge:
         # An attempt that failed and then succeeded is not an error: the run
         # heard the audio in the end, which is the only thing the mark depends
         # on. Only "asked, never heard" excludes.
+        perception_error_detail: Optional[str] = None
         if judge_error is None and audio_unanswerable is not None and not audio_answered:
             judge_error = audio_unanswerable
+            # Only here. A detail attached to an item that ended for some
+            # other reason, or that heard the audio on a later attempt, would
+            # be describing something that did not decide the item.
+            perception_error_detail = audio_unanswerable_detail
 
         return self._build_result(
             item=item,
@@ -887,6 +998,7 @@ class ToolCallingJudge:
             main_api_call_count=main_api_call_count,
             visual_prepass=prepass,
             usage_complete=usage_complete,
+            perception_error_detail=perception_error_detail,
         )
 
     def reset_perception(self) -> None:
@@ -899,6 +1011,49 @@ class ToolCallingJudge:
         for p in (self.vision_perception, self.audio_perception):
             if p is not None and hasattr(p, "reset"):
                 p.reset()
+
+    def perception_spend(self) -> dict:
+        """What this task has charged against its per-task perception caps.
+
+        Counts only. Read after a task stops early so the chunk that finishes
+        it can start from the same place rather than from zero.
+        """
+        spend = {}
+        if self.vision_perception is not None:
+            spend["vision"] = int(getattr(self.vision_perception, "calls_used", 0))
+        if self.audio_perception is not None:
+            spend["audio"] = int(getattr(self.audio_perception, "calls_used", 0))
+            spend["audio_failures"] = int(
+                getattr(self.audio_perception, "failures_used", 0)
+            )
+        return spend
+
+    def restore_perception_spend(self, spent: dict) -> None:
+        """Charge a resumed task for the looking an earlier chunk already did.
+
+        Called straight after :meth:`reset_perception`, which a resume still
+        has to run first -- the caches are keyed per task and the sub-judges
+        must not carry a previous task's images into this one. What the reset
+        must not throw away is the *spend*, and this puts it back.
+
+        Missing keys mean an unwired sub-judge, not zero spend, so an absent
+        key leaves the counter alone rather than clearing it.
+        """
+        if not spent:
+            return
+        vision = self.vision_perception
+        if vision is not None and "vision" in spent:
+            restore = getattr(vision, "restore_spend", None)
+            if callable(restore):
+                restore(spent["vision"])
+        audio = self.audio_perception
+        if audio is not None and "audio" in spent:
+            restore = getattr(audio, "restore_spend", None)
+            if callable(restore):
+                restore(
+                    spent["audio"],
+                    failures_used=int(spent.get("audio_failures") or 0),
+                )
 
     # ------------------------------------------------------------------
     # Prompt / tools
@@ -1584,6 +1739,7 @@ class ToolCallingJudge:
         main_api_call_count: int = 0,
         visual_prepass: Optional[VisualPrepassResult] = None,
         usage_complete: bool = True,
+        perception_error_detail: Optional[str] = None,
     ) -> ToolCallingResult:
         tools_used = list(tools_used or [])
         prepass = visual_prepass or VisualPrepassResult()
@@ -1602,6 +1758,7 @@ class ToolCallingJudge:
             "render_total_latency_ms": prepass.render_total_latency_ms,
             "usage_complete": usage_complete and prepass.usage_complete,
             "visual_provenance": prepass.to_provenance(),
+            "perception_error_detail": perception_error_detail,
         }
         if judge_error is not None or not final_text.strip():
             return ToolCallingResult(

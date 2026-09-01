@@ -29,10 +29,103 @@ from core.file_preview import build_file_structure_info
 from core.reference_integrity import open_verified_reference
 
 
-def _raise_redacted_provider_error(error_type: str):
-    raise RuntimeError(
-        f"Code Interpreter provider error ({error_type})"
-    ) from None
+#: What a provider's own error code may be made of before it is allowed
+#: into a redacted message: letters, digits and underscore, nothing else.
+#: Real codes look like ``PermissionDenied``, ``AuthorizationFailed``,
+#: ``DeploymentNotFound`` or ``insufficient_quota``. An endpoint, an account
+#: name, a deployment name, a file path or a sentence of prose all need a
+#: dot, a dash, a slash, a colon or a space, so none of them can get through
+#: this. That is the whole reason the allow-list is a shape and not a
+#: blocklist of things to strip out.
+_PROVIDER_CODE_SHAPE = re.compile(r"\A[A-Za-z0-9_]{1,64}\Z")
+
+#: Where a refusal's own code is looked for, in the order it is preferred.
+#: The first pair is what the OpenAI SDK lifts out of a JSON body onto the
+#: exception itself. The second pair is read back out of the body, because
+#: Azure nests its code one level down under ``error`` and the SDK leaves the
+#: attributes ``None`` in that case. Looking in the body as well is what makes
+#: this useful against a real Azure refusal rather than only a synthetic one.
+_PROVIDER_CODE_ATTRIBUTES = ("code", "type")
+_PROVIDER_CODE_BODY_KEYS = ("code", "type")
+
+
+def _provider_code_of(value: object) -> Optional[str]:
+    """Return ``value`` when it is code-shaped, and otherwise nothing."""
+    if isinstance(value, str) and _PROVIDER_CODE_SHAPE.match(value):
+        return value
+    return None
+
+
+def _provider_error_classification(exc: BaseException) -> str:
+    """Say what a provider refusal was, without saying who refused it.
+
+    Exactly two things are ever taken from the exception:
+
+    * the HTTP status, and only when it is a whole number a status can be;
+    * the provider's own error code, and only when it is code-shaped by
+      ``_PROVIDER_CODE_SHAPE``.
+
+    The message, the request, the response headers and the body itself are
+    never carried into the result. So a redacted message gains the one thing
+    an operator needs to act — *what* was refused — and still cannot name an
+    endpoint, an account, a project or a deployment.
+
+    Every read is guarded, because these are attributes on somebody else's
+    exception and a property is free to raise. A classification that cannot
+    be worked out is simply absent; it never replaces the class name.
+    """
+    parts: list[str] = []
+
+    try:
+        status = getattr(exc, "status_code", None)
+    except Exception:
+        status = None
+    if isinstance(status, int) and 100 <= status <= 599:
+        parts.append(f"http {status}")
+
+    code = None
+    for attribute in _PROVIDER_CODE_ATTRIBUTES:
+        try:
+            code = _provider_code_of(getattr(exc, attribute, None))
+        except Exception:
+            code = None
+        if code is not None:
+            break
+    if code is None:
+        try:
+            body = getattr(exc, "body", None)
+        except Exception:
+            body = None
+        nested = body.get("error") if isinstance(body, dict) else None
+        for holder in (body, nested):
+            if not isinstance(holder, dict):
+                continue
+            for key in _PROVIDER_CODE_BODY_KEYS:
+                code = _provider_code_of(holder.get(key))
+                if code is not None:
+                    break
+            if code is not None:
+                break
+    if code is not None:
+        parts.append(f"code {code}")
+
+    return ", ".join(parts)
+
+
+def _redacted_provider_error_message(exc: BaseException) -> str:
+    """The one sentence a redacted provider failure is allowed to say."""
+    classification = _provider_error_classification(exc)
+    error_type = type(exc).__name__
+    if classification:
+        return (
+            f"Code Interpreter provider error "
+            f"({error_type}, {classification})"
+        )
+    return f"Code Interpreter provider error ({error_type})"
+
+
+def _raise_redacted_provider_error(message: str):
+    raise RuntimeError(message) from None
 
 
 class _CodeInterpreterProviderCallProxy:
@@ -45,10 +138,10 @@ class _CodeInterpreterProviderCallProxy:
         try:
             value = getattr(self._target, name)
         except Exception as exc:
-            error_type = type(exc).__name__
+            message = _redacted_provider_error_message(exc)
         else:
             return value
-        _raise_redacted_provider_error(error_type)
+        _raise_redacted_provider_error(message)
 
     def __getattr__(self, name: str):
         return _CodeInterpreterProviderCallProxy(
@@ -59,10 +152,10 @@ class _CodeInterpreterProviderCallProxy:
         try:
             result = self._target(*args, **kwargs)
         except Exception as exc:
-            error_type = type(exc).__name__
+            message = _redacted_provider_error_message(exc)
         else:
             return result
-        _raise_redacted_provider_error(error_type)
+        _raise_redacted_provider_error(message)
 
 
 def _close_sync_resources(resources: tuple[tuple[str, object | None], ...]) -> None:
@@ -127,6 +220,14 @@ class CodeInterpreterRunner:
     #: a section from this tuple lowers what the plan is required to cover, so
     #: it must be dropped from the code first.
     REFERENCE_FILE_PROMPT_SECTIONS = ("file_structure",)
+
+    #: Which prompt sections this run place puts in its **first** request past
+    #: the rendered prompt and the reference files. None: this runner builds
+    #: its request from ``render_prompt`` and the structure summary alone, and
+    #: has no ``_augment_prompt``. Empty is a *claim*, not an omission — the
+    #: preflight refuses a run place that declares nothing, because nothing
+    #: looking is not the same as the claim holding.
+    FIRST_REQUEST_EXTRA_SECTIONS: tuple[str, ...] = ()
 
     DEFAULT_PROMPT = "code_interpreter_occupation_codegen"
 

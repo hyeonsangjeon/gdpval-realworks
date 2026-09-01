@@ -1,12 +1,18 @@
 /**
  * Per-task cost receipts, checked in a real browser.
  *
- * The four states this suite exists to keep apart:
+ * The five states this suite exists to keep apart:
  *
+ *   $0.0400    a recorded amount. Priced, complete, and that is the figure.
  *   $0.0000    a recorded zero. Priced, complete, and free.
  *   기록 없음   no receipt. Nobody knows what it cost. NOT zero.
  *   미확정      a receipt that could not be priced, or only partly priced.
- *   미채점      the grading never happened, so there is nothing to price.
+ *   미채점      the work never happened, so there is nothing to price. The
+ *              solve side spells the same state 미실행.
+ *
+ * The first two are one state in the code and two different claims on the
+ * page, so both are asserted: "it was free" and "it cost this much" are not
+ * interchangeable, and neither may drift into 기록 없음.
  *
  * Every fixture here is synthetic and every summary is computed by the real
  * `summarizeCostReceipts`, so the run also proves the aggregator and the
@@ -255,7 +261,14 @@ async function openTask(page, taskId) {
 
 // ── Scenarios ───────────────────────────────────────────────────────────────
 
-/** Everything priced: a real zero, a failed task that still cost money. */
+/**
+ * Every solving cost priced: a real zero, a failed task that still cost money.
+ *
+ * The grading half is deliberately not: `t-zero` was graded and the judge
+ * recorded nothing, which is the only way to test 기록 없음 against 미채점. So
+ * this scenario also carries the contrast between a field whose every row has
+ * a receipt and a field with a hole in it.
+ */
 const fullyPricedRows = () => [
   {
     id: 't-complete',
@@ -337,6 +350,44 @@ const mixedRows = () => [
   },
 ]
 
+/**
+ * The shape the exp026c cost smoke produced: paid work nobody could price.
+ *
+ * Run 33302056462 made two paid model calls against `gpt-5.4-2026-03-05`, a
+ * snapshot the price table has no entry for. Every amount came back a
+ * placeholder zero and the projector nulled all of them, exactly as it should.
+ * A run in that state has spent money and knows it; what it does not know is
+ * how much. Beside it sits a task that never started, which is the one thing
+ * here that genuinely cost nothing.
+ *
+ * No other scenario reaches this state. `mixedRows` has an unpriced receipt,
+ * but an amount still survives elsewhere in the run, so the run headline stays
+ * a number. Here nothing survives, and that is the case where a summariser
+ * reading its state off the amounts instead of the receipts gets it wrong.
+ */
+const ranButUnpricedRows = () => [
+  {
+    id: 't-paid-unpriced',
+    sector: 'Finance',
+    occupation: 'Accountant',
+    solve: receipt({
+      status: 'partial',
+      missing: ['price_missing'],
+      components: [
+        component('generation', 0, { status: 'partial' }),
+        component('self_qa', 0, { status: 'partial' }),
+      ],
+    }),
+  },
+  {
+    id: 't-never-started',
+    sector: 'Health',
+    occupation: 'Nurse',
+    status: 'error',
+    solve: receipt({ status: 'not_run' }),
+  },
+]
+
 /** A run from before cost instrumentation existed. exp003 looks like this. */
 const legacyRows = () => [
   { id: 't-complete', sector: 'Finance', occupation: 'Accountant' },
@@ -400,18 +451,39 @@ async function assertFullyPriced(page, solveSummary, gradeSummary) {
     assert.equal(cell.state, 'recorded')
   }
 
-  assert.equal(gradeSummary.estimated_cost_usd, 0.13)
+  // The grading half of this scenario is not fully recorded, and the page now
+  // says so. `t-zero` was graded and the judge wrote no cost for it, which is
+  // the 기록 없음 cell asserted above -- so $0.1300 covers two of the three
+  // graded tasks and is a floor, not a total. It read `$0.1300 · 총액` until
+  // the summariser stopped judging completeness against only the receipts it
+  // kept; the cell right beside it said the third task's cost was unknown.
+  assert.equal(gradeSummary.total_tasks, 3)
+  assert.equal(gradeSummary.receipt_tasks, 2)
+  assert.equal(gradeSummary.status, 'partial')
+  assert.equal(gradeSummary.estimated_cost_usd, null)
+  assert.equal(gradeSummary.known_cost_usd, 0.13)
   const gradeTotal = await readCell(summaryStat(page, 'grading_cost', '총액'))
-  assert.equal(gradeTotal.text, usd(gradeSummary.estimated_cost_usd))
-  assert.equal(gradeTotal.state, 'recorded')
+  assert.equal(gradeTotal.text, `≥ ${usd(gradeSummary.known_cost_usd)}`)
+  assert.equal(gradeTotal.state, 'floor')
+  assert.match(gradeTotal.title, /3건 중 2건만 가격이 계산되어/)
+
+  // The problem-solving half has a receipt on every row, so it is untouched:
+  // still a total, still `recorded`. That contrast is the point -- one payload,
+  // two fields, and only the one with a hole in it is downgraded.
+  assert.equal(solveSummary.status, 'complete')
+  assert.equal(solveSummary.receipt_tasks, solveSummary.total_tasks)
 
   // Goal 8: the failed task's cost is stated beside the total, not netted out.
   assert.equal(solveSummary.failed_task_count, 1)
   assert.equal(solveSummary.failed_task_cost_usd, 0.04)
-  assert.equal(
-    (await summaryStat(page, 'problem_solving_cost', '실패 작업 비용').innerText()).trim(),
-    '1건 · $0.0400',
+  // Every failure on this run was priced, so the amount is the amount and the
+  // row reads exactly as it did before the measured-failure count existed.
+  assert.equal(solveSummary.failed_measured_tasks, 1)
+  const failedCost = await readCell(
+    summaryStat(page, 'problem_solving_cost', '실패 작업 비용'),
   )
+  assert.equal(failedCost.text, '1건 · $0.0400')
+  assert.equal(failedCost.state, 'recorded')
 
   // The audit sidecar is named on screen with a truncated digest.
   assert.match(
@@ -536,6 +608,61 @@ async function assertMixed(page, solveSummary) {
   assert.equal(combined.state, 'floor')
 }
 
+async function assertRanButUnpriced(page, solveSummary) {
+  await assertColumnsAndNote(page)
+
+  // Money was spent on this row and the amount is unknown.
+  const unpriced = await readCell(tableCell(page, 't-paid-unpriced', 'problem_solving_cost'))
+  assert.equal(unpriced.text, '미확정')
+  assert.equal(unpriced.state, 'unpriced')
+  assert.match(unpriced.title, /가격표에 없는 모델/)
+
+  // Nothing was spent on this one, and that is a different sentence. The two
+  // sit in the same column of the same table, so a reader who cannot tell them
+  // apart cannot tell an unpriced bill from no bill. This is also the only
+  // place a `not_run` receipt reaches the page: everywhere else 미채점 comes
+  // from a missing receipt, which is a different code path.
+  const never = await readCell(tableCell(page, 't-never-started', 'problem_solving_cost'))
+  assert.equal(never.text, '미실행')
+  assert.equal(never.state, 'never_ran')
+
+  // The regression this scenario exists for. Every amount here is null, so a
+  // summariser that reads the run's state off the amounts rather than off the
+  // receipts calls the whole run `not_run` — 미수행 — and a run that paid for
+  // two model calls reads as a run that never happened. The one receipt that
+  // truly did not run must abstain from that vote, not cast it.
+  assert.equal(solveSummary.status, 'partial')
+  assert.equal(solveSummary.measured_tasks, 0)
+  assert.equal(solveSummary.known_cost_usd, 0)
+  assert.equal(solveSummary.estimated_cost_usd, null)
+
+  const column = await summaryColumn(page, 'problem_solving_cost').innerText()
+  assert.match(column, /일부 기록됨/)
+  assert.doesNotMatch(column, /미수행/)
+  assert.match(column, /미가격 사유: 가격표에 없는 모델/)
+
+  // Nothing was priced, so the headline is not a floor either. `≥ $0.0000`
+  // would be a number, and there is no number to show.
+  const total = await readCell(summaryStat(page, 'problem_solving_cost', '총액'))
+  assert.equal(total.text, '미확정')
+  assert.equal(total.state, 'unpriced')
+
+  // The failed-task row, under the same rule as the headline above it.
+  // `t-never-started` failed carrying a `not_run` receipt, whose money fields
+  // arrive as 0.0 like every other status. Summed on its own that reads as a
+  // failure that cost nothing, and this row printed `1건 · $0.0000` — the
+  // producer's own docstring for that receipt is "Not free — it did not
+  // happen." An amount is shown only when the failures behind it were priced.
+  assert.equal(solveSummary.failed_task_count, 1)
+  assert.equal(solveSummary.failed_measured_tasks, 0)
+  const failedCost = await readCell(
+    summaryStat(page, 'problem_solving_cost', '실패 작업 비용'),
+  )
+  assert.equal(failedCost.text, '1건 · 미확정')
+  assert.equal(failedCost.state, 'unpriced')
+  assert.doesNotMatch(failedCost.text, /\$0\.0000/)
+}
+
 async function assertLegacy(page) {
   // Goal 8: a run from before instrumentation still shows a cost card. Hiding
   // it and zeroing it are equally easy to misread as "this was free".
@@ -620,6 +747,13 @@ async function main() {
     const mixed = scenario(mixedRows(), { experimentId, successfulDeliverables: 3 })
     await load(mixed)
     await assertMixed(page, mixed.solveSummary)
+
+    const ranUnpriced = scenario(ranButUnpricedRows(), {
+      experimentId,
+      successfulDeliverables: 1,
+    })
+    await load(ranUnpriced, { graded: false })
+    await assertRanButUnpriced(page, ranUnpriced.solveSummary)
 
     const legacy = scenario(legacyRows(), { experimentId, successfulDeliverables: 2 })
     assert.equal(legacy.solveSummary, null, 'a run with no receipts must summarise to null')

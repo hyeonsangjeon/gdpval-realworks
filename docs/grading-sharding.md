@@ -37,19 +37,19 @@ opens the deliverable and scores it against a rubric. One task takes roughly
 
 The problem is the container that work has to fit in. A single GitHub Actions
 job cannot run forever. This repository uses a **relay** structure that stops
-itself every four hours (`GRADER_TIME_BUDGET_SEC=14400`) and hands off to the
+itself every five hours (`GRADER_TIME_BUDGET_SEC=18000`) and hands off to the
 next run. That relay can be handed off **at most 11 times.**
 
 ```
-4 hours × 11 legs = 44 hours   ← this is the ceiling
+5 hours × 11 legs = 55 hours   ← this is the ceiling
 ```
 
 So:
 
 ```
-time needed 71.6 hours  >  time available 44 hours
+time needed 71.6 hours  >  time available 55 hours
              ↑
-        27.6 hours over → it never finishes
+        16.6 hours over → it never finishes
 ```
 
 This is not "a bit slow." It is **structurally impossible.** No amount of

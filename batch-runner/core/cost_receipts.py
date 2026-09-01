@@ -1497,17 +1497,27 @@ def build_receipt(
     the moment two different readers ran under it: one row of summed tokens
     belonging to two models with two different rates, which no table can price
     and no reader can take apart afterwards.
+
+    ``price_table_sha256`` is what the *caller* has open, which is not always
+    what priced these rows: a resumed round opens the ledger with today's price
+    file and finds rows settled under yesterday's. Each row already records the
+    table it was priced against, so the rows are asked first and the argument is
+    used only where they say nothing.
     """
     per_component: dict[tuple[str | None, ...], dict[str, Any]] = {}
     reasons: set[str] = set()
     model_cost = Decimal(0)
     model_calls = 0
     totals = empty_usage()
+    tables_named_by_rows: set[str] = set()
 
     for call in calls:
         state = str(call.get("state") or "")
         if state == STATE_ABANDONED:
             continue
+        stated = call.get("price_table_sha256")
+        if stated:
+            tables_named_by_rows.add(str(stated))
         stage = str(call.get("stage") or "")
         retry_kind = str(call.get("retry_kind") or RETRY_NONE)
         identity = _identity_of(call)
@@ -1585,9 +1595,32 @@ def build_receipt(
         model_calls=model_calls,
         usage=totals,
         components=components,
-        price_table_sha256=price_table_sha256,
+        price_table_sha256=_one_table(tables_named_by_rows, price_table_sha256),
         missing_reasons=tuple(sorted(reasons)),
     )
+
+
+def _one_table(named: set[str], fallback: str | None) -> str | None:
+    """The table these rows were priced under, or nothing if they disagree.
+
+    The fingerprint is a claim a reader can act on: fetch those bytes, re-price
+    the usage, and the amount should come back. That only holds while there is
+    one table behind the amount. Where two rows name different ones, naming
+    either turns the receipt into a claim its own money disproves, so the
+    honest answer is that it is not known -- which is what
+    :func:`core.cost_projection.summarize_cost_receipts` has always said in the
+    same situation.
+
+    Rows that name nothing are not a disagreement. Ledgers written before the
+    column existed, and ledgers opened with no price list at all, leave it null
+    on every row; there the caller's own table is the only statement available
+    and stays the answer.
+    """
+    if len(named) == 1:
+        return next(iter(named))
+    if named:
+        return None
+    return fallback
 
 
 def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
@@ -1604,6 +1637,10 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
     is a real floor. A run with no record at all has no floor, and reporting one
     of ``$0`` invites exactly the reading — "so far it has cost nothing" — that
     the four statuses exist to prevent.
+
+    The price-table fingerprint survives only where the tasks agree on it. A
+    summary that names one table for money computed under two would be
+    contradicted by the very bytes it points at.
     """
     contributing = [
         receipt
@@ -1619,40 +1656,20 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
     runtime_cost = Decimal(0)
     model_calls = 0
     totals = empty_usage()
-    sha = None
-    merged: dict[tuple[str | None, ...], dict[str, Any]] = {}
+    tables: set[str] = set()
     for receipt in contributing:
         reasons.update(receipt.missing_reasons)
         known += receipt.known_cost_usd
         model_cost += receipt.model_cost_usd
         runtime_cost += receipt.runtime_cost_usd
         model_calls += receipt.model_calls
-        sha = sha or receipt.price_table_sha256
+        if receipt.price_table_sha256:
+            tables.add(receipt.price_table_sha256)
         for name in totals:
             value = receipt.usage.get(name)
             if value is None:
                 continue
             totals[name] = (totals[name] or 0) + int(value)
-        for component in receipt.components:
-            bucket = merged.setdefault(
-                _component_key(component),
-                {
-                    "model_calls": 0,
-                    "known_cost_usd": Decimal(0),
-                    "usage": empty_usage(),
-                    "reasons": set(),
-                    "statuses": set(),
-                },
-            )
-            bucket["model_calls"] += component.model_calls
-            bucket["known_cost_usd"] += component.known_cost_usd
-            bucket["reasons"].update(component.missing_reasons)
-            bucket["statuses"].add(component.status)
-            for name in bucket["usage"]:
-                value = component.usage.get(name)
-                if value is None:
-                    continue
-                bucket["usage"][name] = (bucket["usage"][name] or 0) + int(value)
     return CostReceipt(
         status=_summary_status(contributing),
         known_cost_usd=known,
@@ -1660,50 +1677,107 @@ def summarise_receipts(receipts: Sequence[CostReceipt]) -> CostReceipt:
         runtime_cost_usd=runtime_cost,
         model_calls=model_calls,
         usage=totals,
-        components=tuple(
+        components=_merge_components(contributing),
+        price_table_sha256=_one_table(tables, None),
+        missing_reasons=tuple(sorted(reasons)),
+    )
+
+
+def _summary_status(
+    contributing: Sequence[CostReceipt | ReceiptComponent],
+) -> str:
+    """What a set of already-settled states adds up to.
+
+    Written for receipts and reused verbatim for the lines inside one, because
+    it is the same question asked one level down: a whole of parts is whole
+    only if every part is, and has no record only if no part has one.
+    """
+    if all(receipt.status == STATUS_COMPLETE for receipt in contributing):
+        return STATUS_COMPLETE
+    if all(receipt.status == STATUS_UNAVAILABLE for receipt in contributing):
+        return STATUS_UNAVAILABLE
+    return STATUS_PARTIAL
+
+
+def _merge_components(
+    contributing: Sequence[CostReceipt],
+) -> tuple[ReceiptComponent, ...]:
+    """Carry the receipts' own lines up to the summary, rolled by their key.
+
+    Without this the summary published one figure for a whole run and no
+    account of what it was spent on — and, worse, said so in a way a reader
+    cannot tell from the truth. An empty list is what a run that never called
+    a model carries, so a run of thousands of judge and perception calls and a
+    run that made none published the same field. The tasks in the same file
+    attributed every one of those calls; only the line above them said nothing.
+
+    A line is keyed by ``(stage, retry_kind)`` *and by whose call it was*, not
+    by its displayed name. Generation that had to be redone and Self-QA that
+    had to be redone both display as 재시도 and are not one line; neither are a
+    visual reader and an audio reader that both ran under ``perception``, whose
+    tokens carry different rates and cannot share a row any table can price.
+    That is the same seven-field key :func:`build_receipt` groups a task's own
+    lines under and the same one
+    :func:`core.cost_projection.project_cost_receipt` rejects duplicates of, so
+    the merged list is unique by construction.
+
+    The count is bounded by the vocabulary times the identities the run's own
+    config names, not by the run's size: five stages and five retry kinds give
+    twenty-five pairs, and a stage is only ever reached by the models named for
+    it — one judge under ``grading``, at most the two sub-judges under
+    ``perception``, one generator under ``generation`` and ``self_qa``. A
+    grading run therefore lands near twenty lines and an inference run near
+    ten, under the thirty-two ``_MAX_COMPONENTS`` a published receipt may carry
+    on either reader. That headroom is the reason the cap is worth naming here:
+    it is real, it is checked on the way out, and identity is the axis that
+    consumes it, so a stage that ever fans out to many models would need the
+    cap revisited rather than the fan-out hidden in one unpriceable row.
+
+    Inside a line the rule is the one this module already applies to receipts:
+    work that did not happen contributed nothing, so it is set aside rather
+    than counted against the rest; what is left is whole only if all of it is.
+    """
+    lines: dict[tuple[str | None, ...], list[ReceiptComponent]] = {}
+    for receipt in contributing:
+        for entry in receipt.components:
+            lines.setdefault(_component_key(entry), []).append(entry)
+
+    merged: list[ReceiptComponent] = []
+    for key, entries in sorted(lines.items(), key=_component_order):
+        counted = [entry for entry in entries if entry.status != STATUS_NOT_RUN]
+        known = Decimal(0)
+        model_calls = 0
+        reasons: set[str] = set()
+        usage = empty_usage()
+        for entry in counted:
+            known += entry.known_cost_usd
+            model_calls += entry.model_calls
+            reasons.update(entry.missing_reasons)
+            for name in usage:
+                value = entry.usage.get(name)
+                if value is None:
+                    # Absent is not zero, exactly as it is not zero one level
+                    # up. A line that never said what it used does not get to
+                    # add nothing and leave the sum reading as a full count.
+                    continue
+                usage[name] = (usage[name] or 0) + int(value)
+        merged.append(
             ReceiptComponent(
                 stage=key[0] or "",
                 retry_kind=key[1] or RETRY_NONE,
-                status=_merged_component_status(data["statuses"]),
-                model_calls=data["model_calls"],
-                known_cost_usd=data["known_cost_usd"],
-                usage=data["usage"],
-                missing_reasons=tuple(sorted(data["reasons"])),
+                status=_summary_status(counted) if counted else STATUS_NOT_RUN,
+                model_calls=model_calls,
+                known_cost_usd=known,
+                usage=usage,
+                missing_reasons=tuple(sorted(reasons)),
                 provider=key[2],
                 deployment=key[3],
                 requested_model=key[4],
                 resolved_model=key[5],
                 api_version=key[6],
             )
-            for key, data in sorted(merged.items(), key=_component_order)
-        ),
-        price_table_sha256=sha,
-        missing_reasons=tuple(sorted(reasons)),
-    )
-
-
-def _merged_component_status(statuses: set[str]) -> str:
-    """The status of one summary line, from the per-task lines behind it.
-
-    Mirrors :func:`_summary_status` one level down: all-complete stays
-    complete, all-unavailable stays unavailable, and any mixture is partial.
-    Collapsing a mixture to ``complete`` would let one priced task hide an
-    unpriced one; collapsing it to ``unavailable`` would throw away a real
-    floor that was measured.
-    """
-    if statuses and statuses <= {STATUS_COMPLETE}:
-        return STATUS_COMPLETE
-    if statuses and statuses <= {STATUS_UNAVAILABLE}:
-        return STATUS_UNAVAILABLE
-    return STATUS_PARTIAL
-
-
-def _summary_status(contributing: Sequence[CostReceipt]) -> str:
-    if all(receipt.status == STATUS_COMPLETE for receipt in contributing):
-        return STATUS_COMPLETE
-    if all(receipt.status == STATUS_UNAVAILABLE for receipt in contributing):
-        return STATUS_UNAVAILABLE
-    return STATUS_PARTIAL
+        )
+    return tuple(merged)
 
 
 def ledger_reference(path: str | Path, sha256: str) -> dict[str, str]:

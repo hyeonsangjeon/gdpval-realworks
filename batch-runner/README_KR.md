@@ -251,7 +251,7 @@ condition_a:
     deployment: "gpt-5.2-chat"
   qa:
     enabled: true
-    max_retries: 3
+    max_retries: 3    # 추가 횟수가 아니라 총 답변 수: 3이면 재생성 2번, 1이면 0번
     min_score: 6
 
 execution:

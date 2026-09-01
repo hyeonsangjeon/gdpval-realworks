@@ -1,0 +1,359 @@
+# ══════════════════════════════════════════════════════════════════════════
+# 💵 exp026c — problem_solving_cost receipt SMOKE (1 task)
+# --------------------------------------------------------------------------
+# Byte-identical to exp026s_sandbox_ci_smoke EXCEPT for `data.source` (and the
+# identity strings in `experiment:`). Everything that decides WHICH task runs
+# and HOW it runs — the occupation filter, sample_size, model, temperature,
+# reasoning_effort, QA block, and the whole `execution:` tree — is unchanged.
+#
+# WHY A SEPARATE FILE RATHER THAN AN EDIT TO exp026s
+# ---------------------------------------------------
+# exp026s cannot bootstrap any more. Its target dataset
+# HyeonSang/exp026s_sandbox_ci_smoke was published 2026-07-10 and predates two
+# canonical-schema additions, so Step 0 now hard-fails on it (run 33279473863):
+#
+#   Staged snapshot validation failed:
+#     target: Snapshot columns must exactly match canonical target columns
+#             (missing 'deliverable_text')
+#     target: Canonical needs-files manifest not found:
+#             step0_needs_files_manifest.json
+#     target: Missing cleared submitter column: deliverable_text
+#
+# There is no repair path in code, and that is deliberate.
+# `RepoBootstrapper._ensure_remote_repo` classifies a target that has a `data/`
+# prefix as "data" and returns immediately — it never re-publishes over an
+# existing repo — while the "partial" branch explicitly refuses "automatic
+# repository deletion. Use a new disposable target or remove the partial
+# repository explicitly." `_download_snapshot` takes a `force` argument but
+# discards it (`del force  # ... every call refreshes`), so no flag re-stages a
+# stale target either. A fresh disposable target is the sanctioned, and only
+# non-destructive, way through. The stale exp026s repo is left untouched;
+# whether to delete it is the owner's call, not this file's.
+#
+# TASK SELECTION IS PROVABLY UNCHANGED BY THE RENAME
+# ---------------------------------------------------
+# Bootstrap duplicates openai/gdpval at the pinned `SOURCE_REVISION`
+# 11e7900cdcac61bc4daf59e65feb238acda98fbf (repo_bootstrapper.py:94), which is
+# also the `rubric_commit_sha`/`inference_revision` the gold configs pin. The
+# target name is not an input to that content, so a fresh duplicate carries the
+# same 220 rows; `step1_prepare_tasks.py:99` then seeds `random.seed(42)` before
+# `random.sample`. Selection is therefore a function of (filter, seed, pinned
+# source) alone — all three identical here — and still resolves to
+# 83d10b06-26d1-4636-a32c-23f92c57f30b.
+#
+# Do NOT use this for benchmarking; it is a cost-instrumentation smoke.
+# ══════════════════════════════════════════════════════════════════════════
+
+# 🧪 Sandbox + Skills + Multimodal Perception (exp026)
+# Research Question: Does containerized execution with per-task dependency
+#   discovery, Agent Skills, and multimodal perception (vision for video,
+#   hearing for audio) improve GDPVal deliverable quality vs. plain subprocess?
+# Base architecture: exp025 (GPT-5.4 high + gpt-audio-1.5 preprocessor)
+# New variables:
+#   - execution.mode: sandbox (container, graceful local fallback)
+#   - skills/ injected into prompt + mounted in the sandbox
+#   - video_analyzer preprocessor (frame-by-frame vision)
+# Scope: bounded CI smoke — exactly 1 task (Accountants and Auditors)
+
+experiment:
+  id: "exp026c_cost_receipt_smoke"
+  name: "problem_solving_cost receipt smoke (GPT-5.4 low, 1 task)"
+  description: >
+    One-task smoke whose product is a receipt, not a deliverable. It exists to
+    make `problem_solving_cost` exist: step2_run_inference.py is the only writer
+    of that field, no committed run has ever produced one, and grading never
+    touches it — so no existing artifact can be inspected instead of running
+    this. The sandbox path is chosen because it is instrumented: `mode: sandbox`
+    with no `hardened_substrate` key leaves `hardened_requested` False
+    (step2_run_inference.py:2796), which is the condition under which
+    `open_cost_recorder` is called (:3268); the hardened and agentic paths
+    deliberately emit an uninstrumented `stage_unsupported` receipt instead.
+    With `qa.enabled: true` the run also produces distinct `generation` and
+    `self_qa` cost components, and a QA score below `min_score` adds
+    `*/semantic` retry rows without overwriting the first attempt — which is
+    what proves retries are summed into one task's cost rather than replacing
+    it. Model identity is pinned to azure/gpt-5.4, which is priceable in
+    experiments/execution_envelope/model_price_table.json, so the receipt can
+    reach status `complete` with a real USD figure.
+  author: "Hyeonsang Jeon"
+  created_at: "2026-08-29"
+
+# Variable control
+control:
+  fixed:
+    - tasks               # All 220 tasks (9 sectors, 44 occupations)
+    - temperature         # 0.0
+    - reasoning_effort    # low (see condition_a note: high/medium starve sandbox codegen)
+    - domain_packages     # full exp011 environment (baked into sandbox image)
+  changed:
+    - execution_mode      # subprocess → sandbox
+    - skills              # NEW: Agent Skills injected + mounted
+    - perception          # NEW: audio (hearing) + video (vision) preprocessors
+
+# Data filter — bounded CI smoke: a single accountant/document task
+data:
+  source: "HyeonSang/exp026c_cost_receipt_smoke"
+  filter:
+    sector: null                              # sector not constrained
+    occupation: "Accountants and Auditors"    # single fast document occupation
+    sample_size: 1                            # exactly 1 task for the CI smoke
+
+# Condition A: sandbox + skills + audio/video perception + reasoning=low
+condition_a:
+  name: "GPT-5.4 low + sandbox + skills + audio/video perception"
+  model:
+    provider: "azure"
+    deployment: "gpt-5.4"
+    temperature: 0.0
+    seed: null
+    # ── Sandbox reasoning-effort safety (PR #57 smoke + post-hardening probe) ─
+    # reasoning_effort must stay LOW for sandbox codegen. gpt-5.4 draws hidden
+    # reasoning tokens from the SAME completion budget as the visible code, so
+    # heavier reasoning empties the visible output ("No Python code found") and
+    # can exceed the 480s LLM-client timeout. Empirical probes on a representative
+    # reference-heavy accountant task (7d7fc9a7), code_generation=32768:
+    #   high   -> exceeded 480s client timeout (unusable)
+    #   medium -> MARGINAL: reasoning alone reached 22,790 tok and completion hit
+    #             31,146/32,768 (95%); a slightly larger reasoning draw returns
+    #             0 visible tokens -> "No Python code found" (reproduced live in
+    #             a real step2 run before this pass).
+    #   low    -> SAFE: 2,758 reasoning + ~7,381 visible = 10,139/32,768 (31%),
+    #             106s, finish=stop; ran end-to-end in Docker (final_status=ok).
+    # "low" keeps ~69% budget headroom and ~3.3x lower latency with comparable
+    # code output, so reasoning variance cannot intermittently starve the visible
+    # deliverable. See tasks/0702_thursday/
+    # sandbox_post_hardening_docker_verification_pr57.md.
+    reasoning_effort: "low"
+  prompt:
+    system: |
+      You are a helpful assistant that completes professional tasks.
+      When the task requires creating files (e.g., Excel, Word, PDF, PowerPoint),
+      write Python code that generates those files and save them to the current directory.
+      Use libraries such as openpyxl, python-docx, reportlab, python-pptx, and Pillow.
+      Always produce complete, runnable code.
+    prefix: null
+    body: null
+    suffix: |
+      If the task requires creating deliverable files (documents, spreadsheets,
+      presentations, reports, etc.), you MUST use Python code to generate the
+      actual file(s) and save them to the current directory.
+      Do NOT just describe what you would create — actually execute code to produce
+      downloadable files. The task is NOT complete unless the files are saved.
+
+      In your text response, do NOT include any file download links or sandbox URLs
+      (e.g. "[Download ...](sandbox:/mnt/data/...)" or similar).
+      Only provide a plain-text summary of what was produced.
+
+      IMPORTANT — Defensive coding:
+      Before writing any code, ALWAYS inspect the actual structure of any
+      reference files first (df.columns, df.dtypes, df.head()).
+      Never hardcode column names or assume data types.
+      Use the exact column names found in the file.
+
+      Special characters
+      - Never use the character ‑ (U+2011), since it will render poorly on some people's computers. Instead, always use - (U+002D) instead.
+      - Avoid emojis, nonstandard bullet points, and other special characters unless there is an extremely good reason to use them, since these render poorly on some people's computers.
+
+      Graphics embedded within PDFs/slides
+      - Make sure that any diagrams or plots are large enough to be legible (though not so large that they are ugly or cut off). In most cases they should be at least half the page width.
+      - Plots and charts to visualize data are good. Simple graphics (like a flowchart with arrows) are good. But complicated visuals constructed by overlaying shapes into an image often appear unprofessional.
+
+      PDFs
+      - Always use LibreOffice to create the PDF (it must be LibreOffice! If LibreOffice is not installed, you can install it yourself). Other libraries sometimes show weird artifacts on some computers.
+
+      Fonts
+      - Always use fonts which are available across all platforms. We recommend Noto Sans / Noto Serif unless there is an extremely good reason to use something else.
+      - If you must use another font, embed the font in the pptx/word/etc doc.
+
+      Deliverable text
+      - Do not link to submitted files in the deliverable text (links are not supported on the interface where these will be viewed).
+      - Ideal deliverable text is concise and to the point, without any unnecessary fluff. 4 sentences max.
+      - Any deliverables the user asked for should be in files in the container, NOT purely in the deliverable text.
+      - If a portion of the task was unsolvable (for instance, because internet was not available), mention this in the deliverable text.
+      - Your submission should be complete and self-contained. Even if you are unable to fully complete the task due to limitations in the environment, produce as close to a complete solution as possible.
+
+      Verbosity
+      - Always be clear and comprehensive, but avoid extra verbosity when possible.
+
+      Filetypes
+      - If the prompt does not request a specific filetype, use standard filetypes like PDF, PPTX, DOCX, XLSX, MP4, ZIP, etc.
+
+      Code structure:
+      Write all code in a SINGLE ```python``` code block.
+      Do not split code across multiple code blocks — this can cause
+      syntax errors when blocks are concatenated.
+
+      Lightweight mandatory checks
+      After generating files, do a quick validation pass (5 lines max):
+      - Verify each file exists and has non-zero size
+      - For Excel/DOCX/PPTX: open with the same library and confirm no exception
+      - Do NOT do multi-step visual inspection or PNG conversion
+      If any file is missing or corrupt, fix and regenerate.
+
+      Skills (preinstalled toolkits)
+      - A `skills/` package is available on the Python path inside the sandbox.
+        The "SKILLS AVAILABLE" section above lists the relevant skills and their
+        toolkit APIs for THIS task. Prefer those helpers — they wrap the famous
+        libraries correctly (e.g. `from skills.audio.toolkit import fft_summary`,
+        `from skills.video.toolkit import extract_frames`,
+        `from skills.document.toolkit import read_any`).
+      - If a needed package is listed under "DEPENDENCIES", assume it is already
+        installed in the sandbox image; just import and use it.
+
+      Perception data (vision + hearing)
+      - When an [AUDIO ANALYSIS] section is present, a specialized audio model
+        listened to the reference audio. Trust its findings (BPM, key, timing,
+        levels, etc.) instead of guessing.
+      - When a [VIDEO ANALYSIS] section is present, a vision model watched
+        frame-by-frame samples of the reference video. Trust its findings
+        (on-screen content, scene changes, timing, corruption checks) instead of
+        guessing. To inspect further, sample frames yourself with
+        `skills.video.toolkit.extract_frames`.
+
+      Available packages
+      - Audio: soundfile, pydub, pedalboard, pyloudnorm, librosa, mutagen, ffmpeg-python, moviepy, av
+      - Documents: aspose-words, camelot-py, docx2txt, fpdf2, PyMuPDF, weasyprint, cairosvg
+      - Data/ML: scikit-learn, xgboost, lightgbm, catboost, statsmodels, scipy, networkx
+      - NLP: nltk, textblob, fuzzywuzzy, rapidfuzz, wordcloud
+      - GIS: geopandas, geopy, folium, shapely, rasterio
+      - Vision: opencv-python, pytesseract, pdf2image, pyzbar, qrcode
+      - Visualization: bokeh, plotly, plotnine, seaborn, matplotlib-venn
+      - `ffmpeg`, `tesseract`, `graphviz`, `wkhtmltopdf` are available as system commands.
+      - `LibreOffice` is available for document conversion.
+
+  # Preprocessors: run before main execution (perception layer)
+  preprocessors:
+    - type: "audio_analyzer"          # hearing
+      model:
+        provider: "azure"
+        deployment: "gpt-audio-1.5"
+      trigger: "has_audio_files"
+      inject_as: "prompt_prefix"
+      include_task_instruction: true
+      system: |
+        You are an audio analysis agent.
+        You will receive a task description and one or more audio files.
+        Listen to the audio and provide analysis that is relevant
+        to completing the task.
+        Return your analysis as structured JSON.
+        Only include information you can actually determine from listening.
+        Do not guess or fabricate values.
+        Respond with JSON only. No prose.
+
+    - type: "video_analyzer"          # vision (frame-by-frame)
+      model:
+        provider: "azure"
+        deployment: "gpt-5.4"
+      trigger: "has_video_files"
+      inject_as: "prompt_prefix"
+      include_task_instruction: true
+      frames_per_video: 8
+      max_total_frames: 24
+      frame_max_width: 768
+      frame_detail: "auto"
+      system: |
+        You are a video analysis agent.
+        You will receive a task description, per-video metadata, and several
+        frames sampled across each video's timeline (each labeled with its
+        timestamp in seconds).
+        Examine the frames and describe what is happening on screen as it relates
+        to completing the task: visible content/text, scene changes, notable
+        timestamps, and whether any frame looks corrupted.
+        Return your analysis as structured JSON.
+        Only include information you can actually determine from the frames.
+        Do not guess or fabricate values.
+        Respond with JSON only. No prose.
+
+  # Self-QA: LLM inspects its own output
+  qa:
+    enabled: true
+    max_retries: 1
+    model: null
+    min_score: 5
+    prompt: |
+      You are a strict QA inspector for professional deliverables.
+
+      ## Original Task
+      {instruction}
+
+      ## Generated Output
+      - Text response: {deliverable_text}
+      - Files produced: {deliverable_files}
+
+      ## Inspection Criteria
+      1. Does the output address ALL requirements in the original task?
+      2. Are all required files produced with correct types and content?
+      3. Is the text response complete and professional?
+      4. Are there any obvious errors, missing elements, or placeholder content?
+
+      ## Response Format (JSON only)
+      ```json
+      {{
+        "passed": true,
+        "score": 8,
+        "issues": [],
+        "suggestion": ""
+      }}
+      ```
+
+# Execution settings
+execution:
+  mode: "sandbox"
+  # Video-heavy tasks (e.g. a 657 MB / 4K reference) are marginal at 720s: the
+  # A/B smoke saw the film/video task exhaust the timeout on the compositing
+  # pass. 1200s gives large ffmpeg/moviepy renders room before the resume round.
+  timeout: 1200
+  install_libreoffice: true
+  # Sandbox-specific settings (consumed by core/sandbox_runner.py).
+  sandbox:
+    image: "gdpval-sandbox:latest"
+    # Prompt structure/wording is authored in prompts/sandbox_occupation_codegen
+    # .yaml (sections, reflection_strings, perception placement). To A/B an
+    # alternate design without code changes, copy that file and set:
+    #   prompt_name: "your_variant"   # see prompts/sandbox_prompt_authoring.md
+    use_docker: "always"      # auto | never | always
+    # In CI the sandbox image is guaranteed present: batch-run.yml's
+    # "Sandbox: pull & verify image" preflight pulls it from GHCR and loud-fails
+    # before any model spend if it is missing. "always" therefore makes a mid-run
+    # Docker daemon loss fail LOUD per-task instead of silently falling back to
+    # local execution (fixes the pilot's silent-fallback finding).
+    # 5 GB OOM-killed the 657 MB / 4K video task (exit 137) in the A/B smoke.
+    # 8 GB covers 4K frame buffers + moviepy/ffmpeg working set for the full run.
+    memory_gb: 8
+    cpus: 2.0
+    max_skills: 5
+    # ── Output control loop (Phase 2) ────────────────────────────────────
+    # Skills give the sandbox eyes/ears on INPUTS; the blocks below verify
+    # the OUTPUTS the model generates and repair them when they fall short.
+    repair:
+      enabled: true
+      max_attempts: 1          # repair retries after attempt 0 (bounded)
+    output_qa:
+      enabled: true
+      render: true             # rasterize deliverables for deterministic QA
+      max_pages_per_artifact: 3
+      blank_page_threshold: 0.999   # per-page near-white warning ratio
+      vision:
+        enabled: false         # optional LLM vision QA (off by default)
+        provider: "azure"
+        deployment: "gpt-5.4"
+        max_images: 6
+    manifest:
+      enabled: true
+      filename: "manifest.json"
+    cache:
+      enabled: true            # cache rendered PNGs / perception by sha256
+  tokens:
+    # 16384 truncates gpt-5.4 sandbox codegen -> EMPTY visible output. 32768
+    # gives the visible code block ~69% headroom above low-reasoning usage
+    # (measured 10,139 completion tokens at reasoning_effort=low on a
+    # representative reference-heavy task). Raising this does NOT increase
+    # reasoning (that is controlled by reasoning_effort); it only prevents
+    # truncation. See tasks/0702_thursday/
+    # sandbox_post_hardening_docker_verification_pr57.md.
+    code_generation: 32768
+    qa_check: 4096
+    json_render: 8000
+  max_retries: 5
+  resume_max_rounds: 2
+  relay_max_runs: 5

@@ -373,19 +373,24 @@ grading_config: "grading_configs/default_v2.yaml"
 # purpose, because an unstated guess is how a cost ceiling ends up wrong in the
 # direction that costs money.
 cost:
-  # The owner has 3,700 United States dollars of Azure credit each month and
-  # explicitly approved using it for these benchmark runs on 2026-08-28. Cost
-  # calculations remain visible, but an estimate above a prior amount, a model
-  # without a published price, or a missing first-use measurement no longer
-  # blocks this plan. Fixed task, call, retry, token, and timeout limits still
-  # bound the five-task run.
+  # The owner has a monthly allowance of Azure credit and explicitly approved
+  # using it for these benchmark runs on 2026-08-28. The exact amount is
+  # account information, so it is kept in the owner's private records and not
+  # written here. Cost calculations remain visible, but an estimate above a
+  # prior amount, a model without a published price, or a missing first-use
+  # measurement no longer blocks this plan. Fixed task, call, retry, token, and
+  # timeout limits still bound the five-task run.
   policy: "record_cost_findings_only"
   approved_maximum_usd: null
   owner_approval:
     approved_on: "2026-08-28"
     paid_model_calls: true
-    available_monthly_credit_usd: 3700.00
     unpriced_audio_measurement: true
+    # No account balance belongs here. What the owner approved is the two flags
+    # above; how much credit is left in the account is account information, it
+    # is not a setting for a run, this file is published, and no check reads
+    # it. The free check refuses a plan that writes
+    # available_monthly_credit_usd under owner_approval.
 
   assumptions:
     # How many characters of wording are counted as one token. English text
@@ -408,22 +413,43 @@ cost:
     # thousand characters of wording it wraps every task in, which is the great
     # majority of what is sent.
     #
-    # 5020 is the widest of the three, measured rather than typed: the container
-    # sends prompts/sandbox_occupation_codegen.yaml, which renders to 571
-    # characters of standing instruction and 3725 of wording around the task,
-    # with 724 more from its own condition_a.prompt suffix. The other two come
-    # to 3867 and 3533. The occupation is written into those templates up to
-    # three times, so they are rendered with the longest name in the catalogue.
-    # The free check builds all three through the same renderer a real attempt
-    # uses and refuses this plan if the number here is lower — nothing below is
-    # copied from anything, so editing the prompt files moves the demand.
+    # 5020 was the widest render of the three, measured rather than typed: the
+    # container sends prompts/sandbox_occupation_codegen.yaml, which renders to
+    # 571 characters of standing instruction and 3725 of wording around the
+    # task, with 724 more from its own condition_a.prompt suffix. The other two
+    # render to 3867 and 3533. The occupation is written into those templates up
+    # to three times, so they are rendered with the longest name in the
+    # catalogue.
     #
-    # Still outside this figure: SandboxRunner._augment_prompt adds a
-    # deliverable contract section and a dependency hint to the container's
-    # first request, and a skills manual its settings currently switch off.
-    # Those are the next thing to price. Their absence makes the container's
-    # demand smaller than its real first request, never larger.
-    instruction_character_count: 5020
+    # That render is not all the container sends. SandboxRunner._augment_prompt
+    # builds a deliverable contract, a dependency hint and a skills manual,
+    # lays them out with the task, and hands the result to render_prompt *as*
+    # the task — and the renderer measures with a one-character stand-in task,
+    # so none of it was ever counted. 5020 was therefore smaller than the
+    # container's real first request, which is the one direction a ceiling may
+    # not be wrong in.
+    #
+    # 7307 is 5020 plus the 2287 those sections come to, also measured rather
+    # than typed: 1365 characters of deliverable contract and 922 of dependency
+    # hint. The skills manual is 0 because exp031's execution.sandbox.max_skills
+    # is 0; deleting that line falls back to the executor's own default of 5,
+    # which puts 7028 characters back and this figure would have to rise with it. Two of the three read the task's own words,
+    # and the catalogue holds a task's length but not its text, so they are
+    # built from the widest wording their own committed tables can produce —
+    # over-charging the real container by a wide margin, in the direction a
+    # ceiling is allowed to be wrong in.
+    #
+    # The free check builds all of it through the same functions a real attempt
+    # uses — core/prompt_loader.py for the render, core/first_request_sections.py
+    # for the three sections — and refuses this plan if the number here is
+    # lower. Nothing above is copied from anything, so editing the prompt files,
+    # the contract tables, the dependency tables or the skill packs moves the
+    # demand and this figure has to follow.
+    #
+    # Still outside this figure, and charged elsewhere in this same sum: the
+    # task's own words (per task, from the catalogue's prompt_character_count)
+    # and the reference files (per file, at REFERENCE_FILE_CHARACTER_CAP).
+    instruction_character_count: 7307
 
     # The most times the model may be asked again inside one attempt while it
     # is still working with its tools.
@@ -558,38 +584,46 @@ cost:
     # the settings permit, and it is the settings that decide the bill.
     grading_calls_per_rubric_item: 11.0
 
-    # The same three runs averaged 4,745 tokens of input per marking call
-    # (398,629 tokens over 84 calls). 10,000 is used, a little over twice that.
-    #
-    # This comment used to say that no settings file could pin this number down,
-    # because how much is sent follows the answer being marked. That was wrong,
-    # and the number below is left as it is so the free check can say so out
-    # loud rather than the mistake being quietly tidied away.
+    # This was 10,000 for a long time, taken from three recorded runs that
+    # averaged 4,745 tokens of input per marking call (398,629 over 84 calls).
+    # An average is not a ceiling, and 10,000 turned out to be 1.865 per cent
+    # of what the settings permit. The comment here used to say no settings
+    # file could pin the number down, because how much is sent follows the
+    # answer being marked. Both halves of that were wrong.
     #
     # The judge never sees the answer whole. It asks for pieces through the
-    # read_deliverable tool, and two limits bound what those pieces come to:
+    # read_deliverable tool, and every part of what a call carries is pinned:
     #   * core/tools/read_deliverable.py hands back at most MAX_CONTENT_CHARS
     #     (200,000) characters in one result — every content read ends with
     #     text[:MAX_CONTENT_CHARS];
     #   * grading_configs/default_v2.yaml sets per_item_call_cap: 8, so at most
-    #     eight results can pile up for one scoring line.
-    # Every result stays in the conversation and every later turn sends it
-    # again, so one call can carry 8 x 200,000 characters — 533,334 tokens at
-    # the three-characters-per-token ratio above. 10,000 is 1.87 per cent of it.
+    #     eight results can pile up for one scoring line, and every later turn
+    #     sends them all again — 8 x 200,000 / 3 = 533,334 tokens;
+    #   * every call also opens with prompts/grader_judge_v2.md (6,866
+    #     characters), the 500 characters of the task the judge is shown, and
+    #     the widest scoring line in the benchmark (1,203 characters) —
+    #     2,857 tokens.
     #
-    # core/execution_envelope_grading_cost.py now works that out and refuses
-    # this plan. Three things would settle it, and paying more is only one:
-    #   1. raise the number below to 533,334 — the ceiling then reads about
-    #      7,568 US dollars rather than 364, which is the honest figure;
-    #   2. lower per_item_call_cap in the marking settings, which lowers the
-    #      requirement in proportion;
-    #   3. lower MAX_CONTENT_CHARS, which is a code change and not a setting.
+    # 533,334 + 2,857 = 536,191. The number below is not typed from that
+    # arithmetic: core/execution_envelope_grading_cost.py builds it out of the
+    # marking settings, the committed instruction file and the task catalogue,
+    # and test_the_marking_call_ceiling_is_reached.py rebuilds it the same way
+    # and fails if the number below stops reaching it. Widen per_item_call_cap,
+    # MAX_CONTENT_CHARS, the instruction file or the widest scoring line and
+    # the test says so; none of them can be raised past this figure quietly.
     #
-    # One caveat the check states itself: what the conversation opens with — the
-    # standing instructions, the scoring line, the first 500 characters of the
-    # task — is capped by nothing, so 533,334 is a floor on the largest a call
-    # can be, not the largest itself.
-    grading_input_tokens_per_call: 10000
+    # This is the number that moves the marking line from 215.87 US dollars to
+    # 6,011.21 and the whole ceiling from 364.23 to 7,608.40. Nothing about the
+    # marking run changed — the settings always allowed this. Only the sum
+    # stopped understating it.
+    #
+    # The sum charges this flat: all 11 calls at the full pile-up, when call
+    # one carries no tool results at all and only the last four can carry
+    # eight. 88 result-slots are charged where 52 are reachable, so this is
+    # 1.686 times what a call-by-call count would give. That is deliberate and
+    # it is stated rather than hidden: a ceiling may be more careful than the
+    # thing it bounds, and may not fall short of it.
+    grading_input_tokens_per_call: 536191
 
     # How long one marking reply may run. Read from the same settings file,
     # which sets 2,400. This was 1,000 on the reasoning that "a marking call
@@ -607,9 +641,10 @@ cost:
     # calls_per_task is read from the marking settings and checked against them.
     # The token counts cannot be: neither a picture's size nor a clip's length
     # is fixed by any setting here. Worse, neither perception call sets a limit
-    # on the reply at all — core/perception/vision.py and core/perception/audio.py
-    # both call the Responses API without max_output_tokens — so the numbers
-    # below are measurements of what happened, never promises about what can.
+    # on the reply at all — core/perception/vision.py calls the Responses API
+    # and core/perception/audio.py calls Chat Completions, and neither passes
+    # max_output_tokens — so the numbers below are measurements of what
+    # happened, never promises about what can.
     grading_perception:
       vision:
         model: "gpt-5.4"
@@ -627,13 +662,32 @@ cost:
       audio:
         model: "gpt-audio-1.5"
         # grading_configs/default_v2.yaml: perception.audio.call_cap_per_task.
-        calls_per_task: 3
+        #
+        # Was 3, because that setting said 3 until the cap was raised to 32.
+        # Three was never a measured demand: counted across the checked-in
+        # 220-task inventory, 11 tasks ask for more listening than that, and
+        # the worst asks for 32. This figure only ever mirrors the setting, so
+        # it moves when the setting moves.
+        #
+        # It changes no amount. Both token counts below are null and this
+        # model has no published price, so sound contributes nothing to the
+        # worked-out total either way. What moves is how many calls of unknown
+        # cost the plan admits are possible — which is the honest direction for
+        # an unknown to move in.
+        calls_per_task: 32
         # Deliberately not filled in. Across every committed grading run, 116
         # scoring lines were routed to sound and the sound model was called
         # **zero** times, so there is no measurement to draw on — not one billed
         # call exists. `null` makes the check refuse. Writing a number here
         # would be inventing evidence, and writing 0 would say the calls are
         # free, which is the exact mistake this whole file exists to prevent.
+        #
+        # Zero successful calls is now understood rather than merely observed:
+        # every one of them was sent to an endpoint whose content union has no
+        # audio member, so each was refused with a 400 before a model heard it.
+        # The request now goes to Chat Completions, which accepts it — but a
+        # path that has been repaired and not yet run is still a path nobody
+        # has measured, so these stay null until a real call reports usage.
         #
         # This model also has no published price, so even a measured token count
         # would not produce an amount.

@@ -1369,6 +1369,241 @@ def test_task_visual_budget_fails_all_visual_items_before_any_calls(
     assert responses.calls == []
 
 
+def _image_only_pdf(path: Path) -> Path:
+    """A PDF whose pages are pictures and whose text layer is empty."""
+    pytest.importorskip("reportlab")
+    pytest.importorskip("fitz")
+    pytest.importorskip("PIL")
+    from PIL import Image
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
+    photo = path.parent / f"_{path.stem}.png"
+    Image.new("RGB", (64, 64), color="white").save(photo)
+    document = canvas.Canvas(str(path))
+    for _ in range(2):
+        document.drawImage(ImageReader(str(photo)), 40, 40, width=200, height=200)
+        document.showPage()
+    document.save()
+    photo.unlink()
+    return path
+
+
+def _typed_pdf(path: Path) -> Path:
+    pytest.importorskip("reportlab")
+    from reportlab.pdfgen import canvas
+
+    document = canvas.Canvas(str(path))
+    document.drawString(100, 750, "The total contract value is 4,200 USD.")
+    document.showPage()
+    document.save()
+    return path
+
+
+def _scan_beside_readable_return(tmp_path: Path) -> Path:
+    deliverable_dir = tmp_path / "task"
+    deliverable_dir.mkdir()
+    _image_only_pdf(deliverable_dir / "Scan.pdf")
+    _typed_pdf(deliverable_dir / "Return.pdf")
+    return deliverable_dir
+
+
+def _content_task(task_id: str, count: int):
+    from core.rubric_loader import RubricItem, TaskRubric
+
+    return TaskRubric(
+        task_id=task_id,
+        sector="Finance",
+        occupation="Tax Preparer",
+        prompt="Produce Scan.pdf and Return.pdf.",
+        rubric_items=[
+            RubricItem(
+                f"r{index}",
+                "The document states the total contract value.",
+                2,
+                None,
+            )
+            for index in range(count)
+        ],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+
+
+def test_visual_budget_falls_back_before_it_excludes_a_whole_task(
+    monkeypatch, tmp_path
+):
+    """The 43dc9778 shape: over budget, and still graded.
+
+    Two items about the contents of a bundle holding one scan and one
+    readable return. Each escalates on the scan, so the task wants two
+    renders against a cap of one. Excluding both would leave nothing scored,
+    which is not a zero -- it is an ``all_items_score_excluded`` task that
+    the analysers drop from the corpus. Falling back to the readable sibling
+    grades it, and says so on the payload.
+    """
+    responses = ScriptedResponses([
+        _response(output=[_final(_payload("pass", 1.0, "the return states 4,200"))]),
+        _response(output=[_final(_payload("pass", 1.0, "the return states 4,200"))]),
+    ])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision(call_cap=1)
+    grader._tool_judge.vision_perception = vision
+
+    grade = grader.grade_task(
+        _content_task("t-budget-fallback", 2),
+        str(_scan_beside_readable_return(tmp_path)),
+    )
+
+    assert grade.visual_budget_fallback == (
+        "task_visual_budget_exceeded:required_calls=2,cap=1"
+    )
+    assert grade.error is None
+    assert [item.verdict for item in grade.items] == ["pass", "pass"]
+    assert not any(item.score_excluded for item in grade.items)
+    assert all(item.visual_budget_downgraded for item in grade.items)
+    assert [item.routing_modality for item in grade.items] == ["text", "text"]
+    assert grade.pct == 100.0
+    # The point of falling back is not to spend the budget differently.
+    assert vision.calls == []
+    assert grade.render_call_count == 0
+
+
+def test_a_task_with_nothing_readable_still_fails_closed(monkeypatch, tmp_path):
+    """The rule task 64 established, which this must not undo.
+
+    When *every* selected file is a picture there is no text to fall back
+    to, and reading zero characters would produce a fail verdict about a
+    document that says the thing. Over budget with nothing to give up is
+    still over budget.
+    """
+    responses = ScriptedResponses([])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision(call_cap=1)
+    grader._tool_judge.vision_perception = vision
+    deliverable_dir = tmp_path / "task"
+    deliverable_dir.mkdir()
+    _image_only_pdf(deliverable_dir / "Scan.pdf")
+    _image_only_pdf(deliverable_dir / "Return.pdf")
+
+    grade = grader.grade_task(
+        _content_task("t-nothing-readable", 2), str(deliverable_dir)
+    )
+
+    assert grade.visual_budget_fallback is None
+    assert all(item.score_excluded for item in grade.items)
+    assert not any(item.visual_budget_downgraded for item in grade.items)
+    assert grade.error == "all_items_score_excluded"
+    assert vision.calls == []
+    assert responses.calls == []
+
+
+def test_a_criterion_that_names_a_picture_is_not_given_a_text_verdict(
+    monkeypatch, tmp_path
+):
+    """"Is the chart colour readable" has no answer in the characters.
+
+    The fallback trades a preferred render for an acceptable read. A
+    criterion classified VISUAL on its own words never had a read to fall
+    back to, so the budget still fails it closed -- which is what
+    ``test_task_visual_budget_fails_all_visual_items_before_any_calls``
+    pins, here with a readable file present to prove the fallback is not
+    what decides it.
+    """
+    from core.rubric_loader import RubricItem, TaskRubric
+
+    responses = ScriptedResponses([])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision(call_cap=1)
+    grader._tool_judge.vision_perception = vision
+    task = TaskRubric(
+        task_id="t-explicit-visual",
+        sector="Finance",
+        occupation="Tax Preparer",
+        prompt="Produce Scan.pdf and Return.pdf.",
+        rubric_items=[
+            RubricItem("v1", "Chart color is readable", 2, None),
+            RubricItem("v2", "Graph layout is polished", 2, None),
+        ],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+
+    grade = grader.grade_task(task, str(_scan_beside_readable_return(tmp_path)))
+
+    assert grade.visual_budget_fallback is None
+    assert all(item.score_excluded for item in grade.items)
+    assert all(
+        item.evidence == "task_visual_budget_exceeded:required_calls=4,cap=1"
+        for item in grade.items
+    )
+    assert vision.calls == []
+
+
+def test_the_fallback_saves_what_it_can_and_excludes_the_rest(
+    monkeypatch, tmp_path
+):
+    """A budget that the fallback narrows but still cannot meet.
+
+    Three items on the same scan-beside-readable-return bundle: two content
+    criteria that escalated only on the scan, and one that names a chart.
+    Strict, the task wants four renders against a cap of one. Dropping the
+    escalation takes it to two -- an improvement, still over. So the two
+    content items are graded from the readable file and the chart item is
+    excluded, which is the honest split: the fallback rescues exactly the
+    items that had somewhere else to go, and invents nothing for the one
+    that did not.
+
+    The task survives with a partial score instead of vanishing from the
+    corpus, and ``visual_budget_fallback`` records the original shortfall so
+    a reader can see this score was reached the cheap way.
+    """
+    from core.rubric_loader import RubricItem, TaskRubric
+
+    responses = ScriptedResponses([
+        _response(output=[_final(_payload("pass", 1.0, "states 4,200 USD"))]),
+        _response(output=[_final(_payload("pass", 1.0, "states 4,200 USD"))]),
+    ])
+    grader = _grader(monkeypatch, SimpleNamespace(responses=responses))
+    vision = CountingVision(call_cap=1)
+    grader._tool_judge.vision_perception = vision
+    task = TaskRubric(
+        task_id="t-partial-rescue",
+        sector="Finance",
+        occupation="Tax Preparer",
+        prompt="Produce Scan.pdf and Return.pdf.",
+        rubric_items=[
+            RubricItem("c1", "The document states the total contract value.", 2, None),
+            RubricItem("c2", "The document states the total contract value.", 2, None),
+            RubricItem("v1", "Chart color is readable", 2, None),
+        ],
+        rubric_pretty="",
+        reference_files=[],
+        gold_deliverable_files=[],
+    )
+
+    grade = grader.grade_task(task, str(_scan_beside_readable_return(tmp_path)))
+
+    by_id = {item.rubric_item_id: item for item in grade.items}
+    assert grade.error is None
+    assert grade.visual_budget_fallback == (
+        "task_visual_budget_exceeded:required_calls=4,cap=1"
+    )
+    assert [by_id[i].score_excluded for i in ("c1", "c2", "v1")] == [
+        False, False, True,
+    ]
+    assert [by_id[i].visual_budget_downgraded for i in ("c1", "c2", "v1")] == [
+        True, True, False,
+    ]
+    assert [by_id[i].routing_modality for i in ("c1", "c2")] == ["text", "text"]
+    assert by_id["v1"].evidence == (
+        "task_visual_budget_exceeded:required_calls=2,cap=1"
+    )
+    assert vision.calls == []
+
+
 def test_task_visual_budget_within_cap_spends_per_criterion(
     monkeypatch, tmp_path
 ):
