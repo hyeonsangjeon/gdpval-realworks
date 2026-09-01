@@ -1077,6 +1077,17 @@ jobs:
             --json headRefOid --jq .headRefOid)
           [[ "$CURRENT_HEAD" == "$PR_HEAD_SHA" ]]
 
+      # Two dispatches, one contract. deploy.yml validates the dashboard build;
+      # backend-tests.yml runs the pytest suite. Neither reaches this PR through
+      # its own `pull_request` trigger, because the PR was opened by
+      # GITHUB_TOKEN and GitHub refuses to start a `pull_request` run for a
+      # bot-authored PR -- it creates the run row and kills it at startup with
+      # zero jobs. So the PR's own Checks list stays empty and reads as "nothing
+      # to report" when the truth is "never ran". `workflow_dispatch` is exempt
+      # from that rule, is already proven to work here (`actions: write` is
+      # granted above and the deploy dispatch has been landing since #303), and
+      # pins the exact SHA on both sides so a branch update cannot slip a
+      # different tree past the check.
       - name: Dispatch exact result PR validation
         if: success() && inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
         env:
@@ -1090,6 +1101,102 @@ jobs:
             --ref "$PR_BRANCH" \
             --raw-field deploy_pages=false \
             --raw-field expected_sha="$PR_HEAD_SHA"
+          gh workflow run backend-tests.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$PR_BRANCH" \
+            --raw-field expected_sha="$PR_HEAD_SHA"
+
+      # Dispatching is not checking. The step above only asks; without this one
+      # the job would go green whether the suite passed, failed, or never
+      # started -- which is the same silence the empty Checks list already
+      # produces, just moved one step later.
+      #
+      # Fail closed on every path that is not an observed success: a run that
+      # concludes failure/cancelled/timed_out, a run that never appears, and the
+      # wait timing out all end the job red. Absence is treated as failure
+      # precisely because absence is the symptom being fixed here. Nothing below
+      # writes a check, a status, or an approval -- a red result stays red and
+      # visible, and the PR is put back into draft so the empty Checks list
+      # cannot be mistaken for a clean one.
+      #
+      # This gates the PR, not the upload: step 7 has already run by here, and
+      # deliberately so. The only file in a result PR is report.md, and the code
+      # the suite exercises is identical to the commit the experiment already
+      # ran at, so pytest's verdict is a merge decision about the repository --
+      # not a publish decision about the experiment. Blocking a paid run's
+      # upload on it would spend the money and then throw the artifacts away.
+      - name: Verify dispatched result PR checks
+        if: success() && inputs.dry_run != true && steps.check_relay.outputs.needs_relay == 'false' && steps.step2a.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+          PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
+          REQUIRED_WORKFLOWS: 'backend-tests.yml deploy.yml'
+          WAIT_SECONDS: '1800'
+          POLL_SECONDS: '20'
+        run: |
+          set -euo pipefail
+
+          deadline=$(( $(date +%s) + WAIT_SECONDS ))
+          declare -A conclusion=()
+          declare -A run_url=()
+
+          while :; do
+            pending=0
+            for wf in $REQUIRED_WORKFLOWS; do
+              [[ -n "${conclusion[$wf]:-}" ]] && continue
+              # head_sha is the pin. A dispatch on a branch that moved would
+              # report a different SHA and simply never match, which times out
+              # red rather than passing on the wrong tree.
+              row=$(gh api \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/runs?event=workflow_dispatch&head_sha=$PR_HEAD_SHA&per_page=1" \
+                --jq '.workflow_runs[0] // empty | select(.status == "completed") | "\(.conclusion)\t\(.html_url)"' 2>/dev/null || true)
+              if [[ -n "$row" ]]; then
+                conclusion[$wf]=${row%%$'\t'*}
+                run_url[$wf]=${row##*$'\t'}
+                echo "$wf -> ${conclusion[$wf]}"
+              else
+                pending=$(( pending + 1 ))
+              fi
+            done
+            (( pending == 0 )) && break
+            if (( $(date +%s) >= deadline )); then
+              echo "::error::timed out after ${WAIT_SECONDS}s waiting for dispatched checks on $PR_HEAD_SHA"
+              break
+            fi
+            sleep "$POLL_SECONDS"
+          done
+
+          failed=""
+          for wf in $REQUIRED_WORKFLOWS; do
+            verdict=${conclusion[$wf]:-never-reported}
+            if [[ "$verdict" != "success" ]]; then
+              failed="${failed}${failed:+, }${wf} (${verdict})"
+            fi
+          done
+
+          if [[ -z "$failed" ]]; then
+            echo "all required checks succeeded on $PR_HEAD_SHA"
+            exit 0
+          fi
+
+          # Draft first, comment second. If the comment call is the one that
+          # fails, the PR is already unmergeable rather than open and unchecked.
+          gh pr ready "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --undo || true
+          {
+            printf '## 자동 검사 실패 — 병합하지 마세요\n\n'
+            printf '이 결과 PR의 head `%s`에 대해 다음 검사가 성공하지 않았습니다.\n\n' "$PR_HEAD_SHA"
+            printf '| 워크플로 | 결과 | 실행 |\n|---|---|---|\n'
+            for wf in $REQUIRED_WORKFLOWS; do
+              printf '| `%s` | `%s` | %s |\n' \
+                "$wf" "${conclusion[$wf]:-never-reported}" "${run_url[$wf]:-—}"
+            done
+            printf '\n`never-reported`는 검사가 **실패한 것이 아니라 아예 시작되지 않았다**는 뜻입니다.\n'
+            printf 'PR을 draft로 되돌렸습니다. 원인을 확인한 뒤 사람이 다시 열어 주세요.\n'
+          } | gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file - || true
+
+          echo "::error::required checks not successful on $PR_HEAD_SHA: $failed"
+          exit 1
 
       # ── Summary step ──
       - name: Show summary
