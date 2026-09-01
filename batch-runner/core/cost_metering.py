@@ -24,6 +24,8 @@ ledger.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -55,6 +57,7 @@ __all__ = [
     "extract_usage",
     "open_cost_recorder",
     "read_reported_usage",
+    "request_digest_of",
     "resolved_model_of",
     "route_identity_of",
 ]
@@ -370,6 +373,52 @@ def deployment_of(client: Any, requested: str | None) -> str | None:
         return None
     text = (requested or "").strip()
     return text or None
+
+
+def request_digest_of(payload: Any) -> str | None:
+    """A fingerprint of what was asked, or nothing at all.
+
+    Two rows carrying the same digest were sent the same request. That is the
+    one question the ledger could not answer: when the four attempts at chunk 0
+    were reconstructed, the 818 rows proved the *same positions* had been run
+    four times, and could not prove the same *bytes* had been bought four
+    times, because this column was empty in all 818. It is the same question
+    run-to-run variance asks — a score that moved between two runs at one
+    grader fingerprint means nothing until the requests behind it are known to
+    have been identical.
+
+    The digest is over the request as sent, with keys ordered, so the same call
+    hashes the same on any machine and in any run. Nothing is excluded and
+    nothing is normalised away: a field that differs is a request that differs,
+    and a fingerprint that quietly forgave some fields would answer "same"
+    about calls that were not.
+
+    **A request that cannot be canonically rendered gets no digest at all.**
+    The tempting alternative is to hash a lossy rendering — ``str`` of whatever
+    would not serialise, say — and that is worse than nothing here, because the
+    failure mode is a false *match*: two genuinely different requests collapsing
+    onto one placeholder and reporting themselves identical. A missing digest
+    only fails to answer. So ``None`` means "not captured", exactly as it does
+    everywhere else in this module.
+
+    Never raises. Metering observes; it does not participate. A payload holding
+    something exotic — an open file, a proxy that objects to being read — must
+    not take down the paid call it was only writing a note about.
+
+    One-way by construction, which is what makes the column publishable: the
+    ledger carries the digest of a prompt and never the prompt.
+    """
+    try:
+        canonical = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+    except Exception:  # noqa: BLE001 - see "never raises" above
+        return None
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 # ── The recorder ─────────────────────────────────────────────────────────
@@ -706,6 +755,10 @@ class MeteredClient:
             requested_model=requested,
             deployment=deployment,
             api_version=object.__getattribute__(self, "_api_version"),
+            # Taken before the call rather than after, for the same reason the
+            # row itself is: what a crashed call asked for is exactly what a
+            # reader of the wreckage needs, and by then ``kwargs`` is gone.
+            request_sha256=request_digest_of(kwargs),
         )
         object.__setattr__(self, "last_call_id", call_id)
         response = call(**kwargs)

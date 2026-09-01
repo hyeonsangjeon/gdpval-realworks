@@ -19,6 +19,7 @@ from core.cost_metering import (
     CostRecorder,
     extract_usage,
     read_reported_usage,
+    request_digest_of,
     resolved_model_of,
 )
 from core.cost_receipts import (
@@ -588,3 +589,267 @@ def test_a_default_model_covers_a_request_that_names_none(recorder):
     assert recorder.ledger.calls_for("task-a")[0]["requested_model"] == (
         "a-default-deployment"
     )
+
+
+# ── the fingerprint of what was asked ────────────────────────────────────
+#
+# Why the column exists: four attempts at one chunk were reconstructed from
+# 818 ledger rows, and the reconstruction could show the same *positions* had
+# been run four times but not that the same *bytes* had been bought four
+# times, because this column was empty in all 818 rows. Two runs at one grader
+# fingerprint raise the same question about a score that moved.
+
+
+def _digest(recorder, index=0, task_id="task-a"):
+    return recorder.ledger.calls_for(task_id)[index]["request_sha256"]
+
+
+def test_the_same_request_twice_is_recorded_as_the_same_request(recorder):
+    client = recorder.meter(FakeClient(), provider="azure")
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        client.chat.completions.create(
+            model="a-deployment", messages=[{"role": "user", "content": "hi"}]
+        )
+        client.chat.completions.create(
+            model="a-deployment", messages=[{"role": "user", "content": "hi"}]
+        )
+
+    first, second = (_digest(recorder, 0), _digest(recorder, 1))
+
+    assert first is not None
+    assert first == second
+
+
+def test_a_request_that_differs_by_one_character_is_a_different_request(
+    recorder,
+):
+    client = recorder.meter(FakeClient(), provider="azure")
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        client.chat.completions.create(
+            model="a-deployment", messages=[{"role": "user", "content": "hi"}]
+        )
+        client.chat.completions.create(
+            model="a-deployment", messages=[{"role": "user", "content": "hI"}]
+        )
+
+    assert _digest(recorder, 0) != _digest(recorder, 1)
+
+
+def test_the_order_the_arguments_were_written_in_is_not_part_of_the_request(
+    recorder,
+):
+    """Two callers spelling one request differently still asked for one thing.
+
+    Without this the column answers "different" for every pair of runs that
+    happened to build their keyword arguments in a different order, which is
+    the same as answering nothing.
+    """
+    client = recorder.meter(FakeClient(), provider="azure")
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        client.chat.completions.create(
+            model="a-deployment", messages=[], temperature=0
+        )
+        client.chat.completions.create(
+            temperature=0, messages=[], model="a-deployment"
+        )
+
+    # Both being absent is also "equal", and would prove nothing. The point of
+    # the test is that two spellings of one request meet at a digest, so there
+    # has to be a digest for them to meet at.
+    assert _digest(recorder, 0) is not None
+    assert _digest(recorder, 0) == _digest(recorder, 1)
+
+
+def test_the_order_of_a_conversation_is_part_of_the_request(recorder):
+    """A list, unlike a keyword, means something by its order."""
+    turns = [{"role": "user", "content": "one"}, {"role": "user", "content": "two"}]
+    client = recorder.meter(FakeClient(), provider="azure")
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        client.chat.completions.create(model="a-deployment", messages=turns)
+        client.chat.completions.create(
+            model="a-deployment", messages=list(reversed(turns))
+        )
+
+    assert _digest(recorder, 0) != _digest(recorder, 1)
+
+
+def test_what_is_recorded_is_a_digest_and_never_the_prompt(recorder):
+    """The ledger is published. It carries the fingerprint, not the text."""
+    secret = "the quick brown fox jumps over the lazy dog"
+    client = recorder.meter(FakeClient(), provider="azure")
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        client.chat.completions.create(
+            model="a-deployment",
+            messages=[{"role": "user", "content": secret}],
+        )
+
+    row = recorder.ledger.calls_for("task-a")[0]
+
+    assert len(row["request_sha256"]) == 64
+    assert all(c in "0123456789abcdef" for c in row["request_sha256"])
+    assert secret not in json.dumps(row)
+
+
+def test_a_request_that_cannot_be_rendered_gets_no_fingerprint(recorder):
+    """Silence, not a placeholder.
+
+    Hashing some lossy rendering of the unrenderable part would let two
+    genuinely different requests collapse onto one digest and report
+    themselves identical — a false match, which is worse than no answer.
+    """
+    client = recorder.meter(FakeClient(), provider="azure")
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        client.chat.completions.create(
+            model="a-deployment", messages=[], extra=object()
+        )
+
+    row = recorder.ledger.calls_for("task-a")[0]
+
+    assert row["request_sha256"] is None
+    # And the call itself was untouched: still made, still settled, still priced.
+    assert recorder.receipt_for(
+        "task-a", BUCKET_PROBLEM_SOLVING
+    ).estimated_cost_usd == Decimal("1.20")
+
+
+def test_two_requests_that_could_not_be_rendered_never_meet_at_one_digest(
+    recorder,
+):
+    """The harm a placeholder would do, written down as a test.
+
+    These two calls asked for different things. Under any scheme that fills the
+    column when it cannot read the request — a fixed marker, a hash of ``str``
+    — they land on the same digest and the ledger reports two different
+    requests as one. Later, that is indistinguishable from the thing the column
+    exists to prove.
+    """
+    client = recorder.meter(FakeClient(), provider="azure")
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        client.chat.completions.create(
+            model="a-deployment", messages=[], extra=object()
+        )
+        client.chat.completions.create(
+            model="a-deployment", messages=[], extra={1, 2}
+        )
+
+    # Both absent, not merely unequal: two *different* placeholders would
+    # satisfy ``first != second`` while telling the same lie twice.
+    assert (_digest(recorder, 0), _digest(recorder, 1)) == (None, None)
+
+
+def test_a_payload_that_objects_to_being_read_does_not_take_down_the_call(
+    recorder,
+):
+    """Metering observes. It does not get a vote on whether the call happens.
+
+    The refusal here is a plain ``RuntimeError`` rather than the ``TypeError``
+    an unserialisable value raises, because the guard has to hold for whatever
+    a payload throws, not for the two exceptions ``json`` documents.
+    """
+
+    class Hostile(dict):
+        def items(self):
+            raise RuntimeError("not for you")
+
+    client = recorder.meter(FakeClient(), provider="azure")
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        client.chat.completions.create(
+            model="a-deployment", messages=[], extra=Hostile(a=1)
+        )
+
+    assert _digest(recorder) is None
+    assert recorder.receipt_for("task-a", BUCKET_PROBLEM_SOLVING).model_calls == 1
+
+
+def test_a_call_that_never_came_back_still_says_what_it_asked_for(recorder):
+    """Written before the request, so the wreckage names what was bought."""
+    client = recorder.meter(
+        FakeClient(raises=RuntimeError("gateway timeout")), provider="azure"
+    )
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        with pytest.raises(RuntimeError):
+            client.chat.completions.create(model="a-deployment", messages=[])
+
+    assert _digest(recorder) is not None
+
+
+def test_a_call_filed_from_outside_the_wrapper_records_no_fingerprint(recorder):
+    """A caller that owns its transport is not observed here, and says so.
+
+    ``record_call`` is handed a reply, never a request, so it has nothing to
+    fingerprint. Recorded as unknown rather than filled in from the reply,
+    which would be a different question answered as if it were this one.
+    """
+    with recorder.attributed(task_id="task-a", stage=STAGE_GENERATION):
+        recorder.record_call(
+            provider="azure",
+            requested_model="a-deployment",
+            response=_chat_reply(),
+        )
+
+    assert _digest(recorder) is None
+
+
+# -- the digest itself ----------------------------------------------------
+
+
+def test_a_nested_difference_is_still_a_difference():
+    assert request_digest_of(
+        {"reasoning": {"effort": "high"}}
+    ) != request_digest_of({"reasoning": {"effort": "low"}})
+
+
+def test_nesting_is_canonicalised_all_the_way_down():
+    assert request_digest_of({"a": {"x": 1, "y": 2}}) == request_digest_of(
+        {"a": {"y": 2, "x": 1}}
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"n": float("nan")},
+        {"n": float("inf")},
+        {"seen": {1, 2}},
+        {"when": object()},
+    ],
+)
+def test_anything_json_cannot_state_exactly_is_left_unrecorded(payload):
+    """Including the two floats ``json`` would otherwise emit as bare words.
+
+    ``NaN`` and ``Infinity`` are not JSON, and a digest computed over them
+    would be a digest of something no other reader could reproduce.
+    """
+    assert request_digest_of(payload) is None
+
+
+def test_a_request_that_refers_to_itself_is_left_unrecorded():
+    payload: dict = {"model": "a-deployment"}
+    payload["self"] = payload
+
+    assert request_digest_of(payload) is None
+
+
+def test_a_request_nested_deeper_than_python_will_walk_is_left_unrecorded():
+    """``RecursionError`` is neither of the two exceptions ``json`` documents."""
+    payload: dict = {}
+    cursor = payload
+    for _ in range(2_000):
+        cursor["nested"] = {}
+        cursor = cursor["nested"]
+
+    assert request_digest_of(payload) is None
+
+
+def test_an_empty_request_is_still_a_request():
+    """Nothing asked for is not the same as nothing recorded."""
+    assert request_digest_of({}) is not None
