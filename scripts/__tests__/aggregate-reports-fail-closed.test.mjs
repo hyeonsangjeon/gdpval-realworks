@@ -284,10 +284,13 @@ test('backoff grows when the hub advises nothing', async () => {
 async function scratchTree(dirs) {
   const root = await mkdtemp(join(tmpdir(), 'report-aggregate-'));
   await mkdir(join(root, 'scripts'), { recursive: true });
-  await copyFile(
-    join(SCRIPTS_DIR, 'aggregate-reports.mjs'),
-    join(root, 'scripts', 'aggregate-reports.mjs'),
-  );
+  // The aggregator and everything it imports. `cost-receipt.mjs` is a sibling
+  // import, so leaving it behind makes the copied script die on module
+  // resolution — which every test here would then read as the fail-closed
+  // behaviour it was checking for.
+  for (const name of ['aggregate-reports.mjs', 'cost-receipt.mjs']) {
+    await copyFile(join(SCRIPTS_DIR, name), join(root, 'scripts', name));
+  }
   for (const [dirName, content] of Object.entries(dirs)) {
     const reportDir = join(root, 'batch-runner', 'results', dirName, 'report');
     await mkdir(reportDir, { recursive: true });
@@ -411,6 +414,166 @@ test('a report carrying no task_results still publishes', async () => {
     assert.equal(code, 0, stdout);
     const index = JSON.parse(await readFile(join(root, ...INDEX_PATH), 'utf-8'));
     assert.deepEqual(index.reports[0].task_qa, {});
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// ── 4. the money in a report is checked before it is published ────────────
+//
+// Reports carry `cost_summary`, and the whole object was spread into the index
+// verbatim. Twenty-six of the twenty-six reports on a real build arrive over
+// the unauthenticated HuggingFace fetch above — no results directory holds a
+// local `report_data.json` — so between that wire and the dollar figure on the
+// experiment page there was no check of any kind. The grade path, which is the
+// same shape of payload reaching the same card, has been projected since it was
+// written.
+//
+// Both failures below were reproduced against the real dashboard code before
+// these tests were written.
+
+function costSummary(overrides = {}) {
+  return {
+    schema_version: 'cost-receipt-v1',
+    currency: 'USD',
+    estimate_basis: 'usage_estimate_not_azure_invoice',
+    status: 'complete',
+    total_tasks: 2,
+    receipt_tasks: 2,
+    measured_tasks: 2,
+    coverage_pct: 100,
+    complete_tasks: 2,
+    partial_tasks: 0,
+    unavailable_tasks: 0,
+    not_run_tasks: 0,
+    known_cost_usd: 0.5,
+    estimated_cost_usd: 0.5,
+    avg_cost_usd: 0.25,
+    median_cost_usd: 0.25,
+    p95_cost_usd: 0.25,
+    max_cost_usd: 0.25,
+    successful_deliverables: 2,
+    cost_per_successful_deliverable_usd: 0.25,
+    failed_task_count: 0,
+    failed_task_cost_usd: 0,
+    components: [],
+    price_table_sha256: null,
+    missing_reasons: [],
+    ...overrides,
+  };
+}
+
+const withCost = (cost) => reportFixture({ cost_summary: { problem_solving_cost: cost } });
+
+test('a well-formed cost summary reaches the index unchanged', async () => {
+  const root = await scratchTree({ exp901_good: withCost(costSummary()) });
+  try {
+    const { code, stdout } = await runAggregate(root);
+    assert.equal(code, 0, stdout);
+    const index = JSON.parse(await readFile(join(root, ...INDEX_PATH), 'utf-8'));
+    const published = index.reports[0].cost_summary.problem_solving_cost;
+    assert.equal(published.status, 'complete');
+    assert.equal(published.estimated_cost_usd, 0.5);
+    assert.equal(published.known_cost_usd, 0.5);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// Reproduced failure 1. `summaryTotalCell` gates on `estimated_cost_usd !==
+// null`, not on the status beside it, so this renders `$0.5000` as a settled
+// total while the corner of the same card reads 일부 기록됨. The figure is the
+// part people read.
+test('a partial run that names a total fails the build', async () => {
+  const root = await scratchTree({
+    exp901_lying: withCost(costSummary({ status: 'partial', complete_tasks: 1, partial_tasks: 1 })),
+  });
+  try {
+    const { code, stderr } = await runAggregate(root);
+    assert.notEqual(code, 0);
+    assert.match(stderr, /exp901_lying/);
+    assert.match(stderr, /is partial but carries a total/);
+    assert.equal(existsSync(join(root, ...INDEX_PATH)), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// Reproduced failure 2. The same gate is `!==`, so an absent field passes it:
+// `undefined !== null` is true, `formatCostUsd(undefined)` reaches
+// `undefined.toFixed`, and the experiment page goes down with a TypeError.
+test('a complete run with no total at all fails the build', async () => {
+  const missing = costSummary();
+  delete missing.estimated_cost_usd;
+  const root = await scratchTree({ exp901_silent: withCost(missing) });
+  try {
+    const { code, stderr } = await runAggregate(root);
+    assert.notEqual(code, 0);
+    assert.match(stderr, /exp901_silent/);
+    assert.match(stderr, /is complete without a total/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// The build names the directory rather than dying anonymously: with twenty-six
+// reports in flight, a stack trace with no experiment in it is a bisect.
+test('a bad cost payload is reported the way an unreadable report is', async () => {
+  const root = await scratchTree({
+    exp901_good: reportFixture(),
+    exp902_bad: withCost(costSummary({ receipt_tasks: 5 })),
+  });
+  try {
+    const { code, stderr } = await runAggregate(root);
+    assert.notEqual(code, 0);
+    assert.match(stderr, /1 of 2 report\(s\) could not be loaded/);
+    assert.match(stderr, /exp902_bad/);
+    assert.doesNotMatch(stderr, /exp901_good/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a cost ledger pointer that is not a repository path fails the build', async () => {
+  const root = await scratchTree({
+    exp901_ledger: reportFixture({ cost_ledger: { path: '../escape.jsonl', sha256: 'a'.repeat(64) } }),
+  });
+  try {
+    const { code, stderr } = await runAggregate(root);
+    assert.notEqual(code, 0);
+    assert.match(stderr, /exp901_ledger/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// NEGATIVE CONTROL. Twenty-three of the twenty-six real reports predate cost
+// receipts entirely. Absent must stay absent: an empty object here would make
+// the dashboard draw a card claiming a record that does not exist.
+test('a report from before receipts existed still publishes, with no cost key', async () => {
+  const root = await scratchTree({ exp901_old: reportFixture() });
+  try {
+    const { code, stdout } = await runAggregate(root);
+    assert.equal(code, 0, stdout);
+    const index = JSON.parse(await readFile(join(root, ...INDEX_PATH), 'utf-8'));
+    assert.equal('cost_summary' in index.reports[0], false);
+    assert.equal('cost_ledger' in index.reports[0], false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// NEGATIVE CONTROL. A wrapper whose only field is null is a wrapper with
+// nothing in it, and must read as no record rather than as an empty card.
+test('a cost wrapper holding only nulls publishes as no record', async () => {
+  const root = await scratchTree({
+    exp901_null: reportFixture({ cost_summary: { problem_solving_cost: null } }),
+  });
+  try {
+    const { code, stdout } = await runAggregate(root);
+    assert.equal(code, 0, stdout);
+    const index = JSON.parse(await readFile(join(root, ...INDEX_PATH), 'utf-8'));
+    assert.equal('cost_summary' in index.reports[0], false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

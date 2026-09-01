@@ -304,6 +304,33 @@ function projectComponent(value, field) {
 }
 
 /**
+ * Normalise a payload's `components` list.
+ *
+ * A line is identified by the pair *and* by whose call it was. Generation that
+ * had to be redone and Self-QA that had to be redone both display as 재시도,
+ * and rejecting the second as a duplicate would throw away a real charge. So
+ * would rejecting the second of two models read under one perception stage —
+ * which is why identity is part of the key rather than decoration on it. Two
+ * lines that agree on all seven really are one line the producer failed to add
+ * up.
+ *
+ * Keyed by `summaryComponentKey`, the same function the run summariser folds
+ * its rows under, so a list this refuses and a list that summariser would
+ * silently merge cannot be different lists.
+ */
+function projectComponents(value, field) {
+  const raw = value ?? [];
+  if (!Array.isArray(raw)) fail(field, 'components must be a list');
+  if (raw.length > MAX_COMPONENTS) fail(field, 'carries too many components');
+  const components = raw.map(
+    (item, index) => projectComponent(item, `${field}.components[${index}]`),
+  );
+  const keys = components.map(summaryComponentKey);
+  if (keys.length !== new Set(keys).size) fail(field, 'carries duplicate component keys');
+  return components;
+}
+
+/**
  * Normalise one `cost-receipt-v1` receipt.
  *
  * null/undefined in, null out — an absent receipt is a legitimate state and
@@ -340,34 +367,7 @@ export function projectCostReceipt(value, field = 'cost receipt') {
   );
   const reasons = missingReasons(value.missing_reasons, `${field}.missing_reasons`);
 
-  const rawComponents = value.components ?? [];
-  if (!Array.isArray(rawComponents)) fail(field, 'components must be a list');
-  if (rawComponents.length > MAX_COMPONENTS) fail(field, 'carries too many components');
-  const components = rawComponents.map(
-    (item, index) => projectComponent(item, `${field}.components[${index}]`),
-  );
-  // A line is identified by the pair *and* by whose call it was. Generation
-  // that had to be redone and Self-QA that had to be redone both display as
-  // 재시도, and rejecting the second as a duplicate would throw away a real
-  // charge. So would rejecting the second of two models read under one
-  // perception stage — which is why identity is part of the key rather than
-  // decoration on it. Two lines that agree on all seven really are one line
-  // the producer failed to add up.
-  //
-  // Serialised as JSON rather than joined on a separator: identity fields are
-  // free text from the provider, not slugs, so no chosen byte is guaranteed
-  // absent from them — and `null` must not key the same as the four-letter
-  // string, since one means unrecorded and the other is a name.
-  const keys = components.map((component) =>
-    JSON.stringify([
-      component.stage,
-      component.retry_kind,
-      ...COMPONENT_IDENTITY.map((column) => component[column] ?? null),
-    ]),
-  );
-  if (keys.length !== new Set(keys).size) {
-    fail(field, 'carries duplicate component keys');
-  }
+  const components = projectComponents(value.components, field);
 
   if (status === 'complete') {
     if (estimated === null) fail(field, 'is complete without an amount');
@@ -453,6 +453,11 @@ function receiptAmount(receipt) {
  * rows. Not `name`: `name` is *derived* from the first two — every retry at
  * every stage derives `retry`, and both a visual reader and an audio reader
  * derive `perception` — so it cannot tell those rows apart by construction.
+ *
+ * Serialised as JSON rather than joined on a separator: identity fields are
+ * free text from the provider, not slugs, so no chosen byte is guaranteed
+ * absent from them — and `null` must not key the same as the four-letter
+ * string, since one means unrecorded and the other is a name.
  */
 function summaryComponentKey(component) {
   return JSON.stringify([
@@ -688,3 +693,185 @@ export function summarizeCostReceipts(rows, { successfulDeliverables = null } = 
     missing_reasons: reasons,
   };
 }
+
+// ── the gate on a summary this build did not compute ─────────────────────
+//
+// Everything `summarizeCostReceipts` returns is sound by construction, because
+// it did the arithmetic. The other producer of the same shape is
+// `build_cost_summaries` in batch-runner/core/cost_projection.py, and its
+// output travels inside `report_data.json` — which reaches the build over an
+// unauthenticated fetch from HuggingFace for every experiment, since no results
+// directory carries a local copy. Between that fetch and `summaryTotalCell` in
+// src/lib/cost.ts there was nothing at all: `scripts/aggregate-reports.mjs`
+// spread the object into the published index verbatim and the dashboard
+// rendered it as money.
+//
+// Two ways that ends badly, both reproduced before this was written:
+//
+//   * `status: "partial"` beside a non-null `estimated_cost_usd` renders as a
+//     settled `$0.5000`. The corner of the card says 일부 기록됨 and the middle
+//     says a firm figure, and the figure is the part people read.
+//   * `estimated_cost_usd` absent renders nothing at all: `undefined !== null`
+//     is true, so `formatCostUsd(undefined)` reaches `undefined.toFixed` and
+//     takes the experiment page down with a TypeError.
+//
+// So the rule both producers already obey is enforced here on the way in.
+
+// A summary counts tasks, and a run of this benchmark has 220 of them. Bounded
+// four orders of magnitude above that rather than pinned to it: a corpus this
+// repository has not defined yet is not the thing worth refusing.
+const MAX_SUMMARY_TASKS = 1_000_000;
+
+/** A count the summary must carry; absent is a malformed summary, not a zero. */
+function summaryCount(value, field) {
+  const count = costCount(value, field, MAX_SUMMARY_TASKS);
+  if (count === null) fail(field, 'is required');
+  return count;
+}
+
+/** An amount the summary must carry, for the same reason. */
+function summaryAmount(value, field) {
+  const amount = costAmount(value, field);
+  if (amount === null) fail(field, 'is required');
+  return amount;
+}
+
+/**
+ * Normalise one run summary that arrived from somewhere else.
+ *
+ * null/undefined in, null out — an experiment that ran before receipts existed
+ * carries no summary, and that absence is what makes the dashboard say 기록
+ * 없음 rather than $0. Anything present but malformed throws, and the caller
+ * turns that into a named build failure.
+ */
+export function projectCostSummary(value, field = 'cost summary') {
+  if (value === null || value === undefined) return null;
+  if (!isPlainObject(value)) fail(field, 'must be an object');
+  if (value.schema_version !== COST_RECEIPT_SCHEMA_VERSION) {
+    fail(field, `must declare schema_version ${COST_RECEIPT_SCHEMA_VERSION}`);
+  }
+  if (value.currency !== COST_CURRENCY) {
+    fail(field, `must be denominated in ${COST_CURRENCY}`);
+  }
+
+  const status = costStatus(value.status, `${field}.status`);
+  const known = summaryAmount(value.known_cost_usd, `${field}.known_cost_usd`);
+  const estimated = costAmount(value.estimated_cost_usd, `${field}.estimated_cost_usd`);
+
+  // The biconditional both summarisers hold to: `estimated_cost_usd` is
+  // `known_total if complete_run else None`, and `complete_run` is exactly
+  // `status === 'complete'`. Checked in both directions, because each one is a
+  // different lie. A complete run withholding its total understates what was
+  // spent; an incomplete run naming one promotes a floor to a headline.
+  if (status === 'complete') {
+    if (estimated === null) fail(field, 'is complete without a total');
+    if (estimated !== known) {
+      fail(field, 'is complete but its total is not what it knows');
+    }
+  } else if (estimated !== null) {
+    fail(field, `is ${status} but carries a total`);
+  }
+
+  const totalTasks = summaryCount(value.total_tasks, `${field}.total_tasks`);
+  const receiptTasks = summaryCount(value.receipt_tasks, `${field}.receipt_tasks`);
+  const measuredTasks = summaryCount(value.measured_tasks, `${field}.measured_tasks`);
+  if (receiptTasks > totalTasks) fail(field, 'holds more receipts than it has tasks');
+  if (measuredTasks > receiptTasks) {
+    fail(field, 'prices more tasks than it holds receipts for');
+  }
+
+  // Each receipt lands in exactly one bucket, so the buckets are the receipts
+  // counted a second way. A payload where the two disagree has been rewritten
+  // by something that did not know that, and the disagreement is the only
+  // evidence of it there will ever be.
+  const buckets = {};
+  let bucketed = 0;
+  for (const name of COST_STATUSES) {
+    const count = summaryCount(value[`${name}_tasks`], `${field}.${name}_tasks`);
+    buckets[`${name}_tasks`] = count;
+    bucketed += count;
+  }
+  if (bucketed !== receiptTasks) {
+    fail(field, 'sorts its receipts into buckets that do not add up');
+  }
+
+  const coverage = value.coverage_pct;
+  if (typeof coverage !== 'number' || !Number.isFinite(coverage)
+      || coverage < 0 || coverage > 100) {
+    fail(`${field}.coverage_pct`, 'must be a percentage');
+  }
+
+  const failedCount = summaryCount(value.failed_task_count, `${field}.failed_task_count`);
+  if (failedCount > totalTasks) fail(field, 'counts more failures than it has tasks');
+  // Optional, and only optional: reports published before this count existed do
+  // not carry it, and src/types/cost.ts marks it so. Absent stays absent, which
+  // is what makes `failedTaskCostCell` fall back to its older inference instead
+  // of trusting a zero this reader invented.
+  const failedMeasured = costCount(
+    value.failed_measured_tasks, `${field}.failed_measured_tasks`, MAX_SUMMARY_TASKS,
+  );
+  if (failedMeasured !== null && failedMeasured > failedCount) {
+    fail(field, 'prices more failures than it counted');
+  }
+
+  return {
+    schema_version: COST_RECEIPT_SCHEMA_VERSION,
+    currency: COST_CURRENCY,
+    estimate_basis: ESTIMATE_BASIS,
+    status,
+    total_tasks: totalTasks,
+    receipt_tasks: receiptTasks,
+    measured_tasks: measuredTasks,
+    coverage_pct: round(coverage, 1),
+    ...buckets,
+    known_cost_usd: known,
+    estimated_cost_usd: estimated,
+    avg_cost_usd: costAmount(value.avg_cost_usd, `${field}.avg_cost_usd`),
+    median_cost_usd: costAmount(value.median_cost_usd, `${field}.median_cost_usd`),
+    p95_cost_usd: costAmount(value.p95_cost_usd, `${field}.p95_cost_usd`),
+    max_cost_usd: costAmount(value.max_cost_usd, `${field}.max_cost_usd`),
+    successful_deliverables: costCount(
+      value.successful_deliverables, `${field}.successful_deliverables`, MAX_SUMMARY_TASKS,
+    ),
+    cost_per_successful_deliverable_usd: costAmount(
+      value.cost_per_successful_deliverable_usd,
+      `${field}.cost_per_successful_deliverable_usd`,
+    ),
+    failed_task_count: failedCount,
+    ...(failedMeasured === null ? {} : { failed_measured_tasks: failedMeasured }),
+    failed_task_cost_usd: summaryAmount(
+      value.failed_task_cost_usd, `${field}.failed_task_cost_usd`,
+    ),
+    components: projectComponents(value.components, field),
+    price_table_sha256: priceTableSha256(
+      value.price_table_sha256, `${field}.price_table_sha256`,
+    ),
+    missing_reasons: missingReasons(value.missing_reasons, `${field}.missing_reasons`),
+  };
+}
+
+/**
+ * Normalise the `{problem_solving_cost, grading_cost}` wrapper.
+ *
+ * Returns only the fields that projected to something, and null when none did,
+ * so a wrapper that survived a producer change with nothing left in it reads as
+ * no record rather than as an empty card.
+ */
+export function projectCostSummaries(value, field = 'cost_summary') {
+  if (value === null || value === undefined) return null;
+  if (!isPlainObject(value)) fail(field, 'must be an object');
+  // An unknown key here is a field the dashboard will not render and nobody
+  // will notice is missing. Named rather than dropped, because the two ways a
+  // cost stops being shown — never recorded, and recorded under a name no
+  // reader knows — look identical on screen.
+  const unknown = Object.keys(value).filter((key) => !COST_FIELDS.includes(key));
+  if (unknown.length) fail(field, `carries an unknown cost field: ${unknown.sort().join(', ')}`);
+
+  const projected = {};
+  for (const key of COST_FIELDS) {
+    const summary = projectCostSummary(value[key], `${field}.${key}`);
+    if (summary !== null) projected[key] = summary;
+  }
+  return Object.keys(projected).length ? projected : null;
+}
+

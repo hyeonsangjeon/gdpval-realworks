@@ -8,6 +8,11 @@ import { readdir, readFile, writeFile, mkdir } from 'fs/promises';
 import { join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
+import {
+  projectCostLedgerReference,
+  projectCostSummaries,
+} from './cost-receipt.mjs';
+
 const ROOT = new URL('..', import.meta.url).pathname;
 const RESULTS_DIR = join(ROOT, 'batch-runner', 'results');
 const OUTPUT_DIR = join(ROOT, 'public', 'generated');
@@ -136,6 +141,33 @@ export function findShortIdCollisions(dirNames) {
   return [...byShortId.entries()].filter(([, dirs]) => dirs.length > 1);
 }
 
+// The money a report claims to have spent, checked before it is published.
+//
+// Every field in a report is spread into the index verbatim, which is the right
+// default for text a human wrote and the wrong one for a figure a dashboard
+// renders as a dollar amount. Twenty-six of the twenty-six reports on this
+// build arrive over the unauthenticated HuggingFace fetch above — no results
+// directory carries a local `report_data.json` — so nothing between that wire
+// and `summaryTotalCell` in src/lib/cost.ts had ever looked at these numbers.
+// The grade path, which is the same shape of payload from the same kind of
+// source, has run every receipt through the projector since it was written.
+//
+// Absent stays absent rather than becoming an empty object: `cost_summary`
+// missing is how a report from before receipts existed says it has no record,
+// and `{}` would say the record exists and is empty. Destructured out of
+// `rest` for that reason — a spread of the original would put the raw field
+// back after the projection removed it.
+export function withProjectedCost(report) {
+  const { cost_summary: rawSummaries, cost_ledger: rawLedger, ...rest } = report;
+  const summaries = projectCostSummaries(rawSummaries);
+  const ledger = projectCostLedgerReference(rawLedger);
+  return {
+    ...rest,
+    ...(summaries ? { cost_summary: summaries } : {}),
+    ...(ledger ? { cost_ledger: ledger } : {}),
+  };
+}
+
 // Load all reports
 async function loadAllReports(deps = {}) {
   const subdirs = await readdir(RESULTS_DIR, { withFileTypes: true });
@@ -180,6 +212,11 @@ async function loadAllReports(deps = {}) {
     let source;
     try {
       ({ data, source } = await fetchReportData(dirName, reportPath, deps));
+      // Inside the same try, so a payload that claims money it cannot support
+      // is reported the way an unreadable one is: the build stops and names
+      // the directory. Outside it, a throw here would take down the build
+      // without saying which of the twenty-six reports caused it.
+      data = withProjectedCost(data);
     } catch (err) {
       failures.push(`  ${dirName}: ${err.message}`);
       continue;
