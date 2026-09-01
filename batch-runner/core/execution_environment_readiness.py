@@ -812,6 +812,7 @@ def inspect_environment_support(
     docker_daemon_available: bool | None = None,
     docker_image_available: bool | None = None,
     azure_route_profile: str | None = None,
+    azure_route_served: bool | None = None,
     docker_run_setting: str | None = None,
 ) -> list[EnvironmentReadiness]:
     """Grade all five run places against the code in this repository.
@@ -819,6 +820,13 @@ def inspect_environment_support(
     The optional arguments describe the machine the comparison would run on.
     Passing ``None`` means "this was not measured", which produces
     :data:`STATUS_EVIDENCE_INSUFFICIENT` rather than an optimistic guess.
+
+    ``azure_route_profile`` and ``azure_route_served`` are two different
+    things and the difference is the whole point. The profile is a setting —
+    it names the route the Azure run place must use. ``azure_route_served``
+    is an observation — somebody asked that route and it answered this
+    sign-in. A run can have the first without the second, and exp032 did:
+    twice, with ten refusals.
     """
     modes = registered_execution_modes()
     results: list[EnvironmentReadiness] = []
@@ -925,6 +933,7 @@ def inspect_environment_support(
                 evidence=evidence,
                 blockers=blockers,
                 azure_route_profile=azure_route_profile,
+                azure_route_served=azure_route_served,
             )
             results.append(
                 EnvironmentReadiness(
@@ -1004,7 +1013,32 @@ def _grade_azure_code_interpreter(
     evidence: list[str],
     blockers: list[str],
     azure_route_profile: str | None,
+    azure_route_served: bool | None,
 ) -> str:
+    """Grade the Azure run place on what was measured, not on what was set.
+
+    This used to end at the route profile: if ``AZURE_AI_ROUTE_PROFILE`` said
+    ``project-ci`` the answer was "a real experiment can be started here
+    today", and nothing else was consulted. exp032 disproved that twice. Both
+    runs had the profile set to exactly that value and neither could start:
+    ten calls, ten ``PermissionDeniedError (http 403)`` from the
+    project-scoped Responses route, zero responses served. GitHub runs
+    33464316741 and 33468138329.
+
+    The setting was never evidence. It names the route this mode must use, and
+    ``step2_run_inference._require_code_interpreter_route_profile`` refuses the
+    mode without it, so a real dispatch cannot help but have it set. That made
+    the one input this grade depended on a value that is always present when
+    the grade matters, which is another way of saying the grade was decided in
+    advance.
+
+    :func:`_grade_docker_container`, in the same comparison, already does the
+    right thing: it reads the plan's setting *and* whether Docker is actually
+    running on this machine, and answers "not measured" when nobody looked.
+    Azure had no equivalent input at all, so the two run places in one
+    comparison were held to different standards. ``azure_route_served`` is that
+    missing input, and ``None`` means the same thing here as it does there.
+    """
     evidence.append(
         "step2_run_inference._require_code_interpreter_route_profile refuses "
         "this mode unless the AZURE_AI_ROUTE_PROFILE setting names the "
@@ -1039,6 +1073,24 @@ def _grade_azure_code_interpreter(
         )
         return STATUS_BLOCKED_REQUIREMENT_UNMET
     evidence.append(f"the Azure route profile is set to {required!r}")
+
+    if azure_route_served is None:
+        blockers.append(
+            "nobody checked whether the project-scoped route answers this "
+            "sign-in, so it is unknown whether this environment could start; "
+            "the route profile names the route to use and is not evidence "
+            "that the route serves anybody"
+        )
+        return STATUS_EVIDENCE_INSUFFICIENT
+    if not azure_route_served:
+        blockers.append(
+            "the project-scoped route was asked and refused this sign-in, so "
+            "starting here would spend money on calls that cannot be served"
+        )
+        return STATUS_BLOCKED_REQUIREMENT_UNMET
+    evidence.append(
+        "the project-scoped route was observed to answer this sign-in"
+    )
     return STATUS_CAN_RUN_REAL_EXPERIMENT
 
 
@@ -1360,6 +1412,7 @@ def build_readiness_report(
     docker_daemon_available: bool | None = None,
     docker_image_available: bool | None = None,
     azure_route_profile: str | None = None,
+    azure_route_served: bool | None = None,
     docker_run_setting: str | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> ReadinessReport:
@@ -1377,6 +1430,7 @@ def build_readiness_report(
         docker_daemon_available=docker_daemon_available,
         docker_image_available=docker_image_available,
         azure_route_profile=azure_route_profile,
+        azure_route_served=azure_route_served,
         docker_run_setting=docker_run_setting,
     )
     approved = paid_model_calls_approved(environ)

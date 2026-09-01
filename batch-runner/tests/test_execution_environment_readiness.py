@@ -88,6 +88,7 @@ def _ready_container_arguments() -> dict:
         "docker_image_available": True,
         "docker_run_setting": "always",
         "azure_route_profile": "project-ci",
+        "azure_route_served": True,
     }
 
 
@@ -337,7 +338,9 @@ def test_azure_code_interpreter_is_blocked_without_the_required_route():
 
 
 def test_azure_code_interpreter_is_ready_with_the_required_route():
-    entries = inspect_environment_support(azure_route_profile="project-ci")
+    entries = inspect_environment_support(
+        azure_route_profile="project-ci", azure_route_served=True
+    )
     entry = _entry(entries, ENVIRONMENT_AZURE_CODE_INTERPRETER)
     assert entry.status == STATUS_CAN_RUN_REAL_EXPERIMENT
 
@@ -346,7 +349,8 @@ def test_the_required_azure_route_name_comes_from_the_shipped_code():
     from core.azure_ai_clients import RouteProfile
 
     entries = inspect_environment_support(
-        azure_route_profile=RouteProfile.PROJECT_CI.value
+        azure_route_profile=RouteProfile.PROJECT_CI.value,
+        azure_route_served=True,
     )
     entry = _entry(entries, ENVIRONMENT_AZURE_CODE_INTERPRETER)
     assert entry.status == STATUS_CAN_RUN_REAL_EXPERIMENT

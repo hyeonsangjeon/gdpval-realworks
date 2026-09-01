@@ -153,6 +153,7 @@ def _ready_preflight(plan, **overrides):
         "docker_daemon_available": True,
         "docker_image_available": True,
         "azure_route_profile": "project-ci",
+        "azure_route_served": True,
         "environ": FULLY_READY_ENVIRON,
     }
     settings.update(overrides)

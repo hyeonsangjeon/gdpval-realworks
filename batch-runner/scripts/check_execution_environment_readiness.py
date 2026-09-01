@@ -90,6 +90,19 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--azure-route-served",
+        choices=("yes", "no"),
+        default=None,
+        help=(
+            "Whether somebody asked the project-scoped Azure route and it "
+            "answered this sign-in. There is no probe for this, so leaving it "
+            "out reports the Azure run place as not measured rather than as "
+            "ready. AZURE_AI_ROUTE_PROFILE is not an answer to this question: "
+            "it names the route to use, and a real dispatch is required to set "
+            "it before anything has been asked."
+        ),
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         dest="as_json",
@@ -100,6 +113,10 @@ def main() -> int:
     plan: dict = {}
     if args.plan is not None:
         plan = load_plan(args.plan)
+
+    azure_route_served: bool | None = None
+    if args.azure_route_served is not None:
+        azure_route_served = args.azure_route_served == "yes"
 
     docker_daemon: bool | None = None
     docker_image: bool | None = None
@@ -126,6 +143,7 @@ def main() -> int:
         docker_daemon_available=docker_daemon,
         docker_image_available=docker_image,
         azure_route_profile=os.getenv("AZURE_AI_ROUTE_PROFILE") or None,
+        azure_route_served=azure_route_served,
         docker_run_setting=(plan.get("container") or {}).get("use_docker"),
     )
 
