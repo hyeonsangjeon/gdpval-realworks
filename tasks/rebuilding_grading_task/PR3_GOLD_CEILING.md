@@ -267,8 +267,8 @@ Usage
 
 Bill
 ------------------------------------------------------------
-  estimated cost          UNKNOWN — not every model used has a published price
-  unpriced models         ['gpt-5.6-sol', 'gpt-audio-1.5']
+  estimated cost          UNKNOWN — this grade predates the cost receipt
+  judge models declared   ['gpt-5.6-sol', 'gpt-audio-1.5']
 
 Per task (worst first)
 ------------------------------------------------------------
@@ -468,8 +468,8 @@ Usage
 
 Bill
 ------------------------------------------------------------
-  estimated cost          UNKNOWN — not every model used has a published price
-  unpriced models         ['gpt-5.6-sol', 'gpt-audio-1.5']
+  estimated cost          UNKNOWN — this grade predates the cost receipt
+  judge models declared   ['gpt-5.6-sol', 'gpt-audio-1.5']
 
 Per task (worst first)
 ------------------------------------------------------------

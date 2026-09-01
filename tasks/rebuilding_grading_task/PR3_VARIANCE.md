@@ -232,8 +232,8 @@ Usage per run
       main tokens         in 27299254, out 1392576, cached 13103993
       perception tokens   in 266033, out 37479
       judge latency       26264.17s, usage complete True
-      estimated cost      UNKNOWN — not every model used has a published price
-      unpriced models     ['gpt-5.6-sol', 'gpt-audio-1.5']
+      estimated cost      UNKNOWN — this grade predates the cost receipt
+      judge models        ['gpt-5.6-sol', 'gpt-audio-1.5']
       azure route         4883551d5001c23b50b24d0f2290fc01a6febacf73374667fce8a0c7111de517
       azure route         5df8d48b6568d7a6ae41c99f61044cdab00e6cdee4cbc1ac4960efcf3881e5e7
   run 2  graded at 2026-08-28T22:38:04Z
@@ -243,8 +243,8 @@ Usage per run
       main tokens         in 26689319, out 1393484, cached 12709773
       perception tokens   in 266033, out 42022
       judge latency       24833.42s, usage complete True
-      estimated cost      UNKNOWN — not every model used has a published price
-      unpriced models     ['gpt-5.6-sol', 'gpt-audio-1.5']
+      estimated cost      UNKNOWN — this grade predates the cost receipt
+      judge models        ['gpt-5.6-sol', 'gpt-audio-1.5']
       azure route         4883551d5001c23b50b24d0f2290fc01a6febacf73374667fce8a0c7111de517
       azure route         5df8d48b6568d7a6ae41c99f61044cdab00e6cdee4cbc1ac4960efcf3881e5e7
   run 3  graded at 2026-08-29T01:22:18Z
@@ -254,8 +254,8 @@ Usage per run
       main tokens         in 27266562, out 1385129, cached 13001172
       perception tokens   in 266033, out 42267
       judge latency       24433.4s, usage complete True
-      estimated cost      UNKNOWN — not every model used has a published price
-      unpriced models     ['gpt-5.6-sol', 'gpt-audio-1.5']
+      estimated cost      UNKNOWN — this grade predates the cost receipt
+      judge models        ['gpt-5.6-sol', 'gpt-audio-1.5']
       azure route         4883551d5001c23b50b24d0f2290fc01a6febacf73374667fce8a0c7111de517
       azure route         5df8d48b6568d7a6ae41c99f61044cdab00e6cdee4cbc1ac4960efcf3881e5e7
 ```

@@ -497,6 +497,10 @@ def usage_by_run(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "estimated_cost_usd": cost.get("estimated_cost_usd"),
                 "pricing_complete": cost.get("pricing_complete"),
                 "unpriced_models": cost.get("unpriced_models"),
+                # Where the money actually is. The three legacy fields above
+                # are pinned by contract and cannot report a run's cost; see
+                # `analyze_gold_ceiling._bill_receipt`.
+                "receipt": gold._bill_receipt(summary),
                 "azure_ai_routes": [
                     route.get("runtime_fingerprint")
                     for route in run["payload"].get("azure_ai_routes") or []
@@ -788,15 +792,46 @@ def _render(report: dict[str, Any], *, mover_limit: int) -> str:
             f"      judge latency       {row['total_judge_latency_sec']}s, "
             f"usage complete {row['usage_complete']}"
         )
-        if row["pricing_complete"]:
-            lines.append(f"      estimated cost      ${row['estimated_cost_usd']}")
-        else:
-            # An unpriced run is never rendered as free. Unknown is not zero.
+        # An unpriced run is never rendered as free, and a floor is never
+        # rendered as a total. Unknown is not zero.
+        receipt = row.get("receipt")
+        status = receipt.get("status") if receipt else None
+        floor = receipt.get("known_cost_usd") if receipt else None
+        if status == gold.STATUS_COMPLETE:
             lines.append(
-                "      estimated cost      UNKNOWN — not every model used has "
-                "a published price"
+                f"      estimated cost      ${receipt['estimated_cost_usd']} "
+                f"over {receipt['model_calls']} priced calls"
             )
-            lines.append(f"      unpriced models     {row['unpriced_models']}")
+        elif status == gold.STATUS_PARTIAL and floor:
+            lines.append(
+                f"      estimated cost      AT LEAST ${floor} — a floor, not "
+                "a total"
+            )
+            lines.append(
+                f"      unpriced because    "
+                f"{', '.join(receipt['missing_reasons'])}"
+            )
+        elif status in (
+            gold.STATUS_PARTIAL,
+            gold.STATUS_UNAVAILABLE,
+            gold.STATUS_NOT_RUN,
+        ):
+            # A partial receipt whose floor is zero has no floor to state.
+            # "At least $0" would be true and useless, and reads as "free".
+            lines.append(
+                "      estimated cost      UNKNOWN — nothing in this run "
+                "could be priced"
+            )
+            lines.append(
+                f"      unpriced because    "
+                f"{', '.join(receipt['missing_reasons'])}"
+            )
+        else:
+            lines.append(
+                "      estimated cost      UNKNOWN — this grade predates the "
+                "cost receipt"
+            )
+            lines.append(f"      judge models        {row['unpriced_models']}")
         # Reported, never frozen: route drift is expected within a single run,
         # so a difference here is context rather than a fault.
         for fingerprint in row["azure_ai_routes"]:
