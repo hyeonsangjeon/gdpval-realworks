@@ -464,3 +464,179 @@ def test_sdk_requirement_is_exactly_pinned_once(requirement):
     ]
 
     assert matching == [requirement]
+
+
+def _project_ci_env(**updates: str) -> dict[str, str]:
+    return _env(
+        AZURE_AI_ROUTE_PROFILE="project-ci",
+        AZURE_OPENAI_V1_ENDPOINT=(
+            "https://account.services.ai.azure.com/openai/v1/"
+        ),
+        FOUNDRY_PROJECT_ENDPOINT=(
+            "https://account.services.ai.azure.com/api/projects/project-one"
+        ),
+        **updates,
+    )
+
+
+def test_passing_token_check_names_every_route_it_did_not_exercise(capsys):
+    """exp032's shape: two routes, one audience, and a green tick anyway.
+
+    Under ``project-ci`` the Code Interpreter route resolves to the project
+    endpoint and everything else to the account endpoint, but both carry the
+    same ``token_scope``. ``verify_route_tokens`` collects scopes into a set,
+    so one ``get_token`` satisfies both, and the account path is the one that
+    answers it. exp032 passed this step and then took ``http 403`` on all
+    five of its tasks from the route the token never touched.
+    """
+    preflight.main(
+        [
+            "--workload",
+            "inference=private-deployment",
+            "--workload",
+            "code-interpreter=private-deployment",
+            "--verify-token",
+        ],
+        env=_project_ci_env(),
+        token_verifier=MagicMock(),
+    )
+
+    stderr = capsys.readouterr().err
+    assert "issued 1 token(s)" in stderr
+    assert "2 typed route record(s)" in stderr
+    assert "https://ai.azure.com/.default" in stderr
+    assert "code-interpreter=project" in stderr
+    assert "inference=direct-v1" in stderr
+    assert "private-deployment" not in stderr
+
+
+def test_passing_token_check_warns_that_a_project_403_is_invisible(capsys):
+    preflight.main(
+        ["--workload", "code-interpreter=private-deployment", "--verify-token"],
+        env=_project_ci_env(),
+        token_verifier=MagicMock(),
+    )
+
+    stderr = capsys.readouterr().err
+    assert "http 403" in stderr
+    assert "exp032" in stderr
+
+
+def test_project_403_warning_is_omitted_when_no_project_route_is_used(capsys):
+    """The warning is about a route this run has; it is not boilerplate."""
+    preflight.main(
+        ["--workload", "inference=private-deployment", "--verify-token"],
+        env=_direct_env(),
+        token_verifier=MagicMock(),
+    )
+
+    stderr = capsys.readouterr().err
+    assert "does not establish" in stderr
+    assert "inference=direct-v1" in stderr
+    assert "http 403" not in stderr
+
+
+def test_the_gap_is_raised_as_one_single_line_annotation(capsys):
+    """A run summary is where a spend gate gets read, not a step log.
+
+    ``preflight_grading_renderer.py`` already reports an accepted drift this
+    way. GitHub truncates an annotation at the first newline, so the whole
+    statement has to be one line to arrive intact.
+    """
+    preflight.main(
+        [
+            "--workload",
+            "inference=private-deployment",
+            "--workload",
+            "code-interpreter=private-deployment",
+            "--verify-token",
+        ],
+        env=_project_ci_env(),
+        token_verifier=MagicMock(),
+    )
+
+    annotations = [
+        line
+        for line in capsys.readouterr().err.splitlines()
+        if line.startswith("::warning::")
+    ]
+    assert len(annotations) == 1
+    assert "does not establish" in annotations[0]
+    assert "http 403" in annotations[0]
+
+
+def test_route_record_count_follows_the_records_not_the_arguments(capsys):
+    """The count must be what was emitted, or the statement overclaims.
+
+    ``preflight_routes`` deduplicates on ``(workload, deployment)``. Repeating
+    a workload must not inflate the number of routes said to be covered.
+    """
+    workload = "inference=private-deployment"
+
+    records = preflight.main(
+        ["--workload", workload, "--verify-token"],
+        env=_direct_env(AZURE_AI_WORKLOADS_JSON=json.dumps([workload, workload])),
+        token_verifier=MagicMock(),
+    )
+
+    assert len(records) == 1
+    assert "1 typed route record(s)" in capsys.readouterr().err
+
+
+def test_token_evidence_is_silent_when_no_token_was_acquired(capsys):
+    preflight.main(
+        ["--workload", "inference=private-deployment"],
+        env=_direct_env(),
+        token_verifier=MagicMock(),
+    )
+
+    assert "::warning::" not in capsys.readouterr().err
+
+
+def test_token_evidence_is_silent_when_the_token_check_failed(capsys):
+    """A failed check already stops the run; it must not also claim coverage."""
+    with pytest.raises(SystemExit):
+        preflight.main(
+            [
+                "--workload",
+                "inference=private-deployment",
+                "--verify-token",
+            ],
+            env=_direct_env(),
+            token_verifier=MagicMock(side_effect=RuntimeError("denied")),
+        )
+
+    stderr = capsys.readouterr().err
+    assert "Azure AI route token verification failed" in stderr
+    assert "::warning::" not in stderr
+
+
+def test_token_evidence_leaves_the_stdout_records_contract_byte_identical(
+    capsys,
+):
+    """Step 2, step 8 and the narrative analyser consume stdout unchanged.
+
+    These records are also uploaded as ``azure_ai_routes`` provenance and are
+    compared across shards as a fixed condition, so the statement goes to
+    stderr and stdout must not move by a byte.
+    """
+    args = [
+        "--workload",
+        "inference=private-deployment",
+        "--workload",
+        "code-interpreter=private-deployment",
+    ]
+
+    preflight.main(args, env=_project_ci_env(), token_verifier=MagicMock())
+    quiet = capsys.readouterr()
+
+    preflight.main(
+        [*args, "--verify-token"],
+        env=_project_ci_env(),
+        token_verifier=MagicMock(),
+    )
+    verified = capsys.readouterr()
+
+    assert verified.out == quiet.out
+    assert "::warning::" not in quiet.err
+    assert "::warning::" in verified.err
