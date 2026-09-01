@@ -20,9 +20,13 @@ This is a port rather than a new rule. Both other summarisers over these same
 receipts already roll the lines up:
 
 * ``core.cost_projection.summarize_cost_receipts`` folds each receipt's lines
-  by displayed name before touching the run totals;
+  before touching the run totals;
 * ``scripts/cost-receipt.mjs`` does the same in ``aggregateComponents`` and
   hands the result to the dashboard.
+
+Both of those folded by *displayed name* when this file was written, which is
+the defect ``test_a_run_summary_row_is_one_model_not_one_label.py`` was added
+to hold shut; all three now group on the key below.
 
 Those two produce a run-summary document. ``summarise_receipts`` returns a
 ``CostReceipt``, so its lines have to be ``ReceiptComponent`` objects, folded on

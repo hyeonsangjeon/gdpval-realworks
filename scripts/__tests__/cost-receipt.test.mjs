@@ -637,10 +637,18 @@ test('components aggregate across tasks', () => {
   assert.deepEqual(summary.components, [
     {
       name: 'generation',
+      stage: 'generation',
+      retry_kind: 'none',
+      provider: null,
+      deployment: null,
+      requested_model: null,
+      resolved_model: null,
+      api_version: null,
       tasks: 2,
       known_cost_usd: 0.5,
       complete_tasks: 2,
       model_calls: 6,
+      missing_reasons: [],
       status: 'complete',
     },
   ]);
@@ -648,8 +656,13 @@ test('components aggregate across tasks', () => {
 
 test('two retries in one task are one task in the component total', () => {
   // `tasks` sits beside the amount as "how many tasks paid this". A task that
-  // retried twice paid it once; counting the lines would make that column
-  // exceed the number of tasks in the run.
+  // retried twice paid each of these once; counting the lines would make that
+  // column exceed the number of tasks in the run.
+  //
+  // They are two rows, not one. Generation's retry and Self-QA's retry both
+  // display as 재시도, and folding them by that label summed a $0.15 charge
+  // into a $0.05 one and published `retry | $0.20 | 3 calls` — a row over two
+  // stages that no reader can take apart again.
   const summary = summarizeCostReceipts([
     row(projectCostReceipt(receipt({
       estimated_cost_usd: 0.2,
@@ -672,13 +685,123 @@ test('two retries in one task are one task in the component total', () => {
   assert.deepEqual(summary.components, [
     {
       name: 'retry',
+      stage: 'generation',
+      retry_kind: 'infrastructure',
+      provider: null,
+      deployment: null,
+      requested_model: null,
+      resolved_model: null,
+      api_version: null,
       tasks: 1,
-      known_cost_usd: 0.2,
+      known_cost_usd: 0.15,
       complete_tasks: 1,
-      model_calls: 3,
+      model_calls: 2,
+      missing_reasons: [],
+      status: 'complete',
+    },
+    {
+      name: 'retry',
+      stage: 'self_qa',
+      retry_kind: 'semantic',
+      provider: null,
+      deployment: null,
+      requested_model: null,
+      resolved_model: null,
+      api_version: null,
+      tasks: 1,
+      known_cost_usd: 0.05,
+      complete_tasks: 1,
+      model_calls: 1,
+      missing_reasons: [],
       status: 'complete',
     },
   ]);
+  // The guard this test was written for still holds: one task, and no row
+  // claiming more tasks paid it than the run contains.
+  assert.ok(summary.components.every((entry) => entry.tasks === 1));
+});
+
+test('two models read under one stage are two rows in the run total', () => {
+  // The same rule one line down. A deliverable holding a picture and a
+  // recording is read by two models under one `perception` stage, and they are
+  // priced from different entries — so a row of their summed tokens is a figure
+  // neither entry produces. `retry_kind` cannot separate these: both are first
+  // attempts, and the only thing that differs is who was called.
+  const summary = summarizeCostReceipts([
+    row(projectCostReceipt(receipt({
+      estimated_cost_usd: 0.33,
+      known_cost_usd: 0.33,
+      model_cost_usd: 0.33,
+      runtime_cost_usd: null,
+      components: [
+        component({
+          name: 'perception', stage: 'perception', retry_kind: 'none',
+          provider: 'azure', requested_model: 'sees-things',
+          resolved_model: 'sees-things', known_cost_usd: 0.03,
+          model_calls: 1, usage: {},
+        }),
+        component({
+          name: 'perception', stage: 'perception', retry_kind: 'none',
+          provider: 'azure', requested_model: 'hears-things',
+          resolved_model: 'hears-things', known_cost_usd: 0.3,
+          model_calls: 1, usage: {},
+        }),
+      ],
+    }))),
+  ]);
+
+  assert.equal(summary.components.length, 2);
+  assert.deepEqual(
+    summary.components.map((entry) => entry.resolved_model),
+    ['hears-things', 'sees-things'],
+  );
+  assert.deepEqual(
+    summary.components.map((entry) => entry.known_cost_usd),
+    [0.3, 0.03],
+  );
+  // Both carry the same label, which is why the label cannot be the key.
+  assert.ok(summary.components.every((entry) => entry.name === 'perception'));
+});
+
+test('a missing reason names the row it belongs to', () => {
+  // Kept only at the run level, "no rate is published for this model" told a
+  // reader that something went unpriced but never which thing — and with the
+  // two readers merged into one row there was nothing it could have named.
+  const summary = summarizeCostReceipts([
+    row(projectCostReceipt(receipt({
+      status: 'partial',
+      estimated_cost_usd: null,
+      known_cost_usd: 0.03,
+      model_cost_usd: 0.03,
+      runtime_cost_usd: null,
+      components: [
+        component({
+          name: 'perception', stage: 'perception', retry_kind: 'none',
+          provider: 'azure', resolved_model: 'sees-things',
+          known_cost_usd: 0.03, model_calls: 1, usage: {},
+        }),
+        component({
+          name: 'perception', stage: 'perception', retry_kind: 'none',
+          provider: 'azure', resolved_model: 'unheard-of',
+          status: 'partial', known_cost_usd: null, model_calls: 1, usage: {},
+          missing_reasons: ['price_missing'],
+        }),
+      ],
+      missing_reasons: ['price_missing'],
+    }))),
+  ]);
+
+  const byModel = Object.fromEntries(
+    summary.components.map((entry) => [entry.resolved_model, entry]),
+  );
+  assert.deepEqual(byModel['sees-things'].missing_reasons, []);
+  assert.equal(byModel['sees-things'].status, 'complete');
+  assert.deepEqual(byModel['unheard-of'].missing_reasons, ['price_missing']);
+  assert.equal(byModel['unheard-of'].status, 'partial');
+  // The unpriced row still counted its call and still did not claim to be free.
+  assert.equal(byModel['unheard-of'].known_cost_usd, 0);
+  assert.equal(byModel['unheard-of'].model_calls, 1);
+  assert.equal(summary.estimated_cost_usd, null);
 });
 
 test('coverage reports the rows that carry no receipt at all', () => {
