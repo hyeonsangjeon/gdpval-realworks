@@ -227,6 +227,87 @@ function processLegacyGradesFile(
   };
 }
 
+// ── Is the headline an average of the rows underneath it? ─────────────────
+//
+// `summary.openai_compat.avg_score_pct` is the number the dashboard shows as
+// an experiment's score, and it is the one figure on this record that is
+// copied out of the payload rather than derived here. The validators below
+// check every count around it — total/graded/error, perfect/zero/partial,
+// judge_error_rate — and never checked the average itself, so a headline the
+// task rows do not add up to rendered with nothing to mark it.
+//
+// Four of the nineteen grade files this aggregator reads are exactly that.
+// All four are schema 1.0 `exp003` runs whose average was taken over all 220
+// tasks instead of the 215 or 219 that were graded, counting every ungraded
+// task as a zero: one of them publishes 54.10 where its own rows mean 55.36.
+// It is the mirror image of the excluded-item defect — an item the grader
+// could not read leaves the denominator and the score goes UP; a task it
+// could not grade stays in the denominator as a zero and the score goes DOWN
+// — and neither was visible from the published summary.
+//
+// The treatment splits the way this file already splits versions:
+//
+//   * 1.3 and 1.4, the versions today's writer produces, are checked and
+//     rejected. Across all seventy-five 1.3/1.4 grade files under data/grades
+//     — the two this aggregator reads plus the diagnostic, shard and
+//     validation files a publish is copied from — the largest disagreement is
+//     0.005 points, which is two-decimal rounding and nothing else. The check
+//     costs the corpus nothing today and refuses the defect the moment a
+//     writer reintroduces it.
+//   * 1.0-1.2 cannot be rejected. Four real published experiments would take
+//     the dashboard build down with them, which is the same reasoning that
+//     keeps the historical count checks loose a few dozen lines below. They
+//     are measured instead, and the measurement travels on the record.
+//
+// Either way the published `avg_score_pct` is passed through untouched.
+// Which number is the experiment's score is a decision about the benchmark,
+// not one for a reader to make silently on the way to the screen.
+
+// The headline and every task `pct` are each published rounded to two
+// decimals, so a mean over correctly-computed rows can sit 0.005 from the
+// rows' rounding plus 0.005 from the headline's — 0.01 at worst. This is five
+// times that, and twenty-five times below the 1.24-point disagreement of the
+// smallest of the four real ones, so no plausible widening of the tolerance
+// admits the rounding and the defect together.
+const HEADLINE_ROW_TOLERANCE_PCT = 0.05;
+
+/**
+ * Compare the published headline against the mean of the rows it summarises.
+ *
+ * `supported` is deliberately three-valued. `null` means the comparison could
+ * not be made — no scored rows, or no numeric headline — and is not the same
+ * claim as `true`. A boolean default here would report "the rows agree" for a
+ * file whose rows said nothing at all, which is the failure this whole block
+ * exists to stop.
+ */
+function headlineSupport(raw) {
+  const published = raw?.summary?.openai_compat?.avg_score_pct;
+  const pcts = [];
+  for (const task of Array.isArray(raw?.tasks) ? raw.tasks : []) {
+    // A falsy `error` is what every other reader in this file counts as
+    // graded — the `graded_tasks` check above, the task projection below — so
+    // the row set measured here cannot drift from the one being summarised.
+    if (!task || typeof task !== 'object' || Array.isArray(task) || task.error) continue;
+    if (Number.isFinite(task.pct)) pcts.push(task.pct);
+  }
+  if (pcts.length === 0 || !Number.isFinite(published)) {
+    return {
+      avg_score_pct_from_rows: null,
+      delta_pct: null,
+      rows_counted: pcts.length,
+      supported: null,
+    };
+  }
+  const fromRows = pcts.reduce((sum, pct) => sum + pct, 0) / pcts.length;
+  const delta = published - fromRows;
+  return {
+    avg_score_pct_from_rows: Number(fromRows.toFixed(2)),
+    delta_pct: Number(delta.toFixed(2)),
+    rows_counted: pcts.length,
+    supported: Math.abs(delta) <= HEADLINE_ROW_TOLERANCE_PCT,
+  };
+}
+
 // ── v1.0 schema (007) ─────────────────────────────────────────────────────
 //
 // Maps raw item-level grade JSON onto the dashboard's existing legacy shape
@@ -341,6 +422,33 @@ function validateScoreExcludedGrade(raw) {
     || openaiCompat.ci_pct < 0
   ) {
     throw new Error(`schema ${version} scored headline is missing or invalid`);
+  }
+
+  // An average has to be the average of something. Every scored task must
+  // carry the `pct` the headline is a mean over — otherwise the mean below is
+  // taken across a subset and would disagree with a headline that was right —
+  // and the headline must be that mean.
+  if (gradedTasks > 0) {
+    for (const task of tasks) {
+      if (task.error) continue;
+      if (!Number.isFinite(task.pct) || task.pct < 0 || task.pct > 100) {
+        throw new Error(
+          `schema ${version} scored task pct is missing or invalid`,
+        );
+      }
+    }
+    const support = headlineSupport(raw);
+    // `!== true` rather than `=== false`: with a finite headline and a
+    // finite pct on every one of the `gradedTasks > 0` rows the null is
+    // unreachable, and if that ever stops being true it should stop the
+    // build rather than pass as agreement.
+    if (support.supported !== true) {
+      throw new Error(
+        `schema ${version} headline ${openaiCompat.avg_score_pct} is not the average of `
+          + `its ${support.rows_counted} scored task rows `
+          + `(${support.avg_score_pct_from_rows}, off by ${support.delta_pct})`,
+      );
+    }
   }
 
   const rate = raw?.summary?.wow?.judge_error_rate;
@@ -632,6 +740,13 @@ function processV1GradesFile(
         ? openaiCompat.avg_score_pct
         : null,
       ci_pct: typeof openaiCompat.ci_pct === 'number' ? openaiCompat.ci_pct : null,
+      // What the task rows say the average is, beside what the payload
+      // claims. On 1.3/1.4 the validator has already refused any file where
+      // these disagree, so it reads as a redundant confirmation; on 1.0-1.2,
+      // where four published experiments do disagree, it is the only place
+      // the disagreement is written down. Present on every version so a
+      // reader never has to know which tier a file came from.
+      headline_support: headlineSupport(raw),
       perfect_score: openaiCompat.perfect_count ?? 0,
       partial_score: openaiCompat.partial_count ?? 0,
       zero_score: openaiCompat.zero_count ?? 0,
