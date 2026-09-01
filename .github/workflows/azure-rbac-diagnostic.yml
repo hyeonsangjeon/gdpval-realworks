@@ -75,13 +75,21 @@ jobs:
 
       # No model credential is passed in. If one were, a future edit could turn
       # this read-only job into one that spends, and nothing here would notice.
+      #
+      # The Foundry account and project names are repository VARIABLES, and
+      # GitHub does not mask a variable the way it masks a secret: whatever a
+      # step lists under env: is reprinted verbatim in the step header, and the
+      # logs of a public repository are public. So this step does not ask for
+      # AZURE_AI_EXPECTED_PROJECT_ACCOUNT or AZURE_AI_EXPECTED_PROJECT_NAME. It
+      # does not need them. Both names live inside the endpoint, which is a
+      # secret and therefore masked, and the script pulls them out of it for
+      # redaction. Naming the resource in the header of the job whose whole
+      # point is not to name the resource would be an odd way to start.
       - name: Read the roles this identity holds on the project
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
-          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
           FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           EMIT_JSON: ${{ inputs.emit_json }}

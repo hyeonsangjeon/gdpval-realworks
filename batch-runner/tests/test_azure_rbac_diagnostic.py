@@ -838,6 +838,42 @@ def test_the_workflow_demands_the_expected_identities_like_every_other_run_place
     assert "AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'" in text
 
 
+def test_the_step_that_prints_the_report_names_no_repository_variable():
+    """A variable is not a secret, and this job's logs are public.
+
+    GitHub reprints whatever a step lists under `env:` in the step header, and
+    it masks secrets there but not variables. The Foundry account and project
+    names are stored as variables, so asking for them by name in this step
+    would publish them in the header of the one job whose entire purpose is to
+    report without naming the resource. Measured on run 33510351756, which is
+    what this test exists to stop happening again.
+    """
+    steps = _workflow()["jobs"]["diagnose"]["steps"]
+    invocation = "python3 scripts/azure_rbac_diagnostic.py"
+    reporting = [step for step in steps if invocation in step.get("run", "")]
+    assert len(reporting) == 1, "the reporting step moved or was duplicated"
+    for key, value in reporting[0].get("env", {}).items():
+        assert "vars." not in str(value), f"{key} publishes a repository variable"
+
+
+def test_the_report_still_hides_both_names_without_those_variables():
+    """The check above only holds if the names are recoverable elsewhere.
+
+    They are: both live inside the project endpoint, which is a secret, and the
+    script pulls them out of it. Without this, dropping the variables would
+    look like a tightening while quietly removing a redaction source.
+    """
+    environment = _env()
+    for name in (
+        "AZURE_AI_EXPECTED_PROJECT_ACCOUNT",
+        "AZURE_AI_EXPECTED_PROJECT_NAME",
+    ):
+        assert name not in environment, "this test is measuring the wrong thing"
+    _, output = _run_main([], _custom_role_named_after_the_project())
+    assert ACCOUNT not in output
+    assert PROJECT not in output
+
+
 def test_the_diagnostic_never_reaches_for_the_inference_path():
     """Kept in step with the workflow's own last step, which greps for this."""
     source = SCRIPT.read_text(encoding="utf-8")
