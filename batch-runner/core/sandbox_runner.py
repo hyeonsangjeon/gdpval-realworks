@@ -542,6 +542,32 @@ class SandboxRunner:
         "available_files",
     )
 
+    #: Which prompt sections this run place puts in its **first** request past
+    #: the rendered prompt and the reference files.
+    #:
+    #: ``_augment_prompt`` builds these three and hands the result to
+    #: ``render_prompt`` *as the task*, so ``fixed_prompt_characters`` — which
+    #: renders with a one-character stand-in task — cannot see them. They are
+    #: charged nowhere else: the deliverable contract and the dependency hint
+    #: are built from the task's words and the file *names*, not from the file
+    #: contents ``REFERENCE_FILE_CHARACTER_CAP`` covers, and the skills manual
+    #: is built from the committed skill packs.
+    #:
+    #: ``reflection`` is not here: ``run`` opens with ``reflection = None`` and
+    #: only fills it from a finished attempt, so no first request carries it.
+    #: ``task``, ``perception_analysis`` and the three reference-file sections
+    #: are priced elsewhere; ``core/first_request_sections.py`` says where, and
+    #: refuses a section id that is in neither list.
+    #:
+    #: A spec may switch any of them off — the container's does exactly that to
+    #: the skills manual, through ``max_skills: 0`` — so this tuple is what the
+    #: run place *can* send, and the settings decide what it does send.
+    FIRST_REQUEST_EXTRA_SECTIONS = (
+        "skills_manual",
+        "deps_hint",
+        "contract",
+    )
+
     DEFAULT_PROMPT = "sandbox_occupation_codegen"
 
     def __init__(

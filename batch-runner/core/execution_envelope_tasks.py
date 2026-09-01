@@ -410,7 +410,7 @@ def catalog_number_problems(catalog: TaskCatalog) -> list[str]:
 
     What that costs is worth writing down. Set every ``rubric_item_count`` in
     the committed catalogue to zero and the ceiling for the planned comparison
-    falls from 364.00 to 94.16 United States dollars — 269.84 of it gone, about
+    falls from 364.24 to 94.40 United States dollars — 269.84 of it gone, about
     three quarters — because marking is charged per scoring line and a task with
     no scoring lines is marked for free. Nothing noticed: the loader takes any
     whole number, :func:`catalog_score_problems` is asked a different question
