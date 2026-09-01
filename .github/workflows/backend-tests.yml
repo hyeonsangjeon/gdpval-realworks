@@ -9,6 +9,19 @@ name: Backend Tests
 # pre-existing backlog (189 and 20 findings on main) that a gate would freeze
 # into permanent red.
 
+# The `pull_request` trigger below does not reach the result PRs that
+# batch-run.yml opens. Those are created by peter-evans/create-pull-request with
+# GITHUB_TOKEN, and GitHub deliberately refuses to start a `pull_request` run
+# for them so a workflow cannot loop by writing to its own repository. It does
+# not refuse quietly: a run row IS created, and it dies at startup with zero
+# jobs and the message "This run likely failed because of a workflow file
+# issue." Six for six on the bot PRs measured (33464032707, 33464032741,
+# 33464910416, 33464910554, 33308414611, 33308414607), while every
+# human-authored PR touching the same paths ran normally. The result PR then
+# shows an empty Checks list, which reads as "nothing to report" when the truth
+# is "never ran". `workflow_dispatch` is not subject to that rule, so
+# batch-run.yml dispatches this workflow explicitly and refuses to finish green
+# unless the dispatched run comes back successful.
 on:
   pull_request:
     paths:
@@ -19,9 +32,17 @@ on:
     paths:
       - "batch-runner/**"
       - ".github/workflows/backend-tests.yml"
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: 'Exact result-PR head SHA this dispatch must test. A dispatch resolves a branch name to whatever it points at now, so the caller pins the commit it measured and the run below refuses to be anything else.'
+        required: true
+        type: string
 
 # Read-only, and no secrets are referenced anywhere below. The suite must stay
-# runnable from a fork PR, where neither is available.
+# runnable from a fork PR, where neither is available. A dispatch does not need
+# more than this either: it only reads the tree and runs pytest, and the caller
+# -- not this workflow -- is what acts on the verdict.
 permissions:
   contents: read
 
@@ -34,6 +55,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # A dispatch names a branch, and a branch is a moving pointer. Between the
+      # caller measuring the PR head and this run starting, the branch can be
+      # updated -- so the caller passes the SHA it measured and this refuses to
+      # run as anything else. `github.workflow_sha` is checked too, so the
+      # workflow file being obeyed is the one on the commit under test rather
+      # than a different version of this file on a branch that happens to share
+      # the name. Same shape as the validation dispatch in deploy.yml.
+      - name: Verify dispatch contract
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]]
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_SHA" ]]
+          echo "dispatch pinned to $EXPECTED_SHA"
+
       # Full history, not the default shallow clone.
       # test_verifier_ignores_hostile_path_for_repository_git resolves a
       # hardcoded commit (3ecb8ded, "docs(sandbox): finalize evidence isolation
@@ -44,6 +84,18 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # The contract check above reads what GitHub *said* the run is for. This
+      # reads what actually landed on disk. The default checkout resolves a
+      # branch name, so a push racing the dispatch would otherwise be tested
+      # silently under the pinned SHA's name.
+      - name: Verify exact checkout
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]]
 
       # Exact patch, not "3.11" like the other workflows here. core/agentic_v2_
       # license.py pins LICENSE_EVALUATOR_PYTHON_VERSION = "3.10.12" and
