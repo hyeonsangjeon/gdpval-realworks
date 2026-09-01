@@ -1550,6 +1550,90 @@ def _tally_severity(totals: dict[int | float, list[int]], item: dict) -> None:
         bucket[1] += 1
 
 
+def _score_exclusion_stats(
+    scored_tasks: list[dict],
+    avg_pct: float | None,
+) -> dict:
+    """What the headline average gains from rubric items that went unread.
+
+    A rubric item the judge could not decide is marked ``score_excluded`` and
+    dropped from the numerator *and* the denominator, so the task is scored
+    out of less than the rubric is worth. The percentage therefore rises when
+    grading fails, which is the wrong direction: on the published 30-task
+    cohort ``a328feea`` earned 18.6 points and reported 84.55% out of 22 after
+    two items were excluded, where the same 18.6 points out of the rubric's
+    full 24 is 77.50%. Fourteen tasks of the 185-task corpus carry a
+    denominator that moved this way, and until now the run said only that
+    ``judge_error_rate`` was nonzero -- never that the headline had been
+    lifted by it.
+
+    ``avg_score_pct_full_denominator`` is the same average with every
+    excluded item counted at its full weight and zero award. It is the
+    pessimistic end: it assumes an unread item would have earned nothing,
+    where ``avg_score_pct`` assumes it would have earned at the rate of the
+    items that *were* read. The run's true average is between the two. The
+    gap between them is ``avg_score_pct_lift``, and it is exactly zero on a
+    run where the grader read every rubric it was given -- which is the point
+    of publishing it: a reader can tell at a glance whether the headline
+    needs the caveat at all.
+
+    Counted over the tasks the headline averages, i.e. those without an
+    ``error``. A task whose every item was excluded already leaves the
+    average entirely and is counted in ``error_tasks`` instead.
+
+    Recomputed from ``items`` rather than read from the per-task
+    ``pct_full_denominator`` field, so that a grade file written before that
+    field existed reports the same numbers when it is re-summarised.
+    """
+    tasks_with_exclusions = 0
+    excluded_items = 0
+    excluded_max_score = 0.0
+    full_pcts: list[float] = []
+
+    for task in scored_tasks:
+        pct = float(task["pct"])
+        excluded = [
+            item for item in task.get("items", [])
+            if item.get("score_excluded")
+        ]
+        excluded_max = sum(
+            max(0.0, float(item.get("max_score") or 0.0)) for item in excluded
+        )
+        if not excluded:
+            # Nothing left this rubric, so the denominator never moved and the
+            # published figure is already the full-denominator one. Reusing it
+            # rather than recomputing keeps the lift at a hard zero instead of
+            # a rounding artefact.
+            full_pcts.append(pct)
+            continue
+
+        tasks_with_exclusions += 1
+        excluded_items += len(excluded)
+        excluded_max_score += excluded_max
+
+        total_awarded = float(task.get("total_awarded") or 0.0)
+        full_max = float(task.get("total_max") or 0.0) + excluded_max
+        full_pcts.append(
+            max(0.0, min(100.0, total_awarded / full_max * 100.0))
+            if full_max else 0.0
+        )
+
+    avg_full = (sum(full_pcts) / len(full_pcts)) if full_pcts else None
+    return {
+        "tasks_with_excluded_items": tasks_with_exclusions,
+        "excluded_items": excluded_items,
+        "excluded_max_score": round(excluded_max_score, 4),
+        "avg_score_pct_full_denominator": (
+            round(avg_full, 2) if avg_full is not None else None
+        ),
+        "avg_score_pct_lift": (
+            round(avg_pct - avg_full, 2)
+            if avg_pct is not None and avg_full is not None
+            else None
+        ),
+    }
+
+
 def _compute_summary(
     task_dicts: list[dict],
     *,
@@ -1686,6 +1770,10 @@ def _compute_summary(
             "partial_count": partial,
             "inconsistent_count": 0,
         },
+        # Sits beside the headline rather than inside it: ``openai_compat`` is
+        # a fixed compatibility shape, and this is the caveat on the number it
+        # carries, not another field of it.
+        "score_exclusions": _score_exclusion_stats(scored_tasks, avg_pct),
         "wow": {
             "rubric_item_coverage_avg": _rate(
                 counters["all_pass"], counters["all_items"]
