@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from core.cost_metering import request_digest_of
 from core.grader_routing import Modality, RoutingDecision
 from core.rubric_loader import RubricItem, TaskRubric
 from core.tool_calling_judge import (
@@ -2927,3 +2928,92 @@ def test_the_schema_offers_member_without_demanding_it():
     # Nullable, because ``additionalProperties: False`` plus a non-nullable
     # optional is how a model ends up unable to say "the whole file".
     assert params["properties"]["member"]["type"] == ["string", "null"]
+
+
+# ── The request the ledger fingerprints ──────────────────────────────
+#
+# ``request_sha256`` is filled by the metering wrapper from the keyword
+# arguments handed to the provider. That is a generic mechanism, tested
+# generically next door. What those tests cannot say is whether *this* caller —
+# the one that spends the grading money — actually hands over something a
+# digest can be taken of, and whether what it hands over is the same twice.
+# Both are answered here, against the real payload.
+
+
+def _judged_requests(client_script, task, item, deliverable_dir):
+    """Run one judgement and return a digest per upstream request."""
+    client = FakeClient(ScriptedResponses(client_script))
+    judge = ToolCallingJudge(client=client, model="gpt-5.4",
+                             prompt_template=PROMPT_TEMPLATE)
+    judge.judge_item(task=task, item=item,
+                     deliverable_dir=str(deliverable_dir),
+                     file_names=["report.xlsx"])
+    return [request_digest_of(call) for call in client.responses.calls]
+
+
+def _pass_verdict() -> dict:
+    return _final(json.dumps({
+        "verdict": "pass", "partial_score": 1.0,
+        "evidence": "label present", "confidence": 0.9, "reasoning": "ok",
+    }))
+
+
+def test_the_request_the_grader_sends_can_be_fingerprinted(
+    deliverable_dir, task_and_item
+):
+    """A digest the grading path cannot produce is a column that stays empty.
+
+    The tool schema is the fragile part: it is assembled per modality, and an
+    entry that could not be rendered would blank the fingerprint on exactly the
+    calls the receipt was built for, silently, while every other test still
+    passed.
+    """
+    task, item = task_and_item
+
+    digests = _judged_requests([_response(output=[_pass_verdict()])],
+                               task, item, deliverable_dir)
+
+    assert digests and all(d is not None for d in digests)
+
+
+def test_the_same_judgement_twice_sends_the_same_request(
+    deliverable_dir, task_and_item
+):
+    """What makes the column worth reading across two runs.
+
+    A score that moved between two runs at one grader fingerprint means
+    nothing until the requests behind it are known to have been identical. If
+    anything transient reached the payload — a timestamp, a run id, an
+    iteration order that wandered — the digests would differ here and the
+    comparison would be unavailable in principle, not just unmeasured.
+    """
+    task, item = task_and_item
+
+    first = _judged_requests([_response(output=[_pass_verdict()])],
+                             task, item, deliverable_dir)
+    second = _judged_requests([_response(output=[_pass_verdict()])],
+                              task, item, deliverable_dir)
+
+    # Two absences are also "equal"; the point is that they meet at a digest.
+    assert all(d is not None for d in first)
+    assert first == second
+
+
+def test_grading_a_different_criterion_is_a_different_request(
+    deliverable_dir, task_and_item
+):
+    """And the digest still tracks the thing being judged."""
+    task, item = task_and_item
+    other = RubricItem(
+        rubric_item_id="r2",
+        criterion="The deliverable contains a 'beta' label in column B",
+        score=5,
+        required=None,
+    )
+
+    first = _judged_requests([_response(output=[_pass_verdict()])],
+                             task, item, deliverable_dir)
+    second = _judged_requests([_response(output=[_pass_verdict()])],
+                              task, other, deliverable_dir)
+
+    assert first != second
