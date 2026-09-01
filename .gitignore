@@ -55,6 +55,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/analyze_variance.py
 !batch-runner/scripts/stage3_partial_inventory.py
 !batch-runner/scripts/check_grader_hash_freeze.py
+!batch-runner/scripts/azure_rbac_diagnostic.py
 
 
 # Experiment report HTML (skews GitHub language stats)
