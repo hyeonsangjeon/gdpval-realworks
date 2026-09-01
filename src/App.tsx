@@ -25,7 +25,7 @@ class ErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-dash-page flex items-center justify-center">
+        <div className="min-h-screen bg-dash-page flex items-center justify-center" data-testid="error-boundary">
           <div className="text-center">
             <p className="font-semibold text-red-500 mb-2">Something went wrong</p>
             <p className="text-sm text-dash-text-muted mb-4">{this.state.error?.message}</p>

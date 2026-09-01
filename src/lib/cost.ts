@@ -28,6 +28,53 @@ import type {
 /** Shown beside every amount, hover or visible. Goal: no amount reads as billed. */
 export const COST_ESTIMATE_NOTE = '사용량 기준 예상 비용이며 Azure 청구서 금액이 아님'
 
+/*
+ * ── Reading a payload nothing has checked ───────────────────────────────────
+ *
+ * Every other cost payload on this page has been through a validator before it
+ * arrives: grading receipts through `projectCostReceipt` in
+ * `aggregate-grades.mjs`, run summaries through `projectCostSummary` in
+ * `aggregate-reports.mjs`. Per-task solving receipts have been through neither.
+ * `aggregate-reports.mjs` strips `task_results` from the index, so they reach
+ * this module straight off an unauthenticated fetch of `self_report.json` from
+ * HuggingFace. `CostReceipt` is what they are hoped to be, not what anything
+ * has established.
+ *
+ * The gap is not theoretical, and it does not fail small. A receipt whose
+ * amount arrives as the string `"0.04"` reaches `formatCostUsd`, `.toFixed` is
+ * not a function, and the error boundary in `App.tsx` replaces the entire
+ * experiment page with "Something went wrong" — every task, every score, every
+ * summary gone over one field on one receipt. A `components` that is not an
+ * array does the same through `.map`; so does a `missing_reasons` that is not
+ * an array, through `.length`.
+ *
+ * So a field is used here only when it is what the contract says it is.
+ * Anything else is read as absent, which lands the cell on one of the four
+ * states this module already has — 미확정 for a receipt carrying no usable
+ * number — rather than on a figure nobody can stand behind, the `$0` the
+ * contract forbids, or a blank page.
+ */
+
+/** A money field is a finite number, or it is not there. */
+function readAmount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/** Present, and not a number this module can use. Absent is not broken. */
+function isBrokenAmount(value: unknown): boolean {
+  return value !== null && value !== undefined && readAmount(value) === null
+}
+
+/** A name field is a string, or it is not there. */
+function readText(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+/** A list field is a list, or it is empty. */
+function readList<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
+}
+
 export const COST_FIELD_LABELS: Record<CostField, string> = {
   problem_solving_cost: '문제 풀이 비용',
   grading_cost: '채점 비용',
@@ -85,9 +132,17 @@ const COMPONENT_LABELS: Record<string, string> = {
   retry: '재시도',
 }
 
-/** Human label for a component slug; unknown slugs degrade to spaced words. */
+/**
+ * Human label for a component slug; unknown slugs degrade to spaced words.
+ *
+ * A slug that is not a string at all degrades further, to `?`. It reaches here
+ * off the unvalidated fetch, and `.split` on a number took the whole page down
+ * the same way a malformed amount did.
+ */
 export function componentLabel(name: string): string {
-  return COMPONENT_LABELS[name] ?? name.split('_').join(' ')
+  const slug = readText(name)
+  if (slug === null) return '?'
+  return COMPONENT_LABELS[slug] ?? slug.split('_').join(' ')
 }
 
 /**
@@ -112,15 +167,18 @@ const RETRY_KIND_LABELS: Record<string, string> = {
  */
 export function componentDetail(component: CostComponent): string {
   const stage = componentLabel(component.stage)
-  const model =
-    component.resolved_model ?? component.requested_model ?? component.deployment
+  const model = readText(
+    component.resolved_model ?? component.requested_model ?? component.deployment,
+  )
   const parts = [stage]
-  if (component.retry_kind !== 'none') {
-    parts.push(RETRY_KIND_LABELS[component.retry_kind] ?? component.retry_kind)
+  const retryKind = readText(component.retry_kind)
+  if (retryKind !== null && retryKind !== 'none') {
+    parts.push(RETRY_KIND_LABELS[retryKind] ?? retryKind)
   }
   // Absent stays absent. Every receipt published before call identity was
   // recorded omits it, and inventing a name here would put one model's label
-  // on another model's tokens.
+  // on another model's tokens. A value that is not a name is absent too — the
+  // alternative is a tooltip reading `[object Object]`, which names nothing.
   if (model) parts.push(model)
   return parts.join(' · ')
 }
@@ -167,7 +225,34 @@ export function formatCostUsd(value: number): string {
  */
 export function receiptAmount(receipt: CostReceipt): number | null {
   if (receipt.status !== 'complete' && receipt.status !== 'partial') return null
-  return receipt.estimated_cost_usd ?? receipt.known_cost_usd
+  // Both fields are checked, not just the one that ends up being used. A
+  // receipt carrying a broken `known_cost_usd` has already shown its money
+  // fields cannot be read, and falling through to `estimated_cost_usd` would
+  // be taking a number off a record known to be wrong.
+  if (isBrokenAmount(receipt.estimated_cost_usd)) return null
+  if (isBrokenAmount(receipt.known_cost_usd)) return null
+  return readAmount(receipt.estimated_cost_usd) ?? readAmount(receipt.known_cost_usd)
+}
+
+/**
+ * The component rows to draw.
+ *
+ * A `components` that is not an array is no rows, not a crash: the receipt
+ * still has a status and possibly a total, and those are worth showing even
+ * when the breakdown beside them is unreadable.
+ */
+export function receiptComponents(receipt: CostReceipt): CostComponent[] {
+  return readList<CostComponent>(receipt.components)
+}
+
+/**
+ * What one component row shows: 미수행 for a stage that never ran, the amount
+ * when there is one, 미확정 when the line carries no number this can read.
+ */
+export function componentAmountText(component: CostComponent): string {
+  if (component.status === 'not_run') return '미수행'
+  const amount = readAmount(component.known_cost_usd)
+  return amount === null ? '미확정' : formatCostUsd(amount)
 }
 
 /**
@@ -185,7 +270,7 @@ export function receiptAmount(receipt: CostReceipt): number | null {
  * which is the only reason the line exists.
  */
 export function runtimeLineAmount(receipt: CostReceipt): number | null {
-  const amount = receipt.runtime_cost_usd
+  const amount = readAmount(receipt.runtime_cost_usd)
   if (amount === null || amount === 0) return null
   return amount
 }
@@ -227,11 +312,13 @@ export function missingReasonLabel(reason: string): string {
 
 /** The same list, deduplicated by label and joined for display. */
 export function missingReasonText(reasons: string[]): string {
-  return [...new Set(reasons.map(missingReasonLabel))].join(', ')
+  const list = readList<unknown>(reasons)
+  return [...new Set(list.map((reason) => missingReasonLabel(String(reason))))].join(', ')
 }
 
 function unpricedTitle(reasons: string[]): string {
-  return reasons.length ? `미가격 사유: ${missingReasonText(reasons)}` : '가격을 계산할 수 없음'
+  const text = missingReasonText(reasons)
+  return text ? `미가격 사유: ${text}` : '가격을 계산할 수 없음'
 }
 
 /**
@@ -332,7 +419,16 @@ export function combinedTaskCost(
   const exact =
     accounted.every((r) => r.status === 'complete') &&
     [problem, grading].every((r) => r == null || r.status !== 'partial') &&
-    [problem, grading].filter(Boolean).length === 2
+    [problem, grading].filter(Boolean).length === 2 &&
+    // Every receipt that ran also has to have produced a number. The three
+    // clauses above read statuses, and a status is a claim: a receipt saying
+    // `complete` while carrying an amount this module cannot read is left out
+    // of the sum but was still voting that the sum is whole. That printed one
+    // half of a pair as the pair's total — $0.0200 for two receipts worth
+    // $0.0600 — which is a worse failure than the blank page, because it looks
+    // like an answer. On a valid payload this clause never fires: a complete
+    // receipt always carries its estimate.
+    amounts.length === accounted.length
 
   if (!amounts.length) {
     return {
