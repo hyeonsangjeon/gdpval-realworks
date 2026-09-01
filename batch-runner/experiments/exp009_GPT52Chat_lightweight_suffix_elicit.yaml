@@ -76,7 +76,7 @@ condition_a:
   # Self-QA: LLM inspects its own output
   qa:
     enabled: true
-    max_retries: 1              # max regeneration attempts on QA failure
+    max_retries: 1              # answers in all, not extra tries: 1 regenerates nothing
     model: null                 # null = same model as generation
     min_score: 5                # scores below this fail QA (1-10)
     prompt: |
