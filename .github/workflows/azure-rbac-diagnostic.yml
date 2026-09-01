@@ -1,0 +1,111 @@
+# Read which roles the CI identity holds on the Foundry project, and say what is
+# missing, without ever naming the resource.
+#
+# Why a separate workflow: two dispatches of the Code Interpreter arm were
+# refused on every call with http 403 while the token check ahead of them
+# passed. The direct-v1 arm, run by this same identity in the same tenant and
+# subscription and asking for the same token audience, was served. That makes
+# the gap an authorization one at the Foundry project, and nothing in this
+# repository could measure it -- there is no infrastructure code and no role
+# tooling anywhere in it.
+#
+# Every call this makes is an ARM control-plane READ. It creates nothing,
+# changes nothing, and calls no model endpoint, so running it cannot reproduce
+# the refusal it exists to explain and cannot spend anything.
+name: Azure Foundry RBAC Diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      emit_json:
+        description: Emit the redacted report as JSON instead of prose
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: azure-foundry-rbac-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      # The same pinned action, client id, tenant and subscription the paid
+      # runs authenticate with. Reading a different identity's roles would
+      # answer a question nobody asked.
+      - name: Azure Login (OIDC)
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure OIDC session identity
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/azure_oidc_identity_preflight.py --verify-session
+
+      # No model credential is passed in. If one were, a future edit could turn
+      # this read-only job into one that spends, and nothing here would notice.
+      - name: Read the roles this identity holds on the project
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          EMIT_JSON: ${{ inputs.emit_json }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          ARGS=()
+          if [ "${EMIT_JSON}" = "true" ]; then
+            ARGS+=(--json)
+          fi
+          # Deliberately not --require-project-role: reporting that the role is
+          # absent is the point of the run, not a failure of it.
+          python3 scripts/azure_rbac_diagnostic.py "${ARGS[@]}"
+
+      - name: Confirm no model call was made
+        if: always()
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          # A grep, not a promise. If a future edit reaches for the inference
+          # path from this diagnostic, this step is what says so.
+          if grep -nE 'responses\.create|chat\.completions|AzureOpenAI|llm_client|code_interpreter' \
+              scripts/azure_rbac_diagnostic.py; then
+            echo "FATAL: the diagnostic references a model call path"
+            exit 1
+          fi
+          echo "control-plane-reads-only=confirmed"
