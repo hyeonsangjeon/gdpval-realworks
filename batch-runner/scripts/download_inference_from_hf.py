@@ -284,11 +284,43 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_experiment_data_block(experiment: str) -> dict:
+def _load_experiment_yaml(experiment: str) -> dict:
     exp_path = Path("experiments") / f"{experiment}.yaml"
     data = yaml.safe_load(exp_path.read_text(encoding="utf-8"))
-    block = (data or {}).get("data")
+    return data if isinstance(data, dict) else {}
+
+
+def _load_experiment_data_block(experiment: str) -> dict:
+    block = _load_experiment_yaml(experiment).get("data")
     return block if isinstance(block, dict) else {}
+
+
+def resolve_experiment_id(experiment: str) -> str:
+    """The identity to compare against, read from the config, not its path.
+
+    ``--experiment`` says which file to open. ``experiment.id`` inside that
+    file says which experiment it is. Those are two different facts, and every
+    config written before now made them look like one: they all sat directly
+    in ``experiments/`` and were named after their own id.
+
+    A config in a directory separates them.
+    ``execution_envelope/exp030_envelope_host_python_process`` opens a file
+    whose declared id is ``exp030_envelope_host_python_process``, and it is the
+    declared id that step 3 wrote into ``inference_provenance.json`` and
+    uploaded. Comparing the path against that sidecar refuses the experiment's
+    own inference.
+
+    Fail-closed. An absent or empty id is an error rather than a fall back to
+    the path, because the fall back is precisely the comparison this exists to
+    stop, and it would only be found after the download.
+    """
+    block = _load_experiment_yaml(experiment).get("experiment")
+    declared = block.get("id") if isinstance(block, dict) else None
+    if not isinstance(declared, str) or not declared:
+        raise ValueError("experiment.id is missing in experiment yaml")
+    # Compared literally, never stripped: step 3 records whatever the config
+    # declares, so normalising one side here would invent a disagreement.
+    return declared
 
 
 def resolve_repo_id(experiment: str) -> str:
@@ -367,7 +399,7 @@ def _load_repository_grading_config(path_value: str) -> dict:
 def resolve_legacy_missing_provenance_allowance(
     config: dict,
     *,
-    experiment: str,
+    experiment_id: str,
     requested_revision: str,
     resolved_revision: str,
 ) -> bool:
@@ -396,7 +428,7 @@ def resolve_legacy_missing_provenance_allowance(
         raise ValueError(
             "legacy missing provenance allowance requires pinned task_ids"
         )
-    if identity.get("experiment_id") != experiment:
+    if identity.get("experiment_id") != experiment_id:
         raise ValueError(
             "legacy missing provenance allowance experiment mismatch"
         )
@@ -436,7 +468,9 @@ def _coerce_list(value: object) -> list[str]:
     return [str(value)] if value else []
 
 
-def _build_inference_from_parquet(parquet_path: str, experiment: str, repo_id: str) -> dict:
+def _build_inference_from_parquet(
+    parquet_path: str, experiment_id: str, repo_id: str
+) -> dict:
     df = pd.read_parquet(parquet_path)
     results = []
     for row in df.to_dict("records"):
@@ -455,7 +489,7 @@ def _build_inference_from_parquet(parquet_path: str, experiment: str, repo_id: s
         )
 
     return {
-        "experiment_id": experiment,
+        "experiment_id": experiment_id,
         "source": repo_id,
         "model": "",
         "completed_at": None,
@@ -521,7 +555,9 @@ def gold_rows_from_parquet(parquet_path: str) -> list[dict]:
     return rows
 
 
-def _build_gold_inference(parquet_path: str, experiment: str, repo_id: str) -> dict:
+def _build_gold_inference(
+    parquet_path: str, experiment_id: str, repo_id: str
+) -> dict:
     results = []
     for row in gold_rows_from_parquet(parquet_path):
         result = {
@@ -536,7 +572,7 @@ def _build_gold_inference(parquet_path: str, experiment: str, repo_id: str) -> d
         results.append(result)
 
     return {
-        "experiment_id": experiment,
+        "experiment_id": experiment_id,
         "source": repo_id,
         # Named rather than blank so a grade payload records what produced the
         # graded bytes. Nothing did: these are the benchmark's own answers.
@@ -553,7 +589,7 @@ def _build_gold_inference(parquet_path: str, experiment: str, repo_id: str) -> d
 
 
 def _download_gold_inference(
-    experiment: str, repo_id: str, revision: str, out: Path
+    experiment_id: str, repo_id: str, revision: str, out: Path
 ) -> None:
     parquet_file = _with_hub_retry(
         "gold corpus parquet",
@@ -565,7 +601,7 @@ def _download_gold_inference(
             token=_hf_token(),
         ),
     )
-    payload = _build_gold_inference(parquet_file, experiment, repo_id)
+    payload = _build_gold_inference(parquet_file, experiment_id, repo_id)
     _atomic_write_json(out, _canonicalize_inference_payload(payload, repo_id, revision))
 
 
@@ -580,7 +616,7 @@ def _canonicalize_inference_payload(payload: object, repo_id: str, revision: str
 def _attach_inference_provenance(
     payload: dict,
     *,
-    experiment: str,
+    experiment_id: str,
     repo_id: str,
     revision: str,
     allow_legacy_missing_provenance: bool = False,
@@ -611,7 +647,7 @@ def _attach_inference_provenance(
     provenance = json.loads(Path(provenance_file).read_text(encoding="utf-8"))
     verified = validate_inference_provenance(
         provenance,
-        experiment_id=experiment,
+        experiment_id=experiment_id,
         source_repo_id=repo_id,
         task_ids=task_ids,
         prepared_fingerprint=payload.get("prepared_fingerprint"),
@@ -666,7 +702,7 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
 
 
 def _download_or_reconstruct_inference(
-    experiment: str,
+    experiment_id: str,
     repo_id: str,
     revision: str,
     out: Path,
@@ -697,12 +733,14 @@ def _download_or_reconstruct_inference(
                 token=token,
             ),
         )
-        payload = _build_inference_from_parquet(parquet_file, experiment, repo_id)
+        payload = _build_inference_from_parquet(
+            parquet_file, experiment_id, repo_id
+        )
 
     canonical = _canonicalize_inference_payload(payload, repo_id, revision)
     canonical = _attach_inference_provenance(
         canonical,
-        experiment=experiment,
+        experiment_id=experiment_id,
         repo_id=repo_id,
         revision=revision,
         allow_legacy_missing_provenance=allow_legacy_missing_provenance,
@@ -902,6 +940,10 @@ def _select_gold_materialization(payload: dict, task_ids: list[str] | None) -> l
 def main() -> int:
     args = parse_args()
     repo_id = resolve_repo_id(args.experiment)
+    # `--experiment` is a path to a config; this is the experiment that config
+    # says it is. Every identity comparison below uses the second, because the
+    # second is what the inference run recorded.
+    experiment_id = resolve_experiment_id(args.experiment)
     inference_source = resolve_inference_source(args.experiment)
     _stagger_shard_start()
     revision = resolve_immutable_revision(repo_id, args.revision)
@@ -913,7 +955,7 @@ def main() -> int:
         grading_config = _load_repository_grading_config(args.grading_config)
         config_allowance = resolve_legacy_missing_provenance_allowance(
             grading_config,
-            experiment=args.experiment,
+            experiment_id=experiment_id,
             requested_revision=args.revision,
             resolved_revision=revision,
         )
@@ -938,7 +980,7 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        _download_gold_inference(args.experiment, repo_id, revision, out)
+        _download_gold_inference(experiment_id, repo_id, revision, out)
         payload = _canonicalize_inference_payload(
             json.loads(out.read_text(encoding="utf-8")), repo_id, revision
         )
@@ -954,7 +996,7 @@ def main() -> int:
         return 0
 
     _download_or_reconstruct_inference(
-        args.experiment,
+        experiment_id,
         repo_id,
         revision,
         out,

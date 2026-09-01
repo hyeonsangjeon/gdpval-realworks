@@ -1985,7 +1985,13 @@ def main() -> int:
     try:
         _validate_pinned_rerun_identity(
             config,
-            experiment_id=args.experiment_yaml_name,
+            # The config it opened, not the path that opened it. The same
+            # `rerun_identity.experiment_id` is checked a second time by
+            # scripts/download_inference_from_hf.py against what the inference
+            # run recorded, and that recording is the declared id -- so a
+            # grading config would otherwise have to pin two different spellings
+            # to satisfy both halves of one run.
+            experiment_id=exp_config.experiment_id,
             task_ids=[task["task_id"] for task in tasks],
             rubric_commit_sha=rubric_sha,
             inference_revision=inference_revision,

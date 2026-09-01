@@ -45,18 +45,26 @@ def _remote_missing(message="missing"):
     )
 
 
-def _write_submission_experiment(name="exp", source="owner/repo"):
+def _write_submission_experiment(name="exp", source="owner/repo", declared_id=None):
     """Write the experiment file ``main()`` reads, under the current directory.
 
-    ``main()`` resolves two things from it: which repository the graded corpus
-    comes from, and whether that corpus is a submission or the benchmark's own
-    reference answers. A test that chdirs into a tmp dir has to supply the file
-    for both reads -- stubbing only ``resolve_repo_id`` leaves the second one
-    looking at a path that does not exist.
+    ``main()`` resolves three things from it: which repository the graded corpus
+    comes from, which experiment the config says it is, and whether that corpus
+    is a submission or the benchmark's own reference answers. A test that chdirs
+    into a tmp dir has to supply the file for all three -- stubbing only
+    ``resolve_repo_id`` leaves the others looking at a path that does not exist.
+
+    ``declared_id`` defaults to ``name`` because that is the shape every config
+    written so far happens to have. Pass it to model the shape that separates
+    them: a config whose id is not the path used to open it.
     """
     path = Path("experiments") / f"{name}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f'data:\n  source: "{source}"\n', encoding="utf-8")
+    path.write_text(
+        f'experiment:\n  id: "{declared_id or name}"\n'
+        f'data:\n  source: "{source}"\n',
+        encoding="utf-8",
+    )
 
 
 def test_direct_script_entrypoint_resolves_core_import():
@@ -207,7 +215,7 @@ def test_legacy_allowance_defaults_to_fail_closed(config):
 
     assert module.resolve_legacy_missing_provenance_allowance(
         config,
-        experiment="exp",
+        experiment_id="exp",
         requested_revision=FULL_SHA,
         resolved_revision=FULL_SHA,
     ) is False
@@ -220,7 +228,7 @@ def test_legacy_allowance_rejects_non_boolean_declaration(declaration):
     with pytest.raises(ValueError, match="must be boolean"):
         module.resolve_legacy_missing_provenance_allowance(
             _legacy_config(declaration=declaration),
-            experiment="exp",
+            experiment_id="exp",
             requested_revision=FULL_SHA,
             resolved_revision=FULL_SHA,
         )
@@ -261,7 +269,7 @@ def test_legacy_allowance_rejects_unscoped_identity(mutation, message):
     with pytest.raises(ValueError, match=message):
         module.resolve_legacy_missing_provenance_allowance(
             config,
-            experiment="exp",
+            experiment_id="exp",
             requested_revision=FULL_SHA,
             resolved_revision=FULL_SHA,
         )
@@ -274,7 +282,7 @@ def test_legacy_allowance_rejects_noncanonical_requested_revision(requested):
     with pytest.raises(ValueError, match="requested revision mismatch"):
         module.resolve_legacy_missing_provenance_allowance(
             _legacy_config(),
-            experiment="exp",
+            experiment_id="exp",
             requested_revision=requested,
             resolved_revision=FULL_SHA,
         )
@@ -287,7 +295,7 @@ def test_legacy_allowance_rejects_resolved_revision_mismatch(resolved):
     with pytest.raises(ValueError, match="resolved revision mismatch"):
         module.resolve_legacy_missing_provenance_allowance(
             _legacy_config(),
-            experiment="exp",
+            experiment_id="exp",
             requested_revision=FULL_SHA,
             resolved_revision=resolved,
         )
@@ -298,7 +306,7 @@ def test_legacy_allowance_accepts_only_exact_pinned_identity():
 
     assert module.resolve_legacy_missing_provenance_allowance(
         _legacy_config(),
-        experiment="exp",
+        experiment_id="exp",
         requested_revision=FULL_SHA,
         resolved_revision=FULL_SHA,
     ) is True
@@ -414,7 +422,7 @@ def test_downloaded_json_metadata_overrides_stale_values(monkeypatch, tmp_path):
 
     allowance = module.resolve_legacy_missing_provenance_allowance(
         _legacy_config(),
-        experiment="exp",
+        experiment_id="exp",
         requested_revision=FULL_SHA,
         resolved_revision=FULL_SHA,
     )
@@ -527,7 +535,7 @@ def test_missing_sidecar_is_rejected_without_explicit_legacy_override(
     with pytest.raises(ValueError, match="provenance sidecar is missing"):
         module._attach_inference_provenance(
             {"results": [{"task_id": "task-1", "deliverable_files": []}]},
-            experiment="exp",
+            experiment_id="exp",
             repo_id="owner/repo",
             revision=FULL_SHA,
         )
@@ -549,7 +557,7 @@ def test_missing_sidecar_with_embedded_routes_is_always_rejected(monkeypatch):
                 "azure_ai_routes": [{"workload": "inference"}],
                 "results": [{"task_id": "task-1", "deliverable_files": []}],
             },
-            experiment="exp",
+            experiment_id="exp",
             repo_id="owner/repo",
             revision=FULL_SHA,
             allow_legacy_missing_provenance=True,
@@ -573,7 +581,7 @@ def test_non_remote_missing_sidecar_errors_are_not_downgraded(
     with pytest.raises(type(error), match=str(error)):
         module._attach_inference_provenance(
             {"results": [{"task_id": "task-1", "deliverable_files": []}]},
-            experiment="exp",
+            experiment_id="exp",
             repo_id="owner/repo",
             revision=FULL_SHA,
             allow_legacy_missing_provenance=True,
@@ -592,7 +600,7 @@ def test_local_entry_not_found_is_not_downgraded(monkeypatch):
     with pytest.raises(LocalEntryNotFoundError, match="local cache missing"):
         module._attach_inference_provenance(
             {"results": [{"task_id": "task-1", "deliverable_files": []}]},
-            experiment="exp",
+            experiment_id="exp",
             repo_id="owner/repo",
             revision=FULL_SHA,
             allow_legacy_missing_provenance=True,
@@ -612,7 +620,7 @@ def test_malformed_sidecar_is_not_downgraded(monkeypatch, tmp_path):
     with pytest.raises(json.JSONDecodeError):
         module._attach_inference_provenance(
             {"results": [{"task_id": "task-1", "deliverable_files": []}]},
-            experiment="exp",
+            experiment_id="exp",
             repo_id="owner/repo",
             revision=FULL_SHA,
             allow_legacy_missing_provenance=True,
@@ -636,7 +644,7 @@ def test_http_auth_errors_are_not_downgraded(monkeypatch, status_code):
     with pytest.raises(HfHubHTTPError, match="authorization failed"):
         module._attach_inference_provenance(
             {"results": [{"task_id": "task-1", "deliverable_files": []}]},
-            experiment="exp",
+            experiment_id="exp",
             repo_id="owner/repo",
             revision=FULL_SHA,
             allow_legacy_missing_provenance=True,
@@ -696,7 +704,7 @@ def test_verified_sidecar_rejects_embedded_identity_mismatch(
     with pytest.raises(ValueError, match=message):
         module._attach_inference_provenance(
             payload,
-            experiment="exp",
+            experiment_id="exp",
             repo_id="owner/repo",
             revision=FULL_SHA,
             allow_legacy_missing_provenance=True,
