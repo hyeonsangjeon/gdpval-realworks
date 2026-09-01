@@ -580,3 +580,34 @@ def test_an_unpriced_run_is_never_rendered_as_free(tmp_path, capsys):
     printed = capsys.readouterr().out
     assert "UNKNOWN" in printed
     assert "$0" not in printed
+
+
+def test_each_run_shows_the_total_from_its_own_receipt(tmp_path, capsys):
+    """What the comparison is for: the same fingerprint billed three times.
+
+    `summary.cost.pricing_complete` is pinned false by contract, so branching
+    on it printed UNKNOWN for every run and hid the one number a variance
+    report over repeated runs exists to compare.
+    """
+    paths = []
+    for ordinal in (1, 2, 3):
+        payload = _payload(
+            STEADY, graded_at=f"2026-08-2{ordinal}T0{ordinal}:00:00Z"
+        )
+        payload["summary"]["grading_cost"] = {
+            "status": "complete",
+            "estimated_cost_usd": 40.0 + ordinal,
+            "known_cost_usd": 40.0 + ordinal,
+            "model_calls": 700,
+            "missing_reasons": [],
+            "price_table_sha256": "a" * 64,
+        }
+        paths.append(_write(tmp_path, payload, ordinal=ordinal))
+
+    variance.main([str(path) for path in paths] + ["--bootstrap-resamples", "200"])
+
+    printed = capsys.readouterr().out
+    assert "$41.0" in printed
+    assert "$42.0" in printed
+    assert "$43.0" in printed
+    assert "UNKNOWN" not in printed

@@ -76,6 +76,12 @@ JUDGE_ERROR_RATE_CEILING = 0.02
 # rather than relying on the caller's working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from core.cost_receipts import (  # noqa: E402
+    STATUS_COMPLETE,
+    STATUS_NOT_RUN,
+    STATUS_PARTIAL,
+    STATUS_UNAVAILABLE,
+)
 from core.grader import MAGNITUDE_THRESHOLD as REQUIRED_ITEM_MIN_ABS_SCORE  # noqa: E402
 from step8_grade import _ordered_task_ids_sha256  # noqa: E402
 
@@ -715,6 +721,32 @@ def _tasks_failing_a_required_item(payload: dict[str, Any]) -> list[str]:
     ]
 
 
+def _bill_receipt(summary: dict[str, Any]) -> dict[str, Any] | None:
+    """The run's schema-1.4 grading receipt, or None on an older grade.
+
+    This is where a run's money actually is. The legacy ``summary.cost`` trio
+    beside it cannot answer the question: ``step8_grade`` pins
+    ``estimated_cost_usd`` to null and ``pricing_complete`` to false, and
+    ``grade_payload._validate_current_payload`` rejects any payload that says
+    otherwise, so those two fields are frozen by contract rather than measured.
+    Reading them as a verdict on cost is what made this report tell every run,
+    including fully priced ones, that its cost was unknown.
+    """
+    receipt = summary.get("grading_cost")
+    if not isinstance(receipt, dict):
+        return None
+    return {
+        "status": receipt.get("status"),
+        # Populated only on a complete receipt. `known_cost_usd` is always the
+        # sum of what was confirmed, which on a partial receipt is a floor.
+        "estimated_cost_usd": receipt.get("estimated_cost_usd"),
+        "known_cost_usd": receipt.get("known_cost_usd"),
+        "model_calls": receipt.get("model_calls"),
+        "missing_reasons": list(receipt.get("missing_reasons") or []),
+        "price_table_sha256": receipt.get("price_table_sha256"),
+    }
+
+
 def analyze(payload: dict[str, Any]) -> dict[str, Any]:
     summary = payload.get("summary") or {}
     compat = summary.get("openai_compat") or {}
@@ -802,9 +834,17 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
             "perception_calls_by_modality": perception_calls_by_modality(payload),
         },
         "bill": {
+            # The legacy trio, carried unchanged for compatibility. The first
+            # two are pinned to "unpriced" by contract (see `_bill_receipt`).
+            # `unpriced_models` is a misnomer: it holds neither a pricing
+            # verdict nor a list of models that went unpriced, but the declared
+            # judge and perception model identity, which `grade_payload` checks
+            # against `payload["judge"]` and `step9_merge_shards` compares
+            # across shards to catch a cohort graded by two different models.
             "estimated_cost_usd": cost.get("estimated_cost_usd"),
             "pricing_complete": cost.get("pricing_complete"),
             "unpriced_models": cost.get("unpriced_models"),
+            "receipt": _bill_receipt(summary),
         },
         "shortfalls": {
             "graded_items": graded_items,
@@ -1131,16 +1171,42 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
     bill = report["bill"]
     lines.append("Bill")
     lines.append("-" * 60)
-    if bill["pricing_complete"]:
-        lines.append(f"  estimated cost          ${bill['estimated_cost_usd']}")
-    else:
-        # Never render an unpriced run as zero. A model with no published price
-        # makes the total unknown, and unknown is not free.
+    # Never render an unpriced run as zero, and never render a floor as a
+    # total. A model with no published price makes the total unknown, and
+    # unknown is not free; a run that lost one call's usage knows a lower
+    # bound, not a bill.
+    receipt = bill.get("receipt")
+    status = receipt.get("status") if receipt else None
+    floor = receipt.get("known_cost_usd") if receipt else None
+    if status == STATUS_COMPLETE:
+        lines.append(f"  estimated cost          ${receipt['estimated_cost_usd']}")
+        lines.append(f"  priced model calls      {receipt['model_calls']}")
+        lines.append(f"  price table             {receipt['price_table_sha256']}")
+    elif status == STATUS_PARTIAL and floor:
         lines.append(
-            "  estimated cost          UNKNOWN — not every model used has a "
-            "published price"
+            f"  estimated cost          AT LEAST ${floor} — a floor, not a total"
         )
-        lines.append(f"  unpriced models         {bill['unpriced_models']}")
+        lines.append(
+            f"  unpriced because        {', '.join(receipt['missing_reasons'])}"
+        )
+    elif status in (STATUS_PARTIAL, STATUS_UNAVAILABLE, STATUS_NOT_RUN):
+        # A partial receipt whose floor is zero has no floor to state. Saying
+        # "at least $0" would be true and useless, and reads as "free".
+        lines.append(
+            "  estimated cost          UNKNOWN — nothing in this run could be "
+            "priced"
+        )
+        lines.append(
+            f"  unpriced because        {', '.join(receipt['missing_reasons'])}"
+        )
+    else:
+        # No receipt at all: a grade written before schema 1.4, where the
+        # legacy pair below is the only thing there is to report.
+        lines.append(
+            "  estimated cost          UNKNOWN — this grade predates the cost "
+            "receipt"
+        )
+        lines.append(f"  judge models declared   {bill['unpriced_models']}")
     lines.append("")
 
     lines.append("Per task (worst first)")

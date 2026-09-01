@@ -574,8 +574,8 @@ Usage
 
 Bill
 ------------------------------------------------------------
-  estimated cost          UNKNOWN — not every model used has a published price
-  unpriced models         ['gpt-5.6-sol', 'gpt-audio-1.5']
+  estimated cost          UNKNOWN — nothing in this run could be priced
+  unpriced because        price_missing
 
 Per task (worst first)
 ------------------------------------------------------------

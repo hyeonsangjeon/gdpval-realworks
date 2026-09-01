@@ -610,11 +610,33 @@ def test_a_task_that_errored_is_named_with_its_error():
 # ── An unpriced run is never reported as free ──────────────────────────────
 
 
-def test_an_unpriced_run_is_reported_as_unknown_rather_than_zero(tmp_path, capsys):
-    """`gpt-5.6-sol` and `gpt-audio-1.5` have no published price.
+def _receipt(**overrides):
+    """A schema-1.4 grading receipt as `step8_grade` writes it."""
+    receipt = {
+        "schema_version": "cost-receipt-v1",
+        "status": "complete",
+        "currency": "USD",
+        "estimated_cost_usd": 412.75,
+        "known_cost_usd": 412.75,
+        "model_calls": 1433,
+        "usage": {},
+        "components": [],
+        "price_table_sha256": "a" * 64,
+        "missing_reasons": [],
+    }
+    receipt.update(overrides)
+    return receipt
+
+
+def test_a_grade_written_before_the_cost_receipt_is_unknown_not_zero(
+    tmp_path, capsys
+):
+    """Schema 1.3 and earlier carry no receipt, so the cost cannot be stated.
 
     Rendering that as $0 would be the one wrong answer, because it reads as
-    "this cost nothing" rather than "nobody can say what this cost".
+    "this cost nothing" rather than "nobody can say what this cost". The
+    declared judge models are still worth naming — not as a pricing verdict,
+    but so the reader knows which models the silence is about.
     """
     grade_file = tmp_path / "grade.json"
     grade_file.write_text(json.dumps(_payload()))
@@ -627,17 +649,114 @@ def test_an_unpriced_run_is_reported_as_unknown_rather_than_zero(tmp_path, capsy
     assert "$0" not in printed
 
 
-def test_a_priced_run_shows_its_total(tmp_path, capsys):
+def test_a_priced_run_shows_the_total_from_its_receipt(tmp_path, capsys):
     payload = _payload()
-    payload["summary"]["cost"]["pricing_complete"] = True
-    payload["summary"]["cost"]["estimated_cost_usd"] = 412.75
-    payload["summary"]["cost"]["unpriced_models"] = []
+    payload["summary"]["grading_cost"] = _receipt()
     grade_file = tmp_path / "grade.json"
     grade_file.write_text(json.dumps(payload))
 
     analysis.main([str(grade_file)])
+    printed = capsys.readouterr().out
 
-    assert "$412.75" in capsys.readouterr().out
+    assert "$412.75" in printed
+    assert "UNKNOWN" not in printed
+
+
+def test_the_pinned_legacy_fields_do_not_hide_a_complete_receipt(
+    tmp_path, capsys
+):
+    """The defect this fixture reproduces.
+
+    `step8_grade` pins `summary.cost.estimated_cost_usd` to null and
+    `pricing_complete` to false, and `grade_payload` rejects any payload that
+    says otherwise — so a real grade file carries both a frozen "unpriced"
+    claim and, beside it, a receipt with an exact figure. Branching on the
+    frozen pair told every run ever analysed that its cost was unknown, and
+    named models that were priced (or never called) as the reason.
+    """
+    payload = _payload()
+    assert payload["summary"]["cost"]["pricing_complete"] is False
+    assert payload["summary"]["cost"]["estimated_cost_usd"] is None
+    payload["summary"]["grading_cost"] = _receipt()
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(json.dumps(payload))
+
+    analysis.main([str(grade_file)])
+    printed = capsys.readouterr().out
+
+    assert "$412.75" in printed
+    assert "not every model used has a published price" not in printed
+
+
+def test_a_partial_receipt_is_reported_as_a_floor_not_a_total(tmp_path, capsys):
+    """One call whose usage never arrived means there is no total to show."""
+    payload = _payload()
+    payload["summary"]["grading_cost"] = _receipt(
+        status="partial",
+        estimated_cost_usd=None,
+        known_cost_usd=91.5,
+        missing_reasons=["usage_absent"],
+    )
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(json.dumps(payload))
+
+    analysis.main([str(grade_file)])
+    printed = capsys.readouterr().out
+
+    assert "AT LEAST $91.5" in printed
+    assert "a floor, not a total" in printed
+    assert "usage_absent" in printed
+
+
+def test_a_partial_receipt_with_a_zero_floor_is_unknown_not_zero(
+    tmp_path, capsys
+):
+    """The 185-task gold corpus is exactly this case.
+
+    Its judge has no published price, so the receipt is incomplete and the
+    confirmed total is $0.00 — not because it was free, but because nothing
+    in it could be priced. "AT LEAST $0.0" is literally true and reads as
+    free, which is the one thing this report must never say.
+    """
+    payload = _payload()
+    payload["summary"]["grading_cost"] = _receipt(
+        status="partial",
+        estimated_cost_usd=None,
+        known_cost_usd=0.0,
+        missing_reasons=["price_missing"],
+    )
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(json.dumps(payload))
+
+    analysis.main([str(grade_file)])
+    printed = capsys.readouterr().out
+
+    assert "UNKNOWN" in printed
+    assert "price_missing" in printed
+    assert "$0" not in printed
+
+
+def test_a_run_that_kept_no_priceable_record_is_unknown_not_zero(
+    tmp_path, capsys
+):
+    payload = _payload()
+    payload["summary"]["grading_cost"] = _receipt(
+        status="unavailable",
+        estimated_cost_usd=None,
+        known_cost_usd=0.0,
+        model_calls=0,
+        price_table_sha256=None,
+        missing_reasons=["ledger_absent"],
+    )
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(json.dumps(payload))
+
+    analysis.main([str(grade_file)])
+    printed = capsys.readouterr().out
+
+    assert "UNKNOWN" in printed
+    assert "ledger_absent" in printed
+    assert "$0" not in printed
 
 
 # ── The readable report stays readable ─────────────────────────────────────
