@@ -17,7 +17,14 @@ from three distances:
 3. The experiment-level summary carried no component lines at all. The
    per-task breakdown existed; the rollup silently dropped it.
 
-The tests below fix all three as behaviour. No provider is contacted: every
+A fourth turned up afterwards, in the first paid grading receipt: all 84
+settled calls recorded no deployment and no API version whatsoever. Nothing was
+wrong with the meter. The grader reaches Azure over the undated ``/openai/v1/``
+route, which travels on the *plain* ``OpenAI`` class, and that class has
+nowhere to keep either value — so asked, it truthfully answered that it did not
+know. The route knows, and now says so at the point of construction.
+
+The tests below fix all four as behaviour. No provider is contacted: every
 client here is local and returns a fixed object.
 """
 
@@ -27,9 +34,12 @@ from decimal import Decimal
 import pytest
 
 from core.cost_metering import (
+    ROUTE_IDENTITY_ATTRIBUTE,
     CostRecorder,
+    RouteCallIdentity,
     api_version_of,
     deployment_of,
+    route_identity_of,
 )
 from core.cost_receipts import (
     BUCKET_GRADING,
@@ -270,6 +280,140 @@ def test_asking_a_hostile_client_does_not_break_the_call(recorder, ledger, tmp_p
     # And what could not be observed is recorded as unobserved.
     assert line.deployment is None
     assert line.api_version is None
+
+
+# ── 1b. a route the client cannot describe describes itself ──────────────
+
+
+def _declaring(reply, *, names_deployments=True, declared_api_version="v1", **kwargs):
+    """A client whose builder wrote down how the route it opened behaves.
+
+    ``declared_api_version`` is what the *route* says. Any ``api_version``
+    passed through to :class:`FakeClient` is what the *client* says, and the
+    two are deliberately nameable apart so a test can set both and assert which
+    one wins.
+    """
+    client = FakeClient(reply, **kwargs)
+    setattr(
+        client,
+        ROUTE_IDENTITY_ATTRIBUTE,
+        RouteCallIdentity(
+            model_argument_names_deployment=names_deployments,
+            api_version=declared_api_version,
+        ),
+    )
+    return client
+
+
+def test_the_undated_v1_route_says_nothing_until_it_declares_itself():
+    # What the grader actually holds under AZURE_AI_ROUTE_PROFILE=direct-v1: a
+    # plain OpenAI client pointed at …/openai/v1/. No Azure attribute exists on
+    # it, so the meter — which asks the client, because the client is what puts
+    # the value on the wire — is right to answer "unknown" twice. This is the
+    # exact shape of what all 84 calls of the first paid grading run recorded.
+    silent = FakeClient(_reply("sees-things"))
+    assert deployment_of(silent, "sees-things") is None
+    assert api_version_of(silent) is None
+
+    # Same class, same call, same request. The only new thing is that whoever
+    # opened the connection wrote down how it routes.
+    declared = _declaring(_reply("sees-things"))
+    assert deployment_of(declared, "sees-things") == "sees-things"
+    assert api_version_of(declared) == "v1"
+
+
+def test_one_declared_connection_can_address_two_deployments():
+    # Grading a deliverable holding a picture and a recording runs both readers
+    # over a single shared connection, each naming its own model. A deployment
+    # fixed once at connection time would have billed the audio tokens to the
+    # vision deployment — the merged-perception-line failure again, one layer
+    # down.
+    shared = _declaring(_reply("sees-things"))
+
+    assert deployment_of(shared, "sees-things") == "sees-things"
+    assert deployment_of(shared, "hears-things") == "hears-things"
+
+
+def test_a_declaration_never_overrules_what_the_client_itself_reports():
+    # A dated Azure client resolves and keeps both values, and those are the
+    # ones that go out. A declaration is a fallback for a route that cannot
+    # speak, never a second opinion about one that can. Both are set here, and
+    # they disagree on purpose.
+    pinned = _declaring(
+        _reply("sees-things"),
+        declared_api_version="v1",
+        azure=True,
+        deployment="pinned-route",
+        api_version="2026-01-01",
+    )
+
+    assert deployment_of(pinned, "ignored-by-the-sdk") == "pinned-route"
+    assert api_version_of(pinned) == "2026-01-01"
+
+
+def test_a_route_that_does_not_name_deployments_declares_only_its_contract():
+    # The flag is a routing fact, not a formality. A route carrying a fixed API
+    # contract but taking a bare model name must not have that model name filed
+    # as a deployment it never had.
+    bare = _declaring(_reply("sees-things"), names_deployments=False)
+
+    assert deployment_of(bare, "sees-things") is None
+    assert api_version_of(bare) == "v1"
+
+
+@pytest.mark.parametrize("impostor", ["v1", object(), None, {"api_version": "v1"}])
+def test_something_that_is_not_a_declaration_is_not_read_as_one(impostor):
+    # The attribute carries a promise about routing. Anything else found under
+    # that name — a proxy that re-wrapped it, a leftover string — is discarded
+    # rather than believed, because "unknown" is the safe direction to fail in.
+    client = FakeClient(_reply("sees-things"))
+    setattr(client, ROUTE_IDENTITY_ATTRIBUTE, impostor)
+
+    assert route_identity_of(client) is None
+    assert deployment_of(client, "sees-things") is None
+    assert api_version_of(client) is None
+
+
+def test_a_metered_call_on_a_declared_route_records_both(recorder, ledger, tmp_path):
+    client = recorder.meter(_declaring(_reply("sees-things")), provider="azure")
+
+    with recorder.attributed(task_id="task-a", stage=STAGE_GRADING):
+        client.chat.completions.create(model="gold-judge", messages=[])
+
+    export = tmp_path / "ledger.jsonl"
+    ledger.export_jsonl(export)
+    (row,) = [
+        json.loads(line)
+        for line in export.read_text(encoding="utf-8").splitlines()
+        if line.strip() and json.loads(line).get("record_type", "call") == "call"
+    ]
+
+    assert row["deployment"] == "gold-judge"
+    assert row["api_version"] == "v1"
+
+
+def test_a_real_sdk_client_accepts_the_declaration():
+    # The declaration is an ordinary attribute set on an SDK object this repo
+    # does not own. If a future release gives OpenAI __slots__, that has to
+    # fail here, loudly, rather than silently returning every v1-route receipt
+    # to the state above. Constructing a client opens no connection: the key is
+    # a placeholder and the host is unroutable by definition.
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key="not-a-real-key",
+        base_url="https://account.invalid/openai/v1/",
+    )
+    try:
+        setattr(
+            client,
+            ROUTE_IDENTITY_ATTRIBUTE,
+            RouteCallIdentity(model_argument_names_deployment=True, api_version="v1"),
+        )
+        assert deployment_of(client, "gold-judge") == "gold-judge"
+        assert api_version_of(client) == "v1"
+    finally:
+        client.close()
 
 
 # ── 2. two models under one stage are two lines ──────────────────────────

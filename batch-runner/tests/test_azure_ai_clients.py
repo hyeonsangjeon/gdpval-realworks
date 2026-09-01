@@ -12,6 +12,11 @@ from unittest.mock import MagicMock
 import pytest
 
 import core.azure_ai_clients as clients
+from core.cost_metering import (
+    api_version_of,
+    deployment_of,
+    route_identity_of,
+)
 from core.experiment_config import ExperimentConfig
 
 
@@ -1320,6 +1325,46 @@ def test_legacy_factory_uses_azure_constructor_scope_and_version(monkeypatch):
         "https://cognitiveservices.azure.com/.default",
     )
     assert lease.client is azure_client
+
+
+def test_direct_factory_declares_how_its_route_names_deployments(monkeypatch):
+    openai_client = _responses_client()
+    monkeypatch.setattr(clients, "OpenAI", MagicMock(return_value=openai_client))
+    monkeypatch.setattr(
+        clients, "get_bearer_token_provider", MagicMock(return_value=object())
+    )
+
+    lease = clients.AzureAIClientFactory(
+        settings=_direct_settings(),
+        credential=object(),
+    ).create("grader", deployment="gold-judge")
+
+    # The undated v1 route is reached through the plain OpenAI class, which has
+    # neither _azure_deployment nor _api_version — so a cost receipt
+    # questioning this client got "unknown" for both, which is how the first
+    # paid grading run settled 84 calls without recording either one. The
+    # client cannot know; the builder that classified the URL does.
+    assert route_identity_of(lease.client) == clients.DIRECT_V1_CALL_IDENTITY
+    assert deployment_of(lease.client, "gold-judge") == "gold-judge"
+    assert api_version_of(lease.client) == "v1"
+
+
+def test_dated_factory_leaves_a_client_that_can_speak_for_itself(monkeypatch):
+    azure_client = _responses_client()
+    monkeypatch.setattr(clients, "AzureOpenAI", MagicMock(return_value=azure_client))
+    monkeypatch.setattr(
+        clients, "get_bearer_token_provider", MagicMock(return_value=object())
+    )
+
+    lease = clients.AzureAIClientFactory(
+        settings=_legacy_settings(),
+        credential=object(),
+    ).create("grader", deployment="deployment", legacy_api_version="2026-01-01")
+
+    # A dated client resolves its own api-version and keeps its own deployment,
+    # and those are the values that go on the wire. Declaring over the top
+    # would put a second, unverified answer beside the real one.
+    assert clients.ROUTE_IDENTITY_ATTRIBUTE not in vars(lease.client)
 
 
 def test_project_factory_uses_lazy_project_client_without_api_calls(monkeypatch):

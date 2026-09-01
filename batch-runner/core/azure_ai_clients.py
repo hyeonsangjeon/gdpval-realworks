@@ -18,11 +18,26 @@ from enum import Enum
 from typing import Mapping, Sequence
 from urllib.parse import urlsplit
 
+from core.cost_metering import ROUTE_IDENTITY_ATTRIBUTE, RouteCallIdentity
+
 DIRECT_TOKEN_SCOPE = "https://ai.azure.com/.default"
 LEGACY_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
 DEFAULT_TIMEOUT = 480.0
 DEFAULT_LEGACY_API_VERSION = "2025-04-01-preview"
 ROUTE_FINGERPRINT_CONTRACT_VERSION = "azure-ai-route-v1"
+
+#: What a cost receipt can be told about a call made over the undated v1 route.
+#:
+#: The endpoint is pinned to ``https://{account}.openai.azure.com/openai/v1/``
+#: by :func:`_classify_endpoint`, and it is reached through the plain ``OpenAI``
+#: class — which is why nothing about it can be read back off the client. Both
+#: facts below are properties of that URL, fixed at classification time:
+#: ``/openai/v1/`` routes by the request's ``model`` argument, and it is Azure
+#: OpenAI's undated v1 contract rather than a dated ``api-version``.
+DIRECT_V1_CALL_IDENTITY = RouteCallIdentity(
+    model_argument_names_deployment=True,
+    api_version="v1",
+)
 
 FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV = (
     "AZURE_OPENAI_API_KEY",
@@ -1034,6 +1049,16 @@ class AzureAIClientFactory:
                     base_url=route.endpoint.url,
                     api_key=token_provider,
                     **common,
+                )
+                # The plain OpenAI class has nowhere to keep the deployment or
+                # the API contract, so a cost receipt questioning this client
+                # gets "unknown" for both — as every call of the first paid
+                # grading run did. What is unknown to the client is not unknown
+                # here, so the route records it on the way out.
+                setattr(
+                    client,
+                    ROUTE_IDENTITY_ATTRIBUTE,
+                    DIRECT_V1_CALL_IDENTITY,
                 )
             else:
                 client = AzureOpenAI(

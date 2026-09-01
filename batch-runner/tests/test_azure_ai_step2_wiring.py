@@ -22,6 +22,13 @@ from core.azure_ai_clients import (
     RouteProfile,
     RouteSelection,
 )
+from core.cost_metering import (
+    ROUTE_IDENTITY_ATTRIBUTE,
+    RouteCallIdentity,
+    api_version_of,
+    deployment_of,
+    route_identity_of,
+)
 from core.executor import TaskExecutor as CoreTaskExecutor
 from core.result_fingerprint import (
     inference_result_fingerprint,
@@ -448,6 +455,44 @@ def test_redacted_main_client_delegates_nested_calls_and_drops_raw_exception():
     assert caught.value.__cause__ is None
     assert caught.value.__context__ is None
     assert sensitive not in repr(caught.value)
+
+
+def test_redacted_main_client_hands_its_route_declaration_over_whole():
+    declaration = RouteCallIdentity(
+        model_argument_names_deployment=True, api_version="v1"
+    )
+    raw = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: None)),
+        route="verified-route",
+        runtime_fingerprint="f" * 64,
+    )
+    setattr(raw, ROUTE_IDENTITY_ATTRIBUTE, declaration)
+
+    client = step2._RedactedAzureAIClient(raw)
+
+    # This boundary re-wraps every attribute it hands out, so that a provider
+    # exception raised deeper in cannot escape with an endpoint inside it.
+    # Re-wrapping this one would give the cost meter a proxy where it expects a
+    # declaration, and inference on the v1 route would go back to recording no
+    # deployment and no API version — the very state the boundary is standing
+    # in front of. What passes through is a routing rule and the name of an API
+    # contract: no endpoint, no account, no credential.
+    assert route_identity_of(client) is declaration
+    assert deployment_of(client, "gold-judge") == "gold-judge"
+    assert api_version_of(client) == "v1"
+    # Everything else still goes through the boundary.
+    assert isinstance(client.chat, step2._RedactedAzureAICallProxy)
+
+
+def test_redacted_main_client_without_a_declaration_answers_unknown_not_error():
+    # The undeclared case has to stay quiet rather than raise: the boundary
+    # turns every missing attribute into a RuntimeError, and metering only
+    # watches a call — it never gets a vote on whether the call happens.
+    client = step2._RedactedAzureAIClient(SimpleNamespace(chat=SimpleNamespace()))
+
+    assert route_identity_of(client) is None
+    assert deployment_of(client, "gold-judge") is None
+    assert api_version_of(client) is None
 
 
 def test_redacted_main_client_drops_nested_attribute_exception():

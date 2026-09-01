@@ -47,13 +47,16 @@ __all__ = [
     "Attribution",
     "CostRecorder",
     "MeteredClient",
+    "ROUTE_IDENTITY_ATTRIBUTE",
     "ReportedUsage",
+    "RouteCallIdentity",
     "api_version_of",
     "deployment_of",
     "extract_usage",
     "open_cost_recorder",
     "read_reported_usage",
     "resolved_model_of",
+    "route_identity_of",
 ]
 
 
@@ -82,6 +85,42 @@ class Attribution:
 _CURRENT: ContextVar[Attribution | None] = ContextVar(
     "cost_attribution", default=None
 )
+
+
+@dataclass(frozen=True)
+class RouteCallIdentity:
+    """What a connection's builder knows that the connection cannot say.
+
+    :func:`deployment_of` and :func:`api_version_of` normally read a client,
+    because the client is what puts those values on the wire. Azure's undated
+    ``/openai/v1/`` route defeats that: it is reached through the *plain*
+    ``OpenAI`` class, which carries neither ``_azure_endpoint`` nor
+    ``_api_version``, so an observer questioning the object sees an unmarked
+    direct provider and honestly answers "unknown" to both. That is how a fully
+    settled 84-call grading receipt came to record its deployment and its API
+    version nowhere at all.
+
+    The route knows. This is the route saying so, once, at the point of
+    construction — not the meter guessing from a URL afterwards.
+    """
+
+    #: Whether the per-request ``model`` argument names an Azure deployment
+    #: rather than a bare model. This is the endpoint's own routing rule, not a
+    #: judgement about the string: on ``/openai/v1/`` the model argument is
+    #: what selects the deployment, exactly as ``azure_deployment`` is on the
+    #: dated route.
+    model_argument_names_deployment: bool
+    #: The API contract, where the route has a fixed one. A dated route
+    #: resolves its own ``api-version`` and the client reports it, so a route
+    #: that leaves this ``None`` is deferring to the client, not claiming the
+    #: version is unknowable.
+    api_version: str | None = None
+
+
+#: Attribute a client builder may attach to carry a :class:`RouteCallIdentity`.
+#: Read through :func:`_probe`, so a client that has never heard of it — every
+#: client outside the typed Azure factory — simply says nothing.
+ROUTE_IDENTITY_ATTRIBUTE = "_gdpval_route_call_identity"
 
 
 # ── Reading usage off whatever the provider returned ─────────────────────
@@ -265,14 +304,26 @@ def resolved_model_of(response: Any, fallback: str) -> str:
     return fallback
 
 
+def route_identity_of(client: Any) -> RouteCallIdentity | None:
+    """The declaration a client's builder left on it, if it left one."""
+    found = _probe(client, ROUTE_IDENTITY_ATTRIBUTE)
+    return found if isinstance(found, RouteCallIdentity) else None
+
+
 def api_version_of(client: Any) -> str | None:
     """The API version this client will put on the wire, if it has one.
 
     Read off the client rather than asked of the caller, because the client is
     what actually sends it: ``AzureOpenAI.__init__`` resolves the argument (or
     ``OPENAI_API_VERSION``) and keeps the result in ``_api_version``, and that
-    resolved value is the one on every request. A direct provider has no such
-    concept and correctly answers ``None``.
+    resolved value is the one on every request.
+
+    A client with nothing to say is asked whether its builder left a
+    :class:`RouteCallIdentity` — Azure's undated v1 route travels over the
+    plain ``OpenAI`` class and so has no ``_api_version`` to read, though its
+    contract is perfectly well known to whoever opened the connection. A client
+    with neither answers ``None``, which is a direct provider correctly saying
+    the concept does not apply.
 
     Recorded because ``resolved_model`` alone does not say which API contract
     produced it, and two contracts can name the same model differently.
@@ -280,6 +331,9 @@ def api_version_of(client: Any) -> str | None:
     found = _probe(client, "_api_version")
     if isinstance(found, str) and found.strip():
         return found.strip()
+    declared = route_identity_of(client)
+    if declared is not None and declared.api_version:
+        return declared.api_version
     return None
 
 
@@ -294,15 +348,25 @@ def deployment_of(client: Any, requested: str | None) -> str | None:
     carrying only ``requested_model`` unpriceable: the reader cannot tell
     whether they are holding an alias or a model name.
 
-    Anything that is not an Azure client answers ``None``, because it has no
-    deployment. ``None`` here means "does not apply or was not observed" — it
-    never means the deployment was empty.
+    The same rule holds on the undated ``/openai/v1/`` route, but there the
+    client is a plain ``OpenAI`` with no Azure attribute to find it by, so the
+    route states it instead through a :class:`RouteCallIdentity`. Resolved per
+    call in both cases, because one connection may legitimately address two
+    deployments.
+
+    Anything that is neither answers ``None``, because it has no deployment.
+    ``None`` here means "does not apply or was not observed" — it never means
+    the deployment was empty.
     """
     pinned = _probe(client, "_azure_deployment")
     if isinstance(pinned, str) and pinned.strip():
         return pinned.strip()
+    declared = route_identity_of(client)
+    routes_by_model = declared is not None and (
+        declared.model_argument_names_deployment
+    )
     # Presence only. The endpoint itself is never read out or recorded.
-    if _probe(client, "_azure_endpoint") is None:
+    if not routes_by_model and _probe(client, "_azure_endpoint") is None:
         return None
     text = (requested or "").strip()
     return text or None
