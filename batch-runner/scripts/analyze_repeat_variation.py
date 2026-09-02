@@ -829,16 +829,24 @@ def observed_vocabulary(runs: list[dict[str, Any]]) -> dict[str, Any]:
 
     There is no refusal and no tool-failure field in this schema. Reporting
     "refusal rate 0.0%" would read as a measurement, and it is not one: the
-    vocabulary simply never contained the value. The ``read_deliverable``
-    census is the nearest available signal and is labelled a proxy, tail and
-    all -- the interesting end is the zero-call end, where a verdict was
-    reached without opening the deliverable once.
+    vocabulary simply never contained the value.
+
+    The ``read_deliverable`` census used to be offered as the nearest signal
+    for tool failure, on the reading that its zero-call end is where a verdict
+    was reached without opening the deliverable. That reading does not survive
+    contact with the items: an item routed to pictures opens the deliverable by
+    rendering it, and never calls ``read_deliverable`` at all. So the zero
+    bucket is broken out by how the item did reach the file -- a rendering, some
+    other tool, or nothing -- and only the last of those three is a tool-failure
+    candidate.
     """
     counts: dict[str, int] = {v: 0 for v in VERDICT_VOCABULARY}
     modality: dict[str, int] = {}
     selection: dict[str, int] = {}
     decided_by: dict[str, int] = {}
     reads: dict[int, int] = {}
+    never = {"items": 0, "rendered_and_looked": 0, "other_tools_only": 0}
+    never_modality: dict[str, int] = {}
     for run in runs:
         for item in _item_index(run).values():
             counts[item["verdict"]] += 1
@@ -848,20 +856,37 @@ def observed_vocabulary(runs: list[dict[str, Any]]) -> dict[str, Any]:
             selection[status] = selection.get(status, 0) + 1
             decider = str(item.get("decided_by"))
             decided_by[decider] = decided_by.get(decider, 0) + 1
-            calls = sum(
-                1
-                for tool in (item.get("tools_used") or [])
-                if tool == "read_deliverable"
-            )
+            tools = list(item.get("tools_used") or [])
+            calls = sum(1 for tool in tools if tool == "read_deliverable")
             reads[calls] = reads.get(calls, 0) + 1
+            if calls:
+                continue
+            never["items"] += 1
+            never_modality[key] = never_modality.get(key, 0) + 1
+            if item.get("perception_called"):
+                never["rendered_and_looked"] += 1
+            elif tools:
+                never["other_tools_only"] += 1
 
     graded = sum(counts.values())
     return {
         "verdicts": counts,
         "judge_error_rate_pct": 100.0 * counts["judge_error"] / graded,
         "refusal": "not in this schema and not observed - absent, not measured",
-        "tool_failure": "no field exists - the read census below is a proxy",
+        "tool_failure": (
+            "no field exists - not measured. The zero end of the read census "
+            "was offered as a proxy and is not one: see never_read"
+        ),
         "read_deliverable_calls": dict(sorted(reads.items())),
+        "never_read": {
+            **never,
+            # Whatever is left reached the deliverable no way at all, and is
+            # the only part of this bucket worth calling a failure candidate.
+            "no_tool_at_all": never["items"]
+            - never["rendered_and_looked"]
+            - never["other_tools_only"],
+            "by_modality": dict(sorted(never_modality.items())),
+        },
         "routing_modality": dict(sorted(modality.items())),
         "selection_status": dict(sorted(selection.items())),
         "decided_by": dict(sorted(decided_by.items())),
@@ -1254,6 +1279,20 @@ def _render(report: dict[str, Any]) -> str:
         for calls, count in vocabulary["read_deliverable_calls"].items()
     )
     lines.append(f"  read_deliverable per item  {census}")
+    never = vocabulary["never_read"]
+    lines.append(
+        f"    of the {never['items']} that never called it: "
+        f"{never['rendered_and_looked']} rendered it and looked, "
+        f"{never['other_tools_only']} used some other tool, "
+        f"{never['no_tool_at_all']} reached the file no way at all"
+    )
+    lines.append(
+        "    and they were routed  "
+        + "   ".join(
+            f"{name} {count}"
+            for name, count in never["by_modality"].items()
+        )
+    )
     modality = "   ".join(
         f"{name} {count}" for name, count in vocabulary["routing_modality"].items()
     )

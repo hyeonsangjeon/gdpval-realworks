@@ -602,7 +602,9 @@ def test_what_was_not_measured_says_so_rather_than_reporting_zero(report):
 
     assert "not measured" in vocabulary["refusal"]
     assert "no field exists" in vocabulary["tool_failure"]
-    assert "proxy" in vocabulary["tool_failure"]
+    # And the census is not offered in its place. It was, and the next test is
+    # why it is not any more.
+    assert "is not one" in vocabulary["tool_failure"]
 
 
 def test_the_judge_error_rate_is_reported_as_the_small_number_it_is(report):
@@ -627,6 +629,58 @@ def test_items_decided_without_reading_the_deliverable_are_surfaced(report):
     assert census[0] == 92
     assert sum(census.values()) == 4299
     assert max(census) == 6
+
+
+def test_the_zero_read_items_all_opened_the_file_as_a_picture(report):
+    """The 92 are not a tool failure, and this is the measurement that says so.
+
+    The report used to leave them as a candidate, on the plain reading that a
+    verdict reached without calling ``read_deliverable`` is a verdict reached
+    without opening the deliverable. Every one of them opened it. They are
+    routed to pictures, so they render the file and look at the rendering, and
+    ``read_deliverable`` is not the tool for that.
+
+    The direction that settles it is the one below the split: 92 of the 231
+    visual items never call it, and not one of the 3,858 text items is in the
+    bucket at all. A tool failure would not sort itself by routing.
+    """
+    vocabulary = report["vocabulary"]
+    never = vocabulary["never_read"]
+
+    assert never["items"] == vocabulary["read_deliverable_calls"][0]
+    assert never["rendered_and_looked"] == 92
+    assert never["other_tools_only"] == 0
+    assert never["no_tool_at_all"] == 0
+    assert never["by_modality"] == {"visual": 92}
+    assert vocabulary["routing_modality"]["visual"] == 231
+    assert vocabulary["routing_modality"]["text"] == 3858
+
+
+def test_an_item_that_reached_the_file_no_way_at_all_is_told_apart(runs):
+    """The negative control, because the split above is worth nothing without
+    it.
+
+    A bucket that reported everything as ``rendered_and_looked`` would produce
+    exactly the figures the previous test asserts, and would be wrong the first
+    time an item genuinely failed to reach its deliverable. So one item is
+    stripped of its perception and its tools, and it has to move.
+    """
+    before = rv.observed_vocabulary(runs)
+    stripped = next(
+        item
+        for task in runs[0]["tasks"]
+        for item in task["items"]
+        if "read_deliverable" not in (item.get("tools_used") or [])
+    )
+    stripped["perception_called"] = False
+    stripped["tools_used"] = []
+
+    after = rv.observed_vocabulary(runs)
+
+    assert before["never_read"]["rendered_and_looked"] == 92
+    assert after["never_read"]["items"] == before["never_read"]["items"]
+    assert after["never_read"]["rendered_and_looked"] == 91
+    assert after["never_read"]["no_tool_at_all"] == 1
 
 
 def test_the_money_column_stays_unregistered_and_never_zero(report):

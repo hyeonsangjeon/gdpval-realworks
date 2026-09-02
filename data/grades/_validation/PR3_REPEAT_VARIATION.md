@@ -165,8 +165,10 @@ what was actually observed (metric 3, section 9)
   pass 3175   partial 585   fail 535   judge_error 4
   judge_error rate 0.0930%
   refusal        not in this schema and not observed - absent, not measured
-  tool failure   no field exists - the read census below is a proxy
+  tool failure   no field exists - not measured. The zero end of the read census was offered as a proxy and is not one: see never_read
   read_deliverable per item  0x 92   1x 2855   2x 516   3x 822   4x 8   5x 2   6x 4
+    of the 92 that never called it: 92 rendered it and looked, 0 used some other tool, 0 reached the file no way at all
+    and they were routed  visual 92
   routing modality  formatting 207   mixed 3   text 3858   visual 231
 
 cost and latency per run (metric 6)
@@ -276,14 +278,28 @@ VERDICT  MET
 | | 관측 |
 |---|---|
 | 거부(refusal) | **이 스키마에 필드가 없고 관측되지도 않았다.** "거부율 0%"라고 쓰면 잰 것처럼 읽히는데, 잰 적이 없다 |
-| 도구 실패 | 전용 필드가 없다. `read_deliverable` 호출 횟수 분포가 대용물이고, 그렇게 표시한다 |
+| 도구 실패 | 전용 필드가 없어 **재지 않았다.** 호출 횟수 분포의 0회 칸을 대용물로 쓰자는 얘기가 있었는데, 대용물이 아니다(바로 아래) |
 | 판정 실패 | 4건 / 4,299짝 = 0.093%. `score_excluded`와 **완전히 같은 4건**이다 |
 | 음성 | **0개.** 307·310~312에서 관측된 음성 판정 흔들림은 구조적으로 이 구간 안에 들어올 수 없다 |
 | 선택 실패 | 4,299/4,299 `ok` |
 | 과제 오류 | 세 실행 모두 0 |
 
-`read_deliverable`를 **한 번도 부르지 않고** 판정한 항목이 92개 있다. 효율이
-아니라 도구 실패 후보로 보는 쪽이 맞고, 후속으로 넘긴다.
+`read_deliverable`를 **한 번도 부르지 않고** 판정한 항목이 92개 있다. 도구 실패
+후보로 보고 후속으로 넘겼던 건인데, 답이 나왔다. **도구 실패가 아니다.**
+
+92개 전부가 그림으로 가는 항목이고(`routing_modality: visual`), 92개 전부가
+그림을 실제로 만들어서 봤다(`perception_called: true`, 쓴 도구는
+`harness_render_to_image` + `harness_vision_perception`, 그중 25개는 두 번 이상).
+도구를 하나도 못 쓴 항목은 0개고, 판정도 pass 78 · partial 14로 판정 실패가
+하나도 없다.
+
+즉 **산출물을 안 연 게 아니라, 글자 대신 그림으로 열었다.** 그림으로 가는 항목은
+`read_deliverable`을 부를 일이 애초에 없다. 방향을 뒤집으면 더 분명하다. 그림으로
+간 231개 중 92개가 이렇고, 글자로 간 3,858개 중에는 **한 개도** 이렇지 않다.
+
+그래서 도구가 이제 0회 칸을 세 갈래로 쪼개 찍는다 — 그림으로 봤다 / 다른 도구를
+썼다 / 파일에 아예 닿지 못했다. 실패 후보는 마지막 하나뿐이고, 이 실행에서는
+0이다.
 
 ## 비용
 

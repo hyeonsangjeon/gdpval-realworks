@@ -143,6 +143,25 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **The repeat-variation report left 92 items standing as tool-failure
+  candidates, and they are not.** The stage-3 analysis has no tool-failure
+  field, so it offered the `read_deliverable` call census in its place, on the
+  plain reading that its zero end is where a verdict was reached without opening
+  the deliverable. Measured across the three runs, all 92 zero-call items are
+  routed `visual`, all 92 have `perception_called: true`, and all 92 carry a
+  non-empty `tools_used` — they rendered the deliverable and looked at the
+  rendering, 25 of them more than once, and `read_deliverable` is not the tool
+  for that. The direction that settles it: 92 of the 231 visual items never call
+  it, and **not one** of the 3,858 text items is in the bucket. A tool failure
+  would not sort itself by routing. `observed_vocabulary` now splits the zero
+  bucket three ways — rendered and looked, some other tool, reached the file no
+  way at all — and only the last is a failure candidate; on these runs it is 0.
+  The `tool_failure` label says it was not measured and disclaims the proxy
+  reading instead of inviting it.
+  `data/grades/_validation/PR3_REPEAT_VARIATION.md` is regenerated (every
+  bootstrap figure reproduces unchanged) and its Korean deferral is replaced
+  with the answer. No published score moves, and the tool is outside
+  `compute_grader_source_hash`, so no grader fingerprint moves either.
 - **A guard against mixing two graders was being decided by filesystem
   order.** `test_a_shard_from_a_superseded_grader_cannot_join_this_run` merges
   a current shard with one graded by superseded code and asserts the refusal
