@@ -439,6 +439,44 @@ task's score. Compare conditions only after a complete rerun under one grader
 source and one schema identity — the same rule as the schema `1.3` boundary
 above.
 
+## The audio repeat cohort
+
+`gold_audio_repeat_v2_sol_max.yaml` pins the three gold tasks that are actually
+graded by listening, so the same three can be graded more than once at one
+grader fingerprint. It exists because the repeat data we already own cannot
+answer an audio question: the three `gold_ceiling_30_v2_sol_max` runs sit at one
+fingerprint and hold `38889c3b`, but at that fingerprint the task routes
+`{text: 23, formatting: 12}` with zero perception calls. The audio routing
+landed after those runs were bought, so all 1,433 of their items are audio-free
+and `analyze_repeat_variation.py` sets `FORBIDDEN_MODALITY = "audio"` to keep
+them that way.
+
+Three is the whole population, not a sample. On the merged 185-task run 31 of
+8,816 items route AUDIO, and they belong to `38889c3b` (10), `e222075d` (7) and
+`75401f7c` (14) — listed in that order because a pin out of canonical source
+order is a refusal, not a different run.
+
+The bound is checkable without that run. Audio only reaches the listening path
+from inside a container, and just 7 of the 185 gold bundles carry a `.mp4` or a
+`.zip`; the other 178 are `.pdf`, `.xlsx`, `.docx` and friends, which cannot
+hold audio whatever their criteria ask. Both `.mp4` tasks route audio and one of
+five `.zip` tasks does. The four that do not — `5e2b6aab`, `0e386e32`,
+`7de33b48`, `4122f866` — are the entire residual doubt.
+
+Filenames cannot supply the pin: `GRADER_AUDIO_EXTENSIONS` matches nothing in
+this corpus, since no gold deliverable is a bare `.wav` or `.mp3`. Only a run
+that probed the containers knows, which is why
+`tests/test_the_audio_repeat_cohort_is_every_audio_task.py` derives the cohort
+from the merged payload and fails if the config disagrees.
+
+Repeats are bought with `--run-ordinal N`, exactly as the 30-task cohort's three
+were. The pin is a proper subset, so output forks to
+`data/grades/_diagnostic/b16d9b188a763fa9382d9b18df796b2f08cf284b47619195a2feba963149063c/`,
+with ordinals past the first under `_repeats/run-00N/`. That digest is a
+function of the pin, so it collides with neither the 185-task run's tree nor the
+30-task cohort's — and if the pin ever moves, repeats already bought are under
+the old digest and are not repeats of the new one.
+
 ## Archived (no longer recommended)
 
 Under `_archive_v1/`. These files are provenance references, not runnable inputs

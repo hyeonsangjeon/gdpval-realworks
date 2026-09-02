@@ -1,0 +1,165 @@
+schema_version: "2.0"
+config_name: "gold_audio_repeat_v2_sol_max"
+description: |
+  Every gold task that is actually graded by listening, pinned so the same
+  three can be graded more than once at one fingerprint. Step 1 of the
+  repeat-variation measurement for audio.
+
+  Runtime semantics are byte-for-byte those of gold_ceiling_185_v2_sol_max --
+  same judge, same reasoning effort, same tool ops and caps, same perception
+  models, same critical rule, same scoring, same prompts, same rate-limit
+  guard. Only the identity differs: the config name and a pinned corpus of
+  three. A repeat run whose settings had moved would be measuring the settings.
+
+  Why this cannot reuse the repeat data that already exists. Three runs of
+  gold_ceiling_30_v2_sol_max sit at one fingerprint and carry 1,433 items, and
+  `38889c3b` is one of their 30 tasks -- so they look like free audio repeats.
+  They are not. At that fingerprint `38889c3b` routes {text: 23, formatting:
+  12} with perception_call_count 0; the same task on the merged 185 routes
+  {text: 15, formatting: 10, audio: 10} with 6 perception calls. The audio
+  routing landed after those runs were bought. There are 0 audio-routed items
+  across all three, which is why scripts/analyze_repeat_variation.py sets
+  FORBIDDEN_MODALITY = "audio" and refuses to shape a run containing any:
+  folding audio into those intervals would report a flip rate for a modality
+  the cohort never exercised.
+
+  Why exactly three, and why that is the whole population rather than a
+  sample. On the merged 185-task run, 31 of 8,816 items route AUDIO and they
+  belong to these three tasks. Nothing was left out for cost: a fourth audio
+  task does not exist in this corpus.
+
+  The bound is checkable without trusting that run. Audio reaches the listening
+  path from inside a container -- `38889c3b` ships one .zip, the other two ship
+  one .mp4 each -- and only 7 of the 185 gold bundles carry a .mp4 or a .zip at
+  all. The other 178 are .pdf, .xlsx, .docx, .pptx and friends, which cannot
+  hold audio, so they cannot route it whatever the criteria say. Of the 7, both
+  .mp4 tasks route audio and one of the five .zip tasks does; the four that do
+  not (`5e2b6aab`, `0e386e32`, `7de33b48`, `4122f866`) are few enough to name.
+
+  That also rules out deriving this pin from filenames. `GRADER_AUDIO_EXTENSIONS`
+  matches none of the 185 bundles -- not one gold deliverable is a bare .wav or
+  .mp3 -- so a projection over extensions returns the empty set and a projection
+  over criterion wording cannot see which containers a probe will find audio in.
+  The pin has to come from a run that probed. It is derived rather than copied:
+  tests/test_the_audio_repeat_cohort_is_every_audio_task.py re-reads the merged
+  185 payload and fails if this list and the tasks carrying AUDIO items ever
+  disagree.
+
+  Order is not a preference. step8_grade.py refuses a pinned list that does not
+  follow canonical source order and compares the pinned list to the selected
+  list by equality, so a reordering is a refusal rather than a quietly
+  different run. `38889c3b` is corpus position 12, `e222075d` 46 and
+  `75401f7c` 47.
+
+  The pinned list is a proper subset of the source corpus, so step8_grade.py
+  classes the scope as `subset` and forks the output into
+  _diagnostic/<scope_sha>/, and repeats past the first go to
+  _repeats/run-00N/ under it. The 185-task run's directory is untouched by
+  whatever this one does, including when it fails.
+
+  What this config does not decide: how many repeats to buy. That is
+  `--run-ordinal N` at dispatch, exactly as the 30-task cohort's three runs
+  were bought, and it moves nothing hashed here.
+
+rerun_identity:
+  experiment_id: "exp_gold_baseline"
+  expected_task_count: 3
+  # The dataset commit the rubric is read from. The same commit stages 1 and 2
+  # were frozen to, so the two measurements are of the same corpus.
+  rubric_commit_sha: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  # The same commit, because for a gold corpus the dataset IS the inference:
+  # no model ran, so the revision that supplied the answers is the revision
+  # that supplied the rubric.
+  inference_revision: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  # Deliberately absent: allow_legacy_missing_provenance. That switch forgives
+  # a submission whose Azure routes were never recorded. Here no inference ran,
+  # so there is no route that could be missing -- the payload says `gold-corpus`
+  # outright, and step8_grade.py keeps every such run out of the published path
+  # on that basis alone.
+  task_ids:
+    - "38889c3b-e3d4-49c8-816a-3cc8e5313aba"
+    - "e222075d-5d62-4757-ae3c-e34b0846583b"
+    - "75401f7c-396d-406d-b08e-938874ad1045"
+
+judge:
+  provider: "azure_openai"
+  api: "responses"
+  model: "gpt-5.6-sol"
+  deployment: "gpt-5.6-sol"
+  api_version: "2025-04-01-preview"
+  timeout_sec: 600
+  reasoning:
+    effort: "max"
+  generation:
+    temperature: 0
+    seed: 42
+    max_output_tokens: 2400
+    finalization_reasoning_effort: "max"
+
+  tools:
+    read_deliverable:
+      env: "exp011_subprocess"
+      ops:
+        - inspect_structure
+        - read_content
+        - inspect_formatting
+        - probe_audio
+        - probe_video
+      read_only: true
+      per_item_call_cap: 8
+      max_iterations: 10
+
+  perception:
+    visual:
+      model: "gpt-5.6-sol"
+      deployment: "gpt-5.6-sol"
+      reasoning_effort: "max"
+      vision: true
+      call_cap_per_task: 112  # 185-task gold run, measured: irreducible max 102 + one item (file_cap_per_item 10)
+    audio:
+      model: "gpt-audio-1.5"
+      deployment: "gpt-audio-1.5"
+      call_cap_per_task: 32  # checked-in 220 inventory: max 32 listening criteria
+      trim_seconds: 30
+
+  critical:
+    rule: "abs_max_score_threshold"
+    threshold: 4
+    sign_aware: true
+
+  scoring:
+    sign_aware_pct: true
+    handle_nonpositive_total_max: "explicit"
+
+rubric:
+  source: "huggingface"
+  repo_id: "openai/gdpval"
+  revision: "11e7900cdcac61bc4daf59e65feb238acda98fbf"
+  cache_dir: "data/gdpval-local"
+
+grader:
+  precheck_patterns_version: "v2"
+  evidence_max_chars: 200
+  judge_max_retries: 1
+  per_item_max_output_tokens: 2400
+  save_raw_responses: false
+  fail_on_missing_evidence: true
+  task_prompt_truncate_chars: 500
+
+tpm_guard:
+  max_concurrent: 1
+  min_delay_ms_between_calls: 500
+  retry_on_429:
+    enabled: true
+    max_retries: 3
+    initial_backoff_sec: 2
+    exponential_factor: 2.0
+
+prompt:
+  template: "prompts/grader_judge.md"
+  tool_template: "prompts/grader_judge_v2.md"
+  version: "v2.2"
+
+output:
+  directory: "../data/grades"
+  filename_template: "{exp_id}__judge_{judge_slug}__{config_name}__cfg_{config_hash}__rubric_{rubric_sha}__inference_{inference_sha}__src_{grader_source_hash_short}__{prompt_v}.json"
