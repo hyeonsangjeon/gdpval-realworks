@@ -84,10 +84,16 @@ _FINALIZATION_RETRY_PROMPT = (
 #: set lower.
 _REASONING_EFFORTS = ("none", "low", "medium", "high", "xhigh", "max")
 
+#: The judge produced no usable final text. Always recorded with a
+#: ``:<finish_reason>`` suffix naming which kind of nothing it was, so that
+#: "ran out of output budget" and "the provider filtered it" do not collect in
+#: one bucket. Bare, it is the last resort of ``_empty_text_reason``.
+_EMPTY_FINAL_TEXT = "empty_final_text"
+
 #: The one retry reason that says the room ran out rather than the answer
 #: went wrong: the first attempt spent its whole output budget and left no
 #: text behind.
-_OUT_OF_ROOM_RETRY_REASON = "empty_final_text:max_output_tokens"
+_OUT_OF_ROOM_RETRY_REASON = f"{_EMPTY_FINAL_TEXT}:max_output_tokens"
 
 #: Ceiling on the retry's reasoning when the room ran out. Effort is the
 #: thing that consumed the budget, so the retry has to want less of it than
@@ -500,13 +506,47 @@ def _finalization_retry_reason(
         finish_reason = _response_finish_reason(
             response, max_output_tokens, output_tokens
         )
-        return f"empty_final_text:{finish_reason}"
+        return f"{_EMPTY_FINAL_TEXT}:{finish_reason}"
     parsed = _safe_json_loads(final_text)
     if parsed is None:
         return "final_json_parse_failed"
     if _validated_final_envelope(parsed) is None:
         return "invalid_final_envelope"
     return None
+
+
+def _empty_text_reason(
+    judge_error: Optional[str], finalization_reason: Optional[str]
+) -> str:
+    """What to record for an item that produced no usable final text.
+
+    ``_finalization_retry_reason`` already works out *why* the text was empty
+    -- ``max_output_tokens``, ``content_filter``, an incomplete status, or
+    ``unknown`` -- because the decision of whether to retry depends on it.
+    That value used to be read once and dropped, so every one of the thirteen
+    empty verdicts on the 185-task run was written down as a bare
+    ``empty_final_text``: 60-85 seconds of grading each, and afterwards no way
+    to separate the ones a bigger budget would fix from the ones the model
+    declined to answer. Nothing was broken; the reason was simply not carried
+    the last few lines to where it gets recorded.
+
+    An explicit ``judge_error`` wins, because it names a failure that happened
+    *before* the text was read -- an upstream error, a tool call during
+    finalization, the iteration cap -- and is therefore the more specific
+    cause. Only when nothing else went wrong is emptiness itself the story.
+
+    The suffix is checked rather than trusted. The caller reads the same
+    ``final_text`` this branch tested, so the two agree by construction today;
+    pinning it here means a future caller cannot file "the JSON did not parse"
+    under a bucket that says the model said nothing at all.
+    """
+    if judge_error is not None:
+        return judge_error
+    if finalization_reason is not None and finalization_reason.startswith(
+        f"{_EMPTY_FINAL_TEXT}:"
+    ):
+        return finalization_reason
+    return _EMPTY_FINAL_TEXT
 
 
 def _finalization_effort(configured: str, retry_reason: Optional[str]) -> str:
@@ -760,6 +800,14 @@ class ToolCallingJudge:
         # "how hard should the retry think" depends on it. See
         # ``_finalization_effort``.
         finalization_retry_reason: Optional[str] = None
+        # The same question asked of the *last* attempt rather than the one
+        # that triggered a retry, and kept for a different reason: it is what
+        # the item is finally recorded as. Retrying and reporting used to read
+        # the one computed value and then throw it away, so all thirteen empty
+        # verdicts on the 185-task run were written down as a bare
+        # ``empty_final_text`` -- 60-85 seconds spent per item and no way
+        # afterwards to tell "ran out of room" from "the model refused".
+        last_finalization_reason: Optional[str] = None
 
         while iterations < self.max_iterations + (
             finalization_retries_used if finalization_only else 0
@@ -951,6 +999,11 @@ class ToolCallingJudge:
                 self.max_output_tokens,
                 response_output_tokens,
             )
+            # Overwritten every time, never accumulated: a retry that produced
+            # a good envelope must clear the reason the attempt before it
+            # failed for, or the item would be filed under a failure it
+            # recovered from.
+            last_finalization_reason = retry_reason
             if (
                 retry_reason is not None
                 and finalization_retries_used < self.finalization_retries
@@ -1012,6 +1065,7 @@ class ToolCallingJudge:
             visual_prepass=prepass,
             usage_complete=usage_complete,
             perception_error_detail=perception_error_detail,
+            finalization_reason=last_finalization_reason,
         )
 
     def reset_perception(self) -> None:
@@ -1784,6 +1838,7 @@ class ToolCallingJudge:
         visual_prepass: Optional[VisualPrepassResult] = None,
         usage_complete: bool = True,
         perception_error_detail: Optional[str] = None,
+        finalization_reason: Optional[str] = None,
     ) -> ToolCallingResult:
         tools_used = list(tools_used or [])
         prepass = visual_prepass or VisualPrepassResult()
@@ -1812,7 +1867,7 @@ class ToolCallingJudge:
                 evidence="",
                 confidence=None,
                 reasoning="",
-                judge_error=judge_error or "empty_final_text",
+                judge_error=_empty_text_reason(judge_error, finalization_reason),
                 tool_calls_made=tool_calls_made,
                 iterations=iterations,
                 latency_ms=latency_ms,

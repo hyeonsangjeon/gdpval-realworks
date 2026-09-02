@@ -403,7 +403,12 @@ def test_empty_final_retry_budget_exhaustion_stays_fail_closed(
     )
 
     assert result.verdict == "judge_error"
-    assert result.judge_error == "empty_final_text"
+    # Not the bare ``empty_final_text`` this asserted for most of the project's
+    # life. Both attempts ran out of output budget, the judge worked that out
+    # in order to decide whether to retry, and the item is now filed under what
+    # it worked out -- so a reader can tell this apart from a refusal without
+    # re-running the item.
+    assert result.judge_error == "empty_final_text:max_output_tokens"
     assert result.main_api_call_count == 2
     assert result.iterations == 2
     assert len(client.responses.calls) == 2
