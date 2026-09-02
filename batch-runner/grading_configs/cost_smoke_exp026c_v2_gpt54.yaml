@@ -169,7 +169,7 @@ judge:
       # the deployment that produced it.
       deployment: "gpt-5.4"
       vision: true
-      call_cap_per_task: 72
+      call_cap_per_task: 112  # 185-task gold run, measured: irreducible max 102 + one item (file_cap_per_item 10)
     audio:
       model: "gpt-audio-1.5"
       deployment: "gpt-audio-1.5"

@@ -363,23 +363,30 @@ def test_what_the_flat_number_was_keeping_off_the_ceiling():
     Under the record-only cost policy neither figure stops anything. Both are
     what the check would put in front of somebody deciding whether to start a
     run, and the difference between them is why the plan was not left as it
-    was: the old flat 10,000 was holding more than twenty times the whole
-    ceiling out of sight.
+    was: the old flat 10,000 was showing a marking line a twentieth of its real
+    size, and holding seven thousand dollars off the total.
+
+    The ratio is taken on ``grading_usd`` and not on the total on purpose.
+    ``grading_input_tokens_per_call`` moves marking and nothing else, while the
+    ceiling carries two lines it cannot touch — running and perception — that
+    both legs pay identically and that therefore only dilute it. Left on the
+    total, this test read 20.89 and then 19.03 when the visual task cap went
+    from 72 to 112 renders, which is a failure about pictures wearing the name
+    of a test about marking.
     """
     plan = load_plan(PLAN_PATH)
-    at_the_limit = run_envelope_preflight(
-        plan, root=BATCH_RUNNER_ROOT
-    ).cost.total_usd
+    at_the_limit = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT).cost
 
     plan["cost"]["assumptions"]["grading_input_tokens_per_call"] = 10_000
     as_written_before = run_envelope_preflight(
         plan, root=BATCH_RUNNER_ROOT
-    ).cost.total_usd
+    ).cost
 
-    assert at_the_limit > as_written_before * 20, (
-        f"as the plan used to read {as_written_before}, "
-        f"at the limit {at_the_limit}"
+    assert at_the_limit.grading_usd > as_written_before.grading_usd * 20, (
+        f"as the plan used to read {as_written_before.grading_usd}, "
+        f"at the limit {at_the_limit.grading_usd}"
     )
+    assert at_the_limit.total_usd - as_written_before.total_usd > 7_000
     # And the limit leg is the plan as committed, not a number typed here.
     assert load_plan(PLAN_PATH)["cost"]["assumptions"][
         "grading_input_tokens_per_call"

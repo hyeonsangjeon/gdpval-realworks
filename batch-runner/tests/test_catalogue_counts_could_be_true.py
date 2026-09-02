@@ -20,7 +20,7 @@ measurement, which is precisely the thing nothing complains about.
 
 The measurement that made this worth doing: set every ``rubric_item_count`` in
 the committed catalogue to zero and the ceiling for the planned comparison falls
-from **7608.41 to 94.40 United States dollars** — 7514.01 of it gone, very
+from **7645.91 to 131.90 United States dollars** — 7514.01 of it gone, very
 nearly all of it — because marking is charged per scoring line and a task with
 no scoring lines is marked for free. Four things had a chance to notice and none
 did. The loader takes any whole number. The no-scores check is asked a different
@@ -196,13 +196,16 @@ def test_zeroing_the_scoring_lines_takes_nearly_all_of_the_ceiling():
     every machine; the proportion is what the claim *means*, and survives an
     assumption being revised.
 
-    It has already survived one. This test was called ``…takes_three_quarters
+    It has already survived two. This test was called ``…takes_three_quarters
     _off_the_ceiling`` while the marking sum still assumed a flat 10,000 tokens
     of input a call. Once that assumption was replaced by what the marking
     settings actually permit, the share marking accounts for went from about
-    three quarters to 98.8 per cent. The bound below stayed where it was and
-    stayed true, which is the point of stating a bound loosely: it is the claim
-    the test defends, and the exact figures beside it are the evidence.
+    three quarters to 98.8 per cent. Raising the visual task cap from 72 to 112
+    renders then moved both figures below by the same 37.50, because looking at
+    pictures is charged per task and a zeroed rubric column cannot reach it.
+    The bound below stayed where it was and stayed true through both, which is
+    the point of stating a bound loosely: it is the claim the test defends, and
+    the exact figures beside it are the evidence.
     """
     real = _ceiling_usd(load_task_catalog())
 
@@ -211,8 +214,8 @@ def test_zeroing_the_scoring_lines_takes_nearly_all_of_the_ceiling():
         task["rubric_item_count"] = 0
     zeroed = _ceiling_usd(_loaded(payload))
 
-    assert _as_money(real) == "7608.41"
-    assert _as_money(zeroed) == "94.40"
+    assert _as_money(real) == "7645.91"
+    assert _as_money(zeroed) == "131.90"
 
     lost = real - zeroed
     assert lost > real * Decimal("0.7"), (

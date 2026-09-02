@@ -36,7 +36,7 @@ judge:
     visual:
       model: "gpt-5.4"
       vision: true
-      call_cap_per_task: 72
+      call_cap_per_task: 112  # 185-task gold run, measured: irreducible max 102 + one item (file_cap_per_item 10)
     audio:
       model: "gpt-audio-1.5"
       call_cap_per_task: 32  # checked-in 220 inventory: max 32 listening criteria

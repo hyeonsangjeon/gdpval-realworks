@@ -96,6 +96,18 @@ EXPECTED_ADVANCE_CHECK_TASKS = (
 # once here rather than typed into each of them.
 UNPRICED_SOUND_MODEL = "gpt-audio-1.5"
 
+# How many renders marking may spend on one task, read from the settings that
+# decide it rather than restated. The plan's picture line is a ceiling only if
+# it is the ceiling marking is actually configured to allow, and while both
+# copies were typed out by hand the plan could keep an old number and go on
+# calling itself a ceiling. That is what happened when the cap moved from 72 to
+# 112: nothing held the two together, so nothing said so.
+CONFIGURED_VISUAL_CALL_CAP = yaml.safe_load(
+    (BATCH_RUNNER_ROOT / "grading_configs" / "default_v2.yaml").read_text(
+        encoding="utf-8"
+    )
+)["judge"]["perception"]["visual"]["call_cap_per_task"]
+
 # A number large enough to sit above the worked-out ceiling, so that tests
 # about something else are not blocked by the amount. It is written into a copy
 # of the plan held in memory and never into the plan on disk. **It approves
@@ -1431,7 +1443,10 @@ def test_perception_settings_that_are_not_a_block_are_refused():
 def test_the_committed_plan_measures_pictures_and_leaves_sound_blank(plan):
     """What the plan claims about perception, in the plan's own words.
 
-    The picture numbers come from the largest call in every marking run this
+    How many renders is the cap marking is configured to allow, and is read
+    from those settings rather than restated, because a plan that keeps its own
+    copy of a ceiling stops being a ceiling the moment the real one moves. The
+    two token figures come from the largest call every marking run this
     repository has committed. The sound numbers are blank because that model
     has never been called, so there is nothing to draw on — and a blank is a
     refusal while a zero would be a claim that the calls are free.
@@ -1439,7 +1454,8 @@ def test_the_committed_plan_measures_pictures_and_leaves_sound_blank(plan):
     perception = plan["cost"]["assumptions"]["grading_perception"]
 
     assert perception["vision"]["model"] == "gpt-5.4"
-    assert perception["vision"]["calls_per_task"] == 72
+    assert perception["vision"]["calls_per_task"] == CONFIGURED_VISUAL_CALL_CAP
+    assert perception["vision"]["calls_per_task"] == 112
     assert perception["vision"]["input_tokens_per_call"] == 24000
     assert perception["vision"]["output_tokens_per_call"] == 4000
 

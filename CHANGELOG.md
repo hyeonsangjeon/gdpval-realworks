@@ -143,6 +143,76 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **A task lost 34 of its 63 scoring lines to a picture budget nobody had
+  counted.** `judge.perception.visual.call_cap_per_task` was 72 in all thirteen
+  grading configurations, and nothing anywhere said where 72 came from. It was
+  not idle: on the 185-task gold run, task `a73fbc98` planned 102 renders, was
+  refused, and 34 of its rubric items were never attempted — no perception
+  call, no tool call, no render against any of them. Its published 76.74% is 33
+  points out of the 43 that got graded, from a rubric worth 87. The same cap had
+  already cost more than that once: at an earlier grader generation task
+  `43dc9778` planned 134, was refused whole, and came back
+  `all_items_score_excluded` at 0.0% — a 67-item task leaving a 185-task corpus
+  without the corpus looking any smaller.
+
+  The cap is now **112**, and the figure is counted rather than chosen. The two
+  refusals differ in the way that settles it. `43dc9778`'s 134 was
+  **reducible**, and a code change had already reduced it: `058d4f8` (#303)
+  narrowed the no-text-layer escalation so one unreadable file stops sending a
+  whole task to pictures, and at the next grader generation that task plans 68,
+  renders 68 and scores 92.23% with nothing excluded — at the same cap of 72,
+  with nothing about the budget changed. `a73fbc98`'s 102 is **irreducible**:
+  every render is wanted by a criterion naming something visual, so
+  `_relax_to_fit_visual_budget` returns the strict plan unchanged and the task
+  fails closed. That relaxation was live on the run — the payload's
+  `grader_source_hash` is the tree of the commit that introduced it, and not one
+  of the task's 63 items is marked `visual_budget_downgraded`, which is the
+  signature of relaxation having been tried and having freed nothing. So the cap
+  has to clear 102, plus one more item's worth of files, which the run records
+  as `visual_file_cap` 10.
+
+  It deliberately stays below 134. Not as a live saving — the current grader
+  would not spend 134 on that task at any cap — but as a guard on the shape of
+  demand that produced it: one unreadable file escalating a whole task is a
+  mistake that can be reintroduced, and at a cap of 134 or more the benchmark
+  would quietly pay for it instead of refusing and saying so.
+
+  What it costs: one task of 185 starts rendering, adding 102 renders against
+  the corpus total of 670. Every other task planned inside 72 to begin with, the
+  largest at 68, so 184 of the 185 do exactly what they did before. Those are
+  strict plans throughout — `visual_budget_downgraded` is false on all 17,743
+  items that carry it across every committed payload, so relaxation has never
+  once fired in production.
+
+  Three exp003 configuration hashes are repinned as a consequence, and none of
+  the published exp003 figures can move: a raised ceiling can only change a run
+  that reached it, and not one of the thirteen committed exp003 payloads holds a
+  single budget refusal (`grep -rl task_visual_budget_exceeded data/grades/`).
+
+  Two things that quoted the old cap are corrected with it. The execution
+  envelope's cost plan mirrored it at 72, which silently stopped being a ceiling
+  the moment the grader allowed 112; its vision line is now 112 and is read from
+  the grading configuration rather than typed beside it, so the next cap change
+  cannot leave it behind. Unlike the sound line this one carries money, so the
+  worked-out perception total rises $54.00 → $84.00 and the safety-multiplied
+  grand total $7,608.40 → $7,645.90 — the honest direction, since the old total
+  was a ceiling under a cap that no longer applies. Everything that quoted that
+  total in prose is requoted with it, including
+  `core.execution_envelope_tasks.catalog_number_problems`, whose docstring
+  measures what the zeroed-rubric rule saves.
+  `test_track2_visual_inventory.py` keeps its projection but no
+  longer reads as the basis for the cap; it counts what criteria ask for by
+  their wording, cannot see the no-text-layer escalation at all, and projects
+  this run's two heaviest renderers — 68 and 59 renders — as 2 apiece. The
+  third, at 39, it projects exactly, because that task's renders are asked for
+  by criteria naming something visual. Exact where the demand is named, blind
+  where it is escalated, and both halves are now pinned in that file rather
+  than asserted in a comment.
+
+  The basis lives with the number: `grading_configs/README.md` §"Why the visual
+  task cap is 112" states every figure, and
+  `tests/test_the_picture_budget_was_counted.py` recomputes all of them from the
+  committed run rather than restating them.
 - **Thirteen items the judge never answered were all written down as the same
   six words.** When a grading call returns no usable final text, the judge
   already works out *which* kind of nothing it was — the output budget ran out,

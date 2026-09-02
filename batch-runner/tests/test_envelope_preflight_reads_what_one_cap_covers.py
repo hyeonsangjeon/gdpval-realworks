@@ -15,11 +15,11 @@ them, both in ``core/execution_envelope_cost.py``:
   the growing sum ``turns * (turns - 1) / 2`` into the flat ``turns - 1``.
 
 Measured against the committed plan: flipping Azure from ``true`` to ``false``
-moves the ceiling from 7608.41 United States dollars to 7658.58, and Azure's
+moves the ceiling from 7645.90 United States dollars to 7696.08, and Azure's
 own line from 14.48 to 54.62 — a factor of 3.77. The container fails in the
 direction that is harder to notice: at the two turns task #27 made reachable,
-flipping it from ``false`` to ``true`` *lowers* the ceiling, 7613.83 to
-7609.74. A wrong figure that makes the bill look smaller is the one nobody goes
+flipping it from ``false`` to ``true`` *lowers* the ceiling, 7651.33 to
+7647.24. A wrong figure that makes the bill look smaller is the one nobody goes
 looking for.
 
 None of that has to be taken on trust, because the answer is readable from the
@@ -739,13 +739,20 @@ def _ceiling(catalog, capped: dict | None = None, turns: dict | None = None):
 
 
 def test_azure_flipped_the_wrong_way_is_worth_about_fifty_dollars(catalog):
-    """The figure the docstring quotes, checked rather than remembered."""
+    """The figure the docstring quotes, checked rather than remembered.
+
+    The two totals move whenever any line of the ceiling moves — raising the
+    visual task cap from 72 to 112 put 37.50 on both of them — and the
+    difference does not, because the flip touches only Azure's line. That is
+    why the fifty dollars is asserted as a difference and not inferred from the
+    pair: it is the part of this test that is about the boolean.
+    """
     committed_total, committed_azure = _ceiling(catalog)
     flipped_total, flipped_azure = _ceiling(
         catalog, {ENVIRONMENT_AZURE_CODE_INTERPRETER: False}
     )
-    assert committed_total == Decimal("7608.4048453125")
-    assert flipped_total == Decimal("7658.5808453125")
+    assert committed_total == Decimal("7645.9048453125")
+    assert flipped_total == Decimal("7696.0808453125")
     assert flipped_total - committed_total == Decimal("50.17600000")
     assert flipped_azure > committed_azure * 3
 
@@ -847,17 +854,18 @@ def test_the_committed_plan_draws_no_refusal_from_the_free_check():
     place really sends, rather than by adding up two blocks written into the
     plan; to 364.23468750 when the three sections the container's runner
     builds *before* that render — and hands to the renderer as the task, where
-    its one-character stand-in hid them — were measured as well; and to
+    its one-character stand-in hid them — were measured as well; to
     7608.4048453125 when the marking sum stopped assuming a flat 10,000 tokens
     of input a call and started stating the 536,191 the committed marking
-    settings permit one call to carry. Nothing about this rule changed with any
-    of the three.
+    settings permit one call to carry; and to 7645.9048453125 when the visual
+    task cap the plan mirrors went from 72 to 112 renders. Nothing about this
+    rule changed with any of the four.
     """
     result = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
 
     assert not any(REFUSAL_OPENING in problem for problem in result.all_problems)
     assert result.cost is not None
-    assert result.cost.total_usd == Decimal("7608.4048453125")
+    assert result.cost.total_usd == Decimal("7645.9048453125")
 
 
 def test_the_free_check_does_refuse_once_the_plan_claims_the_wrong_cap():

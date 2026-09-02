@@ -308,7 +308,8 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
         "df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c"
     )
     assert rerun["rubric"]["revision"] == identity["rubric_commit_sha"]
-    # Was 0aebaaa2d0e51d74 until the audio call cap moved from 3 to 32.
+    # Was 0aebaaa2d0e51d74 until the audio call cap moved from 3 to 32, and
+    # cada0fd1406f5340 until the visual call cap moved from 72 to 112.
     #
     # Repinning a completed study's config needs a reason better than "the
     # test went red", and here it is: no audio call has ever succeeded in
@@ -321,7 +322,13 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
     # assertion below, and that file is a live template, so it could not be
     # frozen; gold_ceiling_30_v2_sol_max.yaml, which nothing forces, was
     # left at its old hash instead.
-    assert hash_config(str(rerun_path)) == "cada0fd1406f5340"
+    #
+    # The visual cap repin has the same shape and a check anyone can rerun:
+    # ``grep -rl task_visual_budget_exceeded data/grades/`` names only the
+    # 185-task gold payload and two of its shards. No exp003 payload holds
+    # one, so no exp003 item was ever refused for want of task budget and
+    # none could change when the ceiling above it rises.
+    assert hash_config(str(rerun_path)) == "82685843dbc4d457"
 
     for key in ("config_name", "description"):
         baseline.pop(key)
@@ -334,24 +341,25 @@ def test_exp003_score_excluded_rerun_identity_is_pinned():
 @pytest.mark.parametrize(
     ("filename", "expected_task_count", "expected_hash", "expected_task_ids_sha256"),
     [
-        # Both hashes moved when the audio call cap went from 3 to 32; see the
-        # note on the mini rerun's pin above for why repinning a finished
-        # study is defensible here and what was frozen instead. These two
-        # follow default_v2_sol_max.yaml because the modality-equality
-        # assertion at the foot of this test couples them to it, and that file
-        # is grade-run.yml's default config -- the one a dispatch gets when it
+        # Both hashes moved when the audio call cap went from 3 to 32, and
+        # again when the visual call cap went from 72 to 112; see the note on
+        # the mini rerun's pin above for why repinning a finished study is
+        # defensible here and what was frozen instead. These two follow
+        # default_v2_sol_max.yaml because the modality-equality assertion at
+        # the foot of this test couples them to it, and that file is
+        # grade-run.yml's default config -- the one a dispatch gets when it
         # names none. A live default cannot be held at a starving cap by two
         # completed reruns.
         (
             "regrade_exp003_v2_sol_max_score_excluded.yaml",
             220,
-            "26fd8822e42e0f82",  # was 71c325eee0e48c13
+            "e2e15dae3b268e97",  # was 26fd8822e42e0f82, was 71c325eee0e48c13
             "df1fcd6415c55a17e4f39a254aaf0f0f9f2f55c751189f74d2713a873373aa3c",
         ),
         (
             "validation_exp003_v2_sol_max_anchor4.yaml",
             4,
-            "56d3912c29a79f59",  # was 7f3c7c2e542cf580
+            "fbb9b175f63398c6",  # was 56d3912c29a79f59, was 7f3c7c2e542cf580
             "29d5623a5cec85eb38f21fb73a2f3b06c66ed6a5fd6fd95948b979cd70a70bc9",
         ),
     ],
@@ -391,7 +399,15 @@ def test_exp003_sol_max_configs_are_pinned_and_preserve_modalities(
     assert candidate["judge"]["perception"]["audio"] == (
         baseline["judge"]["perception"]["audio"]
     )
-    assert candidate["judge"]["perception"]["visual"]["call_cap_per_task"] == 72
+    # Read off the baseline rather than restated, as the audio block above
+    # already is. This used to pin the visual call cap to a literal 72, which
+    # made a deliberate change to the production default look like a break in
+    # these two configs -- and the invariant worth holding is not "72", it is
+    # "these do not quietly diverge from the config everything else grades
+    # under".
+    assert candidate["judge"]["perception"]["visual"] == (
+        baseline["judge"]["perception"]["visual"]
+    )
     if expected_task_count == 220:
         assert "anchor_projection" not in candidate
     else:
