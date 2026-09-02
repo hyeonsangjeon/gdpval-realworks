@@ -493,6 +493,22 @@ def _stage_one_priced(input_tokens_per_call: int):
     return result.chosen
 
 
+def _looking_at_pictures(option) -> Decimal:
+    """The row total less the two lines ``StageOneOption`` names.
+
+    The option keeps running and marking apart on purpose and then totals a
+    third line it does not carry: what stage one would spend looking at
+    pictures. Naming the remainder here means a change to the visual budget
+    shows up as itself. When the visual task cap went from 72 to 112, both row
+    totals below rose by 12.50 while neither named line moved by a cent —
+    which, without this, reads as an unexplained break in a test about
+    marking.
+    """
+    return option.most_it_could_cost_usd - (
+        option.most_running_could_cost_usd + option.most_grading_could_cost_usd
+    )
+
+
 def test_stage_one_was_under_counted_by_the_same_figure_and_is_not_now():
     """The correction reaches stage one too, and only on the marking side.
 
@@ -504,8 +520,13 @@ def test_stage_one_was_under_counted_by_the_same_figure_and_is_not_now():
     one. Stage one's *running* line does not move by a cent — the same 40
     calls, the same 3.3654250 — because nothing about how stage one runs
     changed. Its *marking* line moves 89.945625 to 2504.6690109375, a factor
-    of nearly twenty-eight, and carries the row from 115.8110500 to
-    2530.5344359375.
+    of nearly twenty-eight, and carries the row from 128.3110500 to
+    2543.0344359375.
+
+    The looking line is held equal on both sides rather than left inside the
+    row, because it answers to the visual task cap and not to this correction
+    at all: 35.00 either way, and the two row totals differ by exactly the
+    marking line.
     """
     before = _stage_one_priced(10_000)
     after = _stage_one_priced(536_191)
@@ -521,8 +542,12 @@ def test_stage_one_was_under_counted_by_the_same_figure_and_is_not_now():
     assert before.most_grading_could_cost_usd == Decimal("89.945625")
     assert after.most_grading_could_cost_usd == Decimal("2504.6690109375")
 
-    assert before.most_it_could_cost_usd == Decimal("115.8110500")
-    assert after.most_it_could_cost_usd == Decimal("2530.5344359375")
+    assert _looking_at_pictures(before) == _looking_at_pictures(after) == Decimal(
+        "35.00"
+    ), "the marking figure must not have reached the picture budget"
+
+    assert before.most_it_could_cost_usd == Decimal("128.3110500")
+    assert after.most_it_could_cost_usd == Decimal("2543.0344359375")
 
 
 def test_stage_one_reads_these_assumptions_rather_than_keeping_its_own():

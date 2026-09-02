@@ -586,7 +586,7 @@ def test_the_free_check_reports_exactly_what_it_would_without_this_rule():
 def test_the_ceiling_is_unchanged_because_the_constant_did_not_move():
     """Only the justification and the check around it changed, not the figure.
 
-    The absolute figure has moved three times since, and none of the three
+    The absolute figure has moved four times since, and none of the four
     because of this rule.
 
     * The wording every request opens with is now measured by rendering the
@@ -603,6 +603,9 @@ def test_the_ceiling_is_unchanged_because_the_constant_did_not_move():
       permit one call to carry, which took the ceiling to 7608.4048453125.
       That is a twenty-one-fold move and it is entirely on the marking line;
       the three run places this rule is about did not shift by a cent.
+    * Then the visual task cap marking is allowed went from 72 renders to 112,
+      which took the ceiling to 7645.9048453125 — 37.50 of perception, again
+      leaving the three run places exactly where they were.
 
     Pinning the total here is deliberate — a ceiling that changes should make
     somebody look.
@@ -610,7 +613,7 @@ def test_the_ceiling_is_unchanged_because_the_constant_did_not_move():
     result = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
 
     assert result.cost is not None
-    assert result.cost.total_usd == Decimal("7608.4048453125")
+    assert result.cost.total_usd == Decimal("7645.9048453125")
 
 
 # ── The justification that was wrong, and why it stayed wrong ────────────────

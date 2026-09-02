@@ -667,7 +667,7 @@ def test_this_rule_does_not_touch_the_ceiling(monkeypatch):
     after = run_envelope_preflight(load_plan(PLAN_PATH), root=BATCH_RUNNER_ROOT)
 
     assert before.total_usd == after.cost.total_usd
-    assert str(before.total_usd) == "7608.4048453125"
+    assert str(before.total_usd) == "7645.9048453125"
 
 
 # ---------------------------------------------------------------------------

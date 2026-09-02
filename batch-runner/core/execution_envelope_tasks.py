@@ -410,12 +410,15 @@ def catalog_number_problems(catalog: TaskCatalog) -> list[str]:
 
     What that costs is worth writing down. Set every ``rubric_item_count`` in
     the committed catalogue to zero and the ceiling for the planned comparison
-    falls from 7608.41 to 94.40 United States dollars — 7514.01 of it gone,
+    falls from 7645.91 to 131.90 United States dollars — 7514.01 of it gone,
     very nearly all of it — because marking is charged per scoring line and a
-    task with no scoring lines is marked for free. Nothing noticed: the loader
-    takes any whole number, :func:`catalog_score_problems` is asked a different
-    question and answers it correctly, and the builder's ``--check`` cannot help
-    because it rebuilds with the same code and so reproduces the same zeros.
+    task with no scoring lines is marked for free. What survives the zeroing is
+    running the tasks and looking at their pictures, both of which are charged
+    per task and neither of which a rubric column can reach. Nothing noticed:
+    the loader takes any whole number, :func:`catalog_score_problems` is asked a
+    different question and answers it correctly, and the builder's ``--check``
+    cannot help because it rebuilds with the same code and so reproduces the
+    same zeros.
 
     Four things are refused, and the reason each one cannot be true is a fact
     about this benchmark rather than a preference:
