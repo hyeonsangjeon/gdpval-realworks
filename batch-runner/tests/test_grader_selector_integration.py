@@ -1459,6 +1459,8 @@ def test_visual_budget_falls_back_before_it_excludes_a_whole_task(
     assert grade.visual_budget_fallback == (
         "task_visual_budget_exceeded:required_calls=2,cap=1"
     )
+    # Rescued outright: nothing was left over for the task to record.
+    assert grade.visual_budget_unmet is None
     assert grade.error is None
     assert [item.verdict for item in grade.items] == ["pass", "pass"]
     assert not any(item.score_excluded for item in grade.items)
@@ -1495,6 +1497,10 @@ def test_a_task_with_nothing_readable_still_fails_closed(monkeypatch, tmp_path):
     assert all(item.score_excluded for item in grade.items)
     assert not any(item.visual_budget_downgraded for item in grade.items)
     assert grade.error == "all_items_score_excluded"
+    # The task that leaves the corpus carries its own reason for leaving,
+    # rather than only the items that are leaving with it.
+    assert grade.visual_budget_unmet == grade.items[0].evidence
+    assert grade.visual_budget_unmet is not None
     assert vision.calls == []
     assert responses.calls == []
 
@@ -1538,6 +1544,9 @@ def test_a_criterion_that_names_a_picture_is_not_given_a_text_verdict(
     assert all(
         item.evidence == "task_visual_budget_exceeded:required_calls=4,cap=1"
         for item in grade.items
+    )
+    assert grade.visual_budget_unmet == (
+        "task_visual_budget_exceeded:required_calls=4,cap=1"
     )
     assert vision.calls == []
 
@@ -1599,6 +1608,12 @@ def test_the_fallback_saves_what_it_can_and_excludes_the_rest(
     ]
     assert [by_id[i].routing_modality for i in ("c1", "c2")] == ["text", "text"]
     assert by_id["v1"].evidence == (
+        "task_visual_budget_exceeded:required_calls=2,cap=1"
+    )
+    # Narrowed and still short: the task records both what it gave up and
+    # what that did not buy it. Neither field alone describes this task.
+    assert grade.visual_budget_fallback != grade.visual_budget_unmet
+    assert grade.visual_budget_unmet == (
         "task_visual_budget_exceeded:required_calls=2,cap=1"
     )
     assert vision.calls == []

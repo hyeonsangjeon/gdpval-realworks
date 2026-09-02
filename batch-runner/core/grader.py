@@ -267,7 +267,23 @@ class TaskGrade:
     #: that never came near the cap. The string is the shortfall as it was
     #: originally measured, so the size of what was given up is on the record
     #: even though the items below carry real scores.
+    #:
+    #: Set when giving up pictures *helped*, which is not the same as when it
+    #: was enough: a task whose demand fell but stayed over the cap carries
+    #: this and ``visual_budget_unmet`` at once.
     visual_budget_fallback: Optional[str] = None
+    #: The shortfall that still stood afterwards -- the budget no route open
+    #: to this task could meet. ``None`` on a task that fit, and on one the
+    #: fallback rescued.
+    #:
+    #: This is the field for the case that costs the most and said the least.
+    #: Every item that wanted a picture is excluded, and if that is all of
+    #: them the task reports ``all_items_score_excluded`` and leaves the
+    #: corpus mean -- not scored zero, *dropped*. Until this existed the only
+    #: trace of it was the shortfall truncated into each excluded item's
+    #: ``evidence``, which is not somewhere a run summary can look, so a run
+    #: that lost a whole task this way looked exactly like a clean one.
+    visual_budget_unmet: Optional[str] = None
     #: How much of the rubric was never read, and what the task scores when
     #: that unread weight is counted against it rather than removed.
     #:
@@ -830,6 +846,10 @@ class Grader:
 
         grade = self._aggregate(items, task)
         grade.visual_budget_fallback = visual_budget_fallback
+        # Whatever the fallback could not absorb. Non-``None`` here means
+        # items were excluded for want of renders, so the task's own record
+        # says so rather than only the evidence string on each dead item.
+        grade.visual_budget_unmet = visual_budget_error
         for item_grade, runtime_plan in zip(items, runtime_plans):
             # Positional for the same reason the loop above is: ``items`` is a
             # prefix of the rubric in canonical order, restored chunks
