@@ -267,9 +267,10 @@ function processLegacyGradesFile(
 // The headline and every task `pct` are each published rounded to two
 // decimals, so a mean over correctly-computed rows can sit 0.005 from the
 // rows' rounding plus 0.005 from the headline's — 0.01 at worst. This is five
-// times that, and twenty-five times below the 1.24-point disagreement of the
-// smallest of the four real ones, so no plausible widening of the tolerance
-// admits the rounding and the defect together.
+// times that. The four real disagreements under `data/grades` run from 0.23 to
+// 1.26 points, so the narrowest of them is twenty-three times the rounding
+// bound and four times this tolerance, and no plausible widening of the
+// tolerance admits the rounding and the defect together.
 const HEADLINE_ROW_TOLERANCE_PCT = 0.05;
 
 /**
@@ -654,6 +655,99 @@ function scoreExclusionsByTask(raw) {
   return exclusions;
 }
 
+/**
+ * How much the run's own average is lifted by the items its judge could not
+ * read, or null if nothing was excluded.
+ *
+ * The per-task pair above is on the board already, but only inside the task
+ * table, and only one row at a time. Nothing said what the *headline* — the
+ * one number an experiment is remembered by — owed to the same effect. Twelve
+ * of the nineteen grade files under `data/grades` have a headline that moved
+ * this way, and a reader comparing two experiments had no way to see it.
+ *
+ * Measured against `avg_score_pct_from_rows` rather than against the published
+ * headline, and that is the whole care of this function. Two different defects
+ * move these runs' averages in opposite directions: an item the judge could
+ * not read leaves the denominator and lifts the score, while a task it could
+ * not grade stays in the denominator as a zero and lowers it. Four published
+ * 1.0 files carry the second, by 0.23 to 1.26 points. Subtracting a
+ * full-denominator row mean from a published headline would report the two
+ * added together as though both were this one, and on the worst of those four
+ * it flips the sign: 54.10 published against 55.36 from the rows and 54.82 out
+ * of the whole rubrics is a lift of +0.53, which the naive subtraction reports
+ * as −0.72. Both figures here are means over one row set, so their difference
+ * isolates exactly the excluded items — and `headline_support`, computed over
+ * the same rows, carries the other.
+ *
+ * Every value averaged is the same value the task table shows for that row, so
+ * the headline figure and the rows underneath it cannot tell different
+ * stories. That also means the three cases `scoreExclusionForTask` declines to
+ * report — a non-positive full denominator, a rubric of penalties only, a
+ * second number that rounds onto the first — fall back to the published `pct`
+ * here too. They understate the lift rather than overstate it.
+ */
+function scoreExclusionLift(raw) {
+  if (!ITEM_LEVEL_VERSIONS.includes(raw?.schema_version)) return null;
+
+  // The row predicate `headlineSupport` uses, for the reason it gives there:
+  // measuring a different row set than the one being summarised is how the
+  // two numbers drift apart.
+  const published = [];
+  const full = [];
+  let tasksAffected = 0;
+  let excludedItems = 0;
+  let excludedMax = 0;
+
+  for (const task of Array.isArray(raw.tasks) ? raw.tasks : []) {
+    if (!task || typeof task !== 'object' || Array.isArray(task) || task.error) continue;
+    if (!Number.isFinite(task.pct)) continue;
+    published.push(task.pct);
+    const exclusion = scoreExclusionForTask(task);
+    if (exclusion === null) {
+      full.push(task.pct);
+      continue;
+    }
+    tasksAffected += 1;
+    excludedItems += exclusion.items;
+    excludedMax += exclusion.excluded_max;
+    full.push(exclusion.pct_full_denominator);
+  }
+
+  // Null rather than a zeroed object. A `lift_pct: 0` on every run would put
+  // the caveat on the board wholesale and invite a reader to compare zeros
+  // that mean different things. Both ways of arriving here — the denominator
+  // held, or no row was scored at all — leave the dashboard nothing to say
+  // about unread rubric, and it says nothing.
+  if (tasksAffected === 0 || published.length === 0) return null;
+
+  const mean = (xs) => xs.reduce((sum, x) => sum + x, 0) / xs.length;
+  const fromRows = mean(published);
+  const fullDenominator = mean(full);
+
+  // The producer learned to write this run-level figure in #362 (77ec989).
+  // None of the nineteen files the aggregator reads carries it; one grade file
+  // further down `data/grades` already does, so this is a payload that exists
+  // rather than one that might. It is recomputed from the same items by the
+  // same rule, so the two should agree to rounding. Reported three-valued
+  // rather than silently preferring one of them: `null` means the payload made
+  // no claim, and is not the same statement as `true`.
+  const claimed = raw?.summary?.score_exclusions?.avg_score_pct_full_denominator;
+  const payloadAgrees = Number.isFinite(claimed)
+    ? Math.abs(claimed - fullDenominator) <= HEADLINE_ROW_TOLERANCE_PCT
+    : null;
+
+  return {
+    tasks_affected: tasksAffected,
+    tasks_counted: published.length,
+    excluded_items: excludedItems,
+    excluded_max: Math.round(excludedMax * 100) / 100,
+    avg_score_pct_from_rows: Number(fromRows.toFixed(2)),
+    avg_score_pct_full_denominator: Number(fullDenominator.toFixed(2)),
+    lift_pct: Number((fromRows - fullDenominator).toFixed(2)),
+    payload_agrees: payloadAgrees,
+  };
+}
+
 /** Map<task_id, projected receipt> for a cost-carrying grade file. */
 function costReceiptsByTask(raw) {
   const receipts = new Map();
@@ -883,6 +977,12 @@ function processV1GradesFile(
       // the disagreement is written down. Present on every version so a
       // reader never has to know which tier a file came from.
       headline_support: headlineSupport(raw),
+      // The same headline read the other way. `headline_support` measures a
+      // published average against its rows; this measures those rows against
+      // the rubric weight the judge never read. Absent on a run that lost
+      // nothing, which is most of the reason it is worth printing when it is
+      // present.
+      score_exclusion_lift: scoreExclusionLift(raw),
       perfect_score: openaiCompat.perfect_count ?? 0,
       partial_score: openaiCompat.partial_count ?? 0,
       zero_score: openaiCompat.zero_count ?? 0,

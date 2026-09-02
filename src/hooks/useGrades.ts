@@ -8,6 +8,8 @@ import type {
   CalibrationCounts,
   SelectionOutcome,
   ScoreExclusion,
+  ScoreExclusionLift,
+  HeadlineSupport,
 } from '../types/grade'
 import type {
   CostLedgerReference,
@@ -57,6 +59,18 @@ export interface GradeSummary {
   calibration_mae?: number | null
   /** Distribution of calibration categories. null when no samples. */
   calibration_counts?: CalibrationCounts | null
+  /**
+   * What rubric the judge never read is worth to this run's average, or absent
+   * when it read everything. Present only on item-level grades, which is every
+   * real run on the board.
+   */
+  score_exclusion_lift?: ScoreExclusionLift | null
+  /**
+   * Whether the published headline matches the mean of its own rows. Read
+   * alongside `score_exclusion_lift`, never subtracted from it: the two
+   * measure different defects and move the average in opposite directions.
+   */
+  headline_support?: HeadlineSupport | null
 }
 
 export interface GradeResult {

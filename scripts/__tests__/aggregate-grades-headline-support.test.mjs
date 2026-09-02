@@ -355,6 +355,7 @@ test('no 1.3 or 1.4 file on disk fails the check the aggregator now enforces', a
     'a strict-tier grade stopped projecting',
   );
   // Two-decimal rounding and nothing else, which is why the tolerance can sit
-  // five times above it and still be twenty-five times below the defect.
+  // five times above it and still be four times below the narrowest of the
+  // four real disagreements.
   assert.ok(worst <= 0.005, `a real 1.3/1.4 file drifts by ${worst}`);
 });
