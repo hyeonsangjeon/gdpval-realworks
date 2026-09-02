@@ -1,0 +1,298 @@
+name: Audio Accuracy Probe
+
+# Step 4 of the audio-confidence card, and the last one.
+#
+# The three repeat runs measured how often the audio sub-judge disagrees with
+# itself: 19.35% of verdict pairs, against 2.12% on text items. That is
+# consistency. It does not say which of the two answers was right, and it
+# cannot -- every item in that corpus is scored against an expert deliverable
+# whose own correctness is one of the two open readings the card names.
+#
+# This workflow runs the one measurement that separates them, on clips whose
+# contents are arithmetic rather than opinion. Twelve criteria, six true and
+# six false, matched in pairs on five clips synthesised from a segment list at
+# run time. Nothing is downloaded and no audio is committed; the clips are
+# rendered from `wave` and `math` and their digests go into the report.
+#
+# What it does NOT do, deliberately:
+#   * It does not grade anything. No task, no rubric, no deliverable, no
+#     corpus. It calls the audio sub-judge directly, so a run here cannot
+#     write a grade or move a published number.
+#   * It does not publish. The report goes out as an artifact, not a commit --
+#     these are diagnostic verdicts on synthetic clips and they have no place
+#     in data/grades or on the dashboard.
+#   * It does not move any grader fingerprint. The script lives in
+#     batch-runner/scripts/, and `compute_grader_source_hash` takes exactly one
+#     file from that directory (download_inference_from_hf.py). A test in
+#     tests/test_audio_accuracy_probe_knows_its_own_answers.py proves it by
+#     adding a file there and recomputing the hash.
+#
+# It still spends money, so the paid half sits behind the same `grading`
+# environment gate every other paid path in this repository uses. A gate that
+# is reused rather than duplicated is one fewer approval surface to audit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run the whole path against a stub that answers from the segment list. No network call, no cost, and no measurement of the model. Run this first.'
+        required: true
+        type: boolean
+        default: true
+      paid_approval:
+        description: 'Required for a measured run. Unchecked plus dry_run false is refused before the gate, so a mis-set dispatch fails in seconds instead of waiting on a reviewer.'
+        required: true
+        type: boolean
+        default: false
+      repeats:
+        description: 'How many times each criterion is put to the model. 3 matches the repeat runs, so stability here is comparable with the 19.35%. Total calls = 12 criteria x repeats.'
+        required: false
+        type: number
+        default: 3
+
+# Read-only by default. The paid job adds id-token for OIDC and nothing else:
+# there is no commit, no release, and no dispatch to make.
+permissions:
+  contents: read
+
+# One at a time. Two concurrent probes would interleave their calls against the
+# same deployment's TPM budget and each would measure the other's throttling.
+concurrency:
+  group: audio-accuracy-probe
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The free half. Runs on every dispatch, including the paid one, and the paid
+  # job waits on it -- so a report shape that cannot be produced at all is
+  # discovered before a reviewer is asked to approve spending on it.
+  # ---------------------------------------------------------------------------
+  dry-run:
+    name: Dry run (no model call, no cost)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          pip install -r requirements.txt
+
+      # The probe's ground truth is only worth what this suite says it is: it
+      # decodes the rendered bytes back -- after the grader's own re-encode --
+      # and measures the onsets, the burst count, the click interval and the
+      # pitch order off the waveform the model will actually hear. If the
+      # corpus and the description of the corpus have drifted apart, nothing
+      # below is worth running.
+      - name: Prove the probe knows its own answers
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python -m pytest tests/test_audio_accuracy_probe_knows_its_own_answers.py -q
+
+      - name: Dry run
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/measure_audio_grading_accuracy.py \
+            --dry-run \
+            --repeats "${{ inputs.repeats }}" \
+            --out "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json"
+
+      # A dry run reports 100% accuracy, because the stub answers from the
+      # segment list. That is a shape check and not a result, and the report
+      # carries `measured: false` so it cannot be read as one. This step says
+      # the same thing where a human will see it.
+      - name: Summarise
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          report = json.load(open(os.path.join(os.environ["GITHUB_WORKSPACE"], "audio-accuracy-dry-run.json")))
+          acc = report["accuracy"]
+          print("## Audio accuracy probe — dry run\n")
+          print("**This measured nothing about `gpt-audio-1.5`.** The stub answers")
+          print("from the segment list, so a perfect score here means the pipeline")
+          print("works, not that the model listens.\n")
+          print(f"- `measured`: `{json.dumps(report['measured'])}`")
+          print(f"- calls: {acc['overall']['calls']}, billable: {report['cost']['billable_calls']}")
+          print(f"- claims: {report['pins']['claims']} "
+                f"({report['pins']['true_claims']} true / {report['pins']['false_claims']} false)")
+          print(f"- cost: `{json.dumps(report['cost']['estimated_cost_usd'])}`")
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: audio-accuracy-dry-run
+          path: audio-accuracy-dry-run.json
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # The gate. Same reusable `grading` environment as every other paid path
+  # here, so approving a probe is the same act, in the same place, with the same
+  # reviewers, as approving a grading run.
+  # ---------------------------------------------------------------------------
+  approve-paid:
+    name: Approve paid audio accuracy probe
+    needs: dry-run
+    if: ${{ inputs.dry_run == false && inputs.paid_approval == true }}
+    runs-on: ubuntu-24.04
+    environment:
+      name: grading
+    steps:
+      - name: Record approved request
+        env:
+          PROBE_REPEATS: ${{ inputs.repeats }}
+        run: |
+          printf '%s\n' \
+            "Approved paid audio accuracy probe:" \
+            "  model      = gpt-audio-1.5 (read from gold_audio_repeat_v2_sol_max.yaml)" \
+            "  criteria   = 12 (6 true / 6 false)" \
+            "  repeats    = $PROBE_REPEATS" \
+            "  calls      = $((12 * PROBE_REPEATS))" \
+            "  grades     = none. This does not write a grade or touch a corpus."
+
+  # ---------------------------------------------------------------------------
+  # A dispatch with dry_run false and paid_approval unchecked is a mistake, and
+  # it should cost seconds rather than a reviewer's attention. This job says so
+  # and fails, instead of letting the run sit pending on a gate nobody expects.
+  # ---------------------------------------------------------------------------
+  refuse-unapproved:
+    name: Refuse an unapproved paid dispatch
+    if: ${{ inputs.dry_run == false && inputs.paid_approval != true }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo "::error::dry_run is false but paid_approval is not checked; refusing before the gate"
+          exit 1
+
+  measure:
+    name: Measure (paid, ${{ inputs.repeats }} repeats)
+    needs: approve-paid
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: batch-runner/requirements.txt
+
+      # Plain runner, not the grading container. The image exists to pin
+      # LibreOffice, and nothing here renders a deliverable. What does matter
+      # is PyAV, which performs the 16 kHz mono re-encode on the way out --
+      # and the clips are *authored* at 16 kHz mono 16-bit, so that step is an
+      # identity transform whatever version resolves. The dry-run job proves
+      # it: it decodes the encoder's own output and re-measures the waveform.
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure OIDC session identity
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/azure_oidc_identity_preflight.py --verify-session
+
+      # Same route profile and the same identity assertions the grading run
+      # uses. The point of this measurement is to describe the audio path the
+      # 19.35% came off; reaching it by a different route would describe
+      # something else.
+      - name: Measure
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/measure_audio_grading_accuracy.py \
+            --repeats "${{ inputs.repeats }}" \
+            --out "$GITHUB_WORKSPACE/audio-accuracy-measured.json"
+
+      - name: Summarise
+        if: always()
+        run: |
+          set -euo pipefail
+          test -f "$GITHUB_WORKSPACE/audio-accuracy-measured.json" || exit 0
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          report = json.load(open(os.path.join(os.environ["GITHUB_WORKSPACE"], "audio-accuracy-measured.json")))
+          acc = report["accuracy"]
+          j = acc["discrimination_j"]
+          perm = acc["permutation"]
+
+          def pct(value):
+              return "n/a" if value is None else f"{value * 100:.2f}%"
+
+          print("## Audio accuracy probe — measured\n")
+          print(f"Model `{report['pins']['audio_deployment']}`, "
+                f"{report['pins']['claims']} criteria x {report['pins']['repeats']} repeats "
+                f"= {acc['overall']['calls']} calls.\n")
+          print("| | |")
+          print("|---|---|")
+          print(f"| accuracy (answered calls) | {pct(acc['overall']['accuracy'])} |")
+          print(f"| false-fail rate (on true claims) | {pct(acc['on_true_claims']['false_fail_rate'])} |")
+          print(f"| false-pass rate (on false claims) | {pct(acc['on_false_claims']['false_pass_rate'])} |")
+          print(f"| hedged (`partial`) | {acc['overall']['hedged']} |")
+          print(f"| unanswered (`judge_error`) | {acc['overall']['unanswered']} |")
+          print(f"| **discrimination (Youden's J)** | **{j['per_call']}** |")
+          print(f"| permutation p (one-sided) | {perm['p_one_sided']} |")
+          print(f"| smallest p this design can reach | {perm['smallest_attainable_p']} |")
+          print()
+          print("**J = 0 would mean the verdict does not depend on the audio.** A model")
+          print("answering `pass` to everything scores 50% accuracy on this balanced")
+          print("corpus and J = 0; accuracy alone cannot tell a listener from a coin.\n")
+          print(f"This design cannot produce a p below "
+                f"{perm['smallest_attainable_p']} — six pairs, 64 relabellings. "
+                "Significant at 0.05 is the ceiling; 0.01 is out of reach.\n")
+          print("### Cost\n")
+          print(f"- billable calls: {report['cost']['billable_calls']}")
+          print(f"- pricing complete: `{json.dumps(report['cost']['pricing_complete'])}`")
+          print(f"- unpriced models: `{json.dumps(report['cost']['unpriced_models'])}`")
+          print(f"- estimated cost: `{json.dumps(report['cost']['estimated_cost_usd'])}` — "
+                "**null, not $0.** An unpriced model costs an unknown amount.")
+          print("\n### By family\n")
+          print("| family | answered | correct | false fail | false pass | hedged |")
+          print("|---|---|---|---|---|---|")
+          for name, row in acc["by_family"].items():
+              print(f"| {name} | {row['answered']} | {row['correct']} | "
+                    f"{row['false_fail']} | {row['false_pass']} | {row['hedged']} |")
+          PY
+
+      # Artifact, not a commit. These are verdicts on five synthetic clips and
+      # they are not grades; putting them in data/grades would make them show
+      # up on the dashboard as if they were.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: audio-accuracy-measured
+          path: audio-accuracy-measured.json
+          if-no-files-found: warn
