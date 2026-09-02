@@ -1659,6 +1659,11 @@ def _compute_summary(
     pcts = [float(task["pct"]) for task in scored_tasks]
     avg_pct = (sum(pcts) / len(pcts)) if pcts else None
 
+    # Both names are inherited and both are looser than they sound: `perfect`
+    # is >= 99%, not full marks, and `zero` is <= 1%, not nothing. The values
+    # are right; only the words for them were ever wrong, which is why no check
+    # of the numbers caught it. Anything that prints these has to print the
+    # threshold beside them -- see `openai_compat` in schemas/grade.schema.json.
     perfect = sum(1 for x in pcts if x >= 99.0)
     zero = sum(1 for x in pcts if x <= 1.0)
     partial = graded_tasks - perfect - zero

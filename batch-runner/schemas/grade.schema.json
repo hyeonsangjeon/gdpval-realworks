@@ -699,9 +699,9 @@
           "properties": {
             "avg_score_pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
             "ci_pct": {"type": ["number", "null"], "minimum": 0},
-            "perfect_count": {"type": "integer", "minimum": 0},
-            "zero_count": {"type": "integer", "minimum": 0},
-            "partial_count": {"type": "integer", "minimum": 0},
+            "perfect_count": {"type": "integer", "minimum": 0, "description": "Scored tasks at or above 99% -- NEAR-perfect, not full marks. A task that dropped a point is counted here, so this is an upper bound on how many scored exactly 100 and must not be read as one. The name is kept for compatibility with the field it mirrors; the threshold is the one stated here, not the one the name suggests. Anything reporting this number has to say `>= 99%` beside it."},
+            "zero_count": {"type": "integer", "minimum": 0, "description": "Scored tasks at or below 1% -- NEAR-zero, not exactly zero, with the same naming caveat as `perfect_count`. A task that earned 0.7% is counted here. Report it as `<= 1%`."},
+            "partial_count": {"type": "integer", "minimum": 0, "description": "`graded_tasks` minus `perfect_count` minus `zero_count`: the scored tasks strictly between 1% and 99%."},
             "inconsistent_count": {"type": "integer", "minimum": 0}
           },
           "additionalProperties": true
