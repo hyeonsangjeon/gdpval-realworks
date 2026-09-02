@@ -155,3 +155,21 @@ jobs:
         run: |
           cd batch-runner
           python -m pytest -m "not integration" --tb=short -q -rs
+
+      # `scripts/__tests__/` holds Python tests for the repo-root `scripts/`
+      # tooling, and until now nothing ran them: the step above changes into
+      # `batch-runner` first, and `npm test` wires only the `.mjs` files that
+      # sit in the same directory. Eight files and ninety-five test functions
+      # gated nothing. Two of them had been red on `main` for days -- one since
+      # #188 (2026-08-21), one since #302 (2026-08-31) -- and no run said so.
+      #
+      # Run from the repo root, because these resolve fixtures through
+      # `parents[2]`. There is no pytest.ini here, so the marker filter is
+      # spelled out rather than inherited; nothing under this path is marked
+      # integration today and this keeps it that way if something ever is.
+      #
+      # An empty collection exits 5 and a missing path exits 4, so this step
+      # cannot pass by quietly finding nothing -- which is the exact way the
+      # directory went unnoticed in the first place.
+      - name: Run repo-root script tests
+        run: python -m pytest scripts/__tests__ -m "not integration" --tb=short -q -rs
