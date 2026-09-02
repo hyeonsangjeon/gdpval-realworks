@@ -162,7 +162,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   bootstrap figure reproduces unchanged) and its Korean deferral is replaced
   with the answer. No published score moves, and the tool is outside
   `compute_grader_source_hash`, so no grader fingerprint moves either.
-
+- **A guard against mixing two graders was being decided by filesystem
+  order.** `test_a_shard_from_a_superseded_grader_cannot_join_this_run` merges
+  a current shard with one graded by superseded code and asserts the refusal
+  names `grader_source_hash`. It got that older shard from
+  `iterdir()`'s first entry — and two superseded passes are committed side by
+  side. One differs from the current run only in the grader source; the other
+  also carries a different judge config, which `step9` refuses on *first*, so
+  the refusal never mentions a grader at all. On identical bytes the test
+  passed on one machine and failed on CI. The sibling is now chosen by reading
+  the payloads for the difference the test is about — same `judge.config_hash`,
+  different `grader_source_hash` — and a new test pins both ends of that
+  choice, including that the sibling it rejects really would have swallowed the
+  assertion. Restoring the old selection turns both tests red.
 - **A task lost 34 of its 63 scoring lines to a picture budget nobody had
   counted.** `judge.perception.visual.call_cap_per_task` was 72 in all thirteen
   grading configurations, and nothing anywhere said where 72 came from. It was
