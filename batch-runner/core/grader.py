@@ -43,7 +43,11 @@ from core.task_checkpoint import (
     TaskProgress,
     TaskProgressDraft,
 )
-from core.tools import has_audio_content, has_extractable_text
+from core.tools import (
+    has_audio_content,
+    has_extractable_text,
+    has_only_source_code_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -417,6 +421,7 @@ class Grader:
             #: silently repeated once per rubric item.
             self._text_layer_cache: dict[str, bool | None] = {}
             self._audio_content_cache: dict[str, bool | None] = {}
+            self._source_code_cache: dict[str, bool | None] = {}
             #: Set while a task is being marked, to a zero-argument callable
             #: returning what that task has finished so far. Read only by
             #: ``_check_should_stop``, on its way to raising. ``None`` outside
@@ -543,11 +548,12 @@ class Grader:
         # routing probes are answered once per file per task rather than
         # once per item. Cleared here for the same reason the caps are.
         #
-        # Not restored on resume, unlike the caps: these two probes read local
+        # Not restored on resume, unlike the caps: these probes read local
         # bytes, cost nothing and answer the same way every time, so paying
         # them again changes the clock and not the marking.
         self._text_layer_cache = {}
         self._audio_content_cache = {}
+        self._source_code_cache = {}
         try:
             if self._cost_recorder is None:
                 return self._grade_task_with_selector(
@@ -958,6 +964,43 @@ class Grader:
             deliverable_path, paths, has_audio_content, self._audio_content_cache
         )
 
+    def _selected_paths_are_source_code(
+        self, deliverable_path: Path, paths: Iterable[str]
+    ) -> bool | None:
+        """Is *every* one of these files program text with no picture in it?
+
+        The mirror of ``_any_selected_path`` with the answers swapped, and it
+        has to be, because the two questions fail in opposite directions. One
+        audio file in a bundle makes the bundle worth listening to; one
+        screenshot in a bundle is enough that "there is nothing here to look
+        at" is false. So a measured ``False`` from a single file settles this
+        for the whole set and returns immediately, while ``True`` has to be
+        earned by all of them.
+
+        ``None`` when any file could not be answered for, on the same rule as
+        its sibling: what this signal does is demote a visual item, and
+        demoting on a file the probe could not open is the guess the tri-state
+        exists to refuse.
+        """
+        seen_unknown = False
+        seen_any = False
+        for name in paths:
+            if not isinstance(name, str) or not name:
+                continue
+            seen_any = True
+            if name not in self._source_code_cache:
+                self._source_code_cache[name] = has_only_source_code_content(
+                    deliverable_path / name
+                )
+            answer = self._source_code_cache[name]
+            if answer is False:
+                return False
+            if answer is None:
+                seen_unknown = True
+        if not seen_any or seen_unknown:
+            return None
+        return True
+
     def _paths_without_text(
         self, deliverable_path: Path, paths: Iterable[str]
     ) -> tuple[str, ...]:
@@ -1024,6 +1067,9 @@ class Grader:
             selected_paths_have_audio=self._selected_paths_have_audio(
                 deliverable_path, plan.selected_paths
             ),
+            selected_paths_are_source_code=self._selected_paths_are_source_code(
+                deliverable_path, plan.selected_paths
+            ),
             paths_without_text=self._paths_without_text(
                 deliverable_path, plan.selected_paths
             ),
@@ -1059,6 +1105,11 @@ class Grader:
                     ),
                     selected_paths_have_audio=self._selected_paths_have_audio(
                         deliverable_path, target.paths
+                    ),
+                    selected_paths_are_source_code=(
+                        self._selected_paths_are_source_code(
+                            deliverable_path, target.paths
+                        )
                     ),
                     paths_without_text=self._paths_without_text(
                         deliverable_path, target.paths

@@ -22,6 +22,7 @@ def _planner(config: dict) -> Grader:
     # so one memo for its lifetime is the same scope ``grade_task`` gives it.
     grader._text_layer_cache = {}
     grader._audio_content_cache = {}
+    grader._source_code_cache = {}
     return grader
 
 
@@ -235,6 +236,11 @@ def _plan_pass(
                     selected_paths_have_audio=grader._selected_paths_have_audio(
                         deliverable_path, target.paths
                     ),
+                    selected_paths_are_source_code=(
+                        grader._selected_paths_are_source_code(
+                            deliverable_path, target.paths
+                        )
+                    ),
                     paths_without_text=grader._paths_without_text(
                         deliverable_path, target.paths
                     ),
@@ -356,6 +362,9 @@ def _plan_pass(
                 else None
             ),
             selected_paths_have_audio=grader._selected_paths_have_audio(
+                deliverable_path, target_plan.selected_paths
+            ),
+            selected_paths_are_source_code=grader._selected_paths_are_source_code(
                 deliverable_path, target_plan.selected_paths
             ),
             paths_without_text=grader._paths_without_text(

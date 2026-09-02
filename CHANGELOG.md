@@ -143,6 +143,51 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **A React component was refused a verdict for want of a picture that does
+  not exist.** Task 7de33b48's whole deliverable is one 3.5 KB
+  `screen_reader_status_message.zip` — two `.tsx` files, a `.css`, a
+  `README.md` and a `package.json`. Five of its rubric items, worth eight of
+  its fifty-two points, use the words `render`, `layout` and `visual`, so all
+  five were classified visual, found nothing renderable inside an archive, and
+  were recorded as `required_visual_render_target_unavailable`. There is no
+  picture in that submission to find. The component's appearance is not a
+  property of the submission at all — it exists only once something builds and
+  runs the code — so the JSX and the CSS are not a substitute for looking at
+  the page, they are the only place the answer is written down.
+
+  This is the narrow inverse of the rule it sits beside, which is unchanged:
+  "document color and page layout are visually polished" against a `.csv` still
+  fails closed, because data has a look a reader sees on opening it and a text
+  verdict there would be invented rather than merely absent. So `.csv`, `.txt`,
+  `.md` and `.json` are deliberately absent from the new
+  `GRADER_SOURCE_CODE_EXTENSIONS`, and an archive of prose and configuration is
+  refused on the separate ground that none of it is source.
+
+  `has_only_source_code_content` answers the question the routing rule needs:
+  is every selected file program text, with nothing anywhere in it — nor in any
+  archive member — that could be turned into a picture. It is tri-state on the
+  same discipline as the audio probe. `True` demotes, `False` is a positive
+  claim that the file was examined and is not that, and `None` is an admission
+  — missing file, unreadable archive, or a member list cut short one entry
+  before the screenshot — which changes nothing, because demoting on a guess is
+  what the tri-state exists to refuse. A companion `README.md` and
+  `package.json` do not spoil the claim, since nothing in them is looked at
+  either; one `.png`, one `.csv`, or one extension this module cannot name
+  settles the whole archive as `False`.
+
+  The demotion cannot divert an item that renders today. It fires only when no
+  selected suffix is in the render set, which is exactly the set that currently
+  errors: `.zip` is not renderable, so a zip of screenshots errored before and
+  still errors now rather than being answered from source it happens to
+  contain. Nor can the unreadable-file escalation undo it — that promotes only
+  when every suffix *is* renderable.
+
+  The other four of the nine unjudgeable items are two video reels, and they
+  are deliberately left alone. A reel really does have to be watched; sampling
+  a frame would turn "could not see it" into a verdict about whichever frame
+  was picked. They stay excluded, which is the honest outcome rather than a
+  gap.
+
 - **Repeating a grading run gave its calls the names run 1's calls already
   had, and 684 separately billed calls stopped being countable.** Grading a
   corpus twice is how repeat variation gets measured, so a repeat holds

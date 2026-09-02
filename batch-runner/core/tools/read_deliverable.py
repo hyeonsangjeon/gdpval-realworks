@@ -40,7 +40,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
-from core.media_types import GRADER_AUDIO_EXTENSIONS
+from core.media_types import (
+    GRADER_AUDIO_EXTENSIONS,
+    GRADER_SOURCE_CODE_EXTENSIONS,
+    GRADER_VISUAL_RENDER_EXTENSIONS,
+)
 
 # ── Constants ─────────────────────────────────────────────────────────
 
@@ -1283,6 +1287,79 @@ def has_audio_content(path: Union[str, Path]) -> Optional[bool]:
     if any(entry["kind"] == "audio" for entry in entries):
         return True
     return None if truncated else False
+
+
+def has_only_source_code_content(path: Union[str, Path]) -> Optional[bool]:
+    """Is this deliverable program text and nothing a renderer could draw?
+
+    The sibling of ``has_audio_content``, asked for the opposite reason. That
+    one exists so a criterion about sound is not answered by reading; this one
+    exists so a criterion about *code* is not refused for want of a picture.
+
+    ``True`` means every file here is source -- code, stylesheet or markup --
+    and none of it can be turned into an image. That is a narrow claim and
+    deliberately so. A React component archive is the case it was written for:
+    its appearance is not a property of the submission at all, only of
+    something that builds and runs it, so the JSX and the CSS are where the
+    answer is actually written down. ``False`` says the file was examined and
+    is not that -- it renders, or it holds a picture, a recording or data.
+    ``None`` is an admission: missing file, unreadable archive, or a member
+    list cut short that may have stopped one entry before the image.
+
+    A ``.csv`` answers ``False``, which is the point. Data has a look that a
+    reader would see on opening it, and "page layout is visually polished"
+    against one is a question reading cannot honestly settle;
+    ``test_explicit_visual_item_fails_closed_without_render_target`` pins that
+    it keeps failing closed.
+
+    Companion text -- the ``README.md`` and ``package.json`` that ship beside
+    any real component -- does not spoil the claim, because nothing about
+    those files is looked at either. What does spoil it is one member this
+    module cannot name, and an unrecognised extension is refused for exactly
+    that reason: it may be the screenshot.
+    """
+    p = Path(path)
+    if not p.is_file():
+        return None
+    if p.suffix.lower() in GRADER_SOURCE_CODE_EXTENSIONS:
+        return True
+    if _kind_of(p) != "zip":
+        return False
+    try:
+        entries, _hidden, truncated = _zip_entries(p)
+    except Exception:  # noqa: BLE001
+        return None
+
+    def _is_source(entry: Dict[str, Any]) -> bool:
+        return Path(entry["name"]).suffix.lower() in GRADER_SOURCE_CODE_EXTENSIONS
+
+    def _has_nothing_to_look_at(entry: Dict[str, Any]) -> bool:
+        # The renderable test is asked first and separately even though it is
+        # redundant today, because it is the one that would stop being
+        # redundant: put ``.html`` in the render set tomorrow and the source
+        # set would otherwise wave through a file the prepass had just
+        # learned to draw.
+        if Path(entry["name"]).suffix.lower() in GRADER_VISUAL_RENDER_EXTENSIONS:
+            return False
+        # ``_zip_entries`` reads member kinds off the extension alone, so
+        # "txt" here means ``.txt``, ``.md`` or ``.json`` and nothing that had
+        # to be opened to be believed. Everything else -- an image, a
+        # recording, a workbook, a ``.csv``, a nested archive, and every
+        # extension this module cannot name -- fails.
+        return _is_source(entry) or entry["kind"] == "txt"
+
+    if not all(_has_nothing_to_look_at(entry) for entry in entries):
+        return False
+    if truncated:
+        # Unlike the disqualifying member above, "nothing here can be seen" is
+        # a claim about the whole archive, and a list cut at the cap cannot
+        # support it: the entry that was never listed is precisely the one
+        # that would have refuted it.
+        return None
+    # An archive of prose and configuration is not a source deliverable. It
+    # would pass the test above on the strength of having no picture in it,
+    # which is the ``.csv`` mistake moved inside a container.
+    return any(_is_source(entry) for entry in entries)
 
 
 def _op_read_content(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:

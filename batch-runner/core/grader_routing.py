@@ -190,6 +190,7 @@ def resolve_runtime_routing(
     *,
     selected_paths_have_text: bool | None = None,
     selected_paths_have_audio: bool | None = None,
+    selected_paths_are_source_code: bool | None = None,
     some_selected_path_lacks_text: bool | None = None,
     paths_without_text: Iterable[str] | None = None,
 ) -> RoutingDecision:
@@ -214,6 +215,12 @@ def resolve_runtime_routing(
     anything here to listen to", and is used only defensively: a measured
     ``True`` stops the demotion below from stripping the listening model off a
     criterion about sound. It can never promote a criterion on its own.
+
+    ``selected_paths_are_source_code`` answers "is every selected file program
+    text, with nothing anywhere in it that could be turned into a picture".
+    Only a measured ``True`` acts, and what it does is demote -- so an
+    unreadable archive or a probe that cannot speak leaves the item exactly
+    where it is, which is failing closed.
     """
     decision = classify_criterion(criterion_text)
     paths = [path for path in selected_paths if isinstance(path, str) and path]
@@ -284,6 +291,45 @@ def resolve_runtime_routing(
     elif (
         decision.modality is Modality.VISUAL
         and is_overall_style_criterion(criterion_text)
+        and suffixes
+        and suffixes.isdisjoint(GRADER_VISUAL_RENDER_EXTENSIONS)
+    ):
+        decision = RoutingDecision(
+            modality=Modality.TEXT,
+            preferred_op="read_content",
+            matched_keywords=decision.matched_keywords,
+        )
+    # The one place an *explicitly* visual criterion may demote, and it does
+    # not weaken the rule above so much as name the case that rule was never
+    # arguing about.
+    #
+    # The objection to demoting "document color and page layout are visually
+    # polished" is that the ``.csv`` has an appearance and the characters do
+    # not carry it, so a text verdict would be invented. Source code inverts
+    # that. "The rendered DOM includes an element with role=status" is a
+    # question about a page that does not exist yet and is not in the
+    # submission at all -- it exists only once something builds and runs the
+    # code. The JSX is not a substitute for looking at that page. It is the
+    # only place the answer is written down, and rendering is not an option
+    # that was passed over, it is not an option.
+    #
+    # Task 7de33b48 is five items and eight points on one ``.zip`` of two
+    # ``.tsx`` files, a ``.css``, a ``README.md`` and a ``package.json``: no
+    # picture in it anywhere, every criterion naming a source file or a code
+    # construct, and all five excluded as
+    # ``required_visual_render_target_unavailable``. They were sorted by the
+    # words ``render``, ``layout`` and ``visual`` in their text, which is the
+    # right default and the wrong answer here.
+    #
+    # Two locks, either of which alone would do. The measured probe is the
+    # real one: it is ``True`` only when every selected file was examined and
+    # none of it -- nor any member of any archive in it -- can be turned into
+    # an image, and it withholds ``True`` rather than guess. The suffix test
+    # is the second, so that a suffix added to the render set tomorrow cannot
+    # be demoted here by a probe that had not heard about it.
+    elif (
+        decision.modality is Modality.VISUAL
+        and selected_paths_are_source_code is True
         and suffixes
         and suffixes.isdisjoint(GRADER_VISUAL_RENDER_EXTENSIONS)
     ):
