@@ -18,7 +18,19 @@ CONFIG = (
     REPO_ROOT
     / "batch-runner/grading_configs/validation_exp003_v2_sol_max_anchor4.yaml"
 )
-PAYLOAD_SHA256 = "b5cbb6a80c776b458f99f007841a946c1c5f9ec8bf60be052500713dd6f13570"
+# Whole-file, on purpose: every number below was read off this payload, so any
+# edit to it invalidates the reasoning until a person re-checks it. That is the
+# pin doing its job -- when it goes red, confirm the edit does not touch what
+# this test reasons about, then move the pin in the same commit.
+#
+# Moved once. `b5cbb6a8...` was the content before #188 (2026-08-21) backfilled
+# `summary.wow` analytics. That commit's only structural effect on this file was
+# `summary.wow.score_density_histogram` going from `[]` to ten buckets -- no
+# task, item, verdict, latency or routing field moved, which is why every
+# assertion below still holds unchanged. The pin was red on `main` from that
+# day until it was re-checked, and nobody saw it, because nothing ran this file
+# (see the CI note in test_analyze_grade_run.py).
+PAYLOAD_SHA256 = "eb046f77548779dcffdf100cff553fc3b365bbf899a9575a03abbdd7c8e01394"
 
 
 def _error_type(item: dict) -> str:

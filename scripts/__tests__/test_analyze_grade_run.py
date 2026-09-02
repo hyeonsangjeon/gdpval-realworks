@@ -36,6 +36,45 @@ ANCHOR_ANALYSIS = ANCHOR_PAYLOAD.with_name(
     "analysis.md"
 )
 
+# The anchor config content the payload was graded against -- carried in its own
+# filename above (`cfg_7f3c7c2e542cf580`) as well as in `judge.config_hash`.
+# Checked against that config's history: this was the real committed content of
+# `batch-runner/grading_configs/validation_exp003_v2_sol_max_anchor4.yaml` from
+# a36c4c4 (#171) until 238c255 (#302) replaced it with 56d3912c29a79f59. So the
+# payload provably came from a committed state of the anchor config, and the
+# mismatch the gate reports today is that file moving afterwards -- not this
+# payload failing to be what it says it is.
+ANCHOR_CONFIG_SHA16_AT_ANALYSIS = "7f3c7c2e542cf580"
+ANCHOR_CONFIG = (
+    REPO_ROOT
+    / "batch-runner/grading_configs/validation_exp003_v2_sol_max_anchor4.yaml"
+)
+
+# The only lines of the committed analysis the live config can move. Everything
+# else is arithmetic over the frozen payload and has to re-derive exactly.
+IDENTITY_DEPENDENT_PREFIXES = (
+    "- projected_220_wall_hours:",
+    "- anchor integrity:",
+    "- targetable finalization errors:",
+    "- full-run gate:",
+    "- component total:",
+    "| main |",
+    "| visual |",
+    "| audio |",
+)
+
+
+def _anchor_config_sha16() -> str | None:
+    if not ANCHOR_CONFIG.exists():
+        return None
+    return hashlib.sha256(ANCHOR_CONFIG.read_bytes()).hexdigest()[:16]
+
+
+def _render_anchor_analysis(module) -> str:
+    return module.render_markdown(
+        module.analyze(ANCHOR_PAYLOAD.relative_to(REPO_ROOT)), None
+    )
+
 
 def _load_module():
     spec = importlib.util.spec_from_file_location("analyze_grade_run", SCRIPT)
@@ -1601,18 +1640,109 @@ def test_json_with_explicit_out_remains_supported(tmp_path: Path):
     ] == 1
 
 
-def test_committed_anchor_analysis_is_exactly_reproducible(monkeypatch):
+def test_the_anchor_analysis_reproduces_every_line_its_payload_decides(
+    monkeypatch,
+):
+    """Re-derive the committed analysis and require it back, line for line.
+
+    This used to demand the whole document byte-for-byte, and that claim was
+    too strong to hold: ``analyze`` reads the anchor grading config **live**,
+    so the eight verdict lines in ``IDENTITY_DEPENDENT_PREFIXES`` depend on a
+    file later commits are free to edit. #302 edited it, this test went red on
+    ``main``, and it stayed red unnoticed because nothing in CI ran this file.
+
+    What is genuinely frozen is the payload, and it decides everything else --
+    every measurement, count, ratio and error tally. Those still have to come
+    back exactly, so a change to the analyzer's arithmetic fails here just as
+    loudly as before. Only the verdict may move, and only in the way the
+    companion test below pins down.
+    """
     module = _load_module()
-    relative_payload = ANCHOR_PAYLOAD.relative_to(REPO_ROOT)
     monkeypatch.chdir(REPO_ROOT)
 
     assert hashlib.sha256(ANCHOR_PAYLOAD.read_bytes()).hexdigest() == (
         "303a5e763e28bf06339877df62c8e2d0d022bc605aeeb3aee77e63ab411a41fb"
     )
     assert module.resolve_analysis_output_path(ANCHOR_PAYLOAD) == ANCHOR_ANALYSIS
-    expected = module.render_markdown(module.analyze(relative_payload), None)
 
-    assert ANCHOR_ANALYSIS.read_text(encoding="utf-8") == expected
-    assert "tasks: 4/4 (errors=0)" in expected
-    assert "full-run gate: blocked" in expected
-    assert str(relative_payload) in expected
+    committed = ANCHOR_ANALYSIS.read_text(encoding="utf-8").splitlines()
+    fresh = _render_anchor_analysis(module).splitlines()
+
+    assert len(committed) == len(fresh), (
+        "the analysis gained or lost lines; that is never config drift"
+    )
+
+    drifted = [
+        (n, was, now)
+        for n, (was, now) in enumerate(zip(committed, fresh), start=1)
+        if was != now
+    ]
+    unexplained = [
+        entry for entry in drifted
+        if not entry[1].startswith(IDENTITY_DEPENDENT_PREFIXES)
+    ]
+    assert not unexplained, (
+        "these lines are computed from the frozen payload alone and have to "
+        f"re-derive exactly: {unexplained}"
+    )
+
+    # ...and the bulk of the document really did re-derive, so the check above
+    # cannot pass by everything drifting into an exempt prefix.
+    assert len(committed) - len(drifted) >= 50
+
+    rendered = "\n".join(fresh)
+    assert "tasks: 4/4 (errors=0)" in rendered
+    assert str(ANCHOR_PAYLOAD.relative_to(REPO_ROOT)) in rendered
+
+
+def test_the_anchor_verdict_moved_only_because_the_config_did(monkeypatch):
+    """Why those verdict lines are exempt -- checked, not asserted.
+
+    The exemption above is only defensible while the divergence has exactly
+    one cause. So: the payload must still record the config content the
+    analysis was made against, and if the working tree still holds that
+    content the strict original claim is restored -- the whole document, byte
+    for byte. Reverting the config re-arms this test rather than leaving a
+    permanent licence to differ.
+
+    Once the content has moved, the run may fail its identity gate, but *only*
+    its identity gate. Any other blocker means something real broke and the
+    exemption no longer covers it.
+    """
+    module = _load_module()
+    monkeypatch.chdir(REPO_ROOT)
+
+    payload = json.loads(ANCHOR_PAYLOAD.read_text(encoding="utf-8"))
+    assert payload["judge"]["config_hash"] == ANCHOR_CONFIG_SHA16_AT_ANALYSIS
+    assert payload["judge"]["config_name"] == (
+        "validation_exp003_v2_sol_max_anchor4"
+    )
+
+    fresh = _render_anchor_analysis(module)
+    live = _anchor_config_sha16()
+
+    assert live is not None, (
+        f"{ANCHOR_CONFIG.relative_to(REPO_ROOT)} is gone. The exemption above "
+        "assumes the anchor config exists and merely moved; a deleted config "
+        "is a different failure and needs deciding, not exempting"
+    )
+
+    if live == ANCHOR_CONFIG_SHA16_AT_ANALYSIS:
+        assert ANCHOR_ANALYSIS.read_text(encoding="utf-8") == fresh
+        return
+
+    integrity = next(
+        line for line in fresh.splitlines()
+        if line.startswith("- anchor integrity:")
+    )
+    assert "anchor_config_identity_mismatch" in integrity
+    for blocker in (
+        "anchor_projection_contract_mismatch",
+        "anchor_ordered_task_identity_mismatch",
+        "anchor_source_config_unavailable",
+    ):
+        assert blocker not in integrity, (
+            f"{blocker} is not config drift -- the analysis diverged for a "
+            "reason the companion test does not cover"
+        )
+
