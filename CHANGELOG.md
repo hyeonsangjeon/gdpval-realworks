@@ -339,6 +339,46 @@ entries land under a fresh dated heading the day they merge to `main`.
   not open at all; the probe reports *unknown* rather than *no*, which leaves
   the existing extension rule in charge instead of promoting towards a file
   nothing can extract.
+- **The listening model was handed the first 30 seconds of the deliverable and
+  then asked about 1:22.** With the routing above fixed, task `38889c3b` grades
+  at **45.5 of 62 (73.39%)** with `perception_call_count: 6` and nothing
+  excluded — and three of its items are *still* failed for a reason that is not
+  a property of the work under test. Each names a region the clip could not
+  reach, and one sub-judge wrote the defect out itself: *"The clip only includes
+  the first 30s, ending well before 1:49."* It listened, it reported honestly
+  what it had been given, and the harness recorded that as a finding about the
+  deliverable. **6 points, across the items asking about 1:22–1:49, 1:49–end,
+  and the beginning through 1:22.**
+
+  The clip now opens where the criterion is looking. A criterion naming a region
+  that begins after the head slice *ends* — and only such a criterion — moves
+  the window there, using the tolerance the rubric states rather than one we
+  guess (`1:49 (+/- 2 s)` opens at 1:47). Anything anchored at the beginning,
+  naming no time, or naming a time already inside the slice is untouched, so
+  *"From the beginning ... through 1:22"* keeps the head it needs. **Neither the
+  number of calls nor the length of the clip changes** — the same 30 seconds at
+  the same encoding, cut at a different offset — so the set of items that can
+  move is exactly the set that cannot be answered from the audio sent today,
+  and `start_seconds=0` is byte-for-byte the path it has always been.
+
+  The system prompt now names the span it is actually carrying instead of
+  claiming "first 30s" of everything, which is the half of the defect that made
+  the wrong verdicts look well-grounded. Where a window is wanted and cannot be
+  cut, the two reasons are kept apart because they deserve opposite verdicts: a
+  deliverable that genuinely ends before the timestamp is a fact about the work
+  and is graded as one, while a file this machine could not decode is a fact
+  about us, and there the sub-judge is told to return `judge_error` and say what
+  went unheard. That line is drawn from the file's own frame timestamps, never
+  from silence — a container that reports no times at all cannot be read as a
+  short deliverable. Absence of observation is not observation of absence.
+
+  One more link had to hold for any of this to reach a real run. `audio_judge`
+  grades whatever criterion string the *main* judge passes it, and nothing
+  obliged that string to be the rubric's own words — a summary such as "check
+  the bridge thins to synths" carries no time, leaves the window at the head
+  and fails the item exactly as before. The tool now asks for the criterion
+  verbatim and says which words are load-bearing, and its description no longer
+  advertises "the head-30s slice" of the file it is about to be given.
 - **An empty read was treated as proof the content was absent.** On stage-1
   task `43dc9778` the judge read a two-page scan that has no text layer,
   `read_content` returned `"text": "", "char_count": 0`, and **ten rubric items

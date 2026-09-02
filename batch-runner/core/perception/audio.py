@@ -21,9 +21,12 @@ Design notes (task 206):
   refused with a 400 before any model hears it; the audio content part
   belongs to ``ChatCompletionContentPartParam``. See
   ``tests/test_audio_goes_to_the_endpoint_that_accepts_it.py``.
-* Duration trim: only the first 30 seconds of the file are sent, re-encoded
-  to 16 kHz mono. The head-only slice keeps cost bounded; the main judge
-  still has access to full-clip statistics via
+* Duration trim: 30 seconds of the file are sent per call, re-encoded to
+  16 kHz mono. Which 30 seconds follows the criterion -- a question about
+  1:22 is sent 1:22, not the opening -- and whichever window goes out is the
+  window the system prompt names. See :func:`criterion_listen_start` for why
+  a fixed head slice cost task ``38889c3b`` six points on the gold run. The
+  main judge still has access to full-clip statistics via
   ``read_deliverable(op='probe_audio', ...)``.
 * Per-task call cap = 32, which is the most listening criteria any one task
   in the gold corpus carries. The cap counts *listens*, not attempts: a
@@ -51,6 +54,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -87,6 +91,89 @@ AUDIO_CALL_CAP = 32
 #: is a price as much as a limit, and the grader reads it from here rather
 #: than keeping a second copy.
 AUDIO_TRIM_SECONDS = 30
+
+#: Patterns for reading a listening window out of a criterion's own words.
+#:
+#: The clip has always been the *first* ``AUDIO_TRIM_SECONDS`` of the
+#: deliverable, and the sub-judge has always been told so. That is fine for
+#: "is there music", "is the voiceover audible", "does it clip" -- properties
+#: a head slice carries. It is not fine for a criterion that names a region:
+#: on the 185-task gold run, task ``38889c3b`` was asked about 1:22-1:49,
+#: about 1:49-to-the-end, and about the stretch through 1:22 of a two-minute
+#: master. All three were answered ``fail``, 0/2, for six points; one of them
+#: says why in its own evidence -- *"The clip only includes the first 30s,
+#: ending well before 1:49."*
+#:
+#: That is the failure this module exists to avoid, wearing the one disguise
+#: it is hardest to see: the model listened, reported honestly what it heard,
+#: and the harness recorded "the deliverable does not do this" from a clip in
+#: which the deliverable was never given the chance to. Absence of observation
+#: is not observation of absence.
+#:
+#: So the window follows the question. ``M:SS`` only, seconds bounded at 59,
+#: and not when a clock-time suffix follows -- "9:00 AM" is a meeting, "2:1"
+#: is a ratio and cannot match at all. A stated tolerance ("+/- 10 s") is read
+#: from the text rather than guessed at, and the window opens that much early.
+_AUDIO_TIMESTAMP_RE = re.compile(
+    r"\b(\d{1,3}):([0-5]\d)\b(?!\s*(?:[ap]\.?\s?m\.?\b|:?\d))",
+    flags=re.IGNORECASE,
+)
+#: Words that put the asked-about region at the top of the file no matter what
+#: else the criterion names. "From the beginning of the Master track through
+#: 1:22" names 1:22 and wants 0:00. Seeking to 1:22 for it would take a clip
+#: that overlaps the question and replace it with one that does not, so any of
+#: these words means: leave the head slice alone. A word matched here by
+#: accident costs nothing -- it restores exactly today's behaviour.
+_AUDIO_HEAD_ANCHOR_RE = re.compile(
+    r"\b(beginning|begins?|start|starts|starting|opening|opens|intro"
+    r"|introduction|outset|onset|first|initial|top)\b",
+    flags=re.IGNORECASE,
+)
+_AUDIO_TOLERANCE_RE = re.compile(
+    r"(?:±|\+\s*/\s*-|\+-)\s*(\d{1,3})\s*(?:s\b|sec|second)",
+    flags=re.IGNORECASE,
+)
+
+
+def criterion_listen_start(
+    criterion: str,
+    *,
+    trim_seconds: int = AUDIO_TRIM_SECONDS,
+) -> Optional[float]:
+    """Where in the deliverable this criterion needs the clip to start.
+
+    Returns ``None`` -- meaning "the head, as always" -- unless the criterion
+    names a region that the head slice provably cannot contain. That is a
+    deliberately narrow trigger, and it is the whole safety argument for this
+    function: the only items whose clip can move are the ones asking about a
+    stretch of audio that starts *after* everything we send today ends. Those
+    items cannot currently be answered from evidence. Nothing that is
+    answerable today changes.
+
+    The tolerance a criterion states about its own timestamp is honoured, so
+    "1:22 (+/- 10 s)" opens the window at 1:12 rather than at 1:22 and does
+    not miss the very thing it was sent to hear.
+    """
+    text = criterion or ""
+    if not text or _AUDIO_HEAD_ANCHOR_RE.search(text):
+        return None
+    stamps = [
+        minutes * 60 + seconds
+        for minutes, seconds in (
+            (int(m.group(1)), int(m.group(2)))
+            for m in _AUDIO_TIMESTAMP_RE.finditer(text)
+        )
+    ]
+    if not stamps:
+        return None
+    tolerances = [int(m.group(1)) for m in _AUDIO_TOLERANCE_RE.finditer(text)]
+    start = min(stamps) - (max(tolerances) if tolerances else 0)
+    if start <= trim_seconds:
+        # The head already overlaps what is being asked about. Sending a
+        # second, later clip would answer a question nobody asked.
+        return None
+    return float(start)
+
 
 #: What the head slice is re-encoded to. The source is whatever the
 #: deliverable happens to carry — the two video deliverables in this corpus
@@ -226,14 +313,65 @@ class AudioVerdict:
         }
 
 
-_AUDIO_PROMPT_HEADER = (
-    "You are an audio sub-judge for the GDPval grading pipeline. The "
-    "clip is a head-only slice (first 30s) of the LLM-under-test's "
-    "audio deliverable. Grade ONE rubric criterion against what you "
-    "HEAR. Return the same JSON envelope as the main judge: "
-    "{verdict, partial_score, evidence, confidence, reasoning}. The "
-    "evidence MUST describe an audible feature; do not invent. Keep "
-    "evidence <= 200 chars. Return JSON only."
+def _mmss(seconds: float) -> str:
+    total = int(round(seconds))
+    return f"{total // 60}:{total % 60:02d}"
+
+
+def _audio_prompt_header(
+    *,
+    start_seconds: float = 0.0,
+    trim_seconds: int = AUDIO_TRIM_SECONDS,
+    window_note: Optional[str] = None,
+) -> str:
+    """The system prompt, stating the window this call actually carries.
+
+    This used to be a constant reading "a head-only slice (first 30s)", which
+    was true of the bytes but became false as soon as marking settings named a
+    different ``trim_seconds``, and false in a more expensive way once the
+    clip could start anywhere. What the sub-judge is told it is hearing has to
+    be what it is hearing: its evidence is quoted in the grade, and evidence
+    timed against the wrong origin is worse than none.
+    """
+    if start_seconds > 0:
+        span = (
+            f"the segment from {_mmss(start_seconds)} to "
+            f"{_mmss(start_seconds + trim_seconds)} of"
+        )
+    else:
+        span = f"a head-only slice (first {int(trim_seconds)}s) of"
+    parts = [
+        "You are an audio sub-judge for the GDPval grading pipeline. The "
+        f"clip is {span} the LLM-under-test's audio deliverable."
+    ]
+    if window_note:
+        parts.append(window_note)
+    parts.append(
+        "Grade ONE rubric criterion against what you HEAR. Return the same "
+        "JSON envelope as the main judge: {verdict, partial_score, evidence, "
+        "confidence, reasoning}. The evidence MUST describe an audible "
+        "feature; do not invent. Keep evidence <= 200 chars. Return JSON only."
+    )
+    return " ".join(parts)
+
+
+#: Told to the sub-judge when the criterion named a region and the clip could
+#: not be cut to it for a reason that is about this machine rather than about
+#: the deliverable. Not having listened is not having heard nothing, and the
+#: envelope already has a value for "no verdict was reached".
+_AUDIO_WINDOW_UNCUT_NOTE = (
+    "The criterion names a part of the deliverable that this clip does not "
+    "contain, and it could not be extracted, so you have NOT observed it. Do "
+    "not treat that as evidence the deliverable lacks it: return verdict "
+    "\"judge_error\" and say in the evidence which part went unheard."
+)
+
+#: Told to the sub-judge when the region is missing because the deliverable
+#: stops before it. That is a fact about the work under test, so it is
+#: gradeable, and the sub-judge is left to grade it.
+_AUDIO_REGION_ABSENT_NOTE = (
+    "Note: the criterion names a timestamp beyond the end of this "
+    "deliverable, which runs out before that point."
 )
 
 
@@ -271,7 +409,28 @@ def _first_choice_text(response: Any) -> str:
     return str(getattr(audio, "transcript", "") or "") if audio else ""
 
 
-def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
+class AudioWindowUnavailable(Exception):
+    """A requested listening window could not be cut from the file.
+
+    Raised only for a window that was actually asked for -- either the file
+    ends before it, or nothing here can decode it. The caller's answer is to
+    fall back to the head slice *and say so in the prompt*, never to present a
+    head slice as if it were the segment the criterion named.
+
+    ``region_absent`` separates the two, because they deserve opposite
+    verdicts. A deliverable that ends at 0:30 really does not have the bridge
+    the rubric asks for at 1:22, and failing it is correct. A file this
+    machine could not decode tells us nothing about the deliverable at all,
+    and failing *that* is the very mistake this class was added to stop.
+    """
+
+    def __init__(self, message: str, *, region_absent: bool = False) -> None:
+        super().__init__(message)
+        self.region_absent = region_absent
+
+
+def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS,
+                      start_seconds: float = 0.0,
                       ) -> Tuple[bytes, str]:
     """Read a file and return ``(bytes, format)`` trimmed to ``max_seconds``.
 
@@ -284,8 +443,20 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
     sent whole: "no duration" is not "short", and a studio stem that declines
     to say how long it is would otherwise go out at its full size. Nor does a
     short ``.wav`` qualify — see ``COMPRESSED_AUDIO_FORMATS``.
+
+    ``start_seconds`` moves the slice off the head, for a criterion that named
+    a region the head cannot contain (see :func:`criterion_listen_start`). At
+    the default of ``0.0`` every path below is exactly what it was. Above it,
+    the two shortcuts that would send bytes other than the requested window --
+    the raw hand-over and the whole-file fallback — are closed, because a clip
+    that does not match what the prompt claims about it is worse than no clip.
+    The slice is cut by decoding forward and dropping what precedes the window
+    rather than by seeking: a container seek lands on the keyframe at or
+    before the target, and the window promised to the sub-judge has to be the
+    window it actually hears.
     """
     fmt = _guess_format(path)
+    wants_window = start_seconds > 0
 
     def raw() -> Tuple[bytes, str]:
         with open(path, "rb") as fh:
@@ -294,6 +465,8 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
     try:
         import av  # type: ignore
     except ImportError:
+        if wants_window:
+            raise AudioWindowUnavailable("no decoder available to cut a window")
         return raw()
 
     try:
@@ -304,8 +477,15 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
             container.streams.audio[0]
             duration_s = (float(container.duration) / 1_000_000.0
                           if container.duration else None)
+            if wants_window and duration_s is not None and duration_s <= start_seconds:
+                raise AudioWindowUnavailable(
+                    f"deliverable is {duration_s:.0f}s long and the criterion "
+                    f"asks about {start_seconds:.0f}s",
+                    region_absent=True,
+                )
             if (
-                duration_s is not None
+                not wants_window
+                and duration_s is not None
                 and duration_s <= max_seconds
                 and fmt in COMPRESSED_AUDIO_FORMATS
             ):
@@ -322,13 +502,35 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
             resampler = av.AudioResampler(
                 format="s16", layout=AUDIO_LAYOUT, rate=AUDIO_SAMPLE_RATE_HZ,
             )
+            window_end = start_seconds + max_seconds
+            heard_anything = False
+            furthest = 0.0
             for frame in container.decode(audio=0):
                 t = float(frame.pts * frame.time_base) if frame.pts else 0.0
-                if t > max_seconds:
+                furthest = max(furthest, t)
+                if t > window_end:
                     break
+                if t < start_seconds:
+                    continue
+                heard_anything = True
                 for resampled in resampler.resample(frame):
                     for packet in out_stream.encode(resampled):
                         out.mux(packet)
+            if wants_window and not heard_anything:
+                # Two different things end up here and only one of them is
+                # the deliverable's fault. A file whose frames carried real,
+                # advancing timestamps and still had nothing at the window
+                # really is shorter than the criterion assumes. A file whose
+                # timestamps never moved off zero told us nothing at all, and
+                # blaming it for stopping early would put a sentence in the
+                # prompt that no evidence supports.
+                timestamps_moved = furthest > 0.0
+                raise AudioWindowUnavailable(
+                    f"no audio at {start_seconds:.0f}s in this deliverable"
+                    if timestamps_moved
+                    else "frame timestamps unusable; cannot cut a window",
+                    region_absent=timestamps_moved,
+                )
             # Drain the resampler before the encoder: PyAV buffers whole
             # output frames, so the tail of the slice is still inside it.
             for resampled in resampler.resample(None):
@@ -340,7 +542,12 @@ def _trim_audio_bytes(path: str, max_seconds: int = AUDIO_TRIM_SECONDS
             return buf.getvalue(), "wav"
         finally:
             container.close()
+    except AudioWindowUnavailable:
+        # The one failure the whole-file fallback must not paper over.
+        raise
     except Exception:
+        if wants_window:
+            raise AudioWindowUnavailable("could not decode a window from this file")
         return raw()
 
 
@@ -427,6 +634,28 @@ class AudioPerception:
             failure_detail=reason,
         )
 
+    def _preparation_error(self, exc: Exception, audio_path: str) -> "AudioVerdict":
+        """A verdict for a clip that could not be built at all.
+
+        Shared by the plain path and by the fall-back after a window could not
+        be cut, so that failing to prepare a head slice reads the same however
+        the caller arrived at it.
+        """
+        detail = (
+            f"audio preparation failed:"
+            f" {public_task_error(exc)['error_type']}"
+            f" (suffix={os.path.splitext(audio_path)[1].lower() or 'none'})"
+        )
+        return AudioVerdict(
+            verdict="judge_error",
+            partial_score=0.0,
+            evidence="",
+            confidence=0.0,
+            reasoning=detail,
+            judge_error=public_task_error_text(exc),
+            failure_detail=detail,
+        )
+
     def judge(
         self,
         *,
@@ -453,23 +682,30 @@ class AudioPerception:
                 f"audio failure budget {self.failure_budget} exhausted",
                 "audio_unavailable:repeated_failure",
             )
+        listen_start = criterion_listen_start(
+            criterion, trim_seconds=self.trim_seconds
+        )
+        window_note: Optional[str] = None
         try:
-            data, fmt = _trim_audio_bytes(audio_path, self.trim_seconds)
+            data, fmt = _trim_audio_bytes(
+                audio_path, self.trim_seconds, listen_start or 0.0
+            )
+        except AudioWindowUnavailable as window_exc:
+            # A window was asked for and could not be cut. Fall back to the
+            # head slice -- but never silently. What the prompt says about the
+            # clip has to stay true, and *why* the region went unheard is what
+            # decides whether failing the criterion would be honest.
+            window_note = (
+                _AUDIO_REGION_ABSENT_NOTE if window_exc.region_absent
+                else _AUDIO_WINDOW_UNCUT_NOTE
+            )
+            listen_start = None
+            try:
+                data, fmt = _trim_audio_bytes(audio_path, self.trim_seconds)
+            except Exception as exc:  # noqa: BLE001
+                return self._preparation_error(exc, audio_path)
         except Exception as exc:  # noqa: BLE001
-            detail = (
-                f"audio preparation failed:"
-                f" {public_task_error(exc)['error_type']}"
-                f" (suffix={os.path.splitext(audio_path)[1].lower() or 'none'})"
-            )
-            return AudioVerdict(
-                verdict="judge_error",
-                partial_score=0.0,
-                evidence="",
-                confidence=0.0,
-                reasoning=detail,
-                judge_error=public_task_error_text(exc),
-                failure_detail=detail,
-            )
+            return self._preparation_error(exc, audio_path)
         if fmt not in SUPPORTED_AUDIO_FORMATS:
             # Refused before the call, not after it. The API rejects an
             # unsupported container outright, so sending it spends a slot from
@@ -480,13 +716,19 @@ class AudioPerception:
                 "unsupported_audio_format",
             )
         b64 = base64.b64encode(data).decode("ascii")
+        header = _audio_prompt_header(
+            start_seconds=listen_start or 0.0,
+            trim_seconds=self.trim_seconds,
+            window_note=window_note,
+        )
         if len(b64) > AUDIO_MAX_REQUEST_BYTES:
             # The size candidate, named rather than guessed at. This is the
             # one shape of 400 the class can recognise on its own side of the
             # wire, so it says so instead of letting the provider say
             # ``BadRequestError`` and leaving the reader to pick between two
-            # explanations. Deterministic for the task -- the next criterion
-            # sends the same clip -- so it blocks the rest rather than
+            # explanations. Deterministic for the task -- every criterion gets
+            # the same length of clip at the same encoding, whichever part of
+            # the file it is cut from -- so it blocks the rest rather than
             # re-measuring the same file thirteen more times.
             self._blocked_reason = "payload_too_large"
             return self._refuse(
@@ -513,7 +755,7 @@ class AudioPerception:
                         "role": "user",
                         "content": [
                             {"type": "text",
-                             "text": f"{_AUDIO_PROMPT_HEADER}\n\nCriterion:\n{criterion}"},
+                             "text": f"{header}\n\nCriterion:\n{criterion}"},
                             {"type": "input_audio",
                              "input_audio": {"data": b64, "format": fmt}},
                         ],

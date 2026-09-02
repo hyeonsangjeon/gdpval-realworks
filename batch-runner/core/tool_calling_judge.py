@@ -1203,14 +1203,26 @@ class ToolCallingJudge:
             "type": "function",
             "name": "audio_judge",
             "description": (
-                "Ask the audio sub-judge to grade the criterion against "
-                "the head-30s slice of a deliverable audio file. Use "
-                "only for AUDIO items."
+                "Ask the audio sub-judge to grade the criterion against a "
+                "30-second slice of a deliverable audio file. Use "
+                "only for AUDIO items. Which 30 seconds is worked out from "
+                "the criterion text you pass -- the opening, unless the "
+                "criterion names a region that starts later -- and the "
+                "sub-judge is told which span it was given."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "criterion": {"type": "string"},
+                    "criterion": {
+                        "type": "string",
+                        "description": (
+                            "The rubric criterion, copied verbatim. Keep its "
+                            "timestamps: \"1:22-1:49 (+/- 10 s)\" is what "
+                            "makes the clip start at 1:12 rather than at "
+                            "0:00, so a paraphrase that drops the times gets "
+                            "the wrong part of the file listened to."
+                        ),
+                    },
                     "audio_path": {"type": "string"},
                     "member": {
                         "type": ["string", "null"],
