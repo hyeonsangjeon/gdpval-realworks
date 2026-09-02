@@ -60,22 +60,47 @@ def _shard_paths() -> list[Path]:
 
 
 def _superseded_shard_path() -> Path:
-    """One shard from the earlier pass, whichever it is.
+    """One shard graded by superseded code *at this judge config*.
 
     The cost-receipt work touched ``core/`` and so moved the grader source
     hash, orphaning the shards graded before it. They were committed and are
     still on disk one directory across from the current run.
+
+    Which of them is handed back is not a detail. More than one earlier pass is
+    committed and they do not all differ from the current run in the same way:
+    one differs only in the grader source, another also carries a different
+    judge config. The merge refuses on the config before it ever looks at the
+    source hash, so a caller asking "does a different grader stop this merge?"
+    that is handed the second one gets a refusal it did not ask about and a
+    green test that proves nothing.
+
+    This used to take ``iterdir()``'s first entry, which is filesystem order --
+    it picked the right sibling on one machine and the wrong one on CI. So the
+    sibling is now chosen by reading the payloads for the difference the caller
+    is asking about: same ``judge.config_hash``, different ``grader_source_hash``.
     """
-    siblings = [
+    current = json.loads(_shard_paths()[0].read_text(encoding="utf-8"))
+    siblings = sorted(
         entry
         for entry in inventory.SHARD_DIR.parent.iterdir()
         if entry.is_dir() and entry != inventory.SHARD_DIR
-    ]
-    if not siblings:
-        pytest.skip("no superseded shard directory is committed any more")
-    payloads = sorted(siblings[0].glob("shard-*.json"))
-    assert payloads, f"{siblings[0]} holds no shard payloads"
-    return payloads[0]
+    )
+    for sibling in siblings:
+        payloads = sorted(sibling.glob("shard-*.json"))
+        assert payloads, f"{sibling} holds no shard payloads"
+        payload = json.loads(payloads[0].read_text(encoding="utf-8"))
+        same_config = payload.get("judge", {}).get("config_hash") == current.get(
+            "judge", {}
+        ).get("config_hash")
+        moved_source = payload.get("grader_source_hash") != current.get(
+            "grader_source_hash"
+        )
+        if same_config and moved_source:
+            return payloads[0]
+    pytest.skip(
+        "no shard from a superseded grader at this judge config is committed "
+        "any more"
+    )
 
 
 def test_every_committed_gold_shard_still_calls_itself_partial():
@@ -179,6 +204,57 @@ def test_a_shard_from_a_superseded_grader_cannot_join_this_run(
         "graders may no longer be what stops it"
     )
     assert not out.exists()
+
+
+def test_the_superseded_shard_is_chosen_for_the_difference_being_tested(
+    tmp_path, capsys
+):
+    """Why the test above does not take whatever the filesystem hands it first.
+
+    Two earlier passes are committed side by side. One differs from the current
+    run only in the grader source. The other also carries a different judge
+    config, and ``step9`` refuses that one on the config without ever reaching
+    the source hash -- so handing it to the test above would produce a refusal
+    that says nothing about graders, and a green test.
+
+    Which one arrived used to be ``iterdir()``'s first entry, which is
+    filesystem order. On identical bytes it picked the right sibling on one
+    machine and the wrong one on CI, where the assertion above failed. So the
+    selection is pinned here from both ends: what comes back differs in the
+    grader and only in the grader, and the sibling that does not qualify really
+    would have swallowed the refusal being asserted.
+    """
+    current_path = _shard_paths()[0]
+    current = json.loads(current_path.read_text(encoding="utf-8"))
+    chosen = json.loads(_superseded_shard_path().read_text(encoding="utf-8"))
+
+    assert chosen["judge"]["config_hash"] == current["judge"]["config_hash"]
+    assert chosen["grader_source_hash"] != current["grader_source_hash"]
+
+    decoys = [
+        payloads[0]
+        for sibling in sorted(
+            entry
+            for entry in inventory.SHARD_DIR.parent.iterdir()
+            if entry.is_dir() and entry != inventory.SHARD_DIR
+        )
+        for payloads in [sorted(sibling.glob("shard-*.json"))]
+        if payloads
+        and json.loads(payloads[0].read_text(encoding="utf-8"))
+        .get("judge", {})
+        .get("config_hash")
+        != current["judge"]["config_hash"]
+    ]
+    if not decoys:
+        pytest.skip("only one kind of superseded shard is committed now")
+
+    for decoy in decoys:
+        out = tmp_path / f"{decoy.parent.name[-16:]}.json"
+        assert s9.main([str(current_path), str(decoy), "-o", str(out)]) == 1
+        assert "grader_source_hash" not in capsys.readouterr().err, (
+            f"{decoy.parent.name} now reports the grader hash too, so it is no "
+            "longer a decoy; picking siblings by hand may no longer be needed"
+        )
 
 
 def test_the_analyzer_refuses_a_payload_that_is_still_partial():
