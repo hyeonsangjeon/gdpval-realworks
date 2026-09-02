@@ -610,6 +610,60 @@ function GradeDetail() {
                   <> Graders disagreed on <strong className="text-purple-500">{s.inconsistent_grades}</strong> task{s.inconsistent_grades > 1 ? 's' : ''}.</>
                 )}
               </p>
+              {/*
+                The same caveat the task table carries, said once for the run.
+                The banner under the table is per-task and shows fifty rows at
+                most; nothing until now told a reader what the *headline* — the
+                one number an experiment is remembered by — owed to rubric its
+                judge never read. Absent on a run that read everything, so this
+                appears only where it is true.
+
+                Both percentages printed here are means over the task rows, and
+                that is deliberate. Neither is the published headline above:
+                pairing a full-denominator mean with the published figure would
+                add a second, unrelated defect into this one and can flip the
+                sign of the answer on real files. When the headline and its own
+                rows disagree, the sentence after says so rather than leaving a
+                reader to reconcile three numbers alone.
+              */}
+              {(() => {
+                const lift = s.score_exclusion_lift
+                if (!lift) return null
+                const support = s.headline_support
+                // Kept as the number rather than a flag: a boolean would need a
+                // non-null assertion at the point of use, and asserting a value
+                // is present is exactly the habit that puts a stray "0.00
+                // points" on screen when it is not.
+                const headlineDelta = support?.supported === false
+                  && typeof support.delta_pct === 'number'
+                  ? support.delta_pct
+                  : null
+                return (
+                  <p className="text-sm text-muted-foreground leading-relaxed mt-3">
+                    <strong className="text-foreground">Part of that average is rubric nobody read.</strong>{' '}
+                    The judge failed to read <strong>{lift.excluded_items}</strong> rubric
+                    item{lift.excluded_items > 1 ? 's' : ''} across{' '}
+                    <strong>{lift.tasks_affected}</strong> of the{' '}
+                    {lift.tasks_counted} scored task{lift.tasks_counted > 1 ? 's' : ''},
+                    worth {lift.excluded_max} points of rubric, and those items left the
+                    denominator along with the numerator. Averaging the task rows as
+                    published gives <strong>{lift.avg_score_pct_from_rows}%</strong>;
+                    scoring the same tasks out of their whole rubrics gives{' '}
+                    <strong>{lift.avg_score_pct_full_denominator}%</strong>. The
+                    difference — <strong className="text-amber-500">{lift.lift_pct.toFixed(2)} points</strong>{' '}
+                    — is what unread rubric adds to this run&apos;s average, and the
+                    truth is between the two.
+                    {headlineDelta !== null && (
+                      <> Neither figure is the headline above: this run publishes an
+                        average {Math.abs(headlineDelta).toFixed(2)} points{' '}
+                        {headlineDelta < 0 ? 'below' : 'above'} the mean of its own
+                        rows, which is a separate problem pulling the other way. The two
+                        gaps are reported apart because adding them would describe
+                        neither.</>
+                    )}
+                  </p>
+                )
+              })()}
             </CardContent>
           </Card>
         </motion.div>

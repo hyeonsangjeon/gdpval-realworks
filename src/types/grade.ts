@@ -46,6 +46,60 @@ export interface ScoreExclusion {
   pct_full_denominator: number
 }
 
+/**
+ * The published headline measured against the mean of the rows beneath it.
+ *
+ * `supported` is three-valued on purpose: `null` means the comparison could not
+ * be made — no scored rows, or no numeric headline — which is not the same
+ * claim as `true`. Four published runs on the board disagree with their own
+ * rows, because a task the grader could not grade at all stays in the
+ * denominator as a zero. That gap is a different defect from the one
+ * `ScoreExclusionLift` measures and moves the average the other way, so the two
+ * are reported separately and never subtracted across.
+ */
+export interface HeadlineSupport {
+  /** Mean of the scored task percentages. null when there were none. */
+  avg_score_pct_from_rows: number | null
+  /** Published headline minus that mean. null when either side is missing. */
+  delta_pct: number | null
+  /** Scored rows the mean was taken over. */
+  rows_counted: number
+  /** Whether the two agree to rounding, or null when they could not be compared. */
+  supported: boolean | null
+}
+
+/**
+ * The same measurement as `ScoreExclusion`, taken over a whole run.
+ *
+ * Both percentages are means over one row set — the scored rows — so their
+ * difference is the excluded items and nothing else. Neither is the published
+ * headline: on four of the runs on the board the published figure disagrees
+ * with its own rows for an unrelated reason, and pairing it with a
+ * full-denominator mean would report the two defects added together.
+ * `HeadlineSupport` carries that other gap.
+ */
+export interface ScoreExclusionLift {
+  /** Scored tasks whose denominator moved. Never 0 — the whole object is null then. */
+  tasks_affected: number
+  /** Scored tasks the two averages are taken over. */
+  tasks_counted: number
+  /** Rubric items the judge failed to read, across those tasks. */
+  excluded_items: number
+  /** Points of rubric those items were worth. */
+  excluded_max: number
+  /** Mean of the published task percentages, each out of what was read. */
+  avg_score_pct_from_rows: number
+  /** Mean of the same tasks scored out of their whole rubrics. */
+  avg_score_pct_full_denominator: number
+  /** The first minus the second: what unread rubric adds to this run's average. */
+  lift_pct: number
+  /**
+   * Whether the payload's own run-level figure agrees with this one, or null
+   * when the payload made no claim. Null is not the same statement as true.
+   */
+  payload_agrees: boolean | null
+}
+
 export interface TaskGradeV1 {
   task_id: string
   sector: string

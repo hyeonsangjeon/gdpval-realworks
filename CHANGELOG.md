@@ -143,7 +143,37 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
-- **The repeat-variation report left 92 items standing as tool-failure
+- **The headline never said what part of it was rubric nobody read.** An item
+  the judge fails to read leaves the numerator and the denominator together, so
+  the task is scored out of less rubric than it was worth and its percentage
+  rises. Both ends of that have been on the board since #362, but only inside
+  the task table — one row at a time, fifty rows at most. Nothing told a reader
+  what the *run's* average owed to the same effect. Twelve of the nineteen grade
+  files under `data/grades` have a headline that moved this way; the widest is
+  3.53 points on a three-task smoke, and the 215–220 task runs move 0.14 to
+  0.53. `summary.score_exclusion_lift` now carries the run-level measurement and
+  the grade detail page prints it, on the runs where it is true and nowhere
+  else.
+
+  Both percentages it reports are means over the task rows, and neither is the
+  published headline. Two independent defects move these averages in opposite
+  directions: unread rubric leaves the denominator and lifts the score, while a
+  task the grader could not grade at all stays in the denominator as a zero and
+  lowers it. Four published 1.0 files carry the second, by 0.23 to 1.26 points.
+  Subtracting a full-denominator row mean from a published headline reports the
+  two added together as though both were the first, and on the worst of the four
+  it flips the sign: 54.10 published against 55.36 from the rows and 54.82 out
+  of the whole rubrics is a lift of **+0.53**, which the naive subtraction
+  reports as **−0.72**. The two gaps are therefore reported apart — the existing
+  `headline_support` carries the other — and the page says so in words when a
+  run's headline disagrees with its own rows. No published number changes; the
+  headline is passed through as written and asserted byte-identical.
+
+  This is the reporting half of the follow-up logged above, where an item the
+  judge fails to answer changes the maximum score itself between runs. Whether
+  to keep that rule remains an owner decision; the dashboard no longer stays
+  quiet about its effect while it stands.
+
   candidates, and they are not.** The stage-3 analysis has no tool-failure
   field, so it offered the `read_deliverable` call census in its place, on the
   plain reading that its zero end is where a verdict was reached without opening

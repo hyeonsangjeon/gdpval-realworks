@@ -132,6 +132,32 @@ function halfReadHalfLost(taskId = 't1') {
 }
 
 /**
+ * The same shape with a fifth of the rubric unread instead of a third.
+ *
+ * Ten points earned out of the twenty read is 50%; out of the whole 25 it is
+ * exactly 40%. Both ends land on two decimals with nothing left over, which is
+ * what lets the run-level means below be written as the integers they are
+ * rather than as whatever a float happened to round to.
+ */
+function fifthOfTheRubricUnread(taskId = 't1') {
+  return task(taskId, [
+    item(10, 5, 'partial'),
+    item(10, 5, 'partial'),
+    item(5, 0, 'judge_error'),
+  ]);
+}
+
+/** A task the judge read end to end, at full marks. */
+function readInFull(taskId = 't2') {
+  return task(taskId, [item(10, 10), item(10, 10)]);
+}
+
+/** The run-level lift, as the dashboard receives it. */
+function liftOf(raw) {
+  return processGradesFile('g.json', raw).summary.score_exclusion_lift;
+}
+
+/**
  * `avg_score` as the aggregator has always derived it from `pct`.
  *
  * It snaps: 99 and above is exactly 1, 1 and below is exactly 0, so that
@@ -401,4 +427,146 @@ test('no published task row loses its score to this projection', async () => {
     }
   }
   assert.ok(checked >= 500, `expected the whole corpus, checked ${checked} rows`);
+});
+
+// -- the same measurement, taken over the whole run -------------------------
+//
+// The pair above reaches the screen one task at a time, inside a table that
+// shows fifty rows at most. Nothing said what the headline — the one number an
+// experiment is remembered by — owed to the same effect, so a reader comparing
+// two experiments could not see it at all.
+
+test('the run carries the same measurement its rows do', () => {
+  // One task of two loses a fifth of its rubric. The rows average 75%; the
+  // same two tasks out of their whole rubrics average 70%. Five points of this
+  // run's headline are rubric nobody read.
+  const got = liftOf(grade('1.4', [fifthOfTheRubricUnread('t1'), readInFull('t2')]));
+  assert.deepEqual(got, {
+    tasks_affected: 1,
+    tasks_counted: 2,
+    excluded_items: 1,
+    excluded_max: 5,
+    avg_score_pct_from_rows: 75,
+    avg_score_pct_full_denominator: 70,
+    lift_pct: 5,
+    payload_agrees: null,
+  });
+});
+
+test('a run whose judge read every rubric item reports nothing rather than a zero', () => {
+  // A `lift_pct: 0` on every run would put the caveat on the whole board and
+  // invite a reader to compare zeros that mean different things. Same
+  // convention as the per-task pair, for the same reason.
+  for (const version of ALL_VERSIONS) {
+    const raw = grade(version, [task('t1', [item(10, 7, 'partial'), item(10, 10)])]);
+    assert.equal(liftOf(raw), null, `schema ${version} invented a lift`);
+  }
+});
+
+test('the lift is measured against the rows, not against a headline that disagrees with them', () => {
+  // The shape of the four published 1.0 files on the board. A task the grader
+  // could not grade at all stays in the denominator as a zero, so the headline
+  // sits BELOW the mean of its own rows — while unread rubric lifts those rows
+  // above what the whole rubrics would give. The two defects are independent
+  // and pull opposite ways, so subtracting a full-denominator mean from the
+  // published headline reports their sum and here flips the sign outright:
+  // 65 − 70 is −5 where the answer is +5.
+  const raw = grade('1.0', [fifthOfTheRubricUnread('t1'), readInFull('t2')]);
+  raw.summary.openai_compat.avg_score_pct = 65;
+  const record = processGradesFile('g.json', raw);
+
+  // The published figure is still the published figure. Restating a benchmark
+  // score is not a decision for an aggregator, here or anywhere else in this
+  // file.
+  assert.equal(record.summary.avg_score_pct, 65);
+  assert.equal(record.summary.headline_support.supported, false);
+  assert.equal(record.summary.headline_support.delta_pct, -10);
+
+  const got = record.summary.score_exclusion_lift;
+  assert.equal(got.avg_score_pct_from_rows, 75);
+  assert.equal(got.avg_score_pct_full_denominator, 70);
+  assert.equal(got.lift_pct, 5, 'the headline gap leaked into the lift');
+  assert.equal(
+    record.summary.avg_score_pct - got.avg_score_pct_full_denominator,
+    -5,
+    'the fixture stopped demonstrating the sign flip',
+  );
+});
+
+test('a run-level claim in the payload is reported three-valued, never assumed', () => {
+  // The grader learned to write this figure in #362 and none of the nineteen
+  // files the aggregator reads carries it — though one further down
+  // `data/grades` already does, so the case below is a payload that exists.
+  // `null` has to keep meaning "the payload said nothing", which is a
+  // different statement from "the payload agrees" — the same three-valued rule
+  // `headline_support.supported` follows.
+  const build = () => grade('1.4', [fifthOfTheRubricUnread('t1'), readInFull('t2')]);
+
+  assert.equal(liftOf(build()).payload_agrees, null, 'silence was read as agreement');
+
+  const agreeing = build();
+  agreeing.summary.score_exclusions = { avg_score_pct_full_denominator: 70.02 };
+  assert.equal(liftOf(agreeing).payload_agrees, true, 'a two-decimal rounding step was called a conflict');
+
+  const disagreeing = build();
+  disagreeing.summary.score_exclusions = { avg_score_pct_full_denominator: 68 };
+  assert.equal(liftOf(disagreeing).payload_agrees, false, 'a real disagreement went unreported');
+});
+
+test('a schema the projection has never validated gets no run-level lift either', () => {
+  // An unrecognised version does not reach the item-level summary at all, so
+  // the key is absent rather than null. Both readings are "no claim" to the
+  // dashboard, which tests the value for truthiness; the distinction is
+  // written down here so a later change that starts emitting `null` on this
+  // path is visible as a change rather than as a wash.
+  const raw = grade('1.4', [fifthOfTheRubricUnread('t1'), readInFull('t2')]);
+  raw.schema_version = '2.0';
+  const record = processGradesFile('g.json', raw);
+  assert.equal(record.schema_version, null, 'the fixture stopped being unknown');
+  assert.equal('score_exclusion_lift' in record.summary, false);
+  assert.ok(!record.summary.score_exclusion_lift);
+});
+
+test('twelve of the nineteen published files owe part of their headline to unread rubric', async () => {
+  // Twelve known positives against seven known negatives, on the real data.
+  // An equality rather than a floor: a corpus that changes this should make
+  // somebody look at it, the same way the headline-support corpus check does.
+  const files = (await readdir(GRADES_DIR))
+    .filter((name) => name.endsWith('.json'))
+    .sort();
+  assert.ok(files.length >= 19, `expected the published corpus, found ${files.length}`);
+
+  let withLift = 0;
+  let worst = 0;
+  for (const name of files) {
+    const raw = JSON.parse(await readFile(join(GRADES_DIR, name), 'utf8'));
+    const record = processGradesFile(join(GRADES_DIR, name), raw);
+    const got = record.summary?.score_exclusion_lift;
+    if (!got) continue;
+    withLift += 1;
+
+    // Dividing by MORE rubric cannot raise a run's average any more than it
+    // can raise a task's.
+    assert.ok(got.lift_pct >= 0, `${name}: the fuller denominator averaged higher`);
+    assert.ok(got.tasks_affected >= 1 && got.tasks_affected <= got.tasks_counted,
+      `${name}: ${got.tasks_affected} affected of ${got.tasks_counted} counted`);
+    assert.ok(got.excluded_items >= got.tasks_affected,
+      `${name}: fewer unread items than affected tasks`);
+    assert.ok(got.excluded_max > 0, `${name}: reported no lost points`);
+    // Both run-level readers take their published-side mean over the same
+    // rows. If these ever drift, the two numbers on the page are describing
+    // different runs.
+    assert.equal(got.avg_score_pct_from_rows,
+      record.summary.headline_support.avg_score_pct_from_rows,
+      `${name}: the run-level readers disagree about which rows they read`);
+    assert.equal(got.payload_agrees, null,
+      `${name}: a published payload started claiming its own figure`);
+
+    worst = Math.max(worst, got.lift_pct);
+  }
+
+  assert.equal(withLift, 12, `expected twelve affected files, found ${withLift}`);
+  // exp998's three-task pro smoke: one task of three, 3.53 points of headline.
+  // The 215-220 task runs move 0.14 to 0.53.
+  assert.ok(worst >= 3.5, `the widest published run-level lift fell to ${worst}`);
 });
