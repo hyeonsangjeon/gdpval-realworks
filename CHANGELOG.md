@@ -143,6 +143,44 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **Thirteen items the judge never answered were all written down as the same
+  six words.** When a grading call returns no usable final text, the judge
+  already works out *which* kind of nothing it was — the output budget ran out,
+  the provider filtered the reply, the response came back with a failed status,
+  or nothing explains it — because whether to retry at all depends on that
+  answer. The value was used for the retry decision and then dropped, and the
+  item was recorded as a bare `empty_final_text`.
+
+  On the 185-task gold run that happened to thirteen items across ten tasks, at
+  60–85 seconds of grading each. Afterwards there was no way to separate them
+  without paying to grade them again, and they need opposite responses: a
+  budget exhaustion is fixed by a larger cap, a content filter is not fixed by
+  anything a cap can do, and `unknown` means the provider said nothing at all.
+  The distinction was visible the whole time in the retry warning line — the
+  shard-4 entry below quotes `empty_final_text:max_output_tokens` from exactly
+  that log — but the log is per-run and the record is what the analysis reads.
+
+  The reason is now carried the last few lines to where the item is recorded,
+  so an empty verdict reads `empty_final_text:<finish_reason>`. Three things
+  are deliberately unchanged. A failure that happened *before* the text was
+  read — an upstream error, a tool call during finalization, the iteration cap
+  — still wins, because it names a more specific cause than emptiness. The
+  reason is overwritten on every attempt rather than remembered from the first,
+  so an item whose retry succeeded carries nothing from how it started, and an
+  item that failed twice differently is filed under the second failure rather
+  than the one a bigger budget already failed to fix. And the item is still
+  excluded from the score exactly as before: naming the failure is a separate
+  question from deciding what an unanswered item costs, and that one is open on
+  its own card.
+
+  The `finish_reason` vocabulary is bounded — a provider `incomplete_details`
+  reason, a status, `max_output_tokens`, or `unknown` — so the suffix groups
+  rather than fragmenting into one bucket per item. The recorded reason and the
+  string that tells the retry to think cheaply are now built from one constant,
+  so they cannot drift apart into a silent no-op. Consumers that count
+  `baseline_empty_final_text` read a configured integer, not this string, and
+  are unaffected. Regression tests in
+  `batch-runner/tests/test_an_empty_verdict_says_why_it_was_empty.py`.
 - **A task that takes longer than one chunk could never be graded, only paid
   for repeatedly.** `--resume` harvests *completed* `task_id`s from the partial
   on disk, so resume granularity is one whole task. A task abandoned part-way
