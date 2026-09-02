@@ -1647,6 +1647,92 @@ def _score_exclusion_stats(
     }
 
 
+#: Both visual-budget markers carry their figures in the same shape, set by
+#: ``Grader._task_visual_budget_error``:
+#: ``task_visual_budget_exceeded:required_calls=134,cap=72``.
+_VISUAL_BUDGET_FIGURES = re.compile(r"required_calls=(\d+),cap=(\d+)")
+
+
+def _visual_budget_figures(marker: object) -> tuple[int, int] | None:
+    """``(required_calls, cap)`` from a budget marker, or ``None``."""
+    if not isinstance(marker, str):
+        return None
+    match = _VISUAL_BUDGET_FIGURES.search(marker)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _visual_budget_stats(task_dicts: list[dict]) -> dict:
+    """What this run gave up, or lost outright, to the visual call cap.
+
+    A task may want more renders than the per-task cap allows. The grader
+    answers by dropping the escalation that exists only for unreadable files,
+    and if that is still not enough, every item that wanted a picture is
+    excluded. A task with nothing left to score is then dropped from the
+    corpus -- not scored zero, *dropped*: it reports
+    ``all_items_score_excluded`` and lands in ``error_tasks`` beside tasks
+    that broke for unrelated reasons. Stage 3's ``43dc9778`` went exactly
+    that way, 134 renders against a cap of 72, a 67-item task scoring 87%,
+    gone from a 185-task corpus with no number anywhere saying so.
+
+    Counted over **every** task rather than the scored ones, because the case
+    this exists to surface is precisely the task that is no longer scored.
+    That is the difference from ``score_exclusions``, which reports on the
+    tasks the headline averages.
+
+    The two counts overlap on purpose. ``tasks_downgraded`` is graded work
+    that reached a verdict without pictures it asked for -- absorbed into the
+    average, and until now invisible there. ``tasks_unmet`` is the shortfall
+    that stood anyway. A task whose demand fell but stayed over the cap is in
+    both.
+
+    ``max_required_calls`` against ``call_cap`` makes headroom legible
+    without going and finding it: the recovered ``43dc9778`` used 68 of 72.
+    Both are ``None`` on a run where no task came near the cap, because
+    nothing records a demand that was met -- ``tasks_over_cap: 0`` is the
+    claim being made there, and it is the honest one.
+    """
+    tasks_over_cap = 0
+    tasks_downgraded = 0
+    tasks_unmet = 0
+    items_downgraded = 0
+    required_calls: list[int] = []
+    caps: list[int] = []
+
+    for task in task_dicts:
+        fallback = task.get("visual_budget_fallback")
+        unmet = task.get("visual_budget_unmet")
+        if fallback:
+            tasks_downgraded += 1
+        if unmet:
+            tasks_unmet += 1
+        if fallback or unmet:
+            tasks_over_cap += 1
+        items_downgraded += sum(
+            1
+            for item in task.get("items", [])
+            if item.get("visual_budget_downgraded")
+        )
+        for marker in (fallback, unmet):
+            figures = _visual_budget_figures(marker)
+            if figures is None:
+                continue
+            required_calls.append(figures[0])
+            caps.append(figures[1])
+
+    return {
+        "tasks_over_cap": tasks_over_cap,
+        "tasks_downgraded": tasks_downgraded,
+        "tasks_unmet": tasks_unmet,
+        "items_downgraded": items_downgraded,
+        "max_required_calls": max(required_calls) if required_calls else None,
+        # Constant within a run, since it is read once from config; ``max``
+        # only picks a representative if a resumed run ever spans a change.
+        "call_cap": max(caps) if caps else None,
+    }
+
+
 def _compute_summary(
     task_dicts: list[dict],
     *,
@@ -1792,6 +1878,10 @@ def _compute_summary(
         # a fixed compatibility shape, and this is the caveat on the number it
         # carries, not another field of it.
         "score_exclusions": _score_exclusion_stats(scored_tasks, avg_pct),
+        # Over every task, not just the scored ones. A task that could not fit
+        # its renders may have left the average altogether, and that is the
+        # case this is here to count -- see `_visual_budget_stats`.
+        "visual_budget": _visual_budget_stats(task_dicts),
         "wow": {
             "rubric_item_coverage_avg": _rate(
                 counters["all_pass"], counters["all_items"]
