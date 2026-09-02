@@ -13,6 +13,31 @@ project rather than an authentication one.
 Nothing in this repository could measure that: there is no infrastructure code
 and no role tooling of any kind. This script closes that gap.
 
+Where it has to be run
+----------------------
+Through its workflow, in CI. Not from a development box, and not from the agent
+container.
+
+What this reads is whatever subscription and identity the ``az`` session is
+signed into, and a login taken outside CI is a different one of each. The
+subscription such a login reaches does not contain the Foundry account this asks
+about, so ``resolve_resource_group`` gets nothing back and the run stops at
+``cannot_read_control_plane``.
+
+That verdict is honest as far as it goes. The sentence recorded beside it is
+not: it reads "that alone means this identity has no reader on the account",
+which is a true inference only when the lookup went to the right subscription.
+From the wrong one the identity was never asked about at all, because an absent
+resource and a withheld role come back through the control plane looking the
+same. A local run therefore cannot answer this question, and it cannot answer it
+in the negative either.
+
+``AZURE_SUBSCRIPTION_ID`` is required rather than defaulted, below, so the
+script cannot quietly inherit whichever subscription a local login happens to
+carry. That is as far as a check can go: a subscription id supplied by hand is
+well-formed whether or not it is the right one, and no assertion here can tell
+the two apart.
+
 What it does and does not do
 ----------------------------
 Every call it makes is an ARM control-plane READ. It never creates, updates or
