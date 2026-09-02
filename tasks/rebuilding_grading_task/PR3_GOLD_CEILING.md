@@ -225,7 +225,7 @@ Required items (|max score| >= 4)
 
 Scores
 ------------------------------------------------------------
-  graded 30 task(s), 0 in error; 0 perfect, 30 partial, 0 zero
+  graded 30 task(s), 0 in error; 0 near-perfect (>=99%), 30 partial, 0 near-zero (<=1%)
   rubric item coverage    0.74
   judge pass rate         0.739
     Government                                           85.16%  n=13
@@ -426,7 +426,7 @@ Required items (|max score| >= 4)
 
 Scores
 ------------------------------------------------------------
-  graded 30 task(s), 0 in error; 0 perfect, 30 partial, 0 zero
+  graded 30 task(s), 0 in error; 0 near-perfect (>=99%), 30 partial, 0 near-zero (<=1%)
   rubric item coverage    0.695
   judge pass rate         0.695
     Government                                           85.87%  n=13

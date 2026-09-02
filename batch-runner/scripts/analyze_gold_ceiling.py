@@ -1096,8 +1096,9 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
     lines.append(
         f"  graded {scores['graded_tasks']} task(s), "
         f"{scores['error_tasks']} in error; "
-        f"{scores['perfect_count']} perfect, "
-        f"{scores['partial_count']} partial, {scores['zero_count']} zero"
+        f"{scores['perfect_count']} near-perfect (>=99%), "
+        f"{scores['partial_count']} partial, "
+        f"{scores['zero_count']} near-zero (<=1%)"
     )
     lines.append(f"  rubric item coverage    {scores['rubric_item_coverage_avg']}")
     lines.append(f"  judge pass rate         {scores['judge_pass_rate']}")
