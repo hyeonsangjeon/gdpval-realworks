@@ -58,6 +58,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/azure_rbac_diagnostic.py
 !batch-runner/scripts/analyze_repeat_variation.py
 !batch-runner/scripts/analyze_audio_repeat_variation.py
+!batch-runner/scripts/measure_audio_grading_accuracy.py
 
 
 # Experiment report HTML (skews GitHub language stats)
