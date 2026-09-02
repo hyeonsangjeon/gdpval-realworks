@@ -20,6 +20,7 @@ from core.tools import (
     RendererDependencyError,
     has_audio_content,
     has_extractable_text,
+    has_only_source_code_content,
     read_deliverable,
 )
 
@@ -2037,6 +2038,183 @@ def test_has_audio_content_answers_before_the_cut_when_it_can(
     monkeypatch.setattr(read_deliverable_module, "MAX_ZIP_ENTRIES", 2)
 
     assert has_audio_content(p) is True
+
+
+# ── has_only_source_code_content: nothing here to look at ────────────
+#
+# The sibling of the block above, asked for the opposite reason. That probe
+# exists so a criterion about sound is not answered by reading; this one
+# exists so a criterion about code is not refused for want of a picture.
+#
+# Task 7de33b48 delivers one 3.5 KB ``screen_reader_status_message.zip`` --
+# two ``.tsx``, a ``.css``, a ``README.md`` and a ``package.json`` -- and is
+# graded on five items worth eight points that name the words ``render``,
+# ``layout`` and ``visual``. All five were excluded as
+# ``required_visual_render_target_unavailable``.
+
+
+def _react_component_archive(base_dir):
+    """The real deliverable's member list, from the judge's own evidence."""
+    return _archive(base_dir, "screen_reader_status_message.zip", {
+        "screen-reader-status-message/README.md": "# usage",
+        "screen-reader-status-message/package.json": '{"name": "srsm"}',
+        "screen-reader-status-message/src/ScreenReaderStatusMessage.tsx":
+            "export const StatusMessage = () => <div role='status' />;",
+        "screen-reader-status-message/src/ScreenReaderStatusMessage.css":
+            ".sr-only { position: absolute; }",
+        "screen-reader-status-message/src/ScreenReaderStatusMessage.test.tsx":
+            "it('renders', () => {});",
+    })
+
+
+def test_a_react_component_archive_is_source_and_nothing_else(base_dir):
+    assert has_only_source_code_content(
+        _react_component_archive(base_dir)
+    ) is True
+
+
+def test_the_readme_and_manifest_beside_the_source_do_not_spoil_the_claim(
+    base_dir,
+):
+    """The check that nearly shipped broken.
+
+    ``.md`` and ``.json`` are deliberately absent from
+    ``GRADER_SOURCE_CODE_EXTENSIONS`` -- a memo is not source. Requiring every
+    member to be in that set would have answered ``False`` for the one archive
+    this was written for, because every real component ships with both of
+    these. They pass on the different ground that there is nothing in them to
+    look at.
+    """
+    p = _archive(base_dir, "with_docs.zip", {
+        "README.md": "# usage",
+        "package.json": '{"name": "srsm"}',
+        "src/Component.tsx": "export const C = () => <div />;",
+    })
+
+    assert has_only_source_code_content(p) is True
+
+
+def test_prose_and_configuration_alone_are_not_a_source_deliverable(base_dir):
+    """Passing the "no picture in it" test is not enough on its own.
+
+    An archive of notes would sail through that and be demoted off the visual
+    path, which is the ``.csv`` mistake moved inside a container. At least one
+    member has to actually be source.
+    """
+    p = _archive(base_dir, "notes.zip", {
+        "README.md": "# notes",
+        "CHANGELOG.md": "## 1.0",
+        "config.json": "{}",
+    })
+
+    assert has_only_source_code_content(p) is False
+
+
+@pytest.mark.parametrize("member,payload", [
+    ("src/screenshot.png", b"\x89PNG\r\n\x1a\n"),
+    ("docs/design.pdf", b"%PDF-1.4\n"),
+    ("assets/chime.wav", b"\x00"),
+    ("assets/demo.mp4", b"\x00"),
+    ("data/rows.csv", "a,b\n1,2\n"),
+    ("assets/logo.svg", "<svg/>"),
+    ("nested/inner.zip", b"PK\x03\x04"),
+])
+def test_one_member_worth_looking_at_settles_the_whole_archive(
+    base_dir, member, payload
+):
+    """Each of these is refused for its own reason and the same reason.
+
+    The first four and the ``.csv`` are things a judge would see on opening
+    them. The ``.svg`` and the nested archive are things this module cannot
+    name -- ``_zip_entries`` reads member kinds off the extension alone, and an
+    extension it does not know may be the screenshot. Saying "nothing to look
+    at" about a list containing one of these would be a guess.
+    """
+    p = _archive(base_dir, "mixed.zip", {
+        "src/Component.tsx": "export const C = () => <div />;",
+        member: payload,
+    })
+
+    assert has_only_source_code_content(p) is False
+
+
+def test_directory_entries_are_not_mistaken_for_unnameable_members(base_dir):
+    """A folder has no extension, and ``_zip_entries`` already drops it."""
+    import zipfile
+
+    p = base_dir / "with_dirs.zip"
+    with zipfile.ZipFile(p, "w") as archive:
+        archive.writestr("src/", b"")
+        archive.writestr("src/Component.tsx", "export const C = () => <div />;")
+
+    assert has_only_source_code_content(p) is True
+
+
+def test_an_empty_archive_is_not_source(base_dir):
+    p = _archive(base_dir, "empty.zip", {})
+
+    assert has_only_source_code_content(p) is False
+
+
+def test_a_bare_source_file_needs_no_archive(base_dir):
+    p = base_dir / "Component.tsx"
+    p.write_text("export const C = () => <div />;", encoding="utf-8")
+
+    assert has_only_source_code_content(p) is True
+
+
+@pytest.mark.parametrize("name,payload", [
+    ("Summary.csv", "a,b\n1,2\n"),
+    ("memo.md", "# notes"),
+    ("reel.mp4", b"\x00"),
+    ("report.pdf", b"%PDF-1.4\n"),
+])
+def test_a_file_that_is_not_source_is_examined_and_refused(
+    base_dir, name, payload
+):
+    """``False`` is a claim, and the ``.csv`` is the one that matters.
+
+    Data has a look a reader sees on opening it, so "page layout is visually
+    polished" against one stays unanswerable by reading;
+    ``test_explicit_visual_item_fails_closed_without_render_target`` pins that
+    it keeps failing closed.
+    """
+    p = base_dir / name
+    if isinstance(payload, bytes):
+        p.write_bytes(payload)
+    else:
+        p.write_text(payload, encoding="utf-8")
+
+    assert has_only_source_code_content(p) is False
+
+
+def test_a_missing_file_is_not_reported_as_source(base_dir):
+    assert has_only_source_code_content(base_dir / "never_written.zip") is None
+
+
+def test_an_archive_it_cannot_open_is_not_reported_as_source(base_dir):
+    p = base_dir / "broken.zip"
+    p.write_bytes(b"not actually a zip file")
+
+    assert has_only_source_code_content(p) is None
+
+
+def test_a_listing_cut_short_cannot_support_a_claim_about_the_whole(
+    base_dir, monkeypatch
+):
+    """Where this probe parts company with its audio sibling.
+
+    ``has_audio_content`` can answer ``True`` off a truncated list, because
+    finding one ``.wav`` settles it and later members can only add. "There is
+    nothing here to look at" is a claim about every member, and the entry that
+    was never listed is precisely the one that would refute it.
+    """
+    p = _archive(base_dir, "many.zip", {
+        f"src/m{i}.tsx": "export const C = () => <div />;" for i in range(5)
+    })
+    monkeypatch.setattr(read_deliverable_module, "MAX_ZIP_ENTRIES", 2)
+
+    assert has_only_source_code_content(p) is None
 
 
 # ── A table's rows reach the judge (task 78) ─────────────────────────

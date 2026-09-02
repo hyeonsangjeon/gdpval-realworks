@@ -37,3 +37,49 @@ GRADER_VISUAL_RENDER_EXTENSIONS = frozenset({
     ".bmp",
     ".webp",
 })
+
+#: Source files: code, stylesheets and markup that describe an appearance
+#: rather than having one. Read as a set of *program text*, not of "things
+#: that happen to be readable" -- ``.csv``, ``.txt``, ``.md`` and ``.json``
+#: are deliberately absent, because a spreadsheet export or a memo is data a
+#: reader looks at, and this set exists to name work whose only honest
+#: reading is its source.
+#:
+#: The distinction earns its keep in one place, the visual demotion in
+#: ``grader_routing``. A React component's rendered appearance is not a
+#: property of the submission at all; it exists only once something builds
+#: and runs the code. So "the rendered DOM includes an element with
+#: role=status" is answered by reading the JSX, and that is not a substitute
+#: for looking -- it is the only place the answer is written down.
+GRADER_SOURCE_CODE_EXTENSIONS = frozenset({
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cs",
+    ".css",
+    ".go",
+    ".h",
+    ".hpp",
+    ".htm",
+    ".html",
+    ".java",
+    ".js",
+    ".jsx",
+    ".kt",
+    ".m",
+    ".mjs",
+    ".php",
+    ".pl",
+    ".py",
+    ".r",
+    ".rb",
+    ".rs",
+    ".scss",
+    ".sh",
+    ".sql",
+    ".svelte",
+    ".swift",
+    ".ts",
+    ".tsx",
+    ".vue",
+})

@@ -222,6 +222,137 @@ def test_one_renderable_file_keeps_the_item_visual():
     assert decision.preferred_op == "render_to_image"
 
 
+# ── Source code: the one explicitly-visual criterion that may demote ──
+#
+# The five items and eight points of task 7de33b48, on one
+# ``screen_reader_status_message.zip`` holding two ``.tsx``, a ``.css``, a
+# ``README.md`` and a ``package.json``. Every one was sorted visual by the
+# words ``render``, ``layout`` and ``visual`` in its text, and every one was
+# excluded as ``required_visual_render_target_unavailable`` -- against a
+# submission with no picture in it anywhere, whose appearance is not a
+# property of the submission at all but of something that builds and runs it.
+
+SOURCE_CRITERIA = [
+    'Before any status message occurs, the rendered DOM includes an element '
+    'with role="status".',
+    'When a status message is triggered, its content is rendered inside the '
+    'element with role="status".',
+    "ScreenReaderStatusMessage.css defines a class to visually hide the live "
+    "region while keeping it in the accessibility tree (no visual impact on "
+    "layout).",
+    "Tests verify that enabling visible does not change the surrounding "
+    "rendered text content or layout.",
+    "ScreenReaderStatusMessage.test.tsx uses React Testing Library to render "
+    "and query the component.",
+]
+
+
+@pytest.mark.parametrize("criterion", SOURCE_CRITERIA)
+def test_a_source_archive_answers_its_own_visual_criteria(criterion: str):
+    # Classification is untouched -- these really do name rendering, and a
+    # ``.png`` beside them would still be looked at. What changes is where an
+    # item goes when the only place the answer is written down is the source.
+    assert classify_criterion(criterion).modality is Modality.VISUAL
+
+    decision = resolve_runtime_routing(
+        criterion,
+        ["screen_reader_status_message.zip"],
+        selected_paths_are_source_code=True,
+    )
+
+    assert decision.modality is Modality.TEXT
+    assert decision.preferred_op == "read_content"
+
+
+def test_a_csv_is_still_not_source_and_still_fails_closed():
+    # The rule directly above this one, unchanged. The probe answers ``False``
+    # for a ``.csv`` -- data has a look a reader sees on opening it -- so the
+    # item stays visual and a missing verdict is not traded for an invented
+    # one.
+    decision = resolve_runtime_routing(
+        "Document color and page layout are visually polished.",
+        ["Summary.csv"],
+        selected_paths_are_source_code=False,
+    )
+
+    assert decision.modality is Modality.VISUAL
+
+
+@pytest.mark.parametrize("answer", [None, False])
+def test_only_a_measured_yes_demotes_an_explicitly_visual_item(answer):
+    # ``None`` is the unreadable archive, the missing file and the member list
+    # cut short. Demoting on any of those is the guess the tri-state exists to
+    # refuse, so silence leaves the item exactly where it was.
+    decision = resolve_runtime_routing(
+        SOURCE_CRITERIA[0],
+        ["screen_reader_status_message.zip"],
+        selected_paths_are_source_code=answer,
+    )
+
+    assert decision.modality is Modality.VISUAL
+
+
+def test_the_suffix_test_is_the_second_lock_on_the_source_demotion():
+    # Either lock alone would do, and this is the one that survives the probe
+    # falling behind: put ``.html`` in the render set tomorrow and a file the
+    # prepass had just learned to draw cannot be demoted here, whatever a
+    # stale probe says about it.
+    decision = resolve_runtime_routing(
+        SOURCE_CRITERIA[0],
+        ["component.png"],
+        selected_paths_are_source_code=True,
+    )
+
+    assert decision.modality is Modality.VISUAL
+    assert decision.preferred_op == "render_to_image"
+
+
+def test_a_source_demotion_cannot_be_undone_by_the_unreadable_escalation():
+    # The last rule in the module promotes a text item whose files hold no
+    # characters. A ``.zip`` is not in the render set, so the item it just
+    # demoted stays demoted rather than bouncing back to a render that would
+    # error -- and ``has_extractable_text`` answers ``None`` for an archive
+    # anyway, so the signal never fires here in the first place.
+    decision = resolve_runtime_routing(
+        SOURCE_CRITERIA[0],
+        ["screen_reader_status_message.zip"],
+        selected_paths_are_source_code=True,
+        selected_paths_have_text=False,
+        some_selected_path_lacks_text=True,
+        paths_without_text=["screen_reader_status_message.zip"],
+    )
+
+    assert decision.modality is Modality.TEXT
+    assert decision.render_paths is None
+
+
+VIDEO_CRITERIA = [
+    "Both graphic cards use white text on a solid black background in a "
+    "clean sans-serif font.",
+    "The first non-logo content shot begins within 7.0 seconds of the start.",
+    "The image is not stretched or squashed; aspect ratio is preserved for "
+    "all included shots.",
+    "The image fills the 1920x1080 frame without unintended letterboxing or "
+    "pillarboxing.",
+]
+
+
+@pytest.mark.parametrize("criterion", VIDEO_CRITERIA)
+def test_the_video_items_this_rule_does_not_reach_are_left_alone(criterion):
+    # The other four of the nine items that cannot be judged today, and the
+    # reason this change is not claimed as a fix for all nine. A reel really
+    # does have to be watched; ``_kind_of`` gives it its own kind rather than
+    # ``zip``, the probe answers ``False``, and the item stays visual and stays
+    # excluded -- which is the honest outcome, not a gap. Deciding otherwise
+    # would mean sampling a frame and turning "could not see it" into a
+    # verdict about the frame that happened to be picked.
+    decision = resolve_runtime_routing(
+        criterion, ["reel.mp4"], selected_paths_are_source_code=False
+    )
+
+    assert decision.modality is Modality.VISUAL
+
+
 def test_split_children_route_the_text_child_away_from_visual():
     # Task bf68f2ad, at the granularity ``grader.py`` actually routes at.
     # Before this rule the ``.txt`` child errored, and because a split_children
