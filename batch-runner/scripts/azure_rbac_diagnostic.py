@@ -19,18 +19,20 @@ Through its workflow, in CI. Not from a development box, and not from the agent
 container.
 
 What this reads is whatever subscription and identity the ``az`` session is
-signed into, and a login taken outside CI is a different one of each. The
-subscription such a login reaches does not contain the Foundry account this asks
-about, so ``resolve_resource_group`` gets nothing back and the run stops at
-``cannot_read_control_plane``.
+signed into, and a login taken outside CI is a different one of each. Such a
+login is not signed into the subscription holding the Foundry account, so ``az``
+refuses the lookup outright -- it exits non-zero and names the subscription as
+not found, rather than answering with an empty list. The run stops at
+``control_plane_read_never_completed``.
 
-That verdict is honest as far as it goes. The sentence recorded beside it is
-not: it reads "that alone means this identity has no reader on the account",
-which is a true inference only when the lookup went to the right subscription.
-From the wrong one the identity was never asked about at all, because an absent
-resource and a withheld role come back through the control plane looking the
-same. A local run therefore cannot answer this question, and it cannot answer it
-in the negative either.
+The two failures are kept apart deliberately, because they license opposite
+conclusions. When az answers and the account is not in the answer, this identity
+genuinely cannot see it: an absent resource and a withheld role come back
+through the control plane looking the same, and either is a real finding about
+the account. When az never answers, the account was not looked up at all, and
+the run says nothing about roles in either direction. Reporting the second as
+the first sends the next reader hunting a missing role in a directory that never
+held the resource.
 
 ``AZURE_SUBSCRIPTION_ID`` is required rather than defaulted, below, so the
 script cannot quietly inherit whichever subscription a local login happens to
@@ -478,11 +480,28 @@ def leaked_placeholders(text: str, secrets: Mapping[str, str]) -> tuple[str, ...
 
 
 class AzureReadFailure(RuntimeError):
-    """An az read failed. Carries a classification, never the provider text."""
+    """An az read failed. Carries a classification, never the provider text.
 
-    def __init__(self, what: str, *, exit_code: int | None) -> None:
+    ``completed`` separates the two ways a read can fail, which are different
+    facts and support different conclusions:
+
+    * ``completed=True``  -- az ran the query, returned parseable output, and
+      the thing being looked for was not in it. Azure answered.
+    * ``completed=False`` -- az did not answer at all: it exited non-zero, or
+      returned something that would not parse. The question never reached the
+      resource, so nothing at all was learned about it.
+
+    Only the first supports an inference about what this identity can see. The
+    default is the second, so a new raise site has to opt in to the stronger
+    claim rather than inherit it.
+    """
+
+    def __init__(
+        self, what: str, *, exit_code: int | None, completed: bool = False
+    ) -> None:
         self.what = what
         self.exit_code = exit_code
+        self.completed = completed
         detail = "no exit code" if exit_code is None else f"exit {exit_code}"
         super().__init__(f"{what} could not be read ({detail})")
 
@@ -528,8 +547,13 @@ def resolve_resource_group(
     """Ask Azure where the Foundry account lives.
 
     No secret and no repository variable records the resource group, so it has
-    to come from Azure itself. Failing to read it is a finding in its own right:
-    it means the principal has no control-plane read on the account.
+    to come from Azure itself.
+
+    An answered query that does not contain the account is a finding in its own
+    right: the account is either absent from this subscription or withheld from
+    this principal, and the control plane returns both the same way. That is the
+    ``completed=True`` raise below. A query az never completed is not that
+    finding, and is raised without the flag by the runner.
     """
     payload = runner(
         [
@@ -550,7 +574,7 @@ def resolve_resource_group(
         derived = resource_group_of(str(resource.get("id", "")))
         if derived:
             return derived
-    raise AzureReadFailure("the Foundry account", exit_code=None)
+    raise AzureReadFailure("the Foundry account", exit_code=None, completed=True)
 
 
 def read_assignments(
@@ -655,13 +679,24 @@ def diagnose(
             runner, account=endpoint.account, subscription_id=subscription_id
         )
     except AzureReadFailure as failure:
-        problems.append(
-            "could not resolve the Foundry account through the control plane, "
-            "so the project scope could not be built. That alone means this "
-            f"identity has no reader on the account ({failure.what})"
-        )
+        if failure.completed:
+            problems.append(
+                "could not resolve the Foundry account through the control "
+                "plane, so the project scope could not be built. Azure "
+                "answered and the account was not in the answer, which means "
+                f"this identity has no reader on it ({failure.what})"
+            )
+            report["verdict"] = "cannot_read_control_plane"
+        else:
+            problems.append(
+                "the Foundry account lookup did not complete, so the project "
+                "scope could not be built. az did not answer the query, which "
+                "is how a subscription this session is not signed into fails, "
+                "so the account was never looked up and no role was measured "
+                f"({failure.what})"
+            )
+            report["verdict"] = "control_plane_read_never_completed"
         report["read_failures"] = problems
-        report["verdict"] = "cannot_read_control_plane"
         return report
 
     scope = project_scope(
@@ -766,6 +801,12 @@ _VERDICT_LINES: Mapping[str, str] = {
     "cannot_read_control_plane": (
         "This identity cannot read the Foundry account through the control "
         "plane, so no role could be read. An owner has to look."
+    ),
+    "control_plane_read_never_completed": (
+        "The account lookup did not complete, so nothing was measured. This "
+        "is what a subscription the session is not signed into looks like, "
+        "and it is not evidence that a role is missing. Re-run it where the "
+        "signed-in subscription is the one holding the project."
     ),
     "cannot_read_role_assignments": (
         "This identity cannot read its own role assignments at the project "

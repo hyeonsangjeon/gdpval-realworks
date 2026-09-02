@@ -503,7 +503,7 @@ def test_an_identity_that_can_assign_is_told_so_rather_than_sent_to_an_owner():
     assert report["principal_can_assign_roles"] is True
 
 
-def test_a_control_plane_that_will_not_answer_is_a_finding_not_an_empty_result():
+def test_a_control_plane_that_answers_without_the_account_is_a_finding():
     az = FakeAz(resources=[], assignments=[], definitions=[])
     report = diagnostic.diagnose(_env(), runner=az)
     assert report["verdict"] == "cannot_read_control_plane"
@@ -512,6 +512,68 @@ def test_a_control_plane_that_will_not_answer_is_a_finding_not_an_empty_result()
     # as a measured zero.
     assert report["roles_held"] == []
     assert len(az.calls) == 1
+    # az answered, and the account was not in the answer. That is a real fact
+    # about what this identity can see, so the stronger sentence is earned.
+    assert "no reader" in " ".join(report["read_failures"])
+
+
+def test_a_lookup_az_never_completed_is_not_reported_as_a_missing_reader():
+    """The failure a login taken outside CI actually produces.
+
+    ``az resource list --subscription <one this session is not signed into>``
+    exits non-zero without querying anything; it does not come back with an
+    empty list. Both used to land on the same verdict and the same sentence,
+    and that sentence -- "this identity has no reader on the account" -- is an
+    inference about a resource nobody asked Azure about. It sends the next
+    reader hunting a role to grant in a directory that never held the project.
+    """
+    az = FakeAz(resources=None, assignments=[], definitions=[])
+    report = diagnostic.diagnose(_env(), runner=az)
+    assert report["verdict"] == "control_plane_read_never_completed"
+    assert report["read_failures"]
+    assert report["roles_held"] == []
+    assert len(az.calls) == 1
+    assert "no reader" not in " ".join(report["read_failures"])
+
+
+def test_the_two_control_plane_failures_do_not_read_the_same_way():
+    answered = diagnostic.render(
+        diagnostic.diagnose(
+            _env(), runner=FakeAz(resources=[], assignments=[], definitions=[])
+        )
+    )
+    unanswered = diagnostic.render(
+        diagnostic.diagnose(
+            _env(), runner=FakeAz(resources=None, assignments=[], definitions=[])
+        )
+    )
+    assert answered != unanswered
+    assert "no reader" in answered
+    assert "no reader" not in unanswered
+    assert "nothing was measured" in unanswered.lower()
+
+
+def test_a_lookup_that_never_completed_still_fails_the_project_role_gate():
+    """A new verdict must not open the gate by not being on a deny list.
+
+    The gate names the one verdict that passes rather than the ones that fail,
+    so an unmeasured run stays closed without anything here being updated.
+    """
+    code, text = _run_main(
+        ["--require-project-role"],
+        FakeAz(resources=None, assignments=[], definitions=[]),
+    )
+    assert code == 1
+    assert "control_plane_read_never_completed" in text
+
+
+def test_every_verdict_the_diagnosis_can_reach_has_a_sentence_written_for_it():
+    # Without this, a verdict added later renders under the fallback line and
+    # reads as though nothing was measured, whatever it actually found.
+    source = SCRIPT.read_text(encoding="utf-8")
+    reachable = set(re.findall(r'report\["verdict"\] = "([a-z_]+)"', source))
+    assert reachable, "the verdict assignments moved; this check went vacuous"
+    assert reachable <= set(diagnostic._VERDICT_LINES)
 
 
 def test_being_unable_to_read_its_own_assignments_is_not_reported_as_none_held():
