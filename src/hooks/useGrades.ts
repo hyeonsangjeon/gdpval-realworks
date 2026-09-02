@@ -7,6 +7,7 @@ import type {
   GradePromptInfo,
   CalibrationCounts,
   SelectionOutcome,
+  ScoreExclusion,
 } from '../types/grade'
 import type {
   CostLedgerReference,
@@ -34,6 +35,12 @@ export interface TaskGrade {
   reached_judge?: boolean
   /** What grading this task cost. Schema 1.4 only; absent means no record. */
   grading_cost?: CostReceipt | null
+  /**
+   * The second end of this task's score, when a judge-failed item took part of
+   * the denominator with it. Absent when the denominator held, which is what
+   * lets the row show one number where there is only one.
+   */
+  score_exclusion?: ScoreExclusion
 }
 
 export interface GradeSummary {

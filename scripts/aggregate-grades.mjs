@@ -536,6 +536,124 @@ function validateHistoricalHeadline(raw) {
 //     worse than no headline, and deriving it in one place makes that
 //     impossible.
 
+// ── The denominator a judge_error takes with it ───────────────────────────
+//
+// An item the judge could not read leaves the numerator and the denominator
+// together, so the task is scored out of less than its rubric is worth and
+// the percentage rises. The widest case on the dashboard today is task
+// f1be6436 of the sol regrade: 24 points earned, 45 points of rubric read,
+// and 29 further points across 17 items the judge never reached. It arrives
+// here as `pct: 54.22` and the screen prints 54%. Those same 24 points out of
+// the whole 74-point rubric are 32.97%. Nothing said so.
+//
+// (The gold-ceiling corpora hold worse ones still, but those files are
+// `grading_diagnostic` and `isPublishableGrade` keeps them off the board, so
+// they are not what a reader is being misled by.)
+//
+// Neither number is wrong. `pct` divides by what was read, which assumes an
+// unread item would have scored like the read ones. The full denominator
+// divides by the whole rubric, which assumes an unread item would have scored
+// nothing. The task's true percentage lies between them, and the two are one
+// number only when nothing was excluded.
+//
+// So both travel, and `avg_score` is left exactly as it was. Changing the
+// published figure here would silently restate every score already on the
+// board, which is a decision about the benchmark rather than one for a reader
+// to make on the way to the screen.
+
+/**
+ * What a task's excluded items did to its denominator, or null if nothing did.
+ *
+ * Absent stays absent: a task that lost nothing gains no key, so the dashboard
+ * can tell "the denominator held" from "nobody looked".
+ *
+ * Two sources, in order. A payload written since the producer learned to
+ * report this carries `pct_full_denominator` itself and is believed. Older
+ * payloads are recomputed from their items, which is why the already-published
+ * runs surface at all -- every 1.3/1.4 file on the board predates that writer,
+ * and `validateScoreExcludedGrade` has already enforced there that an excluded
+ * item and a judge_error are the same thing. Below 1.3 the flag may be absent,
+ * so the verdict stands in for it.
+ */
+function scoreExclusionForTask(task) {
+  const items = Array.isArray(task?.items) ? task.items : [];
+  const excluded = items.filter((item) => (
+    item?.score_excluded === true || item?.verdict === 'judge_error'
+  ));
+  if (excluded.length === 0) return null;
+
+  const excludedMax = excluded.reduce((total, item) => (
+    total + Math.max(0, Number.isFinite(item?.max_score) ? item.max_score : 0)
+  ), 0);
+  // Items can carry a non-positive max_score (penalty criteria), and losing
+  // one of those moves no denominator. Reporting it would put a badge on a
+  // task whose score did not shift by so much as a rounding step.
+  if (excludedMax <= 0) return null;
+
+  const awarded = Number.isFinite(task?.total_awarded) ? task.total_awarded : null;
+  const readMax = Number.isFinite(task?.total_max) ? task.total_max : null;
+  // No published percentage, nothing to qualify. This is the whole-task
+  // failure case: when every item was excluded the producer leaves the task
+  // unscored, the dashboard already prints a dash, and there is no inflated
+  // number here for a second one to stand beside.
+  if (!Number.isFinite(task?.pct)) return null;
+  const published = task.pct;
+
+  let full = Number.isFinite(task?.pct_full_denominator)
+    ? task.pct_full_denominator
+    : null;
+  if (full === null) {
+    if (awarded === null || readMax === null) return null;
+    const fullMax = readMax + excludedMax;
+    // A rubric can carry penalty criteria heavy enough to drive the whole
+    // denominator to zero or below. Task c94452e4 on the board today is one:
+    // a -60 item leaves it with `total_max: -10`, and dividing its 34.72
+    // points by that would put "-868%" on screen beside a published 0%. There
+    // is no honest second number to compute here, so none is offered.
+    if (fullMax <= 0) return null;
+    full = Math.max(0, Math.min(100, (awarded / fullMax) * 100));
+  }
+
+  // The denominator moved and the score did not. A task that earned nothing
+  // is 0% out of what was read and 0% out of the whole rubric, so its
+  // published figure was never inflated and there is no range to show; 66 of
+  // the 303 affected rows on the board are exactly this, and one more is a
+  // task already clamped to 100%. Reporting them would print "somewhere
+  // between 0% and 0%" beside a zero. That the items went missing is still on
+  // the record, in `summary.wow.judge_error_rate`, which is where a reader
+  // asks how much of the rubric was read rather than what the reading was
+  // worth.
+  const rounded = Math.round(full * 100) / 100;
+  if (rounded === published) return null;
+
+  return {
+    items: excluded.length,
+    excluded_max: Math.round(excludedMax * 100) / 100,
+    read_max: readMax,
+    pct_published: published,
+    pct_full_denominator: rounded,
+  };
+}
+
+/**
+ * Map<task_id, exclusion> for every task in an item-level grade file whose
+ * denominator actually moved. Tasks that lost nothing are simply absent.
+ *
+ * Gated on the version list rather than sniffed for `items`, so a payload
+ * shape the projection has never validated cannot quietly acquire a second
+ * headline number on the strength of a key that happens to be spelled the
+ * same.
+ */
+function scoreExclusionsByTask(raw) {
+  const exclusions = new Map();
+  if (!ITEM_LEVEL_VERSIONS.includes(raw?.schema_version)) return exclusions;
+  for (const task of Array.isArray(raw.tasks) ? raw.tasks : []) {
+    const exclusion = scoreExclusionForTask(task);
+    if (exclusion !== null) exclusions.set(task.task_id, exclusion);
+  }
+  return exclusions;
+}
+
 /** Map<task_id, projected receipt> for a cost-carrying grade file. */
 function costReceiptsByTask(raw) {
   const receipts = new Map();
@@ -597,6 +715,11 @@ function processV1GradesFile(
   // grades rendering as "no record" instead of as grading that cost nothing.
   const costReceipts = costReceiptsByTask(raw);
 
+  // Not gated to new payloads: the runs already on the board are exactly the
+  // ones whose inflated task scores are visible today, and their items carry
+  // enough to recompute the honest denominator.
+  const scoreExclusions = scoreExclusionsByTask(raw);
+
   // Convert v1 tasks → legacy-compatible task rows. Snap pct to exact 0/1
   // when it crosses the openai_compat thresholds (pct >= 99 → perfect,
   // pct <= 1 → zero) so legacy Status badges agree with summary counts.
@@ -607,6 +730,11 @@ function processV1GradesFile(
     // dashboard can tell "not recorded" from "recorded as nothing".
     const cost = costReceipts.has(t.task_id)
       ? { grading_cost: costReceipts.get(t.task_id) }
+      : {};
+    // Same convention, second reason: a task whose denominator held gains no
+    // key, so the dashboard shows one number where there is only one.
+    const excluded = scoreExclusions.has(t.task_id)
+      ? { score_exclusion: scoreExclusions.get(t.task_id) }
       : {};
     // Additive: the legacy row keeps every field it had, and gains only the
     // reason it ended where it did. error_messages still carries the raw token
@@ -644,6 +772,7 @@ function processV1GradesFile(
       reached_judge,
       qa_score,
       ...cost,
+      ...excluded,
     };
   });
 
@@ -664,6 +793,12 @@ function processV1GradesFile(
       // reads the same normalised shape the validator vouched for.
       ...(costReceipts.has(t.task_id)
         ? { grading_cost: costReceipts.get(t.task_id) }
+        : {}),
+      // Same projection the legacy row carries, so a consumer that reads
+      // tasks_v1 does not have to recompute the denominator itself and reach
+      // a slightly different answer.
+      ...(scoreExclusions.has(t.task_id)
+        ? { score_exclusion: scoreExclusions.get(t.task_id) }
         : {}),
     };
   });
