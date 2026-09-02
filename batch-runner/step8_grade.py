@@ -213,6 +213,50 @@ def compute_grader_source_hash(config_path: str | Path, config: dict) -> str:
     return digest.hexdigest()
 
 
+#: Suffix that separates a repeat's ledger namespace from run 1's. Exported so
+#: the tests that read committed ledgers can tell a pre-fix repeat from one
+#: minted after this rule existed, without hard-coding the spelling twice.
+REPEAT_RUN_ID_SUFFIX = "|run"
+
+
+def make_cost_run_id(
+    *,
+    experiment_yaml_name: str,
+    config_hash: str,
+    grader_source_hash: str,
+    run_ordinal: int = 1,
+) -> str:
+    """Name the run that a cost ledger's call identifiers hang off.
+
+    The first three parts are the run's scientific identity: same inference, same
+    grading config, same grader source. A repeat run exists precisely to hold all
+    three fixed, so on its own that identity cannot separate repeat 2 from repeat
+    1 -- by construction it is the same string.
+
+    That is fine for everything except the ledger. Call identifiers are derived
+    from *where* a call sits in its run and never from what it says
+    (``core.cost_receipts.make_call_id`` hashes run, task, stage, retry kind,
+    attempt and sequence), so with an identical run id repeat 2's first call on a
+    task is named exactly what repeat 1's was. They are not the same call:
+    different request body, different tokens, separately billed.
+    ``CostReceiptLedger`` keys on ``call_id``, and ``import_jsonl`` updates a row
+    it already holds rather than inserting one, so the later repeat silently
+    overwrites the earlier and its calls leave every total counted by identifier.
+
+    ``core.cost_metering`` already folds its round counter into the same identity
+    one level down, for the same reason. This is that, one level up.
+
+    Only past run 1, so the canonical run keeps the identifiers already published
+    beside it and no committed ledger is renamed by this change.
+    """
+    if run_ordinal < 1:
+        raise ValueError(f"run_ordinal must be at least 1: {run_ordinal}")
+    run_id = f"{experiment_yaml_name}|{config_hash}|{grader_source_hash}"
+    if run_ordinal > 1:
+        run_id = f"{run_id}{REPEAT_RUN_ID_SUFFIX}{run_ordinal}"
+    return run_id
+
+
 def _config_name_slug(config_name: Any) -> str:
     if not isinstance(config_name, str) or not config_name.strip():
         raise ValueError("config_name must be a non-empty string")
@@ -2455,7 +2499,12 @@ def main() -> int:
     # which tasks are already done — so the round is read off the ledger's size.
     cost_ledger_path = out_path.with_name(out_path.stem + ".cost_ledger.sqlite3")
     cost_export_path = out_path.with_name(out_path.stem + ".cost_ledger.jsonl")
-    cost_run_id = f"{args.experiment_yaml_name}|{config_hash}|{grader_source_hash}"
+    cost_run_id = make_cost_run_id(
+        experiment_yaml_name=args.experiment_yaml_name,
+        config_hash=config_hash,
+        grader_source_hash=grader_source_hash,
+        run_ordinal=args.run_ordinal,
+    )
 
     # The paragraph above describes a ledger that outlives its chunk, and on a
     # developer's machine it does. In CI it did not: every chunk gets a fresh

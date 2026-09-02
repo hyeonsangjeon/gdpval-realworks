@@ -143,6 +143,36 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **Repeating a grading run gave its calls the names run 1's calls already
+  had, and 684 separately billed calls stopped being countable.** Grading a
+  corpus twice is how repeat variation gets measured, so a repeat holds
+  everything that identifies the run fixed on purpose: same inference, same
+  grading config, same grader source. `step8_grade.py` forked the *output path*
+  on the repeat number and wrote to `_repeats/run-NNN/`, but the run id the cost
+  ledger hangs its call identifiers off was built from those three fixed parts
+  alone. Call identifiers are derived from where a call sits in its run and
+  never from what it says, so repeat 2's first call on a task was named exactly
+  what repeat 1's had been — and `CostReceiptLedger` keys on that identifier and
+  updates a row it already holds rather than inserting one.
+
+  Three runs of the audio-repeat corpus are committed. They carry 1,039 rows
+  between them under **355** distinct identifiers. All 344 colliding identifiers
+  have rows that disagree on request digest or token counts, and no two of the
+  ledgers are even the same size, so these are different calls wearing one name
+  rather than one call recorded twice. Sort order keeps repeat 2, which leaves
+  632 `gpt-5.6-sol` and 52 `gpt-audio-1.5` calls out of every figure counted by
+  identifier. The `$549.50`–`$980.84` tier bound is computed from a different
+  run's merged ledger and does not move.
+
+  `step8_grade.make_cost_run_id` now suffixes a repeat's run id past run 1, so
+  run 1 keeps the identifiers already published beside it and no new collision
+  can be minted. The identifiers already on disk cannot be un-minted; the
+  price-table entry records how many calls they hide and in which direction, and
+  the guard test classifies every duplicated identifier by the paths it appears
+  under — merge duplication has to equal the merged ledger exactly, repeat
+  collisions have to be pre-fix, and a duplicate belonging to neither fails
+  rather than being absorbed into a total.
+
 - **The headline never said what part of it was rubric nobody read.** An item
   the judge fails to read leaves the numerator and the denominator together, so
   the task is scored out of less rubric than it was worth and its percentage
