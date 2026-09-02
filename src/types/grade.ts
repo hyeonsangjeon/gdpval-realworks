@@ -20,6 +20,32 @@ export interface ItemGrade {
   judge_raw_response?: string | null
 }
 
+/**
+ * What a task's judge-failed items did to its denominator.
+ *
+ * A rubric item the judge could not read leaves the numerator and the
+ * denominator together, so the task is scored out of less than its rubric is
+ * worth and the published percentage rises. Both ends travel so the screen can
+ * show both: `pct_published` assumes an unread item would have scored like the
+ * read ones, `pct_full_denominator` assumes it would have scored nothing, and
+ * the truth is somewhere between.
+ *
+ * Absent on any task whose denominator held, which is most of them. Absent is
+ * not zero — it means there is one number here, not two.
+ */
+export interface ScoreExclusion {
+  /** How many rubric items the judge failed to read. */
+  items: number
+  /** Points of rubric those items were worth. */
+  excluded_max: number
+  /** Points of rubric that were actually read and scored. */
+  read_max: number
+  /** The percentage the run publishes, out of what was read. */
+  pct_published: number
+  /** The same points out of the whole rubric, unread items included. */
+  pct_full_denominator: number
+}
+
 export interface TaskGradeV1 {
   task_id: string
   sector: string
@@ -62,6 +88,12 @@ export interface TaskGradeV1 {
    * absent on 1.0–1.3, where it means "no record" rather than free.
    */
   grading_cost?: CostReceipt | null
+  /**
+   * What this task's judge-failed items did to its denominator. Projected by
+   * the aggregator from `items`, so it reaches grades published long before
+   * the grader learned to report it. Absent when the denominator held.
+   */
+  score_exclusion?: ScoreExclusion
 }
 
 export interface DeliverableTarget {

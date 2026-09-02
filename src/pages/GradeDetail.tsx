@@ -692,6 +692,32 @@ function GradeDetail() {
                     … and {filteredTasks.length - 50} more tasks (showing first 50 only)
                   </p>
                 )}
+                {/*
+                  Only appears when a task in this run actually shows two
+                  numbers, so a run whose grading read every rubric item is not
+                  told about a problem it does not have.
+                */}
+                {(() => {
+                  const affected = grade.tasks.filter((t: TaskGrade) => t.score_exclusion)
+                  if (affected.length === 0) return null
+                  const worst = affected.reduce((acc: number, t: TaskGrade) => {
+                    const ex = t.score_exclusion
+                    if (!ex) return acc
+                    return Math.max(acc, ex.pct_published - ex.pct_full_denominator)
+                  }, 0)
+                  return (
+                    <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+                      <strong className="text-foreground">Two numbers in Avg</strong>{' '}
+                      ({affected.length} of {grade.tasks.length} tasks): the judge
+                      failed to read some rubric items, and those items left the
+                      denominator along with the numerator. The left figure is the
+                      score out of what was read — the one this run publishes. The
+                      right figure is the same points out of the whole rubric. The
+                      real score is between them. The widest gap here is{' '}
+                      {worst.toFixed(1)} points.
+                    </p>
+                  )
+                })()}
                 {(() => {
                   const counts = s.calibration_counts
                   if (!counts) return null
@@ -766,6 +792,64 @@ const OUTCOME_BADGES: Partial<Record<SelectionOutcome, { text: string; className
   grading_error: { text: 'Error', className: 'bg-orange-500/10 text-orange-500' },
 }
 
+/**
+ * The task's score, with both ends shown when a judge failure moved the
+ * denominator.
+ *
+ * A rubric item the judge could not read leaves the numerator and the
+ * denominator together, so the task is scored out of less than its rubric is
+ * worth. The left number is what the run publishes, out of what was read. The
+ * right number is the same points out of the whole rubric. Neither is wrong;
+ * the true score is between them, and printing only the left one reads as
+ * certainty the grading never had.
+ *
+ * Both stay visible rather than hiding behind a hover, because the reader who
+ * most needs the second number is the one who was not going to look for it.
+ */
+function ScoreCell({ task }: { task: TaskGrade }) {
+  if (task.avg_score === null) return <>—</>
+  const exclusion = task.score_exclusion
+  if (!exclusion) return <>{`${(task.avg_score * 100).toFixed(0)}%`}</>
+
+  // Two numbers that render as the same number are not a range, they read as
+  // a bug. Some affected rows differ by less than half a point, so the pair
+  // gains decimals rather than one of the ends dropping off the screen. Two
+  // is enough and is not a guess: both ends carry two decimals, and the
+  // aggregator withholds the key entirely when they are equal there.
+  const collides = (task.avg_score * 100).toFixed(0)
+    === exclusion.pct_full_denominator.toFixed(0)
+  const digits = collides ? 2 : 0
+  const published = `${(task.avg_score * 100).toFixed(digits)}%`
+  const full = `${exclusion.pct_full_denominator.toFixed(digits)}%`
+
+  // The tooltip spells out the left figure from the same `avg_score` the cell
+  // renders, not from the aggregator's `pct_published`. The two agree on every
+  // row in the corpus today, but `avg_score` snaps 99-and-over to a flat 100%
+  // so `perfect_count` can be taken by equality, and a future task landing at
+  // 99.5 with a moved denominator would otherwise show 100% on the row and
+  // 99.5% in its own explanation. A cell that contradicts its tooltip teaches
+  // a reader to trust neither.
+  const publishedExact = (task.avg_score * 100).toFixed(2)
+
+  return (
+    <span
+      className="inline-flex items-baseline gap-1 whitespace-nowrap"
+      title={
+        `${exclusion.items} rubric item${exclusion.items === 1 ? '' : 's'} `
+        + `worth ${exclusion.excluded_max} point${exclusion.excluded_max === 1 ? '' : 's'} `
+        + 'could not be graded, so they left the denominator. '
+        + `${publishedExact}% is out of the ${exclusion.read_max} points `
+        + `that were read; ${exclusion.pct_full_denominator.toFixed(2)}% is out of `
+        + 'the whole rubric. The task’s real score is somewhere between the two.'
+      }
+    >
+      <span>{published}</span>
+      <span className="text-muted-foreground">~</span>
+      <span className="text-muted-foreground">{full}</span>
+    </span>
+  )
+}
+
 function TaskRow({ task, index }: { task: TaskGrade; index: number }) {
   const getStatusBadge = () => {
     const badge = task.outcome ? OUTCOME_BADGES[task.outcome] : undefined
@@ -819,7 +903,7 @@ function TaskRow({ task, index }: { task: TaskGrade; index: number }) {
         </div>
       </td>
       <td className="py-2 px-3 text-center font-mono text-sm">
-        {task.avg_score !== null ? `${(task.avg_score * 100).toFixed(0)}%` : '—'}
+        <ScoreCell task={task} />
       </td>
       {/* Self-QA */}
       <td className="py-2 px-3 text-center">
