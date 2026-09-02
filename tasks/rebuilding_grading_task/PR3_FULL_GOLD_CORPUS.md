@@ -495,7 +495,7 @@ Required items (|max score| >= 4)
 
 Scores
 ------------------------------------------------------------
-  graded 185 task(s), 0 in error; 3 perfect, 181 partial, 1 zero
+  graded 185 task(s), 0 in error; 3 near-perfect (>=99%), 181 partial, 1 near-zero (<=1%)
   rubric item coverage    0.7123
   judge pass rate         0.7077
     Finance and Insurance                                84.44%  n=17

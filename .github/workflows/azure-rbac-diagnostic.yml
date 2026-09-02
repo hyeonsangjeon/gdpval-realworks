@@ -12,6 +12,16 @@
 # Every call this makes is an ARM control-plane READ. It creates nothing,
 # changes nothing, and calls no model endpoint, so running it cannot reproduce
 # the refusal it exists to explain and cannot spend anything.
+#
+# This is also the only place the question can be asked. The script reads
+# whatever subscription and identity the `az` session holds, and a login taken
+# on a development box or in an agent container is a different one of each: the
+# Foundry account this asks about is not in the subscription such a login
+# reaches. The lookup then comes back empty for the same reason a withheld role
+# does, the run stops at `cannot_read_control_plane`, and the note beside it
+# says the identity has no reader on the account -- which is not what was
+# measured, because the identity was never reached. Run it here, or do not run
+# it.
 name: Azure Foundry RBAC Diagnostic
 
 on:

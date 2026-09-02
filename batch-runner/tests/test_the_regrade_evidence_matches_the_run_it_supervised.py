@@ -9,13 +9,18 @@ So each figure the document states is recomputed here from the committed grade
 payload rather than compared against a constant. A constant would only prove the
 document agrees with this file.
 
-Two of the checks are pointed the other way round, at source rather than at data.
-The document records two defects it deliberately did not fix, because both sites
-feed the grader source hash and editing either would produce a fingerprint that
-this evidence is not pinned to. A test that merely restated the defect would go
-green forever. These assert that the defect is *still there*, so that whoever
-eventually fixes it is told, in the same commit, that a published document now
-describes code that no longer exists.
+Two of the checks are pointed the other way round, at source rather than at
+data. The document records two defects it deliberately did not fix, because
+both sites feed the grader source hash and editing either would produce a
+fingerprint that this evidence is not pinned to. A test that merely restated a
+defect would go green forever, so these assert the defect is *still there* --
+which tells whoever eventually fixes it, in the same commit, that a published
+document now describes code that no longer exists.
+
+One of the two has since been fixed (8-6, the mislabelled counts), so its check
+is now inverted: it holds the fix in place and requires the document to have
+moved to the past tense with it. The other (the 0.0 receipt fields) still
+stands and is still asserted present.
 """
 
 import json
@@ -281,26 +286,33 @@ def test_the_two_hour_totals_are_two_scopes_of_the_same_seconds(
     )
 
 
-# ── The two defects the document deliberately left in place ────────────────
+# ── The defects the document recorded rather than fixed ────────────────────
 
 
-def test_perfect_count_still_counts_something_other_than_full_marks():
-    """Section 8-6, asserted against the code rather than restated.
+def test_the_mislabelled_counts_were_fixed_and_the_document_says_so():
+    """Section 8-6, after the fix it asked for.
 
-    The document records that `perfect_count` counts >= 99% and `zero_count`
-    counts <= 1%, while the narrative prompt hands a model "(100%)" and "(0%)".
-    Both sites feed the grader source hash, so the document says plainly that
-    it is being recorded and not fixed while the queue is frozen.
+    The document found `perfect_count` counting >= 99% while the narrative
+    prompt handed a model "(100%)", and left both alone: each site feeds the
+    grader source hash, and editing either mid-queue would have produced a
+    fingerprint this evidence is not pinned to. It said so in the present
+    tense, and the check here asserted the defect was still standing so that
+    whoever eventually fixed it would be told, in the same commit, that a
+    published document had gone stale.
 
-    When someone does fix it, this test goes red -- which is the point. The
-    published document describes the defect in the present tense.
+    That happened. So the check turns around: the threshold is unchanged --
+    which is what keeps 8-6's account of where the number 3 came from true --
+    the captions now name it, and the document has been moved to the past
+    tense. Held together here because those three only mean anything as a set:
+    a fixed caption with a document still calling it broken is the same defect
+    pointing the other way.
     """
     step8 = STEP8_PATH.read_text(encoding="utf-8")
     assert re.search(r"perfect\s*=\s*sum\(1 for x in pcts if x >= 99\.0\)", step8), (
-        "step8_grade.py no longer computes perfect_count as '>= 99.0'. If it "
-        "now counts full marks, section 8-6 of "
-        "314-full-185-regrade-evidence.md is describing code that is gone and "
-        "must be updated in the same change."
+        "step8_grade.py no longer computes perfect_count as '>= 99.0'. Section "
+        "8-6 explains that this run's perfect_count of 3 is the >= 99% "
+        "population; if the rule moved, that explanation is about code which "
+        "is gone and must be updated in the same change."
     )
     assert re.search(r"zero\s*=\s*sum\(1 for x in pcts if x <= 1\.0\)", step8), (
         "step8_grade.py no longer computes zero_count as '<= 1.0'; section 8-6 "
@@ -308,9 +320,26 @@ def test_perfect_count_still_counts_something_other_than_full_marks():
     )
 
     narrative = NARRATIVE_PATH.read_text(encoding="utf-8")
-    assert "Perfect tasks (100%)" in narrative and "Zero tasks (0%)" in narrative, (
-        "narrative_analyzer.py no longer mislabels those two counts to the "
-        "model. That is the fix section 8-6 asks for -- update the document."
+    assert "Perfect tasks (100%)" not in narrative, (
+        "narrative_analyzer.py is handing a model '(100%)' again for a count "
+        "that includes 99.26% and 99.14%. That is the defect 8-6 recorded."
+    )
+    assert "Zero tasks (0%)" not in narrative
+    assert ">= 99%" in narrative and "<= 1%" in narrative, (
+        "the narrative prompt states those counts without their cut-off. See "
+        "test_a_near_perfect_task_is_not_reported_as_full_marks.py, which "
+        "reads the cut-off out of step8_grade.py and checks every surface."
+    )
+
+    evidence = EVIDENCE_PATH.read_text(encoding="utf-8")
+    assert "Perfect tasks (100%)" in evidence, (
+        "8-6 quotes the wrong caption as the evidence of what it found; "
+        "removing the quotation removes the finding"
+    )
+    assert "Near-perfect tasks (>= 99%)" in evidence, (
+        "the caption was fixed and section 8-6 still shows only the broken "
+        "one, so a published document is describing code that is gone. Show "
+        "what the model is handed now."
     )
 
 

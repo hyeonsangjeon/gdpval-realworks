@@ -190,8 +190,8 @@ Rubric source: {_get_nested(grade, ["rubric", "repo_id"], "openai/gdpval")} @ {_
 
 Overall:
   - Average score: {_format_pct(openai_compat.get("avg_score_pct"), decimals=1)} (± {_format_pct(openai_compat.get("ci_pct"), decimals=1)})
-  - Perfect tasks (100%): {openai_compat.get("perfect_count", "n/a")}/{total_tasks or "n/a"}
-  - Zero tasks (0%): {openai_compat.get("zero_count", "n/a")}/{total_tasks or "n/a"}
+  - Near-perfect tasks (>= 99%): {openai_compat.get("perfect_count", "n/a")}/{total_tasks or "n/a"}
+  - Near-zero tasks (<= 1%): {openai_compat.get("zero_count", "n/a")}/{total_tasks or "n/a"}
   - Critical item pass rate: {_format_pct(wow.get("critical_item_pass_rate"), decimals=0)}
   - Precheck pass rate: {_format_pct(wow.get("precheck_pass_rate"), decimals=0)}
   - Judge pass rate: {_format_pct(wow.get("judge_pass_rate"), decimals=0)}
