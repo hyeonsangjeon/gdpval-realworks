@@ -733,6 +733,20 @@
           },
           "additionalProperties": true
         },
+        "routing": {
+          "type": "object",
+          "description": "Which sub-judge decided how much of this run, recomputed from every item's `routing_modality`. The composition of what was graded, as opposed to `wow`, which is how the grading went. It exists because a route's trustworthiness can come into question after the fact: the audio sub-judge measures at a discrimination of 0.00 against synthetic clips whose answers are known, and 'how much of the published average rests on it' was until now answerable only by downloading the payload and counting by hand. Recomputed from `items`, so a merged shard set reports what a serial run would have and an already-published payload reports the same numbers when re-summarised.",
+          "required": ["recorded", "items", "scored_items", "scored_max_score", "tasks", "unrecorded_items"],
+          "properties": {
+            "recorded": {"type": "boolean", "description": "Whether any item in this run carried a route at all. **The four maps below are empty when this is false, and that is the whole point of the field.** A grade written before routing existed carries `routing_modality: null` on every item; zero-filling that into `audio: 0` would turn 'never asked' into 'asked and found none', which is the one reading this object exists to prevent. True with a non-zero `unrecorded_items` is the partly-instrumented case, and both halves are reported."},
+            "items": {"type": "object", "description": "Items per route over EVERY task, errored ones included: the population figure, the one to quote about a corpus ('31 of 8,816 items route audio'). Once `recorded` is true, every route in the schema's enum gets a count including the ones this run did not use — a zero here is a measurement. A route outside the enum is counted under its own name rather than dropped, so a route added upstream is visible here before anything downstream knows the word.", "additionalProperties": {"type": "integer", "minimum": 0}},
+            "scored_items": {"type": "object", "description": "The subset that actually moved the headline: not `score_excluded`, inside a task without an `error`. Scoped exactly like `score_exclusions` on purpose — two summarisers over one payload must not disagree about which items the average is made of.", "additionalProperties": {"type": "integer", "minimum": 0}},
+            "scored_max_score": {"type": "object", "description": "Positive rubric weight carried by those scored items, per route. Same convention as `score_exclusions.excluded_max_score` and for the same reason: a penalty item's negative weight is not weight that would leave a denominator. This is the number a decision to drop a route needs, because it is what would leave the denominator if one were dropped.", "additionalProperties": {"type": "number", "minimum": 0}},
+            "tasks": {"type": "object", "description": "Tasks touching each route at least once, over every task like `items`. Distinguishes a route worth one item across ten tasks from one worth ten items in a single task — which is the difference between a corpus-wide caveat and one task's footnote.", "additionalProperties": {"type": "integer", "minimum": 0}},
+            "unrecorded_items": {"type": "integer", "minimum": 0, "description": "Items carrying no route. Equal to the whole item count when `recorded` is false. Counted over every task, like `items`."}
+          },
+          "additionalProperties": true
+        },
         "cost": {"type": "object"},
         "grading_cost": {"$ref": "#/$defs/costReceipt"}
       },
