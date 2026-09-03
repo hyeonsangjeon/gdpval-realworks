@@ -703,7 +703,7 @@
             "perfect_count": {"type": "integer", "minimum": 0, "description": "Scored tasks at or above 99% -- NEAR-perfect, not full marks. A task that dropped a point is counted here, so this is an upper bound on how many scored exactly 100 and must not be read as one. The name is kept for compatibility with the field it mirrors; the threshold is the one stated here, not the one the name suggests. Anything reporting this number has to say `>= 99%` beside it."},
             "zero_count": {"type": "integer", "minimum": 0, "description": "Scored tasks at or below 1% -- NEAR-zero, not exactly zero, with the same naming caveat as `perfect_count`. A task that earned 0.7% is counted here. Report it as `<= 1%`."},
             "partial_count": {"type": "integer", "minimum": 0, "description": "`graded_tasks` minus `perfect_count` minus `zero_count`: the scored tasks strictly between 1% and 99%."},
-            "inconsistent_count": {"type": "integer", "minimum": 0}
+            "inconsistent_count": {"type": "integer", "minimum": 0, "description": "A compatibility placeholder that is ALWAYS 0, and is not a measurement. It mirrors a field that means 'tasks two graders scored differently'; no run here has two graders. Each task is graded once, and `step9_merge_shards` refuses shards that are not disjoint, so a payload cannot hold the same task twice and there has never been anything to compare. Do not present this as grader agreement: three gradings of the same thirty answers at one fingerprint moved 29 of the 30 tasks, so the direction this zero suggests is the wrong one. `summary.grader_agreement` states the basis; read it before reporting this number at all."}
           },
           "additionalProperties": true
         },
@@ -717,6 +717,19 @@
             "excluded_max_score": {"type": "number", "minimum": 0, "description": "The positive rubric weight that left the denominators, summed over the run."},
             "avg_score_pct_full_denominator": {"type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "The same average with every excluded item counted at full weight and zero award. The pessimistic end of what is known: it assumes an unread item would have earned nothing, where `avg_score_pct` assumes it would have earned at the rate of the items that were read. The run's true average lies between the two. Recomputed from `items`, so a grade file written before the per-task `pct_full_denominator` field existed reports the same number when re-summarised."},
             "avg_score_pct_lift": {"type": ["number", "null"], "description": "`avg_score_pct` minus `avg_score_pct_full_denominator` — how many points of the headline are owed to rubric items that were never read. Exactly 0 when nothing was excluded."}
+          },
+          "additionalProperties": true
+        },
+        "grader_agreement": {
+          "type": "object",
+          "description": "Whether two gradings of one task were ever put side by side to produce `openai_compat.inconsistent_count`. They were not, in any payload this pipeline has written: each task is graded once, and `step9_merge_shards` refuses shards that are not disjoint, so a payload cannot hold the same task twice. That makes the required `0` beside it the value for 'nothing was compared' standing in for the value for 'they agreed' — and the repository has measured which of those is closer, by grading the same thirty answers three times at one fingerprint and watching 29 of the 30 tasks move. Nothing here is assumed from the pipeline's current shape: the counts are read off the task list, so a set of tasks that does hold repeats reports a real measurement instead of a constant.",
+          "required": ["compared", "gradings_per_task", "tasks_compared", "tasks_that_moved", "max_spread_pp"],
+          "properties": {
+            "compared": {"type": "boolean", "description": "Whether any task in this payload was graded more than once. False for every run this pipeline currently produces, which is exactly the claim worth being able to read beside a zero that looks like agreement."},
+            "gradings_per_task": {"type": "integer", "minimum": 0, "description": "The most gradings any single task received here. 1 on an ordinary run; 0 on an empty one. A payload reporting 1 has no basis on which any two verdicts could have disagreed."},
+            "tasks_compared": {"type": "integer", "minimum": 0, "description": "Tasks holding at least two gradings with a numeric `pct`. An errored grading has no score to compare, so it does not make a task comparable on its own."},
+            "tasks_that_moved": {"type": ["integer", "null"], "minimum": 0, "description": "Of those, how many scored differently between gradings. **Null — never 0 — when `compared` is false.** A 0 here would repeat the mistake this object exists to name: it would report 'we compared and found no disagreement' about a run that compared nothing, in the reassuring direction."},
+            "max_spread_pp": {"type": ["number", "null"], "minimum": 0, "description": "The widest gap in percentage points between one task's highest and lowest score across its gradings. Null under the same condition as `tasks_that_moved`, and for the same reason."}
           },
           "additionalProperties": true
         },
