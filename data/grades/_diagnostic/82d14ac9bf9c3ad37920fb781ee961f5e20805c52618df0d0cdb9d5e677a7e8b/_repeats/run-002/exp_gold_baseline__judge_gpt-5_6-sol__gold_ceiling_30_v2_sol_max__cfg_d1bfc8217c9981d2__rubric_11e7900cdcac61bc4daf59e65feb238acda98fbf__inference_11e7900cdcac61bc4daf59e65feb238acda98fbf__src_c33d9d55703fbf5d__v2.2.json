@@ -73683,28 +73683,52 @@
           "avg_pct": 84.99,
           "critical_item_pass_rate": 0.6364,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.7608
+          "judge_pass_rate": 0.7608,
+          "item_counts": {
+            "rubric_items": 531,
+            "critical_items": 22,
+            "precheck_items": 0,
+            "judge_items": 531
+          }
         },
         "Information": {
           "task_count": 3,
           "avg_pct": 79.35,
           "critical_item_pass_rate": 0.5,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.6812
+          "judge_pass_rate": 0.6812,
+          "item_counts": {
+            "rubric_items": 138,
+            "critical_items": 2,
+            "precheck_items": 0,
+            "judge_items": 138
+          }
         },
         "Manufacturing": {
           "task_count": 5,
           "avg_pct": 84.61,
           "critical_item_pass_rate": 0.0,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.7201
+          "judge_pass_rate": 0.7201,
+          "item_counts": {
+            "rubric_items": 268,
+            "critical_items": 4,
+            "precheck_items": 0,
+            "judge_items": 268
+          }
         },
         "Professional, Scientific, and Technical Services": {
           "task_count": 9,
           "avg_pct": 80.69,
           "critical_item_pass_rate": 0.4286,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.7399
+          "judge_pass_rate": 0.7399,
+          "item_counts": {
+            "rubric_items": 496,
+            "critical_items": 7,
+            "precheck_items": 0,
+            "judge_items": 496
+          }
         }
       },
       "by_rubric_category": {},
@@ -73786,7 +73810,13 @@
           "n_items": 1,
           "pass_rate": 1.0
         }
-      ]
+      ],
+      "item_counts": {
+        "rubric_items": 1433,
+        "critical_items": 35,
+        "precheck_items": 0,
+        "judge_items": 1433
+      }
     },
     "cost": {
       "total_judge_calls": 3738,
