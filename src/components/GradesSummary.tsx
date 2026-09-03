@@ -4,12 +4,21 @@ import { Card, CardContent } from './ui/card'
 import { AlertTriangle, Award, Target, XCircle, BarChart3, AlertCircle, HelpCircle, Sparkles, BookOpen } from 'lucide-react'
 import { GradeResult } from '../hooks/useGrades'
 import ProvenanceBadge from './ProvenanceBadge'
+import {
+  NEAR_PERFECT_DEF,
+  NEAR_PERFECT_LABEL,
+  NEAR_PERFECT_SHORT,
+  NEAR_ZERO_DEF,
+  NEAR_ZERO_LABEL,
+  NEAR_ZERO_SHORT,
+  PARTIAL_DEF,
+} from '../data/scoreBands'
 
 const STAT_TOOLTIPS: Record<string, string> = {
   Graded: 'Tasks that received a score — excludes any that errored out.',
-  'Perfect (100%)': 'Score = 100% — all rubric criteria were fully satisfied.',
-  Partial: 'Score between 0–100% — some rubric criteria were met.',
-  'Zero (0%)': 'Score = 0% — no rubric criteria were satisfied.',
+  [NEAR_PERFECT_LABEL]: NEAR_PERFECT_DEF,
+  Partial: PARTIAL_DEF,
+  [NEAR_ZERO_LABEL]: NEAR_ZERO_DEF,
   Disagreement: 'Multiple graders scored the same task differently — indicates ambiguous rubric or borderline output.',
   Errors: 'Tasks that could not be evaluated due to API failures, timeouts, or parsing issues.',
 }
@@ -46,7 +55,7 @@ function ScoreBar({ perfect, partial, zero, total }: { perfect: number; partial:
             animate={{ width: `${pPct}%` }}
             transition={{ duration: 0.8, ease: 'easeOut' }}
             className="bg-emerald-500 h-full"
-            title={`Perfect: ${perfect}`}
+            title={`${NEAR_PERFECT_SHORT}: ${perfect}`}
           />
         )}
         {partPct > 0 && (
@@ -64,14 +73,14 @@ function ScoreBar({ perfect, partial, zero, total }: { perfect: number; partial:
             animate={{ width: `${zPct}%` }}
             transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
             className="bg-red-500 h-full"
-            title={`Zero: ${zero}`}
+            title={`${NEAR_ZERO_SHORT}: ${zero}`}
           />
         )}
       </div>
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <div className="flex items-center gap-1">
           <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-          <span>Perfect {perfect}</span>
+          <span>{NEAR_PERFECT_SHORT} {perfect}</span>
         </div>
         <div className="flex items-center gap-1">
           <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500" />
@@ -79,7 +88,7 @@ function ScoreBar({ perfect, partial, zero, total }: { perfect: number; partial:
         </div>
         <div className="flex items-center gap-1">
           <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500" />
-          <span>Zero {zero}</span>
+          <span>{NEAR_ZERO_SHORT} {zero}</span>
         </div>
       </div>
     </div>
@@ -209,7 +218,7 @@ function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
             />
             <StatMini
               icon={Award}
-              label="Perfect (100%)"
+              label={NEAR_PERFECT_LABEL}
               value={s.perfect_score}
               color="bg-emerald-500/10 text-emerald-500"
             />
@@ -221,7 +230,7 @@ function GradeCard({ grade, index }: { grade: GradeResult; index: number }) {
             />
             <StatMini
               icon={XCircle}
-              label="Zero (0%)"
+              label={NEAR_ZERO_LABEL}
               value={s.zero_score}
               color="bg-red-500/10 text-red-500"
             />

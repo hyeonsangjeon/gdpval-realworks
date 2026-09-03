@@ -35,6 +35,17 @@ const ITEM_LEVEL_STRICT_VERSIONS = ['1.3', '1.4'];
 // feature existed, cost keys or not.
 const COST_RECEIPT_VERSIONS = ['1.4'];
 
+// The thresholds the grading backend actually counts `openai_compat`'s
+// `perfect_count` and `zero_count` at. They are NOT 100 and 0. A task that
+// scored 99.77% is inside `perfect_count`; one that scored 0.9% is inside
+// `zero_count`. `step8_grade.py` has published them this way since the field
+// existed, and PR #371 fixed the backend's wording to match rather than moving
+// the boundary, because the counts are already published. Exported so the
+// labels that describe these counts, and the tests over them, read the
+// boundary instead of restating it from memory.
+export const NEAR_PERFECT_MIN_PCT = 99;
+export const NEAR_ZERO_MAX_PCT = 1;
+
 // Every version the rich projection accepts has to be claimed by one of the
 // two validators below, and the assertion runs at import rather than in a
 // test so it cannot be skipped. 1.3 and 1.4 each joined ITEM_LEVEL_VERSIONS
@@ -815,8 +826,9 @@ function processV1GradesFile(
   const scoreExclusions = scoreExclusionsByTask(raw);
 
   // Convert v1 tasks → legacy-compatible task rows. Snap pct to exact 0/1
-  // when it crosses the openai_compat thresholds (pct >= 99 → perfect,
-  // pct <= 1 → zero) so legacy Status badges agree with summary counts.
+  // when it crosses the openai_compat thresholds (pct >= NEAR_PERFECT_MIN_PCT
+  // → perfect, pct <= NEAR_ZERO_MAX_PCT → zero) so legacy Status badges agree
+  // with summary counts.
   const tasks = rawTasks.map((t) => {
     const qa_score = qaFor(t.task_id);
     const hasError = t.error !== null && t.error !== undefined && t.error !== '';
@@ -851,14 +863,32 @@ function processV1GradesFile(
     }
     const pct = typeof t.pct === 'number' ? t.pct : 0;
     let avgScore;
-    if (pct >= 99) avgScore = 1.0;
-    else if (pct <= 1) avgScore = 0.0;
-    else avgScore = pct / 100;
+    // Whether the snap above moved this row, which is not the same question as
+    // which branch it took: a task that really did score 100 takes the first
+    // branch and is not moved by it.
+    let snapped = false;
+    if (pct >= NEAR_PERFECT_MIN_PCT) {
+      avgScore = 1.0;
+      snapped = pct !== 100;
+    } else if (pct <= NEAR_ZERO_MAX_PCT) {
+      avgScore = 0.0;
+      snapped = pct !== 0;
+    } else {
+      avgScore = pct / 100;
+    }
+    // Absent stays absent, third use of the convention: the snap buys agreement
+    // between badge and count by making the row unable to state its own score,
+    // and `avg_score` is now the only number the task table has. Carry the
+    // unsnapped figure on exactly the rows the snap moved, so a near miss reads
+    // as the 99.8% it was instead of a 100% that never happened. A row the snap
+    // left alone gains no key and renders byte-identically to before.
+    const exact = snapped ? { pct_exact: pct } : {};
     return {
       task_id: t.task_id,
       num_grades: 1,
       scores: [avgScore],
       avg_score: avgScore,
+      ...exact,
       error: false,
       error_messages: [],
       outcome,

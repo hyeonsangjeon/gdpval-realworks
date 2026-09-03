@@ -46,6 +46,18 @@ import {
 import InfoTooltip from '../components/common/InfoTooltip'
 import { tooltipTexts } from '../data/tooltipTexts'
 import {
+  NEAR_PERFECT_DEF,
+  NEAR_PERFECT_LABEL,
+  NEAR_PERFECT_MIN_PCT,
+  NEAR_PERFECT_SHORT,
+  NEAR_ZERO_DEF,
+  NEAR_ZERO_LABEL,
+  NEAR_ZERO_MAX_PCT,
+  NEAR_ZERO_SHORT,
+  PARTIAL_DEF,
+  formatTaskScorePct,
+} from '../data/scoreBands'
+import {
   hasUnverifiedRouteProvenance,
   UNVERIFIED_PROVENANCE_DESCRIPTION,
 } from '../lib/gradeProvenance.js'
@@ -63,9 +75,9 @@ type TaskFilter =
 
 const TERM_DEFINITIONS: Record<string, string> = {
   graded: 'Tasks that received a score — excludes any that errored out.',
-  perfect: 'Score = 100% — all rubric criteria were fully satisfied.',
-  partial: 'Score between 0–100% — some rubric criteria were met.',
-  zero: 'Score = 0% — no rubric criteria were satisfied.',
+  perfect: NEAR_PERFECT_DEF,
+  partial: PARTIAL_DEF,
+  zero: NEAR_ZERO_DEF,
   error: 'Tasks that could not be evaluated due to API failures, timeouts, or parsing issues.',
   errors: 'Tasks that could not be evaluated due to API failures, timeouts, or parsing issues.',
   inconsistent: 'Multiple graders scored the same task differently.',
@@ -76,9 +88,9 @@ const TERM_DEFINITIONS: Record<string, string> = {
 }
 
 const FILTER_LABELS: Record<Exclude<TaskFilter, 'all'>, string> = {
-  perfect: 'Perfect',
+  perfect: NEAR_PERFECT_SHORT,
   partial: 'Partial',
-  zero: 'Zero',
+  zero: NEAR_ZERO_SHORT,
   error: 'Error',
   inconsistent: 'Inconsistent',
   calibrated: 'Calibrated',
@@ -133,6 +145,11 @@ function GradeDetail() {
   // Score distribution data for bar chart
   const scoreDistribution = useMemo(() => {
     if (!grade) return []
+    // Bucket keys stay the four OpenAI score levels; only the labels below say
+    // what the two end buckets actually hold. `avg_score` is snapped at the
+    // band boundaries, so `pct === 0` is every task at or under NEAR_ZERO_MAX_PCT
+    // and `pct === 100` is every task at or over NEAR_PERFECT_MIN_PCT — neither
+    // end is the exact figure its old label claimed.
     const buckets: Record<string, number> = {
       '0%': 0,
       '33%': 0,
@@ -148,10 +165,10 @@ function GradeDetail() {
       else buckets['100%']++
     })
     return [
-      { label: '0%', count: buckets['0%'], color: 'hsl(0, 84%, 60%)' },
+      { label: `≤${NEAR_ZERO_MAX_PCT}%`, count: buckets['0%'], color: 'hsl(0, 84%, 60%)' },
       { label: '~33%', count: buckets['33%'], color: 'hsl(25, 95%, 53%)' },
       { label: '~67%', count: buckets['67%'], color: 'hsl(45, 93%, 47%)' },
-      { label: '100%', count: buckets['100%'], color: 'hsl(142, 71%, 45%)' },
+      { label: `≥${NEAR_PERFECT_MIN_PCT}%`, count: buckets['100%'], color: 'hsl(142, 71%, 45%)' },
     ]
   }, [grade])
 
@@ -160,9 +177,9 @@ function GradeDetail() {
     if (!grade) return []
     const s = grade.summary
     return [
-      { name: 'Perfect', value: s.perfect_score, fill: '#22c55e' },
+      { name: NEAR_PERFECT_SHORT, value: s.perfect_score, fill: '#22c55e' },
       { name: 'Partial', value: s.partial_score, fill: '#f59e0b' },
-      { name: 'Zero', value: s.zero_score, fill: '#ef4444' },
+      { name: NEAR_ZERO_SHORT, value: s.zero_score, fill: '#ef4444' },
       { name: 'Error', value: s.error_tasks, fill: '#f97316' },
     ].filter((d) => d.value > 0)
   }, [grade])
@@ -369,7 +386,7 @@ function GradeDetail() {
             />
             <OverviewStat
               icon={Award}
-              label="Perfect (100%)"
+              label={NEAR_PERFECT_LABEL}
               tooltip={TERM_DEFINITIONS.perfect}
               value={String(s.perfect_score)}
               sub={`${((s.perfect_score / s.total_tasks) * 100).toFixed(1)}%`}
@@ -378,7 +395,7 @@ function GradeDetail() {
             />
             <OverviewStat
               icon={XCircle}
-              label="Zero (0%)"
+              label={NEAR_ZERO_LABEL}
               tooltip={TERM_DEFINITIONS.zero}
               value={String(s.zero_score)}
               sub={`${((s.zero_score / s.total_tasks) * 100).toFixed(1)}%`}
@@ -589,9 +606,9 @@ function GradeDetail() {
             <CardContent>
               <p className="text-foreground leading-relaxed">
                 Out of <strong>{s.graded_tasks}</strong> evaluated tasks,{' '}
-                <strong className="text-emerald-500">{s.perfect_score}</strong> scored full marks,{' '}
+                <strong className="text-emerald-500">{s.perfect_score}</strong> scored {NEAR_PERFECT_MIN_PCT}% or above,{' '}
                 <strong className="text-amber-500">{s.partial_score}</strong> received partial credit,
-                and <strong className="text-red-500">{s.zero_score}</strong> got zero.
+                and <strong className="text-red-500">{s.zero_score}</strong> scored {NEAR_ZERO_MAX_PCT}% or below.
                 {s.error_tasks > 0 && (
                   <> <strong className="text-orange-500">{s.error_tasks}</strong> task{s.error_tasks > 1 ? 's' : ''} could not be evaluated
                     {/* "could not be evaluated" reads as a model failure unless
@@ -863,27 +880,33 @@ const OUTCOME_BADGES: Partial<Record<SelectionOutcome, { text: string; className
 function ScoreCell({ task }: { task: TaskGrade }) {
   if (task.avg_score === null) return <>—</>
   const exclusion = task.score_exclusion
-  if (!exclusion) return <>{`${(task.avg_score * 100).toFixed(0)}%`}</>
+  if (!exclusion) return <>{formatTaskScorePct(task)}</>
+
+  // `avg_score` is snapped to a flat 1.0/0.0 at the band boundaries so the
+  // Status badge can be taken from it by equality, which leaves it unable to
+  // state the score it came from. `pct_exact` is present on exactly the rows
+  // the snap moved, so prefer it: a 99.77 stays 99.77 here instead of becoming
+  // the 100 it never was.
+  const publishedPct = task.pct_exact ?? task.avg_score * 100
 
   // Two numbers that render as the same number are not a range, they read as
   // a bug. Some affected rows differ by less than half a point, so the pair
   // gains decimals rather than one of the ends dropping off the screen. Two
   // is enough and is not a guess: both ends carry two decimals, and the
-  // aggregator withholds the key entirely when they are equal there.
-  const collides = (task.avg_score * 100).toFixed(0)
+  // aggregator withholds the key entirely when they are equal there. A row the
+  // snap moved takes one decimal even when the pair does not collide, for the
+  // same reason the figure is preferred at all.
+  const collides = publishedPct.toFixed(0)
     === exclusion.pct_full_denominator.toFixed(0)
-  const digits = collides ? 2 : 0
-  const published = `${(task.avg_score * 100).toFixed(digits)}%`
+  const digits = collides ? 2 : (task.pct_exact === undefined ? 0 : 1)
+  const published = `${publishedPct.toFixed(digits)}%`
   const full = `${exclusion.pct_full_denominator.toFixed(digits)}%`
 
-  // The tooltip spells out the left figure from the same `avg_score` the cell
-  // renders, not from the aggregator's `pct_published`. The two agree on every
-  // row in the corpus today, but `avg_score` snaps 99-and-over to a flat 100%
-  // so `perfect_count` can be taken by equality, and a future task landing at
-  // 99.5 with a moved denominator would otherwise show 100% on the row and
-  // 99.5% in its own explanation. A cell that contradicts its tooltip teaches
-  // a reader to trust neither.
-  const publishedExact = (task.avg_score * 100).toFixed(2)
+  // The tooltip spells out the left figure from the same number the cell
+  // renders, not from the aggregator's `pct_published`, so the cell and its own
+  // explanation cannot disagree. A cell that contradicts its tooltip teaches a
+  // reader to trust neither.
+  const publishedExact = publishedPct.toFixed(2)
 
   return (
     <span
@@ -921,10 +944,10 @@ function TaskRow({ task, index }: { task: TaskGrade; index: number }) {
       return <span className="px-2 py-0.5 rounded-full text-xs bg-orange-500/10 text-orange-500">Error</span>
     }
     if (task.avg_score === 1) {
-      return <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/10 text-emerald-500">Perfect</span>
+      return <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/10 text-emerald-500">{NEAR_PERFECT_SHORT}</span>
     }
     if (task.avg_score === 0) {
-      return <span className="px-2 py-0.5 rounded-full text-xs bg-red-500/10 text-red-500">Zero</span>
+      return <span className="px-2 py-0.5 rounded-full text-xs bg-red-500/10 text-red-500">{NEAR_ZERO_SHORT}</span>
     }
     return <span className="px-2 py-0.5 rounded-full text-xs bg-amber-500/10 text-amber-500">Partial</span>
   }
