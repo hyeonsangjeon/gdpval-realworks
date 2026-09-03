@@ -87,8 +87,8 @@ export const tooltipTexts = {
   wow: {
     rubricCoverage:
       "Average pass rate across rubric items per task. OpenAI exposed only task-level 0/1; we expose item-level partial credit derived from the full rubric.",
-    criticalItems:
-      "Pass rate on rubric items with weight ≥ 3 — the highest-stakes 'must-have' requirements. Distinguishes decisive criteria from small formatting items.",
+    highMagnitudeItems:
+      "Pass rate over rubric items whose |max score| reaches 4 — the highest-scoring items, NOT the required ones. The rubric's own `required` field is null on all 10,453 items, so score magnitude stands in for necessity. Diagnostic only: it is not a pass gate and not part of the score. Shown with its denominator, because a rate over 3 items and a rate over 300 read the same otherwise.",
     structureVsReasoning:
       "Splits deterministic verification (file format, sheet names, etc.) from LLM judgement (content correctness). Large gap = strong structure but weak reasoning, or vice versa.",
     sectorHeatmap:
@@ -97,6 +97,8 @@ export const tooltipTexts = {
       "OpenAI's hosted grader produced only 4 task-level scores (0/33/67/100). Our item-level partials roll up to 10 buckets across the full 0–100% range.",
     rubricSeverity:
       "Groups rubric items by weight and plots pass rate per weight. A sharp drop signals the difficulty threshold where the model breaks down.",
+    routeExposure:
+      "How much of this run's scored rubric weight was decided by the audio sub-judge, recomputed from each item's recorded route. It matters because that sub-judge was measured against synthetic clips whose answers were known and scored a discrimination of 0.00 — no better than a coin, and more confident when wrong. A run that recorded no route at all reads `not recorded`, never `none`: never asked and asked-and-found-none are different answers.",
   },
 } as const
 

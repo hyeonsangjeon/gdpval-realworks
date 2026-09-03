@@ -1,6 +1,12 @@
 // Grade v1.0 schema types (matches tasks/grading_task/007-grade-schema.md)
 
 import type { CostReceipt, CostSummary } from './cost'
+// The route-composition shape is declared beside the rule that reads it, in a
+// module kept free of imports so `scripts/__tests__/route-exposure.test.mjs`
+// can execute that rule directly. Type-only, so nothing crosses at runtime.
+import type { RouteComposition } from '../components/wow/routeExposure'
+
+export type { RouteComposition }
 
 export type Verdict = 'pass' | 'partial' | 'fail' | 'judge_error'
 export type DecidedBy = 'precheck' | 'judge'
@@ -226,12 +232,29 @@ export interface OpenAICompatSummary {
   inconsistent_count: number
 }
 
+/**
+ * The denominators the `wow` rates were divided by.
+ *
+ * Every rate above is a fraction whose denominator used to be thrown away, and
+ * the fallback for an empty one is `0.0` — the same value as "every single item
+ * failed". `step8_grade._wow_item_counts` publishes the counts so the two can
+ * be told apart. Optional because grades written before it existed carry none,
+ * and an absent count is not a zero one.
+ */
+export interface WowItemCounts {
+  rubric_items?: number
+  critical_items?: number
+  precheck_items?: number
+  judge_items?: number
+}
+
 export interface SectorWowMetric {
   task_count: number
   avg_pct: number
   critical_item_pass_rate: number
   precheck_pass_rate: number
   judge_pass_rate: number
+  item_counts?: WowItemCounts
 }
 
 export interface RubricCategoryMetric {
@@ -252,10 +275,19 @@ export interface RubricSeverityPoint {
 
 export interface WowSummary {
   rubric_item_coverage_avg: number
+  /**
+   * Pass rate over rubric items whose `|max_score|` reaches the grader's
+   * magnitude threshold — *not* over items the rubric marks required. The
+   * rubric's own `required` field is null on all 10,453 items, so the grader
+   * substitutes score magnitude for necessity. Read it as a diagnostic and
+   * never as a verdict; see `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`.
+   * The key keeps its published name so past payloads stay readable.
+   */
   critical_item_pass_rate: number
   precheck_pass_rate: number
   judge_pass_rate: number
   judge_error_rate: number
+  item_counts?: WowItemCounts
   by_sector?: Record<string, SectorWowMetric>
   by_rubric_category?: Record<string, RubricCategoryMetric>
   score_density_histogram?: ScoreDensityBucket[]
@@ -302,6 +334,23 @@ export interface GradeSummaryV1 {
    * unless the grade file is schema 1.4 and recorded receipts.
    */
   grading_cost?: CostSummary
+  /**
+   * Which sub-judge decided how much of the run, recomputed in
+   * scripts/aggregate-grades.mjs from each item's `routing_modality` by the
+   * same rule as `step8_grade._routing_stats`.
+   *
+   * Not to be confused with `JudgeProvenance.routing` below, which is a
+   * tier-routing block naming models on hybrid configs — a different thing at
+   * a different path.
+   *
+   * Present on every item-level payload, including as `recorded: false`. That
+   * value is the answer to "did the audio sub-judge touch this number", not
+   * the absence of one: eleven of the eighteen item-level grades published
+   * today predate routing and carry `routing_modality: null` on every item,
+   * and reading those as `audio: 0` would turn never-asked into
+   * asked-and-found-none.
+   */
+  route_composition?: RouteComposition | null
 }
 
 export interface JudgeTierConfig {

@@ -36,7 +36,8 @@ import { useGrades, TaskGrade } from '../hooks/useGrades'
 import type { GradeSummaryV1, TaskGradeV1, SelectionOutcome } from '../types/grade'
 import {
   RubricCoverageCard,
-  CriticalItemCard,
+  HighMagnitudeItemCard,
+  RouteExposureCard,
   StructureVsReasoning,
   SectorHeatmap,
   ScoreDensityHistogram,
@@ -1052,9 +1053,8 @@ function WowSection({ summary, tasksV1 }: { summary: GradeSummaryV1; tasksV1: Ta
           open-sourced GDPval rubrics — richer than the legacy task-level binary.
         </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <RubricCoverageCard wow={wow} totalItems={totalItems} delay={0.0} />
-        <CriticalItemCard wow={wow} delay={0.05} />
         <StructureVsReasoning wow={wow} delay={0.1} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1063,6 +1063,28 @@ function WowSection({ summary, tasksV1 }: { summary: GradeSummaryV1; tasksV1: Ta
       </div>
       <div className="mt-4">
         <SectorHeatmap wow={wow} delay={0.25} />
+      </div>
+      {/*
+        Below the headline cards, not among them. This rate reads "did the model
+        meet the must-have requirements" and measures no such thing — the
+        rubric's `required` field is null everywhere, so the grader substitutes
+        score magnitude. Owner decision of 2026-09-03 took it out of the top row
+        and out of every verdict; see
+        `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`.
+      */}
+      <div className="mt-4">
+        <HighMagnitudeItemCard wow={wow} delay={0.3} />
+      </div>
+      {/*
+        Beside it, and for the same reason: it says what was graded, not how
+        well. The audio sub-judge scored a discrimination of 0.00 against clips
+        whose answers were known, so how much of this run's weight passed
+        through it is something a reader of the score needs to be able to see.
+        Always rendered — a run that recorded no route says so, which is the
+        answer to the question, not the absence of one.
+      */}
+      <div className="mt-4">
+        <RouteExposureCard composition={summary.route_composition} delay={0.35} />
       </div>
     </motion.section>
   )

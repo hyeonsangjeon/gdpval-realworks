@@ -8,6 +8,8 @@ Checks that the local snapshot is ready for HuggingFace upload:
   4. deliverable_files paths exist locally
   5. deliverable_text fill rate
     6. needs_files tasks with no files  <- WARNING + failure stats, no output mutation
+    6b. needs_files tasks with no row at all  <- ERROR; nothing was checked
+    6c. text-only tasks with no row at all  <- ERROR; a listed task was not carried
   7. No duplicate task_ids
   8. deliverable_files local existence check
 
@@ -19,7 +21,7 @@ Input:
 Output:
   - Pass/fail with detailed report
   - workspace/validate_stats.json
-      file generation statistics (needs_files_total, succeeded, failed)
+      file generation statistics (needs_files_total, succeeded, failed, absent)
 
 Usage:
     python step5_validate.py
@@ -96,6 +98,12 @@ def _task_scope_errors(actual_task_ids: list[str], scope: dict) -> list[str]:
                 f"missing={len(missing)}, unexpected={len(unexpected)}"
             )
     return errors
+
+
+def _id_sample(task_ids: list[str], limit: int = 5) -> str:
+    """Render the first few IDs, saying how many more there are."""
+    suffix = f"... (+{len(task_ids) - limit} more)" if len(task_ids) > limit else ""
+    return f"{task_ids[:limit]}{suffix}"
 
 
 def _load_submission_repo_id() -> str | None:
@@ -228,12 +236,23 @@ def validate(data_dir: str = None) -> bool:
         "needs_files_total": 0,
         "files_succeeded": 0,
         "files_failed": 0,
+        # A file-required task the submission has no row for at all. Its
+        # deliverables were never looked at, so it is neither a success nor a
+        # failure, and folding it into either would make one of them a count of
+        # something nobody checked.
+        "files_absent": 0,
         "dummy_files_created": 0,
         "dummy_task_ids": [],
+        "absent_task_ids": [],
     }
 
     manifest_path = WORKSPACE_DIR / "step0_needs_files_manifest.json"
-    if manifest_path.exists():
+    # Both halves of this section match manifest entries against submitted rows,
+    # so without task IDs to match on there is nothing it can check. That column
+    # is already a hard error above; a stats file of zeros for a run nobody
+    # could check would read as "checked, found none", so such a run gets no
+    # record rather than a zeroed one.
+    if manifest_path.exists() and "task_id" in df.columns:
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
 
@@ -259,21 +278,35 @@ def validate(data_dir: str = None) -> bool:
         )
 
         needs_files_missing = []
+        needs_files_absent = []
+        text_only_absent = []
         needs_files_total = 0
 
         selected_scope = (
             set(task_scope["task_ids"])
             if task_scope.get("task_ids") is not None else None
         )
+        # Which of the manifest's tasks the submission actually carries. The
+        # manifest is generated from the source parquet under a digest check
+        # (``core.repo_bootstrapper._generate_manifest_from_dir`` refuses to
+        # emit one whose ordered task IDs do not hash to the canonical digest)
+        # and it writes one entry per source row, so every key in it names a
+        # canonical task the submission is required to carry — whether or not
+        # that task owes a file.
+        submitted_ids = set(df["task_id"])
         for task_id, info in manifest.get("tasks", {}).items():
             if selected_scope is not None and task_id not in selected_scope:
                 continue
+            absent = task_id not in submitted_ids
             if not info.get("needs_files"):
+                if absent:
+                    text_only_absent.append(task_id)
                 continue
             needs_files_total += 1
-            row = df[df["task_id"] == task_id]
-            if len(row) == 0:
+            if absent:
+                needs_files_absent.append(task_id)
                 continue
+            row = df[df["task_id"] == task_id]
             files = _to_list(row.iloc[0]["deliverable_files"])
             if len(files) == 0:
                 needs_files_missing.append(task_id)
@@ -282,27 +315,55 @@ def validate(data_dir: str = None) -> bool:
 
         file_gen_stats["needs_files_total"] = needs_files_total
         file_gen_stats["files_failed"] = len(needs_files_missing)
+        file_gen_stats["files_absent"] = len(needs_files_absent)
+        file_gen_stats["absent_task_ids"] = needs_files_absent
 
         if needs_files_missing:
-            sample = needs_files_missing[:5]
-            suffix = (
-                f"... (+{len(needs_files_missing) - 5} more)"
-                if len(needs_files_missing) > 5 else ""
-            )
             msg = (
                 f"{len(needs_files_missing)} file-required tasks had no files — "
                 "preserved as failed rows with empty deliverable fields"
             )
-            msg += f": {sample}{suffix}"
+            msg += f": {_id_sample(needs_files_missing)}"
             warnings.append(msg)
-        else:
+
+        # Absent is an error, not a warning: the manifest is generated from the
+        # source parquet under a digest check, so every ID in it is one of the
+        # canonical tasks the submission is required to carry. A subset run
+        # already fails this arrangement through the identity check in
+        # ``_task_scope_errors``; full runs carry no task_ids to check against,
+        # which is the only reason it could reach an upload unremarked.
+        if needs_files_absent:
+            errors.append(
+                f"{len(needs_files_absent)} file-required tasks are absent from "
+                "the submission — their deliverable files were never checked"
+                f": {_id_sample(needs_files_absent)}"
+            )
+
+        # The same integrity break, reached by a task that owed no file. Nothing
+        # else catches it in a full run: a substitute row keeps the count at the
+        # expected 220, and a task that owes no file never enters the counts
+        # above. Deliberately kept out of ``file_gen_stats`` — every field there
+        # is a file-generation outcome, and this absence is an identity fault,
+        # not one.
+        if text_only_absent:
+            errors.append(
+                f"{len(text_only_absent)} text-only tasks are absent from the "
+                "submission — the manifest lists them and no row carries them"
+                f": {_id_sample(text_only_absent)}"
+            )
+
+        # Says what was observed, and only when everything was. The two lists
+        # being empty is the same statement as succeeded == total; written this
+        # way so the claim and its evidence cannot drift apart.
+        if not needs_files_missing and not needs_files_absent:
             warnings.append(
                 f"All {needs_files_total} file-required tasks have deliverable files ✓"
             )
     else:
-        warnings.append(
-            "step0_needs_files_manifest.json not found — skipping file requirement check"
-        )
+        if not manifest_path.exists():
+            warnings.append(
+                "step0_needs_files_manifest.json not found — skipping file requirement check"
+            )
         file_gen_stats = None
 
     # ── 8. deliverable_files local existence check ──
@@ -332,6 +393,7 @@ def validate(data_dir: str = None) -> bool:
         print(f"      needs_files_total:   {file_gen_stats['needs_files_total']}")
         print(f"      files_succeeded:     {file_gen_stats['files_succeeded']}")
         print(f"      files_failed:        {file_gen_stats['files_failed']}")
+        print(f"      files_absent:        {file_gen_stats['files_absent']}")
         print(f"      dummy_files_created: {file_gen_stats['dummy_files_created']}")
 
     _print_result(errors, warnings)

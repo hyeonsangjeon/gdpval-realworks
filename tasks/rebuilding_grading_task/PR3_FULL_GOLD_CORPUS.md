@@ -481,10 +481,14 @@ Gold ceiling — stage 3 -- the whole 185-task gold population
 Thresholds
 ------------------------------------------------------------
   mean score              79.53%   (needs >= 90.0%)   MISS
-  required-item pass      0.6394   (needs >= 0.95)    MISS
   grader error rate       0.0065   (needs < 0.02)     PASS
 
-Required items (|max score| >= 4)
+Diagnostics — measured, but they do not decide the stage
+------------------------------------------------------------
+  high-magnitude item pass   0.6394   (reference 0.95)   over 355 item(s) scoring |max| >= 4
+  diagnostic, not a gate: no explicit `required` signal in the rubric, so score magnitude stands in for it
+
+High-magnitude items (|max score| >= 4)
 ------------------------------------------------------------
   227 of 355 passed  (0.6394)
   not scored              2 item(s) the grader excluded, kept out of the denominator
@@ -510,56 +514,56 @@ Scores
 
 By occupation (44)
 ------------------------------------------------------------
-   50.81%  n=3    required 3/6  ·  Film and Video Editors
-   63.60%  n=4    required 2/3  ·  Real Estate Sales Agents
-   64.41%  n=5    required 0/5  ·  Project Management Specialists
-   64.55%  n=5    required 1/5  ·  First-Line Supervisors of Production and Operating Workers
-   67.21%  n=5    required 0/3  ·  Industrial Engineers
-   69.11%  n=4    required 44/51  ·  Real Estate Brokers
-   69.29%  n=5    required 20/22  ·  Software Developers
-   70.44%  n=5    required 2/5  ·  Mechanical Engineers
-   70.45%  n=3    required 0/0  ·  News Analysts, Reporters, and Journalists
-   71.42%  n=3    required 25/34  ·  Producers and Directors
-   72.60%  n=3    required 0/2  ·  Financial and Investment Analysts
-   75.66%  n=5    required 0/5  ·  First-Line Supervisors of Non-Retail Sales Workers
-   75.78%  n=4    required 1/4  ·  Medical Secretaries and Administrative Assistants
-   77.44%  n=5    required 3/14  ·  Medical and Health Services Managers
-   78.00%  n=5    required 0/3  ·  Computer and Information Systems Managers
-   78.18%  n=5    required 2/8  ·  First-Line Supervisors of Office and Administrative Support Workers
-   78.77%  n=5    required 4/5  ·  Registered Nurses
-   79.37%  n=5    required 13/16  ·  Administrative Services Managers
-   79.45%  n=5    required 7/10  ·  Recreation Workers
-   79.49%  n=5    required 3/5  ·  Sales Managers
-   79.67%  n=4    required 2/3  ·  Concierges
-   80.67%  n=5    required 0/4  ·  Order Clerks
-   81.47%  n=3    required 0/2  ·  Financial Managers
-   81.72%  n=3    required 1/2  ·  Audio and Video Technicians
-   81.85%  n=5    required 0/4  ·  General and Operations Managers
-   82.10%  n=5    required 3/5  ·  Accountants and Auditors
-   82.15%  n=5    required 2/3  ·  Private Detectives and Investigators
-   83.09%  n=4    required 3/4  ·  First-Line Supervisors of Police and Detectives
-   85.61%  n=5    required 1/2  ·  Compliance Officers
-   86.22%  n=5    required 0/4  ·  Buyers and Purchasing Agents
-   86.84%  n=5    required 1/4  ·  Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products
-   87.20%  n=2    required 1/2  ·  First-Line Supervisors of Retail Sales Workers
-   87.49%  n=4    required 2/5  ·  Customer Service Representatives
-   88.05%  n=5    required 30/34  ·  Shipping, Receiving, and Inventory Clerks
-   88.14%  n=4    required 10/14  ·  Lawyers
-   88.87%  n=5    required 11/16  ·  Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products
-   89.05%  n=4    required 0/1  ·  Personal Financial Advisors
-   89.06%  n=3    required 0/0  ·  Securities, Commodities, and Financial Services Sales Agents
-   89.78%  n=3    required 3/3  ·  Child, Family, and School Social Workers
-   89.97%  n=4    required 3/7  ·  Property, Real Estate, and Community Association Managers
-   90.65%  n=2    required 11/12  ·  Editors
-   91.34%  n=4    required 2/5  ·  Counter and Rental Clerks
-   91.84%  n=4    required 10/11  ·  Pharmacists
-   91.90%  n=3    required 1/2  ·  Nurse Practitioners
+   50.81%  n=3    high-mag 3/6  ·  Film and Video Editors
+   63.60%  n=4    high-mag 2/3  ·  Real Estate Sales Agents
+   64.41%  n=5    high-mag 0/5  ·  Project Management Specialists
+   64.55%  n=5    high-mag 1/5  ·  First-Line Supervisors of Production and Operating Workers
+   67.21%  n=5    high-mag 0/3  ·  Industrial Engineers
+   69.11%  n=4    high-mag 44/51  ·  Real Estate Brokers
+   69.29%  n=5    high-mag 20/22  ·  Software Developers
+   70.44%  n=5    high-mag 2/5  ·  Mechanical Engineers
+   70.45%  n=3    high-mag 0/0  ·  News Analysts, Reporters, and Journalists
+   71.42%  n=3    high-mag 25/34  ·  Producers and Directors
+   72.60%  n=3    high-mag 0/2  ·  Financial and Investment Analysts
+   75.66%  n=5    high-mag 0/5  ·  First-Line Supervisors of Non-Retail Sales Workers
+   75.78%  n=4    high-mag 1/4  ·  Medical Secretaries and Administrative Assistants
+   77.44%  n=5    high-mag 3/14  ·  Medical and Health Services Managers
+   78.00%  n=5    high-mag 0/3  ·  Computer and Information Systems Managers
+   78.18%  n=5    high-mag 2/8  ·  First-Line Supervisors of Office and Administrative Support Workers
+   78.77%  n=5    high-mag 4/5  ·  Registered Nurses
+   79.37%  n=5    high-mag 13/16  ·  Administrative Services Managers
+   79.45%  n=5    high-mag 7/10  ·  Recreation Workers
+   79.49%  n=5    high-mag 3/5  ·  Sales Managers
+   79.67%  n=4    high-mag 2/3  ·  Concierges
+   80.67%  n=5    high-mag 0/4  ·  Order Clerks
+   81.47%  n=3    high-mag 0/2  ·  Financial Managers
+   81.72%  n=3    high-mag 1/2  ·  Audio and Video Technicians
+   81.85%  n=5    high-mag 0/4  ·  General and Operations Managers
+   82.10%  n=5    high-mag 3/5  ·  Accountants and Auditors
+   82.15%  n=5    high-mag 2/3  ·  Private Detectives and Investigators
+   83.09%  n=4    high-mag 3/4  ·  First-Line Supervisors of Police and Detectives
+   85.61%  n=5    high-mag 1/2  ·  Compliance Officers
+   86.22%  n=5    high-mag 0/4  ·  Buyers and Purchasing Agents
+   86.84%  n=5    high-mag 1/4  ·  Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products
+   87.20%  n=2    high-mag 1/2  ·  First-Line Supervisors of Retail Sales Workers
+   87.49%  n=4    high-mag 2/5  ·  Customer Service Representatives
+   88.05%  n=5    high-mag 30/34  ·  Shipping, Receiving, and Inventory Clerks
+   88.14%  n=4    high-mag 10/14  ·  Lawyers
+   88.87%  n=5    high-mag 11/16  ·  Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products
+   89.05%  n=4    high-mag 0/1  ·  Personal Financial Advisors
+   89.06%  n=3    high-mag 0/0  ·  Securities, Commodities, and Financial Services Sales Agents
+   89.78%  n=3    high-mag 3/3  ·  Child, Family, and School Social Workers
+   89.97%  n=4    high-mag 3/7  ·  Property, Real Estate, and Community Association Managers
+   90.65%  n=2    high-mag 11/12  ·  Editors
+   91.34%  n=4    high-mag 2/5  ·  Counter and Rental Clerks
+   91.84%  n=4    high-mag 10/11  ·  Pharmacists
+   91.90%  n=3    high-mag 1/2  ·  Nurse Practitioners
 
 Subsets
 ------------------------------------------------------------
-  83.48%   n=30   required 21/34  ·  the same thirty stage 1 graded
-  56.18%   n=5    required 2/5  ·  the five declared input limits
-  80.18%   n=180  required 225/350  ·  everything but those five
+  83.48%   n=30   high-mag 21/34  ·  the same thirty stage 1 graded
+  56.18%   n=5    high-mag 2/5  ·  the five declared input limits
+  80.18%   n=180  high-mag 225/350  ·  everything but those five
 
 Usage
 ------------------------------------------------------------
@@ -582,91 +586,91 @@ Per task (worst first)
   0e386e32-df20-4d1f-b536-7159bc409ad5    0.00%  0.00/78  ·  Software Developers
       55/55 item(s) below max, -78.0 point(s)
   6074bba3-7e3a-4b1c-b8c6-a15bb6695c3b    9.00%  4.50/50  ·  Real Estate Brokers
-      2/48 item(s) below max, -45.5 point(s), required item failed
+      2/48 item(s) below max, -45.5 point(s), high-magnitude item failed
   e222075d-5d62-4757-ae3c-e34b0846583b   21.67%  13.00/60  ·  Film and Video Editors
-      23/33 item(s) below max, -47.0 point(s), required item failed
+      23/33 item(s) below max, -47.0 point(s), high-magnitude item failed
   94925f49-36bc-42da-b45b-61078d329300   28.72%  23.55/82  ·  Real Estate Sales Agents
-      48/56 item(s) below max, -58.45 point(s), required item failed
+      48/56 item(s) below max, -58.45 point(s), high-magnitude item failed
   5e2b6aab-f9fb-4dd6-a1a5-874ef1743909   36.24%  24.64/68  ·  Mechanical Engineers
       27/38 item(s) below max, -43.36 point(s)
   5d0feb24-e8b6-4ace-b64f-d5cd1a8b563d   44.69%  28.60/64  ·  News Analysts, Reporters, and Journalists
       27/46 item(s) below max, -35.4 point(s)
   75401f7c-396d-406d-b08e-938874ad1045   45.18%  25.30/56  ·  Film and Video Editors
-      25/40 item(s) below max, -30.7 point(s), required item failed
+      25/40 item(s) below max, -30.7 point(s), high-magnitude item failed
   c6269101-fdc8-4602-b345-eac7597c0c81   46.37%  28.75/62  ·  Industrial Engineers
       22/31 item(s) below max, -33.25 point(s)
   c357f0e2-963d-4eb7-a6fa-3078fe55b3ba   49.97%  50.47/101  ·  Computer and Information Systems Managers
-      42/70 item(s) below max, -50.5333 point(s), required item failed
+      42/70 item(s) below max, -50.5333 point(s), high-magnitude item failed
   1752cb53-5983-46b6-92ee-58ac85a11283   50.62%  35.94/71  ·  First-Line Supervisors of Production and Operating Workers
-      29/46 item(s) below max, -35.057 point(s), required item failed
+      29/46 item(s) below max, -35.057 point(s), high-magnitude item failed
   bf68f2ad-eac5-490a-adec-d847eb45bd6f   51.88%  29.05/56  ·  First-Line Supervisors of Production and Operating Workers
-      25/40 item(s) below max, -26.95 point(s), required item failed
+      25/40 item(s) below max, -26.95 point(s), high-magnitude item failed
   e21cd746-404d-4602-b9d2-01d2812c5b87   52.31%  20.40/39  ·  Financial and Investment Analysts
-      18/28 item(s) below max, -18.6 point(s), required item failed
+      18/28 item(s) below max, -18.6 point(s), high-magnitude item failed
   a079d38f-c529-436a-beca-3e291f9e62a3   53.69%  28.99/54  ·  Producers and Directors
-      12/34 item(s) below max, -25.01 point(s), required item failed
+      12/34 item(s) below max, -25.01 point(s), high-magnitude item failed
   a69be28f-9a84-47c9-992e-b90446cdca9d   54.36%  54.90/101  ·  Sales Managers
       31/54 item(s) below max, -46.1 point(s)
   ce864f41-8584-49ba-b24f-9c9104b47bf0   54.40%  31.55/58  ·  Project Management Specialists
-      28/39 item(s) below max, -26.45 point(s), required item failed
+      28/39 item(s) below max, -26.45 point(s), high-magnitude item failed
   46fc494e-a24f-45ce-b099-851d5c181fd4   54.87%  63.65/116  ·  Mechanical Engineers
-      35/81 item(s) below max, -52.35 point(s), required item failed
+      35/81 item(s) below max, -52.35 point(s), high-magnitude item failed
   61e7b9c6-0051-429f-a341-fda9b6578a84   57.14%  36.00/63  ·  Medical and Health Services Managers
-      15/19 item(s) below max, -27.0 point(s), required item failed
+      15/19 item(s) below max, -27.0 point(s), high-magnitude item failed
   40a99a31-42d6-4f23-b3ec-8f591afe25b6   57.74%  56.01/97  ·  Industrial Engineers
-      29/64 item(s) below max, -40.99 point(s), required item failed
+      29/64 item(s) below max, -40.99 point(s), high-magnitude item failed
   efca245f-c24f-4f75-a9d5-59201330ab7a   58.45%  59.62/102  ·  First-Line Supervisors of Production and Operating Workers
-      33/59 item(s) below max, -42.38 point(s), required item failed
+      33/59 item(s) below max, -42.38 point(s), high-magnitude item failed
   1aecc095-4d76-4b89-b752-1a0f870502cd   58.96%  53.06/90  ·  First-Line Supervisors of Office and Administrative Support Workers
-      23/52 item(s) below max, -36.94 point(s), required item failed
+      23/52 item(s) below max, -36.94 point(s), high-magnitude item failed
   58ac1cc5-5754-4580-8c9c-8c67e1a9d619   60.18%  45.74/76  ·  Project Management Specialists
-      22/41 item(s) below max, -30.26 point(s), required item failed
+      22/41 item(s) below max, -30.26 point(s), high-magnitude item failed
   b5d2e6f1-62a2-433a-bcdd-95b260cdd860   61.06%  39.69/65  ·  Order Clerks
-      20/32 item(s) below max, -25.3082 point(s), required item failed
+      20/32 item(s) below max, -25.3082 point(s), high-magnitude item failed
   27e8912c-8bd5-44ba-ad87-64066ea05264   61.32%  32.50/53  ·  Administrative Services Managers
-      14/37 item(s) below max, -20.5 point(s), required item failed
+      14/37 item(s) below max, -20.5 point(s), high-magnitude item failed
   fd6129bd-f095-429b-873c-dcc3137be2c3   61.63%  53.00/86  ·  Project Management Specialists
-      35/64 item(s) below max, -33.0 point(s), required item failed
+      35/64 item(s) below max, -33.0 point(s), high-magnitude item failed
   be830ca0-b352-4658-a5bd-57139d6780ba   63.22%  48.68/77  ·  Industrial Engineers
-      29/55 item(s) below max, -28.32 point(s), required item failed
+      29/55 item(s) below max, -28.32 point(s), high-magnitude item failed
   7de33b48-5163-4f50-b5f3-8deea8185e57   63.94%  33.25/52  ·  Software Developers
-      14/39 item(s) below max, -18.75 point(s), required item failed
+      14/39 item(s) below max, -18.75 point(s), high-magnitude item failed
   83d10b06-26d1-4636-a32c-23f92c57f30b   64.84%  40.85/63  ·  Accountants and Auditors
-      15/38 item(s) below max, -22.15 point(s), required item failed
+      15/38 item(s) below max, -22.15 point(s), high-magnitude item failed
   90edba97-74f0-425a-8ff6-8b93182eb7cb   65.12%  87.26/134  ·  Registered Nurses
-      33/71 item(s) below max, -46.74 point(s), required item failed
+      33/71 item(s) below max, -46.74 point(s), high-magnitude item failed
   e996036e-8287-4e7f-8d0a-90a57cb53c45   65.52%  50.45/77  ·  First-Line Supervisors of Non-Retail Sales Workers
-      18/50 item(s) below max, -26.55 point(s), required item failed
+      18/50 item(s) below max, -26.55 point(s), high-magnitude item failed
   1bff4551-1d54-4e37-b2e0-d5c3f2ea4a45   65.70%  28.25/43  ·  Recreation Workers
-      12/29 item(s) below max, -14.75 point(s), required item failed
+      12/29 item(s) below max, -14.75 point(s), high-magnitude item failed
   2fa8e956-7b35-4c13-95dc-027f02be318b   66.18%  21.84/33  ·  Concierges
       12/28 item(s) below max, -11.16 point(s)
   a45bc83b-22f9-4def-8d89-9c5661b2b86f   66.59%  57.93/87  ·  Computer and Information Systems Managers
-      35/72 item(s) below max, -29.07 point(s), required item failed
+      35/72 item(s) below max, -29.07 point(s), high-magnitude item failed
   6a900a40-8d2b-4064-a5b1-13a60bc173d8   67.65%  34.50/51  ·  Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products
-      13/32 item(s) below max, -16.5 point(s), required item failed
+      13/32 item(s) below max, -16.5 point(s), high-magnitude item failed
   f1be6436-ffff-4fee-9e66-d550291a1735   67.70%  50.10/74  ·  Medical Secretaries and Administrative Assistants
       22/47 item(s) below max, -23.9 point(s)
   b39a5aa7-cd1b-47ad-b249-90afd22f8f21   68.31%  42.35/62  ·  Financial Managers
       13/32 item(s) below max, -19.65 point(s)
   4b98ccce-9e42-44e9-9115-6fc3e79de288   68.72%  35.73/52  ·  Medical Secretaries and Administrative Assistants
-      15/31 item(s) below max, -16.2667 point(s), required item failed
+      15/31 item(s) below max, -16.2667 point(s), high-magnitude item failed
   3f821c2d-ab97-46ec-a0fb-b8f73c2682bc   69.69%  56.45/81  ·  First-Line Supervisors of Non-Retail Sales Workers
-      25/46 item(s) below max, -24.55 point(s), required item failed
+      25/46 item(s) below max, -24.55 point(s), high-magnitude item failed
   76418a2c-a3c0-4894-b89d-2493369135d9   70.21%  50.55/72  ·  Shipping, Receiving, and Inventory Clerks
-      14/56 item(s) below max, -21.45 point(s), required item failed
+      14/56 item(s) below max, -21.45 point(s), high-magnitude item failed
   0fad6023-767b-42c1-a1b3-027cd4f583cb   70.94%  46.82/66  ·  General and Operations Managers
-      19/44 item(s) below max, -19.18 point(s), required item failed
+      19/44 item(s) below max, -19.18 point(s), high-magnitude item failed
   02aa1805-c658-4069-8a6a-02dec146063a   71.10%  61.15/86  ·  Project Management Specialists
-      25/71 item(s) below max, -24.85 point(s), required item failed
+      25/71 item(s) below max, -24.85 point(s), high-magnitude item failed
   6436ff9e-c5f2-47ba-9aaa-49d89b0594ab   71.67%  45.15/63  ·  General and Operations Managers
-      19/51 item(s) below max, -17.85 point(s), required item failed
+      19/51 item(s) below max, -17.85 point(s), high-magnitude item failed
   f9f82549-fdde-4462-aff8-e70fba5b8c66   71.67%  23.65/33  ·  Private Detectives and Investigators
       7/26 item(s) below max, -9.35 point(s)
   ec591973-04d5-48c0-981c-1ab2fcec2dc1   72.01%  55.45/77  ·  First-Line Supervisors of Non-Retail Sales Workers
-      24/68 item(s) below max, -21.55 point(s), required item failed
+      24/68 item(s) below max, -21.55 point(s), high-magnitude item failed
   e4f664ea-0e5c-4e4e-a0d3-a87a33da947a   72.13%  123.33/171  ·  Producers and Directors
-      12/50 item(s) below max, -47.665 point(s), required item failed
+      12/50 item(s) below max, -47.665 point(s), high-magnitude item failed
   38889c3b-e3d4-49c8-816a-3cc8e5313aba   73.39%  45.50/62  ·  Audio and Video Technicians
       10/35 item(s) below max, -16.5 point(s)
   dfb4e0cd-a0b7-454e-b943-0dd586c2764c   73.68%  28.00/38  ·  Compliance Officers
@@ -678,9 +682,9 @@ Per task (worst first)
   5ad0c554-a7a2-48cd-b41a-ebc1bff4a9de   74.44%  46.90/63  ·  Real Estate Sales Agents
       21/60 item(s) below max, -16.1 point(s)
   a10ec48c-168e-476c-8fe3-23b2a5f616ac   74.54%  26.09/35  ·  Concierges
-      10/22 item(s) below max, -8.91 point(s), required item failed
+      10/22 item(s) below max, -8.91 point(s), high-magnitude item failed
   3c19c6d1-672c-467a-8437-6fe21afb8eae   74.75%  59.05/79  ·  Project Management Specialists
-      16/41 item(s) below max, -19.95 point(s), required item failed
+      16/41 item(s) below max, -19.95 point(s), high-magnitude item failed
   3baa0009-5a60-4ae8-ae99-4955cb328ff3   75.27%  42.15/56  ·  News Analysts, Reporters, and Journalists
       15/49 item(s) below max, -13.85 point(s)
   dd724c67-8118-4b99-ab50-4761af705c3b   75.62%  41.59/55  ·  Registered Nurses
@@ -698,11 +702,11 @@ Per task (worst first)
   4c18ebae-dfaa-4b76-b10c-61fcdf26734c   77.68%  53.60/69  ·  Compliance Officers
       19/50 item(s) below max, -15.4 point(s)
   d025a41c-c439-4ee1-bc79-dd5c94b27a2d   78.15%  55.49/71  ·  Customer Service Representatives
-      17/60 item(s) below max, -15.5125 point(s), required item failed
+      17/60 item(s) below max, -15.5125 point(s), high-magnitude item failed
   46bc7238-3501-4839-b989-e2bd47853676   78.28%  52.45/67  ·  Real Estate Brokers
       14/46 item(s) below max, -14.55 point(s)
   7d7fc9a7-21a7-4b83-906f-416dea5ad04f   78.63%  74.70/95  ·  Accountants and Auditors
-      16/56 item(s) below max, -20.3 point(s), required item failed
+      16/56 item(s) below max, -20.3 point(s), high-magnitude item failed
   a74ead3b-f67d-4b1c-9116-f6bb81b29d4f   78.71%  66.90/85  ·  Child, Family, and School Social Workers
       18/57 item(s) below max, -18.1 point(s)
   8a7b6fca-60cc-4ae3-b649-971753cbf8b9   78.72%  30.70/39  ·  Industrial Engineers
@@ -714,47 +718,47 @@ Per task (worst first)
   ab81b076-e5d8-473a-9bdb-7ea7c38f6ebc   79.04%  41.10/52  ·  Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products
       10/39 item(s) below max, -10.9 point(s)
   68d8d901-dd0b-4a7e-bf9a-1074fddf1a96   79.48%  68.35/86  ·  First-Line Supervisors of Production and Operating Workers
-      16/61 item(s) below max, -17.65 point(s), required item failed
+      16/61 item(s) below max, -17.65 point(s), high-magnitude item failed
   74ed1dc7-1468-48a8-9071-58775c0d667a   79.59%  39.00/49  ·  Sales Managers
-      11/35 item(s) below max, -10.0 point(s), required item failed
+      11/35 item(s) below max, -10.0 point(s), high-magnitude item failed
   a46d5cd2-55fe-48fa-a4c6-6aaf6b9991b5   79.66%  58.15/73  ·  Private Detectives and Investigators
-      15/56 item(s) below max, -14.85 point(s), required item failed
+      15/56 item(s) below max, -14.85 point(s), high-magnitude item failed
   a95a5829-34bb-40f3-993b-558aed6dcdef   79.67%  35.85/45  ·  First-Line Supervisors of Police and Detectives
       13/29 item(s) below max, -9.15 point(s)
   650adcb1-ed19-4f88-8117-77640f7b94b6   79.76%  98.11/123  ·  Recreation Workers
-      15/48 item(s) below max, -24.89 point(s), required item failed
+      15/48 item(s) below max, -24.89 point(s), high-magnitude item failed
   f841ddcf-2a28-4f6d-bac3-61b607219d3e   79.94%  70.35/88  ·  Order Clerks
-      16/59 item(s) below max, -17.65 point(s), required item failed
+      16/59 item(s) below max, -17.65 point(s), high-magnitude item failed
   69a8ef86-4e69-4fe2-9168-080f1e978e67   80.23%  51.35/64  ·  Sales Managers
-      15/47 item(s) below max, -12.65 point(s), required item failed
+      15/47 item(s) below max, -12.65 point(s), high-magnitude item failed
   1137e2bb-bdf9-4876-b572-f29b7de5e595   80.62%  64.50/80  ·  Order Clerks
       18/62 item(s) below max, -15.5 point(s)
   8314d1b1-5b0f-42a4-b5d5-91c0867b0913   80.85%  94.60/117  ·  Lawyers
-      15/43 item(s) below max, -22.4 point(s), required item failed
+      15/43 item(s) below max, -22.4 point(s), high-magnitude item failed
   105f8ad0-8dd2-422f-9e88-2be5fbd2b215   81.19%  78.75/97  ·  Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products
-      13/46 item(s) below max, -18.25 point(s), required item failed
+      13/46 item(s) below max, -18.25 point(s), high-magnitude item failed
   cecac8f9-8203-4ebd-ad49-54436a8c4171   81.27%  60.95/75  ·  First-Line Supervisors of Retail Sales Workers
       13/55 item(s) below max, -14.05 point(s)
   41f6ef59-88c9-4b2c-bcc7-9ceb88422f48   81.62%  53.87/66  ·  Medical Secretaries and Administrative Assistants
-      14/39 item(s) below max, -12.13 point(s), required item failed
+      14/39 item(s) below max, -12.13 point(s), high-magnitude item failed
   99ac6944-4ec6-4848-959c-a460ac705c6f   81.76%  67.04/82  ·  Audio and Video Technicians
       20/52 item(s) below max, -14.96 point(s)
   24d1e93f-9018-45d4-b522-ad89dfd78079   81.83%  67.10/82  ·  Buyers and Purchasing Agents
-      21/52 item(s) below max, -14.9 point(s), required item failed
+      21/52 item(s) below max, -14.9 point(s), high-magnitude item failed
   116e791e-890c-42b1-ba90-1db02e8bfd45   81.95%  52.45/64  ·  Registered Nurses
       14/46 item(s) below max, -11.55 point(s)
   ee09d943-5a11-430a-b7a2-971b4e9b01b5   81.98%  48.37/59  ·  Accountants and Auditors
       11/44 item(s) below max, -10.632 point(s)
   327fbc21-7d26-4964-bf7c-f4f41e55c54d   82.21%  103.58/126  ·  First-Line Supervisors of Non-Retail Sales Workers
-      21/66 item(s) below max, -22.418 point(s), required item failed
+      21/66 item(s) below max, -22.418 point(s), high-magnitude item failed
   9e39df84-ac57-4c9b-a2e3-12b8abf2c797   82.30%  79.01/96  ·  First-Line Supervisors of Production and Operating Workers
       18/57 item(s) below max, -16.99 point(s)
   6dcae3f5-bf1c-48e0-8b4b-23e6486a934c   82.46%  53.60/65  ·  First-Line Supervisors of Office and Administrative Support Workers
-      11/43 item(s) below max, -11.4 point(s), required item failed
+      11/43 item(s) below max, -11.4 point(s), high-magnitude item failed
   c7d83f01-2874-4876-b7fd-52582ec99e1a   82.55%  43.75/53  ·  Financial and Investment Analysts
       12/43 item(s) below max, -9.25 point(s)
   46b34f78-6c06-4416-87e2-77b6d8b20ce9   82.95%  71.34/86  ·  Financial and Investment Analysts
-      15/53 item(s) below max, -14.66 point(s), required item failed
+      15/53 item(s) below max, -14.66 point(s), high-magnitude item failed
   57b2cdf2-ad62-4591-aa91-aad489740320   83.39%  49.20/59  ·  Private Detectives and Investigators
       11/45 item(s) below max, -9.8 point(s)
   7151c60a-d4cb-4fc4-8169-3d4cb446e6b9   83.81%  35.20/42  ·  Registered Nurses
@@ -766,87 +770,87 @@ Per task (worst first)
   01d7e53e-0513-4109-a242-8ccaf442cd21   84.23%  70.75/84  ·  Recreation Workers
       16/65 item(s) below max, -13.25 point(s)
   bb863dd9-31c2-4f64-911a-ce11f457143b   84.43%  81.90/97  ·  Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products
-      9/53 item(s) below max, -15.1 point(s), required item failed
+      9/53 item(s) below max, -15.1 point(s), high-magnitude item failed
   7bbfcfe9-132d-4194-82bb-d6f29d001b01   84.53%  44.80/53  ·  Compliance Officers
-      11/40 item(s) below max, -8.2 point(s), required item failed
+      11/40 item(s) below max, -8.2 point(s), high-magnitude item failed
   4520f882-715a-482d-8e87-1cb3cbdfe975   84.73%  148.27/175  ·  Financial Managers
-      17/88 item(s) below max, -26.73 point(s), required item failed
+      17/88 item(s) below max, -26.73 point(s), high-magnitude item failed
   1b1ade2d-f9f6-4a04-baa5-aa15012b53be   84.84%  58.54/69  ·  Buyers and Purchasing Agents
-      17/51 item(s) below max, -10.46 point(s), required item failed
+      17/51 item(s) below max, -10.46 point(s), high-magnitude item failed
   cebf301e-5ea7-41ae-b117-ad8f43e7ac22   84.84%  52.60/62  ·  Computer and Information Systems Managers
       8/35 item(s) below max, -9.4 point(s)
   ffed32d8-d192-4e3f-8cd4-eda5a730aec3   85.00%  64.60/76  ·  Pharmacists
       10/46 item(s) below max, -11.4 point(s)
   a0552909-bc66-4a3a-8970-ee0d17b49718   85.10%  81.69/96  ·  Medical Secretaries and Administrative Assistants
-      7/50 item(s) below max, -14.3083 point(s), required item failed
+      7/50 item(s) below max, -14.3083 point(s), high-magnitude item failed
   a99d85fc-eff8-48d2-a7d4-42a75d62f18d   85.10%  65.53/77  ·  Property, Real Estate, and Community Association Managers
-      12/52 item(s) below max, -11.47 point(s), required item failed
+      12/52 item(s) below max, -11.47 point(s), high-magnitude item failed
   61b0946a-5c1c-4bf6-8607-84d7c7e0dfe0   85.37%  69.15/81  ·  Medical and Health Services Managers
-      16/50 item(s) below max, -11.85 point(s), required item failed
+      16/50 item(s) below max, -11.85 point(s), high-magnitude item failed
   a0ef404e-82a6-4507-bff1-633d7c8e0004   85.52%  49.60/58  ·  Counter and Rental Clerks
-      10/41 item(s) below max, -8.4 point(s), required item failed
+      10/41 item(s) below max, -8.4 point(s), high-magnitude item failed
   87da214f-fd92-4c58-9854-f4d0d10adce0   85.57%  63.32/74  ·  Customer Service Representatives
-      15/59 item(s) below max, -10.68 point(s), required item failed
+      15/59 item(s) below max, -10.68 point(s), high-magnitude item failed
   8c8fc328-69fc-4559-a13f-82087baef0a1   85.59%  43.65/51  ·  Film and Video Editors
-      8/30 item(s) below max, -7.35 point(s), required item failed
+      8/30 item(s) below max, -7.35 point(s), high-magnitude item failed
   a328feea-47db-4856-b4be-2bdc63dd88fb   85.83%  20.60/24  ·  Administrative Services Managers
       4/16 item(s) below max, -3.4 point(s)
   84322284-5c2c-4873-b507-b147449d209d   86.03%  62.80/73  ·  Private Detectives and Investigators
       13/51 item(s) below max, -10.2 point(s)
   22c0809b-f8db-489e-93b3-b4da225e3e0e   86.12%  88.70/103  ·  First-Line Supervisors of Police and Detectives
-      9/58 item(s) below max, -14.3 point(s), required item failed
+      9/58 item(s) below max, -14.3 point(s), high-magnitude item failed
   40a8c4b1-b169-4f92-a38b-7f79685037ec   86.20%  96.54/112  ·  First-Line Supervisors of Office and Administrative Support Workers
-      22/72 item(s) below max, -15.46 point(s), required item failed
+      22/72 item(s) below max, -15.46 point(s), high-magnitude item failed
   a97369c7-e5cf-40ca-99e8-d06f81c57d53   86.23%  108.65/126  ·  Lawyers
       12/44 item(s) below max, -17.35 point(s)
   0419f1c3-d669-45d0-81cd-f4d5923b06a5   86.24%  73.30/85  ·  Property, Real Estate, and Community Association Managers
-      15/52 item(s) below max, -11.7 point(s), required item failed
+      15/52 item(s) below max, -11.7 point(s), high-magnitude item failed
   552b7dd0-96f4-437c-a749-0691e0e4b381   86.27%  69.88/81  ·  Shipping, Receiving, and Inventory Clerks
       12/63 item(s) below max, -11.12 point(s)
   3940b7e7-ec4f-4cea-8097-3ab4cfdcaaa6   86.30%  75.08/87  ·  Mechanical Engineers
-      13/55 item(s) below max, -11.92 point(s), required item failed
+      13/55 item(s) below max, -11.92 point(s), high-magnitude item failed
   5a2d70da-0a42-4a6b-a3ca-763e03f070a5   86.56%  77.90/90  ·  Mechanical Engineers
       11/64 item(s) below max, -12.1 point(s)
   93b336f3-61f3-4287-86d2-87445e1e0f90   86.64%  65.85/76  ·  Buyers and Purchasing Agents
-      11/53 item(s) below max, -10.15 point(s), required item failed
+      11/53 item(s) below max, -10.15 point(s), high-magnitude item failed
   aa071045-bcb0-4164-bb85-97245d56287e   86.92%  74.75/86  ·  Counter and Rental Clerks
       12/63 item(s) below max, -11.25 point(s)
   4d61a19a-8438-4d4c-9fc2-cf167e36dcd6   86.96%  60.00/69  ·  General and Operations Managers
-      4/43 item(s) below max, -9.0 point(s), required item failed
+      4/43 item(s) below max, -9.0 point(s), high-magnitude item failed
   c44e9b62-7cd8-4f72-8ad9-f8fbddb94083   87.02%  101.81/117  ·  Administrative Services Managers
-      14/44 item(s) below max, -15.19 point(s), required item failed
+      14/44 item(s) below max, -15.19 point(s), high-magnitude item failed
   3f625cb2-f40e-4ead-8a97-6924356d5989   87.17%  66.25/76  ·  Lawyers
       16/64 item(s) below max, -9.75 point(s)
   0ec25916-1b5c-4bfe-93d3-4e103d860f3a   87.37%  58.54/67  ·  Registered Nurses
       14/42 item(s) below max, -8.46 point(s)
   4d1a8410-e9c5-4be5-ab43-cc55563c594c   87.38%  158.16/181  ·  First-Line Supervisors of Office and Administrative Support Workers
-      14/64 item(s) below max, -22.8367 point(s), required item failed
+      14/64 item(s) below max, -22.8367 point(s), high-magnitude item failed
   1a78e076-445e-4c5d-b8ce-387d2fe5e715   87.41%  74.30/85  ·  Nurse Practitioners
-      11/63 item(s) below max, -10.7 point(s), required item failed
+      11/63 item(s) below max, -10.7 point(s), high-magnitude item failed
   15ddd28d-8445-4baa-ac7f-f41372e1344e   87.54%  49.90/57  ·  Buyers and Purchasing Agents
       10/46 item(s) below max, -7.1 point(s)
   eb54f575-93f9-408b-b9e0-f1208a0b6759   87.62%  55.20/63  ·  First-Line Supervisors of Police and Detectives
       10/53 item(s) below max, -7.8 point(s)
   9a0d8d36-6233-4c76-9107-0d1f783c7340   87.88%  45.70/52  ·  Personal Financial Advisors
-      12/40 item(s) below max, -6.3 point(s), required item failed
+      12/40 item(s) below max, -6.3 point(s), high-magnitude item failed
   8077e700-2b31-402d-bd09-df4d33c39653   88.21%  59.10/67  ·  Mechanical Engineers
       14/44 item(s) below max, -7.9 point(s)
   f84ea6ac-8f9f-428c-b96c-d0884e30f7c7   88.28%  51.20/58  ·  Administrative Services Managers
-      5/30 item(s) below max, -6.8 point(s), required item failed
+      5/30 item(s) below max, -6.8 point(s), high-magnitude item failed
   6241e678-4ba3-4831-b3c7-78412697febc   88.43%  144.14/163  ·  Producers and Directors
-      12/60 item(s) below max, -18.86 point(s), required item failed
+      12/60 item(s) below max, -18.86 point(s), high-magnitude item failed
   788d2bc6-82df-4dc7-8467-a0f31405dc14   88.69%  74.50/84  ·  Sales Managers
       8/48 item(s) below max, -9.5 point(s)
   3a4c347c-4aec-43c7-9a54-eb1f816ab1f9   88.72%  65.65/74  ·  Editors
-      8/54 item(s) below max, -8.35 point(s), required item failed
+      8/54 item(s) below max, -8.35 point(s), high-magnitude item failed
   62f04c2f-e0f7-4710-876c-54ee9c2e8256   88.87%  80.87/91  ·  First-Line Supervisors of Non-Retail Sales Workers
-      12/53 item(s) below max, -10.13 point(s), required item failed
+      12/53 item(s) below max, -10.13 point(s), high-magnitude item failed
   045aba2e-4093-42aa-ab7f-159cc538278c   89.73%  65.50/73  ·  Pharmacists
       7/34 item(s) below max, -7.5 point(s)
   c2e8f271-7858-412f-b460-472463ad81d9   89.78%  72.72/81  ·  Computer and Information Systems Managers
-      12/67 item(s) below max, -8.28 point(s), required item failed
+      12/67 item(s) below max, -8.28 point(s), high-magnitude item failed
   8f9e8bcd-6102-40da-ab76-23f51d8b21fa   89.80%  44.00/49  ·  General and Operations Managers
-      4/33 item(s) below max, -5.0 point(s), required item failed
+      4/33 item(s) below max, -5.0 point(s), high-magnitude item failed
   bb499d9c-0263-4684-9238-75e8e86077b1   89.83%  79.95/89  ·  Securities, Commodities, and Financial Services Sales Agents
       9/61 item(s) below max, -9.05 point(s)
   02314fc6-a24e-42f4-a8cd-362cae0f0ec1   89.86%  31.45/35  ·  General and Operations Managers
@@ -858,31 +862,31 @@ Per task (worst first)
   c9bf9801-9640-45fa-8166-1ab01f2d98e4   90.00%  55.80/62  ·  Medical and Health Services Managers
       7/47 item(s) below max, -6.2 point(s)
   f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb   90.00%  71.10/79  ·  Audio and Video Technicians
-      8/51 item(s) below max, -7.9 point(s), required item failed
+      8/51 item(s) below max, -7.9 point(s), high-magnitude item failed
   47ef842d-8eac-4b90-bda8-dd934c228c96   90.10%  89.20/99  ·  Order Clerks
-      8/58 item(s) below max, -9.8 point(s), required item failed
+      8/58 item(s) below max, -9.8 point(s), high-magnitude item failed
   05389f78-589a-473c-a4ae-67c61050bfca   90.23%  79.40/88  ·  Buyers and Purchasing Agents
-      12/66 item(s) below max, -8.6 point(s), required item failed
+      12/66 item(s) below max, -8.6 point(s), high-magnitude item failed
   a4a9195c-5ebe-4b8d-a0c2-4a6b7a49da8b   90.32%  56.00/62  ·  Shipping, Receiving, and Inventory Clerks
       11/55 item(s) below max, -6.0 point(s)
   fe0d3941-e32c-4bf1-a643-b566d2b4cb3c   90.62%  43.50/48  ·  Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products
       3/27 item(s) below max, -4.5 point(s)
   4122f866-01fa-400b-904d-fa171cdab7c7   90.74%  212.34/234  ·  Software Developers
-      15/65 item(s) below max, -21.66 point(s), required item failed
+      15/65 item(s) below max, -21.66 point(s), high-magnitude item failed
   403b9234-6299-4b5f-a106-70c1bc11ec4c   90.83%  49.05/54  ·  Recreation Workers
-      3/17 item(s) below max, -4.95 point(s), required item failed
+      3/17 item(s) below max, -4.95 point(s), high-magnitude item failed
   d7cfae6f-4a82-4289-955e-c799dfe1e0f4   91.01%  114.67/126  ·  Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products
-      9/63 item(s) below max, -11.33 point(s), required item failed
+      9/63 item(s) below max, -11.33 point(s), high-magnitude item failed
   61717508-4df7-41be-bf97-318dfb2475c0   91.25%  58.40/64  ·  Customer Service Representatives
-      7/42 item(s) below max, -5.6 point(s), required item failed
+      7/42 item(s) below max, -5.6 point(s), high-magnitude item failed
   b78fd844-db76-448e-a783-5e9877cb74c2   91.36%  69.43/76  ·  Financial Managers
-      11/51 item(s) below max, -6.57 point(s), required item failed
+      11/51 item(s) below max, -6.57 point(s), high-magnitude item failed
   60221cd0-686e-4a08-985e-d9bb2fa18501   91.38%  26.50/29  ·  News Analysts, Reporters, and Journalists
       3/20 item(s) below max, -2.5 point(s)
   ed2bc14c-99ac-4a2a-8467-482a1a5d67f3   91.57%  49.45/54  ·  Property, Real Estate, and Community Association Managers
-      8/36 item(s) below max, -4.55 point(s), required item failed
+      8/36 item(s) below max, -4.55 point(s), high-magnitude item failed
   c3525d4d-2012-45df-853e-2d2a0e902991   91.63%  78.80/86  ·  Order Clerks
-      9/52 item(s) below max, -7.2 point(s), required item failed
+      9/52 item(s) below max, -7.2 point(s), high-magnitude item failed
   2c249e0f-4a8c-4f8e-b4f4-6508ba29b34f   91.76%  67.90/74  ·  Software Developers
       7/50 item(s) below max, -6.1 point(s)
   43dc9778-450b-4b46-b77e-b6d82b202035   92.23%  111.60/121  ·  Accountants and Auditors
@@ -894,23 +898,23 @@ Per task (worst first)
   7b08cd4d-df60-41ae-9102-8aaa49306ba2   92.81%  82.60/89  ·  Accountants and Auditors
       5/59 item(s) below max, -6.4 point(s)
   15d37511-75c5-4c7f-81f1-16e00c0d95f3   92.84%  101.20/109  ·  Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products
-      9/56 item(s) below max, -7.8 point(s), required item failed
+      9/56 item(s) below max, -7.8 point(s), high-magnitude item failed
   0112fc9b-c3b2-4084-8993-5a4abb1f54f1   93.11%  61.45/66  ·  Nurse Practitioners
       8/55 item(s) below max, -4.55 point(s)
   211d0093-2c64-4bd0-828c-0201f18924e7   93.14%  47.50/51  ·  First-Line Supervisors of Retail Sales Workers
-      6/40 item(s) below max, -3.5 point(s), required item failed
+      6/40 item(s) below max, -3.5 point(s), high-magnitude item failed
   4c4dc603-c21c-4284-8fb1-1b827c1fddf4   93.27%  48.50/52  ·  Securities, Commodities, and Financial Services Sales Agents
       4/37 item(s) below max, -3.5 point(s)
   fd3ad420-6f7d-43b1-a990-c0c5c047d071   93.55%  29.00/31  ·  Real Estate Brokers
       1/21 item(s) below max, -2.0 point(s)
   b7a5912e-0e63-41f5-8c22-9cdb8f46ab01   93.77%  106.90/114  ·  Counter and Rental Clerks
-      3/59 item(s) below max, -7.1 point(s), required item failed
+      3/59 item(s) below max, -7.1 point(s), high-magnitude item failed
   fccaa4a1-1c39-49ac-b701-55361a19966b   94.02%  50.77/54  ·  Concierges
       6/40 item(s) below max, -3.23 point(s)
   8384083a-c31b-4194-80ba-4d335a444918   94.07%  59.27/63  ·  Pharmacists
       5/47 item(s) below max, -3.7334 point(s)
   11dcc268-cb07-4d3a-a184-c6d7a19349bc   94.19%  121.50/129  ·  Shipping, Receiving, and Inventory Clerks
-      2/27 item(s) below max, -7.5 point(s), required item failed
+      2/27 item(s) below max, -7.5 point(s), high-magnitude item failed
   b3573f20-5d3e-4954-948f-9461fda693d2   94.59%  35.00/37  ·  Sales Managers
       1/17 item(s) below max, -2.0 point(s)
   664a42e5-3240-413a-9a57-ea93c6303269   94.60%  47.30/50  ·  Personal Financial Advisors
@@ -918,42 +922,42 @@ Per task (worst first)
   c657103b-b348-4496-a848-b2b7165d28b2   94.74%  54.95/58  ·  Personal Financial Advisors
       6/36 item(s) below max, -3.05 point(s)
   7ed932dd-244f-4d61-bf02-1bc3bab1af14   94.94%  80.70/85  ·  Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products
-      4/55 item(s) below max, -4.3 point(s), required item failed
+      4/55 item(s) below max, -4.3 point(s), high-magnitude item failed
   0ed38524-a4ad-405f-9dee-7b2252659aad   95.00%  49.40/52  ·  Customer Service Representatives
       2/28 item(s) below max, -2.6 point(s)
   1b9ec237-bf9c-41f9-8fa9-0e685fcd93c6   95.17%  56.15/59  ·  Nurse Practitioners
       4/47 item(s) below max, -2.85 point(s)
   2d06bc0a-89c6-4e89-9417-5ffe725c1bc6   95.61%  63.10/66  ·  Real Estate Brokers
-      2/34 item(s) below max, -2.9 point(s), required item failed
+      2/34 item(s) below max, -2.9 point(s), high-magnitude item failed
   2696757c-1f8a-4959-8f0d-f5597b9e70fc   95.85%  39.30/41  ·  Compliance Officers
       2/25 item(s) below max, -1.7 point(s)
   36d567ba-e205-4313-9756-931c6e4691fe   96.30%  52.00/54  ·  Compliance Officers
       1/27 item(s) below max, -2.0 point(s)
   1e5a1d7f-12c1-48c6-afd9-82257b3f2409   96.97%  32.00/33  ·  Property, Real Estate, and Community Association Managers
-      1/18 item(s) below max, -1.0 point(s), required item failed
+      1/18 item(s) below max, -1.0 point(s), high-magnitude item failed
   76d10872-9ffa-4ede-83ee-e0f1ec5e2b8d   97.84%  144.80/148  ·  Child, Family, and School Social Workers
       5/74 item(s) below max, -3.2 point(s)
   19403010-3e5c-494e-a6d3-13594e99f6af   98.19%  121.75/124  ·  Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products
-      2/63 item(s) below max, -2.25 point(s), required item failed
+      2/63 item(s) below max, -2.25 point(s), high-magnitude item failed
   aad21e4c-1d43-45fc-899a-97754a1b1b63   98.31%  124.85/127  ·  Lawyers
       5/84 item(s) below max, -2.15 point(s)
   f2986c1f-2bbf-4b83-bc93-624a9d617f45   98.57%  154.75/157  ·  Pharmacists
-      1/77 item(s) below max, -2.25 point(s), required item failed
+      1/77 item(s) below max, -2.25 point(s), high-magnitude item failed
   b57efde3-26d6-4742-bbff-2b63c43b4baa   98.67%  74.00/75  ·  Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products
       2/62 item(s) below max, -1.0 point(s)
   2ea2e5b5-257f-42e6-a7dc-93763f28b19d   98.82%  84.00/85  ·  Computer and Information Systems Managers
       1/60 item(s) below max, -1.0 point(s)
   476db143-163a-4537-9e21-fe46adad703b   99.14%  63.45/64  ·  Counter and Rental Clerks
-      1/28 item(s) below max, -0.55 point(s), required item failed
+      1/28 item(s) below max, -0.55 point(s), high-magnitude item failed
   5349dd7b-bf0a-4544-9a17-75b7013767e6   99.26%  147.90/149  ·  Shipping, Receiving, and Inventory Clerks
-      1/94 item(s) below max, -1.1 point(s), required item failed
+      1/94 item(s) below max, -1.1 point(s), high-magnitude item failed
   854f3814-681c-4950-91ac-55b0db0e3781  100.00%  33.00/33  ·  Software Developers
       0/23 item(s) below max, -0.0 point(s)
 
 Shortfalls
 ------------------------------------------------------------
   2467 of 8816 rubric item(s) scored below their maximum, losing 2718.9011 point(s)
-  required item failed in 99 task(s):
+  high-magnitude item failed in 99 task(s):
       83d10b06-26d1-4636-a32c-23f92c57f30b, 7d7fc9a7-21a7-4b83-906f-416dea5ad04f, f84ea6ac-8f9f-428c-b96c-d0884e30f7c7
       27e8912c-8bd5-44ba-ad87-64066ea05264, c44e9b62-7cd8-4f72-8ad9-f8fbddb94083, f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb
       1b1ade2d-f9f6-4a04-baa5-aa15012b53be, 93b336f3-61f3-4287-86d2-87445e1e0f90, 24d1e93f-9018-45d4-b522-ad89dfd78079

@@ -11,7 +11,132 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+- **"필수 항목 통과율" was never measuring required items, and it decided a
+  pass gate anyway.** The rubric's own `required` field is `null` on all 10,453
+  items across all 220 tasks, so `core/grader.py` substitutes
+  `abs(max_score) >= 4`. That substitute was published as the headline
+  "Critical Items (weight ≥ 3)" — a label wrong three ways: nothing marks these
+  items required, the threshold is 4 rather than 3, and it reads the score
+  magnitude rather than any weight field. Owner decision of 2026-09-03, priced
+  first by `scripts/analyze_required_item_definition.py` and recorded in
+  `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`.
+
+  **The threshold does not move and no grade file is rewritten.**
+  `MAGNITUDE_THRESHOLD` stays at 4, `core/**`, `step8_grade.py` and
+  `schemas/grade.schema.json` are untouched — so no grader fingerprint moved and
+  no published run is restated. The JSON keys keep their published names
+  (`critical_item_pass_rate`, `critical_fail`, `item_counts.critical_items`),
+  because renaming them would break every reader of every payload written so
+  far. What changed is the name a human reads, and what the number is allowed
+  to decide.
+
+  - `scripts/analyze_gold_ceiling.py` gates on two things now, not three: mean
+    score and judge error rate. The rate moves to a `diagnostics` block that
+    prints its own denominator and states plainly that it does not decide the
+    stage. Exit codes are unchanged on both gold corpora — stage 1 (mean
+    82.87%) and stage 3 (mean 79.53%) already failed on mean score, so nothing
+    that failed before passes now.
+  - The dashboard card is renamed *High-magnitude item pass rate (|max score| ≥
+    4)*, moved out of the headline row into a dashed diagnostic card below the
+    heatmap, and stripped of its WOW badge. `CriticalItemCard.tsx` →
+    `HighMagnitudeItemCard.tsx`; the decision itself lives in the import-free
+    `src/components/wow/highMagnitudeReading.ts` so a node test can execute it.
+  - The sector heatmap's column header said `Critical ≥3` while the code
+    thresholded at 4. It now says `High-mag ≥4`, and any cell whose denominator
+    is unrecorded, empty, or under 20 items is greyed out with the reason on
+    hover instead of painted red.
+  - **An empty denominator reads "not recorded", never `0%`.** Measured on this
+    repository's own grades with #393 merged in: 447 published sector rows
+    carry the rate, of which #393 recovered a denominator for 62 — the other
+    385 still publish a bare rate with nothing behind it. Of the 62 that can
+    now be checked, **4 counted no high-magnitude item at all**; those printed
+    `0.0%` and painted the heatmap bright red for a run that measured nothing,
+    and they now read "not recorded". A further 21 counted between 1 and 19.
+    168 sector rows read exactly `0.0`, and only 10 of them carry a denominator
+    to explain it — but recomputing the count straight from the item data
+    settles all 168: **41 counted no high-magnitude item at all, 127 counted
+    between 1 and 19, and not one reached 20.** Every published `0.0` is a
+    denominator artefact, and the heatmap painted all 168 bright red. Run level
+    is the same shape: 94 payloads publish the rate, 22 carry
+    `item_counts.critical_items` (1 of them zero, 14 under 20), 72 carry
+    nothing. The 20-item floor is derived rather than chosen:
+    `ceil(1 / (1 − 0.95))`, below which one item moves the rate further than
+    the whole distance from the reference to a clean sweep.
+  - `scripts/__tests__/high-magnitude-label.test.mjs` pins all of it — the two
+    constants against their Python sources, the absence of the heuristic from
+    `gates`, the banned labels across every rendered `src/` surface, and the
+    five states of `readHighMagnitudeRate`.
+
+  Known residual: `core/narrative_analyzer.py` still writes "Critical item pass
+  rate" into the report prompt. Correcting that string is a one-word edit, but
+  `core/**/*.py` feeds `compute_grader_source_hash`, so it is deferred to the
+  next fingerprint-moving PR rather than smuggled in beside a label change.
+
 ### Added
+- **How much of a published average was decided by the audio sub-judge is now
+  on screen — and for most runs the honest answer is "not recorded".** The
+  audio route was measured against synthetic clips whose answers were known and
+  came back at 48.6%, with a discrimination of exactly **0.00** by item
+  majority, an 83.3% false-negative rate on true claims, higher confidence when
+  wrong than when right, and 11 of 12 items answered identically across three
+  repeats — so re-running a grade can never surface the error. Nothing on the
+  board said how much of any average passed through it.
+
+  `step8_grade._routing_stats` computes exactly this and post-dates every
+  published payload, so `scripts/aggregate-grades.mjs` recomputes it from the
+  same items by the same rule, which that function's own docstring licenses:
+  *"a payload published before this field existed reports the same numbers when
+  it is re-summarised."* The predicate is copied deliberately — an errored
+  task's items stay in the population but leave the scored counts, a
+  `score_excluded` item does the same, a penalty item's negative weight is
+  clamped to 0 rather than netted off, an unknown modality is counted under its
+  own name rather than dropped, and `tasks` counts a task once however many
+  items it routed. `route_composition` lands on `summary_v1`; the new
+  `RouteExposureCard` renders it as a dashed diagnostic card with no WOW badge,
+  beside the high-magnitude card and for the same reason.
+
+  **Three states, never collapsed into two.** Of the 19 grade files the
+  dashboard reads, **18 are item-level and get a composition — 7 recorded a
+  route and 11 recorded none at all**; the 19th carries no rubric items and
+  gets no composition. Those 11 predate the field and carry
+  `routing_modality: null` on every item. Reading
+  them as `audio: 0` would turn *never asked* into *asked and found none*, so a
+  run that recorded nothing gets **empty maps rather than zero-filled ones**
+  and reads `not recorded`, never `0%`. A route missing from a run that *did*
+  record is a measured zero and reads `none`. Where the route was used, the
+  card prints its share of scored rubric weight: on the two `rubric_v2_tools`
+  runs that is **58 items across 22 tasks, 0.64%**; the OFFICIAL sol-220 grade
+  carries no audio key at all.
+
+  **The unrouted remainder is stated, and it is not a random sample.** The
+  OFFICIAL grade leaves **964 of 10,453 items (9.2%)** without a route, and
+  every one of them is an item the judge failed or errored on — 952 `fail`
+  plus 12 `judge_error` — so a share taken over the routed rest is a share
+  over a population missing its failures. The card says so rather than
+  printing the percentage bare.
+
+  **What the counts structurally cannot see is disclosed too.** Both the
+  producer and this recomputation count a `mixed` item once, under `mixed`, and
+  neither descends into `child_grades` — so an audio child inside a mixed item
+  is audio-decided weight the audio row does not cover. Measured across all 19
+  files: **23 mixed items, 72 children, zero audio children**, so nothing on
+  screen moves today. `audio_in_mixed_items` is computed and reported anyway,
+  kept outside the route maps so they stay comparable with the producer's, and
+  the headline reads `none directly` rather than `none` the day it fires.
+
+  **This discloses; it does not decide.** No score changes, no grade file is
+  rewritten, and nothing under `compute_grader_source_hash` is touched — the
+  change is confined to `scripts/aggregate-grades.mjs`, `src/**`,
+  `scripts/__tests__/**` and `package.json`, so no grader fingerprint moved and
+  no published run is restated. How the audio-graded items should ultimately be
+  treated remains an open owner decision, and the card says that on its face.
+  The rule lives in the import-free `src/components/wow/routeExposure.ts` so
+  `scripts/__tests__/route-exposure.test.mjs` can execute it; that test also
+  reads `_ROUTING_MODALITIES` straight out of `step8_grade.py` so the two
+  languages cannot drift apart, and asserts the three states on the real
+  published grades, not only on fixtures.
+
 - **The number that says whether the model got the important things right is,
   on the gold corpora, mostly one line about formatting.** GDPVal rubrics carry
   a `required` field and it is `null` on all 10,453 items, so the repository
@@ -188,6 +313,60 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **A precheck that never ran was published as "Strong on reasoning, weak on
+  structure".** `step8_grade._rate` returns `0.0` when the denominator is
+  empty, and `0.0` is also the worst possible score, so the two are the same
+  number on the wire — a hazard that function's own docstring states. The
+  producer's answer was `_wow_item_counts`, which publishes the denominators
+  beside the rates, and its docstring names the reader that had not yet used
+  them: *"the dashboard's Structure vs Reasoning card turns the same gap into
+  'Strong on reasoning, weak on structure' — a finding about a check that never
+  ran, in a paid report and on a public page."* The obligation sits on the
+  reading side, and that is where this is fixed.
+
+  **Measured on this repository's own published grades.** 94 run-level payloads
+  carry `precheck_pass_rate` and **81 of them publish `0.0`**. 22 record the
+  denominator, and among those, every one of the **15** zeros counted **no
+  precheck items at all** — not one is a run where prechecks ran and failed.
+  Per sector the shape repeats: 447 rows carry the rate, 420 publish `0.0`, 62
+  record a denominator, and **all 35 recorded zeros counted nothing**. Among
+  them is the 185-task gold-ceiling run — 8,816 judged items, zero prechecked
+  ones, published as a 0% structural pass rate and captioned as a weakness.
+
+  **Four states, never collapsed into two.** `src/components/wow/rateReading.ts`
+  is import-free so a node test can execute the decision itself. A rate whose
+  denominator was recorded and non-zero is `measured` and reads exactly as
+  before. A recorded zero denominator is `none-counted`: it prints "not
+  recorded", **draws no bar at all** — a bar at zero length is the picture of
+  total failure, which is the one thing the run did not measure — and says why.
+  A rate with no denominator recorded is `denominator-unknown`: the percentage
+  is still shown, greyed, with the gap stated, because 72 run-level payloads and
+  385 sector rows predate `item_counts` and #393 recovered it for only some. A
+  run publishing no rate at all is `absent`. Only `measured` may be set against
+  another rate, so *Structure vs Reasoning* now withholds its verdict and names
+  the missing half instead of subtracting a zero that stands for nothing.
+
+  Applied uniformly across every surface that reads one of these three rates:
+  `StructureVsReasoning`, `HealthStrip`, `SectorHeatmap`, `RubricCoverageCard`
+  and the `GradingAnalysisView` mini-pills, where runs are read side by side and
+  an invented `0.0%` ranks them. **Scope stated honestly:**
+  `precheck_pass_rate` is the live case; `judge_pass_rate` and
+  `rubric_item_coverage_avg` have zero zero-denominator instances in anything
+  published so far and are fixed as the same code path, not as a live defect.
+
+  **Nothing the producer writes changes.** The rates keep their type, their
+  values and their keys — `scripts/grading_cost_sweep.py` compares them against
+  thresholds and 33 payloads carry them, so turning them null to fix a caption
+  would break more than it repairs. No grade file is rewritten, no score moves,
+  and the change is confined to `src/**` plus one new test, so **no grader
+  source fingerprint moves**. As Session B's backfill fills `item_counts`, the
+  `denominator-unknown` state shrinks into `measured` or `none-counted` on its
+  own. `scripts/__tests__/wow-rate-denominator.test.mjs` pins it: the
+  producer's four denominator keys against `step8_grade.py`, the four states run
+  for real, the comparison withheld unless both sides were measured, the
+  measured case unchanged in every band, and a scan proving no `src/` surface
+  reads one of these rates without going through `readWowRate`.
+
 - **The dashboard called a band "Perfect (100%)" that a task scoring 99.77%
   is inside, and printed that task's score as "100%".**
   `summary.openai_compat.perfect_count` and `zero_count` are counted by the
