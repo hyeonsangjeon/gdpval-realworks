@@ -1878,6 +1878,85 @@ def _routing_stats(task_dicts: list[dict]) -> dict:
     }
 
 
+def _grader_agreement_stats(task_dicts: list[dict]) -> dict:
+    """Whether two gradings of one task were ever put side by side here.
+
+    ``openai_compat.inconsistent_count`` is a required integer that has been
+    the literal ``0`` in every payload this repository has ever written, and
+    the dashboard renders it as *"multiple graders scored the same task
+    differently: 0"*. No run has ever had multiple graders. Each task is
+    graded once, and ``step9_merge_shards`` refuses a merge whose shards are
+    not disjoint, so a published payload cannot hold the same task twice.
+    Nothing was compared, and the number for "nothing was compared" was
+    published as the number for "they all agreed".
+
+    The direction matters. The repository has measured this separately: three
+    gradings of the same thirty answers, at one grader fingerprint, moved
+    **29 of the 30 tasks**. So the zero is not an unexamined guess that
+    happens to be defensible -- it is the reassuring answer to a question
+    whose real answer is already known to be the opposite.
+
+    That integer stays as it is. Ninety-four committed payloads carry it,
+    ``core/grade_payload.py`` and ``scripts/aggregate-grades.mjs`` both use
+    ``inconsistent_count != 0`` to recognise a stub, and its schema entry now
+    says plainly what it is. What was missing is a statement of the *basis*,
+    which is what this returns: ``compared`` says whether any task in this
+    payload was graded more than once, and ``tasks_that_moved`` is ``None``
+    when none was -- never ``0``, for the same reason ``routing`` reports
+    empty maps rather than ``audio: 0`` on a run that never recorded a route.
+
+    Nothing here assumes the current pipeline's answer. The counts come out
+    of the payload, so a set of tasks that does hold repeats -- assembled by
+    something other than the merge step, or by a later summariser that reads
+    repeat runs together -- gets a real measurement out of this rather than a
+    constant, and the branch that says so is reached by the tests either way.
+
+    Two gradings differ when their ``pct`` differs; a grading with no numeric
+    ``pct`` (an errored task) has no score to compare, so a task needs two of
+    them before it counts as compared at all.
+    """
+    scores_by_task: dict[str, list[float]] = {}
+    gradings_by_task: dict[str, int] = {}
+
+    for task in task_dicts:
+        task_id = task.get("task_id")
+        if not isinstance(task_id, str) or not task_id:
+            continue
+        gradings_by_task[task_id] = gradings_by_task.get(task_id, 0) + 1
+        pct = task.get("pct")
+        if isinstance(pct, bool) or not isinstance(pct, (int, float)):
+            continue
+        scores_by_task.setdefault(task_id, []).append(float(pct))
+
+    gradings_per_task = max(gradings_by_task.values(), default=0)
+    comparable = [scores for scores in scores_by_task.values() if len(scores) > 1]
+
+    if not comparable:
+        return {
+            "compared": False,
+            "gradings_per_task": gradings_per_task,
+            "tasks_compared": 0,
+            "tasks_that_moved": None,
+            "max_spread_pp": None,
+        }
+
+    moved = 0
+    widest = 0.0
+    for scores in comparable:
+        spread = max(scores) - min(scores)
+        if spread > 0:
+            moved += 1
+        widest = max(widest, spread)
+
+    return {
+        "compared": True,
+        "gradings_per_task": gradings_per_task,
+        "tasks_compared": len(comparable),
+        "tasks_that_moved": moved,
+        "max_spread_pp": round(widest, 4),
+    }
+
+
 def _compute_summary(
     task_dicts: list[dict],
     *,
@@ -2023,6 +2102,10 @@ def _compute_summary(
         # a fixed compatibility shape, and this is the caveat on the number it
         # carries, not another field of it.
         "score_exclusions": _score_exclusion_stats(scored_tasks, avg_pct),
+        # The basis behind `openai_compat.inconsistent_count`, which is the
+        # constant 0 above and is read downstream as "the graders agreed".
+        # This says whether anything was compared to reach it.
+        "grader_agreement": _grader_agreement_stats(task_dicts),
         # Over every task, not just the scored ones. A task that could not fit
         # its renders may have left the average altogether, and that is the
         # case this is here to count -- see `_visual_budget_stats`.
