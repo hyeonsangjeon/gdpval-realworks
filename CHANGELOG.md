@@ -12,6 +12,42 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **A way into an archive that only one of two schemas mentioned.** PR3 follow-up
+  4. A stage-1 gold answer — five WAV stems inside one `.zip` — scored 2 of 62
+  because thirty-four rubric items were answered "binary or unsupported" about
+  files nothing had opened. The re-run recovered **39.8 points** (→ 41.80/62),
+  and PR3 recorded the outcome and the caveat together: the judge found the
+  member scope *by itself*, in a `note` returned by `inspect_formatting`, so this
+  was booked as a reproducibility item rather than a defect — "it worked, but
+  nothing made it work."
+
+  The fix was to say it where the judge is looking, and by then three of the four
+  places did: the structure listing, the text read, and
+  `MODEL_READ_DELIVERABLE_TOOL_SCHEMA`, the schema the judge is actually handed.
+  The fourth did not. `core/tools/read_deliverable.py` describes `scope` twice,
+  and the other one — `READ_DELIVERABLE_TOOL_SCHEMA`, exported from `core.tools`,
+  which this changelog's own entry for that file offers as "ready to drop into
+  Responses API `tools=[...]`" — said nothing about a member. A caller who took
+  that at its word got a model that could reach every file in an archive and was
+  told about none of them: the 2-of-62 answer, reintroduced one export over.
+
+  Both descriptions are now composed from one `_SCOPE_MEMBER_CONTRACT`. The
+  string the judge receives is **byte-identical to before** — verified by
+  evaluating the old literals out of `git show` — so the grading prompt does not
+  move, and only the six-op export gains text. The comment on `_ZIP_MEMBER_HINT`
+  claimed the fact was said "in all three places" including the schema; it was
+  said in two, and now says which two.
+
+  Nine tests find the schemas **by shape rather than by name**, so a third one
+  added later is held to the same contract instead of quietly becoming the next
+  place it is missing; one of them pins the sweep itself against matching
+  nothing. Two checks are needed for one claim: the built dict must *contain* the
+  constant, and the source must *refer* to it — at runtime a hand-written copy
+  and a reference are identical bytes, and the hand-written copy is what drifted.
+  13 of 13 planted mutations were caught, including that one. Grader source hash
+  moves `fc1fe6a9…` → `726b2c38…` (`default_v2_sol_max.yaml`); no grade run was
+  in flight. No model calls, $0.
+
 - **The published grades index carried an amount nobody ever measured.** Sixteen
   of the nineteen rows in `public/generated/grades-index.json` said
   `summary_v1.cost.estimated_cost_usd: 0`, and every one of them said it beside

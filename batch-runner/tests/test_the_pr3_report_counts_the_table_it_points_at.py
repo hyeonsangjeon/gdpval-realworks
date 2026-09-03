@@ -362,6 +362,9 @@ def test_relative_document_links_resolve(path: Path):
 def test_the_follow_up_list_is_contiguous_and_registers_the_302_side_finding():
     text = _read(REPORT)
     body = text[text.index("## 후속 항목") :]
-    numbers = [int(n) for n in re.findall(r"^(\d+)\.\s+\*\*", body, re.M)]
+    # ``~~`` before the bold lead-in marks a closed item. Counting only the
+    # open ones would have made this check silently weaker every time one was
+    # closed -- and closing a middle item is exactly when contiguity breaks.
+    numbers = [int(n) for n in re.findall(r"^(\d+)\.\s+~{0,2}\*\*", body, re.M)]
     assert numbers == list(range(1, len(numbers) + 1)), f"follow-up list: {numbers}"
     assert "319-the-published-index-still-says-zero.md" in body

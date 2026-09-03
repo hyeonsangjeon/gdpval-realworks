@@ -108,6 +108,25 @@ PDF_POINTS_PER_INCH = 72.0
 RENDERER_VERSION_TIMEOUT_SEC = 10
 RENDERER_VERSION_MAX_CHARS = 200
 
+#: The member scope, said once for every schema that describes ``scope``.
+#:
+#: A judge meets an archive in three places -- the schema it is handed, the
+#: structure listing, and the text read. The last two say it at runtime through
+#: ``_ZIP_MEMBER_HINT``; the schemas say it here. It is a constant rather than
+#: a sentence typed into each one because this file describes ``scope`` twice,
+#: and the two descriptions had already drifted: the model schema carried the
+#: member contract and the exported six-op schema did not, while the CHANGELOG
+#: offers that schema as drop-in ``tools=[...]``. A caller who took it got a
+#: model with no stated way to open anything an archive holds -- which is the
+#: 2-of-62 archive answer this text was written to prevent, reintroduced one
+#: export over.
+_SCOPE_MEMBER_CONTRACT = (
+    "To reach a file inside a .zip deliverable, pass "
+    "{\"member\": \"<exact name from the listing>\"} to any op -- "
+    "probe_audio for a stem, read_content for a document. An archive is a "
+    "container of files this tool already reads, not an unreadable binary."
+)
+
 #: Full six-op schema retained for public API compatibility and direct
 #: harness tests. Do not send this schema to the main model.
 READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
@@ -146,7 +165,8 @@ READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
                 "description": (
                     "Optional op-specific scope, e.g. "
                     "{'workbook_page': 1}, {'slide': 1}, {'page': 1}, or "
-                    "{'page_start': 1, 'page_end': 3}."
+                    "{'page_start': 1, 'page_end': 3}. "
+                    + _SCOPE_MEMBER_CONTRACT
                 ),
                 "additionalProperties": True,
             },
@@ -205,12 +225,8 @@ MODEL_READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
             "scope": {
                 "type": ["object", "null"],
                 "description": (
-                    "Optional op-specific content/formatting scope. To reach "
-                    "a file inside a .zip deliverable, pass "
-                    "{\"member\": \"<exact name from the listing>\"} to any "
-                    "op -- probe_audio for a stem, read_content for a "
-                    "document. An archive is a container of files this tool "
-                    "already reads, not an unreadable binary."
+                    "Optional op-specific content/formatting scope. "
+                    + _SCOPE_MEMBER_CONTRACT
                 ),
                 "additionalProperties": True,
             },
@@ -488,9 +504,12 @@ def _zip_entries(p: Path) -> Tuple[List[Dict[str, Any]], int, bool]:
     return entries, hidden, truncated
 
 
-#: Said in all three places a judge can meet an archive -- the tool schema it
-#: is given, the structure listing, and the text read -- because a judge that
-#: does not know a member can be opened reports the archive as unreadable.
+#: The runtime half of ``_SCOPE_MEMBER_CONTRACT``: the same fact, said in the
+#: two places a judge meets an archive without reading the schema again -- the
+#: structure listing and the text read. Worded for a line inside a listing
+#: rather than for a parameter description, but it has to name the same key and
+#: the same ops, because a judge that does not know a member can be opened
+#: reports the archive as unreadable.
 _ZIP_MEMBER_HINT = (
     "open a member with scope={\"member\": \"<name>\"} on any op, "
     "e.g. probe_audio for a .wav or read_content for a .docx"
