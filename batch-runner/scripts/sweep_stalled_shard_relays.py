@@ -55,6 +55,10 @@ class ShardReadError(ValueError):
     """A shard file cannot be read as a shard."""
 
 
+class CorpusNotFound(FileNotFoundError):
+    """The tree the sweep was pointed at is not there to be read."""
+
+
 def load_shard_file(path: Path) -> tuple[dict, str]:
     """Return ``(payload, sha256_of_file_bytes)`` for one shard file.
 
@@ -447,7 +451,18 @@ def sweep(
     commit_time: Callable[[Path], datetime | None],
     canonical_lookup: Callable[[str], list[str] | None],
 ) -> list[RelayVerdict]:
-    """Classify every stem under ``<grades_root>/_shards/``."""
+    """Classify every stem under ``<grades_root>/_shards/``.
+
+    Raises ``CorpusNotFound`` when ``grades_root`` itself is not a directory,
+    so an empty list carries one meaning only: the corpus was read and it holds
+    no relay. A grades root that exists but has no ``_shards/`` tree yet is
+    that case -- nothing has been committed -- and returns ``[]``.
+    """
+    if not grades_root.is_dir():
+        raise CorpusNotFound(
+            f"--grades-root {grades_root} is not a directory, so no relay was "
+            "inspected; that is not the same as finding none"
+        )
     shards_root = grades_root / "_shards"
     if not shards_root.is_dir():
         return []
@@ -532,19 +547,34 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     repo_root = Path(args.repo_root).resolve()
     config_dir = Path(args.config_dir)
-    verdicts = sweep(
-        Path(args.grades_root),
-        now=datetime.now(timezone.utc),
-        stale_after=timedelta(hours=args.stale_after_hours),
-        commit_time=lambda path: last_commit_at(repo_root, path),
-        canonical_lookup=lambda sha: canonical_ids_from_configs(config_dir, sha),
-    )
+    annotate = bool(os.environ.get("GITHUB_ACTIONS"))
+    try:
+        verdicts = sweep(
+            Path(args.grades_root),
+            now=datetime.now(timezone.utc),
+            stale_after=timedelta(hours=args.stale_after_hours),
+            commit_time=lambda path: last_commit_at(repo_root, path),
+            canonical_lookup=lambda sha: canonical_ids_from_configs(config_dir, sha),
+        )
+    except CorpusNotFound as exc:
+        # `inspect_stem` already refuses to guess when it cannot read one stem's
+        # liveness, and says so out loud. The input that decides whether any
+        # stem is read at all gets the same treatment: a sweep that could not
+        # look must not print the sentence a sweep that looked and found nothing
+        # prints. On stdout, because the workflow tees stdout into the job
+        # summary and that summary is what a person reads. Exit 2, as for any
+        # other unusable invocation -- 1 stays reserved for "a relay needs
+        # attention", which nothing here is in a position to have judged.
+        message = f"cannot sweep: {exc}"
+        print(message)
+        if annotate:
+            print(f"::error title=Shard relay sweep could not look::{message}")
+        return 2
 
     if not verdicts:
         print("no shard relays to inspect")
         return 0
 
-    annotate = bool(os.environ.get("GITHUB_ACTIONS"))
     for line in render(verdicts, annotate=annotate):
         print(line)
 

@@ -235,8 +235,35 @@ def test_a_relay_with_no_shard_files_is_ignored(tmp_path):
     assert verdict.failing is False
 
 
-def test_a_missing_shards_tree_sweeps_nothing(tmp_path):
-    assert _sweep(tmp_path / "grades") == []
+@pytest.mark.parametrize("kind", ["absent", "a regular file"])
+def test_a_grades_root_it_cannot_find_is_not_a_sweep_that_found_nothing(
+    tmp_path, kind
+):
+    # Replaces `test_a_missing_shards_tree_sweeps_nothing`, which pinned the
+    # opposite: it passed a grades root that was never there and asserted the
+    # empty list, i.e. the same answer as a corpus that was read and held no
+    # relay. This sweep is the watchdog for the case where "the relay is broken
+    # and every signal is green", so those two must not share an answer.
+    # `test_liveness_it_cannot_read_is_never_reported_as_a_failure` above is the
+    # same refusal one layer down; the input deciding whether any stem is read
+    # at all now gets it too.
+    grades = tmp_path / "grades"
+    if kind == "a regular file":
+        grades.write_text("not a directory\n", encoding="utf-8")
+
+    with pytest.raises(sweep.CorpusNotFound) as caught:
+        _sweep(grades)
+    assert str(grades) in str(caught.value)
+
+
+def test_a_grades_root_with_no_shards_tree_yet_sweeps_nothing(tmp_path):
+    # The other half of the split, and a control: it must pass on both sides of
+    # the change. A grades root that exists but holds no `_shards/` was read,
+    # and it really does hold no relay -- nothing has been committed yet. That
+    # is a finding, so it keeps the empty list and the quiet exit.
+    grades = tmp_path / "grades"
+    grades.mkdir()
+    assert _sweep(grades) == []
 
 
 @pytest.mark.parametrize("total,shard_count", [(220, 9), (12, 3), (7, 7), (5, 1)])
@@ -594,3 +621,48 @@ def test_the_cli_exits_zero_when_every_relay_is_accounted_for(tmp_path, capsys):
 def test_a_non_positive_staleness_window_is_rejected(tmp_path, capsys):
     assert sweep.main(["--stale-after-hours", "0"]) == 2
     assert "must be positive" in capsys.readouterr().err
+
+
+def test_the_cli_does_not_report_a_corpus_it_never_found_as_empty(
+    tmp_path, capsys
+):
+    rc = sweep.main(["--grades-root", str(tmp_path / "nowhere")])
+    captured = capsys.readouterr()
+
+    # 2, not 1: 1 means a relay needs attention, and no relay was judged here.
+    # 2 is what this CLI already returns for an invocation it cannot act on.
+    assert rc == 2
+    assert "cannot sweep" in captured.out
+    assert str(tmp_path / "nowhere") in captured.out
+    # The exact sentence a sweep that looked and found nothing prints. Reaching
+    # it from here is the defect, so pin its absence rather than only pinning
+    # the new wording, which a later edit could reword without noticing.
+    assert "no shard relays to inspect" not in captured.out
+
+
+def test_the_cli_puts_a_corpus_it_cannot_find_in_the_run_annotations(
+    tmp_path, capsys, monkeypatch
+):
+    # The workflow tees stdout into the job summary, so the sentence goes to
+    # stdout; under Actions it also has to surface as an annotation, the way
+    # `render` marks a failing verdict.
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    assert sweep.main(["--grades-root", str(tmp_path / "nowhere")]) == 2
+    annotations = [
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("::error")
+    ]
+    assert len(annotations) == 1
+    assert "could not look" in annotations[0]
+
+
+def test_the_cli_still_reports_a_corpus_that_really_holds_no_relay(
+    tmp_path, capsys
+):
+    # Control: passes on both sides of the change. Reading the corpus and
+    # finding no relay is a finding, and keeps its quiet green answer.
+    grades = tmp_path / "grades"
+    grades.mkdir()
+    assert sweep.main(["--grades-root", str(grades)]) == 0
+    assert capsys.readouterr().out.strip() == "no shard relays to inspect"
