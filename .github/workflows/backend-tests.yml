@@ -26,11 +26,13 @@ on:
   pull_request:
     paths:
       - "batch-runner/**"
+      - "scripts/**"
       - ".github/workflows/backend-tests.yml"
   push:
     branches: [main]
     paths:
       - "batch-runner/**"
+      - "scripts/**"
       - ".github/workflows/backend-tests.yml"
   workflow_dispatch:
     inputs:
@@ -171,5 +173,12 @@ jobs:
       # An empty collection exits 5 and a missing path exits 4, so this step
       # cannot pass by quietly finding nothing -- which is the exact way the
       # directory went unnoticed in the first place.
+      #
+      # `scripts/**` is in the trigger filter above for this step's sake. It
+      # was not at first, so a pull request touching only repo-root `scripts/`
+      # started no run at all and this step never executed -- the directory was
+      # wired to a job that nothing woke up. Measured on #392, which changed
+      # `scripts/grading_cost_sweep.py` and added twenty-five tests here: the
+      # only workflow that ran was Aggregate Tests & Deploy.
       - name: Run repo-root script tests
         run: python -m pytest scripts/__tests__ -m "not integration" --tb=short -q -rs

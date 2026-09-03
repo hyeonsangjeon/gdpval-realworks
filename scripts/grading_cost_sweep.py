@@ -30,7 +30,7 @@ import subprocess
 import sys
 import tempfile
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -567,6 +567,40 @@ def run_step8_grade(
 # Metrics extraction
 # ---------------------------------------------------------------------
 
+#: The ``summary.wow.item_counts`` denominator each acceptance rate was divided
+#: by. ``step8_grade`` computes every one of these as ``hits / <count>`` and
+#: publishes ``0.0`` when the count is zero -- which is also exactly what a
+#: total failure publishes. Without the denominator the two are the same
+#: number, and every threshold below rejects on both alike.
+RATE_DENOMINATORS = {
+    "critical_item_pass_rate": "critical_items",
+    "judge_error_rate": "judge_items",
+    "precheck_pass_rate": "precheck_items",
+}
+
+
+def _measured_rate(wow: Any, key: str) -> float | None:
+    """A rate from ``summary.wow``, or ``None`` if nothing was measured.
+
+    ``None`` is returned in two cases: the rate is absent, or its denominator
+    is explicitly zero. A grade written before ``item_counts`` existed carries
+    no denominator at all -- that is *unknown*, not zero, so the rate is
+    returned as published rather than discarded.
+    """
+    if not isinstance(wow, dict):
+        return None
+    value = wow.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    counts = wow.get("item_counts")
+    denominator = RATE_DENOMINATORS.get(key)
+    if isinstance(counts, dict) and denominator is not None:
+        n = counts.get(denominator)
+        if isinstance(n, int) and not isinstance(n, bool) and n == 0:
+            return None
+    return float(value)
+
+
 def extract_metrics(grade_json_path: Path, variant: Variant) -> dict[str, Any]:
     """Read a grade JSON and compute the dispatcher's per-variant metric block."""
     with open(grade_json_path, "r", encoding="utf-8") as f:
@@ -586,14 +620,20 @@ def extract_metrics(grade_json_path: Path, variant: Variant) -> dict[str, Any]:
     smoke_cost = _cost_from_tokens(variant, judge_input, judge_output)
     full_cost = smoke_cost * FULL_RUN_SCALE
 
+    avg_score = oai.get("avg_score_pct")
     return {
         "name": variant.name,
         "phase": variant.phase,
         "repeat_index": variant.repeat_index,
-        "avg_score_pct": float(oai.get("avg_score_pct", 0.0)),
-        "critical_item_pass_rate": float(wow.get("critical_item_pass_rate", 0.0)),
-        "judge_error_rate": float(wow.get("judge_error_rate", 0.0)),
-        "precheck_pass_rate": float(wow.get("precheck_pass_rate", 0.0)),
+        "avg_score_pct": (
+            float(avg_score)
+            if isinstance(avg_score, (int, float)) and not isinstance(avg_score, bool)
+            else None
+        ),
+        "critical_item_pass_rate": _measured_rate(wow, "critical_item_pass_rate"),
+        "judge_error_rate": _measured_rate(wow, "judge_error_rate"),
+        "precheck_pass_rate": _measured_rate(wow, "precheck_pass_rate"),
+        "item_counts": wow.get("item_counts") if isinstance(wow, dict) else None,
         "judge_call_count": judge_calls,
         "judge_total_latency_sec": judge_latency,
         "judge_input_tokens": judge_input,
@@ -616,6 +656,18 @@ def _cost_from_tokens(variant: Variant, in_tok: int, out_tok: int) -> float:
 # Pareto frontier + winner selection
 # ---------------------------------------------------------------------
 
+def _axis(m: dict[str, Any], ax: str) -> float:
+    """One Pareto axis, with an unmeasured value sorted as worst.
+
+    ``math.inf`` rather than ``0.0``: a variant whose error rate was never
+    measured must not out-rank one whose measured error rate is genuinely low.
+    """
+    value = m.get(ax)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return math.inf
+    return float(value)
+
+
 def pareto_frontier(
     results: list[dict[str, Any]],
     axes: Iterable[str],
@@ -631,10 +683,10 @@ def pareto_frontier(
             strictly_better = False
             all_le = True
             for ax in axes:
-                if other.get(ax, math.inf) > cand.get(ax, math.inf):
+                if _axis(other, ax) > _axis(cand, ax):
                     all_le = False
                     break
-                if other.get(ax, math.inf) < cand.get(ax, math.inf):
+                if _axis(other, ax) < _axis(cand, ax):
                     strictly_better = True
             if all_le and strictly_better:
                 dominated = True
@@ -649,31 +701,116 @@ class WinnerResult:
     name: str
     metrics: dict[str, Any]
     rationale: str
+    unmeasured: list[str] = field(default_factory=list)
+
+
+#: A criterion's three possible states. ``UNMEASURED`` exists because the
+#: absent form of every rate here is ``0.0`` -- the worst value on the scale --
+#: so a two-state gate reads "we never ran this check" as "this failed the
+#: check", and rejects a config on evidence it does not have.
+PASS = "pass"
+FAIL = "fail"
+UNMEASURED = "unmeasured"
+
+
+@dataclass
+class CriterionVerdict:
+    criterion: str
+    verdict: str
+    detail: str
+
+
+def _verdict(criterion: str, value: Any, detail_if_measured: str) -> CriterionVerdict:
+    """``UNMEASURED`` for a non-number, otherwise the caller's own verdict."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return CriterionVerdict(criterion, UNMEASURED, "not measured on this run")
+    return CriterionVerdict(criterion, PASS, detail_if_measured)
+
+
+def evaluate_acceptance(
+    metrics: dict[str, Any],
+    acceptance: dict[str, Any],
+) -> list[CriterionVerdict]:
+    """Score one variant against every acceptance criterion, three-state.
+
+    A criterion that was never measured returns ``UNMEASURED``. It does not
+    reject: an absence is not evidence of failure. It does not silently pass
+    either -- it is carried on the winner and printed in RESULTS.md, so nobody
+    promotes a config believing a check ran that never did.
+    """
+    verdicts: list[CriterionVerdict] = []
+
+    error = metrics.get("error")
+    if error:
+        # The variant produced no grade at all. This is a rejection on the
+        # evidence -- the run failed -- not on a missing measurement.
+        verdicts.append(
+            CriterionVerdict("graded", FAIL, f"variant did not produce a grade: {error}")
+        )
+
+    for key, threshold_key, direction in (
+        ("critical_item_pass_rate", "critical_item_pass_rate_min", "below"),
+        ("precheck_pass_rate", "precheck_pass_rate_min", "below"),
+        ("judge_error_rate", "judge_error_rate_max", "above"),
+    ):
+        limit = float(acceptance[threshold_key])
+        value = metrics.get(key)
+        bound = "≥" if direction == "below" else "≤"
+        v = _verdict(key, value, f"{value} ({bound} {limit})")
+        if v.verdict == PASS:
+            numeric = float(value)  # type: ignore[arg-type]
+            if numeric < limit if direction == "below" else numeric > limit:
+                v = CriterionVerdict(
+                    key, FAIL, f"{value} is {direction} the limit {limit}"
+                )
+        verdicts.append(v)
+
+    baseline = float(acceptance["baseline_avg_score_pct"])
+    delta_pp = float(acceptance["avg_score_delta_pp"])
+    score = metrics.get("avg_score_pct")
+    v = _verdict("avg_score_pct", score, f"{score} (baseline {baseline} ± {delta_pp}pp)")
+    if v.verdict == PASS and abs(float(score) - baseline) > delta_pp:  # type: ignore[arg-type]
+        v = CriterionVerdict(
+            "avg_score_pct", FAIL,
+            f"{score} is more than {delta_pp}pp from baseline {baseline}",
+        )
+    verdicts.append(v)
+
+    return verdicts
+
+
+def acceptance_audit(
+    progress: dict[str, Any],
+    acceptance: dict[str, Any],
+) -> dict[str, list[CriterionVerdict]]:
+    """Per-criterion verdicts for every selectable variant, keyed by name."""
+    return {
+        name: evaluate_acceptance(m, acceptance)
+        for name, m in progress.get("results", {}).items()
+        if m.get("phase") != "DV"  # diversity validator is never selected
+    }
 
 
 def select_pareto_winner(
     progress: dict[str, Any],
     acceptance: dict[str, Any],
 ) -> WinnerResult | None:
-    baseline_score = float(acceptance["baseline_avg_score_pct"])
-    delta_pp = float(acceptance["avg_score_delta_pp"])
-    crit_min = float(acceptance["critical_item_pass_rate_min"])
-    err_max = float(acceptance["judge_error_rate_max"])
-    precheck_min = float(acceptance["precheck_pass_rate_min"])
+    audit = acceptance_audit(progress, acceptance)
 
-    eligible = []
-    for name, m in progress.get("results", {}).items():
-        if m.get("phase") == "DV":
-            continue  # diversity validator never selected
-        if m.get("critical_item_pass_rate", 0.0) < crit_min:
-            continue
-        if m.get("judge_error_rate", 1.0) > err_max:
-            continue
-        if m.get("precheck_pass_rate", 0.0) < precheck_min:
-            continue
-        if abs(m.get("avg_score_pct", 0.0) - baseline_score) > delta_pp:
-            continue
-        eligible.append(m)
+    # Keyed by identity, not by name: `results` is keyed by variant name but
+    # each metric dict carries its own `name`, and the two are not guaranteed
+    # to agree.
+    verdicts_of = {
+        id(m): audit[key]
+        for key, m in progress.get("results", {}).items()
+        if key in audit
+    }
+
+    eligible = [
+        m for m in progress.get("results", {}).values()
+        if id(m) in verdicts_of
+        and not any(v.verdict == FAIL for v in verdicts_of[id(m)])
+    ]
 
     if not eligible:
         return None
@@ -690,20 +827,41 @@ def select_pareto_winner(
         if r.get("name", "").startswith(winner["name"]) and r.get("phase") == "C"
     ]
     if len(reps) >= 2:
-        scores = [r["avg_score_pct"] for r in reps]
-        mean = sum(scores) / len(scores)
-        std = (sum((s - mean) ** 2 for s in scores) / len(scores)) ** 0.5
-        if std > 1.5 and len(frontier) > 1:
-            remaining = [m for m in frontier if m["name"] != winner["name"]]
-            winner = min(remaining, key=lambda m: m["full_run_cost_usd"])
+        # Only the reps that actually carry a score: averaging over a
+        # fabricated 0.0 would invent instability that was never observed.
+        scores = [
+            r["avg_score_pct"] for r in reps
+            if isinstance(r.get("avg_score_pct"), (int, float))
+            and not isinstance(r.get("avg_score_pct"), bool)
+        ]
+        if len(scores) >= 2:
+            mean = sum(scores) / len(scores)
+            std = (sum((s - mean) ** 2 for s in scores) / len(scores)) ** 0.5
+            if std > 1.5 and len(frontier) > 1:
+                remaining = [m for m in frontier if m["name"] != winner["name"]]
+                winner = min(remaining, key=lambda m: m["full_run_cost_usd"])
+
+    unmeasured = [
+        v.criterion for v in verdicts_of[id(winner)] if v.verdict == UNMEASURED
+    ]
+    rationale = (
+        f"Pareto winner among {len(eligible)} eligible variants "
+        f"(frontier size {len(frontier)}); minimized full_run_cost_usd."
+    )
+    if unmeasured:
+        # Said on the winner itself, because this is the sentence a human
+        # needs before promoting the config: it cleared every threshold that
+        # ran, and these ones did not run.
+        rationale += (
+            " NOT VERIFIED against " + ", ".join(unmeasured) +
+            " — not measured on this run, so no threshold was applied."
+        )
 
     return WinnerResult(
         name=winner["name"],
         metrics=winner,
-        rationale=(
-            f"Pareto winner among {len(eligible)} eligible variants "
-            f"(frontier size {len(frontier)}); minimized full_run_cost_usd."
-        ),
+        rationale=rationale,
+        unmeasured=unmeasured,
     )
 
 
@@ -755,16 +913,79 @@ def write_summary_json(progress: dict[str, Any], path: Path) -> None:
         json.dump(payload, f, indent=2)
 
 
+def _fmt_measure(
+    value: Any,
+    spec: str,
+    *,
+    scale: float = 1.0,
+    absent: str = "n/a",
+) -> str:
+    """Render a metric, or ``absent`` when there was no measurement.
+
+    ``0.00`` is a legitimate rendering of a measured zero. It must not also be
+    the rendering of "never measured", which is the whole defect these tables
+    used to carry into the report.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return absent
+    return spec.format(value * scale)
+
+
 def _format_row(m: dict[str, Any]) -> str:
     return (
-        f"| {m['name']} | {m.get('avg_score_pct', 0):.2f} | "
-        f"{m.get('critical_item_pass_rate', 0):.2f} | "
-        f"{m.get('judge_error_rate', 0)*100:.1f}% | "
+        f"| {m['name']} | {_fmt_measure(m.get('avg_score_pct'), '{:.2f}')} | "
+        f"{_fmt_measure(m.get('critical_item_pass_rate'), '{:.2f}')} | "
+        f"{_fmt_measure(m.get('judge_error_rate'), '{:.1f}%', scale=100)} | "
         f"{m.get('judge_call_count', 0)} | "
         f"{m.get('judge_total_latency_sec', 0):.0f}s | "
         f"${m.get('smoke_cost_usd', 0):.2f} | "
         f"${m.get('full_run_cost_usd', 0):.2f} |"
     )
+
+
+def _rejection_lines(
+    progress: dict[str, Any],
+    acceptance: dict[str, Any],
+) -> list[str]:
+    """Why each variant was rejected, and which checks never ran.
+
+    Without this the report says only "no variant satisfied all acceptance
+    thresholds", which reads as "the graders were not good enough" whether
+    that is what happened or not.
+    """
+    audit = acceptance_audit(progress, acceptance)
+    if not audit:
+        return ["No selectable variants were run.", ""]
+
+    lines = ["Per-variant acceptance verdicts:", ""]
+    lines.append("| variant | rejected because | not measured |")
+    lines.append("|---|---|---|")
+    for name, verdicts in audit.items():
+        failed = [v for v in verdicts if v.verdict == FAIL]
+        skipped = [v.criterion for v in verdicts if v.verdict == UNMEASURED]
+        lines.append(
+            f"| {name} | "
+            + ("; ".join(f"{v.criterion}: {v.detail}" for v in failed) or "—")
+            + " | "
+            + (", ".join(f"`{c}`" for c in skipped) or "—")
+            + " |"
+        )
+    lines.append("")
+
+    never_ran = sorted({
+        v.criterion
+        for verdicts in audit.values()
+        for v in verdicts
+        if v.verdict == UNMEASURED
+    })
+    if never_ran:
+        lines.append(
+            "A criterion listed under **not measured** did not reject anything: "
+            "an absent measurement is not a failed one. Nothing was verified "
+            "against it either."
+        )
+        lines.append("")
+    return lines
 
 
 def write_results_md(
@@ -800,6 +1021,7 @@ def write_results_md(
     if winner is None:
         lines.append("**No winner** — no variant satisfied all acceptance thresholds.")
         lines.append("")
+        lines.extend(_rejection_lines(progress, plan.acceptance))
         lines.append("Best-effort recommendation: see Phase B table below.")
     else:
         m = winner.metrics
@@ -807,13 +1029,32 @@ def write_results_md(
         lines.append(f"**Winner**: `{winner.name}`")
         lines.append("")
         lines.append(f"- 풀런 예상 비용: ${m['full_run_cost_usd']:.2f}")
-        lines.append(
-            f"- avg_score_pct: {m['avg_score_pct']:.2f} "
-            f"(baseline {baseline_score}, Δ {m['avg_score_pct']-baseline_score:+.2f}pp)"
+        delta = (
+            f" (baseline {baseline_score}, "
+            f"Δ {m['avg_score_pct'] - baseline_score:+.2f}pp)"
+            if isinstance(m.get("avg_score_pct"), (int, float))
+            and not isinstance(m.get("avg_score_pct"), bool)
+            else f" (baseline {baseline_score}, Δ not measured)"
         )
-        lines.append(f"- critical_item_pass_rate: {m['critical_item_pass_rate']:.2f}")
-        lines.append(f"- judge_error_rate: {m['judge_error_rate']*100:.1f}%")
-        lines.append(f"- wall-clock (smoke): {m['judge_total_latency_sec']:.0f}s")
+        lines.append(
+            f"- avg_score_pct: {_fmt_measure(m.get('avg_score_pct'), '{:.2f}')}{delta}"
+        )
+        lines.append(
+            "- critical_item_pass_rate: "
+            f"{_fmt_measure(m.get('critical_item_pass_rate'), '{:.2f}')}"
+        )
+        lines.append(
+            "- judge_error_rate: "
+            f"{_fmt_measure(m.get('judge_error_rate'), '{:.1f}%', scale=100)}"
+        )
+        lines.append(f"- wall-clock (smoke): {m.get('judge_total_latency_sec', 0):.0f}s")
+        if winner.unmeasured:
+            lines.append(
+                "- ⚠️ **NOT VERIFIED**: "
+                + ", ".join(f"`{c}`" for c in winner.unmeasured)
+                + " — never measured on this run, so no threshold was applied "
+                "to them. This winner cleared only the criteria that ran."
+            )
         lines.append(f"- Rationale: {winner.rationale}")
     lines.append("")
 
@@ -905,13 +1146,26 @@ def append_changelog_entry(
     else:
         m = winner.metrics
         baseline_full = plan.baseline["expected_metrics"].get("smoke_cost_usd", 0.0) * FULL_RUN_SCALE
+        score = m.get("avg_score_pct")
+        delta = (
+            f"Δ{score - plan.acceptance['baseline_avg_score_pct']:+.2f}pp"
+            if isinstance(score, (int, float)) and not isinstance(score, bool)
+            else "Δn/a"
+        )
         entry = (
             f"- Grading cost sweep run `{output_dir.name}`: winner "
             f"`{winner.name}` — projected full-run cost ${m['full_run_cost_usd']:.2f} "
             f"(baseline ~${baseline_full:.0f}), avg_score "
-            f"Δ{m['avg_score_pct']-plan.acceptance['baseline_avg_score_pct']:+.2f}pp, "
-            f"critical {m['critical_item_pass_rate']:.2f}, err "
-            f"{m['judge_error_rate']*100:.1f}%. See `{rel}/RESULTS.md`."
+            f"{delta}, "
+            f"critical {_fmt_measure(m.get('critical_item_pass_rate'), '{:.2f}')}, err "
+            f"{_fmt_measure(m.get('judge_error_rate'), '{:.1f}%', scale=100)}."
+            + (
+                " NOT VERIFIED against "
+                + ", ".join(winner.unmeasured)
+                + " (never measured)."
+                if winner.unmeasured else ""
+            )
+            + f" See `{rel}/RESULTS.md`."
         )
     # Insert under "### Added" right after the marker.
     needle = marker + "\n\n### Added\n"
@@ -1043,15 +1297,17 @@ def _run_variant(
     cfg_path = render_temp_config(variant, output_dir)
 
     if dry_run:
-        # Synthesize zero metrics; mark as dry-run.
+        # No grading happened, so nothing was measured. `None` rather than
+        # 0.0: a dry run must not look like a variant that scored zero.
         progress["results"][variant.name] = {
             "name": variant.name,
             "phase": variant.phase,
             "repeat_index": variant.repeat_index,
-            "avg_score_pct": 0.0,
-            "critical_item_pass_rate": 0.0,
-            "judge_error_rate": 0.0,
-            "precheck_pass_rate": 0.0,
+            "avg_score_pct": None,
+            "critical_item_pass_rate": None,
+            "judge_error_rate": None,
+            "precheck_pass_rate": None,
+            "item_counts": None,
             "judge_call_count": 0,
             "judge_total_latency_sec": 0.0,
             "judge_input_tokens": 0,
@@ -1070,14 +1326,19 @@ def _run_variant(
         metrics = extract_metrics(grade_path, variant)
     except Exception as exc:  # noqa: BLE001
         LOG.error("[%s] FAILED: %s", variant.name, exc)
+        # The variant crashed before producing a grade. Every rate is `None`
+        # because none of them was measured; `error` is what rejects it, and
+        # it rejects unconditionally rather than by leaning on a stand-in
+        # judge_error_rate of 1.0 that a looser threshold could let through.
         metrics = {
             "name": variant.name,
             "phase": variant.phase,
             "repeat_index": variant.repeat_index,
-            "avg_score_pct": 0.0,
-            "critical_item_pass_rate": 0.0,
-            "judge_error_rate": 1.0,
-            "precheck_pass_rate": 0.0,
+            "avg_score_pct": None,
+            "critical_item_pass_rate": None,
+            "judge_error_rate": None,
+            "precheck_pass_rate": None,
+            "item_counts": None,
             "judge_call_count": 0,
             "judge_total_latency_sec": 0.0,
             "judge_input_tokens": 0,
@@ -1092,11 +1353,26 @@ def _run_variant(
     progress["completed"].append(variant.name)
     save_progress(progress, progress_path)
     LOG.info(
-        "[%s] DONE: avg=%.2f err=%.3f cost=$%.3f",
+        "[%s] DONE: avg=%s err=%s cost=$%.3f",
         variant.name,
-        metrics["avg_score_pct"],
-        metrics["judge_error_rate"],
+        _fmt_measure(metrics.get("avg_score_pct"), "{:.2f}"),
+        _fmt_measure(metrics.get("judge_error_rate"), "{:.3f}"),
         metrics["smoke_cost_usd"],
+    )
+
+
+def _below_critical_min(m: dict[str, Any], acceptance: dict[str, Any]) -> bool:
+    """Whether a variant is *known* to be under the critical-pass floor.
+
+    Used to narrow Phase B down to Phase C. An unmeasured rate returns
+    ``False``: it has not been shown to be under the floor, and dropping a
+    variant here means it is never repeated, never on the frontier, and never
+    explained -- a silent elimination on a check that did not run.
+    """
+    return any(
+        v.verdict == FAIL
+        for v in evaluate_acceptance(m, acceptance)
+        if v.criterion == "critical_item_pass_rate"
     )
 
 
@@ -1181,7 +1457,7 @@ def main(argv: list[str] | None = None) -> int:
         ]
         b_eligible = [
             m for m in b_results
-            if m.get("critical_item_pass_rate", 0) >= plan.acceptance["critical_item_pass_rate_min"]
+            if not _below_critical_min(m, plan.acceptance)
         ]
         top_b = sorted(
             b_eligible, key=lambda m: m.get("full_run_cost_usd", math.inf)
@@ -1235,6 +1511,20 @@ def main(argv: list[str] | None = None) -> int:
     _finalize(progress, plan, output_dir, winner)
 
     print(f"[sweep] winner: {winner.name if winner else '(none)'}")
+    if winner is None:
+        for name, verdicts in acceptance_audit(progress, plan.acceptance).items():
+            failed = [f"{v.criterion} {v.detail}" for v in verdicts if v.verdict == FAIL]
+            skipped = [v.criterion for v in verdicts if v.verdict == UNMEASURED]
+            print(
+                f"[sweep]   {name}: rejected by {'; '.join(failed) or '(nothing)'}"
+                + (f" | not measured: {', '.join(skipped)}" if skipped else "")
+            )
+    elif winner.unmeasured:
+        print(
+            "[sweep] NOT VERIFIED against "
+            + ", ".join(winner.unmeasured)
+            + " (never measured on this run)"
+        )
     print(f"[sweep] cost spent: ${progress['cumulative_cost_usd']:.2f}")
     print(f"[sweep] report: {output_dir / 'RESULTS.md'}")
 
