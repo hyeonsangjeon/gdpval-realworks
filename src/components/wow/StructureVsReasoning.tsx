@@ -4,28 +4,32 @@ import { Card, CardContent } from '../ui/card'
 import InfoTooltip from '../common/InfoTooltip'
 import type { WowSummary } from '../../types/grade'
 import { tooltipTexts } from '../../data/tooltipTexts'
+import {
+  JUDGE_ITEMS_DESCRIBED,
+  PRECHECK_ITEMS_DESCRIBED,
+  readWowRate,
+  structureVsReasoningAbsence,
+  structureVsReasoningInsight,
+  type RateReading,
+} from './rateReading'
 
 interface Props {
   wow: WowSummary
   delay?: number
 }
 
-function pctFmt(v: number): string {
-  return `${(v * 100).toFixed(1)}%`
-}
-
-function insightLabel(precheck: number, judge: number): string {
-  const gap = precheck - judge
-  if (Math.abs(gap) < 0.05) return 'Balanced structure and reasoning'
-  if (gap > 0.15) return 'Strong on structure, weak on reasoning'
-  if (gap < -0.15) return 'Strong on reasoning, weak on structure'
-  return gap > 0 ? 'Slightly stronger on structure' : 'Slightly stronger on reasoning'
-}
-
 export default function StructureVsReasoning({ wow, delay = 0 }: Props) {
-  const precheck = wow.precheck_pass_rate
-  const judge = wow.judge_pass_rate
-  const insight = insightLabel(precheck, judge)
+  const precheck = readWowRate(
+    wow.precheck_pass_rate,
+    wow.item_counts?.precheck_items,
+    PRECHECK_ITEMS_DESCRIBED,
+  )
+  const judge = readWowRate(
+    wow.judge_pass_rate,
+    wow.item_counts?.judge_items,
+    JUDGE_ITEMS_DESCRIBED,
+  )
+  const insight = structureVsReasoningInsight(precheck, judge)
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -49,12 +53,12 @@ export default function StructureVsReasoning({ wow, delay = 0 }: Props) {
           </div>
 
           <div className="space-y-3 mt-3">
-            <BarRow label="Precheck (deterministic)" value={precheck} color="bg-emerald-500" />
-            <BarRow label="LLM Judge (reasoning)" value={judge} color="bg-sky-500" />
+            <BarRow label="Precheck (deterministic)" reading={precheck} color="bg-emerald-500" />
+            <BarRow label="LLM Judge (reasoning)" reading={judge} color="bg-sky-500" />
           </div>
 
           <p className="text-xs text-muted-foreground mt-4 italic">
-            {insight}
+            {insight ?? structureVsReasoningAbsence(precheck, judge)}
           </p>
         </CardContent>
       </Card>
@@ -62,22 +66,51 @@ export default function StructureVsReasoning({ wow, delay = 0 }: Props) {
   )
 }
 
-function BarRow({ label, value, color }: { label: string; value: number; color: string }) {
-  const pct = Math.max(0, Math.min(100, value * 100))
+function BarRow({
+  label,
+  reading,
+  color,
+}: {
+  label: string
+  reading: RateReading
+  color: string
+}) {
+  // No bar at all when there is no rate to draw. A bar at zero length is the
+  // picture of total failure, and here it would be drawn out of an empty
+  // denominator — the one thing the run did not measure.
+  const pct =
+    reading.fraction === null
+      ? null
+      : Math.max(0, Math.min(100, reading.fraction * 100))
   return (
     <div>
       <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
         <span>{label}</span>
-        <span className="font-mono text-foreground">{pctFmt(value)}</span>
+        <span
+          className={
+            reading.standing === 'measured'
+              ? 'font-mono text-foreground'
+              : 'font-mono text-muted-foreground'
+          }
+        >
+          {reading.value}
+        </span>
       </div>
       <div className="h-2.5 w-full rounded-full overflow-hidden bg-muted">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
-          className={`${color} h-full`}
-        />
+        {pct !== null && (
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
+            className={`${color} h-full`}
+          />
+        )}
       </div>
+      {reading.caveat && (
+        <p className="text-[10px] text-muted-foreground/80 mt-1 leading-relaxed">
+          {reading.caveat}
+        </p>
+      )}
     </div>
   )
 }

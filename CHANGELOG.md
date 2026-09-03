@@ -313,6 +313,60 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **A precheck that never ran was published as "Strong on reasoning, weak on
+  structure".** `step8_grade._rate` returns `0.0` when the denominator is
+  empty, and `0.0` is also the worst possible score, so the two are the same
+  number on the wire — a hazard that function's own docstring states. The
+  producer's answer was `_wow_item_counts`, which publishes the denominators
+  beside the rates, and its docstring names the reader that had not yet used
+  them: *"the dashboard's Structure vs Reasoning card turns the same gap into
+  'Strong on reasoning, weak on structure' — a finding about a check that never
+  ran, in a paid report and on a public page."* The obligation sits on the
+  reading side, and that is where this is fixed.
+
+  **Measured on this repository's own published grades.** 94 run-level payloads
+  carry `precheck_pass_rate` and **81 of them publish `0.0`**. 22 record the
+  denominator, and among those, every one of the **15** zeros counted **no
+  precheck items at all** — not one is a run where prechecks ran and failed.
+  Per sector the shape repeats: 447 rows carry the rate, 420 publish `0.0`, 62
+  record a denominator, and **all 35 recorded zeros counted nothing**. Among
+  them is the 185-task gold-ceiling run — 8,816 judged items, zero prechecked
+  ones, published as a 0% structural pass rate and captioned as a weakness.
+
+  **Four states, never collapsed into two.** `src/components/wow/rateReading.ts`
+  is import-free so a node test can execute the decision itself. A rate whose
+  denominator was recorded and non-zero is `measured` and reads exactly as
+  before. A recorded zero denominator is `none-counted`: it prints "not
+  recorded", **draws no bar at all** — a bar at zero length is the picture of
+  total failure, which is the one thing the run did not measure — and says why.
+  A rate with no denominator recorded is `denominator-unknown`: the percentage
+  is still shown, greyed, with the gap stated, because 72 run-level payloads and
+  385 sector rows predate `item_counts` and #393 recovered it for only some. A
+  run publishing no rate at all is `absent`. Only `measured` may be set against
+  another rate, so *Structure vs Reasoning* now withholds its verdict and names
+  the missing half instead of subtracting a zero that stands for nothing.
+
+  Applied uniformly across every surface that reads one of these three rates:
+  `StructureVsReasoning`, `HealthStrip`, `SectorHeatmap`, `RubricCoverageCard`
+  and the `GradingAnalysisView` mini-pills, where runs are read side by side and
+  an invented `0.0%` ranks them. **Scope stated honestly:**
+  `precheck_pass_rate` is the live case; `judge_pass_rate` and
+  `rubric_item_coverage_avg` have zero zero-denominator instances in anything
+  published so far and are fixed as the same code path, not as a live defect.
+
+  **Nothing the producer writes changes.** The rates keep their type, their
+  values and their keys — `scripts/grading_cost_sweep.py` compares them against
+  thresholds and 33 payloads carry them, so turning them null to fix a caption
+  would break more than it repairs. No grade file is rewritten, no score moves,
+  and the change is confined to `src/**` plus one new test, so **no grader
+  source fingerprint moves**. As Session B's backfill fills `item_counts`, the
+  `denominator-unknown` state shrinks into `measured` or `none-counted` on its
+  own. `scripts/__tests__/wow-rate-denominator.test.mjs` pins it: the
+  producer's four denominator keys against `step8_grade.py`, the four states run
+  for real, the comparison withheld unless both sides were measured, the
+  measured case unchanged in every band, and a scan proving no `src/` surface
+  reads one of these rates without going through `readWowRate`.
+
 - **The dashboard called a band "Perfect (100%)" that a task scoring 99.77%
   is inside, and printed that task's score as "100%".**
   `summary.openai_compat.perfect_count` and `zero_count` are counted by the

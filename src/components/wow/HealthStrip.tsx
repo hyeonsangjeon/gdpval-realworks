@@ -5,6 +5,11 @@ import InfoTooltip from '../common/InfoTooltip'
 import { tooltipTexts } from '../../data/tooltipTexts'
 import { fmtPct, fmtLatency } from '../../lib/format'
 import type { GradeSummaryV1 } from '../../types/grade'
+import {
+  JUDGE_ITEMS_DESCRIBED,
+  PRECHECK_ITEMS_DESCRIBED,
+  readWowRate,
+} from './rateReading'
 
 interface Props {
   summaryV1: GradeSummaryV1
@@ -49,6 +54,20 @@ export default function HealthStrip({ summaryV1, delay = 0 }: Props) {
   const cost = summaryV1.cost ?? null
   const errRate = wow?.judge_error_rate
   const errAlert = typeof errRate === 'number' && errRate > 0.05
+  // `fmtPct` cannot tell a measured 0% from a rate divided by nothing, and
+  // these two pills are the ones that get divided by nothing: 81 of the 94
+  // grades published so far carry `precheck_pass_rate: 0.0`, and of the 22
+  // that record the denominator, all 15 zeros counted no precheck items.
+  const precheck = readWowRate(
+    wow?.precheck_pass_rate,
+    wow?.item_counts?.precheck_items,
+    PRECHECK_ITEMS_DESCRIBED,
+  )
+  const judge = readWowRate(
+    wow?.judge_pass_rate,
+    wow?.item_counts?.judge_items,
+    JUDGE_ITEMS_DESCRIBED,
+  )
 
   return (
     <motion.div
@@ -75,13 +94,21 @@ export default function HealthStrip({ summaryV1, delay = 0 }: Props) {
             />
             <NeutralPill
               label="judge"
-              value={fmtPct(wow?.judge_pass_rate)}
-              tooltip={tooltipTexts.health.judgePassRate}
+              value={judge.fraction === null ? '—' : fmtPct(judge.fraction)}
+              tooltip={
+                judge.caveat
+                  ? `${tooltipTexts.health.judgePassRate} — ${judge.caveat}`
+                  : tooltipTexts.health.judgePassRate
+              }
             />
             <NeutralPill
               label="precheck"
-              value={fmtPct(wow?.precheck_pass_rate)}
-              tooltip={tooltipTexts.health.precheckPassRate}
+              value={precheck.fraction === null ? '—' : fmtPct(precheck.fraction)}
+              tooltip={
+                precheck.caveat
+                  ? `${tooltipTexts.health.precheckPassRate} — ${precheck.caveat}`
+                  : tooltipTexts.health.precheckPassRate
+              }
             />
             <NeutralPill
               label="calls"
