@@ -31,6 +31,7 @@ the published payloads cannot support one.
 """
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -218,6 +219,194 @@ def test_a_denominator_that_can_carry_the_gate_is_not_flagged():
     assert effect is not None
     assert effect.critical_items == 25
     assert effect.usable is True
+
+
+# ── no denominator is not a denominator of zero ──────────────────────
+
+
+def _sweep_row(report: str, threshold: int) -> str:
+    """The one sweep-table row for ``threshold``, from the rendered report.
+
+    These tests read the report rather than the dataclass wherever they can:
+    the fields were never the thing anyone looked at, and the fold this section
+    is about happened in the rendering.
+    """
+    for line in report.splitlines():
+        match = re.match(r"^\s+(\d+) \*?\s+\d", line)
+        if match and int(match.group(1)) == threshold:
+            return line
+    raise AssertionError(f"no sweep row for threshold {threshold}")
+
+
+def test_a_threshold_that_leaves_no_items_reports_no_rate_not_zero():
+    """The owner's decision, applied to the tool that priced it.
+
+    Measured on this repository's own committed payloads before the fix: 97
+    lines of the report printed ``0.0000`` beside a count of zero items, one of
+    them at the shipped threshold. ``0.0000`` is the worst value this rate can
+    take and it sits in the same column as real zeros from the same corpus.
+    """
+    tasks = [_task("t1", [_item("worth four", 4, did_right=True)])]
+    priced = _price(_payload(tasks))
+
+    effect = priced.effect_at(10)
+    assert effect is not None
+    assert effect.critical_items == 0
+    assert effect.pass_rate is None
+    assert effect.measured is False
+
+    row = _sweep_row(arid.render([priced]), 10)
+    assert arid.NOT_MEASURED in row
+    assert "0.0000" not in row
+
+
+def test_no_items_and_too_thin_are_annotated_differently():
+    """Three states, and the report has to keep all three apart.
+
+    One 6-point item: threshold 6 measures a real rate on a set too small to
+    decide on, threshold 10 measures nothing at all. Before the fix both got
+    ``[denominator too thin to use]``, and the rate column read 1.0000 then
+    0.0000 -- the largest possible drop, entirely an artefact of the fold.
+    """
+    tasks = [_task("t1", [_item("the only big one", 6, did_right=True)])]
+    priced = _price(_payload(tasks))
+    report = arid.render([priced])
+
+    thin = priced.effect_at(6)
+    absent = priced.effect_at(10)
+    assert thin is not None and absent is not None
+    assert (thin.measured, thin.usable) == (True, False)
+    assert (absent.measured, absent.usable) == (False, False)
+    assert thin.pass_rate == 1.0
+    assert absent.pass_rate is None
+
+    assert "[denominator too thin to use]" in _sweep_row(report, 6)
+    assert "[no critical items" in _sweep_row(report, 10)
+    assert "[denominator too thin to use]" not in _sweep_row(report, 10)
+
+
+def test_a_real_zero_over_a_real_denominator_still_prints():
+    """The control, and the reason this change is not a silencer.
+
+    Twenty items over the usable floor, every one of them wrong. That is a
+    measured rate of zero and it has to survive intact -- a fix that hid it
+    would trade one wrong answer for another.
+    """
+    tasks = [
+        _task(f"t{n}", [_item(f"criterion {n}-{k}", 4, did_right=False) for k in range(5)])
+        for n in range(4)
+    ]
+    priced = _price(_payload(tasks))
+
+    effect = priced.effect_at(4)
+    assert effect is not None
+    assert effect.critical_items == 20
+    assert effect.measured is True
+    assert effect.usable is True
+    assert effect.pass_rate == 0.0
+    assert "0.0000" in _sweep_row(arid.render([priced]), 4)
+
+
+def test_the_style_split_reports_an_empty_partition_as_having_no_rate():
+    """The line with no caveat at all, and the one the decision turns on.
+
+    This is the report line that prices "exclude the deliverable-wide style
+    items". On a payload whose critical set is nothing but style lines it read
+    ``remaining 0 item(s), rate 0.0000`` -- excluding the style lines leaves a
+    0% pass rate -- when what it leaves is nothing to take a rate over.
+    """
+    style = "Overall formatting and style of the deliverable"
+    tasks = [_task("t1", [_item(style, 5, did_right=True)])]
+    priced = _price(_payload(tasks))
+
+    assert priced.text_rule_items == 1
+    assert priced.text_rule_rate == 1.0
+    assert priced.remainder_items == 0
+    assert priced.remainder_rate is None
+
+    report = arid.render([priced])
+    assert "remaining    0 item(s), no rate (no items)" in report
+    assert "remaining    0 item(s), rate 0.0000" not in report
+
+
+def test_the_style_split_keeps_a_real_zero_in_a_non_empty_partition():
+    """Control for the split: one style item the model got wrong is a zero."""
+    style = "Overall formatting and style of the deliverable"
+    tasks = [
+        _task(
+            "t1",
+            [
+                _item(style, 5, did_right=False),
+                _item("The totals reconcile to the ledger", 5, did_right=True),
+            ],
+        )
+    ]
+    priced = _price(_payload(tasks))
+
+    assert (priced.text_rule_items, priced.text_rule_rate) == (1, 0.0)
+    assert (priced.remainder_items, priced.remainder_rate) == (1, 1.0)
+    assert "rate 0.0000" in arid.render([priced])
+
+
+def test_the_report_never_prints_a_rate_beside_a_count_of_zero_items():
+    """Structural, so a new zero-denominator cell cannot be added quietly.
+
+    Reads the rendered report rather than any one field: every sweep row that
+    reports zero critical items must carry the marker, and no row may carry a
+    numeric rate without items behind it.
+    """
+    tasks = [
+        _task("t1", [_item("worth four", 4, did_right=True)]),
+        _task("t2", [_item("worth two", 2, did_right=False)]),
+    ]
+    report = arid.render([_price(_payload(tasks))])
+
+    zero_rows = [
+        line
+        for line in report.splitlines()
+        if re.match(r"^\s+\d+ \*?\s+0\s+0\.0%", line)
+    ]
+    assert zero_rows, "expected at least one threshold to leave no items"
+    for row in zero_rows:
+        assert arid.NOT_MEASURED in row, row
+        assert not re.search(r"\d\.\d{4}", row), row
+
+
+def test_a_payload_that_publishes_no_rate_is_not_read_as_a_zero():
+    """An absent number is not a zero, at the one place the number is read."""
+    assert arid._published_rate({}, 25) is None
+    assert arid._published_rate({"critical_item_pass_rate": None}, 25) is None
+    assert arid._published_rate({"critical_item_pass_rate": "0.9"}, 25) is None
+    assert arid._published_rate({"critical_item_pass_rate": 0.0}, 25) == 0.0
+    # Zero items: the summariser divided nothing by nothing and returned 0.0.
+    assert arid._published_rate({"critical_item_pass_rate": 0.0}, 0) is None
+
+
+def test_the_report_says_what_the_marker_means():
+    tasks = [_task("t1", [_item("worth four", 4, did_right=True)])]
+    report = arid.render([_price(_payload(tasks))])
+    legend = [
+        line for line in report.splitlines() if line.startswith(arid.NOT_MEASURED)
+    ]
+    assert len(legend) == 1
+    assert "It is not a zero." in legend[0]
+
+
+def test_the_module_docstring_claim_matches_what_the_code_does():
+    """The claim came first and the behaviour did not follow it.
+
+    ``analyze_required_item_definition`` said it "refuses to report a rate its
+    denominator cannot carry" while printing ``0.0000`` for an empty one, and
+    ``MIN_USABLE_CRITICAL_ITEMS`` said in as many words that "a run that leaves
+    none reads 0.0000, and neither is a measurement". Pin both to the code.
+    """
+    doc = arid.__doc__ or ""
+    assert "refuses to report a rate its denominator cannot carry" in doc
+    assert arid.NOT_MEASURED in doc
+
+    tasks = [_task("t1", [_item("worth four", 4, did_right=True)])]
+    effect = _price(_payload(tasks)).effect_at(10)
+    assert effect is not None and effect.pass_rate is None
 
 
 # ── refusals ─────────────────────────────────────────────────────────
