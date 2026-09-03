@@ -1531,14 +1531,26 @@
           "avg_pct": 90.72,
           "critical_item_pass_rate": 0.0,
           "precheck_pass_rate": 1.0,
-          "judge_pass_rate": 0.7714
+          "judge_pass_rate": 0.7714,
+          "item_counts": {
+            "rubric_items": 42,
+            "critical_items": 0,
+            "precheck_items": 7,
+            "judge_items": 35
+          }
         },
         "Real Estate and Rental and Leasing": {
           "task_count": 1,
           "avg_pct": 75.06,
           "critical_item_pass_rate": 0.0,
           "precheck_pass_rate": 0.3333,
-          "judge_pass_rate": 0.5306
+          "judge_pass_rate": 0.5306,
+          "item_counts": {
+            "rubric_items": 52,
+            "critical_items": 1,
+            "precheck_items": 3,
+            "judge_items": 49
+          }
         }
       },
       "by_rubric_category": {},
@@ -1600,7 +1612,13 @@
           "n_items": 1,
           "pass_rate": 0.0
         }
-      ]
+      ],
+      "item_counts": {
+        "rubric_items": 94,
+        "critical_items": 1,
+        "precheck_items": 10,
+        "judge_items": 84
+      }
     },
     "cost": {
       "total_judge_calls": 84,

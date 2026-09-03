@@ -22496,14 +22496,26 @@
           "avg_pct": 79.26,
           "critical_item_pass_rate": 0.4706,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.6667
+          "judge_pass_rate": 0.6667,
+          "item_counts": {
+            "rubric_items": 171,
+            "critical_items": 17,
+            "precheck_items": 0,
+            "judge_items": 171
+          }
         },
         "Professional, Scientific, and Technical Services": {
           "task_count": 5,
           "avg_pct": 36.22,
           "critical_item_pass_rate": 0.2,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.2917
+          "judge_pass_rate": 0.2917,
+          "item_counts": {
+            "rubric_items": 264,
+            "critical_items": 5,
+            "precheck_items": 0,
+            "judge_items": 264
+          }
         }
       },
       "by_rubric_category": {},
@@ -22585,7 +22597,13 @@
           "n_items": 1,
           "pass_rate": 0.0
         }
-      ]
+      ],
+      "item_counts": {
+        "rubric_items": 435,
+        "critical_items": 22,
+        "precheck_items": 0,
+        "judge_items": 435
+      }
     },
     "cost": {
       "total_judge_calls": 1359,
