@@ -12,6 +12,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **A grading config could ask for tiered judging, be credentialed for it, and
+  be graded without it.** Task 207 removed the tiered judge, and an earlier
+  entry below recorded a decision to leave
+  `core.azure_ai_clients.grader_route_workloads` enumerating `tier_standard` /
+  `tier_pro` / `tier_mini` on the grounds that the branch was "unreachable
+  rather than permissive" — the `Grader` was said to reject the configs that
+  reach it. That reading was wrong. `Grader` rejects a config only for
+  *lacking* `judge.tools.read_deliverable`; it never looks at `judge_routing`.
+  A config carrying both therefore passed `validate_grading_config`, had its
+  two or three tier deployments added to the Azure allowlist `azure/login`
+  federates for, and then graded every item on the single main judge. The
+  operator reads a tiered config and a green run; the run was not tiered.
+
+  Deleting the enumeration on its own would have kept that config valid and
+  merely stopped crediting deployments the run could not use — a narrower
+  boundary and a quieter one. So `grader_route_workloads` now *refuses* any
+  config carrying a `judge_routing` key, before the provider check so that a
+  non-Azure judge cannot carry the block through unremarked, and however empty
+  the block is: a key nobody reads is a belief about routing, and the belief is
+  the failure. `validate_grading_config` calls this function, so the refusal
+  lands at the entry point every run passes through, before spend.
+
+  This clears the last live hit of task 207's acceptance grep in
+  `batch-runner/core/`. `tests/test_the_tier_names_are_gone_from_the_grading_core.py`
+  re-runs that grep and requires every survivor to be one of the two carve-outs
+  PR3 documented — the `_archive_v1/` directory 207's own instruction created,
+  and lines that name a removed knob without assigning it — plus a check that
+  the archive stays undispatchable and that no shipped config carries a legacy
+  key at any depth. Shipped configs and published grades are unaffected: none
+  carries `judge_routing`. The grader source hash moves with any `core/` change
+  (`default_v2_sol_max.yaml`: `13cf75f8…` → `fc1fe6a9…`), so this merged with no
+  grade run in flight. No model was called.
 - **"필수 항목 통과율" was never measuring required items, and it decided a
   pass gate anyway.** The rubric's own `required` field is `null` on all 10,453
   items across all 220 tasks, so `core/grader.py` substitutes

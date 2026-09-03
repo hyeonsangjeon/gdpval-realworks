@@ -1159,7 +1159,7 @@ def test_code_interpreter_rejects_non_azure_main_provider():
         )
 
 
-def test_grader_workloads_include_tiers_and_perception():
+def test_grader_workloads_include_perception():
     config = {
         "judge": {
             "provider": "azure_openai",
@@ -1169,30 +1169,69 @@ def test_grader_workloads_include_tiers_and_perception():
                 "audio": {"deployment": "audio"},
             },
         },
-        "judge_routing": {
-            "tier_standard": {"deployment": "standard"},
-            "tier_pro": {"model": "pro"},
-        },
     }
 
     assert clients.grader_route_workloads(config) == [
         (clients.AzureAIWorkload.GRADER, "main"),
-        (clients.AzureAIWorkload.GRADER, "standard"),
-        (clients.AzureAIWorkload.GRADER, "pro"),
         (clients.AzureAIWorkload.GRADER, "vision"),
         (clients.AzureAIWorkload.GRADER, "audio"),
     ]
 
 
 @pytest.mark.parametrize(
+    "routing",
+    [
+        {"tier_standard": {"deployment": "standard"}, "tier_pro": {"model": "pro"}},
+        {"tier_mini": {"deployment": "mini"}},
+        # An empty or null block is refused too. It names no deployment, so
+        # enumerating it was always a no-op -- but a config that still has the
+        # key is one someone believes routes, and that belief is the failure.
+        {},
+        None,
+    ],
+    ids=["two-tiers", "one-tier", "empty", "null"],
+)
+def test_grader_workloads_refuse_a_config_carrying_judge_routing(routing):
+    """The block is refused, not ignored, however little it carries.
+
+    ``Grader`` accepts this config -- it only requires
+    ``judge.tools.read_deliverable`` -- and then grades every item on the main
+    judge. Silently dropping the tier deployments from the allowlist would
+    leave that intact and only narrow the credentials, so the refusal lives
+    here, at the boundary the run passes through before it spends anything.
+    """
+    config = {
+        "judge": {
+            "provider": "azure_openai",
+            "model": "main",
+            "deployment": "main",
+        },
+        "judge_routing": routing,
+    }
+
+    with pytest.raises(ValueError, match="judge_routing is not a grading path"):
+        clients.grader_route_workloads(config)
+
+
+def test_a_non_azure_grader_does_not_carry_judge_routing_through():
+    """The refusal precedes the provider check.
+
+    A non-Azure judge returns no Azure workloads, so it is the one shape whose
+    ``judge_routing`` an enumerate-then-return-early ordering would never look
+    at.
+    """
+    with pytest.raises(ValueError, match="judge_routing is not a grading path"):
+        clients.grader_route_workloads(
+            {
+                "judge": {"provider": "openai", "model": "m", "deployment": "m"},
+                "judge_routing": {"tier_pro": {"deployment": "pro"}},
+            }
+        )
+
+
+@pytest.mark.parametrize(
     "config",
     [
-        {
-            "judge": {"model": "main", "deployment": "main"},
-            "judge_routing": {
-                "tier_pro": {"model": "pro-a", "deployment": "pro-b"}
-            },
-        },
         {
             "judge": {
                 "model": "main",

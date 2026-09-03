@@ -788,27 +788,42 @@ def inference_route_workloads(
 def grader_route_workloads(
     config: Mapping[str, object],
 ) -> list[tuple[AzureAIWorkload, str]]:
-    """Return every Azure deployment a grading config can call."""
+    """Return every Azure deployment a grading config can call.
+
+    This is the credential boundary: the caller turns the result into the
+    allowlist ``azure/login`` federates for, so a deployment absent here is one
+    the run cannot reach, and a deployment present here is one it can.
+
+    That is why a ``judge_routing`` block is refused rather than enumerated.
+    Task 207 removed the tiered judge; nothing on the grading path reads the
+    block any more. But ``Grader`` only refuses a config for *lacking*
+    ``judge.tools.read_deliverable`` -- it does not look at ``judge_routing``
+    at all -- so a config carrying both used to validate, credential its two
+    or three tier deployments, and then grade every item on the single main
+    judge. The operator reads a tiered config and a successful run; the run
+    was not tiered. Deleting the enumeration alone would keep that config
+    passing and merely stop crediting the unreachable deployments, which
+    trades a wide boundary for a silent one. Refusing it costs a config edit
+    and is loud, before any spend.
+    """
     judge = config.get("judge")
     if not isinstance(judge, Mapping):
         raise ValueError("judge config must be an object")
+    # Before the provider check on purpose: a non-Azure config gets no Azure
+    # workloads, but it must not be the one shape that carries this block
+    # through unremarked.
+    if "judge_routing" in config:
+        raise ValueError(
+            "judge_routing is not a grading path: the tiered judge was "
+            "removed in task 207 and nothing reads this block, so leaving it "
+            "in a config grants its deployments credentials the grader will "
+            "never spend and hides that every item went to judge.deployment. "
+            "Remove judge_routing from the grading config."
+        )
     provider = judge.get("provider", "azure_openai")
     if provider not in {"azure", "azure_openai"}:
         return []
     deployments = [canonical_deployment(judge, "judge")]
-
-    routing = config.get("judge_routing") or {}
-    if not isinstance(routing, Mapping):
-        raise ValueError("judge_routing must be an object")
-    for tier_name in ("tier_standard", "tier_pro", "tier_mini"):
-        tier = routing.get(tier_name) or {}
-        if not isinstance(tier, Mapping):
-            raise ValueError(f"judge_routing.{tier_name} must be an object")
-        if tier.get("deployment") is None and tier.get("model") is None:
-            continue
-        deployments.append(
-            canonical_deployment(tier, f"judge_routing.{tier_name}")
-        )
 
     perception = judge.get("perception") or {}
     if not isinstance(perception, Mapping):
