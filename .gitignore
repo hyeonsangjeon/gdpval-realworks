@@ -121,6 +121,7 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/PR3_COST_BUDGET.md
 !tasks/rebuilding_grading_task/319-the-published-index-still-says-zero.md
 !tasks/rebuilding_grading_task/320-three-gaps-that-closed.md
+!tasks/rebuilding_grading_task/321-the-question-the-probe-asked.md
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local

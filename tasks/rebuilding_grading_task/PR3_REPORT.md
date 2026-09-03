@@ -261,7 +261,8 @@ PR3에서 특정됐지만 PR3의 범위를 벗어나는 것들. 앞의 넷은
    내놓았다. 다만 **Word 쪽 수 절반은 아직 한 번도 쓰이지 않았다**: 두 payload
    어디에도 `.docx` 구조 검사 결과가 없다. 약 15점 중 Word 몫은 미측정이다.
    그리고 이 뒤집기를 만든 것은 `inspect_structure` 쪽 경로다 —
-   `inspect_formatting` 쪽 절반은 실제 실행 환경에서 아직 닿지 않는다(**8번**).
+   `inspect_formatting` 쪽 절반도 실제 실행 환경에서 **닿는다**(**8번**에서
+   정정했다. 처음에는 닿지 않는다고 적었고, 그것이 틀렸다).
    [`320`](./320-three-gaps-that-closed.md).
 2. ~~**압축 파일 구성원에 듣기 모델이 배정되게 한다.**~~ **닫혔다.** 같은 #260이
    배달했다(`has_audio_content`, `selected_paths_have_audio`). 과제 `38889c3b`에서
@@ -319,18 +320,35 @@ PR3에서 특정됐지만 PR3의 범위를 벗어나는 것들. 앞의 넷은
    그 밖에 움직인 값은 없다. 같은 spread로 새던 payload 자신의 run 단위
    `grading_cost`도 함께 막았다 — 그 값은 행에서 유도하거나 싣지 않는다.
    [`319`](./319-the-published-index-still-says-zero.md).
-8. **`inspect_formatting`이 PDF 쪽 크기를 실제 실행 환경에서 보고하게 한다.**
-   1번의 탐침을 쓰다가 나왔다. `_pdf_geometry`를 부르는 자리는 둘인데, 그중
-   `_op_inspect_formatting`의 PDF 분기는 **PyMuPDF 전용**이고 `ImportError`면
-   `{"kind": "pdf", "note": "PyMuPDF not available"}`를 돌려준다 — 기하도 폰트도
-   없다. PyMuPDF는 `requirements-renderer.txt`에만 적혀 있고
-   **`backend-tests.yml`과 `grade-run.yml`은 둘 다 `requirements.txt`만 설치한다.**
-   즉 이 분기는 **이 저장소가 실제로 돌리는 모든 환경에서 note만 돌려준다** —
-   두 유료 실행에서도 그랬다. 1번이 닫힌 것은 이 자리 덕분이 아니라
-   `inspect_structure` 쪽 `_inspect_pdf` 덕분이고, 그쪽은 `pdfplumber` 대체
-   경로를 갖고 있다. 판정기가 실제로 인용한 증거의 모양이 그 함수의 것이다.
-   고치는 길은 둘 — 의존성을 선언하거나, 형제 함수가 이미 가진 `pdfplumber`
-   대체 경로를 이 분기에도 준다. **아직 열려 있다.** 탐침은 "지금 이 기계가 할 수
-   있는가"가 아니라 **"우리가 배포하는 환경에서 닿는가"**를 정적으로 묻는다 —
-   PyMuPDF가 깔린 개발 기계에서만 초록이 되는 검사는 아무것도 붙잡지 못한다.
-   [`320`](./320-three-gaps-that-closed.md).
+8. ~~**`inspect_formatting`이 PDF 쪽 크기를 실제 실행 환경에서 보고하게 한다.**~~
+   **이 항목은 틀린 전제 위에 열렸고, 여기서 정정하며 닫는다.** 원래 주장은
+   `_op_inspect_formatting`의 PDF 분기가 **PyMuPDF 전용**이라 `ImportError`면
+   `{"kind": "pdf", "note": "PyMuPDF not available"}`만 돌려주는데 PyMuPDF가
+   `requirements-renderer.txt`에만 있으니 **이 저장소가 돌리는 모든 환경에서
+   note만 돌아온다**는 것이었다. 뒷부분이 사실이 아니다 — `requirements.txt`
+   4번째 줄이 `-r requirements-renderer.txt`다. include와 PyMuPDF 선언은 둘 다
+   `fa8bf4f`(2026-07-15)에 같이 들어왔고, `requirements.txt`를 설치하는
+   `backend-tests.yml`·`grade-run.yml`·`batch-run.yml`·`audio-accuracy-probe.yml`은
+   **넷 다 PyMuPDF를 설치한다.** 3단계 유료 실행이 반대편에서 이를 확인해 준다 —
+   PDF 폰트 목록을 인용한 항목이 3개 있고, `ae0c1093`의 증거는
+   `"page_size_uniform": true, "orientation": "portrait", "fonts": [...]`로
+   **fitz 분기의 출력 모양 그대로**다(`_inspect_pdf`는 `fonts`를 내지 않는다).
+   1단계에 이 모양이 없는 이유는 능력이 없어서가 아니라 그 30개 과제의 항목
+   1,433개 중 폰트를 묻는 것이 **하나도 없어서**다. 틀린 것은 코드가 아니라
+   **탐침이 던진 질문**이었다 — `requirements.txt`만 읽고 `-r`을 따라가지 않았다.
+   탐침은 이제 pip과 같은 include 사슬을 걷는다.
+   [`321`](./321-the-question-the-probe-asked.md).
+9. **채점기 지문이 설치 그래프의 절반만 덮는다.** 8번을 정정하면서 지문이
+   움직이지 않았음을 확인하다가 나왔다. `grader_source_hash`는 `step8_grade.py`,
+   `core/**.py`, 스키마, 프롬프트, 설정과 함께 **`requirements.txt`를** 해시에
+   넣는다. 그 파일이 `-r`로 끌어오는 **`requirements-renderer.txt`는 넣지
+   않는다.** 거기에 `PyMuPDF`·`openpyxl`·`python-pptx`·`python-docx`·`Pillow`가
+   선언돼 있고, 전부 판정기의 `read_deliverable`이 쓰는 능력이다. 즉 **채점기가
+   볼 수 있는 것이 바뀌어도 신원은 그대로일 수 있다.** 추론이 아니라 실측이다
+   (`94ea015`): 포함된 파일에서 `PyMuPDF>=1.21.0`을 지워도 지문은
+   `7b2bd7d9…` 그대로였고, 진입 파일에 주석 한 줄을 붙이자 `0247c9e0…`으로
+   바뀌었다. **8번과 정확히 같은 결함**(그래프를 파일 하나로 읽기)이 이번에는
+   시험이 아니라 신원 안에 있다. 고치려면 `step8_grade.py`를 건드려야 하고 그
+   순간 이후 모든 실행의 지문이 움직인다 — 비용이 실재하므로 **소유자 결정으로
+   남긴다.** 탐침 9번은 그때까지 거짓을 돌려주고, 이 항목은 열려 있다.
+   [`321`](./321-the-question-the-probe-asked.md).

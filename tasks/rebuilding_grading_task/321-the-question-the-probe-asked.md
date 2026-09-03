@@ -1,0 +1,231 @@
+# 321 — 탐침이 던진 질문이 틀렸다 (후속 8번 정정)
+
+**요약.** [`320`](./320-three-gaps-that-closed.md)이 문서와 코드를 잇는 탐침을 도입하면서,
+그 자리에서 발견했다며 **후속 8번**을 열었다. 8번의 주장은 *"`inspect_formatting`의 PDF
+분기는 이 저장소가 돌리는 모든 환경에서 `note: "PyMuPDF not available"`만 돌려준다"* 였다.
+
+**틀렸다.** PyMuPDF는 우리가 돌리는 모든 환경에 **설치되어 있고**, 3단계 유료 실행이
+그 분기의 출력을 실제로 인용했다. 틀린 것은 코드가 아니라 **탐침이 던진 질문**이다.
+
+---
+
+## 1. 무엇을 잘못 읽었나
+
+탐침 8은 정적이었다. 이건 의도한 설계다 — PyMuPDF가 깔린 개발 기계에서만 초록이 되는
+검사는 문서를 아무것에도 붙잡아 두지 못하므로, "이 기계가 할 수 있나"가 아니라
+"우리가 배포하는 환경에 있나"를 물어야 한다. 그 방향은 맞았다.
+
+문제는 **읽은 파일이 한 장뿐이었다는 것**이다.
+
+```python
+re.search(r"^\s*PyMuPDF\b", requirements.read_text(), re.M | re.I)   # → False
+```
+
+`requirements.txt`에는 `PyMuPDF`라는 글자가 없다. 그러나 그 파일의 **4번째 줄**이 이렇다.
+
+```
+# Grading renderer dependencies (shared with the model-free CI preflight)
+-r requirements-renderer.txt
+```
+
+그리고 `requirements-renderer.txt`에 `PyMuPDF>=1.21.0`이 있다. **pip은 `-r`을 따라간다.
+탐침은 따라가지 않았다.** 그래서 `pip install -r requirements.txt`가 설치하는 패키지를
+"선언되지 않았다"고 읽었다.
+
+두 줄 — include와 PyMuPDF 선언 — 은 같은 커밋 `fa8bf4f`(**2026-07-15**)에 함께 들어왔다.
+두 유료 실행(2026-08-28, 2026-08-31)보다 **6주 앞선다.**
+
+## 2. 그래서 실제로는 어느 환경에 있나
+
+`requirements.txt`를 설치하는 워크플로가 전부 PyMuPDF를 설치한다.
+
+| 워크플로 | 설치하는 파일 | PyMuPDF |
+|---|---|---|
+| `backend-tests.yml` | `requirements.txt` | **있음** (include 경유) |
+| `grade-run.yml` (2곳) | `requirements.txt` | **있음** (include 경유) |
+| `batch-run.yml` | `requirements.txt` | **있음** (include 경유) |
+| `audio-accuracy-probe.yml` (2곳) | `requirements.txt` | **있음** (include 경유) |
+| `grading-renderer-preflight.yml` | `requirements-renderer.txt` | **있음** (직접) |
+| `preflight-track2-cohort.yml` | `requirements-track2-preflight.lock` | 없음 — 그러나 이 워크플로는
+  cohort planner이고 `read_deliverable`을 부르지 않는다 (`pdfplumber`도 없다) |
+
+## 3. 코드가 아니라 실행 기록이 답한다
+
+3단계 유료 실행(185과제) payload에서 **PDF 파일에 대해 폰트 목록을 증거로 인용한 항목이
+3개** 있다. `_inspect_pdf`는 `fonts`를 절대 내지 않는다 — `metadata`를 낸다. `fonts`를
+내는 자리는 `_op_inspect_formatting`의 fitz 분기 **하나뿐**이다.
+
+| 과제 | 파일 | 판정기가 인용한 증거 |
+|---|---|---|
+| `ae0c1093` | `Undercover Observation Form.pdf` | `"page_size_uniform": true, "orientation": "portrait", "fonts": ["Helvetica", "Helvetica-Bo…` |
+| `788d2bc6` | `Advertising Agency Business Presentation.pdf` | `"fonts": ["AAAAAA+Arial-BoldMT", "AAAAAA+ArialMT", "AAAAAA+OpenSauceOne-SemiBold", …` |
+| `60221cd0` | `The Race for Virginia_2025 Elections edits.pdf` | `"fonts": ["AAAAAC+Arial-BoldMT", "AAAAAE+ArialMT", "AKMBBX+ArialMT"]` |
+
+첫 행이 결정적이다. `page_size_uniform` · `orientation`(= `_pdf_geometry`의 출력)에
+`fonts`가 곧바로 이어지는 모양은 그 분기의 반환문 그대로다. **기하도 폰트도 도착했다.**
+
+`AAAAAA+ArialMT` 같은 접두어는 PDF 부분집합 임베딩 이름이라, 이 목록이 PDF에서 나온
+것이지 다른 형식에서 나온 것이 아님을 한 번 더 확인해 준다. 그리고 `788d2bc6`의
+*"No more than two distinct font families are used across the deck"* 는 그 목록을 근거로
+**fail**을 받았다 — 즉 이 능력은 존재하기만 한 게 아니라 **점수를 움직였다.**
+
+### 1단계에 왜 이 모양이 없나
+
+능력이 없어서가 아니다. 1단계 30과제의 채점 항목 **1,433개 중 폰트를 묻는 항목이 하나도
+없다**(3단계는 8,715개 중 11개). **묻지 않았으므로 답이 없다.** 부재를 능력 부재의 증거로
+읽으면 안 되는 전형적인 자리라서 적어 둔다.
+
+## 4. 고친 것
+
+**탐침이 pip과 같은 include 사슬을 걷는다.** `-r` / `--requirement`를 따라가고, 순환을
+끊고, `#` 주석을 pip 규칙대로(줄 시작이거나 공백 뒤일 때만) 떼어 낸다. include 대상이
+디스크에 없으면 **False가 아니라 예외**다 — 설치 그래프가 깨진 것과 패키지가 없는 것은
+다른 발견이고, 전자를 후자로 접으면 지금 이 결함이 그대로 되돌아온다.
+
+그리고 그 자체를 회귀로 고정했다: `requirements.txt`가 이름을 직접 적지 **않는** 패키지
+두 개(`PyMuPDF`, `openpyxl`)가 include를 통해 보여야 한다. 어느 날 이름이 직접 적히면
+그 시험은 "이제 이 검사가 include를 따라가는 reader와 안 따라가는 reader를 구별하지
+못한다"고 **먼저 말하고 붉어진다.**
+
+**8번은 취소선으로 닫았다.** 탐침이 참을 돌려주므로 규칙상 그래야 한다.
+
+**음성 대조군을 넣었다.** 8번이 닫히면 등록된 6개 탐침이 전부 참이 되어, "거짓인데
+취소선이 있으면 실패" 방향을 도는 살아 있는 사례가 사라진다. 그래서 비교 규칙 자체를
+함수로 떼어 내고 네 조합(참/참 · 거짓/거짓 · 참/미취소 · 거짓/취소)을 직접 시험한다.
+이 방향이 더 중요한 쪽이다 — 되돌아간 능력을 "닫혔다"고 주장하는 문서가, 안 닫힌 것을
+안 닫혔다고 적는 문서보다 나쁘다.
+
+## 5. 남는 비대칭 — 고치지 않기로 했다
+
+`_pdf_geometry`를 부르는 두 자리의 대체 경로는 여전히 다르다.
+
+| 부르는 자리 | PyMuPDF가 없을 때 |
+|---|---|
+| `_inspect_pdf` | `pdfplumber`로 기하를 만든다 (`metadata`는 **생략**한다 — 지어내지 않는다) |
+| `_op_inspect_formatting` | `note: "PyMuPDF not available"` |
+
+원래 이 정정 작업은 "형제가 가진 대체 경로를 이 분기에도 준다"로 시작했다. **하지 않았다.**
+근거가 세 가지다.
+
+1. **우리가 돌리는 어떤 환경에서도 실행되지 않는 분기다.** 위 표대로 PyMuPDF는 어디에나
+   있다.
+2. **채점기 지문이 움직인다.** `core/`를 건드리면 fingerprint가 바뀌고, 이 저장소에서
+   그것은 진행 중 채점·병합 freeze·재현성에 실제 비용을 부과한다. 실행되지 않는 경로를
+   위해 치를 값이 아니다.
+3. **두 엔진의 `fonts`가 같지 않다.** 직접 재 봤다 — 같은 2쪽 PDF에서 쪽 크기는
+   `[(432.0, 288.0), (612.0, 792.0)]`로 **완전히 일치**하지만, 폰트는 fitz가
+   `['Courier', 'Helvetica', 'Helvetica-Bold', 'Times-Roman']`, pdfplumber가
+   `['Courier', 'Helvetica-Bold', 'Times-Roman']`이다. fitz는 **선언된 폰트 자원**을,
+   pdfplumber는 **실제로 그려진 글자의 폰트**를 센다. 대체 경로가 `fonts`를 채우면
+   같은 이름의 필드가 환경에 따라 다른 뜻이 된다 — 이 문서 계열이 막으려는 결함 그
+   자체다. 빈 `fonts: []`를 내는 것은 "없음은 0이 아니다" 규칙 위반이라 더 나쁘다.
+
+그러므로 이 비대칭은 **결함이 아니라 기록**으로 둔다. 필요해지는 조건은 명확하다:
+PyMuPDF가 설치 그래프에서 빠지는 날. 그날 탐침 8이 **먼저 붉어진다.**
+
+## 6. 같은 결함이 채점기 신원 안에도 있었다 (→ 새 후속 9번)
+
+이 정정이 지문을 움직이지 않았음을 확인하다가 나왔다. `compute_grader_source_hash`가
+해시에 넣는 파일 목록에 **`requirements.txt`는 있고 `requirements-renderer.txt`는
+없다.** 그런데 `requirements.txt`는 그 파일을 `-r`로 끌어온다. **탐침 8이 저지른 것과
+똑같은 동작** — 그래프를 파일 하나로 읽기 — 이 이번에는 시험이 아니라 **신원 안에**
+있다.
+
+추론이 아니라 실측이다. `94ea015`에서 같은 설정
+(`gold_ceiling_185_v2_sol_max.yaml`)으로 세 번 쟀다.
+
+| 무엇을 바꿨나 | 지문 |
+|---|---|
+| 아무것도 안 바꿈 | `7b2bd7d97125c383…` |
+| 포함된 파일에서 `PyMuPDF>=1.21.0` 삭제 | `7b2bd7d97125c383…` **(그대로)** |
+| 진입 파일에 주석 한 줄 추가 | `0247c9e02f961cbf…` **(바뀜)** |
+
+가운데 줄이 결함이다. 판정기의 `read_deliverable`이 쓰는 능력
+(`PyMuPDF`·`openpyxl`·`python-pptx`·`python-docx`·`Pillow`)이 통째로 사라져도 **신원은
+같다고 말한다.** 신원이 같으면 shard가 병합되고, 발행된 채점이 "이 채점기가 냈다"고
+인용하는 값이 그것이다.
+
+지금 지문이 실제로 읽는 파일은 **108개**다. 그중 include 대상은 0개다.
+
+**고치지 않았다.** 고치려면 `step8_grade.py`를 건드려야 하고, 그 순간 이후 모든 실행의
+지문이 움직인다 — 진행 중 채점·병합 freeze·재현성에 실제 비용이 붙는다. 그래서
+**후속 9번으로 열어 두고 소유자 결정으로 남긴다.** 탐침 9번이 그 상태를 지킨다. 이
+탐침은 소스에서 파일 이름을 grep하지 않고 **해시 함수가 실제로 읽는 파일을 관찰한다** —
+목록이 나중에 다른 방식으로 만들어져도 계속 맞는 질문을 하도록.
+
+덤으로, 8번이 닫히면서 사라졌던 **살아 있는 `거짓` 사례가 9번으로 되돌아왔다.** 음성
+대조군은 그대로 둔다. 9번도 언젠가 닫히기 때문이다.
+
+## 7. 이 정정이 실제로 말하는 것
+
+`320`의 결론은 "문장과 코드를 잇는 것이 없으면 문서가 늙는다"였고, 그 처방이 탐침이었다.
+이번에 드러난 것은 그 다음 층이다 — **탐침도 틀릴 수 있다.** 그리고 틀리는 방식이
+특이하다. 탐침 8은 고장 나지 않았다. 정확히 물었고 정확히 답했다. 다만 **물어야 할
+질문과 다른 질문**이었다("이 파일에 이름이 적혀 있나" ≠ "설치되나").
+
+`320`이 심은 변이 20개는 전부 잡혔다. 그중 하나가 `'declare PyMuPDF in requirements'`
+였는데 — 그 변이는 `requirements.txt` 끝에 `PyMuPDF>=1.21.0`을 덧붙여 탐침을 참으로
+뒤집었고, 시험은 예상대로 붉어졌다. **변이 하네스는 자기 전제가 이미 참인지는 묻지
+않는다.** 초록도 빨강도 전부 "설계대로"였고, 아무것도 이상하지 않았다.
+
+틀린 전제를 잡은 것은 시험이 아니라 **유료 실행 payload를 다시 읽은 것**이다. 그래서
+이 저장소의 순서가 한 번 더 확인된다 — 코드로부터의 추론보다 **실행 기록이 위**다.
+
+### 변이 목록도 같이 뒤집었다
+
+8번의 기대 답이 뒤집혔으므로 그 항목을 겨누던 변이 3개는 뜻이 달라졌다. 다시 짰다.
+지금은 **28개 중 28개**가 잡힌다(이전 20/20).
+
+| 새 변이 | 무엇을 무너뜨리나 |
+|---|---|
+| `unstrike item 8 while it works` | 되는 능력을 "열림"으로 되돌린다 |
+| `drop the -r include` | 설치 그래프에서 include를 끊는다 (8번·9번 양쪽에서 붉어진다) |
+| `drop PyMuPDF from the renderer file` | 패키지 자체를 뺀다 |
+| `point the include at nothing` | 없는 파일을 가리킨다 → **예외**여야지 False면 안 된다 |
+| `name PyMuPDF directly instead` | 직접 선언이 생기면 회귀 시험이 스스로 무의미해졌다고 말해야 한다 |
+| `stop following -r in the reader` | 원래 결함 그 자체를 다시 심는다 |
+| `rename the branch with PyMuPDF gone` | 패키지가 없을 때만 도는 절반이 "아무것도 못 읽고 답한 척"하는지 |
+| `drop the open-but-unstruck direction` | 비교 규칙의 한쪽을 죽인다 |
+| `drop the struck-but-gone direction` | 비교 규칙의 **다른** 한쪽을 죽인다 — 8번이 닫힌 뒤 9번이 열리기 전까지 살아 있는 사례가 없던 방향이라, 음성 대조군이 유일한 감시자였다 |
+| `strike item 9 while it is open` | 안 고친 것을 "닫혔다"고 적는다 |
+| `let the identity probe answer yes` | 9번 탐침이 신원을 재지 않고 참만 돌려주게 만든다 |
+| `add an unclassified 10` | 등록되지 않은 새 번호가 문서에 들어온다 |
+| `add an unclassified 9` | 이미 있는 번호가 **한 번 더** 들어온다 (아래) |
+
+`drop the …-direction` 두 줄이 이 정정에서 실제로 얻은 안전장치다. 8번이 닫히면서
+모든 탐침이 참이 되었으므로, 음성 대조군이 없었다면 비교 규칙의 절반이 조용히 죽어도
+아무도 붉어지지 않았을 것이다. (9번이 열리면서 살아 있는 `거짓` 사례가 돌아왔지만,
+대조군은 그대로 둔다 — 9번도 언젠가 닫힌다.)
+
+`'give the formatting branch a fallback'` 변이는 **뺐다.** 대체 경로가 생기면 탐침이
+참을 돌려주는 것이 맞고, 8번은 이미 취소선이므로 초록이 정답이다. 그건 변이가 아니라
+정상적인 다른 세계다. 마찬가지로 이제 탐침은 설치 그래프에서 답이 나오면 소스를 읽지
+않고 끝내므로, 소스 모양만 건드리는 변이는 패키지를 함께 없앤 복합 변이로 다시 짰다.
+
+### 그러다 시험 자체의 구멍이 하나 나왔다
+
+9번이 **등록된 번호**가 되자, `320`에서 그대로 넘어온 변이
+`'add an unclassified 9'`(문서 끝에 `9.`로 시작하는 줄을 덧붙인다)가 갑자기
+**놓쳤다.** 이유가 시시하지 않다. 문서를 읽는 `_follow_ups()`는 번호를 사전(dict)
+키로 모으는데, 같은 번호가 두 번 나오면 **뒤엣것이 앞엣것을 조용히 덮어썼다.** 즉
+두 주장 중 하나는 아무것과도 대조되지 않은 채 통과한다. 취소선이 붙은 진짜 8번 아래에
+취소선 없는 가짜 8번을 붙여도 마찬가지였을 것이다.
+
+이제 중복 번호는 그 자리에서 **예외**다. 원래 의도였던 "분류 없는 새 번호"는
+`'add an unclassified 10'`으로 다시 심었고, 둘 다 잡힌다. 이 건은 이 문서의 주제를
+한 번 더 확인해 준다 — 변이 하네스는 자기 전제를 묻지 않지만, **전제가 바뀌면
+결과로 알려 준다.** 8번이 열렸다가 닫히는 동안 이 구멍은 계속 있었고, 아무도 붉어지지
+않았다.
+
+---
+
+## 검증
+
+| | |
+|---|---|
+| 채점기 지문 | **안 움직임** — 같은 설정으로 브랜치·`origin/main` 양쪽에서 `7b2bd7d97125c383…` |
+| 지문 입력 | `batch-runner/core`·`scripts` **무수정**(diff 0줄) |
+| 계약 시험 | **18개 통과**(이전 15개) |
+| 변이 검증 | **28개 중 28개** 잡힘 |
+| 모델 호출 | **0회** |
+| 비용 | **$0** |

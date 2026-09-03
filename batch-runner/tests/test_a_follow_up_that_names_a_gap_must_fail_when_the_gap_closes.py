@@ -26,11 +26,25 @@ cannot quietly join it, and every number present in the document must appear in
 one of the two registries, so adding an item 8 turns this suite red until it is
 classified.
 
-Item 8 is the first entry written under that rule, and it is open: writing
-probe 1 turned up a second, unrecorded half of the same gap, so it was numbered
-rather than left in a commit message. Its probe returns ``False`` today, which
-means the ``False`` direction of the contract above is exercised by a live case
-and not only by planted mutations.
+Item 8 is the first entry written under that rule, and it is a cautionary one.
+It was added while writing probe 1, describing ``inspect_formatting``'s PDF
+branch as unreachable in production -- and that was wrong. The probe behind it
+grepped ``requirements.txt`` for ``PyMuPDF`` without following the ``-r`` include
+on its fourth line, so it answered ``False`` for a capability the shipped
+environment has had since 2026-07-15 and that the stage-3 paid run demonstrably
+used. Both the item and the probe are corrected here; what the episode shows is
+that a probe is only as honest as the question it asks, so the reader it uses now
+walks the same include chain pip does.
+
+Item 9 came out of verifying that correction. ``compute_grader_source_hash``
+makes the same one-file-for-a-graph move: it hashes ``requirements.txt`` and not
+the file that ``requirements.txt`` includes, so the identity two paid runs are
+pinned to does not cover the declaration of PyMuPDF, openpyxl, python-pptx,
+python-docx or Pillow. Measured, not read off the source -- deleting PyMuPDF
+from the included file leaves the fingerprint byte-identical while appending one
+comment to the entry file changes it. It answers ``False`` today, so the
+``False`` direction of the contract is exercised by a live item as well as by
+the negative control over the comparison itself.
 
 Measured evidence for the three closures — the paid runs on either side of #260,
 compared item by item — is in ``tasks/rebuilding_grading_task/320-three-gaps-that-closed.md``.
@@ -40,6 +54,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import re
 import subprocess
 import wave
@@ -70,12 +85,72 @@ def _follow_ups() -> dict[int, bool]:
         # suite green while pointing it at a section nobody maintains.
         raise AssertionError(f"{REPORT.name} has no '## 후속 항목' section heading")
     body = text[heading.start() :]
-    return {int(n): bool(struck) for n, struck in _ENTRY.findall(body)}
+    entries: dict[int, bool] = {}
+    for number, struck in _ENTRY.findall(body):
+        # Two entries sharing a number is not a typo to shrug at: the second
+        # would silently overwrite the first here, so one of the two claims
+        # would be checked against nothing at all.
+        assert int(number) not in entries, (
+            f"follow-up {number} is listed twice in {REPORT.name}; one of the "
+            f"two would be dropped before anything checked it"
+        )
+        entries[int(number)] = bool(struck)
+    return entries
 
 
 def _rd() -> Any:
     """The module, not the function of the same name exported beside it."""
     return importlib.import_module("core.tools.read_deliverable")
+
+
+def _requirements_closure(entry: Path) -> tuple[list[Path], list[str]]:
+    """The files ``pip install -r entry`` reads, and every line in them.
+
+    ``requirements.txt`` is not a flat list. Its fourth line is
+    ``-r requirements-renderer.txt``, so a package can be installed by every
+    workflow in this repository without ever being named in the file those
+    workflows pass to pip. Reading the entry file alone is exactly how probe 8
+    was first written, and it reported a capability as missing that production
+    has had since ``fa8bf4f`` (2026-07-15). pip follows the include; a probe
+    that does not is answering a different question from the one that ships.
+
+    The file list is returned beside the lines because the same include is a
+    hole in the grader fingerprint (probe 9), and both questions need the same
+    walk.
+    """
+    seen: set[Path] = set()
+    files: list[Path] = []
+    lines: list[str] = []
+    stack = [entry]
+    while stack:
+        current = stack.pop().resolve()
+        if current in seen:  # an include cycle is pip's problem, not a hang here
+            continue
+        seen.add(current)
+        assert current.exists(), (
+            f"{current.name} is pulled in with -r but is not on disk. The "
+            f"install graph this reader walks is broken, which is a different "
+            f"finding from a package being absent from it."
+        )
+        files.append(current)
+        for raw in current.read_text(encoding="utf-8").splitlines():
+            # pip treats '#' as a comment at line start or after whitespace,
+            # which leaves '#egg=' fragments in URLs alone.
+            line = re.sub(r"(^|\s)#.*$", "", raw).strip()
+            if not line:
+                continue
+            include = re.match(r"(?:-r|--requirement)[=\s]+(\S+)", line)
+            if include:
+                stack.append(current.parent / include.group(1))
+            else:
+                lines.append(line)
+    return files, lines
+
+
+def _declared_in_requirements(package: str, entry: Path) -> bool:
+    """Is ``package`` installed by ``pip install -r entry``, include chain and all?"""
+    pattern = re.compile(rf"^{re.escape(package)}\b", re.I)
+    return any(pattern.match(line) for line in _requirements_closure(entry)[1])
 
 
 def _scope_descriptions() -> list[str]:
@@ -216,36 +291,37 @@ def _probe_published_index_cost(tmp_path: Path) -> bool:
 def _probe_formatting_pdf_geometry_in_the_shipped_environment(tmp_path: Path) -> bool:
     """8. Can ``inspect_formatting`` report PDF geometry in the shipped env?
 
-    Found while writing probe 1. ``_op_inspect_formatting``'s PDF branch is
-    PyMuPDF-only -- on ``ImportError`` it returns ``{"kind": "pdf", "note":
-    "PyMuPDF not available"}``, with no geometry and no fonts. PyMuPDF is
-    declared in ``requirements-renderer.txt``, and both ``backend-tests.yml``
-    and ``grade-run.yml`` install ``requirements.txt`` only. So one of
-    ``_pdf_geometry``'s two call sites returns a note in every environment
-    this repository actually runs, including the two paid gold-ceiling runs.
+    ``_op_inspect_formatting``'s PDF branch is PyMuPDF-only: on ``ImportError``
+    it returns ``{"kind": "pdf", "note": "PyMuPDF not available"}``, with no
+    geometry and no fonts. The question is whether that branch is the one this
+    repository actually runs.
 
-    Deliberately static rather than an ``import fitz`` attempt. A developer
-    box that happens to have PyMuPDF would otherwise answer ``True`` here
-    while CI answered ``False``, and a probe whose verdict depends on who is
-    running it cannot hold a document to anything. The question is not "can
-    *this* machine do it" but "is it reachable in the environment we ship",
-    and either repair -- declaring the dependency, or giving the branch the
-    ``pdfplumber`` fallback its sibling ``_inspect_pdf`` already has --
-    flips this to ``True``.
+    It is not, and the first version of this probe got that wrong. PyMuPDF is
+    declared in ``requirements-renderer.txt``, which ``requirements.txt`` pulls
+    in with ``-r`` on its fourth line -- both since ``fa8bf4f`` (2026-07-15).
+    ``backend-tests.yml``, ``grade-run.yml``, ``batch-run.yml`` and
+    ``audio-accuracy-probe.yml`` all install ``requirements.txt``, so all four
+    install PyMuPDF, and the stage-3 paid run confirms it from the other end:
+    three items quote a PDF font list, and ``ae0c1093``'s evidence reads
+    ``"page_size_uniform": true, "orientation": "portrait", "fonts": [...]`` --
+    the fitz branch's exact output shape, which ``_inspect_pdf`` never emits.
+
+    Deliberately static rather than an ``import fitz`` attempt. A developer box
+    that happens to have PyMuPDF would otherwise answer ``True`` here while an
+    environment without it answered ``False``, and a probe whose verdict depends
+    on who is running it cannot hold a document to anything. The question is not
+    "can *this* machine do it" but "is it reachable in the environment we ship" --
+    so the read has to walk the same include chain pip does.
     """
     source_path = REPO_ROOT / "batch-runner/core/tools/read_deliverable.py"
     requirements = REPO_ROOT / "batch-runner/requirements.txt"
     for path in (source_path, requirements):
-        # Raise rather than return False. This is the one registered item that
-        # is *open*, so ``False`` is its expected answer -- anything that
-        # silently degrades to ``False`` would leave the probe blind and the
-        # suite green. Only an exception is visible from here.
+        # Raise rather than return False. A missing anchor is not evidence that
+        # the capability is absent, and returning False for it would let the
+        # probe go blind while the suite stayed green.
         assert path.exists(), f"probe 8 cannot find {path.relative_to(REPO_ROOT)}"
 
-    declared = bool(
-        re.search(r"^\s*PyMuPDF\b", requirements.read_text(encoding="utf-8"), re.M | re.I)
-    )
-    if declared:
+    if _declared_in_requirements("PyMuPDF", requirements):
         return True
 
     source = source_path.read_text(encoding="utf-8")
@@ -259,6 +335,84 @@ def _probe_formatting_pdf_geometry_in_the_shipped_environment(tmp_path: Path) ->
     return "PyMuPDF not available" not in branch.group(0)
 
 
+#: The grading config probe 9 fingerprints. Any real one would do -- this is
+#: the one the 185-task paid run used, so the measurement is taken against the
+#: identity that is actually pinned in published grades.
+_FINGERPRINT_CONFIG = "batch-runner/grading_configs/gold_ceiling_185_v2_sol_max.yaml"
+
+
+def _fingerprint_inputs() -> set[Path]:
+    """Every file the grader identity hashes, observed rather than parsed.
+
+    ``compute_grader_source_hash`` builds its input list from a literal, an
+    ``rglob`` over ``core/`` and a couple of config lookups, so reading the
+    source for a filename would answer a slightly different question from the
+    one that ships -- the mistake probe 8 made. Recording what the function
+    actually reads answers it exactly, and keeps working if the list is later
+    built some other way.
+    """
+    import step8_grade  # local: heavy, and only probe 9 needs it
+    import yaml
+
+    config_path = REPO_ROOT / _FINGERPRINT_CONFIG
+    assert config_path.is_file(), f"probe 9 cannot find {_FINGERPRINT_CONFIG}"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    read: list[Path] = []
+    original = Path.read_bytes
+
+    def recording(self: Path) -> bytes:
+        read.append(Path(self).resolve())
+        return original(self)
+
+    cwd = Path.cwd()
+    Path.read_bytes = recording  # type: ignore[method-assign]
+    try:
+        # _batch_runner_root() resolves against the working directory, not
+        # against its own __file__, so the probe has to stand where step8 runs.
+        os.chdir(REPO_ROOT / "batch-runner")
+        step8_grade.compute_grader_source_hash(str(config_path), config)
+    finally:
+        Path.read_bytes = original  # type: ignore[method-assign]
+        os.chdir(cwd)
+    return set(read)
+
+
+def _probe_identity_covers_the_install_graph(tmp_path: Path) -> bool:
+    """9. Does the grader fingerprint cover every file pip reads?
+
+    ``grader_source_hash`` is what two shards must agree on before their
+    partials can be merged, and what a published grade cites to say which
+    grader produced it. It hashes ``batch-runner/requirements.txt`` — but not
+    ``requirements-renderer.txt``, which that file includes with ``-r`` and
+    which is where ``PyMuPDF``, ``openpyxl``, ``python-pptx``, ``python-docx``
+    and ``Pillow`` are declared. Every one of those is a capability the judge's
+    ``read_deliverable`` tools use, so the identity can stay byte-identical
+    while what the grader can see changes.
+
+    Measured offline before this item was opened, at ``94ea015``: deleting
+    ``PyMuPDF>=1.21.0`` from the included file left the fingerprint at
+    ``7b2bd7d9...``, and appending a single comment line to the entry file moved
+    it to ``0247c9e0...``. This is the same one-file-for-a-graph mistake probe 8
+    made, sitting inside the identity rather than inside a test.
+
+    Fixing it means editing ``step8_grade.py``, which moves the fingerprint for
+    every future run -- a real cost, and the owner's call. The item stays open
+    and this probe stays ``False`` until then.
+    """
+    entry = REPO_ROOT / "batch-runner/requirements.txt"
+    assert entry.is_file(), "probe 9 cannot find batch-runner/requirements.txt"
+    files, _ = _requirements_closure(entry)
+    hashed = _fingerprint_inputs()
+    # If the entry file itself stopped being hashed, the comparison below would
+    # still say False, but for a completely different reason. Say so instead.
+    assert entry.resolve() in hashed, (
+        "the grader fingerprint no longer reads requirements.txt at all; probe 9 "
+        "is measuring something other than what it was written for"
+    )
+    return all(path in hashed for path in files)
+
+
 #: Follow-up number -> the capability it asked for.
 PROBES: dict[int, Callable[[Path], bool]] = {
     1: _probe_page_geometry,
@@ -267,6 +421,7 @@ PROBES: dict[int, Callable[[Path], bool]] = {
     4: _probe_scope_member_documented,
     7: _probe_published_index_cost,
     8: _probe_formatting_pdf_geometry_in_the_shipped_environment,
+    9: _probe_identity_covers_the_install_graph,
 }
 
 #: Follow-ups that ask the owner to decide, not for code to exist. Pinned, so a
@@ -304,25 +459,84 @@ def test_the_owner_decision_exemption_is_exactly_five_and_six():
     assert not (OWNER_DECISIONS & set(PROBES)), "an item cannot be both"
 
 
-@pytest.mark.parametrize("number", sorted(PROBES))
-def test_a_follow_up_is_struck_exactly_when_its_capability_exists(number, tmp_path):
-    entries = _follow_ups()
-    assert number in entries, f"follow-up {number} is missing from {REPORT.name}"
+def _mismatch(number: int, exists: bool, struck: bool) -> str | None:
+    """The contract itself, in one place so it can be negative-controlled.
 
-    exists = PROBES[number](tmp_path)
-    struck = entries[number]
-
+    Returns the complaint, or ``None`` when the document and the capability
+    agree. Kept separate from the test below so the rule can be fed all four
+    combinations directly. Item 9 is open, so ``struck and not exists`` is
+    reachable today by striking it -- but that is a fact about the current
+    contents of the report, not about the rule, and it stops being true the day
+    item 9 closes. Between item 8 closing and item 9 opening it was not true at
+    all, and nothing said so.
+    """
     if exists and not struck:
-        pytest.fail(
+        return (
             f"follow-up {number} still reads as open, but the capability it asks "
             f"for runs today. Strike it through and record what the change "
             f"actually measured -- see 320-three-gaps-that-closed.md."
         )
     if struck and not exists:
-        pytest.fail(
+        return (
             f"follow-up {number} is struck through as closed, but its capability "
             f"no longer runs. The list is claiming a gap is handled while it is "
             f"open again."
+        )
+    return None
+
+
+@pytest.mark.parametrize("number", sorted(PROBES))
+def test_a_follow_up_is_struck_exactly_when_its_capability_exists(number, tmp_path):
+    entries = _follow_ups()
+    assert number in entries, f"follow-up {number} is missing from {REPORT.name}"
+
+    complaint = _mismatch(number, PROBES[number](tmp_path), entries[number])
+    if complaint:
+        pytest.fail(complaint)
+
+
+def test_both_directions_of_the_contract_actually_fail():
+    """Negative control over the comparison itself.
+
+    Item 9 exercises the ``False`` direction with a live case today, but that
+    is a temporary state -- it holds only until someone decides the fingerprint
+    is worth moving. This test does not depend on any item being open: it feeds
+    the rule all four combinations directly, so the direction stays pinned on
+    the day the last open item closes rather than going quietly dead.
+
+    The second direction is the one worth pinning hardest: a capability that was
+    reverted while its item stayed struck would leave the list claiming a gap
+    is handled when it is open again, which is worse than the drift this file
+    was written for.
+    """
+    assert _mismatch(8, exists=True, struck=True) is None
+    assert _mismatch(8, exists=False, struck=False) is None
+    assert "still reads as open" in (_mismatch(8, exists=True, struck=False) or "")
+    assert "open again" in (_mismatch(8, exists=False, struck=True) or "")
+
+
+def test_the_requirements_reader_follows_includes():
+    """The bug behind item 8's first version, pinned as its own regression.
+
+    ``requirements.txt`` names neither PyMuPDF nor openpyxl; it reaches both
+    through ``-r requirements-renderer.txt``. A reader that stops at the entry
+    file reports a shipped dependency as absent, which is how a capability the
+    stage-3 paid run used came to be written up as an open gap.
+    """
+    entry = REPO_ROOT / "batch-runner/requirements.txt"
+    flat = entry.read_text(encoding="utf-8")
+    assert re.search(r"^\s*-r\s+\S+", flat, re.M), (
+        "requirements.txt no longer includes another file; if the include was "
+        "inlined this test is obsolete, but check what else it carried first"
+    )
+    for package in ("PyMuPDF", "openpyxl"):
+        assert not re.search(rf"^{package}\b", flat, re.M | re.I), (
+            f"{package} is now named directly in requirements.txt, so this test "
+            f"no longer distinguishes a reader that follows -r from one that does not"
+        )
+        assert _declared_in_requirements(package, entry), (
+            f"{package} is installed by 'pip install -r requirements.txt' but the "
+            f"reader cannot see it -- the include chain is not being walked"
         )
 
 
@@ -395,12 +609,25 @@ def test_every_sibling_link_points_at_a_file_everyone_has():
             continue
         for target in re.findall(r"\]\(\./([^)#]+)\)", doc.read_text(encoding="utf-8")):
             relative = f"tasks/rebuilding_grading_task/{target}"
-            if relative not in tracked:
-                on_disk = (REPO_ROOT / relative).exists()
-                broken.append(
-                    f"{doc.name} -> {target} "
-                    f"({'present but untracked -- add a !negation to .gitignore' if on_disk else 'missing'})"
+            if relative in tracked:
+                continue
+            if not (REPO_ROOT / relative).exists():
+                broken.append(f"{doc.name} -> {target} (missing)")
+                continue
+            # On disk but not in the index. Two different causes with two
+            # different fixes, and saying the wrong one sends the reader to a
+            # .gitignore line that is already correct.
+            ignored = subprocess.run(
+                ["git", "check-ignore", "-q", relative], cwd=REPO_ROOT
+            )
+            broken.append(
+                f"{doc.name} -> {target} "
+                + (
+                    "(present but ignored -- add a !negation to .gitignore)"
+                    if ignored.returncode == 0
+                    else "(present and un-ignored, but never added -- git add it)"
                 )
+            )
     assert not broken, "links that resolve for nobody else:\n  " + "\n  ".join(broken)
 
 
