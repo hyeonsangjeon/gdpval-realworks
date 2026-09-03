@@ -37,6 +37,7 @@ import type { GradeSummaryV1, TaskGradeV1, SelectionOutcome } from '../types/gra
 import {
   RubricCoverageCard,
   HighMagnitudeItemCard,
+  RouteExposureCard,
   StructureVsReasoning,
   SectorHeatmap,
   ScoreDensityHistogram,
@@ -1073,6 +1074,17 @@ function WowSection({ summary, tasksV1 }: { summary: GradeSummaryV1; tasksV1: Ta
       */}
       <div className="mt-4">
         <HighMagnitudeItemCard wow={wow} delay={0.3} />
+      </div>
+      {/*
+        Beside it, and for the same reason: it says what was graded, not how
+        well. The audio sub-judge scored a discrimination of 0.00 against clips
+        whose answers were known, so how much of this run's weight passed
+        through it is something a reader of the score needs to be able to see.
+        Always rendered — a run that recorded no route says so, which is the
+        answer to the question, not the absence of one.
+      */}
+      <div className="mt-4">
+        <RouteExposureCard composition={summary.route_composition} delay={0.35} />
       </div>
     </motion.section>
   )

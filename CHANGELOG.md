@@ -74,6 +74,69 @@ entries land under a fresh dated heading the day they merge to `main`.
   next fingerprint-moving PR rather than smuggled in beside a label change.
 
 ### Added
+- **How much of a published average was decided by the audio sub-judge is now
+  on screen — and for most runs the honest answer is "not recorded".** The
+  audio route was measured against synthetic clips whose answers were known and
+  came back at 48.6%, with a discrimination of exactly **0.00** by item
+  majority, an 83.3% false-negative rate on true claims, higher confidence when
+  wrong than when right, and 11 of 12 items answered identically across three
+  repeats — so re-running a grade can never surface the error. Nothing on the
+  board said how much of any average passed through it.
+
+  `step8_grade._routing_stats` computes exactly this and post-dates every
+  published payload, so `scripts/aggregate-grades.mjs` recomputes it from the
+  same items by the same rule, which that function's own docstring licenses:
+  *"a payload published before this field existed reports the same numbers when
+  it is re-summarised."* The predicate is copied deliberately — an errored
+  task's items stay in the population but leave the scored counts, a
+  `score_excluded` item does the same, a penalty item's negative weight is
+  clamped to 0 rather than netted off, an unknown modality is counted under its
+  own name rather than dropped, and `tasks` counts a task once however many
+  items it routed. `route_composition` lands on `summary_v1`; the new
+  `RouteExposureCard` renders it as a dashed diagnostic card with no WOW badge,
+  beside the high-magnitude card and for the same reason.
+
+  **Three states, never collapsed into two.** Of the 19 grade files the
+  dashboard reads, **18 are item-level and get a composition — 7 recorded a
+  route and 11 recorded none at all**; the 19th carries no rubric items and
+  gets no composition. Those 11 predate the field and carry
+  `routing_modality: null` on every item. Reading
+  them as `audio: 0` would turn *never asked* into *asked and found none*, so a
+  run that recorded nothing gets **empty maps rather than zero-filled ones**
+  and reads `not recorded`, never `0%`. A route missing from a run that *did*
+  record is a measured zero and reads `none`. Where the route was used, the
+  card prints its share of scored rubric weight: on the two `rubric_v2_tools`
+  runs that is **58 items across 22 tasks, 0.64%**; the OFFICIAL sol-220 grade
+  carries no audio key at all.
+
+  **The unrouted remainder is stated, and it is not a random sample.** The
+  OFFICIAL grade leaves **964 of 10,453 items (9.2%)** without a route, and
+  every one of them is an item the judge failed or errored on — 952 `fail`
+  plus 12 `judge_error` — so a share taken over the routed rest is a share
+  over a population missing its failures. The card says so rather than
+  printing the percentage bare.
+
+  **What the counts structurally cannot see is disclosed too.** Both the
+  producer and this recomputation count a `mixed` item once, under `mixed`, and
+  neither descends into `child_grades` — so an audio child inside a mixed item
+  is audio-decided weight the audio row does not cover. Measured across all 19
+  files: **23 mixed items, 72 children, zero audio children**, so nothing on
+  screen moves today. `audio_in_mixed_items` is computed and reported anyway,
+  kept outside the route maps so they stay comparable with the producer's, and
+  the headline reads `none directly` rather than `none` the day it fires.
+
+  **This discloses; it does not decide.** No score changes, no grade file is
+  rewritten, and nothing under `compute_grader_source_hash` is touched — the
+  change is confined to `scripts/aggregate-grades.mjs`, `src/**`,
+  `scripts/__tests__/**` and `package.json`, so no grader fingerprint moved and
+  no published run is restated. How the audio-graded items should ultimately be
+  treated remains an open owner decision, and the card says that on its face.
+  The rule lives in the import-free `src/components/wow/routeExposure.ts` so
+  `scripts/__tests__/route-exposure.test.mjs` can execute it; that test also
+  reads `_ROUTING_MODALITIES` straight out of `step8_grade.py` so the two
+  languages cannot drift apart, and asserts the three states on the real
+  published grades, not only on fixtures.
+
 - **The number that says whether the model got the important things right is,
   on the gold corpora, mostly one line about formatting.** GDPVal rubrics carry
   a `required` field and it is `null` on all 10,453 items, so the repository

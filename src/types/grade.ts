@@ -1,6 +1,12 @@
 // Grade v1.0 schema types (matches tasks/grading_task/007-grade-schema.md)
 
 import type { CostReceipt, CostSummary } from './cost'
+// The route-composition shape is declared beside the rule that reads it, in a
+// module kept free of imports so `scripts/__tests__/route-exposure.test.mjs`
+// can execute that rule directly. Type-only, so nothing crosses at runtime.
+import type { RouteComposition } from '../components/wow/routeExposure'
+
+export type { RouteComposition }
 
 export type Verdict = 'pass' | 'partial' | 'fail' | 'judge_error'
 export type DecidedBy = 'precheck' | 'judge'
@@ -328,6 +334,23 @@ export interface GradeSummaryV1 {
    * unless the grade file is schema 1.4 and recorded receipts.
    */
   grading_cost?: CostSummary
+  /**
+   * Which sub-judge decided how much of the run, recomputed in
+   * scripts/aggregate-grades.mjs from each item's `routing_modality` by the
+   * same rule as `step8_grade._routing_stats`.
+   *
+   * Not to be confused with `JudgeProvenance.routing` below, which is a
+   * tier-routing block naming models on hybrid configs — a different thing at
+   * a different path.
+   *
+   * Present on every item-level payload, including as `recorded: false`. That
+   * value is the answer to "did the audio sub-judge touch this number", not
+   * the absence of one: eleven of the eighteen item-level grades published
+   * today predate routing and carry `routing_modality: null` on every item,
+   * and reading those as `audio: 0` would turn never-asked into
+   * asked-and-found-none.
+   */
+  route_composition?: RouteComposition | null
 }
 
 export interface JudgeTierConfig {

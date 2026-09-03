@@ -759,6 +759,158 @@ function scoreExclusionLift(raw) {
   };
 }
 
+/**
+ * The routes `step8_grade._ROUTING_MODALITIES` names, sorted the way the
+ * producer sorts them. A route the producer knows about but this run never used
+ * is a measured zero and is listed; a route neither side knows about but that
+ * appears on an item is added rather than dropped, so a modality introduced
+ * upstream shows up here before anything downstream has been taught the word.
+ */
+const ROUTE_NAMES = ['audio', 'formatting', 'mixed', 'text', 'visual'];
+
+/**
+ * Which sub-judge decided how much of this run.
+ *
+ * The question this answers is not academic. The audio sub-judge was measured
+ * against synthetic clips whose answers were known and scored a discrimination
+ * of 0.00 — it answered no better than a coin, with higher confidence when it
+ * was wrong. "How much of this average rests on that route" is therefore a
+ * thing a reader needs before quoting the average, and until now it was
+ * obtainable only by downloading the payload and counting items by hand.
+ *
+ * `step8_grade._routing_stats` computes exactly this, and its docstring
+ * promises that a payload published before the field existed "reports the same
+ * numbers when it is re-summarised". Not one of the grade files here carries
+ * it — it post-dates all of them — so this recomputes it from the same items by
+ * the same rule rather than waiting for a re-grade to backfill a disclosure
+ * that costs nothing to make now. The scoring predicate is copied deliberately:
+ * a task with an `error` is out, an item with `score_excluded` is out, and
+ * `scored_max_score` sums positive weight only, all matching
+ * `scoreExclusionLift` above. Two summarisers over one payload must not
+ * disagree about which items the average is made of.
+ *
+ * **A route absent from a run that recorded routing is a measured zero. A route
+ * absent from a run that recorded none is not.** Of the nineteen files read
+ * here, eighteen are item-level and get a composition — seven recorded a route
+ * and eleven carry `routing_modality: null` on every item; the nineteenth
+ * carries no rubric items at all and gets no composition. Zero-filling those
+ * eleven into `audio: 0` would turn "never asked" into "asked and found none" —
+ * the one reading this exists to prevent. So `recorded` says which of the two
+ * situations a reader is in, and the maps are empty in the second.
+ *
+ * `unrecorded_failing_items` is here because the missing slice is not a random
+ * sample of the run. On the official 220-task grade every one of the 964 items
+ * without a route is one the judge failed or errored on, so a share computed
+ * over routed items alone is a share of a population that is missing failures.
+ * That is stated rather than smoothed over.
+ *
+ * `audio_in_mixed_items` is the one number the producer does not compute, and
+ * it is kept OUTSIDE the route maps rather than folded into `audio` so those
+ * maps stay comparable with the producer's. A `mixed` item is counted once,
+ * under `mixed`, by both sides — but its `child_grades` can name a route of
+ * their own, so an audio child inside a mixed item is audio-decided weight that
+ * `audio` does not cover. Across all nineteen files today that count is 0: the
+ * 23 mixed items on the board have 72 children between them, every one of them
+ * `formatting` or `visual`. It is computed anyway, because a silent 0 that
+ * nobody measured and a measured 0 are the distinction this whole field is
+ * about, and the day an audio child appears the card should say so rather than
+ * quietly under-report.
+ */
+function routeComposition(raw) {
+  if (!ITEM_LEVEL_VERSIONS.includes(raw?.schema_version)) return null;
+
+  const items = {};
+  const scoredItems = {};
+  const scoredMax = {};
+  const taskCounts = {};
+  let unrecordedItems = 0;
+  let unrecordedFailing = 0;
+  let audioInMixed = 0;
+  let totalItems = 0;
+
+  for (const task of Array.isArray(raw.tasks) ? raw.tasks : []) {
+    if (!task || typeof task !== 'object' || Array.isArray(task)) continue;
+    const taskScored = !task.error;
+    const seenHere = new Set();
+    for (const item of Array.isArray(task.items) ? task.items : []) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      totalItems += 1;
+      const route = item.routing_modality;
+      if (typeof route !== 'string' || !route) {
+        unrecordedItems += 1;
+        if (item.verdict === 'fail' || item.verdict === 'judge_error') {
+          unrecordedFailing += 1;
+        }
+        continue;
+      }
+      items[route] = (items[route] ?? 0) + 1;
+      seenHere.add(route);
+      // A parent counted under `mixed` can still have been part-decided by the
+      // route in question. Counted separately, never added to `audio`.
+      if (route === 'mixed' && Array.isArray(item.child_grades)) {
+        const hasAudioChild = item.child_grades.some(
+          (child) =>
+            child && typeof child === 'object' && child.routing_modality === 'audio',
+        );
+        if (hasAudioChild) audioInMixed += 1;
+      }
+      if (taskScored && !item.score_excluded) {
+        scoredItems[route] = (scoredItems[route] ?? 0) + 1;
+        scoredMax[route] = (scoredMax[route] ?? 0) + Math.max(0, Number(item.max_score) || 0);
+      }
+    }
+    for (const route of seenHere) taskCounts[route] = (taskCounts[route] ?? 0) + 1;
+  }
+
+  // Nothing carried a route. Empty maps, not zeroed ones — see above.
+  if (Object.keys(items).length === 0) {
+    return {
+      recorded: false,
+      items: {},
+      scored_items: {},
+      scored_max_score: {},
+      tasks: {},
+      total_items: totalItems,
+      scored_max_score_total: 0,
+      unrecorded_items: unrecordedItems,
+      unrecorded_failing_items: unrecordedFailing,
+      audio_in_mixed_items: audioInMixed,
+      payload_agrees: null,
+    };
+  }
+
+  const names = [...new Set([...ROUTE_NAMES, ...Object.keys(items)])].sort();
+  const round4 = (x) => Math.round(x * 10000) / 10000;
+  const composition = {
+    recorded: true,
+    items: Object.fromEntries(names.map((n) => [n, items[n] ?? 0])),
+    scored_items: Object.fromEntries(names.map((n) => [n, scoredItems[n] ?? 0])),
+    scored_max_score: Object.fromEntries(names.map((n) => [n, round4(scoredMax[n] ?? 0)])),
+    tasks: Object.fromEntries(names.map((n) => [n, taskCounts[n] ?? 0])),
+    total_items: totalItems,
+    scored_max_score_total: round4(
+      Object.values(scoredMax).reduce((sum, x) => sum + x, 0),
+    ),
+    unrecorded_items: unrecordedItems,
+    unrecorded_failing_items: unrecordedFailing,
+    audio_in_mixed_items: audioInMixed,
+    payload_agrees: null,
+  };
+
+  // Three-valued against the payload's own claim, for the reason
+  // `scoreExclusionLift` gives: `null` means the payload made no claim, and
+  // that is not the same statement as `true`. No file read here carries
+  // `summary.routing` today; one written after #396 will.
+  const claimed = raw?.summary?.routing;
+  if (claimed && typeof claimed === 'object' && !Array.isArray(claimed)) {
+    composition.payload_agrees =
+      claimed.recorded === true &&
+      JSON.stringify(claimed.items ?? null) === JSON.stringify(composition.items) &&
+      (claimed.unrecorded_items ?? null) === composition.unrecorded_items;
+  }
+  return composition;
+}
+
 /** Map<task_id, projected receipt> for a cost-carrying grade file. */
 function costReceiptsByTask(raw) {
   const receipts = new Map();
@@ -1034,6 +1186,11 @@ function processV1GradesFile(
       calibration_mae,
       calibration_counts,
       selection,
+      // Which sub-judge decided how much of this run, recomputed from the
+      // items. Always present on an item-level payload, including as
+      // `recorded: false` — "this run recorded no route" is the answer to the
+      // reader's question, not the absence of one.
+      route_composition: routeComposition(raw),
       // Only on a run that recorded something. Absent here is what the
       // dashboard reads as "no record" — never as $0.
       ...(costSummary ? { grading_cost: costSummary } : {}),

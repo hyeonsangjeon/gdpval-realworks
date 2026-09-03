@@ -97,6 +97,8 @@ export const tooltipTexts = {
       "OpenAI's hosted grader produced only 4 task-level scores (0/33/67/100). Our item-level partials roll up to 10 buckets across the full 0–100% range.",
     rubricSeverity:
       "Groups rubric items by weight and plots pass rate per weight. A sharp drop signals the difficulty threshold where the model breaks down.",
+    routeExposure:
+      "How much of this run's scored rubric weight was decided by the audio sub-judge, recomputed from each item's recorded route. It matters because that sub-judge was measured against synthetic clips whose answers were known and scored a discrimination of 0.00 — no better than a coin, and more confident when wrong. A run that recorded no route at all reads `not recorded`, never `none`: never asked and asked-and-found-none are different answers.",
   },
 } as const
 
