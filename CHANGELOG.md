@@ -12,6 +12,84 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **Three follow-ups that named a gap kept naming it after the gap closed.**
+  PR3's follow-up list carried items 1, 2 and 3 — Word/PDF page geometry,
+  listening inside an archive, and the empty-read disclaimer — as open, with
+  point estimates of roughly 15, 20 and 13 attached. All three were delivered by
+  #260 (`df473c0`) on 2026-08-29. They read as open for five days because that
+  PR's closeout moved two Project cards and never touched the report; items 4
+  and 7 were struck when they closed, and 1–3 were not, since nothing tied the
+  sentence to the code.
+
+  The two paid gold-ceiling runs sit either side of #260 — 30 tasks graded
+  2026-08-28, 185 tasks graded 2026-08-31, sharing 30 task ids — so the closures
+  are recorded as measurements rather than as a reading of the diff:
+
+  - **Follow-up 1** flips on the same task and the same sentence. `f9a1c16c`'s
+    *"PDF page orientation is landscape"* went **fail 0/2 → pass 2/2**, with the
+    judge's evidence moving from `"kind": "pdf", "page_count": 1` to
+    `"orientation": "landscape"`. The answer was landscape both times; the page
+    geometry was simply invisible. No perception call was made in either run.
+    The `.docx` half of the item has never been exercised — neither payload
+    contains a `.docx` structure inspection at all.
+  - **Follow-up 2** delivered the capability and not the estimate. On `38889c3b`
+    the items routed to listening went **0 → 10** and listening calls **0 → 6**,
+    matching #260's replayed prediction exactly. Those ten items scored
+    **8.5 → 9.0 of 18.0**, a gain of **+0.5** against an estimate of ~20.2. The
+    task's **+5.97pp** must not be credited here either: of the 28 shared tasks
+    whose routing did not change, the mean move was +1.62pp with a standard
+    deviation of 1.89pp and a **maximum of +5.83pp**, so the audio task's total
+    sits inside the spread of tasks nothing touched. The payload gives the
+    reasons — three of the ten were answerable from the WAV header and already
+    passed, one routed to audio and never called, and three of the six that did
+    listen were judged against 1:22–1:49 criteria from a clip ending at 0:30, a
+    separate limit closed afterwards by `f514d05` (#374).
+  - **Follow-up 3** reaches the judge: the disclaimer appears in **0** rubric
+    items before #260 and **23** after. It cannot be separated into a score.
+
+  So the third of the three paths offered before stage 3 — "fix the remaining
+  tool defects first and recover about 46 points" — was in fact taken, and the
+  46 points did not arrive: the same 30 tasks moved **82.87% → 83.48%**. The
+  estimates are marked in the report as replaced by measurement, and
+  `tasks/rebuilding_grading_task/320-three-gaps-that-closed.md` carries the
+  item-by-item comparison.
+
+  Fixing the three sentences alone would leave the same hole open for the next
+  item, so each numbered follow-up is now registered against a model-free
+  **probe** that runs the capability it asks for:
+  `probe() is True` requires the item to be struck through, `probe() is False`
+  requires that it is not, and both directions fail. Items 5 and 6 ask the owner
+  to decide rather than for code to exist and are exempt — an exemption pinned to
+  exactly `{5, 6}`, with every number in the document required to appear in one
+  of the two registries, so a newly numbered item turns the suite red until it is
+  classified. 20 of 20 planted mutations were caught; two of them found real
+  weaknesses in the probes themselves (a substring test that still matched a
+  renamed symbol, and a heading match that a renamed heading slipped past). A
+  further check requires every `./NNN-*.md` link in these documents to resolve to
+  a *tracked* file, because `tasks/rebuilding_grading_task/*` is ignored by
+  default and a note added without a `!` negation is correct only in the
+  worktree that wrote it.
+
+  Writing probe 1 turned up a second half of the same gap, now recorded as
+  **follow-up 8, open**. `_pdf_geometry` has two call sites, and only one of them
+  produced the flip above. `_inspect_pdf`, behind `inspect_structure`, prefers
+  PyMuPDF and falls back to `pdfplumber` — which is what the judge actually
+  called, since the stage-1 evidence it cited is that function's shape.
+  `_op_inspect_formatting`'s PDF branch has no fallback: on `ImportError` it
+  returns `{"kind": "pdf", "note": "PyMuPDF not available"}`, with no geometry
+  and no fonts. PyMuPDF is declared only in `requirements-renderer.txt`, and
+  `backend-tests.yml` and `grade-run.yml` both install `requirements.txt`, so
+  that branch has returned the note in every environment this repository runs,
+  including both paid gold-ceiling runs. Follow-up 1 stays closed — the
+  capability it asked for was delivered and did flip a verdict — but half of it
+  is not reachable where we ship, which is a numbered item rather than a remark
+  in a commit message. Its probe is deliberately static: it reads
+  `requirements.txt` and the branch's source instead of attempting
+  `import fitz`, because a probe that answers `True` on a developer box with
+  PyMuPDF and `False` in CI cannot hold a document to anything. It answers
+  `False` today, so the `False` direction of the contract above is now exercised
+  by a live item and not only by planted mutations.
+
 - **A way into an archive that only one of two schemas mentioned.** PR3 follow-up
   4. A stage-1 gold answer — five WAV stems inside one `.zip` — scored 2 of 62
   because thirty-four rubric items were answered "binary or unsupported" about
