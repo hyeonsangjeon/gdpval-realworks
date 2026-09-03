@@ -277,8 +277,21 @@ export interface RubricSeverityPoint {
   pass_rate: number
 }
 
+/**
+ * The `wow` analytics block, as the aggregator can actually emit it.
+ *
+ * Every rate is optional, and that is a statement about the producer rather
+ * than a hedge. `aggregate-grades.mjs` publishes `summary.wow || {}`, and only
+ * schema 1.3+ is checked for the block at all: `validateHistoricalHeadline`,
+ * which guards 1.0–1.2, reads six `openai_compat` keys and never looks at `wow`.
+ * Sixteen of the nineteen published grade files are 1.0 or 1.1. Declaring these
+ * `number` told every reader the fields were always there, and that is how a
+ * `(rate ?? 0) > 0.05` comparison came to paint an unmeasured error rate the
+ * green this dashboard uses for a healthy run. Read them through
+ * `src/components/wow/rateReading.ts`, which has a state for absent.
+ */
 export interface WowSummary {
-  rubric_item_coverage_avg: number
+  rubric_item_coverage_avg?: number
   /**
    * Pass rate over rubric items whose `|max_score|` reaches the grader's
    * magnitude threshold — *not* over items the rubric marks required. The
@@ -287,10 +300,10 @@ export interface WowSummary {
    * never as a verdict; see `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`.
    * The key keeps its published name so past payloads stay readable.
    */
-  critical_item_pass_rate: number
-  precheck_pass_rate: number
-  judge_pass_rate: number
-  judge_error_rate: number
+  critical_item_pass_rate?: number
+  precheck_pass_rate?: number
+  judge_pass_rate?: number
+  judge_error_rate?: number
   item_counts?: WowItemCounts
   by_sector?: Record<string, SectorWowMetric>
   by_rubric_category?: Record<string, RubricCategoryMetric>
