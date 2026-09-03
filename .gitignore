@@ -59,6 +59,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/analyze_repeat_variation.py
 !batch-runner/scripts/analyze_audio_repeat_variation.py
 !batch-runner/scripts/measure_audio_grading_accuracy.py
+!batch-runner/scripts/check_dev_host_migration_triggers.py
 
 
 # Experiment report HTML (skews GitHub language stats)
