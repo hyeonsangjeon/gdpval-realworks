@@ -8,6 +8,7 @@ import type { GradeSummaryV1 } from '../../types/grade'
 import {
   JUDGE_ITEMS_DESCRIBED,
   PRECHECK_ITEMS_DESCRIBED,
+  readJudgeErrorRate,
   readWowRate,
 } from './rateReading'
 
@@ -52,8 +53,10 @@ function NeutralPill({ label, value, tooltip }: { label: string; value: string; 
 export default function HealthStrip({ summaryV1, delay = 0 }: Props) {
   const wow = summaryV1.wow ?? null
   const cost = summaryV1.cost ?? null
-  const errRate = wow?.judge_error_rate
-  const errAlert = typeof errRate === 'number' && errRate > 0.05
+  // The alert already refused to fire on an absent rate; this reads it through
+  // the shared rule so the one surface that got it wrong and the one that got
+  // it right cannot drift apart again, and so the tooltip says which it is.
+  const err = readJudgeErrorRate(wow?.judge_error_rate, wow?.item_counts?.judge_items)
   // `fmtPct` cannot tell a measured 0% from a rate divided by nothing, and
   // these two pills are the ones that get divided by nothing: 20 of the 33
   // published grades carry `precheck_pass_rate: 0.0`, and now that #393 and
@@ -82,7 +85,7 @@ export default function HealthStrip({ summaryV1, delay = 0 }: Props) {
       <Card className="bg-card/30 backdrop-blur border-border">
         <CardContent className="py-3 px-4">
           <div className="flex items-center gap-2 mb-2">
-            {errAlert && <AlertTriangle className="h-3.5 w-3.5 text-red-400" />}
+            {err.alert && <AlertTriangle className="h-3.5 w-3.5 text-red-400" />}
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Run Health
             </span>
@@ -91,9 +94,13 @@ export default function HealthStrip({ summaryV1, delay = 0 }: Props) {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-xs">
             <Pill
               label="err"
-              value={fmtPct(errRate)}
-              alert={errAlert}
-              tooltip={tooltipTexts.health.judgeErrorRate}
+              value={err.value}
+              alert={err.alert}
+              tooltip={
+                err.caveat
+                  ? `${tooltipTexts.health.judgeErrorRate} — ${err.caveat}`
+                  : tooltipTexts.health.judgeErrorRate
+              }
             />
             <NeutralPill
               label="judge"
