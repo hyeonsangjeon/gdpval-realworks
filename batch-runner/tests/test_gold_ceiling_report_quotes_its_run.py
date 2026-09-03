@@ -306,6 +306,31 @@ def test_the_perception_split_in_the_report_is_the_run_s_split(
     )
 
 
+def test_the_split_this_report_quotes_was_built_from_the_whole_run(
+    report_text, gold_grade_file
+):
+    """Every item of this run said how many perception calls it took.
+
+    The split can only be built from items that answered, so a run with
+    unanswered items yields a floor and the report says so. That is the right
+    thing to print, and it is not what this report prints -- so the property
+    it depends on belongs here, asserted directly. If a later run stops
+    recording the count, this fails and the report loses its warrant, rather
+    than the split quietly turning into a lower bound under the same wording.
+    """
+    payload = json.loads(gold_grade_file.read_text(encoding="utf-8"))
+    recording = analysis.perception_call_recording(payload)
+
+    assert recording["unrecorded"] == 0, (
+        f"{recording['unrecorded']} of "
+        f"{recording['unrecorded'] + recording['recorded']} rubric items "
+        "recorded no perception-call count, so the split in this report "
+        "covers part of the run rather than all of it"
+    )
+    assert recording["recorded"] > 0
+    assert "a floor:" not in report_text
+
+
 # ── Every shortfall is classified by a person ──────────────────────────────
 
 
