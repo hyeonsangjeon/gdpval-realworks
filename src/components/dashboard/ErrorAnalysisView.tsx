@@ -282,6 +282,10 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
               const failRate = fg.needs_files_total > 0
                 ? ((fg.files_failed / fg.needs_files_total) * 100).toFixed(1)
                 : '0'
+              // Tasks with no row in the submission at all. They are in the
+              // denominator above but were never looked at, so a failure rate
+              // computed without saying so reads as a clean result.
+              const absent = fg.files_absent ?? 0
               return (
                 <div key={exp.short_id} className="space-y-2">
                   <ExpBadge id={exp.short_id} />
@@ -302,6 +306,12 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
                       <div className="text-[10px] text-dash-text-muted">Dummy Created</div>
                       <div className="font-mono font-semibold text-amber-400">{fg.dummy_files_created}</div>
                     </div>
+                    {absent > 0 && (
+                      <div className="col-span-2">
+                        <div className="text-[10px] text-dash-text-muted">Never checked (no row in submission)</div>
+                        <div className="font-mono font-semibold text-amber-400">{absent}</div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="flex justify-between text-[10px] mb-0.5">
@@ -311,6 +321,12 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
                     <div className="w-full h-1.5 rounded-full bg-dash-card-hover overflow-hidden">
                       <div className="h-full rounded-full bg-red-500/60 transition-all duration-500" style={{ width: `${failRate}%` }} />
                     </div>
+                    {absent > 0 && (
+                      <div className="mt-1 text-[10px] leading-snug text-amber-400/90">
+                        {absent} of these tasks were never checked, so this rate is out of a
+                        denominator that includes them.
+                      </div>
+                    )}
                   </div>
                 </div>
               )

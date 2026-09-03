@@ -288,6 +288,15 @@ export interface FileGeneration {
   needs_files_total: number
   files_succeeded: number
   files_failed: number
+  /**
+   * File-required tasks the submission carries no row for, so their
+   * deliverables were never looked at. Neither a success nor a failure: folding
+   * them into either would make that count a count of something nobody checked.
+   * Absent on reports written before step5 counted them, where it means no
+   * record rather than none — so read it as a number only when it is one.
+   */
+  files_absent?: number | null
+  absent_task_ids?: string[]
   dummy_files_created: number
   dummy_task_ids: string[]
 }
