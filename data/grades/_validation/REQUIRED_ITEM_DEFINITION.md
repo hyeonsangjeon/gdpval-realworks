@@ -188,7 +188,7 @@ Countable cost, per payload:
 
 Across the 88 payloads under `data/grades/` that this could price, it withdraws
 every `critical_item_pass_rate` the dashboard renders
-(`src/components/wow/CriticalItemCard.tsx`, `src/components/wow/SectorHeatmap.tsx`)
+(`src/components/wow/HighMagnitudeItemCard.tsx`, `src/components/wow/SectorHeatmap.tsx`)
 and every per-task `critical_fail` flag in the payloads. It costs no accuracy —
 nothing published becomes wrong — and it removes the only per-task signal that
 distinguishes "scored 60% by missing small things" from "scored 60% by missing
@@ -266,11 +266,75 @@ templates and the config file — no other file under `batch-runner/scripts/`), 
 running or changing it moves no grader fingerprint and invalidates no published
 grade.
 
-## What is still open
+## The decision (2026-09-03)
+
+The owner ruled. It is **option 4 — keep the threshold, keep publishing the
+number — with the name and the standing changed.** Options 1 and 3 were
+rejected by name.
+
+> 현재 데이터를 "필수 항목 통과율"이라는 이름의 대표 지표나 합격 게이트로 더 이상
+> 게시하지 마세요. … 기존 계산을 감사용으로 남겨야 한다면 `고배점 항목 통과율
+> (진단용, |배점| >= 4)`처럼 실제 정의가 드러나는 이름으로만 보조 상세에 노출하세요.
+> 임계값을 5나 6으로 바꾸지 말고, 전체 스타일 항목을 몰래 제외하지도 마세요.
+> 정의 변경을 과거 발표값에 소급 적용하거나 기존 grade JSON을 재작성하지 마세요.
+
+What that means, point by point:
+
+1. **`MAGNITUDE_THRESHOLD` does not move.** It stays at 4. It is a
+   grader-fingerprint input, so moving it would restate every published run, and
+   the table under option 1 shows the move would make the benchmark's own
+   ceiling look worse while making the system under test look better.
+2. **No grade JSON is rewritten.** Not one byte under `data/grades/` changes.
+   The raw values and the old schema stay readable exactly as published.
+3. **The name changes wherever a human reads it.** "Critical items" and
+   "required items" become "high-magnitude items (|max score| ≥ 4)". The JSON
+   keys — `critical_item_pass_rate`, `critical_fail`, `item_counts.critical_items`
+   — keep their published names, because renaming them would break every reader
+   of every payload written so far, and the owner's ruling is about what is
+   *exposed*, not about the wire format.
+4. **It stops deciding anything.** It is out of the gold-ceiling pass gate
+   (`scripts/analyze_gold_ceiling.py`: two gates now, not three) and out of the
+   dashboard's headline row. `0.95` is still printed as the reference the
+   specification wrote, so the distance to it stays visible — it just no longer
+   settles a verdict.
+5. **The denominator is shown with the rate.** A rate over 3 items and a rate
+   over 300 read identically otherwise. Below 20 counted items — `ceil(1/(1−0.95))`,
+   derived rather than chosen — the reader is told the number cannot carry
+   weight, because one item moves it further than the whole distance from the
+   reference to a clean sweep.
+6. **An empty denominator is "not recorded", never `0%`.** Measured on this
+   repository's own grades: 168 of 447 published sector rows report exactly
+   `0.0`, of which 45 counted no items at all and 123 counted 1–19. **Not one
+   has 20 or more.** Every published `0.0` is a denominator artefact, and the
+   heatmap painted all 168 of them bright red.
+
+### What this changed, and what it did not
+
+| surface | before | after |
+|---|---|---|
+| `scripts/analyze_gold_ceiling.py` gates | 3 (mean, critical, error rate) | 2 (mean, error rate) |
+| its exit code on stage 1 / stage 3 | 1 / 1 | 1 / 1 — unchanged |
+| dashboard headline row | 3 cards, this one in the middle | 2 cards, this one moved below |
+| sector heatmap column | `Critical ≥3` (the code uses ≥4) | `High-mag ≥4`, greyed where unreadable |
+| `core/grader.py`, `step8_grade.py`, `schemas/` | — | **untouched**, so no grader fingerprint moved |
+
+No verdict flipped. Stage 1 (mean 82.87%) and stage 3 (mean 79.53%) already
+failed on mean score, so dropping the gate leaves both failing and both exiting
+`1`. Nothing that failed before passes now.
+
+### Residual risk, recorded rather than fixed
+
+`core/narrative_analyzer.py` still writes "Critical item pass rate" into the
+report prompt. Correcting that string is a one-word edit, but `core/**/*.py` is
+a `compute_grader_source_hash` input: changing it moves the grader fingerprint,
+which is only honest to do alongside a real re-grade. It is deferred to the next
+fingerprint-moving PR rather than smuggled in here.
+
+## What was open before it
 
 The definition itself. Changing `MAGNITUDE_THRESHOLD`, or replacing it, changes
 this metric on every run already published, and `core/grader.py` **is** a
-grader-fingerprint input — so the decision belongs to the owner and the card's
-완료 기준 requires it in writing. This file exists so that the decision can be
+grader-fingerprint input — so the decision belonged to the owner and the card's
+완료 기준 required it in writing. This file exists so that the decision could be
 made against measured consequences instead of an assumption about what "worth 4
-points" means.
+points" means. It was.

@@ -4,11 +4,15 @@
 Why this exists
 ---------------
 ``tasks/rebuilding_grading_task/300-gold-ceiling.md`` asks for six things: the
-mean score, the required-item pass rate, the grader error rate, the evidence
-behind every item that fell short of full marks, the usage split by model, and
-the actual bill. Every one of those is already in the grade payload. Copying
-them into a report by hand is where a report stops matching its run -- so this
-reads them out, and the report quotes this.
+mean score, the high-magnitude item pass rate, the grader error rate, the
+evidence behind every item that fell short of full marks, the usage split by
+model, and the actual bill. Every one of those is already in the grade payload.
+Copying them into a report by hand is where a report stops matching its run --
+so this reads them out, and the report quotes this.
+
+Two of the six decide the stage. The high-magnitude rate no longer does; see
+``CRITICAL_ITEM_PASS_DECIDES_VERDICT`` below and
+``data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`` for why.
 
 ``304-full-gold-corpus.md`` asks the same six of a corpus six times the size,
 and three more that only make sense once there is a bigger corpus to ask them
@@ -51,19 +55,51 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import textwrap
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, NamedTuple
 
-# The three numbers stage 1 is accepted or rejected on, from
+# The numbers stage 1 is read against, from
 # `tasks/rebuilding_grading_task/300-gold-ceiling.md` lines 17-19 and 24-26.
 # `test_gold_ceiling_analysis.py` checks these against the specification text,
 # so a threshold edited in one place and not the other fails rather than drifts.
 MEAN_SCORE_PCT_FLOOR = 90.0
 CRITICAL_ITEM_PASS_FLOOR = 0.95
 JUDGE_ERROR_RATE_CEILING = 0.02
+
+# Two of the three decide the stage. The middle one does not, by owner decision
+# recorded in `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`.
+#
+# The reason is that it never measured what its name says. GDPVal v2 rubrics
+# carry a `required` field and it is `null` on all 10,453 items, so the grader
+# substitutes score magnitude for necessity (`core/grader.py:118-138`). A rate
+# over "items worth 4 or more" is a real measurement and worth printing; it is
+# not the fraction of *required* criteria the answer met, and a stage must not
+# be accepted or rejected on a substitute nobody validated. 0.95 stays as the
+# reference the specification wrote, so the distance to it is still reported --
+# it just no longer decides.
+#
+# The threshold itself is untouched: `MAGNITUDE_THRESHOLD` is a grader
+# fingerprint input, and moving it would restate every published run.
+CRITICAL_ITEM_PASS_DECIDES_VERDICT = False
+
+# Below this many counted items the rate is withheld rather than printed.
+# Derived, not chosen: the reference above leaves a margin of `1 - 0.95`, so
+# with fewer than `1 / (1 - reference)` items one failure costs more than the
+# whole distance between the reference and a clean sweep. A run with a single
+# high-magnitude item reads 1.0000 and a run with none reads 0.0000 through
+# `step8_grade._rate`, and neither is a measurement.
+MIN_USABLE_REQUIRED_ITEMS: int = math.ceil(1.0 / (1.0 - CRITICAL_ITEM_PASS_FLOOR))
+
+# Printed wherever the rate is, so no reader has to already know the paragraph
+# above to understand what the number is a rate of.
+REQUIRED_ITEM_SUBSTITUTE_NOTE = (
+    "diagnostic, not a gate: no explicit `required` signal in the rubric, "
+    "so score magnitude stands in for it"
+)
 
 # Which items the second threshold counts. Imported rather than restated: the
 # comment above `MAGNITUDE_THRESHOLD` names this very run as the thing that
@@ -763,19 +799,45 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
             "floor": MEAN_SCORE_PCT_FLOOR,
             "met": mean_pct is not None and mean_pct >= MEAN_SCORE_PCT_FLOOR,
         },
-        "critical_item_pass_rate": {
-            "value": critical_pass,
-            "floor": CRITICAL_ITEM_PASS_FLOOR,
-            "met": (
-                critical_pass is not None
-                and critical_pass >= CRITICAL_ITEM_PASS_FLOOR
-            ),
-        },
         "judge_error_rate": {
             "value": error_rate,
             "ceiling": JUDGE_ERROR_RATE_CEILING,
             "met": error_rate is not None and error_rate < JUDGE_ERROR_RATE_CEILING,
         },
+    }
+
+    # Recounted once and used twice: the diagnostic needs the denominator, and
+    # the audit block below reports the same recount in full. Two calls would
+    # be two chances to answer the question differently.
+    required = required_items(payload)
+    counted = required["total"]
+    diagnostics = {
+        # Deliberately *not* in `gates`. `all_gates_met` is what the exit code
+        # and every reader keyed off, so leaving this in it with a flag saying
+        # "ignore me" would have kept deciding the stage for anyone who did
+        # not read the flag.
+        "high_magnitude_item_pass_rate": {
+            "min_abs_score": REQUIRED_ITEM_MIN_ABS_SCORE,
+            "decides_verdict": CRITICAL_ITEM_PASS_DECIDES_VERDICT,
+            # The run's own published number, kept verbatim. Nothing here
+            # rewrites a payload; this reports what one says.
+            "value": critical_pass,
+            "recounted_rate": required["rate"],
+            "items": counted,
+            "min_usable_items": MIN_USABLE_REQUIRED_ITEMS,
+            # A rate over no items is `0.0` out of `step8_grade._rate` and a
+            # rate over one item is `0.0` or `1.0`. Neither is a measurement,
+            # and printing either as a percentage is the whole defect.
+            "recorded": counted > 0,
+            "usable": counted >= MIN_USABLE_REQUIRED_ITEMS,
+            "reference": CRITICAL_ITEM_PASS_FLOOR,
+            "meets_reference": (
+                counted > 0
+                and critical_pass is not None
+                and critical_pass >= CRITICAL_ITEM_PASS_FLOOR
+            ),
+            "note": REQUIRED_ITEM_SUBSTITUTE_NOTE,
+        }
     }
 
     shortfalls = items_below_full_marks(payload)
@@ -804,6 +866,7 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
         },
         "gates": gates,
         "all_gates_met": all(gate["met"] for gate in gates.values()),
+        "diagnostics": diagnostics,
         "scores": {
             "graded_tasks": summary.get("graded_tasks"),
             "error_tasks": summary.get("error_tasks"),
@@ -855,7 +918,8 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
             "items": shortfalls,
         },
         "per_task": per_task(payload),
-        "required_items": required_items(payload),
+        # Same recount the diagnostic above reports on, not a second one.
+        "required_items": required,
         "subsets": {
             # `304` asks for the mean with and without the five declared input
             # limits, and for the same thirty tasks stage 1 measured. All three
@@ -953,7 +1017,7 @@ def _render_subset(label: str, block: dict[str, Any]) -> list[str]:
     pct = "n/a" if block["avg_pct"] is None else f"{block['avg_pct']}%"
     out = [
         f"  {pct:<8} n={block['task_count']:<4d} "
-        f"required {block['required_passed']}/{block['required_items']}"
+        f"high-mag {block['required_passed']}/{block['required_items']}"
         f"  ·  {label}"
     ]
 
@@ -998,20 +1062,13 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
     lines.append("-" * 60)
     gates = report["gates"]
     mean = gates["mean_score_pct"]
-    crit = gates["critical_item_pass_rate"]
     err = gates["judge_error_rate"]
-    # Three gates decide the stage, so the eye should be able to run straight
+    # Two gates decide the stage, so the eye should be able to run straight
     # down the PASS/MISS column. The bars are different lengths -- "needs >=
     # 90.0%" against "needs < 0.02" -- so the column only lines up if every
-    # field is padded to the widest of the three rather than written by hand.
+    # field is padded to the wider of the two rather than written by hand.
     gate_rows = [
         ("mean score", f"{mean['value']}%", f"needs >= {mean['floor']}%", mean["met"]),
-        (
-            "required-item pass",
-            f"{crit['value']}",
-            f"needs >= {crit['floor']}",
-            crit["met"],
-        ),
         (
             "grader error rate",
             f"{err['value']}",
@@ -1028,9 +1085,49 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
         )
     lines.append("")
 
+    # Deliberately its own section, below the gates and without a PASS/MISS
+    # column. A third row in the table above would read as a third gate no
+    # matter what the caption said, and reading as a gate is exactly what the
+    # owner decision took away from this number.
+    crit = report["diagnostics"]["high_magnitude_item_pass_rate"]
+    lines.append("Diagnostics — measured, but they do not decide the stage")
+    lines.append("-" * 60)
+    if not crit["recorded"]:
+        # Not `0.0%`. Nothing was counted, so there is nothing to be a rate of,
+        # and a zero here is the same glyph the worst possible run would print.
+        lines.append(
+            f"  high-magnitude item pass   not recorded   "
+            f"(0 item(s) score |max| >= {crit['min_abs_score']})"
+        )
+    else:
+        # The run's own published figure, not the recount, because this line is
+        # about the number that used to be a gate. When the run states none,
+        # say so rather than quietly substituting the recount -- the block
+        # below already reports the recount and flags any disagreement.
+        stated = "not stated by the run" if crit["value"] is None else f"{crit['value']}"
+        lines.append(
+            f"  high-magnitude item pass   {stated}   "
+            f"(reference {crit['reference']})   "
+            f"over {crit['items']} item(s) scoring |max| >= "
+            f"{crit['min_abs_score']}"
+        )
+        if not crit["usable"]:
+            lines.extend(
+                _wrapped_prose(
+                    f"!! {crit['items']} item(s) is under the "
+                    f"{crit['min_usable_items']} this rate needs before it "
+                    f"reads as one — a single item moves it further than the "
+                    f"whole distance from {crit['reference']} to a clean sweep",
+                    indent=" " * 5,
+                    first_indent="  ",
+                )
+            )
+    lines.extend(_wrapped_prose(crit["note"], indent=" " * 2))
+    lines.append("")
+
     req = report["required_items"]
     lines.append(
-        f"Required items (|max score| >= {REQUIRED_ITEM_MIN_ABS_SCORE})"
+        f"High-magnitude items (|max score| >= {REQUIRED_ITEM_MIN_ABS_SCORE})"
     )
     lines.append("-" * 60)
     lines.append(
@@ -1050,7 +1147,7 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
         )
     elif req["rate"] is None:
         lines.append(
-            f"  !! no required items here to recount, so the run's own "
+            f"  !! no high-magnitude items here to recount, so the run's own "
             f"{req['payload_rate']} is unchecked"
         )
     elif not req["agrees_with_payload"]:
@@ -1124,7 +1221,7 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
             pct = "  n/a" if block["avg_pct"] is None else f"{block['avg_pct']:6.2f}"
             lines.append(
                 f"  {pct}%  n={block['task_count']:<3d}  "
-                f"required {block['required_passed']}/{block['required_items']}"
+                f"high-mag {block['required_passed']}/{block['required_items']}"
                 # Printed whole. The name is the last field on the line, so
                 # clipping it buys no alignment, and at 44 characters two of
                 # this corpus's occupations -- the wholesale sales
@@ -1228,7 +1325,7 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
             else f"-{row['points_lost']} point(s)",
         ]
         if row["critical_fail"]:
-            notes.append("required item failed")
+            notes.append("high-magnitude item failed")
         if row["selection_status"] and row["selection_status"] != "ok":
             notes.append(f"selection {row['selection_status']}")
         if row["error"]:
@@ -1245,7 +1342,7 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
     )
     if short["tasks_failing_a_required_item"]:
         failed = short["tasks_failing_a_required_item"]
-        lines.append(f"  required item failed in {len(failed)} task(s):")
+        lines.append(f"  high-magnitude item failed in {len(failed)} task(s):")
         lines.extend(_wrapped_ids(failed))
     if short["tasks_with_errors"]:
         lines.append(f"  tasks in error: {len(short['tasks_with_errors'])}")

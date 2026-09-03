@@ -87,8 +87,8 @@ export const tooltipTexts = {
   wow: {
     rubricCoverage:
       "Average pass rate across rubric items per task. OpenAI exposed only task-level 0/1; we expose item-level partial credit derived from the full rubric.",
-    criticalItems:
-      "Pass rate on rubric items with weight ≥ 3 — the highest-stakes 'must-have' requirements. Distinguishes decisive criteria from small formatting items.",
+    highMagnitudeItems:
+      "Pass rate over rubric items whose |max score| reaches 4 — the highest-scoring items, NOT the required ones. The rubric's own `required` field is null on all 10,453 items, so score magnitude stands in for necessity. Diagnostic only: it is not a pass gate and not part of the score. Shown with its denominator, because a rate over 3 items and a rate over 300 read the same otherwise.",
     structureVsReasoning:
       "Splits deterministic verification (file format, sheet names, etc.) from LLM judgement (content correctness). Large gap = strong structure but weak reasoning, or vice versa.",
     sectorHeatmap:

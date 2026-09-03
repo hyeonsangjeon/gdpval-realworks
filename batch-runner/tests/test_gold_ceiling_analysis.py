@@ -185,6 +185,25 @@ def test_the_thresholds_are_the_ones_the_spec_states():
     ) in spec
 
 
+def test_the_spec_records_that_the_middle_bar_stopped_deciding():
+    """The demotion is an owner decision, so it lives in the document too.
+
+    The bar itself stays written where it always was -- the test above still
+    demands both spellings of `0.95`. What this adds is that the document has
+    to say the bar no longer gates, so a reader who finds `critical_pass ≥
+    0.95` under `## Acceptance` is not left believing a stage still turns on
+    it.
+    """
+    spec = SPEC_PATH.read_text(encoding="utf-8")
+
+    assert "critical_pass`는 더 이상 합격을 가르지 않는다" in spec
+    assert "REQUIRED_ITEM_DEFINITION.md" in spec
+    # The reason, not just the ruling: the rubric field the name implies is
+    # empty, so magnitude stands in for it.
+    assert f"abs(max_score) >= {analysis.REQUIRED_ITEM_MIN_ABS_SCORE}" in spec
+    assert "not recorded" in spec
+
+
 def test_the_pinned_corpora_match_the_grading_configs():
     """The tasks each corpus insists on are the tasks its run was told to grade.
 
@@ -397,7 +416,7 @@ def test_the_refusal_can_be_overridden_on_purpose(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)["gates"]["mean_score_pct"]["met"]
 
 
-# ── The three gates ────────────────────────────────────────────────────────
+# ── The two gates, and the diagnostic that stopped being one ───────────────
 
 
 def test_every_gate_met_reports_success():
@@ -405,15 +424,55 @@ def test_every_gate_met_reports_success():
 
     assert report["all_gates_met"]
     assert report["gates"]["mean_score_pct"]["met"]
-    assert report["gates"]["critical_item_pass_rate"]["met"]
     assert report["gates"]["judge_error_rate"]["met"]
+
+
+def test_the_high_magnitude_rate_is_not_a_gate():
+    """The owner decision, pinned where the exit code reads it.
+
+    `main` returns `0 if report["all_gates_met"]`, so anything left in `gates`
+    keeps deciding the stage no matter what the label around it says. The rate
+    has to be *absent* from that dict, not merely annotated inside it.
+    """
+    report = analysis.analyze(_payload())
+
+    assert "critical_item_pass_rate" not in report["gates"]
+    assert set(report["gates"]) == {"mean_score_pct", "judge_error_rate"}
+    assert analysis.CRITICAL_ITEM_PASS_DECIDES_VERDICT is False
+
+    diagnostic = report["diagnostics"]["high_magnitude_item_pass_rate"]
+    assert diagnostic["decides_verdict"] is False
+    # Still measured and still reported against the number the spec wrote --
+    # demoted, not deleted.
+    assert diagnostic["value"] == _payload()["summary"]["wow"][
+        "critical_item_pass_rate"
+    ]
+    assert diagnostic["reference"] == analysis.CRITICAL_ITEM_PASS_FLOOR
+    assert diagnostic["min_abs_score"] == analysis.REQUIRED_ITEM_MIN_ABS_SCORE
+
+
+def test_a_run_far_under_the_old_bar_still_passes_on_the_two_real_gates():
+    """The demotion's whole effect, stated as a number.
+
+    A run that would have failed only on the retired gate now passes. That is
+    the intended change and it should be visible here rather than inferred.
+    """
+    payload = _payload()
+    payload["summary"]["wow"]["critical_item_pass_rate"] = 0.10
+
+    report = analysis.analyze(payload)
+
+    assert report["all_gates_met"]
+    assert report["diagnostics"]["high_magnitude_item_pass_rate"]["value"] == 0.10
+    assert not report["diagnostics"]["high_magnitude_item_pass_rate"][
+        "meets_reference"
+    ]
 
 
 @pytest.mark.parametrize(
     "block, field, value, gate",
     [
         ("openai_compat", "avg_score_pct", 89.9, "mean_score_pct"),
-        ("wow", "critical_item_pass_rate", 0.94, "critical_item_pass_rate"),
         ("wow", "judge_error_rate", 0.02, "judge_error_rate"),
     ],
 )
@@ -436,6 +495,17 @@ def test_a_missed_gate_is_reported_and_exits_nonzero(
     assert analysis.main([str(grade_file)]) == 1
 
 
+def test_a_missed_high_magnitude_rate_no_longer_exits_nonzero(tmp_path):
+    """The same 0.94 that used to fail the run, now only reported."""
+    payload = _payload()
+    payload["summary"]["wow"]["critical_item_pass_rate"] = 0.94
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(json.dumps(payload))
+
+    assert analysis.analyze(payload)["all_gates_met"]
+    assert analysis.main([str(grade_file)]) == 0
+
+
 def test_the_bars_themselves_are_met():
     """Exactly at each bar passes, so the comparison is not off by one side."""
     payload = _payload()
@@ -444,6 +514,26 @@ def test_the_bars_themselves_are_met():
     payload["summary"]["wow"]["judge_error_rate"] = 0.0199
 
     assert analysis.analyze(payload)["all_gates_met"]
+
+
+def test_the_retired_bar_is_still_compared_so_the_distance_stays_readable():
+    """Demoted, not deleted: the 0.95 the spec wrote is still reported against."""
+    payload = _payload(
+        tasks=[_task("task-1", items=[_item(max_score=5, verdict="pass")])]
+    )
+    payload["summary"]["wow"]["critical_item_pass_rate"] = 0.95
+
+    diagnostic = analysis.analyze(payload)["diagnostics"][
+        "high_magnitude_item_pass_rate"
+    ]
+
+    assert diagnostic["reference"] == 0.95
+    assert diagnostic["meets_reference"] is True
+
+    payload["summary"]["wow"]["critical_item_pass_rate"] = 0.94
+    assert not analysis.analyze(payload)["diagnostics"][
+        "high_magnitude_item_pass_rate"
+    ]["meets_reference"]
 
 
 def test_a_missing_number_is_a_miss_rather_than_a_pass():
@@ -789,7 +879,7 @@ def test_many_failing_tasks_are_listed_down_the_page(tmp_path, capsys):
     analysis.main([str(grade_file)])
     printed = capsys.readouterr().out
 
-    assert "required item failed in 12 task(s):" in printed
+    assert "high-magnitude item failed in 12 task(s):" in printed
     assert max(len(line) for line in printed.splitlines()) < 120
     for task in tasks:
         assert task["task_id"] in printed
@@ -938,14 +1028,17 @@ def test_a_long_occupation_does_not_run_off_the_page():
     assert max(len(line) for line in rendered.splitlines()) < 120
 
 
-def test_the_three_verdicts_line_up_in_one_column():
-    """Three gates decide the stage, so the eye should run down one column.
+def test_the_two_verdicts_line_up_in_one_column():
+    """Two gates decide the stage, so the eye should run down one column.
 
     The bars are different lengths -- 'needs >= 90.0%' against 'needs < 0.02'
-    -- so writing the three lines by hand left PASS and MISS stepping across
-    the page. This is worth a test because it is the block every reader looks
-    at first, and because the padding is computed from the widest row, so a
-    fourth gate or a re-worded bar would silently break the alignment again.
+    -- so writing the lines by hand left PASS and MISS stepping across the
+    page. This is worth a test because it is the block every reader looks at
+    first, and because the padding is computed from the widest row, so another
+    gate or a re-worded bar would silently break the alignment again.
+
+    It also pins the count. A PASS/MISS column with three rows in it would mean
+    the demoted rate had found its way back into the table.
     """
     rendered = analysis._render(
         analysis.analyze(_payload(tasks=[_task("task-1")])), shortfall_limit=0
@@ -954,7 +1047,7 @@ def test_the_three_verdicts_line_up_in_one_column():
     verdicts = [
         line for line in rendered.splitlines() if line.endswith(("  PASS", "  MISS"))
     ]
-    assert len(verdicts) == 3, verdicts
+    assert len(verdicts) == 2, verdicts
 
     columns = {line.index("(") for line in verdicts}
     assert len(columns) == 1, f"the bars start in different columns: {verdicts}"
@@ -1312,8 +1405,11 @@ def test_the_required_item_block_reaches_the_readable_report(tmp_path, capsys):
     analysis.main([str(grade_file), "--shortfall-limit", "0"])
     printed = capsys.readouterr().out
 
-    assert "Required items (|max score| >= 4)" in printed
+    assert "High-magnitude items (|max score| >= 4)" in printed
     assert "0 of 1 passed" in printed
+    # The heading must not go back to calling these items required. The rubric
+    # never said they were; `abs(max_score) >= 4` did.
+    assert "Required items" not in printed
     assert max(len(line) for line in printed.splitlines()) < 120
 
 
@@ -1334,6 +1430,82 @@ def test_a_run_with_no_required_items_does_not_divide_by_zero():
     analysis._render(analysis.analyze(payload), shortfall_limit=0)
 
 
+def test_an_empty_denominator_is_not_recorded_rather_than_zero_percent():
+    """`0.0` and "nothing was counted" are the same glyph out of `_rate`.
+
+    `step8_grade._rate` returns `0.0` for an empty denominator, and `0.0` is
+    also the worst score a real run can earn. 45 of the 447 sector rows in
+    `data/grades/` publish exactly `0.0` over a denominator of exactly zero, so
+    this is measured behaviour rather than a hypothetical.
+    """
+    payload = _payload(tasks=[_task("task-1", items=[_item(max_score=1)])])
+    # What the producer wrote for a run that counted nothing.
+    payload["summary"]["wow"]["critical_item_pass_rate"] = 0.0
+
+    diagnostic = analysis.analyze(payload)["diagnostics"][
+        "high_magnitude_item_pass_rate"
+    ]
+
+    assert diagnostic["items"] == 0
+    assert diagnostic["recorded"] is False
+    assert diagnostic["usable"] is False
+    assert diagnostic["meets_reference"] is False
+
+    rendered = analysis._render(analysis.analyze(payload), shortfall_limit=0)
+    diagnostic_line = next(
+        line for line in rendered.splitlines() if "high-magnitude item pass" in line
+    )
+    assert "not recorded" in diagnostic_line
+    # The number the producer wrote must not reach the page as a rate.
+    assert "0.0" not in diagnostic_line
+    assert "%" not in diagnostic_line
+
+
+def test_a_denominator_too_small_to_read_says_so_beside_the_rate():
+    """One item makes the rate `0.0` or `1.0`, and neither is a measurement.
+
+    123 of the 447 published sector rows sit between 1 and 19 items. The floor
+    is derived rather than chosen: under `1 / (1 - 0.95)` items, one failure
+    costs more than the entire distance between the reference and a clean
+    sweep.
+    """
+    assert analysis.MIN_USABLE_REQUIRED_ITEMS == 20
+
+    payload = _payload(
+        tasks=[_task("task-1", items=[_item(max_score=5, verdict="pass")])]
+    )
+    payload["summary"]["wow"]["critical_item_pass_rate"] = 1.0
+
+    report = analysis.analyze(payload)
+    diagnostic = report["diagnostics"]["high_magnitude_item_pass_rate"]
+
+    assert diagnostic["items"] == 1
+    assert diagnostic["recorded"] is True
+    assert diagnostic["usable"] is False
+    # A perfect 1.0 over one item still clears the retired reference. Saying so
+    # and saying it means nothing are both true, and the report prints both.
+    assert diagnostic["meets_reference"] is True
+
+    rendered = analysis._render(report, shortfall_limit=0)
+    assert "high-magnitude item pass   1.0" in rendered
+    assert "1 item(s) is under the 20" in rendered
+    assert max(len(line) for line in rendered.splitlines()) < 120
+
+
+def test_the_diagnostic_carries_its_own_explanation():
+    """A reader who starts at this line should not need the paragraph above."""
+    rendered = analysis._render(
+        analysis.analyze(_payload(tasks=[_task("task-1")])), shortfall_limit=0
+    )
+
+    assert "Diagnostics" in rendered
+    # Whole, on one line -- a caveat broken across a line wrap is one a reader
+    # skimming the value can miss.
+    assert f"  {analysis.REQUIRED_ITEM_SUBSTITUTE_NOTE}" in rendered.splitlines()
+    assert "no explicit `required` signal" in rendered
+    assert "score magnitude stands in for it" in rendered
+
+
 def test_a_rate_that_cannot_be_compared_is_not_reported_as_a_conflict():
     """"Nothing to compare" and "the two disagree" are different findings.
 
@@ -1349,7 +1521,10 @@ def test_a_rate_that_cannot_be_compared_is_not_reported_as_a_conflict():
         shortfall_limit=0,
     )
     assert "disagrees" not in no_required
-    assert "no required items here to recount, so the run's own 0.98" in no_required
+    assert (
+        "no high-magnitude items here to recount, so the run's own 0.98"
+        in no_required
+    )
 
     # A recount here, no rate on the payload to check it against.
     no_payload_rate = analysis._render(
