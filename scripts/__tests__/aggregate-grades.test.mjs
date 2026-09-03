@@ -354,8 +354,15 @@ test('dashboard always renders judge-error rate and discloses score exclusion', 
     'utf8',
   );
 
-  assert.match(healthStrip, /label="err"[\s\S]*value=\{fmtPct\(errRate\)\}/);
-  assert.doesNotMatch(healthStrip, /errRate\s*&&\s*<Pill/);
+  // The pill is unconditional: it is rendered for every run, including the
+  // runs that published no rate. What goes in its value slot now comes from
+  // `readJudgeErrorRate`, which prints an em dash rather than a percentage for
+  // a rate nobody measured — the `fmtPct(errRate)` this replaced turned an
+  // absent rate into a green 0.0%. `doesNotMatch` keeps the original guard:
+  // hiding the pill when the rate is missing is still forbidden, because a
+  // missing measurement is exactly what this strip has to be able to say.
+  assert.match(healthStrip, /label="err"[\s\S]*value=\{err\.value\}/);
+  assert.doesNotMatch(healthStrip, /err(Rate)?(\.\w+)?\s*&&\s*<Pill/);
   assert.match(tooltips, /excluded from score denominators but remain visible here/);
 });
 

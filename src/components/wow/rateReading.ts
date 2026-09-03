@@ -10,6 +10,11 @@
  * for one specific rate, with the wording a whole headline card can afford.
  * This is its plain-clothes sibling for the other three, and it adds the one
  * thing a single card never needed: whether two rates may be *compared*.
+ *
+ * `readJudgeErrorRate` at the foot of the file is the fifth and last `wow`
+ * rate, kept separate because its polarity is inverted: for a pass rate an
+ * absence and a zero both mean "nothing to show", and for an error rate a zero
+ * is the good news, so the two must not share a code path.
  */
 
 /**
@@ -169,4 +174,92 @@ export function structureVsReasoningAbsence(
     return `No comparison: this run rated no items by ${none.join(' or ')}.`
   }
   return `No comparison: the ${unusable.join(' and ')} denominator is not recorded by this run.`
+}
+
+/** Above this share of judged items erroring, a run is called out. */
+export const JUDGE_ERROR_ALERT_THRESHOLD = 0.05
+
+export interface ErrorRateReading {
+  standing: RateStanding
+  /** What goes in the value slot. A percentage only when one was published. */
+  value: string
+  /**
+   * Whether to raise the alarm. Only ever true for a number the run published:
+   * silence is not a clean bill of health.
+   */
+  alert: boolean
+  /**
+   * Whether the run is entitled to be shown as healthy — the other half of
+   * `alert`, and not its negation. A rate that was never published is neither
+   * over the threshold nor under it.
+   */
+  reassuring: boolean
+  /** Why the number is neither a clean run nor a faulty one, when it is not. */
+  caveat?: string
+}
+
+/**
+ * Read `summary.wow.judge_error_rate` the way its four siblings are read.
+ *
+ * It was the last of the five `wow` rates with no reader, and the only one a
+ * surface *coloured*: `GradingAnalysisView` asked `(rate ?? 0) > 0.05`, so a run
+ * that published no rate scored `0`, failed the comparison, and was painted the
+ * emerald this dashboard uses for a healthy run — beside two neighbours that
+ * correctly printed `—`. The aggregator does emit that state: schema 1.0–1.2 is
+ * checked by `validateHistoricalHeadline`, which reads six `openai_compat` keys
+ * and never looks at `wow` at all, and `aggregate-grades.mjs` then publishes
+ * `summary.wow || {}`. Sixteen of the nineteen published grade files are 1.0 or
+ * 1.1. All sixteen carry a numeric rate today, so no page renders the green
+ * pill right now; the guard that keeps it that way did not exist for them.
+ *
+ * An error rate inverts the polarity that makes `readWowRate` safe to reuse.
+ * There, absence and zero both mean "no percentage to show". Here, zero is the
+ * *good* result, so folding absence into it does not merely omit a finding —
+ * it asserts the opposite one. Hence `reassuring` as a separate field: a caller
+ * cannot get the green by writing `!alert`.
+ */
+export function readJudgeErrorRate(
+  rate: number | null | undefined,
+  counted: number | null | undefined,
+): ErrorRateReading {
+  const hasRate = typeof rate === 'number' && Number.isFinite(rate)
+  const hasCount = typeof counted === 'number' && Number.isFinite(counted)
+
+  if (hasCount && counted === 0) {
+    return {
+      standing: 'none-counted',
+      value: '—',
+      alert: false,
+      reassuring: false,
+      caveat:
+        `Not recorded: no item in this run was ${JUDGE_ITEMS_DESCRIBED}, ` +
+        'so this is not a run the judge got through without erroring.',
+    }
+  }
+  if (!hasRate) {
+    return {
+      standing: 'absent',
+      value: '—',
+      alert: false,
+      reassuring: false,
+      caveat:
+        'This run did not publish a judge error rate, so it is neither a ' +
+        'clean run nor a faulty one — it is an unmeasured one.',
+    }
+  }
+
+  const value = `${(rate * 100).toFixed(1)}%`
+  const alert = rate > JUDGE_ERROR_ALERT_THRESHOLD
+  if (!hasCount) {
+    return {
+      standing: 'denominator-unknown',
+      value,
+      alert,
+      reassuring: !alert,
+      caveat:
+        'Denominator not recorded by this run, so the rate is shown as ' +
+        'published and cannot be checked against the items it was divided by.',
+    }
+  }
+  return { standing: 'measured', value, alert, reassuring: !alert }
 }

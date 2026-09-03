@@ -20,6 +20,7 @@ import ProvenanceBadge from '../ProvenanceBadge'
 import {
   JUDGE_ITEMS_DESCRIBED,
   PRECHECK_ITEMS_DESCRIBED,
+  readJudgeErrorRate,
   readWowRate,
 } from '../wow/rateReading'
 import {
@@ -363,6 +364,13 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
     wow?.item_counts?.judge_items,
     JUDGE_ITEMS_DESCRIBED,
   )
+  // And the third pill is the one that coloured itself. `(rate ?? 0) > 0.05`
+  // read an absent rate as a measured zero and went emerald — healthy — next
+  // to two neighbours printing `—`. Absence gets no colour in either direction.
+  const errPill = readJudgeErrorRate(
+    wow?.judge_error_rate,
+    wow?.item_counts?.judge_items,
+  )
   const stats = [
     { icon: Target, label: 'Graded', value: `${s.graded_tasks}/${s.total_tasks}`, color: 'text-blue-400 bg-blue-500/10' },
     { icon: Award, label: NEAR_PERFECT_SHORT, value: s.perfect_score, color: 'text-emerald-400 bg-emerald-500/10' },
@@ -442,12 +450,20 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
         {grade.grade_status === 'graded_v1' && wow && (
           <div className="flex items-center gap-2 text-[10px] mt-1 mb-3 font-mono">
             <span
-              className={(wow.judge_error_rate ?? 0) > 0.05
-                ? 'text-red-400 font-semibold'
-                : 'text-emerald-400'}
-              title={tooltipTexts.health.judgeErrorRate}
+              className={
+                errPill.alert
+                  ? 'text-red-400 font-semibold'
+                  : errPill.reassuring
+                    ? 'text-emerald-400'
+                    : 'text-dash-text-muted'
+              }
+              title={
+                errPill.caveat
+                  ? `${tooltipTexts.health.judgeErrorRate} — ${errPill.caveat}`
+                  : tooltipTexts.health.judgeErrorRate
+              }
             >
-              err {fmtPct(wow.judge_error_rate)}
+              err {errPill.value}
             </span>
             <span
               className="text-dash-text-muted"
