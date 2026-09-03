@@ -126,7 +126,12 @@ VERDICT_RANK: dict[str, int] = {"fail": 0, "partial": 1, "pass": 2}
 
 # Section 11. This cohort has no audio items, which is why the audio flipping
 # recorded in 307 and 310-312 cannot be inside these intervals. That is a
-# checkable fact rather than a promise, so it is checked.
+# checkable fact rather than a promise, so it is checked -- and checking it
+# means reading a field the grade schema does not require. An item that leaves
+# `routing_modality` unrecorded is not an item that is not audio; it is an item
+# nobody looked at, and section 11 asks for the fact confirmed rather than for
+# a search that came back empty. Both halves are refused in `shape_problems`,
+# separately, because they are different answers.
 FORBIDDEN_MODALITY = "audio"
 
 # Section 4's table, value for value. Each entry is a human label, a path into
@@ -311,6 +316,26 @@ def _document_order(run: dict[str, Any]) -> list[str]:
     return [task["task_id"] for task in run["tasks"]]
 
 
+def _records_modality(item: dict[str, Any]) -> bool:
+    """Whether this item says which modality the grader routed it to.
+
+    ``routing_modality`` is not among the item fields the grade schema
+    requires, and a third of the committed corpus either omits the key or
+    writes it as null. So ``item.get("routing_modality") == FORBIDDEN_MODALITY``
+    is false for two quite different items: one the grader routed somewhere
+    other than audio, and one that records no routing at all. Section 11 asks
+    for the first.
+
+    Deliberately not a vocabulary check, unlike ``VERDICT_VOCABULARY``. Any
+    recorded modality already answers the only question asked here -- that it
+    is not ``audio`` -- so pinning the permitted set would refuse a cohort for
+    naming a route this file has not heard of yet, which is a complaint about
+    this file rather than about the cohort.
+    """
+    value = item.get("routing_modality")
+    return isinstance(value, str) and value.strip() != ""
+
+
 def shape_problems(runs: list[dict[str, Any]]) -> list[str]:
     """Section 12 checks 4, 5 and 7.
 
@@ -318,6 +343,11 @@ def shape_problems(runs: list[dict[str, Any]]) -> list[str]:
     payload rather than its header, and because a caller that wants to know
     whether two files are the same run should not have to load every item to
     find out.
+
+    Check 7 is two refusals rather than one. Finding an ``audio`` item and
+    being unable to tell whether there is one are different answers, and
+    section 11 asks for a fact confirmed rather than for a search that came
+    back empty because it had nothing to read.
     """
     problems: list[str] = []
 
@@ -350,6 +380,20 @@ def shape_problems(runs: list[dict[str, Any]]) -> list[str]:
                 f"{run['_label']} contains verdict value(s) outside the "
                 f"registered vocabulary: {', '.join(strange)}. A handling rule "
                 "is not invented while the numbers are being produced"
+            )
+
+        unrecorded = sorted(
+            key for key, item in index.items() if not _records_modality(item)
+        )
+        if unrecorded:
+            sample = ", ".join(f"{task}/{item}" for task, item in unrecorded[:3])
+            problems.append(
+                f"{run['_label']} records no routing modality for "
+                f"{len(unrecorded)} rubric item(s), for example {sample}. "
+                f"Section 11 is checked by reading that field, so an item "
+                f"that leaves it unrecorded leaves the claim that this cohort "
+                f"has no {FORBIDDEN_MODALITY} item unchecked rather than "
+                "confirmed"
             )
 
         audio = [

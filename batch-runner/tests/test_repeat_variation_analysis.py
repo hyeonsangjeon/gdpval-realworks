@@ -809,3 +809,160 @@ def test_a_run_of_the_wrong_size_is_refused(runs):
     problems = rv.fingerprint_problems(runs[:2])
 
     assert any(str(rv.EXPECTED_RUN_COUNT) in problem for problem in problems)
+
+
+# -- section 11 is a fact confirmed, not a search that came back empty ------
+#
+# The audio check reads ``routing_modality``, which the grade schema does not
+# require of an item. Comparing it to ``"audio"`` answers "is this audio?" for
+# an item that says what it is, and answers "no" for an item that says nothing
+# at all -- which is the second-worst possible answer, because it is the same
+# answer a clean cohort gives. Section 11 asks for zero audio items confirmed.
+
+
+def _strip_modality(run: dict) -> int:
+    stripped = 0
+    for task in run["tasks"]:
+        for item in task["items"]:
+            if item.pop("routing_modality", None) is not None:
+                stripped += 1
+    return stripped
+
+
+def test_the_published_cohort_records_a_modality_for_every_item(runs):
+    """The control. This guard tightening cannot move the published numbers.
+
+    All three payloads name a route for every item they carry, so the new
+    refusal has nothing to fire on here and the interval in
+    ``PR3_REPEAT_VARIATION.md`` is arithmetically untouched. Asserted rather
+    than assumed, because if it ever stops being true the report is quoting a
+    cohort this analysis can no longer vouch for.
+    """
+    for run in runs:
+        unrecorded = [
+            (task["task_id"], item["rubric_item_id"])
+            for task in run["tasks"]
+            for item in task["items"]
+            if not rv._records_modality(item)
+        ]
+        assert unrecorded == [], (
+            f"{run['_label']} leaves {len(unrecorded)} item(s) unrouted, "
+            f"for example {unrecorded[:3]}"
+        )
+
+
+def test_an_item_that_names_no_modality_is_refused_rather_than_read_as_not_audio(
+    runs,
+):
+    """Absence is not a route. A third of the committed corpus omits this key."""
+    stripped = _strip_modality(runs[0])
+    assert stripped, "the fixture had nothing to strip, so this proves nothing"
+
+    problems = rv.shape_problems(runs)
+
+    assert problems, f"{stripped} unrouted item(s) passed as 'not audio'"
+    assert any("records no routing modality" in problem for problem in problems)
+    assert any(str(stripped) in problem for problem in problems)
+
+
+def test_a_null_modality_is_refused_on_the_same_footing_as_a_missing_key(runs):
+    """``json.loads`` turns a written null into ``None``, not into a route."""
+    for task in runs[1]["tasks"]:
+        for item in task["items"]:
+            item["routing_modality"] = None
+
+    problems = rv.shape_problems(runs)
+
+    assert any("records no routing modality" in problem for problem in problems)
+
+
+def test_a_blank_modality_string_is_not_a_recorded_route(runs):
+    """An empty string is a field that was filled in without being answered."""
+    runs[2]["tasks"][0]["items"][0]["routing_modality"] = "   "
+
+    problems = rv.shape_problems(runs)
+
+    assert any("records no routing modality" in problem for problem in problems)
+
+
+def test_finding_audio_and_being_unable_to_look_are_different_complaints(runs):
+    """Two refusals, worded apart, because they are two different answers.
+
+    One says the cohort contains the thing section 11 rules out; the other says
+    the cohort cannot be asked. Collapsing them into one message would leave a
+    reader thinking audio had been found and looked for in vain by turns.
+    """
+    _strip_modality(runs[0])
+    runs[1]["tasks"][0]["items"][0]["routing_modality"] = rv.FORBIDDEN_MODALITY
+
+    problems = rv.shape_problems(runs)
+
+    unrouted = [p for p in problems if "records no routing modality" in p]
+    found = [p for p in problems if f"contains 1 {rv.FORBIDDEN_MODALITY}" in p]
+    assert len(unrouted) == 1, problems
+    assert len(found) == 1, problems
+    assert unrouted[0] != found[0]
+    assert "unchecked rather than confirmed" in unrouted[0]
+    assert "unchecked rather than confirmed" not in found[0]
+
+
+def test_a_recorded_route_this_file_has_never_heard_of_is_still_a_route(runs):
+    """Deliberately not a vocabulary check, unlike the verdict one beside it.
+
+    A cohort that routes items to a modality added after this file was written
+    has still answered the only question section 11 asks -- that nothing went
+    to audio. Refusing it would be this file complaining about its own age, and
+    would stop a later cohort being analysed for a reason unrelated to whether
+    its repeats agree.
+    """
+    for run in runs:
+        for task in run["tasks"]:
+            for item in task["items"]:
+                item["routing_modality"] = "a-modality-added-later"
+
+    assert rv.shape_problems(runs) == []
+
+
+def test_absence_stops_the_modality_check_the_way_it_stops_the_verdict_check(
+    runs,
+):
+    """The contrast this change is here to remove.
+
+    Both checks sit in the same loop over the same items. Deleting ``verdict``
+    always stopped the run, because ``str(None)`` is outside the registered
+    vocabulary. Deleting ``routing_modality`` used to sail through, because
+    ``None != "audio"``. Same absence, same function, opposite treatment.
+    """
+    missing_verdict = rv.load_runs(list(_repeat_grade_files()))
+    for task in missing_verdict[0]["tasks"]:
+        for item in task["items"]:
+            item.pop("verdict", None)
+
+    _strip_modality(runs[0])
+
+    assert rv.shape_problems(missing_verdict), "the verdict check regressed"
+    assert rv.shape_problems(runs), "the modality check still reads absence"
+
+
+def test_the_unrouted_refusal_reaches_the_caller_through_the_entry_point(
+    grade_files, tmp_path
+):
+    """Not a test-only refusal: ``main`` raises before any interval is printed.
+
+    Only the first payload is rewritten; the other two are read from the
+    repository, so the mutation is the single difference between this call and
+    the one the report pins.
+    """
+    payload = json.loads(grade_files[0].read_text())
+    for task in payload["tasks"]:
+        for item in task["items"]:
+            item.pop("routing_modality", None)
+    unrouted = tmp_path / grade_files[0].name
+    unrouted.write_text(json.dumps(payload))
+
+    argv = [str(unrouted)] + [str(path) for path in grade_files[1:]]
+
+    with pytest.raises(rv.RepeatsAreNotComparable) as raised:
+        rv.main(argv)
+
+    assert "records no routing modality" in str(raised.value)
