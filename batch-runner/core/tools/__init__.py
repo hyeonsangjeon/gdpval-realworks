@@ -7,6 +7,7 @@ or any file under the trusted base directory.
 
 from .read_deliverable import (
     get_renderer_fingerprint,
+    VIDEO_CONTACT_SHEET_FRAMES,
     has_audio_content,
     has_extractable_text,
     has_only_source_code_content,
@@ -22,6 +23,7 @@ from .read_deliverable import (
 
 __all__ = [
     "get_renderer_fingerprint",
+    "VIDEO_CONTACT_SHEET_FRAMES",
     "has_audio_content",
     "has_extractable_text",
     "has_only_source_code_content",

@@ -153,7 +153,12 @@
       "properties": {
         "page": {"type": "integer", "minimum": 1},
         "workbook_page": {"type": "integer", "minimum": 1},
-        "slide": {"type": "integer", "minimum": 1}
+        "slide": {"type": "integer", "minimum": 1},
+        "frames": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Video only: how many evenly spaced stills the contact sheet carries. The other scopes name one surface out of a fixed set; this one sets the temporal resolution every judgement about *when* something happens was limited to, so a grade that reads 'the shot starts after 7s' can be checked against how far apart the samples were."
+        }
       },
       "maxProperties": 1,
       "additionalProperties": false
@@ -163,8 +168,9 @@
       "required": ["rasterizer"],
       "properties": {
         "converter": {"type": "string", "enum": ["libreoffice"]},
-        "rasterizer": {"type": "string", "enum": ["pymupdf", "pillow"]},
+        "rasterizer": {"type": "string", "enum": ["pymupdf", "pillow", "pyav+pillow"]},
         "dpi": {"type": "integer", "minimum": 1},
+        "tile_width": {"type": "integer", "minimum": 1},
         "libreoffice_binary": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
         "libreoffice_version": {"type": "string", "minLength": 1},
         "pymupdf_version": {"type": "string", "minLength": 1}
@@ -176,11 +182,28 @@
       "required": ["kind", "source_kind", "renderer", "byte_size"],
       "properties": {
         "kind": {"const": "image_png_base64"},
-        "source_kind": {"type": "string", "enum": ["pdf", "xlsx", "pptx", "docx", "image"]},
+        "source_kind": {"type": "string", "enum": ["pdf", "xlsx", "pptx", "docx", "image", "video"]},
         "source_page_count": {"type": "integer", "minimum": 1},
         "source_sheet_count": {"type": "integer", "minimum": 1},
         "source_slide_count": {"type": "integer", "minimum": 1},
         "converted_page_count": {"type": "integer", "minimum": 1},
+        "source_width": {"type": ["integer", "null"], "minimum": 1},
+        "source_height": {"type": ["integer", "null"], "minimum": 1},
+        "source_duration_s": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "source_fps": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "source_frame_count": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Null means the container recorded no length and none could be derived. It is not zero: this is the denominator of the sampled/total coverage pair, and a 0 would divide it by nothing."
+        },
+        "sampled_frame_count": {"type": "integer", "minimum": 1},
+        "sampled_timestamps_s": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "number", "minimum": 0},
+          "description": "The authoritative copy of the timestamps drawn on the tiles. A claim about when something happens is checked against these rather than read back off the pixels."
+        },
+        "contact_sheet_grid": {"type": "string", "pattern": "^[0-9]+x[0-9]+$"},
         "renderer": {"$ref": "#/$defs/visualRenderer"},
         "byte_size": {"type": "integer", "minimum": 1}
       },
@@ -190,7 +213,11 @@
       "type": "object",
       "required": ["coverage_mode", "criterion_scope", "sampled_surface_count", "total_surface_count"],
       "properties": {
-        "coverage_mode": {"const": "sampled_first_surface"},
+        "coverage_mode": {
+          "type": "string",
+          "enum": ["sampled_first_surface", "sampled_frame_grid"],
+          "description": "sampled_frame_grid is the video contact sheet: many surfaces, evenly spaced, not the first one. Calling that sampled_first_surface would have understated what the judge saw and misnamed which surfaces they were."
+        },
         "criterion_scope": {"type": "string", "enum": ["overall_style", "generic_visual_fallback"]},
         "sampled_surface_count": {"type": "integer", "minimum": 1},
         "total_surface_count": {"type": ["integer", "null"], "minimum": 1}
