@@ -941,6 +941,79 @@ function gradingCostSummary(rawTasks, receipts) {
   );
 }
 
+/** The three counters the legacy block uses to record contacting a provider. */
+const LEGACY_CONTACT_COUNTERS = [
+  'total_judge_calls',
+  'total_input_tokens',
+  'total_output_tokens',
+];
+
+/**
+ * The legacy `summary.cost` block, with a placeholder zero read back as absence.
+ *
+ * Sixteen of the nineteen published grades carry `estimated_cost_usd: 0.0`
+ * here, and every one of them carries real tokens beside it — the largest sits
+ * next to 130,092,056 input and 5,523,697 output tokens. That zero is not what
+ * the run cost. It is what "nobody could price this" looked like before
+ * receipts existed, written by a summariser that filled the field on every
+ * path including the ones that had nothing to put in it.
+ *
+ * The rule it breaks is this repository's oldest one about money
+ * (`batch-runner/core/cost_receipts.py`): a missing usage block does not mean a
+ * call was free, it means nobody can say what it cost, and the only real $0 is
+ * a path that never contacted a provider at all. `measuredAmount` in
+ * `scripts/cost-receipt.mjs` already holds the receipt path to exactly this;
+ * the spread this feeds was the last place a payload could walk a zero past it.
+ *
+ * So the test is the contract's own, asked of the block itself: did this run
+ * record contacting anyone? Calls and tokens are that record, and all three
+ * must be present and zero for the zero to stand. A counter that is merely
+ * missing is not a counter that read nothing — the same reasoning one level up,
+ * applied to the evidence for the exemption rather than to the amount.
+ *
+ * Normalised to `null`, not dropped. Absent is the more tempting shape and it
+ * is the one this repository has already been bitten by: `undefined !== null`
+ * is true, so a reader guarding on `!== null` reaches `.toFixed` on `undefined`
+ * and takes the page down (`scripts/cost-receipt.mjs:711-716`). `null` is also
+ * what the current writer puts there for a run it could not price
+ * (`core/cost_projection.py:810`), so both eras say absence the same way.
+ */
+function projectLegacyCost(cost) {
+  if (!cost || typeof cost !== 'object' || Array.isArray(cost)) return cost;
+  if (cost.estimated_cost_usd !== 0) return cost;
+  if (LEGACY_CONTACT_COUNTERS.every((field) => cost[field] === 0)) return cost;
+  return { ...cost, estimated_cost_usd: null };
+}
+
+/**
+ * `raw.summary`, as it is allowed to reach the published record.
+ *
+ * Spreading the payload's summary is how `summary_v1` keeps every field the
+ * WOW components read, and it is also how two money shapes get past the
+ * projections that exist for them. Both are handled here rather than at the
+ * spread, so there is one place that says which of a payload's own numbers
+ * this build is willing to republish.
+ *
+ * `grading_cost` is dropped outright. The rule for it is written at the top of
+ * the cost-receipt section: the run summary is derived here from the per-task
+ * receipts, never copied out of the payload, because a headline the rows do
+ * not add up to is worse than no headline. When this build derives one it is
+ * put back below; when it cannot — `summarizeCostReceipts` returns null the
+ * moment no task carries a receipt — there is nothing underneath the payload's
+ * own figure at all, which is exactly when republishing it is least defensible.
+ *
+ * Key order is preserved so a regenerated index differs from its predecessor
+ * only where a value does.
+ */
+function projectLegacySummary(summary) {
+  const projected = {};
+  for (const [key, value] of Object.entries(summary)) {
+    if (key === 'grading_cost') continue;
+    projected[key] = key === 'cost' ? projectLegacyCost(value) : value;
+  }
+  return projected;
+}
+
 function processV1GradesFile(
   filePath,
   raw,
@@ -1211,7 +1284,10 @@ function processV1GradesFile(
     prompt: raw.prompt,
     graded_at: raw.graded_at,
     summary_v1: {
-      ...summary,
+      // Every field the WOW components read, minus the two money shapes a
+      // payload is not allowed to publish through this spread. See
+      // projectLegacySummary.
+      ...projectLegacySummary(summary),
       wow,
       openai_compat: openaiCompat,
       calibration_mae,
