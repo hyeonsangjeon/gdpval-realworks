@@ -47,12 +47,22 @@ entries land under a fresh dated heading the day they merge to `main`.
     is unrecorded, empty, or under 20 items is greyed out with the reason on
     hover instead of painted red.
   - **An empty denominator reads "not recorded", never `0%`.** Measured on this
-    repository's own grades: 168 of 447 published sector rows report exactly
-    `0.0`, of which 45 counted no items at all and 123 counted 1–19 — **not one
-    has 20 or more.** Every published `0.0` was a denominator artefact, and the
-    heatmap painted all 168 bright red. The 20-item floor is derived rather
-    than chosen: `ceil(1 / (1 − 0.95))`, below which one item moves the rate
-    further than the whole distance from the reference to a clean sweep.
+    repository's own grades with #393 merged in: 447 published sector rows
+    carry the rate, of which #393 recovered a denominator for 62 — the other
+    385 still publish a bare rate with nothing behind it. Of the 62 that can
+    now be checked, **4 counted no high-magnitude item at all**; those printed
+    `0.0%` and painted the heatmap bright red for a run that measured nothing,
+    and they now read "not recorded". A further 21 counted between 1 and 19.
+    168 sector rows read exactly `0.0`, and only 10 of them carry a denominator
+    to explain it — but recomputing the count straight from the item data
+    settles all 168: **41 counted no high-magnitude item at all, 127 counted
+    between 1 and 19, and not one reached 20.** Every published `0.0` is a
+    denominator artefact, and the heatmap painted all 168 bright red. Run level
+    is the same shape: 94 payloads publish the rate, 22 carry
+    `item_counts.critical_items` (1 of them zero, 14 under 20), 72 carry
+    nothing. The 20-item floor is derived rather than chosen:
+    `ceil(1 / (1 − 0.95))`, below which one item moves the rate further than
+    the whole distance from the reference to a clean sweep.
   - `scripts/__tests__/high-magnitude-label.test.mjs` pins all of it — the two
     constants against their Python sources, the absence of the heuristic from
     `gates`, the banned labels across every rendered `src/` surface, and the

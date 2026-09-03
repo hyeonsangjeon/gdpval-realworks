@@ -303,8 +303,11 @@ What that means, point by point:
    weight, because one item moves it further than the whole distance from the
    reference to a clean sweep.
 6. **An empty denominator is "not recorded", never `0%`.** Measured on this
-   repository's own grades: 168 of 447 published sector rows report exactly
-   `0.0`, of which 45 counted no items at all and 123 counted 1–19. **Not one
+   repository's own grades with #393 merged: 447 published sector rows carry
+   the rate, and #393 recovered a denominator for 62 of them — the other 385
+   still publish a bare rate. 168 of the 447 report exactly `0.0`; only 10 of
+   those carry a denominator, but recomputing the count from the item data
+   settles all 168 — **41 counted no item at all, 127 counted 1–19, and not one
    has 20 or more.** Every published `0.0` is a denominator artefact, and the
    heatmap painted all 168 of them bright red.
 

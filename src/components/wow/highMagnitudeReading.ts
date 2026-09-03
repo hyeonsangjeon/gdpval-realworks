@@ -45,9 +45,10 @@ export interface HighMagnitudeReading {
  * Turn the published rate and its denominator into something a reader can act
  * on, without ever printing `0.0%` for a run that counted nothing.
  *
- * An absent denominator is not a zero one. No payload published so far carries
- * `item_counts.critical_items` — it was added after they were written — so the
- * common case today is a real rate with no denominator behind it, and that is
+ * An absent denominator is not a zero one. `item_counts.critical_items` was
+ * added after most payloads were written, and #393 recovered it for only some
+ * of them — 22 of 94 payloads and 62 of 447 sector rows carry it today — so a
+ * real rate with nothing behind it is still the common case, and that is
  * stated rather than hidden.
  */
 export function readHighMagnitudeRate(
