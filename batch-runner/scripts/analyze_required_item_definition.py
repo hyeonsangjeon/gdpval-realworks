@@ -52,8 +52,12 @@ What it will not do
   while claiming to compare one. ``scripts/summary_wow_drift.py`` already
   names the two historical causes; this defers to it rather than guessing.
 * **It refuses to report a rate its denominator cannot carry.** A threshold
-  that leaves a handful of items produces a number that looks like a metric
-  and is not one -- see ``MIN_USABLE_CRITICAL_ITEMS`` below.
+  that leaves no items at all gets ``n/a`` and not ``0.0000``, in every cell
+  of every table here -- dividing nothing by nothing is not a score of zero,
+  and zero is the worst value this rate can take. A threshold that leaves a
+  handful gets its real rate plus a note that it is too thin to decide on.
+  The two are annotated differently because they are different answers; see
+  ``MIN_USABLE_CRITICAL_ITEMS`` below.
 
 Usage
 -----
@@ -115,13 +119,21 @@ THRESHOLD_SWEEP: tuple[int, ...] = (2, 3, 4, 5, 6, 8, 10)
 #: is `>= CRITICAL_ITEM_PASS_FLOOR`, so its whole margin is `1 - floor`. With
 #: fewer than `1 / (1 - floor)` items a single failure costs more than that
 #: entire margin, and the metric cannot express any value between the floor and
-#: a clean sweep. A gold run that leaves one critical item reads 1.0000 and a
-#: run that leaves none reads 0.0000, and neither is a measurement.
+#: a clean sweep. A gold run that leaves one critical item reads 1.0000, which
+#: is a real measurement of a set too small to decide on. A run that leaves
+#: none is a separate state and reads `NOT_MEASURED`: there was no denominator,
+#: so no rate was taken.
 MIN_USABLE_CRITICAL_ITEMS: int = math.ceil(1.0 / (1.0 - CRITICAL_ITEM_PASS_FLOOR))
 
 #: How much of a corpus a criterion has to appear in before it is reported as
 #: repeated. The census itself is exhaustive; this only decides what is printed.
 DEFAULT_REPEAT_TASK_SHARE = 0.10
+
+#: Printed wherever a rate or a share has no denominator to stand on. One
+#: marker for every such cell, so "no answer" never has to be inferred from a
+#: number that looks like one. Not ``--``: this file already spells em-dashes
+#: that way in prose.
+NOT_MEASURED = "n/a"
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -184,19 +196,30 @@ class ThresholdEffect:
     threshold: int
     critical_items: int
     scored_items: int
-    pass_rate: float
+    pass_rate: float | None
     critical_fail_tasks: int
     graded_tasks: int
 
     @property
-    def item_share(self) -> float:
-        return (self.critical_items / self.scored_items) if self.scored_items else 0.0
+    def item_share(self) -> float | None:
+        return (self.critical_items / self.scored_items) if self.scored_items else None
 
     @property
-    def task_share(self) -> float:
+    def task_share(self) -> float | None:
         return (
-            (self.critical_fail_tasks / self.graded_tasks) if self.graded_tasks else 0.0
+            (self.critical_fail_tasks / self.graded_tasks) if self.graded_tasks else None
         )
+
+    @property
+    def measured(self) -> bool:
+        """Whether this threshold leaves anything to pass or fail at all.
+
+        Separate from ``usable`` because they are different answers. A
+        threshold that leaves four items produced a real rate that is too
+        coarse to decide on; a threshold that leaves none produced no rate.
+        Folding the second into the first reports a measurement nobody took.
+        """
+        return self.critical_items > 0
 
     @property
     def usable(self) -> bool:
@@ -216,10 +239,10 @@ class RepeatedCriterion:
     items: int
     tasks: int
     magnitudes: tuple[float, ...]
-    pass_rate: float
+    pass_rate: float | None
 
-    def share_of(self, critical_items: int) -> float:
-        return (self.items / critical_items) if critical_items else 0.0
+    def share_of(self, critical_items: int) -> float | None:
+        return (self.items / critical_items) if critical_items else None
 
 
 @dataclass
@@ -239,9 +262,9 @@ class Priced:
     repeat_floor: float = DEFAULT_REPEAT_TASK_SHARE
     text_rule_items: int = 0
     text_rule_tasks: int = 0
-    text_rule_rate: float = 0.0
+    text_rule_rate: float | None = None
     remainder_items: int = 0
-    remainder_rate: float = 0.0
+    remainder_rate: float | None = None
 
     @property
     def priced(self) -> bool:
@@ -254,15 +277,20 @@ class Priced:
         return None
 
 
-def _rate_of(items: list[dict]) -> float:
+def _rate_of(items: list[dict]) -> float | None:
     """Share of items the model did the right thing on, to 4 places.
 
     ``model_did_right`` rather than ``verdict == 'pass'``: GDPVal rubrics carry
     negative-weight anti-criteria where a pass verdict means the model *did*
     the prohibited thing, and the critical set spans both signs.
+
+    ``None`` for an empty set rather than ``0.0``. ``0.0`` is the worst value
+    this rate can take, so returning it for a partition nobody had anything to
+    put in reports a total failure where there was no measurement -- and this
+    function's output is printed beside real zeros from the same corpus.
     """
     if not items:
-        return 0.0
+        return None
     right = sum(1 for item in items if bool(item.get("model_did_right", False)))
     return round(right / len(items), 4)
 
@@ -301,12 +329,34 @@ def _sweep(tasks: list[dict], scored_items: int, graded_tasks: int) -> list[Thre
                     threshold=threshold,
                     critical_items=len(critical),
                     scored_items=scored_items,
-                    pass_rate=float(wow.get("critical_item_pass_rate") or 0.0),
+                    pass_rate=_published_rate(wow, len(critical)),
                     critical_fail_tasks=_critical_fail_tasks(tasks),
                     graded_tasks=graded_tasks,
                 )
             )
     return effects
+
+
+def _published_rate(wow: dict, critical_items: int) -> float | None:
+    """The summariser's rate, or ``None`` when it stands on nothing.
+
+    ``step8_grade._rate`` returns ``0.0`` for an empty denominator and its own
+    docstring calls that "a real hazard, not a formatting detail"; it is
+    mitigated there by publishing ``item_counts`` beside the rates so the two
+    cases can be told apart. Reading the rate out on its own discards that
+    mitigation, so the count is re-applied here: at a threshold that leaves no
+    critical items the summariser divided nothing by nothing, and the 0.0 it
+    returned is not this corpus's answer.
+
+    An absent or non-numeric key is ``None`` for the same reason and not
+    ``0.0`` -- a payload that did not publish the rate did not publish a zero.
+    """
+    if critical_items <= 0:
+        return None
+    value = wow.get("critical_item_pass_rate")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
 
 
 def _census(tasks: list[dict], floor: float) -> list[RepeatedCriterion]:
@@ -471,8 +521,18 @@ def price(path: Path, payload: dict, *, repeat_floor: float) -> Priced | None:
 # ── reporting ────────────────────────────────────────────────────────
 
 
-def _pct(value: float) -> str:
-    return f"{value * 100:.1f}%"
+def _pct(value: float | None) -> str:
+    return NOT_MEASURED if value is None else f"{value * 100:.1f}%"
+
+
+def _rate(value: float | None, width: int = 8) -> str:
+    """A rate cell. ``None`` prints the marker, never a number."""
+    return f"{NOT_MEASURED:>{width}}" if value is None else f"{value:>{width}.4f}"
+
+
+def _rate_phrase(value: float | None) -> str:
+    """A rate in running text, where there is room to say why it is absent."""
+    return "no rate (no items)" if value is None else f"rate {value:.4f}"
 
 
 def render(results: list[Priced]) -> str:
@@ -487,6 +547,10 @@ def render(results: list[Priced]) -> str:
     lines.append(
         f"a rate needs >= {MIN_USABLE_CRITICAL_ITEMS} critical items to mean "
         f"anything against the {CRITICAL_ITEM_PASS_FLOOR:.2f} floor"
+    )
+    lines.append(
+        f"{NOT_MEASURED} means there was no denominator, so no rate was taken. "
+        f"It is not a zero."
     )
     lines.append("")
 
@@ -516,10 +580,19 @@ def render(results: list[Priced]) -> str:
         )
         for effect in result.effects:
             mark = " *" if effect.is_shipped else "  "
-            note = "" if effect.usable else "   [denominator too thin to use]"
+            # Three states, not two. A threshold that leaves a handful of items
+            # measured something too coarse to decide on; a threshold that
+            # leaves none measured nothing at all, and the second is not a
+            # worse version of the first.
+            if not effect.measured:
+                note = "   [no critical items -- nothing to pass or fail]"
+            elif not effect.usable:
+                note = "   [denominator too thin to use]"
+            else:
+                note = ""
             lines.append(
                 f"  {effect.threshold:>7g}{mark} {effect.critical_items:>6} "
-                f"{_pct(effect.item_share):>8} {effect.pass_rate:>8.4f} "
+                f"{_pct(effect.item_share):>8} {_rate(effect.pass_rate)} "
                 f"{effect.critical_fail_tasks:>10} "
                 f"({_pct(effect.task_share)}){note}"
             )
@@ -542,7 +615,7 @@ def render(results: list[Priced]) -> str:
                     f"    {repeat.items:>4} item(s) in {repeat.tasks} task(s) "
                     f"({_pct(repeat.tasks / result.graded_tasks)}), "
                     f"{_pct(repeat.share_of(total))} of the critical set, "
-                    f"|max|={mags}{variant}, rate {repeat.pass_rate:.4f}"
+                    f"|max|={mags}{variant}, {_rate_phrase(repeat.pass_rate)}"
                 )
                 lines.append(f"         {repeat.criterion!r}")
         else:
@@ -555,11 +628,12 @@ def render(results: list[Priced]) -> str:
         )
         lines.append(
             f"    excluded  {result.text_rule_items:>4} item(s) across "
-            f"{result.text_rule_tasks} task(s), rate {result.text_rule_rate:.4f}"
+            f"{result.text_rule_tasks} task(s), "
+            f"{_rate_phrase(result.text_rule_rate)}"
         )
         lines.append(
             f"    remaining {result.remainder_items:>4} item(s), "
-            f"rate {result.remainder_rate:.4f}"
+            f"{_rate_phrase(result.remainder_rate)}"
         )
         lines.append("")
 
