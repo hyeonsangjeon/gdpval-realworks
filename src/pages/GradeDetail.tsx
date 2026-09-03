@@ -862,6 +862,10 @@ const OUTCOME_BADGES: Partial<Record<SelectionOutcome, { text: string; className
   no_deliverable: { text: 'No deliverable', className: 'bg-orange-400/10 text-orange-400' },
   not_selected: { text: 'Not scored', className: 'bg-violet-400/10 text-violet-400' },
   grading_error: { text: 'Error', className: 'bg-orange-500/10 text-orange-500' },
+  // Without an entry here the row falls past every branch of getStatusBadge --
+  // not an error, not a 1, not a 0 -- and lands on the "Partial" default,
+  // which is the one thing a row with no score definitely is not.
+  score_not_recorded: { text: 'No score recorded', className: 'bg-slate-400/10 text-slate-400' },
 }
 
 /**

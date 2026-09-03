@@ -1013,7 +1013,38 @@ function processV1GradesFile(
         ...cost,
       };
     }
-    const pct = typeof t.pct === 'number' ? t.pct : 0;
+    // A row with no score is not a row that scored nothing. Reading the
+    // absence as 0 would hand the snap below a number the payload never
+    // published, and the snap would then mark it unmoved -- so it would arrive
+    // at the dashboard as a flat zero with `num_grades: 1`, `scores: [0]` and
+    // no `pct_exact` breadcrumb to say the figure was invented. The shape
+    // returned here is the `hasError` branch's, minus the claim that an error
+    // occurred: no score, no scores array, nothing counted. `score_exclusion`
+    // is left off for the same reason it is left off there -- it describes the
+    // denominator of a score, and there is no score.
+    // Which tier this is for: on 1.3/1.4 a scored task with no finite `pct`
+    // already throws in validateScoreExcludedGrade, and that stays the
+    // stronger answer -- the file is refused rather than rendered. 1.0-1.2 are
+    // checked for the PRESENCE of the headline keys and nothing else, so
+    // nothing on that tier looks at a task's own `pct` before this line. The
+    // published 1.0-1.2 files all carry one, which is why this has never
+    // fired; it is what the aggregator does with the file that does not.
+    if (!Number.isFinite(t.pct)) {
+      return {
+        task_id: t.task_id,
+        num_grades: 0,
+        scores: [],
+        avg_score: null,
+        error: false,
+        error_messages: [],
+        outcome,
+        outcome_detail: detail,
+        reached_judge,
+        qa_score,
+        ...cost,
+      };
+    }
+    const pct = t.pct;
     let avgScore;
     // Whether the snap above moved this row, which is not the same question as
     // which branch it took: a task that really did score 100 takes the first
