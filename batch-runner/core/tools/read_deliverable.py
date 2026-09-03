@@ -31,6 +31,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -1782,6 +1783,175 @@ def _render_image(p: Path) -> bytes:
     return _png_bytes_from_pil(Image.open(p))
 
 
+#: How many frames one contact sheet samples, and how wide each tile is
+#: drawn before the shared byte cap gets a say. Twelve at 480px lands a
+#: 16:9 source in a 1920x900-ish sheet: coarse enough to stay under the cap,
+#: dense enough that a ten-second clip is sampled slightly under once a
+#: second. Both are part of the render contract rather than tuning knobs --
+#: they set the temporal resolution every judgement about *when* something
+#: happens is limited to, so they are reported in the renderer metadata.
+#:
+#: The frame count is public because the judge plans the render before
+#: calling it: ``_VISUAL_RENDER_SCOPES`` names a ``frames`` scope per video
+#: suffix, and if that number and this one were written down separately they
+#: could disagree, leaving the sheet's own docstring describing a resolution
+#: no judged item was actually rendered at.
+VIDEO_CONTACT_SHEET_FRAMES = 12
+_VIDEO_CONTACT_SHEET_TILE_WIDTH = 480
+_VIDEO_CONTACT_SHEET_COLUMNS = 4
+
+
+def _video_sample_times(duration_s: float, frames: int) -> List[float]:
+    """Evenly spaced sample times, first frame included, last one excluded.
+
+    The final instant is skipped deliberately: seeking to exactly the
+    duration lands past the last decodable frame in most containers, which
+    costs a tile and yields nothing. Sampling is uniform rather than
+    criterion-aware on purpose -- the scope is per-suffix and shared by every
+    item, so a sampler that chased one criterion's timings would quietly
+    change what a different criterion was shown.
+    """
+    if frames < 1:
+        raise InvalidScope("frames must be a positive integer")
+    if duration_s <= 0:
+        return [0.0]
+    return [round(duration_s * i / frames, 3) for i in range(frames)]
+
+
+def _video_label_font(tile_width: int):
+    """A legible label font, or the bitmap default if no truetype is found.
+
+    The labels are an aid, not the contract: ``sampled_timestamps_s`` in the
+    renderer metadata carries the same numbers in frame order, so a host with
+    no fonts installed degrades to a smaller caption rather than to a sheet
+    whose frames cannot be placed in time.
+    """
+    from PIL import ImageFont  # type: ignore
+
+    size = max(12, tile_width // 24)
+    for candidate in (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ):
+        if Path(candidate).is_file():
+            try:
+                return ImageFont.truetype(candidate, size)
+            except OSError:
+                continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:  # Pillow < 10.1 has no scalable default
+        return ImageFont.load_default()
+
+
+def _render_video_contact_sheet(
+    p: Path, frames: int
+) -> Tuple[bytes, Dict[str, Any]]:
+    """Tile evenly spaced, timestamped frames of a video into one image.
+
+    One sheet per video, not one call per frame: the per-file visual budget
+    (``file_cap_per_item``, ``call_cap_per_task``) counts renders and vision
+    calls, and a video that spent a call per frame would price a single
+    deliverable like twelve of them.
+
+    Tiles are scaled uniformly and never padded. That is load-bearing rather
+    than tidy -- two of the criteria this exists to answer are about aspect
+    ratio and letterboxing, so a montage that boxed frames into a fixed cell
+    would manufacture the very artefact being judged. Source dimensions go to
+    the metadata so those two are answered from numbers, not from pixels.
+    """
+    import av  # type: ignore
+    from PIL import Image, ImageDraw  # type: ignore
+
+    container = av.open(str(p))
+    try:
+        if not container.streams.video:
+            raise ReadDeliverableError("video has no video stream")
+        stream = container.streams.video[0]
+        time_base = stream.time_base
+        duration_s = 0.0
+        if stream.duration and time_base:
+            duration_s = float(stream.duration * time_base)
+        elif container.duration:
+            duration_s = float(container.duration) / 1_000_000.0
+        fps = float(stream.average_rate) if stream.average_rate else 0.0
+        width = int(stream.codec_context.width or 0)
+        height = int(stream.codec_context.height or 0)
+        # Read before the container closes. Every attribute here is backed by
+        # the open container, and reading one afterwards returns whatever is
+        # left at that address -- which is how this first reported a
+        # twelve-of-14-billion-frames coverage ratio rather than 12 of 360.
+        #
+        # Not every container stores a frame count (Matroska and WebM
+        # routinely report 0), so fall back to duration x rate and leave it
+        # None when neither is knowable. None reads as "length unknown"
+        # downstream; a 0 would divide the coverage ratio by nothing.
+        stored_frames = int(stream.frames or 0)
+        if stored_frames > 0:
+            frame_count: Optional[int] = stored_frames
+        elif duration_s > 0 and fps > 0:
+            frame_count = round(duration_s * fps)
+        else:
+            frame_count = None
+
+        sampled: List[Tuple[float, Any]] = []
+        for target in _video_sample_times(duration_s, frames):
+            if time_base and duration_s > 0:
+                try:
+                    container.seek(int(target / time_base), stream=stream)
+                except (av.AVError, OSError, ValueError):
+                    continue
+            decoded = None
+            for frame in container.decode(video=0):
+                decoded = frame
+                break
+            if decoded is None:
+                continue
+            sampled.append((target, decoded.to_image()))
+        if not sampled:
+            raise ReadDeliverableError(
+                "no decodable video frames; the file has a video stream but "
+                "nothing could be sampled from it"
+            )
+    finally:
+        container.close()
+
+    tile_w = _VIDEO_CONTACT_SHEET_TILE_WIDTH
+    first = sampled[0][1]
+    tile_h = max(1, round(first.height * tile_w / first.width))
+    font = _video_label_font(tile_w)
+    strip_h = max(14, tile_w // 20)
+    columns = min(_VIDEO_CONTACT_SHEET_COLUMNS, len(sampled))
+    rows = math.ceil(len(sampled) / columns)
+    cell_h = tile_h + strip_h
+
+    sheet = Image.new("RGB", (columns * tile_w, rows * cell_h), (32, 32, 32))
+    draw = ImageDraw.Draw(sheet)
+    for index, (timestamp, image) in enumerate(sampled):
+        x = (index % columns) * tile_w
+        y = (index // columns) * cell_h
+        sheet.paste(image.convert("RGB").resize(
+            (tile_w, tile_h), Image.LANCZOS), (x, y))
+        draw.text(
+            (x + 4, y + tile_h + 1),
+            f"t={timestamp:.2f}s",
+            fill=(255, 255, 255),
+            font=font,
+        )
+
+    metadata: Dict[str, Any] = {
+        "source_width": width or None,
+        "source_height": height or None,
+        "source_duration_s": round(duration_s, 3) if duration_s else None,
+        "source_fps": round(fps, 3) if fps else None,
+        "source_frame_count": frame_count,
+        "sampled_frame_count": len(sampled),
+        "sampled_timestamps_s": [t for t, _ in sampled],
+        "contact_sheet_grid": f"{columns}x{rows}",
+    }
+    return _png_bytes_from_pil(sheet), metadata
+
+
 def _find_soffice() -> Optional[str]:
     for executable in ("soffice", "libreoffice"):
         found = shutil.which(executable)
@@ -2103,9 +2273,26 @@ def _op_render_to_image(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
             "base64": base64.b64encode(png).decode("ascii"),
             "byte_size": len(png),
         }
+    if kind == "video":
+        _validate_scope_keys(scope, allowed={"frames"}, source_kind="video")
+        frames = _positive_int(
+            scope.get("frames", VIDEO_CONTACT_SHEET_FRAMES), "frames"
+        )
+        png, video_metadata = _render_video_contact_sheet(p, frames)
+        png = _downsample_to_cap(png)
+        return {
+            "kind": "image_png_base64",
+            "source_kind": "video",
+            "scope": {"frames": frames},
+            "renderer": {"rasterizer": "pyav+pillow", "tile_width": (
+                _VIDEO_CONTACT_SHEET_TILE_WIDTH)},
+            "base64": base64.b64encode(png).decode("ascii"),
+            "byte_size": len(png),
+            **video_metadata,
+        }
     raise UnsupportedScope(
         f"render_to_image not supported for kind={kind}; "
-        "supported: pdf, xlsx, pptx, docx, image. "
+        "supported: pdf, xlsx, pptx, docx, image, video. "
         "Use inspect_structure/read_content instead."
     )
 

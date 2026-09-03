@@ -99,6 +99,49 @@ _VISION_PROMPT_HEADER = (
     "without Markdown fences or extra text."
 )
 
+#: Appended when the image is not one surface but many. A contact sheet
+#: shown without this reads as a single busy page, and a criterion about
+#: *when* something happens gets answered from a grid whose axis the model
+#: was never told about. The timestamps are drawn on the tiles as well; this
+#: says how to read them, and says plainly that the gaps between tiles were
+#: never seen -- which is the difference between "the shot starts after 7s"
+#: and "no sampled frame before 7s showed it".
+_CONTACT_SHEET_NOTE = (
+    "This image is a contact sheet, not a single surface: {frames} stills "
+    "sampled at even intervals from a {duration} video and tiled in a "
+    "{grid} grid, left to right then top to bottom. Each tile is captioned "
+    "with its timestamp. The source frames are {width}x{height}; the tiles "
+    "are uniformly scaled from that, so any bar or border you see is in the "
+    "video rather than added by the tiling. You are seeing only these "
+    "moments -- if the criterion turns on something that could fall between "
+    "two sampled timestamps, say so in your reasoning and lower confidence "
+    "instead of assuming the gap resembles its neighbours."
+)
+
+
+def contact_sheet_note(metadata: Mapping[str, Any]) -> str:
+    """Render the contact-sheet note from renderer metadata, or "" if absent.
+
+    Returns the empty string for any render that is not a video sheet, so
+    the caller can append unconditionally.
+    """
+    if str(metadata.get("source_kind") or "") != "video":
+        return ""
+    frames = metadata.get("sampled_frame_count")
+    grid = metadata.get("contact_sheet_grid")
+    width = metadata.get("source_width")
+    height = metadata.get("source_height")
+    if not (frames and grid and width and height):
+        return ""
+    duration = metadata.get("source_duration_s")
+    return _CONTACT_SHEET_NOTE.format(
+        frames=frames,
+        duration=f"{duration:g}-second" if duration else "single",
+        grid=grid,
+        width=width,
+        height=height,
+    )
+
 
 def _parse_json_envelope(text: str) -> Dict[str, Any]:
     """Strip code fences, parse JSON, raise ValueError on malformed."""
@@ -222,8 +265,14 @@ class VisionPerception:
         criterion: str,
         image_b64: str,
         cache_key: Optional[str] = None,
+        surface_note: str = "",
     ) -> VisionVerdict:
-        """Run the vision sub-judge against a single criterion."""
+        """Run the vision sub-judge against a single criterion.
+
+        ``surface_note`` describes what the image *is* when that is not
+        self-evident -- see :func:`contact_sheet_note`. It is prompt text,
+        so a caller that varies it must vary ``cache_key`` with it.
+        """
         if cache_key is not None and cache_key in self._cache:
             return replace(
                 self._cache[cache_key],
@@ -282,7 +331,11 @@ class VisionPerception:
                         "role": "user",
                         "content": [
                             {"type": "input_text",
-                             "text": f"{_VISION_PROMPT_HEADER}\n\nCriterion:\n{criterion}"},
+                             "text": (
+                                 f"{_VISION_PROMPT_HEADER}"
+                                 + (f"\n\n{surface_note}" if surface_note else "")
+                                 + f"\n\nCriterion:\n{criterion}"
+                             )},
                             {"type": "input_image",
                              "image_url": f"data:image/png;base64,{image_b64}"},
                         ],

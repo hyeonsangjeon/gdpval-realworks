@@ -61,6 +61,7 @@ from core.grader_routing import (
     is_overall_style_criterion,
 )
 from core.public_error import public_provider_error_text, public_task_error_text
+from core.perception.vision import contact_sheet_note
 from core.rubric_loader import RubricItem, TaskRubric
 from core.tools import (
     MODEL_READ_DELIVERABLE_OPS,
@@ -68,6 +69,7 @@ from core.tools import (
     open_archive_member,
     read_deliverable,
     ReadDeliverableError,
+    VIDEO_CONTACT_SHEET_FRAMES,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,6 +138,16 @@ _VISUAL_RENDER_SCOPES: Dict[str, Dict[str, int]] = {
     ".gif": {},
     ".bmp": {},
     ".webp": {},
+    # A video is sampled, not paged. ``frames`` is how many evenly spaced
+    # stills the contact sheet carries, and it is the temporal resolution of
+    # every judgement about *when* something happens -- a criterion about the
+    # first seven seconds of a two-minute clip is being answered from stills
+    # about ten seconds apart, which the timestamps on the sheet say out loud.
+    ".mp4": {"frames": VIDEO_CONTACT_SHEET_FRAMES},
+    ".mov": {"frames": VIDEO_CONTACT_SHEET_FRAMES},
+    ".webm": {"frames": VIDEO_CONTACT_SHEET_FRAMES},
+    ".mkv": {"frames": VIDEO_CONTACT_SHEET_FRAMES},
+    ".avi": {"frames": VIDEO_CONTACT_SHEET_FRAMES},
 }
 #: Default upper bound on how many files one visual rubric item may render
 #: and perceive. It bounds one item's evidence; ``call_cap_per_task`` bounds
@@ -182,6 +194,9 @@ _TOTAL_SURFACE_KEYS: Dict[str, Optional[str]] = {
     "xlsx": "converted_page_count",
     "docx": "converted_page_count",
     "image": None,
+    # Frames, so the sampled/total pair reads as "12 stills out of 3,600" --
+    # the ratio a temporal claim has to survive.
+    "video": "source_frame_count",
 }
 _RENDERER_METADATA_KEYS = (
     "kind",
@@ -192,6 +207,21 @@ _RENDERER_METADATA_KEYS = (
     "converted_page_count",
     "renderer",
     "byte_size",
+    # Video: the stored geometry and the sample times. Two of the criteria
+    # this render exists for are about aspect ratio and letterboxing, and
+    # those are properties of the stored dimensions rather than of anything
+    # visible in a downscaled tile -- so they are answered from these numbers.
+    # ``sampled_timestamps_s`` is the authoritative copy of the labels drawn
+    # on the sheet, which is what lets a claim about *when* be checked rather
+    # than read off pixels.
+    "source_width",
+    "source_height",
+    "source_duration_s",
+    "source_fps",
+    "source_frame_count",
+    "sampled_frame_count",
+    "sampled_timestamps_s",
+    "contact_sheet_grid",
 )
 
 
@@ -1580,6 +1610,7 @@ class ToolCallingJudge:
                 verdict = self.vision_perception.judge(
                     criterion=item.criterion,
                     image_b64=image_b64,
+                    surface_note=contact_sheet_note(render_data),
                 )
                 verdict_data = verdict.to_dict()
             except Exception as exc:  # noqa: BLE001
@@ -1709,14 +1740,25 @@ class ToolCallingJudge:
         total_surfaces = 1 if source_kind == "image" else (
             render_data.get(total_key) if total_key else None
         )
+        # A video sheet carries many surfaces, so it may not claim the "one
+        # surface, the first one" shape the other kinds have. Reporting 1 here
+        # would understate what the judge saw; keeping the first-surface label
+        # would misname *which* surfaces those were.
+        sampled = render_data.get("sampled_frame_count")
+        if source_kind == "video" and isinstance(sampled, int):
+            coverage_mode = "sampled_frame_grid"
+            sampled_count = sampled
+        else:
+            coverage_mode = "sampled_first_surface"
+            sampled_count = 1
         return {
-            "coverage_mode": "sampled_first_surface",
+            "coverage_mode": coverage_mode,
             "criterion_scope": (
                 "overall_style"
                 if is_overall_style_criterion(item.criterion)
                 else "generic_visual_fallback"
             ),
-            "sampled_surface_count": 1,
+            "sampled_surface_count": sampled_count,
             "total_surface_count": total_surfaces,
         }
 
