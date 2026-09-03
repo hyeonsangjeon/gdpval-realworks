@@ -556,6 +556,56 @@ def test_schema_knows_every_renderer_metadata_key_the_judge_persists():
     )
 
 
+def test_schema_accepts_every_render_scope_the_judge_plans():
+    """The sibling guards above cover two of the four persisted objects.
+
+    ``scope`` is the third, and it was missed. Adding video to
+    ``_VISUAL_RENDER_SCOPES`` introduced a ``frames`` key that
+    ``visualScope`` did not declare, and ``additionalProperties: false``
+    rejects it -- so a run would have rendered the sheet, paid the vision
+    call, judged the item, and then failed validation on the way to disk.
+    Neither guard above looks at ``scope``, and no fixture had a video in
+    it, so nothing said a word.
+    """
+    from core.tool_calling_judge import _VISUAL_RENDER_SCOPES
+
+    declared = set(_load_schema()["$defs"]["visualScope"]["properties"])
+    planned = {key for scope in _VISUAL_RENDER_SCOPES.values() for key in scope}
+
+    assert planned <= declared, (
+        "the judge plans render scopes the schema rejects: "
+        f"{sorted(planned - declared)}"
+    )
+
+
+def test_schema_accepts_every_coverage_mode_the_judge_reports():
+    """The fourth persisted object, missed the same way.
+
+    ``coverage_mode`` was a ``const``, which is the tightest possible
+    spelling of "there is only one of these" and the easiest to invalidate:
+    the video sheet reports ``sampled_frame_grid`` because it is neither one
+    surface nor the first one, and a const cannot hold two values. Derived
+    from the code rather than listed by hand, so the third mode fails here.
+    """
+    import inspect
+    import re
+
+    from core.tool_calling_judge import ToolCallingJudge
+
+    declared = set(
+        _load_schema()["$defs"]["visualCoverageMetadata"]
+        ["properties"]["coverage_mode"]["enum"]
+    )
+    source = inspect.getsource(ToolCallingJudge._coverage_metadata)
+    reported = set(re.findall(r'coverage_mode = "([a-z_]+)"', source))
+
+    assert reported, "no coverage modes found; the assignment shape changed"
+    assert reported <= declared, (
+        f"the judge reports coverage modes the schema rejects: "
+        f"{sorted(reported - declared)}"
+    )
+
+
 def test_visual_provenance_rejects_base64_field():
     payload = _minimal_payload()
     provenance = _valid_visual_provenance()

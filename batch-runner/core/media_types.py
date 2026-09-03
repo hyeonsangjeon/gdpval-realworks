@@ -24,6 +24,26 @@ GRADER_AUDIO_EXTENSIONS = frozenset({
 #: deliberate and guarded: the failure it prevents is a suffix being added to
 #: one and not the other, which would route a renderable file to text (or
 #: promise a render that cannot happen) with no error anywhere.
+#: Video containers the visual prepass renders as a contact sheet: evenly
+#: spaced, timestamped stills tiled into one image. Named separately from the
+#: rest of the visual set because the render is a *sample* rather than a
+#: reproduction -- a page render shows the page, whereas twelve frames of a
+#: two-minute clip show twelve moments and say so -- but folded into
+#: ``GRADER_VISUAL_RENDER_EXTENSIONS`` below, because routing has one
+#: question to ask and it is "can the judge be shown this".
+#:
+#: Kept equal to ``_EXT_KIND``'s ``video`` entries by
+#: ``test_video_render_extensions_match_the_kind_map``: the renderer
+#: dispatches on kind, so a suffix here that the kind map calls something
+#: else would plan a render the renderer then refuses.
+GRADER_VIDEO_RENDER_EXTENSIONS = frozenset({
+    ".mp4",
+    ".mov",
+    ".webm",
+    ".mkv",
+    ".avi",
+})
+
 GRADER_VISUAL_RENDER_EXTENSIONS = frozenset({
     ".pdf",
     ".xlsx",
@@ -36,7 +56,7 @@ GRADER_VISUAL_RENDER_EXTENSIONS = frozenset({
     ".gif",
     ".bmp",
     ".webp",
-})
+}) | GRADER_VIDEO_RENDER_EXTENSIONS
 
 #: Source files: code, stylesheets and markup that describe an appearance
 #: rather than having one. Read as a set of *program text*, not of "things

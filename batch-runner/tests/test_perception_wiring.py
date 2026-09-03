@@ -56,12 +56,14 @@ class FakeVision:
         self.calls = 0
         self.reset_count = 0
         self.remaining_calls = 5
+        self.surface_notes = []
 
     def reset(self):
         self.reset_count += 1
 
-    def judge(self, *, criterion, image_b64, cache_key=None):
+    def judge(self, *, criterion, image_b64, cache_key=None, surface_note=""):
         self.calls += 1
+        self.surface_notes.append(surface_note)
         return SimpleNamespace(
             judge_error=None,
             to_dict=lambda: {
