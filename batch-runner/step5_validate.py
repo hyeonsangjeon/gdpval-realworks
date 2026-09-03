@@ -9,6 +9,7 @@ Checks that the local snapshot is ready for HuggingFace upload:
   5. deliverable_text fill rate
     6. needs_files tasks with no files  <- WARNING + failure stats, no output mutation
     6b. needs_files tasks with no row at all  <- ERROR; nothing was checked
+    6c. text-only tasks with no row at all  <- ERROR; a listed task was not carried
   7. No duplicate task_ids
   8. deliverable_files local existence check
 
@@ -246,7 +247,12 @@ def validate(data_dir: str = None) -> bool:
     }
 
     manifest_path = WORKSPACE_DIR / "step0_needs_files_manifest.json"
-    if manifest_path.exists():
+    # Both halves of this section match manifest entries against submitted rows,
+    # so without task IDs to match on there is nothing it can check. That column
+    # is already a hard error above; a stats file of zeros for a run nobody
+    # could check would read as "checked, found none", so such a run gets no
+    # record rather than a zeroed one.
+    if manifest_path.exists() and "task_id" in df.columns:
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
 
@@ -273,22 +279,34 @@ def validate(data_dir: str = None) -> bool:
 
         needs_files_missing = []
         needs_files_absent = []
+        text_only_absent = []
         needs_files_total = 0
 
         selected_scope = (
             set(task_scope["task_ids"])
             if task_scope.get("task_ids") is not None else None
         )
+        # Which of the manifest's tasks the submission actually carries. The
+        # manifest is generated from the source parquet under a digest check
+        # (``core.repo_bootstrapper._generate_manifest_from_dir`` refuses to
+        # emit one whose ordered task IDs do not hash to the canonical digest)
+        # and it writes one entry per source row, so every key in it names a
+        # canonical task the submission is required to carry — whether or not
+        # that task owes a file.
+        submitted_ids = set(df["task_id"])
         for task_id, info in manifest.get("tasks", {}).items():
             if selected_scope is not None and task_id not in selected_scope:
                 continue
+            absent = task_id not in submitted_ids
             if not info.get("needs_files"):
+                if absent:
+                    text_only_absent.append(task_id)
                 continue
             needs_files_total += 1
-            row = df[df["task_id"] == task_id]
-            if len(row) == 0:
+            if absent:
                 needs_files_absent.append(task_id)
                 continue
+            row = df[df["task_id"] == task_id]
             files = _to_list(row.iloc[0]["deliverable_files"])
             if len(files) == 0:
                 needs_files_missing.append(task_id)
@@ -321,6 +339,19 @@ def validate(data_dir: str = None) -> bool:
                 f": {_id_sample(needs_files_absent)}"
             )
 
+        # The same integrity break, reached by a task that owed no file. Nothing
+        # else catches it in a full run: a substitute row keeps the count at the
+        # expected 220, and a task that owes no file never enters the counts
+        # above. Deliberately kept out of ``file_gen_stats`` — every field there
+        # is a file-generation outcome, and this absence is an identity fault,
+        # not one.
+        if text_only_absent:
+            errors.append(
+                f"{len(text_only_absent)} text-only tasks are absent from the "
+                "submission — the manifest lists them and no row carries them"
+                f": {_id_sample(text_only_absent)}"
+            )
+
         # Says what was observed, and only when everything was. The two lists
         # being empty is the same statement as succeeded == total; written this
         # way so the claim and its evidence cannot drift apart.
@@ -329,9 +360,10 @@ def validate(data_dir: str = None) -> bool:
                 f"All {needs_files_total} file-required tasks have deliverable files ✓"
             )
     else:
-        warnings.append(
-            "step0_needs_files_manifest.json not found — skipping file requirement check"
-        )
+        if not manifest_path.exists():
+            warnings.append(
+                "step0_needs_files_manifest.json not found — skipping file requirement check"
+            )
         file_gen_stats = None
 
     # ── 8. deliverable_files local existence check ──
