@@ -1518,8 +1518,54 @@ def _score_bucket(pct: float) -> str:
 
 
 def _rate(numerator: int, denominator: int) -> float:
-    """Rounded pass rate as a 0-1 fraction, 0.0 when nothing was counted."""
+    """Rounded pass rate as a 0-1 fraction, 0.0 when nothing was counted.
+
+    That last clause is a real hazard, not a formatting detail: a rate of
+    ``0.0`` is indistinguishable from a rate over an empty denominator, and
+    ``0.0`` is the *worst possible score*. Publish it for a rate nobody
+    measured and readers see a total failure. ``_wow_item_counts`` publishes
+    the denominators beside the rates so the two cases can be told apart.
+    """
     return round((numerator / denominator) if denominator else 0.0, 4)
+
+
+def _wow_item_counts(counters: dict[str, int]) -> dict[str, int]:
+    """The denominators the ``wow`` rates were divided by.
+
+    Every ``wow`` rate is a fraction whose denominator is thrown away, and the
+    fallback for an empty one is ``0.0`` -- the same value as "every single
+    item failed". The two are not close. Measured over this repository's own
+    published grades, **twenty of thirty-three payloads report
+    ``precheck_pass_rate: 0.0``, and all twenty had no precheck items at all**;
+    not one is a run where prechecks ran and failed. Per sector it is 56 of 83
+    rows, again with no real zero among them. Among the twenty is the 185-task
+    gold-ceiling run: 8,816 judged items, zero prechecked ones, published as a
+    0% structural pass rate.
+
+    Downstream that is not left as a number. The narrative prompt puts
+    ``Precheck pass rate: 0%`` next to "Precheck failures dominate: deliverable
+    structure issues", and the dashboard's *Structure vs Reasoning* card turns
+    the same gap into "Strong on reasoning, weak on structure" -- a finding
+    about a check that never ran, in a paid report and on a public page.
+
+    ``rubric_severity_curve`` in this same summary already refuses to publish
+    an all-zero shape from missing verdicts, on the reasoning that "a single
+    rate can absorb that; a curve cannot, because its shape is the claim". The
+    corpus says the single rate did not absorb it. It publishes ``n_items``
+    beside each ``pass_rate``, which is exactly what this is: the counts, so a
+    ``0.0`` can be read as either "none passed" or "none existed".
+
+    The rates themselves are unchanged. Their type is ``number`` on both sides
+    of the wire, thirty-three payloads carry them, and an acceptance gate in
+    ``scripts/grading_cost_sweep.py`` compares them against thresholds; turning
+    them null to fix a caption would break more than it repairs.
+    """
+    return {
+        "rubric_items": counters["all_items"],
+        "critical_items": counters["critical_items"],
+        "precheck_items": counters["pre_items"],
+        "judge_items": counters["judge_items"],
+    }
 
 
 def _new_item_counters() -> dict[str, int]:
@@ -2053,6 +2099,10 @@ def _compute_summary(
             ),
             "precheck_pass_rate": _rate(bag["pre_pass"], bag["pre_items"]),
             "judge_pass_rate": _rate(bag["judge_pass"], bag["judge_items"]),
+            # 56 of the 83 sector rows this repository has published report a
+            # `precheck_pass_rate` of 0.0 over no precheck items at all. The
+            # three rates above cannot say which; these counts can.
+            "item_counts": _wow_item_counts(bag),
         }
         for sector, bag in sorted(sector_counters.items())
     }
@@ -2131,6 +2181,10 @@ def _compute_summary(
                 counters["judge_errors"], counters["judge_items"]
             ),
             "by_sector": by_sector,
+            # What every rate above was divided by. A rate of 0.0 here means
+            # either "nothing passed" or "nothing was counted", and until these
+            # were published there was no way to tell -- see `_wow_item_counts`.
+            "item_counts": _wow_item_counts(counters),
             # Left empty deliberately. The GDPVal rubrics carry no category
             # taxonomy — rubric items have an id, a criterion string and a
             # weight, and nothing that groups them into categories — so there
