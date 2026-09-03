@@ -276,17 +276,54 @@ def _identity_problems(payload: dict[str, Any]) -> list[str]:
     return problems
 
 
+def _records_perception_calls(item: dict[str, Any]) -> bool:
+    """Whether this rubric item says how many perception calls it took.
+
+    ``perception_call_count`` is not among the required item fields in
+    ``schemas/grade.schema.json``, so an item is free to omit it. A recorded
+    count is an integer, and ``0`` is a recorded count: it says the grader
+    looked for something to perceive and made no call. An absent one says
+    nothing at all.
+    """
+    calls = item.get("perception_call_count")
+    return isinstance(calls, int) and not isinstance(calls, bool)
+
+
+def perception_call_recording(payload: dict[str, Any]) -> dict[str, int]:
+    """How many rubric items stated a perception-call count, and how many did not.
+
+    The split below can only be built from items that stated one. This is how
+    much of the run it was built from, so a reader can tell a split that
+    covers everything from one that covers part of the run.
+    """
+    recorded = unrecorded = 0
+    for task in payload.get("tasks") or []:
+        for item in task.get("items") or []:
+            if _records_perception_calls(item):
+                recorded += 1
+            else:
+                unrecorded += 1
+    return {"recorded": recorded, "unrecorded": unrecorded}
+
+
 def perception_calls_by_modality(payload: dict[str, Any]) -> dict[str, int]:
-    """How many perception calls each routing modality accounted for.
+    """How many *recorded* perception calls each routing modality accounted for.
 
     ``summary.cost.total_perception_calls`` is one number. The specification
     asks for the image and audio counts separately, and only the rubric items
     know which was which.
+
+    Items that record no count contribute nothing here, because there is
+    nothing of theirs to add. That makes an empty result ambiguous on its own,
+    so callers pair it with `perception_call_recording` rather than reading
+    emptiness as "none were made".
     """
     by_modality: dict[str, int] = defaultdict(int)
     for task in payload.get("tasks") or []:
         for item in task.get("items") or []:
-            calls = item.get("perception_call_count") or 0
+            if not _records_perception_calls(item):
+                continue
+            calls = item["perception_call_count"]
             if calls:
                 by_modality[item.get("routing_modality") or "unrecorded"] += calls
     return dict(sorted(by_modality.items()))
@@ -895,6 +932,7 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
             "total_judge_latency_sec": cost.get("total_judge_latency_sec"),
             "usage_complete": cost.get("usage_complete"),
             "perception_calls_by_modality": perception_calls_by_modality(payload),
+            "perception_call_recording": perception_call_recording(payload),
         },
         "bill": {
             # The legacy trio, carried unchanged for compatibility. The first
@@ -1251,7 +1289,22 @@ def _render(report: dict[str, Any], *, shortfall_limit: int) -> str:
     )
     for modality, calls in (usage["perception_calls_by_modality"] or {}).items():
         lines.append(f"    {modality:<20} {calls}")
-    if not usage["perception_calls_by_modality"]:
+    recording = usage["perception_call_recording"]
+    unrecorded = recording["unrecorded"]
+    items = unrecorded + recording["recorded"]
+    if usage["perception_calls_by_modality"]:
+        if unrecorded:
+            lines.append(
+                f"    (a floor: {unrecorded} of {items} rubric items stated "
+                "no perception-call count)"
+            )
+    elif unrecorded:
+        lines.append(
+            f"    (unrecorded: {unrecorded} of {items} rubric items stated "
+            "no perception-call"
+        )
+        lines.append("     count, which is not the same as stating none)")
+    else:
         lines.append("    (no perception call was made)")
     lines.append(
         f"  main tokens             in {usage['main_input_tokens']}, "

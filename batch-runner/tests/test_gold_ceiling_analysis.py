@@ -592,6 +592,154 @@ def test_a_perception_call_with_no_recorded_modality_is_still_counted():
     assert analysis.perception_calls_by_modality(payload) == {"unrecorded": 5}
 
 
+def test_an_item_that_stated_no_call_count_is_told_apart_from_one_that_stated_zero():
+    """``perception_call_count`` is not a required item field.
+
+    Zero is an answer: the grader had the chance to call and did not. An absent
+    field is not an answer at all. The split below cannot hold them apart --
+    neither contributes anything to a sum -- so the count of who answered has
+    to be carried separately.
+    """
+    payload = _payload(
+        tasks=[
+            _task(
+                items=[
+                    _item(perception_call_count=0),
+                    _item(
+                        rubric_item_id="item-2",
+                        perception_call_count=4,
+                        routing_modality="visual",
+                    ),
+                    _item(rubric_item_id="item-3"),
+                ]
+            )
+        ]
+    )
+    payload["tasks"][0]["items"][2].pop("perception_call_count")
+
+    assert analysis.perception_call_recording(payload) == {
+        "recorded": 2,
+        "unrecorded": 1,
+    }
+
+
+def test_a_count_written_as_null_is_unrecorded_rather_than_zero():
+    """A key present and empty says as little as a key that is absent."""
+    payload = _payload(tasks=[_task(items=[_item(perception_call_count=None)])])
+
+    assert analysis.perception_call_recording(payload) == {
+        "recorded": 0,
+        "unrecorded": 1,
+    }
+    assert analysis.perception_calls_by_modality(payload) == {}
+
+
+def test_a_true_is_not_a_perception_call_count():
+    """`perception_called` is the boolean; this field is the number.
+
+    A payload that put the flag's value in the number's field has recorded
+    nothing usable, and counting `True` as one call would invent a call the
+    run never reported.
+    """
+    payload = _payload(tasks=[_task(items=[_item(perception_call_count=True)])])
+
+    assert analysis.perception_call_recording(payload)["unrecorded"] == 1
+    assert analysis.perception_calls_by_modality(payload) == {}
+
+
+def test_a_run_where_nobody_stated_a_count_does_not_report_that_none_were_made():
+    """The line this replaces claimed a measurement out of an absence.
+
+    Twelve grade payloads in this repository were graded before the count
+    existed. Every one of them rendered `(no perception call was made)` under
+    a `total_perception_calls` that the same block printed as `None` -- two
+    answers to one question, one line apart, and only one of them true.
+    """
+    items = []
+    for index in range(3):
+        item = _item(rubric_item_id=f"item-{index}")
+        item.pop("perception_call_count")
+        items.append(item)
+    payload = _payload(tasks=[_task(items=items)])
+    payload["summary"]["cost"].pop("total_perception_calls", None)
+
+    rendered = analysis._render(analysis.analyze(payload), shortfall_limit=0)
+
+    assert "(no perception call was made)" not in rendered
+    assert "unrecorded: 3 of 3 rubric items stated no perception-call" in rendered
+    assert "not the same as stating none" in rendered
+
+
+def test_a_run_that_really_made_no_perception_call_still_says_so():
+    """The control. Telling absence apart from zero must not silence zero.
+
+    Every item here answered the question and every answer was none, which is
+    a measured fact about the run and has to keep reading as one.
+    """
+    payload = _payload(
+        tasks=[
+            _task(
+                items=[
+                    _item(rubric_item_id=f"item-{index}", perception_call_count=0)
+                    for index in range(3)
+                ]
+            )
+        ]
+    )
+
+    rendered = analysis._render(analysis.analyze(payload), shortfall_limit=0)
+
+    assert "(no perception call was made)" in rendered
+    assert "unrecorded:" not in rendered
+    assert "a floor" not in rendered
+
+
+def test_a_split_built_from_part_of_the_run_says_which_part():
+    """A split that adds up to less than the run is a floor, and says so.
+
+    Nothing else in the block would tell the reader. `summary.cost` carries
+    the run's own total, and a reader who trusts the split has no way to see
+    that some items were never asked.
+    """
+    absent = _item(rubric_item_id="item-2", routing_modality="visual")
+    absent.pop("perception_call_count")
+    payload = _payload(
+        tasks=[
+            _task(
+                items=[
+                    _item(routing_modality="visual", perception_call_count=3),
+                    absent,
+                ]
+            )
+        ]
+    )
+
+    rendered = analysis._render(analysis.analyze(payload), shortfall_limit=0)
+
+    assert "visual" in rendered
+    assert "a floor: 1 of 2 rubric items stated no perception-call count" in rendered
+    assert "(no perception call was made)" not in rendered
+
+
+def test_a_fully_recorded_split_is_not_labelled_a_floor():
+    """The second control: a complete split must not be hedged."""
+    payload = _payload(
+        tasks=[
+            _task(
+                items=[
+                    _item(routing_modality="visual", perception_call_count=3),
+                    _item(rubric_item_id="item-2", perception_call_count=0),
+                ]
+            )
+        ]
+    )
+
+    rendered = analysis._render(analysis.analyze(payload), shortfall_limit=0)
+
+    assert "a floor" not in rendered
+    assert "unrecorded:" not in rendered
+
+
 # ── The shortfalls a person has to classify ────────────────────────────────
 
 
