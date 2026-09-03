@@ -122,12 +122,17 @@ export const RUBRIC_ITEMS_DESCRIBED = 'scored against the rubric'
  *
  * The old form subtracted the two rates unconditionally. Measured across this
  * repository's own grades that produced a finding out of an absence: of the
- * rows carrying a recorded precheck denominator and a rate of 0.0, **fifteen of
- * fifteen run-level rows and thirty-five of thirty-five sector rows had no
- * precheck items at all, and not one was a run where prechecks ran and
+ * published rows carrying a recorded precheck denominator and a rate of 0.0,
+ * **twenty of twenty run-level rows and fifty-nine of fifty-nine sector rows
+ * had no precheck items at all, and not one was a run where prechecks ran and
  * failed**. Every one of them subtracted a zero that stood for nothing and
  * announced "Strong on reasoning, weak on structure" — a finding about a check
  * that never ran, on a public page.
+ *
+ * That pair read fifteen and thirty-five when this was written, because only
+ * that many zeros had a denominator to check against. #393 and then #399
+ * recovered the rest of the published side, and every newly checkable zero
+ * said the same thing the first fifteen did.
  */
 export function structureVsReasoningInsight(
   precheck: RateReading,

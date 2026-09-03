@@ -303,13 +303,23 @@ What that means, point by point:
    weight, because one item moves it further than the whole distance from the
    reference to a clean sweep.
 6. **An empty denominator is "not recorded", never `0%`.** Measured on this
-   repository's own grades with #393 merged: 447 published sector rows carry
-   the rate, and #393 recovered a denominator for 62 of them — the other 385
-   still publish a bare rate. 168 of the 447 report exactly `0.0`; only 10 of
-   those carry a denominator, but recomputing the count from the item data
-   settles all 168 — **41 counted no item at all, 127 counted 1–19, and not one
-   has 20 or more.** Every published `0.0` is a denominator artefact, and the
-   heatmap painted all 168 of them bright red.
+   repository's own grades with #393 and #399 merged: **86 published sector
+   rows** carry the rate and every one of them now carries a denominator, #399
+   having recovered the 21 that did not. 16 of the 86 report exactly `0.0`;
+   recomputing the count from the item data settles all 16 — **four counted no
+   item at all, twelve counted 1–19, and none reached 20.** The 61 shard
+   payloads, whose rates are published nowhere, say the same at scale: 364 rows,
+   155 zeros, split 41 and 114, none at 20, and not one carrying a denominator.
+   Every `0.0` on this metric is a denominator artefact, and the heatmap painted
+   all of them bright red.
+
+   (This point first gave the figures as 447 rows, 168 zeros and 385 missing
+   denominators, split 41/127. That pair added the 364 shard rows into a count
+   it called published; the published figures at that moment were 83 and 13.
+   #399 then recovered denominators across the published corpus and moved the
+   published side again, to the numbers above. The conclusion held under all
+   three sets, and is asserted per population in
+   `batch-runner/tests/test_the_report_prompt_retires_the_required_item_name.py`.)
 
 ### What this changed, and what it did not
 
@@ -325,13 +335,49 @@ No verdict flipped. Stage 1 (mean 82.87%) and stage 3 (mean 79.53%) already
 failed on mean score, so dropping the gate leaves both failing and both exiting
 `1`. Nothing that failed before passes now.
 
-### Residual risk, recorded rather than fixed
+### The residual, and how it closed
 
-`core/narrative_analyzer.py` still writes "Critical item pass rate" into the
-report prompt. Correcting that string is a one-word edit, but `core/**/*.py` is
-a `compute_grader_source_hash` input: changing it moves the grader fingerprint,
-which is only honest to do alongside a real re-grade. It is deferred to the next
-fingerprint-moving PR rather than smuggled in here.
+This document originally recorded one place the ruling had not reached:
+`core/narrative_analyzer.py` still wrote "Critical item pass rate" into the
+report prompt. It was deferred because `core/**/*.py` is a
+`compute_grader_source_hash` input, so correcting the string moves the grader
+fingerprint — not a thing to smuggle in beside a label change.
+
+It closed in its own pull request. Two findings from doing it are worth keeping:
+
+* **The string was the smaller half.** `_build_grading_guard_clause` also
+  ordered the paid narrative model to *highlight* `critical_item_pass_rate`,
+  unconditionally, on the line directly above a denominator-guarded highlight
+  for the precheck breakdown. One rate was protected from its own empty
+  denominator and this one was promoted regardless. It is out of the highlight
+  list now, and the prompt states plainly that it is not a required-item
+  measure and not a pass criterion.
+* **Point 5 had never reached this surface.** The prompt printed `crit=0%` with
+  no denominator and no readability floor. It now renders the count, says
+  "not measured (0 items)" over an empty denominator, says "denominator not
+  recorded" where `item_counts` is absent, and marks anything under 20 counted
+  items as too few to read — the same `ceil(1/(1−0.95))` the dashboard and
+  `analyze_gold_ceiling.py` derive. Every one of the four is a state the
+  committed corpus actually reaches, censused and floored in the tests:
+
+  | population | not recorded | not measured (0) | too few to read | readable |
+  |---|--:|--:|--:|--:|
+  | published, run level | 6 | 1 | 15 | 11 |
+  | published, per sector | 0 | 4 | 34 | 48 |
+  | shard, run level | 61 | 0 | 0 | 0 |
+  | shard, per sector | 364 | 0 | 0 | 0 |
+
+  The published sector row no longer lands in "not recorded" because #399
+  recovered its denominator. The state is not dead: a merge reads shards, so
+  all 425 shard rows plus the 6 published payloads that predate
+  `model_did_right` still render it, and it is the state the paid prompt shows
+  most often.
+
+The grader fingerprint moved, deliberately and on the record: measured before
+and after on three grading configs, and the pairs are in `CHANGELOG.md` under
+this change. No grade JSON was rewritten, no rate changed value, and no run's
+stored score moved; what changed is the text a future report generation is
+given. The next paid grade run needs a fresh smoke at the new fingerprint.
 
 ## What was open before it
 

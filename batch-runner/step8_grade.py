@@ -2099,7 +2099,7 @@ def _compute_summary(
             ),
             "precheck_pass_rate": _rate(bag["pre_pass"], bag["pre_items"]),
             "judge_pass_rate": _rate(bag["judge_pass"], bag["judge_items"]),
-            # 56 of the 83 sector rows this repository has published report a
+            # 59 of the 86 sector rows this repository has published report a
             # `precheck_pass_rate` of 0.0 over no precheck items at all. The
             # three rates above cannot say which; these counts can.
             "item_counts": _wow_item_counts(bag),

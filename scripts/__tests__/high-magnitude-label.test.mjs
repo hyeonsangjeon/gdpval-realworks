@@ -236,7 +236,11 @@ test('the card is not in the headline row it was demoted out of', async () => {
 test('a run that counted nothing is not reported as a 0% pass rate', async () => {
   const { readHighMagnitudeRate } = await loadReading();
   // `step8_grade._rate` returns 0.0 on an empty denominator, so this is the
-  // exact pair 45 of the 447 published sector rows carry today.
+  // exact pair 5 rows in the published corpus carry today — 4 sector rows and
+  // 1 run-level payload, out of 86 and 33 that carry the rate. (An earlier
+  // version of this line said 45 of 447 published sector rows; 447 folds in the
+  // 364 rows inside the `_shards/` payloads, which are published nowhere and
+  // record no denominator at all, so none of them is in *this* state.)
   const reading = readHighMagnitudeRate(0.0, 0);
   assert.equal(reading.value, 'not recorded');
   assert.ok(!reading.value.includes('%'), 'a percentage was printed for an empty denominator');
@@ -252,7 +256,11 @@ test('a run that published no rate at all says so', async () => {
 });
 
 test('a rate with no denominator behind it is shown, and the gap is stated', async () => {
-  // The common case: all 94 payloads publish the rate, none records the count.
+  // Once the common case, and still a live one: `item_counts` was added after
+  // most payloads were written, and #393 then #399 recovered it across the
+  // published side — 6 of the 33 published run-level payloads still record no
+  // count, and none of their 86 sector rows. All 61 shard payloads and all 364
+  // of their rows do, and a merge reads shards.
   const { readHighMagnitudeRate } = await loadReading();
   const reading = readHighMagnitudeRate(0.5714, undefined);
   assert.equal(reading.value, '57.1%');

@@ -47,20 +47,20 @@ entries land under a fresh dated heading the day they merge to `main`.
     is unrecorded, empty, or under 20 items is greyed out with the reason on
     hover instead of painted red.
   - **An empty denominator reads "not recorded", never `0%`.** Measured on this
-    repository's own grades with #393 merged in: 447 published sector rows
-    carry the rate, of which #393 recovered a denominator for 62 — the other
-    385 still publish a bare rate with nothing behind it. Of the 62 that can
-    now be checked, **4 counted no high-magnitude item at all**; those printed
-    `0.0%` and painted the heatmap bright red for a run that measured nothing,
-    and they now read "not recorded". A further 21 counted between 1 and 19.
-    168 sector rows read exactly `0.0`, and only 10 of them carry a denominator
-    to explain it — but recomputing the count straight from the item data
-    settles all 168: **41 counted no high-magnitude item at all, 127 counted
-    between 1 and 19, and not one reached 20.** Every published `0.0` is a
-    denominator artefact, and the heatmap painted all 168 bright red. Run level
-    is the same shape: 94 payloads publish the rate, 22 carry
-    `item_counts.critical_items` (1 of them zero, 14 under 20), 72 carry
-    nothing. The 20-item floor is derived rather than chosen:
+    repository's own grades with #393 merged in: **83 published sector rows**
+    carry the rate, of which #393 recovered a denominator for 62 — the other 21
+    still publish a bare rate with nothing behind it. **4 of the 62 counted no
+    high-magnitude item at all**; those printed `0.0%` and painted the heatmap
+    bright red for a run that measured nothing, and they now read "not
+    recorded". A further 21 counted between 1 and 19, and 37 counted 20 or
+    more. 13 sector rows read exactly `0.0`, and recomputing the count straight
+    from the item data settles all 13: **4 counted nothing, 9 counted 1–19, and
+    none reached 20.**
+    The 61 shard payloads, whose rates are published nowhere, say the same at
+    scale — 364 rows, 155 zeros, split 41 and 114, none at 20, none carrying a
+    denominator. Run level is the same shape: 33 published payloads publish the
+    rate and 22 carry `item_counts.critical_items` (1 of them zero, 14 under
+    20). The 20-item floor is derived rather than chosen:
     `ceil(1 / (1 − 0.95))`, below which one item moves the rate further than
     the whole distance from the reference to a clean sweep.
   - `scripts/__tests__/high-magnitude-label.test.mjs` pins all of it — the two
@@ -68,10 +68,8 @@ entries land under a fresh dated heading the day they merge to `main`.
     `gates`, the banned labels across every rendered `src/` surface, and the
     five states of `readHighMagnitudeRate`.
 
-  Known residual: `core/narrative_analyzer.py` still writes "Critical item pass
-  rate" into the report prompt. Correcting that string is a one-word edit, but
-  `core/**/*.py` feeds `compute_grader_source_hash`, so it is deferred to the
-  next fingerprint-moving PR rather than smuggled in beside a label change.
+  The residual this entry recorded — `core/narrative_analyzer.py` still writing
+  "Critical item pass rate" into the report prompt — is closed under **Fixed**.
 
 ### Added
 - **How much of a published average was decided by the audio sub-judge is now
@@ -313,6 +311,128 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **The report prompt ordered a paid model to headline the heuristic the owner
+  had just retired.** `core/narrative_analyzer.py` was the one surface the
+  2026-09-03 ruling had not reached, and it is the surface where a model is
+  paid to turn these numbers into prose a person then reads. The string in the
+  known-residual note above was the smaller half of it.
+
+  `_build_grading_guard_clause` built its `Highlight:` line — the line that
+  decides what the report leads with — as
+  `"weakest sector, strongest sector, critical_item_pass_rate"`, unconditionally.
+  The very next statement in the same function denominator-guards the precheck
+  breakdown, so one rate was protected from its own empty denominator while
+  this one was promoted regardless of what was behind it. The rate is out of
+  the highlight list now, and the prompt states in its own words that it counts
+  items by score magnitude, is **not** a measure of required items, is **not**
+  a pass criterion, and must not be called critical, required or mandatory.
+
+  Point 5 of the ruling — show the denominator, and say when it is too small to
+  read — had never reached this surface either. `crit=0%` went to the model
+  with nothing beside it. `_format_high_magnitude_rate` now renders
+  `not measured (0 items)` over an empty denominator, `0% (denominator not
+  recorded)` where `item_counts` is absent,
+  `0% of 3 -- too few to read (< 20 items)` under the floor, and `33% of 400`
+  when there is something to read. The floor is the same `ceil(1 / (1 − 0.95))`
+  the dashboard and `scripts/analyze_gold_ceiling.py` each derive; the label is
+  built from `core/grader.py`'s `MAGNITUDE_THRESHOLD` so it cannot drift from
+  the comparison that decides criticality. The other two rates keep
+  `_format_rate`'s behaviour unchanged — the ruling was about this metric, and
+  inventing a readability floor for `precheck_pass_rate` and `judge_pass_rate`
+  would be a new criterion applied to runs already published.
+
+  Measured on this repository's own grades, with #399 merged: 86 published
+  sector rows carry the rate, 16 report exactly `0.0`, and recomputing the count
+  settles all 16 — 4 counted nothing, 12 counted 1–19, none reached 20. The 61
+  shard payloads, whose rates are published nowhere, say the same at scale: 364
+  rows, 155 zeros, split 41 and 114, none at 20. Not one `0.0` on this metric,
+  in either population, is a run where twenty or more high-magnitude items were
+  scored and failed. All four rendered states are reached by the committed
+  corpus, and a census test floors each one so none can become a branch nothing
+  exercises:
+
+  | population | not recorded | not measured (0) | too few to read | readable |
+  |---|--:|--:|--:|--:|
+  | published, run level | 6 | 1 | 15 | 11 |
+  | published, per sector | 0 | 4 | 34 | 48 |
+  | shard, run level | 61 | 0 | 0 | 0 |
+  | shard, per sector | 364 | 0 | 0 | 0 |
+
+  Writing that measurement down found an arithmetic error in the entry above
+  and in point 6 of `REQUIRED_ITEM_DEFINITION.md`, both merged by #394: they
+  gave 447 sector rows, 168 zeros and 385 missing denominators, split 41/127,
+  and called all of it published. That total folded the 364 shard rows in
+  alongside the 83 real ones. Shards are intermediate halves of a run and their
+  rates are published nowhere, so they are not published rows. The conclusion
+  those entries drew is unaffected — no zero on this metric is readable in
+  either population — but the counts were wrong, so both are corrected in place
+  rather than repeated here, and the new test asserts a floor per population so
+  the two cannot be conflated again.
+
+  Then #399 moved the published side again, mid-review, by backfilling
+  `item_counts` across the corpus: 83 rows became 86, 13 zeros became 16, the
+  1–19 bucket went 9 → 12, and the 21 published sector rows with no denominator
+  went to none. Every `>=` floor in the tests stayed green while the sentences
+  they guarded went stale, which is the whole reason the census above is
+  floored per state as well as per population. The figures here and in
+  `REQUIRED_ITEM_DEFINITION.md` are the post-#399 ones; #394's entry above is
+  left as written, since it dates itself to "#393 merged in" and was correct on
+  that corpus.
+
+  **The grader source fingerprint moves, deliberately.**
+  `compute_grader_source_hash` walks every `.py` under `batch-runner/core/` and
+  hashes `step8_grade.py` alongside them, so a prompt with nothing to do with
+  grading — and even a comment restating a count in the summariser — still
+  changes the hash each shard stamps and `step9_merge_shards` compares. That is
+  why the one-word edit waited for a pull request of its own.
+
+  Measured rather than asserted, against `main` at `de9b5ef`, and re-measured
+  there rather than carried forward. Full 64 characters, because an abbreviated
+  hash is not one:
+
+  | grading config | | grader source hash |
+  |---|---|---|
+  | `regrade_exp003_v2_sol_max_score_excluded` (the OFFICIAL run) | before | `b3634efefd90bec6640c1ef258e459cd93147f7bee67fe52b73e28924c3363d6` |
+  | | after | `832900dbdd07363c58bd4e61679f62d12a7349c6a341d1c5a988c078cefb7eca` |
+  | `gold_ceiling_185_v2_sol_max` | before | `1312a579d67ec2e8eafd0d5dbce81a890fb3497d1a0f5841188d7310d7ccc215` |
+  | | after | `4e65f0c3e6ff223ee08c65b6d5705e4aad5cb0df0dbc5c7e03aef74d95c3f3a5` |
+  | `default_v2_mini` | before | `7599593dc16cbbc5829af6ae1fa2a261b3f46edb67cae2138b7d588f50acc8eb` |
+  | | after | `82987c3dbd2f28b9f87338298587de016762d02fcb4624ba307a1babb39ab482` |
+
+  Three configs because the hash is per config, so "it moved" is a claim about
+  each one and not about the tree.
+
+  Both columns were measured three times over this change's life, and recording
+  that is the point: only the last measurement is worth anything. The first pair
+  was taken against `main` at `4739321`. The `after` column then moved once, when
+  correcting the stale count in `step8_grade.py`'s own `item_counts` comment
+  brought that file into the diff. The `before` column then moved too — without
+  this branch touching anything — when `de9b5ef` merged the video contact-sheet
+  work, which changed `core/media_types.py`, `core/perception/vision.py`,
+  `core/tool_calling_judge.py`, files under `core/tools/` and
+  `schemas/grade.schema.json`: every one of them an input. The table above is the
+  state after merging that base in. A fingerprint recorded when a branch opens is
+  a fingerprint of a tree nobody will grade against; this one is measured
+  immediately before merging, and re-measured whenever the base moves underneath
+  it.
+
+  They are recorded here and **not** pinned in a test. A test that asserted a
+  literal hash would fail on the next unrelated edit under `core/` and would
+  have to be updated by whoever broke it, which is how a fingerprint check
+  becomes a formality. The repository has no such pin today and this change does
+  not add one.
+
+  Checked before merging: no literal source hash is pinned anywhere in the
+  tests, scripts, workflows or validation docs, and no grade run was in flight.
+  Nothing under `data/grades/` is
+  rewritten, no rate changes value, and no stored score moves — what changes is
+  the text a future report generation is given. The next paid grade run needs a
+  fresh smoke at the new fingerprint.
+  `batch-runner/tests/test_the_report_prompt_retires_the_required_item_name.py`
+  pins the label against `MAGNITUDE_THRESHOLD`, the floor against all three
+  copies of the constant, the five rendering states, the highlight line, the
+  scope decision, and the corpus claim above.
+
 - **A precheck that never ran was published as "Strong on reasoning, weak on
   structure".** `step8_grade._rate` returns `0.0` when the denominator is
   empty, and `0.0` is also the worst possible score, so the two are the same
@@ -324,14 +444,35 @@ entries land under a fresh dated heading the day they merge to `main`.
   ran, in a paid report and on a public page."* The obligation sits on the
   reading side, and that is where this is fixed.
 
-  **Measured on this repository's own published grades.** 94 run-level payloads
-  carry `precheck_pass_rate` and **81 of them publish `0.0`**. 22 record the
-  denominator, and among those, every one of the **15** zeros counted **no
-  precheck items at all** — not one is a run where prechecks ran and failed.
-  Per sector the shape repeats: 447 rows carry the rate, 420 publish `0.0`, 62
-  record a denominator, and **all 35 recorded zeros counted nothing**. Among
-  them is the 185-task gold-ceiling run — 8,816 judged items, zero prechecked
-  ones, published as a 0% structural pass rate and captioned as a weakness.
+  **Measured on this repository's own published grades.** 33 published
+  run-level payloads carry `precheck_pass_rate` and **20 of them publish
+  `0.0`**. 22 record the denominator, and among those, every one of the **15**
+  zeros counted **no precheck items at all** — not one is a run where prechecks
+  ran and failed. Per sector the shape repeats: 83 rows carry the rate, **56
+  publish `0.0`**, 62 record a denominator, and **all 35 recorded zeros counted
+  nothing**. Among them is the 185-task gold-ceiling run — 8,816 judged items,
+  zero prechecked ones, published as a 0% structural pass rate and captioned as
+  a weakness. The 61 shard payloads, whose rates are published nowhere, carry
+  364 more sector rows; every one of them is a zero and not one records a
+  denominator.
+
+  (This paragraph first gave those counts as 94 run-level payloads, 81 zeros,
+  447 sector rows and 420 zeros — the published and shard populations added
+  together and all called published. The figures for the denominator itself
+  were right, because no shard records one. `tests/test_a_rate_over_nothing_is
+  _not_zero.py` had it right all along at 20 and 56; the prose here did not.
+  Corrected in place, and the same conflation is corrected in the entry above.
+
+  A second note, added afterwards rather than written over the paragraph: #399
+  backfilled `item_counts` across the published corpus and moved every published
+  figure above. The finding is unchanged and got stronger — with denominators
+  recovered, **all 20** run-level zeros and **all 59** sector zeros counted no
+  precheck items, where before only the 15 and 35 with a recorded denominator
+  could be checked. The counts now read 33 run-level payloads carrying the rate,
+  20 zeros, 27 with a denominator and 6 without; per sector 86 rows, 59 zeros,
+  and a denominator on every one. The shard totals — 61 payloads, 364 rows, no
+  denominator anywhere — did not move. The paragraph above is left as it was
+  measured, because it was right on the corpus it was measured against.)
 
   **Four states, never collapsed into two.** `src/components/wow/rateReading.ts`
   is import-free so a node test can execute the decision itself. A rate whose
@@ -340,8 +481,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   recorded", **draws no bar at all** — a bar at zero length is the picture of
   total failure, which is the one thing the run did not measure — and says why.
   A rate with no denominator recorded is `denominator-unknown`: the percentage
-  is still shown, greyed, with the gap stated, because 72 run-level payloads and
-  385 sector rows predate `item_counts` and #393 recovered it for only some. A
+  is still shown, greyed, with the gap stated, because 11 of the 33 published
+  run-level payloads and 21 of their 83 sector rows predate `item_counts` — as
+  do all 61 shard payloads and all 364 of their rows — and #393 recovered it
+  for only some. (#399 then recovered the rest of the published side: 6 run-level
+  payloads and no sector row are still in this state. The shard rows all are,
+  and a merge reads shards, so the state is not dead.) A
   run publishing no rate at all is `absent`. Only `measured` may be set against
   another rate, so *Structure vs Reasoning* now withholds its verdict and names
   the missing half instead of subtracting a zero that stands for nothing.
