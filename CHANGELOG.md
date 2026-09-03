@@ -12,6 +12,51 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The number that says whether the model got the important things right is,
+  on the gold corpora, mostly one line about formatting.** GDPVal rubrics carry
+  a `required` field and it is `null` on all 10,453 items, so the repository
+  decided weight stands in for necessity at `abs(max_score) >= 4` and left a
+  comment saying 4 was a heuristic to revisit once gold-ceiling validation
+  could show whether it mis-classifies. That validation is finished, and
+  `batch-runner/scripts/analyze_required_item_definition.py` now prices the
+  alternatives against the runs already published, without changing any of
+  them.
+
+  `'Overall formatting and style of the deliverable'` is worth exactly 5 and
+  appears in 55–65% of tasks. It is **54.3%** of the stage-1 gold critical set
+  and **33.8%** of stage-3's, and the expert gold answers pass it at about a
+  third the rate of everything else. So raising the threshold to 5 — the first
+  option on the board — keeps every copy of it and drops only the genuine
+  must-haves worth 4: stage-1 gold moves **0.5714 → 0.5312**, *away* from the
+  0.95 gate it has to reach, and stage 3 moves 0.6394 → 0.6325, while the
+  220-task model run drifts the other way (0.4903 → 0.4950). Threshold 6 does
+  clear the boilerplate and leaves stage 1 with **one** critical item out of
+  1,431 scored ones, which then reads a perfect 1.0000. Excluding
+  deliverable-wide style lines with the predicate the grader already ships,
+  `core.grader_routing.is_overall_style_criterion`, takes gold to 0.7500 and
+  0.8128 — still short of 0.95, which is the honest part: what is left is real
+  must-haves the reference answers miss.
+
+  The sweep runs through the production summariser rather than a copy of it.
+  `step8_grade` imports `_is_critical_item` — the function — and that function
+  reads `MAGNITUDE_THRESHOLD` from `core.grader` when it is called, so
+  rebinding the module global reprices `summary.wow.critical_item_pass_rate`
+  and `tasks[].critical_fail` exactly as a real change would. At the shipped
+  threshold the recount lands on the flags the grader itself wrote (13 of 30,
+  99 of 185) or the tool says so and stops. It refuses a payload whose stored
+  rate the current summariser does not reproduce, deferring to the two causes
+  `scripts/summary_wow_drift.py` already named — six of the 94 payloads under
+  `data/grades/` — and refuses a rate whose denominator is below
+  `ceil(1 / (1 - 0.95)) = 20` items, a floor derived from the gate it serves
+  rather than chosen.
+
+  **No definition was changed.** `MAGNITUDE_THRESHOLD` is untouched, nothing
+  under `core/` or `step8_grade.py` was edited, and no grader fingerprint
+  moved — the tool lives outside `compute_grader_source_hash`'s input set. The
+  choice belongs to the owner, because it would change this metric on every run
+  already published. Measurements, all four options and their costs:
+  `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`.
+
 - **The grading rebuild (v2) is complete, and the first thing it established is
   that a perfect answer does not score 100.** The rebuild ran in three parts.
   PR1 fixed a sign error in the score arithmetic. PR2 rebuilt the judge around
