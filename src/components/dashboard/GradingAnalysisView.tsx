@@ -18,6 +18,11 @@ import { fmtPct } from '../../lib/format'
 import { isHiddenGrade, isOfficialGrade } from '../../lib/officialFilter'
 import ProvenanceBadge from '../ProvenanceBadge'
 import {
+  JUDGE_ITEMS_DESCRIBED,
+  PRECHECK_ITEMS_DESCRIBED,
+  readWowRate,
+} from '../wow/rateReading'
+import {
   NEAR_PERFECT_LABEL,
   NEAR_PERFECT_SHORT,
   NEAR_ZERO_LABEL,
@@ -346,6 +351,18 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
   const isLegacyDummy = grade.grade_status === 'legacy_dummy'
   const isOfficial = isOfficialGrade(grade)
   const wow = grade.summary_v1?.wow
+  // These two pills sit in a grid of runs read side by side, which is exactly
+  // where a `0.0%` invented by an empty denominator does its damage: it ranks.
+  const precheckPill = readWowRate(
+    wow?.precheck_pass_rate,
+    wow?.item_counts?.precheck_items,
+    PRECHECK_ITEMS_DESCRIBED,
+  )
+  const judgePill = readWowRate(
+    wow?.judge_pass_rate,
+    wow?.item_counts?.judge_items,
+    JUDGE_ITEMS_DESCRIBED,
+  )
   const stats = [
     { icon: Target, label: 'Graded', value: `${s.graded_tasks}/${s.total_tasks}`, color: 'text-blue-400 bg-blue-500/10' },
     { icon: Award, label: NEAR_PERFECT_SHORT, value: s.perfect_score, color: 'text-emerald-400 bg-emerald-500/10' },
@@ -432,11 +449,25 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
             >
               err {fmtPct(wow.judge_error_rate)}
             </span>
-            <span className="text-dash-text-muted" title={tooltipTexts.health.judgePassRate}>
-              judge {fmtPct(wow.judge_pass_rate)}
+            <span
+              className="text-dash-text-muted"
+              title={
+                judgePill.caveat
+                  ? `${tooltipTexts.health.judgePassRate} — ${judgePill.caveat}`
+                  : tooltipTexts.health.judgePassRate
+              }
+            >
+              judge {judgePill.fraction === null ? '—' : fmtPct(judgePill.fraction)}
             </span>
-            <span className="text-dash-text-muted" title={tooltipTexts.health.precheckPassRate}>
-              precheck {fmtPct(wow.precheck_pass_rate)}
+            <span
+              className="text-dash-text-muted"
+              title={
+                precheckPill.caveat
+                  ? `${tooltipTexts.health.precheckPassRate} — ${precheckPill.caveat}`
+                  : tooltipTexts.health.precheckPassRate
+              }
+            >
+              precheck {precheckPill.fraction === null ? '—' : fmtPct(precheckPill.fraction)}
             </span>
           </div>
         )}
