@@ -47,9 +47,10 @@ export interface HighMagnitudeReading {
  *
  * An absent denominator is not a zero one. `item_counts.critical_items` was
  * added after most payloads were written, and #393 recovered it for only some
- * of them — 22 of 94 payloads and 62 of 447 sector rows carry it today — so a
- * real rate with nothing behind it is still the common case, and that is
- * stated rather than hidden.
+ * of them — 22 of the 33 published payloads and 62 of their 83 sector rows
+ * carry it today, and not one of the 61 shard payloads does — so a real rate
+ * with nothing behind it is still the common case, and that is stated rather
+ * than hidden.
  */
 export function readHighMagnitudeRate(
   rate: number | null | undefined,

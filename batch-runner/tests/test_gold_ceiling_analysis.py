@@ -1434,9 +1434,10 @@ def test_an_empty_denominator_is_not_recorded_rather_than_zero_percent():
     """`0.0` and "nothing was counted" are the same glyph out of `_rate`.
 
     `step8_grade._rate` returns `0.0` for an empty denominator, and `0.0` is
-    also the worst score a real run can earn. 45 of the 447 sector rows in
-    `data/grades/` publish exactly `0.0` over a denominator of exactly zero, so
-    this is measured behaviour rather than a hypothetical.
+    also the worst score a real run can earn. 4 of the 83 published sector rows
+    in `data/grades/` publish exactly `0.0` over a denominator of exactly zero,
+    as do 41 of the 364 rows in the shard payloads beneath them, so this is
+    measured behaviour rather than a hypothetical.
     """
     payload = _payload(tasks=[_task("task-1", items=[_item(max_score=1)])])
     # What the producer wrote for a run that counted nothing.
@@ -1464,10 +1465,10 @@ def test_an_empty_denominator_is_not_recorded_rather_than_zero_percent():
 def test_a_denominator_too_small_to_read_says_so_beside_the_rate():
     """One item makes the rate `0.0` or `1.0`, and neither is a measurement.
 
-    123 of the 447 published sector rows sit between 1 and 19 items. The floor
-    is derived rather than chosen: under `1 / (1 - 0.95)` items, one failure
-    costs more than the entire distance between the reference and a clean
-    sweep.
+    9 of the 83 published sector rows sit between 1 and 19 items, as do 114 of
+    the 364 shard rows. The floor is derived rather than chosen: under
+    `1 / (1 - 0.95)` items, one failure costs more than the entire distance
+    between the reference and a clean sweep.
     """
     assert analysis.MIN_USABLE_REQUIRED_ITEMS == 20
 

@@ -34,11 +34,13 @@ function colorFor(rate: number): string {
  * A cell whose rate cannot be read as a verdict, so it is not painted like one.
  *
  * Colour is the whole claim of a heatmap: red says the model failed here. A
- * column earns that only when items were counted for it. Across the 447 sector
- * rows published so far, 385 record no denominator at all; of the 62 that do,
+ * column earns that only when items were counted for it. Across the 83 sector
+ * rows published so far, 21 record no denominator at all; of the 62 that do,
  * **35 rows rate no precheck items whatever and every one of them publishes
  * `precheck_pass_rate: 0.0`, while not one is a sector where prechecks ran and
- * failed**. Painted, all 35 read as a total structural failure.
+ * failed**. Painted, all 35 read as a total structural failure. (The 364 rows
+ * inside the shard payloads carry no denominator at all and are published
+ * nowhere; folding them in is what first made this read 447 and 385.)
  */
 const UNREADABLE_CELL = 'hsl(220, 8%, 28%)'
 

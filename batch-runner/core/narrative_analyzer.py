@@ -17,6 +17,7 @@ Usage:
 
 import json
 import logging
+import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -25,10 +26,37 @@ from core.azure_ai_clients import (
     AzureAIClientFactory,
     AzureAIWorkload,
 )
+from core.grader import MAGNITUDE_THRESHOLD
 from core.llm_client import ManagedAzureAIClient, create_typed_azure_client
 from core.measurement_display import NOT_MEASURED, render_measured
 
 logger = logging.getLogger(__name__)
+
+#: The reference `critical_item_pass_rate` is read against, from
+#: `tasks/rebuilding_grading_task/300-gold-ceiling.md`. It is a reference, not a
+#: gate -- `scripts/analyze_gold_ceiling.py` stopped deciding on it by owner
+#: decision. It is repeated here rather than imported because
+#: `batch-runner/scripts/` is not a `compute_grader_source_hash` input, and a
+#: file outside that set must not be able to change this prompt's text.
+#: `test_the_report_prompt_retires_the_required_item_name.py` pins the two
+#: copies together.
+HIGH_MAGNITUDE_PASS_REFERENCE = 0.95
+
+#: Below this many counted items the rate cannot carry the weight a reader puts
+#: on it: one item moves it further than the whole distance from the reference
+#: to a clean sweep. Derived, not chosen. The dashboard derives the same number
+#: the same way in `src/components/wow/highMagnitudeReading.ts`.
+MIN_READABLE_HIGH_MAGNITUDE_ITEMS = math.ceil(1 / (1 - HIGH_MAGNITUDE_PASS_REFERENCE))
+
+#: What `critical_item_pass_rate` is called wherever a person reads it. The JSON
+#: key keeps its published name -- renaming it would break every reader of every
+#: payload written so far -- but the owner's ruling of 2026-09-03 retired
+#: "critical" and "required" from the prose, because the GDPVal rubrics carry no
+#: `required` field and the grader substitutes score magnitude for necessity.
+#: See `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`.
+HIGH_MAGNITUDE_RATE_LABEL = (
+    f"High-magnitude item pass rate (|max score| >= {MAGNITUDE_THRESHOLD}, diagnostic)"
+)
 
 # ─── Result Dataclass ─────────────────────────────────────────────────────
 
@@ -102,7 +130,7 @@ def _build_grading_guard_clause(grade: dict | None) -> str:
     wow = _get_nested(grade, ["summary", "wow"], {})
     # Asking for a breakdown that does not exist in this run is how an absence
     # becomes a paragraph. See `_failure_pattern_hint`.
-    highlights = "weakest sector, strongest sector, critical_item_pass_rate"
+    highlights = "weakest sector, strongest sector"
     if not isinstance(wow, dict) or _measured_over(wow, "precheck_items") != 0:
         highlights += ", precheck vs judge breakdown"
 
@@ -112,6 +140,11 @@ def _build_grading_guard_clause(grade: dict | None) -> str:
   against open-sourced GDPval rubrics ({rubric_repo} @ {rubric_sha}).
 - Refer to scores as "LLM-judge grade" or "rubric-based score"; avoid
   wording that implies human expert review or OpenAI-hosted official scoring.
+- "{HIGH_MAGNITUDE_RATE_LABEL}"
+  counts items whose score magnitude is large. The rubrics carry no
+  required-item flag, so it is NOT a measure of required items and NOT a pass
+  criterion. Report it as supporting detail only; do not call it critical,
+  required or mandatory, and do not describe a run as passing or failing on it.
 - Highlight: {highlights}."""
 
 
@@ -170,11 +203,58 @@ def _format_rate(metrics: dict, rate_key: str, count_key: str, decimals: int = 0
     return f"{formatted} of {measured}"
 
 
+def _format_high_magnitude_rate(metrics: dict) -> str:
+    """``critical_item_pass_rate``, rendered as what it actually measures.
+
+    The rate itself is untouched: same key, same value, same arithmetic. What
+    is added is the two things the owner's ruling of 2026-09-03 requires a
+    reader to be given with it, and which the paid prompt is the last surface
+    not to give.
+
+    **The denominator, or the fact that there isn't one.** Measured over the
+    grade payloads committed here: 83 published sector rows carry the rate and
+    13 report exactly ``0.0``. Recomputing the count settles all 13 -- four
+    counted no high-magnitude item at all, nine counted between 1 and 19, none
+    reached 20. The 61 shard payloads, whose rates are published nowhere, say
+    the same thing at scale: 364 rows, 155 zeros, 41 over nothing and 114 over
+    1-19, again none at 20. There is no ``0.0`` on this metric, in either
+    population, that is a run where twenty or more high-magnitude items were
+    scored and failed. A bare ``0%`` in front of a model paid to explain it
+    produces the one paragraph the data does not support.
+
+    **That it is too small to read.** Below
+    ``MIN_READABLE_HIGH_MAGNITUDE_ITEMS`` a single item moves the rate further
+    than the whole distance from the reference to a clean sweep, so the number
+    is noise rather than a finding. The dashboard already says so; this is the
+    same statement on the surface that feeds the report.
+
+    Only this rate is treated this way. ``precheck_pass_rate`` and
+    ``judge_pass_rate`` keep ``_format_rate``'s behaviour, because the ruling
+    was about this metric and inventing a readability floor for the other two
+    would be a new criterion applied to already-published runs.
+    """
+    measured = _measured_over(metrics, "critical_items")
+    if measured == 0:
+        return "not measured (0 items)"
+    formatted = _format_pct(metrics.get("critical_item_pass_rate"), decimals=0)
+    if measured is None:
+        # 21 of the 83 published sector rows are in this state, and every one
+        # of the 364 shard rows. Without the count, a 0% here and a 0% over
+        # four hundred items are the same string.
+        return f"{formatted} (denominator not recorded)"
+    if measured < MIN_READABLE_HIGH_MAGNITUDE_ITEMS:
+        return (
+            f"{formatted} of {measured} -- too few to read "
+            f"(< {MIN_READABLE_HIGH_MAGNITUDE_ITEMS} items)"
+        )
+    return f"{formatted} of {measured}"
+
+
 def _format_sector_grade_line(sector: str, metrics: dict) -> str:
     """Format one sector line for the GRADING RESULTS prompt section."""
     return (
         f"  - {sector}: avg_pct={_format_pct(metrics.get('avg_pct'), decimals=1)}, "
-        f"crit={_format_rate(metrics, 'critical_item_pass_rate', 'critical_items')}, "
+        f"high_mag={_format_high_magnitude_rate(metrics)}, "
         f"pre={_format_rate(metrics, 'precheck_pass_rate', 'precheck_items')}, "
         f"judge={_format_rate(metrics, 'judge_pass_rate', 'judge_items')}"
     )
@@ -264,7 +344,7 @@ Overall:
   - Average score: {_format_pct(openai_compat.get("avg_score_pct"), decimals=1)} (± {_format_pct(openai_compat.get("ci_pct"), decimals=1)})
   - Near-perfect tasks (>= 99%): {openai_compat.get("perfect_count", "n/a")}/{total_tasks or "n/a"}
   - Near-zero tasks (<= 1%): {openai_compat.get("zero_count", "n/a")}/{total_tasks or "n/a"}
-  - Critical item pass rate: {_format_rate(wow, "critical_item_pass_rate", "critical_items")}
+  - {HIGH_MAGNITUDE_RATE_LABEL}: {_format_high_magnitude_rate(wow)}
   - Precheck pass rate: {_format_rate(wow, "precheck_pass_rate", "precheck_items")}
   - Judge pass rate: {_format_rate(wow, "judge_pass_rate", "judge_items")}
 

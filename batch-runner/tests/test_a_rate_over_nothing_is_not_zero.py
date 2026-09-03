@@ -273,7 +273,11 @@ def test_the_guard_clause_stops_asking_for_the_breakdown() -> None:
     grade = {"summary": {"wow": {"item_counts": {"precheck_items": 0}}}}
 
     assert "precheck vs judge breakdown" not in _build_grading_guard_clause(grade)
-    assert "critical_item_pass_rate" in _build_grading_guard_clause(grade)
+    # ...and only that one was withdrawn. The rest of the line survives.
+    # `critical_item_pass_rate` used to be asserted here too; it left the
+    # highlight list by owner decision, pinned in
+    # `test_the_report_prompt_retires_the_required_item_name.py`.
+    assert "weakest sector, strongest sector" in _build_grading_guard_clause(grade)
 
 
 def test_the_guard_clause_still_asks_for_it_when_it_exists() -> None:
