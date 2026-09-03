@@ -19,7 +19,7 @@
 // UNCLASSIFIED and callers gate the whole feature on `covered`, so older
 // experiments render exactly as they did before this file existed.
 
-/** @typedef {'scored'|'content_zero'|'inference_failed'|'format_unmet'|'no_deliverable'|'not_selected'|'grading_error'|'unclassified'} SelectionOutcome */
+/** @typedef {'scored'|'content_zero'|'inference_failed'|'format_unmet'|'no_deliverable'|'not_selected'|'grading_error'|'score_not_recorded'|'unclassified'} SelectionOutcome */
 
 export const SELECTION_OUTCOME = {
   SCORED: 'scored',
@@ -29,6 +29,11 @@ export const SELECTION_OUTCOME = {
   NO_DELIVERABLE: 'no_deliverable',
   NOT_SELECTED: 'not_selected',
   GRADING_ERROR: 'grading_error',
+  // A row carrying no score and no reason for not having one. Every other
+  // outcome here answers "why is this not a normal score"; this one answers
+  // "we do not know, and the row never said". It is not a zero -- see the
+  // comparison in classifyTaskOutcome for why it used to become one.
+  SCORE_NOT_RECORDED: 'score_not_recorded',
   UNCLASSIFIED: 'unclassified',
 };
 
@@ -52,6 +57,7 @@ export const OUTCOME_LABELS = {
   [SELECTION_OUTCOME.NO_DELIVERABLE]: 'No deliverable',
   [SELECTION_OUTCOME.NOT_SELECTED]: 'Not scored',
   [SELECTION_OUTCOME.GRADING_ERROR]: 'Grading error',
+  [SELECTION_OUTCOME.SCORE_NOT_RECORDED]: 'Score not recorded',
   [SELECTION_OUTCOME.UNCLASSIFIED]: 'Unclassified',
 };
 
@@ -141,7 +147,10 @@ export function classifyTaskOutcome(task) {
   const selectionError = task?.selection_error ?? null;
   const files = deliverableFiles(task);
   const formats = requiredFormats(selectionError);
-  const pct = typeof task?.pct === 'number' ? task.pct : null;
+  // Finite, not merely typed: the aggregator's row projection gates on
+  // Number.isFinite, and if these two disagreed about what counts as a score a
+  // row could be labelled "Scored" while the row beside it carried no number.
+  const pct = Number.isFinite(task?.pct) ? task.pct : null;
   const hasError = task?.error !== null && task?.error !== undefined && task?.error !== '';
 
   const base = {
@@ -195,6 +204,28 @@ export function classifyTaskOutcome(task) {
 
   if (hasError) {
     return decide(SELECTION_OUTCOME.GRADING_ERROR, String(task.error));
+  }
+
+  // Everything below this line reads `pct` to decide what the row means, so a
+  // row that has no `pct` has to be answered before it gets there. Both of the
+  // comparisons below are `pct === 0`, and `null === 0` is false, so an absent
+  // score used to fall through them and return SCORED -- a claim the row has
+  // nothing to support. On grade schema 1.3/1.4 the aggregator's strict
+  // validator refuses such a file outright and this is unreachable; on 1.0-1.2,
+  // which are checked for the presence of the headline keys and nothing else,
+  // this is the only thing between an absent score and the word "Scored".
+  //
+  // Deliberately not in REACHED_JUDGE: whether a judge ever saw this
+  // deliverable is exactly what the missing score fails to say. Deliberately
+  // not in ZERO_OUTCOME_ORDER either -- an absent score is not a zero, and
+  // listing it as a reason for zeros would reintroduce the confusion by the
+  // back door.
+  if (pct === null) {
+    return decide(
+      SELECTION_OUTCOME.SCORE_NOT_RECORDED,
+      'This task carries no score. Nothing here says whether it was graded, so it is '
+      + 'neither a zero nor a pass -- the record is simply missing.',
+    );
   }
 
   // No selection metadata at all: a grade file written before the selector

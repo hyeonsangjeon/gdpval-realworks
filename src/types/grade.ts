@@ -181,6 +181,9 @@ export interface DeliverableSelection {
  * `content_zero` is the only zero that is a verdict on the work. The rest are
  * recorded as zero because nothing gradeable reached the judge, which is a
  * different finding and belongs in a different bucket on screen.
+ *
+ * `score_not_recorded` is not in that list at all: it is a row carrying no
+ * score, which is neither a zero nor a pass.
  */
 export type SelectionOutcome =
   | 'scored'
@@ -190,6 +193,7 @@ export type SelectionOutcome =
   | 'no_deliverable'
   | 'not_selected'
   | 'grading_error'
+  | 'score_not_recorded'
   | 'unclassified'
 
 export interface ZeroReason {

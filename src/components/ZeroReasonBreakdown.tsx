@@ -69,6 +69,16 @@ const REASON_STYLES: Record<SelectionOutcome, ReasonStyle> = {
     bar: 'bg-orange-500',
     blurb: 'Grading raised an error before a verdict was reached.',
   },
+  // Never reaches this breakdown -- an absent score is not a zero, so it is not
+  // in ZERO_OUTCOME_ORDER. Carried here because the map is total over the
+  // union, and written out properly rather than blanked so that a future caller
+  // that does render it says something true.
+  score_not_recorded: {
+    icon: HelpCircle,
+    accent: 'text-slate-400',
+    bar: 'bg-slate-400',
+    blurb: 'This task carries no score at all, so nothing here says whether it was graded.',
+  },
   scored: { icon: Gavel, accent: '', bar: '', blurb: '' },
 }
 
