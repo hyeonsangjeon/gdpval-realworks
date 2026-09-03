@@ -99,6 +99,12 @@ def _build_grading_guard_clause(grade: dict | None) -> str:
     reasoning_effort = _get_nested(grade, ["judge", "reasoning_effort"], "unknown")
     rubric_repo = _get_nested(grade, ["rubric", "repo_id"], "openai/gdpval")
     rubric_sha = _get_nested(grade, ["rubric", "short_sha"], "unknown")
+    wow = _get_nested(grade, ["summary", "wow"], {})
+    # Asking for a breakdown that does not exist in this run is how an absence
+    # becomes a paragraph. See `_failure_pattern_hint`.
+    highlights = "weakest sector, strongest sector, critical_item_pass_rate"
+    if not isinstance(wow, dict) or _measured_over(wow, "precheck_items") != 0:
+        highlights += ", precheck vs judge breakdown"
 
     return f"""- Grading scores ARE available (see GRADING RESULTS section below).
 - Source: rubric-based LLM-judge ({judge_model}, reasoning_effort={reasoning_effort}).
@@ -106,8 +112,7 @@ def _build_grading_guard_clause(grade: dict | None) -> str:
   against open-sourced GDPval rubrics ({rubric_repo} @ {rubric_sha}).
 - Refer to scores as "LLM-judge grade" or "rubric-based score"; avoid
   wording that implies human expert review or OpenAI-hosted official scoring.
-- Highlight: weakest sector, strongest sector, critical_item_pass_rate,
-  precheck vs judge breakdown."""
+- Highlight: {highlights}."""
 
 
 def _build_grading_disclosure_paragraph(grade: dict | None) -> str:
@@ -123,13 +128,80 @@ def _build_grading_disclosure_paragraph(grade: dict | None) -> str:
     )
 
 
+def _measured_over(metrics: dict, count_key: str) -> int | None:
+    """How many items a ``wow`` rate was divided by, or ``None`` if unstated.
+
+    ``summary.wow.item_counts`` (and its per-sector twin) was added by
+    ``step8_grade._wow_item_counts``. Grades written before that carry no
+    counts, and for those the honest answer is that we do not know the
+    denominator -- not that it was zero.
+    """
+    counts = metrics.get("item_counts")
+    if not isinstance(counts, dict):
+        return None
+    value = counts.get(count_key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _format_rate(metrics: dict, rate_key: str, count_key: str, decimals: int = 0) -> str:
+    """A ``wow`` rate, or the reason there is no rate to give.
+
+    ``step8_grade._rate`` returns ``0.0`` when its denominator is empty, which
+    is also what "every item failed" looks like. This prompt is the sharpest
+    consequence of that collision: the model is paid to read these numbers and
+    write conclusions from them, and 0% invites exactly one conclusion.
+
+    Twenty of this repository's thirty-three published grades report
+    ``precheck_pass_rate: 0.0`` having prechecked nothing at all. Given
+    ``pre=0%`` beside "Precheck failures dominate: deliverable structure
+    issues", a model has been told, in effect, to write up a structural
+    collapse in runs where structure was never checked.
+
+    So a rate over an empty denominator is not rendered as a percentage here.
+    """
+    measured = _measured_over(metrics, count_key)
+    if measured == 0:
+        return "not measured (0 items)"
+    formatted = _format_pct(metrics.get(rate_key), decimals=decimals)
+    if measured is None:
+        return formatted
+    return f"{formatted} of {measured}"
+
+
 def _format_sector_grade_line(sector: str, metrics: dict) -> str:
     """Format one sector line for the GRADING RESULTS prompt section."""
     return (
         f"  - {sector}: avg_pct={_format_pct(metrics.get('avg_pct'), decimals=1)}, "
-        f"crit={_format_pct(metrics.get('critical_item_pass_rate'), decimals=0)}, "
-        f"pre={_format_pct(metrics.get('precheck_pass_rate'), decimals=0)}, "
-        f"judge={_format_pct(metrics.get('judge_pass_rate'), decimals=0)}"
+        f"crit={_format_rate(metrics, 'critical_item_pass_rate', 'critical_items')}, "
+        f"pre={_format_rate(metrics, 'precheck_pass_rate', 'precheck_items')}, "
+        f"judge={_format_rate(metrics, 'judge_pass_rate', 'judge_items')}"
+    )
+
+
+def _failure_pattern_hint(wow: dict) -> str:
+    """How to read precheck against judge -- when there is a precheck to read.
+
+    The hint asks the model to decide which of two failure modes dominates.
+    That is a comparison, and it needs both sides. On a run with no precheck
+    items there is no precheck side, and the old third branch pointed at
+    ``by_rubric_category``, which ``step8_grade`` fills with ``{}`` on every
+    run (the GDPVal rubrics carry no category taxonomy) and which this prompt
+    has never included. A model asked to consult something absent does not
+    report an absence; it reasons from what it can see, which here is 0%.
+    """
+    if _measured_over(wow, "precheck_items") == 0:
+        return (
+            "  - UNAVAILABLE for this run: no rubric item was decided by\n"
+            "    precheck, so `precheck_pass_rate` is a rate over nothing and\n"
+            "    its 0% is not a finding. Do NOT report weak deliverable\n"
+            "    structure, and do NOT compare structure against reasoning."
+        )
+    return (
+        "  - Precheck failures dominate: deliverable structure issues (file naming, format)\n"
+        "  - Judge failures dominate: content quality / domain reasoning issues\n"
+        "  - Neither dominates: say so; there is no finer breakdown to consult."
     )
 
 
@@ -192,9 +264,9 @@ Overall:
   - Average score: {_format_pct(openai_compat.get("avg_score_pct"), decimals=1)} (± {_format_pct(openai_compat.get("ci_pct"), decimals=1)})
   - Near-perfect tasks (>= 99%): {openai_compat.get("perfect_count", "n/a")}/{total_tasks or "n/a"}
   - Near-zero tasks (<= 1%): {openai_compat.get("zero_count", "n/a")}/{total_tasks or "n/a"}
-  - Critical item pass rate: {_format_pct(wow.get("critical_item_pass_rate"), decimals=0)}
-  - Precheck pass rate: {_format_pct(wow.get("precheck_pass_rate"), decimals=0)}
-  - Judge pass rate: {_format_pct(wow.get("judge_pass_rate"), decimals=0)}
+  - Critical item pass rate: {_format_rate(wow, "critical_item_pass_rate", "critical_items")}
+  - Precheck pass rate: {_format_rate(wow, "precheck_pass_rate", "precheck_items")}
+  - Judge pass rate: {_format_rate(wow, "judge_pass_rate", "judge_items")}
 
 By sector (top 3 weakest):
 {chr(10).join(weakest)}
@@ -203,9 +275,7 @@ By sector (top 3 strongest):
 {chr(10).join(strongest)}
 
 Failure pattern hint (precheck vs judge):
-  - Precheck failures dominate: deliverable structure issues (file naming, format)
-  - Judge failures dominate: content quality / domain reasoning issues
-  - Mixed: see by_rubric_category
+{_failure_pattern_hint(wow)}
 """
 
 
