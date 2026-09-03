@@ -100,3 +100,73 @@ summary_v1: {
 - 고칠 자리가 `scripts/aggregate-grades.mjs`와 그 검사들이라 **302의 범위
   (backend 측정 + 문서)와 겹치지 않는다.**
 - 프런트엔드 생성기 쪽은 지금 다른 작업이 물려 있어 한 PR에 섞으면 검토가 흐려진다.
+
+---
+
+## 고쳤다
+
+`scripts/aggregate-grades.mjs`의 그 spread를 `projectLegacySummary(summary)`로
+바꿨다. 데이터는 한 글자도 건드리지 않았다 — `data/grades/`의 payload 16개는
+지금도 `0.0`을 그대로 들고 있다. 달라진 것은 **생성기가 그 값을 다시 발행하느냐**다.
+
+### 규칙을 어디서 가져왔나
+
+새 규칙을 만들지 않았다. `core/cost_receipts.py` 맨 위에 이미 적혀 있는 문장을
+그대로 옮겼다 — *"usage 블록이 없다는 것은 공짜였다는 뜻이 아니라, 아무도 얼마인지
+말할 수 없다는 뜻이다. 진짜 `$0`은 공급자에 한 번도 닿지 않은 경로뿐이다."*
+영수증 경로는 `scripts/cost-receipt.mjs`의 `measuredAmount`가 이미 이 문장을
+지키고 있었고, 이 spread가 payload의 `0`이 그 검사를 우회할 수 있던 **마지막
+자리**였다.
+
+### 위 "주의"를 그대로 구현했다
+
+무조건 `null`로 밀지 않는다. **블록 자신에게** 물어본다 — 이 실행은 누군가에게
+닿은 기록을 남겼는가? `total_judge_calls` · `total_input_tokens` ·
+`total_output_tokens` 셋이 그 기록이고, **셋이 모두 있고 모두 `0`일 때만** `0`이
+살아남는다.
+
+한 걸음 더 닫았다. **없는 카운터는 `0`인 카운터가 아니다.** 카운터가 아예 없는
+블록은 "공짜로 돌았다"처럼 보이면서 그것을 가장 증명하지 못하는 모양이므로,
+정규화하는 쪽으로 fail closed 한다. 금액에 적용한 논리를 면제 근거 자체에 한 번 더
+적용한 것이다.
+
+### `null`이지 삭제가 아니다
+
+이 저장소는 이미 그 함정에 한 번 빠졌다. `undefined !== null`이 참이라
+`!== null`로 막아 둔 화면이 `undefined.toFixed`에 닿아 실험 페이지를 통째로
+내린다(`scripts/cost-receipt.mjs:711-716`). 지금 쓰는 writer도 값을 못 매긴 실행에
+`null`을 적으므로(`core/cost_projection.py:810`), 두 시대가 "없음"을 같은 말로
+적게 된다.
+
+### 같은 spread의 두 번째 구멍
+
+`...summary`는 payload의 **run 단위** `summary.grading_cost`도 함께 실어 나른다.
+아래 줄이 그것을 덮어쓰는 것은 `costSummary`가 있을 때뿐이고,
+`summarizeCostReceipts`는 영수증을 든 과제가 하나도 없으면 `null`을 돌려준다 —
+즉 **payload의 총액을 검증 없이 발행할 수 있는 경로**가 남아 있었다. 지금 발행되는
+19개는 전부 schema 1.0/1.1/1.3이라 실제로 새는 파일은 없지만, 같은 문장의 나머지
+반쪽이고 이 파일의 절 머리글이 *"run summary는 여기서 행에서 유도한다, payload에서
+베끼지 않는다"* 라고 이미 금지하고 있다. 그래서 함께 막았다.
+
+### 잰 것
+
+| | |
+|---|---|
+| `grades-index.json` 필드 차이 | **16개, 전부 `estimated_cost_usd: 0 → null`** |
+| 나머지 생성 파일 7개 | `_generated` 타임스탬프 1개씩 |
+| 전체 차이 | **23개. 그 밖에 움직인 값 0** |
+| 고친 뒤 분포 | `null` 18 · 블록 없음 1 · **숫자 금액 0행** |
+| cost 블록의 비금액 필드(토큰·호출·지연) | **0개 이동** |
+| 키 순서 | 보존 |
+| 디스크의 payload | **16개 그대로 `0.0`** |
+| 새 테스트 | **14개** (`scripts/__tests__/a-zero-beside-real-tokens-is-not-a-price.test.mjs`) |
+| 심은 결함 | **12개 중 12개 검출**, 빠져나간 것 0 |
+| scripts 전체 | 401 → **415개 통과** |
+| 모델 호출 | **0회 · $0** |
+
+전수 확인(위 2번)도 했다. `scripts/*.mjs`에서 summary·cost를 펼치는 자리는 네
+곳이고 셋은 이미 영수증 경로다. `data/grades/**`의 모든 키를 깊이 무관하게 세어
+`projectCostSummary`/`projectCostReceipt`를 거치지 않는 금액 키가
+`.summary.cost.estimated_cost_usd` 하나뿐임을 확인했다.
+`reports-index.json`의 금액 3개는 전부 `status: complete`이고
+`known_cost_usd`와 일치한다 — 그 경로는 깨끗하다.
