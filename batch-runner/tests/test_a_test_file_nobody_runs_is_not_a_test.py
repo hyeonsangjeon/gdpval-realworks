@@ -25,6 +25,7 @@ import shlex
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github/workflows/backend-tests.yml"
@@ -128,3 +129,54 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
         "the repo-root script tests are unwired again; they resolve fixtures "
         "through parents[2] and must be invoked from the repository root"
     )
+
+
+@pytest.mark.parametrize("root", COVERED_ROOTS)
+def test_a_change_under_each_covered_root_actually_starts_this_workflow(root: str):
+    """A step that exists but never fires is still a step nobody runs.
+
+    Wiring the invocation fixed half of it. The trigger did not follow: the
+    path filter listed only `batch-runner/**`, so a pull request touching
+    just repo-root `scripts/` started no run, and the step above never
+    executed on the change it was added to cover.
+
+    Measured, not inferred -- #392 changed `scripts/grading_cost_sweep.py` and
+    added twenty-five tests under `scripts/__tests__/`, and the only workflow
+    that ran on it was Aggregate Tests & Deploy. The suite was green and
+    nothing had checked it.
+    """
+    triggers = _trigger_block()
+
+    for event in ("pull_request", "push"):
+        patterns = triggers[event]["paths"]
+        assert any(_pattern_covers(pattern, root) for pattern in patterns), (
+            f"a change under {root}/ starts no {event} run of "
+            f"{WORKFLOW.name}, so the pytest step that covers it never "
+            f"executes. Filter is: {patterns}"
+        )
+
+
+def _trigger_block() -> dict:
+    """The workflow's `on:` mapping.
+
+    Keyed by `True`, not by `"on"` -- PyYAML follows YAML 1.1, where a bare
+    `on` is a boolean. Reading `["on"]` here would raise `KeyError` rather
+    than check anything, so both spellings are accepted.
+    """
+    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    triggers = document.get("on", document.get(True))
+    assert isinstance(triggers, dict), f"no trigger block in {WORKFLOW.name}"
+    return triggers
+
+
+def _pattern_covers(pattern: str, root: str) -> bool:
+    """Whether a workflow path filter would match a file under `root`.
+
+    Only the `dir/**` and exact-path forms this workflow uses are understood;
+    anything cleverer should be checked deliberately rather than guessed at.
+    """
+    if pattern.endswith("/**"):
+        return (root + "/").startswith(pattern[:-2])
+    return pattern == root
+
+
