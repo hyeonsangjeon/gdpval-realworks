@@ -331,8 +331,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   read — had never reached this surface either. `crit=0%` went to the model
   with nothing beside it. `_format_high_magnitude_rate` now renders
   `not measured (0 items)` over an empty denominator, `0% (denominator not
-  recorded)` for the rows that predate `item_counts` — 21 of the 83 published
-  sector rows, and all 364 shard rows —
+  recorded)` where `item_counts` is absent,
   `0% of 3 -- too few to read (< 20 items)` under the floor, and `33% of 400`
   when there is something to read. The floor is the same `ceil(1 / (1 − 0.95))`
   the dashboard and `scripts/analyze_gold_ceiling.py` each derive; the label is
@@ -342,13 +341,22 @@ entries land under a fresh dated heading the day they merge to `main`.
   inventing a readability floor for `precheck_pass_rate` and `judge_pass_rate`
   would be a new criterion applied to runs already published.
 
-  Measured on this repository's own grades: 83 published sector rows carry the
-  rate, 13 report exactly `0.0`, and recomputing the count settles all 13 — 4
-  counted nothing, 9 counted 1–19, none reached 20. The 61 shard payloads,
-  whose rates are published nowhere, say the same at scale: 364 rows, 155
-  zeros, split 41 and 114, none at 20. Not one `0.0` on this metric, in either
-  population, is a run where twenty or more high-magnitude items were scored
-  and failed.
+  Measured on this repository's own grades, with #399 merged: 86 published
+  sector rows carry the rate, 16 report exactly `0.0`, and recomputing the count
+  settles all 16 — 4 counted nothing, 12 counted 1–19, none reached 20. The 61
+  shard payloads, whose rates are published nowhere, say the same at scale: 364
+  rows, 155 zeros, split 41 and 114, none at 20. Not one `0.0` on this metric,
+  in either population, is a run where twenty or more high-magnitude items were
+  scored and failed. All four rendered states are reached by the committed
+  corpus, and a census test floors each one so none can become a branch nothing
+  exercises:
+
+  | population | not recorded | not measured (0) | too few to read | readable |
+  |---|--:|--:|--:|--:|
+  | published, run level | 6 | 1 | 15 | 11 |
+  | published, per sector | 0 | 4 | 34 | 48 |
+  | shard, run level | 61 | 0 | 0 | 0 |
+  | shard, per sector | 364 | 0 | 0 | 0 |
 
   Writing that measurement down found an arithmetic error in the entry above
   and in point 6 of `REQUIRED_ITEM_DEFINITION.md`, both merged by #394: they
@@ -361,29 +369,48 @@ entries land under a fresh dated heading the day they merge to `main`.
   rather than repeated here, and the new test asserts a floor per population so
   the two cannot be conflated again.
 
+  Then #399 moved the published side again, mid-review, by backfilling
+  `item_counts` across the corpus: 83 rows became 86, 13 zeros became 16, the
+  1–19 bucket went 9 → 12, and the 21 published sector rows with no denominator
+  went to none. Every `>=` floor in the tests stayed green while the sentences
+  they guarded went stale, which is the whole reason the census above is
+  floored per state as well as per population. The figures here and in
+  `REQUIRED_ITEM_DEFINITION.md` are the post-#399 ones; #394's entry above is
+  left as written, since it dates itself to "#393 merged in" and was correct on
+  that corpus.
+
   **The grader source fingerprint moves, deliberately.**
-  `compute_grader_source_hash` walks every `.py` under `batch-runner/core/`, so
-  a prompt with nothing to do with grading still changes the hash each shard
-  stamps and `step9_merge_shards` compares. That is why the one-word edit
-  waited for a pull request of its own.
+  `compute_grader_source_hash` walks every `.py` under `batch-runner/core/` and
+  hashes `step8_grade.py` alongside them, so a prompt with nothing to do with
+  grading — and even a comment restating a count in the summariser — still
+  changes the hash each shard stamps and `step9_merge_shards` compares. That is
+  why the one-word edit waited for a pull request of its own.
 
   Measured rather than asserted, against `main` at `4739321` — which touched no
   hash input, so these are also the values at `04294ed`, the base this branch
-  was cut from:
+  was cut from. Full 64 characters, because an abbreviated hash is not one:
 
-  | grading config | before | after |
+  | grading config | | grader source hash |
   |---|---|---|
-  | `regrade_exp003_v2_sol_max_score_excluded` (the OFFICIAL run) | `444ceee8…9e35895f` | `a0b3f8ca…48af892d` |
-  | `gold_ceiling_185_v2_sol_max` | `119f3e4f…c3a207ed` | `15c53c2e…83b2285d` |
-  | `default_v2_mini` | `b5adca7d…bec20b34` | `bbef3256…097f8c1f` |
+  | `regrade_exp003_v2_sol_max_score_excluded` (the OFFICIAL run) | before | `444ceee84be5b0712971ad21e52c1218929604cc814373b62b2dfba19e35895f` |
+  | | after | `3817a416d25d971d9544df29a00c89d95400178122180cd96884d50a8beac8fb` |
+  | `gold_ceiling_185_v2_sol_max` | before | `119f3e4fa0ac203092e3c48cf7c06096b2b1e618787672b1ae3cc382c3a207ed` |
+  | | after | `9af738c17463088e8d7ee57008ed0c54dda7194d44f992e57a8f44cdfc134713` |
+  | `default_v2_mini` | before | `b5adca7d484760a75e5c0076a48ab390f82f726f1414c2829c050d1cbec20b34` |
+  | | after | `e0832b975fa0318c58450bde9b2e73e66a68609e6fd27f11290ce54e5ece3a83` |
 
   Three configs because the hash is per config, so "it moved" is a claim about
-  each one and not about the tree. The full 64-hex values are in the pull
-  request; they are recorded here and **not** pinned in a test. A test that
-  asserted a literal hash would fail on the next unrelated edit under `core/`
-  and would have to be updated by whoever broke it, which is how a fingerprint
-  check becomes a formality. The repository has no such pin today and this
-  change does not add one.
+  each one and not about the tree. The `after` column was re-measured at the end
+  of review rather than carried over from the first measurement: correcting the
+  stale count in `step8_grade.py`'s `item_counts` comment moved all three again,
+  which is the input set behaving exactly as documented and the reason a
+  fingerprint is measured immediately before merging rather than once.
+
+  They are recorded here and **not** pinned in a test. A test that asserted a
+  literal hash would fail on the next unrelated edit under `core/` and would
+  have to be updated by whoever broke it, which is how a fingerprint check
+  becomes a formality. The repository has no such pin today and this change does
+  not add one.
 
   Checked before merging: no literal source hash is pinned anywhere in the
   tests, scripts, workflows or validation docs, and no grade run was in flight.
@@ -424,7 +451,18 @@ entries land under a fresh dated heading the day they merge to `main`.
   together and all called published. The figures for the denominator itself
   were right, because no shard records one. `tests/test_a_rate_over_nothing_is
   _not_zero.py` had it right all along at 20 and 56; the prose here did not.
-  Corrected in place, and the same conflation is corrected in the entry above.)
+  Corrected in place, and the same conflation is corrected in the entry above.
+
+  A second note, added afterwards rather than written over the paragraph: #399
+  backfilled `item_counts` across the published corpus and moved every published
+  figure above. The finding is unchanged and got stronger — with denominators
+  recovered, **all 20** run-level zeros and **all 59** sector zeros counted no
+  precheck items, where before only the 15 and 35 with a recorded denominator
+  could be checked. The counts now read 33 run-level payloads carrying the rate,
+  20 zeros, 27 with a denominator and 6 without; per sector 86 rows, 59 zeros,
+  and a denominator on every one. The shard totals — 61 payloads, 364 rows, no
+  denominator anywhere — did not move. The paragraph above is left as it was
+  measured, because it was right on the corpus it was measured against.)
 
   **Four states, never collapsed into two.** `src/components/wow/rateReading.ts`
   is import-free so a node test can execute the decision itself. A rate whose
@@ -436,7 +474,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   is still shown, greyed, with the gap stated, because 11 of the 33 published
   run-level payloads and 21 of their 83 sector rows predate `item_counts` — as
   do all 61 shard payloads and all 364 of their rows — and #393 recovered it
-  for only some. A
+  for only some. (#399 then recovered the rest of the published side: 6 run-level
+  payloads and no sector row are still in this state. The shard rows all are,
+  and a merge reads shards, so the state is not dead.) A
   run publishing no rate at all is `absent`. Only `measured` may be set against
   another rate, so *Structure vs Reasoning* now withholds its verdict and names
   the missing half instead of subtracting a zero that stands for nothing.

@@ -212,9 +212,9 @@ def _format_high_magnitude_rate(metrics: dict) -> str:
     not to give.
 
     **The denominator, or the fact that there isn't one.** Measured over the
-    grade payloads committed here: 83 published sector rows carry the rate and
-    13 report exactly ``0.0``. Recomputing the count settles all 13 -- four
-    counted no high-magnitude item at all, nine counted between 1 and 19, none
+    grade payloads committed here: 86 published sector rows carry the rate and
+    16 report exactly ``0.0``. Recomputing the count settles all 16 -- four
+    counted no high-magnitude item at all, twelve counted between 1 and 19, none
     reached 20. The 61 shard payloads, whose rates are published nowhere, say
     the same thing at scale: 364 rows, 155 zeros, 41 over nothing and 114 over
     1-19, again none at 20. There is no ``0.0`` on this metric, in either
@@ -238,9 +238,11 @@ def _format_high_magnitude_rate(metrics: dict) -> str:
         return "not measured (0 items)"
     formatted = _format_pct(metrics.get("critical_item_pass_rate"), decimals=0)
     if measured is None:
-        # 21 of the 83 published sector rows are in this state, and every one
-        # of the 364 shard rows. Without the count, a 0% here and a 0% over
-        # four hundred items are the same string.
+        # No published sector row is in this state since #399 recovered the
+        # denominators, but 6 published payloads are at run level, and so is
+        # every one of the 61 shard payloads and their 364 rows -- and a merge
+        # reads shards. Without the count, a 0% here and a 0% over four hundred
+        # items are the same string.
         return f"{formatted} (denominator not recorded)"
     if measured < MIN_READABLE_HIGH_MAGNITUDE_ITEMS:
         return (

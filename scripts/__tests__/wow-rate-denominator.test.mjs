@@ -11,11 +11,17 @@
 //    'Strong on reasoning, weak on structure' -- a finding about a check that
 //    never ran, in a paid report and on a public page."
 //
-// Measured against this repository's published grades before the fix: 81 of 94
-// run-level payloads carry `precheck_pass_rate: 0.0`, and of the 22 that record
-// the denominator, **all 15 zeros counted no precheck items**. Per sector, 420
-// of 447 rows publish `0.0` and **all 35 recorded zeros counted nothing**. Not
-// one row in either set is a run where prechecks ran and failed.
+// Measured against this repository's published grades: 20 of the 33 published
+// run-level payloads carry `precheck_pass_rate: 0.0`, and **all 20 counted no
+// precheck items**. Per sector, 59 of 86 rows publish `0.0` and **all 59
+// counted nothing**. Not one row in either set is a run where prechecks ran and
+// failed. The 61 shard payloads and their 364 sector rows are published nowhere
+// and record no denominator at all; this comment first added them in and gave
+// the pair as 81 of 94 and 420 of 447, which is the conflation `CHANGELOG.md`
+// corrects under #398. The published side then moved again under #399, which
+// recovered `item_counts` across the corpus — which is why every zero above can
+// now be checked, where before only the 15 and 35 with a recorded denominator
+// could be.
 //
 // `src/components/wow/rateReading.ts` is where the reading now happens, and it
 // is import-free so esbuild — already installed, as vite depends on it — can
@@ -163,8 +169,9 @@ test('a rate over an empty denominator is not a 0% pass rate', async () => {
 });
 
 test('a rate with no denominator recorded is shown, and the gap is stated', async () => {
-  // The common case: 72 of 94 run-level payloads and 385 of 447 sector rows
-  // predate `item_counts` and #393 recovered it for only some of them.
+  // Still a live state, not a legacy branch: 6 published run-level payloads
+  // predate `item_counts`, and so do all 61 shard payloads and their 364 rows,
+  // which a merge reads. (#393 then #399 recovered the published sector rows.)
   const { readWowRate, JUDGE_ITEMS_DESCRIBED } = await loadReading();
   const reading = readWowRate(0.8123, undefined, JUDGE_ITEMS_DESCRIBED);
   assert.equal(reading.standing, 'denominator-unknown');

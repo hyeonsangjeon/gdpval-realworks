@@ -55,9 +55,12 @@ export default function HealthStrip({ summaryV1, delay = 0 }: Props) {
   const errRate = wow?.judge_error_rate
   const errAlert = typeof errRate === 'number' && errRate > 0.05
   // `fmtPct` cannot tell a measured 0% from a rate divided by nothing, and
-  // these two pills are the ones that get divided by nothing: 81 of the 94
-  // grades published so far carry `precheck_pass_rate: 0.0`, and of the 22
-  // that record the denominator, all 15 zeros counted no precheck items.
+  // these two pills are the ones that get divided by nothing: 20 of the 33
+  // published grades carry `precheck_pass_rate: 0.0`, and now that #393 and
+  // #399 have recovered `item_counts` all 20 can be checked — all 20 counted
+  // no precheck items, and not one is a run where prechecks ran and failed.
+  // (This first read 81 of 94, which folded in the 61 `_shards/` payloads;
+  // those are published nowhere and record no denominator at all.)
   const precheck = readWowRate(
     wow?.precheck_pass_rate,
     wow?.item_counts?.precheck_items,

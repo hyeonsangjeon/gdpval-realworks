@@ -8,7 +8,7 @@ This is not a hypothetical collision. Measured over the grade payloads
 committed to this repository: **twenty of the thirty-three that carry a ``wow``
 block report ``precheck_pass_rate: 0.0``, and every one of the twenty
 prechecked nothing at all.** Not one is a run where prechecks ran and failed.
-Per sector it is fifty-six of eighty-three rows, with no real zero among those
+Per sector it is fifty-nine of eighty-six rows, with no real zero among those
 either. The 185-task gold-ceiling run is in that set: 8,816 judged items, zero
 prechecked ones, published as a 0% structural pass rate.
 
@@ -76,7 +76,7 @@ GOLD_CEILING_PRECHECK_ITEMS = 0
 #: published ``precheck_pass_rate`` of 0.0 has ever been a real one, and these
 #: keep that claim from passing over an empty corpus.
 PAYLOADS_WITH_AN_EMPTY_PRECHECK_ZERO = 20
-SECTOR_ROWS_WITH_AN_EMPTY_PRECHECK_ZERO = 56
+SECTOR_ROWS_WITH_AN_EMPTY_PRECHECK_ZERO = 59
 
 
 def _item(*, passed: bool, precheck: bool = False, critical: bool = False) -> dict:

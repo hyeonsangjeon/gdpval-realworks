@@ -27,9 +27,9 @@ denominator and the other was promoted regardless of what was behind it -- on
 the one surface where a model is paid to turn these numbers into prose that a
 person then reads.
 
-Measured over the grade payloads committed to this repository: 83 published
-sector rows carry the rate and 13 report exactly ``0.0``. Recomputing the count
-settles all 13 -- four counted no high-magnitude item at all, nine counted
+Measured over the grade payloads committed to this repository: 86 published
+sector rows carry the rate and 16 report exactly ``0.0``. Recomputing the count
+settles all 16 -- four counted no high-magnitude item at all, twelve counted
 between 1 and 19, and none reached 20. The 61 shard payloads, whose rates are
 published nowhere, say the same thing at scale: 364 rows, 155 zeros, split 41
 and 114, and again not one at 20. There is no ``0.0`` on this metric, in either
@@ -38,8 +38,11 @@ and failed.
 
 (An earlier entry in ``CHANGELOG.md`` and point 6 of the decision document put
 these at 447 rows and 168 zeros. That pair added the 364 shard rows into a count
-it called published. Both are corrected in this change; the conclusion they
-drew was right and is asserted below over each population separately.)
+it called published; the true figures at that moment were 83 and 13. Both are
+corrected in this change, and both are restated again for #399, which recovered
+denominators across the published corpus and moved every published figure here.
+The conclusion they drew was right under all three sets of numbers, and is
+asserted below over each population separately.)
 
 What this file pins is the reading, not the arithmetic. The JSON key keeps its
 published name, the rate keeps its value, and not one byte under
@@ -85,8 +88,25 @@ RETIRED_WORDS = ("critical", "required", "mandatory", "must-have")
 #: that the measurement this change rests on stops holding. Kept apart by
 #: population, because conflating the two is what produced the wrong figure the
 #: module docstring corrects.
-PUBLISHED_ROWS_WITH_AN_UNREADABLE_ZERO = 13
+PUBLISHED_ROWS_WITH_AN_UNREADABLE_ZERO = 16
 SHARD_ROWS_WITH_AN_UNREADABLE_ZERO = 155
+
+#: Floors on how many rows in the committed corpus render in each of the four
+#: states, so that none of them is a branch nothing ever reaches. Read off the
+#: corpus as it stood when #399 finished recovering denominators: at run level
+#: the published payloads split 6 / 1 / 15 / 11 across the four, and per sector
+#: 0 / 4 / 34 / 48; the 61 shard payloads and their 364 sector rows carry no
+#: denominator at all and land wholly in the first.
+#:
+#: "Not recorded" has no published *sector* row behind it any more and so has no
+#: floor of its own -- ``test_a_denominator_that_was_never_recorded_says_so``
+#: carries that state instead, over the populations that still hold it.
+STATE_FLOORS = {
+    "unrecorded": 6 + 61 + 364,
+    "none-counted": 1 + 4,
+    "too-few": 15 + 34,
+    "readable": 11 + 48,
+}
 
 
 def _item(*, passed: bool, critical: bool = False) -> dict:
@@ -286,12 +306,18 @@ def test_a_zero_reads_as_what_its_denominator_supports(counted: int, expected: s
 
 
 def test_a_denominator_that_was_never_recorded_says_so() -> None:
-    """21 of the 83 published sector rows are in exactly this state, and all
-    364 shard rows.
+    """After #399 no published *sector* row is in this state. It is not dead.
 
-    Older payloads predate ``item_counts``. "We do not know what this was
-    divided by" is a different statement from "it was divided by nothing", and
-    turning the first into the second would relabel most of the corpus.
+    #399 backfilled ``item_counts`` across the published corpus, so all 86
+    published sector rows now carry a denominator. What is still in this state
+    is every shard row -- 61 run-level and 364 sector -- and the six published
+    payloads that predate ``model_did_right`` and carry a run-level rate with
+    no counts behind it. A merge reads shards, so this is the state the paid
+    prompt renders most often, not a legacy branch.
+
+    "We do not know what this was divided by" is a different statement from
+    "it was divided by nothing", and collapsing the first into the second would
+    relabel four hundred rows as measured absences.
     """
     assert (
         _format_high_magnitude_rate({"critical_item_pass_rate": 0.0})
@@ -396,6 +422,50 @@ def test_no_published_zero_on_this_metric_is_a_readable_one(
     assert readable == {False: 0, True: 0}
     assert unreadable[False] >= PUBLISHED_ROWS_WITH_AN_UNREADABLE_ZERO
     assert unreadable[True] >= SHARD_ROWS_WITH_AN_UNREADABLE_ZERO
+
+
+def test_every_one_of_the_four_states_is_reached_by_the_committed_corpus(
+    published_sector_rows: list[tuple[str, bool, dict, dict]],
+) -> None:
+    """Four states, and a census showing each is a real one.
+
+    ``_format_high_magnitude_rate`` can say four things. Three of them are
+    refusals, and a refusal branch nobody reaches is indistinguishable from a
+    refusal branch that is wrong. So every ``wow`` block committed to this
+    repository -- run level and per sector, published and shard -- is rendered
+    and bucketed, and each bucket carries a floor.
+
+    The floors are also what makes this file notice when the corpus moves under
+    it. #399 recovered ``item_counts`` across the published payloads after the
+    prose here was written; the ``>=`` assertions elsewhere stayed green while
+    the sentences they guarded went stale. A count that must land in a named
+    state cannot drift the same way in silence.
+    """
+    census = {state: 0 for state in STATE_FLOORS}
+    for name, _is_shard, published, _fresh in published_sector_rows:
+        rows = [(name, published)]
+        rows += [
+            (f"{name}:{sector}", row)
+            for sector, row in sorted((published.get("by_sector") or {}).items())
+        ]
+        for where, row in rows:
+            if not isinstance(row, dict) or "critical_item_pass_rate" not in row:
+                continue
+            rendered = _format_high_magnitude_rate(row)
+            if rendered == "not measured (0 items)":
+                census["none-counted"] += 1
+            elif rendered.endswith("(denominator not recorded)"):
+                census["unrecorded"] += 1
+            elif "too few to read" in rendered:
+                census["too-few"] += 1
+            else:
+                # The only remaining shape is a plain "N% of M", and it is the
+                # one state allowed to read as a measurement.
+                assert re.fullmatch(r"\d+% of \d+", rendered), f"{where}: {rendered}"
+                census["readable"] += 1
+
+    for state, floor in STATE_FLOORS.items():
+        assert census[state] >= floor, f"{state}: {census[state]} < {floor}"
 
 
 def test_not_one_published_rate_moved(

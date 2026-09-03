@@ -303,20 +303,22 @@ What that means, point by point:
    weight, because one item moves it further than the whole distance from the
    reference to a clean sweep.
 6. **An empty denominator is "not recorded", never `0%`.** Measured on this
-   repository's own grades with #393 merged: **83 published sector rows** carry
-   the rate, and #393 recovered a denominator for 62 of them — the other 21
-   still publish a bare rate. 13 of the 83 report exactly `0.0`; recomputing
-   the count from the item data settles all 13 — **four counted no item at all,
-   nine counted 1–19, and none reached 20.** The 61 shard payloads, whose rates
-   are published nowhere, say the same at scale: 364 rows, 155 zeros, split 41
-   and 114, none at 20, and not one carrying a denominator. Every `0.0` on this
-   metric is a denominator artefact, and the heatmap painted all of them bright
-   red.
+   repository's own grades with #393 and #399 merged: **86 published sector
+   rows** carry the rate and every one of them now carries a denominator, #399
+   having recovered the 21 that did not. 16 of the 86 report exactly `0.0`;
+   recomputing the count from the item data settles all 16 — **four counted no
+   item at all, twelve counted 1–19, and none reached 20.** The 61 shard
+   payloads, whose rates are published nowhere, say the same at scale: 364 rows,
+   155 zeros, split 41 and 114, none at 20, and not one carrying a denominator.
+   Every `0.0` on this metric is a denominator artefact, and the heatmap painted
+   all of them bright red.
 
    (This point first gave the figures as 447 rows, 168 zeros and 385 missing
    denominators, split 41/127. That pair added the 364 shard rows into a count
-   it called published. The conclusion was right; the arithmetic is corrected
-   here and asserted per population in
+   it called published; the published figures at that moment were 83 and 13.
+   #399 then recovered denominators across the published corpus and moved the
+   published side again, to the numbers above. The conclusion held under all
+   three sets, and is asserted per population in
    `batch-runner/tests/test_the_report_prompt_retires_the_required_item_name.py`.)
 
 ### What this changed, and what it did not
@@ -353,10 +355,23 @@ It closed in its own pull request. Two findings from doing it are worth keeping:
 * **Point 5 had never reached this surface.** The prompt printed `crit=0%` with
   no denominator and no readability floor. It now renders the count, says
   "not measured (0 items)" over an empty denominator, says "denominator not
-  recorded" for the rows that predate `item_counts` — 21 of the 83 published
-  sector rows, and all 364 shard rows — and marks anything under 20 counted
-  items as too few to read, the same `ceil(1/(1−0.95))` the dashboard and
-  `analyze_gold_ceiling.py` derive.
+  recorded" where `item_counts` is absent, and marks anything under 20 counted
+  items as too few to read — the same `ceil(1/(1−0.95))` the dashboard and
+  `analyze_gold_ceiling.py` derive. Every one of the four is a state the
+  committed corpus actually reaches, censused and floored in the tests:
+
+  | population | not recorded | not measured (0) | too few to read | readable |
+  |---|--:|--:|--:|--:|
+  | published, run level | 6 | 1 | 15 | 11 |
+  | published, per sector | 0 | 4 | 34 | 48 |
+  | shard, run level | 61 | 0 | 0 | 0 |
+  | shard, per sector | 364 | 0 | 0 | 0 |
+
+  The published sector row no longer lands in "not recorded" because #399
+  recovered its denominator. The state is not dead: a merge reads shards, so
+  all 425 shard rows plus the 6 published payloads that predate
+  `model_did_right` still render it, and it is the state the paid prompt shows
+  most often.
 
 The grader fingerprint moved, deliberately and on the record: measured before
 and after on three grading configs, and the pairs are in `CHANGELOG.md` under
