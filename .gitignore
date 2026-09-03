@@ -118,6 +118,8 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/316-two-halves-of-one-cost.md
 !tasks/rebuilding_grading_task/317-pricing-the-185-task-run.md
 !tasks/rebuilding_grading_task/318-video-contact-sheet.md
+!tasks/rebuilding_grading_task/PR3_COST_BUDGET.md
+!tasks/rebuilding_grading_task/319-the-published-index-still-says-zero.md
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local

@@ -3,6 +3,12 @@
 > Pre-PR3 evidence from the very first live invocation of the v2 tool-calling
 > grader on a 3-task smoke (`exp998_smoke_baseline_sample`, `default_v2.yaml`).
 
+> **비용 부분은 [`PR3_COST_BUDGET.md`](./PR3_COST_BUDGET.md)가 대체한다 (302).**
+> 아래 `$0.71 / 3 tasks → $52.1` 외삽은 **재현되지 않는다.** 그 $0.71은 이 실행의
+> 토큰을 `gpt-5.4`의 어떤 공표 요율에 넣어도 나오지 않고, 한 규칙으로 다시 재면
+> N=3은 과제당 비용을 **2.81배 낮게** 봤다. 실측값은 실행당 **$411.80 ~ $980.84**다.
+> 이 문서의 나머지(과제별 토큰, 도구 사용, 실패 양상)는 그대로 유효하다.
+
 ## The run
 
 - **Workflow run**: [`26677864500`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/26677864500)
