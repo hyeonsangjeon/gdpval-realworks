@@ -1,3 +1,10 @@
+import {
+  NEAR_PERFECT_DEF,
+  NEAR_ZERO_DEF,
+  PARTIAL_DEF,
+  SCORE_BANDS_HINT,
+} from './scoreBands'
+
 export const TASK_TOTAL_PLACEHOLDER = '{TASK_TOTAL}'
 
 export const tooltipTexts = {
@@ -37,12 +44,9 @@ export const tooltipTexts = {
       'Percentage of retried tasks that succeeded on retry. 100% = all retries eventually succeeded.',
   },
   grading: {
-    perfect:
-      'Tasks scored 100% by the LLM-judge (rubric-based, automated). The LLM output fully met all rubric criteria.',
-    partial:
-      'Tasks scored between 1–99% by the LLM-judge. The output met some but not all rubric criteria.',
-    zero:
-      'Tasks scored 0% by the LLM-judge. The output failed to meet any rubric criteria or was completely off-target.',
+    perfect: `${NEAR_PERFECT_DEF} Rubric-based, automated.`,
+    partial: `${PARTIAL_DEF}`,
+    zero: `${NEAR_ZERO_DEF} Rubric-based, automated.`,
     graderDisagreement:
       'Cases where multiple judges scored the same task differently. Visible only in multi-judge mode (Phase B). High rates may indicate ambiguous rubric criteria.',
     ci:
@@ -104,7 +108,7 @@ export const sectionHintTexts = {
   errors:
     'Runtime failures during task execution. "Recovered" means the task succeeded after automatic retry. AI Failure Insights are LLM-generated analysis of error patterns.',
   grading:
-    'LLM-judge (rubric-based, automated). Scores: Perfect (100%), Partial (1-99%), Zero (0%). Grading runs separately from inference via grade-run.yml.',
+    `LLM-judge (rubric-based, automated). ${SCORE_BANDS_HINT} Grading runs separately from inference via grade-run.yml.`,
 } as const
 
 export const aboutContent = {

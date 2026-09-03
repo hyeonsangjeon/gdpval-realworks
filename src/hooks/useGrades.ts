@@ -22,6 +22,17 @@ export interface TaskGrade {
   num_grades: number
   scores: number[]
   avg_score: number | null
+  /**
+   * The score this task actually got, when `avg_score` no longer says it.
+   *
+   * The aggregator snaps `avg_score` to a flat 1.0/0.0 once a task crosses the
+   * `openai_compat` band boundaries (>= 99% / <= 1%) so the Status badges agree
+   * with the published counts. That makes `avg_score` a band, not a score, on
+   * those rows. `pct_exact` carries the unsnapped percentage and is present on
+   * exactly the rows the snap moved — a task that genuinely scored 100 keeps
+   * the key absent, so a row that was already right renders unchanged.
+   */
+  pct_exact?: number
   error: boolean
   error_messages: string[]
   /** Inference-time Self-QA score (0–10). Enriched from reports-index task_qa map. */

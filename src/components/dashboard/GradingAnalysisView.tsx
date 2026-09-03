@@ -17,6 +17,12 @@ import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
 import { fmtPct } from '../../lib/format'
 import { isHiddenGrade, isOfficialGrade } from '../../lib/officialFilter'
 import ProvenanceBadge from '../ProvenanceBadge'
+import {
+  NEAR_PERFECT_LABEL,
+  NEAR_PERFECT_SHORT,
+  NEAR_ZERO_LABEL,
+  NEAR_ZERO_SHORT,
+} from '../../data/scoreBands'
 
 /* ─── palette ─── */
 const SCORE_COLORS = {
@@ -79,9 +85,9 @@ export default function GradingAnalysisView({ debug = false }: { debug?: boolean
       agg.error += g.summary.error_tasks
     }
     return [
-      { name: 'Perfect (100%)', value: agg.perfect, color: SCORE_COLORS.perfect },
+      { name: NEAR_PERFECT_LABEL, value: agg.perfect, color: SCORE_COLORS.perfect },
       { name: 'Partial', value: agg.partial, color: SCORE_COLORS.partial },
-      { name: 'Zero (0%)', value: agg.zero, color: SCORE_COLORS.zero },
+      { name: NEAR_ZERO_LABEL, value: agg.zero, color: SCORE_COLORS.zero },
       { name: 'Errors', value: agg.error, color: SCORE_COLORS.error },
     ].filter((d) => d.value > 0)
   }, [grades])
@@ -206,9 +212,9 @@ export default function GradingAnalysisView({ debug = false }: { debug?: boolean
               <XAxis type="number" tick={tickStyle} allowDecimals={false} />
               <YAxis dataKey="name" type="category" tick={{ ...tickStyle, fontSize: isMobile ? 9 : 11 }} width={isMobile ? 80 : 130} />
               <Tooltip {...chartTooltip} />
-              <Bar dataKey="perfect" stackId="a" fill={SCORE_COLORS.perfect} name="Perfect (100%)" />
+              <Bar dataKey="perfect" stackId="a" fill={SCORE_COLORS.perfect} name={NEAR_PERFECT_LABEL} />
               <Bar dataKey="partial" stackId="a" fill={SCORE_COLORS.partial} name="Partial" />
-              <Bar dataKey="zero" stackId="a" fill={SCORE_COLORS.zero} name="Zero (0%)" />
+              <Bar dataKey="zero" stackId="a" fill={SCORE_COLORS.zero} name={NEAR_ZERO_LABEL} />
               <Bar dataKey="error" stackId="a" fill={SCORE_COLORS.error} name="Error" />
             </BarChart>
           </ResponsiveContainer>
@@ -342,9 +348,9 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
   const wow = grade.summary_v1?.wow
   const stats = [
     { icon: Target, label: 'Graded', value: `${s.graded_tasks}/${s.total_tasks}`, color: 'text-blue-400 bg-blue-500/10' },
-    { icon: Award, label: 'Perfect', value: s.perfect_score, color: 'text-emerald-400 bg-emerald-500/10' },
+    { icon: Award, label: NEAR_PERFECT_SHORT, value: s.perfect_score, color: 'text-emerald-400 bg-emerald-500/10' },
     { icon: BarChart3, label: 'Partial', value: s.partial_score, color: 'text-amber-400 bg-amber-500/10' },
-    { icon: XCircle, label: 'Zero', value: s.zero_score, color: 'text-red-400 bg-red-500/10' },
+    { icon: XCircle, label: NEAR_ZERO_SHORT, value: s.zero_score, color: 'text-red-400 bg-red-500/10' },
     ...(s.inconsistent_grades > 0
       ? [{ icon: AlertCircle, label: 'Disagree', value: s.inconsistent_grades as number | string, color: 'text-purple-400 bg-purple-500/10' }]
       : []),
@@ -452,9 +458,9 @@ function GradeOverviewCard({ grade, color, onNavigate }: { grade: GradeResult; c
             )}
           </div>
           <div className="flex justify-between text-[9px] text-dash-text-faint mt-1">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-emerald-500 inline-block" /> Perfect {s.perfect_score} <InfoTooltip content={tooltipTexts.grading.perfect} position="bottom" /></span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-emerald-500 inline-block" /> {NEAR_PERFECT_SHORT} {s.perfect_score} <InfoTooltip content={tooltipTexts.grading.perfect} position="bottom" /></span>
             <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-amber-500 inline-block" /> Partial {s.partial_score} <InfoTooltip content={tooltipTexts.grading.partial} position="bottom" /></span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-red-500 inline-block" /> Zero {s.zero_score} <InfoTooltip content={tooltipTexts.grading.zero} position="bottom" /></span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-red-500 inline-block" /> {NEAR_ZERO_SHORT} {s.zero_score} <InfoTooltip content={tooltipTexts.grading.zero} position="bottom" /></span>
           </div>
         </div>
 

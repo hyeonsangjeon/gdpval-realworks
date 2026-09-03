@@ -188,6 +188,52 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **The dashboard called a band "Perfect (100%)" that a task scoring 99.77%
+  is inside, and printed that task's score as "100%".**
+  `summary.openai_compat.perfect_count` and `zero_count` are counted by the
+  grading backend at `>= 99%` and `<= 1%`. PR #371 corrected the backend's own
+  wording to say so — `narrative_analyzer.py` prints `Near-perfect (>= 99%)`,
+  `grade.schema.json` warns the number "must not be read as one" — and
+  deliberately left the dashboard alone. So the screen went on saying
+  `Perfect (100%)`, `Zero (0%)`, `Score = 100% — all rubric criteria were
+  fully satisfied` and `scored full marks` over counts that require none of it.
+
+  Two published rows are why this is not a wording quibble. In
+  `exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_4-hybrid`, task
+  `476db143` scored **99.77%** and task `0e386e32` scored **0.9%**. The
+  aggregator snaps a row's `avg_score` to a flat 1.0/0.0 once it crosses a band
+  boundary, so that the per-row Status badge and the summary count cannot
+  disagree — which left `476db143` rendering as a `100%` in its own score
+  column, under a `Perfect` badge, inside a `Perfect (100%)` total. Every
+  figure on that row was a number the task did not have.
+
+  The thresholds do not move and no published count changes, for PR #371's
+  reason: the counts are already on the board, and moving a boundary would
+  restate every run. What changes is the words, plus one number the row can now
+  state for itself. `src/data/scoreBands.ts` is the single place the two
+  thresholds and the five labels derived from them are written, and
+  `scripts/aggregate-grades.mjs` exports the same two constants;
+  `scripts/__tests__/near-perfect-labels.test.mjs` fails if the two files drift,
+  if a label spells its threshold out as a literal instead of interpolating it,
+  or if any surface under `src/` goes back to naming an exact figure.
+
+  The aggregator now carries `pct_exact` on **exactly** the rows the snap moved
+  — measured across every published grade file, that is 2 rows out of 2,020, so
+  2,018 render byte-identically to before — and `ScoreCell` prefers it, so
+  `476db143` reads `99.8%` and `0e386e32` reads `0.9%`. A task that genuinely
+  scored 100 or 0 gains no key and is unchanged. The recount of snapped rows
+  still equals `perfect_count` and `zero_count` on both published runs, which is
+  the check that the counts did not move.
+
+  `OUTCOME_BADGES` has no `scored` entry, so both rows fell through to the
+  `avg_score === 1 / === 0` fallback and were badged from the snapped value;
+  those two badges now read `Near-perfect` / `Near-zero`. The `content_zero`
+  badge is deliberately left saying `Zero`: `classifyTaskOutcome` branches on
+  the raw `pct === 0`, so that one is exact.
+
+  Nothing here is inside `compute_grader_source_hash`, which covers only
+  `batch-runner/`, so no grader fingerprint moves and no published grade needs
+  regrading.
 - **A React component was refused a verdict for want of a picture that does
   not exist.** Task 7de33b48's whole deliverable is one 3.5 KB
   `screen_reader_status_message.zip` — two `.tsx` files, a `.css`, a
