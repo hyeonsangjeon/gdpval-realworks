@@ -1777,6 +1777,107 @@ def _visual_budget_stats(task_dicts: list[dict]) -> dict:
     }
 
 
+#: The routes an item can be graded on, as ``grade.schema.json`` fixes them.
+#: Listed here so that every one of them gets a count once routing is being
+#: recorded at all -- including the routes this run happened not to use, which
+#: is the answer to "how many audio items?" and not a gap in the record.
+_ROUTING_MODALITIES = ("visual", "audio", "formatting", "text", "mixed")
+
+
+def _routing_stats(task_dicts: list[dict]) -> dict:
+    """How much of this run each sub-judge decided.
+
+    Every item already carries ``routing_modality``; nothing aggregated it, so
+    the size of a route was only ever obtainable by downloading the payload and
+    counting it by hand. That is the wrong place for it to live once a route's
+    trustworthiness is in question: the audio sub-judge measures at a
+    discrimination of 0.00 against synthetic clips whose answers are known, and
+    the question that follows -- how much of the published score rests on it --
+    is a property of the run, so the run says it.
+
+    Three numbers, because three different questions get asked:
+
+    ``items`` is the population, over **every** task including errored ones.
+    This is the "31 of 8,816" figure, and it is the one to quote about the
+    corpus.
+
+    ``scored_items`` and ``scored_max_score`` are over the items that actually
+    moved the headline: not ``score_excluded``, inside a task without an
+    ``error``. Scoped exactly like :func:`_score_exclusion_stats`, deliberately
+    -- two summarisers over one payload must not disagree about which items the
+    average is made of. ``scored_max_score`` sums positive rubric weight only,
+    the same convention and for the same reason as ``excluded_max_score``: a
+    penalty item's negative weight is not weight that would leave a denominator.
+
+    ``tasks`` counts tasks touching a route at least once, so a route worth one
+    item spread over ten tasks is distinguishable from one worth ten items in a
+    single task. Over every task, like ``items``.
+
+    **A route absent from a run that recorded routing is a measured zero. A
+    route absent from a run that recorded none is not.** Grades written before
+    routing existed carry ``routing_modality: null`` on every item, and
+    zero-filling those into ``audio: 0`` would turn "never asked" into "asked
+    and found none" -- the one reading this field exists to prevent. So the
+    maps are empty when nothing was recorded, ``unrecorded_items`` carries the
+    whole item count, and ``recorded`` says which of the two situations a
+    reader is in. A partly-instrumented payload reports both: real counts and a
+    non-zero ``unrecorded_items``.
+
+    A modality outside the schema's enum is counted under its own name rather
+    than dropped, so a route added upstream shows up here before anything
+    downstream has been taught the word.
+
+    Recomputed from ``items``, so a merged shard set reports what a serial run
+    would have, and a payload published before this field existed reports the
+    same numbers when it is re-summarised.
+    """
+    items: dict[str, int] = {}
+    scored_items: dict[str, int] = {}
+    scored_max_score: dict[str, float] = {}
+    tasks: dict[str, int] = {}
+    unrecorded_items = 0
+
+    for task in task_dicts:
+        scored_task = not task.get("error")
+        seen_here: set[str] = set()
+        for item in task.get("items", []):
+            modality = item.get("routing_modality")
+            if not isinstance(modality, str) or not modality:
+                unrecorded_items += 1
+                continue
+            items[modality] = items.get(modality, 0) + 1
+            seen_here.add(modality)
+            if scored_task and not item.get("score_excluded"):
+                scored_items[modality] = scored_items.get(modality, 0) + 1
+                scored_max_score[modality] = scored_max_score.get(
+                    modality, 0.0
+                ) + max(0.0, float(item.get("max_score") or 0.0))
+        for modality in seen_here:
+            tasks[modality] = tasks.get(modality, 0) + 1
+
+    if not items:
+        return {
+            "recorded": False,
+            "items": {},
+            "scored_items": {},
+            "scored_max_score": {},
+            "tasks": {},
+            "unrecorded_items": unrecorded_items,
+        }
+
+    names = sorted(set(_ROUTING_MODALITIES) | set(items))
+    return {
+        "recorded": True,
+        "items": {name: items.get(name, 0) for name in names},
+        "scored_items": {name: scored_items.get(name, 0) for name in names},
+        "scored_max_score": {
+            name: round(scored_max_score.get(name, 0.0), 4) for name in names
+        },
+        "tasks": {name: tasks.get(name, 0) for name in names},
+        "unrecorded_items": unrecorded_items,
+    }
+
+
 def _compute_summary(
     task_dicts: list[dict],
     *,
@@ -1926,6 +2027,10 @@ def _compute_summary(
         # its renders may have left the average altogether, and that is the
         # case this is here to count -- see `_visual_budget_stats`.
         "visual_budget": _visual_budget_stats(task_dicts),
+        # Which sub-judge decided how much of this run. Beside the two above
+        # rather than inside `wow`: those are rates about how the grading went,
+        # and this is the composition of what was graded.
+        "routing": _routing_stats(task_dicts),
         "wow": {
             "rubric_item_coverage_avg": _rate(
                 counters["all_pass"], counters["all_items"]
