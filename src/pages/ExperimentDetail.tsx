@@ -595,6 +595,12 @@ function ExperimentDetail() {
                   { label: 'Tasks requiring files', value: report.file_generation.needs_files_total },
                   { label: 'Successfully generated', value: `${report.file_generation.files_succeeded} (${report.file_generation.needs_files_total > 0 ? ((report.file_generation.files_succeeded / report.file_generation.needs_files_total) * 100).toFixed(1) : 0}%)` },
                   { label: 'Failed → dummy created', value: report.file_generation.files_failed },
+                  // Only when there are any. A report written before step5
+                  // counted them carries no number here, and no number is not
+                  // the same claim as none.
+                  ...((report.file_generation.files_absent ?? 0) > 0
+                    ? [{ label: 'Absent from submission (never checked)', value: report.file_generation.files_absent as number }]
+                    : []),
                 ].map((row, i) => (
                   <div key={i} className="flex justify-between py-1 border-b border-dash-border-subtle last:border-0">
                     <span className="text-dash-text-secondary">{row.label}</span>
@@ -602,6 +608,13 @@ function ExperimentDetail() {
                   </div>
                 ))}
               </div>
+              {(report.file_generation.files_absent ?? 0) > 0 && (
+                <p className="mt-2 text-[10px] leading-snug text-amber-400/90">
+                  {report.file_generation.files_absent} of these tasks have no row in the
+                  submission, so nothing was read for them. The percentage above is out of a
+                  denominator that includes them.
+                </p>
+              )}
             </motion.div>
           )}
           {report.recovery_stats?.resume_rounds?.per_round &&

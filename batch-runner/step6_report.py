@@ -1002,17 +1002,31 @@ def _build_markdown(rd: dict) -> str:
         total_fg = fg["needs_files_total"]
         succeeded = fg["files_succeeded"]
         failed = fg["files_failed"]
+        # Tasks the submission had no row for. Absent on reports written before
+        # step5 counted them, where it means no record rather than none — which
+        # is why the row and the note below appear only when there are some.
+        absent = fg.get("files_absent") or 0
         pct = round(succeeded / total_fg * 100, 1) if total_fg else 0.0
+        rows = [
+            f"| Tasks requiring files | {total_fg} |",
+            f"| Successfully generated | {succeeded} ({pct}%) |",
+            f"| Failed (empty outputs preserved) | {failed} |",
+        ]
+        note = []
+        if absent:
+            rows.append(f"| Absent from submission (never checked) | {absent} |")
+            note = [
+                f"> {absent} of these {total_fg} tasks have no row in the "
+                "submission at all, so nothing was read for them. The "
+                f"{pct}% above is out of a denominator that includes them.",
+                "",
+            ]
         lines += [
             "## File Generation",
             "",
             "| Metric | Value |",
             "|--------|-------|",
-            f"| Tasks requiring files | {total_fg} |",
-            f"| Successfully generated | {succeeded} ({pct}%) |",
-            f"| Failed (empty outputs preserved) | {failed} |",
-            "",
-        ]
+        ] + rows + [""] + note
 
     # 5. Recovery Stats
     rc = rd.get("recovery_stats") or {}
@@ -1169,11 +1183,15 @@ def _build_html(rd: dict) -> str:
     fg_succeeded = fg.get("files_succeeded")
     if fg_total is not None and fg_total > 0:
         fg_pct = round(fg_succeeded / fg_total * 100, 1)
+        fg_absent = fg.get("files_absent") or 0
+        fg_sub = f"{fg_succeeded} / {fg_total} tasks"
+        if fg_absent:
+            fg_sub += f" — {fg_absent} never checked"
         fg_card = (
             f'<div class="card">'
             f'<div class="label">File Gen Rate</div>'
             f'<div class="value">{fg_pct}%</div>'
-            f'<div class="sub">{fg_succeeded} / {fg_total} tasks</div>'
+            f'<div class="sub">{fg_sub}</div>'
             f'</div>'
         )
     else:
@@ -1603,6 +1621,7 @@ def generate_report(
         "needs_files_total": None,
         "files_succeeded": None,
         "files_failed": None,
+        "files_absent": None,
         "dummy_files_created": None,
         "dummy_task_ids": [],
     }

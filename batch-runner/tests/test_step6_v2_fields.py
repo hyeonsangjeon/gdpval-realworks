@@ -540,6 +540,91 @@ def test_markdown_reports_failed_files_without_claiming_dummy_creation():
     assert "dummy created" not in markdown
 
 
+def _markdown_for_file_generation(file_generation: dict) -> str:
+    """Render the report markdown for one ``file_generation`` block."""
+    report = step6_report._build_report_data(
+        _make_result_payload(),
+        {"grading_referenced": False},
+        {
+            "total_tasks": 2,
+            "success_count": 1,
+            "success_rate_pct": 50.0,
+            "error_count": 1,
+            "retried_count": 0,
+            "avg_qa_score": 0,
+            "min_qa_score": 0,
+            "max_qa_score": 0,
+            "avg_latency_ms": 0,
+            "max_latency_ms": 0,
+            "total_latency_ms": 0,
+        },
+        [],
+        [],
+        [],
+    )
+    report["file_generation"] = file_generation
+    return step6_report._build_markdown(report)
+
+
+def _file_generation_section(markdown: str) -> str:
+    """The ``## File Generation`` block alone — the rest carries a timestamp."""
+    lines = markdown.splitlines()
+    start = lines.index("## File Generation")
+    end = next(
+        (
+            index
+            for index, line in enumerate(lines[start + 1:], start + 1)
+            if line.startswith("## ")
+        ),
+        len(lines),
+    )
+    return "\n".join(lines[start:end])
+
+
+def test_markdown_names_the_tasks_that_were_never_checked():
+    """A task with no row in the submission is in the denominator of the rate
+    printed above it, so the report has to say it was never looked at."""
+    markdown = _markdown_for_file_generation({
+        "needs_files_total": 2,
+        "files_succeeded": 1,
+        "files_failed": 0,
+        "files_absent": 1,
+        "dummy_files_created": 0,
+        "dummy_task_ids": [],
+    })
+
+    assert "| Successfully generated | 1 (50.0%) |" in markdown
+    assert "| Absent from submission (never checked) | 1 |" in markdown
+    assert "> 1 of these 2 tasks have no row in the submission at all" in markdown
+    assert "The 50.0% above is out of a denominator that includes them." in markdown
+
+
+def test_markdown_is_unchanged_when_no_task_was_absent():
+    """Nothing absent, and a report written before step5 counted them, render
+    exactly as they did before — no empty row, no note about a zero."""
+    counted = _markdown_for_file_generation({
+        "needs_files_total": 2,
+        "files_succeeded": 1,
+        "files_failed": 1,
+        "files_absent": 0,
+        "dummy_files_created": 0,
+        "dummy_task_ids": [],
+    })
+    legacy = _markdown_for_file_generation({
+        "needs_files_total": 2,
+        "files_succeeded": 1,
+        "files_failed": 1,
+        "dummy_files_created": 0,
+        "dummy_task_ids": [],
+    })
+
+    section = _file_generation_section(counted)
+    assert section == _file_generation_section(legacy)
+    assert "never checked" not in section
+    assert "no row in the submission" not in section
+    assert "| Failed (empty outputs preserved) | 1 |" in section
+
+
 def test_report_preserves_current_pipeline_publication_identity(
     monkeypatch, tmp_path
 ):
