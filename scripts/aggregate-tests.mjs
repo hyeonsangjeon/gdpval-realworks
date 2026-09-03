@@ -15,15 +15,29 @@
  */
 
 import { readdir, readFile, writeFile, mkdir } from 'fs/promises';
-import { join, extname } from 'path';
+import { join, extname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { parse as parseYaml } from 'yaml';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const TESTS_DIR = join(ROOT, 'data', 'tests');
 const OUTPUT_DIR = join(ROOT, 'public', 'generated');
 
-async function loadAllTests() {
-  const files = await readdir(TESTS_DIR);
+// A file that is present but unusable is not the same thing as one that is not
+// there. Reading already worked that way — readFile below is deliberately
+// outside any catch, so an unreadable file ends the build. Parsing did not: a
+// malformed file was logged to stderr and dropped, and `Found N experiments`
+// then printed a number that had silently shrunk beside a checkmark, wrote the
+// index, and exited 0. data/tests/ holds one file, so one bad byte published an
+// empty experiments-index.json to the dashboard with a green build and a green
+// deploy.
+//
+// aggregate-reports.mjs already draws this line for the same job in the same
+// directory: ENOENT returns null, anything else throws "present but is not
+// valid JSON". This is that contract, for the first script in the prebuild
+// chain.
+export async function loadAllTests(testsDir = TESTS_DIR) {
+  const files = await readdir(testsDir);
   const yamlFiles = files
     .filter(f => ['.yaml', '.yml'].includes(extname(f)))
     .sort(); // 알파벳 순 정렬로 결정적 출력 보장
@@ -31,13 +45,24 @@ async function loadAllTests() {
   const experiments = [];
 
   for (const file of yamlFiles) {
-    const content = await readFile(join(TESTS_DIR, file), 'utf-8');
+    const content = await readFile(join(testsDir, file), 'utf-8');
+    let data;
     try {
-      const data = parseYaml(content);
-      experiments.push({ ...data, _sourceFile: file });
+      data = parseYaml(content);
     } catch (err) {
-      console.error(`⚠️  ${file} 파싱 실패:`, err.message);
+      throw new Error(`${file} is present but is not valid YAML: ${err.message}`);
     }
+    // An empty file parses to null, and `{ ...null }` is `{}` — a row with no
+    // id that reaches experiments-index.json before the markdown pass dies on
+    // it, so the index is written wrong and the failure names no file.
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error(
+        `${file} is present but does not hold an experiment: parsed as ${
+          Array.isArray(data) ? 'a list' : String(data === null ? 'nothing' : typeof data)
+        }`
+      );
+    }
+    experiments.push({ ...data, _sourceFile: file });
   }
 
   return experiments;
@@ -169,7 +194,11 @@ async function main() {
   console.log('   Done!');
 }
 
-main().catch(err => {
-  console.error('❌ Aggregation failed:', err);
-  process.exit(1);
-});
+// Only run the aggregation when invoked directly, so scripts/__tests__/ can
+// import loadAllTests above without triggering a full run over data/tests/.
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch(err => {
+    console.error('❌ Aggregation failed:', err);
+    process.exit(1);
+  });
+}
