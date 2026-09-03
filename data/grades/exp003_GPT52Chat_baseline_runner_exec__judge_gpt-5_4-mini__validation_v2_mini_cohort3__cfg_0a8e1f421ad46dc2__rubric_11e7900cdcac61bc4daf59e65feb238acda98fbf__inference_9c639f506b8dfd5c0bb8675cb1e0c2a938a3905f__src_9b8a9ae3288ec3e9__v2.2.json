@@ -7667,7 +7667,13 @@
           "avg_pct": 36.14,
           "critical_item_pass_rate": 0.0,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.281
+          "judge_pass_rate": 0.281,
+          "item_counts": {
+            "rubric_items": 153,
+            "critical_items": 3,
+            "precheck_items": 0,
+            "judge_items": 153
+          }
         }
       },
       "by_rubric_category": {},
@@ -7729,7 +7735,13 @@
           "n_items": 3,
           "pass_rate": 0.0
         }
-      ]
+      ],
+      "item_counts": {
+        "rubric_items": 153,
+        "critical_items": 3,
+        "precheck_items": 0,
+        "judge_items": 153
+      }
     },
     "cost": {
       "total_judge_calls": 536,
