@@ -12,6 +12,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **The published grades index carried an amount nobody ever measured.** Sixteen
+  of the nineteen rows in `public/generated/grades-index.json` said
+  `summary_v1.cost.estimated_cost_usd: 0`, and every one of them said it beside
+  real tokens — the largest next to 130,092,056 input and 5,523,697 output
+  tokens across 8,904 judge calls. Those runs did not cost nothing; nobody could
+  price them, because the judge they used is deliberately absent from this
+  repository's price table. `scripts/aggregate-grades.mjs` spread the legacy
+  payload's summary into the record unfiltered, two lines above the receipt path
+  that already gets this right ("Absent here is what the dashboard reads as 'no
+  record' — never as $0").
+
+  The spread now goes through `projectLegacySummary`. No payload is rewritten —
+  the sixteen zeros stay on disk exactly where they were written; what changed is
+  what the build is willing to republish from them. The exemption is the
+  contract's own (`batch-runner/core/cost_receipts.py`: the only real $0 is a
+  path that never contacted a provider), asked of the block itself: a zero
+  survives only when `total_judge_calls`, `total_input_tokens` and
+  `total_output_tokens` are all present and all zero. A *missing* counter is not
+  a counter that read nothing, so a block with no counters normalises — fail
+  closed on the evidence for the exemption, the same reasoning one level up from
+  the amount. Unrecorded becomes `null`, not absent: `undefined !== null` is
+  true, so dropping the key sends a reader guarding on null into `.toFixed` on
+  `undefined` (`scripts/cost-receipt.mjs:711-716`).
+
+  The same spread also carried a payload's own run-level `summary.grading_cost`,
+  which the line below it overrides only when this build derived one — and
+  `summarizeCostReceipts` returns null the moment no task carries a receipt. Not
+  live on any published file, but it is the other half of the section's own rule
+  that a run summary is derived from the rows, never copied. Both are dropped
+  there now.
+
+  Measured across the regenerated `public/generated`: 16 field differences, all
+  `0 → null`, plus one `_generated` timestamp per other file — 23 in total, with
+  no token, call, latency or key-order change anywhere. No index row publishes a
+  numeric amount. `scripts/__tests__/a-zero-beside-real-tokens-is-not-a-price.test.mjs`
+  (14 tests) pins that on the real corpus and holds the genuine-$0 exemption
+  open; 12 of 12 planted defects were caught. Frontend generator and docs only —
+  no `core/` change, so no grader fingerprint moved. No model was called.
 - **A grading config could ask for tiered judging, be credentialed for it, and
   be graded without it.** Task 207 removed the tiered judge, and an earlier
   entry below recorded a decision to leave
