@@ -37,6 +37,32 @@
 - i 풍선: "rubric 가중치가 3점 이상인 핵심 요구사항의 통과율. 작은
   formatting 항목보다 결정적 요건을 얼마나 충족했는지 보여줌."
 
+> **2026-09-03 소유자 결정으로 위 W2 사양은 폐기되었습니다.** 위 문단은
+> 당시 무엇을 만들었는지 남기기 위해 그대로 둡니다.
+>
+> 위 사양의 세 문장이 모두 사실과 달랐습니다. ① rubric에는 `required`
+> 필드가 실제로 있고 220개 task의 10,453개 항목 **전부에서 null**이라,
+> 이 항목들을 "must-have"로 지정한 것은 아무것도 없습니다. ②
+> `core/grader.py`의 기준은 가중치 3점이 아니라 `abs(max_score) >= 4`
+> 이고, 별도의 weight 필드가 아니라 배점의 절댓값을 봅니다. ③ 이 값이
+> gold-ceiling 합격 게이트와 대시보드 대표 카드에 동시에 쓰이면서,
+> 휴리스틱이 판정을 내리고 있었습니다.
+>
+> 바뀐 것: 이름은 `High-magnitude item pass rate (|max score| ≥ 4)`,
+> 카드는 대표 행 아래 진단 영역으로 내려가고, 게이트에서 빠집니다.
+> 분모를 함께 표시하며, 센 항목이 하나도 없어 분모가 0이면 `0%`가 아니라
+> **"not recorded"** 로 표시합니다.
+>
+> 바뀌지 않은 것: `MAGNITUDE_THRESHOLD`는 4 그대로, `data/grades/**`의
+> 어떤 payload도 다시 쓰지 않았고, JSON 키
+> (`critical_item_pass_rate`, `critical_fail`, `item_counts.critical_items`)
+> 도 발표된 이름을 그대로 씁니다.
+>
+> 근거와 실측 수치: `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`,
+> 구현: `src/components/wow/HighMagnitudeItemCard.tsx`,
+> 판정 규칙: `src/components/wow/highMagnitudeReading.ts`,
+> 회귀 방지: `scripts/__tests__/high-magnitude-label.test.mjs`.
+
 ### W3 — Precheck vs Judge Breakdown
 - 카드 제목: "Structure vs Reasoning"
 - 두 바: precheck_pass_rate (e.g., 92%) vs judge_pass_rate (e.g., 64%)

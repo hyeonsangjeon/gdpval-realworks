@@ -8,6 +8,10 @@ import type {
   SectorWowMetric,
 } from '../../types/grade'
 import { tooltipTexts } from '../../data/tooltipTexts'
+import {
+  HIGH_MAGNITUDE_MIN_ABS_SCORE,
+  MIN_READABLE_HIGH_MAGNITUDE_ITEMS,
+} from './highMagnitudeReading'
 
 interface Props {
   wow: WowSummary
@@ -21,7 +25,26 @@ function colorFor(rate: number): string {
   return `hsl(${hue}, 70%, 45%)`
 }
 
-type Row = { name: string; values: { key: string; rate: number; label?: string }[] }
+/**
+ * A cell whose rate cannot be read as a verdict, so it is not painted like one.
+ *
+ * Colour is the whole claim of a heatmap: red says the model failed here. The
+ * high-magnitude column earns that only when enough items were counted to make
+ * the rate mean something, and no grade published so far records the count at
+ * all — 447 sector rows carry the rate, 0 carry a denominator, and 168 of them
+ * are exactly `0.0`. Painted, every one of those 168 reads as a total failure.
+ */
+const UNREADABLE_CELL = 'hsl(220, 8%, 28%)'
+
+type CellValue = {
+  key: string
+  rate: number
+  label?: string
+  /** Why this cell is not a verdict; renders muted, with the reason on hover. */
+  unreadable?: string
+}
+
+type Row = { name: string; values: CellValue[] }
 
 function buildRubricCategoryRows(
   bySector: Record<string, SectorWowMetric>,
@@ -36,6 +59,25 @@ function buildRubricCategoryRows(
   return null
 }
 
+/**
+ * Why this sector's high-magnitude rate is not a verdict, or `undefined` if it
+ * is. Mirrors `readHighMagnitudeRate`, minus the wording a whole card can
+ * afford: a heatmap cell has a tooltip and nothing else.
+ */
+function highMagnitudeCaveat(m: SectorWowMetric): string | undefined {
+  const counted = m.item_counts?.critical_items
+  if (typeof counted !== 'number' || !Number.isFinite(counted)) {
+    return 'Denominator not recorded by this run, so this rate cannot be read as a pass or a failure.'
+  }
+  if (counted === 0) {
+    return `Not recorded: no item in this sector scored |max| ≥ ${HIGH_MAGNITUDE_MIN_ABS_SCORE}, so this is not a 0% pass rate.`
+  }
+  if (counted < MIN_READABLE_HIGH_MAGNITUDE_ITEMS) {
+    return `Over ${counted} item(s) only — under the ${MIN_READABLE_HIGH_MAGNITUDE_ITEMS} this rate needs before it reads as one.`
+  }
+  return undefined
+}
+
 function buildSectorFallbackRows(
   bySector: Record<string, SectorWowMetric>,
 ): Row[] {
@@ -44,7 +86,12 @@ function buildSectorFallbackRows(
     values: [
       { key: 'precheck', rate: m.precheck_pass_rate, label: 'Precheck' },
       { key: 'judge', rate: m.judge_pass_rate, label: 'Judge' },
-      { key: 'critical', rate: m.critical_item_pass_rate, label: 'Critical' },
+      {
+        key: 'critical',
+        rate: m.critical_item_pass_rate,
+        label: `High-magnitude (|max| ≥ ${HIGH_MAGNITUDE_MIN_ABS_SCORE}, diagnostic)`,
+        unreadable: highMagnitudeCaveat(m),
+      },
     ],
   }))
 }
@@ -57,8 +104,11 @@ export default function SectorHeatmap({ wow, delay = 0 }: Props) {
   const categoryRows = buildRubricCategoryRows(bySector, byCategory)
   const rows: Row[] = categoryRows ?? buildSectorFallbackRows(bySector)
   const hasData = rows.length > 0
+  const hasUnreadable = rows.some((row) => row.values.some((v) => v.unreadable))
 
-  const header = !categoryRows ? ['Precheck', 'Judge', 'Critical ≥3'] : []
+  const header = !categoryRows
+    ? ['Precheck', 'Judge', `High-mag ≥${HIGH_MAGNITUDE_MIN_ABS_SCORE}`]
+    : []
 
   return (
     <motion.div
@@ -113,11 +163,24 @@ export default function SectorHeatmap({ wow, delay = 0 }: Props) {
                       {row.values.map((v) => (
                         <td key={v.key} className="py-1.5 px-1">
                           <div
-                            className="rounded text-center font-mono text-[11px] font-semibold text-white py-1"
-                            style={{ backgroundColor: colorFor(v.rate) }}
-                            title={`${v.label ?? v.key}: ${(v.rate * 100).toFixed(1)}%`}
+                            className={
+                              v.unreadable
+                                ? 'rounded text-center font-mono text-[11px] font-semibold text-muted-foreground py-1 border border-dashed border-border'
+                                : 'rounded text-center font-mono text-[11px] font-semibold text-white py-1'
+                            }
+                            style={{
+                              backgroundColor: v.unreadable
+                                ? UNREADABLE_CELL
+                                : colorFor(v.rate),
+                            }}
+                            title={
+                              v.unreadable
+                                ? `${v.label ?? v.key}: ${(v.rate * 100).toFixed(1)}% — ${v.unreadable}`
+                                : `${v.label ?? v.key}: ${(v.rate * 100).toFixed(1)}%`
+                            }
                           >
                             {(v.rate * 100).toFixed(0)}%
+                            {v.unreadable ? '*' : ''}
                           </div>
                         </td>
                       ))}
@@ -125,6 +188,18 @@ export default function SectorHeatmap({ wow, delay = 0 }: Props) {
                   ))}
                 </tbody>
               </table>
+              {hasUnreadable && (
+                <p className="text-[11px] text-muted-foreground/80 mt-3 leading-relaxed">
+                  * Greyed cells are not verdicts. The high-magnitude column is
+                  a diagnostic over items scoring |max| ≥{' '}
+                  {HIGH_MAGNITUDE_MIN_ABS_SCORE} — not over items the rubric
+                  marks required, since its <code>required</code> field is null
+                  everywhere. A cell is greyed when the run recorded no
+                  denominator, or counted fewer than{' '}
+                  {MIN_READABLE_HIGH_MAGNITUDE_ITEMS} items. Hover for the
+                  reason.
+                </p>
+              )}
             </div>
           )}
         </CardContent>

@@ -214,10 +214,14 @@ Gold ceiling — stage 1 -- the 30-task sample
 Thresholds
 ------------------------------------------------------------
   mean score              82.87%   (needs >= 90.0%)   MISS
-  required-item pass      0.5714   (needs >= 0.95)    MISS
   grader error rate       0.0014   (needs < 0.02)     PASS
 
-Required items (|max score| >= 4)
+Diagnostics — measured, but they do not decide the stage
+------------------------------------------------------------
+  high-magnitude item pass   0.5714   (reference 0.95)   over 35 item(s) scoring |max| >= 4
+  diagnostic, not a gate: no explicit `required` signal in the rubric, so score magnitude stands in for it
+
+High-magnitude items (|max score| >= 4)
 ------------------------------------------------------------
   20 of 35 passed  (0.5714)
   verdicts                20 pass, 14 partial, 1 fail
@@ -235,22 +239,22 @@ Scores
 
 By occupation (7)
 ------------------------------------------------------------
-   77.87%  n=3    required 1/2  ·  Audio and Video Technicians
-   79.34%  n=4    required 0/2  ·  Computer and Information Systems Managers
-   81.36%  n=5    required 3/5  ·  Accountants and Auditors
-   83.98%  n=5    required 1/2  ·  Compliance Officers
-   84.27%  n=5    required 0/4  ·  Buyers and Purchasing Agents
-   84.64%  n=5    required 12/17  ·  Administrative Services Managers
-   87.99%  n=3    required 3/3  ·  Child, Family, and School Social Workers
+   77.87%  n=3    high-mag 1/2  ·  Audio and Video Technicians
+   79.34%  n=4    high-mag 0/2  ·  Computer and Information Systems Managers
+   81.36%  n=5    high-mag 3/5  ·  Accountants and Auditors
+   83.98%  n=5    high-mag 1/2  ·  Compliance Officers
+   84.27%  n=5    high-mag 0/4  ·  Buyers and Purchasing Agents
+   84.64%  n=5    high-mag 12/17  ·  Administrative Services Managers
+   87.99%  n=3    high-mag 3/3  ·  Child, Family, and School Social Workers
 
 Subsets
 ------------------------------------------------------------
-  82.87%   n=30   required 20/35  ·  the same thirty stage 1 graded
-  67.42%   n=1    required 0/0  ·  the five declared input limits
+  82.87%   n=30   high-mag 20/35  ·  the same thirty stage 1 graded
+  67.42%   n=1    high-mag 0/0  ·  the five declared input limits
       named but not in this payload:
       a73fbc98, e222075d, 75401f7c
       7de33b48
-  83.41%   n=29   required 20/35  ·  everything but those five
+  83.41%   n=29   high-mag 20/35  ·  everything but those five
       named but not in this payload:
       a73fbc98, e222075d, 75401f7c
       7de33b48
@@ -273,9 +277,9 @@ Bill
 Per task (worst first)
 ------------------------------------------------------------
   c357f0e2-963d-4eb7-a6fa-3078fe55b3ba   49.29%  49.79/101  ·  Computer and Information Systems Managers
-      42/70 item(s) below max, -51.2133 point(s), required item failed
+      42/70 item(s) below max, -51.2133 point(s), high-magnitude item failed
   83d10b06-26d1-4636-a32c-23f92c57f30b   66.90%  42.15/63  ·  Accountants and Auditors
-      15/38 item(s) below max, -20.85 point(s), required item failed
+      15/38 item(s) below max, -20.85 point(s), high-magnitude item failed
   38889c3b-e3d4-49c8-816a-3cc8e5313aba   67.42%  41.80/62  ·  Audio and Video Technicians
       14/35 item(s) below max, -20.2 point(s)
   dfb4e0cd-a0b7-454e-b943-0dd586c2764c   72.09%  31.00/43  ·  Compliance Officers
@@ -287,15 +291,15 @@ Per task (worst first)
   4c18ebae-dfaa-4b76-b10c-61fcdf26734c   76.81%  53.00/69  ·  Compliance Officers
       21/50 item(s) below max, -16.0 point(s)
   24d1e93f-9018-45d4-b522-ad89dfd78079   78.11%  64.05/82  ·  Buyers and Purchasing Agents
-      24/52 item(s) below max, -17.95 point(s), required item failed
+      24/52 item(s) below max, -17.95 point(s), high-magnitude item failed
   7d7fc9a7-21a7-4b83-906f-416dea5ad04f   79.68%  75.70/95  ·  Accountants and Auditors
-      15/56 item(s) below max, -19.3 point(s), required item failed
+      15/56 item(s) below max, -19.3 point(s), high-magnitude item failed
   99ac6944-4ec6-4848-959c-a460ac705c6f   81.51%  66.84/82  ·  Audio and Video Technicians
       21/52 item(s) below max, -15.16 point(s)
   ee09d943-5a11-430a-b7a2-971b4e9b01b5   82.15%  48.47/59  ·  Accountants and Auditors
       11/44 item(s) below max, -10.53 point(s)
   7bbfcfe9-132d-4194-82bb-d6f29d001b01   82.36%  43.65/53  ·  Compliance Officers
-      12/40 item(s) below max, -9.35 point(s), required item failed
+      12/40 item(s) below max, -9.35 point(s), high-magnitude item failed
   15ddd28d-8445-4baa-ac7f-f41372e1344e   82.54%  47.05/57  ·  Buyers and Purchasing Agents
       12/46 item(s) below max, -9.95 point(s)
   cebf301e-5ea7-41ae-b117-ad8f43e7ac22   84.52%  52.40/62  ·  Computer and Information Systems Managers
@@ -303,21 +307,21 @@ Per task (worst first)
   a328feea-47db-4856-b4be-2bdc63dd88fb   84.55%  18.60/22  ·  Administrative Services Managers
       4/16 item(s) below max, -3.4 point(s)
   f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb   84.68%  66.90/79  ·  Audio and Video Technicians
-      9/51 item(s) below max, -12.1 point(s), required item failed
+      9/51 item(s) below max, -12.1 point(s), high-magnitude item failed
   1b1ade2d-f9f6-4a04-baa5-aa15012b53be   84.88%  58.57/69  ·  Buyers and Purchasing Agents
-      17/51 item(s) below max, -10.43 point(s), required item failed
+      17/51 item(s) below max, -10.43 point(s), high-magnitude item failed
   c44e9b62-7cd8-4f72-8ad9-f8fbddb94083   85.00%  103.70/122  ·  Administrative Services Managers
-      16/44 item(s) below max, -18.3 point(s), required item failed
+      16/44 item(s) below max, -18.3 point(s), high-magnitude item failed
   93b336f3-61f3-4287-86d2-87445e1e0f90   85.53%  65.00/76  ·  Buyers and Purchasing Agents
-      11/53 item(s) below max, -11.0 point(s), required item failed
+      11/53 item(s) below max, -11.0 point(s), high-magnitude item failed
   c2e8f271-7858-412f-b460-472463ad81d9   85.89%  69.57/81  ·  Computer and Information Systems Managers
-      14/67 item(s) below max, -11.43 point(s), required item failed
+      14/67 item(s) below max, -11.43 point(s), high-magnitude item failed
   43dc9778-450b-4b46-b77e-b6d82b202035   86.40%  104.55/121  ·  Accountants and Auditors
       18/67 item(s) below max, -16.45 point(s)
   f84ea6ac-8f9f-428c-b96c-d0884e30f7c7   86.57%  50.21/58  ·  Administrative Services Managers
-      6/30 item(s) below max, -7.79 point(s), required item failed
+      6/30 item(s) below max, -7.79 point(s), high-magnitude item failed
   05389f78-589a-473c-a4ae-67c61050bfca   90.28%  79.44/88  ·  Buyers and Purchasing Agents
-      11/66 item(s) below max, -8.555 point(s), required item failed
+      11/66 item(s) below max, -8.555 point(s), high-magnitude item failed
   7b08cd4d-df60-41ae-9102-8aaa49306ba2   91.69%  81.60/89  ·  Accountants and Auditors
       5/59 item(s) below max, -7.4 point(s)
   bbe0a93b-ebf0-40b0-98dc-8d9243099034   92.30%  74.76/81  ·  Child, Family, and School Social Workers
@@ -325,7 +329,7 @@ Per task (worst first)
   2696757c-1f8a-4959-8f0d-f5597b9e70fc   92.68%  38.00/41  ·  Compliance Officers
       2/25 item(s) below max, -3.0 point(s)
   27e8912c-8bd5-44ba-ad87-64066ea05264   94.34%  50.00/53  ·  Administrative Services Managers
-      2/37 item(s) below max, -3.0 point(s), required item failed
+      2/37 item(s) below max, -3.0 point(s), high-magnitude item failed
   36d567ba-e205-4313-9756-931c6e4691fe   95.96%  51.82/54  ·  Compliance Officers
       2/27 item(s) below max, -2.18 point(s)
   76d10872-9ffa-4ede-83ee-e0f1ec5e2b8d   96.96%  143.50/148  ·  Child, Family, and School Social Workers
@@ -336,7 +340,7 @@ Per task (worst first)
 Shortfalls
 ------------------------------------------------------------
   370 of 1433 rubric item(s) scored below their maximum, losing 377.7283 point(s)
-  required item failed in 13 task(s):
+  high-magnitude item failed in 13 task(s):
       83d10b06-26d1-4636-a32c-23f92c57f30b, 7d7fc9a7-21a7-4b83-906f-416dea5ad04f, f84ea6ac-8f9f-428c-b96c-d0884e30f7c7
       27e8912c-8bd5-44ba-ad87-64066ea05264, c44e9b62-7cd8-4f72-8ad9-f8fbddb94083, f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb
       1b1ade2d-f9f6-4a04-baa5-aa15012b53be, 93b336f3-61f3-4287-86d2-87445e1e0f90, 24d1e93f-9018-45d4-b522-ad89dfd78079
@@ -415,10 +419,14 @@ Gold ceiling — stage 1 -- the 30-task sample
 Thresholds
 ------------------------------------------------------------
   mean score              78.24%   (needs >= 90.0%)   MISS
-  required-item pass      0.5429   (needs >= 0.95)    MISS
   grader error rate          0.0   (needs < 0.02)     PASS
 
-Required items (|max score| >= 4)
+Diagnostics — measured, but they do not decide the stage
+------------------------------------------------------------
+  high-magnitude item pass   0.5429   (reference 0.95)   over 35 item(s) scoring |max| >= 4
+  diagnostic, not a gate: no explicit `required` signal in the rubric, so score magnitude stands in for it
+
+High-magnitude items (|max score| >= 4)
 ------------------------------------------------------------
   19 of 35 passed  (0.5429)
   verdicts                19 pass, 16 partial
@@ -436,22 +444,22 @@ Scores
 
 By occupation (7)
 ------------------------------------------------------------
-   56.21%  n=3    required 1/2  ·  Audio and Video Technicians
-   59.53%  n=4    required 0/2  ·  Computer and Information Systems Managers
-   80.87%  n=5    required 3/5  ·  Accountants and Auditors
-   83.94%  n=5    required 0/4  ·  Buyers and Purchasing Agents
-   84.43%  n=5    required 1/2  ·  Compliance Officers
-   86.14%  n=5    required 12/17  ·  Administrative Services Managers
-   87.82%  n=3    required 2/3  ·  Child, Family, and School Social Workers
+   56.21%  n=3    high-mag 1/2  ·  Audio and Video Technicians
+   59.53%  n=4    high-mag 0/2  ·  Computer and Information Systems Managers
+   80.87%  n=5    high-mag 3/5  ·  Accountants and Auditors
+   83.94%  n=5    high-mag 0/4  ·  Buyers and Purchasing Agents
+   84.43%  n=5    high-mag 1/2  ·  Compliance Officers
+   86.14%  n=5    high-mag 12/17  ·  Administrative Services Managers
+   87.82%  n=3    high-mag 2/3  ·  Child, Family, and School Social Workers
 
 Subsets
 ------------------------------------------------------------
-  78.24%   n=30   required 19/35  ·  the same thirty stage 1 graded
-  3.23%    n=1    required 0/0  ·  the five declared input limits
+  78.24%   n=30   high-mag 19/35  ·  the same thirty stage 1 graded
+  3.23%    n=1    high-mag 0/0  ·  the five declared input limits
       named but not in this payload:
       a73fbc98, e222075d, 75401f7c
       7de33b48
-  80.82%   n=29   required 19/35  ·  everything but those five
+  80.82%   n=29   high-mag 19/35  ·  everything but those five
       named but not in this payload:
       a73fbc98, e222075d, 75401f7c
       7de33b48
@@ -478,57 +486,57 @@ Per task (worst first)
   2ea2e5b5-257f-42e6-a7dc-93763f28b19d   19.53%  16.60/85  ·  Computer and Information Systems Managers
       53/60 item(s) below max, -68.4 point(s)
   c357f0e2-963d-4eb7-a6fa-3078fe55b3ba   47.10%  47.57/101  ·  Computer and Information Systems Managers
-      42/70 item(s) below max, -53.4333 point(s), required item failed
+      42/70 item(s) below max, -53.4333 point(s), high-magnitude item failed
   83d10b06-26d1-4636-a32c-23f92c57f30b   66.27%  41.75/63  ·  Accountants and Auditors
-      15/38 item(s) below max, -21.25 point(s), required item failed
+      15/38 item(s) below max, -21.25 point(s), high-magnitude item failed
   17111c03-aac7-45c2-857d-c06d8223d6ad   72.21%  44.05/61  ·  Administrative Services Managers
       17/44 item(s) below max, -16.95 point(s)
   4c18ebae-dfaa-4b76-b10c-61fcdf26734c   73.12%  50.45/69  ·  Compliance Officers
       21/50 item(s) below max, -18.55 point(s)
   a74ead3b-f67d-4b1c-9116-f6bb81b29d4f   74.85%  63.62/85  ·  Child, Family, and School Social Workers
-      21/57 item(s) below max, -21.375 point(s), required item failed
+      21/57 item(s) below max, -21.375 point(s), high-magnitude item failed
   dfb4e0cd-a0b7-454e-b943-0dd586c2764c   77.58%  33.36/43  ·  Compliance Officers
       9/26 item(s) below max, -9.64 point(s)
   24d1e93f-9018-45d4-b522-ad89dfd78079   77.68%  63.70/82  ·  Buyers and Purchasing Agents
-      20/52 item(s) below max, -18.3 point(s), required item failed
+      20/52 item(s) below max, -18.3 point(s), high-magnitude item failed
   7d7fc9a7-21a7-4b83-906f-416dea5ad04f   78.53%  74.60/95  ·  Accountants and Auditors
-      15/56 item(s) below max, -20.4 point(s), required item failed
+      15/56 item(s) below max, -20.4 point(s), high-magnitude item failed
   99ac6944-4ec6-4848-959c-a460ac705c6f   80.59%  66.08/82  ·  Audio and Video Technicians
       20/52 item(s) below max, -15.92 point(s)
   ee09d943-5a11-430a-b7a2-971b4e9b01b5   82.03%  48.40/59  ·  Accountants and Auditors
       11/44 item(s) below max, -10.6 point(s)
   7bbfcfe9-132d-4194-82bb-d6f29d001b01   82.83%  43.90/53  ·  Compliance Officers
-      11/40 item(s) below max, -9.1 point(s), required item failed
+      11/40 item(s) below max, -9.1 point(s), high-magnitude item failed
   15ddd28d-8445-4baa-ac7f-f41372e1344e   82.98%  47.30/57  ·  Buyers and Purchasing Agents
       12/46 item(s) below max, -9.7 point(s)
   1b1ade2d-f9f6-4a04-baa5-aa15012b53be   83.58%  57.67/69  ·  Buyers and Purchasing Agents
-      17/51 item(s) below max, -11.33 point(s), required item failed
+      17/51 item(s) below max, -11.33 point(s), high-magnitude item failed
   93b336f3-61f3-4287-86d2-87445e1e0f90   84.47%  64.20/76  ·  Buyers and Purchasing Agents
-      11/53 item(s) below max, -11.8 point(s), required item failed
+      11/53 item(s) below max, -11.8 point(s), high-magnitude item failed
   f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb   84.81%  67.00/79  ·  Audio and Video Technicians
-      10/51 item(s) below max, -12.0 point(s), required item failed
+      10/51 item(s) below max, -12.0 point(s), high-magnitude item failed
   c2e8f271-7858-412f-b460-472463ad81d9   84.90%  68.77/81  ·  Computer and Information Systems Managers
-      14/67 item(s) below max, -12.23 point(s), required item failed
+      14/67 item(s) below max, -12.23 point(s), high-magnitude item failed
   43dc9778-450b-4b46-b77e-b6d82b202035   85.82%  103.84/121  ·  Accountants and Auditors
       17/67 item(s) below max, -17.16 point(s)
   a328feea-47db-4856-b4be-2bdc63dd88fb   86.04%  20.65/24  ·  Administrative Services Managers
       4/16 item(s) below max, -3.35 point(s)
   c44e9b62-7cd8-4f72-8ad9-f8fbddb94083   86.19%  105.15/122  ·  Administrative Services Managers
-      14/44 item(s) below max, -16.85 point(s), required item failed
+      14/44 item(s) below max, -16.85 point(s), high-magnitude item failed
   cebf301e-5ea7-41ae-b117-ad8f43e7ac22   86.61%  53.70/62  ·  Computer and Information Systems Managers
       6/35 item(s) below max, -8.3 point(s)
   05389f78-589a-473c-a4ae-67c61050bfca   90.99%  80.07/88  ·  Buyers and Purchasing Agents
-      11/66 item(s) below max, -7.93 point(s), required item failed
+      11/66 item(s) below max, -7.93 point(s), high-magnitude item failed
   bbe0a93b-ebf0-40b0-98dc-8d9243099034   91.53%  74.14/81  ·  Child, Family, and School Social Workers
       8/61 item(s) below max, -6.86 point(s)
   7b08cd4d-df60-41ae-9102-8aaa49306ba2   91.69%  81.60/89  ·  Accountants and Auditors
       5/59 item(s) below max, -7.4 point(s)
   f84ea6ac-8f9f-428c-b96c-d0884e30f7c7   91.81%  53.25/58  ·  Administrative Services Managers
-      5/30 item(s) below max, -4.75 point(s), required item failed
+      5/30 item(s) below max, -4.75 point(s), high-magnitude item failed
   2696757c-1f8a-4959-8f0d-f5597b9e70fc   92.68%  38.00/41  ·  Compliance Officers
       2/25 item(s) below max, -3.0 point(s)
   27e8912c-8bd5-44ba-ad87-64066ea05264   94.43%  50.05/53  ·  Administrative Services Managers
-      3/37 item(s) below max, -2.95 point(s), required item failed
+      3/37 item(s) below max, -2.95 point(s), high-magnitude item failed
   36d567ba-e205-4313-9756-931c6e4691fe   95.96%  51.82/54  ·  Compliance Officers
       2/27 item(s) below max, -2.18 point(s)
   76d10872-9ffa-4ede-83ee-e0f1ec5e2b8d   97.09%  143.70/148  ·  Child, Family, and School Social Workers
@@ -537,7 +545,7 @@ Per task (worst first)
 Shortfalls
 ------------------------------------------------------------
   435 of 1433 rubric item(s) scored below their maximum, losing 486.0083 point(s)
-  required item failed in 14 task(s):
+  high-magnitude item failed in 14 task(s):
       83d10b06-26d1-4636-a32c-23f92c57f30b, 7d7fc9a7-21a7-4b83-906f-416dea5ad04f, f84ea6ac-8f9f-428c-b96c-d0884e30f7c7
       27e8912c-8bd5-44ba-ad87-64066ea05264, c44e9b62-7cd8-4f72-8ad9-f8fbddb94083, f9a1c16c-53fd-4c8f-88cc-5c325ec2f0bb
       1b1ade2d-f9f6-4a04-baa5-aa15012b53be, 93b336f3-61f3-4287-86d2-87445e1e0f90, 24d1e93f-9018-45d4-b522-ad89dfd78079

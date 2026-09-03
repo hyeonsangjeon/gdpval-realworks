@@ -226,12 +226,29 @@ export interface OpenAICompatSummary {
   inconsistent_count: number
 }
 
+/**
+ * The denominators the `wow` rates were divided by.
+ *
+ * Every rate above is a fraction whose denominator used to be thrown away, and
+ * the fallback for an empty one is `0.0` — the same value as "every single item
+ * failed". `step8_grade._wow_item_counts` publishes the counts so the two can
+ * be told apart. Optional because grades written before it existed carry none,
+ * and an absent count is not a zero one.
+ */
+export interface WowItemCounts {
+  rubric_items?: number
+  critical_items?: number
+  precheck_items?: number
+  judge_items?: number
+}
+
 export interface SectorWowMetric {
   task_count: number
   avg_pct: number
   critical_item_pass_rate: number
   precheck_pass_rate: number
   judge_pass_rate: number
+  item_counts?: WowItemCounts
 }
 
 export interface RubricCategoryMetric {
@@ -252,10 +269,19 @@ export interface RubricSeverityPoint {
 
 export interface WowSummary {
   rubric_item_coverage_avg: number
+  /**
+   * Pass rate over rubric items whose `|max_score|` reaches the grader's
+   * magnitude threshold — *not* over items the rubric marks required. The
+   * rubric's own `required` field is null on all 10,453 items, so the grader
+   * substitutes score magnitude for necessity. Read it as a diagnostic and
+   * never as a verdict; see `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`.
+   * The key keeps its published name so past payloads stay readable.
+   */
   critical_item_pass_rate: number
   precheck_pass_rate: number
   judge_pass_rate: number
   judge_error_rate: number
+  item_counts?: WowItemCounts
   by_sector?: Record<string, SectorWowMetric>
   by_rubric_category?: Record<string, RubricCategoryMetric>
   score_density_histogram?: ScoreDensityBucket[]

@@ -11,6 +11,68 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+- **"필수 항목 통과율" was never measuring required items, and it decided a
+  pass gate anyway.** The rubric's own `required` field is `null` on all 10,453
+  items across all 220 tasks, so `core/grader.py` substitutes
+  `abs(max_score) >= 4`. That substitute was published as the headline
+  "Critical Items (weight ≥ 3)" — a label wrong three ways: nothing marks these
+  items required, the threshold is 4 rather than 3, and it reads the score
+  magnitude rather than any weight field. Owner decision of 2026-09-03, priced
+  first by `scripts/analyze_required_item_definition.py` and recorded in
+  `data/grades/_validation/REQUIRED_ITEM_DEFINITION.md`.
+
+  **The threshold does not move and no grade file is rewritten.**
+  `MAGNITUDE_THRESHOLD` stays at 4, `core/**`, `step8_grade.py` and
+  `schemas/grade.schema.json` are untouched — so no grader fingerprint moved and
+  no published run is restated. The JSON keys keep their published names
+  (`critical_item_pass_rate`, `critical_fail`, `item_counts.critical_items`),
+  because renaming them would break every reader of every payload written so
+  far. What changed is the name a human reads, and what the number is allowed
+  to decide.
+
+  - `scripts/analyze_gold_ceiling.py` gates on two things now, not three: mean
+    score and judge error rate. The rate moves to a `diagnostics` block that
+    prints its own denominator and states plainly that it does not decide the
+    stage. Exit codes are unchanged on both gold corpora — stage 1 (mean
+    82.87%) and stage 3 (mean 79.53%) already failed on mean score, so nothing
+    that failed before passes now.
+  - The dashboard card is renamed *High-magnitude item pass rate (|max score| ≥
+    4)*, moved out of the headline row into a dashed diagnostic card below the
+    heatmap, and stripped of its WOW badge. `CriticalItemCard.tsx` →
+    `HighMagnitudeItemCard.tsx`; the decision itself lives in the import-free
+    `src/components/wow/highMagnitudeReading.ts` so a node test can execute it.
+  - The sector heatmap's column header said `Critical ≥3` while the code
+    thresholded at 4. It now says `High-mag ≥4`, and any cell whose denominator
+    is unrecorded, empty, or under 20 items is greyed out with the reason on
+    hover instead of painted red.
+  - **An empty denominator reads "not recorded", never `0%`.** Measured on this
+    repository's own grades with #393 merged in: 447 published sector rows
+    carry the rate, of which #393 recovered a denominator for 62 — the other
+    385 still publish a bare rate with nothing behind it. Of the 62 that can
+    now be checked, **4 counted no high-magnitude item at all**; those printed
+    `0.0%` and painted the heatmap bright red for a run that measured nothing,
+    and they now read "not recorded". A further 21 counted between 1 and 19.
+    168 sector rows read exactly `0.0`, and only 10 of them carry a denominator
+    to explain it — but recomputing the count straight from the item data
+    settles all 168: **41 counted no high-magnitude item at all, 127 counted
+    between 1 and 19, and not one reached 20.** Every published `0.0` is a
+    denominator artefact, and the heatmap painted all 168 bright red. Run level
+    is the same shape: 94 payloads publish the rate, 22 carry
+    `item_counts.critical_items` (1 of them zero, 14 under 20), 72 carry
+    nothing. The 20-item floor is derived rather than chosen:
+    `ceil(1 / (1 − 0.95))`, below which one item moves the rate further than
+    the whole distance from the reference to a clean sweep.
+  - `scripts/__tests__/high-magnitude-label.test.mjs` pins all of it — the two
+    constants against their Python sources, the absence of the heuristic from
+    `gates`, the banned labels across every rendered `src/` surface, and the
+    five states of `readHighMagnitudeRate`.
+
+  Known residual: `core/narrative_analyzer.py` still writes "Critical item pass
+  rate" into the report prompt. Correcting that string is a one-word edit, but
+  `core/**/*.py` feeds `compute_grader_source_hash`, so it is deferred to the
+  next fingerprint-moving PR rather than smuggled in beside a label change.
+
 ### Added
 - **The number that says whether the model got the important things right is,
   on the gold corpora, mostly one line about formatting.** GDPVal rubrics carry
