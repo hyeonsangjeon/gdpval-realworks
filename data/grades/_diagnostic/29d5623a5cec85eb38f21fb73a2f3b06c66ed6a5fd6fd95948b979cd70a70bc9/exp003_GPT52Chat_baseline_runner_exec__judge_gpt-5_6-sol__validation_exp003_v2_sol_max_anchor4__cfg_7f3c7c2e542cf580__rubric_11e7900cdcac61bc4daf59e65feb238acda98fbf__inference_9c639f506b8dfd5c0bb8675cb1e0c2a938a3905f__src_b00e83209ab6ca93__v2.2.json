@@ -14666,10 +14666,113 @@
       "precheck_pass_rate": 0.0,
       "judge_pass_rate": 0.3122,
       "judge_error_rate": 0.0042,
-      "by_sector": {},
+      "by_sector": {
+        "Government": {
+          "task_count": 2,
+          "avg_pct": 48.31,
+          "critical_item_pass_rate": 0.0,
+          "precheck_pass_rate": 0.0,
+          "judge_pass_rate": 0.354,
+          "item_counts": {
+            "rubric_items": 112,
+            "critical_items": 1,
+            "precheck_items": 0,
+            "judge_items": 113
+          }
+        },
+        "Health Care and Social Assistance": {
+          "task_count": 1,
+          "avg_pct": 40.33,
+          "critical_item_pass_rate": 0.0,
+          "precheck_pass_rate": 0.0,
+          "judge_pass_rate": 0.2917,
+          "item_counts": {
+            "rubric_items": 72,
+            "critical_items": 1,
+            "precheck_items": 0,
+            "judge_items": 72
+          }
+        },
+        "Information": {
+          "task_count": 1,
+          "avg_pct": 39.51,
+          "critical_item_pass_rate": 0.0,
+          "precheck_pass_rate": 0.0,
+          "judge_pass_rate": 0.25,
+          "item_counts": {
+            "rubric_items": 52,
+            "critical_items": 1,
+            "precheck_items": 0,
+            "judge_items": 52
+          }
+        }
+      },
       "by_rubric_category": {},
-      "score_density_histogram": [],
-      "rubric_severity_curve": []
+      "score_density_histogram": [
+        {
+          "bucket": "0-10%",
+          "count": 0
+        },
+        {
+          "bucket": "10-20%",
+          "count": 0
+        },
+        {
+          "bucket": "20-30%",
+          "count": 0
+        },
+        {
+          "bucket": "30-40%",
+          "count": 1
+        },
+        {
+          "bucket": "40-50%",
+          "count": 2
+        },
+        {
+          "bucket": "50-60%",
+          "count": 1
+        },
+        {
+          "bucket": "60-70%",
+          "count": 0
+        },
+        {
+          "bucket": "70-80%",
+          "count": 0
+        },
+        {
+          "bucket": "80-90%",
+          "count": 0
+        },
+        {
+          "bucket": "90-100%",
+          "count": 0
+        }
+      ],
+      "rubric_severity_curve": [
+        {
+          "weight": 1,
+          "n_items": 130,
+          "pass_rate": 0.2923
+        },
+        {
+          "weight": 2,
+          "n_items": 103,
+          "pass_rate": 0.3495
+        },
+        {
+          "weight": 5,
+          "n_items": 3,
+          "pass_rate": 0.0
+        }
+      ],
+      "item_counts": {
+        "rubric_items": 236,
+        "critical_items": 3,
+        "precheck_items": 0,
+        "judge_items": 237
+      }
     },
     "cost": {
       "total_judge_calls": 738,

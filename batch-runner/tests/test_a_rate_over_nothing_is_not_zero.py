@@ -43,6 +43,7 @@ Nothing in this file calls a model, grades anything, or spends anything.
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -309,10 +310,49 @@ def gold_ceiling() -> dict:
     pytest.skip("the gold-ceiling run is not in this checkout")
 
 
+def _before_the_denominators_were_recovered(payload: dict) -> dict:
+    """The committed payload as it read before its counts were backfilled.
+
+    Removing ``item_counts`` -- run-level and from every sector row -- is the
+    exact inverse of what the recovery added to this file; the caller asserts
+    that rather than trusting this docstring.
+    """
+    stripped = copy.deepcopy(payload)
+    wow = stripped["summary"]["wow"]
+    wow.pop("item_counts", None)
+    for row in (wow.get("by_sector") or {}).values():
+        row.pop("item_counts", None)
+    return stripped
+
+
+def _keys_that_differ(before: object, after: object) -> set[str]:
+    """Every key name at which two nested payloads disagree."""
+    if isinstance(before, dict) and isinstance(after, dict):
+        names = set(before) ^ set(after)
+        for key in set(before) & set(after):
+            if before[key] != after[key]:
+                names |= _keys_that_differ(before[key], after[key]) or {key}
+        return names
+    if isinstance(before, list) and isinstance(after, list):
+        if len(before) != len(after):
+            return {"<length>"}
+        names = set()
+        for old, new in zip(before, after):
+            if old != new:
+                names |= _keys_that_differ(old, new) or {"<item>"}
+        return names
+    return set()
+
+
 def test_the_gold_ceiling_run_published_a_zero_it_never_measured(
     gold_ceiling: dict,
 ) -> None:
-    """8,816 items judged, none prechecked, 0% published. As committed."""
+    """8,816 items judged, none prechecked. As committed.
+
+    The zero is still published, and deliberately so: ``precheck_pass_rate`` is
+    ``number`` on both sides of the wire and a threshold gate compares it.
+    What the payload now also carries is what that zero was divided by.
+    """
     published = gold_ceiling["summary"]["wow"]
 
     assert published["precheck_pass_rate"] == 0.0
@@ -321,13 +361,28 @@ def test_the_gold_ceiling_run_published_a_zero_it_never_measured(
     counts = _compute_summary(gold_ceiling["tasks"])["wow"]["item_counts"]
     assert counts["judge_items"] == GOLD_CEILING_JUDGE_ITEMS
     assert counts["precheck_items"] == GOLD_CEILING_PRECHECK_ITEMS
+    assert published["item_counts"] == counts, (
+        "the committed denominators have to be the ones the task rows give, or "
+        "the payload states a basis it does not have"
+    )
 
 
 def test_that_run_stops_telling_the_paid_model_structure_collapsed(
     gold_ceiling: dict,
 ) -> None:
-    """Before and after, on the payload itself rather than a fixture."""
-    before = _build_grading_results_section(gold_ceiling)
+    """Before and after, on the payload itself rather than a fixture.
+
+    The "before" is no longer readable off disk, and that is this test getting
+    what it asked for: the recovery has since been applied to the committed
+    payload. So it is reconstructed by removing exactly what the recovery
+    added. That the removal is exactly that, and not a conveniently wider one,
+    is asserted -- a before-state a test builds for itself can quietly drift
+    into one where the contrast it draws is trivial.
+    """
+    before_payload = _before_the_denominators_were_recovered(gold_ceiling)
+    assert _keys_that_differ(gold_ceiling, before_payload) == {"item_counts"}
+
+    before = _build_grading_results_section(before_payload)
     assert "Precheck pass rate: 0%" in before
     assert "Precheck failures dominate" in before
 
@@ -342,6 +397,12 @@ def test_that_run_stops_telling_the_paid_model_structure_collapsed(
     # Every sector line, too -- the run-wide caveat does not reach those.
     assert "pre=0%" not in after
     assert "pre=not measured (0 items)" in after
+
+    # and the payload as committed today already renders the "after"
+    assert _build_grading_results_section(gold_ceiling) == after, (
+        "the recovery is only worth its digest if the committed bytes are what "
+        "the paid prompt actually reads"
+    )
 
 
 @pytest.fixture(scope="module")

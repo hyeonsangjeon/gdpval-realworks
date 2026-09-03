@@ -1049,7 +1049,10 @@ Shortfalls
 grade file    data/grades/_diagnostic/cef3a5b9…/exp_gold_baseline__judge_gpt-5_6-sol__
               gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900c…__
               inference_11e7900c…__src_79c2f503…__v2.2.json
-sha256        381c38089b45a33e20c3af636c289599078707d14a4069cf4031111ef8f055a0
+sha256        e120c205c16626554cf464ec62d83db8b499dbbe3afb0653ced5dac2d2f18672
+              (기존 381c38089b45a33e...; summary.wow 분모를 채우면서 이동했다.
+               과제 행·판정·점수·비용·provenance는 그대로이고, 위 분석 블록은
+               같은 명령으로 568줄 전부 그대로 재현된다.)
 cost ledger   같은 이름 + .cost_ledger.jsonl   (22,528행)
 sha256        1b1d2d198ad034ddad703e27b7905176306be18b08ccb76f04e509d20a45192c
 ```

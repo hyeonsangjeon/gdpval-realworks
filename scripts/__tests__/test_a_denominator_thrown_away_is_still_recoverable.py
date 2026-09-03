@@ -598,6 +598,279 @@ def test_git_being_absent_refuses_too(
     assert "Refusing" in str(excinfo.value)
 
 
+# --------------------------------------------------------------------------
+# --unseal: the one way past the refusal, and what it owes in return
+# --------------------------------------------------------------------------
+#
+# The refusal above is correct and it is also terminal: five payloads on this
+# tree were sealed at digests that predate ``item_counts``, and no amount of
+# re-running gets the denominators into them. Something has to be able to say
+# "rewrite this one, I will move the digest".
+#
+# What makes that safe is not the flag being hard to type. It is that the flag
+# cannot be aimed at a file the tree does not already vouch for, and that it
+# hands back both digests -- the one every document still states and the one
+# they have to state instead. An unseal that quietly rewrites a file and says
+# nothing has not removed the lie; it has moved it somewhere harder to find.
+
+
+def _sealed_fixture(tmp_path: Path, name: str = "sealed.json"):
+    """A payload, a tracked document stating its digest, and the digest."""
+    root = tmp_path / "repo"
+    payload = _write(root / "data" / "grades", name, _payload(MEASURED))
+    digest = hashlib.sha256(payload.read_bytes()).hexdigest()
+    _tree(root, {"EVIDENCE.md": f"reproduced at sha256 {digest}\n"})
+    return root, payload, digest
+
+
+def _different_payload(dirpath: Path, name: str, unlike: Path) -> Path:
+    """A second payload, with the difference from ``unlike`` asserted out loud.
+
+    The first draft of these fixtures reached for
+    ``_payload(MEASURED, judge_pass_rate=0.5)`` as "some other payload" -- and
+    the computed ``judge_pass_rate`` already *was* 0.5, so the file came out
+    byte-identical to the sealed one. It inherited that digest, the document
+    vouched for it, and the test asserting a stale path gets refused failed:
+    the path was not stale, and the code was right to write it. A fixture whose
+    two files are supposed to differ has to say so, or a test can read like a
+    bug in the thing it is testing.
+    """
+    path = _write(dirpath, name, _payload(NEVER_PRECHECKED))
+    assert (
+        hashlib.sha256(path.read_bytes()).hexdigest()
+        != hashlib.sha256(unlike.read_bytes()).hexdigest()
+    ), f"degenerate fixture: {name} has the same digest as {unlike.name}"
+    return path
+
+
+def test_unseal_writes_the_file_the_seal_was_refusing(tmp_path: Path):
+    root, payload, _ = _sealed_fixture(tmp_path)
+
+    report = backfill.backfill_one(
+        payload, apply=True, tree=root, unseal=frozenset({payload.resolve()})
+    )
+
+    assert report["status"] == "unsealed"
+    assert _wow(payload)["item_counts"]["precheck_items"] == 1
+
+
+def test_unseal_hands_back_both_digests(tmp_path: Path):
+    """The before is what the document says today; the after is what it has to
+    say now. Getting either wrong makes the operator's next edit wrong."""
+    root, payload, digest = _sealed_fixture(tmp_path)
+
+    report = backfill.backfill_one(
+        payload, apply=True, tree=root, unseal=frozenset({payload.resolve()})
+    )
+
+    assert report["sha_before"] == digest, (
+        "the before-digest has to match what EVIDENCE.md actually states, or "
+        "the operator searches for a string that is not there"
+    )
+    assert report["sha_after"] == hashlib.sha256(payload.read_bytes()).hexdigest()
+    assert report["sha_after"] != report["sha_before"]
+    assert report["vouchers"] == ["EVIDENCE.md"]
+
+
+def test_a_dry_run_unseal_rehearses_without_writing(tmp_path: Path):
+    """Both digests before anything is on disk. Otherwise the only way to find
+    out what an unseal would do is to do it."""
+    root, payload, digest = _sealed_fixture(tmp_path)
+    before = payload.read_text()
+
+    report = backfill.backfill_one(
+        payload, apply=False, tree=root, unseal=frozenset({payload.resolve()})
+    )
+
+    assert report["status"] == "would-unseal"
+    assert payload.read_text() == before
+    assert report["sha_before"] == digest
+    assert report["sha_after"] != digest
+    # and the rehearsed after-digest is the one an --apply actually produces
+    backfill.backfill_one(
+        payload, apply=True, tree=root, unseal=frozenset({payload.resolve()})
+    )
+    assert hashlib.sha256(payload.read_bytes()).hexdigest() == report["sha_after"]
+
+
+def test_unseal_reaches_only_the_file_it_names(tmp_path: Path):
+    """Naming one sealed file must not open the others.
+
+    Five of the six seals on this tree moved together and the sixth did not.
+    A flag that unsealed the whole run would have rewritten a payload whose
+    digest is pinned in a test that had no reason to change.
+    """
+    root = tmp_path / "repo"
+    grades = root / "data" / "grades"
+    named = _write(grades, "named.json", _payload(MEASURED))
+    other = _different_payload(grades, "other.json", unlike=named)
+    _tree(root, {
+        "EVIDENCE.md": (
+            f"named  sha256 {hashlib.sha256(named.read_bytes()).hexdigest()}\n"
+            f"other  sha256 {hashlib.sha256(other.read_bytes()).hexdigest()}\n"
+        )
+    })
+    other_before = other.read_text()
+
+    reports = {
+        p.name: backfill.backfill_one(
+            p, apply=True, tree=root, unseal=frozenset({named.resolve()})
+        )
+        for p in (named, other)
+    }
+
+    assert reports["named.json"]["status"] == "unsealed"
+    assert reports["other.json"]["status"] == "sealed"
+    assert other.read_text() == other_before
+
+
+def test_unseal_is_idempotent_once_the_operator_moves_the_digest(tmp_path: Path):
+    """The seal comes back. It is a seal at a new digest, not a hole.
+
+    This is the whole shape of the change on the real tree: five payloads
+    rewritten, five documents updated, and ``documents_asserting`` finding the
+    same files refused on the next run.
+    """
+    root, payload, digest = _sealed_fixture(tmp_path)
+    report = backfill.backfill_one(
+        payload, apply=True, tree=root, unseal=frozenset({payload.resolve()})
+    )
+
+    doc = root / "EVIDENCE.md"
+    doc.write_text(doc.read_text().replace(digest, report["sha_after"]))
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+
+    after = payload.read_text()
+    again = backfill.backfill_one(payload, apply=True, tree=root)
+
+    assert again["status"] == "sealed"
+    assert "EVIDENCE.md" in again["reason"]
+    assert payload.read_text() == after
+
+
+def test_a_second_unseal_changes_nothing(tmp_path: Path):
+    """Running it twice without moving the digest is not a second rewrite.
+
+    The counts are a pure function of the task rows, so the second pass has
+    nothing to add. If this ever produced a third digest, every document
+    updated from the first run would be wrong again.
+    """
+    root, payload, _ = _sealed_fixture(tmp_path)
+    unseal = frozenset({payload.resolve()})
+    first = backfill.backfill_one(payload, apply=True, tree=root, unseal=unseal)
+    settled = payload.read_bytes()
+
+    second = backfill.backfill_one(payload, apply=True, tree=root, unseal=unseal)
+
+    assert payload.read_bytes() == settled
+    assert second["status"] in ("unchanged", "unsealed")
+    if second["status"] == "unsealed":
+        assert second["sha_after"] == first["sha_after"]
+
+
+def test_unseal_refuses_a_path_nothing_vouches_for(tmp_path: Path):
+    """A stale operator model is a hard stop, not a no-op.
+
+    Naming a file no document asserts means the path is a typo, or the seal
+    already moved, or somebody else updated the document first. Each makes the
+    rest of the invocation untrustworthy, and this is the one flag a person
+    reaches for while holding a list of digests to paste.
+    """
+    root = tmp_path / "repo"
+    payload = _write(root / "data" / "grades", "free.json", _payload(MEASURED))
+    _tree(root, {"EVIDENCE.md": "no digests here\n"})
+    before = payload.read_text()
+
+    with pytest.raises(SystemExit) as excinfo:
+        backfill._resolve_unseal([payload], root)
+
+    assert "nothing here to unseal" in str(excinfo.value)
+    assert payload.read_text() == before
+
+
+def test_unseal_refuses_a_path_that_is_not_there(tmp_path: Path):
+    root = tmp_path / "repo"
+    _write(root / "data" / "grades", "real.json", _payload(MEASURED))
+    _tree(root, {"EVIDENCE.md": "x\n"})
+
+    with pytest.raises(SystemExit) as excinfo:
+        backfill._resolve_unseal([root / "data" / "grades" / "typo.json"], root)
+
+    assert "no such file" in str(excinfo.value)
+
+
+def test_one_bad_path_stops_the_whole_run(tmp_path: Path):
+    """Fail closed across the batch, not per file.
+
+    The real invocation named six paths at once. If a typo in the fourth one
+    let the first three through, the run would have written three files and
+    printed three digests to paste into documents -- while the operator's
+    reason for believing the fourth was sealed had just been shown wrong.
+    """
+    root, payload, _ = _sealed_fixture(tmp_path)
+    before = payload.read_text()
+
+    with pytest.raises(SystemExit):
+        backfill._resolve_unseal(
+            [payload, root / "data" / "grades" / "typo.json"], root
+        )
+
+    assert payload.read_text() == before
+
+
+def test_without_the_flag_the_same_file_is_still_refused(tmp_path: Path):
+    """The negative control. Without it every test above passes against a
+    build that stopped sealing anything at all."""
+    root, payload, _ = _sealed_fixture(tmp_path)
+    before = payload.read_text()
+
+    report = backfill.backfill_one(payload, apply=True, tree=root)
+
+    assert report["status"] == "sealed"
+    assert payload.read_text() == before
+
+
+def test_the_cli_carries_the_flag_through(tmp_path: Path):
+    """Everything above calls the function. The operator types the command."""
+    root, payload, digest = _sealed_fixture(tmp_path)
+    before = payload.read_text()
+
+    result = _run(
+        root / "data" / "grades",
+        "--tree", str(root),
+        "--unseal", str(payload),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "would-unseal" in result.stdout
+    assert digest in result.stdout, "the digest to search for has to be printed"
+    assert "EVIDENCE.md" in result.stdout
+    assert payload.read_text() == before, (
+        "a dry run through the CLI still writes nothing"
+    )
+
+
+def test_the_cli_refuses_a_stale_path_before_touching_anything(tmp_path: Path):
+    root, payload, _ = _sealed_fixture(tmp_path)
+    free = _different_payload(root / "data" / "grades", "free.json", unlike=payload)
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+    before = payload.read_text()
+
+    result = _run(
+        root / "data" / "grades",
+        "--apply",
+        "--tree", str(root),
+        "--unseal", str(free),
+    )
+
+    assert result.returncode == 1
+    assert "nothing here to unseal" in result.stderr
+    assert payload.read_text() == before, (
+        "the refusal has to come before the walk, or a bad --unseal still "
+        "rewrites every unsealed file in the tree"
+    )
+
+
 def test_the_committed_backfill_added_denominators_and_nothing_else():
     """What actually landed in the diff, read off the committed tree.
 
@@ -608,6 +881,12 @@ def test_the_committed_backfill_added_denominators_and_nothing_else():
     diff honest. This reads every payload and checks that the only ``wow`` key
     it carries beyond what ``_compute_summary`` would refuse is the one this
     change is for.
+
+    The counts moved once, when the five sealed payloads were unsealed and
+    backfilled: 22 -> 27 payloads, 62 -> 86 sector rows (21 existing rows
+    gained denominators and the anchor payload gained three rows it never
+    had), and one fewer empty ``by_sector`` for that same anchor. Every one of
+    those deltas is a file this suite can name.
     """
     grades = REPO_ROOT / "data" / "grades"
     carried, sector_rows, empty_analytics = 0, 0, 0
@@ -641,15 +920,15 @@ def test_the_committed_backfill_added_denominators_and_nothing_else():
         if backfill._is_empty(wow.get("by_sector")):
             empty_analytics += 1
 
-    assert carried == 22, (
-        f"22 payloads should carry recovered denominators; {carried} do"
+    assert carried == 27, (
+        f"27 payloads should carry recovered denominators; {carried} do"
     )
-    assert sector_rows == 62, (
-        f"62 sector rows should carry them as well; {sector_rows} do"
+    assert sector_rows == 86, (
+        f"86 sector rows should carry them as well; {sector_rows} do"
     )
-    assert empty_analytics == 7, (
-        "seven payloads have no by_sector and every one is either sealed or "
-        f"semantics-diverged; found {empty_analytics}"
+    assert empty_analytics == 6, (
+        "six payloads have no by_sector and every one is semantics-diverged; "
+        f"found {empty_analytics}"
     )
 
 
@@ -659,8 +938,18 @@ def test_the_six_sealed_files_on_disk_are_still_sealed():
     Every test above builds the tree it queries, so all of them would keep
     passing if the seals in this repository moved or the walk stopped reaching
     them. This is the one that reads what is actually on disk -- including the
-    185-task gold ceiling, the corpus's clearest instance of the defect and a
-    file this change deliberately does not fix.
+    185-task gold ceiling, the corpus's clearest instance of the defect.
+
+    Five of these six were unsealed and backfilled. A seal that moves is still
+    a seal: the payload changed, and every document that stated its digest
+    states the new one, so the same six files come back refused. What this
+    catches is the half-done version. ``documents_asserting`` reports only the
+    documents whose digest matches the bytes on disk, so a document left
+    behind does not fail loudly -- it silently drops out of this set while
+    continuing to assert a hash nothing in the tree has. That is strictly
+    worse than never having moved the seal, and it is exactly what happened on
+    the first pass here: ``CHANGELOG.md`` vanished from the set below and this
+    assertion is the only thing that said so.
     """
     sealed = {
         backfill._display(path): backfill.documents_asserting(path)
@@ -680,7 +969,11 @@ def test_the_six_sealed_files_on_disk_are_still_sealed():
         "scripts/__tests__/test_sol_max_anchor_selection.py",
         "tasks/LATEST_TASK_RESULT/README.md",
         "tasks/rebuilding_grading_task/PR3_FULL_GOLD_CORPUS.md",
-    }
+    }, (
+        "a document dropped out of the voucher set. It did not stop asserting "
+        "a digest -- it is asserting one no file in this tree has. Find which "
+        "payload it names and move that digest too."
+    )
 
 
 # --------------------------------------------------------------------------

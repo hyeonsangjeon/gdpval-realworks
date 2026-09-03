@@ -97,9 +97,9 @@
 repeat variation - the same answers, graded three times
 ==============================================================
 
-  run-001  2026-08-28T18:41:32Z  final  sha256 c13f708da18e6481
-  run-002  2026-08-28T22:38:04Z  final  sha256 7337e9790c7c7b62
-  run-003  2026-08-29T01:22:18Z  final  sha256 a434eb6f572e04a9
+  run-001  2026-08-28T18:41:32Z  final  sha256 ccdc43ec4fdeee31
+  run-002  2026-08-28T22:38:04Z  final  sha256 3fdc899df73e0cf0
+  run-003  2026-08-29T01:22:18Z  final  sha256 999bec6cc653ae14
 
   resamples 10000   seed 20260901   unit task   percentile 2.5/97.5
 

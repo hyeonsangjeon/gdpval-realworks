@@ -364,7 +364,11 @@ would have produced a grade the dashboard never shows.
 - Payload:
   `exp003_GPT52Chat_baseline_runner_exec__judge_gpt-5_6-sol__validation_exp003_v2_sol_max_anchor4__cfg_7f3c7c2e542cf580__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_9c639f506b8dfd5c0bb8675cb1e0c2a938a3905f__src_b00e83209ab6ca93__v2.2.json`.
 - Payload SHA-256:
-  `303a5e763e28bf06339877df62c8e2d0d022bc605aeeb3aee77e63ab411a41fb`.
+  `934b2d6e4f55f8ebf05a46960620ea6672619814c301c091aa9d9c634af4a8f9`.
+  (Was `303a5e763e28bf06339877df62c8e2d0d022bc605aeeb3aee77e63ab411a41fb`
+  until the `summary.wow` denominators were backfilled; the task rows,
+  verdicts, scores, cost and provenance are byte-identical, and the generated
+  analysis below re-derives unchanged.)
 - Generated analysis:
   `grade__233124fc9c26e453b906d82429fc0f6387a14c70586639ad428685146e5b4da0.analysis.md`.
 - Analysis SHA-256:

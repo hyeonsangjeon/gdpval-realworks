@@ -469416,63 +469416,117 @@
           "avg_pct": 84.44,
           "critical_item_pass_rate": 0.2,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.7567
+          "judge_pass_rate": 0.7567,
+          "item_counts": {
+            "rubric_items": 785,
+            "critical_items": 10,
+            "precheck_items": 0,
+            "judge_items": 785
+          }
         },
         "Government": {
           "task_count": 22,
           "avg_pct": 82.9,
           "critical_item_pass_rate": 0.7714,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.7177
+          "judge_pass_rate": 0.7177,
+          "item_counts": {
+            "rubric_items": 913,
+            "critical_items": 35,
+            "precheck_items": 0,
+            "judge_items": 953
+          }
         },
         "Health Care and Social Assistance": {
           "task_count": 22,
           "avg_pct": 79.58,
           "critical_item_pass_rate": 0.3333,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.6824
+          "judge_pass_rate": 0.6824,
+          "item_counts": {
+            "rubric_items": 1078,
+            "critical_items": 33,
+            "precheck_items": 0,
+            "judge_items": 1083
+          }
         },
         "Information": {
           "task_count": 14,
           "avg_pct": 71.75,
           "critical_item_pass_rate": 0.7407,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.6795
+          "judge_pass_rate": 0.6795,
+          "item_counts": {
+            "rubric_items": 617,
+            "critical_items": 54,
+            "precheck_items": 0,
+            "judge_items": 621
+          }
         },
         "Manufacturing": {
           "task_count": 25,
           "avg_pct": 75.29,
           "critical_item_pass_rate": 0.6471,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.6751
+          "judge_pass_rate": 0.6751,
+          "item_counts": {
+            "rubric_items": 1346,
+            "critical_items": 51,
+            "precheck_items": 0,
+            "judge_items": 1348
+          }
         },
         "Professional, Scientific, and Technical Services": {
           "task_count": 24,
           "avg_pct": 75.9,
           "critical_item_pass_rate": 0.6735,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.6731
+          "judge_pass_rate": 0.6731,
+          "item_counts": {
+            "rubric_items": 1286,
+            "critical_items": 49,
+            "precheck_items": 0,
+            "judge_items": 1291
+          }
         },
         "Real Estate and Rental and Leasing": {
           "task_count": 20,
           "avg_pct": 78.74,
           "critical_item_pass_rate": 0.7681,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.6783
+          "judge_pass_rate": 0.6783,
+          "item_counts": {
+            "rubric_items": 802,
+            "critical_items": 69,
+            "precheck_items": 0,
+            "judge_items": 802
+          }
         },
         "Retail Trade": {
           "task_count": 16,
           "avg_pct": 85.11,
           "critical_item_pass_rate": 0.65,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.7942
+          "judge_pass_rate": 0.7942,
+          "item_counts": {
+            "rubric_items": 690,
+            "critical_items": 20,
+            "precheck_items": 0,
+            "judge_items": 690
+          }
         },
         "Wholesale Trade": {
           "task_count": 25,
           "avg_pct": 82.31,
           "critical_item_pass_rate": 0.4412,
           "precheck_pass_rate": 0.0,
-          "judge_pass_rate": 0.7474
+          "judge_pass_rate": 0.7474,
+          "item_counts": {
+            "rubric_items": 1242,
+            "critical_items": 34,
+            "precheck_items": 0,
+            "judge_items": 1243
+          }
         }
       },
       "by_rubric_category": {},
@@ -469609,7 +469663,13 @@
           "n_items": 1,
           "pass_rate": 0.0
         }
-      ]
+      ],
+      "item_counts": {
+        "rubric_items": 8759,
+        "critical_items": 355,
+        "precheck_items": 0,
+        "judge_items": 8816
+      }
     },
     "cost": {
       "total_judge_calls": 22528,

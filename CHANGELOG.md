@@ -2885,7 +2885,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   the workflow failed only afterward because appending `.analysis.md` to the
   250-byte JSON basename exceeded Linux `NAME_MAX`. The committed diagnostic
   payload SHA-256 is
-  `303a5e763e28bf06339877df62c8e2d0d022bc605aeeb3aee77e63ab411a41fb`.
+  `934b2d6e4f55f8ebf05a46960620ea6672619814c301c091aa9d9c634af4a8f9`
+  (was `303a5e763e28bf06339877df62c8e2d0d022bc605aeeb3aee77e63ab411a41fb`
+  until the `summary.wow` denominators were backfilled; task rows, verdicts,
+  scores, cost and provenance are byte-identical and the generated analysis
+  re-derives unchanged).
   Its preregistered result is `full_run_gate.status=blocked` with blockers
   `audio_wiring_not_exercised` and `at_or_above_44h_envelope`, projected
   `71.5934` hours against the 44-hour envelope,
