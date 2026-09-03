@@ -1661,7 +1661,7 @@ def test_the_anchor_analysis_reproduces_every_line_its_payload_decides(
     monkeypatch.chdir(REPO_ROOT)
 
     assert hashlib.sha256(ANCHOR_PAYLOAD.read_bytes()).hexdigest() == (
-        "303a5e763e28bf06339877df62c8e2d0d022bc605aeeb3aee77e63ab411a41fb"
+        "934b2d6e4f55f8ebf05a46960620ea6672619814c301c091aa9d9c634af4a8f9"
     )
     assert module.resolve_analysis_output_path(ANCHOR_PAYLOAD) == ANCHOR_ANALYSIS
 

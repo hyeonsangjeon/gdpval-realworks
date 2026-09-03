@@ -314,11 +314,11 @@ def collect_grade_files(grades_dir: Path) -> list[Path]:
 
 
 def backfill_one(
-    path: Path, apply: bool, tree: Path = REPO_ROOT
+    path: Path, apply: bool, tree: Path = REPO_ROOT, unseal: frozenset = frozenset()
 ) -> dict:
     """Return a report for one file; write it only when ``apply`` is set."""
     vouchers = documents_asserting(path, tree)
-    if vouchers:
+    if vouchers and path.resolve() not in unseal:
         return {
             "path": _display(path),
             "status": "sealed",
@@ -429,14 +429,14 @@ def backfill_one(
     )
     still_empty = sorted(f for f in ANALYTIC_FIELDS if _is_empty(new_wow.get(f)))
 
+    # Match the trailing-newline convention of the file as found.
+    text = json.dumps(candidate, indent=2, ensure_ascii=False)
+    if original_text.endswith("\n"):
+        text += "\n"
     if apply:
-        # Match the trailing-newline convention of the file as found.
-        text = json.dumps(candidate, indent=2, ensure_ascii=False)
-        if original_text.endswith("\n"):
-            text += "\n"
         path.write_text(text)
 
-    return {
+    report = {
         "path": _display(path),
         "status": "written" if apply else "would-write",
         "before_filled": before_filled,
@@ -446,6 +446,45 @@ def backfill_one(
         "diverged": diverged,
         "counts": new_wow.get("item_counts") if "item_counts" in writable else None,
     }
+    if vouchers:
+        # Reached only via --unseal. Carry out the two things the operator now
+        # owes the tree: the digest every voucher still states, and the one it
+        # has to state instead. Printing them is the point of the flag -- an
+        # unseal that does not tell you which documents it just falsified has
+        # only moved the lie somewhere harder to find. Both digests are
+        # available on a dry run, which is what makes the flag rehearsable.
+        report["status"] = "unsealed" if apply else "would-unseal"
+        report["vouchers"] = vouchers
+        report["sha_before"] = hashlib.sha256(original_text.encode()).hexdigest()
+        report["sha_after"] = hashlib.sha256(text.encode()).hexdigest()
+    return report
+
+
+def _resolve_unseal(raw_paths: list[Path], tree: Path) -> frozenset[Path]:
+    """Resolve ``--unseal`` arguments, refusing anything not actually sealed.
+
+    Naming a file no document vouches for means the operator's picture of the
+    tree is out of date: the path is a typo, or the seal already moved, or
+    somebody else updated the document first. Each of those makes the rest of
+    the invocation untrustworthy, and ``--unseal`` is the one place a person has
+    said "rewrite evidence" out loud -- the wrong place to be forgiving. So a
+    stale name is a hard stop, not a no-op.
+    """
+    resolved = []
+    for raw in raw_paths:
+        path = raw.resolve()
+        if not path.is_file():
+            raise SystemExit(f"--unseal {raw}: no such file")
+        if not documents_asserting(path, tree):
+            raise SystemExit(
+                f"--unseal {_display(path)}: no tracked document in {tree} "
+                "asserts this file's digest, so there is nothing here to "
+                "unseal. Either the path is wrong or the seal has already "
+                "moved -- find out which before rewriting anything else in "
+                "this run."
+            )
+        resolved.append(path)
+    return frozenset(resolved)
 
 
 def main() -> int:
@@ -463,16 +502,33 @@ def main() -> int:
         default=REPO_ROOT,
         help="git repository to ask which digests are already vouched for",
     )
+    ap.add_argument(
+        "--unseal",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="rewrite this sealed file anyway; repeatable. Prints the digest "
+             "its vouching documents still state and the one they must state "
+             "instead -- moving them is then the operator's job, in the same "
+             "commit. Works on a dry run, so it can be rehearsed.",
+    )
     args = ap.parse_args()
+
+    unseal = _resolve_unseal(args.unseal, args.tree)
 
     files = sorted(collect_grade_files(args.grades_dir))
     if not files:
         print(f"no grade JSONs under {args.grades_dir}", file=sys.stderr)
         return 1
 
-    reports = [backfill_one(p, args.apply, args.tree) for p in files]
+    reports = [backfill_one(p, args.apply, args.tree, unseal) for p in files]
     aborted = [r for r in reports if r["status"] == "ABORTED"]
-    touched = [r for r in reports if r["status"] in ("written", "would-write")]
+    touched = [
+        r for r in reports
+        if r["status"] in ("written", "would-write", "unsealed", "would-unseal")
+    ]
+    unsealed = [r for r in reports if r["status"] in ("unsealed", "would-unseal")]
     sealed = [r for r in reports if r["status"] == "sealed"]
 
     for r in reports:
@@ -484,6 +540,14 @@ def main() -> int:
             print(f"  ABORTED      {_short(r['path'])}  {r['reason']}")
             continue
         print(f"  {r['status']:<12} {_short(r['path'])}")
+        if r.get("vouchers"):
+            # The whole output of an unseal. A person has to carry these two
+            # digests into the documents below by hand, so print them at full
+            # length -- an abbreviated hash is a hash you cannot paste.
+            print(f"      digest these documents state: {r['sha_before']}")
+            print(f"      digest they must state now:   {r['sha_after']}")
+            for doc in r["vouchers"]:
+                print(f"        -> {doc}")
         print(f"      analytic fields filled: {r['before_filled']}/4 -> {r['after_filled']}/4")
         print(f"      changed: {r['changed']}")
         if r.get("counts"):
@@ -512,6 +576,18 @@ def main() -> int:
     for r in sealed:
         print(f"    {_short(r['path'])}")
         print(f"        {r['reason']}")
+    if unsealed:
+        # Separate from the count above on purpose. "6 sealed" and "4 sealed,
+        # 2 unsealed" are different states of the tree, and the second one has
+        # an outstanding obligation attached to it.
+        docs = sorted({d for r in unsealed for d in r["vouchers"]})
+        print(f"{len(unsealed)} files unsealed by request. "
+              f"{len(docs)} document(s) now state a digest these files no "
+              f"longer have{' -- would, on --apply' if not args.apply else ''}:")
+        for doc in docs:
+            print(f"    {doc}")
+        print("    Move them in the same commit, or the tree ships a document "
+              "asserting a hash that is now false.")
     if not args.apply and touched:
         print("\ndry run -- re-run with --apply to write")
     return 1 if aborted else 0
