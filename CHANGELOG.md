@@ -226,11 +226,24 @@ entries land under a fresh dated heading the day they merge to `main`.
   Whether to keep that rule is an owner decision, logged as a follow-up. Report
   in `tasks/rebuilding_grading_task/PR3_VARIANCE.md`.
 
-  One item is deliberately left open. The cost-budget re-estimate (302) was
-  built on a three-task projection, and real 220-task and repeated 30-task runs
-  have since replaced that projection with measurements. Re-answering it is not
-  a cost question but a choice of which grading configuration every published
-  score is based on, so it stays with the owner rather than being decided here.
+  The cost-budget re-estimate (302) was the last item still resting on that
+  three-task projection, and it has now been re-answered from measurement.
+  Recomputing three real runs from the grade payloads and cost ledgers already
+  committed here puts one grading run at **$411.80–$980.84** — **8.2× to 19.6×**
+  the `< $50` the gate asks for. The remedy 302 prescribes on failure, tightening
+  the vision/audio caps or narrowing the routing, cannot reach that money:
+  perception is **1.85%–3.49%** of the bill, and deleting it entirely still
+  leaves $404.17. The driver is reasoning at `effort: max` — **82.3%** of
+  gold-185's output tokens, **$194.41**, about ten times the entire perception
+  spend. The `$52.1` the gate was set from does not reproduce; held to one
+  convention the three-task sample understated per-task cost by **2.81×**. Of
+  the 21 published per-token meters in this repository exactly one lands under
+  $50, two classes below the judge, so satisfying the gate by price means
+  grading with a different model rather than tightening a cap. What remains is
+  therefore not a cost question but a choice of which grading configuration
+  every published score is based on, and that stays with the owner. Report in
+  `tasks/rebuilding_grading_task/PR3_COST_BUDGET.md`; no model was called and
+  nothing was regraded to produce it.
 
   The v2 judge code, prompt (`prompts/grader_judge.md` v2.2), configurations
   and grade JSON are all on `main`; the v1 grade files are preserved unmodified
