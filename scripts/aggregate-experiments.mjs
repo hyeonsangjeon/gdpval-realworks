@@ -51,6 +51,42 @@ export function normalizeAgenticConfig(value) {
   return Object.keys(normalized).length ? normalized : null;
 }
 
+/**
+ * A key the experiment file never states is published as null, not as a number.
+ *
+ * batch-runner/core/experiment_config.py is what actually runs these files, and
+ * where a key is absent it supplies its own default: execution.max_retries 3
+ * (:291), qa.max_retries 2 (:357), qa.min_score 6 (:359). Defaulting to 5, 1 and
+ * 5 here printed a number that was in neither the file nor the run.
+ * resume_max_rounds already said null; these now say it too.
+ */
+export function buildQaPrompt(qa) {
+  const source = qa || {};
+  if (!source.enabled) return { enabled: false, content: null };
+  return {
+    enabled: true,
+    min_score: source.min_score ?? null,
+    max_retries: source.max_retries ?? null,
+    content: source.prompt || '',
+  };
+}
+
+export function buildExecutionConfig(execution) {
+  const source = execution || {};
+  const metrics = normalizeExecutionMetrics(source.metrics);
+  const agentic = normalizeAgenticConfig(source.agentic);
+  return {
+    mode: source.mode || 'subprocess',
+    tokens: source.tokens || null,
+    timeout: source.timeout || null,
+    resume_max_rounds: source.resume_max_rounds ?? null,
+    max_retries: source.max_retries ?? null,
+    install_libreoffice: source.install_libreoffice || false,
+    ...(metrics ? { metrics } : {}),
+    ...(agentic ? { agentic } : {}),
+  };
+}
+
 async function main() {
   console.log('📦 Aggregating experiment prompt architectures...');
   const codegen = parseYaml(await readFile(join(PROMPTS_DIR, 'subprocess_occupation_codegen.yaml'), 'utf-8'));
@@ -65,10 +101,6 @@ async function main() {
     if (!shortId) continue;
     const condition = expData.condition_a || {};
     const prompt = condition.prompt || {};
-    const qa = condition.qa || {};
-    const execution = expData.execution || {};
-    const metrics = normalizeExecutionMetrics(execution.metrics);
-    const agentic = normalizeAgenticConfig(execution.agentic);
 
     experiments.push({
       exp_id: expData.experiment?.id || file.replace('.yaml', ''),
@@ -93,19 +125,8 @@ async function main() {
             ? { source: file, content: prompt.suffix }
             : null,
         },
-        qa_prompt: qa.enabled
-          ? { enabled: true, min_score: qa.min_score || 5, max_retries: qa.max_retries || 1, content: qa.prompt || '' }
-          : { enabled: false, content: null },
-        execution_config: {
-          mode: execution.mode || 'subprocess',
-          tokens: execution.tokens || null,
-          timeout: execution.timeout || null,
-          resume_max_rounds: execution.resume_max_rounds ?? null,
-          max_retries: execution.max_retries || 5,
-          install_libreoffice: execution.install_libreoffice || false,
-          ...(metrics ? { metrics } : {}),
-          ...(agentic ? { agentic } : {}),
-        },
+        qa_prompt: buildQaPrompt(condition.qa),
+        execution_config: buildExecutionConfig(expData.execution),
       },
     });
   }

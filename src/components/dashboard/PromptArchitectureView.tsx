@@ -129,7 +129,7 @@ export default function PromptArchitectureView({ prompt, shortId: _shortId }: { 
         badge={
           qa_prompt.enabled ? (
             <span className="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded font-mono">
-              min:{qa_prompt.min_score} retries:{qa_prompt.max_retries}
+              min:{qa_prompt.min_score ?? '—'} retries:{qa_prompt.max_retries ?? '—'}
             </span>
           ) : undefined
         }
@@ -147,7 +147,7 @@ export default function PromptArchitectureView({ prompt, shortId: _shortId }: { 
             { l: 'tokens', v: ec.tokens ? `${ec.tokens.code_generation?.toLocaleString()}` : '—' },
             { l: 'timeout', v: ec.timeout ? `${ec.timeout}s` : '—' },
             { l: 'resume_rounds', v: ec.resume_max_rounds ?? '—' },
-            { l: 'max_retries', v: ec.max_retries },
+            { l: 'max_retries', v: ec.max_retries ?? '—' },
             { l: 'libreoffice', v: ec.install_libreoffice ? '✅' : '—' },
             ...(ec.metrics ? [{ l: 'job_metrics', v: ec.metrics.enabled ? 'enabled' : 'disabled' }] : []),
           ].map(({ l, v }) => (
