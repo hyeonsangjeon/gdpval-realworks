@@ -386,25 +386,35 @@ entries land under a fresh dated heading the day they merge to `main`.
   changes the hash each shard stamps and `step9_merge_shards` compares. That is
   why the one-word edit waited for a pull request of its own.
 
-  Measured rather than asserted, against `main` at `4739321` — which touched no
-  hash input, so these are also the values at `04294ed`, the base this branch
-  was cut from. Full 64 characters, because an abbreviated hash is not one:
+  Measured rather than asserted, against `main` at `de9b5ef`, and re-measured
+  there rather than carried forward. Full 64 characters, because an abbreviated
+  hash is not one:
 
   | grading config | | grader source hash |
   |---|---|---|
-  | `regrade_exp003_v2_sol_max_score_excluded` (the OFFICIAL run) | before | `444ceee84be5b0712971ad21e52c1218929604cc814373b62b2dfba19e35895f` |
-  | | after | `3817a416d25d971d9544df29a00c89d95400178122180cd96884d50a8beac8fb` |
-  | `gold_ceiling_185_v2_sol_max` | before | `119f3e4fa0ac203092e3c48cf7c06096b2b1e618787672b1ae3cc382c3a207ed` |
-  | | after | `9af738c17463088e8d7ee57008ed0c54dda7194d44f992e57a8f44cdfc134713` |
-  | `default_v2_mini` | before | `b5adca7d484760a75e5c0076a48ab390f82f726f1414c2829c050d1cbec20b34` |
-  | | after | `e0832b975fa0318c58450bde9b2e73e66a68609e6fd27f11290ce54e5ece3a83` |
+  | `regrade_exp003_v2_sol_max_score_excluded` (the OFFICIAL run) | before | `b3634efefd90bec6640c1ef258e459cd93147f7bee67fe52b73e28924c3363d6` |
+  | | after | `832900dbdd07363c58bd4e61679f62d12a7349c6a341d1c5a988c078cefb7eca` |
+  | `gold_ceiling_185_v2_sol_max` | before | `1312a579d67ec2e8eafd0d5dbce81a890fb3497d1a0f5841188d7310d7ccc215` |
+  | | after | `4e65f0c3e6ff223ee08c65b6d5705e4aad5cb0df0dbc5c7e03aef74d95c3f3a5` |
+  | `default_v2_mini` | before | `7599593dc16cbbc5829af6ae1fa2a261b3f46edb67cae2138b7d588f50acc8eb` |
+  | | after | `82987c3dbd2f28b9f87338298587de016762d02fcb4624ba307a1babb39ab482` |
 
   Three configs because the hash is per config, so "it moved" is a claim about
-  each one and not about the tree. The `after` column was re-measured at the end
-  of review rather than carried over from the first measurement: correcting the
-  stale count in `step8_grade.py`'s `item_counts` comment moved all three again,
-  which is the input set behaving exactly as documented and the reason a
-  fingerprint is measured immediately before merging rather than once.
+  each one and not about the tree.
+
+  Both columns were measured three times over this change's life, and recording
+  that is the point: only the last measurement is worth anything. The first pair
+  was taken against `main` at `4739321`. The `after` column then moved once, when
+  correcting the stale count in `step8_grade.py`'s own `item_counts` comment
+  brought that file into the diff. The `before` column then moved too — without
+  this branch touching anything — when `de9b5ef` merged the video contact-sheet
+  work, which changed `core/media_types.py`, `core/perception/vision.py`,
+  `core/tool_calling_judge.py`, files under `core/tools/` and
+  `schemas/grade.schema.json`: every one of them an input. The table above is the
+  state after merging that base in. A fingerprint recorded when a branch opens is
+  a fingerprint of a tree nobody will grade against; this one is measured
+  immediately before merging, and re-measured whenever the base moves underneath
+  it.
 
   They are recorded here and **not** pinned in a test. A test that asserted a
   literal hash would fail on the next unrelated edit under `core/` and would
