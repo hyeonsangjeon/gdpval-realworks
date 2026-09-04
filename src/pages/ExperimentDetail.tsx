@@ -17,7 +17,8 @@ import { useTheme } from '../contexts/ThemeContext'
 import ScopeBadge from '../components/ScopeBadge'
 import { useExperimentPrompt } from '../hooks/useExperimentPrompt'
 import { useGrades, GradeResult } from '../hooks/useGrades'
-import PromptArchitectureView from '../components/dashboard/PromptArchitectureView'
+import PromptArchitectureView, { PromptArchitectureNotice } from '../components/dashboard/PromptArchitectureView'
+import { readPromptArchitecture } from '../components/dashboard/promptArchitectureReading'
 import type { TaskResult } from '../types/report'
 import type { ReportMeta } from '../types/report'
 import type { CostReceipt, CostSummary } from '../types/cost'
@@ -136,13 +137,21 @@ function ExperimentDetail() {
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [showPromptArch, setShowPromptArch] = useState(false)
   const [qaScoreFilter, setQaScoreFilter] = useState<number | 'all'>('all')
-  const { prompt: promptArch, description: expDescription } = useExperimentPrompt(id)
+  const { prompt: promptArch, description: expDescription, loading: promptLoading, error: promptError } = useExperimentPrompt(id)
   const { grades } = useGrades()
 
   // ── Derived data ──
   const meta = report?.meta
   const summary = report?.summary
   const relatedJournalArticles = getJournalLinksForExperiment(id)
+  // Which of the four empties the Prompt Architecture panel is in, if any. Kept
+  // beside the hook that measured it so the panel never has to guess.
+  const promptArchReading = readPromptArchitecture({
+    hasPrompt: Boolean(promptArch),
+    loading: promptLoading,
+    error: promptError,
+    shortId: id,
+  })
   const resolvedScope = useMemo(() => resolveScope(meta, grades), [meta, grades])
   const sectors = useMemo(
     () => [...new Set(report?.task_results?.map((t) => t.sector) || [])].sort(),
@@ -947,7 +956,7 @@ function ExperimentDetail() {
             {showPromptArch ? <ChevronDown className="w-5 h-5 dark:text-blue-400/60 text-blue-500" /> : <ChevronRight className="w-5 h-5 dark:text-blue-400/60 text-blue-500" />}
           </button>
           <AnimatePresence>
-            {showPromptArch && promptArch && (
+            {showPromptArch && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
@@ -956,7 +965,11 @@ function ExperimentDetail() {
                 className="overflow-hidden"
               >
                 <div className="bg-dash-card border border-dash-border rounded-xl p-4">
-                  <PromptArchitectureView prompt={promptArch} shortId={id ?? ''} />
+                  {promptArch ? (
+                    <PromptArchitectureView prompt={promptArch} shortId={id ?? ''} />
+                  ) : (
+                    <PromptArchitectureNotice reading={promptArchReading} />
+                  )}
                 </div>
               </motion.div>
             )}
