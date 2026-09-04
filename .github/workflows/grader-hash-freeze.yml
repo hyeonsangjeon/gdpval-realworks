@@ -29,6 +29,10 @@ on:
       - "batch-runner/grading_configs/**"
       - "batch-runner/schemas/grade.schema.json"
       - "batch-runner/requirements.txt"
+      # Reached from requirements.txt with `-r`, and hashed with it. Without
+      # this line a pull request touching only the include never starts this
+      # workflow, so the guard above it never gets to say no.
+      - "batch-runner/requirements-renderer.txt"
       - "batch-runner/scripts/download_inference_from_hf.py"
       # So the guard is exercised by its own changes.
       - "batch-runner/scripts/check_grader_hash_freeze.py"

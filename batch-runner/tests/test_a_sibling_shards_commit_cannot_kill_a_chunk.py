@@ -127,34 +127,53 @@ def test_both_jobs_pin_the_same_inputs():
     assert paid == sorted(paid), "kept sorted so a diff of the two reads cleanly"
 
 
-def test_the_pin_covers_everything_the_source_hash_covers():
+def test_the_pin_covers_everything_the_source_hash_covers(monkeypatch):
     """Derived from the real hash function, not from a list typed twice.
 
     ``compute_grader_source_hash`` is what the merge compares across shards; a
     file inside it that the pin leaves out could change mid-run, and the change
     would surface as an unmergeable shard hours later instead of as a refusal
     here.
+
+    The docstring above used to sit over a restatement of the hash function's
+    file list, which is not the same thing as deriving it. The copy went stale
+    the day the hash started following the ``-r`` include in
+    ``requirements.txt``: the restatement still named one requirements file, so
+    it agreed with itself while the pin missed a file the grader's identity had
+    started to depend on. It now watches what the real function reads.
     """
     import step8_grade as s8
 
+    monkeypatch.chdir(REPO_ROOT / "batch-runner")
     config_path = Path("grading_configs/gold_ceiling_185_v2_sol_max.yaml")
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
 
-    batch_root = Path(s8.__file__).resolve().parent
-    covered = [
-        batch_root / "step8_grade.py",
-        *(p for p in (batch_root / "core").rglob("*.py")),
-        batch_root / "schemas" / "grade.schema.json",
-        batch_root / "requirements.txt",
-        batch_root / "scripts" / "download_inference_from_hf.py",
-        Path(config["prompt"]["template"]).resolve(),
-        s8.resolve_tool_prompt_path(config).resolve(),
-        config_path.resolve(),
-    ]
-    pinned = _input_paths(PAID_STEP)
+    seen: list[Path] = []
+    real_read_bytes = Path.read_bytes
 
-    for source in covered:
-        relative = source.relative_to(REPO_ROOT).as_posix()
+    def spy(self: Path) -> bytes:
+        seen.append(self)
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", spy)
+    s8.compute_grader_source_hash(str(config_path), config)
+    monkeypatch.undo()
+
+    covered = sorted({p.resolve().relative_to(REPO_ROOT).as_posix() for p in seen})
+    # A spy that caught nothing would make every assertion below vacuous.
+    assert len(covered) > 20, "the hash function read nothing, so this proves nothing"
+    for expected in (
+        "batch-runner/step8_grade.py",
+        "batch-runner/requirements.txt",
+        "batch-runner/requirements-renderer.txt",
+    ):
+        assert expected in covered, (
+            f"{expected} is no longer read by the hash; if that is deliberate, "
+            f"this list is measuring something other than what it was written for"
+        )
+
+    pinned = _input_paths(PAID_STEP)
+    for relative in covered:
         assert any(
             relative == entry or relative.startswith(entry + "/")
             for entry in pinned
